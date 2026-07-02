@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.10.10 — 2026-07-02 — schedules remember their last run
+
+- **A schedule now records whether its last run succeeded or failed**, alongside
+  when it ran, so the apps can show a job's health at a glance instead of only
+  its next fire time.
+
 ## v0.10.9 — 2026-07-01 — workspace knowledge replaces raw-file RAG
 
 - **Workspace knowledge is now a first-class Markdown wiki.** The new

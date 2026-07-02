@@ -451,6 +451,7 @@ def fire_by_id(home: Path, job_id: str) -> tuple[bool, str]:
         for j in current:
             if j.get("id") == job_id:
                 j["last_run_at"] = stamp_at
+                j["last_run_status"] = "ok" if outcome.ok else "error"
                 return current
         return None
     jobs_store.update(home, _stamp)
@@ -613,6 +614,7 @@ def tick(home: Path, now: datetime | None = None) -> list[tuple[str, bool, str]]
                 kind, ok = fired[jid]
                 # Stamp last_run_at even on failure to avoid a tight re-fire loop.
                 j["last_run_at"] = stamp_at
+                j["last_run_status"] = "ok" if ok else "error"
                 # One-shot success: drop. On failure, keep so the next tick retries.
                 if kind == "once" and ok:
                     continue

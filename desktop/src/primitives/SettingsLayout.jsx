@@ -190,7 +190,9 @@ export function ScheduleRow({ s, onFire, onToggle, onDelete }) {
   return (
     <div className={styles.scheduleRow}>
       <span className={`mono ${styles.scheduleId}`}>{s.id}</span>
-      <Chip state={s.on ? "on" : "off"} size="sm">{s.cron}</Chip>
+      <Tip text={s.lastRun} side="up">
+        <Chip state={s.on ? "on" : "off"} size="sm">{s.cron}</Chip>
+      </Tip>
       <div className={styles.scheduleTitleCell}>
         <Tip text={s.prompt} side="up" escape block wide>
           <span className={styles.scheduleTitle}>{s.title || s.prompt}</span>

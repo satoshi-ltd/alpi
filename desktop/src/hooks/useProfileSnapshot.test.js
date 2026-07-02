@@ -87,4 +87,22 @@ describe("useProfileSnapshot", () => {
       vi.useRealTimers();
     }
   });
+
+  it("does not surface the previous profile's snapshot while the new one is still loading (remote latency)", async () => {
+    let resolveB;
+    invokeMock
+      .mockResolvedValueOnce({ detail: { who: "A" } })
+      .mockImplementationOnce(() => new Promise((r) => { resolveB = r; }));
+    const { result, rerender } = renderHook(
+      ({ p }) => useProfileSnapshot("remote", p),
+      { initialProps: { p: "A" } },
+    );
+    await waitFor(() => expect(result.current.snapshot?.detail.who).toBe("A"));
+
+    rerender({ p: "B" });
+    expect(result.current.snapshot).toBeNull();
+
+    await act(async () => { resolveB({ detail: { who: "B" } }); });
+    await waitFor(() => expect(result.current.snapshot?.detail.who).toBe("B"));
+  });
 });

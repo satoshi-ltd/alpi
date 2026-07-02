@@ -184,6 +184,25 @@ describe("SchedulesSection", () => {
     expect(await screen.findByText("Second")).toBeInTheDocument();
   });
 
+  it("re-fetches when a background job finishes (schedule.done / schedule.failed)", async () => {
+    invokeMock.mockResolvedValueOnce([
+      { id: "j1", title: "First", prompt: "", paused: false, cron: "* * * * *" },
+    ]);
+    render(<SchedulesSection profile={{ name: "work" }} connectionId="casa" />);
+    expect(await screen.findByText("First")).toBeInTheDocument();
+
+    invokeMock.mockResolvedValueOnce([
+      { id: "j1", title: "Renamed", prompt: "", paused: false, cron: "* * * * *" },
+    ]);
+    await act(async () => {
+      emit("daemon-event", {
+        connection_id: "casa",
+        frame: { event: "schedule.done", data: { profile: "work" } },
+      });
+    });
+    expect(await screen.findByText("Renamed")).toBeInTheDocument();
+  });
+
   it("ignores schedule.changed events for a different profile", async () => {
     invokeMock.mockResolvedValueOnce([
       { id: "j1", title: "Stay", prompt: "", paused: false, cron: "* * * * *" },

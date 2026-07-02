@@ -40,7 +40,7 @@ export default function Settings({
     <div className={styles.wrap}>
       {selectedProfile && (
         <ProfileDetail
-          key={`${selectedProfile.name}:${refreshTick}`}
+          key={`${activeConnection?.id ?? "local"}:${selectedProfile.name}:${refreshTick}`}
           profile={selectedProfile}
           profiles={profiles}
           activeConnection={activeConnection}
@@ -54,7 +54,7 @@ export default function Settings({
       )}
       {selectedWorkgroup && (
         <WorkgroupDetail
-          key={`${selectedWorkgroup.id}:${refreshTick}`}
+          key={`${activeConnection?.id ?? "local"}:${selectedWorkgroup.id}:${refreshTick}`}
           workgroup={selectedWorkgroup}
           profiles={profiles}
           connectionId={activeConnection?.id ?? null}

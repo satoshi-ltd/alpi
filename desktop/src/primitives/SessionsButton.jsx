@@ -46,13 +46,13 @@ export default function SessionsButton({
   const [open, setOpen] = useState(false);
   const [manageOpen, setManageOpen] = useState(false);
   const [sessions, setSessions] = useState([]);
-  const [loaded, setLoaded] = useState(false);
+  const [loadedProfile, setLoadedProfile] = useState(null);
   const [reloadTick, setReloadTick] = useState(0);
 
   useEffect(() => {
     if (!profile) {
       setSessions([]);
-      setLoaded(false);
+      setLoadedProfile(null);
       return undefined;
     }
     let cancelled = false;
@@ -60,21 +60,25 @@ export default function SessionsButton({
       .then((all) => {
         if (cancelled) return;
         setSessions((all || []).filter((s) => s.kind === "chat"));
-        setLoaded(true);
+        setLoadedProfile(profile);
       })
       .catch(() => {
         if (cancelled) return;
         setSessions([]);
-        setLoaded(true);
+        setLoadedProfile(profile);
       });
     return () => {
       cancelled = true;
     };
   }, [profile, open, reloadTick]);
 
+  // Never show a prior profile's list while a switch is still loading (stale on remote).
+  const isFresh = loadedProfile === profile;
+  const shownSessions = isFresh ? sessions : [];
+
   const grouped = useMemo(() => {
     const m = new Map();
-    for (const s of sessions) {
+    for (const s of shownSessions) {
       // mtime is unreliable post-checkout/rsync; prefer updated_at from session content.
       const ts = (s.updated_at ?? s.started_at ?? s.mtime ?? 0) * 1000;
       const k = bucketFor(ts);
@@ -84,7 +88,7 @@ export default function SessionsButton({
     return [...m.entries()];
   }, [sessions]);
 
-  if (!loaded) return null;
+  if (!isFresh) return null;
 
   return (
     <span className={styles.root}>
@@ -108,7 +112,7 @@ export default function SessionsButton({
           <span className={styles.kbd}><Kbd>⌘</Kbd><Kbd>N</Kbd></span>
         </button>
         <div className={styles.scroll}>
-          {sessions.length === 0 && (
+          {shownSessions.length === 0 && (
             <div className={styles.empty}>No sessions yet</div>
           )}
           {grouped.map(([day, items]) => (

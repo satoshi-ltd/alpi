@@ -31,6 +31,7 @@ def test_cron_tool_add_cron_job_writes_jobs_json(tmp_home_no_env: Path) -> None:
     assert "platform" not in job and "chat_id" not in job
     assert job["last_run_at"] is not None
     datetime.fromisoformat(job["last_run_at"])
+    assert "last_run_status" not in job
 
 
 def test_cron_tool_add_cron_job_silent_by_default(tmp_home_no_env: Path) -> None:
@@ -243,6 +244,7 @@ def test_tick_fires_due_jobs_and_updates_last_run(monkeypatch, tmp_home_no_env: 
 
     saved = json.loads((tmp_home_no_env / "schedule" / "jobs.json").read_text())
     assert saved[0]["last_run_at"] is not None
+    assert saved[0]["last_run_status"] == "ok"
 
 
 def test_tick_skips_not_due(monkeypatch, tmp_home_no_env: Path) -> None:
@@ -278,6 +280,7 @@ def test_tick_failure_still_updates_last_run(monkeypatch, tmp_home_no_env: Path)
     assert results == [("x", False, "boom")]
     saved = json.loads((tmp_home_no_env / "schedule" / "jobs.json").read_text())
     assert saved[0]["last_run_at"] is not None
+    assert saved[0]["last_run_status"] == "error"
 
 
 # --------------------------------------------------------------------
@@ -672,6 +675,9 @@ def test_fire_by_id_runs_matching_job(monkeypatch, tmp_home_no_env: Path) -> Non
     assert ok, msg
     assert called_with == {"id": "alpha", "prompt": "hi"}
     assert "ran alpha" in msg
+    saved = json.loads(jobs_path.read_text())
+    alpha = next(j for j in saved if j["id"] == "alpha")
+    assert alpha["last_run_status"] == "ok"
 
 
 def test_fire_by_id_unknown_returns_error(tmp_home_no_env: Path) -> None:

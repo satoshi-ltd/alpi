@@ -57,4 +57,24 @@ describe("ScheduleRow", () => {
     );
     expect(screen.getByLabelText("Enable")).toBeTruthy();
   });
+
+  it("carries the last-run as a tooltip on the cron chip", () => {
+    render(
+      <ScheduleRow
+        s={{ ...base, lastRun: "ran 2h ago" }}
+        onFire={noop} onToggle={noop} onDelete={noop}
+      />,
+    );
+    const tip = screen.getByText("0 2 * * 4").closest(".ds-tip");
+    expect(tip).toBeTruthy();
+    expect(tip.textContent).toContain("ran 2h ago");
+  });
+
+  it("renders no cron tooltip when last-run is absent", () => {
+    render(
+      <ScheduleRow s={base} onFire={noop} onToggle={noop} onDelete={noop} />,
+    );
+    const chip = screen.getByText("0 2 * * 4");
+    expect(chip.closest(".ds-tip")).toBeNull();
+  });
 });

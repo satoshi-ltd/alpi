@@ -11,6 +11,20 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.12 — 2026-07-02 — schedule health, steadier connection & profile UI
+
+_Requires alpi v0.10.10+._
+
+- **Each schedule shows its last run.** Hovering a schedule's cron chip now
+  reveals when it last ran and whether it succeeded or errored, so a failing job
+  is visible without opening it.
+- **The connection list no longer dances when you open it.** The current
+  connection sorts to the top and the list stays put while it probes, instead of
+  reshuffling as each host reports back.
+- **Switching profiles over a remote connection no longer flashes the previous
+  profile.** The session navigator (and settings panel) clear immediately on
+  switch instead of showing the prior profile's data until the new one loads.
+
 ## v0.4.11 — 2026-07-01 — daemon knowledge-tool compatibility
 
 _Requires alpi v0.10.9+._

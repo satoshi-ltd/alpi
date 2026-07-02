@@ -136,6 +136,14 @@ export function formatLastSeen(ts) {
   return d.toISOString().slice(0, 10);
 }
 
+export function formatLastRun(iso, status) {
+  if (!status || !iso) return "never run";
+  const ms = Date.parse(iso);
+  if (Number.isNaN(ms)) return "never run";
+  const rel = formatLastSeen(ms / 1000);
+  return status === "error" ? `last run failed · ${rel}` : `ran ${rel}`;
+}
+
 export function isValidEd25519Pubkey(s) {
   if (!s) return false;
   if (!/^[A-Za-z0-9+/]+={0,2}$/.test(s)) return false;

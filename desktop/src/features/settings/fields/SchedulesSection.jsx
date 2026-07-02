@@ -5,13 +5,17 @@ import { useNotify } from "../../../primitives/Notification.jsx";
 import { Section } from "../primitives.jsx";
 import settingsStyles from "../Settings.module.css";
 import { ScheduleRow as DsScheduleRow, ScheduleList as DsScheduleList } from "../../../primitives/SettingsLayout.jsx";
-import { scheduleSummary } from "../util.js";
+import { scheduleSummary, formatLastRun } from "../util.js";
 
 function cacheKey(connectionId, profileName) {
   return `${connectionId || "local"}|${profileName}`;
 }
 
 const _jobsCache = new Map();
+
+const SCHEDULE_REFRESH_EVENTS = new Set([
+  "schedule.changed", "schedule.done", "schedule.failed",
+]);
 
 export function _clearScheduleCache() {
   _jobsCache.clear();
@@ -91,7 +95,7 @@ export function SchedulesSection({
     return subscribeDaemonEvent((event) => {
       const payload = event?.payload ?? {};
       const frame = payload.frame ?? payload;
-      if (frame?.event !== "schedule.changed") return;
+      if (!SCHEDULE_REFRESH_EVENTS.has(frame?.event)) return;
       if (frame?.data?.profile !== profile.name) return;
       if (connectionId && payload.connection_id && payload.connection_id !== connectionId) return;
       load();
@@ -187,6 +191,7 @@ export function SchedulesSection({
               title: j.title || "",
               prompt: j.prompt || "",
               on: !j.paused,
+              lastRun: formatLastRun(j.last_run_at, j.last_run_status),
             }}
             onFire={() => fire(j.id)}
             onToggle={() => setPaused(j.id, !j.paused)}

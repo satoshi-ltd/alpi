@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
-use std::net::{IpAddr, SocketAddr, TcpStream};
+use std::net::{IpAddr, SocketAddr, TcpStream, ToSocketAddrs};
 #[cfg(unix)]
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
@@ -298,6 +298,8 @@ pub enum HostConnection {
         name: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         device_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        last_connected: Option<i64>,
     },
     Remote {
         id: String,
@@ -309,6 +311,8 @@ pub enum HostConnection {
         revoked: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         device_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        last_connected: Option<i64>,
     },
 }
 
@@ -326,6 +330,7 @@ impl Default for ConnectionsState {
                 id: LOCAL_ID.to_string(),
                 name: "Local daemon".to_string(),
                 device_id: None,
+                last_connected: None,
             }],
         }
     }
@@ -353,13 +358,20 @@ impl HostConnection {
         }
     }
 
+    pub fn set_last_connected(&mut self, value: Option<i64>) {
+        match self {
+            HostConnection::Local { last_connected, .. } => *last_connected = value,
+            HostConnection::Remote { last_connected, .. } => *last_connected = value,
+        }
+    }
+
     fn with_token_redacted(&self) -> Value {
         let (status, error) = status_for(self.id());
         let alpi_version = version_for(self.id());
         let update_available = update_available_for(self.id());
         let role = role_for(self.id());
         match self {
-            HostConnection::Local { id, name, device_id } => {
+            HostConnection::Local { id, name, device_id, last_connected } => {
                 json!({
                     "id": id,
                     "name": name,
@@ -370,6 +382,7 @@ impl HostConnection {
                     "update_available": update_available,
                     "device_id": device_id,
                     "role": role,
+                    "last_connected": last_connected,
                 })
             }
             HostConnection::Remote {
@@ -380,6 +393,7 @@ impl HostConnection {
                 token,
                 revoked,
                 device_id,
+                last_connected,
             } => json!({
                 "id": id,
                 "name": name,
@@ -394,6 +408,7 @@ impl HostConnection {
                 "update_available": update_available,
                 "device_id": device_id,
                 "role": role,
+                "last_connected": last_connected,
             }),
         }
     }
@@ -437,6 +452,7 @@ fn ensure_local(state: &mut ConnectionsState) {
         id: LOCAL_ID.to_string(),
         name: "Local daemon".to_string(),
         device_id: None,
+        last_connected: None,
     });
 }
 
@@ -455,6 +471,21 @@ fn persist_device_id(connection_id: &str, device_id: &str) {
                 conn.set_device_id(Some(device_id.to_string()));
                 changed = true;
             }
+            break;
+        }
+    }
+    if changed {
+        let _ = save_connections(&state);
+    }
+}
+
+fn persist_last_connected(connection_id: &str) {
+    let mut state = load_connections();
+    let mut changed = false;
+    for conn in state.connections.iter_mut() {
+        if conn.id() == connection_id {
+            conn.set_last_connected(Some(now_unix()));
+            changed = true;
             break;
         }
     }
@@ -498,14 +529,41 @@ fn save_connections(state: &ConnectionsState) -> Result<(), String> {
     fs::rename(&tmp, &path).map_err(|e| format!("rename {}: {e}", path.display()))
 }
 
+fn now_unix() -> i64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+fn display_rank(conn: &HostConnection, active_id: &str) -> u8 {
+    if conn.id() == active_id {
+        0
+    } else if conn.id() == LOCAL_ID {
+        1
+    } else {
+        2
+    }
+}
+
+// Stable rank, never last_connected — a live probe must not reshuffle the open list.
+fn ordered_for_display<'a>(
+    conns: &'a [HostConnection],
+    active_id: &str,
+) -> Vec<&'a HostConnection> {
+    let mut out: Vec<&HostConnection> = conns.iter().collect();
+    out.sort_by_key(|c| display_rank(c, active_id));
+    out
+}
+
 pub fn connections_for_ui() -> Value {
     let state = load_connections();
     json!({
         "active_id": state.active_id,
-        "connections": state
-            .connections
+        "connections": ordered_for_display(&state.connections, &state.active_id)
             .iter()
-            .map(HostConnection::with_token_redacted)
+            .map(|c| c.with_token_redacted())
             .collect::<Vec<_>>(),
     })
 }
@@ -545,8 +603,8 @@ pub fn add_remote_connection(
     if host.trim().is_empty() {
         return Err("host is required".to_string());
     }
-    if host.trim().parse::<IpAddr>().is_err() {
-        return Err("remote host must be an IP address".to_string());
+    if !is_valid_host(host.trim()) {
+        return Err("remote host must be an IP address or hostname".to_string());
     }
     if token.trim().is_empty() {
         return Err("token is required".to_string());
@@ -570,6 +628,7 @@ pub fn add_remote_connection(
         token: token.trim().to_string(),
         revoked: false,
         device_id: None,
+        last_connected: None,
     });
     state.active_id = id.clone();
     save_connections(&state)?;
@@ -631,6 +690,7 @@ fn active_connection() -> HostConnection {
             id: LOCAL_ID.to_string(),
             name: "Local daemon".to_string(),
             device_id: None,
+            last_connected: None,
         })
 }
 
@@ -1053,11 +1113,36 @@ fn frame_matches_id(text: &str, id: &str) -> bool {
         .unwrap_or(false)
 }
 
-fn socket_addr(host: &str, port: u16) -> Result<SocketAddr, String> {
-    let ip = host
-        .parse::<IpAddr>()
-        .map_err(|_| "remote host must be an IP address".to_string())?;
-    Ok(SocketAddr::new(ip, port))
+fn is_valid_hostname(host: &str) -> bool {
+    let host = host.strip_suffix('.').unwrap_or(host);
+    if host.is_empty() || host.len() > 253 {
+        return false;
+    }
+    host.split('.').all(|label| {
+        !label.is_empty()
+            && label.len() <= 63
+            && !label.starts_with('-')
+            && !label.ends_with('-')
+            && label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+    })
+}
+
+fn is_valid_host(host: &str) -> bool {
+    host.parse::<IpAddr>().is_ok() || is_valid_hostname(host)
+}
+
+fn resolve_addrs(host: &str, port: u16) -> Result<Vec<SocketAddr>, String> {
+    if let Ok(ip) = host.parse::<IpAddr>() {
+        return Ok(vec![SocketAddr::new(ip, port)]);
+    }
+    let addrs: Vec<SocketAddr> = (host, port)
+        .to_socket_addrs()
+        .map_err(|e| format!("cannot resolve host {host:?}: {e}"))?
+        .collect();
+    if addrs.is_empty() {
+        return Err(format!("host {host:?} resolved to no addresses"));
+    }
+    Ok(addrs)
 }
 
 struct WsClient {
@@ -1071,9 +1156,19 @@ impl WsClient {
         connect_timeout: Duration,
         read_timeout: Duration,
     ) -> Result<Self, String> {
-        let addr = socket_addr(host, port)?;
-        let stream = TcpStream::connect_timeout(&addr, connect_timeout)
-            .map_err(|e| format!("connect ws://{host}:{port}: {e}"))?;
+        let addrs = resolve_addrs(host, port)?;
+        let mut stream = None;
+        let mut last_err = format!("connect ws://{host}:{port}: no address");
+        for addr in &addrs {
+            match TcpStream::connect_timeout(addr, connect_timeout) {
+                Ok(s) => {
+                    stream = Some(s);
+                    break;
+                }
+                Err(e) => last_err = format!("connect ws://{host}:{port} ({addr}): {e}"),
+            }
+        }
+        let stream = stream.ok_or(last_err)?;
         // Disable Nagle: chatty JSON-RPC frames suffer 40ms/RTT penalty otherwise.
         stream.set_nodelay(true).ok();
         // TCP keepalive: catch silently-broken Tailscale tunnels in ~60s.
@@ -1274,6 +1369,7 @@ pub fn probe_connection(conn: &HostConnection) {
     match result {
         Ok(_) => {
             set_status(&id, ConnectionStatus::Online, None);
+            persist_last_connected(&id);
             let version_call = match conn {
                 HostConnection::Local { .. } => {
                     call_local_inner("host.version", json!({}), timeout)
@@ -1373,6 +1469,7 @@ mod tests {
             id: LOCAL_ID.to_string(),
             name: "Local daemon".to_string(),
             device_id: None,
+            last_connected: None,
         };
         let remote = HostConnection::Remote {
             id: "remote-1".to_string(),
@@ -1382,6 +1479,7 @@ mod tests {
             token: "secret".to_string(),
             revoked: false,
             device_id: None,
+            last_connected: None,
         };
         assert_eq!(
             probe_timeout_for(&local),
@@ -1394,11 +1492,49 @@ mod tests {
     }
 
     #[test]
+    fn ordered_for_display_pins_active_then_local_ignoring_last_connected() {
+        let conns = vec![
+            HostConnection::Local {
+                id: LOCAL_ID.to_string(),
+                name: "Local daemon".to_string(),
+                device_id: None,
+                last_connected: Some(100),
+            },
+            HostConnection::Remote {
+                id: "casa".to_string(),
+                name: "casa".to_string(),
+                host: "10.0.0.2".to_string(),
+                port: 49200,
+                token: "t".to_string(),
+                revoked: false,
+                device_id: None,
+                last_connected: Some(1),
+            },
+            HostConnection::Remote {
+                id: "mirai".to_string(),
+                name: "mirai".to_string(),
+                host: "10.0.0.3".to_string(),
+                port: 49201,
+                token: "t".to_string(),
+                revoked: false,
+                device_id: None,
+                last_connected: Some(999),
+            },
+        ];
+        let ids: Vec<&str> = ordered_for_display(&conns, "casa")
+            .iter()
+            .map(|c| c.id())
+            .collect();
+        assert_eq!(ids, vec!["casa", LOCAL_ID, "mirai"]);
+    }
+
+    #[test]
     fn device_id_round_trip_through_set_and_get() {
         let mut local = HostConnection::Local {
             id: LOCAL_ID.to_string(),
             name: "Local".to_string(),
             device_id: None,
+            last_connected: None,
         };
         assert!(local.device_id().is_none());
         local.set_device_id(Some("uuid-mac".to_string()));
@@ -1412,6 +1548,7 @@ mod tests {
             token: "t".to_string(),
             revoked: false,
             device_id: Some("uuid-mac".to_string()),
+            last_connected: None,
         };
         assert_eq!(remote.device_id(), Some("uuid-mac"));
         remote.set_device_id(None);
@@ -1447,9 +1584,50 @@ mod tests {
     }
 
     #[test]
-    fn remote_socket_addr_rejects_hostnames() {
-        assert!(socket_addr("100.64.0.1", 49200).is_ok());
-        assert!(socket_addr("MacBook-Pro.local", 49200).is_err());
+    fn resolve_addrs_accepts_ip_and_resolvable_host() {
+        assert_eq!(resolve_addrs("100.64.0.1", 49200).unwrap().len(), 1);
+        assert!(!resolve_addrs("localhost", 49200).unwrap().is_empty());
+        assert!(resolve_addrs("no.such.host.invalid", 49200).is_err());
+    }
+
+    #[test]
+    fn is_valid_host_accepts_ips_and_hostnames() {
+        for h in ["100.64.0.1", "::1", "casa", "casa.local", "host.tail1234.ts.net"] {
+            assert!(is_valid_host(h), "expected {h:?} to be valid");
+        }
+        for h in ["", "a b", "http://casa", "casa/x", "-bad", "bad-", "casa..local"] {
+            assert!(!is_valid_host(h), "expected {h:?} to be invalid");
+        }
+    }
+
+    #[test]
+    fn ordered_for_display_is_stable_and_ignores_recency() {
+        let remote = |id: &str, ts: Option<i64>| HostConnection::Remote {
+            id: id.to_string(),
+            name: id.to_string(),
+            host: "1.1.1.1".to_string(),
+            port: 49200,
+            token: "t".to_string(),
+            revoked: false,
+            device_id: None,
+            last_connected: ts,
+        };
+        let conns = vec![
+            remote("r-old", Some(100)),
+            HostConnection::Local {
+                id: LOCAL_ID.to_string(),
+                name: "Local".to_string(),
+                device_id: None,
+                last_connected: None,
+            },
+            remote("r-new", Some(500)),
+            remote("r-never", None),
+        ];
+        let ids: Vec<&str> = ordered_for_display(&conns, LOCAL_ID)
+            .iter()
+            .map(|c| c.id())
+            .collect();
+        assert_eq!(ids, vec![LOCAL_ID, "r-old", "r-new", "r-never"]);
     }
 
     #[test]
