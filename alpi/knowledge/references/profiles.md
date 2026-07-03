@@ -5,6 +5,7 @@
 - Default profile: `~/.alpi/`. Named profile: `~/.alpi/profiles/<name>/`.
 - A profile is one isolated alpi identity + data dir (config, `.env`, memory, skills, sessions, scheduler state, logs, ALP identity, budget ledger).
 - Create a new profile for a separate identity/memory/credentials/ALP-trust/budget boundary. Use workspace (not a profile) when identity and memory can be shared across projects.
+- Profile Git/versioning: recommend a separate profile-source repo + explicit allowlisted sync into `~/.alpi`; do not recommend `git init ~/.alpi` as the default. In containers/Kubernetes, use profile-source Git + init/entrypoint sync + persistent runtime volume/PVC + external secrets.
 
 ## Active profile resolution (first match wins)
 
@@ -39,6 +40,20 @@ Eager dirs at `ensure_home`: `memories/`, `secrets/`, `sessions/`, `skills/`, `s
 `alpi -p <name>` auto-bootstraps any not-yet-existing profile on first use; `alpi profile create <name>` is the explicit pre-bootstrap. Both go through `home.validate_profile_name`: the name must match `^[A-Za-z0-9][A-Za-z0-9._-]*$`, so `-p ../escape`, `-p .hidden`, `-p a/b`, `-p ..`, and any name containing `..` raise `InvalidProfileName` before the path is joined. `-p ""` is a no-op — empty falls through to the default profile (`~/.alpi/`), it does NOT resolve to `~/.alpi/profiles/`. Quote names containing zsh-glob characters (`*`, `?`, `[`); they're rejected by validation anyway but the shell expands them first.
 
 Shared globally (NOT isolated): the `alpi` binary (`~/.local/bin/alpi`), Whisper downloads (`~/.cache/huggingface/`), Playwright Chromium, the user's shell / git config / workspace contents. **Host-plane root state** — `~/.alpi/host/host.sock` (control-plane socket), `~/.alpi/host/devices.yaml` (pairing tokens), `~/.alpi/host/events.jsonl` (host event stream), and `~/.alpi/host/device_id` are root-only, ONE instance per installation. Named profiles still get their own `host/attachments/tmp/` (uploaded chat attachments), which IS per-profile and appears in the layout table above.
+
+## Versioning / Git
+
+Answer profile-versioning questions with this policy:
+
+- `~/.alpi` is live runtime state, not clean source. It contains secrets, ALP private keys, device tokens, sessions, outputs, logs, cache, sockets, PIDs, temporary attachments, and derived indexes.
+- Best practice: keep a separate Git repo such as `~/git/alpi-profiles/` containing profile source, then sync into the live profile with an allowlist.
+- Commit source-like intent: `config.yaml` (reviewed for local paths/accounts), `memories/{AGENT,USER,MEMORY}.md`, `skills/**/SKILL.md`, skill scripts/references/non-secret assets, `schedule/jobs.json` when schedule behavior is intended, `README.md`, `env.example`.
+- Never commit: `.env`, `secrets/`, `alp/secrets/`, skill `secrets/`, skill `state/`, `host/devices.yaml`, `sessions/`, `mentions/`, `outputs/`, `logs/`, `cache/`, `run/`, `knowledge.sqlite`, sockets, pid files, temp attachments.
+- `git init ~/.alpi` may be acceptable only for local inspection or a temporary migration on encrypted disk. If used, require deny-by-default `.gitignore` (`*` then opt in config/memories/skills/schedule docs) and inspect `git status --ignored` + `git diff --cached` before committing. Excluding only `.env` is unsafe.
+- Docker: image is disposable; mount alpi home on a persistent volume, mount/bake profile-source separately/read-only, inject `.env`/credentials through runtime secrets, sync allowlisted files before `alpi daemon`.
+- Kubernetes: prefer `StatefulSet` + `replicas: 1` for one live home writer; PVC at alpi home; init container or `git-sync` checks out profile source; init sync allowlisted files into PVC; secrets via Kubernetes Secret/SOPS/External Secrets/vault; annotate workload with source commit SHA.
+- Do not make a Docker volume or Kubernetes PVC the Git repo for normal operation; the daemon writes live runtime state there.
+- Git does not replace `alpi backup`: Git captures desired profile source; backup captures operational recovery (ALP identity, device pairings, OAuth tokens, sessions, outputs, ledgers, runtime state).
 
 ## Commands
 

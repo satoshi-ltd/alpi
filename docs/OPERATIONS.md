@@ -224,6 +224,10 @@ After restoring on a new machine, run `alpi doctor` — it surfaces
 peers whose counterpart rotated their key since the backup, and
 any missing optional dependency the restored skills declare.
 
+Backups are operational snapshots. They are not a review workflow for
+profile changes. For Git-based profile source, promotion, and secrets
+boundaries, see [Profiles → Versioning](PROFILES.md#versioning).
+
 ## ALP identity rotation
 
 Rotating the Ed25519 keypair is a deliberate, disruptive act.

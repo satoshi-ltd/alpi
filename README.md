@@ -193,7 +193,7 @@ See [docs/SECURITY.md](docs/SECURITY.md) for the full model.
 - [QUICKSTART.md](QUICKSTART.md) — install, model, workspace, first chat,
   email, profiles, ALP, doctor.
 - [docs/PROFILES.md](docs/PROFILES.md) — per-profile identity,
-  isolation, state, memory, skills, peers, services.
+  isolation, state, memory, skills, peers, services, versioning.
 - [docs/ALP.md](docs/ALP.md) — wire protocol, identity, signatures,
   transports, methods, errors, workgroups.
 - [docs/SECURITY.md](docs/SECURITY.md) — threat model, approval gate,

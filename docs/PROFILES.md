@@ -70,6 +70,195 @@ alpi profile list              # shows all profiles, active one flagged
 alpi profile remove work       # deletes after safety checks + confirm
 ```
 
+## Versioning
+
+Treat `~/.alpi/` as the live runtime tree. It contains reviewable
+profile intent, but also secrets, identity material, logs, sessions,
+outputs, sockets, cache, and other state the daemon owns while it is
+running.
+
+### Source repository
+
+The preferred workflow is a separate Git repository for profile source,
+then an explicit sync into the live profile:
+
+```text
+~/git/alpi-profiles/
+  profiles/
+    support/
+      config.yaml
+      memories/
+        AGENT.md
+        USER.md
+        MEMORY.md
+      skills/
+      schedule/
+        jobs.json
+      env.example
+      README.md
+```
+
+```bash
+rsync -a --delete \
+  --include='config.yaml' \
+  --include='memories/***' \
+  --include='skills/***' \
+  --include='schedule/' \
+  --include='schedule/jobs.json' \
+  --exclude='*' \
+  ~/git/alpi-profiles/profiles/support/ \
+  ~/.alpi/profiles/support/
+
+alpi -p support doctor
+```
+
+This keeps Git diffs focused on intended behavior: model/config
+choices, memory, skills, schedules, and profile notes. It avoids
+reviewing transient runtime files and avoids accidentally pushing
+secrets or private chat history.
+
+Good candidates for Git:
+
+- `config.yaml`, after checking for local-only hostnames, paths, and
+  account ids.
+- `memories/AGENT.md`, `memories/USER.md`, `memories/MEMORY.md`.
+- `skills/**/SKILL.md`, scripts, references, tests, and non-secret
+  assets.
+- `schedule/jobs.json` when schedules are part of the intended profile
+  behavior.
+- `README.md` files that explain the profile purpose, owner, rollout
+  notes, and workspace expectation.
+- `env.example`, never the real `.env`.
+
+Do not commit:
+
+- `.env`, `secrets/`, `alp/secrets/`, or any skill `secrets/`.
+- `host/devices.yaml` or host pairing state.
+- `sessions/`, `mentions/`, `outputs/`, `logs/`, `cache/`, `run/`.
+- `knowledge.sqlite` or other derived indexes.
+- sockets, PID files, temporary attachments, skill `state/`.
+
+### Local live home
+
+Running `git init ~/.alpi` can be useful as a local inspection tool, but
+it is not the recommended collaboration model. If you do it, use a
+deny-by-default `.gitignore` and opt files back in:
+
+```gitignore
+*
+
+!config.yaml
+!memories/
+!memories/AGENT.md
+!memories/USER.md
+!memories/MEMORY.md
+!skills/
+!skills/**/
+!skills/**/SKILL.md
+!skills/**/scripts/
+!skills/**/scripts/**
+!skills/**/references/
+!skills/**/references/**
+!skills/**/assets/
+!skills/**/assets/**
+!schedule/
+!schedule/jobs.json
+!README.md
+!.gitignore
+!env.example
+
+.env
+**/.env
+secrets/
+**/secrets/
+**/state/
+alp/secrets/
+host/
+sessions/
+mentions/
+outputs/
+logs/
+cache/
+run/
+knowledge.sqlite
+*.sock
+*.pid
+```
+
+Even with that ignore file, inspect `git status --ignored` and
+`git diff --cached` before every commit. A future alpi release can add a
+new runtime path, so a separate source repo plus allowlisted sync stays
+safer than committing the live home.
+
+### Docker
+
+For containers, keep the same split:
+
+- Mount the alpi home on a persistent volume, for example
+  `/home/alpi/.alpi`.
+- Mount or bake the profile-source repository separately and read-only,
+  for example `/profile-source`.
+- Inject `.env` and provider credentials through the container runtime,
+  not through the profile-source repository.
+- Run an entrypoint step that syncs allowlisted source files into the
+  live profile before starting the daemon.
+
+```bash
+rsync -a --delete \
+  --include='config.yaml' \
+  --include='memories/***' \
+  --include='skills/***' \
+  --include='schedule/' \
+  --include='schedule/jobs.json' \
+  --exclude='*' \
+  /profile-source/profiles/support/ \
+  /home/alpi/.alpi/profiles/support/
+
+exec alpi daemon
+```
+
+The container image should be disposable. The volume is operational
+state. The Git repository is desired profile source.
+
+### Kubernetes
+
+Use a `StatefulSet` with `replicas: 1` unless the daemon explicitly
+supports multi-writer operation for the same home. Mount a PVC at the
+alpi home and treat it as live runtime state.
+
+A typical layout:
+
+- Init container, or a `git-sync`-style checkout step, checks out the
+  profile-source repository into a read-only mount before the daemon
+  starts.
+- Init container copies allowlisted files from profile source into the
+  PVC before the daemon starts.
+- Secrets arrive through Kubernetes `Secret`, SOPS, External Secrets, or
+  a vault integration, not through Git.
+- ConfigMaps are fine for tiny deployment values, but profile trees with
+  skills, references, and assets should stay in Git.
+- Annotate the Pod or StatefulSet with the profile-source commit SHA so
+  runtime state can be traced back to reviewed source.
+
+```text
+profile-source Git
+  -> init checkout
+  -> allowlisted sync
+  -> PVC /home/alpi/.alpi
+  -> alpi daemon
+```
+
+Do not make the PVC itself the Git repository for normal operation. The
+daemon writes sessions, outputs, logs, ledgers, sockets, cache, and
+other runtime files there while Kubernetes keeps the process alive.
+
+### Backups
+
+Git does not replace `alpi backup`. Git captures desired profile source;
+backup captures operational recovery: ALP private identity, device
+pairings, OAuth tokens, sessions, outputs, ledgers, and other runtime
+state.
+
 `profile remove` archives the profile home under
 `~/.alpi/.trash/<name>-<timestamp>/`. There's no per-profile
 service to uninstall — the daemon is per-machine and picks up the
