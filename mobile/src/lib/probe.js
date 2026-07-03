@@ -6,9 +6,9 @@ const PROBE_TIMEOUT_MS = 3500;
 const VERSION_TIMEOUT_MS = 2000;
 
 export async function probe(endpoint) {
-  if (!endpoint) return { status: 'unknown', version: null, updateAvailable: null, deviceName: null, deviceId: null, role: null };
+  if (!endpoint) return { status: 'unknown', version: null, updateAvailable: null, deviceName: null, deviceId: null, role: null, summaries: null };
   try {
-    await call(endpoint, 'host.profile.summaries', {}, { timeoutMs: PROBE_TIMEOUT_MS });
+    const summaries = await call(endpoint, 'host.profile.summaries', {}, { timeoutMs: PROBE_TIMEOUT_MS });
     let version = null;
     let updateAvailable = null;
     let deviceName = null;
@@ -32,12 +32,12 @@ export async function probe(endpoint) {
     } catch {
       // version is non-fatal
     }
-    return { status: 'online', version, updateAvailable, deviceName, deviceId, role };
+    return { status: 'online', version, updateAvailable, deviceName, deviceId, role, summaries };
   } catch (e) {
     if (e instanceof RpcError && e.code === AUTH_FAILED) {
-      return { status: 'auth-failed', version: null, updateAvailable: null, deviceName: null, deviceId: null, role: null };
+      return { status: 'auth-failed', version: null, updateAvailable: null, deviceName: null, deviceId: null, role: null, summaries: null };
     }
-    return { status: 'offline', version: null, updateAvailable: null, deviceName: null, deviceId: null, role: null };
+    return { status: 'offline', version: null, updateAvailable: null, deviceName: null, deviceId: null, role: null, summaries: null };
   }
 }
 

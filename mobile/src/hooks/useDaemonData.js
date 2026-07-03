@@ -122,6 +122,14 @@ function usePolledCall(method, params, deps, opts = {}) {
   return { ...snap, refresh };
 }
 
+export function seedCache(endpointId, method, params, data) {
+  if (!endpointId || data == null) return;
+  const entry = entryFor(keyFor(endpointId, method, params));
+  entry.data = data;
+  entry.error = null;
+  notify(entry);
+}
+
 export function invalidate(endpointId, method, params = {}) {
   const key = keyFor(endpointId, method, params);
   const entry = cache.get(key);
@@ -179,12 +187,12 @@ export function useSession(profile, sessionId, tailTurns = null) {
   };
 }
 
-export function useSessionsList(profile, limit = 20) {
+export function useSessionsList(profile, limit = 20, opts = {}) {
   return usePolledCall(
     'host.sessions.list',
     profile ? { profile, limit } : null,
     [profile, limit],
-    { skipWhen: !profile },
+    { skipWhen: !profile || !!opts.skipWhen },
   );
 }
 

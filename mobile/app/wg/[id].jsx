@@ -30,6 +30,7 @@ import { useEventEffect } from '../../src/hooks/useEvents';
 import { useEndpoint } from '../../src/lib/EndpointContext';
 import { isForeignConnection } from '../../src/features/aln/deeplink';
 import { markWorkgroupRead } from '../../src/lib/readState';
+import { resolveMembers } from '../../src/lib/workgroupMembers';
 import { accentForProfile } from '../../src/theme/accents';
 import { useTheme } from '../../src/theme/ThemeContext';
 
@@ -357,7 +358,7 @@ function WorkgroupChatInner() {
 
   const persistedRaw = transcript.data?.posts ?? transcript.data?.messages ?? [];
   const persisted = Array.isArray(persistedRaw) ? persistedRaw : [];
-  const members = memberList.data?.members ?? wg?.members ?? [];
+  const members = resolveMembers(memberList.data);
 
   const toast = useToast();
   const [actionTarget, setActionTarget] = useState(null);
@@ -534,7 +535,7 @@ function WorkgroupChatInner() {
     );
   }
 
-  const memberCount = members.length || wg.members?.length || 0;
+  const memberCount = members.length || wg.members || 0;
   const metaTextStyle = {
     fontFamily: fonts.mono,
     fontSize: fontSizes.xs,
@@ -552,8 +553,7 @@ function WorkgroupChatInner() {
 
   const mentionSource = (needle) => {
     const n = needle.toLowerCase();
-    const list = members.length ? members : (wg.members ?? []);
-    return list
+    return members
       .map((m) => (typeof m === 'string' ? m : m.name ?? m.handle))
       .filter((m) => m && (!n || m.toLowerCase().includes(n)))
       .map((m) => ({ id: m, role: m === wg.hub_id ? 'hub' : 'member' }));
@@ -577,7 +577,7 @@ function WorkgroupChatInner() {
         onBack={() => router.back()}
         onMore={canAdmin ? () => router.push(`/wg/${wg.id}/settings`) : null}
         right={(
-          <View style={styles.headerRight}>
+          <View style={WG_STYLES.headerRight}>
             <SoundWave accent={accent} />
             {tasks.length ? <TasksHeaderButton tasks={tasks} accent={accent} onPress={() => setTasksOpen(true)} /> : null}
           </View>

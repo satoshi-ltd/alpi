@@ -42,7 +42,7 @@ export function ComposeSheet({ open, onClose }) {
         name: w.name || w.id,
         label: `#${w.name || w.id}`,
         accent: hub?.accent ?? accentForProfile(w.hub_id),
-        sub: `hub @${w.hub_id} · ${(w.members ?? []).length} members`,
+        sub: `hub @${w.hub_id} · ${w.members ?? 0} members`,
         paused: w.paused,
       };
     });

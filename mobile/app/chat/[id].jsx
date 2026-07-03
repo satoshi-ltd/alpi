@@ -258,8 +258,7 @@ function ChatList({ turns, pendingTurn, loading, hydrating, profileName, model, 
     <FlatList
       inverted
       data={visible}
-      // Composite key: pending and the matching persisted turn share idx 0 in the inverted visible window → row stays mounted across the done→refresh swap. Adding idx disambiguates same-text repeats (sending "ok" twice no longer collides).
-      keyExtractor={(item, idx) => `${item.turn.user ?? ''}|${item.turnIndex}|${idx}`}
+      keyExtractor={(item) => String(item.turnIndex)}
       renderItem={renderItem}
       contentContainerStyle={{ paddingTop: space.s5, paddingBottom: space.s5 }}
       onEndReached={hasMore ? () => {

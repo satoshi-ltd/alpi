@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef } from 'react';
 import { AppState } from 'react-native';
 
 import { useEndpoint } from '../lib/EndpointContext';
@@ -14,7 +14,6 @@ const RESUME_STALE_MS = 30000;
 
 export function EventsProvider({ children }) {
   const { endpoint, call, callStream } = useEndpoint();
-  const [last, setLast] = useState(null);
   const listenersRef = useRef(new Set());
   // seq is the canonical backfill pivot; wall-clock `at` is informational only (NTP skew, suspend/resume).
   const lastSeqRef = useRef(0);
@@ -32,7 +31,6 @@ export function EventsProvider({ children }) {
       }
       if (seq > lastSeqRef.current) lastSeqRef.current = seq;
     }
-    setLast(payload);
     for (const fn of listenersRef.current) {
       try { fn(payload); } catch { /* */ }
     }
@@ -165,13 +163,14 @@ export function EventsProvider({ children }) {
     return () => listenersRef.current.delete(fn);
   }, []);
 
+  const value = useMemo(() => ({ subscribe }), [subscribe]);
   return (
-    <EventsContext.Provider value={{ last, subscribe }}>{children}</EventsContext.Provider>
+    <EventsContext.Provider value={value}>{children}</EventsContext.Provider>
   );
 }
 
 export function useEvents() {
-  return useContext(EventsContext) ?? { last: null, subscribe: () => () => {} };
+  return useContext(EventsContext) ?? { subscribe: () => () => {} };
 }
 
 // fnRef pattern lets callers pass inline arrows without re-subscribing every render.

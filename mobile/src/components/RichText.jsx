@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Image, Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { space, fontSizes, lineHeights, radii } from '../theme/tokens';
 
@@ -194,10 +194,11 @@ export function RichText({ children, color, size, imageProfile }) {
   const fg = color ?? colors.ink;
   const fz = size ?? 16;
   const lh = fz * 1.55;
+  const blocks = useMemo(() => segmentBlocks(children), [children]);
 
   return (
     <View>
-      {segmentBlocks(children).map((b, i) => {
+      {blocks.map((b, i) => {
         if (b.type === 'code') return <CodeBlock key={`code-${i}`} lang={b.lang} code={b.code} theme={theme} />;
         if (b.type === 'table') return <MdTable key={`tbl-${i}`} header={b.header} rows={b.rows} theme={theme} />;
         if (b.type === 'image') return <MarkdownImage key={`img-${i}`} path={b.path} alt={b.alt} note={b.note} profile={imageProfile} theme={theme} />;

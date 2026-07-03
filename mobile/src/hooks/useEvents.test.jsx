@@ -350,3 +350,31 @@ describe("useEvents AppState resume", () => {
     expect(streamCallCount).toBe(1);
   });
 });
+
+describe("EventsProvider re-render hygiene", () => {
+  it("keeps a stable context value across events so consumers don't re-render (no dead `last` state)", async () => {
+    const { useEvents } = await import("./useEvents.jsx");
+    const seen = [];
+    function Capture() {
+      const ctx = useEvents();
+      seen.push(ctx);
+      return null;
+    }
+    render(
+      <EventsProvider>
+        <Capture />
+      </EventsProvider>,
+    );
+    await waitFor(() => expect(mockCallStream).toHaveBeenCalled());
+    const rendersBefore = seen.length;
+    await act(async () => {
+      lastStreamHandlers.onFrame({ event: "subscribed", next_seq: 1 });
+      lastStreamHandlers.onFrame({ event: "wg.post", seq: 2, data: { profile: "x" } });
+      lastStreamHandlers.onFrame({ event: "session_changed", seq: 3, data: { profile: "x" } });
+    });
+    // Events must not re-render the provider's consumers.
+    expect(seen.length).toBe(rendersBefore);
+    expect(seen[0].last).toBeUndefined();
+    expect(typeof seen[0].subscribe).toBe("function");
+  });
+});

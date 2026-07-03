@@ -289,3 +289,36 @@ describe("useProfileSnapshot sections", () => {
     }));
   });
 });
+
+describe('seedCache + useSessionsList skipWhen', () => {
+  it('seedCache pre-populates a key so a consumer paints synchronously without fetching', async () => {
+    const { seedCache, useProfileSummaries } = await import('./useDaemonData');
+    const payload = { profiles: [{ name: 'seeded' }] };
+    seedCache('ep-seed', 'host.profile.summaries', {}, payload);
+    const call = vi.fn(async () => ({ profiles: [{ name: 'fresh' }] }));
+    const endpoint = { id: 'ep-seed', name: 'ep-seed' };
+    function Wrapper({ children }) {
+      return (
+        <EndpointContext.Provider value={{ endpoint, call }}>{children}</EndpointContext.Provider>
+      );
+    }
+    const { result } = renderHook(() => useProfileSummaries(), { wrapper: Wrapper });
+    // Synchronous first paint from the seed, before any fetch resolves.
+    expect(result.current.data).toEqual(payload);
+    await waitFor(() => expect(result.current.data?.profiles?.[0]?.name).toBe('fresh'));
+  });
+
+  it('useSessionsList with skipWhen:true issues no RPC', async () => {
+    const { useSessionsList } = await import('./useDaemonData');
+    const call = vi.fn(async () => ({ sessions: [] }));
+    const endpoint = { id: 'ep1', name: 'ep1' };
+    function Wrapper({ children }) {
+      return (
+        <EndpointContext.Provider value={{ endpoint, call }}>{children}</EndpointContext.Provider>
+      );
+    }
+    renderHook(() => useSessionsList('doc', 30, { skipWhen: true }), { wrapper: Wrapper });
+    await Promise.resolve();
+    expect(call).not.toHaveBeenCalled();
+  });
+});

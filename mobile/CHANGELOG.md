@@ -14,6 +14,19 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.2.4 — 2026-07-03 — snappier and lighter
+
+_Requires alpi v0.10.5+._
+
+- **Live activity no longer bogs down the app.** A busy daemon (workgroups
+  posting, sessions updating) used to re-render the whole app on every event;
+  now only the parts that care react, keeping scrolling and typing smooth.
+- **Sending a message is smoother**, and long streamed replies no longer get
+  choppier as they grow.
+- **The home inbox appears faster on launch**, reusing what the connection
+  check already fetched instead of asking again.
+- **Fixed a crash when opening a workgroup.**
+
 ## v0.2.3 — 2026-07-02 — chats open fast + schedule health
 
 _Requires alpi v0.10.5+; fast chat opening needs alpi v0.10.11+._

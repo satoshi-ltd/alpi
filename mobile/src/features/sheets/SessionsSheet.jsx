@@ -40,7 +40,7 @@ function fmtCost(n) {
 
 export function SessionsSheet({ open, onClose, profile, accent, activeSessionId, onPick, onNew }) {
   const { colors, fonts, fontSizes } = useTheme();
-  const sessions = useSessionsList(profile, 30);
+  const sessions = useSessionsList(profile, 30, { skipWhen: !open });
   const rows = useMemo(
     () => (sessions.data?.sessions ?? []).filter((s) => (s.kind ?? 'chat') === 'chat'),
     [sessions.data],

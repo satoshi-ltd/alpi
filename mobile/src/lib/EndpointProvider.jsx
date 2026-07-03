@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { EndpointContext } from './EndpointContext';
 import { clearImageCache } from '../hooks/useCachedImage';
+import { seedCache } from '../hooks/useDaemonData';
 import { probe, probeAll } from './probe';
 import { call as rpcCall, callStream as rpcCallStream, dropEndpointPool } from './rpc';
 import { clearAll, loadConnections, removeConnection, saveConnection, setActiveConnection, setDeviceIds } from './store';
@@ -31,7 +32,8 @@ export function EndpointProvider({ children }) {
       next.set(id, 'probing');
       return next;
     });
-    const { status, version, updateAvailable, deviceId, role } = await probe(target);
+    const { status, version, updateAvailable, deviceId, role, summaries } = await probe(target);
+    if (summaries) seedCache(id, 'host.profile.summaries', {}, summaries);
     setProbeState((m) => {
       const next = new Map(m);
       next.set(id, status);
