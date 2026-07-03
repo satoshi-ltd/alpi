@@ -104,6 +104,30 @@ def test_session_save_writes_serialized_turns(tmp_path: Path) -> None:
     assert "assistant_meta" not in data["turns"][0]
 
 
+def test_interrupted_flag_round_trips_through_save_and_load() -> None:
+    session = Session(home=Path("/tmp"), model="m")
+    session.log_turn(user="a", assistant="", tools=[], started_at=1.0)
+    session.log_turn(user="b", assistant="", tools=[], started_at=2.0, interrupted=True)
+
+    assert session.turns[0].interrupted is False
+    assert session.turns[1].interrupted is True
+
+    from alpi.session import _serialize_turn_v2
+
+    rows = [_serialize_turn_v2(t, redact=lambda v: v) for t in session.turns]
+    assert "interrupted" not in rows[0]
+    assert rows[1]["interrupted"] is True
+
+    loaded = load_turns({"turns": rows})
+    assert loaded[0].interrupted is False
+    assert loaded[1].interrupted is True
+
+
+def test_load_turns_defaults_interrupted_false_for_legacy_data_without_the_field() -> None:
+    turns = load_turns({"turns": [{"at": 1.0, "user": "hi", "assistant": ""}]})
+    assert turns[0].interrupted is False
+
+
 def test_session_save_leaves_no_temp_sibling(tmp_path: Path) -> None:
     session = Session(home=tmp_path, model="m")
     session.log_turn(user="hi", assistant="hello", tools=[], started_at=1.0)

@@ -11,6 +11,17 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.15 — 2026-07-03 — no more crying wolf on long-running turns
+
+_Needs alpi v0.10.13+ to show "Still working…"; older daemons just show nothing until the reply lands._
+
+- **Reopening a chat while the agent is still working no longer says
+  "Interrupted before final reply."** Long turns — the kind that make dozens
+  of tool calls — used to flash that message the moment you came back,
+  because the daemon hadn't written a reply yet. It now shows "Still
+  working…" instead, and only shows "Interrupted" when a turn was genuinely
+  stopped (Stop button, Ctrl+C, or a peer cancelling it).
+
 ## v0.4.14 — 2026-07-02 — one cache policy everywhere
 
 _No daemon changes required._

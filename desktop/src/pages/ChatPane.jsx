@@ -49,7 +49,7 @@ import {
   stripProducedImageMarkdown,
 } from "../lib/producedAttachments.js";
 import { rewriteCut } from "../lib/rewriteCut.js";
-import { dropInflightStub } from "../lib/transcriptTurns.js";
+import { dropInflightStub, isLastTurnInFlight } from "../lib/transcriptTurns.js";
 import { copyText } from "../lib/clipboard.js";
 import { pickEffectiveModel } from "../lib/effectiveModel.js";
 
@@ -394,6 +394,7 @@ const Transcript = memo(function Transcript({
   const cut = rewriteCut({ pendingTurn, rewriteDraft, profileName, sessionId });
   const cutTurns = cut != null ? allTurns.slice(0, cut) : allTurns;
   const turns = dropInflightStub(cutTurns, pendingTurn);
+  const lastTurnInFlight = isLastTurnInFlight(turns, data?.in_flight);
 
   const [showSkeleton, setShowSkeleton] = useState(false);
   useEffect(() => {
@@ -450,6 +451,7 @@ const Transcript = memo(function Transcript({
               onRewriteMessage={onRewriteMessage}
               onRetryMessage={onRetryMessage}
               sessionId={sessionId}
+              lastTurnInFlight={lastTurnInFlight}
             />
             {pendingTurn && <PendingTurn turn={pendingTurn} accent={accent} profiles={profiles} />}
           </div>
@@ -469,6 +471,7 @@ const HistoryTurns = memo(function HistoryTurns({
   onRewriteMessage,
   onRetryMessage,
   sessionId,
+  lastTurnInFlight,
 }) {
   return (
     <>
@@ -484,6 +487,7 @@ const HistoryTurns = memo(function HistoryTurns({
           turnIndex={i}
           onRewriteMessage={onRewriteMessage}
           onRetryMessage={onRetryMessage}
+          inFlight={lastTurnInFlight && i === turns.length - 1}
         />
       ))}
     </>
@@ -500,6 +504,7 @@ const Turn = memo(function Turn({
   turnIndex,
   onRewriteMessage,
   onRetryMessage,
+  inFlight = false,
 }) {
   const notify = useNotify();
   const allTools = turn.tools ?? [];
@@ -689,6 +694,9 @@ const Turn = memo(function Turn({
       )}
       {turn.unfinished && (
         <div className={styles.unfinished}>Interrupted before final reply</div>
+      )}
+      {!turn.unfinished && inFlight && (
+        <div className={styles.unfinished}>Still working…</div>
       )}
     </div>
   );

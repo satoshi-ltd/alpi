@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { mergeStreamingTurn, isInterruptedTurn, autoReadText, consumeAutoRead } from './chatTurns.js';
+import { mergeStreamingTurn, isInterruptedTurn, isLastTurnInFlight, autoReadText, consumeAutoRead } from './chatTurns.js';
 
 describe('mergeStreamingTurn', () => {
   it('returns turns unchanged when there is no pendingTurn', () => {
@@ -73,6 +73,38 @@ describe('isInterruptedTurn', () => {
 
   it('is false when the flag is absent', () => {
     expect(isInterruptedTurn({ user: 'q', assistant: 'a' })).toBe(false);
+  });
+});
+
+describe('isLastTurnInFlight', () => {
+  it('is true for a trailing stub when the session is in_flight', () => {
+    const turns = [{ user: 'hola', assistant: '', tools: [] }];
+    expect(isLastTurnInFlight(turns, true)).toBe(true);
+  });
+
+  it('is false when the session is not in_flight', () => {
+    const turns = [{ user: 'hola', assistant: '', tools: [] }];
+    expect(isLastTurnInFlight(turns, false)).toBe(false);
+  });
+
+  it('is false when the last turn already has a real reply', () => {
+    const turns = [{ user: 'hola', assistant: 'the full reply' }];
+    expect(isLastTurnInFlight(turns, true)).toBe(false);
+  });
+
+  it('is false when the last turn already has tool activity', () => {
+    const turns = [{ user: 'hola', assistant: '', tools: [{ tool_id: 't1' }] }];
+    expect(isLastTurnInFlight(turns, true)).toBe(false);
+  });
+
+  it('is false once this device merged its own live pendingTurn over the stub', () => {
+    const turns = [{ user: 'hola', assistant: '', tools: [], pending: true }];
+    expect(isLastTurnInFlight(turns, true)).toBe(false);
+  });
+
+  it('is false with no turns', () => {
+    expect(isLastTurnInFlight([], true)).toBe(false);
+    expect(isLastTurnInFlight(undefined, true)).toBe(false);
   });
 });
 

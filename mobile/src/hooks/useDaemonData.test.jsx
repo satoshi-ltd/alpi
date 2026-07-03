@@ -262,6 +262,27 @@ describe("useSession tail slicing", () => {
     expect(result.current.turnsOffset).toBe(0);
   });
 
+  it("exposes inFlight true when the daemon reports the session running", async () => {
+    const call = vi.fn(async () => ({
+      session: { id: "s1", turns: [{ user: "u0", assistant: "", tools: [] }] },
+      in_flight: true,
+    }));
+    const { result } = renderHook(() => useSession("doc", "s1"), {
+      wrapper: wrapperWith(call),
+    });
+    await waitFor(() => expect(result.current.data?.id).toBe("s1"));
+    expect(result.current.inFlight).toBe(true);
+  });
+
+  it("defaults inFlight to false when the daemon omits it", async () => {
+    const call = vi.fn(async () => ({ session: { id: "s1", turns: [] } }));
+    const { result } = renderHook(() => useSession("doc", "s1"), {
+      wrapper: wrapperWith(call),
+    });
+    await waitFor(() => expect(result.current.data?.id).toBe("s1"));
+    expect(result.current.inFlight).toBe(false);
+  });
+
   it("omits tail_turns when not requested", async () => {
     const call = vi.fn(async () => ({ session: { id: "s1", turns: [] } }));
     renderHook(() => useSession("doc", "s1"), { wrapper: wrapperWith(call) });

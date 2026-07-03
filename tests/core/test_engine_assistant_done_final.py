@@ -149,6 +149,20 @@ def test_interrupt_during_wrap_up_finalizes_as_interrupt(
 
     assert any(e.kind == "interrupted" for e in events)
     assert not [e for e in events if e.kind == "assistant_done" and e.final]
+    assert patched_engine.session.turns[-1].interrupted is True
+
+
+def test_silent_tool_only_completion_is_not_persisted_as_interrupted(
+    patched_engine: Engine, monkeypatch,
+) -> None:
+    _stub_stream(monkeypatch, [_final_chunk("")])
+
+    events = []
+    patched_engine.run_turn("do something silent", emit=lambda e: events.append(e))
+
+    assert not any(e.kind == "interrupted" for e in events)
+    assert patched_engine.session.turns[-1].assistant == ""
+    assert patched_engine.session.turns[-1].interrupted is False
 
 
 def test_max_steps_wrap_up_overrides_open_todo_guard(

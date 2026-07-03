@@ -14,6 +14,17 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.2.5 — 2026-07-03 — no more crying wolf on long-running turns
+
+_Needs alpi v0.10.13+ to show "Still working…"; older daemons just show nothing until the reply lands._
+
+- **Reopening a chat while the agent is still working no longer says
+  "Interrupted before final reply."** Long turns — the kind that make dozens
+  of tool calls — used to flash that message the moment you came back,
+  because the daemon hadn't written a reply yet. It now shows "Still
+  working…" instead, and only shows "Interrupted" when a turn was genuinely
+  stopped (Stop button, Ctrl+C, or a peer cancelling it).
+
 ## v0.2.4 — 2026-07-03 — snappier and lighter
 
 _Requires alpi v0.10.5+._

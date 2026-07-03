@@ -45,6 +45,7 @@ class Turn:
     reasoned_s: float = 0.0
     attachments: list[dict[str, Any]] = field(default_factory=list)  # bytes-free; carries a best-effort local path (may be unfetchable cross-client / post-TTL)
     output_attachments: list[dict[str, Any]] = field(default_factory=list)  # bytes-free; carries a best-effort local path (may be unfetchable cross-client / post-TTL)
+    interrupted: bool = False
 
 
 @dataclass
@@ -84,6 +85,7 @@ class Session:
         tools: list[ToolLog],
         started_at: float | None = None,
         attachments: list[dict[str, Any]] | None = None,
+        interrupted: bool = False,
     ) -> None:
         """Append a completed user turn to the persistent log."""
         self.turns.append(Turn(
@@ -92,6 +94,7 @@ class Session:
             tools=tools,
             assistant=assistant,
             attachments=list(attachments or []),
+            interrupted=interrupted,
         ))
 
     def status_line(self) -> str:
@@ -154,6 +157,8 @@ def _serialize_turn_v2(t: Turn, *, redact) -> dict[str, Any]:  # noqa: ANN001
         row["attachments"] = redact(t.attachments)
     if t.output_attachments:
         row["output_attachments"] = redact(t.output_attachments)
+    if t.interrupted:
+        row["interrupted"] = True
     return row
 
 
@@ -302,6 +307,7 @@ def load_turns(data: dict[str, Any]) -> list[Turn]:
             reasoned_s=float(t.get("reasoned_s", 0)),
             attachments=list(t.get("attachments") or []),
             output_attachments=list(t.get("output_attachments") or []),
+            interrupted=bool(t.get("interrupted")),
         ))
     return out
 

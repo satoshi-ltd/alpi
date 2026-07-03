@@ -106,7 +106,6 @@ async def _session_read(
 
     def _load() -> dict[str, Any]:
         data = host_sessions.read_session(home, session_id)
-        from alpi.session import turn_replayable
         turns = data.get("turns") or []
         total = len(turns)
         offset = 0
@@ -117,10 +116,13 @@ async def _session_read(
         turns = turns[offset:]
         for t in turns:
             if isinstance(t, dict):
-                t["unfinished"] = not turn_replayable(t)
+                # empty assistant text alone does not mean interrupted
+                t["unfinished"] = bool(t.get("interrupted"))
         data["turns"] = turns
-        # total_turns doubles as the capability marker: clients only trust partial semantics when it is present.
-        return {"session": data, "total_turns": total, "turns_offset": offset}
+        from alpi.host import chat as host_chat
+        in_flight = host_chat.session_key(profile, session_id) in host_chat._session_active
+        # total_turns is the capability marker for partial-read support
+        return {"session": data, "total_turns": total, "turns_offset": offset, "in_flight": in_flight}
 
     try:
         return await asyncio.to_thread(_load)
@@ -157,7 +159,7 @@ async def _sessions_delete(
         if not sid or not _SAFE_ID.match(sid):
             errors.append({"id": sid, "code": "invalid-id"})
             continue
-        if sid in host_chat._session_active:
+        if host_chat.session_key(profile, sid) in host_chat._session_active:
             errors.append({"id": sid, "code": "session-busy"})
             continue
         existed = await asyncio.to_thread(host_sessions.delete_session, home, sid)

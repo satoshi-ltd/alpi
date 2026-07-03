@@ -239,7 +239,7 @@ async def test_data_session_read_method_not_found_for_unknown_id(
 
 
 @pytest.mark.asyncio
-async def test_session_read_marks_unfinished_turns(
+async def test_session_read_marks_unfinished_from_the_persisted_flag_only(
     tmp_path: Path, monkeypatch,
 ) -> None:
     home = tmp_path / "home"
@@ -255,6 +255,8 @@ async def test_session_read_marks_unfinished_turns(
                 {"at": 2.0, "name": "web_search", "args": {}, "result": "", "ok": True, "duration_s": 0.1},
             ]},
             {"at": 3.0, "user": "made a file", "assistant": "", "output_attachments": [{"path": "/p"}]},
+            {"at": 4.0, "user": "in-flight stub", "assistant": "", "tools": []},
+            {"at": 5.0, "user": "cut off mid-turn", "assistant": "", "tools": [], "interrupted": True},
         ],
     }), encoding="utf-8")
     srv = host_server.Server(home=home)
@@ -267,8 +269,12 @@ async def test_session_read_marks_unfinished_turns(
     })
     turns = response["result"]["session"]["turns"]
     assert turns[0]["unfinished"] is False
-    assert turns[1]["unfinished"] is True
+    # Tool-only reply with no closing text: completed normally, never interrupted.
+    assert turns[1]["unfinished"] is False
     assert turns[2]["unfinished"] is False
+    # The in-flight stub another client can read mid-turn must not read as interrupted.
+    assert turns[3]["unfinished"] is False
+    assert turns[4]["unfinished"] is True
 
 
 def test_list_sessions_size_bytes_sums_main_and_sidecar(tmp_path: Path) -> None:
@@ -375,7 +381,7 @@ async def test_sessions_delete_rpc_refuses_busy_id(
     srv = host_server.Server(home=home)
     data_handlers.register(srv)
     monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
-    monkeypatch.setitem(host_chat._session_active, "busy", object())
+    monkeypatch.setitem(host_chat._session_active, host_chat.session_key("default", "busy"), object())
 
     response = await srv._dispatch({
         "id": "r", "method": "host.sessions.delete",
@@ -611,6 +617,38 @@ async def test_session_read_full_carries_total_turns_marker(
     assert result["total_turns"] == 3
     assert result["turns_offset"] == 0
     assert [t["user"] for t in result["session"]["turns"]] == ["one", "two", "three"]
+
+
+@pytest.mark.asyncio
+async def test_session_read_in_flight_false_when_no_active_engine(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    _seed_multi_turn(tmp_path)
+    result = await _read_rpc(tmp_path, monkeypatch, {"id": "multi3"})
+    assert result["in_flight"] is False
+
+
+@pytest.mark.asyncio
+async def test_session_read_in_flight_true_while_a_turn_is_running(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    from alpi.host import chat as host_chat
+    _seed_multi_turn(tmp_path)
+    monkeypatch.setitem(host_chat._session_active, host_chat.session_key("default", "multi3"), object())
+    result = await _read_rpc(tmp_path, monkeypatch, {"id": "multi3"})
+    assert result["in_flight"] is True
+
+
+@pytest.mark.asyncio
+async def test_session_read_in_flight_ignores_same_session_id_on_another_profile(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    from alpi.host import chat as host_chat
+    _seed_multi_turn(tmp_path)
+    # A different profile's turn happens to share this session id — must not leak here.
+    monkeypatch.setitem(host_chat._session_active, host_chat.session_key("other-profile", "multi3"), object())
+    result = await _read_rpc(tmp_path, monkeypatch, {"id": "multi3"})
+    assert result["in_flight"] is False
 
 
 @pytest.mark.asyncio

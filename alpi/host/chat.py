@@ -11,16 +11,20 @@ from alpi.host import server as host_server
 
 _active_lock = threading.Lock()
 _active: dict[str, Any] = {}  # request_id -> Engine
-_session_active: dict[str, Any] = {}  # session_id -> Engine
-_session_locks: dict[str, asyncio.Lock] = {}
+_session_active: dict[tuple[str, str], Any] = {}  # (profile, session_id) -> Engine
+_session_locks: dict[tuple[str, str], asyncio.Lock] = {}
 _HEARTBEAT_PERIOD_S = 5.0
 
 
-def _get_session_lock(session_id: str) -> asyncio.Lock:
-    lock = _session_locks.get(session_id)
+def session_key(profile: str, session_id: str) -> tuple[str, str]:
+    return (profile, session_id)
+
+
+def _get_session_lock(key: tuple[str, str]) -> asyncio.Lock:
+    lock = _session_locks.get(key)
     if lock is None:
         lock = asyncio.Lock()
-        _session_locks[session_id] = lock
+        _session_locks[key] = lock
     return lock
 
 
@@ -100,20 +104,21 @@ async def _data_chat_send(
         await send_frame({"event": "error", "text": f"session not found: {session_id}"})
         return
 
-    # Pin the session id BEFORE the engine runs so replay via host.chat.events_since works even for a brand-new session whose id the client hasn't seen yet.
+    # pin sid before the engine runs — events_since replay needs it pre-run
     effective_sid = session_id if isinstance(session_id, str) and session_id else engine.session.id
     persisted_sid = effective_sid
+    skey = session_key(profile, effective_sid)
 
     session_lock: asyncio.Lock | None = None
     # Claim atomically under the lock before any await, or the busy gate races.
     busy = False
     with _active_lock:
-        prev = _session_active.get(effective_sid)
+        prev = _session_active.get(skey)
         if prev is not None and prev is not engine:
             busy = True
         else:
             _active[request_id] = engine
-            _session_active[effective_sid] = engine
+            _session_active[skey] = engine
     if busy:
         await send_frame({"event": "error", "text": "session already has a running turn", "code": "busy"})
         return
@@ -121,7 +126,7 @@ async def _data_chat_send(
     heartbeat_task: asyncio.Task | None = None
     lock_acquired = False
     try:
-        session_lock = _get_session_lock(effective_sid)
+        session_lock = _get_session_lock(skey)
         await session_lock.acquire()
         lock_acquired = True
 
@@ -248,8 +253,8 @@ async def _data_chat_send(
             await task
         with _active_lock:
             _active.pop(request_id, None)
-            if _session_active.get(effective_sid) is engine:
-                _session_active.pop(effective_sid, None)
+            if _session_active.get(skey) is engine:
+                _session_active.pop(skey, None)
         if lock_acquired and session_lock is not None:
             session_lock.release()
 
@@ -361,7 +366,7 @@ async def _data_chat_events_since(
     _check_id(session_id, "session_id")
     home = _resolve_home(profile)
     in_flight = False
-    if session_id in _session_active:
+    if session_key(profile, session_id) in _session_active:
         in_flight = True
     events = await asyncio.to_thread(
         _chat_events.read_since, home, session_id, after_seq=after_seq, limit=limit,

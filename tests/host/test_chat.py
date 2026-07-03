@@ -797,3 +797,53 @@ async def test_chat_send_builds_engine_off_the_event_loop(
         await srv.stop()
 
     assert seen["thread"] is not threading.main_thread()
+
+
+@pytest.mark.asyncio
+async def test_data_chat_send_same_session_id_on_another_profile_is_not_busy(
+    monkeypatch, short_tmp: Path,
+) -> None:
+    home = short_tmp / "h"
+    home.mkdir()
+    load_or_generate(home)
+    _patch_engine(monkeypatch)
+    from alpi.host import chat as dc
+    import alpi.cli as cli_mod
+    monkeypatch.setattr(cli_mod, "_continue_specific_session", lambda *a, **kw: True)
+
+    # profile-a is mid-turn here — profile-b coincidentally shares the session id
+    dc._session_active[dc.session_key("profile-a", "shared-sid")] = object()
+
+    srv = host_server.Server(home=home)
+    data_handlers.register(srv)
+    dc.register(srv)
+    await srv.start()
+
+    events: list[dict] = []
+    try:
+        reader, writer = await asyncio.open_unix_connection(str(srv.socket_path()))
+        writer.write((json.dumps({
+            "id": "req-b",
+            "method": "host.chat.send",
+            "params": {
+                "profile": "profile-b",
+                "text": "hi",
+                "request_id": "req-b",
+                "session_id": "shared-sid",
+            },
+        }) + "\n").encode("utf-8"))
+        await writer.drain()
+        while True:
+            line = await reader.readline()
+            if not line:
+                break
+            events.append(json.loads(line))
+        writer.close()
+        await writer.wait_closed()
+    finally:
+        await srv.stop()
+
+    kinds = [e.get("event") for e in events]
+    assert not any(e.get("event") == "error" and e.get("code") == "busy" for e in events), events
+    assert "reply" in kinds and "done" in kinds, kinds
+    assert dc.session_key("profile-a", "shared-sid") in dc._session_active

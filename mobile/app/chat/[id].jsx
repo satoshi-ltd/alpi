@@ -19,7 +19,7 @@ import { retryTextFor } from '../../src/features/chat/messageActions';
 import { visibleWindow } from '../../src/lib/chatWindow';
 import { compactProducedTool } from '../../src/lib/producedAttachments';
 import { profileLabel } from '../../src/lib/profileLabel';
-import { mergeStreamingTurn, isInterruptedTurn, consumeAutoRead } from '../../src/features/chat/chatTurns';
+import { mergeStreamingTurn, isInterruptedTurn, isLastTurnInFlight, consumeAutoRead } from '../../src/features/chat/chatTurns';
 import { ChatSkeleton } from '../../src/features/chat/ChatSkeleton';
 import { ToolCallGroup, groupConsecutiveTools } from '../../src/features/chat/ToolCallRow';
 import { askUserNoAnswerTag } from '../../src/features/chat/askUserAnswer';
@@ -63,7 +63,7 @@ const TURN_STYLES = StyleSheet.create({
   emptyModel: { fontSize: fontSizes.sm, textAlign: 'center' },
 });
 
-const TurnBlock = memo(function TurnBlock({ turn, turnIndex, profileName, accent, colors, fonts, fontSizes, onActionTarget }) {
+const TurnBlock = memo(function TurnBlock({ turn, turnIndex, profileName, accent, colors, fonts, fontSizes, onActionTarget, inFlight = false }) {
   const ts = turn.at ? relativeTime(turn.at * 1000) : '';
   const askUsers = (turn.tools ?? []).filter((t) => t.name === 'ask_user');
   const askUserAnswers = askUsers
@@ -145,6 +145,11 @@ const TurnBlock = memo(function TurnBlock({ turn, turnIndex, profileName, accent
           Interrupted before final reply
         </Text>
       ) : null}
+      {!isInterruptedTurn(turn) && inFlight ? (
+        <Text style={[TURN_STYLES.unfinished, { color: colors.ink3, fontFamily: fonts.mono, fontSize: fontSizes.xs }]}>
+          Still working…
+        </Text>
+      ) : null}
       {turn.error ? (
         <Text style={[TURN_STYLES.error, { color: colors.danger, fontFamily: fonts.mono, fontSize: fontSizes.xs }]}>
           {turn.error}
@@ -220,10 +225,15 @@ function EmptyThread({ profileName, model, accent, colors, fonts }) {
   );
 }
 
-function ChatList({ turns, pendingTurn, loading, hydrating, profileName, model, accent, onActionTarget, colors, fonts, fontSizes, turnsBase = 0, hasMoreRemote = false, onLoadOlder }) {
+function ChatList({ turns, pendingTurn, loading, hydrating, profileName, model, accent, onActionTarget, colors, fonts, fontSizes, turnsBase = 0, hasMoreRemote = false, onLoadOlder, sessionInFlight = false }) {
   const [pageSize, setPageSize] = useState(INITIAL_PAGE);
 
   const full = useMemo(() => mergeStreamingTurn(turns, pendingTurn), [turns, pendingTurn]);
+  const lastTurnInFlight = useMemo(
+    () => isLastTurnInFlight(full, sessionInFlight),
+    [full, sessionInFlight],
+  );
+  const lastTurnIndex = turnsBase + full.length - 1;
 
   const visible = useMemo(
     () => visibleWindow(full, pageSize, turnsBase),
@@ -242,9 +252,10 @@ function ChatList({ turns, pendingTurn, loading, hydrating, profileName, model, 
         fonts={fonts}
         fontSizes={fontSizes}
         onActionTarget={onActionTarget}
+        inFlight={lastTurnInFlight && item.turnIndex === lastTurnIndex}
       />
     ),
-    [profileName, accent, colors, fonts, fontSizes, onActionTarget],
+    [profileName, accent, colors, fonts, fontSizes, onActionTarget, lastTurnInFlight, lastTurnIndex],
   );
 
   if ((loading || hydrating) && full.length === 0) {
@@ -374,17 +385,20 @@ function ProfileChatInner() {
   }, [id, sessionId]);
   const session = useSession(id, sessionId, tailTurns);
 
-  // Growing the tail flips the cache key (data null while the bigger tail loads) — hold the last good payload so the list never flashes a skeleton mid-scroll.
-  const heldRef = useRef({ key: null, data: null, offset: 0 });
+  // tail growth flips the cache key to null briefly — hold last payload to avoid a flash
+  const heldRef = useRef({ key: null, data: null, offset: 0, inFlight: false });
   const sessKey = `${endpoint?.id ?? ''}|${id}|${sessionId ?? ''}`;
   useEffect(() => {
     if (session.data) {
-      heldRef.current = { key: sessKey, data: session.data, offset: session.turnsOffset };
+      heldRef.current = {
+        key: sessKey, data: session.data, offset: session.turnsOffset, inFlight: session.inFlight,
+      };
     }
-  }, [session.data, session.turnsOffset, sessKey]);
+  }, [session.data, session.turnsOffset, session.inFlight, sessKey]);
   const held = heldRef.current.key === sessKey ? heldRef.current : null;
   const sessionData = session.data ?? held?.data ?? null;
   const turnsBase = session.data ? session.turnsOffset : (held?.offset ?? 0);
+  const sessionInFlight = session.data ? session.inFlight : (held?.inFlight ?? false);
   const hasMoreRemote = turnsBase > 0;
 
   const sessionLoadingRef = useRef(false);
@@ -650,6 +664,7 @@ function ProfileChatInner() {
             turnsBase={turnsBase}
             hasMoreRemote={hasMoreRemote}
             onLoadOlder={loadOlder}
+            sessionInFlight={sessionInFlight}
           />
           <Composer
             placeholder={`Message @${profileLabel(profile.name)}…`}

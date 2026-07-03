@@ -676,6 +676,7 @@ class Engine:
                 reasoning="\n\n".join(p for p in turn_reasoning_parts if p),
                 reasoned_s=max(0.0, reasoned_until - turn_started),
                 attachments=att_meta, output_attachments=turn_produced,
+                interrupted=self._interrupted_this_turn,
             )
             if self.session.turns and self.session.turns[-1].at == turn_started:
                 self.session.turns[-1] = final_turn

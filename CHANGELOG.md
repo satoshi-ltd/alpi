@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.10.13 — 2026-07-03 — chat history stops crying wolf
+
+- **A turn no longer shows "interrupted" just because it hasn't been read yet.**
+  Sending a message writes an in-progress placeholder to disk before the reply
+  streams in; a second device (or the same one, on reconnect) reading the
+  chat at that exact moment used to show it as interrupted, then "fix itself"
+  once the real reply landed. A turn is now only ever marked interrupted when
+  it genuinely was — via Stop, Ctrl+C, or a peer cancelling it — never
+  inferred from an answer that simply hasn't arrived yet.
+- **A reply made only of tool actions, with no closing comment, is no longer
+  mislabeled interrupted either** — the same fix applies to any turn that
+  legitimately ends without final text.
+- **`host.session.read` now reports whether a session currently has a turn
+  running** (`in_flight`), so a client reopening a long-running chat can show
+  "still working" instead of guessing from an empty reply. Desktop and mobile
+  pick this up in their own next release.
+- **Fixed a rare cross-profile mixup: two profiles that happen to have a
+  session with the same id could interfere with each other** — one profile's
+  running turn could make an unrelated profile's identically-named session
+  wrongly report "busy" (blocking sends and deletes) or "still working."
+  Session activity is now tracked per profile, not just per session id.
+
 ## v0.10.12 — 2026-07-03 — tighter guards on paired-device access
 
 - **A profile-scoped device can no longer act outside its profiles.** Answering

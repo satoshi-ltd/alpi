@@ -12,13 +12,19 @@ const turn = (i) => ({ at: i, user: `u${i}`, assistant: `a${i}` });
 describe("normalizeSessionResult", () => {
   it("unwraps the envelope with total/offset", () => {
     const res = normalizeSessionResult({ session: { id: "s" }, total_turns: 5, turns_offset: 2 });
-    expect(res).toEqual({ session: { id: "s" }, totalTurns: 5, turnsOffset: 2 });
+    expect(res).toEqual({ session: { id: "s" }, totalTurns: 5, turnsOffset: 2, inFlight: false });
   });
 
   it("treats a bare legacy session object as envelope-less", () => {
     const res = normalizeSessionResult({ id: "s", turns: [] });
     expect(res.totalTurns).toBeNull();
     expect(res.session.id).toBe("s");
+    expect(res.inFlight).toBe(false);
+  });
+
+  it("reads in_flight true from the envelope", () => {
+    const res = normalizeSessionResult({ session: { id: "s" }, in_flight: true });
+    expect(res.inFlight).toBe(true);
   });
 });
 
@@ -101,5 +107,35 @@ describe("fetchFullSession", () => {
     });
     await fetchFullSession("work", "s", { known });
     expect(invokeMock).toHaveBeenCalledWith("session_detail", { profile: "work", id: "s" });
+  });
+
+  it("carries in_flight through onto the returned session on a full fetch", async () => {
+    invokeMock.mockResolvedValueOnce({
+      session: { id: "s", turns: [turn(0)] },
+      total_turns: 1,
+      turns_offset: 0,
+      in_flight: true,
+    });
+    const data = await fetchFullSession("work", "s");
+    expect(data.in_flight).toBe(true);
+  });
+
+  it("carries in_flight through onto the returned session on a merged fetch", async () => {
+    const known = { id: "s", turns: [turn(0)] };
+    invokeMock.mockResolvedValueOnce({
+      session: { id: "s", turns: [turn(1)] },
+      total_turns: 2,
+      turns_offset: 1,
+      in_flight: true,
+    });
+    const data = await fetchFullSession("work", "s", { known });
+    expect(data.in_flight).toBe(true);
+    expect(data.turns).toHaveLength(2);
+  });
+
+  it("defaults in_flight to false when the daemon omits it", async () => {
+    invokeMock.mockResolvedValueOnce({ session: { id: "s", turns: [turn(0)] } });
+    const data = await fetchFullSession("work", "s");
+    expect(data.in_flight).toBe(false);
   });
 });

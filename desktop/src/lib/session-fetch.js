@@ -6,9 +6,10 @@ export function normalizeSessionResult(raw) {
       session: raw.session,
       totalTurns: Number.isInteger(raw.total_turns) ? raw.total_turns : null,
       turnsOffset: Number.isInteger(raw.turns_offset) ? raw.turns_offset : 0,
+      inFlight: raw.in_flight === true,
     };
   }
-  return { session: raw, totalTurns: null, turnsOffset: 0 };
+  return { session: raw, totalTurns: null, turnsOffset: 0, inFlight: false };
 }
 
 export function mergeSessionTurns(known, res) {
@@ -42,10 +43,10 @@ export async function fetchFullSession(profile, sessionId, { known = null } = {}
     const res = await fetchSessionDetail(profile, sessionId, {
       afterTurn: known.turns.length,
     });
-    if (res.totalTurns == null) return res.session;
+    if (res.totalTurns == null) return { ...res.session, in_flight: res.inFlight };
     const merged = mergeSessionTurns(known, res);
-    if (merged) return merged;
+    if (merged) return { ...merged, in_flight: res.inFlight };
   }
   const res = await fetchSessionDetail(profile, sessionId);
-  return res.session;
+  return { ...res.session, in_flight: res.inFlight };
 }

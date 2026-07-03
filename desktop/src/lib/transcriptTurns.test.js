@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { dropInflightStub } from "./transcriptTurns.js";
+import { dropInflightStub, isLastTurnInFlight } from "./transcriptTurns.js";
 
 const pending = { user: "hola", profile: "doc", sessionId: "s1" };
 
@@ -31,5 +31,31 @@ describe("dropInflightStub", () => {
     const turns = [{ user: "hola", assistant: "" }];
     expect(dropInflightStub(turns, null)).toBe(turns);
     expect(dropInflightStub([], pending)).toEqual([]);
+  });
+});
+
+describe("isLastTurnInFlight", () => {
+  it("is true for a trailing stub when the session is in_flight", () => {
+    const turns = [{ user: "hola", assistant: "", tools: [] }];
+    expect(isLastTurnInFlight(turns, true)).toBe(true);
+  });
+
+  it("is false when the session is not in_flight", () => {
+    const turns = [{ user: "hola", assistant: "", tools: [] }];
+    expect(isLastTurnInFlight(turns, false)).toBe(false);
+  });
+
+  it("is false when the last turn already has a real reply", () => {
+    const turns = [{ user: "hola", assistant: "the full reply" }];
+    expect(isLastTurnInFlight(turns, true)).toBe(false);
+  });
+
+  it("is false when the last turn already has tool activity", () => {
+    const turns = [{ user: "hola", assistant: "", tools: [{ tool_id: "t1" }] }];
+    expect(isLastTurnInFlight(turns, true)).toBe(false);
+  });
+
+  it("is false with no turns", () => {
+    expect(isLastTurnInFlight([], true)).toBe(false);
   });
 });

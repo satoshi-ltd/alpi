@@ -123,3 +123,57 @@ describe("ChatPane — an interrupted turn is marked, not pending", () => {
     expect(screen.queryByLabelText("Copy response")).toBeNull();
   });
 });
+
+describe("ChatPane — a still-running turn reads as in progress, not interrupted", () => {
+  const profile = { name: "a", model: "x/y" };
+  const stub = { at: 0, user: "do a long research", assistant: "", tools: [] };
+
+  it("shows a still-working note when the daemon reports the session in_flight", () => {
+    render(
+      <ChatPane
+        view={{ kind: "profile", profile: profile.name, sessionId: "s1" }}
+        profiles={[profile]}
+        activeProfile={profile}
+        sessionData={{ turns: [stub], last_ctx_tokens: 0, in_flight: true }}
+        onSend={vi.fn()}
+        onRewriteMessage={vi.fn()}
+        onRetryMessage={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Still working…")).toBeTruthy();
+    expect(screen.queryByText("Interrupted before final reply")).toBeNull();
+  });
+
+  it("shows nothing for the same stub when the session is not in_flight", () => {
+    render(
+      <ChatPane
+        view={{ kind: "profile", profile: profile.name, sessionId: "s1" }}
+        profiles={[profile]}
+        activeProfile={profile}
+        sessionData={{ turns: [stub], last_ctx_tokens: 0, in_flight: false }}
+        onSend={vi.fn()}
+        onRewriteMessage={vi.fn()}
+        onRetryMessage={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText("Still working…")).toBeNull();
+    expect(screen.queryByText("Interrupted before final reply")).toBeNull();
+  });
+
+  it("a genuinely interrupted turn still wins over in_flight", () => {
+    const interrupted = { ...stub, unfinished: true };
+    render(
+      <ChatPane
+        view={{ kind: "profile", profile: profile.name, sessionId: "s1" }}
+        profiles={[profile]}
+        activeProfile={profile}
+        sessionData={{ turns: [interrupted], last_ctx_tokens: 0, in_flight: true }}
+        onSend={vi.fn()}
+        onRewriteMessage={vi.fn()}
+        onRetryMessage={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Interrupted before final reply")).toBeTruthy();
+    expect(screen.queryByText("Still working…")).toBeNull();
+  });
+});
