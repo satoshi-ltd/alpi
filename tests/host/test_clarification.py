@@ -487,3 +487,17 @@ async def test_multi_respond_rejects_non_json_choice(tmp_path: Path) -> None:
         await asyncio.wait_for(handler_future, timeout=5.0)
     finally:
         monkeypatched.undo()
+
+
+def test_pending_profile_resolves_and_fails_closed(monkeypatch):
+    from alpi.host import clarification as clar
+    clar._reset_for_tests()
+    with clar._pending_lock:
+        clar._pending_meta["req-1"] = {"request_id": "req-1", "profile": "finance"}
+    try:
+        assert clar.pending_profile("req-1") == "finance"
+        assert clar.pending_profile("unknown") is None
+        assert clar.pending_profile("") is None
+        assert clar.pending_profile(None) is None
+    finally:
+        clar._reset_for_tests()

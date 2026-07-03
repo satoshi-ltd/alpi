@@ -124,3 +124,190 @@ async def test_remote_token_validation_runs_off_the_event_loop(
 
     assert sent and sent[0].get("result") == {"ok": True}
     assert seen["thread"] is not threading.main_thread()
+
+def _member(scope):
+    def _fake(_body):
+        return True, "member", scope
+    return _fake
+
+
+def _admin():
+    def _fake(_body):
+        return True, "admin", []
+    return _fake
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method", ["host.config.set_field", "host.config.unset_field"])
+@pytest.mark.parametrize(
+    "key", ["alp.tcp_port", "host.tcp_port", "host.allow_public_bind", "network.host"],
+)
+async def test_config_field_local_only_key_blocked_over_remote(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, method: str, key: str,
+) -> None:
+    monkeypatch.setattr(host_server, "_check_token_meta", _admin())
+    srv = host_server.Server(home=tmp_path)
+    reached = {"n": 0}
+
+    async def stub(_params, _server):
+        reached["n"] += 1
+        return {"ok": True}
+
+    srv.register(method, stub)
+    sent: list[dict] = []
+
+    async def send(p):
+        sent.append(p)
+
+    body = json.dumps({"id": "r", "method": method,
+                       "params": {"auth_token": "t", "profile": "default", "key": key, "value": "true"}})
+    await srv._handle_request(body, send, require_token=True)
+    assert sent[0]["error"]["message"] == "forbidden"
+    assert sent[0]["error"]["data"]["detail"] == "config key is local-only"
+    assert reached["n"] == 0
+
+
+@pytest.mark.asyncio
+async def test_config_set_field_normal_key_passes_gate_over_remote(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(host_server, "_check_token_meta", _admin())
+    srv = host_server.Server(home=tmp_path)
+    reached = {"n": 0}
+
+    async def stub(_params, _server):
+        reached["n"] += 1
+        return {"ok": True}
+
+    srv.register("host.config.set_field", stub)
+    sent: list[dict] = []
+
+    async def send(p):
+        sent.append(p)
+
+    body = json.dumps({"id": "r", "method": "host.config.set_field",
+                       "params": {"auth_token": "t", "profile": "default", "key": "model", "value": "x"}})
+    await srv._handle_request(body, send, require_token=True)
+    assert reached["n"] == 1
+    assert sent[0].get("result") == {"ok": True}
+
+
+@pytest.mark.asyncio
+async def test_config_set_field_local_only_key_allowed_over_unix_socket(
+    tmp_path: Path,
+) -> None:
+    srv = host_server.Server(home=tmp_path)
+    reached = {"n": 0}
+
+    async def stub(_params, _server):
+        reached["n"] += 1
+        return {"ok": True}
+
+    srv.register("host.config.set_field", stub)
+    sent: list[dict] = []
+
+    async def send(p):
+        sent.append(p)
+
+    body = json.dumps({"id": "r", "method": "host.config.set_field",
+                       "params": {"profile": "default", "key": "host.tcp_port", "value": "7423"}})
+    await srv._handle_request(body, send)  # no token = local socket
+    assert reached["n"] == 1
+
+
+@pytest.mark.asyncio
+async def test_clarification_respond_scoped_member_out_of_scope_blocked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(host_server, "_check_token_meta", _member(["allowed"]))
+    monkeypatch.setattr("alpi.host.clarification.pending_profile", lambda rid: "other")
+    srv = host_server.Server(home=tmp_path)
+    reached = {"n": 0}
+
+    async def stub(_params, _server):
+        reached["n"] += 1
+        return {"ok": True}
+
+    srv.register("host.clarification.respond", stub)
+    sent: list[dict] = []
+
+    async def send(p):
+        sent.append(p)
+
+    body = json.dumps({"id": "r", "method": "host.clarification.respond",
+                       "params": {"auth_token": "t", "request_id": "abc", "choice": "A"}})
+    await srv._handle_request(body, send, require_token=True)
+    assert reached["n"] == 0
+    assert sent[0]["error"]["data"]["detail"] == "profile not in device scope"
+
+
+@pytest.mark.asyncio
+async def test_clarification_respond_scoped_member_in_scope_allowed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(host_server, "_check_token_meta", _member(["allowed"]))
+    monkeypatch.setattr("alpi.host.clarification.pending_profile", lambda rid: "allowed")
+    srv = host_server.Server(home=tmp_path)
+    reached = {"n": 0}
+
+    async def stub(_params, _server):
+        reached["n"] += 1
+        return {"ok": True}
+
+    srv.register("host.clarification.respond", stub)
+    sent: list[dict] = []
+
+    async def send(p):
+        sent.append(p)
+
+    body = json.dumps({"id": "r", "method": "host.clarification.respond",
+                       "params": {"auth_token": "t", "request_id": "abc", "choice": "A"}})
+    await srv._handle_request(body, send, require_token=True)
+    assert reached["n"] == 1
+
+
+@pytest.mark.asyncio
+async def test_clarification_respond_scoped_member_unknown_id_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(host_server, "_check_token_meta", _member(["allowed"]))
+    monkeypatch.setattr("alpi.host.clarification.pending_profile", lambda rid: None)
+    srv = host_server.Server(home=tmp_path)
+
+    async def stub(_params, _server):
+        return {"ok": True}
+
+    srv.register("host.clarification.respond", stub)
+    sent: list[dict] = []
+
+    async def send(p):
+        sent.append(p)
+
+    body = json.dumps({"id": "r", "method": "host.clarification.respond",
+                       "params": {"auth_token": "t", "request_id": "ghost", "choice": "A"}})
+    await srv._handle_request(body, send, require_token=True)
+    assert sent[0]["error"]["message"] == "forbidden"
+
+
+@pytest.mark.asyncio
+async def test_clarification_respond_unscoped_member_allowed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(host_server, "_check_token_meta", _member([]))  # empty scope = all
+    srv = host_server.Server(home=tmp_path)
+    reached = {"n": 0}
+
+    async def stub(_params, _server):
+        reached["n"] += 1
+        return {"ok": True}
+
+    srv.register("host.clarification.respond", stub)
+    sent: list[dict] = []
+
+    async def send(p):
+        sent.append(p)
+
+    body = json.dumps({"id": "r", "method": "host.clarification.respond",
+                       "params": {"auth_token": "t", "request_id": "abc", "choice": "A"}})
+    await srv._handle_request(body, send, require_token=True)
+    assert reached["n"] == 1

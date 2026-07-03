@@ -231,6 +231,14 @@ async def _pending_handler(
     return {"requests": items}
 
 
+def pending_profile(request_id: Any) -> str | None:
+    if not isinstance(request_id, str) or not request_id:
+        return None
+    with _pending_lock:
+        meta = _pending_meta.get(request_id)
+    return meta.get("profile") if isinstance(meta, dict) else None
+
+
 def _reset_for_tests() -> None:
     """Drop all pending Futures + unbind the loop. Test fixture helper."""
     global _loop_ref

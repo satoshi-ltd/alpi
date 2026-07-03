@@ -24,6 +24,13 @@ _LOCAL_ONLY_METHODS = frozenset({
     "host.network.restart_host_server",
 })
 
+_LOCAL_ONLY_CONFIG_KEYS = frozenset({
+    "alp.tcp_port",
+    "host.tcp_port",
+    "host.allow_public_bind",
+    "network.host",
+})
+
 # Require ``role == "admin"`` when called over WS. Local socket bypasses (see ``devices.validate_and_lookup_role`` for the empty-store bootstrap).
 _ADMIN_METHODS = frozenset({
     "host.providers.set_key",
@@ -100,7 +107,6 @@ _SCOPE_FREE_METHODS = frozenset({
     "host.approval.pending",
     "host.clarification.pending",
     "host.approval.respond",
-    "host.clarification.respond",
 })
 
 
@@ -310,6 +316,19 @@ class Server:
                 },
             })
             return
+        if require_token and method in ("host.config.set_field", "host.config.unset_field"):
+            params = body.get("params") if isinstance(body.get("params"), dict) else {}
+            if str(params.get("key") or "") in _LOCAL_ONLY_CONFIG_KEYS:
+                log.warning("host forbidden: config key %r is local-only", params.get("key"))
+                await send({
+                    "id": body.get("id"),
+                    "error": {
+                        "code": -32001,
+                        "message": "forbidden",
+                        "data": {"detail": "config key is local-only"},
+                    },
+                })
+                return
         if require_token and method in _ADMIN_METHODS and role != "admin":
             log.warning("host forbidden: %s blocked for role=%s", method, role)
             await send({
@@ -330,6 +349,9 @@ class Server:
         ):
             params = body.get("params") if isinstance(body.get("params"), dict) else {}
             target = params.get("profile")
+            if (not isinstance(target, str) or not target) and method == "host.clarification.respond":
+                from alpi.host import clarification
+                target = clarification.pending_profile(params.get("request_id"))
             if not isinstance(target, str) or not target:
                 log.warning(
                     "host forbidden: %s requires explicit profile for scoped token",

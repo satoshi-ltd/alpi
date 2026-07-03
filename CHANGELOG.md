@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.10.12 — 2026-07-03 — tighter guards on paired-device access
+
+- **A profile-scoped device can no longer act outside its profiles.** Answering
+  a running agent's clarification prompt is now checked against the device's
+  allowed profiles, closing a gap where a scoped phone could reply to another
+  profile's agent.
+- **Network settings stay local-only, everywhere.** Changing the daemon's
+  listening ports, advertised address, or public-exposure flag is now blocked
+  over remote connections even for admin devices — matching the rule that
+  already applied to the dedicated network commands.
+
 ## v0.10.11 — 2026-07-02 — a faster, steadier host plane for the apps
 
 - **Opening a chat no longer stalls the daemon.** Reading a session's history
