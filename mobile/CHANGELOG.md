@@ -14,6 +14,21 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.2.6 — 2026-07-04 — lighter chats over the wire
+
+_Works with older daemons (falls back to full refetches); incremental sync
+and history paging need alpi v0.10.14+._
+
+- **Chats now sync incrementally.** Refreshing a conversation — after a
+  reply, a daemon event, or pull-to-refresh — fetches only the turns you
+  don't have yet, instead of re-downloading the whole visible tail every
+  time.
+- **Scrolling back loads history in small pages.** Older turns arrive in
+  30-turn chunks; each step used to re-ship everything loaded so far, so
+  deep scrolls got heavier the further back you went.
+- **Reopening a chat you already visited paints instantly** from the kept
+  transcript and just tops up whatever is new.
+
 ## v0.2.5 — 2026-07-03 — no more crying wolf on long-running turns
 
 _Needs alpi v0.10.13+ to show "Still working…"; older daemons just show nothing until the reply lands._

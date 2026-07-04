@@ -169,25 +169,6 @@ export function useProfilesList() {
   return usePolledCall('host.profiles.list', {}, []);
 }
 
-// Daemon returns { session: {...} } — unwrap. totalTurns null ⇒ the daemon ignored the tail slice and shipped the full transcript.
-export function useSession(profile, sessionId, tailTurns = null) {
-  const inner = usePolledCall(
-    'host.session.read',
-    profile && sessionId
-      ? { profile, id: sessionId, ...(tailTurns ? { tail_turns: tailTurns } : {}) }
-      : null,
-    [profile, sessionId, tailTurns],
-    { skipWhen: !profile || !sessionId },
-  );
-  return {
-    ...inner,
-    data: inner.data?.session ?? null,
-    totalTurns: Number.isInteger(inner.data?.total_turns) ? inner.data.total_turns : null,
-    turnsOffset: Number.isInteger(inner.data?.turns_offset) ? inner.data.turns_offset : 0,
-    inFlight: inner.data?.in_flight === true,
-  };
-}
-
 export function useSessionsList(profile, limit = 20, opts = {}) {
   return usePolledCall(
     'host.sessions.list',

@@ -27,7 +27,8 @@ import { Diamond } from '../../src/components/Diamond';
 import { SessionsSheet } from '../../src/features/sheets/SessionsSheet';
 import { useChatSend } from '../../src/hooks/useChatSend';
 import { stageAttachment } from '../../src/lib/attachments';
-import { useProfileSummaries, useSession, useSessionsList } from '../../src/hooks/useDaemonData';
+import { useProfileSummaries, useSessionsList } from '../../src/hooks/useDaemonData';
+import { useSessionTranscript } from '../../src/hooks/useSessionTranscript';
 import { useDebouncedCallback } from '../../src/hooks/useDebouncedCallback';
 import { useEventEffect } from '../../src/hooks/useEvents';
 import { useEndpoint } from '../../src/lib/EndpointContext';
@@ -48,8 +49,6 @@ function relativeTime(ms) {
 
 const INITIAL_PAGE = 30;
 const PAGE_STEP = 30;
-// One rendered page + one buffered — first paint ships ~60 turns instead of the whole transcript.
-const TAIL_INITIAL = INITIAL_PAGE + PAGE_STEP;
 
 const TURN_STYLES = StyleSheet.create({
   block: { gap: space.s4, paddingTop: space.s8 },
@@ -379,34 +378,12 @@ function ProfileChatInner() {
     const chat = sessions.find((s) => (s.kind ?? 'chat') === 'chat');
     if (chat?.id) setSessionId(chat.id);
   }, [sessionPicked, sessionId, latestChatId, sessionsList.data]);
-  const [tailTurns, setTailTurns] = useState(TAIL_INITIAL);
-  useEffect(() => {
-    setTailTurns(TAIL_INITIAL);
-  }, [id, sessionId]);
-  const session = useSession(id, sessionId, tailTurns);
-
-  // tail growth flips the cache key to null briefly — hold last payload to avoid a flash
-  const heldRef = useRef({ key: null, data: null, offset: 0, inFlight: false });
-  const sessKey = `${endpoint?.id ?? ''}|${id}|${sessionId ?? ''}`;
-  useEffect(() => {
-    if (session.data) {
-      heldRef.current = {
-        key: sessKey, data: session.data, offset: session.turnsOffset, inFlight: session.inFlight,
-      };
-    }
-  }, [session.data, session.turnsOffset, session.inFlight, sessKey]);
-  const held = heldRef.current.key === sessKey ? heldRef.current : null;
-  const sessionData = session.data ?? held?.data ?? null;
-  const turnsBase = session.data ? session.turnsOffset : (held?.offset ?? 0);
-  const sessionInFlight = session.data ? session.inFlight : (held?.inFlight ?? false);
-  const hasMoreRemote = turnsBase > 0;
-
-  const sessionLoadingRef = useRef(false);
-  sessionLoadingRef.current = session.loading;
-  const loadOlder = useCallback(() => {
-    if (sessionLoadingRef.current) return;
-    setTailTurns((t) => t + PAGE_STEP);
-  }, []);
+  const session = useSessionTranscript(id, sessionId);
+  const sessionData = session.data;
+  const turnsBase = session.turnsOffset;
+  const sessionInFlight = session.inFlight;
+  const hasMoreRemote = session.hasMore;
+  const loadOlder = session.loadOlder;
 
   const latestSessionTs =
     profile?.latest_session?.updated_at ??
