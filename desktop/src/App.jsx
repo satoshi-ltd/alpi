@@ -24,12 +24,8 @@ import { installUpdater } from "./lib/updater.js";
 import { findLatestTask } from "./lib/workgroup-tasks.js";
 import { saveCachedMessages } from "./lib/workgroup-cache.js";
 import { fetchWorkgroupTranscript, invalidateTranscriptCache } from "./lib/workgroup-fetch.js";
-import {
-  loadCachedSession,
-  saveCachedSession,
-  invalidateSessionCache,
-} from "./lib/session-cache.js";
-import { fetchFullSession, isSessionGone } from "./lib/session-fetch.js";
+import { invalidateSessionCache } from "./lib/session-cache.js";
+import { createSessionOpener } from "./lib/session-open.js";
 import { createSessionRefresher } from "./lib/session-refresh.js";
 import { invalidateConnectionCaches } from "./lib/swr-cache.js";
 import { invalidateSessionsButtonCache } from "./primitives/SessionsButton.jsx";
@@ -65,7 +61,10 @@ function isChatSessionSummary(session) {
   return session?.kind === "chat";
 }
 
-function isChatSessionData(data) {
+export function isChatSessionData(data) {
+  // kind comes from the daemon envelope and classifies the TRUE first turn — turns[0] of a tail slice does not, so offset slices without kind are unclassifiable and must pass.
+  if (typeof data?.kind === "string") return data.kind === "chat" || data.kind === "empty";
+  if (Number.isInteger(data?.turnsOffset) && data.turnsOffset > 0) return true;
   const first = String(data?.turns?.[0]?.user ?? "").trimStart();
   if (!first) return true;
   if (first.startsWith("[workgroup-poller]") || first.startsWith("[workgroup ")) {
@@ -87,6 +86,7 @@ export default function App() {
     id: null,
   });
   const [sessionData, setSessionData] = useState(null);
+  const [sessionSync, setSessionSync] = useState(null);
   const sessionDataRef = useRef(null);
   useEffect(() => {
     sessionDataRef.current = sessionData;
@@ -516,39 +516,34 @@ export default function App() {
     [],
   );
 
+  const sessionOpener = useMemo(
+    () =>
+      createSessionOpener({
+        activeConnectionIdRef,
+        sessionDataRef,
+        setSessionData,
+        setSessionSync,
+        isChatSessionData,
+        onGone: (connId, profile, sessionId) => dropDeadSession(connId, profile, sessionId),
+        onNonChat: (_connId, _profile, sessionId) =>
+          setView((v) =>
+            v.kind === "profile" && v.sessionId === sessionId
+              ? { ...v, sessionId: null }
+              : v,
+          ),
+        onError: (e) => notify({ message: `chat load failed: ${e}`, variant: "error" }),
+      }),
+    [],
+  );
+
   useEffect(() => {
+    setSessionSync(null);
     if (view.kind !== "profile" || !view.sessionId) {
       setSessionData(null);
       return undefined;
     }
-    const connId = hostConnections.active_id;
-    const cached = loadCachedSession(connId, view.profile, view.sessionId);
-    setSessionData(cached?.data ?? null);
-    let cancelled = false;
-    fetchFullSession(view.profile, view.sessionId, {
-      known: cached?.complete ? cached.data : null,
-    })
-      .then((data) => {
-        if (cancelled) return;
-        if (!isChatSessionData(data)) {
-          setView((v) =>
-            v.kind === "profile" && v.sessionId === view.sessionId
-              ? { ...v, sessionId: null }
-              : v,
-          );
-          return;
-        }
-        saveCachedSession(connId, view.profile, view.sessionId, data);
-        setSessionData(data);
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        if (isSessionGone(e)) dropDeadSession(connId, view.profile, view.sessionId);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [view, hostConnections.active_id, dropDeadSession]);
+    return sessionOpener.open(view.profile, view.sessionId);
+  }, [view, hostConnections.active_id, sessionOpener]);
 
   const scheduleReload = useCoalescedCallback(() => reloadRef.current?.(), 500, 5000);
 
@@ -1106,6 +1101,7 @@ export default function App() {
                   activeProfile={activeProfile}
                   connectionId={hostConnections.active_id}
                   sessionData={sessionData}
+                  sessionSync={sessionSync}
                   daemonOffline={daemonOffline}
                   pendingTurn={pendingTurnForCurrentView}
                   onSend={onSend}

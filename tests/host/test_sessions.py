@@ -686,6 +686,83 @@ async def test_session_read_tail_turns_returns_last_n(
 
 
 @pytest.mark.asyncio
+async def test_session_read_before_turn_with_max_turns_slices_older_chunk(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    _seed_multi_turn(tmp_path)
+    result = await _read_rpc(
+        tmp_path, monkeypatch, {"id": "multi3", "before_turn": 2, "max_turns": 1},
+    )
+    assert result["total_turns"] == 3
+    assert result["turns_offset"] == 1
+    assert [t["user"] for t in result["session"]["turns"]] == ["two"]
+
+
+@pytest.mark.asyncio
+async def test_session_read_before_turn_without_max_turns_returns_prefix(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    _seed_multi_turn(tmp_path)
+    result = await _read_rpc(tmp_path, monkeypatch, {"id": "multi3", "before_turn": 2})
+    assert result["turns_offset"] == 0
+    assert [t["user"] for t in result["session"]["turns"]] == ["one", "two"]
+
+
+@pytest.mark.asyncio
+async def test_session_read_before_turn_beyond_total_clamps(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    _seed_multi_turn(tmp_path)
+    result = await _read_rpc(
+        tmp_path, monkeypatch, {"id": "multi3", "before_turn": 99, "max_turns": 2},
+    )
+    assert result["turns_offset"] == 1
+    assert [t["user"] for t in result["session"]["turns"]] == ["two", "three"]
+
+
+@pytest.mark.asyncio
+async def test_session_read_after_turn_wins_over_before_turn(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    _seed_multi_turn(tmp_path)
+    result = await _read_rpc(
+        tmp_path, monkeypatch,
+        {"id": "multi3", "after_turn": 2, "before_turn": 1, "max_turns": 1},
+    )
+    assert result["turns_offset"] == 2
+    assert [t["user"] for t in result["session"]["turns"]] == ["three"]
+
+
+@pytest.mark.asyncio
+async def test_session_read_kind_classifies_pre_slice_first_turn(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    sid = "wgtail"
+    p = tmp_path / "sessions" / f"{sid}.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({
+        "id": sid,
+        "started_at": 1.0,
+        "turns": [
+            {"at": 1.0, "user": "[workgroup-poller] tick", "assistant": "a1"},
+            {"at": 2.0, "user": "plain follow-up", "assistant": "a2"},
+        ],
+    }), encoding="utf-8")
+    result = await _read_rpc(tmp_path, monkeypatch, {"id": sid, "tail_turns": 1})
+    assert result["kind"] == "workgroup"
+    assert [t["user"] for t in result["session"]["turns"]] == ["plain follow-up"]
+
+
+@pytest.mark.asyncio
+async def test_session_read_kind_chat_for_plain_sessions(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    _seed_multi_turn(tmp_path)
+    result = await _read_rpc(tmp_path, monkeypatch, {"id": "multi3"})
+    assert result["kind"] == "chat"
+
+
+@pytest.mark.asyncio
 async def test_session_read_runs_off_the_event_loop(
     tmp_path: Path, monkeypatch,
 ) -> None:

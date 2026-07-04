@@ -496,11 +496,23 @@ async fn session_detail(
     profile: String,
     id: String,
     after_turn: Option<u64>,
+    tail_turns: Option<u64>,
+    before_turn: Option<u64>,
+    max_turns: Option<u64>,
 ) -> Result<serde_json::Value, String> {
     off_main(move || {
         let mut params = serde_json::json!({"profile": profile, "id": id});
         if let Some(after) = after_turn {
             params["after_turn"] = serde_json::json!(after);
+        }
+        if let Some(tail) = tail_turns {
+            params["tail_turns"] = serde_json::json!(tail);
+        }
+        if let Some(before) = before_turn {
+            params["before_turn"] = serde_json::json!(before);
+        }
+        if let Some(max) = max_turns {
+            params["max_turns"] = serde_json::json!(max);
         }
         // Full envelope: total_turns is the client's only signal that the daemon honored the slice.
         host_client::call("host.session.read", params)

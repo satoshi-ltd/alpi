@@ -1,9 +1,12 @@
 const KEY_PREFIX = "alpi.session.cache.v1";
 const MAX_PERSISTED_TURNS = 60;
+const MIN_PERSISTED_TURNS = 4;
 const MAX_SESSIONS_PER_SCOPE = 8;
 const MAX_PERSIST_BYTES = 400_000;
+const TEXT_PERSIST_CAP = 16_000;
+const TOOL_OUTPUT_PERSIST_CAP = 4_000;
 
-// Memory holds the FULL session (safe as `known` for incremental fetch); localStorage holds a tail marked partialTail so it is never used as an after_turn base.
+// Memory holds the server-sourced session (full, or a contiguous slice with turnsOffset); localStorage holds a trimmed tail marked partialTail+displayOnly — turnsOffset kept for absolute indices, displayOnly bars it from the after_turn delta path.
 const _memory = new Map();
 
 function key(connectionId, profile, sessionId) {
@@ -16,7 +19,10 @@ function indexKey(connectionId, profile) {
 
 export function loadCachedSession(connectionId, profile, sessionId) {
   const k = key(connectionId, profile, sessionId);
-  if (_memory.has(k)) return { data: _memory.get(k), complete: true };
+  if (_memory.has(k)) {
+    const data = _memory.get(k);
+    return { data, complete: !data?.partialTail };
+  }
   try {
     const raw = localStorage.getItem(k);
     if (!raw) return null;
@@ -28,18 +34,44 @@ export function loadCachedSession(connectionId, profile, sessionId) {
   }
 }
 
-export function saveCachedSession(connectionId, profile, sessionId, data) {
+function clip(s, cap) {
+  return typeof s === "string" && s.length > cap ? `${s.slice(0, cap)}…` : s;
+}
+
+function trimTurnForPersist(turn) {
+  if (!turn || typeof turn !== "object") return turn;
+  const out = { ...turn };
+  out.user = clip(out.user, TEXT_PERSIST_CAP);
+  out.assistant = clip(out.assistant, TEXT_PERSIST_CAP);
+  out.reasoning = clip(out.reasoning, TEXT_PERSIST_CAP);
+  if (Array.isArray(out.tools)) {
+    out.tools = out.tools.map((t) =>
+      t && typeof t === "object" ? { ...t, output: clip(t.output, TOOL_OUTPUT_PERSIST_CAP) } : t,
+    );
+  }
+  return out;
+}
+
+export function saveCachedSession(connectionId, profile, sessionId, data, { persist = true } = {}) {
   if (!data || typeof data !== "object" || !Array.isArray(data.turns)) return;
   const k = key(connectionId, profile, sessionId);
   _memory.set(k, data);
+  if (!persist) return;
   try {
-    const tail = {
-      ...data,
-      turns: data.turns.slice(-MAX_PERSISTED_TURNS),
-      partialTail: true,
-    };
-    const serialized = JSON.stringify(tail);
-    if (serialized.length > MAX_PERSIST_BYTES) return;
+    const absoluteEnd = (Number.isInteger(data.turnsOffset) ? data.turnsOffset : 0) + data.turns.length;
+    let turns = data.turns.slice(-MAX_PERSISTED_TURNS).map(trimTurnForPersist);
+    // displayOnly keeps a persisted tail out of the after_turn delta path; turnsOffset stays so rewrite/retry indices remain absolute while it is on screen.
+    const tail = { ...data, partialTail: true, displayOnly: true };
+    delete tail.totalTurns;
+    let serialized;
+    for (;;) {
+      tail.turns = turns;
+      tail.turnsOffset = absoluteEnd - turns.length;
+      serialized = JSON.stringify(tail);
+      if (serialized.length <= MAX_PERSIST_BYTES) break;
+      if (turns.length <= MIN_PERSISTED_TURNS) return;
+      turns = turns.slice(Math.ceil(turns.length / 2));
+    }
     localStorage.setItem(k, serialized);
     touchIndex(connectionId, profile, sessionId);
   } catch {

@@ -9,6 +9,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
+use flate2::{Decompress, FlushDecompress, Status};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
@@ -1265,8 +1266,66 @@ fn resolve_addrs(host: &str, port: u16) -> Result<Vec<SocketAddr>, String> {
     Ok(addrs)
 }
 
+// Ceiling for one inflated message — guards against a decompression bomb from a compromised daemon.
+const WS_MAX_INFLATED_BYTES: usize = 256 * 1024 * 1024;
+
+fn ws_deflate_accepted(response_head: &str) -> bool {
+    for line in response_head.lines() {
+        let Some((name, value)) = line.split_once(':') else {
+            continue;
+        };
+        if !name.trim().eq_ignore_ascii_case("sec-websocket-extensions") {
+            continue;
+        }
+        for ext in value.split(',') {
+            let ext_name = ext.split(';').next().unwrap_or("").trim();
+            if ext_name.eq_ignore_ascii_case("permessage-deflate") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+// RFC 7692: strip happens server-side, so the 00 00 FF FF tail is re-appended before a raw inflate; the Decompress persists per connection because context takeover shares the dictionary across messages.
+fn inflate_ws_message(inflater: &mut Decompress, payload: &[u8]) -> Result<Vec<u8>, String> {
+    let mut input = Vec::with_capacity(payload.len() + 4);
+    input.extend_from_slice(payload);
+    input.extend_from_slice(&[0x00, 0x00, 0xff, 0xff]);
+    let mut out: Vec<u8> = Vec::with_capacity((payload.len().saturating_mul(4)).clamp(4096, 1 << 20));
+    let mut consumed = 0_usize;
+    loop {
+        if out.len() == out.capacity() {
+            if out.capacity() >= WS_MAX_INFLATED_BYTES {
+                return Err("websocket inflate: message too large".to_string());
+            }
+            out.reserve(out.capacity().max(4096));
+        }
+        let before_in = inflater.total_in();
+        let before_out = inflater.total_out();
+        let status = inflater
+            .decompress_vec(&input[consumed..], &mut out, FlushDecompress::Sync)
+            .map_err(|e| format!("websocket inflate: {e}"))?;
+        consumed += (inflater.total_in() - before_in) as usize;
+        let progressed =
+            inflater.total_in() > before_in || inflater.total_out() > before_out;
+        if matches!(status, Status::StreamEnd) {
+            inflater.reset(false);
+            break;
+        }
+        if consumed >= input.len() && out.len() < out.capacity() {
+            break;
+        }
+        if !progressed && out.len() < out.capacity() {
+            return Err("websocket inflate: stalled stream".to_string());
+        }
+    }
+    Ok(out)
+}
+
 struct WsClient {
     stream: TcpStream,
+    inflater: Option<Decompress>,
 }
 
 impl WsClient {
@@ -1306,7 +1365,7 @@ impl WsClient {
             .map_err(|e| format!("set write timeout: {e}"))?;
         let key = "dGhlIHNhbXBsZSBub25jZQ==";
         let req = format!(
-            "GET / HTTP/1.1\r\nHost: {host}:{port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n"
+            "GET / HTTP/1.1\r\nHost: {host}:{port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Extensions: permessage-deflate; client_max_window_bits\r\n\r\n"
         );
         stream
             .write_all(req.as_bytes())
@@ -1329,7 +1388,8 @@ impl WsClient {
                 head.lines().next().unwrap_or("")
             ));
         }
-        Ok(Self { stream })
+        let inflater = ws_deflate_accepted(&head).then(|| Decompress::new(false));
+        Ok(Self { stream, inflater })
     }
 
     fn set_timeouts(&mut self, timeout: Duration) -> Result<(), String> {
@@ -1401,6 +1461,7 @@ impl WsClient {
                 .read_exact(&mut head)
                 .map_err(|e| format!("websocket read: {e}"))?;
             let opcode = head[0] & 0x0f;
+            let rsv1 = (head[0] & 0x40) != 0;
             let masked = (head[1] & 0x80) != 0;
             let mut len = (head[1] & 0x7f) as u64;
             if len == 126 {
@@ -1436,7 +1497,16 @@ impl WsClient {
             }
             match opcode {
                 0x1 => {
-                    return String::from_utf8(payload)
+                    let bytes = if rsv1 {
+                        let inflater = self.inflater.as_mut().ok_or_else(|| {
+                            "websocket: compressed frame without negotiated permessage-deflate"
+                                .to_string()
+                        })?;
+                        inflate_ws_message(inflater, &payload)?
+                    } else {
+                        payload
+                    };
+                    return String::from_utf8(bytes)
                         .map_err(|e| format!("websocket text utf8: {e}"));
                 }
                 0x8 => return Err("websocket closed by daemon".to_string()),
@@ -1840,6 +1910,106 @@ mod tests {
         });
         assert_eq!(calls, 1);
         assert!(r.is_err());
+    }
+
+    fn deflate_ws_test_message(compressor: &mut flate2::Compress, data: &[u8]) -> Vec<u8> {
+        let before_in = compressor.total_in();
+        let mut out = Vec::with_capacity(data.len() * 2 + 1024);
+        compressor
+            .compress_vec(data, &mut out, flate2::FlushCompress::Sync)
+            .unwrap();
+        assert_eq!(compressor.total_in() - before_in, data.len() as u64);
+        assert!(out.ends_with(&[0x00, 0x00, 0xff, 0xff]));
+        out.truncate(out.len() - 4);
+        out
+    }
+
+    #[test]
+    fn ws_deflate_accepted_parses_extension_headers() {
+        assert!(ws_deflate_accepted(
+            "HTTP/1.1 101 Switching Protocols\r\nSec-WebSocket-Extensions: permessage-deflate\r\n\r\n"
+        ));
+        assert!(ws_deflate_accepted(
+            "HTTP/1.1 101 X\r\nsec-websocket-extensions: Permessage-Deflate; server_max_window_bits=12\r\n\r\n"
+        ));
+        assert!(ws_deflate_accepted(
+            "HTTP/1.1 101 X\r\nSec-WebSocket-Extensions: foo, permessage-deflate; client_no_context_takeover\r\n\r\n"
+        ));
+        assert!(!ws_deflate_accepted("HTTP/1.1 101 Switching Protocols\r\n\r\n"));
+        assert!(!ws_deflate_accepted(
+            "HTTP/1.1 101 X\r\nSec-WebSocket-Extensions: x-permessage-deflate-like\r\n\r\n"
+        ));
+        assert!(!ws_deflate_accepted(
+            "HTTP/1.1 101 X\r\nX-Other: permessage-deflate\r\n\r\n"
+        ));
+    }
+
+    #[test]
+    fn inflate_ws_message_roundtrips_a_sync_flushed_message() {
+        let mut compressor = flate2::Compress::new(flate2::Compression::default(), false);
+        let mut inflater = Decompress::new(false);
+        let data = br#"{"id":"r1","result":{"session":{"turns":[1,2,3]}}}"#;
+        let wire = deflate_ws_test_message(&mut compressor, data);
+        let out = inflate_ws_message(&mut inflater, &wire).unwrap();
+        assert_eq!(out, data);
+    }
+
+    #[test]
+    fn inflate_ws_message_keeps_context_across_messages() {
+        // Context takeover: msg2 (identical to msg1) compresses to back-references into msg1's window, so a fresh inflater must fail on it.
+        let mut compressor = flate2::Compress::new(flate2::Compression::default(), false);
+        let msg: Vec<u8> = (0..1024_u32).flat_map(|i| i.to_be_bytes()).collect();
+        let wire1 = deflate_ws_test_message(&mut compressor, &msg);
+        let wire2 = deflate_ws_test_message(&mut compressor, &msg);
+        assert!(wire2.len() < wire1.len() / 2);
+
+        let mut inflater = Decompress::new(false);
+        assert_eq!(inflate_ws_message(&mut inflater, &wire1).unwrap(), msg);
+        assert_eq!(inflate_ws_message(&mut inflater, &wire2).unwrap(), msg);
+
+        // Backend-dependent: strict inflaters error on the out-of-window distance, miniz_oxide zero-fills — either way the decode must not be correct.
+        let mut fresh = Decompress::new(false);
+        let res = inflate_ws_message(&mut fresh, &wire2);
+        assert!(res.map(|out| out != msg).unwrap_or(true));
+    }
+
+    #[test]
+    fn inflate_ws_message_grows_output_beyond_initial_capacity() {
+        let mut compressor = flate2::Compress::new(flate2::Compression::default(), false);
+        let mut inflater = Decompress::new(false);
+        let data = r#"{"user":"hola","assistant":"que tal"}"#.repeat(80_000);
+        let wire = deflate_ws_test_message(&mut compressor, data.as_bytes());
+        assert!(wire.len() < data.len() / 10);
+        let out = inflate_ws_message(&mut inflater, &wire).unwrap();
+        assert_eq!(out, data.as_bytes());
+    }
+
+    #[test]
+    fn inflate_ws_message_rejects_garbage() {
+        let mut inflater = Decompress::new(false);
+        assert!(inflate_ws_message(&mut inflater, &[0xff, 0xff, 0xff, 0xff, 0xff]).is_err());
+    }
+
+    #[test]
+    #[ignore = "live integration: set ALPI_WS_TEST_ADDR=host:port to a websockets server with compression=deflate"]
+    fn ws_deflate_live_negotiation_and_inflate() {
+        let addr = std::env::var("ALPI_WS_TEST_ADDR").expect("ALPI_WS_TEST_ADDR");
+        let (host, port) = addr.rsplit_once(':').expect("host:port");
+        let port: u16 = port.parse().expect("port");
+        let mut ws = WsClient::connect(
+            host,
+            port,
+            Duration::from_secs(4),
+            Duration::from_secs(10),
+        )
+        .unwrap();
+        assert!(ws.inflater.is_some(), "server did not negotiate permessage-deflate");
+        for id in ["t1", "t2"] {
+            let req = json!({"id": id, "method": "test.echo", "params": {"marker": id}});
+            let result = ws.request(id, &req).unwrap();
+            assert_eq!(result["echo"]["params"]["marker"], json!(id));
+            assert!(result["big"].as_str().unwrap().len() >= 200_000);
+        }
     }
 
     #[test]

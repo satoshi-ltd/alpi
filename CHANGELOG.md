@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.10.14 — 2026-07-04 — chat history in slices
+
+- **Chat history can now be read in slices, newest first.** `host.session.read`
+  accepts `before_turn`/`max_turns` to page older turns backwards, alongside
+  the existing `after_turn`/`tail_turns` — so a client can paint the latest
+  messages immediately and backfill the rest, instead of shipping the whole
+  transcript before anything renders.
+- **Sliced reads now say what kind of session they are** (chat, workgroup,
+  scheduled…), classified from the true first turn — a client that only
+  fetched the tail can no longer mistake a chat for something else.
+
 ## v0.10.13 — 2026-07-03 — chat history stops crying wolf
 
 - **A turn no longer shows "interrupted" just because it hasn't been read yet.**

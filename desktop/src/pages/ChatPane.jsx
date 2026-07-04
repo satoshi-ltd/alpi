@@ -8,6 +8,8 @@ import Button from "../primitives/Button.jsx";
 import Message from "../primitives/Message.jsx";
 import { useStickyScroll } from "../lib/useStickyScroll.js";
 import { useScrollProgress } from "../lib/useScrollProgress.js";
+import { useScrollAnchor } from "../lib/useScrollAnchor.js";
+import { useDelayedFlag } from "../lib/useDelayedFlag.js";
 import { relativeTime } from "../lib/time.js";
 import { reasoningSteps } from "../lib/reasoningSteps.js";
 import { profileLabel } from "../lib/profile-display.js";
@@ -59,6 +61,7 @@ export default function ChatPane({
   activeProfile,
   connectionId,
   sessionData,
+  sessionSync = null,
   pendingTurn,
   onSend,
   onCancel,
@@ -127,7 +130,7 @@ export default function ChatPane({
     const { speak, nextStreamed } = consumeAutoRead(lastPreviewRef.current, autoRead, turns);
     lastPreviewRef.current = nextStreamed;
     if (speak) {
-      const idx = turns.length - 1;
+      const idx = (sessionData?.turnsOffset ?? 0) + turns.length - 1;
       enqueueTts({
         key: `chat:${activeProfile?.name}:${view.sessionId ?? "new"}:${idx}`,
         profile: activeProfile?.name,
@@ -148,6 +151,7 @@ export default function ChatPane({
         || (activeProfile.provider_ollama?.length ?? 0) > 0);
 
   const paused = !!activeProfile?.paused;
+  const syncVisible = useDelayedFlag(!!sessionSync);
   const onTogglePause =
     onTogglePauseProfile && activeProfile ? () => onTogglePauseProfile(activeProfile) : null;
   const effectiveModel = pickEffectiveModel(modelOverride, sessionData?.model, activeProfile?.model);
@@ -280,12 +284,15 @@ export default function ChatPane({
       )}
       <div className={styles.body}>
         <RefreshBar
-          key={refreshBeat}
-          active={refreshBeat > 0}
+          key={syncVisible ? "sync" : refreshBeat}
+          active={refreshBeat > 0 || syncVisible}
+          controlled={syncVisible}
           accent={activeProfile?.accent ?? null}
+          label={syncVisible ? "syncing conversation" : null}
         />
         <SessionView
           data={sessionData}
+          sync={sessionSync}
           profiles={profiles}
           pendingTurn={pendingTurn}
           accent={activeProfile?.accent ?? null}
@@ -330,6 +337,7 @@ export default function ChatPane({
 function SessionView({
   data,
   profiles,
+  sync,
   pendingTurn,
   accent,
   showEmptyHint,
@@ -347,6 +355,7 @@ function SessionView({
     <>
       <Transcript
         data={data}
+        sync={sync}
         profiles={profiles}
         pendingTurn={pendingTurn}
         accent={accent}
@@ -367,6 +376,7 @@ function SessionView({
 
 const Transcript = memo(function Transcript({
   data,
+  sync,
   profiles,
   pendingTurn,
   accent,
@@ -391,10 +401,13 @@ const Transcript = memo(function Transcript({
     onCloseSearch?.();
   };
   const allTurns = data?.turns ?? [];
+  const turnBase = Number.isInteger(data?.turnsOffset) ? data.turnsOffset : 0;
   const cut = rewriteCut({ pendingTurn, rewriteDraft, profileName, sessionId });
-  const cutTurns = cut != null ? allTurns.slice(0, cut) : allTurns;
+  const cutTurns = cut != null ? allTurns.slice(0, Math.max(0, cut - turnBase)) : allTurns;
   const turns = dropInflightStub(cutTurns, pendingTurn);
   const lastTurnInFlight = isLastTurnInFlight(turns, data?.in_flight);
+  useScrollAnchor(scrollRef, turnBase, `${profileName}:${sessionId ?? "new"}`);
+  const syncPill = useDelayedFlag(!!sync && !!data);
 
   const [showSkeleton, setShowSkeleton] = useState(false);
   useEffect(() => {
@@ -444,6 +457,7 @@ const Transcript = memo(function Transcript({
           <div className={styles.timeline}>
             <HistoryTurns
               turns={turns}
+              turnBase={turnBase}
               profiles={profiles}
               accent={accent}
               profileName={profileName}
@@ -456,14 +470,30 @@ const Transcript = memo(function Transcript({
             {pendingTurn && <PendingTurn turn={pendingTurn} accent={accent} profiles={profiles} />}
           </div>
         </div>
+        {syncPill && (
+          <div className={`${styles.syncPill} anim-fade`} role="status">
+            <DSSpinnerIcon className={styles.syncPillSpinner} />
+            <span>{syncPillLabel(sync)}</span>
+          </div>
+        )}
         <JumpToLatest show={farFromBottom} onClick={scrollToBottom} />
       </div>
     </>
   );
 });
 
+function syncPillLabel(sync) {
+  if (sync?.phase === "backfill") {
+    return Number.isInteger(sync.total)
+      ? `syncing history · ${sync.loaded}/${sync.total}`
+      : "syncing history…";
+  }
+  return "syncing…";
+}
+
 const HistoryTurns = memo(function HistoryTurns({
   turns,
+  turnBase = 0,
   profiles,
   accent,
   profileName,
@@ -477,14 +507,14 @@ const HistoryTurns = memo(function HistoryTurns({
     <>
       {turns.map((t, i) => (
         <Turn
-          key={t.at ?? i}
+          key={t.at ?? turnBase + i}
           turn={t}
           profiles={profiles}
           accent={accent}
           profileName={profileName}
           voiceId={voiceId}
           sessionId={sessionId}
-          turnIndex={i}
+          turnIndex={turnBase + i}
           onRewriteMessage={onRewriteMessage}
           onRetryMessage={onRetryMessage}
           inFlight={lastTurnInFlight && i === turns.length - 1}

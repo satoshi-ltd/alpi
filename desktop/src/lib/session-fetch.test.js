@@ -3,7 +3,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const invokeMock = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...a) => invokeMock(...a) }));
 
-import { fetchFullSession, isSessionGone, normalizeSessionResult } from "./session-fetch.js";
+import {
+  absoluteEnd,
+  fetchFullSession,
+  fetchSessionDetail,
+  isDeltaBase,
+  isSessionGone,
+  mergeSessionTurns,
+  normalizeSessionResult,
+} from "./session-fetch.js";
 
 beforeEach(() => invokeMock.mockReset());
 
@@ -12,7 +20,12 @@ const turn = (i) => ({ at: i, user: `u${i}`, assistant: `a${i}` });
 describe("normalizeSessionResult", () => {
   it("unwraps the envelope with total/offset", () => {
     const res = normalizeSessionResult({ session: { id: "s" }, total_turns: 5, turns_offset: 2 });
-    expect(res).toEqual({ session: { id: "s" }, totalTurns: 5, turnsOffset: 2, inFlight: false });
+    expect(res).toEqual({ session: { id: "s" }, totalTurns: 5, turnsOffset: 2, inFlight: false, kind: null });
+  });
+
+  it("reads kind from the envelope", () => {
+    const res = normalizeSessionResult({ session: { id: "s" }, total_turns: 1, turns_offset: 0, kind: "workgroup" });
+    expect(res.kind).toBe("workgroup");
   });
 
   it("treats a bare legacy session object as envelope-less", () => {
@@ -65,8 +78,8 @@ describe("fetchFullSession", () => {
     expect(data.cost_usd).toBe(9);
   });
 
-  it("never uses a persisted partial tail as the slice base", async () => {
-    const known = { id: "s", partialTail: true, turns: [turn(5)] };
+  it("never uses a persisted display-only tail as the slice base even with an offset", async () => {
+    const known = { id: "s", partialTail: true, displayOnly: true, turnsOffset: 5, turns: [turn(5)] };
     invokeMock.mockResolvedValueOnce({
       session: { id: "s", turns: [turn(0)] },
       total_turns: 1,
@@ -137,5 +150,82 @@ describe("fetchFullSession", () => {
     invokeMock.mockResolvedValueOnce({ session: { id: "s", turns: [turn(0)] } });
     const data = await fetchFullSession("work", "s");
     expect(data.in_flight).toBe(false);
+  });
+
+  it("uses a server-sourced partial slice as delta base with an absolute afterTurn", async () => {
+    const known = { id: "s", turns: [turn(5), turn(6)], turnsOffset: 5, totalTurns: 7, partialTail: true };
+    invokeMock.mockResolvedValueOnce({
+      session: { id: "s", turns: [turn(7)] },
+      total_turns: 8,
+      turns_offset: 7,
+    });
+    const data = await fetchFullSession("work", "s", { known });
+    expect(invokeMock).toHaveBeenCalledWith("session_detail", {
+      profile: "work", id: "s", afterTurn: 7,
+    });
+    expect(data.turns.map((t) => t.user)).toEqual(["u5", "u6", "u7"]);
+    expect(data.turnsOffset).toBe(5);
+    expect(data.totalTurns).toBe(8);
+    expect(data.partialTail).toBe(true);
+  });
+
+  it("stamps envelope kind onto the returned session", async () => {
+    invokeMock.mockResolvedValueOnce({
+      session: { id: "s", turns: [turn(0)] },
+      total_turns: 1,
+      turns_offset: 0,
+      kind: "chat",
+    });
+    const data = await fetchFullSession("work", "s");
+    expect(data.kind).toBe("chat");
+  });
+});
+
+describe("isDeltaBase", () => {
+  it("accepts full sessions and server slices, rejects persisted tails", () => {
+    expect(isDeltaBase({ id: "s", turns: [] })).toBe(true);
+    expect(isDeltaBase({ id: "s", turns: [], partialTail: true, turnsOffset: 3 })).toBe(true);
+    expect(isDeltaBase({ id: "s", turns: [], partialTail: true })).toBe(false);
+    expect(isDeltaBase({ id: "s", turns: [], partialTail: true, turnsOffset: 3, displayOnly: true })).toBe(false);
+    expect(isDeltaBase(null)).toBe(false);
+    expect(isDeltaBase({ id: "s" })).toBe(false);
+  });
+});
+
+describe("mergeSessionTurns with offsets", () => {
+  it("appends against the absolute end of a partial slice", () => {
+    const known = { id: "s", turns: [turn(3), turn(4)], turnsOffset: 3, partialTail: true };
+    expect(absoluteEnd(known)).toBe(5);
+    const res = normalizeSessionResult({
+      session: { id: "s", turns: [turn(5)] }, total_turns: 6, turns_offset: 5,
+    });
+    const merged = mergeSessionTurns(known, res);
+    expect(merged.turns.map((t) => t.user)).toEqual(["u3", "u4", "u5"]);
+    expect(merged.turnsOffset).toBe(3);
+    expect(merged.totalTurns).toBe(6);
+  });
+
+  it("rejects a slice that does not start at the absolute end", () => {
+    const known = { id: "s", turns: [turn(3)], turnsOffset: 3 };
+    const res = normalizeSessionResult({
+      session: { id: "s", turns: [turn(9)] }, total_turns: 10, turns_offset: 9,
+    });
+    expect(mergeSessionTurns(known, res)).toBeNull();
+  });
+});
+
+describe("fetchSessionDetail params", () => {
+  it("passes tailTurns through", async () => {
+    invokeMock.mockResolvedValueOnce({ session: { id: "s", turns: [] }, total_turns: 0, turns_offset: 0 });
+    await fetchSessionDetail("work", "s", { tailTurns: 60 });
+    expect(invokeMock).toHaveBeenCalledWith("session_detail", { profile: "work", id: "s", tailTurns: 60 });
+  });
+
+  it("passes beforeTurn/maxTurns through", async () => {
+    invokeMock.mockResolvedValueOnce({ session: { id: "s", turns: [] }, total_turns: 0, turns_offset: 0 });
+    await fetchSessionDetail("work", "s", { beforeTurn: 200, maxTurns: 100 });
+    expect(invokeMock).toHaveBeenCalledWith("session_detail", {
+      profile: "work", id: "s", beforeTurn: 200, maxTurns: 100,
+    });
   });
 });

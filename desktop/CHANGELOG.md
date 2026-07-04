@@ -11,6 +11,27 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.16 — 2026-07-04 — remote chats open fast, and say so
+
+_Works with older daemons (falls back to a single full fetch); history paging
+and exact session classification need alpi v0.10.14+._
+
+- **Opening a conversation paints the newest messages first.** The app now
+  fetches the last 60 turns, renders them immediately, and backfills older
+  history in the background — instead of downloading the entire transcript
+  before showing anything. Your scroll position stays put while history
+  fills in above.
+- **Loading is no longer silent.** A progress bar under the header and a
+  floating "syncing history · 240/1220" pill show when a chat is loading or
+  catching up, and a failed load surfaces as an error toast instead of an
+  endless skeleton.
+- **Remote transcripts travel compressed.** The desktop now negotiates
+  WebSocket compression with the daemon — measured ~80% less data on real
+  conversations over Tailscale. Older daemons keep working uncompressed.
+- **Long chats survive an app restart.** Heavy conversations used to skip the
+  local cache entirely; their recent tail is now trimmed to fit, so reopening
+  one shows content instantly even before the daemon answers.
+
 ## v0.4.15 — 2026-07-03 — no more crying wolf on long-running turns
 
 _Needs alpi v0.10.13+ to show "Still working…"; older daemons just show nothing until the reply lands._

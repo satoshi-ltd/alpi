@@ -196,7 +196,7 @@ def _row_from_data(sid: str, data: dict[str, Any], *, mtime: int, size_bytes: in
         "last_assistant": last_assistant,
         "model": data.get("model"),
         "turn_count": len(turns),
-        "kind": _classify(first_user),
+        "kind": classify_first_user(first_user),
         "input_tokens": int(data.get("input_tokens") or 0),
         "output_tokens": int(data.get("output_tokens") or 0),
         "cost_usd": float(data.get("cost_usd") or 0.0),
@@ -215,7 +215,7 @@ def _large_session_row(
     first_user = _truncate(str(fields.get("user") or ""), _FIRST_USER_MAX)
     started_at = fields.get("started_at")
     updated_at = max(_as_ts(started_at), float(mtime), float(sidecar_mtime))
-    kind = _classify(first_user)
+    kind = classify_first_user(first_user)
     return {
         "id": p.stem,
         "mtime": mtime,
@@ -296,7 +296,7 @@ def delete_session(home: Path, session_id: str) -> bool:
     return existed
 
 
-def _classify(first_user: str) -> str:
+def classify_first_user(first_user: str) -> str:
     s = first_user.lstrip()
     if s.startswith("[workgroup-poller]") or s.startswith("[workgroup "):
         return "workgroup"
