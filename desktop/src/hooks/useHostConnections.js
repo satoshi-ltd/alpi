@@ -35,7 +35,6 @@ function parsePairingPayload(payload) {
   };
 }
 
-// Connection switcher state + per-connection profile/workgroup cache; App.jsx passes its own setters (chat/view) so the hook can reset them on connection switch.
 export function useHostConnections({
   setSessionData,
   clearTurnsForConnection,
@@ -51,6 +50,10 @@ export function useHostConnections({
   const [workgroups, setWorkgroups] = useState([]);
   const [pickerAlpi, setPickerAlpi] = useState(null);
   const [connectionSyncing, setConnectionSyncing] = useState(false);
+  const [switchTargetId, setSwitchTargetId] = useState(null);
+  useEffect(() => {
+    if (!connectionSyncing) setSwitchTargetId(null);
+  }, [connectionSyncing]);
 
   const hostConnectionsRef = useRef(hostConnections);
   const connectionSwitchRef = useRef(0);
@@ -176,7 +179,6 @@ export function useHostConnections({
           ps = fallbackProfiles;
         }
       }
-      // Detail is now LAZY: settings/profile screens fetch host.profile.detail on demand (see useProfileDetail). Reloading every profile's detail on each status flip would re-introduce the very 30–60 KB Tailscale poll we just split apart.
       // switchId guards A→B→A races where active_id alone would match
       if (
         hostConnectionsRef.current?.active_id !== activeId ||
@@ -222,7 +224,6 @@ export function useHostConnections({
     showCachedOrClear,
   ]);
 
-  // Forward connection-status events from the daemon into local state.
   useEffect(() => {
     return subscribe("connection-status", (event) => {
       const { id, status, error, alpi_version, update_available } = event.payload ?? {};
@@ -264,7 +265,6 @@ export function useHostConnections({
   // Status only (no error): the error string flapping during a restart must not re-fire reload/reprobe effects.
   const activeStatusKey = `${hostConnections.active_id}:${activeConnectionForSync?.status ?? "unknown"}`;
 
-  // React to status transitions (online → reload, offline → clear).
   useEffect(() => {
     const active = hostConnectionsRef.current.connections.find(
       (c) => c.id === hostConnectionsRef.current.active_id,
@@ -326,9 +326,9 @@ export function useHostConnections({
       setSessionData(null);
       setActiveTask(null);
       setView((v) => (v.kind === "settings" ? v : { kind: "empty" }));
-      // reset picker — applyProfilesAndWorkgroups keeps prev if name collides across connections
       setPickerAlpi(null);
       loadFromCache(id);
+      setSwitchTargetId(id);
       setConnectionSyncing(true);
 
       invoke("host_connection_set_active", { id })
@@ -417,6 +417,7 @@ export function useHostConnections({
     setProfiles,
     workgroups,
     connectionSyncing,
+    connectionSwitching: switchTargetId != null && connectionSyncing,
     touchWorkgroup,
     pickerAlpi,
     setPickerAlpi,

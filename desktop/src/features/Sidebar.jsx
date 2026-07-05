@@ -32,6 +32,8 @@ import {
   markWorkgroupRead,
 } from "../hooks/useReadState.js";
 import { compareProfiles, orderedSidebarProfiles, orderPinnedItems } from "../lib/profile-order.js";
+import Skeleton from "../primitives/Skeleton.jsx";
+import { useDelayedFlag } from "../lib/useDelayedFlag.js";
 import styles from "./Sidebar.module.css";
 
 const MIN_VISIBLE_ALPIS = 3;
@@ -73,6 +75,7 @@ function Sidebar({
   pinned = { profiles: [], workgroups: [] },
   hostConnections,
   daemonOffline = false,
+  connectionSyncing = false,
   onNewChat,
   onNewProfile,
   onNewWorkgroup,
@@ -97,9 +100,12 @@ function Sidebar({
   const inSettings = view.kind === "settings";
 
   const connId = hostConnections?.active_id ?? "local";
+  const showLoadingRows = useDelayedFlag(
+    connectionSyncing && profiles.length === 0 && workgroups.length === 0,
+    300,
+  );
   const { checkProfile: checkUnread, checkWorkgroup: checkWorkgroupUnread } =
     useReadState(connId);
-  // Stable identities — these reach every memoized row; an inline closure here re-renders the whole list on each Sidebar render.
   const openProfile = useCallback(
     (p) => {
       if (inSettings) {
@@ -243,7 +249,6 @@ function Sidebar({
   const openProfileCtx = useCallback(
     (e, profile) => {
       e.preventDefault();
-      // no admin actions here → menu would be just a redundant Pin (already on the row)
       if (!onOpenSettingsTarget) return;
       const pinned = pinnedProfileNames.includes(profile.name);
       const items = [
@@ -407,6 +412,11 @@ function Sidebar({
         </div>
 
         <nav ref={navRef} className={styles.nav}>
+          {showLoadingRows && (
+            <Section label="Alpis">
+              <SidebarLoadingRows />
+            </Section>
+          )}
           {hasPinned && (
             <Section label="Pinned" containerRef={pinnedSectionRef}>
               {pinnedItems.map((it) =>
@@ -488,6 +498,19 @@ function Sidebar({
         />
       )}
     </aside>
+  );
+}
+
+function SidebarLoadingRows() {
+  return (
+    <div className={styles.loadingRows} role="status" aria-label="Loading profiles">
+      {["68%", "52%", "60%"].map((w) => (
+        <div key={w} className={styles.loadingRow}>
+          <Skeleton width="9px" height="9px" radius="2px" delay={0} />
+          <Skeleton width={w} height="0.65em" delay={0} />
+        </div>
+      ))}
+    </div>
   );
 }
 

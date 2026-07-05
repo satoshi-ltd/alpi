@@ -11,6 +11,20 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.17 — 2026-07-05 — switching connections shows its work
+
+_Frontend-only; works with any daemon version._
+
+- **Switching connections is no longer a leap of faith.** The connection
+  pill now reads "connecting…" while the new daemon is being probed, and a
+  banner tracks the handoff — "Connecting to office…", then "Connected —
+  syncing profiles…" while the lists load.
+- **The sidebar never goes dark mid-switch.** Jumping to a connection you
+  haven't opened before shows placeholder rows while profiles arrive,
+  instead of an empty sidebar that looks disconnected.
+- Fast local switches stay silent — the feedback only appears when a switch
+  actually takes time.
+
 ## v0.4.16 — 2026-07-04 — remote chats open fast, and say so
 
 _Works with older daemons (falls back to a single full fetch); history paging

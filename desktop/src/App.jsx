@@ -55,6 +55,7 @@ import {
   useNotificationDeeplink,
 } from "./hooks/useNotificationDeeplink.js";
 import { useDaemonAutostart } from "./hooks/useDaemonAutostart.js";
+import { useDelayedFlag } from "./lib/useDelayedFlag.js";
 import styles from "./App.module.css";
 
 function isChatSessionSummary(session) {
@@ -263,7 +264,6 @@ export default function App() {
     setView({ kind: "settings" });
   }, []);
   const adminOnOpenSettings = canAdminEarly ? onOpenSettings : null;
-  // opens settings for a specific target (onOpenSettings only toggles the active view)
   const openSettingsFor = useCallback((target) => {
     setSettingsTarget(target);
     setView({ kind: "settings" });
@@ -307,6 +307,7 @@ export default function App() {
     setProfiles,
     workgroups,
     connectionSyncing,
+    connectionSwitching,
     touchWorkgroup,
     pickerAlpi,
     setPickerAlpi,
@@ -427,7 +428,6 @@ export default function App() {
   useEffect(() => {
     profilesRef.current = profiles;
   }, [profiles]);
-  // Optimistic delete: drop the row now, restore it if the host call fails.
   const onDeleteProfile = useCallback(async (name) => {
     const snapshot = profilesRef.current;
     setProfiles((prev) => prev.filter((p) => p.name !== name));
@@ -559,7 +559,6 @@ export default function App() {
     reloadRef.current?.();
   }, [refreshSessionData]);
 
-  // Same reducer for fs-change (local watcher) and daemon-event (works on remote too).
   const applyChange = useCallback((ev) => {
     if (!ev || !ev.kind) return;
     const v = viewRef.current;
@@ -623,8 +622,6 @@ export default function App() {
         break;
     }
   }, [scheduleReload, scheduleSessionRefresh, setActivityByWorkgroup, setTaskByWorkgroup, seenMtimesRef, touchWorkgroup]);
-
-  // fromDaemonFrame lives in lib/daemon-frame.js (pure, unit-tested).
 
   useEffect(() => {
     let cancelled = false;
@@ -928,6 +925,14 @@ export default function App() {
   useDaemonAutostart({ activeConnection, onAttempt: setAutostartPhase });
 
   const activeStatus = activeConnection?.status;
+  const switchBannerVisible = useDelayedFlag(
+    connectionSwitching && !daemonOffline,
+    300,
+  );
+  const connectionDisplayName =
+    activeConnection?.kind === "remote"
+      ? activeConnection?.name ?? "remote daemon"
+      : "local daemon";
   const isLocalAutostartInFlight =
     activeConnection?.kind === "local" &&
     activeStatus === "offline" &&
@@ -1007,6 +1012,7 @@ export default function App() {
         jumpHints={jumpHints}
         hostConnections={hostConnections}
         daemonOffline={daemonOffline}
+        connectionSyncing={connectionSyncing}
         onNewChat={onNewChat}
         onOpenProfile={onOpenProfile}
         onOpenWorkgroup={onOpenWorkgroup}
@@ -1068,6 +1074,13 @@ export default function App() {
                         : autostartPhase === "gave-up"
                           ? "Local daemon won't start — check Settings → daemon, or run `alpi daemon start` from terminal."
                           : "Local daemon unreachable — reconnecting…"}
+                </Banner>
+              )}
+              {!daemonOffline && switchBannerVisible && (
+                <Banner kind="info" pulsing>
+                  {activeStatus === "online"
+                    ? `Connected to ${connectionDisplayName} — syncing profiles…`
+                    : `Connecting to ${connectionDisplayName}…`}
                 </Banner>
               )}
               {view.kind === "workgroup" && activeWorkgroup && (
@@ -1196,7 +1209,6 @@ export default function App() {
           setCreateWorkgroupOpen(false);
           await reload();
           if (wgId) {
-            // The creator just made it — it's not "unread".
             markWorkgroupRead(hostConnections.active_id, hubName, wgId);
             setSettingsTarget({ kind: "workgroup", id: wgId, profile: hubName });
             setView({ kind: "settings" });

@@ -59,7 +59,6 @@ beforeEach(() => {
 
 describe("useHostConnections.onSetHostConnection", () => {
   it("flips active_id in the ref BEFORE pruning cache (otherwise the outgoing connection's cache gets pruned against the incoming workgroup list)", async () => {
-    // initial: local active, both online, with profile_summaries + workgroups
     invoke.mockImplementation(async (cmd) => {
       if (cmd === "host_connections") return makeConnections("local");
       if (cmd === "profile_summaries") return [{ name: "doc", model: "a/b" }];
@@ -73,16 +72,13 @@ describe("useHostConnections.onSetHostConnection", () => {
       expect(result.current.profiles.map((p) => p.name)).toEqual(["doc"]),
     );
 
-    // Seed remote cache that has DIFFERENT workgroup IDs.
     setProfileCache("remote", [{ name: "doc", model: "x/y" }], [{ id: "wg-remote" }]);
     pruneCachedMessages.mockClear();
 
-    // Now switch.
     act(() => {
       result.current.onSetHostConnection("remote");
     });
 
-    // First call from loadFromCache("remote") must receive the NEW active_id="remote", not the stale "local".
     expect(pruneCachedMessages).toHaveBeenCalled();
     const [activeIdArg, wgsArg] = pruneCachedMessages.mock.calls[0];
     expect(activeIdArg).toBe("remote");
@@ -119,7 +115,6 @@ describe("useHostConnections.onSetHostConnection", () => {
   });
 
   it("resets pickerAlpi on switch so the new connection's default wins even when both share a profile name", async () => {
-    // local default = doc; remote also has `doc` (NOT default) and `mirai` as its default. Without the reset, picker would stay on `doc` since both lists contain it; with the reset, it must re-derive to `mirai` (remote's default).
     invoke.mockImplementation(async (cmd) => {
       if (cmd === "host_connections") return makeConnections("local");
       if (cmd === "profile_summaries") return [{ name: "doc", model: "a/b", is_default: true }];
@@ -164,10 +159,8 @@ describe("useHostConnections.onSetHostConnection", () => {
     });
 
     const { result } = renderHostConnections();
-    // Wait for mount-time reload to enter profile_summaries and hang.
     await waitFor(() => expect(summariesCalls).toBe(1));
 
-    // First switch (local→remote) bumps connectionSwitchRef.
     act(() => {
       result.current.onSetHostConnection("remote");
     });
@@ -175,7 +168,6 @@ describe("useHostConnections.onSetHostConnection", () => {
       expect(result.current.hostConnectionsRef.current.active_id).toBe("remote"),
     );
 
-    // Second switch (remote→local) bumps it again — and brings active_id back to "local", so the in-flight reload's `active_id === activeId` check would WRONGLY pass without the switchId guard.
     act(() => {
       result.current.onSetHostConnection("local");
     });
@@ -183,7 +175,6 @@ describe("useHostConnections.onSetHostConnection", () => {
       expect(result.current.hostConnectionsRef.current.active_id).toBe("local"),
     );
 
-    // Now resolve the original (stale) reload kicked off at mount.
     await act(async () => {
       resolveFirstSummaries([{ name: "STALE-local-profile", model: "s/l" }]);
       await Promise.resolve();
@@ -345,6 +336,83 @@ describe("useHostConnections connection-status", () => {
 });
 
 
+describe("useHostConnections.connectionSwitching", () => {
+  it("stays false during background reloads even while syncing", async () => {
+    let resolveProfiles;
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "host_connections") return makeConnections("local");
+      if (cmd === "profile_summaries") {
+        return new Promise((resolve) => { resolveProfiles = resolve; });
+      }
+      if (cmd === "workgroups") return [];
+      return null;
+    });
+
+    const { result } = renderHostConnections();
+    await waitFor(() => expect(result.current.connectionSyncing).toBe(true));
+    expect(result.current.connectionSwitching).toBe(false);
+    await act(async () => { resolveProfiles([]); });
+  });
+
+  it("turns on at switch start and off when the probe ends offline", async () => {
+    let resolveProbe;
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "host_connections") return makeConnections("local");
+      if (cmd === "profile_summaries") return [{ name: "doc", model: "a/b" }];
+      if (cmd === "workgroups") return [];
+      if (cmd === "host_connection_set_active") return null;
+      if (cmd === "host_connection_probe") {
+        return new Promise((resolve) => { resolveProbe = resolve; });
+      }
+      return null;
+    });
+
+    const { result } = renderHostConnections();
+    await waitFor(() => expect(result.current.connectionSyncing).toBe(false));
+
+    act(() => result.current.onSetHostConnection("remote"));
+    expect(result.current.connectionSwitching).toBe(true);
+
+    await waitFor(() => expect(typeof resolveProbe).toBe("function"));
+    await act(async () => { resolveProbe("offline"); });
+    await waitFor(() => expect(result.current.connectionSwitching).toBe(false));
+  });
+
+  it("holds through probe→online→reload and clears once the new profiles land", async () => {
+    let active = "local";
+    let resolveRemoteSummaries;
+    invoke.mockImplementation(async (cmd, args) => {
+      if (cmd === "host_connections") return makeConnections(active);
+      if (cmd === "host_connection_set_active") {
+        active = args.id;
+        return null;
+      }
+      if (cmd === "host_connection_probe") return "online";
+      if (cmd === "profile_summaries") {
+        if (active === "remote") {
+          return new Promise((resolve) => { resolveRemoteSummaries = resolve; });
+        }
+        return [{ name: "doc", model: "a/b" }];
+      }
+      if (cmd === "workgroups") return [];
+      return null;
+    });
+
+    const { result } = renderHostConnections();
+    await waitFor(() => expect(result.current.connectionSyncing).toBe(false));
+
+    act(() => result.current.onSetHostConnection("remote"));
+    expect(result.current.connectionSwitching).toBe(true);
+
+    await waitFor(() => expect(typeof resolveRemoteSummaries).toBe("function"));
+    expect(result.current.connectionSwitching).toBe(true);
+
+    await act(async () => { resolveRemoteSummaries([{ name: "mirai", model: "x/y" }]); });
+    await waitFor(() => expect(result.current.connectionSwitching).toBe(false));
+    expect(result.current.profiles.map((p) => p.name)).toEqual(["mirai"]);
+  });
+});
+
 describe("useHostConnections offline auto-reprobe", () => {
   function mockOfflineLocal(getStatus) {
     invoke.mockImplementation(async (cmd) => {
@@ -359,7 +427,7 @@ describe("useHostConnections offline auto-reprobe", () => {
     invoke.mock.calls.filter(([c]) => c === "host_connections_probe_active").length;
 
   it("re-probes offline with exponential backoff and stops once back online", async () => {
-    const rnd = vi.spyOn(Math, "random").mockReturnValue(0.5); // jitter factor 1.0 → deterministic 4s,8s,16s…
+    const rnd = vi.spyOn(Math, "random").mockReturnValue(0.5);
     let localStatus = "offline";
     mockOfflineLocal(() => localStatus);
     vi.useFakeTimers();
@@ -376,11 +444,10 @@ describe("useHostConnections offline auto-reprobe", () => {
 
       invoke.mockClear();
       await act(async () => { vi.advanceTimersByTime(5000); });
-      expect(probeActiveCount()).toBeGreaterThanOrEqual(1); // fast first probe (~4s)
+      expect(probeActiveCount()).toBeGreaterThanOrEqual(1);
 
       invoke.mockClear();
       await act(async () => { vi.advanceTimersByTime(200000); });
-      // a fixed-4s drumbeat would be ~50 probes over 200s; backoff caps it well under 12
       expect(probeActiveCount()).toBeLessThan(12);
 
       localStatus = "online";
@@ -397,7 +464,7 @@ describe("useHostConnections offline auto-reprobe", () => {
   });
 
   it("jitters the reprobe delay below the base interval", async () => {
-    const rnd = vi.spyOn(Math, "random").mockReturnValue(0); // factor 0.8 → first probe at 3200ms
+    const rnd = vi.spyOn(Math, "random").mockReturnValue(0);
     mockOfflineLocal(() => "offline");
     vi.useFakeTimers();
     try {
@@ -408,7 +475,7 @@ describe("useHostConnections offline auto-reprobe", () => {
         await Promise.resolve();
       });
       invoke.mockClear();
-      await act(async () => { vi.advanceTimersByTime(3300); }); // > 3200 jittered, < 4000 base
+      await act(async () => { vi.advanceTimersByTime(3300); });
       expect(probeActiveCount()).toBeGreaterThanOrEqual(1);
     } finally {
       vi.useRealTimers();

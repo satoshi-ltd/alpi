@@ -19,24 +19,41 @@ export default function ConnPill({
   tipText = "Switch connection",
 }) {
   const isOffline = status === "offline" || status === "auth-failed";
+  const isProbing = status === "probing";
   const statusColor = STATUS_COLORS[status] || STATUS_COLORS.unknown;
   return (
     <Tip
-      text={isOffline ? "Daemon offline — click to retry" : tipText}
+      text={
+        isOffline
+          ? "Daemon offline — click to retry"
+          : isProbing
+            ? "Connecting…"
+            : tipText
+      }
       side="l"
       block
     >
       <button type="button" className="ds-conn-pill" onClick={onClick}>
         <span className={styles.iconWrap}>
           {kind === "local" ? <CpuIcon /> : <ServerIcon />}
-          <Dot color={statusColor} pulse={isOffline} className={styles.dot} />
+          <Dot
+            color={statusColor}
+            pulse={isOffline || isProbing}
+            className={styles.dot}
+          />
         </span>
         <span className={`col ${styles.col}`}>
           <span className={`name ${styles.name}`}>{name}</span>
           <span
-            className={`host ${isOffline ? styles.hostOffline : styles.host}`}
+            className={`host ${
+              isOffline
+                ? styles.hostOffline
+                : isProbing
+                  ? styles.hostProbing
+                  : styles.host
+            }`}
           >
-            {isOffline ? "offline · retrying…" : host}
+            {isOffline ? "offline · retrying…" : isProbing ? "connecting…" : host}
           </span>
         </span>
         <ChevDownIcon className={styles.chev} />
