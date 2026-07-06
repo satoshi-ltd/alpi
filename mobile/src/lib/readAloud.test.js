@@ -15,6 +15,14 @@ describe('stripMarkdown', () => {
   it('drops code fences, headings, and link syntax', () => {
     expect(stripMarkdown('# Hi\n```x```\n[a](u) **b**')).toBe('Hi a b');
   });
+
+  it('removes emojis, arrows and table pipes', () => {
+    expect(stripMarkdown('Done ✅🚀 a → b | c ⭐')).toBe('Done a b c');
+  });
+
+  it('reduces bare URLs to their domain', () => {
+    expect(stripMarkdown('see https://github.com/soyjavi/alf/pull/1 now')).toBe('see github.com now');
+  });
 });
 
 describe('enqueueReadAloud', () => {
@@ -25,12 +33,38 @@ describe('enqueueReadAloud', () => {
     expect(call).not.toHaveBeenCalled();
   });
 
-  it('synthesizes real text via host.voice.preview', async () => {
+  it('synthesizes stripped text directly when no profile is given', async () => {
     const call = vi.fn(async () => ({}));
     enqueueReadAloud({ call, key: 'k', voiceId: 'v', text: 'hello there' });
     await vi.waitFor(() => expect(call).toHaveBeenCalled());
     expect(call.mock.calls[0][0]).toBe('host.voice.preview');
     expect(call.mock.calls[0][1]).toMatchObject({ voice_id: 'v', text: 'hello there' });
+  });
+
+  it('asks the daemon for a script and synthesizes it when a profile is given', async () => {
+    const call = vi.fn(async (method) =>
+      method === 'host.voice.script' ? { script: 'Spoken version.' } : {},
+    );
+    enqueueReadAloud({ call, key: 'k', voiceId: 'v', text: 'Done ✅ ok', profile: 'doc' });
+    await vi.waitFor(() =>
+      expect(call.mock.calls.map(([m]) => m)).toContain('host.voice.preview'),
+    );
+    expect(call.mock.calls[0]).toEqual(['host.voice.script', { profile: 'doc', text: 'Done ✅ ok' }]);
+    const preview = call.mock.calls.find(([m]) => m === 'host.voice.preview');
+    expect(preview[1]).toMatchObject({ voice_id: 'v', text: 'Spoken version.' });
+  });
+
+  it('falls back to the local strip when the script verb fails (older daemon)', async () => {
+    const call = vi.fn(async (method) => {
+      if (method === 'host.voice.script') throw new Error('method-not-found');
+      return {};
+    });
+    enqueueReadAloud({ call, key: 'k', voiceId: 'v', text: 'Done ✅ **ok**', profile: 'doc' });
+    await vi.waitFor(() =>
+      expect(call.mock.calls.map(([m]) => m)).toContain('host.voice.preview'),
+    );
+    const preview = call.mock.calls.find(([m]) => m === 'host.voice.preview');
+    expect(preview[1]).toMatchObject({ text: 'Done ok' });
   });
 
   it('clear unblocks the queue when the player never finishes', async () => {

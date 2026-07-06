@@ -39,6 +39,8 @@ export function stopReadAloud() {
   }
 }
 
+const EMOJI_RE = /[\u{1F000}-\u{1FAFF}\u{2190}-\u{21FF}\u{2300}-\u{23FF}\u{2460}-\u{24FF}\u{2500}-\u{25FF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{3030}\u{303D}\u{203C}\u{2049}\u{FE0F}\u{200D}\u{20E3}]+/gu;
+
 export function stripMarkdown(md) {
   if (!md) return '';
   let s = String(md);
@@ -46,6 +48,7 @@ export function stripMarkdown(md) {
   s = s.replace(/`([^`]+)`/g, '$1');
   s = s.replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1');
   s = s.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1');
+  s = s.replace(/https?:\/\/(?:www\.)?([^\s/)]+)\S*/g, '$1');
   s = s.replace(/^\s{0,3}#{1,6}\s+/gm, '');
   s = s.replace(/^\s{0,3}>\s?/gm, '');
   s = s.replace(/^\s*[-*+]\s+/gm, '');
@@ -53,6 +56,8 @@ export function stripMarkdown(md) {
   s = s.replace(/(\*\*|__)(.*?)\1/g, '$2');
   s = s.replace(/(\*|_)(.*?)\1/g, '$2');
   s = s.replace(/~~(.*?)~~/g, '$1');
+  s = s.replace(EMOJI_RE, ' ');
+  s = s.replace(/\|/g, ' ');
   s = s.replace(/\s+/g, ' ').trim();
   return s;
 }
@@ -66,16 +71,26 @@ async function ensureAudioMode() {
   } catch { /* iOS falls back to silent-mode rules */ }
 }
 
-async function playOne({ call, key, voiceId, text, accent = null }) {
+async function playOne({ call, key, voiceId, text, accent = null, profile = null }) {
   const clean = stripMarkdown(text);
   if (!clean) return;
   stopReadAloud();
   currentKey = key;
   notify({ kind: 'loading', key, accent });
 
+  let spoken = clean;
+  if (profile) {
+    try {
+      const res = await call('host.voice.script', { profile, text });
+      const script = String(res?.script || '').trim();
+      if (script) spoken = script;
+    } catch { /* older daemon or offline — the local strip is the audio */ }
+    if (currentKey !== key) return;
+  }
+
   let result;
   try {
-    result = await call('host.voice.preview', { voice_id: voiceId, text: clean });
+    result = await call('host.voice.preview', { voice_id: voiceId, text: spoken });
   } catch (e) {
     if (currentKey !== key) return;
     currentKey = null;

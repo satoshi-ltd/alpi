@@ -14,6 +14,20 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.2.7 — 2026-07-06 — read aloud sounds like a person
+
+_Spoken scripts need alpi v0.10.16+; older daemons fall back to plain cleanup._
+
+- **Read aloud and auto-read now speak a real script, not raw text.** The
+  daemon rewrites each reply as a short spoken summary in the reply's own
+  language — emojis, markdown, tables, code and URLs no longer get read out
+  loud, in chats and workgroups alike.
+- **Long replies finally play.** Reading a message over 280 characters used
+  to fail silently; scripts fit the synthesizer, and the daemon now accepts
+  longer texts as well.
+- **Cleaner audio everywhere**: the local cleanup also drops emojis, arrows
+  and table pipes, and reads links as just their domain.
+
 ## v0.2.6 — 2026-07-04 — lighter chats over the wire
 
 _Works with older daemons (falls back to full refetches); incremental sync

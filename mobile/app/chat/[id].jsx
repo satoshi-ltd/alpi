@@ -479,6 +479,7 @@ function ProfileChatInner() {
         voiceId: voiceCfg.voiceId || 'en-US-AriaNeural',
         text: speak,
         accent,
+        profile: id,
       });
     }
   }, [pendingTurn, voiceCfg, sessionData, turnsBase, call, id, accent]);

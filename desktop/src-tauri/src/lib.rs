@@ -2807,6 +2807,22 @@ async fn tts_synthesize(voice: String, text: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+async fn voice_script(profile: String, text: String) -> Result<String, String> {
+    off_main(move || {
+        let res = host_client::call(
+            "host.voice.script",
+            serde_json::json!({"profile": profile, "text": text}),
+        )?;
+        Ok(res
+            .get("script")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string())
+    })
+    .await?
+}
+
+#[tauri::command]
 fn tray_announce_update(app: AppHandle, available: bool, version: Option<String>) {
     tray::announce_update(&app, available, version.as_deref());
 }
@@ -3205,6 +3221,7 @@ pub fn run() {
             workgroup_transcript,
             workgroup_post,
             tts_synthesize,
+            voice_script,
             read_file,
             chat_send_stream,
             chat_cancel,

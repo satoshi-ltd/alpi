@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.10.16 — 2026-07-06 — replies you can actually listen to
+
+- **New `host.voice.script` verb.** Before reading a reply aloud, the daemon
+  now turns it into a spoken briefing — under a minute of audio, in the
+  reply's own language, leading with the outcome. No emojis, no markdown, no
+  URLs spelled letter by letter; however long the reply, the audio is the
+  executive summary and the full text stays on screen.
+- **Each script is computed once.** Scripts are cached on disk per profile,
+  so replaying a message — or listening to it from another device — never
+  pays the LLM call twice. Script generation counts against the profile's
+  daily budget like any other model call, and a capped profile falls back
+  to plain cleanup instead of spending.
+- **Voice synthesis accepts longer texts** (280 → 700 chars), fixing read
+  aloud silently failing on longer replies from the mobile app.
+
 ## v0.10.15 — 2026-07-06 — big chats and long histories load faster
 
 - **Opening a long conversation no longer re-parses it for every page.** The

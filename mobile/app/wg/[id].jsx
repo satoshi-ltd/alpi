@@ -444,10 +444,12 @@ function WorkgroupChatInner() {
           voiceId: voiceMap[m.from_pubkey] || 'en-US-AriaNeural',
           text: m.body,
           accent: speakerAccent,
+          // scripting resolves a LOCAL profile home on the daemon — speaker names can be remote peers or collide
+          profile: profile || null,
         });
       }
     }
-  }, [messages, autoRead, id, ownPubkey, voiceMap, call, transcript.data, summaries.data]);
+  }, [messages, autoRead, id, ownPubkey, voiceMap, call, transcript.data, summaries.data, profile]);
   const phases = useMemo(
     () => pipelineState(wg?.pipeline || [], messages, hubPubkey),
     [wg?.pipeline, messages, hubPubkey],

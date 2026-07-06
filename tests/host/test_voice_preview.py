@@ -140,7 +140,7 @@ async def test_voice_preview_caps_text_length(
         "method": "host.voice.preview",
         "params": {
             "voice_id": "en-US-AriaNeural",
-            "text": "a" * 281,  # one char past the cap
+            "text": "a" * (host_config._VOICE_PREVIEW_MAX_CHARS + 1),
         },
     })
 

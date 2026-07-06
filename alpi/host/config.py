@@ -66,6 +66,7 @@ def register(server: host_server.Server) -> None:
     server.register("host.voice.set_voice", _voice_set_voice)
     server.register("host.voice.set_auto_read", _voice_set_auto_read)
     server.register("host.voice.preview", _voice_preview)
+    server.register("host.voice.script", _voice_script)
 
 
 def _resolve_home(profile: str) -> Path:
@@ -925,7 +926,7 @@ def _preview_phrase_for(voice_id: str) -> str:
     return _PREVIEW_PHRASES.get(head, _PREVIEW_PHRASES["en"])
 
 
-_VOICE_PREVIEW_MAX_CHARS = 280  # ~one tweet; covers all `_PREVIEW_PHRASES` with room to spare.
+_VOICE_PREVIEW_MAX_CHARS = 700  # must fit voice.SCRIPT_MAX_CHARS scripts; still a DoS guard against multi-MB base64 replies.
 
 
 async def _voice_preview(
@@ -988,3 +989,19 @@ async def _voice_preview(
         "audio_b64": base64.b64encode(audio_bytes).decode("ascii"),
         "mime": "audio/mpeg",
     }
+
+
+async def _voice_script(
+    params: dict[str, Any], _server: host_server.Server,
+) -> dict[str, Any]:
+    profile = str((params or {}).get("profile") or "")
+    text = str((params or {}).get("text") or "").strip()
+    if not text:
+        raise host_server.HandlerError(
+            -32602, "invalid-params", data={"detail": "text required"},
+        )
+    home = _resolve_home(profile)
+    from alpi.host import voice as host_voice
+
+    script, source = await asyncio.to_thread(host_voice.script_for, home, text)
+    return {"script": script, "source": source}

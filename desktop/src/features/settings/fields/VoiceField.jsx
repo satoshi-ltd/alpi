@@ -47,6 +47,7 @@ export function VoiceField({ profile, onSaved }) {
         profile: profile.name,
         voice: voiceId,
         text: previewPhraseFor(voiceId),
+        raw: true,
       });
     } finally {
       setBusy(null);

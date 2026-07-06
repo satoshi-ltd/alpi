@@ -27,6 +27,8 @@ export function voiceForPubkey(pubkey) {
   return VOICE_POOL[Math.abs(h) % VOICE_POOL.length];
 }
 
+const EMOJI_RE = /[\u{1F000}-\u{1FAFF}\u{2190}-\u{21FF}\u{2300}-\u{23FF}\u{2460}-\u{24FF}\u{2500}-\u{25FF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{3030}\u{303D}\u{203C}\u{2049}\u{FE0F}\u{200D}\u{20E3}]+/gu;
+
 export function stripMarkdown(md) {
   if (!md) return "";
   let s = String(md);
@@ -34,6 +36,7 @@ export function stripMarkdown(md) {
   s = s.replace(/`([^`]+)`/g, "$1");
   s = s.replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1");
   s = s.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1");
+  s = s.replace(/https?:\/\/(?:www\.)?([^\s/)]+)\S*/g, "$1");
   s = s.replace(/^\s{0,3}#{1,6}\s+/gm, "");
   s = s.replace(/^\s{0,3}>\s?/gm, "");
   s = s.replace(/^\s*[-*+]\s+/gm, "");
@@ -41,8 +44,21 @@ export function stripMarkdown(md) {
   s = s.replace(/(\*\*|__)(.*?)\1/g, "$2");
   s = s.replace(/(\*|_)(.*?)\1/g, "$2");
   s = s.replace(/~~(.*?)~~/g, "$1");
+  s = s.replace(EMOJI_RE, " ");
+  s = s.replace(/\|/g, " ");
   s = s.replace(/\s+/g, " ").trim();
   return s;
+}
+
+export async function scriptFor(profile, text) {
+  const fallback = stripMarkdown(text);
+  if (!profile || !fallback) return fallback;
+  try {
+    const script = String((await invoke("voice_script", { profile, text })) || "").trim();
+    return script || fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 let currentAudio = null;
@@ -144,7 +160,7 @@ async function synth(_profile, voice, text) {
   return invoke("tts_synthesize", { voice, text });
 }
 
-export async function playTts({ key, profile, voice, text, accent = null }) {
+export async function playTts({ key, profile, voice, text, accent = null, raw = false }) {
   const clean = stripMarkdown(text);
   if (!clean) return;
 
@@ -158,13 +174,16 @@ export async function playTts({ key, profile, voice, text, accent = null }) {
   currentAccent = accent;
   notify({ kind: "loading", key, accent });
 
+  const spoken = raw ? clean : await scriptFor(profile, text);
+  if (currentKey !== key) return;
+
   let b64;
   try {
-    b64 = await synth(profile, voice, clean);
+    b64 = await synth(profile, voice, spoken);
   } catch (e) {
     if (voice && voice !== FALLBACK_VOICE) {
       try {
-        b64 = await synth(profile, FALLBACK_VOICE, clean);
+        b64 = await synth(profile, FALLBACK_VOICE, spoken);
       } catch (e2) {
         currentKey = null;
         notify({ kind: "error", key, error: String(e2) });

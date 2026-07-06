@@ -11,6 +11,18 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.18 — 2026-07-06 — read aloud sounds like a person
+
+_Spoken scripts need alpi v0.10.16+; older daemons fall back to plain cleanup._
+
+- **Read aloud and auto-read now speak a real script, not raw text.** The
+  daemon rewrites each reply as a short spoken summary in the reply's own
+  language — emojis, markdown, tables, code and URLs no longer get read out
+  loud. Replaying a message reuses the same script instead of recomputing it.
+- **Cleaner audio even without the daemon.** The local cleanup now also
+  drops emojis, arrows and table pipes, and reads links as just their
+  domain — so offline playback stops reciting symbols.
+
 ## v0.4.17 — 2026-07-05 — switching connections shows its work
 
 _Frontend-only; works with any daemon version._
