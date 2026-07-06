@@ -107,26 +107,18 @@ async def _session_read(
     max_turns = _coerce_count((params or {}).get("max_turns"))
 
     def _load() -> dict[str, Any]:
-        data = host_sessions.read_session(home, session_id)
-        turns = data.get("turns") or []
-        total = len(turns)
-        offset = 0
-        end = total
-        if after_turn is not None:
-            offset = min(after_turn, total)
-        elif tail_turns is not None and tail_turns > 0:
-            offset = max(0, total - tail_turns)
-        elif before_turn is not None:
-            end = min(before_turn, total)
-            if max_turns is not None and max_turns > 0:
-                offset = max(0, end - max_turns)
-        first_user = str(turns[0].get("user") or "") if turns and isinstance(turns[0], dict) else ""
-        turns = turns[offset:end]
-        for t in turns:
+        data, total, offset, first_user = host_sessions.read_session_slice(
+            home,
+            session_id,
+            after_turn=after_turn,
+            tail_turns=tail_turns,
+            before_turn=before_turn,
+            max_turns=max_turns,
+        )
+        for t in data["turns"]:
             if isinstance(t, dict):
                 # empty assistant text alone does not mean interrupted
                 t["unfinished"] = bool(t.get("interrupted"))
-        data["turns"] = turns
         from alpi.host import chat as host_chat
         in_flight = host_chat.session_key(profile, session_id) in host_chat._session_active
         # total_turns is the capability marker for partial-read support; kind must classify the pre-slice first turn

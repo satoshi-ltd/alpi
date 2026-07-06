@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import threading
 from collections import OrderedDict
@@ -37,8 +38,11 @@ def list_sessions(home: Path, limit: int | None = None) -> list[dict[str, Any]]:
     d = home / "sessions"
     if not d.exists():
         return []
+    files = _session_files(d)
+    disk = _DiskIndex(d)
     # mtime is unreliable post-checkout/rsync; derive updated_at from content (max turn.at vs started_at).
-    rows = [_session_row(p) for p in _session_files(d)]
+    rows = [_session_row(p, disk=disk) for p in files]
+    disk.flush({p.name for p in files})
     rows.sort(key=lambda r: r["updated_at"], reverse=True)
     if limit is not None and limit > 0:
         rows = rows[:limit]
@@ -56,13 +60,16 @@ def latest_chat_summary(home: Path) -> dict[str, Any] | None:
     d = home / "sessions"
     if not d.exists():
         return None
+    files = _session_files(d)
+    disk = _DiskIndex(d)
     best: dict[str, Any] | None = None
-    for p in _session_files(d):
-        row = _session_row(p, large_default_kind="chat")
+    for p in files:
+        row = _session_row(p, large_default_kind="chat", disk=disk)
         if row.get("kind") != "chat":
             continue
         if best is None or float(row.get("updated_at") or 0) > float(best.get("updated_at") or 0):
             best = row
+    disk.flush({p.name for p in files})
     return best
 
 
@@ -89,21 +96,85 @@ _ROW_CACHE_MAX = 8192
 _row_cache: OrderedDict[str, tuple[tuple[int, int, int, int], dict[str, Any]]] = OrderedDict()
 _row_cache_lock = threading.Lock()
 
+_INDEX_VERSION = 1
+
 
 def _clear_row_cache() -> None:
     with _row_cache_lock:
         _row_cache.clear()
 
 
-def _session_row(p: Path, *, large_default_kind: str | None = None) -> dict[str, Any]:
+class _DiskIndex:
+    def __init__(self, d: Path):
+        self._path = d / "_index.json"
+        self._rows: dict[str, list[Any]] | None = None
+        self._dirty = False
+
+    def _load(self) -> dict[str, list[Any]]:
+        if self._rows is None:
+            try:
+                raw = json.loads(self._path.read_text(encoding="utf-8"))
+                rows = raw.get("rows") if raw.get("v") == _INDEX_VERSION else None
+                self._rows = dict(rows) if isinstance(rows, dict) else {}
+            except Exception:  # noqa: BLE001
+                self._rows = {}
+        return self._rows
+
+    def lookup(self, name: str, sig: tuple[int, int, int, int]) -> dict[str, Any] | None:
+        hit = self._load().get(name)
+        if (
+            isinstance(hit, list)
+            and len(hit) == 2
+            and isinstance(hit[0], list)
+            and tuple(hit[0]) == sig
+            and isinstance(hit[1], dict)
+        ):
+            return dict(hit[1])
+        return None
+
+    def store(self, name: str, sig: tuple[int, int, int, int], row: dict[str, Any]) -> None:
+        self._load()[name] = [list(sig), dict(row)]
+        self._dirty = True
+
+    def flush(self, names: set[str]) -> None:
+        if self._rows is None:
+            return
+        stale = set(self._rows) - names
+        for n in stale:
+            self._rows.pop(n, None)
+        if stale:
+            self._dirty = True
+        if not self._dirty:
+            return
+        tmp = self._path.with_name(f".index-{os.getpid()}-{threading.get_ident()}.tmp")
+        try:
+            tmp.write_text(
+                json.dumps({"v": _INDEX_VERSION, "rows": self._rows}),
+                encoding="utf-8",
+            )
+            tmp.replace(self._path)
+        except OSError:
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+        self._dirty = False
+
+
+def _session_row(
+    p: Path,
+    *,
+    large_default_kind: str | None = None,
+    disk: "_DiskIndex | None" = None,
+) -> dict[str, Any]:
     stats = _session_stats(p)
-    row = _cached_row(p, stats)
+    row = _cached_row(p, stats, disk=disk)
     if large_default_kind and stats.main_size > _LARGE_SESSION_BYTES and row.get("kind") == "empty":
         row["kind"] = large_default_kind
     return row
 
 
-def _cached_row(p: Path, stats: _Stats) -> dict[str, Any]:
+def _cached_row(p: Path, stats: _Stats, disk: "_DiskIndex | None" = None) -> dict[str, Any]:
     key = str(p)
     if stats.sig is not None:
         with _row_cache_lock:
@@ -111,6 +182,15 @@ def _cached_row(p: Path, stats: _Stats) -> dict[str, Any]:
             if hit is not None and hit[0] == stats.sig:
                 _row_cache.move_to_end(key)
                 return dict(hit[1])
+        if disk is not None:
+            row = disk.lookup(p.name, stats.sig)
+            if row is not None:
+                with _row_cache_lock:
+                    _row_cache[key] = (stats.sig, dict(row))
+                    _row_cache.move_to_end(key)
+                    while len(_row_cache) > _ROW_CACHE_MAX:
+                        _row_cache.popitem(last=False)
+                return row
     row = _compute_row(p, stats)
     if stats.sig is not None:
         with _row_cache_lock:
@@ -118,6 +198,8 @@ def _cached_row(p: Path, stats: _Stats) -> dict[str, Any]:
             _row_cache.move_to_end(key)
             while len(_row_cache) > _ROW_CACHE_MAX:
                 _row_cache.popitem(last=False)
+        if disk is not None:
+            disk.store(p.name, stats.sig, row)
     return row
 
 
@@ -259,12 +341,87 @@ def _large_session_head_fields(p: Path) -> dict[str, Any]:
     return out
 
 
-def read_session(home: Path, session_id: str) -> dict[str, Any]:
+_PAYLOAD_CACHE_MAX = 8
+_payload_cache: OrderedDict[str, tuple[tuple[int, int], dict[str, Any]]] = OrderedDict()
+_payload_cache_lock = threading.Lock()
+
+
+def _clear_payload_cache() -> None:
+    with _payload_cache_lock:
+        _payload_cache.clear()
+
+
+def _payload_sig(p: Path) -> tuple[int, int] | None:
+    try:
+        st = p.stat()
+        return (int(st.st_mtime_ns), int(st.st_size))
+    except OSError:
+        return None
+
+
+def _copy_jsonish(v: Any) -> Any:
+    if isinstance(v, dict):
+        return {k: _copy_jsonish(x) for k, x in v.items()}
+    if isinstance(v, list):
+        return [_copy_jsonish(x) for x in v]
+    return v
+
+
+def _cached_payload(home: Path, session_id: str) -> dict[str, Any]:
+    # returns the SHARED cached object — callers must deep-copy anything they hand out or mutate
     p = home / "sessions" / f"{session_id}.json"
     if not p.exists():
         raise FileNotFoundError(f"no session {session_id!r}")
+    key = str(p)
+    sig = _payload_sig(p)
+    if sig is not None:
+        with _payload_cache_lock:
+            hit = _payload_cache.get(key)
+            if hit is not None and hit[0] == sig:
+                _payload_cache.move_to_end(key)
+                return hit[1]
     from alpi.session import normalize_payload
-    return normalize_payload(json.loads(p.read_text(encoding="utf-8")))
+    data = normalize_payload(json.loads(p.read_text(encoding="utf-8")))
+    # cache only when the file did not change under the read
+    if sig is not None and _payload_sig(p) == sig:
+        with _payload_cache_lock:
+            _payload_cache[key] = (sig, data)
+            _payload_cache.move_to_end(key)
+            while len(_payload_cache) > _PAYLOAD_CACHE_MAX:
+                _payload_cache.popitem(last=False)
+    return data
+
+
+def read_session(home: Path, session_id: str) -> dict[str, Any]:
+    return _copy_jsonish(_cached_payload(home, session_id))
+
+
+def read_session_slice(
+    home: Path,
+    session_id: str,
+    *,
+    after_turn: int | None = None,
+    tail_turns: int | None = None,
+    before_turn: int | None = None,
+    max_turns: int | None = None,
+) -> tuple[dict[str, Any], int, int, str]:
+    data = _cached_payload(home, session_id)
+    turns = data.get("turns") or []
+    total = len(turns)
+    offset = 0
+    end = total
+    if after_turn is not None:
+        offset = min(after_turn, total)
+    elif tail_turns is not None and tail_turns > 0:
+        offset = max(0, total - tail_turns)
+    elif before_turn is not None:
+        end = min(before_turn, total)
+        if max_turns is not None and max_turns > 0:
+            offset = max(0, end - max_turns)
+    first_user = str(turns[0].get("user") or "") if turns and isinstance(turns[0], dict) else ""
+    out = {k: _copy_jsonish(v) for k, v in data.items() if k != "turns"}
+    out["turns"] = [_copy_jsonish(t) for t in turns[offset:end]]
+    return out, total, offset, first_user
 
 
 def session_paths(home: Path, session_id: str) -> tuple[Path, Path]:

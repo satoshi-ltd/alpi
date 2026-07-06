@@ -17,8 +17,10 @@ from alpi.host import sessions as data_sessions
 @pytest.fixture(autouse=True)
 def _fresh_row_cache():
     data_sessions._clear_row_cache()
+    data_sessions._clear_payload_cache()
     yield
     data_sessions._clear_row_cache()
+    data_sessions._clear_payload_cache()
 
 
 def _seed_session(
@@ -220,6 +222,166 @@ def test_read_session_returns_full_payload(tmp_path: Path) -> None:
 def test_read_session_missing_raises(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
         data_sessions.read_session(tmp_path, "nope")
+
+
+def _count_payload_parses(monkeypatch) -> dict[str, int]:
+    import alpi.session as session_mod
+
+    calls = {"n": 0}
+    orig = session_mod.normalize_payload
+
+    def counting(data):
+        calls["n"] += 1
+        return orig(data)
+
+    monkeypatch.setattr(session_mod, "normalize_payload", counting)
+    return calls
+
+
+def test_read_session_parses_once_until_the_file_changes(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    p = _seed_session(tmp_path, "abc", "hello")
+    calls = _count_payload_parses(monkeypatch)
+
+    first = data_sessions.read_session(tmp_path, "abc")
+    second = data_sessions.read_session(tmp_path, "abc")
+    assert calls["n"] == 1
+    assert second == first
+
+    payload = json.loads(p.read_text(encoding="utf-8"))
+    payload["turns"].append({"at": 1714000100.0, "user": "again", "assistant": "yes", "tools": []})
+    p.write_text(json.dumps(payload), encoding="utf-8")
+
+    third = data_sessions.read_session(tmp_path, "abc")
+    assert calls["n"] == 2
+    assert third["turns"][-1]["user"] == "again"
+
+
+def test_read_session_cached_turns_are_mutation_safe(tmp_path: Path) -> None:
+    p = tmp_path / "sessions" / "abc.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({
+        "id": "abc",
+        "started_at": 1714000000.0,
+        "turns": [{
+            "at": 1714000000.0,
+            "user": "hello",
+            "assistant": "ok",
+            "tools": [{"name": "recall", "args": json.dumps({"q": "x"}), "result": "r"}],
+        }],
+    }), encoding="utf-8")
+
+    first = data_sessions.read_session(tmp_path, "abc")
+    first["turns"][0]["unfinished"] = True
+    first["turns"][0]["tools"].append({"name": "injected"})
+    first["turns"][0]["tools"][0]["args"]["q"] = "poisoned"
+    first["turns"].append({"user": "injected"})
+
+    second = data_sessions.read_session(tmp_path, "abc")
+    assert "unfinished" not in second["turns"][0]
+    assert len(second["turns"]) == 1
+    assert [tl["name"] for tl in second["turns"][0]["tools"]] == ["recall"]
+    assert second["turns"][0]["tools"][0]["args"] == {"q": "x"}
+
+
+def test_read_session_slice_windows_are_mutation_safe(tmp_path: Path) -> None:
+    p = tmp_path / "sessions" / "abc.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({
+        "id": "abc",
+        "started_at": 1714000000.0,
+        "turns": [
+            {"at": 1714000000.0 + i, "user": f"u{i}", "assistant": "ok", "tools": []}
+            for i in range(5)
+        ],
+    }), encoding="utf-8")
+
+    data, total, offset, first_user = data_sessions.read_session_slice(
+        tmp_path, "abc", tail_turns=2,
+    )
+    assert total == 5
+    assert offset == 3
+    assert first_user == "u0"
+    assert [t["user"] for t in data["turns"]] == ["u3", "u4"]
+
+    data["turns"][0]["unfinished"] = True
+    data["turns"][0]["tools"].append({"name": "injected"})
+
+    again, _, _, _ = data_sessions.read_session_slice(tmp_path, "abc", tail_turns=2)
+    assert "unfinished" not in again["turns"][0]
+    assert again["turns"][0]["tools"] == []
+
+
+def test_list_sessions_survives_restart_via_disk_index(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    for sid in ("aaa", "bbb", "ccc"):
+        _seed_session(tmp_path, sid, f"hi {sid}")
+
+    warm = data_sessions.list_sessions(tmp_path)
+    assert len(warm) == 3
+    index_path = tmp_path / "sessions" / "_index.json"
+    assert index_path.exists()
+
+    computes = {"n": 0}
+    orig = data_sessions._compute_row
+
+    def counting(p, stats):
+        computes["n"] += 1
+        return orig(p, stats)
+
+    monkeypatch.setattr(data_sessions, "_compute_row", counting)
+    data_sessions._clear_row_cache()
+
+    cold = data_sessions.list_sessions(tmp_path)
+    assert computes["n"] == 0
+    assert cold == warm
+
+
+def test_disk_index_recomputes_changed_and_prunes_deleted(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    changed = _seed_session(tmp_path, "aaa", "hi aaa")
+    _seed_session(tmp_path, "bbb", "hi bbb")
+    _seed_session(tmp_path, "ccc", "hi ccc")
+    data_sessions.list_sessions(tmp_path)
+
+    payload = json.loads(changed.read_text(encoding="utf-8"))
+    payload["turns"][0]["user"] = "hi aaa v2"
+    changed.write_text(json.dumps(payload), encoding="utf-8")
+    (tmp_path / "sessions" / "ccc.json").unlink()
+
+    computes = {"n": 0}
+    orig = data_sessions._compute_row
+
+    def counting(p, stats):
+        computes["n"] += 1
+        return orig(p, stats)
+
+    monkeypatch.setattr(data_sessions, "_compute_row", counting)
+    data_sessions._clear_row_cache()
+
+    rows = data_sessions.list_sessions(tmp_path)
+    assert computes["n"] == 1
+    assert {r["id"] for r in rows} == {"aaa", "bbb"}
+    assert next(r for r in rows if r["id"] == "aaa")["first_user"] == "hi aaa v2"
+
+    index = json.loads((tmp_path / "sessions" / "_index.json").read_text(encoding="utf-8"))
+    assert set(index["rows"]) == {"aaa.json", "bbb.json"}
+
+
+def test_disk_index_never_listed_and_corruption_is_recoverable(tmp_path: Path) -> None:
+    _seed_session(tmp_path, "abc", "hello")
+    data_sessions.list_sessions(tmp_path)
+
+    (tmp_path / "sessions" / "_index.json").write_text("{not json", encoding="utf-8")
+    data_sessions._clear_row_cache()
+
+    rows = data_sessions.list_sessions(tmp_path)
+    assert [r["id"] for r in rows] == ["abc"]
+    index = json.loads((tmp_path / "sessions" / "_index.json").read_text(encoding="utf-8"))
+    assert set(index["rows"]) == {"abc.json"}
 
 
 @pytest.mark.asyncio

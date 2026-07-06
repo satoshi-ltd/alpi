@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.10.15 — 2026-07-06 — big chats and long histories load faster
+
+- **Opening a long conversation no longer re-parses it for every page.** The
+  daemon keeps recently opened sessions parsed in memory, so the first read
+  does the heavy lifting and every follow-up slice — paging older history,
+  refreshing the tail — returns in milliseconds, even for multi-megabyte
+  chats.
+- **Listing sessions survives a daemon restart without re-reading everything.**
+  Session summaries are now indexed on disk, so a profile with hundreds of
+  conversations lists them instantly after a restart instead of parsing every
+  file again. The index maintains itself: it prunes deleted sessions and
+  rebuilds transparently if it's ever corrupted.
+
 ## v0.10.14 — 2026-07-04 — chat history in slices
 
 - **Chat history can now be read in slices, newest first.** `host.session.read`
