@@ -73,8 +73,8 @@ describe("viewerKind", () => {
   it("classifies the file by ftype and binary flag", () => {
     expect(viewerKind(null)).toBe("empty");
     expect(viewerKind({ binary: true, ftype: "binary" })).toBe("binary");
-    expect(viewerKind({ ftype: "skill" })).toBe("code");
-    expect(viewerKind({ ftype: "md" })).toBe("code");
+    expect(viewerKind({ ftype: "skill" })).toBe("markdown");
+    expect(viewerKind({ ftype: "md" })).toBe("markdown");
     expect(viewerKind({ ftype: "py" })).toBe("code");
     expect(viewerKind({ ftype: "text" })).toBe("code");
   });

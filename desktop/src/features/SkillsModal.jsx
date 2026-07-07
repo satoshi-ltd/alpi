@@ -1,6 +1,8 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { BrowseModal, Eyebrow, Icon, Lock } from "../primitives/index.js";
+import Markdown from "../primitives/Markdown.jsx";
+import { codeLines } from "../lib/pyhighlight.js";
 import shell from "../primitives/BrowseModal.module.css";
 import styles from "./SkillsModal.module.css";
 
@@ -40,6 +42,7 @@ export function matchesSkill(skill, query) {
 export function viewerKind(file) {
   if (!file) return "empty";
   if (file.binary) return "binary";
+  if (file.ftype === "skill" || file.ftype === "md") return "markdown";
   return "code";
 }
 
@@ -479,6 +482,43 @@ function FileViewer({ file, loading }) {
       </div>
     );
   }
-  if (kind === "code") return <pre className={styles.code}>{file.text || ""}</pre>;
+  if (kind === "markdown") {
+    return (
+      <div className={styles.mdBox}>
+        {file.text ? (
+          <Markdown source={file.text} className="alpi-md" />
+        ) : (
+          <div className={styles.viewerLoading}>Empty file.</div>
+        )}
+      </div>
+    );
+  }
+  if (kind === "code") return <CodeView text={file.text || ""} lang={file.ftype} />;
   return <div className={styles.viewerLoading}>Select a file.</div>;
+}
+
+const BLANK_LINE = "\u200b";
+
+function CodeView({ text, lang }) {
+  const lines = useMemo(() => codeLines(text, lang), [text, lang]);
+  return (
+    <div className={styles.codeView}>
+      {lines.map((toks, i) => (
+        <div className={styles.codeLine} key={i}>
+          <span className={styles.ln} aria-hidden>{i + 1}</span>
+          <code className={styles.lc}>
+            {toks.length === 0
+              ? BLANK_LINE
+              : toks.map((t, j) =>
+                  t.type ? (
+                    <span key={j} className={styles[`t_${t.type}`]}>{t.text}</span>
+                  ) : (
+                    <Fragment key={j}>{t.text}</Fragment>
+                  ),
+                )}
+          </code>
+        </div>
+      ))}
+    </div>
+  );
 }

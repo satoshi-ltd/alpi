@@ -11,6 +11,15 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.19 — 2026-07-07 — skill files read like a code editor
+
+- **The skill browser now renders files properly.** `SKILL.md` and other
+  Markdown files show as formatted text instead of raw markup, and scripts
+  and text files get line numbers with horizontal scrolling — so indentation
+  stays intact instead of wrapping.
+- **Python scripts are syntax-highlighted** right in the viewer: keywords,
+  strings, numbers, comments and decorators, no round-trip to an editor.
+
 ## v0.4.18 — 2026-07-06 — read aloud sounds like a person
 
 _Spoken scripts need alpi v0.10.16+; older daemons fall back to plain cleanup._
