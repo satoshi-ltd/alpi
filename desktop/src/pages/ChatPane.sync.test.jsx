@@ -36,22 +36,22 @@ const turnsData = {
 };
 
 describe("ChatPane — sync indicators", () => {
-  it("shows the controlled refresh bar and backfill pill after the anti-flash delay", () => {
+  it("shows the controlled refresh bar during backfill, with no redundant pill", () => {
     renderPane({
       sessionData: { ...turnsData, turnsOffset: 120, totalTurns: 121, partialTail: true },
       sessionSync: { phase: "backfill", loaded: 1, total: 121 },
     });
     expect(screen.queryByRole("progressbar", { name: "syncing conversation" })).toBeNull();
-    expect(screen.queryByRole("status")).toBeNull();
     act(() => vi.advanceTimersByTime(450));
     expect(screen.getByRole("progressbar", { name: "syncing conversation" })).toBeTruthy();
-    expect(screen.getByRole("status").textContent).toContain("syncing history · 1/121");
+    expect(screen.queryByRole("status")).toBeNull();
   });
 
-  it("shows a plain syncing pill during the refresh phase over stale data", () => {
+  it("shows no floating pill during the refresh phase — the refresh bar covers it", () => {
     renderPane({ sessionData: turnsData, sessionSync: { phase: "refresh" } });
     act(() => vi.advanceTimersByTime(450));
-    expect(screen.getByRole("status").textContent).toContain("syncing…");
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.getByRole("progressbar", { name: "syncing conversation" })).toBeTruthy();
   });
 
   it("hides every indicator when sync is idle", () => {

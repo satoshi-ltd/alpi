@@ -11,6 +11,18 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.22 — 2026-07-07 — watch long chats work in real time
+
+- **In-flight chats now show live progress**, not just a "Still working…"
+  label. When a turn is running — especially on a remote profile or a chat you
+  reopened — the app tails the session's activity so tools, thinking, and the
+  partial answer appear as they happen.
+- **Removed the redundant floating "syncing…" pill.** The slim sync bar at the
+  top already shows when a conversation is refreshing.
+
+_The live progress view reads the in-flight signal and activity log from
+alpi v0.10.13+; older daemons still show the reply when the turn finishes._
+
 ## v0.4.21 — 2026-07-07 — today's notifications show the clock
 
 - **Notifications from today now show the time of day** (e.g. `4:42 PM`)

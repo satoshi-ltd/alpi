@@ -4,6 +4,7 @@ import Reasoning from "../primitives/Reasoning.jsx";
 import ChatComposer from "../features/ChatComposer.jsx";
 import AttachmentChips from "../primitives/AttachmentChips.jsx";
 import { useProfileDetail } from "../hooks/useProfileDetail.js";
+import { useSidecarTail } from "../hooks/useSidecarTail.js";
 import Button from "../primitives/Button.jsx";
 import Message from "../primitives/Message.jsx";
 import { useStickyScroll } from "../lib/useStickyScroll.js";
@@ -292,7 +293,6 @@ export default function ChatPane({
         />
         <SessionView
           data={sessionData}
-          sync={sessionSync}
           profiles={profiles}
           pendingTurn={pendingTurn}
           accent={activeProfile?.accent ?? null}
@@ -302,6 +302,7 @@ export default function ChatPane({
           voiceId={activeProfile?.voice_id ?? activeDetail?.voice_id ?? null}
           onRewriteMessage={paused ? null : onRewriteMessage}
           onRetryMessage={paused ? null : onRetryMessage}
+          onRefreshSession={onRefreshSession}
           sessionId={view.sessionId ?? null}
           rewriteDraft={rewriteDraft}
           searchOpen={searchOpen}
@@ -337,7 +338,6 @@ export default function ChatPane({
 function SessionView({
   data,
   profiles,
-  sync,
   pendingTurn,
   accent,
   showEmptyHint,
@@ -346,6 +346,7 @@ function SessionView({
   voiceId,
   onRewriteMessage,
   onRetryMessage,
+  onRefreshSession,
   sessionId,
   rewriteDraft,
   searchOpen,
@@ -355,7 +356,6 @@ function SessionView({
     <>
       <Transcript
         data={data}
-        sync={sync}
         profiles={profiles}
         pendingTurn={pendingTurn}
         accent={accent}
@@ -365,6 +365,7 @@ function SessionView({
         voiceId={voiceId}
         onRewriteMessage={onRewriteMessage}
         onRetryMessage={onRetryMessage}
+        onRefreshSession={onRefreshSession}
         sessionId={sessionId}
         rewriteDraft={rewriteDraft}
         searchOpen={searchOpen}
@@ -376,7 +377,6 @@ function SessionView({
 
 const Transcript = memo(function Transcript({
   data,
-  sync,
   profiles,
   pendingTurn,
   accent,
@@ -386,28 +386,48 @@ const Transcript = memo(function Transcript({
   voiceId,
   onRewriteMessage,
   onRetryMessage,
+  onRefreshSession,
   sessionId,
   rewriteDraft,
   searchOpen,
   onCloseSearch,
 }) {
-  const scrollRef = useStickyScroll([data, pendingTurn], pendingTurn?.requestId ?? null);
-  const { farFromBottom, scrollToBottom } = useScrollProgress(scrollRef, {
-    streaming: !!pendingTurn,
-  });
-  const search = useTranscriptSearch(scrollRef, searchOpen);
-  const closeSearch = () => {
-    search.reset();
-    onCloseSearch?.();
-  };
   const allTurns = data?.turns ?? [];
   const turnBase = Number.isInteger(data?.turnsOffset) ? data.turnsOffset : 0;
   const cut = rewriteCut({ pendingTurn, rewriteDraft, profileName, sessionId });
   const cutTurns = cut != null ? allTurns.slice(0, Math.max(0, cut - turnBase)) : allTurns;
   const turns = dropInflightStub(cutTurns, pendingTurn);
   const lastTurnInFlight = isLastTurnInFlight(turns, data?.in_flight);
+  const liveTail = useSidecarTail({
+    profile: profileName,
+    sessionId,
+    active: lastTurnInFlight && !pendingTurn,
+    onDone: onRefreshSession,
+  });
+  const stub = lastTurnInFlight && !pendingTurn ? turns[turns.length - 1] : null;
+  const tailTurn = liveTail && stub && ((liveTail.tools?.length ?? 0) > 0 || liveTail.assistant || liveTail.reasoning)
+    ? {
+        user: stub.user,
+        at: stub.at,
+        attachments: stub.attachments,
+        tools: liveTail.tools,
+        assistantPreview: liveTail.assistant,
+        reasoningPreview: liveTail.reasoning,
+      }
+    : null;
+  const renderTurns = tailTurn ? turns.slice(0, -1) : turns;
+  const streamingTurn = pendingTurn ?? tailTurn;
+
+  const scrollRef = useStickyScroll([data, pendingTurn, tailTurn], streamingTurn?.requestId ?? (tailTurn ? `tail:${sessionId}` : null));
+  const { farFromBottom, scrollToBottom } = useScrollProgress(scrollRef, {
+    streaming: !!streamingTurn,
+  });
+  const search = useTranscriptSearch(scrollRef, searchOpen);
+  const closeSearch = () => {
+    search.reset();
+    onCloseSearch?.();
+  };
   useScrollAnchor(scrollRef, turnBase, `${profileName}:${sessionId ?? "new"}`);
-  const syncPill = useDelayedFlag(!!sync && !!data);
 
   const [showSkeleton, setShowSkeleton] = useState(false);
   useEffect(() => {
@@ -456,7 +476,7 @@ const Transcript = memo(function Transcript({
         <div ref={scrollRef} className={styles.transcript}>
           <div className={styles.timeline}>
             <HistoryTurns
-              turns={turns}
+              turns={renderTurns}
               turnBase={turnBase}
               profiles={profiles}
               accent={accent}
@@ -465,31 +485,16 @@ const Transcript = memo(function Transcript({
               onRewriteMessage={onRewriteMessage}
               onRetryMessage={onRetryMessage}
               sessionId={sessionId}
-              lastTurnInFlight={lastTurnInFlight}
+              lastTurnInFlight={lastTurnInFlight && !tailTurn}
             />
-            {pendingTurn && <PendingTurn turn={pendingTurn} accent={accent} profiles={profiles} />}
+            {streamingTurn && <PendingTurn turn={streamingTurn} accent={accent} profiles={profiles} />}
           </div>
         </div>
-        {syncPill && (
-          <div className={`${styles.syncPill} anim-fade`} role="status">
-            <DSSpinnerIcon className={styles.syncPillSpinner} />
-            <span>{syncPillLabel(sync)}</span>
-          </div>
-        )}
         <JumpToLatest show={farFromBottom} onClick={scrollToBottom} />
       </div>
     </>
   );
 });
-
-function syncPillLabel(sync) {
-  if (sync?.phase === "backfill") {
-    return Number.isInteger(sync.total)
-      ? `syncing history · ${sync.loaded}/${sync.total}`
-      : "syncing history…";
-  }
-  return "syncing…";
-}
 
 const HistoryTurns = memo(function HistoryTurns({
   turns,
