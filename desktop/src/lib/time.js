@@ -4,6 +4,7 @@ const LONG = new Intl.DateTimeFormat(undefined, {
   day: "numeric",
   year: "numeric",
 });
+const CLOCK = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
 
 const DATE_BUCKETS = ["Today", "Yesterday", "This week", "This month", "Earlier"];
 
@@ -27,6 +28,14 @@ export function groupByDate(rows, getTs, nowMs = Date.now()) {
     buckets.get(label).push(r);
   }
   return DATE_BUCKETS.filter((l) => buckets.has(l)).map((label) => ({ label, rows: buckets.get(label) }));
+}
+
+export function notificationTime(unixSeconds, nowMs = Date.now()) {
+  if (!unixSeconds) return "";
+  if (dateBucket(unixSeconds, nowMs) === "Today") {
+    return CLOCK.format(new Date(unixSeconds * 1000));
+  }
+  return relativeTime(unixSeconds);
 }
 
 export function relativeTime(unixSeconds) {

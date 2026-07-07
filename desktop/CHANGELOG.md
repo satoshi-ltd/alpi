@@ -11,6 +11,12 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.21 — 2026-07-07 — today's notifications show the clock
+
+- **Notifications from today now show the time of day** (e.g. `4:42 PM`)
+  instead of a relative age like "3h" — so you can tell at a glance exactly
+  when something landed. Older notifications keep the relative age.
+
 ## v0.4.20 — 2026-07-07 — long turns keep their reply
 
 - **A reply no longer vanishes after a very long turn.** When a chat ran for

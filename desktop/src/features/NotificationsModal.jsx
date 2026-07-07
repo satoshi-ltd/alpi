@@ -22,7 +22,7 @@ import Eyebrow from "../primitives/Eyebrow.jsx";
 import { playTts, subscribeTts, VOICE_POOL } from "../lib/tts.js";
 import { useOnline } from "../lib/useOnline.js";
 import { useNotify } from "../primitives/Notification.jsx";
-import { groupByDate, relativeTime } from "../lib/time.js";
+import { groupByDate, notificationTime } from "../lib/time.js";
 import { profileLabel } from "../lib/profile-display.js";
 import {
   pendingDeleteKeys,
@@ -384,7 +384,7 @@ function NotificationRow({ row, accent, multi, unread, active, onSelect, onDelet
           </span>
           <span className={styles.rowSlot}>
             {sev ? <span className={`${styles.rowSev} ${sev === "error" ? styles.rowSevError : styles.rowSevWarning}`} aria-hidden /> : null}
-            <Mono className={styles.rowTs}>{relativeTime(row.created_at)}</Mono>
+            <Mono className={styles.rowTs}>{notificationTime(row.created_at)}</Mono>
             <span className={styles.rowDelete}>
               <Tip text="Delete" side="up">
                 <IconBtn aria-label="Delete notification" onClick={handleDelete}>
