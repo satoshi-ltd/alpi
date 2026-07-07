@@ -529,7 +529,61 @@ Add via `alpi setup → Model → Add Ollama`. Remove via `alpi setup → Model 
 
 | Key | Default | Notes |
 |---|---|---|
-| `mcp.servers` | `{}` | Map of `<name> → {command, args, env}`. Secrets in `env` use the `env:VAR_NAME` reference. Add via `alpi setup → MCPs` — hand-editing is supported but the wizard is easier. |
+| `mcp.servers` | `{}` | Map of `<name> → {command, args, env}`. Each server is a **local stdio subprocess** the daemon spawns — alpi has no native HTTP/SSE MCP transport. Secrets in `env` use the `env:VAR_NAME` reference (resolved from the profile `.env` at spawn). Add via `alpi setup → MCPs`; hand-editing is supported. |
+
+An entry is `command` + `args` + `env`. alpi launches it as a local subprocess
+and speaks MCP over stdio, so a **remote HTTP endpoint must be bridged** (below).
+Each `env` value of the form `env:VAR_NAME` is resolved from the profile `.env`
+at spawn and passed as the subprocess's environment — the secret lives in `.env`,
+never in `config.yaml`.
+
+**Pattern A — stdio server, secret via environment** (server reads its
+credentials from env vars, e.g. a Bitbucket MCP):
+
+```yaml
+mcp:
+  servers:
+    bitbucket:
+      command: npx
+      args: [-y, bitbucket-mcp@5.0.6]
+      env:
+        BITBUCKET_URL: env:BITBUCKET_URL
+        BITBUCKET_WORKSPACE: env:BITBUCKET_WORKSPACE
+        BITBUCKET_USERNAME: env:BITBUCKET_USERNAME
+        BITBUCKET_PASSWORD: env:BITBUCKET_PASSWORD
+```
+`.env`: `BITBUCKET_PASSWORD=…` (etc.). The server reads them from its environment.
+
+**Pattern B — remote HTTP endpoint, secret in an auth header.** Because alpi is
+stdio-only, bridge the HTTP MCP with `mcp-remote`. The catch: `env:VAR` injects
+into the subprocess **environment only, not into `args`**, so a secret that must
+travel as an HTTP header cannot be referenced directly in the `--header` arg.
+Use `mcp-remote`'s own `${VAR}` expansion — it substitutes `${VAR}` in a
+`--header` value from its environment, which you populate via the `env:` map:
+
+```yaml
+mcp:
+  servers:
+    lobby:
+      command: npx
+      args:
+        - -y
+        - mcp-remote@latest
+        - https://api.example.com/mcp
+        - --transport
+        - http-only
+        - --header
+        - 'x-mcp-secret: ${MCP_SECRET}'   # mcp-remote expands ${...} from its env
+      env:
+        MCP_SECRET: env:MCP_SECRET   # alpi injects it from the profile .env
+```
+`.env`: `MCP_SECRET=…`. Do **not** hardcode the secret in `--header`, and do
+**not** wrap the command in `sh -c` to expand it — `mcp-remote` expands `${VAR}`
+in headers itself.
+
+**Takes effect:** MCP servers are spawned by the profile's engine; a config
+change is picked up when that profile's MCP subprocess is next (re)started —
+restart the daemon or re-bootstrap the profile.
 
 ### Services (per profile)
 

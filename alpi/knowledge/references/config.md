@@ -147,6 +147,13 @@ per-char iteration.
 - One address, two ports? -> `network.host` is the shared accessible address (empty = auto-detect Tailscale->LAN); `host.tcp_port` is device pairing, `alp.tcp_port` is the ALP peer listener. The `default` profile auto-exposes ALP TCP when a reachable address exists; named profiles are Unix-only unless they set their own unique `alp.tcp_port`. Unix sockets always work locally.
 - Advertise vs bind? -> `network.host` is the *advertised* address clients and peers dial; the *bind* is derived from it, not used verbatim. A private/Tailscale IP binds itself; a hostname or an opted-in public IP binds `0.0.0.0`; a public IP without `host.allow_public_bind` refuses to bind (Unix-only); docker always binds `0.0.0.0`. `host.allow_public_bind` gates the public case for both planes (the address is shared).
 
+## MCP servers
+
+`mcp.servers`: map `<name> -> {command, args, env}`. Each is a **local stdio subprocess** the daemon spawns; alpi has NO native HTTP/SSE MCP transport. `env` values of the form `env:VAR` resolve from the profile `.env` at spawn and become the subprocess environment — the secret stays in `.env`, never in `config.yaml` or in `args`. Add via `alpi setup -> MCPs`. Takes effect on daemon restart / profile re-bootstrap (the MCP subprocess re-spawns).
+
+- **stdio + env secret** (server reads creds from env): `command: npx`, `args: [-y, <pkg>]`, `env: {BITBUCKET_URL: env:BITBUCKET_URL, BITBUCKET_PASSWORD: env:BITBUCKET_PASSWORD, ...}`.
+- **remote HTTP + header secret**: alpi is stdio-only, so bridge with `mcp-remote`. `env:VAR` only reaches the subprocess env, NOT `args`, so a header secret cannot be referenced in `--header` directly. Use mcp-remote's own `${VAR}` header expansion: `args: [-y, mcp-remote@latest, <url>, --transport, http-only, --header, 'x-mcp-secret: ${MCP_SECRET}']` + `env: {MCP_SECRET: env:MCP_SECRET}`. Do NOT hardcode the secret in the header and do NOT wrap in `sh -c` — mcp-remote expands `${VAR}` itself.
+
 ## Related topics
 
 - Install/update path: `install`
