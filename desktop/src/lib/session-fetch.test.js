@@ -111,6 +111,18 @@ describe("fetchFullSession", () => {
     expect(invokeMock).toHaveBeenCalledTimes(1);
   });
 
+  it("refetches full when the known base was captured in-flight (mutable tail)", async () => {
+    const known = { id: "s", turns: [turn(0)], in_flight: true };
+    invokeMock.mockResolvedValueOnce({
+      session: { id: "s", turns: [turn(0), turn(1)] },
+      total_turns: 2,
+      turns_offset: 0,
+    });
+    const data = await fetchFullSession("work", "s", { known });
+    expect(invokeMock).toHaveBeenCalledWith("session_detail", { profile: "work", id: "s" });
+    expect(data.turns.map((t) => t.user)).toEqual(["u0", "u1"]);
+  });
+
   it("ignores a known session whose id differs", async () => {
     const known = { id: "other", turns: [turn(0)] };
     invokeMock.mockResolvedValueOnce({

@@ -501,11 +501,21 @@ export function useChatStream({
         const turn = pendingTurnsRef.current[rid];
         if (!turn) return;
         if (!isActiveConnection(turn)) return;
+        const meta = turnMetaRef.current[rid];
+        if (meta) meta.loaded = true;
         const sid = p.session_id;
         fetchFinishedSession(turn, sid)
           .then((newData) => finishTurnView(turn, sid, newData))
           .catch((e) => notify({ message: String(e), variant: "error" }));
       } else if (p.kind === "done") {
+        const turn = pendingTurnsRef.current[rid];
+        const alreadyLoaded = turnMetaRef.current[rid]?.loaded === true;
+        const sid = p.session_id || turn?.sessionId || null;
+        if (turn && sid && !alreadyLoaded && !turn.error && isActiveConnection(turn)) {
+          fetchFinishedSession(turn, sid)
+            .then((newData) => finishTurnView(turn, sid, newData))
+            .catch((e) => notify({ message: String(e), variant: "error" }));
+        }
         delete turnMetaRef.current[rid];
         delete deltaBufferRef.current[rid];
         dropTurnTimers(rid);

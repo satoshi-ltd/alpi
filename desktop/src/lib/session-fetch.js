@@ -58,7 +58,7 @@ export async function fetchSessionDetail(
 }
 
 export async function fetchFullSession(profile, sessionId, { known = null } = {}) {
-  const usable = isDeltaBase(known) && known.id === sessionId;
+  const usable = isDeltaBase(known) && known.id === sessionId && known.in_flight !== true;
   if (usable && known.turns.length > 0) {
     const res = await fetchSessionDetail(profile, sessionId, {
       afterTurn: absoluteEnd(known),

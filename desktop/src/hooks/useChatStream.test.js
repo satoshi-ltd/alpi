@@ -93,6 +93,29 @@ describe("useChatStream live frames", () => {
     expect(turnOf(result)).toBeNull();
   });
 
+  it("done loads the finished transcript when reply was never seen", async () => {
+    const { result, setSessionData } = mount({ activeConnectionIdRef: { current: "A" } });
+    await waitForListen();
+    seedTurn(result, { connectionId: "A", sessionId: "sess-1", launchSessionId: "sess-1" });
+    invoke.mockClear();
+    setSessionData.mockClear();
+    emit({ kind: "done", session_id: "sess-1" });
+    expect(invoke.mock.calls.some(([cmd]) => cmd === "session_detail")).toBe(true);
+    expect(turnOf(result)).toBeNull();
+  });
+
+  it("done does not re-load the transcript when reply already loaded it", async () => {
+    const { result } = mount({ activeConnectionIdRef: { current: "A" } });
+    await waitForListen();
+    seedTurn(result, { connectionId: "A", sessionId: "sess-1", launchSessionId: "sess-1" });
+    invoke.mockClear();
+    emit({ kind: "reply", session_id: "sess-1" });
+    emit({ kind: "done", session_id: "sess-1" });
+    const detailCalls = invoke.mock.calls.filter(([cmd]) => cmd === "session_detail").length;
+    expect(detailCalls).toBe(1);
+    expect(turnOf(result)).toBeNull();
+  });
+
   it("done preserves the turn when an error frame already landed", async () => {
     const { result } = mount();
     await waitForListen();

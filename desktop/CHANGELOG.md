@@ -11,6 +11,18 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.20 — 2026-07-07 — long turns keep their reply
+
+- **A reply no longer vanishes after a very long turn.** When a chat ran for
+  many minutes and the live stream hiccuped at the very end, the finished
+  answer could disappear, leaving only your message. The completed reply is
+  now always loaded, so it stays on screen.
+- **"Refresh thread" reliably reloads the current answer** instead of
+  occasionally showing nothing — it now always re-reads the latest turn.
+
+_Client-only fixes; work with any daemon — the "Refresh thread" recovery reads
+the in-flight signal from alpi v0.10.13+, older daemons simply skip it._
+
 ## v0.4.19 — 2026-07-07 — skill files read like a code editor
 
 - **The skill browser now renders files properly.** `SKILL.md` and other
