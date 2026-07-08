@@ -419,9 +419,7 @@ const Transcript = memo(function Transcript({
   const streamingTurn = pendingTurn ?? tailTurn;
 
   const scrollRef = useStickyScroll([data, pendingTurn, tailTurn], streamingTurn?.requestId ?? (tailTurn ? `tail:${sessionId}` : null));
-  const { farFromBottom, scrollToBottom } = useScrollProgress(scrollRef, {
-    streaming: !!streamingTurn,
-  });
+  const { farFromBottom, scrollToBottom } = useScrollProgress(scrollRef);
   const search = useTranscriptSearch(scrollRef, searchOpen);
   const closeSearch = () => {
     search.reset();

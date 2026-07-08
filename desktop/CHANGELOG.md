@@ -11,6 +11,17 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.23 — 2026-07-08 — scroll up stays up while a chat streams
+
+- **You can now scroll up during a streaming reply and stay there.** The chat
+  no longer yanks you back to the bottom as new tools and text arrive — it only
+  auto-follows when you're already at the bottom, and disengages the moment you
+  scroll away.
+- **"Jump to latest" now appears while a reply is streaming**, so you can drop
+  back to the live edge whenever you want.
+
+_Client-only scroll behavior; works with any daemon version._
+
 ## v0.4.22 — 2026-07-07 — watch long chats work in real time
 
 - **In-flight chats now show live progress**, not just a "Still working…"

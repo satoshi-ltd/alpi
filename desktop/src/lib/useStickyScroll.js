@@ -8,6 +8,7 @@ export function useStickyScroll(deps, stickKey) {
   const scrollRef = useRef(null);
   const stickRef = useRef(true);
   const keyRef = useRef(stickKey);
+  const rafRef = useRef(0);
 
   if (stickKey !== keyRef.current) {
     keyRef.current = stickKey;
@@ -28,10 +29,15 @@ export function useStickyScroll(deps, stickKey) {
   useEffect(() => {
     const el = scrollRef.current;
     if (!el || !stickRef.current) return;
-    requestAnimationFrame(() => {
-      if (el) el.scrollTop = el.scrollHeight;
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = 0;
+      const cur = scrollRef.current;
+      if (cur && stickRef.current) cur.scrollTop = cur.scrollHeight;
     });
   }, deps);
+
+  useEffect(() => () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); }, []);
 
   return scrollRef;
 }

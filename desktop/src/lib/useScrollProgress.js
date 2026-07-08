@@ -2,14 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 const DEFAULT_THRESHOLD = 200;
 
-// Tracks how far the user is scrolled away from the bottom of a scrollable
-// container, plus a `scrollToBottom()` helper. Returns `farFromBottom = true`
-// only when (a) the container is actually scrollable beyond one viewport,
-// (b) the distance from bottom exceeds `threshold`, and (c) no streaming
-// pass is in flight (auto-scroll already owns the bottom in that case).
 export function useScrollProgress(
   scrollRef,
-  { streaming = false, threshold = DEFAULT_THRESHOLD } = {},
+  { threshold = DEFAULT_THRESHOLD } = {},
 ) {
   const [farFromBottom, setFarFromBottom] = useState(false);
   const rafRef = useRef(0);
@@ -87,7 +82,7 @@ export function useScrollProgress(
   }, [scrollRef]);
 
   return {
-    farFromBottom: farFromBottom && !streaming,
+    farFromBottom,
     scrollToBottom,
   };
 }
