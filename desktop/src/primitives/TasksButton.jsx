@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Btn,
   CheckIcon,
@@ -93,8 +93,17 @@ function StatusGlyph({ status, color }) {
   return <Dot pulse color={color} />;
 }
 
-export default function TasksButton({ thread = [], hubColor, hubPubkey = null, onJump }) {
+export default function TasksButton({ thread = [], hubColor, hubPubkey = null, openTick = 0, onJump }) {
   const [open, setOpen] = useState(false);
+  const mountedRef = useRef(false);
+
+  useEffect(() => {
+    if (!mountedRef.current) {
+      mountedRef.current = true;
+      return;
+    }
+    if (openTick > 0) setOpen(true);
+  }, [openTick]);
 
   const tasks = useMemo(() => deriveTasks(thread, hubPubkey), [thread, hubPubkey]);
   const total = tasks.length;

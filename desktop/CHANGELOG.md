@@ -11,6 +11,17 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.27 — 2026-07-10 — shortcuts open the right panels
+
+- **The command palette now exposes the profile panels you expect from chat or
+  Settings.** Tools, Skills, Memory, Notifications, shortcuts, and contextual
+  history are available from Cmd+K without depending on which screen is open.
+- **Contextual history now opens the right lightweight surface.** In profile
+  chats it opens the Sessions dropdown for quick switching; in workgroups it
+  opens Task history. The removed sidebar shortcut no longer appears.
+
+_Client-only shortcut and navigation cleanup; works with any daemon version._
+
 ## v0.4.26 — 2026-07-09 — rename sessions in the manager
 
 - **Chat sessions can now be renamed from the Manage sessions window.** Double

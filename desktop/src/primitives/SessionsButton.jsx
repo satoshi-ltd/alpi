@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   Btn,
@@ -48,6 +48,7 @@ export default function SessionsButton({
   connectionId = null,
   accent,
   activeSessionId,
+  openTick = 0,
   onChange,
   onNew,
 }) {
@@ -56,11 +57,20 @@ export default function SessionsButton({
   const [sessions, setSessions] = useState(() => (profile ? _sessionsCache.get(profile) ?? [] : []));
   const [loadedProfile, setLoadedProfile] = useState(() => (profile && _sessionsCache.has(profile) ? profile : null));
   const [reloadTick, setReloadTick] = useState(0);
-  const [openTick, setOpenTick] = useState(0);
+  const [loadTick, setLoadTick] = useState(0);
+  const mountedRef = useRef(false);
+
+  useEffect(() => {
+    if (!mountedRef.current) {
+      mountedRef.current = true;
+      return;
+    }
+    if (openTick > 0) setOpen(true);
+  }, [openTick]);
 
   // Revalidate on OPEN only — `open` as a raw dep also refired the fetch on every close.
   useEffect(() => {
-    if (open) setOpenTick((t) => t + 1);
+    if (open) setLoadTick((t) => t + 1);
   }, [open]);
 
   useEffect(() => {
@@ -91,7 +101,7 @@ export default function SessionsButton({
     return () => {
       cancelled = true;
     };
-  }, [profile, openTick, reloadTick]);
+  }, [profile, loadTick, reloadTick]);
 
   // Never show a prior profile's list while a switch is still loading (stale on remote).
   const isFresh = loadedProfile === profile;

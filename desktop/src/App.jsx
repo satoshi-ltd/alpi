@@ -204,6 +204,8 @@ export default function App() {
   const onClosePalette = useCallback(() => setPaletteOpen(false), []);
 
   const [browse, setBrowse] = useState(null);
+  const [sessionsDropdownOpenTick, setSessionsDropdownOpenTick] = useState(0);
+  const [taskHistoryOpenTick, setTaskHistoryOpenTick] = useState(0);
   const onCloseBrowse = useCallback(() => setBrowse(null), []);
   const onBrowseTools = useCallback(() => setBrowse("tools"), []);
   const onBrowseSkills = useCallback(() => setBrowse("skills"), []);
@@ -269,23 +271,6 @@ export default function App() {
     setView({ kind: "settings" });
   }, []);
   const adminOpenSettingsFor = canAdminEarly ? openSettingsFor : null;
-  useWindowChrome({
-    viewRef,
-    setView,
-    onJumpToProfile,
-    onNewProfile: adminOnNewProfile,
-    onNewWorkgroup: adminOnNewWorkgroup,
-    onOpenSettings: adminOnOpenSettings,
-    onToggleSearch,
-    onTogglePalette,
-    paletteOpenRef,
-    onClosePalette,
-    onBrowseTools,
-    onBrowseSkills,
-    onBrowseMemory,
-    onToggleNotifications: onOpenNotifications,
-    onToggleShortcuts,
-  });
   useNavListener(setView);
 
   const connectionOnlineRef = useRef(true);
@@ -675,6 +660,24 @@ export default function App() {
   }, [applyChange, hostConnectionsRef, approval.merge, approval.resolve, clarification.merge, clarification.resolve, scheduleReload]);
 
   const sendingRef = useRef(false);
+  const activeSettingsWorkgroup = useMemo(() => {
+    if (view.kind !== "settings" || settingsTarget?.kind !== "workgroup") {
+      return null;
+    }
+    return workgroups.find((w) => w.id === settingsTarget.id) ?? null;
+  }, [view, settingsTarget, workgroups]);
+
+  const activeWorkgroup = useMemo(() => {
+    if (view.kind === "workgroup") {
+      return (
+        workgroups.find(
+          (w) => w.id === view.id && w.profile === view.profile,
+        ) ?? null
+      );
+    }
+    return null;
+  }, [view, workgroups]);
+
   const activeProfile = useMemo(() => {
     if (view.kind === "profile") {
       return profiles.find((p) => p.name === view.profile) ?? null;
@@ -689,6 +692,58 @@ export default function App() {
     }
     return null;
   }, [view, profiles, pickerAlpi, settingsTarget]);
+  const activeProfileName = activeProfile?.name ?? null;
+  const historyKind = activeWorkgroup || activeSettingsWorkgroup
+    ? "tasks"
+    : activeProfileName ? "sessions" : null;
+  const onOpenHistory = useCallback(() => {
+    if (activeWorkgroup) {
+      setTaskHistoryOpenTick((n) => n + 1);
+      return;
+    }
+    if (activeSettingsWorkgroup) {
+      setView({
+        kind: "workgroup",
+        profile: activeSettingsWorkgroup.profile,
+        id: activeSettingsWorkgroup.id,
+      });
+      setTaskHistoryOpenTick((n) => n + 1);
+      return;
+    }
+    if (activeProfileName) {
+      if (view.kind !== "profile" || view.profile !== activeProfileName) {
+        setView({
+          kind: "profile",
+          profile: activeProfileName,
+          sessionId: isChatSessionSummary(activeProfile?.latest_session)
+            ? activeProfile.latest_session.id
+            : null,
+        });
+      }
+      setSessionsDropdownOpenTick((n) => n + 1);
+    }
+  }, [activeWorkgroup, activeSettingsWorkgroup, activeProfileName, activeProfile, view]);
+
+  useWindowChrome({
+    viewRef,
+    setView,
+    onJumpToProfile,
+    onNewProfile: adminOnNewProfile,
+    onNewWorkgroup: adminOnNewWorkgroup,
+    onOpenSettings: adminOnOpenSettings,
+    onToggleSearch,
+    onTogglePalette,
+    paletteOpenRef,
+    onClosePalette,
+    activeProfileName,
+    historyKind,
+    onOpenHistory,
+    onBrowseTools,
+    onBrowseSkills,
+    onBrowseMemory,
+    onToggleNotifications: onOpenNotifications,
+    onToggleShortcuts,
+  });
 
   const pendingTurnForCurrentView = useMemo(
     () => pendingTurnForView({
@@ -895,24 +950,6 @@ export default function App() {
     );
   }, []);
 
-  const activeSettingsWorkgroup = useMemo(() => {
-    if (view.kind !== "settings" || settingsTarget?.kind !== "workgroup") {
-      return null;
-    }
-    return workgroups.find((w) => w.id === settingsTarget.id) ?? null;
-  }, [view, settingsTarget, workgroups]);
-
-  const activeWorkgroup = useMemo(() => {
-    if (view.kind === "workgroup") {
-      return (
-        workgroups.find(
-          (w) => w.id === view.id && w.profile === view.profile,
-        ) ?? null
-      );
-    }
-    return null;
-  }, [view, workgroups]);
-
   const activeConnection = hostConnections.connections.find(
     (c) => c.id === hostConnections.active_id,
   );
@@ -985,6 +1022,8 @@ export default function App() {
     workgroups,
     pinned,
     searchOpen,
+    activeProfileName,
+    historyKind,
     onSelectProfile: onOpenProfile,
     onSelectWorkgroup,
     onOpenSettings: adminOnOpenSettings,
@@ -996,6 +1035,8 @@ export default function App() {
     onBrowseTools,
     onBrowseSkills,
     onBrowseMemory,
+    onOpenHistory,
+    onToggleNotifications: onOpenNotifications,
   });
 
   return (
@@ -1105,6 +1146,7 @@ export default function App() {
                   } : null}
                   searchOpen={searchOpen}
                   onCloseSearch={onCloseSearch}
+                  taskHistoryOpenTick={taskHistoryOpenTick}
                 />
               )}
               {(view.kind === "empty" || view.kind === "profile") && (
@@ -1150,6 +1192,7 @@ export default function App() {
                   onOpenTools={onBrowseTools}
                   onRefreshSession={onRefreshSession}
                   onNewSession={onNewSessionForCurrentProfile}
+                  sessionsOpenTick={sessionsDropdownOpenTick}
                   onChangeSession={onChangeSession}
                   searchOpen={searchOpen}
                   onCloseSearch={onCloseSearch}
@@ -1169,24 +1212,24 @@ export default function App() {
       />
       <ShortcutsModal open={shortcutsOpen} onClose={onCloseShortcuts} />
       <ToolsModal
-        key={`${hostConnections.active_id}:${view.kind === "profile" ? view.profile : ""}`}
+        key={`${hostConnections.active_id}:${activeProfileName ?? ""}`}
         open={browse === "tools"}
         onClose={onCloseBrowse}
-        profile={view.kind === "profile" ? view.profile : null}
+        profile={activeProfileName}
         connectionId={hostConnections.active_id}
       />
       <SkillsModal
-        key={`${hostConnections.active_id}:${view.kind === "profile" ? view.profile : ""}`}
+        key={`${hostConnections.active_id}:${activeProfileName ?? ""}`}
         open={browse === "skills"}
         onClose={onCloseBrowse}
-        profile={view.kind === "profile" ? view.profile : null}
+        profile={activeProfileName}
         connectionId={hostConnections.active_id}
       />
       <MemoryModal
-        key={`${hostConnections.active_id}:${view.kind === "profile" ? view.profile : ""}`}
+        key={`${hostConnections.active_id}:${activeProfileName ?? ""}`}
         open={browse === "memory"}
         onClose={onCloseBrowse}
-        profile={view.kind === "profile" ? view.profile : null}
+        profile={activeProfileName}
         connectionId={hostConnections.active_id}
       />
       <CreateProfileModal

@@ -35,6 +35,7 @@ export default function ProfileChatHeader({
   onToggleAutoRead,
   onNewSession,
   onChangeSession,
+  sessionsOpenTick = 0,
   sessionsButton,
 }) {
   const accent = profile?.accent || "var(--accent)";
@@ -96,6 +97,7 @@ export default function ProfileChatHeader({
           connectionId={connectionId}
           accent={accent}
           activeSessionId={activeSessionId}
+          openTick={sessionsOpenTick}
           onChange={onChangeSession}
           onNew={onNewSession}
         />

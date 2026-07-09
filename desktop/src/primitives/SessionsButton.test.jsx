@@ -10,6 +10,7 @@ globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {
 
 const sessA = [{ id: "a1", kind: "chat", first_user: "hello from A", updated_at: 1780000000 }];
 const sessB = [{ id: "b1", kind: "chat", first_user: "hello from B", updated_at: 1780000000 }];
+const sessWithTurns = [{ id: "a1", kind: "chat", first_user: "hello from A", turn_count: 2, updated_at: 1780000000 }];
 
 beforeEach(() => {
   invokeMock.mockReset();
@@ -57,6 +58,27 @@ describe("SessionsButton — profile switch", () => {
     fireEvent.click(screen.getByText("Sessions"));
     await act(async () => { await Promise.resolve(); });
     expect(invokeMock.mock.calls.length).toBe(callsAfterMount + 1);
+  });
+
+  it("opens the compact sessions dropdown from an external tick", async () => {
+    invokeMock.mockResolvedValue(sessWithTurns);
+    const { rerender } = render(<SessionsButton profile="A" openTick={0} />);
+    await waitFor(() => expect(screen.getByText("Sessions")).toBeTruthy());
+
+    expect(screen.queryByText("hello from A")).toBeNull();
+    rerender(<SessionsButton profile="A" openTick={1} />);
+
+    await waitFor(() => expect(screen.getByText("hello from A")).toBeTruthy());
+    expect(screen.getByText("Manage sessions →")).toBeTruthy();
+  });
+
+  it("does not auto-open a remounted dropdown with a stale external tick", async () => {
+    invokeMock.mockResolvedValue(sessWithTurns);
+    render(<SessionsButton profile="A" openTick={1} />);
+    await waitFor(() => expect(screen.getByText("Sessions")).toBeTruthy());
+
+    expect(screen.queryByText("hello from A")).toBeNull();
+    expect(screen.queryByText("Manage sessions →")).toBeNull();
   });
 
 });

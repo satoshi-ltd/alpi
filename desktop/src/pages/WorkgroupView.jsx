@@ -91,6 +91,7 @@ export default function WorkgroupView({
   daemonOffline = false,
   searchOpen = false,
   onCloseSearch,
+  taskHistoryOpenTick = 0,
 }) {
   const initialCached = useMemo(
     () => loadCachedMessages(connectionId, workgroup.profile, workgroup.id),
@@ -419,6 +420,7 @@ export default function WorkgroupView({
             thread={messages ?? []}
             hubColor={ownerProfile?.accent}
             hubPubkey={hubPubkey}
+            openTick={taskHistoryOpenTick}
             onJump={(taskId) => {
               const el = document.getElementById(`task-${taskId}`);
               if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });

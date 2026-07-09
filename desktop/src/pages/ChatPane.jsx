@@ -80,6 +80,7 @@ export default function ChatPane({
   onOpenTools,
   onNewSession,
   onChangeSession,
+  sessionsOpenTick = 0,
   onRefreshSession,
   daemonOffline = false,
   searchOpen = false,
@@ -179,6 +180,7 @@ export default function ChatPane({
             onOpenTools={onOpenTools}
             onNewSession={onNewSession}
             onChangeSession={onChangeSession}
+            sessionsOpenTick={sessionsOpenTick}
           />
         )}
         <div className={styles.emptyShell}>
@@ -270,6 +272,7 @@ export default function ChatPane({
           onOpenTools={onOpenTools}
           onNewSession={onNewSession}
           onChangeSession={onChangeSession}
+          sessionsOpenTick={sessionsOpenTick}
           paused={paused}
           onTogglePause={onTogglePause}
           autoRead={autoRead}

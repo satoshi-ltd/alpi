@@ -12,6 +12,9 @@ export function useWindowChrome({
   onTogglePalette,
   paletteOpenRef,
   onClosePalette,
+  activeProfileName = null,
+  historyKind = null,
+  onOpenHistory,
   onBrowseTools,
   onBrowseSkills,
   onBrowseMemory,
@@ -51,12 +54,14 @@ export function useWindowChrome({
       const key = e.key.toLowerCase();
       const isShortcut =
         /^[1-9]$/.test(key) ||
-        key === "b" ||
         key === "n" ||
         key === "," ||
         key === "f" ||
         key === "k" ||
-        (e.shiftKey && (key === "t" || key === "s" || key === "m" || key === "n" || key === "w"));
+        key === "o" ||
+        key === "/" ||
+        key === "?" ||
+        (e.shiftKey && (key === "t" || key === "s" || key === "m" || key === "h" || key === "n" || key === "w"));
       if (paletteOpenRef?.current && isShortcut && key !== "k") {
         onClosePalette?.();
       }
@@ -64,9 +69,6 @@ export function useWindowChrome({
         e.preventDefault();
         e.stopPropagation();
         onJumpToProfile?.(Number(key) - 1);
-        return;
-      }
-      if (key === "b") {
         return;
       }
       if (e.shiftKey && key === "n") {
@@ -137,8 +139,16 @@ export function useWindowChrome({
         onToggleShortcuts?.();
         return;
       }
+      if (e.shiftKey && key === "h") {
+        if (historyKind) {
+          e.preventDefault();
+          e.stopPropagation();
+          onOpenHistory?.();
+        }
+        return;
+      }
       if (e.shiftKey && (key === "t" || key === "s" || key === "m")) {
-        if (viewRef.current?.kind === "profile") {
+        if (activeProfileName) {
           e.preventDefault();
           e.stopPropagation();
           if (key === "t") onBrowseTools?.();
@@ -149,5 +159,5 @@ export function useWindowChrome({
     }
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [viewRef, setView, onJumpToProfile, onNewProfile, onNewWorkgroup, onOpenSettings, onToggleSearch, onTogglePalette, paletteOpenRef, onClosePalette, onBrowseTools, onBrowseSkills, onBrowseMemory, onToggleNotifications]);
+  }, [viewRef, setView, onJumpToProfile, onNewProfile, onNewWorkgroup, onOpenSettings, onToggleSearch, onTogglePalette, paletteOpenRef, onClosePalette, activeProfileName, historyKind, onOpenHistory, onBrowseTools, onBrowseSkills, onBrowseMemory, onToggleNotifications, onToggleShortcuts]);
 }

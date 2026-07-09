@@ -9,7 +9,6 @@ const GROUPS = [
       { keys: ["⌘", "K"], label: "Command palette" },
       { keys: ["⌘", "/"], label: "Keyboard shortcuts" },
       { keys: ["⌘", ","], label: "Settings" },
-      { keys: ["⌘", "B"], label: "Toggle sidebar" },
       { keys: ["⌘", "O"], label: "Notifications" },
       { keys: ["⇧", "⌘", "A"], label: "Bring Alpi to front" },
     ],
@@ -19,6 +18,7 @@ const GROUPS = [
     items: [
       { keys: ["⌘", "1–9"], label: "Jump to alpi / workgroup" },
       { keys: ["⌘", "F"], label: "Find in transcript" },
+      { keys: ["⇧", "⌘", "H"], label: "History: sessions / tasks" },
     ],
   },
   {

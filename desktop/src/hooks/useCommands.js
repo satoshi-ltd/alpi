@@ -8,12 +8,12 @@ export function useCommands({
   workgroups,
   pinned,
   searchOpen,
-  collapsed,
+  activeProfileName = null,
+  historyKind = null,
   onSelectProfile,
   onSelectWorkgroup,
   onOpenSettings,
   onCloseSettings,
-  onToggleSidebar,
   onToggleSearch,
   onNewProfile,
   onNewWorkgroup,
@@ -21,6 +21,8 @@ export function useCommands({
   onBrowseTools,
   onBrowseSkills,
   onBrowseMemory,
+  onOpenHistory,
+  onToggleNotifications,
   onToggleShortcuts,
 }) {
   return useMemo(() => {
@@ -54,6 +56,70 @@ export function useCommands({
       }
     });
 
+    if (historyKind === "sessions" && activeProfileName && onOpenHistory) {
+      cmds.push({
+        id: "chat:sessions",
+        group: "Chat",
+        label: `Switch @${profileLabel(activeProfileName)} sessions`,
+        hint: "⇧⌘H",
+        action: () => onOpenHistory(),
+      });
+    }
+
+    if (view.kind === "profile") {
+      cmds.push({
+        id: "create:chat",
+        group: "Chat",
+        label: "New chat",
+        hint: "⌘N",
+        action: () => onNewChat?.(),
+      });
+    }
+
+    if (view.kind === "profile" || view.kind === "workgroup") {
+      cmds.push({
+        id: "chat:find",
+        group: "Chat",
+        label: searchOpen ? "Close find" : "Find in transcript",
+        hint: "⌘F",
+        action: () => onToggleSearch?.(),
+      });
+    }
+
+    if (historyKind === "tasks" && onOpenHistory) {
+      cmds.push({
+        id: "workgroup:tasks",
+        group: "Workgroup",
+        label: "Task history",
+        hint: "⇧⌘H",
+        action: () => onOpenHistory(),
+      });
+    }
+
+    if (activeProfileName) {
+      cmds.push({
+        id: "profile:tools",
+        group: "Profile",
+        label: "Tools",
+        hint: "⇧⌘T",
+        action: () => onBrowseTools?.(),
+      });
+      cmds.push({
+        id: "profile:skills",
+        group: "Profile",
+        label: "Skills",
+        hint: "⇧⌘S",
+        action: () => onBrowseSkills?.(),
+      });
+      cmds.push({
+        id: "profile:memory",
+        group: "Profile",
+        label: "Memory",
+        hint: "⇧⌘M",
+        action: () => onBrowseMemory?.(),
+      });
+    }
+
     if (view.kind === "settings" ? Boolean(onCloseSettings) : Boolean(onOpenSettings)) {
       cmds.push({
         id: "view:settings",
@@ -65,6 +131,16 @@ export function useCommands({
       });
     }
 
+    if (onToggleNotifications) {
+      cmds.push({
+        id: "view:notifications",
+        group: "View",
+        label: "Notifications",
+        hint: "⌘O",
+        action: () => onToggleNotifications(),
+      });
+    }
+
     if (onToggleShortcuts) {
       cmds.push({
         id: "view:shortcuts",
@@ -72,60 +148,6 @@ export function useCommands({
         label: "Keyboard shortcuts",
         hint: "⌘/",
         action: () => onToggleShortcuts(),
-      });
-    }
-
-    if (view.kind !== "settings") {
-      cmds.push({
-        id: "view:sidebar",
-        group: "View",
-        label: collapsed ? "Show sidebar" : "Hide sidebar",
-        hint: "⌘B",
-        action: () => onToggleSidebar?.(),
-      });
-    }
-
-    if (view.kind === "profile" || view.kind === "workgroup") {
-      cmds.push({
-        id: "view:find",
-        group: "View",
-        label: searchOpen ? "Close find" : "Find in transcript",
-        hint: "⌘F",
-        action: () => onToggleSearch?.(),
-      });
-    }
-
-    if (view.kind === "profile" && view.profile) {
-      cmds.push({
-        id: "browse:tools",
-        group: "Browse",
-        label: "Tools",
-        hint: "⇧⌘T",
-        action: () => onBrowseTools?.(),
-      });
-      cmds.push({
-        id: "browse:skills",
-        group: "Browse",
-        label: "Skills",
-        hint: "⇧⌘S",
-        action: () => onBrowseSkills?.(),
-      });
-      cmds.push({
-        id: "browse:memory",
-        group: "Browse",
-        label: "Memory",
-        hint: "⇧⌘M",
-        action: () => onBrowseMemory?.(),
-      });
-    }
-
-    if (view.kind === "profile") {
-      cmds.push({
-        id: "create:chat",
-        group: "Create",
-        label: "New chat",
-        hint: "⌘N",
-        action: () => onNewChat?.(),
       });
     }
 
@@ -156,12 +178,12 @@ export function useCommands({
     workgroups,
     pinned,
     searchOpen,
-    collapsed,
+    activeProfileName,
+    historyKind,
     onSelectProfile,
     onSelectWorkgroup,
     onOpenSettings,
     onCloseSettings,
-    onToggleSidebar,
     onToggleSearch,
     onNewProfile,
     onNewWorkgroup,
@@ -169,6 +191,8 @@ export function useCommands({
     onBrowseTools,
     onBrowseSkills,
     onBrowseMemory,
+    onOpenHistory,
+    onToggleNotifications,
     onToggleShortcuts,
   ]);
 }
