@@ -8,10 +8,15 @@ export function segmentBlocks(text) {
   const lines = (text ?? '').split('\n');
   const blocks = [];
   let listBuf = null;
+  let quoteBuf = null;
   const flush = () => {
     if (listBuf) {
       blocks.push({ type: 'list', items: listBuf });
       listBuf = null;
+    }
+    if (quoteBuf) {
+      blocks.push({ type: 'quote', text: quoteBuf.join(' ').trim() });
+      quoteBuf = null;
     }
   };
 
@@ -79,8 +84,24 @@ export function segmentBlocks(text) {
 
     const li = /^[-*] (.+)$/.exec(line);
     if (li) {
+      if (quoteBuf) {
+        blocks.push({ type: 'quote', text: quoteBuf.join(' ').trim() });
+        quoteBuf = null;
+      }
       if (!listBuf) listBuf = [];
       listBuf.push(li[1]);
+      i += 1;
+      continue;
+    }
+
+    const quote = /^>\s?(.*)$/.exec(line);
+    if (quote) {
+      if (listBuf) {
+        blocks.push({ type: 'list', items: listBuf });
+        listBuf = null;
+      }
+      if (!quoteBuf) quoteBuf = [];
+      quoteBuf.push(quote[1]);
       i += 1;
       continue;
     }

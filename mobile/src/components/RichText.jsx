@@ -56,7 +56,10 @@ function MarkdownImage({ path, alt, note, profile, theme }) {
   );
 }
 
-function parseInline(text, key, theme) {
+function parseInline(text, key, theme, opts = {}) {
+  const fg = opts.color ?? theme.colors.ink;
+  const codeColor = opts.codeColor ?? fg;
+  const codeBackground = opts.codeBackground ?? theme.colors.hover;
   const out = [];
   const re = /\*\*([^*]+)\*\*|`([^`]+)`/g;
   let last = 0;
@@ -71,7 +74,7 @@ function parseInline(text, key, theme) {
   if (last < text.length) out.push({ key: `${key}-t-${idx++}`, text: text.slice(last) });
   return out.map((seg) =>
     seg.bold ? (
-      <Text key={seg.key} style={{ fontFamily: theme.fonts.sans.semibold, color: theme.colors.ink }}>
+      <Text key={seg.key} style={{ fontFamily: theme.fonts.sans.semibold, color: fg }}>
         {seg.text}
       </Text>
     ) : seg.code ? (
@@ -80,8 +83,8 @@ function parseInline(text, key, theme) {
         style={{
           fontFamily: theme.fonts.mono,
           fontSize: fontSizes.md,
-          backgroundColor: theme.colors.hover,
-          color: theme.colors.ink,
+          backgroundColor: codeBackground,
+          color: codeColor,
         }}
       >
         {' '}
@@ -127,7 +130,7 @@ function CodeBlock({ lang, code, theme }) {
   );
 }
 
-function MdTable({ header, rows, theme }) {
+function MdTable({ header, rows, theme, inlineOpts }) {
   const { colors, fonts } = theme;
   const cols = header.length;
   // RN has no table auto-layout: fix each column's width from its widest cell so
@@ -158,7 +161,7 @@ function MdTable({ header, rows, theme }) {
                 key={j}
                 style={[cellBase, { width: colWidths[j], fontFamily: fonts.sans.semibold, fontSize: fontSizes.sm, color: colors.ink2 }]}
               >
-                {parseInline(c, `th-${j}`, theme)}
+                {parseInline(c, `th-${j}`, theme, inlineOpts)}
               </Text>
             ))}
           </View>
@@ -177,7 +180,7 @@ function MdTable({ header, rows, theme }) {
                   key={j}
                   style={[cellBase, { width: colWidths[j], fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink, lineHeight: fontSizes.sm * 1.5 }]}
                 >
-                  {parseInline(row[j] ?? '', `td-${r}-${j}`, theme)}
+                  {parseInline(row[j] ?? '', `td-${r}-${j}`, theme, inlineOpts)}
                 </Text>
               ))}
             </View>
@@ -188,19 +191,20 @@ function MdTable({ header, rows, theme }) {
   );
 }
 
-export function RichText({ children, color, size, imageProfile }) {
+export function RichText({ children, color, size, imageProfile, codeColor, codeBackground }) {
   const theme = useTheme();
   const { colors, fonts } = theme;
   const fg = color ?? colors.ink;
   const fz = size ?? 16;
   const lh = fz * 1.55;
   const blocks = useMemo(() => segmentBlocks(children), [children]);
+  const inlineOpts = { color: fg, codeColor, codeBackground };
 
   return (
     <View>
       {blocks.map((b, i) => {
         if (b.type === 'code') return <CodeBlock key={`code-${i}`} lang={b.lang} code={b.code} theme={theme} />;
-        if (b.type === 'table') return <MdTable key={`tbl-${i}`} header={b.header} rows={b.rows} theme={theme} />;
+        if (b.type === 'table') return <MdTable key={`tbl-${i}`} header={b.header} rows={b.rows} theme={theme} inlineOpts={inlineOpts} />;
         if (b.type === 'image') return <MarkdownImage key={`img-${i}`} path={b.path} alt={b.alt} note={b.note} profile={imageProfile} theme={theme} />;
         if (b.type === 'space') return <View key={`s-${i}`} style={{ height: 8 }} />;
         if (b.type === 'heading') {
@@ -211,14 +215,32 @@ export function RichText({ children, color, size, imageProfile }) {
                 fontFamily: fonts.sans.semibold,
                 fontSize: fontSizes.lg,
                 lineHeight: fontSizes.lg * lineHeights.cozy,
-                color: colors.ink,
+                color: fg,
                 marginTop: space.s6,
                 marginBottom: space.s1,
                 letterSpacing: -0.16,
               }}
             >
-              {parseInline(b.text, `h${i}`, theme)}
+              {parseInline(b.text, `h${i}`, theme, inlineOpts)}
             </Text>
+          );
+        }
+        if (b.type === 'quote') {
+          return (
+            <View
+              key={`q-${i}`}
+              style={{
+                borderLeftWidth: 3,
+                borderLeftColor: fg,
+                paddingLeft: space.s4,
+                marginVertical: space.s2,
+                opacity: 0.85,
+              }}
+            >
+              <Text style={{ color: fg, fontSize: fz, lineHeight: lh, fontFamily: fonts.sans.regular }}>
+                {parseInline(b.text, `q${i}`, theme, inlineOpts)}
+              </Text>
+            </View>
           );
         }
         if (b.type === 'list') {
@@ -228,7 +250,7 @@ export function RichText({ children, color, size, imageProfile }) {
                 <View key={j} style={{ flexDirection: 'row', gap: space.s3 }}>
                   <Text style={{ color: fg, fontSize: fz, lineHeight: lh }}>•</Text>
                   <Text style={{ flex: 1, color: fg, fontSize: fz, lineHeight: lh, fontFamily: fonts.sans.regular }}>
-                    {parseInline(item, `l${i}-${j}`, theme)}
+                    {parseInline(item, `l${i}-${j}`, theme, inlineOpts)}
                   </Text>
                 </View>
               ))}
@@ -240,7 +262,7 @@ export function RichText({ children, color, size, imageProfile }) {
             key={`p-${i}`}
             style={{ color: fg, fontSize: fz, lineHeight: lh, fontFamily: fonts.sans.regular }}
           >
-            {parseInline(b.text, `p${i}`, theme)}
+            {parseInline(b.text, `p${i}`, theme, inlineOpts)}
           </Text>
         );
       })}

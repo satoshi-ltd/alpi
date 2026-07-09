@@ -102,6 +102,31 @@ UserMessage {
     height: auto;
 }
 
+UserMessage > Horizontal {
+    height: auto;
+}
+
+UserMessage MarkdownBlock > .code_inline {
+    background: transparent;
+    color: $accent-darken-1;
+    text-style: none;
+}
+
+UserMessage MarkdownBlockQuote {
+    background: transparent;
+    color: $text-muted;
+    padding: 0 0 0 1;
+    margin: 1 0;
+    border-left: thick $text-muted;
+}
+
+UserMessage > Horizontal > Markdown {
+    background: transparent;
+    padding: 0;
+    margin: 0;
+    width: 1fr;
+}
+
 AssistantMessage {
     margin: 1 0 0 0;
     height: auto;

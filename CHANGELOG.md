@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.10.19 — 2026-07-09 — TUI shows your Markdown
+
+- **Markdown you type now renders in the TUI transcript.** User messages keep
+  their `>` quote blocks, inline code, lists, and other supported Markdown
+  styling instead of showing the raw markup.
+
 ## v0.10.18 — 2026-07-09 — steadier empty replies and knowledge recall
 
 - **Empty model replies are covered by regression tests.** If a provider closes

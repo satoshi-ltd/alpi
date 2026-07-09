@@ -69,6 +69,18 @@ describe("ChatPane — sync indicators", () => {
 });
 
 describe("ChatPane — partial transcripts use absolute turn indices", () => {
+  it("renders user-authored markdown in the user bubble", () => {
+    renderPane({
+      sessionData: {
+        ...turnsData,
+        turns: [{ at: 1, user: "> Hola me llamo `javi`", assistant: "" }],
+      },
+    });
+
+    expect(document.querySelector(".alpi-md blockquote")).toBeTruthy();
+    expect(document.querySelector(".alpi-md code")?.textContent).toBe("javi");
+  });
+
   it("reports the rewrite index offset by turnsOffset", () => {
     const onRewriteMessage = vi.fn();
     renderPane({

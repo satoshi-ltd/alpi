@@ -23,7 +23,9 @@ def test_theme_styles_fenced_code_blocks() -> None:
 
 
 def test_theme_styles_blockquote() -> None:
-    assert "AssistantMessage MarkdownBlockQuote" in _read_theme()
+    css = _read_theme()
+    assert "AssistantMessage MarkdownBlockQuote" in css
+    assert "UserMessage MarkdownBlockQuote" in css
 
 
 def test_theme_styles_tables() -> None:
@@ -34,3 +36,9 @@ def test_theme_styles_tables() -> None:
 
 def test_theme_styles_horizontal_rule() -> None:
     assert "AssistantMessage MarkdownHorizontalRule" in _read_theme()
+
+
+def test_user_message_has_markdown_body_styles() -> None:
+    css = _read_theme()
+    assert "UserMessage > Horizontal > Markdown" in css
+    assert "UserMessage MarkdownBlock > .code_inline" in css

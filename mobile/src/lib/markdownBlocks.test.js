@@ -47,6 +47,13 @@ describe('segmentBlocks', () => {
     expect(blocks.map((b) => b.type)).toEqual(['heading', 'space', 'list', 'space', 'p']);
     expect(blocks[2].items).toEqual(['one', 'two']);
   });
+
+  it('parses consecutive blockquote lines into one quote block', () => {
+    expect(segmentBlocks('> Hola me llamo `javi`\n> encantado')[0]).toEqual({
+      type: 'quote',
+      text: 'Hola me llamo `javi` encantado',
+    });
+  });
 });
 
 describe('splitRow', () => {

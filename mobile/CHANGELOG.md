@@ -14,6 +14,14 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.2.8 — 2026-07-09 — common Markdown stays formatted
+
+- **Messages you send now render common Markdown in the chat transcript.**
+  Quotes, inline code, code blocks, tables, headings, and bullet lists now
+  appear in your own message bubble instead of as raw Markdown text.
+
+_Client-only rendering fix; works with any daemon version._
+
 ## v0.2.7 — 2026-07-06 — read aloud sounds like a person
 
 _Spoken scripts need alpi v0.10.16+; older daemons fall back to plain cleanup._

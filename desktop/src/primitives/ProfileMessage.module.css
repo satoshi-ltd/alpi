@@ -16,6 +16,10 @@
   overflow-wrap: anywhere;
 }
 
+.userBubble :global(.alpi-md) {
+  white-space: normal;
+}
+
 .userFooter {
   display: flex;
   gap: var(--space-1);

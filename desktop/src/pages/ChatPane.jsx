@@ -619,7 +619,7 @@ const Turn = memo(function Turn({
           {turn.attachments?.length > 0 && (
             <AttachmentChips items={turn.attachments} variant="message" />
           )}
-          {turn.user}
+          <Markdown as="div" source={turn.user} className="alpi-md" />
         </ProfileMessage>
       )}
       {steps.length > 0 && (
@@ -920,7 +920,7 @@ function PendingTurn({ turn, accent, profiles }) {
           {turn.attachments?.length > 0 && (
             <AttachmentChips items={turn.attachments} variant="message" />
           )}
-          {turn.user}
+          <Markdown as="div" source={turn.user} className="alpi-md" />
         </ProfileMessage>
       )}
       {steps.length > 0 && (

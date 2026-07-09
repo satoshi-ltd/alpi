@@ -11,6 +11,14 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.25 — 2026-07-09 — your Markdown stays formatted
+
+- **Messages you send now render Markdown in the chat transcript.** If you type
+  a quote, inline code, list, or other supported Markdown in the composer, the
+  user bubble shows it formatted instead of as raw punctuation.
+
+_Client-only rendering fix; works with any daemon version._
+
 ## v0.4.24 — 2026-07-09 — new OpenRouter profiles start ready
 
 - **New profiles created with OpenRouter now keep the model you picked.**

@@ -33,7 +33,6 @@ const S = StyleSheet.create({
     borderBottomRightRadius: 18,
     borderBottomLeftRadius: 18,
   },
-  bubbleText: { fontSize: fontSizes.lg, lineHeight: fontSizes.lg * 1.45 },
   wgBubble: {
     maxWidth: '90%',
     paddingHorizontal: space.s7,
@@ -61,9 +60,15 @@ export function ProfileUserMessage({ text, ts, accent, attachments, onLongPress,
       ) : null}
       {text ? (
         <Pressable onLongPress={onLongPress} delayLongPress={350} style={bubbleStyle}>
-          <Text style={[S.bubbleText, { fontFamily: fonts.sans.regular, color: '#ffffff' }]}>
+          <RichText
+            size={fontSizes.lg}
+            color="#ffffff"
+            codeColor="#ffffff"
+            codeBackground="rgba(255,255,255,0.18)"
+            imageProfile={profile}
+          >
             {text}
-          </Text>
+          </RichText>
         </Pressable>
       ) : null}
       {ts ? (

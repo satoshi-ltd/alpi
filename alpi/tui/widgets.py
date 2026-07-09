@@ -33,9 +33,16 @@ class ChatInput(Input):
         event.stop()
 
 
-class UserMessage(Static):
+class UserMessage(Widget):
     def __init__(self, text: str) -> None:
-        super().__init__(Text.assemble(("› ", "bold"), (text, "bold")))
+        super().__init__()
+        self._text = text
+
+    def compose(self) -> ComposeResult:
+        yield Horizontal(
+            Static(Text("› ", style="bold")),
+            Markdown(self._text),
+        )
 
 
 class AssistantMessage(Widget):
