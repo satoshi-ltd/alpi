@@ -11,6 +11,17 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.24 — 2026-07-09 — new OpenRouter profiles start ready
+
+- **New profiles created with OpenRouter now keep the model you picked.**
+  After entering an OpenRouter key and model in the desktop create flow,
+  Settings and chat now see that model as selected instead of treating the
+  profile as incomplete.
+- **Adding an OpenRouter model from Settings also selects it immediately,**
+  so the provider setup and the active profile model stay in sync.
+
+_Client-side settings fix; no new daemon verbs._
+
 ## v0.4.23 — 2026-07-08 — scroll up stays up while a chat streams
 
 - **You can now scroll up during a streaming reply and stay there.** The chat

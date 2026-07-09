@@ -51,6 +51,11 @@ export async function applyProvider(profile, value) {
     const model = value.model.trim().replace(/^openrouter\//, "");
     if (model) {
       await invoke("provider_add_openrouter_model", { profile, model });
+      await invoke("set_config_field", {
+        profile,
+        key: "model",
+        value: `openrouter/${model}`,
+      });
     }
     return `OpenRouter ${model} ready`;
   }
