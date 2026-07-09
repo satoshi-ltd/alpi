@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.10.17 — 2026-07-08 — attach a scanned PDF to any profile
+
+- **Scanned PDFs now work as chat attachments, even without vision or a
+  knowledge base.** Attach a scan and ask for a summary: a vision model reads
+  the page images as before, and a text-only model now falls back to on-device
+  OCR instead of erroring. No `knowledge` ingest step required.
+- **Long PDFs are no longer clipped to 15 pages.** Digital-text PDFs are read
+  in full, bounded only by the overall text budget — so "summarize this
+  50-page report" actually sees the whole report.
+- **Attachment text budget now scales with the model automatically.** How much
+  extracted text an attachment can feed the model defaults to half the active
+  model's context window — so a big-context model reads far more (a 1M model
+  ~500k tokens vs the old flat ~40k), a small one proportionally less, with no
+  config. Override per profile with `tools.attachments.max_text_tokens` to bound
+  cost or force a fixed size. See `docs/CONFIG.md`.
+- **Images on a text-only model** stay explicit: instead of silently vanishing,
+  the model is told it can't see the image and to switch to a vision model.
+- Internal: PDF text extraction, page rendering, and OCR now live in one shared
+  module (`alpi/extract.py`) used by both chat attachments and the knowledge
+  tool — no more two diverging code paths.
+
 ## v0.10.16 — 2026-07-06 — replies you can actually listen to
 
 - **New `host.voice.script` verb.** Before reading a reply aloud, the daemon

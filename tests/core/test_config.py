@@ -111,6 +111,23 @@ def test_tools_section_defaults(tmp_home_no_env: Path) -> None:
     assert cfg.tools.deny == []
 
 
+def test_attachments_max_text_tokens_default_and_roundtrip(tmp_home_no_env: Path) -> None:
+    import yaml
+    cfg = config.load(tmp_home_no_env)
+    assert cfg.tools.attachments.max_text_tokens == 0
+
+    (tmp_home_no_env / "config.yaml").write_text(yaml.safe_dump({
+        "tools": {"attachments": {"max_text_tokens": 375_000}},
+    }))
+    cfg = config.load(tmp_home_no_env)
+    assert cfg.tools.attachments.max_text_tokens == 375_000
+
+    config.save(cfg)
+    on_disk = yaml.safe_load((tmp_home_no_env / "config.yaml").read_text())
+    assert on_disk["tools"]["attachments"]["max_text_tokens"] == 375_000
+    assert config.load(tmp_home_no_env).tools.attachments.max_text_tokens == 375_000
+
+
 def test_tools_deny_roundtrips(tmp_home_no_env: Path) -> None:
     import yaml
     (tmp_home_no_env / "config.yaml").write_text(yaml.safe_dump({

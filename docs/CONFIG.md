@@ -84,6 +84,7 @@ Three options:
 | `tools.tts.auto_read` | `false` | bool — apps auto-play each agent reply aloud | next turn |
 | `tools.stt.model` | `"base"` | `tiny` \| `base` \| `small` \| `medium` \| `large-v3` | next turn |
 | `tools.stt.language` | `""` (auto) | ISO code (`en`, `es`, ...) | next turn |
+| `tools.attachments.max_text_tokens` | `0` (auto) | int (tokens) | next turn |
 | `tools.<name>.max_result_chars` | `—` (unset) | int (-1 = unlimited) | next turn |
 
 `max_steps_per_turn` is a **runaway-loop backstop, not the cost guard** — the cost guard is `budget.daily_usd`. Hitting the cap does NOT fail the turn: the engine forces one tools-off **wrap-up** reply so the gathered work (and its cost) isn't thrown away. **When left at the default**, a **free** model (zero per-token pricing) or a **local/ollama** one raises the effective ceiling to 1000 (no runaway cost to bound); an explicit value is always respected. Raise it for agentic profiles whose skills legitimately chain many tool calls.
@@ -236,6 +237,26 @@ The `research` sub-agent's depth tiers (`quick` = 8 steps, `normal` = 15, `deep`
 The daemon never plays audio itself — the `tts` tool returns the cached file path and stops. The alpi mobile / desktop apps stream playback on demand from a per-message button, and — when `tools.tts.auto_read` is on — auto-play each agent reply aloud as it arrives (your own messages are never read); they synthesize through the same Edge TTS path via `host.voice.preview`. To deliver the MP3 to a third party the agent chains `email(send, attachment=<path>)` as an audio attachment. Workgroups carry an analogous **hub-local** `auto_read` flag in the workgroup meta (set from the desktop/mobile workgroup settings) that auto-reads agents' messages — never your directives; it is not replicated to members.
 
 `rate` and `pitch` are config-only (not per-call args) — persistent prosody defaults. Leave empty for neutral. Text is capped at 1000 chars (~1 minute); longer input is rejected. Output is always MP3.
+
+`tools.attachments.max_text_tokens` caps how much **extracted text** from a
+single attachment reaches the model — applied identically to text/source
+files, digital-PDF text, and scanned-PDF OCR. Denominated in tokens; the
+engine converts to characters at ~4 chars/token (`attachments.CHARS_PER_TOKEN`).
+
+**Default `0` = auto**: the cap tracks the active model's context window —
+half of it per attachment (`AUTO_TEXT_WINDOW_FRACTION`), resolved from
+`litellm.get_model_info`. So a 200k-context model gives an attachment ~100k
+tokens, a 1M model ~500k, a small local model proportionally less — no config
+needed. When litellm can't resolve the model (some `openrouter/…` ids, custom
+Ollama names) it falls back to `FALLBACK_TEXT_TOKENS` (100k). A **positive
+value overrides auto** with a fixed per-attachment cap — set it to bound cost
+on a large-context model, or to force more text on a model litellm mis-sizes.
+
+This is the real content ceiling; the per-file byte caps (`MAX_TEXT_FILE_BYTES`
+2 MiB for text, `MAX_FILE_BYTES` 20 MiB for PDF/image) only gate *acceptance*.
+It does not change page rendering or OCR page count (that is the fixed
+`SCAN_MAX_PAGES` scan cap); and to feed a text file larger than 2 MiB you would
+also need a higher acceptance cap.
 
 `tools.stt.{model,language}` control the `stt` tool backed by faster-whisper running on CPU. First call downloads the model weights (~40 MB for `tiny`, ~150 MB for `base`, ~500 MB for `small`, ~1.5 GB for `medium`, ~3 GB for `large-v3`) into `~/.cache/huggingface/` and keeps them forever. Pick the smallest model that meets your accuracy bar — `base` is the sweet spot for spoken messages/voice notes; `small` or above for podcasts/meetings. `language` defaults to `""` (auto-detect); set to an ISO code (`en`, `es`, `fr`, ...) only when auto-detect fails on short clips.
 

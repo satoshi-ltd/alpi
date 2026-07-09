@@ -6,9 +6,9 @@ import threading
 
 import pytest
 
+from alpi import extract as ext
 from alpi.core import _playwright as pw_mod
 from alpi.core import embed as embed_mod
-from alpi.tools import workspace as ws
 
 
 @pytest.fixture(autouse=True)
@@ -16,7 +16,7 @@ def _reset_global_state():
     pw_mod.reset_for_testing()
     yield
     pw_mod.reset_for_testing()
-    ws._ocr_reader_cache = None
+    ext._ocr_reader_cache = None
 
 
 def _race(callable_, n=10):
@@ -48,9 +48,9 @@ def test_ocr_reader_loads_once_under_concurrency(monkeypatch):
         def __init__(self, **kw):
             calls["n"] += 1
 
-    monkeypatch.setattr(ws, "_ocr_reader_cache", None)
+    monkeypatch.setattr(ext, "_ocr_reader_cache", None)
     monkeypatch.setattr("rapidocr_onnxruntime.RapidOCR", FakeRapidOCR)
-    _race(ws._ocr_reader, n=10)
+    _race(ext._ocr_reader, n=10)
     assert calls["n"] == 1
 
 

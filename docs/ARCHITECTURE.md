@@ -294,8 +294,10 @@ HTML (`html2text`), PDF (`pypdf` for text-layer, RapidOCR fallback when
 `ocr=true` and pypdf extracts < 50 chars), DOCX (`python-docx`), EPUB
 (`ebooklib`), images (`PIL` + RapidOCR — only with `ocr=true`). OCR backend is
 `rapidocr-onnxruntime` (ONNX port of PaddleOCR, no torch dependency). The
-extractors and chunker live in `alpi/tools/workspace.py`; that module is a
-support library, not an agent-facing recall surface.
+PDF/image/OCR extraction primitives live in `alpi/extract.py` and are shared
+verbatim with the chat-attachment path (`alpi/attachments.py`); the DOCX/EPUB/
+HTML readers and the chunker live in `alpi/tools/workspace.py`, a support
+library, not an agent-facing recall surface.
 
 **Shared store primitive (`alpi/core/store.py`)**. `open_store(home)` returns a `sqlite3.Connection` with the sqlite-vec extension loaded. Designed to host other shapes later (workgroup search, future entity memory) — they bring their own table schemas.
 
@@ -363,7 +365,7 @@ Spawns a sub-agent with a read-only toolset (`web_search`, `web_fetch`, `web_ext
 
 ### Attachments (`alpi/attachments.py`)
 
-`host.chat.send` accepts `attachments: [{path, mime?, name?}]`. The engine validates them (`att.validate` — magic-byte sniff for image/PDF, NUL/control-ratio guard for binary-as-text, per-type size caps, allowlist: images `png`/`jpeg`/`webp`, PDF, and text/source incl. `py`/`js`/`ts`/`tsx`/`go`/`rs`/`sh`/`sql`) and turns them into OpenAI content-parts (`build_content_parts`): images → base64 `image_url` data parts, text/source → inline text parts, text-layer PDFs → extracted text, scanned PDFs → rendered page images for vision-capable models. A guidance text-part tells the model the files are inline so it doesn't reflexively call filesystem or knowledge tools to "find" them.
+`host.chat.send` accepts `attachments: [{path, mime?, name?}]`. The engine validates them (`att.validate` — magic-byte sniff for image/PDF, NUL/control-ratio guard for binary-as-text, per-type size caps, allowlist: images `png`/`jpeg`/`webp`, PDF, and text/source incl. `py`/`js`/`ts`/`tsx`/`go`/`rs`/`sh`/`sql`) and turns them into OpenAI content-parts (`build_content_parts`): images → base64 `image_url` data parts, text/source → inline text parts, PDFs → text extraction (bounded by `tools.attachments.max_text_tokens` → chars at ~4/token; default auto = half the active model's context window, no page cap). A **scanned** PDF (extractable text below `SCANNED_PDF_TEXT_FLOOR`) falls back by model capability: vision-capable → rendered page images; text-only → **RapidOCR** text (capped at `SCAN_MAX_PAGES`), so a profile with no knowledge base and no vision can still summarize a scan. PDF text/render/OCR mechanics are shared with the knowledge tool via `alpi/extract.py`. Images on a text-only model are **not** OCR'd — they degrade to a path note telling the model it can't see them. A guidance text-part tells the model the files are inline so it doesn't reflexively call filesystem or knowledge tools to "find" them.
 
 **Per-turn only.** Bytes live only in the in-memory message. `session_metadata` is itself bytes- and **path-free** (`{name, mime, size}`), but the engine re-adds a **best-effort local `path`** to each persisted chat-turn attachment so clients can thumbnail history — the path may be unfetchable from another client (outside `host.attachments.fetch` roots) or after a staged file's TTL, so this is preview replay, not durable storage. The validated turn attachments (`{name, path, mime}`) are also published to a runtime-only `ContextVar` (`tools/_state.set_turn_attachments`) so a tool can resolve a turn's files. Remote clients (mobile, or desktop pointed at a remote daemon) can't hand the daemon a local path, so they upload bytes via the `host.attachments.stage` RPC (type-aware caps, content validated 1:1 with send) which writes to a TTL-swept temp dir and returns a daemon-side path.
 

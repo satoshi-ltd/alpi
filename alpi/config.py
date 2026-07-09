@@ -32,6 +32,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "auto_read": False,
         },
         "stt": {"model": "base", "language": ""},
+        "attachments": {"max_text_tokens": 0},
     },
     "tui": {
         "show_cost": True,
@@ -107,6 +108,11 @@ class SttToolConfig:
 
 
 @dataclass
+class AttachmentsToolConfig:
+    max_text_tokens: int = 0
+
+
+@dataclass
 class ToolsConfig:
     max_steps_per_turn: int = 100  # ceiling on tool-calls per user turn
     # Tool names hidden from the LLM schema AND refused by the executor; unknown names are no-ops so typos are harmless.
@@ -117,6 +123,7 @@ class ToolsConfig:
     browser: BrowserToolConfig = field(default_factory=BrowserToolConfig)
     tts: TtsToolConfig = field(default_factory=TtsToolConfig)
     stt: SttToolConfig = field(default_factory=SttToolConfig)
+    attachments: AttachmentsToolConfig = field(default_factory=AttachmentsToolConfig)
 
 
 @dataclass
@@ -255,6 +262,7 @@ def load(home: Path) -> Config:
     browser_raw = tools_raw.get("browser") or {}
     tts_raw = tools_raw.get("tts") or {}
     stt_raw = tools_raw.get("stt") or {}
+    att_raw = tools_raw.get("attachments") or {}
     tools_cfg = ToolsConfig(
         max_steps_per_turn=int(
             tools_raw.get("max_steps_per_turn", DEFAULT_CONFIG["tools"]["max_steps_per_turn"])
@@ -290,6 +298,12 @@ def load(home: Path) -> Config:
         stt=SttToolConfig(
             model=str(stt_raw.get("model", "base") or "base"),
             language=str(stt_raw.get("language", "") or ""),
+        ),
+        attachments=AttachmentsToolConfig(
+            max_text_tokens=_non_negative_int(
+                att_raw.get("max_text_tokens"),
+                DEFAULT_CONFIG["tools"]["attachments"]["max_text_tokens"],
+            ),
         ),
     )
 
@@ -491,6 +505,8 @@ def _tools_delta(cfg: Config) -> dict:
         stt_out["language"] = cfg.tools.stt.language
     if stt_out:
         out["stt"] = stt_out
+    if cfg.tools.attachments.max_text_tokens != d["attachments"]["max_text_tokens"]:
+        out["attachments"] = {"max_text_tokens": cfg.tools.attachments.max_text_tokens}
     return out
 
 

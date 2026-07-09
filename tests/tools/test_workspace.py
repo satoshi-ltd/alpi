@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from alpi import extract as ext
 from alpi.tools import workspace as ws
 
 
@@ -60,9 +61,9 @@ def test_pdf_with_text_layer_skips_ocr(monkeypatch, tmp_path: Path) -> None:
     pdf.write_bytes(b"placeholder")
 
     monkeypatch.setattr(
-        ws,
-        "_ocr_pdf",
-        lambda p: pytest.fail("OCR fallback should not run for text-layer PDFs"),
+        ext,
+        "ocr_pdf",
+        lambda p, **kw: pytest.fail("OCR fallback should not run for text-layer PDFs"),
     )
 
     class FakePage:
@@ -102,11 +103,11 @@ def test_pdf_without_text_layer_falls_back_to_ocr_when_flag_on(
     pdf.write_bytes(b"placeholder")
     called = {"ocr": False}
 
-    def fake_ocr(p):
+    def fake_ocr(p, **kw):
         called["ocr"] = True
-        return "OCR-extracted text from the scan"
+        return ("OCR-extracted text from the scan", False)
 
-    monkeypatch.setattr(ws, "_ocr_pdf", fake_ocr)
+    monkeypatch.setattr(ext, "ocr_pdf", fake_ocr)
 
     class EmptyPage:
         def extract_text(self):
@@ -135,5 +136,5 @@ def test_image_path_uses_ocr_when_flag_on(tmp_path: Path, monkeypatch) -> None:
     image = tmp_path / "receipt.jpg"
     Image.new("RGB", (2, 2), color="white").save(image)
 
-    monkeypatch.setattr(ws, "_ocr_pil", lambda pil: "Receipt total 4.50 EUR")
+    monkeypatch.setattr(ext, "ocr_image", lambda p: "Receipt total 4.50 EUR")
     assert "Receipt total" in ws._read_image(image, ocr=True)

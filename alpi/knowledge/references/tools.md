@@ -82,6 +82,11 @@ Inbound per-turn attachments:
   (`txt/md/csv/json/yaml/html`, plus common code suffixes).
 - The engine validates magic bytes, text-vs-binary, per-file caps, turn caps,
   and count caps before the model sees them.
+- PDFs: digital text is extracted (bounded by the text-char cap, no page cap).
+  A scanned PDF falls back on a vision model to page images, and on a text-only
+  model to on-device OCR text — no knowledge tool needed for a one-off summary.
+- Images on a text-only model are not OCR'd; the model gets a note that it
+  can't see the image (switch to a vision model to read it).
 - Session history stores bytes-free metadata. A best-effort local path may be
   kept for client thumbnails, but it is not durable storage and may be
   unfetchable from another device.

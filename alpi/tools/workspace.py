@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import struct
-import threading
 from pathlib import Path
 
-_PDF_TEXT_FLOOR = 50
+from alpi import extract as _extract
+from alpi.extract import OcrRequired
+
 _LINES_PER_CHUNK = 30
 _LINE_STRIDE = 25
 
@@ -38,9 +39,6 @@ _SUPPORTED_SUFFIXES: frozenset[str] = (
     | _IMAGE_SUFFIXES
 )
 
-_ocr_reader_cache = None
-_ocr_reader_lock = threading.Lock()
-
 _EMBED_BATCH = 64
 
 def _vec_blob(vec: list[float]) -> bytes:
@@ -64,68 +62,19 @@ def _read_html(path: Path) -> str:
     return h.handle(path.read_text(encoding="utf-8", errors="replace"))
 
 
-class OcrRequired(RuntimeError):
-    pass
-
-
 def _read_pdf(path: Path, ocr: bool = False) -> str:
-    from pypdf import PdfReader
-
-    reader = PdfReader(str(path))
-    text = "\n\n".join(page.extract_text() or "" for page in reader.pages)
-    if len(text.strip()) >= _PDF_TEXT_FLOOR:
+    text, _ = _extract.extract_pdf_text(path)
+    if len(text.strip()) >= _extract.SCANNED_PDF_TEXT_FLOOR:
         return text
     if not ocr:
         raise OcrRequired('scanned PDF - re-run knowledge(action="ingest", ocr=true)')
-    return _ocr_pdf(path)
-
-
-def _ocr_pdf(path: Path) -> str:
-    import pypdfium2 as pdfium
-
-    pdf = pdfium.PdfDocument(str(path))
-    try:
-        parts: list[str] = []
-        for page in pdf:
-            pil = page.render(scale=2).to_pil()
-            parts.append(_ocr_pil(pil))
-        return "\n\n".join(parts)
-    finally:
-        pdf.close()
+    return _extract.ocr_pdf(path)[0]
 
 
 def _read_image(path: Path, ocr: bool = False) -> str:
     if not ocr:
         raise OcrRequired('image file - re-run knowledge(action="ingest", ocr=true)')
-    from PIL import Image, ImageOps
-
-    with Image.open(path) as img:
-        oriented = ImageOps.exif_transpose(img)
-        return _ocr_pil(oriented)
-
-
-def _ocr_pil(pil_image) -> str:
-    import numpy as np
-
-    reader = _ocr_reader()
-    arr = np.array(pil_image.convert("RGB"))
-    result, _elapsed = reader(arr)
-    if not result:
-        return ""
-    return "\n".join(text for _box, text, _score in result)
-
-
-def _ocr_reader():
-    global _ocr_reader_cache
-    if _ocr_reader_cache is not None:
-        return _ocr_reader_cache
-    with _ocr_reader_lock:
-        if _ocr_reader_cache is not None:
-            return _ocr_reader_cache
-        from rapidocr_onnxruntime import RapidOCR
-
-        _ocr_reader_cache = RapidOCR()
-        return _ocr_reader_cache
+    return _extract.ocr_image(path)
 
 
 def _read_docx(path: Path) -> str:

@@ -258,6 +258,10 @@ class Engine:
                 vstatus = att_mod.vision_status(model_name)
                 parts = att_mod.build_content_parts(
                     user_text, validated, vision=(vstatus != "no"),
+                    max_text_chars=att_mod.resolve_max_text_chars(
+                        model_name, self.cfg.tools.attachments.max_text_tokens,
+                    ),
+                    on_progress=lambda msg: emit(AgentEvent(kind="tool_state", text=msg)),
                 )
             except att_mod.AttachmentError as e:
                 emit(AgentEvent(kind="error", text=str(e)))
@@ -309,6 +313,7 @@ class Engine:
         todo_token = todo_mod.bind_store(self.session.todos)
 
         deadline_hit = False
+        _empty_retry_done = False
         try:
             for step_idx in range(max_steps):
                 if self.interrupt_requested:
@@ -437,6 +442,20 @@ class Engine:
                                 "outstanding item (or `todo(action='clear')` "
                                 "the whole list) before your final reply. This "
                                 f"continuation consumed one of your remaining "
+                                f"{remaining} steps."
+                            ),
+                        })
+                        continue
+                    if not content.strip() and not turn_produced and not _empty_retry_done:
+                        _empty_retry_done = True
+                        remaining = max_steps - step_idx - 1
+                        self.session.messages.append({
+                            "role": "user",
+                            "content": (
+                                "[engine] You ended your turn with an empty reply. Write "
+                                "your answer to the user now, in plain text and in the "
+                                "user's language. If you don't have the information, say "
+                                "so briefly. This consumed one of your remaining "
                                 f"{remaining} steps."
                             ),
                         })

@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from alpi import attachments as att
+from alpi import extract as ext
 
 PNG_BYTES = b"\x89PNG\r\n\x1a\nfake-image-data"
 
@@ -106,13 +107,43 @@ def test_text_file_becomes_text_part_no_vision_needed(tmp_path):
     assert "a,b" in joined
 
 
-def test_text_file_truncation_folded(tmp_path, monkeypatch):
-    monkeypatch.setattr(att, "MAX_TEXT_CHARS", 10)
+def test_text_file_truncation_folded(tmp_path):
     p = tmp_path / "big.txt"
     p.write_text("y" * 50)
     a = att.validate([{"path": str(p)}])
-    parts = att.build_content_parts("", a, vision=False)
+    parts = att.build_content_parts("", a, vision=False, max_text_chars=10)
     assert any("truncated to 10 chars" in p.get("text", "") for p in parts)
+
+
+def test_resolve_max_text_chars_explicit_override(monkeypatch):
+    def _boom(m):
+        raise AssertionError("must not probe the model when a cap is set")
+    monkeypatch.setattr(att, "model_context_tokens", _boom)
+    assert att.resolve_max_text_chars("any/model", 50_000) == 50_000 * att.CHARS_PER_TOKEN
+
+
+def test_resolve_max_text_chars_auto_uses_window_fraction(monkeypatch):
+    monkeypatch.setattr(att, "model_context_tokens", lambda m: 1_000_000)
+    got = att.resolve_max_text_chars("openrouter/big", 0)
+    assert got == int(1_000_000 * att.AUTO_TEXT_WINDOW_FRACTION) * att.CHARS_PER_TOKEN
+
+
+def test_resolve_max_text_chars_auto_falls_back_when_unknown(monkeypatch):
+    monkeypatch.setattr(att, "model_context_tokens", lambda m: None)
+    assert att.resolve_max_text_chars("mystery/model", 0) == att.FALLBACK_TEXT_TOKENS * att.CHARS_PER_TOKEN
+
+
+def test_max_text_chars_param_threads_into_pdf_budget(tmp_path, monkeypatch):
+    seen = {}
+    def fake(p, char_budget=None):
+        seen["budget"] = char_budget
+        return ("x" * char_budget, True)
+    monkeypatch.setattr(ext, "extract_pdf_text", fake)
+    a = att.validate([{"path": str(_pdf(tmp_path)), "mime": "application/pdf"}])
+    parts = att.build_content_parts("", a, vision=False, max_text_chars=80)
+    body = next(p["text"] for p in parts if "attached PDF" in p.get("text", ""))
+    assert seen["budget"] == 80
+    assert body.count("x") == 80
 
 
 def test_text_file_decodes_non_utf8(tmp_path):
@@ -138,9 +169,9 @@ def test_validate_rejects_content_type_mismatch(tmp_path):
 
 
 def test_corrupt_pdf_surfaces_as_attachment_error(tmp_path, monkeypatch):
-    def boom(_p, _n):
+    def boom(_p, **_kw):
         raise ValueError("broken pdf internals")
-    monkeypatch.setattr(att, "_pdf_extract_text", boom)
+    monkeypatch.setattr(ext, "extract_pdf_text", boom)
     a = att.validate([{"path": str(_pdf(tmp_path)), "mime": "application/pdf"}])
     with pytest.raises(att.AttachmentError, match="could not read PDF"):
         att.build_content_parts("read it", a, vision=True)
@@ -207,7 +238,7 @@ def test_attachment_notice_surfaces_absolute_path(tmp_path):
 
 def test_text_pdf_becomes_text_part(tmp_path, monkeypatch):
     body = "Quarterly revenue grew 12 percent across every region this year."
-    monkeypatch.setattr(att, "_pdf_extract_text", lambda p, n: (body, False))
+    monkeypatch.setattr(ext, "extract_pdf_text", lambda p, **kw: (body, False))
     a = att.validate([{"path": str(_pdf(tmp_path)), "mime": "application/pdf"}])
     parts = att.build_content_parts("summarize", a, vision=False)
     joined = " ".join(p.get("text", "") for p in parts)
@@ -217,15 +248,15 @@ def test_text_pdf_becomes_text_part(tmp_path, monkeypatch):
 
 
 def test_text_pdf_truncation_folded_into_text(tmp_path, monkeypatch):
-    monkeypatch.setattr(att, "_pdf_extract_text", lambda p, n: ("lots of real extractable text here, well over the floor", True))
+    monkeypatch.setattr(ext, "extract_pdf_text", lambda p, **kw: ("lots of real extractable text here, well over the floor", True))
     a = att.validate([{"path": str(_pdf(tmp_path)), "mime": "application/pdf"}])
-    parts = att.build_content_parts("", a, vision=False, max_pdf_pages=15)
-    assert any("first 15 pages only" in p.get("text", "") for p in parts)
+    parts = att.build_content_parts("", a, vision=False)
+    assert any("(truncated)" in p.get("text", "") for p in parts)
 
 
 def test_scanned_pdf_renders_images_with_vision(tmp_path, monkeypatch):
-    monkeypatch.setattr(att, "_pdf_extract_text", lambda p, n: ("", False))
-    monkeypatch.setattr(att, "_pdf_render_images", lambda p, n: ([b"PNG-page-1", b"PNG-page-2"], False))
+    monkeypatch.setattr(ext, "extract_pdf_text", lambda p, **kw: ("", False))
+    monkeypatch.setattr(ext, "render_pdf_images", lambda p, **kw: ([b"PNG-page-1", b"PNG-page-2"], False))
     a = att.validate([{"path": str(_pdf(tmp_path)), "mime": "application/pdf"}])
     parts = att.build_content_parts("read it", a, vision=True)
     imgs = [p for p in parts if p["type"] == "image_url"]
@@ -234,8 +265,8 @@ def test_scanned_pdf_renders_images_with_vision(tmp_path, monkeypatch):
 
 
 def test_image_payload_budget_stops_and_notes(tmp_path, monkeypatch):
-    monkeypatch.setattr(att, "_pdf_extract_text", lambda p, n: ("", False))
-    monkeypatch.setattr(att, "_pdf_render_images", lambda p, n: ([b"x" * 10, b"y" * 10, b"z" * 10], False))
+    monkeypatch.setattr(ext, "extract_pdf_text", lambda p, **kw: ("", False))
+    monkeypatch.setattr(ext, "render_pdf_images", lambda p, **kw: ([b"x" * 10, b"y" * 10, b"z" * 10], False))
     a = att.validate([{"path": str(_pdf(tmp_path)), "mime": "application/pdf"}])
     parts = att.build_content_parts("", a, vision=True, max_image_bytes=15)  # fits one page
     imgs = [p for p in parts if p["type"] == "image_url"]
@@ -250,10 +281,52 @@ def test_validate_accepts_pdf_with_preamble(tmp_path):
     assert out[0].mime == "application/pdf"
 
 
-def test_scanned_pdf_without_vision_errors(tmp_path, monkeypatch):
-    monkeypatch.setattr(att, "_pdf_extract_text", lambda p, n: ("", False))
+def test_scanned_pdf_without_vision_falls_back_to_ocr(tmp_path, monkeypatch):
+    monkeypatch.setattr(ext, "extract_pdf_text", lambda p, **kw: ("", False))
+    monkeypatch.setattr(ext, "ocr_pdf", lambda p, **kw: ("Receipt total 4.50 EUR", False))
     a = att.validate([{"path": str(_pdf(tmp_path)), "mime": "application/pdf"}])
-    with pytest.raises(att.AttachmentError, match="scanned PDF needs a vision"):
+    parts = att.build_content_parts("read it", a, vision=False)
+    joined = " ".join(p.get("text", "") for p in parts)
+    assert "Receipt total 4.50 EUR" in joined
+    assert "(OCR)" in joined
+    assert not any(p["type"] == "image_url" for p in parts)
+
+
+def test_scanned_pdf_ocr_truncation_is_noted(tmp_path, monkeypatch):
+    monkeypatch.setattr(ext, "extract_pdf_text", lambda p, **kw: ("", False))
+    monkeypatch.setattr(ext, "ocr_pdf", lambda p, **kw: ("page text", True))
+    a = att.validate([{"path": str(_pdf(tmp_path)), "mime": "application/pdf"}])
+    parts = att.build_content_parts("", a, vision=False, scan_max_pages=15)
+    assert any("OCR, first 15 pages" in p.get("text", "") for p in parts)
+
+
+def test_scanned_pdf_ocr_respects_text_char_budget(tmp_path, monkeypatch):
+    huge = "word " * (att.MAX_TEXT_CHARS)
+    monkeypatch.setattr(ext, "extract_pdf_text", lambda p, **kw: ("", False))
+    monkeypatch.setattr(ext, "ocr_pdf", lambda p, **kw: (huge, False))
+    a = att.validate([{"path": str(_pdf(tmp_path)), "mime": "application/pdf"}])
+    parts = att.build_content_parts("", a, vision=False)
+    body = next(p["text"] for p in parts if "attached PDF" in p.get("text", ""))
+    assert len(body) <= att.MAX_TEXT_CHARS + 200
+    assert f"truncated to {att.MAX_TEXT_CHARS} chars" in body
+
+
+def test_scanned_pdf_ocr_empty_gives_hint(tmp_path, monkeypatch):
+    monkeypatch.setattr(ext, "extract_pdf_text", lambda p, **kw: ("", False))
+    monkeypatch.setattr(ext, "ocr_pdf", lambda p, **kw: ("", False))
+    a = att.validate([{"path": str(_pdf(tmp_path)), "mime": "application/pdf"}])
+    parts = att.build_content_parts("read it", a, vision=False)
+    joined = " ".join(p.get("text", "") for p in parts)
+    assert "OCR found no readable text" in joined
+
+
+def test_scanned_pdf_ocr_failure_surfaces_error(tmp_path, monkeypatch):
+    monkeypatch.setattr(ext, "extract_pdf_text", lambda p, **kw: ("", False))
+    def boom(p, **kw):
+        raise RuntimeError("ocr engine died")
+    monkeypatch.setattr(ext, "ocr_pdf", boom)
+    a = att.validate([{"path": str(_pdf(tmp_path)), "mime": "application/pdf"}])
+    with pytest.raises(att.AttachmentError, match="could not OCR"):
         att.build_content_parts("read it", a, vision=False)
 
 

@@ -5,6 +5,8 @@ import mimetypes
 from dataclasses import dataclass
 from pathlib import Path
 
+from alpi import extract
+
 IMAGE_MIMES = frozenset({"image/png", "image/jpeg", "image/webp"})
 PDF_MIME = "application/pdf"
 TEXT_MIMES = frozenset({
@@ -30,12 +32,14 @@ _EXT_MIME = {
 
 MAX_FILE_BYTES = 20 * 1024 * 1024
 MAX_TEXT_FILE_BYTES = 2 * 1024 * 1024
-MAX_TEXT_CHARS = 160_000
+CHARS_PER_TOKEN = 4
+AUTO_TEXT_WINDOW_FRACTION = 0.5
+FALLBACK_TEXT_TOKENS = 100_000
+MAX_TEXT_CHARS = 400_000
 MAX_TURN_BYTES = 40 * 1024 * 1024
 MAX_ATTACHMENTS = 10
-MAX_PDF_PAGES = 15
+SCAN_MAX_PAGES = 15
 MAX_IMAGE_PAYLOAD_BYTES = 24 * 1024 * 1024
-_SCANNED_TEXT_MIN = 32
 
 
 class AttachmentError(ValueError):
@@ -269,6 +273,24 @@ def supports_vision(model: str) -> bool:
     return vision_status(model) != "no"
 
 
+def model_context_tokens(model: str) -> int | None:
+    try:
+        import litellm
+        n = litellm.get_model_info(model=model).get("max_input_tokens")
+        return int(n) if n else None
+    except Exception:  # noqa: BLE001 — unmapped model / litellm error → caller falls back
+        return None
+
+
+def resolve_max_text_chars(model: str, configured_tokens: int) -> int:
+    if configured_tokens and configured_tokens > 0:
+        tokens = configured_tokens
+    else:
+        window = model_context_tokens(model)
+        tokens = int(window * AUTO_TEXT_WINDOW_FRACTION) if window else FALLBACK_TEXT_TOKENS
+    return tokens * CHARS_PER_TOKEN
+
+
 def _data_url(mime: str, data: bytes) -> str:
     return f"data:{mime};base64,{base64.b64encode(data).decode('ascii')}"
 
@@ -296,48 +318,15 @@ def _read_text(path: Path, max_chars: int) -> tuple[str, bool]:
     return text[:max_chars], truncated
 
 
-def _pdf_extract_text(path: Path, max_pages: int) -> tuple[str, bool]:
-    from pypdf import PdfReader
-
-    reader = PdfReader(str(path))
-    pages = reader.pages
-    truncated = len(pages) > max_pages
-    chunks: list[str] = []
-    for page in pages[:max_pages]:
-        try:
-            chunks.append(page.extract_text() or "")
-        except Exception:  # noqa: BLE001
-            chunks.append("")
-    return "\n\n".join(c for c in chunks if c.strip()), truncated
-
-
-def _pdf_render_images(path: Path, max_pages: int) -> tuple[list[bytes], bool]:
-    import pypdfium2 as pdfium
-
-    doc = pdfium.PdfDocument(str(path))
-    try:
-        n = len(doc)
-        truncated = n > max_pages
-        images: list[bytes] = []
-        for i in range(min(n, max_pages)):
-            page = doc[i]
-            pil = page.render(scale=2.0).to_pil()
-            import io
-            buf = io.BytesIO()
-            pil.save(buf, format="PNG")
-            images.append(buf.getvalue())
-        return images, truncated
-    finally:
-        doc.close()
-
-
 def build_content_parts(
     text: str,
     attachments: list[Attachment],
     *,
     vision: bool,
-    max_pdf_pages: int = MAX_PDF_PAGES,
+    scan_max_pages: int = SCAN_MAX_PAGES,
     max_image_bytes: int = MAX_IMAGE_PAYLOAD_BYTES,
+    max_text_chars: int = MAX_TEXT_CHARS,
+    on_progress=None,
 ) -> list[dict]:
     parts: list[dict] = []
     if text:
@@ -376,19 +365,17 @@ def build_content_parts(
                 parts.append(_text_part(f"[{a.name}: omitted — turn image payload limit reached]"))
         elif is_pdf(a.mime):
             try:
-                extracted, truncated = _pdf_extract_text(a.path, max_pdf_pages)
+                extracted, truncated = extract.extract_pdf_text(a.path, char_budget=max_text_chars)
             except Exception as e:  # noqa: BLE001 — corrupt/unsupported PDF
                 raise AttachmentError(f"{a.name}: could not read PDF") from e
-            if len(extracted.strip()) >= _SCANNED_TEXT_MIN:
-                pages = f" (first {max_pdf_pages} pages only)" if truncated else ""
+            if len(extracted.strip()) >= extract.SCANNED_PDF_TEXT_FLOOR:
+                trunc = " (truncated)" if truncated else ""
                 parts.append(_text_part(
-                    f"--- attached PDF: {a.name}{pages} ---\n{extracted}\n--- end of {a.name} ---"
+                    f"--- attached PDF: {a.name}{trunc} ---\n{extracted}\n--- end of {a.name} ---"
                 ))
-            else:
-                if not vision:
-                    raise AttachmentError(f"{a.name}: scanned PDF needs a vision-capable model")
+            elif vision:
                 try:
-                    images, truncated = _pdf_render_images(a.path, max_pdf_pages)
+                    images, truncated = extract.render_pdf_images(a.path, max_pages=scan_max_pages)
                 except Exception as e:  # noqa: BLE001
                     raise AttachmentError(f"{a.name}: could not render PDF") from e
                 rendered = 0
@@ -398,19 +385,44 @@ def build_content_parts(
                     rendered += 1
                 caveats = []
                 if truncated:
-                    caveats.append(f"first {max_pdf_pages} pages")
+                    caveats.append(f"first {scan_max_pages} pages")
                 if rendered < len(images):
                     caveats.append("image payload limit reached")
                 if caveats:
                     parts.append(_text_part(
                         f"[{a.name}: {rendered} scanned page image(s) included — {', '.join(caveats)}]"
                     ))
+            else:
+                if on_progress:
+                    on_progress(f"{a.name}: OCR (scanned PDF)…")
+                try:
+                    ocr_text, truncated = extract.ocr_pdf(
+                        a.path, max_pages=scan_max_pages,
+                        on_page=(lambda i, n: on_progress(f"{a.name}: OCR page {i}/{n}…")) if on_progress else None,
+                    )
+                except Exception as e:  # noqa: BLE001
+                    raise AttachmentError(f"{a.name}: could not OCR scanned PDF") from e
+                if ocr_text.strip():
+                    over_budget = len(ocr_text) > max_text_chars
+                    ocr_text = ocr_text[:max_text_chars]
+                    marks = ["OCR"]
+                    if truncated:
+                        marks.append(f"first {scan_max_pages} pages")
+                    if over_budget:
+                        marks.append(f"truncated to {max_text_chars} chars")
+                    parts.append(_text_part(
+                        f"--- attached PDF: {a.name} ({', '.join(marks)}) ---\n{ocr_text}\n--- end of {a.name} ---"
+                    ))
+                else:
+                    parts.append(_text_part(
+                        f"[{a.name}: scanned PDF, OCR found no readable text — try a vision-capable model.]"
+                    ))
         elif is_text(a.mime):
             try:
-                body, truncated = _read_text(a.path, MAX_TEXT_CHARS)
+                body, truncated = _read_text(a.path, max_text_chars)
             except OSError as e:
                 raise AttachmentError(f"{a.name}: could not read file") from e
-            trunc = f" (truncated to {MAX_TEXT_CHARS} chars)" if truncated else ""
+            trunc = f" (truncated to {max_text_chars} chars)" if truncated else ""
             parts.append(_text_part(
                 f"--- attached file: {a.name}{trunc} ---\n{body}\n--- end of {a.name} ---"
             ))
