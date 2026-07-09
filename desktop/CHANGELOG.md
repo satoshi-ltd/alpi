@@ -11,6 +11,16 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.26 — 2026-07-09 — rename sessions in the manager
+
+- **Chat sessions can now be renamed from the Manage sessions window.** Double
+  click a session title, type a clearer name, then press Enter or click away to
+  keep it.
+- **Renamed sessions stay local to this desktop client and daemon connection.**
+  Clearing the title falls back to the original first-message preview.
+
+_Client-only session aliases; works with any daemon version._
+
 ## v0.4.25 — 2026-07-09 — your Markdown stays formatted
 
 - **Messages you send now render Markdown in the chat transcript.** If you type

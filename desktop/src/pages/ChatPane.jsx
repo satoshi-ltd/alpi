@@ -168,6 +168,7 @@ export default function ChatPane({
             model={effectiveModel}
             contextWindow={contextWindow}
             activeSessionId={view.sessionId}
+            connectionId={connectionId}
             onOpenSettings={onConfigureProfile ? () => onConfigureProfile(activeProfile) : null}
             onRefresh={() => {
               setRefreshBeat((b) => b + 1);
@@ -258,6 +259,7 @@ export default function ChatPane({
           model={effectiveModel}
           contextWindow={contextWindow}
           activeSessionId={view.sessionId}
+          connectionId={connectionId}
           onOpenSettings={onConfigureProfile ? () => onConfigureProfile(activeProfile) : null}
           onRefresh={() => {
             setRefreshBeat((b) => b + 1);

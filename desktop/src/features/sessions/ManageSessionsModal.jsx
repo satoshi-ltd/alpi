@@ -7,6 +7,8 @@ import {
   ConfirmDelete,
   Dropdown,
 } from "../../primitives/index.js";
+import EditableSessionTitle from "../../primitives/EditableSessionTitle.jsx";
+import { removeSessionTitles } from "../../lib/session-titles.js";
 import { useNotify } from "../../primitives/Notification.jsx";
 import styles from "./ManageSessionsModal.module.css";
 
@@ -19,8 +21,8 @@ const FILTERS = [
   { key: "lt3",  label: "< 3 turns",     match: (s) => (s.turn_count || 0) < 3 },
 ];
 const SORTS = [
-  { key: "size",     label: "Size",     pick: (s) => s.size_bytes || 0 },
   { key: "activity", label: "Activity", pick: (s) => s.activityMs },
+  { key: "size",     label: "Size",     pick: (s) => s.size_bytes || 0 },
   { key: "turns",    label: "Turns",    pick: (s) => s.turn_count || 0 },
   { key: "created",  label: "Created",  pick: (s) => (s.started_at || 0) * 1000 },
 ];
@@ -62,6 +64,7 @@ export default function ManageSessionsModal({
   open,
   onClose,
   profile,
+  connectionId = null,
   accent,
   currentSessionId,
   onDeleted,
@@ -69,7 +72,7 @@ export default function ManageSessionsModal({
   const notify = useNotify();
   const [rows, setRows] = useState([]);
   const [filterKey, setFilterKey] = useState("all");
-  const [sortKey, setSortKey] = useState("size");
+  const [sortKey, setSortKey] = useState("activity");
   const [selected, setSelected] = useState(() => new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -211,6 +214,7 @@ export default function ManageSessionsModal({
       const deleted = (result?.deleted ?? []).length;
       const errors = result?.errors ?? [];
       if (deleted > 0) {
+        removeSessionTitles(connectionId, profile, result.deleted);
         notify({
           message: `Deleted ${deleted} session${deleted === 1 ? "" : "s"}.`,
           duration: 2500,
@@ -232,7 +236,7 @@ export default function ManageSessionsModal({
     } finally {
       setDeleting(false);
     }
-  }, [selectedIds, profile, notify, onDeleted, clearSelection, refresh]);
+  }, [selectedIds, profile, connectionId, notify, onDeleted, clearSelection, refresh]);
 
   if (!open) return null;
 
@@ -360,7 +364,14 @@ export default function ManageSessionsModal({
                       />
                     </td>
                     <td className={styles.cellSession}>
-                      <div className={styles.preview}>{previewOf(s)}</div>
+                      <EditableSessionTitle
+                        session={s}
+                        profile={profile}
+                        connectionId={connectionId}
+                        max={PREVIEW_MAX}
+                        className={styles.preview}
+                        inputClassName={styles.previewInput}
+                      />
                       {isCurrent && (
                         <div
                           className={styles.current}

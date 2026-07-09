@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { purgeConnectionStorage } from "./connection-gc.js";
+import { getSessionTitle, setSessionTitle } from "./session-titles.js";
 import { markProfileRead, isProfileUnread, purgeConnectionReadState } from "../hooks/useReadState.js";
 
 beforeEach(() => {
@@ -22,6 +23,8 @@ describe("purgeConnectionStorage", () => {
       "alpi:read-state:v1": "{}",
     };
     for (const [k, v] of Object.entries(seed)) localStorage.setItem(k, v);
+    setSessionTitle("gone", "doc", "s1", "Gone");
+    setSessionTitle("kept", "doc", "s1", "Kept");
 
     purgeConnectionStorage("gone");
 
@@ -32,6 +35,8 @@ describe("purgeConnectionStorage", () => {
         expect(localStorage.getItem(k)).not.toBeNull();
       }
     }
+    expect(getSessionTitle("gone", "doc", "s1")).toBe("");
+    expect(getSessionTitle("kept", "doc", "s1")).toBe("Kept");
   });
 
   it("never touches the local connection's storage", () => {

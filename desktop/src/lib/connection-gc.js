@@ -1,3 +1,5 @@
+import { purgeConnectionSessionTitles } from "./session-titles.js";
+
 const exactKeys = (id) => [
   `alf:profiles:v1:${id}`,
   `alf:workgroups:v1:${id}`,
@@ -22,5 +24,6 @@ export function purgeConnectionStorage(connectionId) {
       if (key && prefixes.some((p) => key.startsWith(p))) doomed.push(key);
     }
     for (const key of doomed) localStorage.removeItem(key);
+    purgeConnectionSessionTitles(connectionId);
   } catch {}
 }

@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, fireEvent, screen, cleanup } from "@testing-library/react";
+import { render, fireEvent, screen, cleanup, waitFor } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
 import ManageSessionsModal from "./ManageSessionsModal.jsx";
+import { getSessionTitle, setSessionTitle } from "../../lib/session-titles.js";
 
 const NOW = Date.now() / 1000;
 const DAY = 86_400;
@@ -14,6 +15,7 @@ const SESSIONS = [
 
 describe("ManageSessionsModal", () => {
   beforeEach(() => {
+    localStorage.clear();
     invoke.mockReset();
     invoke.mockImplementation(async (cmd) => {
       if (cmd === "sessions") return SESSIONS;
@@ -24,6 +26,29 @@ describe("ManageSessionsModal", () => {
 
   afterEach(() => {
     cleanup();
+  });
+
+  it("defaults to activity sorting before size, turns and created", async () => {
+    render(
+      <ManageSessionsModal
+        open
+        profile="doc"
+        currentSessionId="live"
+        onClose={() => {}}
+      />,
+    );
+
+    await screen.findByText("active chat");
+
+    expect(screen.getByRole("button", { name: "Activity" })).toBeInTheDocument();
+    const previews = screen.getAllByText(/active chat|stub|old chat/).map((node) => node.textContent);
+    expect(previews).toEqual(["active chat", "stub", "old chat"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Activity" }));
+    const labels = screen
+      .getAllByText(/^(Activity|Size|Turns|Created)$/)
+      .map((node) => node.textContent);
+    expect(labels).toEqual(["Activity", "Activity", "Size", "Turns", "Created"]);
   });
 
   it("clears selection when the filter changes so Delete-N matches what will be deleted", async () => {
@@ -91,5 +116,81 @@ describe("ManageSessionsModal", () => {
     const liveRow = screen.getByText("active chat").closest("tr");
     expect(liveRow.querySelector('input[type="checkbox"]')).toBeDisabled();
     expect(screen.getByText("current session")).toBeInTheDocument();
+  });
+
+  it("shows and edits local session titles without breaking selection", async () => {
+    setSessionTitle("conn-a", "doc", "stub", "Short stub");
+    render(
+      <ManageSessionsModal
+        open
+        profile="doc"
+        connectionId="conn-a"
+        currentSessionId="live"
+        onClose={() => {}}
+      />,
+    );
+
+    await screen.findByText("Short stub");
+    expect(screen.queryByText("stub")).not.toBeInTheDocument();
+
+    fireEvent.doubleClick(screen.getByText("Short stub"));
+    const input = screen.getByRole("textbox", { name: "Session title" });
+    fireEvent.change(input, { target: { value: "  Better stub title  " } });
+    fireEvent.blur(input);
+    expect(getSessionTitle("conn-a", "doc", "stub")).toBe("Better stub title");
+
+    const row = await screen.findByText("Better stub title");
+    fireEvent.click(row.closest("tr").querySelector('input[type="checkbox"]'));
+    expect(screen.getByRole("button", { name: /Delete 1/ })).toBeInTheDocument();
+  });
+
+  it("cancels title editing with Escape", async () => {
+    setSessionTitle("conn-a", "doc", "stub", "Short stub");
+    render(
+      <ManageSessionsModal
+        open
+        profile="doc"
+        connectionId="conn-a"
+        currentSessionId="live"
+        onClose={() => {}}
+      />,
+    );
+
+    await screen.findByText("Short stub");
+    fireEvent.doubleClick(screen.getByText("Short stub"));
+    const input = screen.getByRole("textbox", { name: "Session title" });
+    fireEvent.change(input, { target: { value: "Discarded title" } });
+    fireEvent.keyDown(input, { key: "Escape" });
+
+    expect(getSessionTitle("conn-a", "doc", "stub")).toBe("Short stub");
+    expect(await screen.findByText("Short stub")).toBeInTheDocument();
+  });
+
+  it("clears local titles for deleted sessions", async () => {
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "sessions") return SESSIONS;
+      if (cmd === "sessions_delete") return { deleted: ["stub"], errors: [] };
+      return null;
+    });
+    setSessionTitle("conn-a", "doc", "stub", "Short stub");
+    render(
+      <ManageSessionsModal
+        open
+        profile="doc"
+        connectionId="conn-a"
+        currentSessionId="live"
+        onClose={() => {}}
+      />,
+    );
+
+    await screen.findByText("Short stub");
+    const row = screen.getByText("Short stub").closest("tr");
+    fireEvent.click(row.querySelector('input[type="checkbox"]'));
+    fireEvent.click(screen.getByRole("button", { name: /Delete 1/ }));
+    const typedInput = await screen.findByRole("textbox");
+    fireEvent.change(typedInput, { target: { value: "DELETE" } });
+    fireEvent.click(screen.getByRole("button", { name: "Delete 1 session" }));
+
+    await waitFor(() => expect(getSessionTitle("conn-a", "doc", "stub")).toBe(""));
   });
 });

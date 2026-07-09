@@ -45,6 +45,7 @@ export function invalidateSessionsButtonCache() {
 
 export default function SessionsButton({
   profile,
+  connectionId = null,
   accent,
   activeSessionId,
   onChange,
@@ -181,6 +182,7 @@ export default function SessionsButton({
         open={manageOpen}
         onClose={() => setManageOpen(false)}
         profile={profile}
+        connectionId={connectionId}
         accent={accent}
         currentSessionId={activeSessionId}
         onDeleted={(deletedIds) => {

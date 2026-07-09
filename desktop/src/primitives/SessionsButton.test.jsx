@@ -18,7 +18,7 @@ beforeEach(() => {
 
 describe("SessionsButton — profile switch", () => {
   it("hides the previous profile's sessions until the new profile's fetch resolves", async () => {
-    invokeMock.mockResolvedValueOnce(sessA);
+    invokeMock.mockResolvedValue(sessA);
     const { rerender } = render(<SessionsButton profile="A" />);
     await waitFor(() => expect(screen.getByText("Sessions")).toBeTruthy());
 
@@ -32,7 +32,7 @@ describe("SessionsButton — profile switch", () => {
   });
 
   it("paints a revisited profile's cached list instantly while revalidating", async () => {
-    invokeMock.mockResolvedValueOnce(sessA);
+    invokeMock.mockResolvedValue(sessA);
     const { rerender } = render(<SessionsButton profile="A" />);
     await waitFor(() => expect(screen.getByText("Sessions")).toBeTruthy());
 
@@ -58,4 +58,5 @@ describe("SessionsButton — profile switch", () => {
     await act(async () => { await Promise.resolve(); });
     expect(invokeMock.mock.calls.length).toBe(callsAfterMount + 1);
   });
+
 });

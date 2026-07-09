@@ -23,6 +23,7 @@ export default function ProfileChatHeader({
   model,
   contextWindow = 200_000,
   activeSessionId,
+  connectionId = null,
   onOpenSkills,
   onOpenMemory,
   onOpenTools,
@@ -92,6 +93,7 @@ export default function ProfileChatHeader({
       ) : (
         <SessionsButton
           profile={profile?.name}
+          connectionId={connectionId}
           accent={accent}
           activeSessionId={activeSessionId}
           onChange={onChangeSession}

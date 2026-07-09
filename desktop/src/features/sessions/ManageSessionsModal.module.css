@@ -196,6 +196,11 @@
   white-space: nowrap;
   max-width: 460px;
 }
+
+.previewInput {
+  max-width: 460px;
+  font-size: var(--fs-base);
+}
 .rowCurrent .preview,
 .rowCurrent .cellActivity,
 .rowCurrent .cellTurns,
