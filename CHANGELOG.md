@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.10.18 — 2026-07-09 — steadier empty replies and knowledge recall
+
+- **Empty model replies are covered by regression tests.** If a provider closes
+  a turn with no final text, Alpi nudges once and keeps the turn clean instead
+  of surfacing an empty answer.
+- **Knowledge searches now bias toward the corpus language.** The `knowledge`
+  tool tells the model to phrase search queries in the same language as the
+  stored knowledge, improving recall when the user's prompt is in another
+  language.
+
 ## v0.10.17 — 2026-07-08 — attach a scanned PDF to any profile
 
 - **Scanned PDFs now work as chat attachments, even without vision or a

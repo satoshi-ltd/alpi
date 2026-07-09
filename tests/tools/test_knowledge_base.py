@@ -540,3 +540,8 @@ def test_knowledge_tool_search_hint_uses_single_tool(tmp_home: Path, stub_embedd
     body = json.loads(result.output)
     assert body["results"] == []
     assert 'knowledge(action="index")' in body["hint"]
+
+
+def test_search_query_description_guides_language_matching() -> None:
+    desc = kb.Knowledge.parameters["properties"]["query"]["description"]
+    assert "language" in desc.lower()

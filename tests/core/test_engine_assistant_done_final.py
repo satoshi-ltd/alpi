@@ -259,3 +259,38 @@ def test_request_interrupt_logs_reason(patched_engine: Engine, caplog) -> None:
 def test_request_interrupt_default_reason(patched_engine: Engine) -> None:
     patched_engine.request_interrupt()
     assert patched_engine.interrupt_requested is True
+
+
+def test_empty_reply_is_retried_then_answered(
+    patched_engine: Engine, monkeypatch,
+) -> None:
+    _stub_stream(monkeypatch, [_final_chunk(""), _final_chunk("Las funciones del AM son X, Y, Z.")])
+
+    events = []
+    patched_engine.run_turn("funciones del account manager", emit=lambda e: events.append(e))
+
+    dones = [e for e in events if e.kind == "assistant_done" and e.final]
+    assert len(dones) == 1
+    assert dones[0].text == "Las funciones del AM son X, Y, Z."
+    assert any(
+        m.get("role") == "user" and "empty reply" in str(m.get("content", ""))
+        for m in patched_engine.session.messages
+    ), "engine should inject a nudge after an empty close"
+    assert not any(e.kind == "error" for e in events)
+
+
+def test_empty_reply_retry_is_bounded(patched_engine: Engine, monkeypatch) -> None:
+    n = {"c": 0}
+
+    def fake_stream(messages, tools, **kwargs):
+        n["c"] += 1
+        yield _final_chunk("")
+
+    monkeypatch.setattr("alpi.llm.stream", fake_stream)
+
+    events = []
+    patched_engine.run_turn("x", emit=lambda e: events.append(e))
+
+    assert any(e.kind == "done" for e in events)
+    assert n["c"] == 2, "one initial call + exactly one nudge retry"
+    assert not any(e.kind == "error" for e in events)

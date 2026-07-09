@@ -962,7 +962,7 @@ class Knowledge(Tool):
             },
             "query": {
                 "type": "string",
-                "description": "Natural-language query for action='search'.",
+                "description": "Natural-language query for action='search'. Use the same language as the indexed knowledge; translate the user's request before searching when needed.",
             },
             "k": {
                 "type": "integer",
