@@ -559,7 +559,7 @@ class Engine:
                         ok=result.ok, duration_s=duration,
                         reasoning=reasoning_for_this_tool,
                     ))
-                    if result.ok and name == "skill":
+                    if result.ok and name in ("skill", "attach_file"):
                         import tempfile as _tempfile
                         from alpi import attachments as _att
                         _roots = [self.home, self.cfg.workspace_path,

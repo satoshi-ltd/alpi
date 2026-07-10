@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { FileIcon, FileTextIcon, FileCodeIcon, XIcon } from "./icons.jsx";
+import { FileIcon, FileTextIcon, FileCodeIcon, XIcon, SpinnerIcon } from "./icons.jsx";
+import { useNotify } from "./Notification.jsx";
 import { fileKind, fileTypeLabel, fmtSize } from "../lib/fileKind.js";
 import styles from "./AttachmentChips.module.css";
 
@@ -34,9 +35,61 @@ function Thumb({ kind, path, mime, name }) {
   );
 }
 
+function MessageChip({ a, profile, connectionId }) {
+  const notify = useNotify();
+  const [busy, setBusy] = useState(false);
+  const kind = fileKind(a.name, a.mime);
+  const subtitle = `${fileTypeLabel(a.name, a.mime)} · ${fmtSize(a.size ?? 0)}`;
+
+  async function onDownload() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const saved = await invoke("download_attachment", {
+        profile, path: a.path, connectionId: connectionId ?? null,
+      });
+      if (saved) {
+        notify?.({
+          message: `Saved ${a.name}`,
+          variant: "success",
+          action: "Reveal",
+          onAction: () => invoke("reveal_in_finder", { path: saved }).catch(() => {}),
+        });
+      }
+    } catch (e) {
+      notify?.({ message: `Couldn't download ${a.name}: ${e}`, variant: "error" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      className={`${styles.card} ${styles.cardMessage}`}
+      style={{ cursor: busy ? "default" : "pointer", font: "inherit", textAlign: "left" }}
+      title={busy ? `Downloading ${a.name}…` : `Download ${a.name}`}
+      onClick={onDownload}
+      disabled={busy}
+    >
+      {busy ? (
+        <span className={styles.iconBox} aria-hidden>
+          <SpinnerIcon style={{ width: 16, height: 16 }} />
+        </span>
+      ) : (
+        <Thumb kind={kind} path={a.path} mime={a.mime} name={a.name} />
+      )}
+      <span className={styles.meta}>
+        <span className={styles.name} title={a.name}>{a.name}</span>
+        <span className={styles.size}>{subtitle}</span>
+      </span>
+    </button>
+  );
+}
+
 const MESSAGE_MAX = 4;
 
-export default function AttachmentChips({ items, onRemove, variant = "composer" }) {
+export default function AttachmentChips({ items, onRemove, variant = "composer", profile, connectionId }) {
   if (!items?.length) return null;
   const message = variant === "message";
   const shown = message ? items.slice(0, MESSAGE_MAX) : items;
@@ -44,6 +97,9 @@ export default function AttachmentChips({ items, onRemove, variant = "composer" 
   return (
     <div className={message ? styles.list : styles.row}>
       {shown.map((a, i) => {
+        if (message && a.path) {
+          return <MessageChip key={a.path || i} a={a} profile={profile} connectionId={connectionId} />;
+        }
         const kind = fileKind(a.name, a.mime);
         const subtitle = message
           ? `${fileTypeLabel(a.name, a.mime)} · ${fmtSize(a.size ?? 0)}`

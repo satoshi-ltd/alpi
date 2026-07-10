@@ -4,7 +4,7 @@
     "slug": "alpi-mobile",
     "owner": "satoshi-ltd",
     "scheme": "alpi",
-    "version": "0.2.8",
+    "version": "0.2.9",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -20,8 +20,13 @@
       "infoPlist": {
         "NSFaceIDUsageDescription": "Unlock alpi to keep your daemon tokens private.",
         "NSCameraUsageDescription": "Scan the pairing QR shown by your daemon.",
-        "UIBackgroundModes": ["fetch", "processing"],
-        "BGTaskSchedulerPermittedIdentifiers": ["alpi-aln-poll"]
+        "UIBackgroundModes": [
+          "fetch",
+          "processing"
+        ],
+        "BGTaskSchedulerPermittedIdentifiers": [
+          "alpi-aln-poll"
+        ]
       }
     },
     "android": {
@@ -89,7 +94,8 @@
           "color": "#0f1115"
         }
       ],
-      "expo-background-task"
+      "expo-background-task",
+      "expo-sharing"
     ],
     "extra": {
       "router": {},

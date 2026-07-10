@@ -76,6 +76,19 @@ def test_skill_out_becomes_output_attachment(bootstrapped_home, monkeypatch):
     assert data[-1].output_attachments == turn.output_attachments
 
 
+def test_attach_file_out_becomes_output_attachment(bootstrapped_home, monkeypatch):
+    md = bootstrapped_home / "report.md"
+    md.write_text("# Report\n\nHello.\n")
+    engine, events = _run(
+        bootstrapped_home, monkeypatch, "attach_file",
+        f'{{"path": "{md}"}}', md,
+    )
+    final = [e for e in events if e.kind == "assistant_done" and e.final]
+    assert final and len(final[-1].attachments) == 1
+    att = final[-1].attachments[0]
+    assert att["path"] == str(md) and att["kind"] == "text" and att["producer"] == "attach_file"
+
+
 def test_non_skill_tool_does_not_promote(bootstrapped_home, monkeypatch):
     img = _jpeg(bootstrapped_home)
     _engine, events = _run(

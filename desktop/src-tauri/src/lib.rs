@@ -2322,6 +2322,47 @@ async fn attachment_stage(
         .ok_or_else(|| "stage: response missing attachment".to_string())
 }
 
+// Produced attachments live on the daemon (possibly remote) — fetch the bytes
+// over the host RPC, then let the user save them locally via a native dialog.
+// Works for local and remote connections and for any served mime.
+#[tauri::command]
+async fn download_attachment(
+    app: tauri::AppHandle, profile: String, path: String, connection_id: Option<String>,
+) -> Result<Option<String>, String> {
+    use base64::Engine;
+    let res = tauri::async_runtime::spawn_blocking(move || {
+        let params = serde_json::json!({"profile": profile, "path": path});
+        match connection_id.as_deref() {
+            Some(cid) => host_client::call_for(cid, "host.attachments.fetch", params),
+            None => host_client::call("host.attachments.fetch", params),
+        }
+    })
+    .await
+    .map_err(|e| format!("join: {e}"))??;
+    let name = res
+        .get("name")
+        .and_then(|v| v.as_str())
+        .unwrap_or("download")
+        .to_string();
+    let b64 = res
+        .get("data_base64")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "fetch: response missing data".to_string())?;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(b64)
+        .map_err(|e| format!("decode: {e}"))?;
+    let dest = tauri::async_runtime::spawn_blocking(move || {
+        app.dialog().file().set_file_name(name).blocking_save_file()
+    })
+    .await
+    .map_err(|e| format!("join: {e}"))?;
+    let Some(dest) = dest.and_then(|f| f.into_path().ok()) else {
+        return Ok(None); // user cancelled
+    };
+    std::fs::write(&dest, &bytes).map_err(|e| format!("write: {e}"))?;
+    Ok(Some(dest.to_string_lossy().into_owned()))
+}
+
 // Linux has no portable "select file" — open the containing directory instead.
 fn reveal_command(os: &str, path: &str) -> (&'static str, Vec<String>) {
     match os {
@@ -3241,6 +3282,7 @@ pub fn run() {
             attachment_thumb,
             save_text_file,
             attachment_stage,
+            download_attachment,
             probe_peers,
             peer_add,
             peer_remove,

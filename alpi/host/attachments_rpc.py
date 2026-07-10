@@ -119,6 +119,22 @@ def _fetch_allowed(home: Path, real: Path) -> bool:
             roots.append(ws)
     except Exception:  # noqa: BLE001
         pass
+    return _under_any(real, roots)
+
+
+def _fetch_nonimage_allowed(home: Path, real: Path) -> bool:
+    roots = [home / "host" / "attachments" / "tmp"]
+    try:
+        from alpi import config as cfg_mod
+        ws = cfg_mod.load(home).workspace_path
+        if ws:
+            roots.append(ws)
+    except Exception:  # noqa: BLE001
+        pass
+    return _under_any(real, roots)
+
+
+def _under_any(real: Path, roots: list[Path]) -> bool:
     for r in roots:
         try:
             rc = r.resolve()
@@ -129,23 +145,36 @@ def _fetch_allowed(home: Path, real: Path) -> bool:
     return False
 
 
+# Files whose bytes must never be served to a client, no matter the root.
+_DENIED_FETCH_EXT = (".pem", ".key", ".p12", ".pfx", ".keystore")
+
+
+def _fetch_denied(real: Path) -> bool:
+    if "secrets" in (p.lower() for p in real.parts):
+        return True
+    name = real.name.lower()
+    return name.startswith(".env") or real.suffix.lower() in _DENIED_FETCH_EXT
+
+
 async def _fetch(params: dict[str, Any], server: host_server.Server) -> dict[str, Any]:
     profile = str(params.get("profile") or "")
     path = str(params.get("path") or "")
     ext = path.rsplit(".", 1)[-1].lower() if "." in path else ""
-    mime = _FETCH_IMG_MIME.get(ext)
+    mime = _FETCH_IMG_MIME.get(ext) or att._PRODUCED_EXT_MIME.get("." + ext)
     if not mime:
-        raise host_server.HandlerError(-32602, "unsupported image type")
+        raise host_server.HandlerError(-32602, "unsupported file type")
     home = _resolve_home(profile)
     try:
         real = Path(path).resolve(strict=True)
     except OSError:
         raise host_server.HandlerError(-32004, "not-found") from None
-    if not real.is_file() or not _fetch_allowed(home, real):
+    is_image = mime.startswith("image/")
+    allowed = _fetch_allowed(home, real) if is_image else _fetch_nonimage_allowed(home, real)
+    if not real.is_file() or not allowed or _fetch_denied(real):
         raise host_server.HandlerError(-32001, "forbidden", {"detail": "path not readable"})
     data = real.read_bytes()
     if len(data) > _MAX_FETCH_BYTES:
-        raise host_server.HandlerError(-32602, f"image exceeds {_MAX_FETCH_BYTES}-byte cap")
+        raise host_server.HandlerError(-32602, f"file exceeds {_MAX_FETCH_BYTES}-byte cap")
     return {
         "name": real.name,
         "mime": mime,

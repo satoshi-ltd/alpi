@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.10.20 — 2026-07-10 — assistants can hand you files
+
+- **Assistants can now attach a file they produce to a reply.** Ask for a report,
+  export, or document and get it back as a downloadable file — Markdown, text,
+  CSV, PDF, and more — instead of a wall of text in the message.
+- **Attached files reach paired apps, not just the local machine.** The daemon
+  serves the file's bytes to the desktop and mobile clients on request, while
+  keeping profile secrets off-limits.
+
 ## v0.10.19 — 2026-07-09 — TUI shows your Markdown
 
 - **Markdown you type now renders in the TUI transcript.** User messages keep

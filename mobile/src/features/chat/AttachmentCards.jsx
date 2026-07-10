@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Pressable, Text, View } from 'react-native';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 
 import { Icon } from '../../components/Icon';
 import { useEndpoint } from '../../lib/EndpointContext';
@@ -11,6 +13,21 @@ import { useCachedImage } from '../../hooks/useCachedImage';
 const ICON = { code: 'file-code', text: 'file-text', file: 'file', image: 'file' };
 const BOX = 32;
 const MESSAGE_MAX = 4;
+
+async function shareAttachment(call, profile, a) {
+  try {
+    const r = await call('host.attachments.fetch', { profile, path: a.path });
+    if (!r?.data_base64) throw new Error('empty response');
+    const safe = String(a.name || 'file').replace(/[^A-Za-z0-9._-]+/g, '_');
+    const uri = (FileSystem.cacheDirectory || '') + safe;
+    await FileSystem.writeAsStringAsync(uri, r.data_base64, { encoding: FileSystem.EncodingType.Base64 });
+    if (await Sharing.isAvailableAsync()) {
+      await Sharing.shareAsync(uri, { mimeType: r.mime || a.mime, dialogTitle: a.name });
+    }
+  } catch (e) {
+    Alert.alert('Could not open file', String(e?.message || e));
+  }
+}
 
 function FetchedImage({ path, profile, name, colors }) {
   const { call, endpoint } = useEndpoint();
@@ -50,6 +67,7 @@ function Glyph({ kind, localUri, name, colors }) {
 
 export function AttachmentCards({ items, onRemove, variant = 'composer', profile }) {
   const { colors, fonts, fontSizes } = useTheme();
+  const { call } = useEndpoint();
   if (!items?.length) return null;
   const message = variant === 'message';
   const shown = message ? items.slice(0, MESSAGE_MAX) : items;
@@ -72,9 +90,15 @@ export function AttachmentCards({ items, onRemove, variant = 'composer', profile
         const subtitle = message
           ? `${fileTypeLabel(a.name, a.mime)} · ${fmtSize(a.size)}`
           : fmtSize(a.size);
+        const clickable = message && !!a.path;
+        const CardComp = clickable ? Pressable : View;
+        const cardProps = clickable
+          ? { onPress: () => shareAttachment(call, profile, a), accessibilityRole: 'button', accessibilityLabel: `Open ${a.name}` }
+          : {};
         return (
-          <View
+          <CardComp
             key={a.path || a.name || i}
+            {...cardProps}
             style={{
               flexDirection: 'row', alignItems: 'center', gap: space.s3,
               paddingVertical: space.s2, paddingHorizontal: space.s4,
@@ -96,7 +120,7 @@ export function AttachmentCards({ items, onRemove, variant = 'composer', profile
                 <Icon name="x" size={14} color={colors.ink3} />
               </Pressable>
             ) : null}
-          </View>
+          </CardComp>
         );
       })}
       {hidden > 0 ? (

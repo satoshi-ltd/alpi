@@ -11,6 +11,14 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.28 — 2026-07-10 — download files from the chat
+
+- **Files an assistant attaches to a message are now downloadable.** Click the
+  file chip to save it through a native dialog; a toast confirms it saved and
+  offers to reveal it in Finder.
+- **Attachment chips fit their filename and wrap.** Several files sit in a tidy
+  row instead of one stretching across the whole message.
+
 ## v0.4.27 — 2026-07-10 — shortcuts open the right panels
 
 - **The command palette now exposes the profile panels you expect from chat or

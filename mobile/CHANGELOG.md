@@ -14,6 +14,11 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.2.9 — 2026-07-10 — open attached files
+
+- **Open or share files an assistant attaches to a message.** Tap the file chip
+  to fetch it and hand it straight to the system share sheet.
+
 ## v0.2.8 — 2026-07-09 — common Markdown stays formatted
 
 - **Messages you send now render common Markdown in the chat transcript.**

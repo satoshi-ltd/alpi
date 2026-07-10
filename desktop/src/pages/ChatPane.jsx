@@ -41,7 +41,7 @@ import {
   Tip,
   VolumeIcon,
 } from "../primitives/index.js";
-import { playTts, subscribeTts, enqueueTts, VOICE_POOL } from "../lib/tts.js";
+import { currentlyPlayingKey, playTts, stopTts, subscribeTts, enqueueTts, VOICE_POOL } from "../lib/tts.js";
 import { consumeAutoRead } from "../lib/autoRead.js";
 import { useOnline } from "../lib/useOnline.js";
 import styles from "./ChatPane.module.css";
@@ -81,6 +81,7 @@ export default function ChatPane({
   onNewSession,
   onChangeSession,
   sessionsOpenTick = 0,
+  readAloudTick = 0,
   onRefreshSession,
   daemonOffline = false,
   searchOpen = false,
@@ -94,6 +95,7 @@ export default function ChatPane({
   const [modelOverride, setModelOverride] = useState(null);
   const [refreshBeat, setRefreshBeat] = useState(0);
   const [stopping, setStopping] = useState(false);
+  const readAloudMountedRef = useRef(false);
 
   useEffect(() => {
     setModelOverride(null);
@@ -119,6 +121,31 @@ export default function ChatPane({
 
   const autoRead = !!activeDetail?.voice_auto_read;
   const ttsVoiceId = activeProfile?.voice_id ?? activeDetail?.voice_id ?? null;
+  useEffect(() => {
+    if (!readAloudMountedRef.current) {
+      readAloudMountedRef.current = true;
+      return;
+    }
+    if (readAloudTick <= 0 || view.kind !== "profile") return;
+    const turns = sessionData?.turns ?? [];
+    const turnBase = Number.isInteger(sessionData?.turnsOffset) ? sessionData.turnsOffset : 0;
+    if (currentlyPlayingKey()) {
+      stopTts();
+      return;
+    }
+    for (let i = turns.length - 1; i >= 0; i--) {
+      const text = turns[i]?.assistant;
+      if (!text) continue;
+      const key = `chat:${activeProfile?.name}:${view.sessionId ?? "new"}:${turnBase + i}`;
+      playTts({
+        key,
+        profile: activeProfile?.name,
+        voice: ttsVoiceId || VOICE_POOL[0],
+        text,
+      });
+      break;
+    }
+  }, [readAloudTick, view, sessionData, activeProfile?.name, ttsVoiceId]);
   const prevPendingRef = useRef(false);
   const lastPreviewRef = useRef("");
   // fire only on the pendingTurn truthy→null edge, never on history load
@@ -298,6 +325,7 @@ export default function ChatPane({
         />
         <SessionView
           data={sessionData}
+          connectionId={connectionId}
           profiles={profiles}
           pendingTurn={pendingTurn}
           accent={activeProfile?.accent ?? null}
@@ -342,6 +370,7 @@ export default function ChatPane({
 
 function SessionView({
   data,
+  connectionId,
   profiles,
   pendingTurn,
   accent,
@@ -361,6 +390,7 @@ function SessionView({
     <>
       <Transcript
         data={data}
+        connectionId={connectionId}
         profiles={profiles}
         pendingTurn={pendingTurn}
         accent={accent}
@@ -382,6 +412,7 @@ function SessionView({
 
 const Transcript = memo(function Transcript({
   data,
+  connectionId,
   profiles,
   pendingTurn,
   accent,
@@ -481,6 +512,7 @@ const Transcript = memo(function Transcript({
             <HistoryTurns
               turns={renderTurns}
               turnBase={turnBase}
+              connectionId={connectionId}
               profiles={profiles}
               accent={accent}
               profileName={profileName}
@@ -502,6 +534,7 @@ const Transcript = memo(function Transcript({
 const HistoryTurns = memo(function HistoryTurns({
   turns,
   turnBase = 0,
+  connectionId,
   profiles,
   accent,
   profileName,
@@ -517,6 +550,7 @@ const HistoryTurns = memo(function HistoryTurns({
         <Turn
           key={t.at ?? turnBase + i}
           turn={t}
+          connectionId={connectionId}
           profiles={profiles}
           accent={accent}
           profileName={profileName}
@@ -534,6 +568,7 @@ const HistoryTurns = memo(function HistoryTurns({
 
 const Turn = memo(function Turn({
   turn,
+  connectionId,
   profiles,
   accent,
   profileName,
@@ -726,7 +761,12 @@ const Turn = memo(function Turn({
             <ProducedImages images={imageProduced(turn.output_attachments)} />
           )}
           {nonImageProduced(turn.output_attachments).length > 0 && (
-            <AttachmentChips items={nonImageProduced(turn.output_attachments)} variant="message" />
+            <AttachmentChips
+              items={nonImageProduced(turn.output_attachments)}
+              variant="message"
+              profile={profileName}
+              connectionId={connectionId}
+            />
           )}
         </ProfileMessage>
       )}

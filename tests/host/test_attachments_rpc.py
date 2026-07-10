@@ -134,13 +134,62 @@ async def test_fetch_returns_image_base64(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_fetch_rejects_non_image(tmp_path, monkeypatch):
+async def test_fetch_returns_markdown(tmp_path, monkeypatch):
     from alpi import home as home_mod
     monkeypatch.setattr(home_mod, "_ROOT", tmp_path)
     srv = host_server.Server(home=tmp_path)
     attachments_rpc.register(srv)
-    resp = await _fetch(srv, profile="default", path=str(tmp_path / "notes.txt"))
+    stage = tmp_path / "host" / "attachments" / "tmp"
+    stage.mkdir(parents=True, exist_ok=True)
+    md = stage / "report.md"
+    md.write_text("# Report\n\nbody\n")
+    resp = await _fetch(srv, profile="default", path=str(md))
+    r = resp["result"]
+    assert r["mime"] == "text/markdown"
+    assert r["name"] == "report.md"
+    assert base64.b64decode(r["data_base64"]).decode() == "# Report\n\nbody\n"
+
+
+@pytest.mark.asyncio
+async def test_fetch_denies_non_image_under_home(tmp_path, monkeypatch):
+    # config.yaml / peers.yaml / token .json live under home but outside the
+    # workspace — non-image serving must NOT reach them (only images may).
+    from types import SimpleNamespace
+    from alpi import config as cfg_mod, home as home_mod
+    monkeypatch.setattr(home_mod, "_ROOT", tmp_path)
+    monkeypatch.setattr(cfg_mod, "load", lambda h: SimpleNamespace(workspace_path=tmp_path / "workspace"))
+    srv = host_server.Server(home=tmp_path)
+    attachments_rpc.register(srv)
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text("model: gpt\n")
+    resp = await _fetch(srv, profile="default", path=str(cfg))
+    assert resp["error"]["code"] == -32001
+
+
+@pytest.mark.asyncio
+async def test_fetch_rejects_unsupported_type(tmp_path, monkeypatch):
+    from alpi import home as home_mod
+    monkeypatch.setattr(home_mod, "_ROOT", tmp_path)
+    srv = host_server.Server(home=tmp_path)
+    attachments_rpc.register(srv)
+    p = tmp_path / "archive.zip"
+    p.write_bytes(b"PK\x03\x04")
+    resp = await _fetch(srv, profile="default", path=str(p))
     assert resp["error"]["code"] == -32602
+
+
+@pytest.mark.asyncio
+async def test_fetch_denies_secrets(tmp_path, monkeypatch):
+    from alpi import home as home_mod
+    monkeypatch.setattr(home_mod, "_ROOT", tmp_path)
+    srv = host_server.Server(home=tmp_path)
+    attachments_rpc.register(srv)
+    secret_dir = tmp_path / "secrets"
+    secret_dir.mkdir(parents=True, exist_ok=True)
+    tok = secret_dir / "gmail_token.json"
+    tok.write_text('{"token": "x"}')
+    resp = await _fetch(srv, profile="default", path=str(tok))
+    assert resp["error"]["code"] == -32001
 
 
 @pytest.mark.asyncio
