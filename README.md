@@ -70,7 +70,7 @@ The current release ships the full local-to-network shape:
 - Live skills under `~/.alpi/skills/<category>/<name>/`, scanner-gated
   and auto-injected into the system prompt.
 - Multi-provider LLM support through LiteLLM, plus first-class Ollama.
-- Read-only `research(brief, depth)` sub-agent with `quick`, `normal`,
+- Read-only `research(brief, depth)` sub-agent with `fast`, `normal`,
   and `deep` tiers.
 - Write-capable `delegate` sub-agent for focused file/web/terminal
   tasks.

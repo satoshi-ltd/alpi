@@ -271,3 +271,17 @@ def test_load_turns_preserves_v1_args_with_preview_key() -> None:
     })
 
     assert turns[0].tools[0].args == {"preview": "literal arg", "other": 1}
+
+
+def test_turn_model_round_trips_and_is_omitted_when_empty(tmp_path: Path) -> None:
+    s = Session(home=tmp_path, model="openrouter/main")
+    s.turns.append(Turn(at=1.0, user="hi", tools=[], assistant="hola",
+                        model="openrouter/deep"))
+    s.turns.append(Turn(at=2.0, user="bye", tools=[], assistant="adiós"))
+    path = s.save()
+    payload = json.loads(path.read_text())
+    assert payload["turns"][0]["model"] == "openrouter/deep"
+    assert "model" not in payload["turns"][1]
+    loaded = load_turns(payload)
+    assert loaded[0].model == "openrouter/deep"
+    assert loaded[1].model == ""

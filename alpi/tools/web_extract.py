@@ -70,6 +70,9 @@ class WebExtract(Tool):
         from alpi.home import get_home
         cfg = cfg_mod.load(get_home())
         override = cfg.tools.web_extract.model
+        override_tier = override if override in cfg_mod.TIER_NAMES else None
+        if override_tier is not None:
+            override = cfg_mod.tier_model(cfg, override_tier)
         main_kwargs = cfg_mod.resolve_model(cfg)
 
         # 3. Ask the LLM — try override first, fall back to main model on error.
@@ -87,7 +90,11 @@ class WebExtract(Tool):
             try:
                 emit_state("extracting…")
                 # resolve_model pulls the right api_key from the PROFILE's .env via the override head ("openai", "anthropic"…). `include_reasoning=False` so the profile's effort doesn't leak into a tool sub-model.
-                override_kwargs = cfg_mod.resolve_model(cfg, model=override, include_reasoning=False)
+                override_kwargs = (
+                    cfg_mod.resolve_model(cfg, tier=override_tier)
+                    if override_tier is not None
+                    else cfg_mod.resolve_model(cfg, model=override, include_reasoning=False)
+                )
                 out = llm.complete(messages=messages, **override_kwargs)
                 content = (out.content or "").strip() or "(empty extraction)"
                 return ToolResult(ok=True, output=content)

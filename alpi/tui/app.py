@@ -428,6 +428,8 @@ class AlpiApp(App):
             self._mount_message(ErrorLine(ev.text))
         elif ev.kind == "usage":
             self._update_header()
+        elif ev.kind == "routing":
+            self._mount_message(DimLine(f"⇢ {ev.text}"))
         elif ev.kind == "auto_compact":
             self._mount_message(DimLine(f"↺ {ev.text}"))
             self._update_header()

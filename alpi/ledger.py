@@ -159,6 +159,16 @@ def check(home: Path, cfg_budget: dict[str, Any] | None) -> None:
         raise BudgetExceeded(kind, cap, used)
 
 
+def spend_fraction(home: Path, cfg_budget: dict[str, Any] | None) -> float | None:
+    """Today's spend as a fraction of the daily cap; None when uncapped."""
+    kind, cap = _budget(cfg_budget)
+    if kind is None or cap <= 0:
+        return None
+    with _lock:
+        data = load(home)
+    return float(data["profile"].get(kind, 0)) / cap
+
+
 def record(
     home: Path,
     *,

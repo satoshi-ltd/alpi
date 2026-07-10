@@ -47,6 +47,89 @@ def run(cfg: cfg_mod.Config) -> None:
     ui.ok_and_wait(f"model set to [b]{model_id}[/b]")
 
 
+def tier_status(tier: cfg_mod.TierConfig) -> str:
+    if not tier.model:
+        return "(main model)"
+    return tier.model + (f" · effort {tier.effort}" if tier.effort else "")
+
+
+def tiers_status(cfg: cfg_mod.Config) -> str:
+    if not cfg.tiers.fast.model and not cfg.tiers.deep.model:
+        return "(not set — everything runs on the main model)"
+    return f"fast: {cfg.tiers.fast.model or '—'} · deep: {cfg.tiers.deep.model or '—'}"
+
+
+def run_tiers(cfg: cfg_mod.Config) -> None:
+    """Configure the fast/deep routing tiers (side-tasks, delegation, escalation)."""
+    while True:
+        items = [
+            ("Fast model", "fast",
+             f"{tier_status(cfg.tiers.fast)} — side-tasks, research(fast), delegate(fast), cron tier:fast"),
+            ("Deep model", "deep",
+             f"{tier_status(cfg.tiers.deep)} — escalation, research(deep), delegate(deep)"),
+        ]
+        choice = ui.menu(
+            "Routing tiers",
+            items,
+            subtitle="unconfigured tiers always fall back to the main model",
+            home=cfg.home,
+            close="Back",
+        )
+        if choice is None:
+            return
+        _configure_tier(cfg, choice)
+
+
+def _configure_tier(cfg: cfg_mod.Config, tier_name: str) -> None:
+    tier: cfg_mod.TierConfig = getattr(cfg.tiers, tier_name)
+    items: list[tuple[str, str, str]] = [
+        ("Pick model", "pick", tier.model or "(not set)"),
+    ]
+    if tier.model:
+        items.append(("Clear", "clear", "tier falls back to the main model"))
+    choice = ui.menu(f"{tier_name.capitalize()} tier", items, home=cfg.home, close="Back")
+    if choice == "clear":
+        setattr(cfg.tiers, tier_name, cfg_mod.TierConfig())
+        cfg_mod.save(cfg)
+        ui.ok_and_wait(f"{tier_name} tier cleared — falls back to the main model")
+        return
+    if choice != "pick":
+        return
+    provider = _pick_provider(cfg)
+    if provider is None:
+        ui.dim("No change.")
+        return
+    _ensure_key(cfg, provider)
+    model_id = _pick_model(provider, cfg)
+    if model_id is None:
+        ui.dim("No change.")
+        return
+    tier.model = model_id
+    _remember_openrouter_model(cfg, model_id)
+    tier.effort = _pick_tier_effort(cfg, model_id, tier.effort)
+    cfg_mod.save(cfg)
+    ui.ok_and_wait(f"{tier_name} tier set to [b]{model_id}[/b]")
+
+
+def _pick_tier_effort(cfg: cfg_mod.Config, model_id: str, current: str) -> str:
+    from alpi.providers.reasoning import supports_reasoning
+    if not supports_reasoning(model_id):
+        return ""
+    items = [
+        ("Default", "",       "use provider default"),
+        ("Low",     "low",    "fastest, cheapest"),
+        ("Medium",  "medium", "balanced"),
+        ("High",    "high",   "slower, more thorough"),
+    ]
+    choice = ui.menu(
+        f"Reasoning effort for {model_id}",
+        items,
+        subtitle=f"current: {current or 'default'}",
+        home=cfg.home,
+    )
+    return current if choice is None else choice
+
+
 def _pick_reasoning_effort(cfg: cfg_mod.Config, model_id: str) -> None:
     """Prompt for reasoning effort only on models that declare support."""
     from alpi.providers.reasoning import supports_reasoning

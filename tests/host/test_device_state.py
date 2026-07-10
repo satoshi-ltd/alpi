@@ -769,3 +769,96 @@ async def test_ollama_models_runs_off_the_event_loop(
     })
     assert resp["result"] == {"models": [], "errors": []}
     assert "<lambda>" in seen
+
+
+@pytest.mark.asyncio
+async def test_tier_config_set_field_validates_and_prunes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = _bootstrap(tmp_path / "h")
+    monkeypatch.setattr(host_handlers, "_resolve_home", lambda profile: home)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+
+    async def _set(key, value):
+        resp = await srv._dispatch({
+            "id": f"t-{key}-{value}",
+            "method": "host.config.set_field",
+            "params": {"profile": "default", "key": key, "value": value},
+        })
+        assert resp["result"]["ok"] is True
+
+    await _set("tiers.fast.model", "openai/o3-mini")
+    await _set("tiers.fast.effort", "low")
+    cfg = cfg_mod.load(home)
+    assert cfg.tiers.fast.model == "openai/o3-mini"
+    assert cfg.tiers.fast.effort == "low"
+
+    # Effort on a tier whose model can't reason is dropped, not stored.
+    await _set("tiers.deep.model", "openai/gpt-4o-mini")
+    await _set("tiers.deep.effort", "high")
+    assert cfg_mod.load(home).tiers.deep.effort == ""
+
+    # Swapping the tier model to a non-reasoning one auto-clears its effort.
+    await _set("tiers.fast.model", "openai/gpt-4o-mini")
+    cfg = cfg_mod.load(home)
+    assert cfg.tiers.fast.model == "openai/gpt-4o-mini"
+    assert cfg.tiers.fast.effort == ""
+
+    # Empty model clears the whole tier; clearing both prunes the tiers block.
+    await _set("tiers.fast.model", "")
+    await _set("tiers.deep.model", "")
+    cfg = cfg_mod.load(home)
+    assert cfg.tiers.fast.model == "" and cfg.tiers.deep.model == ""
+    import yaml as _yaml
+    raw = _yaml.safe_load((home / "config.yaml").read_text()) or {}
+    assert "tiers" not in raw
+
+
+@pytest.mark.asyncio
+async def test_profile_detail_exposes_tiers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = _bootstrap(tmp_path / "h")
+    cfg = cfg_mod.load(home)
+    cfg.tiers.fast = cfg_mod.TierConfig(model="openai/o3-mini", effort="low")
+    cfg_mod.save(cfg)
+
+    monkeypatch.setattr(host_handlers, "_resolve_home", lambda profile: home)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+
+    resp = await srv._dispatch({
+        "id": "detail",
+        "method": "host.profile.detail",
+        "params": {"profile": "default"},
+    })
+    tiers = resp["result"]["tiers"]
+    assert tiers["fast"] == {
+        "model": "openai/o3-mini", "effort": "low", "reasoning_supported": True,
+    }
+    assert tiers["deep"] == {"model": "", "effort": "", "reasoning_supported": False}
+
+
+@pytest.mark.asyncio
+async def test_unset_field_clears_tier_and_prunes_block(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = _bootstrap(tmp_path / "h")
+    monkeypatch.setattr(host_handlers, "_resolve_home", lambda profile: home)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+
+    await srv._dispatch({
+        "id": "set", "method": "host.config.set_field",
+        "params": {"profile": "default", "key": "tiers.fast.model", "value": "openai/o3-mini"},
+    })
+    resp = await srv._dispatch({
+        "id": "unset", "method": "host.config.unset_field",
+        "params": {"profile": "default", "key": "tiers.fast"},
+    })
+    assert resp["result"]["ok"] is True
+    assert cfg_mod.load(home).tiers.fast.model == ""
+    import yaml as _yaml
+    raw = _yaml.safe_load((home / "config.yaml").read_text()) or {}
+    assert "tiers" not in raw

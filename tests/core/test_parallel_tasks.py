@@ -99,7 +99,7 @@ def test_delegate_rejects_missing_goal() -> None:
 
 
 def test_delegate_batch_runs_and_aggregates(monkeypatch) -> None:
-    def fake_single(self, goal, context="", toolsets=None):
+    def fake_single(self, goal, context="", toolsets=None, tier="main"):
         return ToolResult(ok=True, output=f"did: {goal}")
 
     monkeypatch.setattr(Delegate, "_run_single", fake_single)
@@ -118,7 +118,7 @@ def test_delegate_batch_uses_per_task_emit(monkeypatch) -> None:
     emits: list[str] = []
     S.set_emit(lambda label, err: emits.append(label))
 
-    def fake_single(self, goal, context="", toolsets=None):
+    def fake_single(self, goal, context="", toolsets=None, tier="main"):
         S.emit_state("inside")
         return ToolResult(ok=True, output="ok")
 

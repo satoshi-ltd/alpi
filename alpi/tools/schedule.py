@@ -152,6 +152,17 @@ class Schedule(Tool):
                     "jobs must be short."
                 ),
             },
+            "tier": {
+                "type": "string",
+                "enum": ["fast", "main", "deep"],
+                "description": (
+                    "Model tier the fired agent turn runs on (profiles with "
+                    "`tiers` configured). fast = cheap routine jobs (digests, "
+                    "syncs), main = default, deep = heavy reasoning jobs. "
+                    "Unconfigured tiers run on the main model. On update, "
+                    "pass 'main' to remove a previously set tier."
+                ),
+            },
         },
         "required": ["action"],
     }
@@ -166,8 +177,17 @@ class Schedule(Tool):
             paused: bool | None = None,
             no_agent: bool | None = None,
             title: str | None = None,
-            timeout: int | None = None) -> ToolResult:
+            timeout: int | None = None,
+            tier: str | None = None) -> ToolResult:
         home = get_home()
+
+        if tier is not None:
+            tier = tier.strip().lower()
+            if tier not in ("fast", "main", "deep"):
+                return ToolResult(
+                    ok=False, output="",
+                    error=f"unknown tier: {tier!r}. Use fast, main, or deep.",
+                )
 
         if action == "list":
             try:
@@ -203,6 +223,8 @@ class Schedule(Tool):
             }
             if no_agent:
                 job["no_agent"] = True
+            if tier and tier != "main":
+                job["tier"] = tier
             if title and title.strip():
                 job["title"] = title.strip()
             if timeout is not None:
@@ -322,6 +344,12 @@ class Schedule(Tool):
                 if paused is not None:
                     job["paused"] = bool(paused)
                     changes.append("paused")
+                if tier is not None:
+                    if tier == "main":
+                        job.pop("tier", None)
+                    else:
+                        job["tier"] = tier
+                    changes.append("tier")
                 if no_agent is not None:
                     if no_agent:
                         if not was_no_agent:

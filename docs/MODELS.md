@@ -145,10 +145,22 @@ model for a profile that depends on skills:
 
 ## Production setups
 
-alpi currently selects one primary model per profile. `fallback_models`
-exists in config, but do not rely on automatic runtime escalation unless
-your installed version explicitly implements it. Use profiles to split
-roles today:
+alpi selects one primary model per profile, with optional dynamic
+routing around it (see `docs/CONFIG.md` → `tiers` / `fallback_models`):
+
+- `tiers.fast` — a cheap model for bounded side-work: compaction
+  summaries, the memory reviewer, bio drafting, `research(depth=fast)`,
+  and `delegate` / scheduled jobs that opt into `tier: fast`.
+- `tiers.deep` — a stronger model for `research(depth=deep)`,
+  `delegate(tier=deep)`, and reactive escalation: after 3 consecutive
+  tool failures or an empty reply the turn escalates once (effort→high
+  on the same model first, else the deep tier), never past 80% of
+  `budget.daily_usd`.
+- `fallback_models` — availability chain when the active model fails
+  before producing output (provider down, credits exhausted).
+
+Unconfigured tiers always resolve to the main model, so none of this
+changes behavior until you opt in. Profiles still split roles best:
 
 - **Personal skill-heavy profile**: owl-alpha, DeepSeek V4 Pro,
   MiMo V2.5 Pro, or Sonnet 4.6.

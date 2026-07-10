@@ -121,3 +121,50 @@ describe("ChatPane — model override is connection-scoped", () => {
     expect(screen.queryByText("prov/other")).toBeNull();
   });
 });
+
+describe("ChatPane — per-turn model badge", () => {
+  it("shows the routed model when a turn ran on a different model than the profile", () => {
+    invoke.mockImplementation(async () => null);
+    renderPane(
+      { name: "a", model: "openrouter/main" },
+      {
+        turns: [
+          { user: "hi", assistant: "rescued", at: 0, model: "openrouter/deep" },
+        ],
+      },
+    );
+    const badge = screen.getByTitle("Ran on openrouter/deep");
+    expect(badge.textContent).toBe("deep");
+  });
+
+  it("uses the session's model as baseline, not the profile's current one", () => {
+    invoke.mockImplementation(async () => null);
+    renderPane(
+      { name: "a", model: "openrouter/new-default" },
+      {
+        model: "openrouter/old-default",
+        turns: [
+          { user: "hi", assistant: "historic reply", at: 0, model: "openrouter/old-default" },
+          { user: "hard", assistant: "escalated reply", at: 1, model: "openrouter/deep" },
+        ],
+      },
+    );
+    // Same model as the session baseline: no badge even though the profile default changed since.
+    expect(screen.queryByTitle("Ran on openrouter/old-default")).toBeNull();
+    expect(screen.getByTitle("Ran on openrouter/deep")).toBeTruthy();
+  });
+
+  it("hides the badge when the turn ran on the profile model", () => {
+    invoke.mockImplementation(async () => null);
+    renderPane(
+      { name: "a", model: "openrouter/main" },
+      {
+        turns: [
+          { user: "hi", assistant: "yo", at: 0, model: "openrouter/main" },
+          { user: "old", assistant: "turn without model", at: 1 },
+        ],
+      },
+    );
+    expect(screen.queryByTitle(/^Ran on /)).toBeNull();
+  });
+});

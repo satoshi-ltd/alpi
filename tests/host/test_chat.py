@@ -847,3 +847,61 @@ async def test_data_chat_send_same_session_id_on_another_profile_is_not_busy(
     assert not any(e.get("event") == "error" and e.get("code") == "busy" for e in events), events
     assert "reply" in kinds and "done" in kinds, kinds
     assert dc.session_key("profile-a", "shared-sid") in dc._session_active
+
+
+@pytest.mark.asyncio
+async def test_data_chat_send_forwards_routing_and_reply_model(
+    monkeypatch, short_tmp: Path,
+) -> None:
+    home = short_tmp / "h"
+    home.mkdir()
+    load_or_generate(home)
+
+    class _RoutingEngine(_FakeEngine):
+        def run_turn(self, text, emit, **kwargs) -> None:  # noqa: ANN001
+            from alpi.engine import AgentEvent
+
+            emit(AgentEvent(
+                kind="routing", model="openrouter/deep",
+                text="escalated to openrouter/deep (3 consecutive tool failures)",
+            ))
+            emit(AgentEvent(kind="assistant_done", text="rescued", final=True))
+
+    from alpi import config as cfg_mod
+    monkeypatch.setattr(cfg_mod, "load", lambda h: SimpleNamespace(model="x"))
+    import alpi.engine
+    monkeypatch.setattr(alpi.engine, "Engine", _RoutingEngine)
+    from alpi.host import chat as dc
+    monkeypatch.setattr(dc, "_resolve_home", lambda profile: home)
+
+    srv = host_server.Server(home=home)
+    data_handlers.register(srv)
+    dc.register(srv)
+    await srv.start()
+
+    try:
+        reader, writer = await asyncio.open_unix_connection(str(srv.socket_path()))
+        writer.write((json.dumps({
+            "id": "req-rt",
+            "method": "host.chat.send",
+            "params": {"profile": "default", "text": "hi", "request_id": "req-rt"},
+        }) + "\n").encode("utf-8"))
+        await writer.drain()
+
+        events: list[dict] = []
+        while True:
+            line = await reader.readline()
+            if not line:
+                break
+            events.append(json.loads(line))
+        writer.close()
+        await writer.wait_closed()
+    finally:
+        await srv.stop()
+
+    routing = next(e for e in events if e.get("event") == "routing")
+    assert routing["model"] == "openrouter/deep"
+    assert "escalated" in routing["text"]
+    reply = next(e for e in events if e.get("event") == "reply")
+    assert reply["model_used"] == "openrouter/deep"
+    assert reply["text"] == "rescued"

@@ -161,3 +161,19 @@ export function scheduleSummary(j) {
   if (j.kind === "inactivity") return `after ${j.after_hours ?? "?"}h`;
   return j.kind || "?";
 }
+
+export function providerPills(profile, ollamaErrors = []) {
+  const errByName = new Map((ollamaErrors ?? []).map((e) => [e.name, e]));
+  const cloud = (profile.provider_keys ?? []).map((k) => ({
+    label: String(k.env || "").replace(/_API_KEY$/, "").toLowerCase(),
+    error: null,
+  }));
+  const ollama = (profile.provider_ollama ?? []).map((o) => {
+    const err = errByName.get(o.name) ?? null;
+    return {
+      label: `ollama/${o.name}`,
+      error: err ? `${err.url} — ${err.detail}` : null,
+    };
+  });
+  return [...cloud, ...ollama].filter((p) => p.label);
+}

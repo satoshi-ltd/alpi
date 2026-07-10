@@ -46,6 +46,24 @@ TOOL_TRUNCATE_KEEP_TAIL_CHARS = 4_000
 # squeeze the summarizer below this.
 MIN_SUMMARY_OUTPUT_TOKENS = 800
 
+# COMPACT_PROMPT + user-wrapper tokens reserved when fitting input to the summarizer.
+SUMMARY_PROMPT_OVERHEAD_TOKENS = 800
+
+
+def clip_transcript(transcript: str, budget_tokens: int) -> str:
+    """Fit the summarizer's (possibly much smaller) window; the tail wins — recent context first."""
+    max_chars = max(500, budget_tokens) * CHARS_PER_TOKEN
+    if len(transcript) <= max_chars:
+        return transcript
+    head = max_chars // 4
+    tail = max_chars - head
+    dropped = len(transcript) - head - tail
+    return (
+        transcript[:head]
+        + f"\n\n[... {dropped} chars elided to fit the summarizer window ...]\n\n"
+        + transcript[-tail:]
+    )
+
 
 CANDIDATE_PROMPT = (
     "You are reading a dense briefing produced by an auto-compaction pass over "
@@ -530,6 +548,9 @@ __all__ = [
     "CandidateLLM",
     "CompactionPolicy",
     "CompactionResult",
+    "MIN_SUMMARY_OUTPUT_TOKENS",
+    "SUMMARY_PROMPT_OVERHEAD_TOKENS",
+    "clip_transcript",
     "compact",
     "emit_candidates_from_summary",
     "estimate_message_tokens",

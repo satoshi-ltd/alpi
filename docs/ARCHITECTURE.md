@@ -140,7 +140,7 @@ alpi/
 │   ├── _sandbox.py         OS-level sandbox wrapper (opt-in)
 │   ├── skill.py            create/edit/patch/add_file/remove_file/delete/list/view + scanner + quota
 │   ├── search.py           content + filename search (rg + stdlib fallback)
-│   ├── research.py         read-only sub-agent (depth: quick/normal/deep)
+│   ├── research.py         read-only sub-agent (depth: fast/normal/deep)
 │   ├── terminal.py         run/background/status/output/kill
 │   ├── notify.py           native push to the owner's apps
 │   └── … (read_file, write_file, edit_file, todo, web_*, schedule,
@@ -355,7 +355,7 @@ Frontmatter (auto-populated on `create`): `name`, `description`, `category`, `ve
 
 Spawns a sub-agent with a read-only toolset (`web_search`, `web_fetch`, `web_extract`, `read_file`, `search`). Returns a single synthesised report; the main agent never sees the intermediate tool trace.
 
-**Depth tiers** instead of a numeric `max_steps`: `depth="quick"|"normal"|"deep"`. The integer per tier comes from `tools.research.{quick,normal,deep}_steps` in `config.yaml` (defaults 8 / 15 / 30). Locks the model to three buckets (quick = single-answer, normal = comparative, deep = exhaustive) while letting the user re-tune all three from one place.
+**Depth tiers** instead of a numeric `max_steps`: `depth="fast"|"normal"|"deep"`. The step ceilings are product constants (`DEPTH_STEPS_DEFAULTS`, 8 / 15 / 30). Locks the model to three buckets (fast = single-answer, normal = comparative, deep = exhaustive); `fast` and `deep` double as the model-tier names, so a depth also picks the matching tier when the profile configures one.
 
 **Synthesis fallback**: when the budget runs out, research forces one final no-tools `llm.complete()` with "stop investigating, report now". Avoids the "[research gave up]" footgun where the main agent retries the whole thing.
 

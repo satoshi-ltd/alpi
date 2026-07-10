@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { mergeStreamingTurn, isInterruptedTurn, isLastTurnInFlight, autoReadText, consumeAutoRead } from './chatTurns.js';
+import { mergeStreamingTurn, isInterruptedTurn, isLastTurnInFlight, autoReadText, consumeAutoRead, routedModelFor, baselineModelFor } from './chatTurns.js';
 
 describe('mergeStreamingTurn', () => {
   it('returns turns unchanged when there is no pendingTurn', () => {
@@ -133,5 +133,27 @@ describe('consumeAutoRead', () => {
   it('clears the streamed reply but speaks nothing when auto-read is off — so it can\'t go stale across turns', () => {
     expect(consumeAutoRead('stale reply', false, [{ assistant: 'prev' }]))
       .toEqual({ speak: '', nextStreamed: '' });
+  });
+});
+
+describe('routedModelFor', () => {
+  it('returns the short model name when the turn ran on a different model', () => {
+    expect(routedModelFor({ model: 'openrouter/deep' }, 'openrouter/main')).toBe('deep');
+  });
+
+  it('returns null when the turn ran on the profile model, has no model, or the profile model is unknown', () => {
+    expect(routedModelFor({ model: 'openrouter/main' }, 'openrouter/main')).toBeNull();
+    expect(routedModelFor({ user: 'old turn' }, 'openrouter/main')).toBeNull();
+    expect(routedModelFor({ model: 'openrouter/deep' }, null)).toBeNull();
+    expect(routedModelFor(null, 'openrouter/main')).toBeNull();
+  });
+});
+
+describe('baselineModelFor', () => {
+  it('prefers the session model over the profile default so history survives model switches', () => {
+    expect(baselineModelFor({ model: 'openrouter/old' }, 'openrouter/new')).toBe('openrouter/old');
+    expect(baselineModelFor({}, 'openrouter/new')).toBe('openrouter/new');
+    expect(baselineModelFor(null, 'openrouter/new')).toBe('openrouter/new');
+    expect(baselineModelFor(null, null)).toBeNull();
   });
 });

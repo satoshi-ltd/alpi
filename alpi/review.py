@@ -127,7 +127,7 @@ def _run_review(home: Path, cfg: cfg_mod.Config, snapshot: list[dict]) -> int:
         *history,
         {"role": "user", "content": "Run the review now."},
     ]
-    call_kwargs = cfg_mod.resolve_model(cfg)
+    call_kwargs = cfg_mod.resolve_model(cfg, tier="fast")
     try:
         out = llm.complete(
             messages=messages, tools=[schema], **call_kwargs

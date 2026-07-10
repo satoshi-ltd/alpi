@@ -96,6 +96,17 @@ class Delegate(Tool):
         "The sub-agent CANNOT call: delegate (no recursion), memory, "
         "skill, schedule, email, session_search, session_read.\n"
         "\n"
+        "`tier` picks the sub-agent's model when the profile configures "
+        "model tiers:\n"
+        "  - fast — mechanical, bounded work (bulk file edits, format "
+        "conversions, scripted pipelines, simple fetch+write)\n"
+        "  - main — default; anything needing judgment or multi-step "
+        "reasoning\n"
+        "  - deep — only for genuinely hard reasoning (subtle debugging, "
+        "tricky refactors)\n"
+        "Unconfigured tiers silently run on the main model, so prefer "
+        "`fast` whenever the goal is mechanical.\n"
+        "\n"
         "IMPORTANT: the sub-agent knows nothing about your conversation. "
         "Pass every relevant fact (file paths, error messages, decisions, "
         "project structure) via `context`.\n"
@@ -128,6 +139,15 @@ class Delegate(Tool):
                     "Capabilities the sub-agent gets. Default: ['file', 'web']."
                 ),
             },
+            "tier": {
+                "type": "string",
+                "enum": ["fast", "main", "deep"],
+                "default": "main",
+                "description": (
+                    "Model tier for the sub-agent. fast = mechanical bounded "
+                    "work, main = default, deep = hard reasoning only."
+                ),
+            },
             "tasks": {
                 "type": "array",
                 "items": {
@@ -138,6 +158,10 @@ class Delegate(Tool):
                         "toolsets": {
                             "type": "array",
                             "items": {"type": "string"},
+                        },
+                        "tier": {
+                            "type": "string",
+                            "enum": ["fast", "main", "deep"],
                         },
                     },
                     "required": ["goal"],
@@ -156,6 +180,7 @@ class Delegate(Tool):
         goal: str = "",
         context: str = "",
         toolsets: list[str] | None = None,
+        tier: str = "main",
         tasks: list[dict] | None = None,
     ) -> ToolResult:
         if tasks:
@@ -165,7 +190,7 @@ class Delegate(Tool):
                 ok=False, output="",
                 error="'goal' required when not using 'tasks'",
             )
-        return self._run_single(goal, context, toolsets)
+        return self._run_single(goal, context, toolsets, tier)
 
     def _run_batch(self, tasks: list[dict]) -> ToolResult:
         if len(tasks) > MAX_PARALLEL_TASKS:
@@ -202,6 +227,7 @@ class Delegate(Tool):
                 task["goal"],
                 task.get("context", ""),
                 task.get("toolsets"),
+                task.get("tier", "main"),
             )
 
         with ThreadPoolExecutor(max_workers=min(MAX_PARALLEL_TASKS, total)) as ex:
@@ -221,9 +247,16 @@ class Delegate(Tool):
         goal: str,
         context: str = "",
         toolsets: list[str] | None = None,
+        tier: str = "main",
     ) -> ToolResult:
         from alpi.tools import execute, schemas as all_schemas
 
+        tier = (tier or "main").strip().lower()
+        if tier not in ("fast", "main", "deep"):
+            return ToolResult(
+                ok=False, output="",
+                error=f"unknown tier: {tier!r}. Use fast, main, or deep.",
+            )
         tool_names, unknown = _resolve_tools(toolsets)
         if unknown:
             return ToolResult(
@@ -238,7 +271,7 @@ class Delegate(Tool):
             )
 
         cfg = cfg_mod.load(get_home())
-        call_kwargs = cfg_mod.resolve_model(cfg)
+        call_kwargs = cfg_mod.resolve_model(cfg, tier=tier)
 
         tools_schema = [
             s for s in all_schemas()

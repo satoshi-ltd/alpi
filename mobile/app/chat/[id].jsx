@@ -19,7 +19,7 @@ import { retryTextFor } from '../../src/features/chat/messageActions';
 import { visibleWindow } from '../../src/lib/chatWindow';
 import { compactProducedTool } from '../../src/lib/producedAttachments';
 import { profileLabel } from '../../src/lib/profileLabel';
-import { mergeStreamingTurn, isInterruptedTurn, isLastTurnInFlight, consumeAutoRead } from '../../src/features/chat/chatTurns';
+import { mergeStreamingTurn, isInterruptedTurn, isLastTurnInFlight, consumeAutoRead, routedModelFor, baselineModelFor } from '../../src/features/chat/chatTurns';
 import { ChatSkeleton } from '../../src/features/chat/ChatSkeleton';
 import { ToolCallGroup, groupConsecutiveTools } from '../../src/features/chat/ToolCallRow';
 import { askUserNoAnswerTag } from '../../src/features/chat/askUserAnswer';
@@ -56,13 +56,14 @@ const TURN_STYLES = StyleSheet.create({
   tools: { gap: space.s1 },
   error: { paddingHorizontal: space.s7 },
   unfinished: { paddingHorizontal: space.s7 },
+  routedModel: { paddingHorizontal: space.s7 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: space.s10, gap: space.s10 },
   emptyTextWrap: { gap: space.s4, alignItems: 'center' },
   emptyHeading: { fontSize: fontSizes["2xl"], lineHeight: 26, letterSpacing: -0.018 * 22, textAlign: 'center' },
   emptyModel: { fontSize: fontSizes.sm, textAlign: 'center' },
 });
 
-const TurnBlock = memo(function TurnBlock({ turn, turnIndex, profileName, accent, colors, fonts, fontSizes, onActionTarget, inFlight = false }) {
+const TurnBlock = memo(function TurnBlock({ turn, turnIndex, profileName, profileModel, accent, colors, fonts, fontSizes, onActionTarget, inFlight = false }) {
   const ts = turn.at ? relativeTime(turn.at * 1000) : '';
   const askUsers = (turn.tools ?? []).filter((t) => t.name === 'ask_user');
   const askUserAnswers = askUsers
@@ -76,6 +77,7 @@ const TurnBlock = memo(function TurnBlock({ turn, turnIndex, profileName, accent
   // Suppress only on exact echo; useful commentary after cancel/timeout/no-handler stays visible.
   const assistantEchoesAsk = lastAnswer && turn.assistant?.trim() === lastAnswer;
   const showAssistant = (!!turn.assistant || turn.output_attachments?.length > 0) && !assistantEchoesAsk;
+  const routedModel = routedModelFor(turn, profileModel);
   const steps = reasoningSteps(turn, { active: turn.pending && !showAssistant });
   return (
     <View style={TURN_STYLES.block}>
@@ -138,6 +140,11 @@ const TurnBlock = memo(function TurnBlock({ turn, turnIndex, profileName, accent
             turnIndex,
           })}
         />
+      ) : null}
+      {showAssistant && routedModel ? (
+        <Text style={[TURN_STYLES.routedModel, { color: colors.ink3, fontFamily: fonts.mono, fontSize: fontSizes.xs }]}>
+          ⇢ {routedModel}
+        </Text>
       ) : null}
       {isInterruptedTurn(turn) ? (
         <Text style={[TURN_STYLES.unfinished, { color: colors.ink3, fontFamily: fonts.mono, fontSize: fontSizes.xs }]}>
@@ -246,6 +253,7 @@ function ChatList({ turns, pendingTurn, loading, hydrating, profileName, model, 
         turn={item.turn}
         turnIndex={item.turnIndex}
         profileName={profileName}
+        profileModel={model}
         accent={accent}
         colors={colors}
         fonts={fonts}
@@ -254,7 +262,7 @@ function ChatList({ turns, pendingTurn, loading, hydrating, profileName, model, 
         inFlight={lastTurnInFlight && item.turnIndex === lastTurnIndex}
       />
     ),
-    [profileName, accent, colors, fonts, fontSizes, onActionTarget, lastTurnInFlight, lastTurnIndex],
+    [profileName, model, accent, colors, fonts, fontSizes, onActionTarget, lastTurnInFlight, lastTurnIndex],
   );
 
   if ((loading || hydrating) && full.length === 0) {
@@ -633,7 +641,7 @@ function ProfileChatInner() {
             loading={session.loading}
             hydrating={hydrating}
             profileName={profile.name}
-            model={profile.model}
+            model={baselineModelFor(sessionData, profile.model)}
             accent={accent}
             onActionTarget={setActionTarget}
             colors={colors}

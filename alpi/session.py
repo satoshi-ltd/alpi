@@ -46,6 +46,7 @@ class Turn:
     attachments: list[dict[str, Any]] = field(default_factory=list)  # bytes-free; carries a best-effort local path (may be unfetchable cross-client / post-TTL)
     output_attachments: list[dict[str, Any]] = field(default_factory=list)  # bytes-free; carries a best-effort local path (may be unfetchable cross-client / post-TTL)
     interrupted: bool = False
+    model: str = ""  # may differ from Session.model after escalation/fallback routing
 
 
 @dataclass
@@ -159,6 +160,8 @@ def _serialize_turn_v2(t: Turn, *, redact) -> dict[str, Any]:  # noqa: ANN001
         row["output_attachments"] = redact(t.output_attachments)
     if t.interrupted:
         row["interrupted"] = True
+    if t.model:
+        row["model"] = t.model
     return row
 
 
@@ -308,6 +311,7 @@ def load_turns(data: dict[str, Any]) -> list[Turn]:
             attachments=list(t.get("attachments") or []),
             output_attachments=list(t.get("output_attachments") or []),
             interrupted=bool(t.get("interrupted")),
+            model=str(t.get("model", "") or ""),
         ))
     return out
 

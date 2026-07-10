@@ -18,7 +18,8 @@
 | Field | Meaning |
 |---|---|
 | `model` | Primary LiteLLM model string. |
-| `fallback_models` | Stored fallback model strings. |
+| `fallback_models` | Availability chain — retried in order when the active model fails before producing output. |
+| `tiers` | Optional `fast` / `deep` `{model, effort}` slots for dynamic routing; unconfigured tiers resolve to `model`. |
 | `workspace` | Default project root for file/terminal tools. |
 | `budget` | Daily spend limit (USD or tokens, mutually exclusive). |
 | `providers` | Provider-specific saved endpoints/choices. |

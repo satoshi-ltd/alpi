@@ -34,6 +34,7 @@ vi.mock("./fields/agent.jsx", () => ({
   McpField: () => null,
   ModelField: () => null,
   ReasoningEffortField: () => null,
+  TierField: () => null,
   VoiceField: () => null,
 }));
 vi.mock("./fields/alp.jsx", () => ({
@@ -72,5 +73,40 @@ describe("ProfileDetail", () => {
     );
 
     expect(screen.getByRole("progressbar", { name: "Fetching latest settings" })).toBeInTheDocument();
+  });
+});
+
+describe("ProfileDetail — routing tiers gating", () => {
+  it("shows tier rows only when the daemon reports tiers in profile.detail", () => {
+    Object.assign(stableDetail, {
+      models: ["openrouter/main"],
+      tiers: {
+        fast: { model: "", effort: "", reasoning_supported: false },
+        deep: { model: "", effort: "", reasoning_supported: false },
+      },
+    });
+    const first = render(
+      <ProfileDetail
+        profile={{ name: "pulse" }}
+        profiles={[]}
+        activeConnection={{ id: "remote" }}
+      />,
+    );
+    expect(screen.getByText("providers")).toBeInTheDocument();
+    expect(screen.getByText("fast model")).toBeInTheDocument();
+    expect(screen.getByText("deep model")).toBeInTheDocument();
+    first.unmount();
+
+    // Old daemon: detail has models but no tiers key — rows must not render.
+    delete stableDetail.tiers;
+    render(
+      <ProfileDetail
+        profile={{ name: "pulse" }}
+        profiles={[]}
+        activeConnection={{ id: "remote" }}
+      />,
+    );
+    expect(screen.queryByText("fast model")).toBeNull();
+    delete stableDetail.models;
   });
 });

@@ -438,6 +438,8 @@ const Transcript = memo(function Transcript({
   onCloseSearch,
 }) {
   const allTurns = data?.turns ?? [];
+  // session model, not current profile default: a model swap must not repaint history as routed
+  const baseModel = data?.model || profileModel || null;
   const turnBase = Number.isInteger(data?.turnsOffset) ? data.turnsOffset : 0;
   const cut = rewriteCut({ pendingTurn, rewriteDraft, profileName, sessionId });
   const cutTurns = cut != null ? allTurns.slice(0, Math.max(0, cut - turnBase)) : allTurns;
@@ -522,6 +524,7 @@ const Transcript = memo(function Transcript({
               turns={renderTurns}
               turnBase={turnBase}
               connectionId={connectionId}
+              baseModel={baseModel}
               profiles={profiles}
               accent={accent}
               profileName={profileName}
@@ -544,6 +547,7 @@ const HistoryTurns = memo(function HistoryTurns({
   turns,
   turnBase = 0,
   connectionId,
+  baseModel,
   profiles,
   accent,
   profileName,
@@ -560,6 +564,7 @@ const HistoryTurns = memo(function HistoryTurns({
           key={t.at ?? turnBase + i}
           turn={t}
           connectionId={connectionId}
+          baseModel={baseModel}
           profiles={profiles}
           accent={accent}
           profileName={profileName}
@@ -578,6 +583,7 @@ const HistoryTurns = memo(function HistoryTurns({
 const Turn = memo(function Turn({
   turn,
   connectionId,
+  baseModel,
   profiles,
   accent,
   profileName,
@@ -629,6 +635,8 @@ const Turn = memo(function Turn({
     if (await copyText(text)) notify({ message: "Message copied", variant: "success" });
     else notify({ message: "Copy failed", variant: "error" });
   };
+  const routedModel =
+    turn.model && baseModel && turn.model !== baseModel ? turn.model : null;
   return (
     <div className={styles.turn}>
       {turn.user && (
@@ -755,6 +763,14 @@ const Turn = memo(function Turn({
                   <>
                     <span className={styles.agentMetaSep}>·</span>
                     <Mono className="tnum">${turn.cost.toFixed(4)}</Mono>
+                  </>
+                )}
+                {routedModel && (
+                  <>
+                    <span className={styles.agentMetaSep}>·</span>
+                    <span className={styles.agentMetaModel} title={`Ran on ${routedModel}`}>
+                      <Mono>{routedModel.split("/").pop()}</Mono>
+                    </span>
                   </>
                 )}
               </span>

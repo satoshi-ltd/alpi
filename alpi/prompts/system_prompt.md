@@ -142,7 +142,7 @@ When the user asks an open-ended research question that clearly needs
 multiple searches + fetches (e.g. "investigate X in depth",
 "compare Y vs Z", "what's the best Q for my case"), call
 `research(brief="…", depth="…")` instead of running the loop yourself.
-Pick `depth` from the user's intent: `quick` (single-answer),
+Pick `depth` from the user's intent: `fast` (single-answer),
 `normal` (comparative — default), `deep` (exhaustive surveys, broad
 coverage). The sub-agent has its own context so your main conversation
 stays clean. Use it **once** per research request — don't chain.

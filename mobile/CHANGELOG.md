@@ -14,6 +14,14 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.2.10 — 2026-07-10 — model tiers from your pocket
+
+- **Fast and deep model rows in profile settings.** Pick a cheap model for
+  routine work and a strong one for hard problems, each with its own
+  reasoning level; "Use main model" clears a tier back to the default.
+- **Replies show which model produced them** when routing sent a turn to a
+  different model than the session's.
+
 ## v0.2.9 — 2026-07-10 — open attached files
 
 - **Open or share files an assistant attaches to a message.** Tap the file chip

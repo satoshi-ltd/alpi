@@ -959,3 +959,53 @@ def test_emit_schedule_event_push_uses_job_title_and_clean_body(tmp_home_no_env:
     msg = next(p for (k, p) in calls if k == "agent.message")
     assert msg["title"] == "Salud · recuperación"
     assert "✅" not in msg["body"] and "Recuperación al 43%" in msg["body"]
+
+
+def test_cron_tool_add_with_tier_persists_it(tmp_home_no_env: Path) -> None:
+    out = Schedule().run(action="add", kind="cron", expression="0 4 * * *",
+                         prompt="nightly digest", tier="fast")
+    assert out.ok
+    data = json.loads((tmp_home_no_env / "schedule" / "jobs.json").read_text())
+    assert data[0]["tier"] == "fast"
+
+
+def test_cron_tool_add_default_has_no_tier(tmp_home_no_env: Path) -> None:
+    out = Schedule().run(action="add", kind="cron", expression="0 4 * * *",
+                         prompt="nightly digest")
+    assert out.ok
+    data = json.loads((tmp_home_no_env / "schedule" / "jobs.json").read_text())
+    assert "tier" not in data[0]
+
+
+def test_cron_tool_add_rejects_unknown_tier(tmp_home_no_env: Path) -> None:
+    out = Schedule().run(action="add", kind="cron", expression="0 4 * * *",
+                         prompt="nightly digest", tier="turbo")
+    assert not out.ok
+    assert "tier" in out.error
+
+
+def test_cron_tool_update_tier_main_removes_it(tmp_home_no_env: Path) -> None:
+    Schedule().run(action="add", kind="cron", expression="0 4 * * *",
+                   prompt="nightly digest", tier="deep")
+    data = json.loads((tmp_home_no_env / "schedule" / "jobs.json").read_text())
+    job_id = data[0]["id"]
+    out = Schedule().run(action="update", id=job_id, tier="main")
+    assert out.ok and "tier" in out.output
+    data = json.loads((tmp_home_no_env / "schedule" / "jobs.json").read_text())
+    assert "tier" not in data[0]
+
+
+def test_run_job_passes_tier_to_child_env(tmp_home_no_env: Path, monkeypatch) -> None:
+    captured: dict = {}
+
+    def fake_run(argv, env=None, **kw):
+        captured["env"] = env or {}
+        return _fake_completed(rc=0, stdout="")
+
+    monkeypatch.setattr(scheduler.subprocess, "run", fake_run)
+    scheduler.run_job({"id": "jt", "kind": "cron", "prompt": "go", "tier": "fast"},
+                      tmp_home_no_env)
+    assert captured["env"]["ALPI_TIER"] == "fast"
+
+    scheduler.run_job({"id": "jt2", "kind": "cron", "prompt": "go"}, tmp_home_no_env)
+    assert "ALPI_TIER" not in captured["env"]

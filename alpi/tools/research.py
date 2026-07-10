@@ -21,7 +21,8 @@ SUB_AGENT_TOOLS = {
     "read_file", "search",
 }
 
-DEPTH_STEPS_DEFAULTS = {"quick": 8, "normal": 15, "deep": 30}
+DEPTH_STEPS_DEFAULTS = {"fast": 8, "normal": 15, "deep": 30}
+# fast/deep double as tier names; normal (and unconfigured tiers) resolve to the main model.
 
 SYSTEM_PROMPT = """\
 You are a research sub-agent. You were spawned by the main agent to go
@@ -55,16 +56,17 @@ class Research(Tool):
         "It returns a single final report — you do not see "
         "its intermediate tool trace.\n"
         "\n"
-        "Pick `depth` based on the user's intent:\n"
-        "  - quick   — single-answer lookups (\"find docs for X\", \"what's\n"
-        "              the syntax of Y\"). Fastest, cheapest.\n"
-        "  - normal  — comparative / multi-source research (\"compare X\n"
-        "              vs Y\", \"free APIs for Z\"). Default.\n"
-        "  - deep    — exhaustive surveys (\"comprehensive analysis of X\",\n"
-        "              \"survey state of the art for Y\", \"haz un estudio\n"
-        "              profundo sobre Z\"). Most tokens, most wall time.\n"
+        "Pick `depth` based on the user's intent (depth also picks the "
+        "model tier of the same name, when the profile configures tiers):\n"
+        "  - fast  — single-answer lookups (\"find docs for X\", \"what's\n"
+        "            the syntax of Y\"). Fastest, cheapest.\n"
+        "  - normal — comparative / multi-source research (\"compare X\n"
+        "            vs Y\", \"free APIs for Z\"). Default.\n"
+        "  - deep  — exhaustive surveys (\"comprehensive analysis of X\",\n"
+        "            \"survey state of the art for Y\", \"haz un estudio\n"
+        "            profundo sobre Z\"). Most tokens, most wall time.\n"
         "\n"
-        "Iteration ceilings per depth (quick=8, normal=15, deep=30) are "
+        "Iteration ceilings per depth (fast=8, normal=15, deep=30) are "
         "internal — pick the depth name, never a step count.\n"
         "\n"
         "For multiple independent investigations, pass `tasks: [{brief, depth}]` "
@@ -79,10 +81,10 @@ class Research(Tool):
             },
             "depth": {
                 "type": "string",
-                "enum": ["quick", "normal", "deep"],
+                "enum": ["fast", "normal", "deep"],
                 "default": "normal",
                 "description": (
-                    "Budget tier. quick = single-answer, normal = "
+                    "Budget + model tier. fast = single-answer, normal = "
                     "comparative, deep = exhaustive."
                 ),
             },
@@ -94,7 +96,7 @@ class Research(Tool):
                         "brief": {"type": "string"},
                         "depth": {
                             "type": "string",
-                            "enum": ["quick", "normal", "deep"],
+                            "enum": ["fast", "normal", "deep"],
                         },
                     },
                     "required": ["brief"],
@@ -171,6 +173,7 @@ class Research(Tool):
     def _run_single(self, brief: str, depth: str = "normal") -> ToolResult:
         from alpi.tools import execute, schemas as all_schemas
 
+        depth = (depth or "normal").strip().lower()
         if depth not in DEPTH_STEPS_DEFAULTS:
             return ToolResult(
                 ok=False, output="",
@@ -178,7 +181,7 @@ class Research(Tool):
             )
 
         cfg = cfg_mod.load(get_home())
-        call_kwargs = cfg_mod.resolve_model(cfg)
+        call_kwargs = cfg_mod.resolve_model(cfg, tier=depth)
         max_steps = _resolve_depth(cfg, depth)
 
         tools_schema = [

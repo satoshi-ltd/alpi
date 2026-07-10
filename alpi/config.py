@@ -12,6 +12,10 @@ import yaml
 DEFAULT_CONFIG: dict[str, Any] = {
     "model": "",
     "fallback_models": [],
+    "tiers": {
+        "fast": {"model": "", "effort": ""},
+        "deep": {"model": "", "effort": ""},
+    },
     "workspace": "",
     "providers": {"ollama": []},
     "tools": {
@@ -140,6 +144,21 @@ class ModelReasoningConfig:
     effort: str = ""
 
 
+TIER_NAMES = ("fast", "deep")
+
+
+@dataclass
+class TierConfig:
+    model: str = ""  # empty = tier unconfigured, resolve to main model
+    effort: str = ""
+
+
+@dataclass
+class TiersConfig:
+    fast: TierConfig = field(default_factory=TierConfig)
+    deep: TierConfig = field(default_factory=TierConfig)
+
+
 @dataclass
 class RuntimeConfig:
     # LLM provider stale-call hardening (RT.1). A timeout of 0 disables that watchdog.
@@ -155,6 +174,7 @@ class Config:
     home: Path
     model: str
     fallback_models: list[str] = field(default_factory=list)
+    tiers: TiersConfig = field(default_factory=TiersConfig)
     providers: dict[str, Any] = field(default_factory=dict)
     tools: ToolsConfig = field(default_factory=ToolsConfig)
     memory: MemoryConfig = field(default_factory=MemoryConfig)
@@ -222,6 +242,29 @@ def _non_negative_int(value: Any, default: int) -> int:
 
 def _normalize_deny(raw: Any) -> list[str]:
     """Tolerate hand-written ``tools.deny`` shapes: must be a list, items get ``strip()``, duplicates dropped, order preserved. A bare string (``deny: terminal``) collapses to ``[]`` rather than iterating chars."""
+    if not isinstance(raw, list):
+        return []
+    seen: set[str] = set()
+    out: list[str] = []
+    for item in raw:
+        name = str(item).strip()
+        if name and name not in seen:
+            seen.add(name)
+            out.append(name)
+    return out
+
+
+def _parse_tier(raw: Any) -> TierConfig:
+    if not isinstance(raw, dict):
+        return TierConfig()
+    effort = str(raw.get("effort", "") or "").strip().lower()
+    return TierConfig(
+        model=str(raw.get("model", "") or "").strip(),
+        effort=effort if effort in {"low", "medium", "high"} else "",
+    )
+
+
+def _normalize_fallbacks(raw: Any) -> list[str]:
     if not isinstance(raw, list):
         return []
     seen: set[str] = set()
@@ -312,6 +355,12 @@ def load(home: Path) -> Config:
         review_interval=int(mem_raw.get("review_interval", 0) or 0),
     )
 
+    tiers_raw = data.get("tiers") or {}
+    tiers_cfg = TiersConfig(
+        fast=_parse_tier(tiers_raw.get("fast")),
+        deep=_parse_tier(tiers_raw.get("deep")),
+    )
+
     reasoning_raw = data.get("model_reasoning") or {}
     # "off" persisted on disk normalises to "" on load — keeps the dataclass canonical (empty string = no param).
     effort_in = str(reasoning_raw.get("effort", "") or "").strip().lower()
@@ -331,7 +380,8 @@ def load(home: Path) -> Config:
     return Config(
         home=home,
         model=data.get("model", DEFAULT_CONFIG["model"]),
-        fallback_models=data.get("fallback_models", []),
+        fallback_models=_normalize_fallbacks(data.get("fallback_models")),
+        tiers=tiers_cfg,
         providers=data.get("providers", DEFAULT_CONFIG["providers"]),
         tools=tools_cfg,
         memory=memory_cfg,
@@ -367,6 +417,17 @@ def save(cfg: Config) -> None:
         data["paused"] = True
     if cfg.fallback_models:
         data["fallback_models"] = cfg.fallback_models
+
+    tiers_delta: dict[str, Any] = {}
+    for tier_name in TIER_NAMES:
+        tcfg: TierConfig = getattr(cfg.tiers, tier_name)
+        if tcfg.model:
+            row: dict[str, Any] = {"model": tcfg.model}
+            if tcfg.effort:
+                row["effort"] = tcfg.effort
+            tiers_delta[tier_name] = row
+    if tiers_delta:
+        data["tiers"] = tiers_delta
 
     tools_delta = _tools_delta(cfg)
     if tools_delta:
@@ -519,8 +580,16 @@ _CLOUD_API_KEY_ENV = {
 }
 
 
+def tier_model(cfg: Config, tier: str | None) -> str:
+    """Return the model configured for ``tier``, or "" when the tier is unset/unknown."""
+    if tier not in TIER_NAMES:
+        return ""
+    return getattr(cfg.tiers, tier).model
+
+
 def resolve_model(
-    cfg: Config, *, model: str | None = None, include_reasoning: bool = True,
+    cfg: Config, *, model: str | None = None, tier: str | None = None,
+    include_reasoning: bool = True,
 ) -> dict[str, Any]:
     """Return the litellm.completion kwargs for the currently selected model.
 
@@ -534,7 +603,24 @@ def resolve_model(
     a different reasoning preference). The default-model path keeps
     reasoning when ``cfg.model_reasoning.effort`` is set and the model
     supports it.
+
+    ``tier`` routing: ``"fast"`` / ``"deep"`` resolve the tier's model and
+    the tier's OWN effort (never the profile effort). An unconfigured tier,
+    ``"main"``, or any unknown value falls back to the default-model path,
+    so profiles without ``tiers`` in config.yaml behave exactly as before.
+    An explicit ``model`` wins over ``tier``.
     """
+    if model is None and tier in TIER_NAMES:
+        tcfg: TierConfig = getattr(cfg.tiers, tier)
+        if tcfg.model:
+            out = resolve_model(cfg, model=tcfg.model, include_reasoning=False)
+            if tcfg.effort:
+                from alpi.providers.reasoning import merge_into_kwargs, reasoning_kwargs
+                extra = reasoning_kwargs(tcfg.model, tcfg.effort)
+                if extra:
+                    out = merge_into_kwargs(out, extra)
+            return out
+
     model_str = model or cfg.model
     head, _, rest = model_str.partition("/")
     is_default_model = model is None or model == cfg.model

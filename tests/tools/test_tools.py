@@ -324,19 +324,19 @@ def test_research_depth_resolves_from_config(tmp_home_no_env) -> None:
     from alpi.tools.research import _resolve_depth, DEPTH_STEPS_DEFAULTS
     from alpi import config as cfg_mod
     cfg = cfg_mod.load(tmp_home_no_env)
-    for d in ("quick", "normal", "deep"):
+    for d in ("fast", "normal", "deep"):
         assert _resolve_depth(cfg, d) == DEPTH_STEPS_DEFAULTS[d]
 
 
 def test_research_depth_ignores_user_overrides(tmp_home_no_env) -> None:
-    """research.{quick,normal,deep}_steps is no longer configurable; tiers are product."""
+    """research.{fast,normal,deep}_steps is no longer configurable; depths are product."""
     (tmp_home_no_env / "config.yaml").write_text(
         "tools:\n  research:\n    deep_steps: 60\n    quick_steps: 3\n"
     )
     from alpi.tools.research import _resolve_depth, DEPTH_STEPS_DEFAULTS
     from alpi import config as cfg_mod
     cfg = cfg_mod.load(tmp_home_no_env)
-    assert _resolve_depth(cfg, "quick") == DEPTH_STEPS_DEFAULTS["quick"]
+    assert _resolve_depth(cfg, "fast") == DEPTH_STEPS_DEFAULTS["fast"]
     assert _resolve_depth(cfg, "normal") == DEPTH_STEPS_DEFAULTS["normal"]
     assert _resolve_depth(cfg, "deep") == DEPTH_STEPS_DEFAULTS["deep"]
 
@@ -666,9 +666,9 @@ def test_research_prefixes_inner_emit_with_step_counter(
     import alpi.tools as tools_pkg
     monkeypatch.setattr(tools_pkg, "execute", _fake_execute, raising=False)
 
-    result = Research().run(brief="test", depth="quick")
+    result = Research().run(brief="test", depth="fast")
     assert result.ok
     assert any("step 1/" in s and "searching the web…" in s for s in captured), (
         f"expected prefixed inner label, got: {captured}"
     )
-    assert any(s.startswith("quick · step 1/") for s in captured)
+    assert any(s.startswith("fast · step 1/") for s in captured)

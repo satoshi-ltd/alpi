@@ -41,6 +41,14 @@ def _turn_deadline_from_env(started: float) -> float | None:
 
 _FREE_MODEL_MAX_STEPS = 1000
 _PEER_USAGE_MARKER = "\n\n---\ntokens:"
+_ESCALATE_AFTER_FAILURES = 3
+_BUDGET_ESCALATION_GUARD = 0.8
+
+
+def _route_tier_from_env() -> str | None:
+    import os
+    tier = os.environ.get("ALPI_TIER", "").strip().lower()
+    return tier if tier in cfg_mod.TIER_NAMES else None
 
 
 def _peer_reply_from_payload(payload: str) -> str:
@@ -102,7 +110,7 @@ def _profile_name(home: Path) -> str:
 
 @dataclass
 class AgentEvent:
-    kind: str                      # 'user' | 'reasoning_delta' | 'assistant_delta' | 'assistant_done' | 'tool_start' | 'tool_state' | 'tool_end' | 'usage' | 'error' | 'done' | 'interrupted' | 'auto_compact'
+    kind: str                      # 'user' | 'reasoning_delta' | 'assistant_delta' | 'assistant_done' | 'tool_start' | 'tool_state' | 'tool_end' | 'usage' | 'routing' | 'error' | 'done' | 'interrupted' | 'auto_compact'
     text: str = ""
     name: str = ""                 # tool name for tool_* events
     args: dict = field(default_factory=dict)
@@ -115,6 +123,7 @@ class AgentEvent:
     # True only on the turn's terminal `assistant_done`; preamble emissions stay False. Contract in AGENTS.md.
     final: bool = False
     attachments: list[dict] = field(default_factory=list)
+    model: str = ""                # set on 'usage' and 'routing' events
 
 
 EventSink = Callable[[AgentEvent], None]
@@ -180,11 +189,13 @@ class Engine:
         from alpi import config as _cfg_mod
         from alpi import ledger
 
-        # Re-read budget + tools.deny from disk so live YAML edits apply on the next turn without needing a profile restart.
+        # Re-read budget + tools.deny + tiers + fallback_models from disk so live YAML edits apply on the next turn without needing a profile restart.
         try:
             fresh = _cfg_mod.load(self.home)
             self.cfg.budget = fresh.budget
             self.cfg.tools.deny = fresh.tools.deny
+            self.cfg.tiers = fresh.tiers
+            self.cfg.fallback_models = fresh.fallback_models
         except Exception:  # noqa: BLE001
             pass
         try:
@@ -296,7 +307,20 @@ class Engine:
 
         deny_tools = frozenset(self.cfg.tools.deny)
         schemas = tools.schemas(deny=deny_tools)
-        call_kwargs = cfg_mod.resolve_model(self.cfg)
+        route_tier = _route_tier_from_env()
+        routed_model = cfg_mod.tier_model(self.cfg, route_tier)
+        call_kwargs = cfg_mod.resolve_model(self.cfg, tier=route_tier)
+        turn_model = routed_model or self.cfg.model
+        turn_effort = (
+            getattr(self.cfg.tiers, route_tier).effort if routed_model
+            else self.cfg.model_reasoning.effort
+        )
+        turn_routing: list[str] = []
+        if routed_model:
+            turn_routing.append(f"tier:{route_tier}")
+        escalated = False
+        consecutive_tool_failures = 0
+        fallback_queue = list(self.cfg.fallback_models)
         from alpi import prompt_cache as _pc
         call_kwargs.update(_pc.cache_kwargs_for_model(call_kwargs.get("model", "")))
         max_steps = self.cfg.tools.max_steps_per_turn
@@ -306,7 +330,7 @@ class Engine:
             if llm.is_free_model(call_kwargs.get("model", "")) or is_ollama(call_kwargs.get("api_base") or ""):
                 max_steps = _FREE_MODEL_MAX_STEPS
 
-        self._maybe_auto_compact(emit, call_kwargs)
+        self._maybe_auto_compact(emit)
 
         # Bind session todos for this turn; reset in finally.
         from alpi.tools import todo as todo_mod
@@ -353,6 +377,37 @@ class Engine:
                             accumulated_text.append(text_delta)
                             emit(AgentEvent(kind="assistant_delta", text=text_delta))
                 except Exception as e:  # noqa: BLE001
+                    # Fallback chain: only before any output reached the client — a partially-streamed step can't be replayed on another model.
+                    fb_applied = False
+                    if not accumulated_text and not reasoning_text:
+                        while fallback_queue:
+                            fb_model = fallback_queue.pop(0)
+                            if fb_model == turn_model:
+                                continue
+                            try:
+                                fb_kwargs = cfg_mod.resolve_model(self.cfg, model=fb_model)
+                            except Exception:  # noqa: BLE001
+                                continue
+                            fb_kwargs.update(_pc.cache_kwargs_for_model(fb_kwargs.get("model", "")))
+                            import logging
+                            logging.getLogger("alpi.engine").warning(
+                                "model %s failed (%s); falling back to %s",
+                                turn_model, e, fb_model,
+                            )
+                            failed_model = turn_model
+                            call_kwargs = fb_kwargs
+                            turn_model = fb_model
+                            turn_effort = ""
+                            turn_routing.append(f"fallback:{fb_model}")
+                            # raw provider error may carry credentials; frames persist for replay
+                            emit(AgentEvent(
+                                kind="routing", model=fb_model,
+                                text=f"model {failed_model} failed; falling back to {fb_model}",
+                            ))
+                            fb_applied = True
+                            break
+                    if fb_applied:
+                        continue
                     turn_error = str(e)
                     emit(AgentEvent(kind="error", text=turn_error))
                     return
@@ -408,6 +463,7 @@ class Engine:
                     tokens_in=final.get("input_tokens", 0),
                     tokens_out=final.get("output_tokens", 0),
                     cost=final.get("cost_usd", 0.0),
+                    model=turn_model,
                 ))
 
                 assistant_msg: dict = {"role": "assistant", "content": content}
@@ -448,6 +504,13 @@ class Engine:
                         continue
                     if not content.strip() and not turn_produced and not _empty_retry_done:
                         _empty_retry_done = True
+                        if not escalated:
+                            routed = self._escalated_route(turn_model, turn_effort, "empty reply")
+                            if routed is not None:
+                                call_kwargs, turn_model, turn_effort, note = routed
+                                escalated = True
+                                turn_routing.append(note)
+                                emit(AgentEvent(kind="routing", model=turn_model, text=note))
                         remaining = max_steps - step_idx - 1
                         self.session.messages.append({
                             "role": "user",
@@ -559,6 +622,9 @@ class Engine:
                         ok=result.ok, duration_s=duration,
                         reasoning=reasoning_for_this_tool,
                     ))
+                    consecutive_tool_failures = (
+                        0 if result.ok else consecutive_tool_failures + 1
+                    )
                     if result.ok and name in ("skill", "attach_file"):
                         import tempfile as _tempfile
                         from alpi import attachments as _att
@@ -606,6 +672,17 @@ class Engine:
                     emit(AgentEvent(kind="assistant_done", text=peer_reply, final=True))
                     emit(AgentEvent(kind="done"))
                     return
+
+                if not escalated and consecutive_tool_failures >= _ESCALATE_AFTER_FAILURES:
+                    routed = self._escalated_route(
+                        turn_model, turn_effort,
+                        f"{consecutive_tool_failures} consecutive tool failures",
+                    )
+                    if routed is not None:
+                        call_kwargs, turn_model, turn_effort, note = routed
+                        escalated = True
+                        turn_routing.append(note)
+                        emit(AgentEvent(kind="routing", model=turn_model, text=note))
 
             if not turn_error and not self.interrupt_requested:
                 _wrap_reason = (
@@ -668,6 +745,7 @@ class Engine:
                             tokens_in=wrap_final.get("input_tokens", 0),
                             tokens_out=wrap_final.get("output_tokens", 0),
                             cost=wrap_final.get("cost_usd", 0.0),
+                            model=turn_model,
                         ))
                         emit(AgentEvent(kind="assistant_done", text=wrap_content, final=True))
                         emit(AgentEvent(kind="done"))
@@ -696,6 +774,7 @@ class Engine:
                 reasoned_s=max(0.0, reasoned_until - turn_started),
                 attachments=att_meta, output_attachments=turn_produced,
                 interrupted=self._interrupted_this_turn,
+                model=turn_model,
             )
             if self.session.turns and self.session.turns[-1].at == turn_started:
                 self.session.turns[-1] = final_turn
@@ -710,6 +789,7 @@ class Engine:
                 elapsed=elapsed,
                 turn_completed=turn_completed, turn_tools=turn_tools,
                 assistant=final_assistant or turn_error,
+                model=turn_model, routing="; ".join(turn_routing),
             )
             if turn_completed:
                 self._maybe_emit_chat_turn_done(
@@ -787,9 +867,39 @@ class Engine:
         except Exception:  # noqa: BLE001
             pass
 
+    def _escalated_route(
+        self, current_model: str, current_effort: str, reason: str,
+    ) -> tuple[dict, str, str, str] | None:
+        """One-way, once-per-turn escalation: effort→high on the same model first, else jump to the deep tier. None when nothing stronger is available or the daily budget is ≥80% spent."""
+        from alpi import ledger as _ledger
+        from alpi import prompt_cache as _pc
+        from alpi.providers.reasoning import (
+            merge_into_kwargs, reasoning_kwargs, supports_reasoning,
+        )
+        try:
+            frac = _ledger.spend_fraction(self.home, self.cfg.budget)
+        except Exception:  # noqa: BLE001
+            frac = None
+        if frac is not None and frac >= _BUDGET_ESCALATION_GUARD:
+            return None
+        if current_effort != "high" and supports_reasoning(current_model):
+            kwargs = cfg_mod.resolve_model(
+                self.cfg, model=current_model, include_reasoning=False,
+            )
+            kwargs = merge_into_kwargs(kwargs, reasoning_kwargs(current_model, "high"))
+            kwargs.update(_pc.cache_kwargs_for_model(kwargs.get("model", "")))
+            return kwargs, current_model, "high", f"escalated effort to high ({reason})"
+        deep = self.cfg.tiers.deep
+        if deep.model and deep.model != current_model:
+            kwargs = cfg_mod.resolve_model(self.cfg, tier="deep")
+            kwargs.update(_pc.cache_kwargs_for_model(kwargs.get("model", "")))
+            return kwargs, deep.model, deep.effort, f"escalated to {deep.model} ({reason})"
+        return None
+
     def _record_run(
         self, *, elapsed: float,
         turn_completed: bool, turn_tools: list, assistant: str,
+        model: str = "", routing: str = "",
     ) -> None:
         # kind comes from dispatch env: workgroup poller sets ALPI_WORKGROUP_DISPATCH, scheduler sets ALPI_SCHEDULE_CHILD.
         try:
@@ -821,6 +931,7 @@ class Engine:
                 last_tool=(turn_tools[-1].name if turn_tools else None),
                 tool_count=len(turn_tools),
                 output_tail=assistant,
+                model=model, routing=routing,
             )
         except Exception:  # noqa: BLE001
             pass
@@ -839,15 +950,23 @@ class Engine:
         preservation rules, same proportional budget, same safety guard
         against destroying history on a summarizer failure.
         """
-        self._run_compaction(emit, cfg_mod.resolve_model(self.cfg), force=True)
+        self._run_compaction(emit, force=True)
 
-    def _maybe_auto_compact(self, emit: EventSink, call_kwargs: dict) -> None:
+    def _maybe_auto_compact(self, emit: EventSink) -> None:
         """Compact ``session.messages`` if the next prompt would overflow."""
-        self._run_compaction(emit, call_kwargs, force=False)
+        self._run_compaction(emit, force=False)
 
-    def _run_compaction(self, emit: EventSink, call_kwargs: dict, *, force: bool) -> None:
+    def _run_compaction(self, emit: EventSink, *, force: bool) -> None:
         from alpi import compaction, ctx_window as ctx_window_mod
 
+        call_kwargs = cfg_mod.resolve_model(self.cfg, tier="fast")
+        summarizer_model = (
+            cfg_mod.tier_model(self.cfg, "fast")
+            or self.session.model or self.cfg.model
+        )
+        summarizer_ctx = ctx_window_mod.resolve(self.home, self.cfg, summarizer_model)
+
+        # Trigger/target stay sized to the TURN model's window; only the summarize prompt is fitted to the summarizer's.
         ctx_window = ctx_window_mod.resolve(
             self.home, self.cfg, self.session.model or self.cfg.model,
         )
@@ -859,6 +978,17 @@ class Engine:
             return
 
         def _summarize(transcript: str, max_tokens: int) -> str:
+            max_tokens = int(max_tokens)
+            if summarizer_ctx > 0:
+                max_tokens = min(
+                    max_tokens,
+                    max(compaction.MIN_SUMMARY_OUTPUT_TOKENS, summarizer_ctx // 4),
+                )
+                transcript = compaction.clip_transcript(
+                    transcript,
+                    summarizer_ctx - max_tokens
+                    - compaction.SUMMARY_PROMPT_OVERHEAD_TOKENS,
+                )
             # We pass a flat transcript (not raw OpenAI messages) so the
             # summarizer never sees orphan tool replies or partial tool_calls.
             prompt_messages = [
@@ -875,7 +1005,7 @@ class Engine:
                 },
             ]
             summarize_kwargs = dict(call_kwargs)
-            summarize_kwargs["max_tokens"] = int(max_tokens)
+            summarize_kwargs["max_tokens"] = max_tokens
             try:
                 out = llm.complete(messages=prompt_messages, **summarize_kwargs)
                 return (out.content or "").strip()

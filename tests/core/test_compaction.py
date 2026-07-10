@@ -342,3 +342,29 @@ def test_compact_force_runs_below_threshold() -> None:
         "[FORCED]" in (m.get("content") or "")
         for m in new_messages
     )
+
+
+def test_clip_transcript_returns_short_input_unchanged() -> None:
+    from alpi.compaction import clip_transcript
+    assert clip_transcript("short", 1000) == "short"
+
+
+def test_clip_transcript_keeps_head_and_favors_tail() -> None:
+    from alpi.compaction import CHARS_PER_TOKEN, clip_transcript
+    text = "H" * 10_000 + "T" * 10_000
+    out = clip_transcript(text, 1000)
+    assert len(out) < len(text)
+    assert "elided to fit the summarizer window" in out
+    assert out.startswith("H")
+    assert out.endswith("T")
+    body = len(out.replace("\n", ""))
+    assert body <= 1000 * CHARS_PER_TOKEN + 100
+    assert out.count("T") > out.count("H")
+
+
+def test_clip_transcript_floors_degenerate_budgets() -> None:
+    from alpi.compaction import CHARS_PER_TOKEN, clip_transcript
+    text = "x" * 50_000
+    out = clip_transcript(text, -200)
+    assert len(out) <= 500 * CHARS_PER_TOKEN + 100
+    assert "elided" in out

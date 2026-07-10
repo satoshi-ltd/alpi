@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.10.21 — 2026-07-10 — the right model for every job
+
+- **Profiles can route work across model tiers.** Configure an optional cheap
+  `fast` model and a strong `deep` model next to your main one; anything left
+  unset simply runs on the main model, so nothing changes until you opt in.
+- **Routine background work gets cheaper automatically.** Context compaction,
+  the memory reviewer, and bio drafting run on the fast tier, and sub-agents
+  and scheduled jobs can pick a tier — `research` depths share the tier
+  names at the extremes (fast/deep) so one vocabulary routes everything.
+- **Stuck turns escalate instead of failing.** After repeated tool failures or
+  an empty reply, the turn retries once with more reasoning or the deep model —
+  never past 80% of the daily budget.
+- **Provider outages fall back automatically.** `fallback_models` now retries
+  down the chain when the active model fails before answering.
+- **Every reply records the model that produced it**, and a new "Routing
+  tiers" section in `alpi setup` configures it all from the terminal.
+
 ## v0.10.20 — 2026-07-10 — assistants can hand you files
 
 - **Assistants can now attach a file they produce to a reply.** Ask for a report,

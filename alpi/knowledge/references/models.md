@@ -96,7 +96,7 @@ Usable as workers, not the main model for a skill-dependent profile:
 
 ## Production setups
 
-One primary model per profile; split roles across profiles (picks per tier in the tables above). `fallback_models` is stored in config — do not assume automatic runtime escalation unless the installed version implements it. Provider dashboards are a weak signal at best (biased by defaults/price/rate limits), and only when they reflect tool-heavy use, not chat benchmarks.
+One primary model per profile; split roles across profiles (picks per tier in the tables above). Dynamic routing is opt-in via config: `tiers.fast` runs bounded side-work (compaction, memory reviewer, `research(depth=fast)`, `delegate(tier=fast)`, scheduled jobs with `tier: fast`), `tiers.deep` runs `research(depth=deep)` / `delegate(tier=deep)` plus the once-per-turn reactive escalation (3 consecutive tool failures or an empty reply; effort→high on the same model first, blocked past 80% of the daily budget), and `fallback_models` is the availability chain when the active model fails before producing any output. Unconfigured tiers resolve to the main model. Provider dashboards are a weak signal at best (biased by defaults/price/rate limits), and only when they reflect tool-heavy use, not chat benchmarks.
 
 ## Switching model
 

@@ -54,6 +54,11 @@ function formatTokens(n) {
   return String(Math.round(v));
 }
 
+function tierValue(tier) {
+  if (!tier?.model) return 'main model';
+  return tier.model.includes('/') ? tier.model.split('/').slice(1).join('/') : tier.model;
+}
+
 function sectionData(section) {
   return section && !section.error ? section : null;
 }
@@ -261,6 +266,44 @@ export default function ProfileSettings() {
             />
           </>
         )}
+        {profile.tiers ? (
+          <>
+            <RowSeparator />
+            <Row
+              label="Fast model"
+              helper="cheap model for side-tasks & delegation"
+              value={tierValue(profile.tiers.fast)}
+              onPress={() => setSheet('tierFast')}
+            />
+            {profile.tiers.fast?.reasoning_supported && (
+              <>
+                <RowSeparator />
+                <Row
+                  label="Fast reasoning"
+                  value={(profile.tiers.fast.effort || 'default')}
+                  onPress={() => setSheet('tierFastReasoning')}
+                />
+              </>
+            )}
+            <RowSeparator />
+            <Row
+              label="Deep model"
+              helper="stronger model for escalation & deep research"
+              value={tierValue(profile.tiers.deep)}
+              onPress={() => setSheet('tierDeep')}
+            />
+            {profile.tiers.deep?.reasoning_supported && (
+              <>
+                <RowSeparator />
+                <Row
+                  label="Deep reasoning"
+                  value={(profile.tiers.deep.effort || 'default')}
+                  onPress={() => setSheet('tierDeepReasoning')}
+                />
+              </>
+            )}
+          </>
+        ) : null}
         <RowSeparator />
         <Row
           label="Budget"
@@ -511,6 +554,48 @@ export default function ProfileSettings() {
         onClose={() => setSheet(null)}
         initialValue={profile.model_reasoning_effort ?? ''}
         onSave={(value) => saveField('model_reasoning.effort', value)}
+      />
+      <ModelSheet
+        open={sheet === 'tierFast'}
+        onClose={() => setSheet(null)}
+        profileName={profile.name}
+        accent={accent}
+        title="Fast model"
+        subtitle={`@${profile.name} · cheap side-task model`}
+        allowClear
+        initialValue={profile.tiers?.fast?.model ?? ''}
+        profileModels={profile.models ?? []}
+        providerKeys={profile.provider_keys ?? []}
+        openrouterModels={(profile.providers?.openrouter?.models) ?? []}
+        ollamaNames={(profile.provider_ollama ?? []).map((o) => o.name)}
+        onSave={(value) => saveField('tiers.fast.model', value)}
+      />
+      <ReasoningEffortSheet
+        open={sheet === 'tierFastReasoning'}
+        onClose={() => setSheet(null)}
+        initialValue={profile.tiers?.fast?.effort ?? ''}
+        onSave={(value) => saveField('tiers.fast.effort', value)}
+      />
+      <ModelSheet
+        open={sheet === 'tierDeep'}
+        onClose={() => setSheet(null)}
+        profileName={profile.name}
+        accent={accent}
+        title="Deep model"
+        subtitle={`@${profile.name} · escalation model`}
+        allowClear
+        initialValue={profile.tiers?.deep?.model ?? ''}
+        profileModels={profile.models ?? []}
+        providerKeys={profile.provider_keys ?? []}
+        openrouterModels={(profile.providers?.openrouter?.models) ?? []}
+        ollamaNames={(profile.provider_ollama ?? []).map((o) => o.name)}
+        onSave={(value) => saveField('tiers.deep.model', value)}
+      />
+      <ReasoningEffortSheet
+        open={sheet === 'tierDeepReasoning'}
+        onClose={() => setSheet(null)}
+        initialValue={profile.tiers?.deep?.effort ?? ''}
+        onSave={(value) => saveField('tiers.deep.effort', value)}
       />
       <BudgetSheet
         open={sheet === 'budget'}

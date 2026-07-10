@@ -1364,6 +1364,7 @@ def setup_cmd(ctx: click.Context) -> None:
         items: list = [
             ui.Heading("Agent"),
             ("Model / Provider", "model", cfg.model or "(not set)"),
+            ("Routing tiers", "tiers", _tiers_status(cfg)),
             ("Voice", "voice", _voice_status(cfg)),
             ("MCPs", "mcps", _mcp_status(h)),
             ("Emails", "email", _email_accounts_status(h)),
@@ -1410,6 +1411,10 @@ def setup_cmd(ctx: click.Context) -> None:
             from alpi import model_selector
 
             model_selector.run(config.load(h))
+        elif choice == "tiers":
+            from alpi import model_selector
+
+            model_selector.run_tiers(config.load(h))
         elif choice == "workspace":
             _workspace_setup(h)
         elif choice == "email":
@@ -2732,6 +2737,11 @@ def _voice_display(voice_id: str) -> str:
 
 def _voice_status(cfg: config.Config) -> str:
     return _voice_display(cfg.tools.tts.voice)
+
+
+def _tiers_status(cfg: config.Config) -> str:
+    from alpi.model_selector import tiers_status
+    return tiers_status(cfg)
 
 
 def _voice_setup(h: Path) -> None:

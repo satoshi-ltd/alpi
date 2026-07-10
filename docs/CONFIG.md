@@ -58,7 +58,11 @@ Three options:
 |---|---|---|---|
 | `model` | `""` (empty; pick via `alpi setup → Model` — see `docs/MODELS.md`) | string | next session |
 | `workspace` | `""` (cwd at launch) | string | next session |
-| `fallback_models` | `[]` | list of strings | next turn |
+| `fallback_models` | `[]` | list of strings — availability chain: when the active model fails before producing any output (provider down, credits exhausted) the turn retries down this list, sticking with the survivor for the rest of the turn | next turn |
+| `tiers.fast.model` | `""` (use main) | string — cheap/fast model for routine work: compaction summaries, the memory reviewer, bio drafting, `research(depth=fast)`, and `delegate`/`schedule` runs that opt into `tier: fast` | next turn |
+| `tiers.fast.effort` | `""` | `low` \| `medium` \| `high` — reasoning effort for the fast tier's own model (never inherits the profile effort) | next turn |
+| `tiers.deep.model` | `""` (use main) | string — stronger model for hard reasoning: `research(depth=deep)`, `delegate(tier=deep)`, and the escalation target when a turn accumulates 3 consecutive tool failures or an empty reply (once per turn, skipped past 80% of `budget.daily_usd`) | next turn |
+| `tiers.deep.effort` | `""` | `low` \| `medium` \| `high` — reasoning effort for the deep tier's own model | next turn |
 | `providers.ollama` | `[]` | list of `{name, url}` — one per Ollama server | next session |
 | `providers.openrouter.models` | `[]` | list of OpenRouter model ids the user has picked | next session |
 | `public_bio` | `""` | string — one-line public tag-line broadcast to every workgroup this profile joins (source of truth for `Member.bio` on the hub). Empty = don't publish; peers see name only. `AGENT.md` stays private. | next `workgroup.join` |
@@ -70,8 +74,8 @@ Three options:
 |---|---|---|---|
 | `tools.max_steps_per_turn` | `100` | int | next turn |
 | `tools.deny` | `[]` | list of tool names | next turn |
-| `tools.web_extract.model` | `""` (use main) | string | next turn |
-| `tools.read_image.model` | `""` (use main) | string | next turn |
+| `tools.web_extract.model` | `""` (use main) | string — a model id, or the literal `fast` / `deep` to reference a tier | next turn |
+| `tools.read_image.model` | `""` (use main) | string — a model id, or the literal `fast` / `deep` to reference a tier | next turn |
 | `tools.terminal.sandbox` | `false` | bool | next turn |
 | `tools.terminal.allow_network` | `false` | bool | next turn |
 | `tools.terminal.approval.allowlist` | `[]` | list of pattern descriptions and/or command globs (see below) | next turn |
@@ -230,7 +234,7 @@ sandbox has a chance to refuse.
 
 Image resizing is automatic: any image whose longer edge exceeds 1568 px (Anthropic's recommended bound) is downscaled before base64-encoding to the model. Vision-model cost scales with resolution — a 4K screenshot costs ~9× more tokens than its 1568-px version for the same content. Aspect ratio is preserved, PNG-with-alpha stays PNG, everything else rounds-trips through JPEG q=85. SVG (vector) is skipped. Not a knob — it is a fixed constant (`alpi.tools.read_image.MAX_EDGE`).
 
-The `research` sub-agent's depth tiers (`quick` = 8 steps, `normal` = 15, `deep` = 30) are product definition, not user config. The agent picks the depth name from intent (`quick` = single-answer lookups, `normal` = comparative research, `deep` = exhaustive surveys); the step ceilings live in `alpi.tools.research.DEPTH_STEPS_DEFAULTS`.
+The `research` sub-agent's depth tiers (`fast` = 8 steps, `normal` = 15, `deep` = 30) are product definition, not user config. `fast` and `deep` share their names with the model tiers — a depth also picks the matching tier when configured, while `normal` runs on the main model. The agent picks the depth name from intent (`fast` = single-answer lookups, `normal` = comparative research, `deep` = exhaustive surveys); the step ceilings live in `alpi.tools.research.DEPTH_STEPS_DEFAULTS`.
 
 `tools.tts.voice` selects the Edge TTS voice used by the `tts` tool. Any Microsoft Neural voice id is valid (`es-ES-AlvaroNeural`, `en-US-AriaNeural`, `fr-FR-DeniseNeural`, ...). Output is an MP3 cached under `~/.alpi/cache/tts/<hash>.mp3` — same text + voice reuses the cached file. Edge TTS runs against a free Microsoft endpoint (no API key), so there's no per-call cost. To use a different voice per call the agent can pass `voice=...` directly without touching config. `alpi setup → Voice` gives you a curated shortlist (10 common-language voices) plus a "custom" entry to type any voice id.
 

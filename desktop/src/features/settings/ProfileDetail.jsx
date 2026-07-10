@@ -12,7 +12,7 @@ import Usage from "./Usage.jsx";
 import { SettingsHero } from "../../primitives/index.js";
 import { CopyIcon, Mono } from "../../primitives/index.js";
 import RefreshBar from "../../primitives/RefreshBar.jsx";
-import { FIELD_KEYS } from "./util.js";
+import { FIELD_KEYS, providerPills } from "./util.js";
 import { mergeProfileDraft } from "../../lib/profile-draft.js";
 import {
   AccentField,
@@ -25,6 +25,7 @@ import {
   McpField,
   ModelField,
   ReasoningEffortField,
+  TierField,
   VoiceField,
 } from "./fields/agent.jsx";
 import {
@@ -109,6 +110,7 @@ export default function ProfileDetail({
   const [emailLoading, setEmailLoading] = useState(false);
   const [schedulesLoading, setSchedulesLoading] = useState(false);
   const [modelLoading, setModelLoading] = useState(false);
+  const [ollamaErrors, setOllamaErrors] = useState([]);
   const [peersLoading, setPeersLoading] = useState(false);
   const [workgroupsLoading, setWorkgroupsLoading] = useState(false);
   const [storageLoading, setStorageLoading] = useState(false);
@@ -190,6 +192,9 @@ export default function ProfileDetail({
 
   const capUsd = profile.budget_daily_usd;
   const usedUsd = profile.budget_used_usd ?? 0;
+  const providers = providerPills(profile, ollamaErrors);
+  const hasModels =
+    (profile.models?.length ?? 0) > 0 || (profile.provider_ollama?.length ?? 0) > 0;
   const heroMeta = (
     <>
       {profile.model && (
@@ -248,31 +253,65 @@ export default function ProfileDetail({
               )}
             </span>
           </Row>
+          <Row label="providers">
+            <span className={styles.inlineRow}>
+              {providers.length > 0 ? (
+                providers.map((p) => (
+                  <Chip
+                    key={p.label}
+                    state={p.error ? "error" : "on"}
+                    tooltip={p.error ?? undefined}
+                  >
+                    {p.label}
+                  </Chip>
+                ))
+              ) : (
+                <span className={styles.muted}>none — add one to pick models</span>
+              )}
+              <AddProviderField profile={profile} onSaved={onSaved} />
+            </span>
+          </Row>
           <Row label="model">
             <span className={styles.inlineRow}>
-              {((profile.models?.length ?? 0) > 0 ||
-                (profile.provider_ollama?.length ?? 0) > 0) ? (
+              {hasModels ? (
                 <ModelField
                   profile={profile}
                   value={draft.model}
                   onChange={(v) => update("model", v)}
                   onLoadingChange={setModelLoading}
+                  onOllamaErrors={setOllamaErrors}
                 />
               ) : (
                 <span className={styles.muted}>
                   no models — add a provider first
                 </span>
               )}
-              <AddProviderField profile={profile} onSaved={onSaved} />
+              {profile.model_reasoning_supported && (
+                <ReasoningEffortField
+                  value={draft.reasoningEffort}
+                  onChange={(v) => update("reasoningEffort", v)}
+                />
+              )}
             </span>
           </Row>
-          {profile.model_reasoning_supported && (
-            <Row label="reasoning">
-              <ReasoningEffortField
-                value={draft.reasoningEffort}
-                onChange={(v) => update("reasoningEffort", v)}
-              />
-            </Row>
+          {/* profile.tiers missing = daemon predates routing tiers — hide the rows instead of rendering pickers that can't read state back. */}
+          {profile.tiers && hasModels && (
+            <>
+              <Row label="fast model">
+                <TierField
+                  profile={profile}
+                  name="fast"
+                  onSaved={() => { refreshDetail(); onSaved?.(); }}
+                />
+              </Row>
+              <Row label="deep model">
+                <TierField
+                  profile={profile}
+                  name="deep"
+                  onSaved={() => { refreshDetail(); onSaved?.(); }}
+                />
+              </Row>
+            </>
           )}
           <BudgetField profile={profile} onSaved={onSaved} />
           <Row label="workspace">

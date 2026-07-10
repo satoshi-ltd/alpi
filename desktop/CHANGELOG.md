@@ -11,6 +11,19 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.30 — 2026-07-10 — pick a model for every kind of work
+
+- **Fast and deep model rows in profile settings.** Give a profile a cheap
+  model for routine work and a strong one for hard problems — each with its
+  own reasoning level, and a Clear that falls back to the main model.
+- **Providers get their own row with health pills.** Configured providers show
+  as pills; a failing Ollama server turns red with the exact error in a
+  tooltip instead of a noisy inline message.
+- **Reasoning sits next to each model picker**, so model + effort read as one
+  setting.
+- **Replies show which model produced them** whenever routing (tiers,
+  escalation, or fallback) picked something other than the session's model.
+
 ## v0.4.29 — 2026-07-10 — the command palette is the shortcut sheet
 
 - **The command palette now doubles as the keyboard-shortcut reference.** Open

@@ -291,3 +291,15 @@ def test_schedule_record_helper_maps_outcome(home: Path) -> None:
     assert by_job["job-2"]["exit_code"] == 1
     assert by_job["job-3"]["outcome"] == "ok"
     assert by_job["job-3"]["backend"] == "script"
+
+
+def test_record_persists_model_and_routing(home: Path) -> None:
+    run_ledger.record(
+        home, kind="agent", outcome="ok", elapsed_s=0.5,
+        model="openrouter/deep", routing="escalated to openrouter/deep (3 consecutive tool failures)",
+    )
+    run_ledger.record(home, kind="agent", outcome="ok", elapsed_s=0.5)
+    rows = run_ledger.read(home)
+    assert rows[1]["model"] == "openrouter/deep"
+    assert "escalated" in rows[1]["routing"]
+    assert rows[0]["model"] is None and rows[0]["routing"] is None

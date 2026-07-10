@@ -37,7 +37,7 @@ def draft_bio_from_agent(home: Path, cfg) -> str:
         {"role": "user", "content": text[:8000]},
     ]
     # resolve_model injects the profile's api_key from its .env; calling complete with raw cfg.model would silently fall back to os.environ, which under the daemon belongs to no profile in particular.
-    result = _llm.complete(messages=messages, **_cfg.resolve_model(cfg))
+    result = _llm.complete(messages=messages, **_cfg.resolve_model(cfg, tier="fast"))
     lines = (result.content or "").strip().splitlines()
     if not lines:
         raise ValueError("LLM returned an empty draft")

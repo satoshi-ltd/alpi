@@ -371,6 +371,10 @@
   color: var(--ink-4);
 }
 
+.agentMetaModel {
+  color: var(--accent);
+}
+
 .hintAt {
   color: var(--ink-2);
 }

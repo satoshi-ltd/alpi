@@ -212,6 +212,9 @@ class ReadImage(Tool):
 
         cfg = cfg_mod.load(get_home())
         override = cfg.tools.read_image.model.strip()
+        override_tier = override if override in cfg_mod.TIER_NAMES else None
+        if override_tier is not None:
+            override = cfg_mod.tier_model(cfg, override_tier)
         main_kwargs = cfg_mod.resolve_model(cfg)
 
         before = len(data)
@@ -236,7 +239,11 @@ class ReadImage(Tool):
         if override:
             try:
                 # resolve_model with the override head ("openai", "anthropic"…) resolves the profile's api_key from .env. `include_reasoning=False` so the profile's effort doesn't leak into a tool sub-model.
-                override_kwargs = cfg_mod.resolve_model(cfg, model=override, include_reasoning=False)
+                override_kwargs = (
+                    cfg_mod.resolve_model(cfg, tier=override_tier)
+                    if override_tier is not None
+                    else cfg_mod.resolve_model(cfg, model=override, include_reasoning=False)
+                )
                 out = llm.complete(messages=messages, **override_kwargs)
                 return _finalize(out)
             except Exception as e:  # noqa: BLE001

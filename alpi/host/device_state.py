@@ -215,6 +215,14 @@ def _profile_detail_payload(home: Path) -> dict[str, Any]:
         "models": _models(cfg, home),
         "model_reasoning_effort": cfg.model_reasoning.effort,
         "model_reasoning_supported": supports_reasoning(cfg.model),
+        "tiers": {
+            name: {
+                "model": tier.model,
+                "effort": tier.effort,
+                "reasoning_supported": bool(tier.model) and supports_reasoning(tier.model),
+            }
+            for name, tier in (("fast", cfg.tiers.fast), ("deep", cfg.tiers.deep))
+        },
     }
 
 
@@ -383,6 +391,28 @@ async def _config_set_field(
             _unset_dotted(data, "model_reasoning.effort")
             if isinstance(data.get("model_reasoning"), dict) and not data["model_reasoning"]:
                 data.pop("model_reasoning", None)
+    elif key in ("tiers.fast.model", "tiers.deep.model"):
+        from alpi.providers.reasoning import supports_reasoning
+        tier = key.split(".")[1]
+        model_val = str(coerced or "").strip()
+        # Empty model clears the whole tier — a tier without a model has no meaning.
+        if not model_val:
+            _unset_dotted(data, f"tiers.{tier}")
+        else:
+            _set_dotted(data, key, model_val)
+            if not supports_reasoning(model_val):
+                _unset_dotted(data, f"tiers.{tier}.effort")
+        _prune_empty_tiers(data)
+    elif key in ("tiers.fast.effort", "tiers.deep.effort"):
+        from alpi.providers.reasoning import normalise_effort, supports_reasoning
+        tier = key.split(".")[1]
+        normalised = normalise_effort(coerced)
+        tier_model = str(((data.get("tiers") or {}).get(tier) or {}).get("model") or "")
+        if normalised and tier_model and supports_reasoning(tier_model):
+            _set_dotted(data, key, normalised)
+        else:
+            _unset_dotted(data, key)
+        _prune_empty_tiers(data)
     else:
         _set_dotted(data, key, coerced)
     _write_user_yaml(home, data)
@@ -397,6 +427,7 @@ async def _config_unset_field(
     key = str(params.get("key") or "")
     data = _load_user_yaml(home)
     _unset_dotted(data, key)
+    _prune_empty_tiers(data)
     _write_user_yaml(home, data)
     _emit_config_changed(home, scope=key.split(".", 1)[0] or "field")
     return {"ok": True}
@@ -692,6 +723,17 @@ def _write_user_yaml(home: Path, data: dict[str, Any]) -> None:
     # Atomic tmp+fsync+rename — same writer as ``config.save`` so a daemon crash mid-write never leaves a truncated config.yaml.
     from alpi.config import atomic_write_yaml
     atomic_write_yaml(home / "config.yaml", data)
+
+
+def _prune_empty_tiers(data: dict[str, Any]) -> None:
+    tiers = data.get("tiers")
+    if not isinstance(tiers, dict):
+        return
+    for name in list(tiers):
+        if isinstance(tiers[name], dict) and not tiers[name]:
+            tiers.pop(name)
+    if not tiers:
+        data.pop("tiers", None)
 
 
 def _set_dotted(data: dict[str, Any], key: str, value: Any) -> None:

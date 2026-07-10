@@ -26,6 +26,17 @@ export function isLastTurnInFlight(turns, sessionInFlight) {
   return isEmptyStubTurn(last) && !last.pending;
 }
 
+// session model beats profile default: a model swap must not repaint history as routed
+export function baselineModelFor(sessionData, profileModel) {
+  return sessionData?.model || profileModel || null;
+}
+
+export function routedModelFor(turn, baselineModel) {
+  const model = turn?.model;
+  if (!model || !baselineModel || model === baselineModel) return null;
+  return model.split('/').pop();
+}
+
 export function autoReadText(streamedReply, turns) {
   const last = Array.isArray(turns) ? turns[turns.length - 1] : null;
   return streamedReply || last?.assistant || '';

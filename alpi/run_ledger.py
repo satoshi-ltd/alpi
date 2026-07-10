@@ -55,6 +55,8 @@ class RunRecord:
     last_tool: str | None = None
     tool_count: int | None = None
     output_tail: str | None = None
+    model: str | None = None
+    routing: str | None = None
 
 
 def store_path(home: Path) -> Path:
@@ -94,6 +96,8 @@ def record(
     last_tool: str | None = None,
     tool_count: int | None = None,
     output_tail: str | None = None,
+    model: str | None = None,
+    routing: str | None = None,
 ) -> None:
     # Best-effort: coercions are inside the try so a malformed caller value can't escape.
     try:
@@ -114,6 +118,8 @@ def record(
             last_tool=last_tool or None,
             tool_count=int(tool_count) if tool_count is not None else None,
             output_tail=_clamp_tail(output_tail),
+            model=model or None,
+            routing=routing or None,
         )
         path = store_path(home)
         with _lock, _interproc_lock(path):

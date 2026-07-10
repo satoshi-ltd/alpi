@@ -163,6 +163,9 @@ export function ModelSheet({
   openrouterModels = [],
   ollamaNames = [],
   onSave,
+  title = 'Model',
+  subtitle = null,
+  allowClear = false,
 }) {
   const { colors, fonts, fontSizes } = useTheme();
   const toast = useToast();
@@ -174,10 +177,10 @@ export function ModelSheet({
   }, [open, initialValue]);
 
   const save = async () => {
-    if (!picked) return;
+    if (!picked && !allowClear) return;
     try {
       await onSave?.(picked);
-      toast({ title: 'Model saved', message: picked });
+      toast({ title: `${title} saved`, message: picked || 'main model' });
       onClose?.();
     } catch (e) {
       toast({ title: 'Save failed', message: String(e) });
@@ -235,11 +238,27 @@ export function ModelSheet({
     <Sheet
       open={open}
       onClose={onClose}
-      title="Model"
-      subtitle={`@${profileName ?? ''} · default model`}
-      primaryAction={{ label: 'Set default', onPress: save, disabled: !picked }}
+      title={title}
+      subtitle={subtitle ?? `@${profileName ?? ''} · default model`}
+      primaryAction={{
+        label: allowClear ? 'Save' : 'Set default',
+        onPress: save,
+        disabled: allowClear ? false : !picked,
+      }}
     >
       <ScrollView contentContainerStyle={{ paddingBottom: space.s7 }}>
+        {allowClear ? (
+          <View>
+            <PickerRow
+              selected={!picked}
+              accent={accent}
+              label="Use main model"
+              helper="tier unset — everything falls back to the profile model"
+              onPress={() => setPicked('')}
+            />
+            <RowSeparator />
+          </View>
+        ) : null}
         {/* During the initial Ollama poll the cloud models (always synchronous via profile.models) are visible but the Ollama section is still loading — render a spinner instead of "No models available" only if BOTH are pending. */}
         {cats.length === 0 ? (
           ollama.loading ? (

@@ -332,6 +332,10 @@ def run_job(job: dict, home: Path) -> JobOutcome:
         "ALPI_PARENT_EMITS_AGENT_MESSAGE": "1",
         **workspace_env(home),
     }
+    from alpi.config import TIER_NAMES
+    job_tier = str(job.get("tier") or "").strip().lower()
+    if job_tier in TIER_NAMES:
+        extra["ALPI_TIER"] = job_tier
     soft = soft_turn_budget(secs)
     if soft is not None:
         extra["ALPI_TURN_BUDGET_S"] = str(soft)

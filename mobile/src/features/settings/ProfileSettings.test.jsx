@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 
 import { EndpointContext } from '../../lib/EndpointContext';
 import { ThemeProvider } from '../../theme/ThemeContext';
@@ -209,5 +209,70 @@ describe('ProfileSettings snapshot first paint', () => {
 
     await waitFor(() => expect(screen.getByText('4 KB')).toBeTruthy());
     expect(calls).toContain('host.profile.storage');
+  });
+});
+
+describe('ProfileSettings routing tiers', () => {
+  it('renders tier rows from profile detail, with main-model fallback labels', async () => {
+    const call = vi.fn(async (method) => {
+      if (method === 'host.profile.summaries') {
+        return { profiles: [{ name: 'doc', counts: {} }] };
+      }
+      if (method === 'host.settings.profile_snapshot') {
+        return {
+          detail: {
+            name: 'doc',
+            model: 'openrouter/example',
+            tiers: {
+              fast: { model: 'openrouter/flash-lite', effort: 'low', reasoning_supported: true },
+              deep: { model: '', effort: '', reasoning_supported: false },
+            },
+          },
+          usage: { days: [] },
+          schedules: { jobs: [] },
+          workgroups: { workgroups: [] },
+          email: { accounts: [] },
+          storage: { storage: [] },
+        };
+      }
+      throw new Error(`unexpected ${method}`);
+    });
+
+    const { container } = render(<ProfileSettings />, { wrapper: wrapper(call) });
+
+    const scope = within(container);
+    await waitFor(() => expect(scope.getByText('Fast model')).toBeTruthy());
+    expect(scope.getByText('flash-lite')).toBeTruthy();
+    expect(scope.getByText('Fast reasoning')).toBeTruthy();
+    expect(scope.getByText('low')).toBeTruthy();
+    expect(scope.getByText('Deep model')).toBeTruthy();
+    expect(scope.getByText('main model')).toBeTruthy();
+    expect(scope.queryByText('Deep reasoning')).toBeNull();
+  });
+
+  it('hides tier rows when the daemon detail has no tiers (old daemon)', async () => {
+    const call = vi.fn(async (method) => {
+      if (method === 'host.profile.summaries') {
+        return { profiles: [{ name: 'doc', counts: {} }] };
+      }
+      if (method === 'host.settings.profile_snapshot') {
+        return {
+          detail: { name: 'doc', model: 'openrouter/example' },
+          usage: { days: [] },
+          schedules: { jobs: [] },
+          workgroups: { workgroups: [] },
+          email: { accounts: [] },
+          storage: { storage: [] },
+        };
+      }
+      throw new Error(`unexpected ${method}`);
+    });
+
+    const { container } = render(<ProfileSettings />, { wrapper: wrapper(call) });
+
+    const scope = within(container);
+    await waitFor(() => expect(scope.getByText('Model')).toBeTruthy());
+    expect(scope.queryByText('Fast model')).toBeNull();
+    expect(scope.queryByText('Deep model')).toBeNull();
   });
 });

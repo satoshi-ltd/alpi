@@ -161,6 +161,7 @@ async def _data_chat_send(
 
         parts: list[str] = []
         produced: list[dict] = []
+        model_used = cfg.model
 
         async def _heartbeat_loop() -> None:
             while stream_alive:
@@ -214,6 +215,9 @@ async def _data_chat_send(
                     "ok": ev.ok,
                     "output": _truncate(ev.output, 4000),
                 })
+            elif ev.kind == "routing":
+                model_used = ev.model or model_used
+                await emit({"event": "routing", "text": ev.text, "model": ev.model})
             elif ev.kind == "reasoning_delta":
                 await emit({"event": "reasoning_delta", "text": ev.text})
             elif ev.kind == "assistant_delta":
@@ -239,6 +243,7 @@ async def _data_chat_send(
             "event": "reply",
             "text": final,
             "session_id": engine.session.id,
+            "model_used": model_used,
             **({"attachments": produced} if produced else {}),
         })
         await emit({"event": "done", "session_id": engine.session.id})
