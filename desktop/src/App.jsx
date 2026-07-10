@@ -9,7 +9,6 @@ import Settings from "./pages/Settings.jsx";
 import { Banner } from "./primitives/index.js";
 import { useNotify } from "./primitives/Notification.jsx";
 import CommandPalette from "./features/CommandPalette.jsx";
-import ShortcutsModal from "./features/ShortcutsModal.jsx";
 import ApprovalModal from "./features/ApprovalModal.jsx";
 import ClarificationModal from "./features/ClarificationModal.jsx";
 import CreateProfileModal from "./features/CreateProfileModal.jsx";
@@ -49,6 +48,7 @@ import { usePinned } from "./hooks/usePinned.js";
 import { useActiveRole } from "./hooks/useActiveRole.js";
 import { useWorkgroupTasks } from "./hooks/useWorkgroupTasks.js";
 import { markWorkgroupRead } from "./hooks/useReadState.js";
+import { isTtsActive, subscribeTts } from "./lib/tts.js";
 import { useWindowChrome } from "./hooks/useWindowChrome.js";
 import {
   useActiveViewPing,
@@ -192,9 +192,6 @@ export default function App() {
   }, [searchOpen]);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const paletteOpenRef = useRef(false);
-  const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const onToggleShortcuts = useCallback(() => setShortcutsOpen((v) => !v), []);
-  const onCloseShortcuts = useCallback(() => setShortcutsOpen(false), []);
   useEffect(() => {
     paletteOpenRef.current = paletteOpen;
   }, [paletteOpen]);
@@ -206,10 +203,18 @@ export default function App() {
   const [browse, setBrowse] = useState(null);
   const [sessionsDropdownOpenTick, setSessionsDropdownOpenTick] = useState(0);
   const [taskHistoryOpenTick, setTaskHistoryOpenTick] = useState(0);
+  const [readAloudTick, setReadAloudTick] = useState(0);
+  const [readAloudActive, setReadAloudActive] = useState(() => isTtsActive());
+  const [workgroupRefreshTick, setWorkgroupRefreshTick] = useState(0);
+  const [workgroupPauseTick, setWorkgroupPauseTick] = useState(0);
   const onCloseBrowse = useCallback(() => setBrowse(null), []);
   const onBrowseTools = useCallback(() => setBrowse("tools"), []);
   const onBrowseSkills = useCallback(() => setBrowse("skills"), []);
   const onBrowseMemory = useCallback(() => setBrowse("memory"), []);
+  useEffect(() => subscribeTts(() => setReadAloudActive(isTtsActive())), []);
+  const onToggleReadAloud = useCallback(() => {
+    setReadAloudTick((n) => n + 1);
+  }, []);
   const onToggleSearch = useCallback(() => {
     if (searchOpenRef.current) {
       setSearchOpen(false);
@@ -696,6 +701,7 @@ export default function App() {
   const historyKind = activeWorkgroup || activeSettingsWorkgroup
     ? "tasks"
     : activeProfileName ? "sessions" : null;
+  const canReadAloud = view.kind === "profile" && (sessionData?.turns ?? []).some((t) => t?.assistant);
   const onOpenHistory = useCallback(() => {
     if (activeWorkgroup) {
       setTaskHistoryOpenTick((n) => n + 1);
@@ -724,6 +730,34 @@ export default function App() {
     }
   }, [activeWorkgroup, activeSettingsWorkgroup, activeProfileName, activeProfile, view]);
 
+  const onRefreshActiveThread = useCallback(() => {
+    const v = viewRef.current;
+    if (v?.kind === "profile") {
+      onRefreshSession();
+    } else if (v?.kind === "workgroup") {
+      setWorkgroupRefreshTick((n) => n + 1);
+    }
+  }, [onRefreshSession]);
+
+  const onToggleActiveProfilePause = useCallback(() => {
+    if (activeProfile && adminOnTogglePauseProfile) {
+      adminOnTogglePauseProfile(activeProfile);
+    }
+  }, [activeProfile, adminOnTogglePauseProfile]);
+
+  const onToggleActiveWorkgroupPause = useCallback(() => {
+    if (activeWorkgroup) setWorkgroupPauseTick((n) => n + 1);
+  }, [activeWorkgroup]);
+
+  const onToggleActiveContextPause = useCallback(() => {
+    const v = viewRef.current;
+    if (v?.kind === "profile") {
+      onToggleActiveProfilePause();
+    } else if (v?.kind === "workgroup") {
+      onToggleActiveWorkgroupPause();
+    }
+  }, [onToggleActiveProfilePause, onToggleActiveWorkgroupPause]);
+
   useWindowChrome({
     viewRef,
     setView,
@@ -738,11 +772,19 @@ export default function App() {
     activeProfileName,
     historyKind,
     onOpenHistory,
+    onRefreshThread:
+      view.kind === "profile" || view.kind === "workgroup"
+        ? onRefreshActiveThread
+        : null,
+    onToggleContextPause:
+      view.kind === "profile" || view.kind === "workgroup"
+        ? onToggleActiveContextPause
+        : null,
+    onToggleReadAloud: canReadAloud ? onToggleReadAloud : null,
     onBrowseTools,
     onBrowseSkills,
     onBrowseMemory,
     onToggleNotifications: onOpenNotifications,
-    onToggleShortcuts,
   });
 
   const pendingTurnForCurrentView = useMemo(
@@ -1016,22 +1058,31 @@ export default function App() {
   }, [jumpTargets]);
 
   const paletteCommands = useCommands({
-    onToggleShortcuts,
     view,
-    profiles,
-    workgroups,
-    pinned,
     searchOpen,
     activeProfileName,
     historyKind,
-    onSelectProfile: onOpenProfile,
-    onSelectWorkgroup,
     onOpenSettings: adminOnOpenSettings,
     onCloseSettings: closeSettings,
     onToggleSearch,
     onNewProfile: adminOnNewProfile,
     onNewWorkgroup: adminOnNewWorkgroup,
     onNewChat,
+    onRefreshThread:
+      view.kind === "profile" || view.kind === "workgroup"
+        ? onRefreshActiveThread
+        : null,
+    onToggleReadAloud: canReadAloud ? onToggleReadAloud : null,
+    canReadAloud,
+    readAloudActive,
+    canRefreshThread:
+      view.kind === "workgroup" ||
+      (view.kind === "profile" && (sessionData?.turns?.length ?? 0) > 0),
+    profilePaused: !!activeProfile?.paused,
+    onToggleProfilePause:
+      activeProfile && adminOnTogglePauseProfile ? onToggleActiveProfilePause : null,
+    workgroupPaused: !!activeWorkgroup?.paused,
+    onToggleWorkgroupPause: activeWorkgroup ? onToggleActiveWorkgroupPause : null,
     onBrowseTools,
     onBrowseSkills,
     onBrowseMemory,
@@ -1147,6 +1198,8 @@ export default function App() {
                   searchOpen={searchOpen}
                   onCloseSearch={onCloseSearch}
                   taskHistoryOpenTick={taskHistoryOpenTick}
+                  refreshCommandTick={workgroupRefreshTick}
+                  pauseCommandTick={workgroupPauseTick}
                 />
               )}
               {(view.kind === "empty" || view.kind === "profile") && (
@@ -1193,6 +1246,7 @@ export default function App() {
                   onRefreshSession={onRefreshSession}
                   onNewSession={onNewSessionForCurrentProfile}
                   sessionsOpenTick={sessionsDropdownOpenTick}
+                  readAloudTick={readAloudTick}
                   onChangeSession={onChangeSession}
                   searchOpen={searchOpen}
                   onCloseSearch={onCloseSearch}
@@ -1207,10 +1261,7 @@ export default function App() {
         open={paletteOpen}
         onClose={onClosePalette}
         commands={paletteCommands}
-        profiles={profiles}
-        workgroups={workgroups}
       />
-      <ShortcutsModal open={shortcutsOpen} onClose={onCloseShortcuts} />
       <ToolsModal
         key={`${hostConnections.active_id}:${activeProfileName ?? ""}`}
         open={browse === "tools"}

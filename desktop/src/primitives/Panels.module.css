@@ -221,6 +221,10 @@
   background: var(--selected);
 }
 
+.paletteItemStatic {
+  cursor: default;
+}
+
 .paletteGlyph {
   width: 16px;
   display: inline-flex;

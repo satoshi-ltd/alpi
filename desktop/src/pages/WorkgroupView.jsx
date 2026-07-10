@@ -92,6 +92,8 @@ export default function WorkgroupView({
   searchOpen = false,
   onCloseSearch,
   taskHistoryOpenTick = 0,
+  refreshCommandTick = 0,
+  pauseCommandTick = 0,
 }) {
   const initialCached = useMemo(
     () => loadCachedMessages(connectionId, workgroup.profile, workgroup.id),
@@ -108,6 +110,8 @@ export default function WorkgroupView({
   const [error, setError] = useState(null);
   const [costs, setCosts] = useState({});
   const scrollRef = useStickyScroll([messages]);
+  const refreshMountedRef = useRef(false);
+  const pauseMountedRef = useRef(false);
   const { farFromBottom, scrollToBottom } = useScrollProgress(scrollRef);
   const search = useTranscriptSearch(scrollRef, searchOpen);
   const closeSearch = () => {
@@ -238,6 +242,37 @@ export default function WorkgroupView({
     setRefreshBeat((b) => b + 1);
     setRefreshTick((t) => t + 1);
   };
+
+  const togglePause = async () => {
+    try {
+      await invoke("workgroup_action", {
+        profile: workgroup.profile,
+        wgId: workgroup.id,
+        action: workgroup.paused ? "resume" : "pause",
+        ...(connectionId ? { connectionId } : {}),
+      });
+      onReload?.();
+      setRefreshTick((t) => t + 1);
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
+  useEffect(() => {
+    if (!refreshMountedRef.current) {
+      refreshMountedRef.current = true;
+      return;
+    }
+    if (refreshCommandTick > 0) bumpRefresh();
+  }, [refreshCommandTick]);
+
+  useEffect(() => {
+    if (!pauseMountedRef.current) {
+      pauseMountedRef.current = true;
+      return;
+    }
+    if (pauseCommandTick > 0) togglePause();
+  }, [pauseCommandTick]);
 
   useEffect(() => {
     let cancelled = false;
@@ -385,20 +420,7 @@ export default function WorkgroupView({
             : null
         }
         paused={!!workgroup.paused}
-        onTogglePause={async () => {
-          try {
-            await invoke("workgroup_action", {
-              profile: workgroup.profile,
-              wgId: workgroup.id,
-              action: workgroup.paused ? "resume" : "pause",
-              ...(connectionId ? { connectionId } : {}),
-            });
-            onReload?.();
-            setRefreshTick((t) => t + 1);
-          } catch (e) {
-            setError(String(e));
-          }
-        }}
+        onTogglePause={togglePause}
         autoRead={!!workgroup.auto_read}
         onToggleAutoRead={async () => {
           try {

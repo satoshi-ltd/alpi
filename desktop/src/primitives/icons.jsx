@@ -42,6 +42,7 @@ export const FileIcon = (p) => <Icon name="file" {...p} />;
 export const FileTextIcon = (p) => <Icon name="file-text" {...p} />;
 export const FileCodeIcon = (p) => <Icon name="file-code" {...p} />;
 export const Mute = (p) => <Icon name="mute" {...p} />;
+export const Volume = (p) => <Icon name="volume" {...p} />;
 export const Archive = (p) => <Icon name="archive" {...p} />;
 export const Bell = (p) => <Icon name="bell" {...p} />;
 
@@ -79,7 +80,7 @@ export const ArchiveIcon = Archive;
 export const BellIcon = Bell;
 export const SkipIcon = (p) => <Icon name="skip" {...p} />;
 export const StopIcon = (p) => <Icon name="stop" {...p} />;
-export const VolumeIcon = (p) => <Icon name="volume" {...p} />;
+export const VolumeIcon = Volume;
 export const EditIcon = (p) => <Icon name="edit" {...p} />;
 export const CaretIcon = (p) => <Icon name="caret" size={12} color="var(--ink-3)" {...p} />;
 export const BackIcon = (p) => <Icon name="arrow-left" size={16} {...p} />;
@@ -175,5 +176,5 @@ export const I = {
   Search, Plus, Arrow, ArrowLeft, Refresh,
   Gear, Check, X, Pause, Play, Power, Copy, Cpu, Server, Globe, Sun, Moon,
   Trash, ChevDown, ChevRight, Send, Blocks, Sparkle, Wrench,
-  MuteIcon: Mute, Archive, Bell, Alpaca,
+  MuteIcon: Mute, Volume, Archive, Bell, Alpaca,
 };

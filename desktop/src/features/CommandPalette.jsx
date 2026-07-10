@@ -7,8 +7,13 @@ const GLYPH_BY_PREFIX = {
   "view:find": () => <I.Search />,
   "view:notifications": () => <I.Bell />,
   "chat:find": () => <I.Search />,
-  "chat:sessions": () => <I.Archive />,
+  "chat:refresh": () => <I.Refresh />,
+  "chat:read-aloud": () => <I.Volume />,
+  "profile:sessions": () => <I.Archive />,
+  "profile:pause": () => <I.Pause />,
   "workgroup:tasks": () => <I.Check />,
+  "workgroup:pause": () => <I.Pause />,
+  "workgroup:refresh": () => <I.Refresh />,
   "profile:tools": () => <I.Wrench />,
   "profile:skills": () => <I.Blocks />,
   "profile:memory": () => <I.Cpu />,
@@ -17,44 +22,12 @@ const GLYPH_BY_PREFIX = {
   "create:workgroup": () => <I.Plus />,
 };
 
-function resolveGlyph(cmd, profiles, workgroups) {
-  // nav:profile:<name>  → diamond in profile accent
-  if (cmd.id.startsWith("nav:profile:")) {
-    const name = cmd.id.slice("nav:profile:".length);
-    const p = profiles.find((x) => x.name === name);
-    return (
-      <span
-        className="diamond"
-        style={{ "--c": p?.accent || "var(--ink-3)", width: 9, height: 9 }}
-      />
-    );
-  }
-  if (cmd.id.startsWith("nav:workgroup:")) {
-    return (
-      <span
-        className="hash"
-        style={{
-          fontFamily: "var(--font-mono)",
-          color: "var(--ink-3)",
-          fontSize: "var(--fs-base)",
-          fontWeight: 500,
-        }}
-      >
-        #
-      </span>
-    );
-  }
+function resolveGlyph(cmd) {
   const make = GLYPH_BY_PREFIX[cmd.id];
   return make ? make() : <I.ChevRight />;
 }
 
-export default function CommandPalette({
-  open,
-  onClose,
-  commands,
-  profiles = [],
-  workgroups = [],
-}) {
+export default function CommandPalette({ open, onClose, commands }) {
   const groups = useMemo(() => {
     const byGroup = new Map();
     commands.forEach((c) => {
@@ -63,7 +36,7 @@ export default function CommandPalette({
         id: c.id,
         label: c.label,
         shortcut: c.hint,
-        glyph: resolveGlyph(c, profiles, workgroups),
+        glyph: resolveGlyph(c),
         onSelect: c.action,
       });
     });
@@ -71,7 +44,7 @@ export default function CommandPalette({
       label,
       items,
     }));
-  }, [commands, profiles, workgroups]);
+  }, [commands]);
 
   return <Palette open={open} onClose={onClose} groups={groups} />;
 }

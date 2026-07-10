@@ -1,66 +1,52 @@
 import { useMemo } from "react";
-import { profileLabel } from "../lib/profile-display.js";
-import { orderedJumpTargets } from "../lib/profile-order.js";
 
 export function useCommands({
   view,
-  profiles,
-  workgroups,
-  pinned,
   searchOpen,
   activeProfileName = null,
   historyKind = null,
-  onSelectProfile,
-  onSelectWorkgroup,
   onOpenSettings,
   onCloseSettings,
   onToggleSearch,
   onNewProfile,
   onNewWorkgroup,
   onNewChat,
+  onRefreshThread,
+  canRefreshThread = false,
+  onToggleReadAloud,
+  canReadAloud = false,
+  readAloudActive = false,
+  profilePaused = false,
+  onToggleProfilePause,
+  workgroupPaused = false,
+  onToggleWorkgroupPause,
   onBrowseTools,
   onBrowseSkills,
   onBrowseMemory,
   onOpenHistory,
   onToggleNotifications,
-  onToggleShortcuts,
 }) {
   return useMemo(() => {
-    const cmds = [];
-
-    const jumpTargets = orderedJumpTargets({
-      profiles,
-      workgroups,
-      pinnedProfiles: pinned?.profiles ?? [],
-      pinnedWorkgroups: pinned?.workgroups ?? [],
-    });
-
-    jumpTargets.slice(0, 9).forEach((item, i) => {
-      const hint = `⌘${i + 1}`;
-      if (item.kind === "profile") {
-        cmds.push({
-          id: `nav:profile:${item.target.name}`,
-          group: "Navigate",
-          label: `Open @${profileLabel(item.target.name)}`,
-          hint,
-          action: () => onSelectProfile?.(item.target),
-        });
-      } else if (item.kind === "workgroup") {
-        cmds.push({
-          id: `nav:workgroup:${item.target.profile}/${item.target.id}`,
-          group: "Navigate",
-          label: `Open #${item.target.name || item.target.id}`,
-          hint,
-          action: () => onSelectWorkgroup?.(item.target),
-        });
-      }
-    });
+    const cmds = [
+      {
+        id: "help:palette",
+        group: "General",
+        label: "Command palette",
+        hint: "⌘K",
+      },
+      {
+        id: "help:jump",
+        group: "General",
+        label: "Jump to profile / workgroup",
+        hint: "⌘1–9",
+      },
+    ];
 
     if (historyKind === "sessions" && activeProfileName && onOpenHistory) {
       cmds.push({
-        id: "chat:sessions",
-        group: "Chat",
-        label: `Switch @${profileLabel(activeProfileName)} sessions`,
+        id: "profile:sessions",
+        group: "Profile",
+        label: "Sessions",
         hint: "⇧⌘H",
         action: () => onOpenHistory(),
       });
@@ -73,6 +59,26 @@ export function useCommands({
         label: "New chat",
         hint: "⌘N",
         action: () => onNewChat?.(),
+      });
+    }
+
+    if (view.kind === "profile" && onRefreshThread && canRefreshThread) {
+      cmds.push({
+        id: "chat:refresh",
+        group: "Chat",
+        label: "Refresh thread",
+        hint: "⇧⌘R",
+        action: () => onRefreshThread(),
+      });
+    }
+
+    if (view.kind === "profile" && onToggleReadAloud && canReadAloud) {
+      cmds.push({
+        id: "chat:read-aloud",
+        group: "Chat",
+        label: readAloudActive ? "Stop audio" : "Read aloud",
+        hint: "⇧⌘L",
+        action: () => onToggleReadAloud(),
       });
     }
 
@@ -96,7 +102,36 @@ export function useCommands({
       });
     }
 
+    if (view.kind === "workgroup" && onToggleWorkgroupPause) {
+      cmds.push({
+        id: "workgroup:pause",
+        group: "Workgroup",
+        label: workgroupPaused ? "Resume workgroup" : "Pause workgroup",
+        hint: "⇧⌘P",
+        action: () => onToggleWorkgroupPause(),
+      });
+    }
+
+    if (view.kind === "workgroup" && onRefreshThread) {
+      cmds.push({
+        id: "workgroup:refresh",
+        group: "Workgroup",
+        label: "Refresh thread",
+        hint: "⇧⌘R",
+        action: () => onRefreshThread(),
+      });
+    }
+
     if (activeProfileName) {
+      if (onToggleProfilePause) {
+        cmds.push({
+          id: "profile:pause",
+          group: "Profile",
+          label: profilePaused ? "Resume profile" : "Pause profile",
+          hint: "⇧⌘P",
+          action: () => onToggleProfilePause(),
+        });
+      }
       cmds.push({
         id: "profile:tools",
         group: "Profile",
@@ -123,7 +158,7 @@ export function useCommands({
     if (view.kind === "settings" ? Boolean(onCloseSettings) : Boolean(onOpenSettings)) {
       cmds.push({
         id: "view:settings",
-        group: "View",
+        group: "General",
         label: view.kind === "settings" ? "Close settings" : "Open settings",
         hint: "⌘,",
         action: () =>
@@ -134,20 +169,10 @@ export function useCommands({
     if (onToggleNotifications) {
       cmds.push({
         id: "view:notifications",
-        group: "View",
+        group: "General",
         label: "Notifications",
         hint: "⌘O",
         action: () => onToggleNotifications(),
-      });
-    }
-
-    if (onToggleShortcuts) {
-      cmds.push({
-        id: "view:shortcuts",
-        group: "View",
-        label: "Keyboard shortcuts",
-        hint: "⌘/",
-        action: () => onToggleShortcuts(),
       });
     }
 
@@ -171,28 +196,46 @@ export function useCommands({
       });
     }
 
+    [
+      ["help:send", "Chat", "Send message", "⌘↵"],
+      ["help:zoom-in", "View", "Zoom in", "⌘+"],
+      ["help:zoom-out", "View", "Zoom out", "⌘-"],
+      ["help:zoom-reset", "View", "Reset zoom", "⌘0"],
+      ["help:close", "View", "Close / dismiss", "Esc"],
+    ].forEach(([id, group, label, hint]) => {
+      cmds.push({
+        id,
+        group,
+        label,
+        hint,
+      });
+    });
+
     return cmds;
   }, [
     view,
-    profiles,
-    workgroups,
-    pinned,
     searchOpen,
     activeProfileName,
     historyKind,
-    onSelectProfile,
-    onSelectWorkgroup,
     onOpenSettings,
     onCloseSettings,
     onToggleSearch,
     onNewProfile,
     onNewWorkgroup,
     onNewChat,
+    onRefreshThread,
+    canRefreshThread,
+    onToggleReadAloud,
+    canReadAloud,
+    readAloudActive,
+    profilePaused,
+    onToggleProfilePause,
+    workgroupPaused,
+    onToggleWorkgroupPause,
     onBrowseTools,
     onBrowseSkills,
     onBrowseMemory,
     onOpenHistory,
     onToggleNotifications,
-    onToggleShortcuts,
   ]);
 }

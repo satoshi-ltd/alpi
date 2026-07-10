@@ -11,6 +11,15 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.29 — 2026-07-10 — the command palette is the shortcut sheet
+
+- **The command palette now doubles as the keyboard-shortcut reference.** Open
+  it with Cmd+K to see every action alongside its keys; the separate shortcuts
+  modal (Cmd+/) is gone.
+- **Act on the current chat or workgroup straight from the palette.** Refresh
+  the thread, read the latest reply aloud, and pause or resume — each with its
+  own shortcut, shown only where it applies.
+
 ## v0.4.28 — 2026-07-10 — download files from the chat
 
 - **Files an assistant attaches to a message are now downloadable.** Click the

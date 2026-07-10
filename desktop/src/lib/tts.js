@@ -89,6 +89,10 @@ export function currentlyPlayingKey() {
   return currentKey;
 }
 
+export function isTtsActive() {
+  return Boolean(currentKey);
+}
+
 export function stopTts() {
   if (currentAudio) {
     try { currentAudio.pause(); } catch { /* */ }

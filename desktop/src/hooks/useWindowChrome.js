@@ -15,11 +15,13 @@ export function useWindowChrome({
   activeProfileName = null,
   historyKind = null,
   onOpenHistory,
+  onRefreshThread,
+  onToggleContextPause,
+  onToggleReadAloud,
   onBrowseTools,
   onBrowseSkills,
   onBrowseMemory,
   onToggleNotifications,
-  onToggleShortcuts,
 } = {}) {
   useEffect(() => {
     function onDown(e) {
@@ -59,9 +61,7 @@ export function useWindowChrome({
         key === "f" ||
         key === "k" ||
         key === "o" ||
-        key === "/" ||
-        key === "?" ||
-        (e.shiftKey && (key === "t" || key === "s" || key === "m" || key === "h" || key === "n" || key === "w"));
+        (e.shiftKey && (key === "t" || key === "s" || key === "m" || key === "h" || key === "l" || key === "p" || key === "r" || key === "n" || key === "w"));
       if (paletteOpenRef?.current && isShortcut && key !== "k") {
         onClosePalette?.();
       }
@@ -133,10 +133,28 @@ export function useWindowChrome({
         onToggleNotifications?.();
         return;
       }
-      if (key === "/" || key === "?") {
-        e.preventDefault();
-        e.stopPropagation();
-        onToggleShortcuts?.();
+      if (e.shiftKey && key === "l") {
+        if (onToggleReadAloud) {
+          e.preventDefault();
+          e.stopPropagation();
+          onToggleReadAloud();
+        }
+        return;
+      }
+      if (e.shiftKey && key === "r") {
+        if (onRefreshThread) {
+          e.preventDefault();
+          e.stopPropagation();
+          onRefreshThread();
+        }
+        return;
+      }
+      if (e.shiftKey && key === "p") {
+        if (onToggleContextPause) {
+          e.preventDefault();
+          e.stopPropagation();
+          onToggleContextPause();
+        }
         return;
       }
       if (e.shiftKey && key === "h") {
@@ -159,5 +177,5 @@ export function useWindowChrome({
     }
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [viewRef, setView, onJumpToProfile, onNewProfile, onNewWorkgroup, onOpenSettings, onToggleSearch, onTogglePalette, paletteOpenRef, onClosePalette, activeProfileName, historyKind, onOpenHistory, onBrowseTools, onBrowseSkills, onBrowseMemory, onToggleNotifications, onToggleShortcuts]);
+  }, [viewRef, setView, onJumpToProfile, onNewProfile, onNewWorkgroup, onOpenSettings, onToggleSearch, onTogglePalette, paletteOpenRef, onClosePalette, activeProfileName, historyKind, onOpenHistory, onRefreshThread, onToggleContextPause, onToggleReadAloud, onBrowseTools, onBrowseSkills, onBrowseMemory, onToggleNotifications]);
 }

@@ -96,6 +96,7 @@ export default function ChatPane({
   const [refreshBeat, setRefreshBeat] = useState(0);
   const [stopping, setStopping] = useState(false);
   const readAloudMountedRef = useRef(false);
+  const readAloudStateRef = useRef(null);
 
   useEffect(() => {
     setModelOverride(null);
@@ -121,14 +122,22 @@ export default function ChatPane({
 
   const autoRead = !!activeDetail?.voice_auto_read;
   const ttsVoiceId = activeProfile?.voice_id ?? activeDetail?.voice_id ?? null;
+  readAloudStateRef.current = {
+    view,
+    turns: sessionData?.turns ?? [],
+    turnsOffset: sessionData?.turnsOffset,
+    name: activeProfile?.name,
+    voice: ttsVoiceId,
+  };
   useEffect(() => {
     if (!readAloudMountedRef.current) {
       readAloudMountedRef.current = true;
       return;
     }
-    if (readAloudTick <= 0 || view.kind !== "profile") return;
-    const turns = sessionData?.turns ?? [];
-    const turnBase = Number.isInteger(sessionData?.turnsOffset) ? sessionData.turnsOffset : 0;
+    if (readAloudTick <= 0) return;
+    const { view, turns, turnsOffset, name, voice } = readAloudStateRef.current;
+    if (view.kind !== "profile") return;
+    const turnBase = Number.isInteger(turnsOffset) ? turnsOffset : 0;
     if (currentlyPlayingKey()) {
       stopTts();
       return;
@@ -136,16 +145,16 @@ export default function ChatPane({
     for (let i = turns.length - 1; i >= 0; i--) {
       const text = turns[i]?.assistant;
       if (!text) continue;
-      const key = `chat:${activeProfile?.name}:${view.sessionId ?? "new"}:${turnBase + i}`;
+      const key = `chat:${name}:${view.sessionId ?? "new"}:${turnBase + i}`;
       playTts({
         key,
-        profile: activeProfile?.name,
-        voice: ttsVoiceId || VOICE_POOL[0],
+        profile: name,
+        voice: voice || VOICE_POOL[0],
         text,
       });
       break;
     }
-  }, [readAloudTick, view, sessionData, activeProfile?.name, ttsVoiceId]);
+  }, [readAloudTick]);
   const prevPendingRef = useRef(false);
   const lastPreviewRef = useRef("");
   // fire only on the pendingTurn truthy→null edge, never on history load

@@ -211,9 +211,10 @@ export function Palette({ open, onClose, groups = [] }) {
     return out;
   }, [q, groups]);
   const items = flat.filter((x) => x.kind === "item");
+  const actionableItems = items.filter((x) => x.onSelect);
 
   function run(it) {
-    if (!it) return;
+    if (!it?.onSelect) return;
     it.onSelect?.();
     onClose?.();
   }
@@ -221,13 +222,13 @@ export function Palette({ open, onClose, groups = [] }) {
   function onKey(e) {
     if (e.key === "ArrowDown" || e.key === "Tab") {
       e.preventDefault();
-      setIdx((i) => Math.min(items.length - 1, i + 1));
+      setIdx((i) => Math.min(actionableItems.length - 1, i + 1));
     } else if (e.key === "ArrowUp" || (e.shiftKey && e.key === "Tab")) {
       e.preventDefault();
       setIdx((i) => Math.max(0, i - 1));
     } else if (e.key === "Enter") {
       e.preventDefault();
-      run(items[idx]);
+      run(actionableItems[idx]);
     } else if (e.key === "Escape") {
       onClose?.();
     }
@@ -267,15 +268,19 @@ export function Palette({ open, onClose, groups = [] }) {
                   </div>
                 );
               }
-              const itemIndex = items.findIndex((it) => it.id === row.id);
-              const selected = itemIndex === idx;
+              const itemIndex = actionableItems.findIndex((it) => it.id === row.id);
+              const selected = itemIndex >= 0 && itemIndex === idx;
+              const actionable = Boolean(row.onSelect);
               return (
                 <button
                   key={row.id}
                   type="button"
                   onClick={() => run(row)}
-                  onMouseEnter={() => setIdx(itemIndex)}
-                  className={`row ${styles.paletteItem} ${selected ? styles.paletteItemSelected : ""}`}
+                  onMouseEnter={() => {
+                    if (itemIndex >= 0) setIdx(itemIndex);
+                  }}
+                  aria-disabled={!actionable}
+                  className={`row ${styles.paletteItem} ${selected ? styles.paletteItemSelected : ""} ${actionable ? "" : styles.paletteItemStatic}`}
                 >
                   <span className={styles.paletteGlyph}>
                     {row.glyph || <I.ChevRight />}

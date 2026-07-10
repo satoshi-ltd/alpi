@@ -26,11 +26,13 @@ function mountWindowChrome(overrides = {}) {
     activeProfileName: "doc",
     historyKind: "sessions",
     onOpenHistory: vi.fn(),
+    onRefreshThread: vi.fn(),
+    onToggleContextPause: vi.fn(),
+    onToggleReadAloud: vi.fn(),
     onBrowseTools: vi.fn(),
     onBrowseSkills: vi.fn(),
     onBrowseMemory: vi.fn(),
     onToggleNotifications: vi.fn(),
-    onToggleShortcuts: vi.fn(),
     ...overrides,
   };
   const hook = renderHook(() => useWindowChrome(props));
@@ -64,14 +66,22 @@ describe("useWindowChrome", () => {
     chrome.unmount();
   });
 
-  it("opens notifications and shortcuts from any view", () => {
+  it("opens notifications from any view", () => {
     const chrome = mountWindowChrome({ activeProfileName: null });
 
     press("o", { metaKey: true });
-    press("/", { metaKey: true });
 
     expect(chrome.onToggleNotifications).toHaveBeenCalledTimes(1);
-    expect(chrome.onToggleShortcuts).toHaveBeenCalledTimes(1);
+    chrome.unmount();
+  });
+
+  it("does not reserve command slash for a separate shortcuts modal", () => {
+    const chrome = mountWindowChrome({ activeProfileName: null });
+
+    press("/", { metaKey: true });
+
+    expect(chrome.onToggleNotifications).not.toHaveBeenCalled();
+    expect(chrome.onOpenHistory).not.toHaveBeenCalled();
     chrome.unmount();
   });
 
@@ -81,6 +91,33 @@ describe("useWindowChrome", () => {
     press("H", { metaKey: true, shiftKey: true });
 
     expect(chrome.onOpenHistory).toHaveBeenCalledTimes(1);
+    chrome.unmount();
+  });
+
+  it("toggles read aloud with shift command l", () => {
+    const chrome = mountWindowChrome();
+
+    press("L", { metaKey: true, shiftKey: true });
+
+    expect(chrome.onToggleReadAloud).toHaveBeenCalledTimes(1);
+    chrome.unmount();
+  });
+
+  it("refreshes the active thread with shift command r", () => {
+    const chrome = mountWindowChrome();
+
+    press("R", { metaKey: true, shiftKey: true });
+
+    expect(chrome.onRefreshThread).toHaveBeenCalledTimes(1);
+    chrome.unmount();
+  });
+
+  it("toggles the active pause state with shift command p", () => {
+    const chrome = mountWindowChrome();
+
+    press("P", { metaKey: true, shiftKey: true });
+
+    expect(chrome.onToggleContextPause).toHaveBeenCalledTimes(1);
     chrome.unmount();
   });
 
