@@ -1,11 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { subscribeDaemonEvent } from "../../../lib/daemon-bus.js";
-import { useNotify } from "../../../primitives/Notification.jsx";
-import { Section } from "../primitives.jsx";
+import { ActionLink } from "../../../primitives/index.js";
+import { Section, Row } from "../primitives.jsx";
 import settingsStyles from "../Settings.module.css";
-import { ScheduleRow as DsScheduleRow, ScheduleList as DsScheduleList } from "../../../primitives/SettingsLayout.jsx";
-import { scheduleSummary, formatLastRun } from "../util.js";
 
 function cacheKey(connectionId, profileName) {
   return `${connectionId || "local"}|${profileName}`;
@@ -25,33 +23,21 @@ export function SchedulesSection({
   profile,
   connectionId = null,
   prefetched,
-  onSnapshotRefresh = null,
   onLoadingChange,
+  onOpen,
   defer = false,
 }) {
   const prefetchedMode = prefetched !== undefined;
   const key = cacheKey(connectionId, profile.name);
   const [jobs, setJobs] = useState(() => (prefetchedMode ? prefetched : _jobsCache.get(key) ?? null));
   const [loadError, setLoadError] = useState(null);
-  const [busyId, setBusyId] = useState(null);
   const [loading, setLoading] = useState(!prefetchedMode);
-  const notify = useNotify();
-  const targetRef = useRef({ profile: profile.name, connectionId });
   const genRef = useRef(0);
 
   const connArg = connectionId ? { connectionId } : {};
 
-  async function load({ force = false } = {}) {
-    if (prefetchedMode) {
-      if (!force || !onSnapshotRefresh) return;
-      setLoading(true);
-      try {
-        await onSnapshotRefresh();
-      } finally {
-        setLoading(false);
-      }
-      return;
-    }
+  async function load() {
+    if (prefetchedMode) return;
     const gen = genRef.current;
     setLoading(true);
     try {
@@ -72,18 +58,15 @@ export function SchedulesSection({
 
   useEffect(() => {
     genRef.current += 1;
-    targetRef.current = { profile: profile.name, connectionId };
     if (prefetchedMode) {
       setJobs(prefetched);
       _jobsCache.set(key, Array.isArray(prefetched) ? prefetched : []);
       setLoadError(null);
-      setBusyId(null);
       setLoading(false);
       return;
     }
     setJobs(_jobsCache.get(key) ?? null);
     setLoadError(null);
-    setBusyId(null);
     if (defer) {
       setLoading(true);
       return;
@@ -107,66 +90,6 @@ export function SchedulesSection({
     });
   }, [profile.name, connectionId, prefetchedMode, defer]);
 
-  function pinnedTarget() {
-    return {
-      profile: targetRef.current.profile,
-      ...(targetRef.current.connectionId ? { connectionId: targetRef.current.connectionId } : {}),
-    };
-  }
-
-  async function fire(id) {
-    const gen = genRef.current;
-    const target = pinnedTarget();
-    setBusyId(`fire:${id}`);
-    try {
-      await invoke("schedule_fire", { ...target, id });
-      if (gen !== genRef.current) return;
-      notify({ message: `Schedule ${id} started`, variant: "success", duration: 2000 });
-      await load({ force: true });
-    } catch (e) {
-      if (gen !== genRef.current) return;
-      notify({ message: `fire failed: ${String(e)}`, variant: "error", duration: 4000 });
-    } finally {
-      if (gen === genRef.current) setBusyId(null);
-    }
-  }
-
-  async function setPaused(id, paused) {
-    const gen = genRef.current;
-    const target = pinnedTarget();
-    setBusyId(`pause:${id}`);
-    try {
-      await invoke("schedule_set_paused", { ...target, id, paused });
-      if (gen !== genRef.current) return;
-      await load({ force: true });
-    } catch (e) {
-      if (gen !== genRef.current) return;
-      notify({
-        message: `${paused ? "pause" : "resume"} failed: ${String(e)}`,
-        variant: "error",
-        duration: 4000,
-      });
-    } finally {
-      if (gen === genRef.current) setBusyId(null);
-    }
-  }
-
-  async function remove(id) {
-    const gen = genRef.current;
-    const target = pinnedTarget();
-    setBusyId(`del:${id}`);
-    try {
-      await invoke("schedule_remove", { ...target, id });
-      if (gen !== genRef.current) return;
-      await load({ force: true });
-    } catch (e) {
-      if (gen !== genRef.current) return;
-      notify({ message: `delete failed: ${String(e)}`, variant: "error", duration: 4000 });
-    } finally {
-      if (gen === genRef.current) setBusyId(null);
-    }
-  }
-
   if (loadError) {
     return (
       <Section title="Schedule" tooltip="recurring agent tasks">
@@ -184,26 +107,14 @@ export function SchedulesSection({
     );
   }
   if (jobs.length === 0) return null;
+  const active = jobs.filter((j) => !j.paused).length;
   return (
     <Section title="Schedule" tooltip="recurring agent tasks">
-      <DsScheduleList>
-        {jobs.map((j) => (
-          <DsScheduleRow
-            key={j.id}
-            s={{
-              id: j.id,
-              cron: scheduleSummary(j),
-              title: j.title || "",
-              prompt: j.prompt || "",
-              on: !j.paused,
-              lastRun: formatLastRun(j.last_run_at, j.last_run_status),
-            }}
-            onFire={() => fire(j.id)}
-            onToggle={() => setPaused(j.id, !j.paused)}
-            onDelete={() => remove(j.id)}
-          />
-        ))}
-      </DsScheduleList>
+      <Row label="Jobs">
+        <ActionLink onClick={() => onOpen?.()}>
+          {jobs.length} job{jobs.length === 1 ? "" : "s"} · {active} active
+        </ActionLink>
+      </Row>
     </Section>
   );
 }

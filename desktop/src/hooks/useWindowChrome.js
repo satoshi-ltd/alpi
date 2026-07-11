@@ -21,6 +21,7 @@ export function useWindowChrome({
   onBrowseTools,
   onBrowseSkills,
   onBrowseMemory,
+  onBrowseSchedule,
   onToggleNotifications,
 } = {}) {
   useEffect(() => {
@@ -61,7 +62,7 @@ export function useWindowChrome({
         key === "f" ||
         key === "k" ||
         key === "o" ||
-        (e.shiftKey && (key === "t" || key === "s" || key === "m" || key === "h" || key === "l" || key === "p" || key === "r" || key === "n" || key === "w"));
+        (e.shiftKey && (key === "t" || key === "s" || key === "m" || key === "e" || key === "h" || key === "l" || key === "p" || key === "r" || key === "n" || key === "w"));
       if (paletteOpenRef?.current && isShortcut && key !== "k") {
         onClosePalette?.();
       }
@@ -165,17 +166,18 @@ export function useWindowChrome({
         }
         return;
       }
-      if (e.shiftKey && (key === "t" || key === "s" || key === "m")) {
+      if (e.shiftKey && (key === "t" || key === "s" || key === "m" || key === "e")) {
         if (activeProfileName) {
           e.preventDefault();
           e.stopPropagation();
           if (key === "t") onBrowseTools?.();
           else if (key === "s") onBrowseSkills?.();
-          else onBrowseMemory?.();
+          else if (key === "m") onBrowseMemory?.();
+          else onBrowseSchedule?.();
         }
       }
     }
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [viewRef, setView, onJumpToProfile, onNewProfile, onNewWorkgroup, onOpenSettings, onToggleSearch, onTogglePalette, paletteOpenRef, onClosePalette, activeProfileName, historyKind, onOpenHistory, onRefreshThread, onToggleContextPause, onToggleReadAloud, onBrowseTools, onBrowseSkills, onBrowseMemory, onToggleNotifications]);
+  }, [viewRef, setView, onJumpToProfile, onNewProfile, onNewWorkgroup, onOpenSettings, onToggleSearch, onTogglePalette, paletteOpenRef, onClosePalette, activeProfileName, historyKind, onOpenHistory, onRefreshThread, onToggleContextPause, onToggleReadAloud, onBrowseTools, onBrowseSkills, onBrowseMemory, onBrowseSchedule, onToggleNotifications]);
 }

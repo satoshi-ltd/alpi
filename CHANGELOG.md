@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.10.23 — 2026-07-11 — schedule reports its next run
+
+- **Scheduled jobs now tell paired apps when they'll next fire.** The daemon
+  computes each cron job's upcoming run time, so desktop and mobile can show
+  "next: tomorrow 07:00" instead of just the raw cron expression.
+
 ## v0.10.22 — 2026-07-11 — every token lands in the ledger
 
 - **Every LLM call now counts against the daily budget.** Web extraction,

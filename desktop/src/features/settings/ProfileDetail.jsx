@@ -71,6 +71,7 @@ export default function ProfileDetail({
   onDelete,
   onNavigate,
   onOpenChat,
+  onOpenSchedule,
   refreshTick = 0,
 }) {
   const connId = activeConnection?.id ?? null;
@@ -495,7 +496,7 @@ export default function ProfileDetail({
           connectionId={activeConnection?.id ?? null}
           prefetched={schedulesPre}
           defer={snapPending}
-          onSnapshotRefresh={snap.refresh}
+          onOpen={onOpenSchedule}
           onLoadingChange={setSchedulesLoading}
         />
 

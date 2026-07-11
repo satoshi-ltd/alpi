@@ -23,6 +23,7 @@ export function useCommands({
   onBrowseTools,
   onBrowseSkills,
   onBrowseMemory,
+  onBrowseSchedule,
   onOpenHistory,
   onToggleNotifications,
 }) {
@@ -153,6 +154,13 @@ export function useCommands({
         hint: "⇧⌘M",
         action: () => onBrowseMemory?.(),
       });
+      cmds.push({
+        id: "profile:schedule",
+        group: "Profile",
+        label: "Schedule",
+        hint: "⇧⌘E",
+        action: () => onBrowseSchedule?.(),
+      });
     }
 
     if (view.kind === "settings" ? Boolean(onCloseSettings) : Boolean(onOpenSettings)) {
@@ -235,6 +243,7 @@ export function useCommands({
     onBrowseTools,
     onBrowseSkills,
     onBrowseMemory,
+    onBrowseSchedule,
     onOpenHistory,
     onToggleNotifications,
   ]);

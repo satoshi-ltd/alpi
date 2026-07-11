@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { I } from "./icons.jsx";
 import Tip from "./Tip.jsx";
-import Chip from "./Chip.jsx";
 import ConfirmDelete from "./ConfirmDelete.jsx";
 import Diamond from "./Diamond.jsx";
 import { useDismissOnOutside } from "../hooks/useDismissOnOutside.js";
@@ -178,64 +177,6 @@ export function AccentPicker({ value, onChange }) {
         </div>
       )}
     </span>
-  );
-}
-
-export function ScheduleList({ children }) {
-  return <div className={styles.scheduleList}>{children}</div>;
-}
-
-export function ScheduleRow({ s, onFire, onToggle, onDelete }) {
-  const [confirm, setConfirm] = useState(false);
-  return (
-    <div className={styles.scheduleRow}>
-      <span className={`mono ${styles.scheduleId}`}>{s.id}</span>
-      <Tip text={s.lastRun} side="up">
-        <Chip state={s.on ? "on" : "off"} size="sm">{s.cron}</Chip>
-      </Tip>
-      <div className={styles.scheduleTitleCell}>
-        <Tip text={s.prompt} side="up" escape block wide>
-          <span className={styles.scheduleTitle}>{s.title || s.prompt}</span>
-        </Tip>
-      </div>
-      <div className={styles.scheduleActions}>
-        <Tip text="Run now" side="up">
-          <button type="button" className="iconbtn" onClick={onFire} aria-label="Run now">
-            <I.Play />
-          </button>
-        </Tip>
-        <Tip text={s.on ? "Disable" : "Enable"} side="up">
-          <button
-            type="button"
-            className="iconbtn"
-            onClick={onToggle}
-            aria-label={s.on ? "Disable" : "Enable"}
-          >
-            {s.on ? <I.Pause /> : <I.Power />}
-          </button>
-        </Tip>
-        <span className={styles.deleteWrap}>
-          <Tip text="Delete" side="up">
-            <button
-              type="button"
-              className={`iconbtn ${styles.deleteBtn}`}
-              onClick={() => setConfirm(true)}
-              aria-label="Delete"
-            >
-              <I.Trash />
-            </button>
-          </Tip>
-          <ConfirmDelete
-            mode="simple"
-            open={confirm}
-            onClose={() => setConfirm(false)}
-            onConfirm={onDelete}
-            title={`Delete schedule ${s.id}?`}
-            consequence="The job stops firing. You can recreate it later."
-          />
-        </span>
-      </div>
-    </div>
   );
 }
 

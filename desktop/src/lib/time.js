@@ -5,6 +5,7 @@ const LONG = new Intl.DateTimeFormat(undefined, {
   year: "numeric",
 });
 const CLOCK = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
+const WEEKDAY = new Intl.DateTimeFormat(undefined, { weekday: "short" });
 
 const DATE_BUCKETS = ["Today", "Yesterday", "This week", "This month", "Earlier"];
 
@@ -36,6 +37,29 @@ export function notificationTime(unixSeconds, nowMs = Date.now()) {
     return CLOCK.format(new Date(unixSeconds * 1000));
   }
   return relativeTime(unixSeconds);
+}
+
+export function lastRunShort(iso, nowMs = Date.now()) {
+  if (!iso) return "";
+  const ms = Date.parse(iso);
+  if (Number.isNaN(ms)) return "";
+  return notificationTime(Math.floor(ms / 1000), nowMs);
+}
+
+export function formatNextFire(iso, nowMs = Date.now()) {
+  if (!iso) return "—";
+  const ms = Date.parse(iso);
+  if (Number.isNaN(ms)) return "—";
+  const d = new Date(ms);
+  const now = new Date(nowMs);
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startTarget = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round((startTarget - startToday) / 86400000);
+  const clock = CLOCK.format(d);
+  if (days <= 0) return `today ${clock}`;
+  if (days === 1) return `tomorrow ${clock}`;
+  if (days < 7) return `${WEEKDAY.format(d)} ${clock}`;
+  return `${SHORT.format(d)} ${clock}`;
 }
 
 export function relativeTime(unixSeconds) {

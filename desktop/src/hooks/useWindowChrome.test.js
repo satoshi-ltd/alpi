@@ -32,6 +32,7 @@ function mountWindowChrome(overrides = {}) {
     onBrowseTools: vi.fn(),
     onBrowseSkills: vi.fn(),
     onBrowseMemory: vi.fn(),
+    onBrowseSchedule: vi.fn(),
     onToggleNotifications: vi.fn(),
     ...overrides,
   };
@@ -50,10 +51,12 @@ describe("useWindowChrome", () => {
     press("S", { metaKey: true, shiftKey: true });
     press("M", { metaKey: true, shiftKey: true });
     press("T", { metaKey: true, shiftKey: true });
+    press("E", { metaKey: true, shiftKey: true });
 
     expect(chrome.onBrowseSkills).toHaveBeenCalledTimes(1);
     expect(chrome.onBrowseMemory).toHaveBeenCalledTimes(1);
     expect(chrome.onBrowseTools).toHaveBeenCalledTimes(1);
+    expect(chrome.onBrowseSchedule).toHaveBeenCalledTimes(1);
     chrome.unmount();
   });
 

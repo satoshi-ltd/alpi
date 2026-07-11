@@ -26,8 +26,13 @@ describe("useCommands", () => {
     const commands = renderCommands();
 
     expect(commands.map((cmd) => cmd.id)).toEqual(
-      expect.arrayContaining(["profile:tools", "profile:skills", "profile:memory"]),
+      expect.arrayContaining(["profile:tools", "profile:skills", "profile:memory", "profile:schedule"]),
     );
+    expect(commands.find((cmd) => cmd.id === "profile:schedule")).toMatchObject({
+      group: "Profile",
+      label: "Schedule",
+      hint: "⇧⌘E",
+    });
   });
 
   it("does not show profile browse commands without an active profile", () => {

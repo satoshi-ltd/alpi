@@ -1,0 +1,111 @@
+.jobRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+}
+
+.dot[data-on="on"] {
+  background: var(--ok, #3fb950);
+}
+
+.dot[data-on="off"] {
+  background: transparent;
+  border: 1.5px solid var(--ink-4);
+}
+
+.jobMain {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.jobTitle {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.jobCron {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+.jobWhen {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding-left: var(--space-3);
+  font-size: var(--fs-xs);
+  color: var(--ink-4);
+  white-space: nowrap;
+}
+
+.detailTitle {
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  color: var(--ink);
+}
+
+.detailId {
+  font-size: var(--fs-xs);
+  color: var(--ink-4);
+}
+
+.deleteWrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.deleteBtn:hover {
+  color: var(--danger, #f85149);
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-2) var(--space-6);
+  margin: 0 0 var(--space-5);
+}
+
+.fields > div {
+  display: contents;
+}
+
+.fields dt {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+}
+
+.fields dd {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--ink);
+}
+
+.paused dd {
+  color: var(--ink-3);
+}
+
+.promptLabel {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+  margin-bottom: var(--space-2);
+}
+
+.emptyNote { color: var(--ink-3); }

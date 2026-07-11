@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { dateBucket, groupByDate, notificationTime, relativeTime } from "./time.js";
+import { dateBucket, formatNextFire, groupByDate, lastRunShort, notificationTime, relativeTime } from "./time.js";
 
 const NOW = new Date(2026, 5, 17, 12, 0, 0).getTime();
 const DAY = 86400000;
@@ -51,5 +51,29 @@ describe("notificationTime", () => {
 
   it("returns empty for a missing timestamp", () => {
     expect(notificationTime(0, NOW)).toBe("");
+  });
+});
+
+describe("formatNextFire", () => {
+  it("shows a dash when there is no next fire", () => {
+    expect(formatNextFire(null, NOW)).toBe("—");
+  });
+
+  it("labels today and tomorrow with the clock time", () => {
+    const today = new Date(2026, 5, 17, 19, 0, 0);
+    const tomorrow = new Date(2026, 5, 18, 7, 0, 0);
+    expect(formatNextFire(today.toISOString(), NOW)).toBe(`today ${CLOCK.format(today)}`);
+    expect(formatNextFire(tomorrow.toISOString(), NOW)).toBe(`tomorrow ${CLOCK.format(tomorrow)}`);
+  });
+});
+
+describe("lastRunShort", () => {
+  it("shows the clock time for a run earlier today", () => {
+    const earlierToday = new Date(2026, 5, 17, 7, 0, 0);
+    expect(lastRunShort(earlierToday.toISOString(), NOW)).toBe(CLOCK.format(earlierToday));
+  });
+
+  it("returns empty for a job that never ran", () => {
+    expect(lastRunShort(null, NOW)).toBe("");
   });
 });

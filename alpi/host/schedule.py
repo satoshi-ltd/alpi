@@ -46,6 +46,11 @@ async def _schedule_list(
         raise host_server.HandlerError(
             -32603, "internal-error", data={"detail": f"jobs.json corrupt: {e}"},
         )
+    from alpi.scheduler.run import next_fire
+    for j in jobs:
+        if isinstance(j, dict):
+            nf = next_fire(j, home=home)
+            j["next_fire"] = nf.isoformat() if nf else None
     return {"jobs": jobs}
 
 

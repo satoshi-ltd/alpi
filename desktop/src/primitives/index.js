@@ -58,6 +58,7 @@ export { default as Radio } from "./Radio.jsx";
 export { default as SettingsHero } from "./SettingsHero.jsx";
 export { default as SidebarRow } from "./SidebarRow.jsx";
 export { default as Skeleton } from "./Skeleton.jsx";
+export { default as StatusPill } from "./StatusPill.jsx";
 export { default as Tag } from "./Tag.jsx";
 export { default as TasksButton } from "./TasksButton.jsx";
 export { default as Textarea } from "./Textarea.jsx";

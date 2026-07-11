@@ -27,6 +27,7 @@ export default function ProfileChatHeader({
   onOpenSkills,
   onOpenMemory,
   onOpenTools,
+  onOpenSchedule,
   onOpenSettings,
   onRefresh,
   paused = false,
@@ -112,6 +113,7 @@ export default function ProfileChatHeader({
         onOpenSkills={onOpenSkills}
         onOpenMemory={onOpenMemory}
         onOpenTools={onOpenTools}
+        onOpenSchedule={onOpenSchedule}
         onRefresh={onRefresh}
         canRefresh={(sessionData?.turns?.length ?? 0) > 0}
       />

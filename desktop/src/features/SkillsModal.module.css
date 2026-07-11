@@ -64,31 +64,6 @@
 }
 .detailInfoDot { color: var(--ink-4); }
 
-.pill {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
-  border-radius: var(--r-pill);
-  padding: var(--space-1) var(--space-3);
-}
-.pillDot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-
-.pillOn {
-  background: color-mix(in srgb, var(--c-success) 14%, transparent);
-  color: color-mix(in srgb, var(--c-success) 70%, var(--ink));
-}
-.pillOn .pillDot { background: var(--c-success); }
-
-.pillOff { background: var(--hover); color: var(--ink-3); }
-.pillOff .pillDot { background: var(--ink-4); }
-
-.pillBad {
-  background: color-mix(in srgb, var(--c-danger) 14%, transparent);
-  color: color-mix(in srgb, var(--c-danger) 75%, var(--ink));
-}
-.pillBad .pillDot { background: var(--c-danger); }
 
 .article {
   flex: 1;

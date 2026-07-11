@@ -11,6 +11,16 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.34 — 2026-07-11 — Schedule is a first-class viewer
+
+- **Schedule joins Skills, Memory and Tools as a browsable panel.** Open it
+  from the ⋯ menu, the command palette, or Cmd+Shift+E to see every cron job,
+  its next run, last run, and the prompt the agent runs.
+- **Run, pause or delete a job from the viewer.** Each has its own button;
+  creating and editing jobs still happens in chat.
+
+_Needs alpi v0.10.23 for a job's next-run time; older daemons show it as blank._
+
 ## v0.4.33 — 2026-07-11 — tidier modal headers and tooltips everywhere
 
 - **Modals close a single, consistent way.** The header X icon is the close

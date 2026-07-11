@@ -12,6 +12,7 @@ export default function HeaderMenu({
   onOpenSkills,
   onOpenMemory,
   onOpenTools,
+  onOpenSchedule,
   onRefresh,
   canRefresh = false,
 }) {
@@ -41,6 +42,7 @@ export default function HeaderMenu({
             <button type="button" className={styles.item} onClick={run(onTogglePause)}>
               <Icon name={paused ? "play" : "pause"} size="lg" className={styles.icon} />
               <span className={styles.label}>{paused ? "Resume" : "Pause"} {noun}</span>
+              <span className={styles.kbd}><Kbd>⇧</Kbd><Kbd>⌘</Kbd><Kbd>P</Kbd></span>
             </button>
           )}
           {onToggleAutoRead && (
@@ -50,23 +52,33 @@ export default function HeaderMenu({
               <Pill state={autoRead ? "on" : "off"} className={styles.statePill}>{autoRead ? "on" : "off"}</Pill>
             </button>
           )}
-          {(onOpenSkills || onOpenMemory || onOpenTools) && <div className={styles.sep} aria-hidden />}
+          {(onOpenSkills || onOpenMemory || onOpenTools || onOpenSchedule) && <div className={styles.sep} aria-hidden />}
           {onOpenSkills && (
             <button type="button" className={styles.item} onClick={run(onOpenSkills)}>
               <Icon name="sparkle" size="lg" className={styles.icon} />
               <span className={styles.label}>Skills</span>
+              <span className={styles.kbd}><Kbd>⇧</Kbd><Kbd>⌘</Kbd><Kbd>S</Kbd></span>
             </button>
           )}
           {onOpenMemory && (
             <button type="button" className={styles.item} onClick={run(onOpenMemory)}>
               <Icon name="folder" size="lg" className={styles.icon} />
               <span className={styles.label}>Memory</span>
+              <span className={styles.kbd}><Kbd>⇧</Kbd><Kbd>⌘</Kbd><Kbd>M</Kbd></span>
             </button>
           )}
           {onOpenTools && (
             <button type="button" className={styles.item} onClick={run(onOpenTools)}>
               <Icon name="cpu" size="lg" className={styles.icon} />
               <span className={styles.label}>Tools</span>
+              <span className={styles.kbd}><Kbd>⇧</Kbd><Kbd>⌘</Kbd><Kbd>T</Kbd></span>
+            </button>
+          )}
+          {onOpenSchedule && (
+            <button type="button" className={styles.item} onClick={run(onOpenSchedule)}>
+              <Icon name="clock" size="lg" className={styles.icon} />
+              <span className={styles.label}>Schedule</span>
+              <span className={styles.kbd}><Kbd>⇧</Kbd><Kbd>⌘</Kbd><Kbd>E</Kbd></span>
             </button>
           )}
           {onRefresh && canRefresh && (
@@ -75,6 +87,7 @@ export default function HeaderMenu({
               <button type="button" className={styles.item} onClick={run(onRefresh)}>
                 <Icon name="refresh" size="lg" className={styles.icon} />
                 <span className={styles.label}>Refresh thread</span>
+                <span className={styles.kbd}><Kbd>⇧</Kbd><Kbd>⌘</Kbd><Kbd>R</Kbd></span>
               </button>
             </>
           )}

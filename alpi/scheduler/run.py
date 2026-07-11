@@ -170,6 +170,38 @@ def is_due(job: dict, now: datetime | None = None, home: Path | None = None) -> 
     return False
 
 
+def next_fire(job: dict, now: datetime | None = None, home: Path | None = None) -> datetime | None:
+    if job.get("paused"):
+        return None
+    now = now or _now()
+    if is_due(job, now, home):
+        return now
+    kind = job.get("kind", "cron")
+    if kind == "cron":
+        expr = job.get("expression", "")
+        last = _parse_iso(job.get("last_run_at"))
+        if not expr or last is None:
+            return None
+        anchor = last.astimezone(now.tzinfo) if last.tzinfo else last.replace(tzinfo=now.tzinfo)
+        try:
+            nxt = croniter(expr, anchor).get_next(datetime)
+        except Exception:  # noqa: BLE001
+            return None
+        if nxt.tzinfo is None:
+            nxt = nxt.replace(tzinfo=now.tzinfo)
+        return nxt
+    if kind == "once":
+        if _parse_iso(job.get("last_run_at")) is not None:
+            return None
+        run_at = _parse_iso(job.get("run_at"))
+        if run_at is None:
+            return None
+        if run_at.tzinfo is None:
+            run_at = run_at.replace(tzinfo=now.tzinfo)
+        return run_at
+    return None
+
+
 def _last_user_activity(home: Path) -> datetime | None:
     sdir = _sessions_dir(home)
     if not sdir.exists():

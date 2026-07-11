@@ -17,6 +17,7 @@ import NotificationsModal from "./features/NotificationsModal.jsx";
 import ToolsModal from "./features/ToolsModal.jsx";
 import SkillsModal from "./features/SkillsModal.jsx";
 import MemoryModal from "./features/MemoryModal.jsx";
+import ScheduleModal from "./features/ScheduleModal.jsx";
 import { useCommands } from "./hooks/useCommands.js";
 import { orderedJumpTargets } from "./lib/profile-order.js";
 import { installUpdater } from "./lib/updater.js";
@@ -211,6 +212,7 @@ export default function App() {
   const onBrowseTools = useCallback(() => setBrowse("tools"), []);
   const onBrowseSkills = useCallback(() => setBrowse("skills"), []);
   const onBrowseMemory = useCallback(() => setBrowse("memory"), []);
+  const onBrowseSchedule = useCallback(() => setBrowse("schedule"), []);
   useEffect(() => subscribeTts(() => setReadAloudActive(isTtsActive())), []);
   const onToggleReadAloud = useCallback(() => {
     setReadAloudTick((n) => n + 1);
@@ -784,6 +786,7 @@ export default function App() {
     onBrowseTools,
     onBrowseSkills,
     onBrowseMemory,
+    onBrowseSchedule,
     onToggleNotifications: onOpenNotifications,
   });
 
@@ -1086,6 +1089,7 @@ export default function App() {
     onBrowseTools,
     onBrowseSkills,
     onBrowseMemory,
+    onBrowseSchedule,
     onOpenHistory,
     onToggleNotifications: onOpenNotifications,
   });
@@ -1143,6 +1147,7 @@ export default function App() {
               onRefresh={reload}
               onDeleteProfile={adminOnDeleteProfile}
               onOpenChat={closeSettings}
+              onOpenSchedule={onBrowseSchedule}
               onSetHostConnection={onSetHostConnection}
               onAddHostConnection={onAddHostConnection}
               onForgetHostConnection={onForgetHostConnection}
@@ -1243,6 +1248,7 @@ export default function App() {
                   onOpenSkills={onBrowseSkills}
                   onOpenMemory={onBrowseMemory}
                   onOpenTools={onBrowseTools}
+                  onOpenSchedule={onBrowseSchedule}
                   onRefreshSession={onRefreshSession}
                   onNewSession={onNewSessionForCurrentProfile}
                   sessionsOpenTick={sessionsDropdownOpenTick}
@@ -1279,6 +1285,13 @@ export default function App() {
       <MemoryModal
         key={`${hostConnections.active_id}:${activeProfileName ?? ""}`}
         open={browse === "memory"}
+        onClose={onCloseBrowse}
+        profile={activeProfileName}
+        connectionId={hostConnections.active_id}
+      />
+      <ScheduleModal
+        key={`${hostConnections.active_id}:${activeProfileName ?? ""}`}
+        open={browse === "schedule"}
         onClose={onCloseBrowse}
         profile={activeProfileName}
         connectionId={hostConnections.active_id}

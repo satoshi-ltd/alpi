@@ -1,10 +1,3 @@
-"""``host.schedule.list`` + ``host.schedule.remove`` — read-only view +
-delete of ``schedule/jobs.json`` from the desktop control plane.
-Mutations beyond delete (add / pause) are intentionally not exposed:
-job creation lives inside the agent (``schedule`` tool) so the
-threat-scan + skill rules stay enforced; the desktop is just a
-visibility + cleanup surface."""
-
 from __future__ import annotations
 
 import json
@@ -60,6 +53,9 @@ async def test_list_returns_jobs(tmp_path: Path, monkeypatch) -> None:
     })
     rows = resp["result"]["jobs"]
     assert [r["id"] for r in rows] == ["abc12345", "def67890"]
+    from datetime import datetime
+    assert datetime.fromisoformat(rows[0]["next_fire"]) is not None
+    assert rows[1]["next_fire"].startswith("2026-12-31T23:59")
 
 
 @pytest.mark.asyncio
@@ -513,3 +509,48 @@ async def test_schedule_list_runs_off_the_event_loop(
     })
     assert [r["id"] for r in resp["result"]["jobs"]] == ["abc12345"]
     assert "read" in seen
+
+
+def test_next_fire_shares_due_semantics() -> None:
+    from datetime import datetime, timedelta
+
+    from alpi.scheduler.run import next_fire
+
+    now = datetime(2026, 6, 17, 12, 0).astimezone()
+    # paused → no next fire
+    assert next_fire({"kind": "cron", "expression": "0 7 * * *", "paused": True}, now) is None
+    # never run → due on the next tick (now), not tomorrow's slot
+    assert next_fire({"kind": "cron", "expression": "0 7 * * *"}, now) == now
+    # overdue (last ran 2 days ago on a daily 7am cron) → still due now
+    overdue = {"kind": "cron", "expression": "0 7 * * *",
+               "last_run_at": (now - timedelta(days=2)).isoformat()}
+    assert next_fire(overdue, now) == now
+    # ran on schedule today → next is tomorrow's slot, in the future
+    ran = {"kind": "cron", "expression": "0 7 * * *",
+           "last_run_at": now.replace(hour=7, minute=0).isoformat()}
+    nf = next_fire(ran, now)
+    assert nf is not None and nf > now
+    # past `once` not yet run → due now (fires next tick), not null
+    assert next_fire({"kind": "once", "run_at": "2020-01-01T00:00:00"}, now) == now
+    # future `once` → its run_at
+    assert next_fire({"kind": "once", "run_at": "2030-01-01T00:00:00"}, now) is not None
+    # `once` already run → done, no next fire
+    assert next_fire({"kind": "once", "run_at": "2030-01-01T00:00:00",
+                      "last_run_at": now.isoformat()}, now) is None
+
+
+@pytest.mark.asyncio
+async def test_list_next_fire_uses_home_for_due_inactivity(tmp_path: Path, monkeypatch) -> None:
+    home = tmp_path / "h"
+    home.mkdir()
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+    _seed_jobs(home, {"id": "inact001", "kind": "inactivity", "after_hours": 2,
+                       "prompt": "nudge"})
+    srv = host_server.Server(home=home)
+    data_schedule.register(srv)
+    resp = await srv._dispatch({
+        "id": "r", "method": "host.schedule.list", "params": {"profile": "default"},
+    })
+    # No sessions yet → is_due(inactivity, home) is True; next_fire must delegate
+    # to it (needs home) and report "now", not null.
+    assert resp["result"]["jobs"][0]["next_fire"] is not None

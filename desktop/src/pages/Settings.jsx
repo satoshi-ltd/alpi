@@ -15,6 +15,7 @@ export default function Settings({
   onRefresh,
   onDeleteProfile,
   onOpenChat,
+  onOpenSchedule,
 }) {
   const setTarget = onSelectTarget ?? (() => {});
 
@@ -51,6 +52,7 @@ export default function Settings({
           onDelete={onDeleteProfile}
           onNavigate={setTarget}
           onOpenChat={onOpenChat}
+          onOpenSchedule={onOpenSchedule}
         />
       )}
       {selectedWorkgroup && (

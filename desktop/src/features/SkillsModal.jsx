@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { BrowseModal, Eyebrow, Icon, Lock } from "../primitives/index.js";
+import { BrowseModal, Eyebrow, Icon, Lock, StatusPill as DSStatusPill } from "../primitives/index.js";
 import Markdown from "../primitives/Markdown.jsx";
 import { codeLines } from "../lib/pyhighlight.js";
 import shell from "../primitives/BrowseModal.module.css";
@@ -312,18 +312,12 @@ function DetailPane({ detail, selectedPath, openDirs, onToggleDir, onSelectFile,
 }
 
 function StatusPill({ status, reason }) {
-  const tone = status === "active" ? styles.pillOn
-    : status === "invalid" ? styles.pillBad
-    : styles.pillOff;
+  const tone = status === "active" ? "on" : status === "invalid" ? "bad" : "off";
   const label = status === "active" ? "active" : status === "invalid" ? "invalid" : "inactive";
   return (
-    <span
-      className={`${styles.pill} ${tone}`}
-      title={status === "active" ? undefined : reason || undefined}
-    >
-      <span className={styles.pillDot} aria-hidden />
+    <DSStatusPill tone={tone} title={status === "active" ? undefined : reason || undefined}>
       {label}
-    </span>
+    </DSStatusPill>
   );
 }
 

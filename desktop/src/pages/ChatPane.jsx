@@ -78,6 +78,7 @@ export default function ChatPane({
   onOpenSkills,
   onOpenMemory,
   onOpenTools,
+  onOpenSchedule,
   onNewSession,
   onChangeSession,
   sessionsOpenTick = 0,
@@ -214,6 +215,7 @@ export default function ChatPane({
             onOpenSkills={onOpenSkills}
             onOpenMemory={onOpenMemory}
             onOpenTools={onOpenTools}
+            onOpenSchedule={onOpenSchedule}
             onNewSession={onNewSession}
             onChangeSession={onChangeSession}
             sessionsOpenTick={sessionsOpenTick}
@@ -306,6 +308,7 @@ export default function ChatPane({
           onOpenSkills={onOpenSkills}
           onOpenMemory={onOpenMemory}
           onOpenTools={onOpenTools}
+          onOpenSchedule={onOpenSchedule}
           onNewSession={onNewSession}
           onChangeSession={onChangeSession}
           sessionsOpenTick={sessionsOpenTick}

@@ -182,57 +182,6 @@
   font-family: var(--font-mono);
 }
 
-.scheduleList {
-  display: grid;
-  grid-template-columns: max-content max-content minmax(0, 1fr) auto;
-  column-gap: var(--space-7);
-}
-
-.scheduleRow {
-  display: grid;
-  grid-column: 1 / -1;
-  grid-template-columns: subgrid;
-  align-items: center;
-  padding: var(--space-5) 0;
-  border-top: .5px solid var(--line);
-}
-
-.scheduleId {
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
-  color: var(--ink-3);
-  letter-spacing: .02em;
-}
-
-.scheduleTitleCell {
-  min-width: 0;
-}
-
-.scheduleTitle {
-  flex: 1;
-  min-width: 0;
-  font-size: var(--fs-base);
-  color: var(--ink-2);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.scheduleActions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.deleteWrap {
-  position: relative;
-}
-
-.deleteBtn:hover {
-  color: var(--c-danger);
-  background: color-mix(in srgb, var(--c-danger) 10%, transparent);
-}
-
 .memberRow {
   gap: var(--space-7);
   padding: var(--space-6) 0;
