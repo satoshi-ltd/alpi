@@ -11,6 +11,15 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.32 — 2026-07-11 — read aloud behaves
+
+- **Stopping and restarting a reply's audio can't overlap anymore.** Replaying
+  the same reply while it was still loading could leave a ghost voice playing
+  underneath that no button could stop.
+- **Turning off "auto read replies" takes effect immediately.** Queued replies
+  waiting to be spoken are dropped the moment you disable it — nothing reads
+  aloud later on its own.
+
 ## v0.4.31 — 2026-07-10 — renamed sessions show everywhere
 
 - **A session you rename now shows its new title in the Sessions dropdown, not

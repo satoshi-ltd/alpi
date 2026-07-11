@@ -113,7 +113,7 @@ function playTtsAwait(item) {
   return new Promise((resolve) => {
     const unsub = subscribeTts((state) => {
       if (state?.key !== item.key) return;
-      if (state.kind === "stopped" || state.kind === "error") {
+      if (state.kind === "stopped" || state.kind === "error" || state.kind === "skipped") {
         unsub();
         resolve();
       }
@@ -164,22 +164,30 @@ async function synth(_profile, voice, text) {
   return invoke("tts_synthesize", { voice, text });
 }
 
+// Restarting the SAME key spawns a new chain with the same currentKey — only the generation token tells the live chain from the aborted one.
+let playGen = 0;
+
 export async function playTts({ key, profile, voice, text, accent = null, raw = false }) {
   const clean = stripMarkdown(text);
-  if (!clean) return;
+  if (!clean) {
+    notify({ kind: "skipped", key });
+    return;
+  }
 
   if (currentKey === key) {
     // re-click a loading key is ignored so a click can't cancel its own synth
     if (currentAudio) stopTts();
+    else notify({ kind: "skipped", key });
     return;
   }
   stopTts();
+  const gen = ++playGen;
   currentKey = key;
   currentAccent = accent;
   notify({ kind: "loading", key, accent });
 
   const spoken = raw ? clean : await scriptFor(profile, text);
-  if (currentKey !== key) return;
+  if (playGen !== gen || currentKey !== key) return;
 
   let b64;
   try {
@@ -189,17 +197,19 @@ export async function playTts({ key, profile, voice, text, accent = null, raw = 
       try {
         b64 = await synth(profile, FALLBACK_VOICE, spoken);
       } catch (e2) {
+        if (playGen !== gen) return;
         currentKey = null;
         notify({ kind: "error", key, error: String(e2) });
         return;
       }
     } else {
+      if (playGen !== gen) return;
       currentKey = null;
       notify({ kind: "error", key, error: String(e) });
       return;
     }
   }
-  if (currentKey !== key) return;
+  if (playGen !== gen || currentKey !== key) return;
   if (!b64) {
     currentKey = null;
     notify({ kind: "error", key, error: "empty audio" });

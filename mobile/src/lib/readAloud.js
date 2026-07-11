@@ -71,10 +71,14 @@ async function ensureAudioMode() {
   } catch { /* iOS falls back to silent-mode rules */ }
 }
 
+// Restarting the SAME key spawns a new chain with the same currentKey — only the generation token tells the live chain from the aborted one.
+let playGen = 0;
+
 async function playOne({ call, key, voiceId, text, accent = null, profile = null }) {
   const clean = stripMarkdown(text);
   if (!clean) return;
   stopReadAloud();
+  const gen = ++playGen;
   currentKey = key;
   notify({ kind: 'loading', key, accent });
 
@@ -85,19 +89,19 @@ async function playOne({ call, key, voiceId, text, accent = null, profile = null
       const script = String(res?.script || '').trim();
       if (script) spoken = script;
     } catch { /* older daemon or offline — the local strip is the audio */ }
-    if (currentKey !== key) return;
+    if (playGen !== gen || currentKey !== key) return;
   }
 
   let result;
   try {
     result = await call('host.voice.preview', { voice_id: voiceId, text: spoken });
   } catch (e) {
-    if (currentKey !== key) return;
+    if (playGen !== gen || currentKey !== key) return;
     currentKey = null;
     notify({ kind: 'error', key, error: String(e) });
     return;
   }
-  if (currentKey !== key) return;
+  if (playGen !== gen || currentKey !== key) return;
 
   const b64 = result?.audio_b64;
   if (!b64) {
@@ -107,7 +111,7 @@ async function playOne({ call, key, voiceId, text, accent = null, profile = null
   }
 
   await ensureAudioMode();
-  if (currentKey !== key) return;  // stopped during synth/audio-mode setup
+  if (playGen !== gen || currentKey !== key) return;  // stopped during synth/audio-mode setup
   const uri = `data:${result.mime ?? 'audio/mpeg'};base64,${b64}`;
   await new Promise((resolve) => {
     const done = () => {
@@ -130,9 +134,11 @@ async function playOne({ call, key, voiceId, text, accent = null, profile = null
       });
       player.play();
     } catch (e) {
-      currentPlayer = null;
-      currentKey = null;
-      notify({ kind: 'error', key, error: String(e) });
+      if (playGen === gen) {
+        currentPlayer = null;
+        currentKey = null;
+        notify({ kind: 'error', key, error: String(e) });
+      }
       done();
     }
   });

@@ -5,7 +5,7 @@ vi.mock('expo-audio', () => ({
   setAudioModeAsync: vi.fn(async () => {}),
 }));
 
-import { enqueueReadAloud, clearReadAloud, stripMarkdown } from './readAloud';
+import { enqueueReadAloud, clearReadAloud, stopReadAloud, stripMarkdown } from './readAloud';
 
 beforeEach(() => {
   clearReadAloud();
@@ -74,5 +74,29 @@ describe('enqueueReadAloud', () => {
     clearReadAloud();
     enqueueReadAloud({ call, key: 'b', voiceId: 'v', text: 'second' });
     await vi.waitFor(() => expect(call).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe('stop races', () => {
+  it('a stop during synth aborts that chain; the next queued item still plays', async () => {
+    const { createAudioPlayer } = await import('expo-audio');
+    createAudioPlayer.mockClear();
+    let releaseFirstPreview;
+    const call = vi.fn((verb, args) => {
+      if (verb === 'host.voice.preview') {
+        if (args?.text === 'first') return new Promise((res) => { releaseFirstPreview = res; });
+        return Promise.resolve({ audio_b64: 'AA', mime: 'audio/mpeg' });
+      }
+      return Promise.resolve({});
+    });
+    enqueueReadAloud({ call, key: 'a', voiceId: 'v', text: 'first' });
+    await vi.waitFor(() => expect(call).toHaveBeenCalledTimes(1));
+    stopReadAloud();
+    enqueueReadAloud({ call, key: 'a', voiceId: 'v', text: 'again' });
+    releaseFirstPreview?.({ audio_b64: 'ZZ', mime: 'audio/mpeg' });
+    await vi.waitFor(() => expect(call).toHaveBeenCalledTimes(2));
+    // Only the live chain reaches the player — the aborted chain's late audio never plays.
+    await vi.waitFor(() => expect(createAudioPlayer).toHaveBeenCalledTimes(1));
+    clearReadAloud();
   });
 });

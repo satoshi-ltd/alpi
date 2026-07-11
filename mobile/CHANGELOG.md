@@ -14,6 +14,11 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.2.11 — 2026-07-11 — read aloud behaves
+
+- **Stopping read-aloud mid-load can't leak audio anymore.** A slow synthesis
+  finishing after you stopped it no longer starts playing on its own.
+
 ## v0.2.10 — 2026-07-10 — model tiers from your pocket
 
 - **Fast and deep model rows in profile settings.** Pick a cheap model for

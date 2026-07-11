@@ -41,7 +41,7 @@ import {
   Tip,
   VolumeIcon,
 } from "../primitives/index.js";
-import { currentlyPlayingKey, playTts, stopTts, subscribeTts, enqueueTts, VOICE_POOL } from "../lib/tts.js";
+import { clearTtsQueue, currentlyPlayingKey, playTts, stopTts, subscribeTts, enqueueTts, VOICE_POOL } from "../lib/tts.js";
 import { consumeAutoRead } from "../lib/autoRead.js";
 import { useOnline } from "../lib/useOnline.js";
 import styles from "./ChatPane.module.css";
@@ -313,6 +313,7 @@ export default function ChatPane({
           onTogglePause={onTogglePause}
           autoRead={autoRead}
           onToggleAutoRead={activeProfile ? () => {
+            if (autoRead) clearTtsQueue();
             invoke("voice_set_auto_read", { profile: activeProfile.name, enabled: !autoRead })
               .then(() => refreshActiveDetail())
               .catch(() => {});

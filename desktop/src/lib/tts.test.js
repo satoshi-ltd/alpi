@@ -76,3 +76,73 @@ describe("enqueueTts", () => {
       .toBeLessThanOrEqual(1);
   });
 });
+
+describe("playTts races", () => {
+  it("a re-triggered key never lets the aborted chain synthesize (zombie guard)", async () => {
+    const { playTts, stopTts } = await import("./tts.js");
+    const scripts = [];
+    invoke.mockImplementation((cmd) => {
+      if (cmd === "voice_script") return new Promise((res) => scripts.push(res));
+      return Promise.resolve("");
+    });
+    const p1 = playTts({ key: "k", profile: "p", voice: "v", text: "hello one" });
+    stopTts();
+    const p2 = playTts({ key: "k", profile: "p", voice: "v", text: "hello one" });
+    await vi.waitFor(() => expect(scripts.length).toBe(2));
+    scripts[0]("Spoken by the aborted chain");
+    scripts[1]("Spoken by the live chain");
+    await Promise.all([p1, p2]);
+    const synthCalls = invoke.mock.calls.filter(([c]) => c === "tts_synthesize");
+    expect(synthCalls).toHaveLength(1);
+    expect(synthCalls[0][1].text).toBe("Spoken by the live chain");
+  });
+
+  it("a zombie synth failure cannot clear the live chain's state", async () => {
+    const { playTts, stopTts, currentlyPlayingKey } = await import("./tts.js");
+    const scripts = [];
+    const synths = [];
+    invoke.mockImplementation((cmd) => {
+      if (cmd === "voice_script") return new Promise((res) => scripts.push(res));
+      if (cmd === "tts_synthesize") return new Promise((_res, rej) => synths.push(rej));
+      return Promise.resolve("");
+    });
+    const p1 = playTts({ key: "k", profile: "p", voice: "en-US-AriaNeural", text: "hello one" });
+    await vi.waitFor(() => expect(scripts.length).toBe(1));
+    scripts[0]("Spoken A");
+    await vi.waitFor(() => expect(synths.length).toBe(1));
+    stopTts();
+    const p2 = playTts({ key: "k", profile: "p", voice: "en-US-AriaNeural", text: "hello one" });
+    await vi.waitFor(() => expect(scripts.length).toBe(2));
+    synths[0](new Error("zombie boom"));
+    await p1;
+    // the live chain still owns the key — the zombie error must not null it
+    expect(currentlyPlayingKey()).toBe("k");
+    scripts[1]("Spoken B");
+    await vi.waitFor(() => expect(synths.length).toBe(2));
+    synths[1](new Error("live boom"));
+    await p2;
+  });
+
+  it("queue skips an item whose key is already loading instead of hanging", async () => {
+    const { playTts } = await import("./tts.js");
+    let releaseManual;
+    invoke.mockImplementation((cmd, args) => {
+      if (cmd === "voice_script") {
+        if (args?.text === "manual") return new Promise((res) => { releaseManual = res; });
+        return Promise.resolve("spoken");
+      }
+      return Promise.resolve("");
+    });
+    playTts({ key: "k1", profile: "p", voice: "v", text: "manual" });
+    enqueueTts({ key: "k1", profile: "p", voice: "v", text: "same key from queue" });
+    enqueueTts({ key: "k2", profile: "p", voice: "v", text: "next item" });
+    // Without the skipped notification the k1 item hangs the drain and k2 never starts.
+    await vi.waitFor(() => {
+      const briefs = invoke.mock.calls
+        .filter(([c]) => c === "voice_script")
+        .map(([, a]) => a.text);
+      expect(briefs).toContain("next item");
+    });
+    releaseManual?.("late");
+  });
+});
