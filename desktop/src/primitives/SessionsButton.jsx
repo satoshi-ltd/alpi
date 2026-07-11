@@ -12,6 +12,7 @@ import {
 } from "./index.js";
 import { Popover } from "./index.js";
 import ManageSessionsModal from "../features/sessions/ManageSessionsModal.jsx";
+import { displaySessionTitle, subscribeSessionTitles } from "../lib/session-titles.js";
 import styles from "./SessionsButton.module.css";
 
 const DAY_MS = 86400000;
@@ -28,12 +29,6 @@ function bucketFor(ms) {
   if (ms >= today - DAY_MS) return "yesterday";
   if (ms >= today - 7 * DAY_MS) return "this week";
   return "earlier";
-}
-
-function previewOf(s) {
-  const t = (s.first_user || "").trim();
-  if (t) return t.length > 56 ? `${t.slice(0, 56)}…` : t;
-  return `(empty · ${(s.id || "").slice(0, 6)})`;
 }
 
 const _sessionsCache = new Map();
@@ -58,7 +53,10 @@ export default function SessionsButton({
   const [loadedProfile, setLoadedProfile] = useState(() => (profile && _sessionsCache.has(profile) ? profile : null));
   const [reloadTick, setReloadTick] = useState(0);
   const [loadTick, setLoadTick] = useState(0);
+  const [, setTitleTick] = useState(0);
   const mountedRef = useRef(false);
+
+  useEffect(() => subscribeSessionTitles(() => setTitleTick((n) => n + 1)), []);
 
   useEffect(() => {
     if (!mountedRef.current) {
@@ -161,7 +159,9 @@ export default function SessionsButton({
                     }}
                     className={`row ${styles.row} ${isCurrent ? styles.rowCurrent : ""}`}
                   >
-                    <span className={styles.preview}>{previewOf(s)}</span>
+                    <span className={styles.preview}>
+                      {displaySessionTitle(s, { connectionId, profile, max: 56 })}
+                    </span>
                     <Mono className="tnum">
                       {s.turn_count} turn{s.turn_count === 1 ? "" : "s"}
                     </Mono>

@@ -5,6 +5,7 @@ const invokeMock = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...a) => invokeMock(...a) }));
 
 import SessionsButton, { invalidateSessionsButtonCache } from "./SessionsButton.jsx";
+import { setSessionTitle } from "../lib/session-titles.js";
 
 globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} };
 
@@ -15,6 +16,7 @@ const sessWithTurns = [{ id: "a1", kind: "chat", first_user: "hello from A", tur
 beforeEach(() => {
   invokeMock.mockReset();
   invalidateSessionsButtonCache();
+  localStorage.clear();
 });
 
 describe("SessionsButton — profile switch", () => {
@@ -79,6 +81,19 @@ describe("SessionsButton — profile switch", () => {
 
     expect(screen.queryByText("hello from A")).toBeNull();
     expect(screen.queryByText("Manage sessions →")).toBeNull();
+  });
+
+  it("shows a custom title and updates live when it changes elsewhere", async () => {
+    invokeMock.mockResolvedValue(sessWithTurns);
+    const { rerender } = render(<SessionsButton profile="A" openTick={0} />);
+    await waitFor(() => expect(screen.getByText("Sessions")).toBeTruthy());
+    rerender(<SessionsButton profile="A" openTick={1} />);
+    await waitFor(() => expect(screen.getByText("hello from A")).toBeTruthy());
+
+    act(() => { setSessionTitle(null, "A", "a1", "Renamed thread"); });
+
+    await waitFor(() => expect(screen.getByText("Renamed thread")).toBeTruthy());
+    expect(screen.queryByText("hello from A")).toBeNull();
   });
 
 });

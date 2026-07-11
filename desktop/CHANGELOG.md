@@ -11,6 +11,14 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.31 — 2026-07-10 — renamed sessions show everywhere
+
+- **A session you rename now shows its new title in the Sessions dropdown, not
+  just the manager.** The change appears immediately, even while the dropdown
+  is open.
+
+_Client-only session-title display; works with any daemon version._
+
 ## v0.4.30 — 2026-07-10 — pick a model for every kind of work
 
 - **Fast and deep model rows in profile settings.** Give a profile a cheap
