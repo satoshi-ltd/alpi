@@ -22,6 +22,8 @@ def draft_bio_from_agent(home: Path, cfg) -> str:
         raise ValueError("AGENT.md is empty — nothing to summarise")
     if not cfg.model:
         raise ValueError("no model configured — set one first")
+    from alpi import ledger
+    ledger.check(home, cfg.budget)
     messages = [
         {
             "role": "system",
@@ -38,6 +40,7 @@ def draft_bio_from_agent(home: Path, cfg) -> str:
     ]
     # resolve_model injects the profile's api_key from its .env; calling complete with raw cfg.model would silently fall back to os.environ, which under the daemon belongs to no profile in particular.
     result = _llm.complete(messages=messages, **_cfg.resolve_model(cfg, tier="fast"))
+    ledger.record_completion(home, result, cfg_budget=cfg.budget)
     lines = (result.content or "").strip().splitlines()
     if not lines:
         raise ValueError("LLM returned an empty draft")

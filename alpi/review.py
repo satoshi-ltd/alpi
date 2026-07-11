@@ -115,11 +115,17 @@ def _apply_calls(tool_calls: list[dict]) -> int:
 
 
 def _run_review(home: Path, cfg: cfg_mod.Config, snapshot: list[dict]) -> int:
+    from alpi import ledger
+
     history = _filter_messages(snapshot)
     if not history:
         return 0
     schema = _memory_schema()
     if schema is None:
+        return 0
+    try:
+        ledger.check(home, cfg.budget)
+    except ledger.BudgetExceeded:
         return 0
 
     messages: list[dict[str, Any]] = [
@@ -134,6 +140,7 @@ def _run_review(home: Path, cfg: cfg_mod.Config, snapshot: list[dict]) -> int:
         )
     except Exception:  # noqa: BLE001
         return 0
+    ledger.record_completion(home, out, cfg_budget=cfg.budget)
     return _apply_calls(out.tool_calls or [])
 
 

@@ -194,6 +194,8 @@ class Research(Tool):
             {"role": "user", "content": brief},
         ]
 
+        from alpi import ledger
+
         iteration = 0
         final_text = ""
         while iteration < max_steps:
@@ -201,6 +203,10 @@ class Research(Tool):
                 return ToolResult(ok=True, output=(
                     "[research: interrupted by user before completing]"
                 ))
+            try:
+                ledger.check(get_home(), cfg.budget)
+            except ledger.BudgetExceeded as e:
+                return ToolResult(ok=False, output="", error=str(e))
             iteration += 1
             prefix = f"step {iteration}/{max_steps}"
             tool_state_mod.emit_state(f"{depth} · {prefix}")
@@ -266,6 +272,10 @@ class Research(Tool):
                 tool_state_mod.set_emit(outer_emit)
 
         if not final_text:
+            try:
+                ledger.check(get_home(), cfg.budget)
+            except ledger.BudgetExceeded as e:
+                return ToolResult(ok=False, output="", error=str(e))
             tool_state_mod.emit_state("writing final report…")
             messages.append({
                 "role": "user",

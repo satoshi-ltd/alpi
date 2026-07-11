@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.10.22 — 2026-07-11 — every token lands in the ledger
+
+- **Every LLM call now counts against the daily budget.** Web extraction,
+  knowledge ingestion and maintenance, context compaction, the memory
+  reviewer, and bio drafting all report their tokens and cost — previously
+  they spent invisibly.
+- **Every spend point checks the cap before spending.** `delegate` and
+  `research` stop mid-loop and before their final synthesis, compaction skips
+  its summary, the memory reviewer skips its pass, and a turn whose
+  compaction crossed the cap never starts — instead of only being caught on
+  the next turn.
+
 ## v0.10.21 — 2026-07-10 — the right model for every job
 
 - **Profiles can route work across model tiers.** Configure an optional cheap

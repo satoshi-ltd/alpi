@@ -284,6 +284,8 @@ class Delegate(Tool):
             {"role": "user", "content": user_content},
         ]
 
+        from alpi import ledger
+
         iteration = 0
         final_text = ""
         while iteration < MAX_STEPS:
@@ -291,6 +293,10 @@ class Delegate(Tool):
                 return ToolResult(ok=True, output=(
                     "[delegate: interrupted by user before completing]"
                 ))
+            try:
+                ledger.check(get_home(), cfg.budget)
+            except ledger.BudgetExceeded as e:
+                return ToolResult(ok=False, output="", error=str(e))
             iteration += 1
             prefix = f"step {iteration}/{MAX_STEPS}"
             tool_state_mod.emit_state(prefix)
@@ -357,6 +363,10 @@ class Delegate(Tool):
                 tool_state_mod.set_emit(outer_emit)
 
         if not final_text:
+            try:
+                ledger.check(get_home(), cfg.budget)
+            except ledger.BudgetExceeded as e:
+                return ToolResult(ok=False, output="", error=str(e))
             tool_state_mod.emit_state("writing summary…")
             messages.append({
                 "role": "user",

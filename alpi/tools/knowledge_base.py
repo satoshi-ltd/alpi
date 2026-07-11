@@ -899,6 +899,10 @@ def maintain_knowledge(
         },
     ]
     completion = llm.complete(messages=messages, **cfg_mod.resolve_model(cfg))
+    from alpi.tools import _state as tool_state_mod
+    tool_state_mod.record_usage(
+        completion.input_tokens, completion.output_tokens, completion.cost_usd,
+    )
     proposal = _parse_llm_json(completion.content)
     if not apply:
         return {"applied": False, "proposal": proposal}

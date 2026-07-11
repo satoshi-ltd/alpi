@@ -346,13 +346,13 @@ class Engine:
                 if turn_deadline is not None and time.time() >= turn_deadline:
                     deadline_hit = True
                     break
-                if step_idx > 0:
-                    try:
-                        ledger.check(self.home, self.cfg.budget)
-                    except ledger.BudgetExceeded as e:
-                        emit(AgentEvent(kind="error", text=str(e)))
-                        turn_error = str(e)
-                        break
+                # step 0 included: auto-compaction may have spent past the cap after the turn-start check.
+                try:
+                    ledger.check(self.home, self.cfg.budget)
+                except ledger.BudgetExceeded as e:
+                    emit(AgentEvent(kind="error", text=str(e)))
+                    turn_error = str(e)
+                    break
                 accumulated_text: list[str] = []
                 reasoning_text: list[str] = []
                 final: dict = {}
@@ -977,7 +977,33 @@ class Engine:
         ):
             return
 
+        from alpi import ledger as _ledger
+
+        def _side_budget_ok() -> bool:
+            try:
+                _ledger.check(self.home, self.cfg.budget)
+            except _ledger.BudgetExceeded:
+                return False
+            return True
+
+        def _record_side_usage(out) -> None:  # noqa: ANN001
+            tokens_in = int(getattr(out, "input_tokens", 0) or 0)
+            tokens_out = int(getattr(out, "output_tokens", 0) or 0)
+            cost = float(getattr(out, "cost_usd", 0.0) or 0.0)
+            self.session.record(
+                input_tokens=tokens_in, output_tokens=tokens_out, cost=cost,
+            )
+            from alpi.tools import _state as _wg_state
+            _wg_state.bump_turn_usage(tokens_in, tokens_out, cost)
+            _ledger.record_completion(self.home, out, cfg_budget=self.cfg.budget)
+            emit(AgentEvent(
+                kind="usage", tokens_in=tokens_in, tokens_out=tokens_out,
+                cost=cost, model=call_kwargs.get("model", ""),
+            ))
+
         def _summarize(transcript: str, max_tokens: int) -> str:
+            if not _side_budget_ok():
+                return ""
             max_tokens = int(max_tokens)
             if summarizer_ctx > 0:
                 max_tokens = min(
@@ -1008,9 +1034,10 @@ class Engine:
             summarize_kwargs["max_tokens"] = max_tokens
             try:
                 out = llm.complete(messages=prompt_messages, **summarize_kwargs)
-                return (out.content or "").strip()
             except Exception:  # noqa: BLE001
                 return ""
+            _record_side_usage(out)
+            return (out.content or "").strip()
 
         new_messages, result = compaction.compact(
             messages=self.session.messages,
@@ -1055,13 +1082,16 @@ class Engine:
                     break
 
             def _candidate_call(messages: list[dict], max_tokens: int) -> str:
+                if not _side_budget_ok():
+                    return ""
                 kwargs = dict(call_kwargs)
                 kwargs["max_tokens"] = int(max_tokens)
                 try:
                     out = llm.complete(messages=messages, **kwargs)
-                    return (out.content or "").strip()
                 except Exception:  # noqa: BLE001
                     return ""
+                _record_side_usage(out)
+                return (out.content or "").strip()
 
             compaction.emit_candidates_from_summary(
                 self.home,

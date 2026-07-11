@@ -87,8 +87,8 @@ def test_budget_exceeded_mid_turn_aborts(engine: Engine, monkeypatch) -> None:
 
     def fake_check(*_a, **_kw):
         calls["n"] += 1
-        # Pre-loop check (1) passes; the first mid-turn check (2) trips.
-        if calls["n"] >= 2:
+        # Turn-start (1) and step-0 (2) checks pass; the step-1 check (3) trips.
+        if calls["n"] >= 3:
             raise ledger.BudgetExceeded("usd", 1.0, 2.0)
 
     monkeypatch.setattr("alpi.ledger.check", fake_check)

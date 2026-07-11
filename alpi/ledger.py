@@ -159,6 +159,19 @@ def check(home: Path, cfg_budget: dict[str, Any] | None) -> None:
         raise BudgetExceeded(kind, cap, used)
 
 
+def record_completion(
+    home: Path, completion: Any, cfg_budget: dict[str, Any] | None = None,
+) -> None:
+    """Ledger entry from any llm.complete-shaped object; tolerates objects missing usage fields."""
+    tokens_in = int(getattr(completion, "input_tokens", 0) or 0)
+    tokens_out = int(getattr(completion, "output_tokens", 0) or 0)
+    usd = float(getattr(completion, "cost_usd", 0.0) or 0.0)
+    record(
+        home, usd=usd, tokens=tokens_in + tokens_out,
+        tokens_in=tokens_in, tokens_out=tokens_out, cfg_budget=cfg_budget,
+    )
+
+
 def spend_fraction(home: Path, cfg_budget: dict[str, Any] | None) -> float | None:
     """Today's spend as a fraction of the daily cap; None when uncapped."""
     kind, cap = _budget(cfg_budget)
