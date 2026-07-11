@@ -88,7 +88,7 @@ export default function BrowseModal({
                   aria-label={search.label || search.placeholder}
                 />
                 {search.value ? (
-                  <IconBtn aria-label="Clear search" onClick={() => search.onChange("")}><XIcon /></IconBtn>
+                  <IconBtn aria-label="Clear search" tip="Clear search" onClick={() => search.onChange("")}><XIcon /></IconBtn>
                 ) : null}
               </div>
             ) : null}

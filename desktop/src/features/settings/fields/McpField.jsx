@@ -7,7 +7,6 @@ import Modal from "../../../primitives/Modal.jsx";
 import Textarea from "../../../primitives/Textarea.jsx";
 import { useNotify } from "../../../primitives/Notification.jsx";
 import { Row } from "../primitives.jsx";
-import { Btn } from "../../../primitives/index.js";
 import Field from "../../../primitives/Field.jsx";
 import { ConfirmDeleteAction, DialogFooter } from "../../../primitives/index.js";
 import styles from "../Settings.module.css";
@@ -87,7 +86,7 @@ function McpDetailModal({ profile, connectionId, mcp, onClose, onRemoved }) {
   }
 
   return (
-    <Modal title={`MCP · ${mcp.name}`} onClose={onClose}>
+    <Modal title={`MCP · ${mcp.name}`} onClose={onClose} closeButton>
       <div className={styles.field}>
         <Eyebrow as="label">command</Eyebrow>
         <span className={styles.mono}>{mcp.command || "(none)"}</span>
@@ -147,9 +146,6 @@ function McpDetailModal({ profile, connectionId, mcp, onClose, onRemoved }) {
           loading={busy}
           onConfirm={remove}
         />
-        <span className={styles.popoverFooterRight}>
-          <Btn variant="ghost" onClick={onClose} disabled={busy}>Close</Btn>
-        </span>
       </div>
     </Modal>
   );

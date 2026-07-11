@@ -6,6 +6,9 @@ import {
   Chip,
   ConfirmDelete,
   Dropdown,
+  IconBtn,
+  Tip,
+  XIcon,
 } from "../../primitives/index.js";
 import EditableSessionTitle from "../../primitives/EditableSessionTitle.jsx";
 import { removeSessionTitles } from "../../lib/session-titles.js";
@@ -240,9 +243,7 @@ export default function ManageSessionsModal({
 
   if (!open) return null;
 
-  const headerActions = selectedCount === 0 ? (
-    <Btn variant="ghost" onClick={onClose}>Close</Btn>
-  ) : (
+  const headerActions = selectedCount === 0 ? null : (
     <>
       <Btn variant="ghost" onClick={clearSelection}>Cancel</Btn>
       <Btn
@@ -277,7 +278,12 @@ export default function ManageSessionsModal({
               Delete old or empty threads to free disk space. The active session is locked.
             </p>
           </div>
-          <div className={styles.headerActions}>{headerActions}</div>
+          <div className={styles.headerActions}>
+            {headerActions}
+            <Tip text="Close" side="down">
+              <IconBtn aria-label="Close" onClick={onClose}><XIcon /></IconBtn>
+            </Tip>
+          </div>
         </header>
 
         <div className={styles.toolbar}>

@@ -27,13 +27,14 @@ export default function ImageLightbox({ src, caption, path, onClose }) {
         {path && (
           <IconBtn
             aria-label="Download image"
+            tip="Download image"
             className={styles.action}
             onClick={() => invoke("save_file_as", { path, roots: getImageRoots() }).catch(() => {})}
           >
             <DownloadIcon />
           </IconBtn>
         )}
-        <IconBtn aria-label="Close" className={styles.action} onClick={onClose}>
+        <IconBtn aria-label="Close" tip="Close" className={styles.action} onClick={onClose}>
           <XIcon />
         </IconBtn>
       </div>

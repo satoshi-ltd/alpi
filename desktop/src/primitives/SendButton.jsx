@@ -1,4 +1,5 @@
 import { SendIcon, StopIcon, SpinnerIcon } from "./icons.jsx";
+import Tip from "./Tip.jsx";
 
 export default function SendButton({
   canSend = false,
@@ -7,6 +8,7 @@ export default function SendButton({
   onClick,
   disabled = false,
   stopping = false,
+  title,
   ...rest
 }) {
   const enabled = !disabled && canSend;
@@ -18,7 +20,7 @@ export default function SendButton({
       ? accent || "var(--accent)"
       : "var(--line)";
   const fg = enabled || isStop ? "#fff" : "var(--ink-3)";
-  return (
+  const btn = (
     <button
       type="button"
       onClick={clickable ? onClick : undefined}
@@ -50,4 +52,5 @@ export default function SendButton({
       )}
     </button>
   );
+  return title ? <Tip text={title} side="up">{btn}</Tip> : btn;
 }

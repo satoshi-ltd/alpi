@@ -6,7 +6,7 @@ import Chip from "../../../primitives/Chip.jsx";
 import Dropdown from "../../../primitives/Dropdown.jsx";
 import Textarea from "../../../primitives/Textarea.jsx";
 import useAutoPosition from "../../../primitives/useAutoPosition.js";
-import { Diamond } from "../../../primitives/index.js";
+import { Diamond, IconBtn, Tip, XIcon } from "../../../primitives/index.js";
 import Field from "../../../primitives/Field.jsx";
 import { useNotify } from "../../../primitives/Notification.jsx";
 import { useDismissOnOutside } from "../../../hooks/useDismissOnOutside.js";
@@ -332,6 +332,11 @@ function PeerDetailPopover({ peer, status, reason, anchorRef, onClose, onRemove 
         visibility: pos.ready ? "visible" : "hidden",
       }}
     >
+      <div className={styles.popoverCloseRow}>
+        <Tip text="Close" side="down">
+          <IconBtn aria-label="Close" onClick={onClose}><XIcon /></IconBtn>
+        </Tip>
+      </div>
       <div className={styles.field}>
         <Eyebrow as="label">peer</Eyebrow>
         <span className={styles.peerRowName}>@{peer.alias || peer.id}</span>
@@ -366,7 +371,6 @@ function PeerDetailPopover({ peer, status, reason, anchorRef, onClose, onRemove 
         </span>
       </div>
       <div className={styles.actions}>
-        <Button size="sm" onClick={onClose}>Close</Button>
         <ConfirmDeleteAction
           label="Remove peer"
           title={`Remove peer @${peer.id || peer.alias || ""}?`}

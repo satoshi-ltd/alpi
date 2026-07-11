@@ -38,6 +38,18 @@ describe("McpField — every daemon call is scoped to the connection", () => {
     );
   });
 
+  it("closes the detail modal from the header icon, not a text button", async () => {
+    const profile = { name: "work", mcps: [{ name: "fs", command: "uvx", args: [], env_keys: [] }] };
+    render(<McpField profile={profile} connectionId={CONN} onSaved={() => {}} />);
+    await act(async () => { fireEvent.click(screen.getByText("fs")); });
+    expect(screen.getByText("command")).toBeInTheDocument();
+
+    const closeBtn = screen.getByRole("button", { name: "Close" });
+    expect(closeBtn).not.toHaveTextContent("Close");
+    await act(async () => { fireEvent.click(closeBtn); });
+    expect(screen.queryByText("command")).toBeNull();
+  });
+
   it("mcp_add carries connectionId", async () => {
     render(<McpField profile={{ name: "work", mcps: [] }} connectionId={CONN} onSaved={() => {}} />);
     await act(async () => { fireEvent.click(screen.getByText("+ Add MCP")); });

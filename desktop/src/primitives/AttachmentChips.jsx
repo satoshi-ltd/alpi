@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { FileIcon, FileTextIcon, FileCodeIcon, XIcon, SpinnerIcon } from "./icons.jsx";
 import { useNotify } from "./Notification.jsx";
+import Tip from "./Tip.jsx";
 import { fileKind, fileTypeLabel, fmtSize } from "../lib/fileKind.js";
 import styles from "./AttachmentChips.module.css";
 
@@ -112,14 +113,16 @@ export default function AttachmentChips({ items, onRemove, variant = "composer",
               <span className={styles.size}>{subtitle}</span>
             </span>
             {!message && onRemove && (
-              <button
-                type="button"
-                className={styles.remove}
-                aria-label={`Remove ${a.name}`}
-                onClick={() => onRemove(i)}
-              >
-                <XIcon />
-              </button>
+              <Tip text="Remove attachment" side="up">
+                <button
+                  type="button"
+                  className={styles.remove}
+                  aria-label={`Remove ${a.name}`}
+                  onClick={() => onRemove(i)}
+                >
+                  <XIcon />
+                </button>
+              </Tip>
             )}
           </div>
         );

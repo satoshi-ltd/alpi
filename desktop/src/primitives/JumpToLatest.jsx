@@ -8,6 +8,7 @@ export default function JumpToLatest({ show, onClick }) {
       className={`${styles.btn} ${show ? styles.visible : ""}`.trim()}
       onClick={onClick}
       aria-label="Scroll to latest"
+      title="Jump to latest"
       aria-hidden={!show}
       tabIndex={show ? 0 : -1}
     >

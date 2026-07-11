@@ -11,6 +11,17 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.33 — 2026-07-11 — tidier modal headers and tooltips everywhere
+
+- **Modals close a single, consistent way.** The header X icon is the close
+  control across modals; the redundant text "Close" buttons are gone. Esc,
+  the X, and clicking outside all still dismiss.
+- **More icon-only controls name themselves on hover.** Attach, remove and
+  send/stop in the composer, clear-search, jump-to-latest, and the image
+  viewer's download and close now show a tooltip.
+
+_Client-only header and tooltip cleanup; works with any daemon version._
+
 ## v0.4.32 — 2026-07-11 — read aloud behaves
 
 - **Stopping and restarting a reply's audio can't overlap anymore.** Replaying

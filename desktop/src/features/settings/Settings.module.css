@@ -683,6 +683,12 @@
   margin-top: var(--space-2);
 }
 
+.popoverCloseRow {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--space-1);
+}
+
 .memberLabel {
   display: inline-flex;
   align-items: center;
