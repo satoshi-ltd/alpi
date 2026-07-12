@@ -42,8 +42,10 @@ import { DevicesField } from "./fields/devices.jsx";
 import { DaemonField } from "./fields/DaemonField.jsx";
 import { NetworkAddressField, PairingNameField, HostPortField } from "./fields/network.jsx";
 import {
+  CleanupField,
   DeleteProfileAction,
   StorageField,
+  _clearStorageCache as _clearStorageCacheSafe,
 } from "./fields/maintenance.jsx";
 import styles from "./Settings.module.css";
 import { copyText } from "../../lib/clipboard.js";
@@ -535,6 +537,13 @@ export default function ProfileDetail({
             prefetched={storagePre}
             onLoadingChange={setStorageLoading}
           />
+          {(activeConnection?.kind === "local" || activeConnection?.role === "admin") && (
+            <CleanupField
+              profile={profile}
+              activeConnection={activeConnection}
+              onCleaned={() => { _clearStorageCacheSafe(); onSaved?.(); }}
+            />
+          )}
         </Section>
 
         {profile.name !== "default"

@@ -35,6 +35,8 @@ def register(server: host_server.Server) -> None:
     server.register("host.profile.detail", _profile_detail)
     server.register("host.profile.read_file", _profile_read_file)
     server.register("host.profile.storage", _profile_storage)
+    server.register("host.cleanup.plan", _cleanup_plan)
+    server.register("host.cleanup.apply", _cleanup_apply)
     server.register("host.config.set_field", _config_set_field)
     server.register("host.config.unset_field", _config_unset_field)
     server.register("host.email.status", _email_status)
@@ -362,6 +364,29 @@ def _emit_config_changed(home: Path, scope: str) -> None:
         "profile": home_mod.profile_name(home),
         "scope": scope,
     })
+
+
+async def _cleanup_plan(
+    params: dict[str, Any], _server: host_server.Server,
+) -> dict[str, Any]:
+    from alpi import cleanup
+    home = _resolve_home(str((params or {}).get("profile") or ""))
+    return {"categories": await asyncio.to_thread(cleanup.plan, home)}
+
+
+async def _cleanup_apply(
+    params: dict[str, Any], _server: host_server.Server,
+) -> dict[str, Any]:
+    from alpi import cleanup
+    home = _resolve_home(str((params or {}).get("profile") or ""))
+    raw_keys = (params or {}).get("keys")
+    keys = [str(k) for k in raw_keys] if isinstance(raw_keys, list) else []
+    if not keys:
+        raise host_server.HandlerError(
+            -32602, "invalid-params", data={"detail": "keys (list) required"},
+        )
+    results = [await asyncio.to_thread(cleanup.apply, home, k) for k in keys]
+    return {"results": results}
 
 
 async def _config_set_field(

@@ -753,6 +753,83 @@ def schedule() -> None:
     """Schedule operations."""
 
 
+@schedule.command("list")
+@click.option("--json", "as_json", is_flag=True, help="Emit machine-readable JSON.")
+@click.pass_context
+def schedule_list(ctx: click.Context, as_json: bool) -> None:
+    """List this profile's scheduled jobs with status and next fire time."""
+    import json as json_mod
+
+    from alpi.scheduler import run as scheduler_run
+    from alpi.scheduler import jobs_store
+
+    h: Path = ctx.obj["home"]
+    _bootstrap(h)
+    try:
+        jobs = jobs_store.read(h)
+    except jobs_store.CorruptJobsFile as e:
+        click.echo(f"jobs.json corrupt: {e}", err=True)
+        ctx.exit(1)
+
+    def _fire_state(job: dict) -> tuple[str, "object"]:
+        # Delegate to the daemon's own semantics so console and scheduler never disagree.
+        if job.get("paused"):
+            return "paused", None
+        if scheduler_run.is_due(job, home=h):
+            return "due", scheduler_run.next_fire(job, home=h)
+        nxt = scheduler_run.next_fire(job, home=h)
+        if nxt is None:
+            if job.get("kind") == "inactivity":
+                return "idle-gated", None
+            return "none", None
+        return "scheduled", nxt
+
+    def _next_fire(job: dict) -> str:
+        status, nxt = _fire_state(job)
+        if status == "paused":
+            return "paused"
+        if status == "due":
+            return "due now"
+        if status == "idle-gated":
+            return f"after {job.get('after_hours')}h idle"
+        if nxt is None:
+            return "—"
+        return nxt.strftime("%Y-%m-%d %H:%M")
+
+    if as_json:
+        rows = []
+        for j in jobs:
+            status, nxt = _fire_state(j)
+            rows.append({
+                **j,
+                "status": status,
+                "next_fire": nxt.isoformat() if nxt is not None else None,
+            })
+        click.echo(json_mod.dumps(rows, indent=2))
+        return
+    if not jobs:
+        click.echo("no scheduled jobs — add one via chat (`schedule` tool) or the apps")
+        return
+    for j in jobs:
+        jid = j.get("id", "?")
+        kind = j.get("kind", "cron")
+        when = j.get("expression") or j.get("run_at") or f"{j.get('after_hours')}h idle"
+        title = j.get("title") or (j.get("prompt") or "")[:60].replace("\n", " ")
+        flags = []
+        if j.get("paused"):
+            flags.append("paused")
+        if j.get("notify"):
+            flags.append("notify")
+        if j.get("tier"):
+            flags.append(f"tier:{j['tier']}")
+        if j.get("no_agent"):
+            flags.append("no_agent")
+        last = j.get("last_run_status") or "never ran"
+        click.echo(f"{jid}  [{kind}] {when}  → next {_next_fire(j)}")
+        click.echo(f"        {title}")
+        click.echo(f"        last: {last}{' · ' + ', '.join(flags) if flags else ''}")
+
+
 @schedule.command("run-once")
 @click.pass_context
 def schedule_run_once(ctx: click.Context) -> None:
@@ -782,6 +859,76 @@ def schedule_fire(ctx: click.Context, job_id: str) -> None:
     click.echo(f"{'OK' if ok else 'FAIL'}  {msg}")
     if not ok:
         ctx.exit(1)
+
+
+@main.group("outputs")
+def outputs_group() -> None:
+    """Browse the outputs inbox (notifications, cron replies, produced files)."""
+
+
+@outputs_group.command("list")
+@click.option("-n", "limit", default=20, show_default=True, help="Max rows.")
+@click.option("--unread", is_flag=True, help="Only unread outputs.")
+@click.option("--json", "as_json", is_flag=True, help="Emit machine-readable JSON.")
+@click.pass_context
+def outputs_list(ctx: click.Context, limit: int, unread: bool, as_json: bool) -> None:
+    """List recent outputs, newest first."""
+    import json as json_mod
+    from datetime import datetime
+
+    from alpi import outputs as outputs_mod
+
+    h: Path = ctx.obj["home"]
+    _bootstrap(h)
+    rows = outputs_mod.list_outputs(
+        h, status="unread" if unread else None, limit=limit,
+    )
+    if as_json:
+        click.echo(json_mod.dumps(rows, indent=2))
+        return
+    if not rows:
+        click.echo("no outputs" + (" unread" if unread else ""))
+        return
+    for it in rows:
+        dot = "●" if it.get("status") == "unread" else "○"
+        ts = datetime.fromtimestamp(float(it.get("created_at") or 0)).strftime("%m-%d %H:%M")
+        title = it.get("title") or (it.get("body") or "")[:60].replace("\n", " ")
+        click.echo(f"{dot} {ts}  [{it.get('type', 'info')}] {it.get('id')}  {title}")
+
+
+@outputs_group.command("show")
+@click.argument("output_id")
+@click.pass_context
+def outputs_show(ctx: click.Context, output_id: str) -> None:
+    """Print one output in full and mark it read."""
+    from datetime import datetime
+
+    from alpi import outputs as outputs_mod
+
+    h: Path = ctx.obj["home"]
+    _bootstrap(h)
+    it = outputs_mod.read(h, output_id)
+    if it is None:
+        click.echo(f"no output with id {output_id!r}", err=True)
+        ctx.exit(1)
+    outputs_mod.mark_read(h, output_id)
+    ts = datetime.fromtimestamp(float(it.get("created_at") or 0)).strftime("%Y-%m-%d %H:%M")
+    click.echo(f"{it.get('title') or '(untitled)'}")
+    click.echo(f"{ts} · {it.get('type', 'info')} · {it.get('id')}")
+    click.echo("")
+    click.echo(it.get("body") or "")
+
+
+@outputs_group.command("read-all")
+@click.pass_context
+def outputs_read_all(ctx: click.Context) -> None:
+    """Mark every unread output as read."""
+    from alpi import outputs as outputs_mod
+
+    h: Path = ctx.obj["home"]
+    _bootstrap(h)
+    touched = outputs_mod.mark_all_read(h)
+    click.echo(f"marked {touched} output(s) read")
 
 
 @main.group("email")
@@ -1385,6 +1532,7 @@ def setup_cmd(ctx: click.Context) -> None:
             items.append(("Daemon", "daemon", _daemon_lifecycle_status()))
         items += [
             ("Subsystems", "subsystems", _subsystems_summary(h)),
+            ("Schedules", "schedules", _schedules_status(h)),
         ]
         if profile_name == "default":
             items.append(("Devices", "devices", _devices_status(h)))
@@ -1433,6 +1581,8 @@ def setup_cmd(ctx: click.Context) -> None:
             _cleanup_setup(h)
         elif choice == "subsystems":
             _subsystems_wizard(h, profile_name)
+        elif choice == "schedules":
+            _schedules_setup(h)
         elif choice == "daemon":
             _daemon_lifecycle_wizard(h)
         elif choice == "identity":
@@ -2796,147 +2946,82 @@ def _voice_setup(h: Path) -> None:
 
 
 def _cleanup_categories(h: Path) -> list[dict]:
-    def _dir(name: str) -> Path:
-        return h / name
+    from alpi.cleanup import categories
+    return categories(h)
 
-    def _sum(files: list[Path]) -> int:
-        total = 0
-        for p in files:
-            try:
-                total += p.stat().st_size
-            except OSError:
-                pass
-        return total
 
-    def _all(d: Path) -> list[Path]:
-        if not d.exists():
-            return []
-        return [p for p in d.iterdir() if p.is_file()]
+def _schedules_status(h: Path) -> str:
+    from alpi.scheduler import jobs_store
 
-    from alpi.core import store as store_mod
+    try:
+        jobs = jobs_store.read(h)
+    except Exception:  # noqa: BLE001
+        return "jobs.json unreadable"
+    if not jobs:
+        return "no jobs"
+    paused = sum(1 for j in jobs if j.get("paused"))
+    label = f"{len(jobs)} job{'s' if len(jobs) != 1 else ''}"
+    return f"{label} · {paused} paused" if paused else label
 
-    def _dir_size(d: Path) -> int:
-        total = 0
-        if d.exists():
-            for p in d.rglob("*"):
-                if p.is_file():
-                    try:
-                        total += p.stat().st_size
-                    except OSError:
-                        pass
-        return total
 
-    tts_files = _all(_dir("cache/tts"))
-    inbound_files = _all(_dir("cache/inbound"))
-    session_files = _all(_dir("sessions"))
-    mention_files = _all(_dir("mentions"))
-    logs_root = _dir("logs")
-    log_files: list[Path] = (
-        [
-            p for p in logs_root.iterdir()
-            if p.is_file() and re.fullmatch(r".+\.log(?:\.\d+)?", p.name)
+def _schedules_setup(h: Path) -> None:
+    from alpi import ui
+    from alpi.scheduler import jobs_store
+
+    while True:
+        try:
+            jobs = jobs_store.read(h)
+        except jobs_store.CorruptJobsFile as e:
+            ui.fail(f"jobs.json corrupt: {e}")
+            return
+        if not jobs:
+            ui.ok_and_wait("no scheduled jobs — add one via chat (`schedule` tool)")
+            return
+        items: list = []
+        for j in jobs:
+            when = j.get("expression") or j.get("run_at") or f"{j.get('after_hours')}h idle"
+            title = j.get("title") or (j.get("prompt") or "")[:50].replace("\n", " ")
+            flags = " · paused" if j.get("paused") else ""
+            items.append((title, j.get("id"), f"[{j.get('kind', 'cron')}] {when}{flags}"))
+        choice = ui.menu(
+            ui.crumb("setup", "schedules"), items, home=h, close="Back",
+        )
+        if choice is None:
+            return
+        job = next((j for j in jobs if j.get("id") == choice), None)
+        if job is None:
+            continue
+        actions = [
+            ("Fire now", "fire", "run this job immediately"),
+            ("Resume" if job.get("paused") else "Pause", "toggle",
+             "auto-fire stays off while paused"),
+            ("Delete", "delete", "remove the job permanently"),
         ]
-        if logs_root.exists() else []
-    )
-    sched_files = _all(_dir("schedule/output"))
-    wg_root = _dir("alp/workgroups")
-    wg_files: list[Path] = (
-        [p for p in wg_root.rglob("*") if p.is_file()] if wg_root.exists() else []
-    )
-    turns_path = _dir("alp/turns.jsonl")
-    if turns_path.is_file():
-        wg_files.append(turns_path)
-    curator_root = _dir("logs/curator")
-    curator_dirs: list[Path] = (
-        [p for p in curator_root.iterdir() if p.is_dir()]
-        if curator_root.exists() else []
-    )
-    curator_size = sum(_dir_size(d) for d in curator_dirs)
-    knowledge_reclaimable = store_mod.reclaimable_bytes(h)
-    knowledge_files: list[Path] = (
-        [store_mod.store_path(h)] if knowledge_reclaimable > 0 else []
-    )
-    att_root = _dir("host/attachments/tmp")
-    att_dirs: list[Path] = (
-        [p for p in att_root.iterdir() if p.is_dir()] if att_root.exists() else []
-    )
-    att_size = sum(_dir_size(d) for d in att_dirs)
-
-    return [
-        {
-            "key": "tts",
-            "label": "TTS cache",
-            "desc": "synthesized speech MP3s in `cache/tts/`",
-            "files": tts_files,
-            "size": _sum(tts_files),
-        },
-        {
-            "key": "inbound_media",
-            "label": "Inbound media cache",
-            "desc": "downloaded voice notes / attachments in `cache/inbound/`",
-            "files": inbound_files,
-            "size": _sum(inbound_files),
-        },
-        {
-            "key": "sessions",
-            "label": "Sessions",
-            "desc": "chat transcripts kept in `sessions/`",
-            "files": session_files,
-            "size": _sum(session_files),
-        },
-        {
-            "key": "mentions",
-            "label": "Mentions",
-            "desc": "per-sender @-mention threads in `mentions/`",
-            "files": mention_files,
-            "size": _sum(mention_files),
-        },
-        {
-            "key": "logs",
-            "label": "Subsystem logs",
-            "desc": "`logs/*.log` — per-profile agent.log + approval.log (daemon-wide service.log lives at the alpi root)",
-            "files": log_files,
-            "size": _sum(log_files),
-        },
-        {
-            "key": "schedule",
-            "label": "Schedule output",
-            "desc": "stdout/stderr of past scheduled jobs",
-            "files": sched_files,
-            "size": _sum(sched_files),
-        },
-        {
-            "key": "workgroups",
-            "label": "Workgroups",
-            "desc": "encrypted transcripts + turn telemetry under `alp/`",
-            "files": wg_files,
-            "size": _sum(wg_files),
-        },
-        {
-            "key": "curator",
-            "label": "Curator reports",
-            "desc": "past skill curator reviews under `logs/curator/<timestamp>/`",
-            "files": curator_dirs,
-            "size": curator_size,
-            "action": "rmtree",
-        },
-        {
-            "key": "attachments",
-            "label": "Attachment staging",
-            "desc": "uploaded chat attachments staged in `host/attachments/tmp/`",
-            "files": att_dirs,
-            "size": att_size,
-            "action": "rmtree",
-        },
-        {
-            "key": "knowledge",
-            "label": "Knowledge index bloat",
-            "desc": "SQLite freelist pages in `knowledge.sqlite` from past force-reindexes",
-            "files": knowledge_files,
-            "size": knowledge_reclaimable,
-            "action": "vacuum",
-        },
-    ]
+        action = ui.menu(
+            job.get("title") or str(job.get("id")), actions, home=h, close="Back",
+        )
+        if action == "fire":
+            from alpi.scheduler.run import fire_by_id
+            ok, msg = fire_by_id(h, str(job.get("id")))
+            ui.ok_and_wait(f"{'OK' if ok else 'FAIL'} — {msg}")
+        elif action == "toggle":
+            # Mirrors host.schedule.set_paused exactly: flip the flag, never touch last_run_at.
+            def _toggle(current: list[dict]) -> list[dict] | None:
+                for row in current:
+                    if row.get("id") == job.get("id"):
+                        row["paused"] = not job.get("paused")
+                        return current
+                return None
+            jobs_store.update(h, _toggle)
+            ui.ok_and_wait("job updated")
+        elif action == "delete":
+            if not ui.confirm(f"  Delete job {job.get('id')}?", default=False):
+                continue
+            def _drop(current: list[dict]) -> list[dict] | None:
+                kept = [row for row in current if row.get("id") != job.get("id")]
+                return kept if len(kept) != len(current) else None
+            jobs_store.update(h, _drop)
+            ui.ok_and_wait("job deleted")
 
 
 def _cleanup_status(h: Path) -> str:
@@ -2952,11 +3037,13 @@ def _cleanup_status(h: Path) -> str:
 def _cleanup_setup(h: Path) -> None:
     from alpi import home as home_mod, ui
 
+    from alpi.cleanup import item_count
+
     while True:
         cats = _cleanup_categories(h)
         items: list = []
         for c in cats:
-            n = len(c["files"])
+            n = item_count(c)
             if n == 0:
                 status = "empty"
             else:
@@ -2973,55 +3060,30 @@ def _cleanup_setup(h: Path) -> None:
         if choice is None:
             return
         target = next((c for c in cats if c["key"] == choice), None)
-        if target is None or not target["files"]:
+        if target is None or item_count(target) == 0:
             continue
 
-        n = len(target["files"])
+        n = item_count(target)
         size_label = home_mod.format_bytes(target["size"])
         ui._console.print("")
+        verb = (
+            f"Compact knowledge index and reclaim {size_label}?"
+            if target.get("action") == "vacuum"
+            else f"Delete {n} item(s) · {size_label} from {target['label']}?"
+        )
+        if not ui.confirm(f"  {verb}", default=False):
+            continue
+        from alpi.cleanup import apply as cleanup_apply
+        result = cleanup_apply(h, target["key"])
+        for err in result["errors"]:
+            ui.fail(f"could not delete {err}")
         if target.get("action") == "vacuum":
-            if not ui.confirm(
-                f"  Compact knowledge index and reclaim {size_label}?",
-                default=False,
-            ):
-                continue
-            from alpi.core import store as store_mod
-
-            before, after = store_mod.compact(h)
             ui.ok_and_wait(
                 f"compacted {target['label']}: "
-                f"{home_mod.format_bytes(before)} → {home_mod.format_bytes(after)}"
+                f"{home_mod.format_bytes(result['before'])} → {home_mod.format_bytes(result['after'])}"
             )
-            continue
-        if target.get("action") == "rmtree":
-            if not ui.confirm(
-                f"  Delete {n} item(s) · {size_label} from {target['label']}?",
-                default=False,
-            ):
-                continue
-            import shutil
-            deleted = 0
-            for p in target["files"]:
-                try:
-                    shutil.rmtree(p)
-                    deleted += 1
-                except OSError as e:  # noqa: BLE001
-                    ui.fail(f"could not delete {p.name}: {e}")
-            ui.ok_and_wait(f"removed {deleted} item(s) from {target['label']}")
-            continue
-        if not ui.confirm(
-            f"  Delete {n} file(s) · {size_label} from {target['label']}?",
-            default=False,
-        ):
-            continue
-        deleted = 0
-        for p in target["files"]:
-            try:
-                p.unlink()
-                deleted += 1
-            except OSError as e:  # noqa: BLE001
-                ui.fail(f"could not delete {p.name}: {e}")
-        ui.ok_and_wait(f"removed {deleted} file(s) from {target['label']}")
+        else:
+            ui.ok_and_wait(f"removed {result['removed']} item(s) from {target['label']}")
 
 
 @main.group()

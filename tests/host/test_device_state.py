@@ -862,3 +862,42 @@ async def test_unset_field_clears_tier_and_prunes_block(
     import yaml as _yaml
     raw = _yaml.safe_load((home / "config.yaml").read_text()) or {}
     assert "tiers" not in raw
+
+
+@pytest.mark.asyncio
+async def test_cleanup_plan_and_apply_rpc(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = _bootstrap(tmp_path / "h")
+    (home / "cache/tts").mkdir(parents=True)
+    (home / "cache/tts/a.mp3").write_bytes(b"x" * 64)
+    monkeypatch.setattr(host_handlers, "_resolve_home", lambda profile: home)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+
+    resp = await srv._dispatch({
+        "id": "plan", "method": "host.cleanup.plan",
+        "params": {"profile": "default"},
+    })
+    cats = resp["result"]["categories"]
+    tts = next(c for c in cats if c["key"] == "tts")
+    assert tts["size"] == 64 and tts["count"] == 1
+
+    resp = await srv._dispatch({
+        "id": "apply", "method": "host.cleanup.apply",
+        "params": {"profile": "default", "keys": ["tts"]},
+    })
+    results = resp["result"]["results"]
+    assert results[0]["ok"] and results[0]["removed"] == 1
+    assert not (home / "cache/tts/a.mp3").exists()
+
+    resp = await srv._dispatch({
+        "id": "bad", "method": "host.cleanup.apply",
+        "params": {"profile": "default"},
+    })
+    assert resp.get("error")
+
+
+def test_cleanup_verbs_are_admin_gated() -> None:
+    assert "host.cleanup.plan" in host_server._ADMIN_METHODS
+    assert "host.cleanup.apply" in host_server._ADMIN_METHODS

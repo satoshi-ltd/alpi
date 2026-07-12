@@ -24,6 +24,7 @@ import { useEndpoint } from '../../../src/lib/EndpointContext';
 import { AccentSheet } from '../../../src/features/sheets/AccentSheet';
 import {
   BudgetSheet,
+  CleanupSheet,
   ModelSheet,
   ReasoningEffortSheet,
   VoiceSheet,
@@ -526,6 +527,12 @@ export default function ProfileSettings() {
               </View>
             ))
         )}
+        <RowSeparator />
+        <Row
+          label="Reclaim space"
+          helper="caches, logs, old transcripts, index bloat"
+          onPress={() => setSheet('cleanup')}
+        />
 
         <SectionHeader>Danger zone</SectionHeader>
         <Row
@@ -596,6 +603,13 @@ export default function ProfileSettings() {
         onClose={() => setSheet(null)}
         initialValue={profile.tiers?.deep?.effort ?? ''}
         onSave={(value) => saveField('tiers.deep.effort', value)}
+      />
+      <CleanupSheet
+        open={sheet === 'cleanup'}
+        onClose={() => setSheet(null)}
+        profileName={profile.name}
+        call={call}
+        onCleaned={() => refreshSettings()}
       />
       <BudgetSheet
         open={sheet === 'budget'}

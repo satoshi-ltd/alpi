@@ -47,6 +47,13 @@ this repository. Hard constraints, not suggestions.
   auth, routing, or interop, it stays; if it's brag/credit/decorative,
   it goes.
 
+- **Console parity is mandatory.** The console (`alpi setup`, the TUI,
+  the CLI) is the core product; desktop/mobile are siblings, not the
+  primary surface. Any new host verb that gets UI in the apps ships its
+  console equivalent (slash command, CLI command, or setup section) in
+  the same change — features must never be reachable only through the
+  apps.
+
 ## Releases & versioning
 
 Two products ship from this repo, on independent cadences with

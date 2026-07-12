@@ -6,6 +6,7 @@ import Button from "../../../primitives/Button.jsx";
 import Chip from "../../../primitives/Chip.jsx";
 import { Row } from "../primitives.jsx";
 import { ConfirmDelete } from "../../../primitives/index.js";
+import { useNotify } from "../../../primitives/Notification.jsx";
 import { Btn } from "../../../primitives/index.js";
 import { STORAGE_SCOPE, formatBytes } from "../util.js";
 import styles from "../Settings.module.css";
@@ -86,6 +87,124 @@ export function StorageField({ profile, activeConnection, prefetched, onLoadingC
     </>
   );
 }
+
+export function CleanupField({ profile, activeConnection, onCleaned }) {
+  const notify = useNotify();
+  const connectionId = activeConnection?.id ?? null;
+  const [plan, setPlan] = useState(null);
+  const [busyKey, setBusyKey] = useState(null);
+  const [confirmKey, setConfirmKey] = useState(null);
+
+  const fetchPlan = () =>
+    invoke("cleanup_plan", {
+      profile: profile.name,
+      ...(connectionId ? { connectionId } : {}),
+    })
+      .then((rows) => setPlan(Array.isArray(rows) ? rows : []))
+      .catch(() => setPlan("error"));
+
+  useEffect(() => {
+    setPlan(null);
+    setConfirmKey(null);
+    fetchPlan();
+  }, [profile.name, connectionId]);
+
+  const doClean = async (cat) => {
+    setBusyKey(cat.key);
+    try {
+      const results = await invoke("cleanup_apply", {
+        profile: profile.name,
+        keys: [cat.key],
+        ...(connectionId ? { connectionId } : {}),
+      });
+      const rows = Array.isArray(results) ? results : [];
+      const failed = rows.filter((r) => !r.ok);
+      const removed = rows.reduce((n, r) => n + (r.removed ?? 0), 0);
+      const freed = rows.reduce((n, r) => n + (r.freed_bytes ?? 0), 0);
+      if (failed.length > 0) {
+        notify({
+          message: `${cat.label}: ${failed[0].errors?.[0] ?? "cleanup failed"}`,
+          variant: "error",
+          duration: 4000,
+        });
+      } else {
+        notify({ message: `${cat.label}: freed ${formatBytes(freed)}`, variant: "success" });
+      }
+      await fetchPlan();
+      if (removed > 0) onCleaned?.();
+    } catch (e) {
+      notify({ message: `${cat.label}: ${String(e)}`, variant: "error", duration: 4000 });
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  const clean = (cat) => {
+    if (cat.destructive) {
+      setConfirmKey(cat.key);
+      return;
+    }
+    doClean(cat);
+  };
+
+  if (plan === null) {
+    return (
+      <Row label="cleanup">
+        <span className={styles.muted}>loading…</span>
+      </Row>
+    );
+  }
+  if (plan === "error") {
+    return (
+      <Row label="cleanup">
+        <span className={styles.muted}>
+          cleanup unavailable — daemon offline or older than 0.10.24
+        </span>
+      </Row>
+    );
+  }
+  const reclaimable = plan.filter((c) => c.size > 0);
+  if (reclaimable.length === 0) {
+    return (
+      <Row label="cleanup">
+        <span className={styles.muted}>nothing to clean</span>
+      </Row>
+    );
+  }
+  return (
+    <>
+      {reclaimable.map((c) => (
+        <Row key={c.key} label={c.label.toLowerCase()}>
+          <span className={styles.inlineRow}>
+            <Chip size="sm" tooltip={c.desc}>{formatBytes(c.size)}</Chip>
+            <Chip size="sm">{c.count} {c.count === 1 ? "item" : "items"}</Chip>
+            <Button
+              size="sm"
+              variant={c.destructive ? "danger" : "ghost"}
+              disabled={busyKey !== null}
+              onClick={() => clean(c)}
+            >
+              {busyKey === c.key
+                ? "Cleaning…"
+                : c.action === "vacuum" ? "Compact" : "Clean"}
+            </Button>
+            <ConfirmDelete
+              open={confirmKey === c.key}
+              onClose={() => setConfirmKey(null)}
+              onConfirm={() => {
+                setConfirmKey(null);
+                doClean(c);
+              }}
+              title={`Delete ${c.label.toLowerCase()}?`}
+              consequence={`${c.desc}. This cannot be undone.`}
+            />
+          </span>
+        </Row>
+      ))}
+    </>
+  );
+}
+
 
 export function DeleteProfileAction({ profile, onDelete, autoConfirm = false, onConsumed }) {
   const [open, setOpen] = useState(false);

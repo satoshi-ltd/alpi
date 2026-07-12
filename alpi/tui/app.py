@@ -21,7 +21,9 @@ from alpi.tui.screens import (
     HelpPanel,
     McpPanel,
     MemoryPanel,
+    OutputsPanel,
     PeersPanel,
+    SessionsPanel,
     SkillsPanel,
     ToolsPanel,
 )
@@ -144,6 +146,7 @@ class AlpiApp(App):
         slash_commands = [
             "/help", "/memory", "/tools", "/mcps", "/status", "/clear", "/new",
             "/compact", "/skills", "/model", "/peers", "/diff",
+            "/sessions", "/outputs",
             "/attach", "/attachments", "/clear-attachments",
             "/exit", "/quit",
         ]
@@ -275,6 +278,30 @@ class AlpiApp(App):
         set_prompt_callback(None)
         from alpi.tools._clarification import set_handler as _set_clarify
         _set_clarify(None)
+
+    def _open_session(self, session_id: str) -> None:
+        if self._turn_in_progress():
+            self._mount_message(DimLine("(turn in progress — wait for it to finish)"))
+            return
+        if session_id == self.engine.session.id:
+            return
+        self.run_worker(self._resume_session_by_id(session_id), exclusive=True)
+
+    async def _resume_session_by_id(self, session_id: str) -> None:
+        from alpi.cli import _continue_specific_session
+
+        # Same reset semantics as /new: forget any session-only /model override.
+        self.cfg = config.load(self.home)
+        self.engine.cfg = self.cfg
+        self.engine.reset_session()
+        chat = self.query_one("#chat", VerticalScroll)
+        await chat.remove_children()
+        if not _continue_specific_session(self.engine, self.home, session_id):
+            chat.mount(ErrorLine(f"session not found: {session_id}"))
+            return
+        from alpi.tools import session_search
+        session_search.set_current_session_id(self.engine.session.id)
+        await self._replay_session_turns()
 
     def _approval_prompt_blocking(self, command: str, pattern: str, severity, cwd: str | None = None) -> str:
         import threading
@@ -588,6 +615,10 @@ class AlpiApp(App):
             "skills": lambda _a: self._cmd_skills(),
             "model": lambda _a: self._cmd_model(),
             "peers": lambda _a: self._show_panel(PeersPanel(self.home)),
+            "sessions": lambda _a: self._show_panel(
+                SessionsPanel(self.home, current_id=self.engine.session.id)
+            ),
+            "outputs": lambda _a: self._show_panel(OutputsPanel(self.home)),
             "diff": lambda a: self._show_panel(DiffPanel(self.home, since=a or "24h")),
             "attach": lambda a: self._cmd_attach(a),
             "attachments": lambda _a: self._cmd_attachments(),
@@ -820,7 +851,10 @@ class AlpiApp(App):
         if not resumed:
             _drop_activity()
             return
+        _drop_activity()
+        await self._replay_session_turns()
 
+    async def _replay_session_turns(self) -> None:
         turns = self.engine.session.turns
         widgets: list = []
         cards_to_finish: list[tuple[ToolCard, object]] = []
@@ -852,7 +886,6 @@ class AlpiApp(App):
         ))
 
         chat = self.query_one("#chat", VerticalScroll)
-        _drop_activity()
         await chat.mount(*widgets)
 
         for card, tl in cards_to_finish:

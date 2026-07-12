@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { radii, space , fontSizes} from '../../theme/tokens';
 
 import { Field } from '../../components/Field';
@@ -345,6 +345,121 @@ export function ModelSheet({
     </Sheet>
   );
 }
+
+function formatCleanupBytes(n) {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+export function CleanupSheet({ open, onClose, profileName, call, onCleaned }) {
+  const { colors, fonts, fontSizes } = useTheme();
+  const toast = useToast();
+  const [plan, setPlan] = useState(null);
+  const [busyKey, setBusyKey] = useState(null);
+
+  const fetchPlan = () =>
+    call('host.cleanup.plan', { profile: profileName })
+      .then((res) => setPlan(Array.isArray(res?.categories) ? res.categories : 'error'))
+      .catch(() => setPlan('error'));
+
+  useEffect(() => {
+    if (!open) return;
+    setPlan(null);
+    fetchPlan();
+  }, [open, profileName]);
+
+  const doClean = async (cat) => {
+    setBusyKey(cat.key);
+    try {
+      const res = await call('host.cleanup.apply', { profile: profileName, keys: [cat.key] });
+      const results = Array.isArray(res?.results) ? res.results : [];
+      const failed = results.filter((r) => !r.ok);
+      const removed = results.reduce((n, r) => n + (r.removed ?? 0), 0);
+      const freed = results.reduce((n, r) => n + (r.freed_bytes ?? 0), 0);
+      if (failed.length > 0) {
+        toast({
+          title: `${cat.label} failed`,
+          message: failed[0].errors?.[0] ?? 'cleanup failed',
+          duration: 2600,
+        });
+      } else {
+        toast({ title: `${cat.label}: freed ${formatCleanupBytes(freed)}`, duration: 1800 });
+      }
+      await fetchPlan();
+      if (removed > 0) onCleaned?.();
+    } catch (e) {
+      toast({ title: 'Cleanup failed', message: String(e), duration: 2400 });
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  const clean = (cat) => {
+    if (busyKey) return;
+    if (!cat.destructive) {
+      doClean(cat);
+      return;
+    }
+    Alert.alert(
+      `Delete ${cat.label.toLowerCase()}?`,
+      `${cat.desc}. This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => doClean(cat) },
+      ],
+    );
+  };
+
+  const reclaimable = plan === 'error' ? [] : (plan ?? []).filter((c) => c.size > 0);
+  return (
+    <Sheet
+      open={open}
+      onClose={onClose}
+      title="Reclaim space"
+      subtitle={`@${profileName ?? ''} · caches, logs, old transcripts`}
+    >
+      <View style={{ paddingVertical: space.s5 }}>
+        {plan === null ? (
+          <View style={{ padding: space.s10, alignItems: 'center' }}>
+            <ActivityIndicator color={colors.ink3} />
+          </View>
+        ) : plan === 'error' ? (
+          <Text
+            style={{
+              padding: space.s8, fontFamily: fonts.sans.regular,
+              fontSize: fontSizes.sm, color: colors.ink3,
+            }}
+          >
+            Cleanup unavailable — daemon offline or older than 0.10.24.
+          </Text>
+        ) : reclaimable.length === 0 ? (
+          <Text
+            style={{
+              padding: space.s8, fontFamily: fonts.sans.regular,
+              fontSize: fontSizes.sm, color: colors.ink3,
+            }}
+          >
+            Nothing to clean — this profile is tidy.
+          </Text>
+        ) : (
+          reclaimable.map((c, i) => (
+            <View key={c.key}>
+              {i > 0 ? <RowSeparator /> : null}
+              <PickerRow
+                label={c.label}
+                helper={c.desc}
+                meta={<Pill>{formatCleanupBytes(c.size)}</Pill>}
+                onPress={() => (busyKey ? null : clean(c))}
+              />
+            </View>
+          ))
+        )}
+      </View>
+    </Sheet>
+  );
+}
+
 
 export function VoiceSheet({ open, onClose, profileName, accent, initialValue, onSave }) {
   const { colors, fonts, fontSizes } = useTheme();

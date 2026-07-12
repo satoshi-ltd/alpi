@@ -938,6 +938,47 @@ async fn profile_storage(profile: String, connection_id: Option<String>) -> serd
 }
 
 #[tauri::command]
+async fn cleanup_plan(
+    profile: String,
+    connection_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let res = tauri::async_runtime::spawn_blocking(move || {
+        let params = serde_json::json!({"profile": profile});
+        match connection_id.as_deref() {
+            Some(cid) => host_client::call_for(cid, "host.cleanup.plan", params),
+            None => host_client::call("host.cleanup.plan", params),
+        }
+    })
+    .await
+    .map_err(|e| format!("join: {e}"))??;
+    Ok(res
+        .get("categories")
+        .cloned()
+        .unwrap_or_else(|| serde_json::Value::Array(vec![])))
+}
+
+#[tauri::command]
+async fn cleanup_apply(
+    profile: String,
+    keys: Vec<String>,
+    connection_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let res = tauri::async_runtime::spawn_blocking(move || {
+        let params = serde_json::json!({"profile": profile, "keys": keys});
+        match connection_id.as_deref() {
+            Some(cid) => host_client::call_for(cid, "host.cleanup.apply", params),
+            None => host_client::call("host.cleanup.apply", params),
+        }
+    })
+    .await
+    .map_err(|e| format!("join: {e}"))??;
+    Ok(res
+        .get("results")
+        .cloned()
+        .unwrap_or_else(|| serde_json::Value::Array(vec![])))
+}
+
+#[tauri::command]
 async fn workgroup_members(
     profile: String,
     wg_id: String,
@@ -3337,6 +3378,8 @@ pub fn run() {
             network_set_advertised,
             network_restart_host_server,
             profile_storage,
+            cleanup_plan,
+            cleanup_apply,
             workgroup_members,
             workgroup_action,
             workgroup_update,

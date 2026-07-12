@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.10.24 — 2026-07-11 — the console catches up
+
+- **The TUI can browse your history.** `/sessions` lists saved sessions with a
+  preview and turn count — press enter to resume one in place, or `d` twice to
+  delete it.
+- **Outputs are no longer invisible in the terminal.** `/outputs` in the TUI
+  and `alpi outputs list|show|read-all` on the CLI browse the same inbox the
+  apps show — notifications, cron replies, produced files — and mark them read.
+- **Scheduled jobs are manageable from the console.** `alpi schedule list`
+  prints every job with its next fire time, and `alpi setup → Schedules` can
+  fire, pause, resume, or delete them.
+- **Storage cleanup is now a host capability.** The same categories behind
+  `alpi setup → Cleanup` (caches, logs, old transcripts, knowledge-index
+  bloat) are exposed to paired apps, so remote daemons can be tidied without
+  a shell.
+
 ## v0.10.23 — 2026-07-11 — schedule reports its next run
 
 - **Scheduled jobs now tell paired apps when they'll next fire.** The daemon

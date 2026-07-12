@@ -11,6 +11,13 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.35 — 2026-07-11 — storage you can act on
+
+- **Clean up a profile's disk from Storage.** Reclaimable categories — caches,
+  logs, old transcripts, knowledge-index bloat — show their size with a Clean
+  (or Compact) button, and it works on remote daemons too. Requires alpi
+  ≥ 0.10.24 on the daemon.
+
 ## v0.4.34 — 2026-07-11 — Schedule is a first-class viewer
 
 - **Schedule joins Skills, Memory and Tools as a browsable panel.** Open it

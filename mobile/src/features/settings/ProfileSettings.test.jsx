@@ -94,6 +94,7 @@ vi.mock('../../features/sheets/AccentSheet', () => ({
 
 vi.mock('../../features/sheets/ProfileFieldSheets', () => ({
   BudgetSheet: () => null,
+  CleanupSheet: () => null,
   ModelSheet: () => null,
   ReasoningEffortSheet: () => null,
   VoiceSheet: () => null,

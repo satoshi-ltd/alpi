@@ -14,6 +14,13 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.2.12 — 2026-07-11 — tidy profiles from your pocket
+
+- **Reclaim space on any daemon.** Profile settings gain a "Reclaim space"
+  sheet listing what's cleanable — caches, logs, old transcripts — with
+  per-category cleanup; destructive categories ask for confirmation first.
+  Requires alpi ≥ 0.10.24 on the daemon.
+
 ## v0.2.11 — 2026-07-11 — read aloud behaves
 
 - **Stopping read-aloud mid-load can't leak audio anymore.** A slow synthesis

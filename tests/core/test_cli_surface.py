@@ -21,7 +21,7 @@ def test_top_level_help_shows_only_canonical_commands() -> None:
 
     for name in ("chat", "setup", "doctor", "logs", "profile", "daemon",
                  "schedule", "peers", "workgroup", "release", "email",
-                 "mcp", "providers", "sandbox", "voice"):
+                 "mcp", "providers", "sandbox", "voice", "outputs"):
         assert name in out, f"{name!r} missing from top-level --help"
 
     assert "\n  alp " not in out, "alp group should be gone"
@@ -78,10 +78,10 @@ def test_daemon_help_lists_lifecycle_verbs() -> None:
 
 def test_schedule_help_lists_only_operational_verbs() -> None:
     """After unification, lifecycle moved to ``alpi daemon``; the
-    ``schedule`` group keeps just ``run-once`` and ``fire``."""
+    ``schedule`` group keeps ``list``, ``run-once`` and ``fire``."""
     result = CliRunner().invoke(cli.main, ["schedule", "--help"])
     assert result.exit_code == 0
-    for sub in ("run-once", "fire"):
+    for sub in ("list", "run-once", "fire"):
         assert sub in result.output
     for gone in ("start", "stop", "restart", "status", "install", "uninstall"):
         assert f"\n  {gone}" not in result.output, f"schedule {gone} should be gone"

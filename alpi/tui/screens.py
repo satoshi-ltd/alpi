@@ -149,6 +149,8 @@ class HelpPanel(FloatingPanel):
         ("status",    "session snapshot — model, turns, tokens, cost"),
         ("skills",    "list installed skills"),
         ("peers",     "list ALP peers; pick one to drop @id into the input"),
+        ("sessions",  "list saved sessions; resume or delete one"),
+        ("outputs",   "outputs inbox — notifications, cron replies, files"),
         ("diff",      "what changed in this profile in the last 24h"),
         ("attach",    "attach an image/PDF to the next message: /attach <path>"),
         ("attachments", "list pending attachments"),
@@ -459,6 +461,187 @@ class PeersPanel(FloatingPanel):
             inp.focus()
         except Exception:  # noqa: BLE001
             pass
+
+
+def list_session_rows(home: Path, limit: int = 30) -> list[dict]:
+    from alpi.host import sessions as host_sessions
+
+    rows = host_sessions.list_sessions(home, limit=None)
+    out: list[dict] = []
+    for r in rows:
+        if r.get("kind") != "chat":
+            continue
+        out.append({
+            "id": str(r.get("id")),
+            "turns": int(r.get("turn_count") or 0),
+            "mtime": float(r.get("updated_at") or r.get("mtime") or 0.0),
+            "preview": str(r.get("first_user") or "")[:70],
+        })
+        if len(out) >= limit:
+            break
+    return out
+
+
+def delete_session_row(home: Path, session_id: str) -> bool:
+    from alpi.host import sessions as host_sessions
+
+    return host_sessions.delete_session(home, session_id)
+
+
+class SessionsPanel(FloatingPanel):
+    """List saved sessions; enter resumes, `d` twice deletes."""
+
+    panel_title = "/sessions"
+    DEFAULT_CSS = _LIST_PANEL_CSS
+
+    def __init__(self, home: Path, current_id: str = "") -> None:
+        super().__init__()
+        self.home = home
+        self.current_id = current_id
+        self._pending_delete: str | None = None
+
+    def compose_body(self) -> ComposeResult:
+        from datetime import datetime
+
+        from alpi.tui.list_row import build_options
+
+        rows = list_session_rows(self.home)
+        if not rows:
+            yield Static("no saved sessions yet", classes="entry-desc")
+            return
+        items: list[tuple[str, str, str]] = []
+        for r in rows:
+            ts = datetime.fromtimestamp(r["mtime"]).strftime("%m-%d %H:%M")
+            marker = " · current" if r["id"] == self.current_id else ""
+            label = r["preview"] or "(empty session)"
+            items.append((r["id"], label, f"{ts} · {r['turns']} turns · {r['id']}{marker}"))
+        accent = self.app.theme_variables.get("accent")
+        yield OptionList(*build_options(items, accent=accent), id="sessions-options", compact=True)
+        yield Static("enter resumes · press d twice to delete", classes="entry-desc", id="sessions-hint")
+
+    def on_mount(self) -> None:
+        self.call_after_refresh(self._focus_list)
+
+    def _focus_list(self) -> None:
+        try:
+            self.query_one(OptionList).focus()
+        except Exception:  # noqa: BLE001
+            pass
+
+    def on_option_list_option_selected(
+        self, event: OptionList.OptionSelected,
+    ) -> None:
+        session_id = event.option.id or ""
+        self.remove()
+        if not session_id or session_id == self.current_id:
+            return
+        opener = getattr(self.app, "_open_session", None)
+        if opener is not None:
+            opener(session_id)
+
+    def on_key(self, event) -> None:  # noqa: ANN001
+        if getattr(event, "key", "") != "d":
+            return
+        try:
+            options = self.query_one(OptionList)
+        except Exception:  # noqa: BLE001
+            return
+        idx = options.highlighted
+        if idx is None:
+            return
+        session_id = options.get_option_at_index(idx).id or ""
+        if not session_id or session_id == self.current_id:
+            return
+        event.stop()
+        hint = self.query_one("#sessions-hint", Static)
+        if self._pending_delete != session_id:
+            self._pending_delete = session_id
+            hint.update(f"press d again to delete {session_id}")
+            return
+        self._pending_delete = None
+        if delete_session_row(self.home, session_id):
+            options.remove_option_at_index(idx)
+            hint.update(f"deleted {session_id}")
+        else:
+            hint.update(f"could not delete {session_id}")
+
+
+def list_output_rows(home: Path, limit: int = 30) -> list[dict]:
+    from alpi import outputs as outputs_mod
+
+    return outputs_mod.list_outputs(home, limit=limit)
+
+
+class OutputsPanel(FloatingPanel):
+    """Outputs inbox — notifications, cron replies, produced files."""
+
+    panel_title = "/outputs"
+    DEFAULT_CSS = _LIST_PANEL_CSS
+
+    def __init__(self, home: Path) -> None:
+        super().__init__()
+        self.home = home
+        self._rows: dict[str, dict] = {}
+
+    def compose_body(self) -> ComposeResult:
+        from datetime import datetime
+
+        from alpi.tui.list_row import build_options
+
+        rows = list_output_rows(self.home)
+        if not rows:
+            yield Static("no outputs yet — notify() results and cron replies land here", classes="entry-desc")
+            return
+        items: list[tuple[str, str, str]] = []
+        for it in rows:
+            oid = str(it.get("id"))
+            self._rows[oid] = it
+            dot = "●" if it.get("status") == "unread" else "○"
+            ts = datetime.fromtimestamp(float(it.get("created_at") or 0)).strftime("%m-%d %H:%M")
+            title = it.get("title") or (it.get("body") or "")[:60].replace("\n", " ")
+            items.append((oid, f"{dot} {title}", f"{ts} · {it.get('type', 'info')}"))
+        accent = self.app.theme_variables.get("accent")
+        yield OptionList(*build_options(items, accent=accent), id="outputs-options", compact=True)
+
+    def on_mount(self) -> None:
+        self.call_after_refresh(self._focus_list)
+
+    def _focus_list(self) -> None:
+        try:
+            self.query_one(OptionList).focus()
+        except Exception:  # noqa: BLE001
+            pass
+
+    def on_option_list_option_selected(
+        self, event: OptionList.OptionSelected,
+    ) -> None:
+        oid = event.option.id or ""
+        item = self._rows.get(oid)
+        self.remove()
+        if item is None:
+            return
+        from alpi import outputs as outputs_mod
+        outputs_mod.mark_read(self.home, oid)
+        shower = getattr(self.app, "_show_panel", None)
+        if shower is not None:
+            shower(OutputDetailPanel(item))
+
+
+class OutputDetailPanel(FloatingPanel):
+    panel_title = "output"
+
+    def __init__(self, item: dict) -> None:
+        super().__init__()
+        self.item = item
+        self.panel_title = str(item.get("title") or "output")
+
+    def compose_body(self) -> ComposeResult:
+        from datetime import datetime
+
+        ts = datetime.fromtimestamp(float(self.item.get("created_at") or 0)).strftime("%Y-%m-%d %H:%M")
+        yield Static(f"{ts} · {self.item.get('type', 'info')} · {self.item.get('id')}", classes="entry-desc")
+        with VerticalScroll():
+            yield Markdown(str(self.item.get("body") or ""))
 
 
 class SkillsPanel(FloatingPanel):
