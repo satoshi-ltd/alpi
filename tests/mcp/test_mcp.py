@@ -427,6 +427,66 @@ def test_wrapped_tool_calls_delegates_to_client(server_and_patch) -> None:
         mcp_registry._stop_existing()
 
 
+def test_wrapped_tool_falls_back_to_structured_content(server_and_patch) -> None:
+    server = server_and_patch
+    server.handle("tools/list", {"tools": [{"name": "lookup", "description": ""}]})
+    server.handle("tools/call", {
+        "content": [],
+        "structuredContent": {"city": "Lisbon", "temp_c": 21},
+        "isError": False,
+    })
+    cfg = _FakeConfig({"mcp": {"servers": {"x": {"command": "echo"}}}})
+    clients = mcp_registry.load_and_register(cfg)
+    try:
+        result = _TOOLS["x__lookup"]().run()
+        assert result.ok is True
+        assert json.loads(result.output) == {"city": "Lisbon", "temp_c": 21}
+    finally:
+        for c in clients:
+            c.stop()
+        mcp_registry._stop_existing()
+
+
+def test_structured_content_survives_non_text_blocks(server_and_patch) -> None:
+    server = server_and_patch
+    server.handle("tools/list", {"tools": [{"name": "scan", "description": ""}]})
+    server.handle("tools/call", {
+        "content": [{"type": "image", "data": "abc", "mimeType": "image/png"}],
+        "structuredContent": {"objects": ["invoice", "total"]},
+        "isError": False,
+    })
+    cfg = _FakeConfig({"mcp": {"servers": {"x": {"command": "echo"}}}})
+    clients = mcp_registry.load_and_register(cfg)
+    try:
+        result = _TOOLS["x__scan"]().run()
+        assert result.ok is True
+        assert "[image content omitted]" in result.output
+        assert json.loads(result.output.split("\n", 1)[1]) == {"objects": ["invoice", "total"]}
+    finally:
+        for c in clients:
+            c.stop()
+        mcp_registry._stop_existing()
+
+
+def test_real_text_suppresses_structured_duplicate(server_and_patch) -> None:
+    server = server_and_patch
+    server.handle("tools/list", {"tools": [{"name": "echo", "description": ""}]})
+    server.handle("tools/call", {
+        "content": [{"type": "text", "text": "pong"}],
+        "structuredContent": {"reply": "pong"},
+        "isError": False,
+    })
+    cfg = _FakeConfig({"mcp": {"servers": {"x": {"command": "echo"}}}})
+    clients = mcp_registry.load_and_register(cfg)
+    try:
+        result = _TOOLS["x__echo"]().run()
+        assert result.output == "pong"
+    finally:
+        for c in clients:
+            c.stop()
+        mcp_registry._stop_existing()
+
+
 def test_load_and_register_resolves_env_from_profile_dotenv(
     monkeypatch, tmp_path,
 ) -> None:

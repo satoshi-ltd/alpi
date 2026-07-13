@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.10.25 — 2026-07-13 — MCP tools that only return structured data
+
+- **MCP tools that reply with structured JSON now come through.** Servers whose
+  results carry only `structuredContent` (no mirrored text block) used to render
+  blank; alpi now falls back to the structured payload so the reply isn't empty.
+
 ## v0.10.24 — 2026-07-11 — the console catches up
 
 - **The TUI can browse your history.** `/sessions` lists saved sessions with a
