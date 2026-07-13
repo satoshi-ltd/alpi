@@ -580,6 +580,16 @@ def _check_services(home: Path, profile: str) -> list[Check]:
             n = -1
         if n >= 0:
             out.append(Check("Services", "Jobs", "info", f"{n} scheduled"))
+    runs_file = home / "schedule" / "runs.json"
+    if runs_file.exists():
+        from alpi.scheduler import jobs_store
+        try:
+            jobs_store._load_json(runs_file, dict)
+        except Exception:  # noqa: BLE001
+            out.append(Check(
+                "Services", "Job runs", "warn",
+                "schedule/runs.json is corrupt — the scheduler skips every tick until it is repaired; no job fires",
+            ))
 
     return out
 

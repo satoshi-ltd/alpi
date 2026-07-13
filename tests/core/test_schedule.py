@@ -8,6 +8,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from alpi.scheduler import jobs_store
 from alpi.scheduler import run as scheduler
 from alpi.tools.schedule import Schedule
 
@@ -29,9 +30,11 @@ def test_cron_tool_add_cron_job_writes_jobs_json(tmp_home_no_env: Path) -> None:
     assert job["expression"] == "*/5 * * * *"
     assert job["notify"] is True
     assert "platform" not in job and "chat_id" not in job
-    assert job["last_run_at"] is not None
-    datetime.fromisoformat(job["last_run_at"])
-    assert "last_run_status" not in job
+    assert "last_run_at" not in job
+    runs = json.loads((tmp_home_no_env / "schedule" / "runs.json").read_text())
+    assert runs[job["id"]]["last_run_at"] is not None
+    datetime.fromisoformat(runs[job["id"]]["last_run_at"])
+    assert "last_run_status" not in runs[job["id"]]
 
 
 def test_cron_tool_add_cron_job_silent_by_default(tmp_home_no_env: Path) -> None:
@@ -243,8 +246,10 @@ def test_tick_fires_due_jobs_and_updates_last_run(monkeypatch, tmp_home_no_env: 
     assert calls == ["abc123"]
 
     saved = json.loads((tmp_home_no_env / "schedule" / "jobs.json").read_text())
-    assert saved[0]["last_run_at"] is not None
-    assert saved[0]["last_run_status"] == "ok"
+    assert "last_run_at" not in saved[0]
+    merged = jobs_store.read(tmp_home_no_env)
+    assert merged[0]["last_run_at"] is not None
+    assert merged[0]["last_run_status"] == "ok"
 
 
 def test_tick_skips_not_due(monkeypatch, tmp_home_no_env: Path) -> None:
@@ -278,9 +283,11 @@ def test_tick_failure_still_updates_last_run(monkeypatch, tmp_home_no_env: Path)
                         lambda job, home: scheduler.JobOutcome(False, "boom"))
     results = scheduler.tick(tmp_home_no_env)
     assert results == [("x", False, "boom")]
-    saved = json.loads((tmp_home_no_env / "schedule" / "jobs.json").read_text())
-    assert saved[0]["last_run_at"] is not None
-    assert saved[0]["last_run_status"] == "error"
+    merged = jobs_store.read(tmp_home_no_env)
+    assert merged[0]["last_run_at"] is not None
+    assert merged[0]["last_run_status"] == "error"
+    assert "last_run_at" not in json.loads(
+        (tmp_home_no_env / "schedule" / "jobs.json").read_text())[0]
 
 
 # --------------------------------------------------------------------
@@ -675,8 +682,8 @@ def test_fire_by_id_runs_matching_job(monkeypatch, tmp_home_no_env: Path) -> Non
     assert ok, msg
     assert called_with == {"id": "alpha", "prompt": "hi"}
     assert "ran alpha" in msg
-    saved = json.loads(jobs_path.read_text())
-    alpha = next(j for j in saved if j["id"] == "alpha")
+    merged = jobs_store.read(tmp_home_no_env)
+    alpha = next(j for j in merged if j["id"] == "alpha")
     assert alpha["last_run_status"] == "ok"
 
 
@@ -707,7 +714,7 @@ def test_fire_by_id_does_not_consume_once_job(
     assert len(jobs_after) == 1
     assert jobs_after[0]["id"] == "tomorrow"
     # last_run_at must land so the operator sees it was tested.
-    assert "last_run_at" in jobs_after[0]
+    assert "last_run_at" in jobs_store.read(tmp_home_no_env)[0]
 
 
 def test_schedule_tool_fire_action(monkeypatch, tmp_home_no_env: Path) -> None:

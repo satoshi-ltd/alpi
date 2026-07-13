@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.10.27 — 2026-07-13 — schedule definitions split from run state
+
+- **`jobs.json` now holds only your job definitions.** The scheduler's
+  bookkeeping (last run time and status) moved to its own file,
+  `schedule/runs.json`, merged transparently when jobs are listed.
+- **Editing a job can no longer race the scheduler.** A job firing mid-edit
+  only writes the run-state file; your definitions are never rewritten unless
+  they actually changed.
+- **Zero-touch migration** — existing `jobs.json` files split automatically on
+  the first write; CLI, TUI, and the apps keep working unchanged.
+- **`alpi doctor`** warns when the run-state file is unreadable (the scheduler
+  refuses to run any job until it is repaired).
+
 ## v0.10.26 — 2026-07-13 — memory you can measure and edit
 
 - **Each memory file now reports a budget %.** AGENT.md, MEMORY.md and USER.md

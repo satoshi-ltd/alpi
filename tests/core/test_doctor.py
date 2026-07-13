@@ -469,3 +469,15 @@ def test_assets_check_reports_missing_chromium_and_stale_builds(
     assert any(c.name == "chromium" and c.status == "info" for c in checks)
     assert any(c.status == "warn" and "chromium-1100" in c.detail for c in checks)
     assert any(c.name == "prefetch" for c in checks)
+
+
+@pytest.mark.parametrize("payload", ["{broken", "[]"])
+def test_services_check_warns_on_runs_json_the_scheduler_rejects(tmp_path: Path, payload: str) -> None:
+    sched = tmp_path / "schedule"
+    sched.mkdir(parents=True)
+    (sched / "jobs.json").write_text('[{"id": "a", "kind": "cron", "expression": "* * * * *", "prompt": "x"}]')
+    (sched / "runs.json").write_text(payload)
+    checks = doctor._check_services(tmp_path, "default")
+    hit = [c for c in checks if c.name == "Job runs"]
+    assert hit and hit[0].status == "warn"
+    assert "runs.json" in hit[0].detail and "no job fires" in hit[0].detail
