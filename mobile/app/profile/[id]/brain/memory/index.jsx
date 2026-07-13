@@ -1,4 +1,5 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useRef } from 'react';
 import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { space } from '../../../../../src/theme/tokens';
@@ -26,6 +27,12 @@ export default function MemoryList() {
   const router = useRouter();
   const { colors } = useTheme();
   const mem = useProfileMemory(id);
+  const refresh = mem.refresh;
+  const settled = useRef(false);
+  useFocusEffect(useCallback(() => {
+    if (settled.current) refresh();
+    else settled.current = true;
+  }, [refresh]));
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -42,14 +49,15 @@ export default function MemoryList() {
         ) : (
           FILES.map((f, i) => {
             const text = mem.data?.[f.name] ?? '';
-            const size = text ? humanBytes(text.length) : 'empty';
+            const u = mem.usage?.[f.name];
+            const value = u?.pct != null ? `${u.pct}%` : (text ? humanBytes(text.length) : 'empty');
             return (
               <View key={f.name}>
                 {i > 0 ? <RowSeparator /> : null}
                 <Row
                   label={f.label}
                   helper={f.helper}
-                  value={size}
+                  value={value}
                   onPress={() =>
                     router.push({
                       pathname: `/profile/${id}/brain/memory/[name]`,

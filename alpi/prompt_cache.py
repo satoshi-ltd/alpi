@@ -107,11 +107,12 @@ def build_parts(home: Path, cfg) -> dict[str, str]:
 
     parts: dict[str, str] = {name: "" for name in PART_ORDER}
 
+    from alpi.memory import MemoryStore
+    _agent = MemoryStore(home=home).read_agent_safe()
     parts["agent_profile"] = (
-        cfg.agent_path.read_text().strip()
-        if cfg.agent_path.exists()
-        else resources.files("alpi.prompts").joinpath("default_agent.md").read_text().strip()
-    )
+        _agent if _agent is not None
+        else resources.files("alpi.prompts").joinpath("default_agent.md").read_text()
+    ).strip()
     parts["base_prompt"] = (
         resources.files("alpi.prompts").joinpath("system_prompt.md").read_text().strip()
     )

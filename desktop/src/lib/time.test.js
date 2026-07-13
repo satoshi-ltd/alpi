@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { dateBucket, formatNextFire, groupByDate, lastRunShort, notificationTime, relativeTime } from "./time.js";
+import { dateBucket, formatNextFire, groupByDate, lastRunShort, notificationTime, relativeTime, shortDate } from "./time.js";
 
 const NOW = new Date(2026, 5, 17, 12, 0, 0).getTime();
 const DAY = 86400000;
@@ -75,5 +75,13 @@ describe("lastRunShort", () => {
 
   it("returns empty for a job that never ran", () => {
     expect(lastRunShort(null, NOW)).toBe("");
+  });
+});
+
+describe("shortDate", () => {
+  it("shows a bare month/day within the current year, empty when missing", () => {
+    const thisYear = new Date(new Date().getFullYear(), 6, 13).getTime() / 1000;
+    expect(shortDate(thisYear)).not.toMatch(/\d{4}/);
+    expect(shortDate(0)).toBe("");
   });
 });

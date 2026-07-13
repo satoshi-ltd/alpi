@@ -62,6 +62,12 @@ export function formatNextFire(iso, nowMs = Date.now()) {
   return `${SHORT.format(d)} ${clock}`;
 }
 
+export function shortDate(unixSeconds) {
+  if (!unixSeconds) return "";
+  const d = new Date(unixSeconds * 1000);
+  return d.getFullYear() === new Date().getFullYear() ? SHORT.format(d) : LONG.format(d);
+}
+
 export function relativeTime(unixSeconds) {
   if (!unixSeconds) return "";
   const ms = unixSeconds * 1000;

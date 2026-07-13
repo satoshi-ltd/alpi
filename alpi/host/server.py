@@ -51,6 +51,7 @@ _ADMIN_METHODS = frozenset({
     "host.profile.storage",
     "host.config.set_field",
     "host.config.unset_field",
+    "host.profile.memory_write",
     "host.cleanup.plan",
     "host.cleanup.apply",
     "host.mcp.add",

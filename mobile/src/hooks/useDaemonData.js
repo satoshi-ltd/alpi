@@ -263,32 +263,48 @@ const MEMORY_FILES = ['USER.md', 'MEMORY.md', 'AGENT.md'];
 
 export function useProfileMemory(profile) {
   const { endpoint, call } = useEndpoint();
+  const scope = endpoint && profile ? `${endpoint.id}|${profile}` : null;
   const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [usage, setUsage] = useState(null);
+  const [loading, setLoading] = useState(!!scope);
   const [error, setError] = useState(null);
   const requestIdRef = useRef(0);
+  const [trackedScope, setTrackedScope] = useState(scope);
+  if (trackedScope !== scope) {
+    setTrackedScope(scope);
+    setData(null);
+    setUsage(null);
+    setError(null);
+    setLoading(!!scope);
+    requestIdRef.current += 1;
+  }
 
   const refresh = useCallback(async () => {
+    const id = ++requestIdRef.current;
     if (!profile || !endpoint) {
       setData(null);
+      setUsage(null);
       setLoading(false);
       return null;
     }
-    const id = ++requestIdRef.current;
     setLoading(true);
     setError(null);
     try {
-      const results = await Promise.all(
-        MEMORY_FILES.map((name) =>
-          call('host.profile.read_file', { profile, rel_path: `memories/${name}` })
-            .then((r) => ({ name, text: r?.text ?? '' }))
-            .catch(() => ({ name, text: '' })),
+      const [results, usageRes] = await Promise.all([
+        Promise.all(
+          MEMORY_FILES.map((name) =>
+            call('host.profile.read_file', { profile, rel_path: `memories/${name}` })
+              .then((r) => ({ name, text: r?.text ?? '' }))
+              .catch(() => ({ name, text: '' })),
+          ),
         ),
-      );
+        call('host.profile.memory_usage', { profile }).then((r) => r?.files ?? null).catch(() => null),
+      ]);
       if (id !== requestIdRef.current) return null;
       const map = {};
       for (const r of results) map[r.name] = r.text;
       setData(map);
+      setUsage(usageRes);
       setLoading(false);
       return map;
     } catch (e) {
@@ -299,7 +315,9 @@ export function useProfileMemory(profile) {
     }
   }, [profile, endpoint, call]);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
 
-  return { data, loading, error, refresh };
+  return { data, usage, loading, error, refresh };
 }

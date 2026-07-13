@@ -1,8 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { BrowseModal } from "../primitives/index.js";
+import { BrowseModal, IconBtn, EditIcon, I } from "../primitives/index.js";
+import { useNotify } from "../primitives/Notification.jsx";
+import { subscribeDaemonEvent } from "../lib/daemon-bus.js";
+import CodeView from "../primitives/CodeView.jsx";
 import shell from "../primitives/BrowseModal.module.css";
 import MarkdownBody from "../primitives/MarkdownBody.jsx";
+import { shortDate } from "../lib/time.js";
 import styles from "./MemoryModal.module.css";
 
 const FILES = [
@@ -29,26 +33,42 @@ export function matchesFile(file, query) {
   return [file.name, file.label, file.content].filter(Boolean).join(" ").toLowerCase().includes(needle);
 }
 
-export default function MemoryModal({ open, onClose, profile, connectionId }) {
+export default function MemoryModal({ open, onClose, profile, connectionId, canEdit = false }) {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(null);
+  const [reloadTick, setReloadTick] = useState(0);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [rev, setRev] = useState(null);
+  const [baseline, setBaseline] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [conflicted, setConflicted] = useState(false);
+  const editingRef = useRef(false);
+  useEffect(() => { editingRef.current = editing; }, [editing]);
+  const notify = useNotify();
 
   useEffect(() => {
     if (!open || !profile) return undefined;
     let cancelled = false;
     setFiles([]);
-    setSelected(null);
     setError(null);
     setLoading(true);
-    invoke("profile_memory", { profile, connectionId })
-      .then((data) => {
+    Promise.all([
+      invoke("profile_memory", { profile, connectionId }),
+      invoke("memory_usage", { profile, connectionId }).catch(() => null),
+    ])
+      .then(([data, usage]) => {
         if (cancelled) return;
         setFiles(FILES.map(({ name, label }) => {
           const raw = data?.[name] || "";
-          return { name, label, content: stripMemoryDelimiters(raw), size: humanBytes(raw.length) };
+          const u = usage?.[name];
+          return {
+            name, label, raw, content: stripMemoryDelimiters(raw), size: humanBytes(raw.length),
+            pct: u?.pct ?? null, over: u?.over ?? false, updatedAt: u?.updated_at ?? null,
+          };
         }));
       })
       .catch((e) => {
@@ -59,6 +79,19 @@ export default function MemoryModal({ open, onClose, profile, connectionId }) {
       })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
+  }, [open, profile, connectionId, reloadTick]);
+
+  useEffect(() => { setEditing(false); }, [selected?.name, open]);
+
+  useEffect(() => {
+    if (!open || !profile) return undefined;
+    return subscribeDaemonEvent((event) => {
+      const payload = event?.payload ?? {};
+      const frame = payload.frame ?? payload;
+      if (frame?.event !== "memory_changed" || frame?.data?.profile !== profile) return;
+      if (connectionId && payload.connection_id && payload.connection_id !== connectionId) return;
+      if (!editingRef.current) setReloadTick((t) => t + 1);
+    });
   }, [open, profile, connectionId]);
 
   useEffect(() => {
@@ -68,6 +101,62 @@ export default function MemoryModal({ open, onClose, profile, connectionId }) {
 
   const filtered = useMemo(() => files.filter((f) => matchesFile(f, query)), [files, query]);
   const active = files.find((f) => f.name === selected?.name) || null;
+  const dirty = editing && draft !== baseline;
+
+  function requestClose() {
+    if (dirty && !globalThis.confirm?.("Discard your unsaved edits?")) return;
+    onClose?.();
+  }
+
+  async function startEdit() {
+    if (!active) return;
+    try {
+      const res = await invoke("memory_read", { profile, name: active.name, connectionId });
+      setDraft(res?.text ?? "");
+      setBaseline(res?.text ?? "");
+      setRev(res?.rev ?? null);
+      setConflicted(false);
+      setEditing(true);
+    } catch (e) {
+      notify?.({ message: `Couldn't open ${active.name}: ${e}`, variant: "error" });
+    }
+  }
+
+  function cancelEdit() {
+    setEditing(false);
+    setConflicted(false);
+    setReloadTick((t) => t + 1);
+  }
+
+  async function save() {
+    if (!active || saving) return;
+    setSaving(true);
+    try {
+      let useRev = rev;
+      if (conflicted) {
+        const r = await invoke("memory_read", { profile, name: active.name, connectionId });
+        useRev = r?.rev ?? null;
+        setRev(useRev);
+      }
+      await invoke("memory_write", { profile, name: active.name, text: draft, rev: useRev, connectionId });
+      setEditing(false);
+      setConflicted(false);
+      setReloadTick((t) => t + 1);
+      notify?.({ message: `Saved ${active.name} — live next message`, variant: "success" });
+    } catch (e) {
+      if (String(e).includes("conflict")) {
+        setConflicted(true);
+        notify?.({
+          message: `${active.name} changed elsewhere — your edits are kept. Save again to overwrite, or Cancel to reopen the latest.`,
+          variant: "error",
+        });
+      } else {
+        notify?.({ message: `Couldn't save ${active.name}: ${e}`, variant: "error" });
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
 
   const list = (
     <ul className={shell.list} role="listbox">
@@ -97,7 +186,9 @@ export default function MemoryModal({ open, onClose, profile, connectionId }) {
             aria-selected={f.name === selected?.name}
           >
             <span className={styles.fileName}>{f.name}</span>
-            <span className={shell.sizeTag}>{f.size}</span>
+            <span className={`${shell.sizeTag} ${f.over ? styles.over : ""}`}>
+              {f.pct != null ? `${f.pct}%` : f.size}
+            </span>
           </button>
         </li>
       ))}
@@ -107,7 +198,7 @@ export default function MemoryModal({ open, onClose, profile, connectionId }) {
   return (
     <BrowseModal
       open={open}
-      onClose={onClose}
+      onClose={requestClose}
       title="Memory"
       count={files.length}
       kicker="files read on every turn"
@@ -120,11 +211,30 @@ export default function MemoryModal({ open, onClose, profile, connectionId }) {
         <>
           <div className={shell.detailMeta}>
             <span className={styles.fileNameLg}>{active.name}</span>
-            <span className={shell.detailMetaSpacer} />
             <span className={shell.sizeTag}>{active.size}</span>
+            <span className={shell.detailMetaSpacer} />
+            {editing ? (
+              <>
+                <IconBtn tip={conflicted ? "Overwrite" : "Save"} onClick={save} disabled={saving}><I.Check /></IconBtn>
+                <IconBtn tip="Cancel" onClick={cancelEdit} disabled={saving}><I.X /></IconBtn>
+              </>
+            ) : (
+              <>
+                {active.updatedAt ? (
+                  <span className={styles.detailInfo}>{shortDate(active.updatedAt)}</span>
+                ) : null}
+                {canEdit ? <IconBtn tip="Edit" onClick={startEdit}><EditIcon /></IconBtn> : null}
+              </>
+            )}
           </div>
           <div className={shell.detailScroll}>
-            {active.content ? <MarkdownBody source={active.content} mono /> : <em className={styles.emptyNote}>(empty)</em>}
+            {editing ? (
+              <CodeView editable text={draft} onChange={setDraft} ariaLabel={`Edit ${active.name}`} />
+            ) : active.content ? (
+              <MarkdownBody source={active.content} mono />
+            ) : (
+              <em className={styles.emptyNote}>(empty)</em>
+            )}
           </div>
         </>
       ) : loading ? (

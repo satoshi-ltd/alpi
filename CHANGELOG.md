@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.10.26 — 2026-07-13 — memory you can measure and edit
+
+- **Each memory file now reports a budget %.** AGENT.md, MEMORY.md and USER.md
+  expose how much of their character budget is used, so you and the agent can
+  see at a glance how close a file is to full. AGENT.md's budget is advisory —
+  writes are never rejected, just flagged over 100%.
+- **Memory files are editable from the apps.** The daemon serves a guarded write
+  for the three memory files; a saved edit is live on the next message (no
+  restart — the prompt re-reads memory every turn).
+
 ## v0.10.25 — 2026-07-13 — MCP tools that only return structured data
 
 - **MCP tools that reply with structured JSON now come through.** Servers whose

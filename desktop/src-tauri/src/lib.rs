@@ -261,6 +261,59 @@ async fn profile_memory(
 }
 
 #[tauri::command]
+async fn memory_usage(
+    profile: String,
+    connection_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    off_main(move || {
+        let params = serde_json::json!({ "profile": profile });
+        let res = match connection_id.as_deref() {
+            Some(cid) => host_client::call_for(cid, "host.profile.memory_usage", params),
+            None => host_client::call("host.profile.memory_usage", params),
+        }?;
+        Ok(res.get("files").cloned().unwrap_or(serde_json::Value::Null))
+    })
+    .await?
+}
+
+#[tauri::command]
+async fn memory_read(
+    profile: String,
+    name: String,
+    connection_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    off_main(move || {
+        let params = serde_json::json!({ "profile": profile, "name": name });
+        match connection_id.as_deref() {
+            Some(cid) => host_client::call_for(cid, "host.profile.memory_read", params),
+            None => host_client::call("host.profile.memory_read", params),
+        }
+    })
+    .await?
+}
+
+#[tauri::command]
+async fn memory_write(
+    profile: String,
+    name: String,
+    text: String,
+    rev: Option<String>,
+    connection_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    off_main(move || {
+        let mut params = serde_json::json!({ "profile": profile, "name": name, "text": text });
+        if let Some(r) = rev {
+            params["rev"] = serde_json::Value::String(r);
+        }
+        match connection_id.as_deref() {
+            Some(cid) => host_client::call_for(cid, "host.profile.memory_write", params),
+            None => host_client::call("host.profile.memory_write", params),
+        }
+    })
+    .await?
+}
+
+#[tauri::command]
 async fn profile_summaries(connection_id: Option<String>) -> Result<serde_json::Value, String> {
     off_main(move || {
         match connection_id {
@@ -3289,6 +3342,9 @@ pub fn run() {
             profile_skill_read,
             profile_skill_file,
             profile_memory,
+            memory_usage,
+            memory_read,
+            memory_write,
             host_connections,
             host_connection_set_active,
             host_connection_forget,

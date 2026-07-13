@@ -222,49 +222,6 @@
   font-size: var(--fs-sm);
 }
 
-.codeView {
-  min-width: 100%;
-  width: max-content;
-  padding: var(--space-4) 0;
-  font-family: var(--font-mono);
-  font-size: var(--fs-sm);
-  line-height: var(--lh-relaxed);
-  color: var(--ink-2);
-}
-
-.codeLine { display: flex; }
-.codeLine:hover { background: var(--hover); }
-
-.ln {
-  position: sticky;
-  left: 0;
-  z-index: 1;
-  flex: none;
-  box-sizing: content-box;
-  min-width: 2.5ch;
-  padding: 0 var(--space-4);
-  text-align: right;
-  color: var(--ink-4);
-  background: var(--bg-pane);
-  user-select: none;
-  -webkit-user-select: none;
-}
-.codeLine:hover .ln { background: var(--hover); }
-
-.lc {
-  white-space: pre;
-  padding-right: var(--space-7);
-  font-family: inherit;
-}
-
-.t_keyword { color: var(--accent); }
-.t_decorator { color: var(--accent); }
-.t_string { color: var(--c-success); }
-.t_number { color: var(--c-warning); }
-.t_comment { color: var(--ink-4); font-style: italic; }
-.t_def { color: var(--ink); font-weight: var(--fw-semibold); }
-.t_builtin { color: var(--ink-2); }
-
 .viewerBinary {
   display: flex;
   flex-direction: column;

@@ -11,6 +11,16 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.36 — 2026-07-13 — read and edit memory
+
+- **The Memory viewer shows how full each file is.** AGENT.md, MEMORY.md and
+  USER.md display a percentage of their character budget instead of just a byte
+  size; a file over its budget turns red.
+- **Edit a memory file in place.** Click Edit in the file header to open a
+  line-numbered editor, then Save — the change is live on your next message.
+
+_Needs alpi v0.10.26 for budgets and editing; older daemons show byte sizes and can't save._
+
 ## v0.4.35 — 2026-07-11 — storage you can act on
 
 - **Clean up a profile's disk from Storage.** Reclaimable categories — caches,

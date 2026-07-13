@@ -24,3 +24,14 @@
 }
 
 .emptyNote { color: var(--ink-3); }
+
+.over { color: var(--c-danger); }
+
+.detailInfo {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+}

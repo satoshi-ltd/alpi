@@ -1,44 +1,47 @@
-// Intercepts hardware/navigation back when the form has unsaved changes and surfaces a "Discard / Keep editing" confirm.
-
-import { useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
-import { Alert, BackHandler } from 'react-native';
+import { useNavigation } from 'expo-router';
+import { useCallback, useEffect, useRef } from 'react';
+import { Alert } from 'react-native';
 
 export function useDirtyBack(isDirty, onConfirmLeave) {
-  const [pendingConfirm, setPendingConfirm] = useState(false);
+  const navigation = useNavigation();
+  const dirtyRef = useRef(isDirty);
+  dirtyRef.current = isDirty;
+  const discardingRef = useRef(false);
+  const promptingRef = useRef(false);
 
-  const ask = useCallback(() => {
-    if (!isDirty) {
-      onConfirmLeave();
-      return true;
-    }
-    if (pendingConfirm) return true;
-    setPendingConfirm(true);
-    Alert.alert(
-      'Discard changes?',
-      'You have unsaved edits.',
-      [
-        { text: 'Keep editing', style: 'cancel', onPress: () => setPendingConfirm(false) },
-        {
-          text: 'Discard',
-          style: 'destructive',
-          onPress: () => {
-            setPendingConfirm(false);
-            onConfirmLeave();
+  useEffect(() => {
+    navigation?.setOptions?.({ gestureEnabled: !isDirty });
+  }, [navigation, isDirty]);
+
+  useEffect(() => {
+    const sub = navigation?.addListener?.('beforeRemove', (e) => {
+      if (!dirtyRef.current || discardingRef.current) return;
+      e.preventDefault();
+      if (promptingRef.current) return;
+      promptingRef.current = true;
+      Alert.alert(
+        'Discard changes?',
+        'You have unsaved edits.',
+        [
+          { text: 'Keep editing', style: 'cancel', onPress: () => { promptingRef.current = false; } },
+          {
+            text: 'Discard',
+            style: 'destructive',
+            onPress: () => {
+              promptingRef.current = false;
+              discardingRef.current = true;
+              navigation.dispatch(e.data.action);
+            },
           },
-        },
-      ],
-      { cancelable: true, onDismiss: () => setPendingConfirm(false) },
-    );
+        ],
+        { cancelable: true, onDismiss: () => { promptingRef.current = false; } },
+      );
+    });
+    return sub;
+  }, [navigation]);
+
+  return useCallback(() => {
+    onConfirmLeave();
     return true;
-  }, [isDirty, pendingConfirm, onConfirmLeave]);
-
-  useFocusEffect(
-    useCallback(() => {
-      const sub = BackHandler.addEventListener('hardwareBackPress', ask);
-      return () => sub.remove();
-    }, [ask]),
-  );
-
-  return ask;
+  }, [onConfirmLeave]);
 }

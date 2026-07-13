@@ -43,6 +43,19 @@ def test_part_order_is_stable_contract() -> None:
     )
 
 
+def test_symlinked_agent_md_never_reaches_the_prompt(tmp_path: Path) -> None:
+    import os
+    cfg = _make_cfg(tmp_path)
+    secret = tmp_path / "secret.env"
+    secret.write_text("OPENAI_API_KEY=sk-super-secret")
+    (tmp_path / "memories").mkdir(parents=True, exist_ok=True)
+    os.symlink(secret, tmp_path / "memories" / "AGENT.md")
+
+    parts = pc.build_parts(tmp_path, cfg)
+    assert "sk-super-secret" not in parts["agent_profile"]
+    assert parts["agent_profile"]  # fell back to the default persona
+
+
 def test_build_parts_emits_every_named_part(tmp_path: Path) -> None:
     cfg = _make_cfg(tmp_path)
     parts = pc.build_parts(tmp_path, cfg)

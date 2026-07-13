@@ -901,3 +901,141 @@ async def test_cleanup_plan_and_apply_rpc(
 def test_cleanup_verbs_are_admin_gated() -> None:
     assert "host.cleanup.plan" in host_server._ADMIN_METHODS
     assert "host.cleanup.apply" in host_server._ADMIN_METHODS
+
+
+@pytest.mark.asyncio
+async def test_profile_memory_usage_reports_pct_for_all_three(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from alpi import memory as mem_mod
+
+    home = tmp_path / "h"
+    (home / "memories").mkdir(parents=True)
+    (home / "memories" / "USER.md").write_text("x" * 300)
+    (home / "memories" / "MEMORY.md").write_text("")
+    (home / "memories" / "AGENT.md").write_text("y" * 4000)
+    monkeypatch.setattr(host_device_state.home_mod, "_ROOT", home)
+    monkeypatch.setattr(host_handlers, "_resolve_home", lambda profile: home)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+
+    resp = await srv._dispatch({
+        "id": "m", "method": "host.profile.memory_usage",
+        "params": {"profile": "default"},
+    })
+    files = resp["result"]["files"]
+    assert set(files) == {"AGENT.md", "USER.md", "MEMORY.md"}
+    assert files["USER.md"]["limit"] == mem_mod.USER_CHAR_LIMIT
+    assert files["USER.md"]["pct"] == round(300 / mem_mod.USER_CHAR_LIMIT * 100)
+    assert files["AGENT.md"]["limit"] == mem_mod.AGENT_CHAR_LIMIT
+    assert files["AGENT.md"]["pct"] == round(4000 / mem_mod.AGENT_CHAR_LIMIT * 100)
+    assert isinstance(files["USER.md"]["updated_at"], (int, float))
+
+
+@pytest.mark.asyncio
+async def test_profile_memory_write_persists_and_rejects_unknown(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "h"
+    (home / "memories").mkdir(parents=True)
+    monkeypatch.setattr(host_device_state.home_mod, "_ROOT", home)
+    monkeypatch.setattr(host_handlers, "_resolve_home", lambda profile: home)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+
+    read = await srv._dispatch({
+        "id": "r", "method": "host.profile.memory_read",
+        "params": {"profile": "default", "name": "AGENT.md"},
+    })
+    rev0 = read["result"]["rev"]
+    ok = await srv._dispatch({
+        "id": "w", "method": "host.profile.memory_write",
+        "params": {"profile": "default", "name": "AGENT.md", "text": "I am helpful.", "rev": rev0},
+    })
+    assert ok["result"]["ok"] is True
+    assert (home / "memories" / "AGENT.md").read_text() == "I am helpful."
+
+    missing = await srv._dispatch({
+        "id": "w2", "method": "host.profile.memory_write",
+        "params": {"profile": "default", "name": "USER.md", "text": "hi"},
+    })
+    assert missing["error"]["code"] == -32602
+
+    bad = await srv._dispatch({
+        "id": "w3", "method": "host.profile.memory_write",
+        "params": {"profile": "default", "name": "../.env", "text": "x", "rev": "abc"},
+    })
+    assert bad["error"]["code"] == -32602
+
+
+@pytest.mark.asyncio
+async def test_profile_memory_read_returns_full_text_and_rev(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "h"
+    (home / "memories").mkdir(parents=True)
+    (home / "memories" / "AGENT.md").write_text("full body here")
+    monkeypatch.setattr(host_device_state.home_mod, "_ROOT", home)
+    monkeypatch.setattr(host_handlers, "_resolve_home", lambda profile: home)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+
+    resp = await srv._dispatch({
+        "id": "r", "method": "host.profile.memory_read",
+        "params": {"profile": "default", "name": "AGENT.md"},
+    })
+    assert resp["result"]["text"] == "full body here"
+    assert resp["result"]["rev"]
+
+
+@pytest.mark.asyncio
+async def test_profile_memory_write_conflicts_on_stale_rev(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "h"
+    (home / "memories").mkdir(parents=True)
+    monkeypatch.setattr(host_device_state.home_mod, "_ROOT", home)
+    monkeypatch.setattr(host_handlers, "_resolve_home", lambda profile: home)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+
+    r0 = await srv._dispatch({
+        "id": "r0", "method": "host.profile.memory_read",
+        "params": {"profile": "default", "name": "AGENT.md"},
+    })
+    first = await srv._dispatch({
+        "id": "w1", "method": "host.profile.memory_write",
+        "params": {"profile": "default", "name": "AGENT.md", "text": "v1", "rev": r0["result"]["rev"]},
+    })
+    stale = first["result"]["rev"]
+    await srv._dispatch({
+        "id": "w2", "method": "host.profile.memory_write",
+        "params": {"profile": "default", "name": "AGENT.md", "text": "v2", "rev": stale},
+    })
+    conflict = await srv._dispatch({
+        "id": "w3", "method": "host.profile.memory_write",
+        "params": {"profile": "default", "name": "AGENT.md", "text": "v3", "rev": stale},
+    })
+    assert conflict["error"]["code"] == -32009
+    assert (home / "memories" / "AGENT.md").read_text() == "v2"
+
+
+@pytest.mark.asyncio
+async def test_memory_usage_over_flag_at_boundary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from alpi import memory as mem_mod
+    home = tmp_path / "h"
+    (home / "memories").mkdir(parents=True)
+    (home / "memories" / "AGENT.md").write_text("z" * (mem_mod.AGENT_CHAR_LIMIT + 1))
+    monkeypatch.setattr(host_device_state.home_mod, "_ROOT", home)
+    monkeypatch.setattr(host_handlers, "_resolve_home", lambda profile: home)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+
+    resp = await srv._dispatch({
+        "id": "u", "method": "host.profile.memory_usage",
+        "params": {"profile": "default"},
+    })
+    ag = resp["result"]["files"]["AGENT.md"]
+    assert ag["over"] is True

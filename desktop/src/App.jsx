@@ -1288,6 +1288,7 @@ export default function App() {
         onClose={onCloseBrowse}
         profile={activeProfileName}
         connectionId={hostConnections.active_id}
+        canEdit={canAdminEarly}
       />
       <ScheduleModal
         key={`${hostConnections.active_id}:${activeProfileName ?? ""}`}

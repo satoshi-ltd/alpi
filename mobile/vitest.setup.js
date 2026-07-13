@@ -11,6 +11,7 @@ vi.mock("expo-router", () => ({
   useRouter: () => ({ push: vi.fn(), back: vi.fn(), replace: vi.fn() }),
   useLocalSearchParams: () => ({}),
   useFocusEffect: (fn) => { fn?.(); },
+  useNavigation: () => ({ setOptions: vi.fn(), addListener: () => () => {}, dispatch: vi.fn() }),
 }));
 
 vi.mock("expo-secure-store", () => ({

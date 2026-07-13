@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 
 import { EndpointContext } from "../lib/EndpointContext";
-import { _resetDaemonDataCache, useProfileSnapshot, useProfileSummaries } from "./useDaemonData";
+import { _resetDaemonDataCache, useProfileMemory, useProfileSnapshot, useProfileSummaries } from "./useDaemonData";
 
 beforeEach(() => {
   _resetDaemonDataCache();
@@ -270,5 +270,74 @@ describe('seedCache + useSessionsList skipWhen', () => {
     renderHook(() => useSessionsList('doc', 30, { skipWhen: true }), { wrapper: Wrapper });
     await Promise.resolve();
     expect(call).not.toHaveBeenCalled();
+  });
+});
+
+describe("useProfileMemory", () => {
+  it("exposes per-file usage alongside the raw text", async () => {
+    const call = vi.fn(async (method) => {
+      if (method === "host.profile.read_file") return { text: "body" };
+      if (method === "host.profile.memory_usage") {
+        return { files: { "AGENT.md": { used: 4000, limit: 8000, pct: 50, over: false } } };
+      }
+      return {};
+    });
+    const endpoint = { id: "e1", name: "e1" };
+    function Wrapper({ children }) {
+      return (
+        <EndpointContext.Provider value={{ endpoint, call }}>{children}</EndpointContext.Provider>
+      );
+    }
+    const { result } = renderHook(() => useProfileMemory("doc"), { wrapper: Wrapper });
+    await waitFor(() => expect(result.current.usage).toBeTruthy());
+    expect(result.current.usage["AGENT.md"].pct).toBe(50);
+  });
+
+  it("clears the previous scope synchronously so it never paints after a profile flip", async () => {
+    const call = vi.fn(async (method, params) => {
+      if (method === "host.profile.read_file") {
+        return { text: params.rel_path.includes("AGENT") ? `body-${params.profile}` : "" };
+      }
+      return { files: {} };
+    });
+    const endpoint = { id: "e1" };
+    const Wrapper = ({ children }) => (
+      <EndpointContext.Provider value={{ endpoint, call }}>{children}</EndpointContext.Provider>
+    );
+    const { result, rerender } = renderHook(({ p }) => useProfileMemory(p), {
+      wrapper: Wrapper,
+      initialProps: { p: "alpha" },
+    });
+    await waitFor(() => expect(result.current.data?.["AGENT.md"]).toBe("body-alpha"));
+
+    act(() => rerender({ p: "beta" }));
+    expect(result.current.data).toBe(null);
+    expect(result.current.loading).toBe(true);
+
+    await waitFor(() => expect(result.current.data?.["AGENT.md"]).toBe("body-beta"));
+  });
+
+  it("drops a pending read when the endpoint disappears before it resolves", async () => {
+    let resolveRead;
+    const call = vi.fn((method) => {
+      if (method === "host.profile.read_file") {
+        return new Promise((r) => { resolveRead = () => r({ text: "late" }); });
+      }
+      return Promise.resolve({ files: {} });
+    });
+    let endpoint = { id: "e1" };
+    const Wrapper = ({ children }) => (
+      <EndpointContext.Provider value={{ endpoint, call }}>{children}</EndpointContext.Provider>
+    );
+    const { result, rerender } = renderHook(() => useProfileMemory("doc"), { wrapper: Wrapper });
+    await waitFor(() => expect(call).toHaveBeenCalled());
+
+    endpoint = null;
+    act(() => rerender());
+    expect(result.current.data).toBe(null);
+    expect(result.current.loading).toBe(false);
+
+    await act(async () => { resolveRead(); await Promise.resolve(); await Promise.resolve(); });
+    expect(result.current.data).toBe(null);
   });
 });

@@ -95,6 +95,11 @@ class FloatingPanel(Container):
     FloatingPanel .memory-section:first-of-type {
         margin-top: 0;
     }
+    FloatingPanel .memory-hint {
+        color: $text-muted;
+        margin-top: 1;
+        height: auto;
+    }
     FloatingPanel Markdown {
         background: transparent;
         padding: 0;
@@ -221,7 +226,6 @@ class MemoryPanel(FloatingPanel):
 
     def compose_body(self) -> ComposeResult:
         from alpi import memory
-        from alpi.home import agent_path as _agent_path
 
         store = memory.MemoryStore(home=self.home)
         store.seed_defaults()
@@ -230,11 +234,12 @@ class MemoryPanel(FloatingPanel):
 
         user_used, user_limit = usage["USER.md"]
         mem_used, mem_limit = usage["MEMORY.md"]
+        agent_used, agent_limit = usage["AGENT.md"]
         user_pct = int(user_used / user_limit * 100) if user_limit else 0
         mem_pct = int(mem_used / mem_limit * 100) if mem_limit else 0
+        agent_pct = int(agent_used / agent_limit * 100) if agent_limit else 0
 
-        ap = _agent_path(self.home)
-        agent_profile = ap.read_text() if ap.exists() else ""
+        agent_profile = store.read_agent_safe() or ""
 
         with VerticalScroll():
             yield Static(
@@ -247,8 +252,41 @@ class MemoryPanel(FloatingPanel):
                 classes="memory-section",
             )
             yield from _render_delimited(snap["MEMORY.md"])
-            yield Static("AGENT.md", classes="memory-section")
+            yield Static(
+                f"AGENT.md · {agent_pct}% ({agent_used:,}/{agent_limit:,} chars)",
+                classes="memory-section",
+            )
             yield Markdown(agent_profile.strip() or "_(empty)_")
+            yield Static(
+                "edit in $EDITOR — u USER · m MEMORY · a AGENT",
+                classes="memory-hint",
+            )
+
+    def on_key(self, event) -> None:  # noqa: ANN001
+        name = {"u": "USER.md", "m": "MEMORY.md", "a": "AGENT.md"}.get(
+            getattr(event, "key", ""),
+        )
+        if not name:
+            return
+        event.stop()
+        self._edit_in_editor(name)
+
+    def _edit_in_editor(self, name: str) -> None:
+        import os
+        import shlex
+        import subprocess
+
+        from alpi.tui.memory_edit import edit_memory_file
+
+        editor = os.environ.get("VISUAL") or os.environ.get("EDITOR") or "nano"
+
+        def launch(path: Path) -> int:
+            with self.app.suspend():
+                return subprocess.call([*shlex.split(editor), str(path)])
+
+        msg = edit_memory_file(self.home, name, launch)
+        self.notify(msg, severity="information" if msg.startswith("saved") else "warning")
+        self.app._show_panel(MemoryPanel(self.home))
 
 
 def _render_delimited(text: str):

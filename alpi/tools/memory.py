@@ -6,12 +6,14 @@ import re
 
 from alpi.home import get_home
 from alpi.memory import (
+    AGENT_CHAR_LIMIT,
     ENTRY_DELIMITER,
     MemoryStore,
     _clean_entry,
     _is_duplicate,
     fuzzy_find_unique_entry,
     is_duplicate_stanza,
+    strip_meta,
 )
 from alpi.tools.base import Tool, ToolResult
 from alpi.scan import scan_memory_content as _scan_memory_content
@@ -261,7 +263,10 @@ class Memory(Tool):
             return ToolResult(ok=False, output="", error="'target' is required for this action")
 
         if target.upper() == "AGENT.MD":
-            return _handle_agent(h, action, content, match, entries)
+            res = _handle_agent(h, action, content, match, entries)
+            if res.ok and action in ("add", "replace", "remove"):
+                _notify_changed(h)
+            return res
 
         store = MemoryStore(home=h)
         store.seed_defaults()
@@ -286,7 +291,10 @@ class Memory(Tool):
                     )
 
                 if batch:
-                    return _add_memory_batch(self, store, target, batch, confidence)
+                    res = _add_memory_batch(self, store, target, batch, confidence)
+                    if res.ok:
+                        _notify_changed(h)
+                    return res
 
                 items = [content]
                 added = 0
@@ -340,6 +348,7 @@ class Memory(Tool):
                     output = f"{' · '.join(header_parts)} in {target}.\n\n{output}"
                 if warnings:
                     output = f"{output}\n\n" + "\n".join(warnings)
+                _notify_changed(h)
                 return ToolResult(ok=True, output=output)
 
             if action == "replace":
@@ -348,15 +357,15 @@ class Memory(Tool):
                 blocked = _safety_error(content)
                 if blocked is not None:
                     return ToolResult(ok=False, output="", error=blocked)
-                new_entries = _modify(store, target, match, replacement=content)
-                _write(store, target, new_entries)
+                store.mutate(target, lambda text: _rewrite_entry(text, match, content))
+                _notify_changed(h)
                 return ToolResult(ok=True, output=self._state_snapshot(store, target))
 
             if action == "remove":
                 if not match:
                     return ToolResult(ok=False, output="", error="'match' required for remove")
-                new_entries = _modify(store, target, match, replacement=None)
-                _write(store, target, new_entries)
+                store.mutate(target, lambda text: _rewrite_entry(text, match, None))
+                _notify_changed(h)
                 return ToolResult(ok=True, output=self._state_snapshot(store, target))
 
             return ToolResult(ok=False, output="", error=f"unknown action: {action}")
@@ -392,8 +401,11 @@ def _locate_literal(text: str, match: str) -> str | None:
 
 
 def _agent_state(text: str) -> str:
+    used = len(strip_meta(text))
+    pct = int(used / AGENT_CHAR_LIMIT * 100) if AGENT_CHAR_LIMIT else 0
+    hint = " — consider consolidating before adding more" if pct >= 80 else ""
     body = text.strip() or "(empty)"
-    return f"AGENT.md: {len(text):,} chars\n\nCurrent contents:\n{body}"
+    return f"AGENT.md: {pct}% ({used:,}/{AGENT_CHAR_LIMIT:,} chars){hint}\n\nCurrent contents:\n{body}"
 
 
 def _add_memory_batch(
@@ -454,14 +466,16 @@ def _add_memory_batch(
     return ToolResult(ok=True, output=out)
 
 
+class _AgentAbort(Exception):
+    pass
+
+
 def _handle_agent(home, action: str, content: str, match: str,
                   entries: list[str] | None = None) -> ToolResult:
-    from alpi.home import agent_path
-    path = agent_path(home)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    text = path.read_text() if path.exists() else ""
+    store = MemoryStore(home=home)
 
     if action == "read":
+        text, _rev = store.read_with_rev("AGENT.md")
         return ToolResult(ok=True, output=f"[AGENT.md]\n{text or '(empty)'}")
 
     if action == "add":
@@ -474,44 +488,48 @@ def _handle_agent(home, action: str, content: str, match: str,
                 error="pass either 'content' or 'entries', not both",
             )
         items = batch if batch else [content]
-        added = 0
-        skipped: list[str] = []
-        new_text = text
-        for item in items:
-            item = item.strip()
-            if not item:
-                continue
-            blocked = _safety_error(item)
-            if blocked is not None:
-                if len(items) == 1:
-                    return ToolResult(ok=False, output="", error=blocked)
-                skipped.append(f"skipped ({blocked}): {item[:60]!r}")
-                continue
-            if is_duplicate_stanza(new_text, item):
-                if len(items) == 1:
-                    return ToolResult(
-                        ok=False, output="",
-                        error=(
+        holder: dict = {}
+
+        def transform(text: str) -> str:
+            added = 0
+            skipped: list[str] = []
+            new_text = text
+            for item in (i.strip() for i in items):
+                if not item:
+                    continue
+                blocked = _safety_error(item)
+                if blocked is not None:
+                    if len(items) == 1:
+                        raise _AgentAbort(blocked)
+                    skipped.append(f"skipped ({blocked}): {item[:60]!r}")
+                    continue
+                if is_duplicate_stanza(new_text, item):
+                    if len(items) == 1:
+                        raise _AgentAbort(
                             "near-duplicate of an existing paragraph in AGENT.md. "
                             "For voice / identity changes, use `replace` with the "
-                            "literal line you want to change."
-                        ),
-                    )
-                skipped.append(f"skipped (duplicate): {item[:60]!r}")
-                continue
-            new_text = (
-                new_text.rstrip() + "\n\n" + item + "\n"
-            ) if new_text.strip() else item + "\n"
-            added += 1
-        if added == 0:
-            return ToolResult(ok=False, output="",
-                              error="no entries added; all duplicates: " + " | ".join(skipped))
-        path.write_text(new_text)
+                            "literal line you want to change.",
+                        )
+                    skipped.append(f"skipped (duplicate): {item[:60]!r}")
+                    continue
+                new_text = (
+                    new_text.rstrip() + "\n\n" + item + "\n"
+                ) if new_text.strip() else item + "\n"
+                added += 1
+            if added == 0:
+                raise _AgentAbort("no entries added; all duplicates: " + " | ".join(skipped))
+            holder["added"], holder["skipped"] = added, skipped
+            return new_text
+
+        try:
+            new_text = store.mutate("AGENT.md", transform)
+        except _AgentAbort as e:
+            return ToolResult(ok=False, output="", error=str(e))
         out = _agent_state(new_text)
-        if added > 1:
-            out = f"Added {added} paragraphs to AGENT.md.\n\n{out}"
-        if skipped:
-            out = f"{out}\n\n" + "\n".join(skipped)
+        if holder["added"] > 1:
+            out = f"Added {holder['added']} paragraphs to AGENT.md.\n\n{out}"
+        if holder["skipped"]:
+            out = f"{out}\n\n" + "\n".join(holder["skipped"])
         return ToolResult(ok=True, output=out)
 
     if action == "replace":
@@ -520,52 +538,53 @@ def _handle_agent(home, action: str, content: str, match: str,
         blocked = _safety_error(content)
         if blocked is not None:
             return ToolResult(ok=False, output="", error=blocked)
-        literal = _locate_literal(text, match)
-        if literal is None:
-            return ToolResult(ok=False, output="", error=f"no match for {match!r}")
-        new = text.replace(literal, content, 1)
-        path.write_text(new)
-        return ToolResult(ok=True, output=_agent_state(new))
+
+        def transform(text: str) -> str:
+            literal = _locate_literal(text, match)
+            if literal is None:
+                raise _AgentAbort(f"no match for {match!r}")
+            return text.replace(literal, content, 1)
+
+        try:
+            return ToolResult(ok=True, output=_agent_state(store.mutate("AGENT.md", transform)))
+        except _AgentAbort as e:
+            return ToolResult(ok=False, output="", error=str(e))
 
     if action == "remove":
         if not match:
             return ToolResult(ok=False, output="", error="'match' required for remove")
-        literal = _locate_literal(text, match)
-        if literal is None:
-            return ToolResult(ok=False, output="", error=f"no match for {match!r}")
-        new = text.replace(literal, "", 1)
-        path.write_text(new)
-        return ToolResult(ok=True, output=_agent_state(new))
+
+        def transform(text: str) -> str:
+            literal = _locate_literal(text, match)
+            if literal is None:
+                raise _AgentAbort(f"no match for {match!r}")
+            return text.replace(literal, "", 1)
+
+        try:
+            return ToolResult(ok=True, output=_agent_state(store.mutate("AGENT.md", transform)))
+        except _AgentAbort as e:
+            return ToolResult(ok=False, output="", error=str(e))
 
     return ToolResult(ok=False, output="", error=f"unknown action: {action}")
 
 
-def _entries(store: MemoryStore, target: str) -> list[str]:
-    path = store.user_path if target == "USER.md" else store.memory_path
-    text = path.read_text() if path.exists() else ""
-    return [e for e in text.split(ENTRY_DELIMITER) if e.strip()]
+def _notify_changed(home) -> None:
+    try:
+        from alpi import home as home_mod
+        from alpi.host import events as host_events
+        host_events.emit("memory_changed", {"profile": home_mod.profile_name(home)})
+    except Exception:  # noqa: BLE001
+        pass
 
 
-def _modify(store: MemoryStore, target: str, match: str,
-            replacement: str | None) -> list[str]:
-    entries = _entries(store, target)
+def _rewrite_entry(text: str, match: str, replacement: str | None) -> str:
+    entries = [e for e in text.split(ENTRY_DELIMITER) if e.strip()]
     idx = fuzzy_find_unique_entry(entries, match)
     if replacement is None:
         entries.pop(idx)
     else:
         entries[idx] = replacement.strip()
-    return entries
-
-
-def _write(store: MemoryStore, target: str, entries: list[str]) -> None:
-    path = store.user_path if target == "USER.md" else store.memory_path
-    content = ENTRY_DELIMITER.join(entries) + ("\n" if entries else "")
-    from alpi.memory import USER_CHAR_LIMIT, MEMORY_CHAR_LIMIT, backup_file
-    limit = USER_CHAR_LIMIT if target == "USER.md" else MEMORY_CHAR_LIMIT
-    if len(content) > limit:
-        raise ValueError(f"{target} would be {len(content):,}/{limit:,} chars — consolidate first")
-    backup_file(path)
-    path.write_text(content)
+    return ENTRY_DELIMITER.join(entries) + ("\n" if entries else "")
 
 
 def _format_candidate(c, *, with_warnings: bool = True) -> str:

@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import contextlib
+import hashlib
+import os
 import re
+import tempfile
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -16,8 +19,56 @@ except ImportError:
 
 ENTRY_DELIMITER = "\n§\n"
 
+class MemoryConflict(Exception):
+    def __init__(self, current_rev: str) -> None:
+        super().__init__("memory changed since it was read")
+        self.current_rev = current_rev
+
+
+def _rev_of(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()[:16]
+
+
+def _atomic_write_bytes(path: Path, data: bytes) -> None:
+    fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, str(path))
+        tmp = None
+    finally:
+        if tmp is not None:
+            with contextlib.suppress(OSError):
+                os.unlink(tmp)
+
+
+def _atomic_write(path: Path, text: str) -> None:
+    _atomic_write_bytes(path, text.encode("utf-8"))
+
+
+@contextlib.contextmanager
+def _memory_lock(mem_dir: Path) -> Iterator[None]:
+    mem_dir.mkdir(parents=True, exist_ok=True)
+    flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(str(mem_dir / ".memory.lock"), flags, 0o600)
+    try:
+        if fcntl is not None:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        try:
+            if fcntl is not None:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+        finally:
+            os.close(fd)
+
+
 USER_CHAR_LIMIT = 3000
 MEMORY_CHAR_LIMIT = 5000
+# Advisory only: surfaced as a budget %, never enforced on write (AGENT.md is free-form).
+AGENT_CHAR_LIMIT = 8000
 
 SEED_USER = ""
 SEED_MEMORY = ""
@@ -45,12 +96,22 @@ class MemoryStore:
     def memory_path(self) -> Path:
         return self.home / "memories" / "MEMORY.md"
 
+    @property
+    def agent_path(self) -> Path:
+        return self.home / "memories" / "AGENT.md"
+
     def seed_defaults(self) -> None:
-        (self.home / "memories").mkdir(parents=True, exist_ok=True)
-        if not self.user_path.exists():
-            self.user_path.write_text(SEED_USER)
-        if not self.memory_path.exists():
-            self.memory_path.write_text(SEED_MEMORY)
+        for name, seed in (("USER.md", SEED_USER), ("MEMORY.md", SEED_MEMORY)):
+            try:
+                path = self._editable_path(name)
+            except ValueError:
+                continue
+            if path.exists():
+                continue
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with _memory_lock(path.parent):
+                if not path.exists():
+                    _atomic_write(path, seed)
 
     def snapshot(self) -> dict[str, str]:
         """Return current memories with metadata comments stripped.
@@ -59,17 +120,86 @@ class MemoryStore:
         sees ``<!-- alpi-meta … -->`` markers.
         """
         return {
-            "USER.md": strip_meta(_read(self.user_path)),
-            "MEMORY.md": strip_meta(_read(self.memory_path)),
+            "USER.md": strip_meta(self._safe_read("USER.md")),
+            "MEMORY.md": strip_meta(self._safe_read("MEMORY.md")),
         }
+
+    def _editable_path(self, name: str) -> Path:
+        mapping = {
+            "AGENT.md": self.agent_path,
+            "USER.md": self.user_path,
+            "MEMORY.md": self.memory_path,
+        }
+        if name not in mapping:
+            raise ValueError(f"not an editable memory file: {name!r}")
+        path = mapping[name]
+        if path.is_symlink():
+            raise ValueError(f"{name} is a symlink — refusing")
+        if self.home.resolve() not in path.resolve().parents:
+            raise ValueError(f"{name} resolves outside the profile — refusing")
+        return path
+
+    def _safe_read(self, name: str) -> str:
+        try:
+            return _read(self._editable_path(name))
+        except ValueError:
+            return ""
+
+    def read_agent_safe(self) -> str | None:
+        try:
+            path = self._editable_path("AGENT.md")
+        except ValueError:
+            return None
+        return path.read_text() if path.exists() else None
+
+    def read_with_rev(self, name: str) -> tuple[str, str]:
+        path = self._editable_path(name)
+        with _memory_lock(self.home / "memories"):
+            data = path.read_bytes() if path.exists() else b""
+        return data.decode("utf-8", errors="replace"), _rev_of(data)
+
+    def revision(self, name: str) -> str:
+        return self.read_with_rev(name)[1]
+
+    def mutate(self, name: str, fn) -> str:
+        path = self._editable_path(name)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with _memory_lock(path.parent):
+            current = path.read_bytes().decode("utf-8", errors="replace") if path.exists() else ""
+            new = fn(current)
+            limit = {"USER.md": USER_CHAR_LIMIT, "MEMORY.md": MEMORY_CHAR_LIMIT}.get(name)
+            if limit is not None and len(strip_meta(new)) > limit:
+                raise ValueError(f"{name} would be {len(strip_meta(new)):,}/{limit:,} chars — consolidate first")
+            if new != current:
+                backup_file(path)
+                _atomic_write(path, new)
+        return new
+
+    def replace(self, name: str, text: str, *, expected_rev: str | None = None) -> str:
+        path = self._editable_path(name)
+        limit = {"USER.md": USER_CHAR_LIMIT, "MEMORY.md": MEMORY_CHAR_LIMIT}.get(name)
+        if limit is not None:
+            visible = len(strip_meta(text))
+            if visible > limit:
+                raise ValueError(f"{name} would be {visible:,}/{limit:,} chars — trim before saving")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        new = text.encode("utf-8")
+        with _memory_lock(path.parent):
+            current = path.read_bytes() if path.exists() else b""
+            if expected_rev is not None and _rev_of(current) != expected_rev:
+                raise MemoryConflict(_rev_of(current))
+            backup_file(path)
+            _atomic_write(path, text)
+        return _rev_of(new)
 
     def usage(self) -> dict[str, tuple[int, int]]:
         """Return (used_chars, limit) per file. Counts what the LLM
         actually sees: metadata comments are stripped first so the
         budget reflects system-prompt impact, not on-disk bytes."""
         return {
-            "USER.md": (len(strip_meta(_read(self.user_path))), USER_CHAR_LIMIT),
-            "MEMORY.md": (len(strip_meta(_read(self.memory_path))), MEMORY_CHAR_LIMIT),
+            "AGENT.md": (len(strip_meta(self._safe_read("AGENT.md"))), AGENT_CHAR_LIMIT),
+            "USER.md": (len(strip_meta(self._safe_read("USER.md"))), USER_CHAR_LIMIT),
+            "MEMORY.md": (len(strip_meta(self._safe_read("MEMORY.md"))), MEMORY_CHAR_LIMIT),
         }
 
     def add(
@@ -93,18 +223,16 @@ class MemoryStore:
                 f"confidence must be one of {CONFIDENCE_LEVELS}, got {confidence!r}"
             )
 
-        path, limit = self._resolve(target)
-        with _locked(path, "a+") as f:
-            f.seek(0)
-            current = f.read()
+        name, limit = self._resolve(target)
+        path = self._editable_path(name)
+        with _memory_lock(path.parent):
+            current = _read(path)
             dup_idx = _find_duplicate_index(current, cleaned)
             if dup_idx is not None:
                 rewritten = _reinforce_at(current, dup_idx)
                 if rewritten != current:
                     backup_file(path)
-                    f.seek(0)
-                    f.truncate()
-                    f.write(rewritten)
+                    _atomic_write(path, rewritten)
                 return "reinforced"
             meta = _build_meta(confidence=confidence, captured=_today(), reinforced=0)
             entry_block = cleaned + meta
@@ -120,9 +248,7 @@ class MemoryStore:
                     "Consolidate existing entries before adding."
                 )
             backup_file(path)
-            f.seek(0)
-            f.truncate()
-            f.write(new_content)
+            _atomic_write(path, new_content)
             return "added"
 
     def prune_low_confidence(self, max_age_days: int, today: date | None = None) -> int:
@@ -134,11 +260,15 @@ class MemoryStore:
             return 0
         today = today or _today()
         removed = 0
-        for path in (self.user_path, self.memory_path):
+        for name in ("USER.md", "MEMORY.md"):
+            try:
+                path = self._editable_path(name)
+            except ValueError:
+                continue
             if not path.exists():
                 continue
-            with _locked(path, "r+") as f:
-                content = f.read()
+            with _memory_lock(path.parent):
+                content = _read(path)
                 if not content.strip():
                     continue
                 kept_entries: list[str] = []
@@ -154,18 +284,16 @@ class MemoryStore:
                 new_text = ENTRY_DELIMITER.join(kept_entries).strip()
                 if new_text:
                     new_text += "\n"
-                f.seek(0)
-                f.truncate()
-                f.write(new_text)
+                _atomic_write(path, new_text)
                 removed += dropped
         return removed
 
-    def _resolve(self, target: str) -> tuple[Path, int]:
+    def _resolve(self, target: str) -> tuple[str, int]:
         key = target.upper()  # accept variants; the canonical form is uppercase
         if key == "USER.MD":
-            return self.user_path, USER_CHAR_LIMIT
+            return "USER.md", USER_CHAR_LIMIT
         if key == "MEMORY.MD":
-            return self.memory_path, MEMORY_CHAR_LIMIT
+            return "MEMORY.md", MEMORY_CHAR_LIMIT
         raise ValueError(f"Unknown memory target: {target!r}")
 
 
@@ -281,22 +409,8 @@ def backup_file(path: Path) -> Path | None:
     if not path.exists():
         return None
     bak = path.with_suffix(path.suffix + ".bak")
-    bak.write_bytes(path.read_bytes())
+    _atomic_write_bytes(bak, path.read_bytes())
     return bak
-
-
-@contextlib.contextmanager
-def _locked(path: Path, mode: str) -> Iterator:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    f = open(path, mode)
-    try:
-        if fcntl is not None:
-            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
-        yield f
-    finally:
-        if fcntl is not None:
-            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
-        f.close()
 
 
 def strip_meta(text: str) -> str:

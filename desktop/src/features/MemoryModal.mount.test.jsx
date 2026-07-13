@@ -13,9 +13,11 @@ const MEM = { "AGENT.md": "# Title\n\n**bold** note", "MEMORY.md": "learned thin
 
 beforeEach(() => {
   h.invoke.mockReset();
-  h.invoke.mockImplementation((cmd, args) =>
-    cmd === "profile_memory" && args.connectionId === "c2" ? Promise.resolve(MEM) : new Promise(() => {}),
-  );
+  h.invoke.mockImplementation((cmd, args) => {
+    if (cmd === "memory_usage") return Promise.resolve(null);
+    if (cmd === "profile_memory" && args.connectionId === "c2") return Promise.resolve(MEM);
+    return new Promise(() => {});
+  });
 });
 
 describe("MemoryModal (mounted)", () => {

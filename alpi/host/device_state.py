@@ -34,6 +34,9 @@ def register(server: host_server.Server) -> None:
     server.register("host.profile.summaries", _profile_summaries)
     server.register("host.profile.detail", _profile_detail)
     server.register("host.profile.read_file", _profile_read_file)
+    server.register("host.profile.memory_usage", _profile_memory_usage)
+    server.register("host.profile.memory_read", _profile_memory_read)
+    server.register("host.profile.memory_write", _profile_memory_write)
     server.register("host.profile.storage", _profile_storage)
     server.register("host.cleanup.plan", _cleanup_plan)
     server.register("host.cleanup.apply", _cleanup_apply)
@@ -295,6 +298,97 @@ async def _profile_read_file(
     if truncated:
         text += "\n...(truncated)\n"
     return {"text": text}
+
+
+def _memory_usage_blocking(home: Path) -> dict[str, Any]:
+    from alpi.memory import MemoryStore
+
+    store = MemoryStore(home)
+    paths = {
+        "AGENT.md": store.agent_path,
+        "USER.md": store.user_path,
+        "MEMORY.md": store.memory_path,
+    }
+    out: dict[str, Any] = {}
+    for name, (used, limit) in store.usage().items():
+        p = paths.get(name)
+        updated_at = None
+        if p is not None and p.exists():
+            try:
+                updated_at = p.stat().st_mtime
+            except OSError:
+                updated_at = None
+        out[name] = {
+            "used": used,
+            "limit": limit,
+            "pct": round(used / limit * 100) if limit else None,
+            "over": bool(limit and used > limit),
+            "updated_at": updated_at,
+        }
+    return out
+
+
+async def _profile_memory_usage(
+    params: dict[str, Any], _server: host_server.Server,
+) -> dict[str, Any]:
+    import asyncio
+
+    profile = str(params.get("profile") or "")
+    home = _resolve_home(profile)
+    return {"files": await asyncio.to_thread(_memory_usage_blocking, home)}
+
+
+async def _profile_memory_read(
+    params: dict[str, Any], _server: host_server.Server,
+) -> dict[str, Any]:
+    from alpi.memory import MemoryStore
+
+    import asyncio
+
+    profile = str(params.get("profile") or "")
+    name = str(params.get("name") or "")
+    store = MemoryStore(_resolve_home(profile))
+    try:
+        text, rev = await asyncio.to_thread(store.read_with_rev, name)
+    except ValueError as e:
+        raise host_server.HandlerError(-32602, "invalid-params", data={"detail": str(e)}) from None
+    return {"text": text, "rev": rev}
+
+
+async def _profile_memory_write(
+    params: dict[str, Any], _server: host_server.Server,
+) -> dict[str, Any]:
+    import asyncio
+
+    from alpi import home as home_mod
+    from alpi.host import events as host_events
+    from alpi.memory import MemoryConflict, MemoryStore
+
+    profile = str(params.get("profile") or "")
+    name = str(params.get("name") or "")
+    text = params.get("text")
+    expected_rev = params.get("rev")
+    if not isinstance(text, str):
+        raise host_server.HandlerError(
+            -32602, "invalid-params", data={"detail": "text must be a string"},
+        )
+    if not isinstance(expected_rev, str) or not expected_rev:
+        raise host_server.HandlerError(
+            -32602, "invalid-params",
+            data={"detail": "rev is required — read the file first to get its revision"},
+        )
+    home = _resolve_home(profile)
+    store = MemoryStore(home)
+    try:
+        rev = await asyncio.to_thread(store.replace, name, text, expected_rev=expected_rev)
+    except MemoryConflict as e:
+        raise host_server.HandlerError(
+            -32009, "conflict", data={"detail": str(e), "rev": e.current_rev},
+        ) from None
+    except ValueError as e:
+        raise host_server.HandlerError(-32602, "invalid-params", data={"detail": str(e)}) from None
+    host_events.emit("memory_changed", {"profile": home_mod.profile_name(home), "name": name})
+    return {"ok": True, "rev": rev}
 
 
 def _storage_rows(home: Path) -> list[dict[str, Any]]:

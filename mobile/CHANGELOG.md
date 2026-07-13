@@ -14,6 +14,15 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.2.13 — 2026-07-13 — read and edit memory
+
+- **The memory list shows each file's budget %** — AGENT.md, MEMORY.md and
+  USER.md report how full they are instead of a raw size.
+- **Edit a memory file from your phone** — tap Edit on a file, change it, Save;
+  it's live on your next message.
+
+_Needs alpi v0.10.26 for budgets and editing; older daemons show sizes and can't save._
+
 ## v0.2.12 — 2026-07-11 — tidy profiles from your pocket
 
 - **Reclaim space on any daemon.** Profile settings gain a "Reclaim space"
