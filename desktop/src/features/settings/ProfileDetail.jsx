@@ -35,7 +35,6 @@ import {
 } from "./fields/alp.jsx";
 import {
   EmailCell,
-  SchedulesSection,
   SubsystemsCell,
 } from "./fields/services.jsx";
 import { DaemonField } from "./fields/DaemonField.jsx";
@@ -51,7 +50,7 @@ import styles from "./Settings.module.css";
 import { copyText } from "../../lib/clipboard.js";
 
 // storage stays out: its os.walk dominates snapshot latency, so StorageField fetches it independently.
-const SNAPSHOT_SECTIONS = ["detail", "usage", "workgroups", "email", "schedules"];
+const SNAPSHOT_SECTIONS = ["detail", "usage", "workgroups", "email"];
 
 function initialDraft(profile) {
   return {
@@ -73,7 +72,6 @@ export default function ProfileDetail({
   onDelete,
   onNavigate,
   onOpenChat,
-  onOpenSchedule,
   onOpenConnections,
   refreshTick = 0,
 }) {
@@ -86,7 +84,6 @@ export default function ProfileDetail({
   const sectionData = (s) => (s && !s.error ? s : undefined);
   const detailPre = sectionData(sn?.detail);
   const usagePre = sectionData(sn?.usage);
-  const schedulesPre = sectionData(sn?.schedules)?.jobs;
   const workgroupsPre = sectionData(sn?.workgroups)?.workgroups;
   const emailPre = sectionData(sn?.email)?.accounts;
   const storagePre = sectionData(sn?.storage)?.storage;
@@ -111,7 +108,6 @@ export default function ProfileDetail({
   const baseline = useMemo(() => initialDraft(profile), [profile]);
   const [draft, setDraft] = useState(baseline);
   const [emailLoading, setEmailLoading] = useState(false);
-  const [schedulesLoading, setSchedulesLoading] = useState(false);
   const [modelLoading, setModelLoading] = useState(false);
   const [ollamaErrors, setOllamaErrors] = useState([]);
 
@@ -215,7 +211,7 @@ export default function ProfileDetail({
   );
   // Lazy sections (storage, peers, network) keep their loading local — the header bar covers only above-the-fold data.
   const syncing = (
-    detailLoading || emailLoading || schedulesLoading
+    detailLoading || emailLoading
     || modelLoading || workgroupsLoading
     || usage.loading || snap.loading || connectionSyncing
   );
@@ -473,15 +469,6 @@ export default function ProfileDetail({
             />
           </Row>
         </Section>
-
-        <SchedulesSection
-          profile={profile}
-          connectionId={activeConnection?.id ?? null}
-          prefetched={schedulesPre}
-          defer={snapPending}
-          onOpen={onOpenSchedule}
-          onLoadingChange={setSchedulesLoading}
-        />
 
         <Section
           title="Sandbox"

@@ -22,7 +22,6 @@ export default function Settings({
   onRefresh,
   onDeleteProfile,
   onOpenChat,
-  onOpenSchedule,
   onOpenConnections,
   onCloseConnections,
 }) {
@@ -64,7 +63,6 @@ export default function Settings({
           onDelete={onDeleteProfile}
           onNavigate={setTarget}
           onOpenChat={onOpenChat}
-          onOpenSchedule={onOpenSchedule}
           onOpenConnections={
             canOpenConnections(activeConnection, selectedProfile.name)
               ? onOpenConnections

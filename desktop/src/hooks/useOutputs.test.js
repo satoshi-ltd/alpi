@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
 import {
+  _resetOutputsMemory,
   fetchConnectionOutputs,
   pendingDeleteKeys,
   rowKey,
@@ -18,6 +19,7 @@ import { _resetDaemonBus } from "../lib/daemon-bus.js";
 let daemonEventListener;
 beforeEach(() => {
   vi.resetAllMocks();
+  _resetOutputsMemory();
   _resetDaemonBus();
   daemonEventListener = null;
   listen.mockImplementation(async (eventName, cb) => {
@@ -53,12 +55,29 @@ describe("useAllOutputs (cross-connection fan-out)", () => {
     expect(rows[0].profile).toBe("default");
   });
 
-  it("fetchConnectionOutputs returns [] when summaries throws (offline daemon)", async () => {
+  it("fetchConnectionOutputs returns null when summaries throws — failure must never read as an empty inbox", async () => {
     invoke.mockImplementation(async (cmd) => {
       if (cmd === "profile_summaries") throw new Error("offline");
-      return [];
+      return null;
     });
-    expect(await fetchConnectionOutputs({ id: "c1", name: "home" })).toEqual([]);
+    expect(await fetchConnectionOutputs({ id: "c1", name: "home" })).toBeNull();
+  });
+
+  it("a partially failing daemon keeps the failed profile's previous rows and updates the rest", async () => {
+    invoke.mockImplementation(async (cmd, params) => {
+      if (cmd === "profile_summaries") return [{ name: "ok" }, { name: "broken" }];
+      if (cmd === "outputs_list") {
+        if (params.profile === "broken") throw new Error("timeout");
+        return [{ id: "fresh", created_at: 9, profile: "ok" }];
+      }
+      return null;
+    });
+    const previous = [
+      { id: "old-ok", created_at: 1, profile: "ok" },
+      { id: "old-broken", created_at: 2, profile: "broken" },
+    ];
+    const rows = await fetchConnectionOutputs({ id: "c1", name: "home" }, null, previous);
+    expect(rows.map((r) => r.id).sort()).toEqual(["fresh", "old-broken"]);
   });
 
   it("merges and sorts rows across all connections newest-first", async () => {
@@ -342,6 +361,178 @@ describe("useAllOutputs review hardening", () => {
     await waitFor(() => expect(result.current.rows.map((r) => r.id)).toEqual(["u1"]));
     rerender({ status: undefined });
     await waitFor(() => expect(result.current.rows.map((r) => r.id)).toEqual(["r1", "u1"]));
+  });
+});
+
+
+describe("useAllOutputs warm start (rows memory)", () => {
+  it("a remount paints remembered rows instantly while the refetch is still pending", async () => {
+    let resolveList = null;
+    let firstCall = true;
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "profile_summaries") return [{ name: "p" }];
+      if (cmd === "outputs_list") {
+        if (firstCall) {
+          firstCall = false;
+          return [{ id: "o1", created_at: 7, profile: "p" }];
+        }
+        return new Promise((res) => { resolveList = res; });
+      }
+      return null;
+    });
+    const conns = [{ id: "c1", name: "home" }];
+    const first = renderHook(() => useAllOutputs({ connections: conns }));
+    await waitFor(() => expect(first.result.current.rows.length).toBe(1));
+    first.unmount();
+
+    const second = renderHook(() => useAllOutputs({ connections: conns }));
+    await waitFor(() => expect(second.result.current.rows.map((r) => r.id)).toEqual(["o1"]));
+    expect(second.result.current.loading).toBe(true);
+    await act(async () => {
+      resolveList([{ id: "o2", created_at: 9, profile: "p" }]);
+      await new Promise((r) => setTimeout(r, 10));
+    });
+    expect(second.result.current.rows.map((r) => r.id)).toEqual(["o2"]);
+  });
+
+  it("deferMs 0 fetches every connection immediately (inbox-open semantics)", async () => {
+    const calls = [];
+    invoke.mockImplementation(async (cmd, params) => {
+      if (cmd === "profile_summaries") { calls.push(params.connectionId); return [{ name: "p" }]; }
+      if (cmd === "outputs_list") return [];
+      return null;
+    });
+    renderHook(() =>
+      useAllOutputs({
+        connections: [{ id: "c1", name: "home" }, { id: "c2", name: "work" }],
+        activeId: "c1",
+        deferMs: 0,
+      }),
+    );
+    await waitFor(() => expect(calls).toContain("c1"));
+    await waitFor(() => expect(calls).toContain("c2"), { timeout: 1500 });
+  });
+
+  it("an offline flip also forgets the remembered rows", async () => {
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "profile_summaries") return [{ name: "p" }];
+      if (cmd === "outputs_list") return [{ id: "o1", created_at: 1, profile: "p" }];
+      return null;
+    });
+    const conn = (status) => [{ id: "c1", name: "home", status }];
+    const { result, rerender, unmount } = renderHook(
+      ({ connections }) => useAllOutputs({ connections }),
+      { initialProps: { connections: conn("online") } },
+    );
+    await waitFor(() => expect(result.current.rows.length).toBe(1));
+    rerender({ connections: conn("offline") });
+    await waitFor(() => expect(result.current.rows).toEqual([]));
+    unmount();
+    invoke.mockImplementation(async () => new Promise(() => {}));
+    const second = renderHook(() => useAllOutputs({ connections: conn("online") }));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(second.result.current.rows).toEqual([]);
+  });
+});
+
+
+describe("useAllOutputs credential and failure hardening", () => {
+  it("re-pairing the same connection id with a new token never shows the old credential's rows", async () => {
+    let resolveList = null;
+    let call = 0;
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "profile_summaries") return [{ name: "p" }];
+      if (cmd === "outputs_list") {
+        call += 1;
+        if (call === 1) return [{ id: "secret-A", created_at: 5, profile: "p" }];
+        return new Promise((res) => { resolveList = res; });
+      }
+      return null;
+    });
+    const conn = (tokenId) => [{ id: "c1", name: "home", token_id: tokenId }];
+    const { result, rerender } = renderHook(
+      ({ connections }) => useAllOutputs({ connections }),
+      { initialProps: { connections: conn("AAAAAAAA") } },
+    );
+    await waitFor(() => expect(result.current.rows.map((r) => r.id)).toEqual(["secret-A"]));
+    rerender({ connections: conn("BBBBBBBB") });
+    await waitFor(() => expect(result.current.rows).toEqual([]));
+    expect(typeof resolveList).toBe("function");
+    await act(async () => {
+      resolveList([{ id: "b-row", created_at: 7, profile: "p" }]);
+      await new Promise((r) => setTimeout(r, 10));
+    });
+    expect(result.current.rows.map((r) => r.id)).toEqual(["b-row"]);
+  });
+
+  it("a total revalidation failure keeps the remembered rows on screen", async () => {
+    let failing = false;
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "profile_summaries") {
+        if (failing) throw new Error("net down");
+        return [{ name: "p" }];
+      }
+      if (cmd === "outputs_list") return [{ id: "kept", created_at: 3, profile: "p" }];
+      return null;
+    });
+    const conns = [{ id: "c1", name: "home" }];
+    const first = renderHook(() => useAllOutputs({ connections: conns }));
+    await waitFor(() => expect(first.result.current.rows.length).toBe(1));
+    first.unmount();
+    failing = true;
+    const second = renderHook(() => useAllOutputs({ connections: conns }));
+    await waitFor(() => expect(second.result.current.rows.map((r) => r.id)).toEqual(["kept"]));
+    await waitFor(() => expect(second.result.current.loading).toBe(false));
+    expect(second.result.current.rows.map((r) => r.id)).toEqual(["kept"]);
+  });
+
+  it("explicit open drains connections with bounded concurrency, not a time stagger", async () => {
+    const resolvers = new Map();
+    invoke.mockImplementation(async (cmd, params) => {
+      if (cmd === "profile_summaries") {
+        return new Promise((res) => { resolvers.set(params.connectionId, res); });
+      }
+      if (cmd === "outputs_list") return [];
+      return null;
+    });
+    const conns = Array.from({ length: 9 }, (_, i) => ({ id: `c${i}`, name: `n${i}` }));
+    renderHook(() => useAllOutputs({ connections: conns, activeId: "c0", deferMs: 0 }));
+    await waitFor(() => expect(resolvers.size).toBe(6));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(resolvers.size).toBe(6);
+    await act(async () => {
+      resolvers.get("c0")([{ name: "p" }]);
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    await waitFor(() => expect(resolvers.size).toBeGreaterThanOrEqual(7));
+  });
+
+  it("loading stays true while queued connections remain, and drops only when the last one lands", async () => {
+    const resolvers = new Map();
+    invoke.mockImplementation(async (cmd, params) => {
+      if (cmd === "profile_summaries") {
+        return new Promise((res) => { resolvers.set(params.connectionId, res); });
+      }
+      if (cmd === "outputs_list") return [];
+      return null;
+    });
+    const conns = Array.from({ length: 8 }, (_, i) => ({ id: `c${i}`, name: `n${i}` }));
+    const { result } = renderHook(() =>
+      useAllOutputs({ connections: conns, activeId: "c0", deferMs: 0 }),
+    );
+    await waitFor(() => expect(resolvers.size).toBe(6));
+    expect(result.current.loading).toBe(true);
+    await act(async () => {
+      for (const id of ["c0", "c1", "c2", "c3", "c4", "c5"]) resolvers.get(id)([]);
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(result.current.loading).toBe(true);
+    await waitFor(() => expect(resolvers.size).toBe(8));
+    await act(async () => {
+      for (const id of ["c6", "c7"]) resolvers.get(id)([]);
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    await waitFor(() => expect(result.current.loading).toBe(false));
   });
 });
 

@@ -11,6 +11,24 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.40 — 2026-07-14 — notifications open instantly again
+
+- **The notifications inbox shows your last-known items the moment it opens**
+  and revalidates in the background — no more empty pane while daemons answer.
+- Opening the inbox starts syncing every connection immediately (bounded
+  concurrency instead of the boot-time stagger), with a syncing bar below the
+  header that stays up until the last connection answers. A failed
+  revalidation keeps the last-known notifications instead of blanking them,
+  and re-pairing an endpoint with new credentials never shows the previous
+  credential's items.
+- **Refresh thread is available whenever a session is open**, including empty
+  or still-loading threads on remote connections — a failed transcript load
+  can now be retried from the menu.
+- **The Schedule summary is gone from profile settings** — it duplicated the
+  Schedule modal (⇧⌘E), which remains the single place to manage jobs.
+
+_Requires alpi v0.10.28+._
+
 ## v0.4.39 — 2026-07-14 — connections become manageable
 
 - **Settings gains a full Connections view** with last activity, session count

@@ -89,7 +89,10 @@ export default function NotificationsModal({
 }) {
   const notify = useNotify();
   const multi = connections.length > 1;
-  const { rows, refresh } = useAllOutputs({ connections, activeId: activeConnectionId, enabled: open });
+  // deferMs 0: opening the inbox is explicit user intent — every connection starts syncing immediately (bounded concurrency, no boot stagger).
+  const { rows, refresh, loading } = useAllOutputs({
+    connections, activeId: activeConnectionId, enabled: open, deferMs: 0,
+  });
   const markAll = useMarkAllOutputsRead();
   const { schedule: scheduleDelete, cancel: cancelDelete } = useDeleteOutput();
   const [pendingId, setPendingId] = useState(null);
@@ -335,6 +338,8 @@ export default function NotificationsModal({
       open={open}
       onClose={onClose}
       title="Notifications"
+      loading={loading}
+      loadingLabel="Syncing notifications"
       kicker={unreadCount > 0 ? `${unreadCount} unread` : null}
       actions={unreadCount > 0 ? <Btn variant="ghost" onClick={onMarkAll}>Mark all read</Btn> : null}
       search={{ value: query, onChange: setQuery, placeholder: "Search notifications…", label: "Search notifications" }}

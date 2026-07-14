@@ -44,7 +44,6 @@ vi.mock("./fields/alp.jsx", () => ({
 }));
 vi.mock("./fields/services.jsx", () => ({
   EmailCell: () => null,
-  SchedulesSection: () => null,
   SubsystemsCell: () => null,
 }));
 vi.mock("./fields/devices.jsx", () => ({ DevicesField: () => null }));

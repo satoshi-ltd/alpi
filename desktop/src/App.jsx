@@ -80,6 +80,12 @@ export function isChatSessionData(data) {
   return true;
 }
 
+export function canRefreshProfileThread(view, sessionData) {
+  if (view?.kind === "workgroup") return true;
+  if (view?.kind !== "profile") return false;
+  return view.sessionId != null || (sessionData?.turns?.length ?? 0) > 0;
+}
+
 export function connectionFailureMessage(connection) {
   if (connection?.status === "disabled") {
     return `${connection?.name ?? "Remote"} — connection disabled by host. Ask an admin to enable it in Settings → Connections.`;
@@ -1132,9 +1138,7 @@ export default function App() {
     onToggleReadAloud: canReadAloud ? onToggleReadAloud : null,
     canReadAloud,
     readAloudActive,
-    canRefreshThread:
-      view.kind === "workgroup" ||
-      (view.kind === "profile" && (sessionData?.turns?.length ?? 0) > 0),
+    canRefreshThread: canRefreshProfileThread(view, sessionData),
     profilePaused: !!activeProfile?.paused,
     onToggleProfilePause:
       activeProfile && adminOnTogglePauseProfile ? onToggleActiveProfilePause : null,
@@ -1201,7 +1205,6 @@ export default function App() {
               onRefresh={reload}
               onDeleteProfile={adminOnDeleteProfile}
               onOpenChat={closeSettings}
-              onOpenSchedule={onBrowseSchedule}
               onOpenConnections={openConnections}
               onCloseConnections={closeConnections}
               onSetHostConnection={onSetHostConnection}

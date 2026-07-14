@@ -59,7 +59,6 @@ export default function BrowseModal({
   return createPortal(
     <div className={`anim-overlay ${styles.backdrop}`}>
       <div ref={wrapRef} className={`anim-dialog ${styles.modal}`} role="dialog" aria-modal="true" aria-label={title}>
-        <RefreshBar active={loading} accent={accent} controlled label={loadingLabel} />
         <header className={styles.header}>
           <span className={styles.headerLead}>
             <span className={styles.title}>{title}</span>
@@ -72,6 +71,9 @@ export default function BrowseModal({
             <IconBtn aria-label="Close" onClick={() => onClose?.()}><XIcon /></IconBtn>
           </Tip>
         </header>
+        <div className={styles.syncSlot}>
+          <RefreshBar active={loading} accent={accent} controlled label={loadingLabel} />
+        </div>
 
         <div className={styles.body}>
           <div className={styles.sidebar}>

@@ -115,7 +115,7 @@ export default function ProfileChatHeader({
         onOpenTools={onOpenTools}
         onOpenSchedule={onOpenSchedule}
         onRefresh={onRefresh}
-        canRefresh={(sessionData?.turns?.length ?? 0) > 0}
+        canRefresh={activeSessionId != null || (sessionData?.turns?.length ?? 0) > 0}
       />
     </>
   );

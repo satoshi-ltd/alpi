@@ -184,3 +184,7 @@
   overflow-y: auto;
   padding: var(--space-7) var(--space-9) var(--space-9);
 }
+
+.syncSlot {
+  position: relative;
+}

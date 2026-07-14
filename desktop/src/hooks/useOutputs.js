@@ -14,17 +14,41 @@ function notifyLocalChange(connectionId = null) {
 
 const OTHERS_DEFER_MS = 4000;
 const OTHERS_STAGGER_MS = 400;
+const OPEN_MAX_CONCURRENT = 6;
+
+// Last fetched rows per connection+credential+filter, surviving unmounts: a reopened inbox paints instantly, then revalidates.
+const _rowsMemory = new Map();
+
+// token_id in the key: remote ids are deterministic per host:port, so re-pairing the same endpoint with new credentials must never surface the old credential's rows.
+function _memoryKey(connectionId, authId, statusKey) {
+  return `${connectionId}|${authId}|${statusKey}`;
+}
+
+function _authId(conn) {
+  return String(conn?.token_id ?? "");
+}
+
+export function _resetOutputsMemory() {
+  _rowsMemory.clear();
+}
+
+export function purgeOutputsMemory(connectionId) {
+  for (const key of Array.from(_rowsMemory.keys())) {
+    if (key.startsWith(`${connectionId}|`)) _rowsMemory.delete(key);
+  }
+}
 
 
-export async function fetchConnectionOutputs(connection, status) {
+// Returns rows, or null when the daemon could not be asked (network failure) — null must never clobber last-known rows.
+export async function fetchConnectionOutputs(connection, status, previous = null) {
   const connectionId = connection?.id;
-  if (!connectionId) return [];
+  if (!connectionId) return null;
   let profiles;
   try {
     const res = await invoke("profile_summaries", { connectionId });
     profiles = (Array.isArray(res) ? res : []).map((p) => ({ name: p.name, accent: p.accent || null, voice_id: p.voice_id ?? null }));
   } catch {
-    return [];
+    return null;
   }
   if (profiles.length === 0) profiles = [{ name: "default", accent: null }];
   const lists = await Promise.all(
@@ -45,10 +69,22 @@ export async function fetchConnectionOutputs(connection, status) {
             connectionName: connection.name,
           })),
         )
-        .catch(() => []),
+        .catch(() => null),
     ),
   );
-  return lists.flat();
+  if (lists.length > 0 && lists.every((r) => r === null)) return null;
+  const rows = [];
+  for (let i = 0; i < profiles.length; i += 1) {
+    const fetched = lists[i];
+    if (fetched === null) {
+      if (Array.isArray(previous)) {
+        rows.push(...previous.filter((row) => row.profile === profiles[i].name));
+      }
+      continue;
+    }
+    rows.push(...fetched);
+  }
+  return rows;
 }
 
 function isFetchable(conn) {
@@ -58,7 +94,7 @@ function isFetchable(conn) {
 // Per-connection model: rows cached and refreshed per connection, so one daemon never re-fans-out the whole inbox.
 export function useAllOutputs({ connections, status, activeId = null, deferMs = OTHERS_DEFER_MS, enabled = true } = {}) {
   const list = Array.isArray(connections) ? connections : [];
-  const sig = list.map((c) => `${c.id}:${c.name}:${c.status ?? ""}`).join("|");
+  const sig = list.map((c) => `${c.id}:${c.name}:${c.status ?? ""}:${_authId(c)}`).join("|");
   const statusKey = String(status ?? "");
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -66,7 +102,9 @@ export function useAllOutputs({ connections, status, activeId = null, deferMs = 
   const seqRef = useRef(new Map());
   const inflightRef = useRef(0);
   const seenSigRef = useRef(new Map());
+  const authRef = useRef(new Map());
   const timersRef = useRef(new Map());
+  const queueRef = useRef([]);
   const prevStatusKeyRef = useRef(statusKey);
   const listRef = useRef(list);
   listRef.current = list;
@@ -76,6 +114,13 @@ export function useAllOutputs({ connections, status, activeId = null, deferMs = 
   activeIdRef.current = activeId;
   const enabledRef = useRef(enabled);
   enabledRef.current = enabled;
+
+  // Scheduled work counts as loading: the sync bar must not blink off between a resolved batch and the queued remainder.
+  const recount = useCallback(() => {
+    setLoading(
+      inflightRef.current > 0 || queueRef.current.length > 0 || timersRef.current.size > 0,
+    );
+  }, []);
 
   const mergeRows = useCallback(() => {
     const ids = new Set(listRef.current.map((c) => c.id));
@@ -93,19 +138,41 @@ export function useAllOutputs({ connections, status, activeId = null, deferMs = 
     const seq = (seqRef.current.get(conn.id) ?? 0) + 1;
     seqRef.current.set(conn.id, seq);
     inflightRef.current += 1;
-    setLoading(true);
+    recount();
     try {
-      const fetched = await fetchConnectionOutputs(conn, statusRef.current).catch(() => []);
+      const key = _memoryKey(conn.id, _authId(conn), String(statusRef.current ?? ""));
+      const previous = byConnRef.current.get(conn.id) ?? _rowsMemory.get(key) ?? null;
+      const fetched = await fetchConnectionOutputs(conn, statusRef.current, previous).catch(() => null);
       if (seqRef.current.get(conn.id) !== seq || !enabledRef.current) return;
+      // null = the daemon was unreachable: keep the last-known rows instead of blanking them.
+      if (fetched === null) return;
       // A connection that went offline mid-flight must not resurrect: commit only against its live, fetchable self.
       if (!isFetchable(listRef.current.find((x) => x.id === conn.id))) return;
       byConnRef.current.set(conn.id, fetched);
+      _rowsMemory.set(key, fetched);
       mergeRows();
     } finally {
       inflightRef.current -= 1;
-      if (inflightRef.current <= 0) setLoading(false);
+      recount();
+      pumpRef.current?.();
     }
-  }, [mergeRows]);
+  }, [mergeRows, recount]);
+
+  const pumpRef = useRef(null);
+  // Explicit-open fan-out: bounded concurrency instead of time stagger — each resolution frees the next slot.
+  const pump = useCallback(() => {
+    while (
+      enabledRef.current
+      && inflightRef.current < OPEN_MAX_CONCURRENT
+      && queueRef.current.length > 0
+    ) {
+      const id = queueRef.current.shift();
+      const cur = listRef.current.find((x) => x.id === id);
+      if (cur && isFetchable(cur)) refreshConn(cur);
+    }
+    recount();
+  }, [refreshConn, recount]);
+  pumpRef.current = pump;
 
   // refresh(id) scopes to one connection; unknown/absent id falls back to every connection.
   const refresh = useCallback(async (connectionId = null) => {
@@ -116,11 +183,13 @@ export function useAllOutputs({ connections, status, activeId = null, deferMs = 
 
   useEffect(() => {
     if (!enabled) {
-      // Disable = full stand-down: kill deferred fetches, invalidate in-flight commits, forget signatures so re-enable refetches from scratch.
+      // Disable = full stand-down: kill deferred and queued fetches, invalidate in-flight commits, forget signatures so re-enable refetches from scratch.
       for (const pending of timersRef.current.values()) clearTimeout(pending);
       timersRef.current.clear();
+      queueRef.current.length = 0;
       seenSigRef.current.clear();
       for (const [id, n] of seqRef.current) seqRef.current.set(id, n + 1);
+      recount();
       return;
     }
     if (prevStatusKeyRef.current !== statusKey) {
@@ -136,9 +205,31 @@ export function useAllOutputs({ connections, status, activeId = null, deferMs = 
       setRows([]);
       return;
     }
+    for (const c of list) {
+      const auth = _authId(c);
+      const prevAuth = authRef.current.get(c.id);
+      if (prevAuth !== undefined && prevAuth !== auth) {
+        // Same endpoint re-paired with new credentials: the old credential's rows must never show.
+        byConnRef.current.delete(c.id);
+        purgeOutputsMemory(c.id);
+        seqRef.current.set(c.id, (seqRef.current.get(c.id) ?? 0) + 1);
+        mergeRows();
+      }
+      authRef.current.set(c.id, auth);
+    }
+    let seeded = false;
+    for (const c of list) {
+      if (byConnRef.current.has(c.id) || !isFetchable(c)) continue;
+      const remembered = _rowsMemory.get(_memoryKey(c.id, _authId(c), statusKey));
+      if (remembered) {
+        byConnRef.current.set(c.id, remembered);
+        seeded = true;
+      }
+    }
+    if (seeded) mergeRows();
     let othersDelay = deferMs;
     for (const c of list) {
-      const s = `${c.name}:${c.status ?? ""}`;
+      const s = `${c.name}:${c.status ?? ""}:${_authId(c)}`;
       if (seenSigRef.current.get(c.id) === s) continue;
       seenSigRef.current.set(c.id, s);
       const pending = timersRef.current.get(c.id);
@@ -148,37 +239,49 @@ export function useAllOutputs({ connections, status, activeId = null, deferMs = 
       }
       if (c.status === "offline" || c.status === "disabled" || c.status === "auth-failed") {
         byConnRef.current.delete(c.id);
+        _rowsMemory.delete(_memoryKey(c.id, _authId(c), statusKey));
         seqRef.current.set(c.id, (seqRef.current.get(c.id) ?? 0) + 1);
+        queueRef.current = queueRef.current.filter((id) => id !== c.id);
         mergeRows();
         continue;
       }
       // unknown/probing never fetch — the single fetch fires on the transition to online.
       if (!isFetchable(c)) continue;
       if (activeIdRef.current != null && c.id !== activeIdRef.current) {
-        const delay = othersDelay;
-        othersDelay += OTHERS_STAGGER_MS;
-        timersRef.current.set(c.id, setTimeout(() => {
-          timersRef.current.delete(c.id);
-          const cur = listRef.current.find((x) => x.id === c.id);
-          if (cur) refreshConn(cur);
-        }, delay));
+        if (deferMs <= 0) {
+          if (!queueRef.current.includes(c.id)) queueRef.current.push(c.id);
+        } else {
+          const delay = othersDelay;
+          othersDelay += OTHERS_STAGGER_MS;
+          timersRef.current.set(c.id, setTimeout(() => {
+            timersRef.current.delete(c.id);
+            const cur = listRef.current.find((x) => x.id === c.id);
+            if (cur) refreshConn(cur);
+            else recount();
+          }, delay));
+        }
       } else {
         refreshConn(c);
       }
     }
+    pump();
     for (const id of Array.from(seenSigRef.current.keys())) {
       if (!list.some((c) => c.id === id)) {
         seenSigRef.current.delete(id);
+        authRef.current.delete(id);
+        purgeOutputsMemory(id);
         const pending = timersRef.current.get(id);
         if (pending) {
           clearTimeout(pending);
           timersRef.current.delete(id);
         }
+        queueRef.current = queueRef.current.filter((qid) => qid !== id);
         byConnRef.current.delete(id);
         mergeRows();
       }
     }
-  }, [sig, statusKey, enabled, deferMs, mergeRows, refreshConn]); // eslint-disable-line react-hooks/exhaustive-deps
+    recount();
+  }, [sig, statusKey, enabled, deferMs, mergeRows, refreshConn, pump, recount]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => () => {
     for (const pending of timersRef.current.values()) clearTimeout(pending);

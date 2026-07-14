@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
+import { canRefreshProfileThread,
   connectionFailureMessage,
   isChatSessionData,
   settingsTargetAfterExit,
@@ -71,5 +71,21 @@ describe("settingsTargetForChatView", () => {
       kind: "profile",
       id: "default",
     });
+  });
+});
+
+
+describe("canRefreshProfileThread", () => {
+  it("shows refresh for an open session even before any turn loads (failed/slow fetch must stay retryable)", () => {
+    expect(canRefreshProfileThread({ kind: "profile", sessionId: "s1" }, null)).toBe(true);
+  });
+
+  it("hides refresh on a profile with no session and no turns", () => {
+    expect(canRefreshProfileThread({ kind: "profile", sessionId: null }, { turns: [] })).toBe(false);
+  });
+
+  it("shows refresh when turns are loaded and always for workgroups", () => {
+    expect(canRefreshProfileThread({ kind: "profile", sessionId: null }, { turns: [{}] })).toBe(true);
+    expect(canRefreshProfileThread({ kind: "workgroup" }, null)).toBe(true);
   });
 });
