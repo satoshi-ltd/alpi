@@ -32,8 +32,7 @@ it — marginal pricing, so adding one agent never triggers a tier cliff.
 
 | Installed agents | Price per agent / year |
 |---|---|
-| 1st agent | **Free** (personal / evaluation, BUSL) |
-| Agents 2–10 | **$10K** |
+| Agents 1–10 | **$10K** |
 | Agents 11–30 | **$8K** |
 | Agents 31–75 | **$7K** |
 | Agents 76–150 | **$5K** |
@@ -47,10 +46,10 @@ Worked examples (annual license):
 
 | Deployment | Agents | Annual license |
 |---|---|---|
-| Small team | 5 | $40K |
-| Single department (e.g. a web factory) | 15 | $130K |
-| Multi-department organization | 50 | $390K |
-| Large operation | 150 | $940K |
+| Small team | 5 | $50K |
+| Single department (e.g. a web factory) | 15 | $140K |
+| Multi-department organization | 50 | $400K |
+| Large operation | 150 | $950K |
 
 ## Early price, not discounts
 
