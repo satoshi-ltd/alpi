@@ -11,7 +11,7 @@ describe('useCachedImage', () => {
     const { result } = renderHook(() =>
       useCachedImage(call, { id: 'c-A' }, 'default', '/one.png'));
     await waitFor(() => expect(result.current.uri).toBe('data:image/png;base64,AAA'));
-    expect(call).toHaveBeenCalledWith('host.attachments.fetch', { profile: 'default', path: '/one.png' });
+    expect(call).toHaveBeenCalledWith('host.attachments.fetch', { profile: 'default', path: '/one.png' }, { timeoutMs: 60_000 });
   });
 
   it('reloads (does not keep the stale image) when the cache key changes on a reused component', async () => {

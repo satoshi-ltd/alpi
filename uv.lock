@@ -118,7 +118,7 @@ wheels = [
 
 [[package]]
 name = "alpi-agent"
-version = "0.10.27"
+version = "0.10.28"
 source = { editable = "." }
 dependencies = [
     { name = "click" },

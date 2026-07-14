@@ -11,6 +11,9 @@ from typing import Any
 # "old transcripts" contract: the sessions category only ever touches sessions past this age.
 SESSIONS_KEEP_DAYS = 30
 
+# chat-delivered artifacts in out/ stay downloadable this long before cleanup offers them.
+GENERATED_KEEP_DAYS = 30
+
 
 _CLEANUP_CLAIM = object()
 
@@ -113,6 +116,20 @@ def categories(h: Path) -> list[dict[str, Any]]:
     knowledge_files: list[Path] = (
         [store_mod.store_path(h)] if knowledge_reclaimable > 0 else []
     )
+    from alpi.home import out_root as _safe_out_root
+    gen_root = _safe_out_root(h)
+    gen_cutoff = time.time() - GENERATED_KEEP_DAYS * 86_400
+    gen_files: list[Path] = []
+    if gen_root is not None:
+        import os as _os
+        for parent, _dirs, files in _os.walk(gen_root, followlinks=False):
+            for fn in files:
+                p = Path(parent) / fn
+                try:
+                    if not p.is_symlink() and p.stat().st_mtime < gen_cutoff:
+                        gen_files.append(p)
+                except OSError:
+                    pass
     att_root = _dir("host/attachments/tmp")
     att_dirs: list[Path] = (
         [p for p in att_root.iterdir() if p.is_dir()] if att_root.exists() else []
@@ -180,6 +197,14 @@ def categories(h: Path) -> list[dict[str, Any]]:
             "files": curator_dirs,
             "size": curator_size,
             "action": "rmtree",
+        },
+        {
+            "key": "generated",
+            "label": "Generated files",
+            "desc": f"chat-delivered images/documents older than {GENERATED_KEEP_DAYS} days in `out/`",
+            "files": gen_files,
+            "size": _sum(gen_files),
+            "destructive": True,
         },
         {
             "key": "attachments",

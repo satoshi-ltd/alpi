@@ -11,6 +11,14 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.37 — 2026-07-14 — large documents download reliably
+
+- Downloading a generated document no longer times out on slow connections:
+  attachment downloads get their own 60-second window (other requests keep
+  the usual fast timeouts).
+
+_Requires alpi v0.10.28+ for generated files under profile `out/`._
+
 ## v0.4.36 — 2026-07-13 — read and edit memory
 
 - **The Memory viewer shows how full each file is.** AGENT.md, MEMORY.md and

@@ -23,6 +23,8 @@ const LOCAL_UNSUPPORTED: &str =
 // RPC timeouts stay generous — a busy daemon or slow Tailscale hop must not fail falsely (calls run off the main thread, so nothing freezes); dead-daemon detection belongs to the probes (2.5s local / 8s remote — a just-restarted daemon's warmup must not read as offline) and the stream keepalives (events ping 25s, chat heartbeat 5s → 75s = three missed pings).
 const READ_TIMEOUT_LOCAL_SECS: u64 = 8;
 const READ_TIMEOUT_REMOTE_SECS: u64 = 20;
+// attachments.fetch ships up to 20 MiB as base64 JSON — a slow hop needs far more than the default RPC window.
+const READ_TIMEOUT_FETCH_SECS: u64 = 60;
 const STREAM_READ_TIMEOUT_SECS: u64 = 75;
 const WS_CONNECT_TIMEOUT_SECS: u64 = 4;
 const WS_KEEPALIVE_IDLE_SECS: u64 = 30;
@@ -825,37 +827,58 @@ fn reusable_after_error(err: &str) -> bool {
 }
 
 pub fn call(method: &str, params: Value) -> Result<Value, String> {
-    call_conn(&active_connection(), method, params)
+    call_conn(&active_connection(), method, params, None)
 }
 
 // Same as `call`, but routed to a specific connection regardless of which is active.
 pub fn call_for(connection_id: &str, method: &str, params: Value) -> Result<Value, String> {
     let conn = connection_by_id(connection_id)
         .ok_or_else(|| format!("unknown connection: {connection_id}"))?;
-    call_conn(&conn, method, params)
+    call_conn(&conn, method, params, None)
 }
 
-fn call_conn(conn: &HostConnection, method: &str, params: Value) -> Result<Value, String> {
+pub fn call_fetch(method: &str, params: Value) -> Result<Value, String> {
+    call_conn(
+        &active_connection(),
+        method,
+        params,
+        Some(Duration::from_secs(READ_TIMEOUT_FETCH_SECS)),
+    )
+}
+
+pub fn call_for_fetch(connection_id: &str, method: &str, params: Value) -> Result<Value, String> {
+    let conn = connection_by_id(connection_id)
+        .ok_or_else(|| format!("unknown connection: {connection_id}"))?;
+    call_conn(
+        &conn,
+        method,
+        params,
+        Some(Duration::from_secs(READ_TIMEOUT_FETCH_SECS)),
+    )
+}
+
+fn read_timeout_for(conn: &HostConnection, over: Option<Duration>) -> Duration {
+    over.unwrap_or_else(|| match conn {
+        HostConnection::Local { .. } => Duration::from_secs(READ_TIMEOUT_LOCAL_SECS),
+        HostConnection::Remote { .. } => Duration::from_secs(READ_TIMEOUT_REMOTE_SECS),
+    })
+}
+
+fn call_conn(
+    conn: &HostConnection,
+    method: &str,
+    params: Value,
+    read_timeout: Option<Duration>,
+) -> Result<Value, String> {
     let id = conn.id().to_string();
+    let timeout = read_timeout_for(conn, read_timeout);
     let result = match conn {
-        HostConnection::Local { .. } => call_local_inner(
-            method,
-            params,
-            Duration::from_secs(READ_TIMEOUT_LOCAL_SECS),
-        ),
+        HostConnection::Local { .. } => call_local_inner(method, params, timeout),
         HostConnection::Remote {
             host, port, token, ..
         } => {
             let _slot = acquire_remote_slot(&id);
-            call_remote_inner(
-                &id,
-                host,
-                *port,
-                token,
-                method,
-                params,
-                Duration::from_secs(READ_TIMEOUT_REMOTE_SECS),
-            )
+            call_remote_inner(&id, host, *port, token, method, params, timeout)
         }
     };
     match &result {
@@ -1663,6 +1686,32 @@ pub fn probe_all() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fetch_timeout_overrides_default_rpc_windows() {
+        let local = HostConnection::Local {
+            id: LOCAL_ID.to_string(),
+            name: "Local daemon".to_string(),
+            device_id: None,
+            last_connected: None,
+        };
+        let remote = HostConnection::Remote {
+            id: "remote-1".to_string(),
+            name: "Remote".to_string(),
+            host: "100.0.0.1".to_string(),
+            port: 7423,
+            token: "t".to_string(),
+            revoked: false,
+            device_id: None,
+            last_connected: None,
+        };
+        assert_eq!(read_timeout_for(&local, None), Duration::from_secs(READ_TIMEOUT_LOCAL_SECS));
+        assert_eq!(read_timeout_for(&remote, None), Duration::from_secs(READ_TIMEOUT_REMOTE_SECS));
+        let fetch = Duration::from_secs(READ_TIMEOUT_FETCH_SECS);
+        assert_eq!(read_timeout_for(&local, Some(fetch)), Duration::from_secs(60));
+        assert_eq!(read_timeout_for(&remote, Some(fetch)), Duration::from_secs(60));
+        assert_eq!(read_timeout_for(&remote, None), Duration::from_secs(20));
+    }
 
     #[test]
     fn probe_timeout_is_shorter_for_local_connections() {

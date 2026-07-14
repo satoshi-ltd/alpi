@@ -1,5 +1,8 @@
 // Keep expo imports out of this module — it must stay unit-testable.
 
+// 20 MiB base64 over a slow hop outlives the default RPC window.
+export const FETCH_TIMEOUT_MS = 60_000;
+
 const MIME_BY_EXT = {
   png: 'image/png',
   jpg: 'image/jpeg',

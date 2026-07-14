@@ -50,6 +50,16 @@ created_at: 2026-04-20
 
 Never put secret values in `SKILL.md`, scripts, references, assets, or the skill root. `secrets/` mode `0700`; credential files `0600`.
 
+## Generated files (where a skill writes its artifacts)
+
+| Destination | Use for | Lifecycle |
+|---|---|---|
+| tmp dir | Pipeline intermediates never delivered or re-referenced | The skill deletes them itself; nothing purges tmp automatically |
+| `<home>/out/` | Chat-delivered artifacts (generated images, documents) — print `{"out": "<abs path>"}` so the file attaches to the reply | Downloadable for ~30 days (`GENERATED_KEEP_DAYS`), then offered by cleanup; excluded from backups and from newly bootstrapped Alpi `.gitignore` files (existing/custom profiles should ignore `out/` themselves) |
+| workspace path | Project deliverables that belong to ongoing work | The workspace's own lifecycle (git/sync/backup) |
+
+Never deliver from shared tmp: sessions retain absolute paths, but tmp has no retention guarantee and the producing skill owns cleanup — `out/` is the delivery surface with retention.
+
 ## Tool actions
 
 - Inspect: `list`, `view(name, [file])`, `validate(name)`.

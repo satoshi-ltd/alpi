@@ -115,6 +115,18 @@ async function mount() {
 }
 
 describe("EndpointProvider lifecycle", () => {
+  it("call forwards per-call options (fetch timeout) to the rpc layer", async () => {
+    const { captureRef } = await mount();
+    callSpy.mockResolvedValueOnce({ ok: true });
+    await captureRef.current.call("host.attachments.fetch", { path: "/x.pdf" }, { timeoutMs: 60_000 });
+    expect(callSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "alpha" }),
+      "host.attachments.fetch",
+      { path: "/x.pdf" },
+      { timeoutMs: 60_000 },
+    );
+  });
+
   it("loads stored connections and probes ONLY the active endpoint on cold start", async () => {
     const { captureRef } = await mount();
     expect(captureRef.current.connections).toHaveLength(2);

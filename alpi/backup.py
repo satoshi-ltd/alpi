@@ -131,6 +131,10 @@ def _iter_files(root: Path) -> Iterable[Path]:
         # Prune in-place at every depth so each profile's own cache/logs/.trash
         # get skipped too (not just the top-level ones).
         dirs[:] = [d for d in dirs if d not in _EXCLUDE_DIRS]
+        rel = Path(parent).relative_to(root)
+        # out/ (regenerable chat-delivered artifacts) is pruned only at home/profile roots, not skill dirs named "out"
+        if not rel.parts or (len(rel.parts) == 2 and rel.parts[0] == "profiles"):
+            dirs[:] = [d for d in dirs if d != "out"]
         for fn in files:
             if fn in _EXCLUDE_FILES:
                 continue

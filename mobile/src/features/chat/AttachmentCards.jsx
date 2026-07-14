@@ -9,6 +9,7 @@ import { useTheme } from '../../theme/ThemeContext';
 import { radii, space } from '../../theme/tokens';
 import { fileKind, fileTypeLabel, fmtSize, shouldFetchPreview } from '../../lib/fileKind';
 import { useCachedImage } from '../../hooks/useCachedImage';
+import { FETCH_TIMEOUT_MS } from '../../lib/attachments';
 
 const ICON = { code: 'file-code', text: 'file-text', file: 'file', image: 'file' };
 const BOX = 32;
@@ -16,7 +17,7 @@ const MESSAGE_MAX = 4;
 
 async function shareAttachment(call, profile, a) {
   try {
-    const r = await call('host.attachments.fetch', { profile, path: a.path });
+    const r = await call('host.attachments.fetch', { profile, path: a.path }, { timeoutMs: FETCH_TIMEOUT_MS });
     if (!r?.data_base64) throw new Error('empty response');
     const safe = String(a.name || 'file').replace(/[^A-Za-z0-9._-]+/g, '_');
     const uri = (FileSystem.cacheDirectory || '') + safe;

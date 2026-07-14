@@ -2427,8 +2427,8 @@ async fn download_attachment(
     let res = tauri::async_runtime::spawn_blocking(move || {
         let params = serde_json::json!({"profile": profile, "path": path});
         match connection_id.as_deref() {
-            Some(cid) => host_client::call_for(cid, "host.attachments.fetch", params),
-            None => host_client::call("host.attachments.fetch", params),
+            Some(cid) => host_client::call_for_fetch(cid, "host.attachments.fetch", params),
+            None => host_client::call_fetch("host.attachments.fetch", params),
         }
     })
     .await

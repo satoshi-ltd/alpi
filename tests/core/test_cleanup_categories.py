@@ -151,3 +151,129 @@ def test_bootstrap_gitignore_covers_private_dirs(tmp_path: Path) -> None:
     gi = (tmp_path / ".gitignore").read_text()
     for needle in ("sessions/", "mentions/", "secrets/"):
         assert needle in gi, f"missing {needle!r} in .gitignore"
+
+
+def test_generated_category_lists_only_old_out_files(tmp_path: Path) -> None:
+    import os
+    import time
+
+    from alpi import cleanup
+
+    out = tmp_path / "out"
+    (out / "nested").mkdir(parents=True)
+    old = out / "old-image.jpg"
+    old.write_text("jpg")
+    stale = time.time() - (cleanup.GENERATED_KEEP_DAYS + 5) * 86_400
+    os.utime(old, (stale, stale))
+    old_nested = out / "nested" / "old-doc.pdf"
+    old_nested.write_text("pdf")
+    os.utime(old_nested, (stale, stale))
+    fresh = out / "fresh.png"
+    fresh.write_text("png")
+
+    cat = next(c for c in cleanup.categories(tmp_path) if c["key"] == "generated")
+    assert cat["destructive"] is True
+    assert sorted(p.name for p in cat["files"]) == ["old-doc.pdf", "old-image.jpg"]
+
+    result = cleanup.apply(tmp_path, "generated")
+    assert result["ok"] and result["removed"] == 2
+    assert fresh.exists() and not old.exists() and not old_nested.exists()
+
+
+def test_bootstrap_gitignore_covers_out_and_run_state(tmp_path: Path) -> None:
+    home_mod.ensure_home(tmp_path)
+    gi = (tmp_path / ".gitignore").read_text()
+    for needle in ("out/", "schedule/runs.json"):
+        assert needle in gi, f"missing {needle!r} in .gitignore"
+
+
+def test_generated_refuses_symlinked_out_root(tmp_path: Path) -> None:
+    import os
+    import time
+
+    from alpi import cleanup
+
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    victim = outside / "victim.pdf"
+    victim.write_text("precious")
+    stale = time.time() - (cleanup.GENERATED_KEEP_DAYS + 5) * 86_400
+    os.utime(victim, (stale, stale))
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / "out").symlink_to(outside)
+
+    cat = next(c for c in cleanup.categories(home) if c["key"] == "generated")
+    assert cat["files"] == []
+    cleanup.apply(home, "generated")
+    assert victim.exists()
+
+
+def test_generated_skips_symlinks_inside_out(tmp_path: Path) -> None:
+    import os
+    import time
+
+    from alpi import cleanup
+
+    outside = tmp_path / "outside"
+    (outside / "deep").mkdir(parents=True)
+    victim = outside / "deep" / "victim.pdf"
+    victim.write_text("precious")
+    loose = outside / "loose.pdf"
+    loose.write_text("precious")
+    home = tmp_path / "home"
+    (home / "out").mkdir(parents=True)
+    (home / "out" / "link-dir").symlink_to(outside / "deep")
+    (home / "out" / "link-file.pdf").symlink_to(loose)
+    stale = time.time() - (cleanup.GENERATED_KEEP_DAYS + 5) * 86_400
+    for p in (victim, loose, home / "out" / "link-file.pdf"):
+        try:
+            os.utime(p, (stale, stale), follow_symlinks=False)
+        except (NotImplementedError, OSError):
+            os.utime(p, (stale, stale))
+
+    cat = next(c for c in cleanup.categories(home) if c["key"] == "generated")
+    assert cat["files"] == []
+    cleanup.apply(home, "generated")
+    assert victim.exists() and loose.exists()
+
+
+def test_ensure_home_provisions_private_out_dir(tmp_path: Path) -> None:
+    import stat
+
+    home_mod.ensure_home(tmp_path)
+    out = tmp_path / "out"
+    assert out.is_dir()
+    assert stat.S_IMODE(out.stat().st_mode) == 0o700
+    assert home_mod.out_root(tmp_path) == out
+
+
+def test_ensure_home_never_touches_a_symlinked_out(tmp_path: Path) -> None:
+    import stat
+
+    outside = tmp_path / "outside"
+    outside.mkdir(mode=0o755)
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / "out").symlink_to(outside)
+    home_mod.ensure_home(home)
+    assert stat.S_IMODE(outside.stat().st_mode) == 0o755
+    assert home_mod.out_root(home) is None
+
+
+def test_ensure_home_survives_broken_out_symlink(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / "out").symlink_to(tmp_path / "gone")
+    home_mod.ensure_home(home)
+    assert (home / "out").is_symlink()
+    assert home_mod.out_root(home) is None
+
+
+def test_ensure_home_leaves_regular_file_named_out(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / "out").write_text("i am a file")
+    home_mod.ensure_home(home)
+    assert (home / "out").read_text() == "i am a file"
+    assert home_mod.out_root(home) is None

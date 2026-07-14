@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-import { imageCacheKey } from '../lib/attachments';
+import { FETCH_TIMEOUT_MS, imageCacheKey } from '../lib/attachments';
 
 const imageCache = new Map();
 const MAX_CACHED_IMAGES = 32;
@@ -31,7 +31,7 @@ export function useCachedImage(call, endpoint, profile, path) {
     setState({ key: cacheKey, uri: cached, err: null });
     if (cached || !endpoint || !profile || !path) return undefined;
     let alive = true;
-    call('host.attachments.fetch', { profile, path })
+    call('host.attachments.fetch', { profile, path }, { timeoutMs: FETCH_TIMEOUT_MS })
       .then((r) => {
         const u = r?.data_base64 ? `data:${r.mime};base64,${r.data_base64}` : null;
         if (u) rememberImage(cacheKey, u);

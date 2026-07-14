@@ -176,11 +176,11 @@ export function EndpointProvider({ children }) {
   );
 
   const call = useCallback(
-    (method, params) => {
+    (method, params, options) => {
       if (!activeEndpoint) {
         return Promise.reject(new Error('No active daemon endpoint'));
       }
-      return rpcCall(activeEndpoint, method, params);
+      return rpcCall(activeEndpoint, method, params, options);
     },
     [activeEndpoint],
   );

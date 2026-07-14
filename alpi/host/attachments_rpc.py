@@ -18,7 +18,8 @@ _FETCH_IMG_MIME = {
     "png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
     "webp": "image/webp", "gif": "image/gif",
 }
-_MAX_FETCH_BYTES = 8 * 1024 * 1024
+# One contract with attachments.MAX_FILE_BYTES: anything the engine can attach, a client can fetch.
+_MAX_FETCH_BYTES = att.MAX_FILE_BYTES
 
 
 def register(server: host_server.Server) -> None:
@@ -123,7 +124,11 @@ def _fetch_allowed(home: Path, real: Path) -> bool:
 
 
 def _fetch_nonimage_allowed(home: Path, real: Path) -> bool:
+    from alpi.home import out_root
     roots = [home / "host" / "attachments" / "tmp"]
+    orp = out_root(home)
+    if orp is not None:
+        roots.append(orp)
     try:
         from alpi import config as cfg_mod
         ws = cfg_mod.load(home).workspace_path

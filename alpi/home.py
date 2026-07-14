@@ -257,6 +257,7 @@ def ensure_home(home: Path) -> None:
         d = home / sub
         d.mkdir(parents=True, exist_ok=True)
         _chmod_private(d)
+    _ensure_out_dir(home)
     gi = home / ".gitignore"
     if not gi.exists():
         gi.write_text(
@@ -265,10 +266,39 @@ def ensure_home(home: Path) -> None:
             "sessions/\n"
             "mentions/\n"
             "schedule/output/\n"
+            "schedule/runs.json\n"
             "logs/\n"
             "cache/\n"
+            "out/\n"
             "skills/**/secrets/\n"
         )
+
+
+def _ensure_out_dir(home: Path) -> None:
+    """lstat-guarded: never mkdir/chmod through a symlink (or its target) named out."""
+    p = home / "out"
+    try:
+        p.lstat()
+    except FileNotFoundError:
+        try:
+            p.mkdir(mode=0o700)
+        except OSError:
+            return
+    if out_root(home) is not None:
+        _chmod_private(p)
+
+
+def out_root(home: Path) -> Path | None:
+    """Canonical out/ dir, or None when it is a symlink or escapes the home (never trust it for delete/serve)."""
+    p = home / "out"
+    if p.is_symlink() or not p.is_dir():
+        return None
+    try:
+        if p.resolve() != home.resolve() / "out":
+            return None
+    except OSError:
+        return None
+    return p
 
 
 def agent_path(home: Path) -> Path:

@@ -217,3 +217,31 @@ def test_fetch_allowed_includes_profile_workspace(tmp_path, monkeypatch):
     assert not attachments_rpc._fetch_allowed(tmp_path / "home", target)
     monkeypatch.setattr(cfg_mod, "load", lambda h: SimpleNamespace(workspace_path=Path("/etc")))
     assert attachments_rpc._fetch_allowed(tmp_path / "home", target)
+
+
+def test_fetch_nonimage_allowed_includes_home_out(tmp_path):
+    home = tmp_path / "home"
+    doc = home / "out" / "report.pdf"
+    doc.parent.mkdir(parents=True)
+    doc.write_text("pdf")
+    assert attachments_rpc._fetch_nonimage_allowed(home, doc.resolve())
+    elsewhere = home / "memories" / "USER.md"
+    elsewhere.parent.mkdir(parents=True)
+    elsewhere.write_text("private")
+    assert not attachments_rpc._fetch_nonimage_allowed(home, elsewhere.resolve())
+
+
+def test_fetch_nonimage_denies_symlinked_out_root(tmp_path):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    secret = outside / "secret.pdf"
+    secret.write_text("pdf")
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / "out").symlink_to(outside)
+    assert not attachments_rpc._fetch_nonimage_allowed(home, secret.resolve())
+
+
+def test_fetch_cap_matches_attachment_contract():
+    from alpi import attachments as att
+    assert attachments_rpc._MAX_FETCH_BYTES == att.MAX_FILE_BYTES

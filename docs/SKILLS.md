@@ -248,6 +248,16 @@ and on every file added via `add_file` to `scripts`, `references`, or
 whole point is that it holds keys). `secrets/` should be mode `0700`;
 files containing credentials should be mode `0600`.
 
+## Where generated files go
+
+A skill that produces files picks the destination by the file's nature, never `/tmp` for anything the user receives:
+
+- **Pipeline intermediates** (conversion scraps, temp frames) → the tmp dir; nobody references them after the turn, and the skill deletes them itself (nothing purges tmp automatically).
+- **Chat deliveries** (a generated image, an exported document) → `<home>/out/`; print `{"out": "<absolute path>"}` from the runner and the file rides the reply as an attachment. These stay downloadable for ~30 days, then the cleanup wizard offers to remove them; they are excluded from `alpi backup` and by newly bootstrapped Alpi `.gitignore` files; existing or custom profiles should ignore `out/` themselves.
+- **Project deliverables** (work that belongs to an ongoing project) → a path inside the profile's workspace, which has its own lifecycle (git, sync, backups).
+
+Never deliver from shared tmp: sessions retain absolute paths, but tmp has no retention guarantee and the producing skill owns its cleanup — `out/` is the delivery surface with retention.
+
 ## Model quality matters
 
 Skills rely on tool-calling discipline and correct routing. Weak or

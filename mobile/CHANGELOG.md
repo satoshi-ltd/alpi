@@ -14,6 +14,13 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.2.14 — 2026-07-14 — large documents download reliably
+
+- Sharing or viewing a generated file no longer times out on slow
+  connections: attachment downloads get their own 60-second window.
+
+_Requires alpi v0.10.28+ for generated files under profile `out/`._
+
 ## v0.2.13 — 2026-07-13 — read and edit memory
 
 - **The memory list shows each file's budget %** — AGENT.md, MEMORY.md and

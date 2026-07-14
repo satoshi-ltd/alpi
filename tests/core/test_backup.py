@@ -487,3 +487,22 @@ def test_cli_backup_refuses_overwrite_without_force(tmp_home: Path) -> None:
     )
     assert res.exit_code != 0
     assert "already exists" in res.output
+
+
+def test_excludes_out_only_at_home_and_profile_roots(tmp_path: Path) -> None:
+    src = tmp_path / "src"
+    _seed(src)
+    (src / "out").mkdir()
+    (src / "out" / "chart.png").write_text("png")
+    (src / "profiles" / "doc" / "out").mkdir()
+    (src / "profiles" / "doc" / "out" / "report.pdf").write_text("pdf")
+    (src / "profiles" / "doc" / "skills" / "whoop" / "out").mkdir()
+    (src / "profiles" / "doc" / "skills" / "whoop" / "out" / "state.json").write_text("{}")
+    archive = tmp_path / "out.alpi-backup"
+    backup.create_backup(src, archive, "pw")
+    target = tmp_path / "restored"
+    target.mkdir()
+    backup.restore_backup(archive, target, "pw")
+    assert not (target / "out").exists()
+    assert not (target / "profiles" / "doc" / "out").exists()
+    assert (target / "profiles" / "doc" / "skills" / "whoop" / "out" / "state.json").exists()
