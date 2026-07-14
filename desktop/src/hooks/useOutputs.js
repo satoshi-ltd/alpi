@@ -146,7 +146,7 @@ export function useAllOutputs({ connections, status, activeId = null, deferMs = 
         clearTimeout(pending);
         timersRef.current.delete(c.id);
       }
-      if (c.status === "offline" || c.status === "auth-failed") {
+      if (c.status === "offline" || c.status === "disabled" || c.status === "auth-failed") {
         byConnRef.current.delete(c.id);
         seqRef.current.set(c.id, (seqRef.current.get(c.id) ?? 0) + 1);
         mergeRows();

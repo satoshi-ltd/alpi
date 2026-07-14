@@ -232,6 +232,27 @@ describe("useSessionTranscript", () => {
     expect(result.current.data).toBeNull();
   });
 
+  it("a disabled connection keeps the cached session", async () => {
+    const all = turns(0, 10);
+    const disabled = new Error("auth-failed");
+    disabled.code = -32000;
+    disabled.data = { reason: "connection-disabled" };
+    const call = vi.fn()
+      .mockResolvedValueOnce(envelope(all, 0, 10))
+      .mockRejectedValueOnce(disabled);
+    const { result } = renderHook(() => useSessionTranscript("doc", "s1"), {
+      wrapper: wrapperWith(call),
+    });
+    await waitFor(() => expect(result.current.data?.turns).toHaveLength(10));
+
+    await act(async () => {
+      await result.current.refresh();
+    });
+
+    expect(result.current.data?.turns).toHaveLength(10);
+    expect(result.current.error?.data?.reason).toBe("connection-disabled");
+  });
+
   it("a refresh requested mid-flight queues one follow-up delta instead of joining the stale read", async () => {
     const all = turns(0, 100);
     const grown = [...all, turn(100)];

@@ -85,12 +85,12 @@ async def _host_version(
     except Exception:  # noqa: BLE001
         device_name = ""
     # The Unix-socket caller carries no token but is sovereign — report admin so the local desktop still unlocks the full UI without a separate "is local" probe.
-    from alpi.host import devices as devices_mod
+    from alpi.host.connection_context import current
+    from alpi.host.connections import authenticate
     token = str((params or {}).get("auth_token") or "")
-    role = "admin"
-    if token:
-        valid, looked_up = devices_mod.validate_and_lookup_role(token)
-        role = looked_up if valid else "member"
+    auth = authenticate(token) if token else None
+    role = auth.role if auth and auth.valid else ("member" if token else "admin")
+    context = current()
     from alpi import updater
     return {
         "agent_name": "alpi",
@@ -99,6 +99,8 @@ async def _host_version(
         "device_name": device_name,
         "device_id": _ensure_device_id(server.home),
         "role": role,
+        "connection_id": context.connection_id,
+        "connection_device_id": context.device_id,
     }
 
 

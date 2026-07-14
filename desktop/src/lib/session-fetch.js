@@ -38,7 +38,9 @@ export function mergeSessionTurns(known, res) {
 // -32004 only — "method-not-found" (-32601) also contains "not-found" and must NOT count.
 export function isSessionGone(err) {
   const msg = String(err);
-  return msg.includes("-32004") || msg.includes("auth-failed");
+  return msg.includes("-32004") || (
+    msg.includes("auth-failed") && !msg.includes("connection-disabled")
+  );
 }
 
 export async function fetchSessionDetail(

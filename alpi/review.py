@@ -150,11 +150,15 @@ def spawn_review(home: Path, cfg: cfg_mod.Config, messages: list[dict]) -> threa
     The caller need not (and should not) join the returned thread. It is
     handed back so tests can wait for completion deterministically."""
     snapshot = copy.deepcopy(messages)
+    from alpi.host.connection_context import current
+    parent_connection = current()
 
     def _worker() -> None:
         token = set_active_home(home)
         try:
-            _run_review(home, cfg, snapshot)
+            from alpi.host.connection_context import use
+            with use(parent_connection):
+                _run_review(home, cfg, snapshot)
         finally:
             reset_active_home(token)
 

@@ -354,7 +354,20 @@ async fn host_connection_add_remote(
     port: u16,
     token: String,
 ) -> Result<String, String> {
-    off_main(move || host_client::add_remote_connection(name, host, port, token)).await?
+    off_main(move || {
+        let id = host_client::add_remote_connection(name, host, port, token)?;
+        let device_name = std::env::var("HOSTNAME").unwrap_or_else(|_| "Desktop".into());
+        let _ = host_client::call_for(
+            &id,
+            "host.connections.register_device",
+            serde_json::json!({
+                "client": "desktop",
+                "name": device_name,
+                "app_version": env!("CARGO_PKG_VERSION"),
+            }),
+        );
+        Ok(id)
+    }).await?
 }
 
 fn spawn_background(name: &str, f: impl FnOnce() + Send + 'static) {
@@ -396,6 +409,7 @@ async fn host_connection_probe(id: String) -> String {
             host_client::ConnectionStatus::Online => "online",
             host_client::ConnectionStatus::Probing => "probing",
             host_client::ConnectionStatus::Offline => "offline",
+            host_client::ConnectionStatus::Disabled => "disabled",
             host_client::ConnectionStatus::AuthFailed => "auth-failed",
             host_client::ConnectionStatus::Unknown => "unknown",
         }
@@ -931,6 +945,92 @@ async fn devices_rename(
     .await
     .map_err(|e| format!("join: {e}"))??;
     Ok(())
+}
+
+fn connections_call(
+    connection_id: Option<&str>, method: &str, params: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    match connection_id {
+        Some(cid) => host_client::call_for(cid, method, params),
+        None => host_client::call(method, params),
+    }
+}
+
+#[tauri::command]
+async fn connections_summary(connection_id: Option<String>) -> Result<serde_json::Value, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        connections_call(connection_id.as_deref(), "host.connections.summary", serde_json::json!({}))
+    }).await.map_err(|e| format!("join: {e}"))?
+}
+
+#[tauri::command]
+async fn connections_create(
+    label: String, role: String, profiles: Vec<String>, connection_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    tauri::async_runtime::spawn_blocking(move || connections_call(
+        connection_id.as_deref(),
+        "host.connections.create",
+        serde_json::json!({"label": label, "role": role, "profiles": profiles}),
+    )).await.map_err(|e| format!("join: {e}"))?
+}
+
+#[tauri::command]
+async fn connections_add_device(
+    target_id: String, connection_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    tauri::async_runtime::spawn_blocking(move || connections_call(
+        connection_id.as_deref(),
+        "host.connections.add_device",
+        serde_json::json!({"connection_id": target_id}),
+    )).await.map_err(|e| format!("join: {e}"))?
+}
+
+#[tauri::command]
+async fn connections_update(
+    target_id: String, label: String, role: String, profiles: Vec<String>,
+    connection_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    tauri::async_runtime::spawn_blocking(move || connections_call(
+        connection_id.as_deref(),
+        "host.connections.update",
+        serde_json::json!({
+            "connection_id": target_id, "label": label,
+            "role": role, "profiles": profiles,
+        }),
+    )).await.map_err(|e| format!("join: {e}"))?
+}
+
+#[tauri::command]
+async fn connections_set_status(
+    target_id: String, status: String, connection_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    tauri::async_runtime::spawn_blocking(move || connections_call(
+        connection_id.as_deref(),
+        "host.connections.set_status",
+        serde_json::json!({"connection_id": target_id, "status": status}),
+    )).await.map_err(|e| format!("join: {e}"))?
+}
+
+#[tauri::command]
+async fn connections_delete(
+    target_id: String, connection_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    tauri::async_runtime::spawn_blocking(move || connections_call(
+        connection_id.as_deref(),
+        "host.connections.delete",
+        serde_json::json!({"connection_id": target_id}),
+    )).await.map_err(|e| format!("join: {e}"))?
+}
+
+#[tauri::command]
+async fn connections_revoke_device(
+    target_id: String, device_id: String, connection_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    tauri::async_runtime::spawn_blocking(move || connections_call(
+        connection_id.as_deref(),
+        "host.connections.revoke_device",
+        serde_json::json!({"connection_id": target_id, "device_id": device_id}),
+    )).await.map_err(|e| format!("join: {e}"))?
 }
 
 #[tauri::command]
@@ -3299,6 +3399,7 @@ pub fn run() {
                             host_client::ConnectionStatus::Online => "online",
                             host_client::ConnectionStatus::Probing => "probing",
                             host_client::ConnectionStatus::Offline => "offline",
+                            host_client::ConnectionStatus::Disabled => "disabled",
                             host_client::ConnectionStatus::AuthFailed => "auth-failed",
                             host_client::ConnectionStatus::Unknown => "unknown",
                         },
@@ -3430,6 +3531,13 @@ pub fn run() {
             devices_demote,
             devices_revoke,
             devices_rename,
+            connections_summary,
+            connections_create,
+            connections_add_device,
+            connections_update,
+            connections_set_status,
+            connections_delete,
+            connections_revoke_device,
             network_status,
             network_set_advertised,
             network_restart_host_server,

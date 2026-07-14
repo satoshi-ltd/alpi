@@ -87,6 +87,8 @@ export function ConnectionPanel({
                 ? "var(--c-success)"
                 : r.status === "offline"
                   ? "var(--c-danger)"
+                  : r.status === "disabled"
+                    ? "var(--ink-3)"
                   : "var(--c-warning)";
             const isLocal = r.kind === "local" || r.isLocal;
             return (
@@ -120,6 +122,7 @@ export function ConnectionPanel({
                         offline
                       </span>
                     )}
+                    {r.status === "disabled" && <span className="tag">disabled</span>}
                     {r.update_available && (
                       <span className={`tag ${styles.tagUpdate}`}>update</span>
                     )}

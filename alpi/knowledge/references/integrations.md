@@ -6,14 +6,14 @@ To let external code (a Node/Java service, CI step, script) talk to a
 profile or workgroup, the code becomes a **host-plane client** of a
 specific daemon — the same role the apps play. It dials the daemon over a
 WebSocket on the private network (Tailscale/LAN) and authenticates with a
-**device token**, calling the same `host.*` JSON-RPC methods. There is no
+device credential under a **connection**, calling the same `host.*` JSON-RPC methods. There is no
 public HTTP API and no cloud middleman. Use ALP only when you need a
 first-class peer identity (`@mention`, peer-level workgroup membership) or
 the network is untrusted.
 
 ## Routes
 
-| | Host-plane device token | ALP peer |
+| | Host-plane connection | ALP peer |
 |---|---|---|
 | Use when | trusted private net (Tailscale/LAN) | untrusted net, or first-class peer identity |
 | Transport | WebSocket + JSON-RPC, plain `ws://` | Noise_XK over TCP, signed Ed25519 envelopes |
@@ -29,16 +29,16 @@ Tailscale/LAN — it is not TLS. Never expose it publicly.
 1. **Listener (machine B).** Config keys: `host.tcp_port` (default 49200),
    `host.allow_public_bind` (default false — public IPs refused),
    `network.host` (advertised address; empty = auto-detect Tailscale then
-   LAN). Find the endpoint via `alpi setup` → Devices header
+   LAN). Find the endpoint via `alpi setup` → Connections header
    (e.g. `tailscale · 100.64.50.234:49200`).
-2. **Token (machine B).** `alpi setup` → Devices → Add device. Choose
+2. **Connection (machine B).** `alpi setup` → Connections → New connection. Choose
    **member** (not admin) and restrict `profile_scope` to the profile(s)
    it may reach. The full token is shown once (QR + `alpi://device?…`
    link). A member token scoped to one profile is blocked from every
    `_ADMIN_METHODS` method and gets scope-filtered responses/events.
 3. **Dial (machine A).** Open `ws://<ip>:<port>`. Every request carries
    `params.auth_token`. One WebSocket message = one JSON object.
-4. **Revoke.** `alpi setup` → Devices → Revoke, or `host.devices.revoke`
+4. **Revoke.** `alpi setup` → Connections → select the device, or `host.connections.revoke_device`
    (**admin-only** — a member token cannot revoke).
 
 ## host.chat.send (streaming; no non-streaming variant exists)

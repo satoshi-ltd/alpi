@@ -24,7 +24,7 @@ npm run expo:doctor        # npx expo-doctor
 
 Prerequisites on the alpi side:
 - `alpi daemon start` running.
-- Host-plane TCP listener enabled (`alpi setup → Services → Devices`).
+- Host-plane TCP listener enabled (`alpi setup → Connections → Network`).
 - A pairing QR (or `alpi://` URL) generated on the desktop / TUI.
 
 The QR / URL encodes daemon IP, TCP port, profile, and a device token.
@@ -39,7 +39,7 @@ multiple paired daemons.
   daemon and no other paired daemons remain.
 - **Multi-connection.** Persist many paired daemons; switch the active
   one from the `ConnectionSheet`. Per-connection probe status
-  (online / offline / auth-failed / probing).
+  (online / offline / disabled / auth-failed / probing).
 - **Inbox.** Profiles + workgroups sorted by recency (unread float to
   top), pinned strip up top, long-press for pin/settings actions,
   pull-to-refresh, FAB → ComposeSheet.
@@ -72,7 +72,7 @@ multiple paired daemons.
 - **Voice test button.** No `host.voice.test` verb. Desktop plays a
   sample via local Tauri command; mobile would need a daemon verb that
   streams synthesized audio.
-- **Devices section.** Self-pairing from mobile to add new devices —
+- **Connections section.** Self-pairing from mobile to add new devices —
   not typical, deferred.
 - **Web export.** `npx expo export --platform web` fails (no `react-dom`
   / `react-native-web`). Mobile is iOS + Android only.

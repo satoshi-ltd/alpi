@@ -64,6 +64,7 @@ def _blank(day: str) -> dict[str, Any]:
         "day": day,
         "profile": {"usd": 0.0, "tokens": 0},
         "by_peer": {},
+        "by_connection": {},
         "history": {},
     }
 
@@ -97,6 +98,8 @@ def _rollover(data: dict[str, Any], today: str) -> dict[str, Any]:
             "tokens_out": 0,
         }
     fresh = _blank(today)
+    if old_day and old_day != today and old_day in history:
+        history[old_day].setdefault("by_connection", data.get("by_connection") or {})
     fresh["history"] = _prune_history(history, today)
     return fresh
 
@@ -120,6 +123,7 @@ def load(home: Path) -> dict[str, Any]:
         return _rollover(data, today)
     data.setdefault("profile", {"usd": 0.0, "tokens": 0})
     data.setdefault("by_peer", {})
+    data.setdefault("by_connection", {})
     data.setdefault("history", {})
     return data
 
@@ -195,6 +199,8 @@ def record(
     if usd <= 0 and tokens <= 0:
         return
     peer_id = _peer_ctx.get() or INTERACTIVE_BUCKET
+    from alpi.host.connection_context import current
+    connection_id = current().connection_id
     with _lock:
         data = load(home)
         profile = data.setdefault("profile", {"usd": 0.0, "tokens": 0})
@@ -205,6 +211,15 @@ def record(
         bucket = buckets.setdefault(peer_id, {"usd": 0.0, "tokens": 0})
         bucket["usd"] = float(bucket.get("usd", 0)) + max(0.0, float(usd))
         bucket["tokens"] = int(bucket.get("tokens", 0)) + max(0, int(tokens))
+        connections = data.setdefault("by_connection", {})
+        connection = connections.setdefault(
+            connection_id,
+            {"usd": 0.0, "tokens": 0, "tokens_in": 0, "tokens_out": 0},
+        )
+        connection["usd"] = float(connection.get("usd", 0)) + max(0.0, float(usd))
+        connection["tokens"] = int(connection.get("tokens", 0)) + max(0, int(tokens))
+        connection["tokens_in"] = int(connection.get("tokens_in", 0)) + max(0, int(tokens_in))
+        connection["tokens_out"] = int(connection.get("tokens_out", 0)) + max(0, int(tokens_out))
         today = str(data.get("day"))
         history = data.setdefault("history", {})
         hentry = history.setdefault(
@@ -214,6 +229,8 @@ def record(
         hentry["tokens"] = int(profile["tokens"])
         hentry["tokens_in"] = int(hentry.get("tokens_in", 0)) + max(0, int(tokens_in))
         hentry["tokens_out"] = int(hentry.get("tokens_out", 0)) + max(0, int(tokens_out))
+        daily_connections = hentry.setdefault("by_connection", {})
+        daily_connections[connection_id] = dict(connection)
         data["history"] = _prune_history(history, today)
         save(home, data)
         after_usd = profile["usd"]

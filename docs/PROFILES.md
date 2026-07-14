@@ -41,7 +41,7 @@ Everything that represents state, identity, or cost:
 | `mentions/<sender>.json` | ✓ | Per-sender `@`-mention threads (capped at 20 turns). Receiving side only. |
 | `skills/` | ✓ | Installed skills (live under this profile's allowlist). |
 | `alp/` (peers.yaml, socket, keypair under `alp/secrets/`) | ✓ | ALP identity + pinned peers. Two profiles on the same machine are two distinct peers. The ALP private key lives here, NOT under `secrets/`. |
-| `host/attachments/tmp/` | ✓ | Staged chat-attachment uploads from the paired apps. Per profile — the rest of `host/` (`host.sock`, `devices.yaml`, `events.jsonl`, `device_id`) is root-only (see below). |
+| `host/attachments/tmp/` | ✓ | Staged chat-attachment uploads from the paired apps. Per profile — the rest of `host/` (`host.sock`, `connections.yaml`, `events.jsonl`, `device_id`) is root-only (see below). |
 | `run/bg/` | ✓ | Background-terminal state — one combined `alpi-bg-*.log` (stdout+stderr capture) and one `<pid>.meta` file (key=value pairs: `log=…`, `started=…`) per job spawned with `terminal(action="background")`. |
 | `schedule/jobs.json` | ✓ | Cron + one-shot jobs. Scheduled runs use `chat --once --no-save` and do not create chat sessions. Jobs flagged `no_agent: true` exec `prompt` as a `python [flags] <skill_script>` invocation directly, bypassing the LLM (allowlist restricts the script to `skills/<category>/<name>/scripts/`). |
 | `outputs/outputs.jsonl` | ✓ | Persistent inbox for proactive agent messages + schedule failures, capped at 500 rows. Surfaced by `host.outputs.*` to paired apps. |
@@ -60,7 +60,7 @@ Not isolated (shared globally by design):
 - Whisper model downloads (`~/.cache/huggingface/`).
 - Chromium for the `browser` tool (Playwright's own cache).
 - The user's shell, git config, workspace contents.
-- **Host-plane root state.** `~/.alpi/host/host.sock` (control-plane socket), `~/.alpi/host/devices.yaml` (pairing tokens), `~/.alpi/host/events.jsonl` (host event stream), and `~/.alpi/host/device_id` are root-only — ONE instance per installation, not duplicated per profile. The desktop / mobile client always pairs against the root and reaches sibling profiles via the `profile` parameter on each verb. Named profiles still get their own `host/attachments/tmp/` (uploaded chat attachments) — that IS per profile and appears in the table above.
+- **Host-plane root state.** `~/.alpi/host/host.sock` (control-plane socket), `~/.alpi/host/connections.yaml` (connection identities and device tokens), `~/.alpi/host/events.jsonl` (host event stream), and `~/.alpi/host/device_id` are root-only — ONE instance per installation, not duplicated per profile. The desktop / mobile client always pairs against the root and reaches sibling profiles via the `profile` parameter on each verb. Named profiles still get their own `host/attachments/tmp/` (uploaded chat attachments) — that IS per profile and appears in the table above.
 
 ## Creating and removing profiles
 
@@ -133,7 +133,7 @@ Good candidates for Git:
 Do not commit:
 
 - `.env`, `secrets/`, `alp/secrets/`, or any skill `secrets/`.
-- `host/devices.yaml` or host pairing state.
+- `host/connections.yaml`, `host/devices.yaml.migrated`, or host pairing state.
 - `sessions/`, `mentions/`, `outputs/`, `logs/`, `cache/`, `run/`.
 - `knowledge.sqlite` or other derived indexes.
 - sockets, PID files, temporary attachments, skill `state/`.

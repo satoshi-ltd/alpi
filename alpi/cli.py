@@ -168,6 +168,7 @@ def _hydrate_from_path(engine: Engine, path: Path, console=None) -> bool:
 
     if data.get("id"):
         engine.session.id = data["id"]
+    engine.session.connection_id = str(data.get("connection_id") or "host")
     engine.session.input_tokens = int(data.get("input_tokens", 0))
     engine.session.output_tokens = int(data.get("output_tokens", 0))
     engine.session.cost_usd = float(data.get("cost_usd", 0.0))
@@ -1535,7 +1536,7 @@ def setup_cmd(ctx: click.Context) -> None:
             ("Schedules", "schedules", _schedules_status(h)),
         ]
         if profile_name == "default":
-            items.append(("Devices", "devices", _devices_status(h)))
+            items.append(("Connections", "connections", _devices_status(h)))
         items += [
             ui.Heading("Maintenance"),
             ("Health check", "doctor", _doctor_status(h, profile_name)),
@@ -1595,7 +1596,7 @@ def setup_cmd(ctx: click.Context) -> None:
             from alpi.alp.workgroup_setup import run as wg_setup_run
 
             wg_setup_run(h)
-        elif choice == "devices":
+        elif choice == "connections":
             _devices_setup(h)
         elif choice == "doctor":
             _doctor_wizard(h, profile_name)
@@ -2089,50 +2090,97 @@ def _network_host_setup(h: Path) -> None:
 
 
 def _devices_status(h: Path) -> str:
-    from alpi.host import devices as devices_mod
+    from alpi.host import connections as connections_mod
     from alpi.host.network import resolve_host_endpoint
 
     if resolve_host_endpoint(h) is None:
         return "no network"
-    n = len(devices_mod.load())
+    n = len(connections_mod.list_connections())
     return f"{n} paired" if n else "ready"
 
 
 def _devices_setup(h: Path) -> None:
     from alpi import ui
-    from alpi.host import devices as devices_mod
+    from alpi.host import connections as connections_mod
     from alpi.host.network import resolve_host_endpoint
+    from alpi.host.usage import connections_summary
 
+    query = ""
     while True:
         endpoint = resolve_host_endpoint(h)
         items: list = [
-            ui.Heading("Paired devices"),
+            ui.Heading("Connections"),
         ]
-        rows = devices_mod.load()
+        rows = connections_mod.list_connections()
+        summary_by_id = {
+            row["id"]: row for row in connections_summary()["connections"]
+        }
         if not rows:
-            items.append(("(no devices yet)", "noop", ""))
+            items.append(("(no connections yet)", "noop", ""))
         else:
-            for d in rows:
-                tid = (d["token"] or "")[-8:]
-                last = _format_last_seen(d.get("last_seen"))
-                role = d.get("role") or "member"
-                items.append((d["label"] or tid, ("device", tid), f"{role} · {last}"))
+            ranked = []
+            for connection in rows:
+                public = connections_mod.public_connection(connection)
+                summary = summary_by_id.get(public["id"], {})
+                last_seen = summary.get("last_seen") or public.get("last_seen")
+                search_text = " ".join([
+                    public["label"],
+                    public["role"],
+                    public["status"],
+                    *[
+                        str(value)
+                        for device in public["devices"]
+                        for value in (
+                            device.get("name"), device.get("client"),
+                            device.get("app_version"), device.get("token_id"),
+                        )
+                        if value
+                    ],
+                ]).casefold()
+                if query and query.casefold() not in search_text:
+                    continue
+                ranked.append((int(last_seen or 0), public, summary))
+            ranked.sort(key=lambda item: (-item[0], item[1]["label"].casefold()))
+            shown = ranked[:20]
+            search_hint = (
+                f"{len(ranked)} matches · {query}"
+                if query else f"{len(rows)} total · showing {len(shown)} recent"
+            )
+            items.append(("Search connections…", "search", search_hint))
+            items.append(None)
+            for last_seen, public, summary in shown:
+                state = " · disabled" if public["status"] == "disabled" else ""
+                hint = (
+                    f"{public['role']}{state} · {len(public['devices'])} devices · "
+                    f"{int(summary.get('sessions') or 0)} sessions · "
+                    f"${float(summary.get('cost_14d') or 0):.2f} / 14d · "
+                    f"{_format_last_seen(last_seen)}"
+                )
+                items.append((public["label"], ("device", public["id"]), hint))
+            if not shown:
+                items.append(("(no matching connections)", "noop", ""))
 
         items.append(None)
-        items.append(("+ Add device", "add",
-                      "generate a new pairing QR"))
+        items.append(("+ New connection", "add", "label, access and first device"))
         items.append(("Network", "network",
                       _network_row_status(h, endpoint)))
 
         choice = ui.menu(
-            ui.crumb("setup", "devices"),
+            ui.crumb("setup", "connections"),
             items,
             subtitle=_devices_subtitle(h, endpoint),
             home=h,
             close="Done",
         )
-        if choice is None or choice == "noop":
+        if choice is None:
             return
+        if choice == "noop":
+            continue
+        if choice == "search":
+            value = ui.text("Search by connection or device:", default=query)
+            if value is not None:
+                query = value.strip()
+            continue
         if choice == "add":
             _device_add(h, endpoint)
             continue
@@ -2180,14 +2228,39 @@ def _format_last_seen(epoch) -> str:
     return f"{delta // 86400}d ago"
 
 
+def _connection_profile_scope(h: Path, current: list[str] | None = None) -> list[str] | None:
+    from alpi import home as home_mod
+    from alpi import ui
+
+    available = home_mod.list_profiles(h)
+    available_set = set(available)
+    while True:
+        ui.dim(
+            "Restrict this connection to a subset of profiles, or leave blank for\n"
+            f"all (available: {', '.join(available)})."
+        )
+        raw = ui.text(
+            "Profiles (comma-separated, blank = all):",
+            default=", ".join(current or []),
+        )
+        if raw is None:
+            return None
+        candidates = [name.strip() for name in raw.split(",") if name.strip()]
+        unknown = [name for name in candidates if name not in available_set]
+        if unknown:
+            ui.fail(f"unknown profile(s): {', '.join(unknown)}")
+            continue
+        return list(dict.fromkeys(candidates))
+
+
 def _device_add(h: Path, endpoint) -> None:
     from alpi import ui
-    from alpi.host import devices as devices_mod
+    from alpi.host import connections as connections_mod
     from alpi.host.network import resolve_host_pairing_name, resolve_host_tcp_port
 
     if endpoint is None:
         ui.banner(
-            ui.crumb("setup", "devices", "add"),
+            ui.crumb("setup", "connections", "new"),
             subtitle="cannot pair — no network",
             home=h,
         )
@@ -2209,46 +2282,30 @@ def _device_add(h: Path, endpoint) -> None:
     port = resolve_host_tcp_port(h)
 
     ui.banner(
-        ui.crumb("setup", "devices", "add"),
-        subtitle=f"pair a new client · {scope} · {host}:{port}",
+        ui.crumb("setup", "connections", "new"),
+        subtitle=f"create connection · {scope} · {host}:{port}",
         home=h,
     )
     ui._console.print("")
-    label = ui.text("Label (e.g. iPhone, MacBook):", default="")
+    label = ui.text("Label (e.g. Javi, Support):", default="")
     if label is None:
         return ui.cancelled()
 
     grant_admin = ui.confirm(
-        "Grant admin access? — can manage profiles, devices",
+        "Grant admin access? — can manage profiles and connections",
         default=False,
     )
     role = "admin" if grant_admin else "member"
 
     profile_scope: list[str] = []
     if role == "member":
-        from alpi import home as home_mod
-        available = home_mod.list_profiles(h)
-        available_set = set(available)
-        while True:
-            ui.dim(
-                "Restrict this device to a subset of profiles, or leave blank for\n"
-                f"all (available: {', '.join(available)})."
-            )
-            raw = ui.text(
-                "Profiles (comma-separated, blank = all):", default="",
-            )
-            if raw is None:
-                return ui.cancelled()
-            candidates = [p.strip() for p in raw.split(",") if p.strip()]
-            unknown = [p for p in candidates if p not in available_set]
-            if unknown:
-                ui.fail(f"unknown profile(s): {', '.join(unknown)}")
-                continue
-            profile_scope = list(dict.fromkeys(candidates))
-            break
+        selected = _connection_profile_scope(h)
+        if selected is None:
+            return ui.cancelled()
+        profile_scope = selected
 
-    row = devices_mod.add(
-        label=label or "device", role=role, profile_scope=profile_scope,
+    connection, device = connections_mod.create_connection(
+        label=label or "connection", role=role, profile_scope=profile_scope,
     )
 
     import io
@@ -2263,7 +2320,7 @@ def _device_add(h: Path, endpoint) -> None:
         "i": host,
         "p": port,
         "n": pairing_name,
-        "t": row["token"],
+        "t": device["token"],
     }
     link = "alpi://device?" + urlencode({
         "host": payload["i"],
@@ -2273,7 +2330,7 @@ def _device_add(h: Path, endpoint) -> None:
     })
 
     ui.banner(
-        ui.crumb("setup", "devices", "add", row["label"]),
+        ui.crumb("setup", "connections", "new", connection["label"]),
         subtitle=f"scan once · {scope} · {host}:{port}",
         home=h,
     )
@@ -2288,14 +2345,14 @@ def _device_add(h: Path, endpoint) -> None:
         buf = io.StringIO()
         qr.print_ascii(out=buf, invert=True)
     ui._console.print(buf.getvalue())
-    ui._console.print(f"[dim]label:    [/dim] {row['label']}")
-    ui._console.print(f"[dim]role:     [/dim] {row['role']}")
-    ui._console.print(f"[dim]token id:[/dim] …{row['token'][-8:]}")
+    ui._console.print(f"[dim]label:    [/dim] {connection['label']}")
+    ui._console.print(f"[dim]role:     [/dim] {connection['role']}")
+    ui._console.print(f"[dim]token id:[/dim] …{device['token'][-8:]}")
     ui._console.print(f"[dim]desktop:  [/dim] {link}")
     ui._console.print("")
     ui.dim(
         "Scan the QR from mobile or paste the desktop link into the desktop app.\n"
-        "The token is one-shot — only this device will be paired with it.\n"
+        "This pairing link adds the first device to the connection.\n"
         "If the QR or link is exposed to anyone else, revoke and generate a new one."
     )
     ui.press_enter()
@@ -2331,7 +2388,7 @@ def _devices_network_setup(h: Path) -> None:
         else "how mobile and desktop clients reach this machine"
     )
     ui.banner(
-        ui.crumb("setup", "devices", "network"),
+        ui.crumb("setup", "connections", "network"),
         subtitle=subtitle,
         home=h,
     )
@@ -2387,105 +2444,156 @@ def _devices_network_setup(h: Path) -> None:
     ui.ok_and_wait(f"remote access target: {target}:{port}, pairing name: {name_target}{msg}")
 
 
-def _device_detail(h: Path, token_id: str) -> None:
+def _device_detail(h: Path, connection_id: str) -> None:
     from alpi import ui
-    from alpi.host import devices as devices_mod
+    from alpi.host import connections as connections_mod
+    from alpi.host.network import resolve_host_endpoint
+    from alpi.host.usage import connections_summary
 
     while True:
-        rows = devices_mod.load()
-        target = next((d for d in rows if (d["token"] or "")[-8:] == token_id), None)
+        target = next(
+            (row for row in connections_mod.list_connections() if row["id"] == connection_id),
+            None,
+        )
         if target is None:
             return
-
-        current_role = target.get("role") or "member"
-        current_scope = target.get("profile_scope") or []
-        flip_label = "Demote to member" if current_role == "admin" else "Promote to admin"
-        flip_hint = (
-            "member can still chat, see events, post in workgroups"
-            if current_role == "admin"
-            else "admin unlocks profile/device management over WS"
+        public = connections_mod.public_connection(target)
+        summary = next(
+            (
+                row for row in connections_summary()["connections"]
+                if row["id"] == connection_id
+            ),
+            {},
         )
-        if current_role == "admin":
-            profiles_display = "all (admin bypass)"
-        else:
-            profiles_display = ", ".join(current_scope) if current_scope else "all"
-
-        entries = [
-            ("Label", "label", target["label"] or "(none)"),
-            ("Role", "noop", current_role),
+        scope = public.get("profile_scope") or []
+        profiles_display = "all" if public["role"] == "admin" or not scope else ", ".join(scope)
+        entries: list = [
+            ("Role", "noop", public["role"]),
             ("Profiles", "noop", profiles_display),
-            ("Token id", "noop", f"…{token_id}"),
-            ("Last seen", "noop", _format_last_seen(target.get("last_seen"))),
+            ("Status", "noop", public["status"]),
+            ("Last seen", "noop", _format_last_seen(public.get("last_seen"))),
+            ("Sessions", "noop", str(int(summary.get("sessions") or 0))),
+            (
+                "Usage (14 days)",
+                "noop",
+                f"${float(summary.get('cost_14d') or 0):.2f} · "
+                f"{int(summary.get('tokens_14d') or 0):,} tokens",
+            ),
+            None,
+            ui.Heading("Devices"),
+            *[
+                (
+                    device.get("name") or f"{device.get('client', 'unknown')} device",
+                    ("revoke_device", device["id"]),
+                    " · ".join(filter(None, (
+                        device.get("client", "unknown"),
+                        device.get("app_version"),
+                        _format_last_seen(device.get("last_seen")),
+                    ))),
+                )
+                for device in public["devices"]
+                if device.get("status") != "deleted"
+            ],
+            ("+ Add device", "add_device", "generate another pairing link"),
             None,
             ("Rename", "rename", ""),
         ]
-        if current_role == "member":
-            entries.append((
-                "Edit profiles", "scope",
-                "restrict access to a subset; blank = all",
-            ))
+        if public["role"] != "admin":
+            entries.append(("Edit profiles", "scope", "blank = all"))
         entries.extend([
-            (flip_label, "flip_role", flip_hint),
-            ("Revoke", "revoke", "the device will lose access immediately"),
+            ("Toggle role", "role", "admin / member"),
+            ("Enable" if public["status"] == "disabled" else "Disable", "status", "keeps sessions and usage"),
+            ("Delete", "delete", "revokes every linked device"),
         ])
-
         choice = ui.menu(
-            ui.crumb("setup", "devices", target["label"] or token_id),
+            ui.crumb("setup", "connections", public["label"]),
             entries,
-            subtitle="device detail",
+            subtitle="connection detail",
             home=None,
             close="Back",
         )
-        if choice is None or choice == "noop":
+        if choice is None:
             return
-        if choice == "label":
-            continue
         if choice == "rename":
-            new_label = ui.text("New label:", default=target["label"] or "")
-            if new_label is None:
+            label = ui.text("New label:", default=public["label"])
+            if label:
+                connections_mod.update_connection(connection_id, label=label)
+        elif choice == "add_device":
+            endpoint = resolve_host_endpoint(h)
+            if endpoint is None:
+                ui.fail("No advertised host is available.")
+                ui.press_enter()
                 continue
-            devices_mod.rename(target["token"], new_label)
-            continue
-        if choice == "scope":
-            from alpi import home as home_mod
-            available = home_mod.list_profiles(h)
-            ui.dim(
-                f"Available: {', '.join(available)}.\n"
-                "Comma-separated list; blank means all profiles.",
+            connection, device = connections_mod.add_device(connection_id)
+            _show_connection_pairing(h, endpoint, connection, device)
+        elif isinstance(choice, tuple) and choice[0] == "revoke_device":
+            device = next(
+                (row for row in public["devices"] if row["id"] == choice[1]),
+                None,
             )
-            raw = ui.text(
-                "Profiles:", default=", ".join(current_scope),
-            )
-            if raw is None:
-                continue
-            new_scope = [p.strip() for p in raw.split(",") if p.strip()]
-            devices_mod.set_profile_scope(target["token"], new_scope)
-            ui.ok_and_wait(
-                f"profiles updated to {', '.join(new_scope) or 'all'}",
-            )
-            continue
-        if choice == "flip_role":
-            new_role = "member" if current_role == "admin" else "admin"
-            if not ui.confirm(
-                f"Change {target['label'] or token_id} to {new_role}?",
+            if device and ui.confirm(
+                f"Revoke {device.get('name') or device.get('client') or 'device'}? "
+                "This device loses access immediately; other devices keep working.",
                 default=False,
             ):
-                continue
-            devices_mod.set_role(target["token"], new_role)
-            if new_role == "admin":
-                devices_mod.set_profile_scope(target["token"], [])
-            ui.ok_and_wait(f"role updated to {new_role}")
-            continue
-        if choice == "revoke":
-            if not ui.confirm(
-                f"Revoke {target['label'] or token_id}? "
-                "The paired device will fail next request.",
+                connections_mod.revoke_device(connection_id, choice[1])
+        elif choice == "scope" and public["role"] != "admin":
+            selected = _connection_profile_scope(h, scope)
+            if selected is not None:
+                connections_mod.update_connection(
+                    connection_id,
+                    profile_scope=selected,
+                )
+        elif choice == "role":
+            role = "member" if public["role"] == "admin" else "admin"
+            if ui.confirm(f"Change {public['label']} to {role}?", default=False):
+                connections_mod.update_connection(connection_id, role=role)
+        elif choice == "status":
+            status = "active" if public["status"] == "disabled" else "disabled"
+            if status == "active" or ui.confirm(
+                f"Disable {public['label']}? Its {len(public['devices'])} linked devices "
+                "will go offline. Sessions and usage remain.",
                 default=False,
             ):
-                continue
-            devices_mod.revoke(target["token"])
-            ui.ok_and_wait("revoked")
-            return
+                connections_mod.update_connection(connection_id, status=status)
+        elif choice == "delete":
+            if ui.confirm(f"Delete {public['label']} and revoke all devices?", default=False):
+                typed = ui.text(f"Type '{public['label']}' to confirm")
+                if (typed or "").strip() == public["label"]:
+                    connections_mod.delete_connection(connection_id)
+                    ui.ok_and_wait("connection deleted")
+                    return
+                ui.cancelled()
+
+
+def _show_connection_pairing(h: Path, endpoint, connection, device) -> None:
+    from alpi import ui
+    from alpi.host.network import resolve_host_pairing_name, resolve_host_tcp_port
+    import io
+    import json
+    from urllib.parse import urlencode
+    import qrcode
+
+    host, scope = endpoint
+    port = resolve_host_tcp_port(h)
+    name = resolve_host_pairing_name(h)
+    payload = {"i": host, "p": port, "n": name, "t": device["token"]}
+    link = "alpi://device?" + urlencode({
+        "host": host, "port": port, "name": name, "token": device["token"],
+    })
+    ui.banner(
+        ui.crumb("setup", "connections", connection["label"], "add device"),
+        subtitle=f"scan once · {scope} · {host}:{port}",
+        home=h,
+    )
+    qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_L, border=1)
+    qr.add_data(json.dumps(payload, separators=(",", ":")))
+    qr.make(fit=True)
+    buf = io.StringIO()
+    qr.print_ascii(out=buf, invert=True)
+    ui._console.print(buf.getvalue())
+    ui._console.print(f"[dim]desktop:[/dim] {link}")
+    ui.press_enter()
 
 
 def _workgroups_status(h: Path) -> str:

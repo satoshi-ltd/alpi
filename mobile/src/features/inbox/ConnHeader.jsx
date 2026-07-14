@@ -20,6 +20,8 @@ export function ConnHeader({
       ? colors.success
       : status === 'offline' || status === 'auth-failed'
         ? colors.danger
+        : status === 'disabled'
+          ? colors.ink3
         : colors.warning;
 
   return (

@@ -164,9 +164,10 @@ alpi/
 │   ├── handlers.py        read verbs (host.workgroup.transcript, host.sessions.*)
 │   ├── chat.py            host.chat.send (streaming) + host.chat.cancel
 │   ├── config.py          mutation verbs (host.providers.*, host.peers.*, host.profile.*, host.mcp.*, host.email.*, host.sandbox.*, host.voice.*)
-│   ├── devices.py         host.devices.* pairing-token lifecycle
+│   ├── connections.py     host.connections.* identities, device credentials and devices.yaml migration
+│   ├── connection_context.py request-scoped connection/device attribution
 │   ├── attachments_rpc.py host.attachments.{stage,fetch} — stage uploads in, fetch serves a tool-produced output attachment's bytes out (scoped to the profile's workspace/home/temp) so rich clients render images inline + other files as a metadata chip; text surfaces get a shared listing
-│   ├── network_rpc.py     host.network.{status,set_advertised,restart_host_server} — pairing endpoint query + override (parity with `alpi setup → devices → network`); scope classified by host character via network.classify_scope (tailscale / lan / custom / docker) so clients don't surface the "configured" resolution-path detail
+│   ├── network_rpc.py     host.network.{status,set_advertised,restart_host_server} — pairing endpoint query + override (parity with `alpi setup → Connections → Network`); scope classified by host character via network.classify_scope (tailscale / lan / custom / docker) so clients don't surface the "configured" resolution-path detail
 │   ├── probes.py          host.email.probe, host.peers.ping, host.model.ctx_window
 │   ├── schedule.py        host.schedule.{list,remove,set_paused,fire}
 │   ├── outputs.py         host.outputs.{list,read,mark_read,mark_all_read,delete}
@@ -555,7 +556,7 @@ Two transports, one dispatcher:
    open their own dedicated socket.
 
 Bind and advertised endpoint are intentionally separate concerns.
-The daemon chooses where the host-plane server listens; `Devices →
+The daemon chooses where the host-plane server listens; `Connections →
 Network` chooses what the paired client should dial. On a normal Mac or
 Linux install those often collapse to the same Tailscale or LAN address.
 In Docker they do not: the daemon binds `0.0.0.0` inside the container
@@ -571,7 +572,7 @@ Wire shape (both transports):
 
 Unix socket payload omits `auth_token` — the local transport is
 sovereign and bypasses token validation entirely. WS **always**
-requires a valid token; an empty or missing `devices.yaml` rejects
+requires a valid token; an empty or missing `connections.yaml` rejects
 every WS request (fail-closed). The first device is minted locally
 over the Unix socket; there is no remote bootstrap path.
 
@@ -579,27 +580,33 @@ The daemon writes either a single response line or, for streaming
 verbs (`host.chat.send`, `host.events.subscribe`), multiple frames
 followed by a `done` frame and connection close.
 
-This is distinct from ALP peer transport. `Devices` / host-plane remote
+This is distinct from ALP peer transport. `Connections` / host-plane remote
 access configures how paired desktop and mobile clients reach their own
 daemon (`host.*`). `Peer TCP listener` configures the optional ALP TCP
 listener other alpis use for `link.*` and `workgroup.*`.
 
-#### Pairing tokens (`alpi/host/devices.py`)
+#### Connections and device credentials (`alpi/host/connections.py`)
 
-Each remote device holds its own opaque token. The store lives at
-`~/.alpi/host/devices.yaml` (mode 0600) as a list of
-`{token, label, created, last_seen, role}`. `role` is `admin` or
-`member`; missing or unknown values collapse to `member` (least
-privilege). The daemon validates the token in `_check_token_role`
-(`alpi/host/server.py`); a hit also bumps `last_seen` so the user
-sees who's active and returns the role to the dispatcher.
+The store lives at `~/.alpi/host/connections.yaml` (mode 0600). A connection
+is the operational identity: `{id, label, role, profile_scope, status}`. Its
+`devices[]` each hold a separate opaque token plus self-reported client/name/
+version metadata and `last_seen`. Desktop and mobile may therefore share one
+connection, its sessions and accounting, without sharing a credential.
+
+The daemon resolves each token to `{connection_id, device_id, role,
+profile_scope}` and binds that identity to the request context. A hit bumps
+the device's `last_seen` at most once per minute. The engine persists
+`connection_id` on new sessions; session list, read, continue, cancel and
+delete reject sessions owned by another connection. The daily ledger records
+input/output tokens and USD under `by_connection`; the run ledger records both
+IDs. Local Unix/TUI/CLI activity uses the synthetic `host` connection.
 
 Three trust tiers gate every WS call:
 
 - **Unix socket** — sovereign. Used by the local CLI and the
   desktop running on the same machine; bypasses every role check.
-- **WS admin** — full app-level CRUD + device management
-  (`host.devices.generate / revoke / rename / promote / demote`).
+- **WS admin** — full app-level CRUD + connection/device management
+  (`host.connections.*`).
 - **WS member** — chat, events, read-only views, schedule listing,
   workgroup post/read, voice preview. Admin verbs reject with
   `-32001 forbidden / "admin role required"`.
@@ -608,31 +615,36 @@ The admin set lives in `_ADMIN_METHODS`; the strictly-local set
 in `_LOCAL_ONLY_METHODS` (network admin only — no role unlocks
 those over WS).
 
-Token lifecycle:
+Lifecycle:
 
-- **Generate**: `host.devices.generate(label?, role?)` returns a
-  fresh `secrets.token_urlsafe(24)` (192 bits, 32 chars). The
-  token is embedded in the QR shown by `alpi setup → Devices →
-  + Add device`. Mobile / desktop save it to their secure store.
-  Both the TUI and the desktop pair modal expose a **Grant admin
-  access** option; the default is `member`. Mobile UI gating for
-  member tokens is a separate follow-up — the daemon enforces
-  regardless.
-- **Promote / demote**: `host.devices.promote(token_id)` and
-  `host.devices.demote(token_id)` flip the role on an existing
-  device. Admin-only.
+- **Create connection**: `host.connections.create(label, role, profiles)`
+  creates the parent identity and its first credential. The token is embedded
+  in the QR/link shown by `alpi setup → Connections → New connection`. The
+  default role is `member`.
+- **Add device**: `host.connections.add_device(connection_id)` creates a new
+  credential under the same parent identity. The client calls
+  `host.connections.register_device` after pairing to record its type, name
+  and app version.
+- **Update / disable**: `host.connections.update` changes label, role or
+  profile scope. `host.connections.set_status` disables or enables every
+  linked credential without deleting sessions or usage.
 - **Use**: every WS request carries `auth_token`. Fail =
   JSON-RPC `{code: -32000, message: "auth-failed"}` and the
   connection closes; the mobile app's auth-failed handler wipes
   its endpoint and bounces back to the pair screen.
-- **Revoke**: `host.devices.revoke(token_id)` (last 8 chars of
-  the token). The TUI lists devices with `Last seen` and a
-  Revoke action; revoked devices fail the next request.
+- **Revoke / delete**: `host.connections.revoke_device` invalidates one
+  device. `host.connections.delete` tombstones the parent and clears every
+  linked token while retaining historical session/ledger attribution.
 
-`host.devices.list` redacts the full token to a `token_id` (last
-8 chars) so the TUI can show paired devices without leaking
-secrets. The full token only escapes the daemon once, at
-`generate` time, into the one-shot QR.
+On startup, when `connections.yaml` is absent and `devices.yaml` exists, each
+legacy device row is migrated to one connection with one device. Tokens,
+roles and profile scopes are preserved; the source becomes
+`devices.yaml.migrated`. No rows are merged because the old schema has no
+reliable grouping key. Sessions written before this contract lack an owner
+and remain under the synthetic `host` connection.
+
+`host.devices.*` remains as a compatibility RPC alias for older clients; all
+new management uses `host.connections.*`.
 
 Verb namespaces in current shape:
 
@@ -701,32 +713,20 @@ Verb namespaces in current shape:
   Tauri layer used to shell out to `alpi workgroup …` for these;
   v0.5 routes them through the host plane so mobile reuses the same
   contract.
-- **`host.devices.{list,generate,revoke,rename,promote,demote,set_profiles}`**
-  — pairing-token management for the WebSocket transport. `list`
-  redacts the full token to `token_id` (last 8 chars); `generate`
-  returns the fresh full token exactly once. Each device record
-  carries a `profile_scope: list[str]` — empty means unrestricted
-  (back-compat for devices paired before v0.6.28). `generate` accepts
-  an optional `profiles` param; `set_profiles` tightens/loosens scope
-  post-pairing without re-issuing the token. The server requires
+- **`host.connections.{list,create,add_device,update,set_status,delete,revoke_device,register_device,summary,usage_daily}`**
+  — connection/device management and 14-day aggregate usage for the
+  WebSocket transport. The server requires
   scoped members to pass `params.profile` explicitly on every
   profile-aware RPC (a small allowlist of profile-agnostic verbs is
   exempt) and returns `-32001 forbidden` if missing or out of scope;
-  admin role bypasses by design. `revoke` is idempotent — `{ok: true, existed:
-  <bool>}` instead of `-32004` when the token_id is already gone,
-  same rationale as `host.peers.remove`. `rename` / `promote` /
-  `demote` / `set_profiles` still raise `-32004` when the device is
-  missing — they mutate state of an existing row. List-style RPCs
+  admin role bypasses by design. `host.devices.*` aliases preserve the old
+  client contract during migration. List-style RPCs
   that aggregate across profiles (`host.profiles.list`,
   `host.profile.summaries`, `host.workgroups.list`,
   `host.approval.pending`, `host.clarification.pending`,
   `host.events.history`) are filtered to the device's scope before
   delivery; the event-subscribe stream drops out-of-scope frames
-  the same way. Same host with two distinct devices (e.g. one
-  scoped to `[work]`, one admin) is a supported topology — each
-  device gets its own pairing token, so the desktop / mobile
-  connection switcher sees them as independent connections
-  pointing at the same daemon.
+  the same way.
 - **`host.email.probe`**, **`host.peers.ping`**,
   **`host.model.ctx_window`** — diagnostic probes the desktop / TUI
   used to invoke via `alpi email probe`, `alpi peers ping`, and

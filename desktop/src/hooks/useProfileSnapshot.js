@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { subscribeDaemonEvent } from "../lib/daemon-bus.js";
 
-// Cache-first: a transient failure keeps the last snapshot; only auth-failed drops it.
+// Cache-first: transient failures keep the last snapshot; authentication failures drop it.
 const _cache = new Map();
 
 function makeKey(connectionId, profile) {
@@ -43,7 +43,10 @@ export function useProfileSnapshot(connectionId, profile, { sections = null } = 
       })
       .catch((e) => {
         const msg = String(e);
-        if (msg.includes("auth-failed")) { _cache.delete(key); setSnapshot(null); }
+        if (msg.includes("auth-failed") && !msg.includes("connection-disabled")) {
+          _cache.delete(key);
+          setSnapshot(null);
+        }
         setError(msg);
         return null;
       })

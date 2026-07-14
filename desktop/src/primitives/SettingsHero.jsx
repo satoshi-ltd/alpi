@@ -6,6 +6,8 @@ import {
   PauseIcon,
   PlayIcon,
   Tip,
+  Button,
+  GlobeIcon,
 } from "./index.js";
 import styles from "./SettingsHero.module.css";
 
@@ -18,13 +20,18 @@ export default function SettingsHero({
   onOpenChat,
   onTogglePause,
   paused = false,
+  onOpenConnections,
+  actions = null,
 }) {
   const isWg = kind === "workgroup";
+  const isConnections = kind === "connections";
   const trimmedBio = (bio || "").trim();
-  const glyph = isWg
-    ? <Hash size="md" />
-    : <Diamond color={accent} size="md" />;
-  const titleGlyph = !isWg && trimmedBio
+  const glyph = isConnections
+    ? <GlobeIcon />
+    : isWg
+      ? <Hash size="md" />
+      : <Diamond color={accent} size="md" />;
+  const titleGlyph = !isWg && !isConnections && trimmedBio
     ? <Tip text={trimmedBio} side="l" escape>{glyph}</Tip>
     : glyph;
   return (
@@ -39,12 +46,18 @@ export default function SettingsHero({
             {titleGlyph}
             <h1>{id}</h1>
             <span className="kicker">
-              {isWg ? "workgroup · settings" : "profile · settings"}
+              {isConnections
+                ? "host · settings"
+                : isWg ? "workgroup · settings" : "profile · settings"}
             </span>
           </div>
           {meta && <div className="meta-row">{meta}</div>}
         </div>
         <div className={`row ${styles.actions}`}>
+          {actions}
+          {onOpenConnections && (
+            <Button icon={<GlobeIcon />} onClick={onOpenConnections}>Connections</Button>
+          )}
           {isWg && onTogglePause && (
             <Tip text={paused ? "Resume workgroup" : "Pause workgroup"} side="r">
               <IconBtn

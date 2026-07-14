@@ -14,6 +14,7 @@ from alpi.tools import _state as S
 from alpi.tools.base import ToolResult
 from alpi.tools.delegate import Delegate
 from alpi.tools.research import MAX_PARALLEL_TASKS, Research
+from alpi.host.connection_context import ConnectionContext, current, use
 
 
 def test_research_rejects_missing_brief() -> None:
@@ -132,3 +133,28 @@ def test_delegate_batch_uses_per_task_emit(monkeypatch) -> None:
     # received verbatim.
     prefixes = {e.split(" ")[0] for e in emits}
     assert prefixes == {"[1/2]", "[2/2]"}
+
+
+def test_parallel_subagents_keep_connection_context(monkeypatch) -> None:
+    seen = []
+
+    def fake_research(self, brief, depth="normal"):
+        seen.append(("research", current().connection_id, current().device_id))
+        return ToolResult(ok=True, output=brief)
+
+    def fake_delegate(self, goal, context="", toolsets=None, tier="main"):
+        seen.append(("delegate", current().connection_id, current().device_id))
+        return ToolResult(ok=True, output=goal)
+
+    monkeypatch.setattr(Research, "_run_single", fake_research)
+    monkeypatch.setattr(Delegate, "_run_single", fake_delegate)
+    with use(ConnectionContext("conn_javi", "dev_phone", "remote")):
+        Research().run(tasks=[{"brief": "a"}, {"brief": "b"}])
+        Delegate().run(tasks=[{"goal": "a"}, {"goal": "b"}])
+
+    assert seen == [
+        ("research", "conn_javi", "dev_phone"),
+        ("research", "conn_javi", "dev_phone"),
+        ("delegate", "conn_javi", "dev_phone"),
+        ("delegate", "conn_javi", "dev_phone"),
+    ]

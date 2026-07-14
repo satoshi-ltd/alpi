@@ -208,6 +208,8 @@ class Delegate(Tool):
         parent_emit = tool_state_mod.get_emit()
         parent_interrupt = tool_state_mod.get_interrupt_getter()
         parent_usage = tool_state_mod.get_usage_sink()
+        from alpi.host.connection_context import current
+        parent_connection = current()
         total = len(tasks)
 
         def _worker(idx: int, task: dict) -> ToolResult:
@@ -223,12 +225,14 @@ class Delegate(Tool):
                     _outer(f"{_p} {_tag} · {msg}", error)
 
             tool_state_mod.set_emit(_prefixed)
-            return self._run_single(
-                task["goal"],
-                task.get("context", ""),
-                task.get("toolsets"),
-                task.get("tier", "main"),
-            )
+            from alpi.host.connection_context import use
+            with use(parent_connection):
+                return self._run_single(
+                    task["goal"],
+                    task.get("context", ""),
+                    task.get("toolsets"),
+                    task.get("tier", "main"),
+                )
 
         with ThreadPoolExecutor(max_workers=min(MAX_PARALLEL_TASKS, total)) as ex:
             results = list(ex.map(

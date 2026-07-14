@@ -57,6 +57,9 @@ class RunRecord:
     output_tail: str | None = None
     model: str | None = None
     routing: str | None = None
+    connection_id: str = "host"
+    device_id: str | None = None
+    source: str = "host"
 
 
 def store_path(home: Path) -> Path:
@@ -101,6 +104,8 @@ def record(
 ) -> None:
     # Best-effort: coercions are inside the try so a malformed caller value can't escape.
     try:
+        from alpi.host.connection_context import current
+        connection = current()
         rec = RunRecord(
             at=float(at if at is not None else time.time()),
             kind=kind if kind in KINDS else "agent",
@@ -120,6 +125,9 @@ def record(
             output_tail=_clamp_tail(output_tail),
             model=model or None,
             routing=routing or None,
+            connection_id=connection.connection_id,
+            device_id=connection.device_id,
+            source=connection.source,
         )
         path = store_path(home)
         with _lock, _interproc_lock(path):

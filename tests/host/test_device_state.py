@@ -71,6 +71,26 @@ async def test_host_version_returns_alpi_runtime(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_host_version_reports_member_for_an_invalid_presented_token(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    from alpi.host import connections
+
+    monkeypatch.setattr(host_device_state.home_mod, "_ROOT", tmp_path)
+    connections.invalidate_cache()
+    srv = host_server.Server(home=tmp_path)
+    host_device_state.register(srv)
+
+    resp = await srv._dispatch({
+        "id": "v",
+        "method": "host.version",
+        "params": {"auth_token": "invalid-token"},
+    })
+
+    assert resp["result"]["role"] == "member"
+
+
+@pytest.mark.asyncio
 async def test_host_version_device_id_is_stable_across_calls(tmp_path: Path) -> None:
     srv = host_server.Server(home=tmp_path)
     host_device_state.register(srv)

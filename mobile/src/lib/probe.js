@@ -1,9 +1,23 @@
-// Status set: 'online' | 'offline' | 'auth-failed' | 'probing' | 'unknown'.
+// Status set: 'online' | 'offline' | 'disabled' | 'auth-failed' | 'probing' | 'unknown'.
 
+import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 import { AUTH_FAILED, RpcError, call } from './rpc';
 
 const PROBE_TIMEOUT_MS = 3500;
 const VERSION_TIMEOUT_MS = 2000;
+const registeredMetadata = new Set();
+
+function registerMetadata(endpoint) {
+  const key = `${endpoint.ip}:${endpoint.port}:${endpoint.token}`;
+  if (registeredMetadata.has(key)) return;
+  registeredMetadata.add(key);
+  call(endpoint, 'host.connections.register_device', {
+    client: 'mobile',
+    name: Platform.constants?.Model || Platform.OS,
+    app_version: Constants.expoConfig?.version || '',
+  }, { timeoutMs: VERSION_TIMEOUT_MS }).catch(() => registeredMetadata.delete(key));
+}
 
 export async function probe(endpoint) {
   if (!endpoint) return { status: 'unknown', version: null, updateAvailable: null, deviceName: null, deviceId: null, role: null, summaries: null };
@@ -29,12 +43,16 @@ export async function probe(endpoint) {
       if (res && typeof res.role === 'string' && res.role.trim()) {
         role = res.role.trim();
       }
+      registerMetadata(endpoint);
     } catch {
       // version is non-fatal
     }
     return { status: 'online', version, updateAvailable, deviceName, deviceId, role, summaries };
   } catch (e) {
     if (e instanceof RpcError && e.code === AUTH_FAILED) {
+      if (e.data?.reason === 'connection-disabled') {
+        return { status: 'disabled', version: null, updateAvailable: null, deviceName: null, deviceId: null, role: null, summaries: null };
+      }
       return { status: 'auth-failed', version: null, updateAvailable: null, deviceName: null, deviceId: null, role: null, summaries: null };
     }
     return { status: 'offline', version: null, updateAvailable: null, deviceName: null, deviceId: null, role: null, summaries: null };

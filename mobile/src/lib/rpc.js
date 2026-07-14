@@ -17,7 +17,9 @@ export function setAuthFailedHandler(cb) {
 // Handler scopes recovery to the failing endpoint — never unpair globally.
 function maybeAuthFailed(err, endpoint, method) {
   if (err?.code === AUTH_FAILED && err?.message === 'auth-failed') {
-    try { _authFailedHandler?.({ endpoint, method }); } catch { /* */ }
+    try {
+      _authFailedHandler?.({ endpoint, method, reason: err?.data?.reason ?? null });
+    } catch { /* */ }
   }
 }
 
@@ -98,7 +100,6 @@ function ensureEntry(endpoint) {
     if (body.error) {
       const err = new RpcError(body.error.code, body.error.message, body.error.data);
       maybeAuthFailed(err, slot.endpoint, slot.method);
-      // auth-failed invalidates the token; drop the whole pool so the next call reconnects.
       if (err.code === AUTH_FAILED) {
         dropEntry(key, err);
         return;

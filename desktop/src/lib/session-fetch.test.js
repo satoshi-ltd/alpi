@@ -45,6 +45,7 @@ describe("isSessionGone", () => {
   it("flags deleted sessions and dead tokens, never transient or method errors", () => {
     expect(isSessionGone("alp -32004: not-found — no session 's1'")).toBe(true);
     expect(isSessionGone("alp -32000: auth-failed")).toBe(true);
+    expect(isSessionGone("alp -32000: auth-failed — connection-disabled")).toBe(false);
     expect(isSessionGone("websocket read: Resource temporarily unavailable")).toBe(false);
     expect(isSessionGone("alp -32601: method-not-found")).toBe(false);
     expect(isSessionGone("connect ws://10.0.0.2:49200: refused")).toBe(false);

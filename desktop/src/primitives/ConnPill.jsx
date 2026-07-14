@@ -5,6 +5,7 @@ const STATUS_COLORS = {
   online: "var(--c-success)",
   connected: "var(--c-success)",
   offline: "var(--c-danger)",
+  disabled: "var(--ink-3)",
   "auth-failed": "var(--c-warning)",
   probing: "var(--c-warning)",
   unknown: "var(--ink-3)",
@@ -18,13 +19,16 @@ export default function ConnPill({
   onClick,
   tipText = "Switch connection",
 }) {
+  const isDisabled = status === "disabled";
   const isOffline = status === "offline" || status === "auth-failed";
   const isProbing = status === "probing";
   const statusColor = STATUS_COLORS[status] || STATUS_COLORS.unknown;
   return (
     <Tip
       text={
-        isOffline
+        isDisabled
+          ? "Connection disabled by host"
+          : isOffline
           ? "Daemon offline — click to retry"
           : isProbing
             ? "Connecting…"
@@ -53,7 +57,13 @@ export default function ConnPill({
                   : styles.host
             }`}
           >
-            {isOffline ? "offline · retrying…" : isProbing ? "connecting…" : host}
+            {isDisabled
+              ? "disabled"
+              : isOffline
+                ? "offline · retrying…"
+                : isProbing
+                  ? "connecting…"
+                  : host}
           </span>
         </span>
         <ChevDownIcon className={styles.chev} />

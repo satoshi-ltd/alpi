@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.10.29 — 2026-07-14 — one connection, multiple devices
+
+- **Connections replace the flat paired-device list.** One label, role and
+  profile scope can now hold separate desktop/mobile credentials; each device
+  can be added or revoked without affecting the others. Existing
+  `devices.yaml` installs migrate automatically with every token preserved.
+- **Chat history and accounting belong to the connection that created them.**
+  Session explorers are isolated per connection, while daily input/output
+  tokens and cost are available as a 14-day connection breakdown. Local CLI,
+  TUI and Unix-socket activity remains grouped under `host`.
+- Sessions created before this upgrade have no connection identity and remain
+  available locally under `host`; remote connection explorers only show new
+  sessions created through that connection.
+- **Full console management in `alpi setup → Connections`**: create, rename,
+  scope, enable/disable or delete a connection, add/revoke individual devices,
+  and inspect sessions plus 14-day usage.
+
 ## v0.10.28 — 2026-07-13 — generated files get a real lifecycle
 
 - **`out/` is now the standard home for chat-delivered artifacts** (generated

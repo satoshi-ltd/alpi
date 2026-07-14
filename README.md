@@ -167,9 +167,10 @@ hub-anchored workgroups.
 
 **Host plane** is separate from ALP. It is the device-facing control
 surface used by paired desktop and mobile clients to talk to their own
-daemon (`host.*` over a local Unix socket or remote WebSocket). `Devices`
-configures that companion endpoint; `Peer TCP listener` configures ALP
-peer traffic.
+daemon (`host.*` over a local Unix socket or remote WebSocket). `Connections`
+groups one operational identity, its profile access, sessions and usage with
+one or more independently revocable device credentials. `Peer TCP listener`
+configures ALP peer traffic.
 
 ## Security posture
 

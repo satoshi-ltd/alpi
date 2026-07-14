@@ -163,7 +163,9 @@ export function useHostConnections({
     const status = active?.status;
     if (status !== "online") {
       showCachedOrClear(activeId, status);
-      if (status === "offline" || status === "auth-failed") setConnectionSyncing(false);
+      if (status === "offline" || status === "disabled" || status === "auth-failed") {
+        setConnectionSyncing(false);
+      }
       reloadConnections();
       return;
     }
@@ -277,7 +279,7 @@ export function useHostConnections({
     } else if (status === "auth-failed") {
       setConnectionSyncing(false);
       reloadConnections().finally(() => clearConnectionContent());
-    } else if (status === "offline") {
+    } else if (status === "offline" || status === "disabled") {
       setConnectionSyncing(false);
       reloadConnections().finally(() => loadFromCache(hostConnectionsRef.current.active_id));
     }
@@ -288,7 +290,7 @@ export function useHostConnections({
     invoke("host_connections_probe_active").catch(() => {});
   }, [reload, reloadConnections]);
 
-  // Offline has no liveness stream to recover on, so re-probe until the daemon returns (makes the pill's "retrying…" real); auth-failed is excluded — a revoked token won't fix itself.
+  // Offline has no liveness stream to recover on; terminal authentication states wait for user or host action.
   useEffect(() => {
     const status = activeConnectionForSync?.status;
     if (status !== "offline" && status !== "unknown") return undefined;
@@ -339,7 +341,7 @@ export function useHostConnections({
               if (connectionSwitchRef.current !== switchId) return;
               if (status === "online") {
                 reloadConnections().finally(() => reload());
-              } else if (status === "offline" || status === "auth-failed") {
+              } else if (status === "offline" || status === "disabled" || status === "auth-failed") {
                 setConnectionSyncing(false);
               }
             })

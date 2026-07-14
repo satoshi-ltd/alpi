@@ -2,7 +2,14 @@ import { useEffect, useMemo } from "react";
 import ProfileDetail from "../features/settings/ProfileDetail.jsx";
 import WorkgroupDetail from "../features/settings/WorkgroupDetail.jsx";
 import RefreshBar from "../primitives/RefreshBar.jsx";
+import ConnectionsPage from "../features/settings/ConnectionsPage.jsx";
 import styles from "../features/settings/Settings.module.css";
+
+export function canOpenConnections(activeConnection, profileName) {
+  return profileName === "default" && (
+    activeConnection?.kind === "local" || activeConnection?.role === "admin"
+  );
+}
 
 export default function Settings({
   profiles,
@@ -16,8 +23,13 @@ export default function Settings({
   onDeleteProfile,
   onOpenChat,
   onOpenSchedule,
+  onOpenConnections,
+  onCloseConnections,
 }) {
   const setTarget = onSelectTarget ?? (() => {});
+  const canManageConnections = (
+    activeConnection?.kind === "local" || activeConnection?.role === "admin"
+  );
 
   const selectedProfile = useMemo(() => {
     if (target?.kind !== "profile") return null;
@@ -53,6 +65,11 @@ export default function Settings({
           onNavigate={setTarget}
           onOpenChat={onOpenChat}
           onOpenSchedule={onOpenSchedule}
+          onOpenConnections={
+            canOpenConnections(activeConnection, selectedProfile.name)
+              ? onOpenConnections
+              : undefined
+          }
         />
       )}
       {selectedWorkgroup && (
@@ -66,7 +83,17 @@ export default function Settings({
           onOpenChat={onOpenChat}
         />
       )}
-      {!selectedProfile && !selectedWorkgroup && (
+      {target?.kind === "connections" && canManageConnections && (
+        <ConnectionsPage
+          profiles={profiles}
+          activeConnection={activeConnection}
+          onBack={onCloseConnections}
+        />
+      )}
+      {target?.kind === "connections" && !canManageConnections && (
+        <div className={styles.empty}>Admin access required</div>
+      )}
+      {!selectedProfile && !selectedWorkgroup && target?.kind !== "connections" && (
         <div className={styles.empty}>
           {connectionSyncing && target?.id ? (
             <>

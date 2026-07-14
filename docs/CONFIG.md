@@ -510,8 +510,8 @@ network:
   host: ""        # empty = auto-detect Tailscale → LAN
 ```
 
-Set it via `alpi setup → Network → Accessible address` or the desktop app
-(`Devices → pairing`). Ports stay per-plane (`host.tcp_port`, `alp.tcp_port`).
+Set it via `alpi setup → Connections → Network` or the desktop app
+(`Connections → Network`). Ports stay per-plane (`host.tcp_port`, `alp.tcp_port`).
 A public IP is `config.yaml`-only: the desktop rejects it, and it also requires
 `host.allow_public_bind: true` — set both keys by hand.
 
@@ -670,11 +670,17 @@ opted-in public IP binds `0.0.0.0`, and a public IP without
 via `ALPI_NETWORK_HOST` — a LAN IP, a `100.x` Tailscale IP, or a MagicDNS
 hostname (see `docker/README.md`).
 
-Pairing tokens for the WS transport live at
-``~/.alpi/host/devices.yaml`` (mode 0600). Manage them through
-``alpi setup → Devices`` — generate, label, revoke. The full token
-appears once inside the pairing QR; the listing redacts to a
-`token_id` (last 8 chars).
+Connection identities and per-device WS credentials live at
+``~/.alpi/host/connections.yaml`` (mode 0600). Manage them through
+``alpi setup → Connections``. A connection owns its label, role and profile
+scope; every linked desktop/mobile device receives a different token and can
+be revoked independently. The full token appears only in its pairing QR/link.
+
+On first startup after upgrading, an existing ``devices.yaml`` is migrated
+automatically. Every legacy row becomes one connection with one device, its
+token and access preserved, and the source is renamed to
+``devices.yaml.migrated``. The old schema has no grouping key, so migration
+cannot safely merge rows that may belong to the same person or workload.
 
 ## Takes-effect cheat sheet
 

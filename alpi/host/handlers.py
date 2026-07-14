@@ -84,7 +84,12 @@ async def _sessions_list(
     limit_raw = (params or {}).get("limit")
     limit = int(limit_raw) if limit_raw is not None else None
     home = _resolve_home(profile)
-    sessions = await asyncio.to_thread(host_sessions.list_sessions, home, limit)
+    from alpi.host.connection_context import current
+    connection_id = current().connection_id
+    sessions = await asyncio.to_thread(host_sessions.list_sessions, home, None)
+    sessions = [row for row in sessions if row.get("connection_id") == connection_id]
+    if limit is not None and limit > 0:
+        sessions = sessions[:limit]
     return {"sessions": sessions}
 
 
@@ -101,6 +106,13 @@ async def _session_read(
     session_id = str((params or {}).get("id") or "").strip()
     _check_id(session_id, "id")
     home = _resolve_home(profile)
+    from alpi.host.connection_context import current
+    try:
+        owner = await asyncio.to_thread(host_sessions.session_connection_id, home, session_id)
+    except FileNotFoundError as e:
+        raise host_server.HandlerError(-32004, "not-found", data={"detail": str(e)})
+    if owner != current().connection_id:
+        raise host_server.HandlerError(-32004, "not-found", data={"detail": "session not found"})
     after_turn = _coerce_count((params or {}).get("after_turn"))
     tail_turns = _coerce_count((params or {}).get("tail_turns"))
     before_turn = _coerce_count((params or {}).get("before_turn"))
@@ -158,6 +170,8 @@ async def _sessions_delete(
             data={"detail": f"too many ids (max {_MAX_DELETE_IDS})"},
         )
     home = _resolve_home(profile)
+    from alpi.host.connection_context import current
+    connection_id = current().connection_id
     deleted: list[str] = []
     errors: list[dict[str, str]] = []
     for raw in raw_ids:
@@ -167,6 +181,14 @@ async def _sessions_delete(
             continue
         if host_chat.session_key(profile, sid) in host_chat._session_active:
             errors.append({"id": sid, "code": "session-busy"})
+            continue
+        try:
+            owner = await asyncio.to_thread(host_sessions.session_connection_id, home, sid)
+        except FileNotFoundError:
+            errors.append({"id": sid, "code": "not-found"})
+            continue
+        if owner != connection_id:
+            errors.append({"id": sid, "code": "not-found"})
             continue
         existed = await asyncio.to_thread(host_sessions.delete_session, home, sid)
         if existed:

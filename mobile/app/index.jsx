@@ -51,7 +51,11 @@ export default function Inbox() {
   const daemonStatus = endpoint ? probeState.get(endpoint.id) ?? 'unknown' : 'offline';
 
   const activeFailed =
-    !!endpoint && (daemonStatus === 'offline' || daemonStatus === 'auth-failed');
+    !!endpoint && (
+      daemonStatus === 'offline' ||
+      daemonStatus === 'disabled' ||
+      daemonStatus === 'auth-failed'
+    );
   useFireOnce(activeFailed, () => setSheet('conn'));
 
   const enriched = useMemo(() => {
@@ -176,6 +180,10 @@ export default function Inbox() {
       {daemonStatus === 'offline' && endpoint ? (
         <Banner kind="danger" action="Retry" onAction={onRefresh}>
           Daemon unreachable. Reconnecting…
+        </Banner>
+      ) : daemonStatus === 'disabled' && endpoint ? (
+        <Banner kind="warning">
+          Connection disabled by host. Ask an admin to enable it in Settings → Connections.
         </Banner>
       ) : null}
       <PinnedRow items={pinned} onPress={openItem} onLongPress={setCtxTarget} />

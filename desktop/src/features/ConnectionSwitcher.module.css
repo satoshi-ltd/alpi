@@ -104,6 +104,10 @@
   background: var(--c-danger);
 }
 
+.statusBadge[data-status="disabled"] {
+  background: var(--ink-3);
+}
+
 .statusBadge[data-status="auth-failed"] {
   background: var(--c-warning);
 }

@@ -47,14 +47,30 @@ SplashScreen.preventAutoHideAsync().catch(() => { /* */ });
 function AuthFailedBridge() {
   const router = useRouter();
   const toast = useToast();
-  const { activeId, forget, connections } = useEndpoint();
-  const stateRef = useRef({ activeId, forget, connections });
-  useEffect(() => { stateRef.current = { activeId, forget, connections }; }, [activeId, forget, connections]);
+  const { activeId, forget, connections, markConnectionStatus } = useEndpoint();
+  const stateRef = useRef({ activeId, forget, connections, markConnectionStatus });
   useEffect(() => {
-    setAuthFailedHandler(async ({ endpoint } = {}) => {
-      const { activeId: active, forget: forgetFn, connections: list } = stateRef.current;
+    stateRef.current = { activeId, forget, connections, markConnectionStatus };
+  }, [activeId, forget, connections, markConnectionStatus]);
+  useEffect(() => {
+    setAuthFailedHandler(async ({ endpoint, reason } = {}) => {
+      const {
+        activeId: active,
+        forget: forgetFn,
+        connections: list,
+        markConnectionStatus: markStatus,
+      } = stateRef.current;
       const failedId = endpoint?.id;
       if (!failedId) return;
+      if (reason === 'connection-disabled') {
+        markStatus?.(failedId, 'disabled');
+        toast({
+          title: 'Connection disabled',
+          message: 'Ask an admin to enable it in Settings → Connections',
+          duration: 3200,
+        });
+        return;
+      }
       try { await forgetFn?.(failedId); } catch { /* */ }
       const wasActive = active === failedId;
       const remaining = (list ?? []).filter((c) => c.id !== failedId);

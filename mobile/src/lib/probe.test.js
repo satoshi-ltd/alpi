@@ -3,9 +3,10 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 const mockCall = vi.fn();
 const AUTH_FAILED = -32099;
 class RpcError extends Error {
-  constructor(code) {
+  constructor(code, data = null) {
     super(`rpc:${code}`);
     this.code = code;
+    this.data = data;
   }
 }
 
@@ -13,6 +14,9 @@ vi.mock('./rpc', () => ({
   call: (...args) => mockCall(...args),
   AUTH_FAILED,
   RpcError,
+}));
+vi.mock('expo-constants', () => ({
+  default: { expoConfig: { version: '0.2.15' } },
 }));
 
 beforeEach(() => {
@@ -28,6 +32,13 @@ describe('probe', () => {
     const result = await probe({ ip: '100.64.0.1', port: 49200, token: 't' });
     expect(result).toEqual({ status: 'online', version: '0.6.6', updateAvailable: null, deviceName: 'Macbook.Pro', deviceId: 'mac-uuid', role: null, summaries: {} });
     expect(result === 'online').toBe(false);
+    expect(mockCall).toHaveBeenNthCalledWith(
+      3,
+      expect.any(Object),
+      'host.connections.register_device',
+      expect.objectContaining({ client: 'mobile', app_version: '0.2.15' }),
+      { timeoutMs: 2000 },
+    );
   });
 
   it('treats blank/whitespace device_name + device_id as null so the pairing flow rejects on missing daemon identity', async () => {
@@ -51,6 +62,13 @@ describe('probe', () => {
     mockCall.mockRejectedValueOnce(new RpcError(AUTH_FAILED));
     const result = await probe({ ip: '100.64.0.1', port: 49200, token: 't' });
     expect(result).toEqual({ status: 'auth-failed', version: null, updateAvailable: null, deviceName: null, deviceId: null, role: null, summaries: null });
+  });
+
+  it('marks disabled when the host has paused the connection', async () => {
+    const { probe } = await import('./probe');
+    mockCall.mockRejectedValueOnce(new RpcError(AUTH_FAILED, { reason: 'connection-disabled' }));
+    const result = await probe({ ip: '100.64.0.1', port: 49200, token: 't' });
+    expect(result).toEqual({ status: 'disabled', version: null, updateAvailable: null, deviceName: null, deviceId: null, role: null, summaries: null });
   });
 
   it('online with null deviceId when host.version transiently fails — pairing layer surfaces the missing-identity error', async () => {

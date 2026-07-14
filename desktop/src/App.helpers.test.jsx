@@ -1,5 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { isChatSessionData } from "./App.jsx";
+import {
+  connectionFailureMessage,
+  isChatSessionData,
+  settingsTargetAfterExit,
+  settingsTargetForChatView,
+} from "./App.jsx";
+
+describe("connectionFailureMessage", () => {
+  it("distinguishes a disabled connection from a rejected token", () => {
+    expect(connectionFailureMessage({ name: "office", status: "disabled" })).toBe(
+      "office — connection disabled by host. Ask an admin to enable it in Settings → Connections.",
+    );
+    expect(connectionFailureMessage({ name: "office", status: "auth-failed" })).toBe(
+      "office — token rejected. Re-pair device from Settings.",
+    );
+  });
+});
 
 describe("isChatSessionData", () => {
   it("trusts the daemon kind when present", () => {
@@ -20,5 +36,40 @@ describe("isChatSessionData", () => {
     expect(isChatSessionData({ turns: [{ user: "[SCHEDULED: daily] go" }] })).toBe(false);
     expect(isChatSessionData({ turns: [{ user: "hola" }] })).toBe(true);
     expect(isChatSessionData({ turns: [] })).toBe(true);
+  });
+});
+
+describe("settingsTargetAfterExit", () => {
+  it("restores the previous settings target after leaving connections", () => {
+    const previous = { kind: "profile", id: "default" };
+
+    expect(settingsTargetAfterExit({ kind: "connections" }, previous)).toEqual(previous);
+    expect(settingsTargetAfterExit({ kind: "connections" }, null)).toEqual({
+      kind: "profile",
+      id: null,
+    });
+  });
+
+  it("preserves normal settings targets", () => {
+    const target = { kind: "profile", id: "atlas" };
+
+    expect(settingsTargetAfterExit(target, null)).toBe(target);
+  });
+});
+
+describe("settingsTargetForChatView", () => {
+  it("derives settings from the current chat instead of the previous settings panel", () => {
+    expect(settingsTargetForChatView({ kind: "profile", profile: "atlas" })).toEqual({
+      kind: "profile",
+      id: "atlas",
+    });
+    expect(settingsTargetForChatView({ kind: "workgroup", id: "build" })).toEqual({
+      kind: "workgroup",
+      id: "build",
+    });
+    expect(settingsTargetForChatView({ kind: "empty" }, "default")).toEqual({
+      kind: "profile",
+      id: "default",
+    });
   });
 });

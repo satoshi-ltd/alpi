@@ -14,6 +14,16 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.2.15 — 2026-07-14 — devices identify themselves
+
+- Pairing now registers the phone model and app version as its own credential
+  under the selected connection, so it appears separately and can be revoked
+  without disconnecting the connection's other devices.
+- A connection disabled by its host stays paired and is shown as disabled;
+  only an invalid or revoked token asks you to pair again.
+
+_Requires alpi v0.10.29+ for connection/device management._
+
 ## v0.2.14 — 2026-07-14 — large documents download reliably
 
 - Sharing or viewing a generated file no longer times out on slow

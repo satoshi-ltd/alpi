@@ -170,7 +170,9 @@ describe("useAllOutputs cold-start discipline (per-connection)", () => {
     expect(calls).toEqual(["c1"]);
   });
 
-  it("a connection going offline drops its rows without any refetch", async () => {
+  it.each(["offline", "disabled"])(
+    "a connection going %s drops its rows without any refetch",
+    async (status) => {
     let listCalls = 0;
     invoke.mockImplementation(async (cmd, params) => {
       if (cmd === "profile_summaries") return [{ name: "p" }];
@@ -183,10 +185,11 @@ describe("useAllOutputs cold-start discipline (per-connection)", () => {
     });
     await waitFor(() => expect(result.current.rows.length).toBe(1));
     const before = listCalls;
-    rerender({ connections: conn("offline") });
+    rerender({ connections: conn(status) });
     await waitFor(() => expect(result.current.rows).toEqual([]));
     expect(listCalls).toBe(before);
-  });
+    },
+  );
 
   it("an output event refreshes only its own connection", async () => {
     const calls = [];

@@ -61,7 +61,10 @@ function notify(entry) {
 
 function isAuthFailure(error) {
   const message = String(error?.message || '');
-  return message === 'auth-failed' || message === 'forbidden';
+  return (
+    (message === 'auth-failed' && error?.data?.reason !== 'connection-disabled') ||
+    message === 'forbidden'
+  );
 }
 
 // totalTurns null ⇒ the daemon predates slicing and shipped the full transcript.

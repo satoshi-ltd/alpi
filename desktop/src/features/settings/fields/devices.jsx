@@ -332,7 +332,7 @@ function DeviceDetailPopover({
   );
 }
 
-function PairDeviceModal({ connectionId, onClose, onPaired }) {
+export function PairDeviceModal({ connectionId, onClose, onPaired }) {
   const notify = useNotify();
   const connectionArg = useMemo(
     () => (connectionId ? { connectionId } : {}),
@@ -716,7 +716,7 @@ const SCOPE_HINTS = {
     "Scan with the Alpi app on the other device, or copy the link below.",
   lan:
     "Same Wi-Fi only — the other device must share this network. " +
-    "Switch to Tailscale in Settings → Devices → Network for remote pairing.",
+    "Switch to Tailscale in Settings → Service → address for remote pairing.",
   custom:
     "Using your custom advertised hostname. " +
     "Scan with the Alpi app on the other device, or copy the link below.",

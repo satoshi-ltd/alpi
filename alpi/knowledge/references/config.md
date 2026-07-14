@@ -54,7 +54,7 @@ providers:
 
 ## Change paths
 
-- `alpi setup` (recommended): model, email, MCPs, sandbox, voice, peers, workgroups, devices, budget, cleanup, daemon/subsystem lifecycle.
+- `alpi setup` (recommended): model, email, MCPs, sandbox, voice, peers, workgroups, connections, budget, cleanup, daemon/subsystem lifecycle.
 - `/model` inside the TUI.
 - Direct `config.yaml` edit for advanced/cosmetic fields.
 - Desktop/mobile settings through `host.*` where available.

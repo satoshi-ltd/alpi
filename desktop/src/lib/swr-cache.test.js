@@ -75,6 +75,19 @@ describe("createSwrCache", () => {
     expect(cache.get("c1|a")).toBeUndefined();
   });
 
+  it("keeps the value when the connection is disabled", async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce("good")
+      .mockRejectedValueOnce(
+        new Error("alp -32000: auth-failed — connection-disabled"),
+      );
+    const cache = createSwrCache({ fetcher });
+    await cache.load("c1|a", {});
+    await cache.load("c1|a", {}, { force: true });
+    expect(cache.get("c1|a")).toBe("good");
+  });
+
   it("a matching daemon event refetches a WATCHED key (coalesced)", async () => {
     const fetcher = vi.fn().mockResolvedValueOnce("v1").mockResolvedValue("v2");
     const cache = createSwrCache({

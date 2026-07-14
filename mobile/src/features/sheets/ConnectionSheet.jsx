@@ -19,6 +19,7 @@ import { useTheme } from '../../theme/ThemeContext';
 function statusColor(status, colors) {
   if (status === 'online' || status === 'connected') return colors.success;
   if (status === 'offline' || status === 'auth-failed') return colors.danger;
+  if (status === 'disabled') return colors.ink3;
   return colors.warning;
 }
 
@@ -114,7 +115,9 @@ export function ConnectionSheet({ open, onClose }) {
                   value={
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2 }}>
                       {upd ? <Tag label="update" tone="warn" /> : null}
-                      {c.id === activeId ? (
+                      {status === 'disabled' ? (
+                        <Tag label="disabled" />
+                      ) : c.id === activeId ? (
                         <Tag label="current" />
                       ) : status === 'offline' ? (
                         <Tag label="offline" tone="danger" />

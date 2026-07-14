@@ -237,6 +237,59 @@ async def test_supervise_isolates_subsystem_crash() -> None:
     # If we got here, the crash was swallowed.
 
 
+@pytest.mark.asyncio
+async def test_host_starts_when_legacy_connections_store_is_corrupt(
+    monkeypatch, tmp_path: Path, caplog,
+) -> None:
+    from alpi import home as home_mod
+    from alpi.host import connections, network, server as host_server
+
+    root = tmp_path / "root"
+    (root / "host").mkdir(parents=True)
+    (root / "host" / "devices.yaml").write_text("[")
+    monkeypatch.setattr(home_mod, "_ROOT", root)
+    connections.invalidate_cache()
+
+    instances = []
+
+    class FakeServer:
+        def __init__(self, **kwargs):
+            self.home = kwargs["home"]
+            self.started = False
+            self.served = False
+            self.stopped = False
+            instances.append(self)
+
+        def register(self, *_args, **_kwargs):
+            return None
+
+        def register_stream(self, *_args, **_kwargs):
+            return None
+
+        async def start(self):
+            self.started = True
+
+        async def enable_tcp(self, _bind):
+            return None
+
+        async def serve_forever(self):
+            self.served = True
+
+        async def stop(self):
+            self.stopped = True
+
+    monkeypatch.setattr(host_server, "Server", FakeServer)
+    monkeypatch.setattr(network, "host_allow_public_bind", lambda _home: False)
+    monkeypatch.setattr(network, "resolve_host_tcp_bind", lambda _home: None)
+
+    await service._run_host(root, "default")
+
+    assert instances[0].started
+    assert instances[0].served
+    assert instances[0].stopped
+    assert "remote authentication will fail closed" in caplog.text
+
+
 def test_profile_home_resolves_against_root(tmp_path: Path) -> None:
     """``_profile_home`` honors the daemon's ``root``, not the import-time ``_ROOT``."""
     root = tmp_path / "alt-root"

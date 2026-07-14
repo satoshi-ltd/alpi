@@ -1976,7 +1976,7 @@ async def _run_host(home: Path, profile: str) -> None:
     from alpi.host import device_state as host_device_state
     from alpi.host import events as host_events
     from alpi.host import handlers as host_handlers
-    from alpi.host import devices as host_devices
+    from alpi.host import connections as host_connections
     from alpi.host import network_rpc as host_network
     from alpi.host import outputs as host_outputs
     from alpi.host import probes as host_probes
@@ -1993,6 +1993,13 @@ async def _run_host(home: Path, profile: str) -> None:
         tcp_bind=None,
         allow_public_bind=host_allow_public_bind(home),
     )
+    try:
+        host_connections.load_store()
+    except host_connections.StoreUnavailable:
+        log.warning(
+            "connections store unavailable at boot; remote authentication will fail closed",
+            exc_info=True,
+        )
     host_handlers.register(server)
     host_chat.register(server)
     host_config.register(server)
@@ -2004,7 +2011,7 @@ async def _run_host(home: Path, profile: str) -> None:
     host_schedule.register(server)
     host_wg_admin.register(server)
     host_probes.register(server)
-    host_devices.register(server)
+    host_connections.register(server)
     host_network.register(server)
     host_outputs.register(server)
     host_tools.register(server)

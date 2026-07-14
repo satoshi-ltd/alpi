@@ -221,6 +221,8 @@ class Schedule(Tool):
                 "notify": bool(notify),
                 "last_run_at": now_iso if (kind or "cron") == "cron" else None,
             }
+            from alpi.host.connection_context import current
+            job["connection_id"] = current().connection_id
             if no_agent:
                 job["no_agent"] = True
             if tier and tier != "main":

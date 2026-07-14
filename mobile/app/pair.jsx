@@ -1,5 +1,6 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Clipboard from 'expo-clipboard';
+import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
@@ -11,13 +12,14 @@ import { useToast } from '../src/components/Toast';
 import { useEndpoint } from '../src/lib/EndpointContext';
 import { parsePairing, PairingError } from '../src/lib/pairing';
 import { probe } from '../src/lib/probe';
+import { call } from '../src/lib/rpc';
 import { useTheme } from '../src/theme/ThemeContext';
 
 export default function Pair() {
   const { colors, fonts, fontSizes, mobile } = useTheme();
   const router = useRouter();
   const toast = useToast();
-  // Use the context's addConnection — calling saveConnection() directly only writes to SecureStore; the EndpointProvider's in-memory `connections` array stays stale until next mount, so the freshly-paired daemon doesn't appear in the connection list. addConnection() chains saveConnection + refresh() so context state stays in sync.
+  // addConnection keeps SecureStore and the provider's live connection list in sync.
   const { addConnection } = useEndpoint();
   const [mode, setMode] = useState('paste');
   const [text, setText] = useState('');
@@ -34,12 +36,20 @@ export default function Pair() {
       if (status === 'auth-failed') {
         throw new PairingError('Token rejected by daemon. Generate a fresh pairing link on the daemon and try again.');
       }
+      if (status === 'disabled') {
+        throw new PairingError('Connection disabled by host. Ask an admin to enable it in Settings → Connections.');
+      }
       if (status !== 'online') {
         throw new PairingError(`Daemon unreachable at ${endpoint.ip}:${endpoint.port}. Make sure the daemon is running, both devices are on the same network, and the port is open.`);
       }
       if (!deviceId) {
         throw new PairingError('Daemon too old or host.version unavailable. Update alpi to v0.6.6 or newer and retry.');
       }
+      await call(endpoint, 'host.connections.register_device', {
+        client: 'mobile',
+        name: Platform.constants?.Model || Platform.OS,
+        app_version: Constants.expoConfig?.version || '',
+      }).catch(() => {});
       const finalEndpoint = { ...endpoint, deviceId, ...(deviceName ? { name: deviceName } : {}) };
       await addConnection(finalEndpoint);
       toast({ title: 'Paired', message: `Connected to ${finalEndpoint.name}`, duration: 2200 });
@@ -151,7 +161,7 @@ export default function Pair() {
       <ScrollView contentContainerStyle={{ padding: space.s8, gap: space.s8 }} keyboardShouldPersistTaps="handled">
         <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.md, color: colors.ink2, lineHeight: fontSizes.md * lineHeights.normal }}>
           Open your daemon's settings, choose{' '}
-          <Text style={{ fontFamily: fonts.mono, color: colors.ink }}>Settings → Devices → + Pair phone</Text>, then either
+          <Text style={{ fontFamily: fonts.mono, color: colors.ink }}>Settings → Connections → New connection / Add device</Text>, then either
           scan the QR or paste the <Text style={{ fontFamily: fonts.mono, color: colors.ink }}>alpi://</Text> link below.
         </Text>
 

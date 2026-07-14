@@ -12,7 +12,8 @@ for agent-to-agent links see [ALP.md](ALP.md).
 There is no public HTTP API and there is no cloud middleman. Your code
 becomes a **host-plane client** of a specific daemon — the same role the
 mobile app plays. It dials the daemon over a WebSocket on the private
-network (Tailscale or LAN), authenticates with a **device token**, and
+network (Tailscale or LAN), authenticates with one device credential under a
+**connection**, and
 calls the same `host.*` JSON-RPC methods the apps use.
 
 ```
@@ -27,7 +28,7 @@ calls the same `host.*` JSON-RPC methods the apps use.
 
 ### Which route
 
-| | Host-plane device token (this doc) | ALP peer ([ALP.md](ALP.md)) |
+| | Host-plane connection (this doc) | ALP peer ([ALP.md](ALP.md)) |
 |---|---|---|
 | Use when | both machines share a trusted private net (Tailscale/LAN) | the network is untrusted, or you want a first-class peer identity |
 | Transport | WebSocket + JSON-RPC | Noise_XK over TCP, signed envelopes |
@@ -61,12 +62,12 @@ By default the listener binds to the machine's Tailscale address if one
 is detected, otherwise the LAN address. A public IP is refused unless you
 explicitly set `host.allow_public_bind: true` (don't, for an integration).
 
-To find the `host:port` to dial, run `alpi setup` → **Devices**: the
+To find the `host:port` to dial, run `alpi setup` → **Connections**: the
 header shows the resolved endpoint, e.g. `tailscale · 100.64.50.234:49200`.
 
-## Step 2 — mint a scoped device token
+## Step 2 — create a scoped connection
 
-Run `alpi setup` → **Devices** → **Add device** on machine B:
+Run `alpi setup` → **Connections** → **New connection** on machine B:
 
 1. Label it (e.g. `ci-bot`).
 2. Choose **member** (not admin) — admin can manage profiles
@@ -75,18 +76,19 @@ Run `alpi setup` → **Devices** → **Add device** on machine B:
    all profiles — avoid that for an integration.
 
 You get a QR code, an `alpi://device?host=…&port=…&name=…&token=…` link,
-and the token. Copy the **token** and the **host:port** to machine A. The
-full token is shown once; afterwards only the last 8 chars (`token_id`)
-are displayed.
+and the token for its first device. Copy the **token** and the **host:port**
+to machine A. Add another device from the connection detail when another
+client should share the same sessions and accounting; it receives a separate
+token so either device can be revoked without affecting the other.
 
 A `member` token restricted to `abby` can only reach `abby`, is blocked
 from every admin method, and gets profile-scoped filtering on responses
 and events.
 
-**Revoke** at any time from `alpi setup` → **Devices** → select →
-**Revoke** (takes effect within ~5s), or with an **admin** device token
-via `host.devices.revoke` (`token_id`). A `member` token cannot revoke
-devices — that method is admin-only.
+**Revoke** at any time from `alpi setup` → **Connections** → select the
+connection → select the device. Admin integrations can use
+`host.connections.revoke_device(connection_id, device_id)`. A `member`
+credential cannot manage connections.
 
 ## Step 3 — the wire protocol
 

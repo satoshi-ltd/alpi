@@ -6,6 +6,7 @@ import { useNotify } from "../primitives/Notification.jsx";
 import styles from "./ConnectionSwitcher.module.css";
 
 function tooltipFor(_connection, status) {
+  if (status === "disabled") return "Connection disabled by host";
   return status === "offline" || status === "auth-failed"
     ? "Daemon offline — click to retry"
     : "Switch connection";
@@ -64,7 +65,11 @@ export default function ConnectionSwitcher({
 
   const handleOpen = () => {
     setOpen(true);
-    if (activeStatus !== "offline" && activeStatus !== "auth-failed") {
+    if (
+      activeStatus !== "offline" &&
+      activeStatus !== "disabled" &&
+      activeStatus !== "auth-failed"
+    ) {
       if (probeTimerRef.current != null) {
         cancelAnimationFrame(probeTimerRef.current);
       }

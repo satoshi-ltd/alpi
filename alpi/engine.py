@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import threading
 import time
@@ -131,9 +132,21 @@ EventSink = Callable[[AgentEvent], None]
 
 class Engine:
     def __init__(self, home: Path, cfg: cfg_mod.Config):
+        from alpi.host.connection_context import ConnectionContext, current
         self.home = home
         self.cfg = cfg
-        self.session = session.Session(home=home, model=cfg.model)
+        self.connection_context = current()
+        env_connection = os.environ.get("ALPI_CONNECTION_ID", "").strip()
+        if env_connection and self.connection_context.connection_id == "host":
+            self.connection_context = ConnectionContext(
+                connection_id=env_connection,
+                source=os.environ.get("ALPI_CONNECTION_SOURCE", "schedule"),
+            )
+        self.session = session.Session(
+            home=home,
+            model=cfg.model,
+            connection_id=self.connection_context.connection_id,
+        )
         # Register MCP tools before building the system prompt.
         self._mcp_clients = _maybe_load_mcps(cfg)
         self._system_prompt = self._build_system_prompt()
@@ -156,7 +169,11 @@ class Engine:
             self.save_session()
         except Exception:
             pass
-        self.session = session.Session(home=self.home, model=self.cfg.model)
+        self.session = session.Session(
+            home=self.home,
+            model=self.cfg.model,
+            connection_id=self.connection_context.connection_id,
+        )
         self.session.messages.append({"role": "system", "content": self._system_prompt})
         self.interrupt_requested = False
 
@@ -170,14 +187,16 @@ class Engine:
             set_active_home, set_active_session,
         )
 
+        from alpi.host.connection_context import use as use_connection
         home_token = set_active_home(self.home)
         session_token = set_active_session(self.session.id)
         try:
-            with self._turn_lock:
-                self._run_turn_locked(
-                    user_text, emit, source=source,
-                    persist_inflight=persist_inflight, attachments=attachments,
-                )
+            with use_connection(self.connection_context):
+                with self._turn_lock:
+                    self._run_turn_locked(
+                        user_text, emit, source=source,
+                        persist_inflight=persist_inflight, attachments=attachments,
+                    )
         finally:
             reset_active_session(session_token)
             reset_active_home(home_token)

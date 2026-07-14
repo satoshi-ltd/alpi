@@ -203,6 +203,33 @@ describe("useProfileSnapshot", () => {
     expect(result.current.error?.message).toBe("auth-failed");
   });
 
+  it("keeps cached settings when the connection is disabled", async () => {
+    const disabled = new Error("auth-failed");
+    disabled.code = -32000;
+    disabled.data = { reason: "connection-disabled" };
+    const call = vi.fn()
+      .mockResolvedValueOnce({ detail: { name: "doc" } })
+      .mockRejectedValueOnce(disabled);
+
+    function Wrapper({ children }) {
+      return (
+        <EndpointContext.Provider value={{ endpoint: { id: "paused" }, call }}>
+          {children}
+        </EndpointContext.Provider>
+      );
+    }
+
+    const { result } = renderHook(() => useProfileSnapshot("doc"), { wrapper: Wrapper });
+    await waitFor(() => expect(result.current.data?.detail?.name).toBe("doc"));
+
+    await act(async () => {
+      await result.current.refresh();
+    });
+
+    expect(result.current.data?.detail?.name).toBe("doc");
+    expect(result.current.error?.data?.reason).toBe("connection-disabled");
+  });
+
   it("marks method-not-found as unsupported for section fallback", async () => {
     const err = new Error("method-not-found");
     err.code = -32601;

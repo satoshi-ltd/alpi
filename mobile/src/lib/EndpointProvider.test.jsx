@@ -137,6 +137,15 @@ describe("EndpointProvider lifecycle", () => {
     expect(captureRef.current.versionState.get("alpha")).toBe("0.4.54");
   });
 
+  it("marks a connection disabled without probing or removing it", async () => {
+    const { captureRef } = await mount();
+
+    act(() => captureRef.current.markConnectionStatus("alpha", "disabled"));
+
+    expect(captureRef.current.probeState.get("alpha")).toBe("disabled");
+    expect(captureRef.current.connections.some((c) => c.id === "alpha")).toBe(true);
+  });
+
   it("setActive drops the previous endpoint's pool and writes the new active id", async () => {
     const { captureRef } = await mount();
     await act(async () => { await captureRef.current.setActive("beta"); });

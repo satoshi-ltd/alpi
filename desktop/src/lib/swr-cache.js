@@ -69,7 +69,10 @@ export function createSwrCache({ fetcher, events = null, coalesceMs = 300 }) {
       .catch((e) => {
         if (entry.gen === gen) {
           entry.error = e;
-          if (String(e).includes("auth-failed")) entry.value = undefined;
+          const message = String(e);
+          if (message.includes("auth-failed") && !message.includes("connection-disabled")) {
+            entry.value = undefined;
+          }
         }
         return entries.get(key)?.value;
       })

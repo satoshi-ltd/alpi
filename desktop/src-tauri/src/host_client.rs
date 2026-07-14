@@ -47,6 +47,7 @@ pub enum ConnectionStatus {
     Probing,
     Online,
     Offline,
+    Disabled,
     AuthFailed,
 }
 
@@ -57,6 +58,7 @@ impl ConnectionStatus {
             ConnectionStatus::Probing => "probing",
             ConnectionStatus::Online => "online",
             ConnectionStatus::Offline => "offline",
+            ConnectionStatus::Disabled => "disabled",
             ConnectionStatus::AuthFailed => "auth-failed",
         }
     }
@@ -238,7 +240,9 @@ fn set_status(id: &str, status: ConnectionStatus, error: Option<String>) {
 }
 
 fn classify_remote_error(err: &str) -> ConnectionStatus {
-    if err.contains("auth-failed") {
+    if err.contains("connection-disabled") {
+        ConnectionStatus::Disabled
+    } else if err.contains("auth-failed") {
         ConnectionStatus::AuthFailed
     } else if err.starts_with("alp ") {
         ConnectionStatus::Online
@@ -284,7 +288,11 @@ fn format_rpc_error(err: &ControlError) -> String {
     let detail = err
         .data
         .as_ref()
-        .and_then(|d| d.get("summary").or_else(|| d.get("detail")))
+        .and_then(|d| {
+            d.get("reason")
+                .or_else(|| d.get("summary"))
+                .or_else(|| d.get("detail"))
+        })
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .trim();
@@ -1221,17 +1229,22 @@ where
             .map(|ev| matches!(ev, "done" | "error" | "interrupted"))
             .unwrap_or(false)
             || frame.get("error").is_some();
-        let auth_failed = frame
-            .get("error")
-            .and_then(|err| {
-                Some((
-                    err.get("code")?.as_i64()?,
-                    err.get("message")?.as_str()?.to_string(),
-                ))
-            })
-            .map(|(code, message)| code == -32000 && message == "auth-failed")
-            .unwrap_or(false);
-        if auth_failed {
+        let auth_error = frame.get("error").and_then(|err| {
+            let code = err.get("code")?.as_i64()?;
+            let message = err.get("message")?.as_str()?;
+            if code != -32000 || message != "auth-failed" {
+                return None;
+            }
+            let reason = err
+                .get("data")
+                .and_then(|data| data.get("reason"))
+                .and_then(|value| value.as_str());
+            Some(reason.unwrap_or("").to_string())
+        });
+        if let Some(reason) = auth_error {
+            if reason == "connection-disabled" {
+                return Err("alp -32000: auth-failed — connection-disabled".to_string());
+            }
             mark_connection_revoked(connection_id);
             return Err("alp -32000: auth-failed".to_string());
         }
@@ -1563,7 +1576,6 @@ impl WsClient {
     }
 }
 
-// Both transports retry once after PROBE_RETRY_DELAY_MS before flipping; only a rejected token (auth-failed) skips the retry.
 pub fn probe_connection(conn: &HostConnection) {
     let id = conn.id().to_string();
     set_status(&id, ConnectionStatus::Probing, None);
@@ -1589,7 +1601,10 @@ pub fn probe_connection(conn: &HostConnection) {
         let retryable = match conn {
             HostConnection::Local { .. } => true,
             HostConnection::Remote { .. } => {
-                classify_remote_error(e) != ConnectionStatus::AuthFailed
+                !matches!(
+                    classify_remote_error(e),
+                    ConnectionStatus::AuthFailed | ConnectionStatus::Disabled
+                )
             }
         };
         if retryable {
@@ -1646,6 +1661,22 @@ pub fn probe_connection(conn: &HostConnection) {
                 .map(|s| s.to_string());
             if let Some(did) = device_id {
                 persist_device_id(&id, &did);
+            }
+            if let HostConnection::Remote { host, port, token, .. } = conn {
+                let device_name = std::env::var("HOSTNAME").unwrap_or_else(|_| "Desktop".into());
+                let _ = call_remote_once(
+                    &id,
+                    host,
+                    *port,
+                    token,
+                    "host.connections.register_device",
+                    json!({
+                        "client": "desktop",
+                        "name": device_name,
+                        "app_version": env!("CARGO_PKG_VERSION"),
+                    }),
+                    timeout,
+                );
             }
         }
         Err(e) => {
@@ -1816,6 +1847,10 @@ mod tests {
     #[test]
     fn classify_remote_errors() {
         assert_eq!(
+            classify_remote_error("alp -32000: auth-failed — connection-disabled"),
+            ConnectionStatus::Disabled
+        );
+        assert_eq!(
             classify_remote_error("alp -32000: auth-failed"),
             ConnectionStatus::AuthFailed
         );
@@ -1826,6 +1861,20 @@ mod tests {
         assert_eq!(
             classify_remote_error("connect ws://10.0.0.2:49200: refused"),
             ConnectionStatus::Offline
+        );
+    }
+
+    #[test]
+    fn formats_structured_auth_reason_for_status_classification() {
+        let error = ControlError {
+            code: -32000,
+            message: "auth-failed".to_string(),
+            data: Some(json!({"reason": "connection-disabled"})),
+        };
+
+        assert_eq!(
+            format_rpc_error(&error),
+            "alp -32000: auth-failed — connection-disabled"
         );
     }
 
@@ -1930,6 +1979,14 @@ mod tests {
     }
 
     #[test]
+    fn disabled_is_not_subject_to_sticky_threshold() {
+        let id = "sticky-disabled";
+        set_status(id, ConnectionStatus::Online, None);
+        set_status(id, ConnectionStatus::Disabled, Some("disabled".into()));
+        assert_eq!(status_for(id).0, ConnectionStatus::Disabled);
+    }
+
+    #[test]
     fn should_retry_remote_ws_distinguishes_transport_from_app_errors() {
         // Transport-level: retry, the WS is dead.
         assert!(should_retry_remote_ws("websocket closed by daemon"));
@@ -1941,6 +1998,9 @@ mod tests {
         assert!(!should_retry_remote_ws("alp -32004: not-found"));
         // Auth failure: token bad, retrying won't help.
         assert!(!should_retry_remote_ws("alp -32000: auth-failed"));
+        assert!(!should_retry_remote_ws(
+            "alp -32000: auth-failed — connection-disabled"
+        ));
     }
 
     #[test]

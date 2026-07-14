@@ -23,4 +23,10 @@ describe("ConnPill", () => {
     render(<ConnPill kind="remote" name="office" host="1.2.3.4:7423" status="offline" />);
     expect(screen.getByText("offline · retrying…")).toBeInTheDocument();
   });
+
+  it("shows a stable disabled state without retry copy", () => {
+    render(<ConnPill kind="remote" name="office" host="1.2.3.4:7423" status="disabled" />);
+    expect(screen.getByText("disabled")).toBeInTheDocument();
+    expect(screen.queryByText("offline · retrying…")).not.toBeInTheDocument();
+  });
 });

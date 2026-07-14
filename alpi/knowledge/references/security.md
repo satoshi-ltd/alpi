@@ -67,12 +67,12 @@ matches the supported interpreter set: `sh / bash / zsh / ash / dash / ksh
 `curl … | jq`, `curl … | tar xz`, `curl example.com || bash fallback.sh`,
 `curl x | jq . || python recover.py`.
 
-## Host pairing and device roles
+## Host connections and device credentials
 
-Desktop/mobile WebSocket transport uses per-device tokens from
-`~/.alpi/host/devices.yaml`. Each entry carries a `role` (`admin`/`member`;
-older entries without the field read back as `member`) and an optional
-`profile_scope` (list of profile names; empty = no restriction).
+Desktop/mobile WebSocket transport uses per-device tokens grouped in
+`~/.alpi/host/connections.yaml`. A connection carries the shared `label`,
+`role` (`admin`/`member`) and optional `profile_scope`; each linked device has
+its own revocable token, client metadata and `last_seen`.
 
 `network.host` is the shared *advertised* address; the listener *binds* a
 local-safe address derived from it — a private/Tailscale IP binds itself, a
@@ -87,8 +87,8 @@ Three trust tiers:
 - **Unix socket (local)** — sovereign. Mints the first device, recovers a
   lost admin token, bypasses all role checks.
 - **WS admin** — manages profiles, email, providers, MCP, workgroups,
-  peers, sandbox, schedules, daemon restart, and other devices
-  (add/promote/demote/revoke/set_profiles). Always bypasses `profile_scope`.
+  peers, sandbox, schedules, daemon restart, connections and devices. Always
+  bypasses `profile_scope`.
 - **WS member** — chat, events, read-only views, schedule listing,
   workgroup post/read, voice preview. Sensitive **host control plane**
   mutations reject `-32001 forbidden / admin role required`. The role does
@@ -97,9 +97,9 @@ Three trust tiers:
   calls) stays reachable. Use the OS sandbox flag or separate profiles for
   that boundary, not the device role.
 
-Per-device profile scope (HOST.1):
+Per-connection profile scope:
 
-- A scoped member must pass `params.profile` in `device.profile_scope`;
+- A scoped member must pass `params.profile` in `connection.profile_scope`;
   out-of-scope returns `-32001 forbidden`.
 - Profile-agnostic verbs exempt from the per-call `profile` requirement:
   `host.version`, `host.profiles.list`, `host.profile.summaries`,
@@ -109,9 +109,16 @@ Per-device profile scope (HOST.1):
   `host.clarification.respond`. Their list payloads are scope-filtered
   before dispatch; event frames with an out-of-scope `data.profile` are
   dropped.
-- `host.devices.generate` takes `profiles: [<name>]` to mint a scoped token
-  in one call. `host.devices.set_profiles(token_id, profiles)` retunes
-  scope without re-pairing. Promoting to `admin` clears scope.
+- `host.connections.create` sets the initial scope and
+  `host.connections.update` retunes it without re-pairing. Promoting to
+  `admin` clears scope. `host.connections.add_device` adds a separate
+  credential to the same identity.
+
+When `connections.yaml` is absent, startup migrates every `devices.yaml` row
+to its own connection, preserving token and access, then renames the source
+to `devices.yaml.migrated`. The old schema cannot prove which rows should be
+grouped. Pre-migration sessions have no owner and remain local to synthetic
+connection `host`.
 
 Local-only verbs (admin role does not unlock them): `host.network.status`,
 `host.network.set_advertised`, `host.network.restart_host_server`.
@@ -131,7 +138,7 @@ slip through:
 - Symlinks resolving into a denied subtree.
 
 Secrets reach the model only through dedicated, audited methods (email
-account setup, redacted `devices.list`, etc.).
+account setup, redacted `host.connections.list`, etc.).
 
 ## Skills and secrets
 
@@ -204,9 +211,10 @@ terminal sandbox, LLM stale-call watchdog, and daily USD budget. Online check:
 installed Python package CVEs via OSV; `alpi audit --offline` skips it. Exit
 code is `1` only for `fail` findings; warnings are visible review items.
 
-Gaps for a fleet (not a single owner): host RPC validates the device token
-but does not propagate or log it, so a privileged change isn't attributable
-to a device/human; records are local and mutable (no WORM, no signing, no
+Gaps for a fleet: request context and run ledgers carry connection/device IDs,
+and sessions/usage are attributed to a connection, but privileged mutations
+do not yet have a dedicated append-only audit log; records are local and
+mutable (no WORM, no signing, no
 external sink); sessions/memory/logs are plaintext at rest (only `alpi
 backup` is encrypted); LLM egress is not logged and there's no
 approved/on-prem provider policy (Ollama is the on-prem option); access

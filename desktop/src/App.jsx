@@ -80,6 +80,28 @@ export function isChatSessionData(data) {
   return true;
 }
 
+export function connectionFailureMessage(connection) {
+  if (connection?.status === "disabled") {
+    return `${connection?.name ?? "Remote"} — connection disabled by host. Ask an admin to enable it in Settings → Connections.`;
+  }
+  if (connection?.status === "auth-failed") {
+    return `${connection?.name ?? "Remote"} — token rejected. Re-pair device from Settings.`;
+  }
+  return null;
+}
+
+export function settingsTargetAfterExit(target, previous) {
+  if (target?.kind !== "connections") return target;
+  if (previous?.kind === "profile" || previous?.kind === "workgroup") return previous;
+  return { kind: "profile", id: null };
+}
+
+export function settingsTargetForChatView(view, selectedProfile = null) {
+  if (view?.kind === "profile") return { kind: "profile", id: view.profile };
+  if (view?.kind === "workgroup") return { kind: "workgroup", id: view.id };
+  return { kind: "profile", id: selectedProfile };
+}
+
 export default function App() {
   const notify = useNotify();
   const [view, setView] = useState({ kind: "empty" });
@@ -87,6 +109,18 @@ export default function App() {
     kind: "profile",
     id: null,
   });
+  const settingsBeforeConnectionsRef = useRef(null);
+  const openConnections = useCallback(() => {
+    if (settingsTarget?.kind !== "connections") {
+      settingsBeforeConnectionsRef.current = settingsTarget;
+    }
+    setSettingsTarget({ kind: "connections" });
+  }, [settingsTarget]);
+  const closeConnections = useCallback(() => {
+    setSettingsTarget(
+      settingsBeforeConnectionsRef.current || { kind: "profile", id: null },
+    );
+  }, []);
   const [sessionData, setSessionData] = useState(null);
   const [sessionSync, setSessionSync] = useState(null);
   const sessionDataRef = useRef(null);
@@ -137,11 +171,18 @@ export default function App() {
   useEffect(() => {
     settingsTargetRef.current = settingsTarget;
   }, [settingsTarget]);
+  useEffect(() => {
+    if (view.kind === "settings" || settingsTarget?.kind !== "connections") return;
+    const next = settingsTargetAfterExit(settingsTarget, settingsBeforeConnectionsRef.current);
+    settingsTargetRef.current = next;
+    setSettingsTarget(next);
+  }, [view.kind, settingsTarget]);
   const workgroupsRef = useRef([]);
 
   const reloadRef = useRef(null);
   const foregroundTurnRef = useRef(null);
   const activeConnectionIdRef = useRef(null);
+  const pickerAlpiRef = useRef(null);
 
   const jumpTargetsRef = useRef([]);
   const onJumpToProfile = useCallback((index) => {
@@ -265,11 +306,9 @@ export default function App() {
       );
       return;
     }
-    if (v?.kind === "profile") {
-      setSettingsTarget({ kind: "profile", id: v.profile });
-    } else if (v?.kind === "workgroup") {
-      setSettingsTarget({ kind: "workgroup", id: v.id });
-    }
+    const next = settingsTargetForChatView(v, pickerAlpiRef.current);
+    settingsTargetRef.current = next;
+    setSettingsTarget(next);
     setView({ kind: "settings" });
   }, []);
   const adminOnOpenSettings = canAdminEarly ? onOpenSettings : null;
@@ -315,6 +354,10 @@ export default function App() {
     setActiveTask,
     setView,
   });
+
+  useEffect(() => {
+    pickerAlpiRef.current = pickerAlpi;
+  }, [pickerAlpi]);
 
   useEffect(() => {
     activeConnectionIdRef.current = hostConnections.active_id;
@@ -457,7 +500,9 @@ export default function App() {
     );
     // Unknown/probing stay truthy — only a confirmed-dead daemon pauses pollers.
     connectionOnlineRef.current =
-      conn?.status !== "offline" && conn?.status !== "auth-failed";
+      conn?.status !== "offline" &&
+      conn?.status !== "disabled" &&
+      conn?.status !== "auth-failed";
   }, [hostConnections]);
   useEffect(() => {
     workgroupsRef.current = workgroups;
@@ -972,6 +1017,11 @@ export default function App() {
 
   const closeSettings = useCallback(() => {
     const t = settingsTargetRef.current;
+    if (t?.kind === "connections") {
+      const next = settingsTargetAfterExit(t, settingsBeforeConnectionsRef.current);
+      settingsTargetRef.current = next;
+      setSettingsTarget(next);
+    }
     if (t?.kind === "profile" && t.id) {
       const profile = profilesRef.current.find((p) => p.name === t.id);
       const latest = profile?.latest_session;
@@ -1002,12 +1052,14 @@ export default function App() {
   const daemonOffline =
     !!activeConnection &&
     (activeConnection.status === "offline" ||
+      activeConnection.status === "disabled" ||
       activeConnection.status === "auth-failed");
 
   const [autostartPhase, setAutostartPhase] = useState("idle");
   useDaemonAutostart({ activeConnection, onAttempt: setAutostartPhase });
 
   const activeStatus = activeConnection?.status;
+  const connectionDisabled = activeStatus === "disabled";
   const switchBannerVisible = useDelayedFlag(
     connectionSwitching && !daemonOffline,
     300,
@@ -1025,6 +1077,7 @@ export default function App() {
   const autoOpenConnectionSwitcher =
     hostConnections.connections.length > 0 &&
     (activeStatus === "auth-failed" ||
+      connectionDisabled ||
       (activeStatus === "offline" &&
         (activeConnection?.kind !== "local" || autostartPhase === "gave-up")));
 
@@ -1149,6 +1202,8 @@ export default function App() {
               onDeleteProfile={adminOnDeleteProfile}
               onOpenChat={closeSettings}
               onOpenSchedule={onBrowseSchedule}
+              onOpenConnections={openConnections}
+              onCloseConnections={closeConnections}
               onSetHostConnection={onSetHostConnection}
               onAddHostConnection={onAddHostConnection}
               onForgetHostConnection={onForgetHostConnection}
@@ -1158,20 +1213,19 @@ export default function App() {
             <>
               {daemonOffline && (
                 <Banner
-                  kind={isLocalAutostartInFlight ? "info" : "danger"}
-                  pulsing={!isLocalAutostartInFlight}
-                  action={isLocalAutostartInFlight ? null : "Retry"}
-                  onAction={isLocalAutostartInFlight ? null : onRefreshHostConnectionStatus}
+                  kind={isLocalAutostartInFlight ? "info" : connectionDisabled ? "warning" : "danger"}
+                  pulsing={!isLocalAutostartInFlight && !connectionDisabled}
+                  action={isLocalAutostartInFlight || connectionDisabled ? null : "Retry"}
+                  onAction={isLocalAutostartInFlight || connectionDisabled ? null : onRefreshHostConnectionStatus}
                 >
-                  {activeConnection?.status === "auth-failed"
-                    ? `${activeConnection?.name ?? "Remote"} — token rejected. Re-pair device from Settings.`
-                    : activeConnection?.kind === "remote"
+                  {connectionFailureMessage(activeConnection) ??
+                    (activeConnection?.kind === "remote"
                       ? `${activeConnection?.name ?? "Remote"} unreachable — check network / tunnel.`
                       : isLocalAutostartInFlight
                         ? "Starting local daemon…"
                         : autostartPhase === "gave-up"
                           ? "Local daemon won't start — check Settings → daemon, or run `alpi daemon start` from terminal."
-                          : "Local daemon unreachable — reconnecting…"}
+                          : "Local daemon unreachable — reconnecting…")}
                 </Banner>
               )}
               {!daemonOffline && switchBannerVisible && (

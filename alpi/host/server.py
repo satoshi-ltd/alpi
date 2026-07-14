@@ -4,6 +4,7 @@ import asyncio
 import ipaddress
 import json
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
@@ -88,6 +89,15 @@ _ADMIN_METHODS = frozenset({
     "host.devices.promote",
     "host.devices.demote",
     "host.devices.set_profiles",
+    "host.connections.list",
+    "host.connections.create",
+    "host.connections.add_device",
+    "host.connections.update",
+    "host.connections.set_status",
+    "host.connections.delete",
+    "host.connections.revoke_device",
+    "host.connections.summary",
+    "host.connections.usage_daily",
     "host.usage.daily",
     "host.usage.workgroup.daily",
 })
@@ -110,6 +120,7 @@ _SCOPE_FREE_METHODS = frozenset({
     "host.approval.pending",
     "host.clarification.pending",
     "host.approval.respond",
+    "host.connections.register_device",
 })
 
 
@@ -298,15 +309,26 @@ class Server:
         # Unix socket is the source of trust; treat as admin-equivalent.
         role = "admin"
         profile_scope: list[str] = []
+        from alpi.host.connection_context import ConnectionContext, use as use_connection
+        request_context = ConnectionContext(source="local")
         if require_token:
-            # Stale last_seen triggers a devices.yaml fsync write-back inside validate — keep it off the loop.
-            valid, role, profile_scope = await asyncio.to_thread(_check_token_meta, body)
+            meta = await asyncio.to_thread(_check_token_meta, body)
+            valid, role, profile_scope = meta
             if not valid:
+                error: dict[str, Any] = {"code": -32000, "message": "auth-failed"}
+                if meta.reason:
+                    error["data"] = {"reason": meta.reason}
                 await send({
                     "id": body.get("id"),
-                    "error": {"code": -32000, "message": "auth-failed"},
+                    "error": error,
                 })
                 return
+            if isinstance(meta, AuthMeta):
+                request_context = ConnectionContext(
+                    connection_id=meta.connection_id,
+                    device_id=meta.device_id,
+                    source="remote",
+                )
         method = str(body.get("method") or "")
         if require_token and method in _LOCAL_ONLY_METHODS:
             log.warning("host forbidden: %s blocked over remote transport", method)
@@ -410,12 +432,13 @@ class Server:
             delivery = send_filtered
         else:
             delivery = send
-        if method in self.stream_handlers:
-            await self._dispatch_stream(body, delivery)
-            return
-        response = await self._dispatch(body)
-        if response is not None:
-            await delivery(response)
+        with use_connection(request_context):
+            if method in self.stream_handlers:
+                await self._dispatch_stream(body, delivery)
+                return
+            response = await self._dispatch(body)
+            if response is not None:
+                await delivery(response)
 
     async def _dispatch(self, body: dict[str, Any]) -> dict[str, Any] | None:
         request_id = body.get("id")
@@ -600,7 +623,7 @@ def _filter_payload_by_scope(
 
 
 def _check_token(body: dict[str, Any]) -> bool:
-    return _check_token_meta(body)[0]
+    return bool(_check_token_meta(body).valid)
 
 
 def _check_token_role(body: dict[str, Any]) -> tuple[bool, str]:
@@ -608,20 +631,57 @@ def _check_token_role(body: dict[str, Any]) -> tuple[bool, str]:
     return valid, role
 
 
-def _check_token_meta(body: dict[str, Any]) -> tuple[bool, str, list[str]]:
-    from alpi.host import devices as devices_mod
+@dataclass(frozen=True)
+class AuthMeta:
+    valid: bool
+    role: str
+    scope: list[str]
+    connection_id: str = ""
+    device_id: str = ""
+    reason: str = ""
+
+    def __iter__(self):
+        yield self.valid
+        yield self.role
+        yield self.scope
+
+
+def _check_token_meta(body: dict[str, Any]) -> AuthMeta:
+    from alpi.host import connections as connections_mod
 
     params = body.get("params") or {}
     token = str(params.get("auth_token") or "")
     method = str(body.get("method") or "?")
-    valid, role, scope = devices_mod.validate_and_lookup(token)
-    if not valid:
+    if connections_mod.store_path().exists():
+        auth = connections_mod.authenticate(token)
+    else:
+        from alpi.host import devices as devices_mod
+        valid, role, scope = devices_mod.validate_and_lookup(token)
+        if valid:
+            return AuthMeta(True, role, scope, f"legacy_{token[-8:]}", f"legacy_{token[-8:]}")
+        auth = connections_mod.AuthResult(False)
+    if not auth.valid:
         if not token:
             log.warning("host auth-failed: no token sent (method=%s)", method)
+        elif auth.reason == "connection-disabled":
+            log.warning("host auth-failed: connection disabled (method=%s)", method)
         else:
             log.warning(
                 "host auth-failed: invalid token (len=%d, method=%s)",
                 len(token), method,
             )
-        return False, "", []
-    return True, role, scope
+        return AuthMeta(
+            False,
+            "",
+            [],
+            auth.connection_id,
+            auth.device_id,
+            auth.reason,
+        )
+    return AuthMeta(
+        True,
+        auth.role,
+        list(auth.profile_scope),
+        auth.connection_id,
+        auth.device_id,
+    )

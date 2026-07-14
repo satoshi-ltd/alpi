@@ -11,6 +11,18 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.39 — 2026-07-14 — connections become manageable
+
+- **Settings gains a full Connections view** with last activity, session count
+  and 14-day spend for every connection. Expand a row for the existing daily
+  token/cost chart and its linked devices.
+- Create or update access, add independently revocable desktop/mobile devices,
+  disable a connection without losing history, or delete it from one place.
+  Disabled connections are identified separately from rejected tokens, while
+  pairing name and port now live alongside the connection list.
+
+_Requires alpi v0.10.29+._
+
 ## v0.4.38 — 2026-07-14 — remote cold start stops crawling
 
 - **The header bar now reflects what you see.** Opening a conversation turns

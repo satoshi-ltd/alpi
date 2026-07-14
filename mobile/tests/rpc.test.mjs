@@ -33,7 +33,7 @@ class FakeWs {
 }
 globalThis.WebSocket = FakeWs;
 
-const { call, dropEndpointPool, _resetPoolForTests } = await import('../src/lib/rpc.js');
+const { call, dropEndpointPool, setAuthFailedHandler, _resetPoolForTests } = await import('../src/lib/rpc.js');
 
 let passed = 0;
 let failed = 0;
@@ -158,6 +158,28 @@ await test('auth-failed drops pool so next call reconnects', async () => {
   nextWs.open();
   nextWs.message({ id: JSON.parse(nextWs.sent[0]).id, result: { ok: true } });
   assert.deepStrictEqual(await p2, { ok: true });
+});
+
+await test('connection-disabled reports its reason without masquerading as rejection', async () => {
+  _resetPoolForTests();
+  nextWs = null;
+  const failures = [];
+  setAuthFailedHandler((failure) => { failures.push(failure); });
+  const p = call(endpoint, 'host.protected', {});
+  nextWs.open();
+  const id = JSON.parse(nextWs.sent[0]).id;
+  nextWs.message({
+    id,
+    error: {
+      code: -32000,
+      message: 'auth-failed',
+      data: { reason: 'connection-disabled' },
+    },
+  });
+  await assert.rejects(p, /auth-failed/);
+  assert.strictEqual(failures.length, 1);
+  assert.strictEqual(failures[0].reason, 'connection-disabled');
+  setAuthFailedHandler(null);
 });
 
 if (failed > 0) {

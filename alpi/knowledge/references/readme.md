@@ -35,7 +35,7 @@ alpi --version
   - ALP.1: same-machine profiles over Unix sockets.
   - ALP.2: inter-machine over Noise_XK TCP, per-peer budget + rate limits.
   - ALP.3: hub-anchored shared workgroups (multiple alpis + optional humans).
-- **Host plane** (separate from ALP): device control surface for paired desktop/mobile clients to reach their own daemon — `host.*` over local Unix socket or remote WebSocket, per-device pairing tokens. `Devices` sets the companion endpoint; `Peer TCP listener` sets ALP peer traffic.
+- **Host plane** (separate from ALP): control surface for paired desktop/mobile clients to reach their own daemon — `host.*` over local Unix socket or remote WebSocket. A connection groups role/profile scope, sessions and usage with multiple per-device credentials. `Connections` sets the companion endpoint; `Peer TCP listener` sets ALP peer traffic.
 
 ## What ships today
 

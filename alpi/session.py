@@ -16,7 +16,7 @@ from typing import Any
 # Per-tool log stored under each Turn. Short, human-friendly, JSON-safe.
 # We deliberately keep ``result`` capped so search snippets stay tight.
 TOOL_RESULT_CAP = 400
-SESSION_SCHEMA_VERSION = 2
+SESSION_SCHEMA_VERSION = 3
 USER_CAP = 64 * 1024
 ASSISTANT_CAP = 64 * 1024
 TURN_REASONING_CAP = 16 * 1024
@@ -53,6 +53,7 @@ class Turn:
 class Session:
     home: Path
     model: str
+    connection_id: str = "host"
     # Subdirectory under ``home`` where ``save()`` lands.
     subdir: str = "sessions"
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
@@ -119,6 +120,7 @@ class Session:
             "schema_version": SESSION_SCHEMA_VERSION,
             "id": self.id,
             "model": self.model,
+            "connection_id": self.connection_id,
             "started_at": self.started_at,
             "elapsed": self.elapsed,
             "input_tokens": self.input_tokens,

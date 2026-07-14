@@ -9,7 +9,7 @@ import { clearAll, loadConnections, removeConnection, saveConnection, setActiveC
 
 const OFFLINE_REPROBE_MS = 4000;
 
-// auth-failed handling lives in <AuthFailedBridge> (app/_layout.jsx) — it needs router + toast context.
+// Rejected-token handling lives in <AuthFailedBridge> because it needs router and toast context.
 export function EndpointProvider({ children }) {
   const [connections, setConnections] = useState([]);
   const [activeId, setActiveId] = useState(null);
@@ -98,7 +98,7 @@ export function EndpointProvider({ children }) {
   const connectionsRef = useRef(connections);
   connectionsRef.current = connections;
 
-  // A dropped daemon has no liveness stream to recover on, so re-probe the active until it returns; auth-failed is excluded — a revoked token won't fix itself.
+  // A dropped daemon has no liveness stream to recover on; terminal authentication states wait for user or host action.
   const activeStatus = activeId ? (probeState.get(activeId) ?? 'unknown') : null;
   useEffect(() => {
     if (!activeId) return undefined;
@@ -175,6 +175,15 @@ export function EndpointProvider({ children }) {
     [connections, probeByIdFrom],
   );
 
+  const markConnectionStatus = useCallback((id, status) => {
+    if (!id) return;
+    setProbeState((current) => {
+      const next = new Map(current);
+      next.set(id, status);
+      return next;
+    });
+  }, []);
+
   const call = useCallback(
     (method, params, options) => {
       if (!activeEndpoint) {
@@ -213,11 +222,12 @@ export function EndpointProvider({ children }) {
       forget,
       unpair,
       probeOne,
+      markConnectionStatus,
       probeAll: probeAllConnections,
       call,
       callStream,
     }),
-    [ready, connections, activeId, activeEndpoint, probeState, versionState, updateState, roleState, activeRole, setActive, addConnection, forget, unpair, probeOne, probeAllConnections, call, callStream],
+    [ready, connections, activeId, activeEndpoint, probeState, versionState, updateState, roleState, activeRole, setActive, addConnection, forget, unpair, probeOne, markConnectionStatus, probeAllConnections, call, callStream],
   );
 
   return <EndpointContext.Provider value={value}>{children}</EndpointContext.Provider>;

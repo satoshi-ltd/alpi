@@ -10,6 +10,7 @@ from pathlib import Path
 
 from alpi.scheduler import jobs_store
 from alpi.scheduler import run as scheduler
+from alpi.host.connection_context import ConnectionContext, use
 from alpi.tools.schedule import Schedule
 
 
@@ -35,6 +36,17 @@ def test_cron_tool_add_cron_job_writes_jobs_json(tmp_home_no_env: Path) -> None:
     assert runs[job["id"]]["last_run_at"] is not None
     datetime.fromisoformat(runs[job["id"]]["last_run_at"])
     assert "last_run_status" not in runs[job["id"]]
+
+
+def test_cron_tool_keeps_creator_connection(tmp_home_no_env: Path) -> None:
+    with use(ConnectionContext("conn_javi", "dev_phone", "remote")):
+        out = Schedule().run(
+            action="add", kind="cron", expression="0 9 * * *", prompt="daily brief",
+        )
+
+    assert out.ok
+    job = json.loads((tmp_home_no_env / "schedule" / "jobs.json").read_text())[0]
+    assert job["connection_id"] == "conn_javi"
 
 
 def test_cron_tool_add_cron_job_silent_by_default(tmp_home_no_env: Path) -> None:

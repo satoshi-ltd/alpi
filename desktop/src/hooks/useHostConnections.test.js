@@ -286,6 +286,24 @@ describe("useHostConnections connection-status", () => {
     });
   });
 
+  it("keeps cached profiles visible while an active connection is disabled", async () => {
+    setProfileCache("remote", [{ name: "cached-doc", model: "a/b" }], []);
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "host_connections") {
+        return makeConnections("remote", { remote: "disabled" });
+      }
+      return null;
+    });
+
+    const { result } = renderHostConnections();
+    await waitFor(() => {
+      expect(result.current.connectionSyncing).toBe(false);
+      expect(result.current.profiles.map((profile) => profile.name)).toEqual([
+        "cached-doc",
+      ]);
+    });
+  });
+
   it("keeps cached remote profiles when profile_summaries rejects", async () => {
     setProfileCache("remote", [{ name: "cached-remote", model: "a/b" }], []);
     invoke.mockImplementation(async (cmd) => {
@@ -331,6 +349,22 @@ describe("useHostConnections connection-status", () => {
     await waitFor(() => expect(result.current.profiles.length).toBe(1));
     act(() => result.current.onSetHostConnection("remote"));
     expect(result.current.connectionSyncing).toBe(true);
+    await waitFor(() => expect(result.current.connectionSyncing).toBe(false));
+  });
+
+  it("clears syncing when a connection switch probe ends disabled", async () => {
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "host_connections") return makeConnections("local");
+      if (cmd === "profile_summaries") return [{ name: "doc", model: "a/b" }];
+      if (cmd === "workgroups") return [];
+      if (cmd === "host_connection_set_active") return null;
+      if (cmd === "host_connection_probe") return "disabled";
+      return null;
+    });
+
+    const { result } = renderHostConnections();
+    await waitFor(() => expect(result.current.profiles.length).toBe(1));
+    act(() => result.current.onSetHostConnection("remote"));
     await waitFor(() => expect(result.current.connectionSyncing).toBe(false));
   });
 });

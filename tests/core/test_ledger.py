@@ -146,6 +146,14 @@ def test_record_populates_daily_history(home: Path) -> None:
         "tokens": 1500,
         "tokens_in": 1200,
         "tokens_out": 300,
+        "by_connection": {
+            "host": {
+                "usd": pytest.approx(0.35),
+                "tokens": 1500,
+                "tokens_in": 1200,
+                "tokens_out": 300,
+            },
+        },
     }
 
 
@@ -155,6 +163,12 @@ def test_free_model_usage_recorded_at_zero_cost(home: Path) -> None:
     today = datetime.now(timezone.utc).date().isoformat()
     assert snap["history"][today] == {
         "usd": 0.0, "tokens": 5000, "tokens_in": 4800, "tokens_out": 200,
+        "by_connection": {
+            "host": {
+                "usd": 0.0, "tokens": 5000,
+                "tokens_in": 4800, "tokens_out": 200,
+            },
+        },
     }
     assert snap["profile"]["tokens"] == 5000
 

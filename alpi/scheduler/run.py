@@ -364,6 +364,8 @@ def run_job(job: dict, home: Path) -> JobOutcome:
         "ALPI_PARENT_EMITS_AGENT_MESSAGE": "1",
         **workspace_env(home),
     }
+    extra["ALPI_CONNECTION_ID"] = str(job.get("connection_id") or "host")
+    extra["ALPI_CONNECTION_SOURCE"] = "schedule"
     from alpi.config import TIER_NAMES
     job_tier = str(job.get("tier") or "").strip().lower()
     if job_tier in TIER_NAMES:
@@ -600,14 +602,19 @@ def _record_schedule_run(
             result = "timeout"
         else:
             result = "error"
-        run_ledger.record(
-            home, kind="schedule", outcome=result, elapsed_s=elapsed, at=started,
-            profile=profile_name(home),
-            job_id=str(job.get("id") or "") or None,
-            backend=("script" if job.get("no_agent") else "agent-subprocess"),
-            exit_code=outcome.exit_code, timeout_reason=outcome.timeout_reason,
-            output_tail=(outcome.reply or outcome.message),
-        )
+        from alpi.host.connection_context import ConnectionContext, use
+        with use(ConnectionContext(
+            connection_id=str(job.get("connection_id") or "host"),
+            source="schedule",
+        )):
+            run_ledger.record(
+                home, kind="schedule", outcome=result, elapsed_s=elapsed, at=started,
+                profile=profile_name(home),
+                job_id=str(job.get("id") or "") or None,
+                backend=("script" if job.get("no_agent") else "agent-subprocess"),
+                exit_code=outcome.exit_code, timeout_reason=outcome.timeout_reason,
+                output_tail=(outcome.reply or outcome.message),
+            )
     except Exception:  # noqa: BLE001
         pass
 

@@ -1,0 +1,71 @@
+.page { flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; overflow: hidden; background: var(--bg-pane); color: var(--ink); }
+.body { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: var(--space-9) var(--pane-pad-x) 80px; }
+.table { width: 100%; max-width: var(--stream-max); margin: 0 auto; }
+.tableToolbar { min-height: 42px; padding: 0 var(--space-4); border-bottom: .5px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: var(--space-5); color: var(--ink-3); }
+.search { width: min(360px, 100%); display: flex; align-items: center; gap: var(--space-3); }
+.search svg { flex-shrink: 0; }
+.search input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font: inherit; }
+.search input::placeholder { color: var(--ink-3); }
+.tableToolbar :global(.mono) { flex-shrink: 0; font-size: var(--fs-xs); }
+.tableHead { min-height: 32px; padding: 0 var(--space-4); display: grid; grid-template-columns: minmax(240px, 1fr) 126px 88px 112px; align-items: center; color: var(--ink-4); font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; }
+.tableHead span:nth-child(n + 2) { text-align: right; }
+.group { border-bottom: .5px solid var(--line); transition: opacity var(--dur-2) var(--ease); }
+.activeGroup { border-radius: var(--r-sm); box-shadow: inset 0 0 0 .5px var(--line-2); }
+.activeGroup > .row { border-bottom: .5px solid var(--line); }
+.mutedGroup { opacity: var(--alpha-muted); }
+.mutedGroup:hover, .mutedGroup:focus-within { opacity: var(--alpha-soft); }
+.row { position: relative; width: 100%; min-height: 74px; background: transparent; color: inherit; }
+.disabledRow { opacity: var(--alpha-soft); }
+.row:hover { background: var(--hover); }
+.rowToggle { width: 100%; min-height: 74px; padding: 0 var(--space-4); border: 0; background: transparent; color: inherit; display: grid; grid-template-columns: minmax(240px, 1fr) 126px 88px 112px; align-items: center; text-align: left; cursor: pointer; }
+.rowToggle:focus-visible { box-shadow: inset 0 0 0 1px var(--focus-border); outline: 0; }
+.identity { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.identity strong { font-size: var(--fs-base); font-weight: var(--fw-bold); line-height: var(--lh-cozy); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.identity :global(.mono) { color: var(--ink-3); font-size: var(--fs-xs); }
+.identityMeta { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+.metric { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.metric strong { font-family: var(--font-mono); font-size: var(--fs-sm); font-weight: var(--fw-medium); }
+.metric small { color: var(--ink-3); font-family: var(--font-mono); font-size: 10px; }
+.spend { transition: opacity var(--dur-1) var(--ease); }
+.rowActions { position: absolute; z-index: 1; top: 50%; right: var(--space-4); width: 102px; display: flex; justify-content: flex-end; gap: 4px; opacity: 0; pointer-events: none; transform: translateY(-50%); transition: opacity var(--dur-1) var(--ease); }
+.confirmAction { position: relative; display: inline-flex; }
+.manageableRow:hover .rowActions, .manageableRow:focus-within .rowActions { opacity: 1; pointer-events: auto; }
+.manageableRow:hover .spend, .manageableRow:focus-within .spend { opacity: 0; }
+.dangerAction { color: var(--c-danger); }
+.detail { padding: var(--space-7) var(--space-4) var(--space-5); background: transparent; }
+.usageSection { margin-bottom: var(--space-8); }
+.sectionLabel { margin-bottom: var(--space-5); font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); }
+.sectionLabel span { margin-left: 12px; text-transform: none; }
+.hostSection { border-top: .5px solid var(--line); padding-top: var(--space-7); }
+.devicesSection { border-top: .5px solid var(--line); padding-top: var(--space-7); }
+.sectionHead { display: flex; justify-content: space-between; align-items: center; }
+.sectionHead h2 { margin: 0 0 var(--space-4); color: var(--ink-4); font-family: var(--font-mono); font-size: 10px; font-weight: var(--fw-regular); text-transform: uppercase; }
+.sectionHead > button { margin-bottom: var(--space-4); }
+.devices { border-top: .5px solid var(--line); }
+.deviceRow { min-height: 56px; border-bottom: .5px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.deviceRow > span { display: flex; align-items: center; gap: 10px; }
+.deviceRow > span:first-child { flex-direction: column; align-items: flex-start; gap: 3px; }
+.deviceRow strong { font-size: var(--fs-base); font-weight: var(--fw-medium); }
+.deviceRow small { color: var(--ink-3); }
+.manageField { display: flex; flex-direction: column; gap: var(--space-2); }
+.fieldLabel { color: var(--ink-3); font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; }
+.select { height: 38px; border: .5px solid var(--line-2); border-radius: 6px; background: var(--bg-input); color: var(--ink); padding: 0 10px; }
+.profiles { max-height: 130px; overflow: auto; border: .5px solid var(--line); padding: 8px; }
+.profiles label { display: flex; align-items: center; gap: 8px; min-height: 30px; }
+.profiles input { position: absolute; opacity: 0; pointer-events: none; }
+.empty { padding: 60px; color: var(--ink-3); text-align: center; }
+.modalFields { display: flex; flex-direction: column; gap: 20px; }
+.modalActions { margin-top: 24px; display: flex; justify-content: flex-end; gap: 8px; }
+.pairing { display: grid; grid-template-columns: 180px 1fr; gap: 24px; align-items: center; }
+.pairing p { color: var(--ink-3); line-height: 1.5; }
+.qr { width: 180px; height: 180px; }
+.qr svg { width: 100%; height: 100%; }
+.link { margin-top: 18px; min-width: 0; padding: 8px 10px; border: .5px solid var(--line); display: flex; align-items: center; gap: 8px; }
+.link :global(.mono) { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 900px) {
+  .tableHead { grid-template-columns: minmax(180px, 1fr) 104px 76px; }
+  .tableHead span:last-child { display: none; }
+  .rowToggle { grid-template-columns: minmax(180px, 1fr) 104px 76px; }
+  .rowToggle .metric:last-child { display: none; }
+  .manageableRow:hover .rowToggle .metric:nth-last-child(2), .manageableRow:focus-within .rowToggle .metric:nth-last-child(2) { opacity: 0; }
+}

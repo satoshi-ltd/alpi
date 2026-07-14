@@ -189,6 +189,27 @@ def test_spawn_returns_thread_and_completes(
     assert "pytest" in (bootstrapped_home / "memories" / "USER.md").read_text()
 
 
+def test_spawn_keeps_connection_context(
+        bootstrapped_home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from alpi.host.connection_context import ConnectionContext, current, use
+    seen = []
+    monkeypatch.setattr(
+        review,
+        "_run_review",
+        lambda *_args: seen.append((current().connection_id, current().device_id)),
+    )
+
+    with use(ConnectionContext("conn_javi", "dev_phone", "remote")):
+        thread = review.spawn_review(
+            bootstrapped_home,
+            config.load(bootstrapped_home),
+            [{"role": "user", "content": "remember this"}],
+        )
+    thread.join(timeout=5)
+
+    assert seen == [("conn_javi", "dev_phone")]
+
+
 # Engine integration — counter and gating.
 
 def test_engine_does_not_spawn_review_when_disabled(

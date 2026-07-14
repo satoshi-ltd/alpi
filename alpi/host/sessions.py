@@ -12,7 +12,7 @@ from typing import Any, NamedTuple
 _FIRST_USER_MAX = 140
 _LARGE_SESSION_BYTES = 2 * 1024 * 1024
 _HEAD_READ_BYTES = 512 * 1024
-_STRING_FIELD_RE = re.compile(r'"(?P<key>model|user)"\s*:\s*(?P<value>"(?:\\.|[^"\\])*")')
+_STRING_FIELD_RE = re.compile(r'"(?P<key>model|user|connection_id)"\s*:\s*(?P<value>"(?:\\.|[^"\\])*")')
 _NUMBER_FIELD_RE = re.compile(
     r'"(?P<key>started_at|input_tokens|output_tokens|cost_usd|last_ctx_tokens)"\s*:\s*(?P<value>-?\d+(?:\.\d+)?)',
 )
@@ -96,7 +96,7 @@ _ROW_CACHE_MAX = 8192
 _row_cache: OrderedDict[str, tuple[tuple[int, int, int, int], dict[str, Any]]] = OrderedDict()
 _row_cache_lock = threading.Lock()
 
-_INDEX_VERSION = 1
+_INDEX_VERSION = 2
 
 
 def _clear_row_cache() -> None:
@@ -277,6 +277,7 @@ def _row_from_data(sid: str, data: dict[str, Any], *, mtime: int, size_bytes: in
         "last_user": last_user,
         "last_assistant": last_assistant,
         "model": data.get("model"),
+        "connection_id": str(data.get("connection_id") or "host"),
         "turn_count": len(turns),
         "kind": classify_first_user(first_user),
         "input_tokens": int(data.get("input_tokens") or 0),
@@ -308,6 +309,7 @@ def _large_session_row(
         "last_user": "",
         "last_assistant": "",
         "model": fields.get("model"),
+        "connection_id": str(fields.get("connection_id") or "host"),
         "turn_count": 0,
         "kind": kind,
         "input_tokens": int(fields.get("input_tokens") or 0),
@@ -394,6 +396,10 @@ def _cached_payload(home: Path, session_id: str) -> dict[str, Any]:
 
 def read_session(home: Path, session_id: str) -> dict[str, Any]:
     return _copy_jsonish(_cached_payload(home, session_id))
+
+
+def session_connection_id(home: Path, session_id: str) -> str:
+    return str(_cached_payload(home, session_id).get("connection_id") or "host")
 
 
 def read_session_slice(

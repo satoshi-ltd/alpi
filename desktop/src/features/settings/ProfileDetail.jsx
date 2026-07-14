@@ -38,9 +38,8 @@ import {
   SchedulesSection,
   SubsystemsCell,
 } from "./fields/services.jsx";
-import { DevicesField } from "./fields/devices.jsx";
 import { DaemonField } from "./fields/DaemonField.jsx";
-import { NetworkAddressField, PairingNameField, HostPortField } from "./fields/network.jsx";
+import { NetworkAddressField } from "./fields/network.jsx";
 import LazyMount from "../../primitives/LazyMount.jsx";
 import {
   CleanupField,
@@ -75,6 +74,7 @@ export default function ProfileDetail({
   onNavigate,
   onOpenChat,
   onOpenSchedule,
+  onOpenConnections,
   refreshTick = 0,
 }) {
   const connId = activeConnection?.id ?? null;
@@ -110,7 +110,6 @@ export default function ProfileDetail({
   }, [refreshTick, snapRefresh]);
   const baseline = useMemo(() => initialDraft(profile), [profile]);
   const [draft, setDraft] = useState(baseline);
-  const [devicesLoading, setDevicesLoading] = useState(false);
   const [emailLoading, setEmailLoading] = useState(false);
   const [schedulesLoading, setSchedulesLoading] = useState(false);
   const [modelLoading, setModelLoading] = useState(false);
@@ -118,8 +117,6 @@ export default function ProfileDetail({
 
   const [workgroupsLoading, setWorkgroupsLoading] = useState(false);
 
-  const [pairingNameLoading, setPairingNameLoading] = useState(false);
-  const [hostPortLoading, setHostPortLoading] = useState(false);
   const notify = useNotify();
   const timersRef = useRef({});
   const prevBaselineRef = useRef(baseline);
@@ -218,9 +215,8 @@ export default function ProfileDetail({
   );
   // Lazy sections (storage, peers, network) keep their loading local — the header bar covers only above-the-fold data.
   const syncing = (
-    detailLoading || devicesLoading || emailLoading || schedulesLoading
+    detailLoading || emailLoading || schedulesLoading
     || modelLoading || workgroupsLoading
-    || pairingNameLoading || hostPortLoading
     || usage.loading || snap.loading || connectionSyncing
   );
 
@@ -233,6 +229,7 @@ export default function ProfileDetail({
         bio={profile.bio || profile.public_bio}
         meta={heroMeta}
         onOpenChat={onOpenChat ? () => onOpenChat(profile) : undefined}
+        onOpenConnections={onOpenConnections}
       />
       <div className={styles.syncBarSlot}>
         <RefreshBar
@@ -476,26 +473,6 @@ export default function ProfileDetail({
             />
           </Row>
         </Section>
-
-        {profile.name === "default" && (activeConnection?.kind === "local" || activeConnection?.role === "admin") && (
-          <Section title="Devices" tooltip="paired apps">
-            {activeConnection?.kind === "local" && (
-              <PairingNameField onLoadingChange={setPairingNameLoading} />
-            )}
-            {activeConnection?.kind === "local" && (
-              <HostPortField
-                profile={profile}
-                onSaved={onSaved}
-                onLoadingChange={setHostPortLoading}
-              />
-            )}
-            <DevicesField
-              connectionId={activeConnection?.id ?? null}
-              role={activeConnection?.role ?? null}
-              onLoadingChange={setDevicesLoading}
-            />
-          </Section>
-        )}
 
         <SchedulesSection
           profile={profile}

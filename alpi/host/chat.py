@@ -61,6 +61,17 @@ async def _data_chat_send(
 
     home = _resolve_home(profile)
 
+    if isinstance(session_id, str) and session_id:
+        from alpi.host.connection_context import current
+        from alpi.host.sessions import session_connection_id
+        try:
+            owner = await asyncio.to_thread(session_connection_id, home, session_id)
+        except FileNotFoundError:
+            owner = None
+        if owner is not None and owner != current().connection_id:
+            await send_frame({"event": "error", "text": f"session not found: {session_id}"})
+            return
+
     # @-mention shortcut mirrors the TUI.
     from alpi.alp import mention as alp_mention
     parsed = alp_mention.parse(text, home=home)
@@ -130,7 +141,14 @@ async def _data_chat_send(
         await session_lock.acquire()
         lock_acquired = True
 
-        await asyncio.to_thread(_chat_events.reset_for_turn, home, persisted_sid, request_id)
+        from alpi.host.connection_context import current
+        await asyncio.to_thread(
+            _chat_events.reset_for_turn,
+            home,
+            persisted_sid,
+            request_id,
+            current().connection_id,
+        )
 
         stream_alive = True
 
@@ -370,6 +388,16 @@ async def _data_chat_events_since(
     from alpi.host.handlers import _check_id
     _check_id(session_id, "session_id")
     home = _resolve_home(profile)
+    from alpi.host.connection_context import current
+    from alpi.host.sessions import session_connection_id
+    try:
+        owner = await asyncio.to_thread(session_connection_id, home, session_id)
+    except FileNotFoundError:
+        owner = await asyncio.to_thread(_chat_events.connection_id, home, session_id)
+        if owner is None:
+            raise host_server.HandlerError(-32004, "not-found", data={"detail": "session not found"})
+    if owner != current().connection_id:
+        raise host_server.HandlerError(-32004, "not-found", data={"detail": "session not found"})
     in_flight = False
     if session_key(profile, session_id) in _session_active:
         in_flight = True
@@ -388,6 +416,9 @@ async def _data_chat_cancel(
     with _active_lock:
         engine = _active.get(request_id)
     if engine is None:
+        return {"cancelled": False}
+    from alpi.host.connection_context import current
+    if getattr(engine.session, "connection_id", "host") != current().connection_id:
         return {"cancelled": False}
     engine.request_interrupt("cancel-rpc")
     return {"cancelled": True}

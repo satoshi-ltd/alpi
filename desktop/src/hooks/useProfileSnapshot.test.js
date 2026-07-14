@@ -69,6 +69,21 @@ describe("useProfileSnapshot", () => {
     await waitFor(() => expect(second.result.current.snapshot).toBeNull());
   });
 
+  it("keeps the snapshot when the connection is disabled", async () => {
+    invokeMock
+      .mockResolvedValueOnce({ detail: { v: 1 } })
+      .mockRejectedValueOnce(
+        new Error("alp -32000: auth-failed — connection-disabled"),
+      );
+    const first = renderHook(() => useProfileSnapshot("c1", "doc"));
+    await waitFor(() => expect(first.result.current.snapshot.detail.v).toBe(1));
+    first.unmount();
+
+    const second = renderHook(() => useProfileSnapshot("c1", "doc"));
+    await waitFor(() => expect(second.result.current.error).toContain("connection-disabled"));
+    expect(second.result.current.snapshot.detail.v).toBe(1);
+  });
+
   it("coalesces relevant daemon events into one refetch and ignores other profiles", async () => {
     vi.useFakeTimers();
     try {
