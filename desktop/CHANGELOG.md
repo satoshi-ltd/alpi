@@ -11,6 +11,22 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.38 — 2026-07-14 — remote cold start stops crawling
+
+- **The header bar now reflects what you see.** Opening a conversation turns
+  the bar off as soon as the recent turns render; older history keeps loading
+  quietly in the background instead of holding the bar hostage.
+- **Cold start no longer syncs every daemon at once.** Notification badges
+  fetch the active connection first; other connections follow a few seconds
+  later, one at a time, and a daemon flipping online no longer re-syncs all
+  the rest.
+- **Profile settings load lighter**: disk usage, peers, and network sections
+  fetch when you scroll to them, not up front.
+- Slow requests (>1s) are logged with their timing to help diagnose slow
+  connections.
+
+_Requires alpi v0.10.28+._
+
 ## v0.4.37 — 2026-07-14 — large documents download reliably
 
 - Downloading a generated document no longer times out on slow connections:

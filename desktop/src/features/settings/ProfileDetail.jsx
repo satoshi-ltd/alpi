@@ -41,6 +41,7 @@ import {
 import { DevicesField } from "./fields/devices.jsx";
 import { DaemonField } from "./fields/DaemonField.jsx";
 import { NetworkAddressField, PairingNameField, HostPortField } from "./fields/network.jsx";
+import LazyMount from "../../primitives/LazyMount.jsx";
 import {
   CleanupField,
   DeleteProfileAction,
@@ -114,10 +115,9 @@ export default function ProfileDetail({
   const [schedulesLoading, setSchedulesLoading] = useState(false);
   const [modelLoading, setModelLoading] = useState(false);
   const [ollamaErrors, setOllamaErrors] = useState([]);
-  const [peersLoading, setPeersLoading] = useState(false);
+
   const [workgroupsLoading, setWorkgroupsLoading] = useState(false);
-  const [storageLoading, setStorageLoading] = useState(false);
-  const [networkLoading, setNetworkLoading] = useState(false);
+
   const [pairingNameLoading, setPairingNameLoading] = useState(false);
   const [hostPortLoading, setHostPortLoading] = useState(false);
   const notify = useNotify();
@@ -216,10 +216,11 @@ export default function ProfileDetail({
       )}
     </>
   );
+  // Lazy sections (storage, peers, network) keep their loading local — the header bar covers only above-the-fold data.
   const syncing = (
     detailLoading || devicesLoading || emailLoading || schedulesLoading
-    || modelLoading || peersLoading || workgroupsLoading || storageLoading
-    || networkLoading || pairingNameLoading || hostPortLoading
+    || modelLoading || workgroupsLoading
+    || pairingNameLoading || hostPortLoading
     || usage.loading || snap.loading || connectionSyncing
   );
 
@@ -353,7 +354,9 @@ export default function ProfileDetail({
             </Row>
           )}
           {activeConnection?.kind === "local" && (
-            <NetworkAddressField onLoadingChange={setNetworkLoading} />
+            <LazyMount>
+              <NetworkAddressField />
+            </LazyMount>
           )}
           <Row label="subsystems">
             <SubsystemsCell profile={profile} onSaved={onSaved} />
@@ -450,13 +453,14 @@ export default function ProfileDetail({
             </span>
           </Row>
           <Row label="peers">
-            <PeersField
-              profile={profile}
-              profiles={profiles}
-              onSaved={onSaved}
-              onRefresh={refreshDetail}
-              onLoadingChange={setPeersLoading}
-            />
+            <LazyMount>
+              <PeersField
+                profile={profile}
+                profiles={profiles}
+                onSaved={onSaved}
+                onRefresh={refreshDetail}
+              />
+            </LazyMount>
           </Row>
           <Row label="workgroups">
             <WorkgroupsField
@@ -531,19 +535,20 @@ export default function ProfileDetail({
         </Section>
 
         <Section title="Storage" tooltip="disk + data usage">
-          <StorageField
-            profile={profile}
-            activeConnection={activeConnection}
-            prefetched={storagePre}
-            onLoadingChange={setStorageLoading}
-          />
-          {(activeConnection?.kind === "local" || activeConnection?.role === "admin") && (
-            <CleanupField
+          <LazyMount>
+            <StorageField
               profile={profile}
               activeConnection={activeConnection}
-              onCleaned={() => { _clearStorageCacheSafe(); onSaved?.(); }}
+              prefetched={storagePre}
             />
-          )}
+            {(activeConnection?.kind === "local" || activeConnection?.role === "admin") && (
+              <CleanupField
+                profile={profile}
+                activeConnection={activeConnection}
+                onCleaned={() => { _clearStorageCacheSafe(); onSaved?.(); }}
+              />
+            )}
+          </LazyMount>
         </Section>
 
         {profile.name !== "default"

@@ -864,6 +864,8 @@ fn read_timeout_for(conn: &HostConnection, over: Option<Duration>) -> Duration {
     })
 }
 
+const SLOW_RPC_LOG_MS: u128 = 1000;
+
 fn call_conn(
     conn: &HostConnection,
     method: &str,
@@ -872,6 +874,7 @@ fn call_conn(
 ) -> Result<Value, String> {
     let id = conn.id().to_string();
     let timeout = read_timeout_for(conn, read_timeout);
+    let started = Instant::now();
     let result = match conn {
         HostConnection::Local { .. } => call_local_inner(method, params, timeout),
         HostConnection::Remote {
@@ -881,6 +884,11 @@ fn call_conn(
             call_remote_inner(&id, host, *port, token, method, params, timeout)
         }
     };
+    let elapsed = started.elapsed().as_millis();
+    // Elapsed includes time queued on the per-connection slot gate — exactly the wait the user experiences.
+    if elapsed >= SLOW_RPC_LOG_MS {
+        eprintln!("[slow-rpc] {method} on {id}: {elapsed}ms (ok={})", result.is_ok());
+    }
     match &result {
         Ok(_) => set_status(&id, ConnectionStatus::Online, None),
         Err(e) => {

@@ -81,7 +81,6 @@ export function createSessionOpener({
           saveCached(connId, profile, sessionId, cur);
           return;
         }
-        sync({ phase: "backfill", loaded: cur.turns.length, total: cur.totalTurns ?? null });
         const res = await fetchDetail(profile, sessionId, {
           beforeTurn: offset,
           maxTurns: BACKFILL_CHUNK_TURNS,
@@ -125,8 +124,9 @@ export function createSessionOpener({
         }
         saveCached(connId, profile, sessionId, data);
         setSessionData(data);
-        await backfill(data);
+        // The bar tracks what the user sees: once the tail is live it goes dark; history backfill continues silently.
         sync(null);
+        await backfill(data);
       } catch (e) {
         sync(null);
         if (isSessionGone(e)) {

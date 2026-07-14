@@ -127,6 +127,222 @@ describe("useAllOutputs (cross-connection fan-out)", () => {
 });
 
 
+describe("useAllOutputs cold-start discipline (per-connection)", () => {
+  it("fetches the active connection immediately and defers the rest", async () => {
+    const calls = [];
+    invoke.mockImplementation(async (cmd, params) => {
+      if (cmd === "profile_summaries") { calls.push(params.connectionId); return [{ name: "p" }]; }
+      if (cmd === "outputs_list") return [];
+      return null;
+    });
+    renderHook(() =>
+      useAllOutputs({
+        connections: [{ id: "c1", name: "home" }, { id: "c2", name: "work" }],
+        activeId: "c1",
+        deferMs: 80,
+      }),
+    );
+    await waitFor(() => expect(calls).toContain("c1"));
+    expect(calls).not.toContain("c2");
+    await waitFor(() => expect(calls).toContain("c2"), { timeout: 2000 });
+  });
+
+  it("unknown→probing→online fetches exactly once, on the online transition", async () => {
+    const calls = [];
+    invoke.mockImplementation(async (cmd, params) => {
+      if (cmd === "profile_summaries") { calls.push(params.connectionId); return [{ name: "p" }]; }
+      if (cmd === "outputs_list") return [];
+      return null;
+    });
+    const conn = (status) => [{ id: "c1", name: "home", status }];
+    const { rerender } = renderHook(({ connections }) => useAllOutputs({ connections }), {
+      initialProps: { connections: conn("unknown") },
+    });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(calls).toEqual([]);
+    rerender({ connections: conn("probing") });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(calls).toEqual([]);
+    rerender({ connections: conn("online") });
+    await waitFor(() => expect(calls).toEqual(["c1"]));
+    rerender({ connections: conn("online") });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(calls).toEqual(["c1"]);
+  });
+
+  it("a connection going offline drops its rows without any refetch", async () => {
+    let listCalls = 0;
+    invoke.mockImplementation(async (cmd, params) => {
+      if (cmd === "profile_summaries") return [{ name: "p" }];
+      if (cmd === "outputs_list") { listCalls += 1; return [{ id: "o1", created_at: 1, profile: "p" }]; }
+      return null;
+    });
+    const conn = (status) => [{ id: "c1", name: "home", status }];
+    const { result, rerender } = renderHook(({ connections }) => useAllOutputs({ connections }), {
+      initialProps: { connections: conn("online") },
+    });
+    await waitFor(() => expect(result.current.rows.length).toBe(1));
+    const before = listCalls;
+    rerender({ connections: conn("offline") });
+    await waitFor(() => expect(result.current.rows).toEqual([]));
+    expect(listCalls).toBe(before);
+  });
+
+  it("an output event refreshes only its own connection", async () => {
+    const calls = [];
+    invoke.mockImplementation(async (cmd, params) => {
+      if (cmd === "profile_summaries") { calls.push(params.connectionId); return [{ name: "p" }]; }
+      if (cmd === "outputs_list") return [];
+      return null;
+    });
+    renderHook(() =>
+      useAllOutputs({ connections: [{ id: "c1", name: "home" }, { id: "c2", name: "work" }] }),
+    );
+    await waitFor(() => expect(calls).toContain("c1"));
+    await waitFor(() => expect(calls).toContain("c2"));
+    await waitFor(() => expect(daemonEventListener).not.toBeNull());
+    calls.length = 0;
+    await act(async () => {
+      daemonEventListener({
+        payload: { connection_id: "c2", frame: { event: "output.created", data: {} } },
+      });
+    });
+    await waitFor(() => expect(calls).toEqual(["c2"]));
+  });
+});
+
+
+describe("useAllOutputs review hardening", () => {
+  it("enabled:false runs no fan-out; enabling fetches active first, secondary after the defer", async () => {
+    const calls = [];
+    invoke.mockImplementation(async (cmd, params) => {
+      if (cmd === "profile_summaries") { calls.push(params.connectionId); return [{ name: "p" }]; }
+      if (cmd === "outputs_list") return [];
+      return null;
+    });
+    const conns = [{ id: "c1", name: "home" }, { id: "c2", name: "work" }];
+    const { rerender } = renderHook(
+      ({ enabled }) => useAllOutputs({ connections: conns, activeId: "c1", deferMs: 80, enabled }),
+      { initialProps: { enabled: false } },
+    );
+    await new Promise((r) => setTimeout(r, 60));
+    expect(calls).toEqual([]);
+    rerender({ enabled: true });
+    await waitFor(() => expect(calls).toContain("c1"));
+    expect(calls).not.toContain("c2");
+    await waitFor(() => expect(calls).toContain("c2"), { timeout: 2000 });
+  });
+
+  it("disabling before the defer cancels the secondary connection's fetch", async () => {
+    const calls = [];
+    invoke.mockImplementation(async (cmd, params) => {
+      if (cmd === "profile_summaries") { calls.push(params.connectionId); return [{ name: "p" }]; }
+      if (cmd === "outputs_list") return [];
+      return null;
+    });
+    const conns = [{ id: "c1", name: "home" }, { id: "c2", name: "work" }];
+    const { rerender } = renderHook(
+      ({ enabled }) => useAllOutputs({ connections: conns, activeId: "c1", deferMs: 80, enabled }),
+      { initialProps: { enabled: true } },
+    );
+    await waitFor(() => expect(calls).toContain("c1"));
+    rerender({ enabled: false });
+    await new Promise((r) => setTimeout(r, 200));
+    expect(calls).not.toContain("c2");
+  });
+
+  it("a response resolving after disable does not update rows", async () => {
+    let resolveList;
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "profile_summaries") return [{ name: "p" }];
+      if (cmd === "outputs_list") return new Promise((res) => { resolveList = res; });
+      return null;
+    });
+    const conns = [{ id: "c1", name: "home" }];
+    const { result, rerender } = renderHook(
+      ({ enabled }) => useAllOutputs({ connections: conns, enabled }),
+      { initialProps: { enabled: true } },
+    );
+    await waitFor(() => expect(typeof resolveList).toBe("function"));
+    rerender({ enabled: false });
+    await act(async () => {
+      resolveList([{ id: "late", created_at: 5, profile: "p" }]);
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(result.current.rows).toEqual([]);
+  });
+
+  it("re-enabling after a close refetches the active connection from scratch", async () => {
+    const calls = [];
+    invoke.mockImplementation(async (cmd, params) => {
+      if (cmd === "profile_summaries") { calls.push(params.connectionId); return [{ name: "p" }]; }
+      if (cmd === "outputs_list") return [];
+      return null;
+    });
+    const conns = [{ id: "c1", name: "home" }];
+    const { rerender } = renderHook(
+      ({ enabled }) => useAllOutputs({ connections: conns, activeId: "c1", enabled }),
+      { initialProps: { enabled: true } },
+    );
+    await waitFor(() => expect(calls).toEqual(["c1"]));
+    rerender({ enabled: false });
+    rerender({ enabled: true });
+    await waitFor(() => expect(calls).toEqual(["c1", "c1"]));
+  });
+
+  it("enabled:false never registers a daemon-bus listener", async () => {
+    invoke.mockImplementation(async () => []);
+    renderHook(() => useAllOutputs({ connections: [{ id: "c1", name: "home" }], enabled: false }));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(daemonEventListener).toBeNull();
+  });
+
+  it("an in-flight response cannot resurrect rows after the connection went offline", async () => {
+    let resolveList;
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "profile_summaries") return [{ name: "p" }];
+      if (cmd === "outputs_list") {
+        return new Promise((res) => { resolveList = res; });
+      }
+      return null;
+    });
+    const conn = (status) => [{ id: "c1", name: "home", status }];
+    const { result, rerender } = renderHook(({ connections }) => useAllOutputs({ connections }), {
+      initialProps: { connections: conn("online") },
+    });
+    await waitFor(() => expect(typeof resolveList).toBe("function"));
+    rerender({ connections: conn("offline") });
+    await act(async () => {
+      resolveList([{ id: "zombie", created_at: 9, profile: "p" }]);
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(result.current.rows).toEqual([]);
+  });
+
+  it("changing the status filter drops the old query's rows and refetches", async () => {
+    invoke.mockImplementation(async (cmd, params) => {
+      if (cmd === "profile_summaries") return [{ name: "p" }];
+      if (cmd === "outputs_list") {
+        return params.status === "unread"
+          ? [{ id: "u1", created_at: 1, profile: "p", status: "unread" }]
+          : [
+            { id: "u1", created_at: 1, profile: "p", status: "unread" },
+            { id: "r1", created_at: 2, profile: "p", status: "read" },
+          ];
+      }
+      return null;
+    });
+    const { result, rerender } = renderHook(
+      ({ status }) => useAllOutputs({ connections: [{ id: "c1", name: "home" }], status }),
+      { initialProps: { status: "unread" } },
+    );
+    await waitFor(() => expect(result.current.rows.map((r) => r.id)).toEqual(["u1"]));
+    rerender({ status: undefined });
+    await waitFor(() => expect(result.current.rows.map((r) => r.id)).toEqual(["r1", "u1"]));
+  });
+});
+
+
 describe("local pub/sub after mutations", () => {
   it("markRead in one hook refreshes every mounted unified list — keeps modal rows + sidebar badge in sync", async () => {
     let listCalls = 0;

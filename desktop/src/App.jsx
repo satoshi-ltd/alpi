@@ -346,6 +346,7 @@ export default function App() {
   const { rows: unreadOutputs } = useAllOutputs({
     connections: hostConnections.connections,
     status: "unread",
+    activeId: hostConnections.active_id,
   });
   const notificationsUnread = unreadOutputs.length;
 
@@ -1325,10 +1326,11 @@ export default function App() {
       />
       <ApprovalModal requests={approval.queue} onResolved={approval.resolve} />
       <ClarificationModal requests={clarification.queue} onResolved={clarification.resolve} />
-      <NotificationsModal
+      {notificationsOpen && <NotificationsModal
         open={notificationsOpen}
         onClose={onCloseNotifications}
         connections={hostConnections.connections}
+        activeConnectionId={hostConnections.active_id}
         selectedId={notificationsTarget?.id}
         selectedProfile={notificationsTarget?.profile}
         selectedConnectionId={notificationsTarget?.connectionId}
@@ -1340,7 +1342,7 @@ export default function App() {
           if (connId && connId !== hostConnections.active_id) onSetHostConnection(connId);
           setView({ kind: "profile", profile, sessionId: null });
         }}
-      />
+      />}
     </div>
   );
 }

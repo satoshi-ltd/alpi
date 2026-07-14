@@ -142,7 +142,7 @@ describe("createSessionOpener", () => {
     expect(state.data.partialTail).toBeUndefined();
     expect(state.sync).toBeNull();
     expect(state.syncLog[0]).toEqual({ phase: "refresh" });
-    expect(state.syncLog.some((s) => s?.phase === "backfill")).toBe(true);
+    expect(state.syncLog).toEqual([{ phase: "refresh" }, null]);
   });
 
   it("small session: tail covers everything, no backfill requests", async () => {

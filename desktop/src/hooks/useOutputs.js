@@ -6,11 +6,14 @@ const DEFAULT_LIMIT = 100;
 
 // In-process bus so a mark_read in one hook instance refreshes siblings (modal list + sidebar badge) before the daemon round-trips output.updated.
 const _localListeners = new Set();
-function notifyLocalChange() {
+function notifyLocalChange(connectionId = null) {
   for (const fn of _localListeners) {
-    try { fn(); } catch { /* */ }
+    try { fn(connectionId); } catch { /* */ }
   }
 }
+
+const OTHERS_DEFER_MS = 4000;
+const OTHERS_STAGGER_MS = 400;
 
 
 export async function fetchConnectionOutputs(connection, status) {
@@ -48,53 +51,161 @@ export async function fetchConnectionOutputs(connection, status) {
   return lists.flat();
 }
 
-export function useAllOutputs({ connections, status } = {}) {
+function isFetchable(conn) {
+  return conn != null && (conn.status == null || conn.status === "online");
+}
+
+// Per-connection model: rows cached and refreshed per connection, so one daemon never re-fans-out the whole inbox.
+export function useAllOutputs({ connections, status, activeId = null, deferMs = OTHERS_DEFER_MS, enabled = true } = {}) {
   const list = Array.isArray(connections) ? connections : [];
-  // Include name+status so a rename or an online/offline flip re-fans-out (re-tagging rows, dropping an offline daemon's stale rows).
   const sig = list.map((c) => `${c.id}:${c.name}:${c.status ?? ""}`).join("|");
+  const statusKey = String(status ?? "");
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
-  const reqRef = useRef(0);
+  const byConnRef = useRef(new Map());
+  const seqRef = useRef(new Map());
+  const inflightRef = useRef(0);
+  const seenSigRef = useRef(new Map());
+  const timersRef = useRef(new Map());
+  const prevStatusKeyRef = useRef(statusKey);
+  const listRef = useRef(list);
+  listRef.current = list;
+  const statusRef = useRef(status);
+  statusRef.current = status;
+  const activeIdRef = useRef(activeId);
+  activeIdRef.current = activeId;
+  const enabledRef = useRef(enabled);
+  enabledRef.current = enabled;
 
-  const refresh = useCallback(async () => {
+  const mergeRows = useCallback(() => {
+    const ids = new Set(listRef.current.map((c) => c.id));
+    const merged = [];
+    for (const [id, r] of byConnRef.current) {
+      if (ids.has(id)) merged.push(...r);
+      else byConnRef.current.delete(id);
+    }
+    merged.sort((a, b) => (b.created_at ?? 0) - (a.created_at ?? 0));
+    setRows(merged);
+  }, []);
+
+  const refreshConn = useCallback(async (conn) => {
+    if (!conn?.id) return;
+    const seq = (seqRef.current.get(conn.id) ?? 0) + 1;
+    seqRef.current.set(conn.id, seq);
+    inflightRef.current += 1;
+    setLoading(true);
+    try {
+      const fetched = await fetchConnectionOutputs(conn, statusRef.current).catch(() => []);
+      if (seqRef.current.get(conn.id) !== seq || !enabledRef.current) return;
+      // A connection that went offline mid-flight must not resurrect: commit only against its live, fetchable self.
+      if (!isFetchable(listRef.current.find((x) => x.id === conn.id))) return;
+      byConnRef.current.set(conn.id, fetched);
+      mergeRows();
+    } finally {
+      inflightRef.current -= 1;
+      if (inflightRef.current <= 0) setLoading(false);
+    }
+  }, [mergeRows]);
+
+  // refresh(id) scopes to one connection; unknown/absent id falls back to every connection.
+  const refresh = useCallback(async (connectionId = null) => {
+    const all = listRef.current;
+    const scoped = connectionId ? all.filter((c) => c.id === connectionId) : [];
+    await Promise.all((scoped.length ? scoped : all).map((c) => refreshConn(c)));
+  }, [refreshConn]);
+
+  useEffect(() => {
+    if (!enabled) {
+      // Disable = full stand-down: kill deferred fetches, invalidate in-flight commits, forget signatures so re-enable refetches from scratch.
+      for (const pending of timersRef.current.values()) clearTimeout(pending);
+      timersRef.current.clear();
+      seenSigRef.current.clear();
+      for (const [id, n] of seqRef.current) seqRef.current.set(id, n + 1);
+      return;
+    }
+    if (prevStatusKeyRef.current !== statusKey) {
+      // The filter changed: every cached row answers the old query — drop caches, invalidate in-flight commits, reschedule from scratch.
+      prevStatusKeyRef.current = statusKey;
+      seenSigRef.current.clear();
+      byConnRef.current.clear();
+      for (const [id, n] of seqRef.current) seqRef.current.set(id, n + 1);
+      mergeRows();
+    }
     if (list.length === 0) {
+      byConnRef.current.clear();
       setRows([]);
       return;
     }
-    const id = ++reqRef.current;
-    setLoading(true);
-    try {
-      const perConn = await Promise.all(
-        list.map((c) => fetchConnectionOutputs(c, status).catch(() => [])),
-      );
-      if (id !== reqRef.current) return;
-      const merged = perConn
-        .flat()
-        .sort((a, b) => (b.created_at ?? 0) - (a.created_at ?? 0));
-      setRows(merged);
-    } finally {
-      if (id === reqRef.current) setLoading(false);
+    let othersDelay = deferMs;
+    for (const c of list) {
+      const s = `${c.name}:${c.status ?? ""}`;
+      if (seenSigRef.current.get(c.id) === s) continue;
+      seenSigRef.current.set(c.id, s);
+      const pending = timersRef.current.get(c.id);
+      if (pending) {
+        clearTimeout(pending);
+        timersRef.current.delete(c.id);
+      }
+      if (c.status === "offline" || c.status === "auth-failed") {
+        byConnRef.current.delete(c.id);
+        seqRef.current.set(c.id, (seqRef.current.get(c.id) ?? 0) + 1);
+        mergeRows();
+        continue;
+      }
+      // unknown/probing never fetch — the single fetch fires on the transition to online.
+      if (!isFetchable(c)) continue;
+      if (activeIdRef.current != null && c.id !== activeIdRef.current) {
+        const delay = othersDelay;
+        othersDelay += OTHERS_STAGGER_MS;
+        timersRef.current.set(c.id, setTimeout(() => {
+          timersRef.current.delete(c.id);
+          const cur = listRef.current.find((x) => x.id === c.id);
+          if (cur) refreshConn(cur);
+        }, delay));
+      } else {
+        refreshConn(c);
+      }
     }
-  }, [sig, status]); // eslint-disable-line react-hooks/exhaustive-deps
+    for (const id of Array.from(seenSigRef.current.keys())) {
+      if (!list.some((c) => c.id === id)) {
+        seenSigRef.current.delete(id);
+        const pending = timersRef.current.get(id);
+        if (pending) {
+          clearTimeout(pending);
+          timersRef.current.delete(id);
+        }
+        byConnRef.current.delete(id);
+        mergeRows();
+      }
+    }
+  }, [sig, statusKey, enabled, deferMs, mergeRows, refreshConn]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
+  useEffect(() => () => {
+    for (const pending of timersRef.current.values()) clearTimeout(pending);
+  }, []);
 
-  // Refresh on any daemon's output mutation (active stream emits output.created/updated) AND on background-poll notifications (flagged, since the poller carries agent.message/etc., not output.created).
+  // Refresh on any daemon's output mutation (active stream emits output.created/updated) AND on background-poll notifications (flagged, since the poller carries agent.message/etc., not output.created) — scoped to the event's connection.
   useEffect(() => {
+    if (!enabled) return undefined;
     let cancelled = false;
     let refreshTimer = null;
+    let pendingTarget;
     const unsub = subscribeDaemonEvent((event) => {
       if (cancelled) return;
       const payload = event.payload ?? {};
       const frame = payload.frame ?? payload;
       const isOutputEvent = frame?.event === "output.created" || frame?.event === "output.updated";
       if (!payload.background && !isOutputEvent) return;
-      if (refreshTimer) return;
+      const target = payload.connection_id ?? activeIdRef.current ?? null;
+      if (refreshTimer) {
+        // Two daemons in one debounce window → widen to a full refresh.
+        if (pendingTarget !== target) pendingTarget = null;
+        return;
+      }
+      pendingTarget = target;
       refreshTimer = setTimeout(() => {
         refreshTimer = null;
-        if (!cancelled) refresh();
+        if (!cancelled) refresh(pendingTarget);
       }, 400);
     });
     return () => {
@@ -102,12 +213,13 @@ export function useAllOutputs({ connections, status } = {}) {
       if (refreshTimer) clearTimeout(refreshTimer);
       unsub();
     };
-  }, [refresh]);
+  }, [refresh, enabled]);
 
   useEffect(() => {
+    if (!enabled) return undefined;
     _localListeners.add(refresh);
     return () => { _localListeners.delete(refresh); };
-  }, [refresh]);
+  }, [refresh, enabled]);
 
   return { rows, loading, refresh };
 }
@@ -144,7 +256,7 @@ export function useOutput(profile, id, connectionId) {
       const out = await invoke("outputs_mark_read", { profile, id, ...(connectionId ? { connectionId } : {}) });
       if (out) {
         setRow(out);
-        notifyLocalChange();
+        notifyLocalChange(connectionId ?? null);
       }
     } catch {
       /* best-effort */
@@ -161,7 +273,7 @@ export function useMarkAllOutputsRead() {
     try {
       const count = await invoke("outputs_mark_all_read", { profile, ...(connectionId ? { connectionId } : {}) });
       const n = Number(count) || 0;
-      if (n > 0) notifyLocalChange();
+      if (n > 0) notifyLocalChange(connectionId ?? null);
       return n;
     } catch {
       return 0;
@@ -196,7 +308,7 @@ export function useDeleteOutput() {
       _pendingDeletes.delete(key);
       try {
         await invoke("outputs_delete", { profile, id, ...(connectionId ? { connectionId } : {}) });
-        notifyLocalChange();
+        notifyLocalChange(connectionId ?? null);
       } catch {
         /* best-effort: row may already be gone */
       }

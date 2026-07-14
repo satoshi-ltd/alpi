@@ -79,6 +79,7 @@ export default function NotificationsModal({
   open,
   onClose,
   connections = [],
+  activeConnectionId = null,
   selectedId,
   selectedProfile,
   selectedConnectionId,
@@ -88,7 +89,7 @@ export default function NotificationsModal({
 }) {
   const notify = useNotify();
   const multi = connections.length > 1;
-  const { rows, refresh } = useAllOutputs({ connections });
+  const { rows, refresh } = useAllOutputs({ connections, activeId: activeConnectionId, enabled: open });
   const markAll = useMarkAllOutputsRead();
   const { schedule: scheduleDelete, cancel: cancelDelete } = useDeleteOutput();
   const [pendingId, setPendingId] = useState(null);
