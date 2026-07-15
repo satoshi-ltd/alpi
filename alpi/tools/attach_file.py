@@ -11,7 +11,12 @@ class AttachFile(Tool):
     name = "attach_file"
     description = (
         "Attach a file you produced to your reply so the user can open and "
-        "download it in the chat. Write the file first with `write_file` "
+        "download it in the chat. Use this ONLY for a deliverable the user "
+        "should keep or download — a document, report, or export — NOT for "
+        "normal project files you create or edit (those stay in the workspace "
+        "via `write_file` / `edit_file`). A workspace-only file isn't "
+        "downloadable: mobile, desktop, and remote members can't browse it. "
+        "Write the file first with `write_file` "
         "(relative paths land in the workspace), then call "
         "`attach_file(path)`. Supported: .md, .txt, .csv, .json, .html, "
         ".pdf, images, and Office docs. The file rides on your final reply as "

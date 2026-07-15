@@ -11,6 +11,17 @@ def test_attach_file_is_registered() -> None:
     assert get("attach_file") is AttachFile
 
 
+def test_write_file_points_to_attach_for_deliverables() -> None:
+    from alpi.tools.write_file import WriteFile
+    assert "attach_file" in WriteFile.description
+
+
+def test_attach_file_scopes_to_deliverables_not_project_files() -> None:
+    desc = AttachFile.description.lower()
+    assert "deliverable" in desc
+    assert "project file" in desc
+
+
 def test_attach_file_returns_out_json(tmp_path: Path) -> None:
     p = tmp_path / "report.md"
     p.write_text("# Report\n\nbody\n")

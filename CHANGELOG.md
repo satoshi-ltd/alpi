@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.10.34 — 2026-07-15 — ask for a file, get it as a download
+
+- **Generated files come back as downloads**: when you ask the agent to
+  produce a document, report or export, it now attaches it to the reply as a
+  downloadable file instead of only writing it into the workspace — which
+  mobile, desktop and remote members can't browse.
+
 ## v0.10.33 — 2026-07-15 — snappier turns, no dead air before the first reply
 
 - **Tool servers are reused across messages** instead of being restarted and
