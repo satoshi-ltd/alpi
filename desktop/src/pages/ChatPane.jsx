@@ -79,6 +79,7 @@ export default function ChatPane({
   onOpenMemory,
   onOpenTools,
   onOpenSchedule,
+  canManageProfileSurfaces = true,
   onNewSession,
   onChangeSession,
   sessionsOpenTick = 0,
@@ -191,6 +192,7 @@ export default function ChatPane({
 
   const paused = !!activeProfile?.paused;
   const syncVisible = useDelayedFlag(!!sessionSync);
+  const notify = useNotify();
   const onTogglePause =
     onTogglePauseProfile && activeProfile ? () => onTogglePauseProfile(activeProfile) : null;
   const effectiveModel = pickEffectiveModel(modelOverride, sessionData?.model, activeProfile?.model);
@@ -315,11 +317,11 @@ export default function ChatPane({
           paused={paused}
           onTogglePause={onTogglePause}
           autoRead={autoRead}
-          onToggleAutoRead={activeProfile ? () => {
+          onToggleAutoRead={activeProfile && canManageProfileSurfaces ? () => {
             if (autoRead) clearTtsQueue();
             invoke("voice_set_auto_read", { profile: activeProfile.name, enabled: !autoRead })
               .then(() => refreshActiveDetail())
-              .catch(() => {});
+              .catch((e) => notify({ message: `auto-read toggle failed: ${e}`, variant: "error" }));
           } : null}
         />
       )}

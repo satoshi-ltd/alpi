@@ -5,7 +5,7 @@ import { clearImageCache } from '../hooks/useCachedImage';
 import { seedCache } from '../hooks/useDaemonData';
 import { probe, probeAll } from './probe';
 import { call as rpcCall, callStream as rpcCallStream, dropEndpointPool } from './rpc';
-import { clearAll, loadConnections, removeConnection, saveConnection, setActiveConnection, setDeviceIds } from './store';
+import { clearAll, loadConnections, removeConnection, rolesFromConnections, saveConnection, setActiveConnection, setDeviceIds, setRoles } from './store';
 
 const OFFLINE_REPROBE_MS = 4000;
 
@@ -51,12 +51,15 @@ export function EndpointProvider({ children }) {
       else next.delete(id);
       return next;
     });
-    setRoleState((m) => {
-      const next = new Map(m);
-      if (role) next.set(id, role);
-      else next.delete(id);
-      return next;
-    });
+    // A failed/roleless probe (offline, old daemon) keeps the last-known role — only the daemon demotes, never a dropped connection.
+    if (role) {
+      setRoleState((m) => {
+        const next = new Map(m);
+        next.set(id, role);
+        return next;
+      });
+      await setRoles(new Map([[id, role]]));
+    }
     if (deviceId && deviceId !== target.deviceId) {
       const next = await setDeviceIds(new Map([[id, deviceId]]));
       setConnections(next.connections);
@@ -69,6 +72,7 @@ export function EndpointProvider({ children }) {
     const state = await loadConnections();
     setConnections(state.connections);
     setActiveId(state.active_id);
+    setRoleState(rolesFromConnections(state.connections));
     setReady(true);
     if (state.active_id) {
       await probeByIdFrom(state.connections, state.active_id);
@@ -84,7 +88,9 @@ export function EndpointProvider({ children }) {
     setProbeState(status);
     setVersionState(versions);
     setUpdateState(updates);
-    setRoleState(roles);
+    // Fresh probe roles overlay the persisted ones; an offline connection keeps its last-known role instead of vanishing from the map.
+    setRoleState(new Map([...rolesFromConnections(state.connections), ...roles]));
+    if (roles.size > 0) await setRoles(roles);
     if (deviceIds.size > 0) {
       const next = await setDeviceIds(deviceIds);
       setConnections(next.connections);

@@ -7,7 +7,7 @@ import { Button } from '../src/components/Button';
 import { Diamond } from '../src/components/Diamond';
 import { ScreenHeader } from '../src/components/ScreenHeader';
 import { useToast } from '../src/components/Toast';
-import { markAllUnifiedRead, useUnifiedOutputs } from '../src/hooks/useUnifiedOutputs';
+import { adminConnectionsOf, isMemberOnly, markAllUnifiedRead, useUnifiedOutputs } from '../src/hooks/useUnifiedOutputs';
 import { useEndpoint } from '../src/lib/EndpointContext';
 import { rowTitle } from '../src/lib/outputsFormat';
 import { accentForProfile } from '../src/theme/accents';
@@ -29,13 +29,17 @@ function fmtRelative(ts) {
 export default function OutputsScreen() {
   const { colors, fonts, fontSizes } = useTheme();
   const router = useRouter();
-  const { endpoint, connections, setActive } = useEndpoint();
+  const { endpoint, connections, roleState, setActive } = useEndpoint();
   const toast = useToast();
 
   const [refreshing, setRefreshing] = useState(false);
 
-  const { rows, loading, refresh } = useUnifiedOutputs();
-  const multi = connections.length > 1;
+  const { rows, loading, refresh, hasAdmin } = useUnifiedOutputs();
+  const adminConnections = useMemo(
+    () => adminConnectionsOf(connections, roleState),
+    [connections, roleState],
+  );
+  const multi = adminConnections.length > 1;
   const unreadCount = useMemo(() => rows.filter((r) => r.status === 'unread').length, [rows]);
 
   useFocusEffect(useCallback(() => { refresh(); }, [refresh]));
@@ -46,10 +50,10 @@ export default function OutputsScreen() {
   }, [refresh]);
 
   const onMarkAll = useCallback(async () => {
-    const total = await markAllUnifiedRead(rows, connections);
+    const total = await markAllUnifiedRead(rows, adminConnections);
     if (total) toast({ title: `Marked ${total} read` });
     refresh();
-  }, [rows, connections, refresh, toast]);
+  }, [rows, adminConnections, refresh, toast]);
 
   const openRow = useCallback(async (item) => {
     if (item.connectionId) {
@@ -126,12 +130,13 @@ export default function OutputsScreen() {
 
   const showEmpty = !loading && rows.length === 0;
   const showSkeleton = loading && rows.length === 0;
+  const memberOnly = isMemberOnly(endpoint, connections, roleState);
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
       <ScreenHeader
         title="Notifications"
-        subtitle={unreadCount > 0 ? `${unreadCount} UNREAD` : 'INBOX ZERO'}
+        subtitle={memberOnly ? 'MEMBER' : unreadCount > 0 ? `${unreadCount} UNREAD` : 'INBOX ZERO'}
         onBack={() => router.back()}
         right={unreadCount > 0 ? (
           <Button title="Mark all read" size="md" variant="ghost" onPress={onMarkAll} />
@@ -175,9 +180,13 @@ export default function OutputsScreen() {
                   textAlign: 'center',
                 }}
               >
-                {endpoint
-                  ? 'Notifications land here when your agent notifies you or a scheduled job fails.'
-                  : 'Pair this phone to a daemon to see your notifications.'}
+                {memberOnly
+                  ? 'The notifications inbox is available to admin connections. This device is paired as a member.'
+                  : hasAdmin
+                    ? 'Notifications land here when your agent notifies you or a scheduled job fails.'
+                    : endpoint
+                      ? 'Connecting… notifications appear once your daemons respond.'
+                      : 'Pair this phone to a daemon to see your notifications.'}
               </Text>
             </View>
           ) : null

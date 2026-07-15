@@ -280,20 +280,24 @@ async def _profile_read_file(
         raise host_server.HandlerError(
             -32004, "not-found", data={"detail": str(e)},
         ) from None
-    if home.resolve() not in (real, *real.parents):
+    home_real = home.resolve()
+    if home_real not in (real, *real.parents):
         raise host_server.HandlerError(
             -32602, "invalid-params", data={"detail": "path escapes home"},
         )
-    # Belt-and-braces: even after symlink resolution, refuse if the real path lands inside a denied subtree of the same home (symlinked secrets directory).
-    try:
-        denied_real = real.relative_to(home.resolve())
-        if _is_denied_read_path(str(denied_real)):
-            raise host_server.HandlerError(
-                -32001, "forbidden",
-                data={"detail": "resolved path holds daemon secrets"},
-            )
-    except ValueError:
-        pass
+    rel_real = real.relative_to(home_real)
+    # Denied-secrets AND member-scope both test the symlink-resolved path — a textual rel_path check is defeated by alp/../ and alp/-rooted symlinks.
+    if _is_denied_read_path(str(rel_real)):
+        raise host_server.HandlerError(
+            -32001, "forbidden",
+            data={"detail": "resolved path holds daemon secrets"},
+        )
+    from alpi.host.connection_context import current
+    if current().role != "admin" and rel_real.parts[:1] != ("alp",):
+        raise host_server.HandlerError(
+            -32001, "forbidden",
+            data={"detail": "path is admin-only over remote connections"},
+        )
     data = real.read_bytes()
     truncated = len(data) > READ_MAX_BYTES
     text = data[:READ_MAX_BYTES].decode("utf-8", errors="replace")

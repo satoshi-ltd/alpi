@@ -11,6 +11,21 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.41 — 2026-07-15 — member connections get a clean chat
+
+- **Member connections see a chat-first UI**: skills, memory, tools, schedule,
+  auto-read and the notifications section are all hidden — members keep
+  read-aloud and refresh thread. Switching an open profile from an admin to a
+  member connection now tears those panels down instead of leaving them up.
+- **The notifications inbox is admin-only**: it never polls or fetches
+  member-role connections — not on a manual or event-driven refresh, and not
+  the background tray poller. Each connection's role is remembered between
+  launches, so an inactive member daemon is skipped from the first second
+  instead of being queried until it's re-checked. A rejected action surfaces an
+  error toast instead of failing silently.
+
+_Requires alpi v0.10.30+ for the member connection boundary._
+
 ## v0.4.40 — 2026-07-14 — notifications open instantly again
 
 - **The notifications inbox shows your last-known items the moment it opens**

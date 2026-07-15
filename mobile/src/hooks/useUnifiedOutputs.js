@@ -14,6 +14,16 @@ export function mergeOutputs(perConnection) {
     .sort((a, b) => (b.created_at ?? 0) - (a.created_at ?? 0));
 }
 
+// Members can't list outputs (daemon rejects) — never ask; roleState is empty pre-probe, so a connection joins the fan-out only once probed admin.
+export function adminConnectionsOf(connections, roleState) {
+  return (connections ?? []).filter((c) => roleState?.get?.(c.id) === 'admin');
+}
+
+export function isMemberOnly(endpoint, connections, roleState) {
+  const list = connections ?? [];
+  return !!endpoint && list.length > 0 && list.every((c) => roleState?.get?.(c.id) === 'member');
+}
+
 export async function fetchConnectionOutputs(connection, status, rpc = rpcCall) {
   if (!connection?.ip || !connection?.port) return [];
   let profiles;
@@ -57,26 +67,32 @@ export function connectionsSignature(connections, probeState) {
 }
 
 export function useUnifiedOutputs({ status } = {}) {
-  const { connections, probeState } = useEndpoint();
+  const { connections, probeState, roleState } = useEndpoint();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const reqRef = useRef(0);
 
+  const adminConnections = useMemo(
+    () => adminConnectionsOf(connections, roleState),
+    [connections, roleState],
+  );
   const connSig = useMemo(
-    () => connectionsSignature(connections, probeState),
-    [connections, probeState],
+    () => connectionsSignature(adminConnections, probeState),
+    [adminConnections, probeState],
   );
 
   const refresh = useCallback(async () => {
-    if (connections.length === 0) {
+    // Bump the token even on the empty path: a fetch started while admin must not restore rows after a demotion drops the last admin.
+    const reqId = ++reqRef.current;
+    if (adminConnections.length === 0) {
       setRows([]);
+      setLoading(false);
       return;
     }
-    const reqId = ++reqRef.current;
     setLoading(true);
     try {
       const perConn = await Promise.all(
-        connections.map((c) => fetchConnectionOutputs(c, status).catch(() => [])),
+        adminConnections.map((c) => fetchConnectionOutputs(c, status).catch(() => [])),
       );
       if (reqId !== reqRef.current) return;
       setRows(mergeOutputs(perConn));
@@ -93,7 +109,7 @@ export function useUnifiedOutputs({ status } = {}) {
   const debouncedRefresh = useDebouncedCallback(refresh, 500);
   useEventEffect(['output.created', 'output.updated'], debouncedRefresh);
 
-  return { rows, loading, refresh };
+  return { rows, loading, refresh, hasAdmin: adminConnections.length > 0 };
 }
 
 export async function markAllUnifiedRead(rows, connections, rpc = rpcCall) {

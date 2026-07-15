@@ -13,13 +13,16 @@ export function groupConnectionsByDaemon(connections) {
   const groups = new Map();
   for (const c of connections) {
     if (!c?.id || !c?.ip || !c?.port || !c?.deviceId) continue;
+    // A member route to a daemon returns empty history (the inbox is admin-only); left in, and sorted first by recency, it would shadow that daemon's admin route.
+    if (c.role === 'member') continue;
     const list = groups.get(c.deviceId) ?? [];
     list.push(c);
     groups.set(c.deviceId, list);
   }
+  const rank = (c) => (c.role === 'admin' ? 0 : 1);
   return Array.from(groups.values()).map((routes) =>
     routes.slice().sort(
-      (a, b) => (Number(b.added_at) || 0) - (Number(a.added_at) || 0),
+      (a, b) => rank(a) - rank(b) || (Number(b.added_at) || 0) - (Number(a.added_at) || 0),
     ),
   );
 }
@@ -87,13 +90,26 @@ export async function runPollOnce() {
       if (Date.now() - startMs > WAKE_BUDGET_MS) break;
       let pollResult = null;
       let winningRoute = null;
+      let fallback = null;
+      let fallbackRoute = null;
       for (const route of routes) {
+        if (Date.now() - startMs > WAKE_BUDGET_MS) break;
         const result = await pollConnection(route);
-        if (result.ok) {
+        if (!result.ok) continue;
+        if (result.events.length > 0) {
           pollResult = result;
           winningRoute = route;
           break;
         }
+        // ok+empty (a member credential's filtered inbox, or a genuinely empty one) is only a fallback — keep searching for a route WITH events so it can't shadow an admin of the same daemon.
+        if (!fallback) {
+          fallback = result;
+          fallbackRoute = route;
+        }
+      }
+      if (!pollResult && fallback) {
+        pollResult = fallback;
+        winningRoute = fallbackRoute;
       }
       if (!pollResult || !winningRoute) continue;
       if (pollResult.events.length === 0) continue;

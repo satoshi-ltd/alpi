@@ -55,6 +55,21 @@ vi.mock("./store", () => ({
     }
     return structuredClone(storeState);
   },
+  rolesFromConnections: (connections) => {
+    const m = new Map();
+    for (const c of connections ?? []) {
+      if (c?.id && typeof c.role === "string") m.set(c.id, c.role);
+    }
+    return m;
+  },
+  setRoles: async (map) => {
+    storeMutations.push({ op: "setRoles", count: map.size });
+    for (const conn of storeState.connections) {
+      const next = map.get(conn.id);
+      if (next) conn.role = next;
+    }
+    return structuredClone(storeState);
+  },
 }));
 
 // Probe returns whatever the test sets. Default: every connection is online.
@@ -135,6 +150,21 @@ describe("EndpointProvider lifecycle", () => {
     expect(captureRef.current.probeState.get("alpha")).toBe("online");
     expect(captureRef.current.probeState.has("beta")).toBe(false);
     expect(captureRef.current.versionState.get("alpha")).toBe("0.4.54");
+  });
+
+  it("seeds roleState from persisted roles at cold start — the never-probed inactive connection's role is already known", async () => {
+    storeState = {
+      v: 1,
+      active_id: "alpha",
+      connections: [
+        { id: "alpha", name: "umbrel", ip: "100.0.0.1", port: 49200, token: "a", kind: "remote", role: "admin" },
+        { id: "beta", name: "macbook", ip: "100.0.0.2", port: 49200, token: "b", kind: "remote", role: "member" },
+      ],
+    };
+    const { captureRef } = await mount();
+    expect(captureRef.current.probeState.has("beta")).toBe(false);
+    expect(captureRef.current.roleState.get("beta")).toBe("member");
+    expect(captureRef.current.roleState.get("alpha")).toBe("admin");
   });
 
   it("marks a connection disabled without probing or removing it", async () => {

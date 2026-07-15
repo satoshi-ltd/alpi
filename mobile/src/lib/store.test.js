@@ -115,6 +115,43 @@ describe("store.saveConnection", () => {
   });
 });
 
+describe("store role persistence", () => {
+  it("rolesFromConnections maps id→role and skips roleless connections", async () => {
+    const { rolesFromConnections } = await import("./store.js");
+    const map = rolesFromConnections([
+      { id: "a", role: "admin" },
+      { id: "b", role: "member" },
+      { id: "c" },
+    ]);
+    expect([...map.entries()]).toEqual([["a", "admin"], ["b", "member"]]);
+  });
+
+  it("setRoles persists the role of matching connections only", async () => {
+    const { saveConnection, setRoles, loadConnections } = await import("./store.js");
+    await saveConnection({ id: "c-1", name: "n", ip: "1.1.1.1", port: 49200, token: "t", deviceId: "mac" });
+    await setRoles(new Map([["c-1", "member"], ["ghost", "admin"]]));
+    const state = await loadConnections();
+    expect(state.connections[0].role).toBe("member");
+  });
+
+  it("saveConnection persists a provided role and preserves it on a role-less re-save", async () => {
+    const { saveConnection, loadConnections } = await import("./store.js");
+    await saveConnection({ id: "c-1", name: "n", ip: "1.1.1.1", port: 49200, token: "t", deviceId: "mac", role: "admin" });
+    expect((await loadConnections()).connections[0].role).toBe("admin");
+    await saveConnection({ id: "c-1", name: "n2", ip: "1.1.1.1", port: 49200, token: "t2", deviceId: "mac" });
+    expect((await loadConnections()).connections[0].role).toBe("admin");
+  });
+
+  it("loadConnections keeps a persisted role through validation", async () => {
+    memory.set(KEY, JSON.stringify({
+      v: 1, active_id: "c-1",
+      connections: [validConn({ role: "member" })],
+    }));
+    const { loadConnections } = await import("./store.js");
+    expect((await loadConnections()).connections[0].role).toBe("member");
+  });
+});
+
 describe("store.removeConnection", () => {
   it("removes and falls back active_id to the next survivor", async () => {
     memory.set(KEY, JSON.stringify({

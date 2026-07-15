@@ -53,3 +53,17 @@ describe("Sidebar connection-switch skeleton", () => {
     expect(loadingRows()).not.toBeInTheDocument();
   });
 });
+
+describe("Sidebar notifications bell (member gating)", () => {
+  const bell = () => screen.queryByRole("button", { name: /Notifications/ });
+
+  it("shows the bell when notifications are allowed", () => {
+    render(<Sidebar {...BASE} onOpenNotifications={() => {}} />);
+    expect(bell()).toBeInTheDocument();
+  });
+
+  it("hides the bell when notifications are gated off (member connection)", () => {
+    render(<Sidebar {...BASE} onOpenNotifications={null} />);
+    expect(bell()).not.toBeInTheDocument();
+  });
+});

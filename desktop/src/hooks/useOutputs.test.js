@@ -436,6 +436,75 @@ describe("useAllOutputs warm start (rows memory)", () => {
 });
 
 
+describe("useAllOutputs member connections", () => {
+  it("never fetches outputs from a member-role connection and drops its stale rows", async () => {
+    const calls = [];
+    invoke.mockImplementation(async (cmd, params) => {
+      if (cmd === "profile_summaries") { calls.push(params.connectionId); return [{ name: "p" }]; }
+      if (cmd === "outputs_list") return [{ id: "o", created_at: 1, profile: "p" }];
+      return null;
+    });
+    const conns = (role) => [
+      { id: "c1", name: "home", role: "admin" },
+      { id: "c2", name: "work", role },
+    ];
+    const { result, rerender } = renderHook(
+      ({ connections }) => useAllOutputs({ connections }),
+      { initialProps: { connections: conns("admin") } },
+    );
+    await waitFor(() => expect(calls.sort()).toEqual(["c1", "c2"]));
+    await waitFor(() => expect(result.current.rows.length).toBe(2));
+    calls.length = 0;
+    rerender({ connections: conns("member") });
+    await waitFor(() => expect(result.current.rows.length).toBe(1));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(calls).toEqual([]);
+  });
+
+  it("refresh(memberId) makes no RPC — the guard is before the fetch, not after", async () => {
+    const calls = [];
+    invoke.mockImplementation(async (cmd, params) => {
+      if (cmd === "profile_summaries") { calls.push(params.connectionId); return [{ name: "p" }]; }
+      if (cmd === "outputs_list") return [{ id: "o", created_at: 1, profile: "p" }];
+      return null;
+    });
+    const connections = [
+      { id: "c1", name: "home", role: "admin" },
+      { id: "c2", name: "work", role: "member" },
+    ];
+    const { result } = renderHook(() => useAllOutputs({ connections }));
+    await waitFor(() => expect(calls).toEqual(["c1"]));
+    calls.length = 0;
+    await act(async () => { await result.current.refresh("c2"); });
+    expect(calls).toEqual([]);
+  });
+
+  it("an event-driven refresh scoped to a member connection makes no RPC", async () => {
+    const calls = [];
+    invoke.mockImplementation(async (cmd, params) => {
+      if (cmd === "profile_summaries") { calls.push(params.connectionId); return [{ name: "p" }]; }
+      if (cmd === "outputs_list") return [{ id: "o", created_at: 1, profile: "p" }];
+      return null;
+    });
+    const connections = [
+      { id: "c1", name: "home", role: "admin" },
+      { id: "c2", name: "work", role: "member" },
+    ];
+    renderHook(() => useAllOutputs({ connections }));
+    await waitFor(() => expect(calls).toEqual(["c1"]));
+    await waitFor(() => expect(daemonEventListener).not.toBeNull());
+    calls.length = 0;
+    await act(async () => {
+      daemonEventListener({
+        payload: { connection_id: "c2", frame: { event: "agent.message", data: {} }, background: true },
+      });
+      await new Promise((r) => setTimeout(r, 500));
+    });
+    expect(calls).toEqual([]);
+  });
+});
+
+
 describe("useAllOutputs credential and failure hardening", () => {
   it("re-pairing the same connection id with a new token never shows the old credential's rows", async () => {
     let resolveList = null;

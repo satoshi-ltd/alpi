@@ -1028,3 +1028,23 @@ def test_run_job_passes_tier_to_child_env(tmp_home_no_env: Path, monkeypatch) ->
 
     scheduler.run_job({"id": "jt2", "kind": "cron", "prompt": "go"}, tmp_home_no_env)
     assert "ALPI_TIER" not in captured["env"]
+
+
+def test_run_job_accounts_to_host_even_for_connection_created_jobs(
+        monkeypatch, tmp_home_no_env: Path) -> None:
+    captured = {}
+
+    class _FakeCompletedProcess:
+        returncode = 0
+        stdout = _events_stdout([{"kind": "reply", "text": "done"}])
+        stderr = ""
+
+    def fake_run(*a, **kw):
+        captured["env"] = kw.get("env") or {}
+        return _FakeCompletedProcess()
+
+    monkeypatch.setattr(scheduler.subprocess, "run", fake_run)
+    job = {"id": "j", "kind": "cron", "prompt": "p", "connection_id": "conn_javi"}
+    assert scheduler.run_job(job, tmp_home_no_env).ok
+    assert captured["env"].get("ALPI_CONNECTION_ID") == "host"
+    assert captured["env"].get("ALPI_CONNECTION_SOURCE") == "schedule"

@@ -14,6 +14,21 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.2.16 — 2026-07-15 — notifications are for admins
+
+- **The notifications inbox is admin-only.** The bell is hidden on member
+  connections, and the inbox only queries — and marks read — the daemons where
+  this device is an admin. Each connection's role is remembered between
+  launches, so admin inboxes from other daemons appear immediately at startup
+  instead of only after you open the connection switcher.
+- **Background notifications skip member routes.** When one daemon is reachable
+  by both an admin and a member credential, alerts now come from the admin
+  route instead of being silenced by the member's empty inbox. The "member"
+  empty state only shows once a connection's role is actually known — not while
+  it's still connecting.
+
+_Requires alpi v0.10.30+ — the member boundary is enforced daemon-side._
+
 ## v0.2.15 — 2026-07-14 — devices identify themselves
 
 - Pairing now registers the phone model and app version as its own credential

@@ -88,13 +88,15 @@ export async function fetchConnectionOutputs(connection, status, previous = null
 }
 
 function isFetchable(conn) {
+  // Outputs are the operator's inbox — member-role connections are never asked (the daemon would reject them anyway).
+  if (conn?.role === "member") return false;
   return conn != null && (conn.status == null || conn.status === "online");
 }
 
 // Per-connection model: rows cached and refreshed per connection, so one daemon never re-fans-out the whole inbox.
 export function useAllOutputs({ connections, status, activeId = null, deferMs = OTHERS_DEFER_MS, enabled = true } = {}) {
   const list = Array.isArray(connections) ? connections : [];
-  const sig = list.map((c) => `${c.id}:${c.name}:${c.status ?? ""}:${_authId(c)}`).join("|");
+  const sig = list.map((c) => `${c.id}:${c.name}:${c.status ?? ""}:${c.role ?? ""}:${_authId(c)}`).join("|");
   const statusKey = String(status ?? "");
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -135,6 +137,8 @@ export function useAllOutputs({ connections, status, activeId = null, deferMs = 
 
   const refreshConn = useCallback(async (conn) => {
     if (!conn?.id) return;
+    // Guard BEFORE the RPC: refresh() and event-driven paths funnel here, so a member/offline connection is never asked (the post-fetch guard below only covers going-offline mid-flight).
+    if (!isFetchable(listRef.current.find((x) => x.id === conn.id) ?? conn)) return;
     const seq = (seqRef.current.get(conn.id) ?? 0) + 1;
     seqRef.current.set(conn.id, seq);
     inflightRef.current += 1;
@@ -229,7 +233,7 @@ export function useAllOutputs({ connections, status, activeId = null, deferMs = 
     if (seeded) mergeRows();
     let othersDelay = deferMs;
     for (const c of list) {
-      const s = `${c.name}:${c.status ?? ""}:${_authId(c)}`;
+      const s = `${c.name}:${c.status ?? ""}:${c.role ?? ""}:${_authId(c)}`;
       if (seenSigRef.current.get(c.id) === s) continue;
       seenSigRef.current.set(c.id, s);
       const pending = timersRef.current.get(c.id);
@@ -237,7 +241,7 @@ export function useAllOutputs({ connections, status, activeId = null, deferMs = 
         clearTimeout(pending);
         timersRef.current.delete(c.id);
       }
-      if (c.status === "offline" || c.status === "disabled" || c.status === "auth-failed") {
+      if (c.status === "offline" || c.status === "disabled" || c.status === "auth-failed" || c.role === "member") {
         byConnRef.current.delete(c.id);
         _rowsMemory.delete(_memoryKey(c.id, _authId(c), statusKey));
         seqRef.current.set(c.id, (seqRef.current.get(c.id) ?? 0) + 1);

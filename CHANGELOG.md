@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.10.30 — 2026-07-15 — member connections stay members
+
+- **Management surfaces are admin-only over remote connections**: memory
+  files, skill listings/bodies, schedule listings and the notifications inbox
+  (list, read, mark-read, delete) reject member tokens. Raw profile reads are
+  limited for members to what chat needs — peer mentions and workgroup
+  transcripts — and that limit can no longer be slipped with `..` or symlinks.
+  Auto-read is a shared profile setting, so toggling it is admin-only too; the
+  generic tool catalog stays readable (the member UI just hides it).
+- **The event stream respects the same boundary**: a member connection no
+  longer receives notification, schedule or spend events — live or on
+  reconnect — so nothing the admin-only verbs hide leaks back through the bus.
+- **Scheduled runs are always accounted to `host`**: the daemon owns every
+  scheduled job regardless of which connection created it; the job keeps its
+  creator as provenance only.
+
 ## v0.10.29 — 2026-07-14 — one connection, multiple devices
 
 - **Connections replace the flat paired-device list.** One label, role and

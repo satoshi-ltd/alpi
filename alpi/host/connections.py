@@ -49,6 +49,7 @@ class AuthResult:
             connection_id=self.connection_id,
             device_id=self.device_id or None,
             source="remote",
+            role=self.role or "member",
         )
 
 

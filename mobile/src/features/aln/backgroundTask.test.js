@@ -105,6 +105,21 @@ describe('groupConnectionsByDaemon', () => {
     expect(groupConnectionsByDaemon(undefined)).toEqual([]);
     expect(groupConnectionsByDaemon({})).toEqual([]);
   });
+
+  it('excludes member-role routes before grouping — their empty inbox would shadow an admin route', () => {
+    const conns = [
+      { id: 'm', ip: '100.x', port: 49200, deviceId: 'mac', added_at: 200, role: 'member' },
+      { id: 'a', ip: '192.x', port: 49200, deviceId: 'mac', added_at: 100, role: 'admin' },
+    ];
+    const groups = groupConnectionsByDaemon(conns);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].map((c) => c.id)).toEqual(['a']);
+  });
+
+  it('keeps routes whose role is unknown (unprobed) — only KNOWN members are excluded', () => {
+    const conns = [{ id: 'u', ip: '100.x', port: 49200, deviceId: 'mac', added_at: 1 }];
+    expect(groupConnectionsByDaemon(conns).flat().map((c) => c.id)).toEqual(['u']);
+  });
 });
 
 describe('runPollOnce', () => {
@@ -164,16 +179,33 @@ describe('runPollOnce', () => {
     expect(hoisted.fireMock).toHaveBeenCalledTimes(1);
   });
 
-  it('stops trying routes for a daemon as soon as one route succeeds — failover does NOT cascade beyond the first ok=true', async () => {
+  it('a route WITH events wins immediately and stops the search', async () => {
     const a = { id: 'a', ip: '1.x', port: 49200, deviceId: 'mac', added_at: 200 };
     const b = { id: 'b', ip: '2.x', port: 49200, deviceId: 'mac', added_at: 100 };
     hoisted.loadConnectionsMock.mockResolvedValueOnce({ connections: [a, b] });
-    hoisted.pollMock.mockResolvedValueOnce({ ok: true, events: [] });
+    hoisted.pollMock.mockResolvedValueOnce({ ok: true, events: [ev1] });
 
     await runPollOnce();
 
     expect(hoisted.pollMock).toHaveBeenCalledTimes(1);
     expect(hoisted.pollMock.mock.calls[0][0].id).toBe('a');
+  });
+
+  it('an ok+empty route does not stop the search — a legacy member (unknown role) cannot shadow an admin with events', async () => {
+    const member = { id: 'member', ip: '100.x', port: 49200, deviceId: 'mac', added_at: 200, token: 'm' };
+    const admin = { id: 'admin', ip: '192.168.x', port: 49200, deviceId: 'mac', added_at: 100, token: 'a' };
+    hoisted.loadConnectionsMock.mockResolvedValueOnce({ connections: [member, admin] });
+    hoisted.pollMock
+      .mockResolvedValueOnce({ ok: true, events: [] })
+      .mockResolvedValueOnce({ ok: true, events: [ev1] });
+
+    await runPollOnce();
+
+    expect(hoisted.pollMock).toHaveBeenCalledTimes(2);
+    expect(hoisted.pollMock.mock.calls[0][0].id).toBe('member');
+    expect(hoisted.pollMock.mock.calls[1][0].id).toBe('admin');
+    expect(hoisted.commitMock).toHaveBeenCalledWith('daemon:mac', [ev1]);
+    expect(hoisted.fireMock).toHaveBeenCalledTimes(1);
   });
 
   it('skips the whole daemon group when every route fails (no spurious commit, no spurious notification)', async () => {
@@ -224,6 +256,20 @@ describe('runPollOnce', () => {
     const result = await runPollOnce();
     expect(result).toEqual({ groups: 0, notifications: 0, skipped: 'no-permission' });
     expect(hoisted.pollMock).not.toHaveBeenCalled();
+  });
+
+  it('a recent member route does not shadow the same daemon\'s older admin route', async () => {
+    const member = { id: 'member', ip: '100.x', port: 49200, deviceId: 'mac', added_at: 200, role: 'member', token: 'm' };
+    const admin = { id: 'admin', ip: '192.168.x', port: 49200, deviceId: 'mac', added_at: 100, role: 'admin', token: 'a' };
+    hoisted.loadConnectionsMock.mockResolvedValueOnce({ connections: [member, admin] });
+    hoisted.pollMock.mockResolvedValueOnce({ ok: true, events: [ev1] });
+
+    await runPollOnce();
+
+    expect(hoisted.pollMock).toHaveBeenCalledTimes(1);
+    expect(hoisted.pollMock.mock.calls[0][0].id).toBe('admin');
+    expect(hoisted.commitMock).toHaveBeenCalledWith('daemon:mac', [ev1]);
+    expect(hoisted.fireMock).toHaveBeenCalledTimes(1);
   });
 
   it('skips connections without deviceId entirely (no legacy fallback)', async () => {

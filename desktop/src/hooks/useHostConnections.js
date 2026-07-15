@@ -228,16 +228,19 @@ export function useHostConnections({
 
   useEffect(() => {
     return subscribe("connection-status", (event) => {
-      const { id, status, error, alpi_version, update_available } = event.payload ?? {};
+      const { id, status, error, alpi_version, update_available, role } = event.payload ?? {};
       if (!id || !status) return;
       setHostConnections((prev) => {
         const before = prev.connections.find((c) => c.id === id);
+        // A null role means "unchanged" (offline/status-only events don't re-probe the role) — never let it clear a role we already know.
+        const nextRole = role ?? before?.role ?? null;
         if (
           before &&
           before.status === status &&
           before.error === error &&
           before.alpi_version === (alpi_version ?? null) &&
-          before.update_available === (update_available ?? null)
+          before.update_available === (update_available ?? null) &&
+          (before.role ?? null) === nextRole
         ) {
           return prev;
         }
@@ -251,6 +254,7 @@ export function useHostConnections({
                   error: error ?? null,
                   alpi_version: alpi_version ?? null,
                   update_available: update_available ?? null,
+                  role: role ?? c.role ?? null,
                 }
               : c,
           ),

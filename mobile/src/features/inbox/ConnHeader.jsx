@@ -1,5 +1,5 @@
 import { Pressable, Text, View } from 'react-native';
-import { radii, space , fontSizes, lineHeights} from '../../theme/tokens';
+import { lineHeights, radii, space } from '../../theme/tokens';
 
 import { Icon } from '../../components/Icon';
 import { useTheme } from '../../theme/ThemeContext';
@@ -14,7 +14,7 @@ export function ConnHeader({
   onBellPress,
   onGearPress,
 }) {
-  const { colors, fonts , fontSizes} = useTheme();
+  const { colors, fonts, fontSizes } = useTheme();
   const statusColor =
     status === 'online' || status === 'connected'
       ? colors.success
@@ -86,40 +86,42 @@ export function ConnHeader({
 
       <View style={{ flex: 1 }} />
 
-      <Pressable
-        onPress={onBellPress}
-        style={({ pressed }) => ({
-          width: 38,
-          height: 38,
-          borderRadius: radii.md,
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: pressed ? colors.selected : 'transparent',
-          position: 'relative',
-        })}
-      >
-        <Icon name="bell" size={22} color={colors.ink2} strokeWidth={1.7} />
-        {unread > 0 ? (
-          <View
-            style={{
-              position: 'absolute',
-              top: 2,
-              right: 2,
-              minWidth: space.s6,
-              height: space.s6,
-              paddingHorizontal: space.s1,
-              borderRadius: radii.pill,
-              backgroundColor: colors.danger,
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.xxs, lineHeight: space.s6, color: '#fff' }}>
-              {unread}
-            </Text>
-          </View>
-        ) : null}
-      </Pressable>
+      {onBellPress ? (
+        <Pressable
+          onPress={onBellPress}
+          style={({ pressed }) => ({
+            width: 38,
+            height: 38,
+            borderRadius: radii.md,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: pressed ? colors.selected : 'transparent',
+            position: 'relative',
+          })}
+        >
+          <Icon name="bell" size={22} color={colors.ink2} strokeWidth={1.7} />
+          {unread > 0 ? (
+            <View
+              style={{
+                position: 'absolute',
+                top: 2,
+                right: 2,
+                minWidth: space.s6,
+                height: space.s6,
+                paddingHorizontal: space.s1,
+                borderRadius: radii.pill,
+                backgroundColor: colors.danger,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.xxs, lineHeight: space.s6, color: '#fff' }}>
+                {unread}
+              </Text>
+            </View>
+          ) : null}
+        </Pressable>
+      ) : null}
 
       <Pressable
         onPress={onGearPress}

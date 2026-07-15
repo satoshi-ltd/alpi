@@ -313,6 +313,8 @@ pub enum HostConnection {
         device_id: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         last_connected: Option<i64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        last_role: Option<String>,
     },
     Remote {
         id: String,
@@ -326,6 +328,8 @@ pub enum HostConnection {
         device_id: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         last_connected: Option<i64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        last_role: Option<String>,
     },
 }
 
@@ -344,6 +348,7 @@ impl Default for ConnectionsState {
                 name: "Local daemon".to_string(),
                 device_id: None,
                 last_connected: None,
+                last_role: None,
             }],
         }
     }
@@ -378,13 +383,27 @@ impl HostConnection {
         }
     }
 
+    pub fn last_role(&self) -> Option<&str> {
+        match self {
+            HostConnection::Local { last_role, .. } => last_role.as_deref(),
+            HostConnection::Remote { last_role, .. } => last_role.as_deref(),
+        }
+    }
+
+    pub fn set_last_role(&mut self, value: Option<String>) {
+        match self {
+            HostConnection::Local { last_role, .. } => *last_role = value,
+            HostConnection::Remote { last_role, .. } => *last_role = value,
+        }
+    }
+
     fn with_token_redacted(&self) -> Value {
         let (status, error) = status_for(self.id());
         let alpi_version = version_for(self.id());
         let update_available = update_available_for(self.id());
-        let role = role_for(self.id());
+        let role = role_for(self.id()).or_else(|| self.last_role().map(str::to_string));
         match self {
-            HostConnection::Local { id, name, device_id, last_connected } => {
+            HostConnection::Local { id, name, device_id, last_connected, .. } => {
                 json!({
                     "id": id,
                     "name": name,
@@ -407,6 +426,7 @@ impl HostConnection {
                 revoked,
                 device_id,
                 last_connected,
+                ..
             } => json!({
                 "id": id,
                 "name": name,
@@ -427,7 +447,19 @@ impl HostConnection {
     }
 }
 
+#[cfg(test)]
+fn config_dir_override() -> &'static Mutex<Option<PathBuf>> {
+    static OVERRIDE: OnceLock<Mutex<Option<PathBuf>>> = OnceLock::new();
+    OVERRIDE.get_or_init(|| Mutex::new(None))
+}
+
 fn connections_dir() -> Result<PathBuf, String> {
+    #[cfg(test)]
+    if let Ok(guard) = config_dir_override().lock() {
+        if let Some(dir) = guard.as_ref() {
+            return Ok(dir.clone());
+        }
+    }
     dirs::config_dir()
         .map(|p| p.join("alpi-desktop"))
         .ok_or_else(|| "cannot resolve config dir".to_string())
@@ -466,6 +498,7 @@ fn ensure_local(state: &mut ConnectionsState) {
         name: "Local daemon".to_string(),
         device_id: None,
         last_connected: None,
+        last_role: None,
     });
 }
 
@@ -476,35 +509,50 @@ pub fn active_subscription_key() -> Option<String> {
 }
 
 fn persist_device_id(connection_id: &str, device_id: &str) {
-    let mut state = load_connections();
-    let mut changed = false;
-    for conn in state.connections.iter_mut() {
-        if conn.id() == connection_id {
-            if conn.device_id() != Some(device_id) {
-                conn.set_device_id(Some(device_id.to_string()));
-                changed = true;
+    mutate_connections(|state| {
+        for conn in state.connections.iter_mut() {
+            if conn.id() == connection_id {
+                if conn.device_id() != Some(device_id) {
+                    conn.set_device_id(Some(device_id.to_string()));
+                    return true;
+                }
+                break;
             }
-            break;
         }
-    }
-    if changed {
-        let _ = save_connections(&state);
-    }
+        false
+    });
+}
+
+fn persist_role(connection_id: &str, role: Option<String>) {
+    mutate_connections(|state| {
+        for conn in state.connections.iter_mut() {
+            if conn.id() == connection_id {
+                if conn.last_role().map(str::to_string) != role {
+                    conn.set_last_role(role.clone());
+                    return true;
+                }
+                break;
+            }
+        }
+        false
+    });
+}
+
+// Live probed role wins; persisted last_role is the cold-start fallback so pollers/fetch gates know a connection's role before it is re-probed.
+pub fn effective_role(conn: &HostConnection) -> Option<String> {
+    role_for(conn.id()).or_else(|| conn.last_role().map(str::to_string))
 }
 
 fn persist_last_connected(connection_id: &str) {
-    let mut state = load_connections();
-    let mut changed = false;
-    for conn in state.connections.iter_mut() {
-        if conn.id() == connection_id {
-            conn.set_last_connected(Some(now_unix()));
-            changed = true;
-            break;
+    mutate_connections(|state| {
+        for conn in state.connections.iter_mut() {
+            if conn.id() == connection_id {
+                conn.set_last_connected(Some(now_unix()));
+                return true;
+            }
         }
-    }
-    if changed {
-        let _ = save_connections(&state);
-    }
+        false
+    });
 }
 
 #[cfg(unix)]
@@ -540,6 +588,30 @@ fn save_connections(state: &ConnectionsState) -> Result<(), String> {
         .map_err(|e| format!("write {}: {e}", tmp.display()))?;
     f.flush().ok();
     fs::rename(&tmp, &path).map_err(|e| format!("rename {}: {e}", path.display()))
+}
+
+fn connections_mutex() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+}
+
+// Every connections.json writer runs load→mutate→save under this one lock — a background probe's metadata write must never interleave with (and lose to) a concurrent activate/add/forget/revoke. Reads stay lock-free; the atomic rename makes torn reads impossible.
+fn mutate_connections(f: impl FnOnce(&mut ConnectionsState) -> bool) {
+    let _guard = connections_mutex().lock().unwrap_or_else(|e| e.into_inner());
+    let mut state = load_connections();
+    if f(&mut state) {
+        let _ = save_connections(&state);
+    }
+}
+
+fn try_mutate_connections<T>(
+    f: impl FnOnce(&mut ConnectionsState) -> Result<T, String>,
+) -> Result<T, String> {
+    let _guard = connections_mutex().lock().unwrap_or_else(|e| e.into_inner());
+    let mut state = load_connections();
+    let out = f(&mut state)?;
+    save_connections(&state)?;
+    Ok(out)
 }
 
 fn now_unix() -> i64 {
@@ -582,25 +654,26 @@ pub fn connections_for_ui() -> Value {
 }
 
 pub fn set_active_connection(id: String) -> Result<(), String> {
-    let mut state = load_connections();
-    if !state.connections.iter().any(|c| c.id() == id) {
-        return Err(format!("unknown connection: {id}"));
-    }
-    state.active_id = id;
-    save_connections(&state)?;
-    Ok(())
+    try_mutate_connections(|state| {
+        if !state.connections.iter().any(|c| c.id() == id) {
+            return Err(format!("unknown connection: {id}"));
+        }
+        state.active_id = id;
+        Ok(())
+    })
 }
 
 pub fn forget_connection(id: String) -> Result<(), String> {
     if id == LOCAL_ID {
         return Err("local connection cannot be removed".to_string());
     }
-    let mut state = load_connections();
-    state.connections.retain(|c| c.id() != id);
-    if state.active_id == id {
-        state.active_id = LOCAL_ID.to_string();
-    }
-    save_connections(&state)?;
+    try_mutate_connections(|state| {
+        state.connections.retain(|c| c.id() != id);
+        if state.active_id == id {
+            state.active_id = LOCAL_ID.to_string();
+        }
+        Ok(())
+    })?;
     if let Ok(mut map) = status_map().lock() {
         map.remove(&id);
     }
@@ -628,45 +701,46 @@ pub fn add_remote_connection(
         host.trim().replace(|c: char| !c.is_ascii_alphanumeric(), "-"),
         port,
     );
-    let mut state = load_connections();
-    state.connections.retain(|c| c.id() != id);
-    state.connections.push(HostConnection::Remote {
-        id: id.clone(),
-        name: if name.trim().is_empty() {
-            host.trim().to_string()
-        } else {
-            name.trim().to_string()
-        },
-        host: host.trim().to_string(),
-        port,
-        token: token.trim().to_string(),
-        revoked: false,
-        device_id: None,
-        last_connected: None,
-    });
-    state.active_id = id.clone();
-    save_connections(&state)?;
+    try_mutate_connections(|state| {
+        state.connections.retain(|c| c.id() != id);
+        state.connections.push(HostConnection::Remote {
+            id: id.clone(),
+            name: if name.trim().is_empty() {
+                host.trim().to_string()
+            } else {
+                name.trim().to_string()
+            },
+            host: host.trim().to_string(),
+            port,
+            token: token.trim().to_string(),
+            revoked: false,
+            device_id: None,
+            last_connected: None,
+            last_role: None,
+        });
+        state.active_id = id.clone();
+        Ok(())
+    })?;
     purge_ws_pool(&id);
     Ok(id)
 }
 
 pub fn mark_connection_revoked(id: &str) {
-    let mut state = load_connections();
-    let mut changed = false;
-    for c in &mut state.connections {
-        if let HostConnection::Remote { id: cid, revoked, .. } = c {
-            if cid == id && !*revoked {
-                *revoked = true;
-                changed = true;
+    mutate_connections(|state| {
+        let mut changed = false;
+        for c in &mut state.connections {
+            if let HostConnection::Remote { id: cid, revoked, .. } = c {
+                if cid == id && !*revoked {
+                    *revoked = true;
+                    changed = true;
+                }
             }
         }
-    }
-    if changed {
-        if state.active_id == id {
+        if changed && state.active_id == id {
             state.active_id = LOCAL_ID.to_string();
         }
-        let _ = save_connections(&state);
-    }
+        changed
+    });
     purge_ws_pool(id);
 }
 
@@ -707,6 +781,7 @@ fn active_connection() -> HostConnection {
             name: "Local daemon".to_string(),
             device_id: None,
             last_connected: None,
+            last_role: None,
         })
 }
 
@@ -1652,7 +1727,10 @@ pub fn probe_connection(conn: &HostConnection) {
                 .and_then(|v| v.as_str())
                 .filter(|s| !s.is_empty())
                 .map(|s| s.to_string());
-            set_role(&id, role);
+            set_role(&id, role.clone());
+            if role.is_some() {
+                persist_role(&id, role);
+            }
             let device_id = version_value
                 .as_ref()
                 .and_then(|v| v.get("device_id"))
@@ -1722,6 +1800,55 @@ pub fn probe_all() {
     RUNNING.store(false, Ordering::Release);
 }
 
+fn roles_backfill_targets(state: &ConnectionsState) -> Vec<&HostConnection> {
+    state
+        .connections
+        .iter()
+        .filter(|c| c.id() != state.active_id && c.last_role().is_none())
+        .collect()
+}
+
+fn backfill_role(conn: &HostConnection) {
+    let id = conn.id().to_string();
+    let timeout = probe_timeout_for(conn);
+    let version_call = match conn {
+        HostConnection::Local { .. } => call_local_inner("host.version", json!({}), timeout),
+        HostConnection::Remote { host, port, token, .. } => {
+            call_remote_once(&id, host, *port, token, "host.version", json!({}), timeout)
+        }
+    };
+    let role = match version_call {
+        Ok(v) => v
+            .get("role")
+            .and_then(|r| r.as_str())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string()),
+        Err(_) => None,
+    };
+    if role.is_some() {
+        set_role(&id, role.clone());
+        persist_role(&id, role);
+    }
+}
+
+// Learn the role of never-probed connections with a bounded host.version fan-out — NOT the full serial probe_all, the active one (already probed) is skipped, and probe_all's RUNNING flag is left untouched.
+pub fn backfill_missing_roles() {
+    const MAX_CONCURRENT: usize = 4;
+    let state = load_connections();
+    let targets: Vec<HostConnection> =
+        roles_backfill_targets(&state).into_iter().cloned().collect();
+    for chunk in targets.chunks(MAX_CONCURRENT) {
+        let handles: Vec<_> = chunk
+            .iter()
+            .cloned()
+            .map(|conn| std::thread::spawn(move || backfill_role(&conn)))
+            .collect();
+        for h in handles {
+            let _ = h.join();
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1733,6 +1860,7 @@ mod tests {
             name: "Local daemon".to_string(),
             device_id: None,
             last_connected: None,
+            last_role: None,
         };
         let remote = HostConnection::Remote {
             id: "remote-1".to_string(),
@@ -1743,6 +1871,7 @@ mod tests {
             revoked: false,
             device_id: None,
             last_connected: None,
+            last_role: None,
         };
         assert_eq!(read_timeout_for(&local, None), Duration::from_secs(READ_TIMEOUT_LOCAL_SECS));
         assert_eq!(read_timeout_for(&remote, None), Duration::from_secs(READ_TIMEOUT_REMOTE_SECS));
@@ -1759,6 +1888,7 @@ mod tests {
             name: "Local daemon".to_string(),
             device_id: None,
             last_connected: None,
+            last_role: None,
         };
         let remote = HostConnection::Remote {
             id: "remote-1".to_string(),
@@ -1769,6 +1899,7 @@ mod tests {
             revoked: false,
             device_id: None,
             last_connected: None,
+            last_role: None,
         };
         assert_eq!(
             probe_timeout_for(&local),
@@ -1788,6 +1919,7 @@ mod tests {
                 name: "Local daemon".to_string(),
                 device_id: None,
                 last_connected: Some(100),
+                last_role: None,
             },
             HostConnection::Remote {
                 id: "casa".to_string(),
@@ -1798,6 +1930,7 @@ mod tests {
                 revoked: false,
                 device_id: None,
                 last_connected: Some(1),
+                last_role: None,
             },
             HostConnection::Remote {
                 id: "mirai".to_string(),
@@ -1808,6 +1941,7 @@ mod tests {
                 revoked: false,
                 device_id: None,
                 last_connected: Some(999),
+                last_role: None,
             },
         ];
         let ids: Vec<&str> = ordered_for_display(&conns, "casa")
@@ -1824,6 +1958,7 @@ mod tests {
             name: "Local".to_string(),
             device_id: None,
             last_connected: None,
+            last_role: None,
         };
         assert!(local.device_id().is_none());
         local.set_device_id(Some("uuid-mac".to_string()));
@@ -1838,10 +1973,133 @@ mod tests {
             revoked: false,
             device_id: Some("uuid-mac".to_string()),
             last_connected: None,
+            last_role: None,
         };
         assert_eq!(remote.device_id(), Some("uuid-mac"));
         remote.set_device_id(None);
         assert!(remote.device_id().is_none());
+    }
+
+    #[test]
+    fn effective_role_prefers_live_then_persisted() {
+        let conn = HostConnection::Remote {
+            id: "role-precedence-1".to_string(),
+            name: "x".to_string(),
+            host: "1.1.1.1".to_string(),
+            port: 49200,
+            token: "t".to_string(),
+            revoked: false,
+            device_id: None,
+            last_connected: None,
+            last_role: Some("member".to_string()),
+        };
+        assert_eq!(effective_role(&conn).as_deref(), Some("member"));
+        set_role("role-precedence-1", Some("admin".to_string()));
+        assert_eq!(effective_role(&conn).as_deref(), Some("admin"));
+    }
+
+    #[test]
+    fn last_role_survives_json_round_trip_and_legacy_defaults_none() {
+        let conn = HostConnection::Remote {
+            id: "r".to_string(),
+            name: "R".to_string(),
+            host: "1.1.1.1".to_string(),
+            port: 49200,
+            token: "t".to_string(),
+            revoked: false,
+            device_id: None,
+            last_connected: None,
+            last_role: Some("member".to_string()),
+        };
+        let text = serde_json::to_string(&conn).unwrap();
+        let back: HostConnection = serde_json::from_str(&text).unwrap();
+        assert_eq!(back.last_role(), Some("member"));
+
+        let legacy: HostConnection = serde_json::from_str(
+            r#"{"kind":"remote","id":"r","name":"R","host":"1.1.1.1","port":49200,"token":"t"}"#,
+        )
+        .unwrap();
+        assert_eq!(legacy.last_role(), None);
+    }
+
+    fn remote_with_role(id: &str, last_role: Option<&str>) -> HostConnection {
+        HostConnection::Remote {
+            id: id.to_string(),
+            name: id.to_string(),
+            host: "127.0.0.1".to_string(),
+            port: 49200,
+            token: "t".to_string(),
+            revoked: false,
+            device_id: None,
+            last_connected: None,
+            last_role: last_role.map(|s| s.to_string()),
+        }
+    }
+
+    #[test]
+    fn roles_backfill_targets_selects_only_unknown_roles_and_excludes_active() {
+        let state = ConnectionsState {
+            active_id: "active".to_string(),
+            connections: vec![
+                remote_with_role("active", None),
+                remote_with_role("known", Some("member")),
+                remote_with_role("unknown-1", None),
+                remote_with_role("unknown-2", None),
+            ],
+        };
+        let ids: Vec<&str> = roles_backfill_targets(&state).iter().map(|c| c.id()).collect();
+        assert_eq!(ids, vec!["unknown-1", "unknown-2"]);
+    }
+
+    static TEST_FS_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn concurrent_metadata_write_does_not_resurrect_a_deleted_connection() {
+        let _fs = TEST_FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = std::env::temp_dir().join(format!("alpi-conns-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        *config_dir_override().lock().unwrap() = Some(dir.clone());
+
+        let seed = ConnectionsState {
+            active_id: LOCAL_ID.to_string(),
+            connections: vec![
+                HostConnection::Local {
+                    id: LOCAL_ID.to_string(),
+                    name: "L".to_string(),
+                    device_id: None,
+                    last_connected: None,
+                    last_role: None,
+                },
+                remote_with_role("remote-a", None),
+                remote_with_role("remote-b", None),
+            ],
+        };
+        save_connections(&seed).unwrap();
+
+        let hammer = std::thread::spawn(|| {
+            for _ in 0..300 {
+                persist_last_connected("remote-a");
+            }
+        });
+        let forget = std::thread::spawn(|| {
+            std::thread::sleep(Duration::from_millis(2));
+            let _ = forget_connection("remote-b".to_string());
+        });
+        hammer.join().unwrap();
+        forget.join().unwrap();
+
+        let text = std::fs::read_to_string(dir.join("connections.json")).unwrap();
+        let parsed: ConnectionsState = serde_json::from_str(&text).expect("valid JSON on disk");
+        let ids: Vec<&str> = parsed.connections.iter().map(|c| c.id()).collect();
+        assert!(ids.contains(&"remote-a"), "remote-a must survive: {ids:?}");
+        assert!(
+            !ids.contains(&"remote-b"),
+            "a stale-snapshot metadata write must not resurrect forgotten remote-b: {ids:?}",
+        );
+
+        *config_dir_override().lock().unwrap() = None;
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -1918,6 +2176,7 @@ mod tests {
             revoked: false,
             device_id: None,
             last_connected: ts,
+            last_role: None,
         };
         let conns = vec![
             remote("r-old", Some(100)),
@@ -1926,6 +2185,7 @@ mod tests {
                 name: "Local".to_string(),
                 device_id: None,
                 last_connected: None,
+                last_role: None,
             },
             remote("r-new", Some(500)),
             remote("r-never", None),

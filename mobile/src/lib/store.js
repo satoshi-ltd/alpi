@@ -59,12 +59,36 @@ export function sortConnectionsByRecency(connections) {
   );
 }
 
+// Persisted role seeds the role map at cold start, so non-active admin inboxes surface before probeAll and members are excluded from the poller without a round-trip.
+export function rolesFromConnections(connections) {
+  const map = new Map();
+  for (const c of connections ?? []) {
+    if (c?.id && typeof c.role === 'string') map.set(c.id, c.role);
+  }
+  return map;
+}
+
+export async function setRoles(idToRole) {
+  const state = await loadConnections();
+  let changed = false;
+  for (const conn of state.connections) {
+    const next = idToRole.get(conn.id);
+    if (next && conn.role !== next) {
+      conn.role = next;
+      changed = true;
+    }
+  }
+  if (changed) await writeRaw(state);
+  return state;
+}
+
 export async function saveConnection(endpoint) {
   if (!endpoint?.deviceId || typeof endpoint.deviceId !== 'string') {
     throw new Error('saveConnection requires a deviceId — pair against an alpi daemon v0.6.6 or newer.');
   }
   const state = await loadConnections();
   const id = endpoint.id ?? genId();
+  const existingIdx = state.connections.findIndex((c) => c.id === id);
   const conn = {
     id,
     name: endpoint.name ?? 'alpi',
@@ -75,8 +99,8 @@ export async function saveConnection(endpoint) {
     added_at: Date.now(),
     last_connected: Date.now(),
     deviceId: endpoint.deviceId,
+    role: endpoint.role ?? state.connections[existingIdx]?.role ?? null,
   };
-  const existingIdx = state.connections.findIndex((c) => c.id === id);
   if (existingIdx >= 0) state.connections[existingIdx] = conn;
   else state.connections.push(conn);
   state.active_id = id;

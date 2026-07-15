@@ -251,6 +251,32 @@ describe("useHostConnections connection-status", () => {
     expect(remote.update_available).toBe("0.9.6");
   });
 
+  it("applies a role change (admin→member) from a connection-status event, and a null role never clears it", async () => {
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "host_connections") return makeConnections("local");
+      if (cmd === "profile_summaries") return [{ name: "doc", model: "a/b" }];
+      if (cmd === "workgroups") return [];
+      return null;
+    });
+
+    const { result } = renderHostConnections();
+    await waitFor(() =>
+      expect(result.current.hostConnections.connections.length).toBe(2),
+    );
+    const roleOf = () =>
+      result.current.hostConnections.connections.find((c) => c.id === "remote").role;
+
+    await act(async () => {
+      await connectionStatusListener({ payload: { id: "remote", status: "online", role: "member" } });
+    });
+    expect(roleOf()).toBe("member");
+
+    await act(async () => {
+      await connectionStatusListener({ payload: { id: "remote", status: "offline" } });
+    });
+    expect(roleOf()).toBe("member");
+  });
+
   it("exposes syncing while the active connection profiles/workgroups refresh is in flight", async () => {
     let resolveProfiles;
     invoke.mockImplementation(async (cmd) => {

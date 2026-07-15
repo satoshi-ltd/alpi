@@ -544,7 +544,7 @@ function SidebarFooter({
           </button>
         </Tip>
       )}
-      {!inSettings && (
+      {!inSettings && onOpenNotifications && (
         <NotificationsBellButton
           unread={notificationsUnread}
           onClick={onOpenNotifications}

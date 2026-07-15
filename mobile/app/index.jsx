@@ -172,9 +172,9 @@ export default function Inbox() {
         name={endpoint?.name ?? 'No daemon'}
         host={endpoint ? `${endpoint.ip}:${endpoint.port}` : 'not paired'}
         status={daemonStatus}
-        unread={unreadCount}
+        unread={canAdmin ? unreadCount : 0}
         onConnPress={() => setSheet('conn')}
-        onBellPress={() => router.push('/outputs')}
+        onBellPress={canAdmin ? () => router.push('/outputs') : null}
         onGearPress={() => setSheet('settings')}
       />
       {daemonStatus === 'offline' && endpoint ? (

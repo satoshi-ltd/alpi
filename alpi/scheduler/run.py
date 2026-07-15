@@ -364,7 +364,8 @@ def run_job(job: dict, home: Path) -> JobOutcome:
         "ALPI_PARENT_EMITS_AGENT_MESSAGE": "1",
         **workspace_env(home),
     }
-    extra["ALPI_CONNECTION_ID"] = str(job.get("connection_id") or "host")
+    # job.connection_id is provenance (who created it); the daemon owns every scheduled run, so accounting stays under host.
+    extra["ALPI_CONNECTION_ID"] = "host"
     extra["ALPI_CONNECTION_SOURCE"] = "schedule"
     from alpi.config import TIER_NAMES
     job_tier = str(job.get("tier") or "").strip().lower()
@@ -603,10 +604,7 @@ def _record_schedule_run(
         else:
             result = "error"
         from alpi.host.connection_context import ConnectionContext, use
-        with use(ConnectionContext(
-            connection_id=str(job.get("connection_id") or "host"),
-            source="schedule",
-        )):
+        with use(ConnectionContext(connection_id="host", source="schedule")):
             run_ledger.record(
                 home, kind="schedule", outcome=result, elapsed_s=elapsed, at=started,
                 profile=profile_name(home),

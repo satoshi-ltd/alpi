@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canRefreshProfileThread,
+import { canRefreshProfileThread, profileManagementAllowed,
   connectionFailureMessage,
   isChatSessionData,
   settingsTargetAfterExit,
@@ -87,5 +87,15 @@ describe("canRefreshProfileThread", () => {
   it("shows refresh when turns are loaded and always for workgroups", () => {
     expect(canRefreshProfileThread({ kind: "profile", sessionId: null }, { turns: [{}] })).toBe(true);
     expect(canRefreshProfileThread({ kind: "workgroup" }, null)).toBe(true);
+  });
+});
+
+
+describe("profileManagementAllowed", () => {
+  it("members lose skills/memory/tools/schedule surfaces; admin and pre-probe keep them", () => {
+    expect(profileManagementAllowed("member")).toBe(false);
+    expect(profileManagementAllowed("admin")).toBe(true);
+    expect(profileManagementAllowed(null)).toBe(true);
+    expect(profileManagementAllowed(undefined)).toBe(true);
   });
 });

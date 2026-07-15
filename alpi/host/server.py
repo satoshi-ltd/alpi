@@ -52,7 +52,18 @@ _ADMIN_METHODS = frozenset({
     "host.profile.storage",
     "host.config.set_field",
     "host.config.unset_field",
+    "host.profile.memory_read",
+    "host.profile.memory_usage",
     "host.profile.memory_write",
+    "host.skills.list",
+    "host.skill.read",
+    "host.skill.file",
+    "host.schedule.list",
+    "host.outputs.list",
+    "host.outputs.read",
+    "host.outputs.mark_read",
+    "host.outputs.mark_all_read",
+    "host.outputs.delete",
     "host.cleanup.plan",
     "host.cleanup.apply",
     "host.mcp.add",
@@ -107,6 +118,20 @@ _MEMBER_DETAIL_KEEP = frozenset({"models", "voice_id", "voice_auto_read"})
 
 # Sections of host.settings.profile_snapshot whose standalone verb is admin-only — stripped for members so the aggregate never leaks what the per-section RPC would reject.
 _SNAPSHOT_ADMIN_SECTIONS = frozenset({"usage", "schedules", "email", "storage"})
+
+# Dropped from a member's live stream AND history — else the event bus re-exposes what host.outputs.*/schedule.*/usage.* deny (schedule.* matched by prefix in _is_member_blocked_event).
+_MEMBER_BLOCKED_EVENTS = frozenset({
+    "agent.message",
+    "output.created",
+    "output.updated",
+    "budget.threshold",
+})
+
+
+def _is_member_blocked_event(kind: Any) -> bool:
+    return isinstance(kind, str) and (
+        kind in _MEMBER_BLOCKED_EVENTS or kind.startswith("schedule.")
+    )
 
 # Methods that don't operate on a single profile — exempt from the scope gate. New profile-handling RPCs MUST default to denied for scoped members; add here only when the verb is truly profile-agnostic (or aggregates across profiles and the response gets scope-filtered downstream).
 _SCOPE_FREE_METHODS = frozenset({
@@ -328,6 +353,7 @@ class Server:
                     connection_id=meta.connection_id,
                     device_id=meta.device_id,
                     source="remote",
+                    role=meta.role or "member",
                 )
         method = str(body.get("method") or "")
         if require_token and method in _LOCAL_ONLY_METHODS:
@@ -428,6 +454,8 @@ class Server:
                         return
                 if member:
                     out = _redact_payload_by_role(method, out)
+                    if out is None:
+                        return
                 await send(out)
             delivery = send_filtered
         else:
@@ -538,10 +566,13 @@ def _is_safe_bind(addr: str, allow_public: bool = False) -> bool:
     return allow_public  # a public IP only with the explicit opt-in
 
 
-def _redact_payload_by_role(method: str, payload: dict[str, Any]) -> dict[str, Any]:
+def _redact_payload_by_role(method: str, payload: dict[str, Any]) -> dict[str, Any] | None:
     # Strip Settings-only fields from rich profile.detail blob; admin role bypasses this wrapper entirely so the redaction only kicks in for member tokens.
     if not isinstance(payload, dict):
         return payload
+    # Live event frame: {event, data, at, seq}. Drop entirely when its kind exposes an admin-only surface.
+    if "data" in payload and _is_member_blocked_event(payload.get("event")):
+        return None
     result = payload.get("result")
     if not isinstance(result, dict):
         return payload
@@ -554,6 +585,13 @@ def _redact_payload_by_role(method: str, payload: dict[str, Any]) -> dict[str, A
         if isinstance(detail, dict):
             redacted["detail"] = {k: v for k, v in detail.items() if k in _MEMBER_DETAIL_KEEP}
         return {**payload, "result": redacted}
+    if method == "host.events.history":
+        events = result.get("events")
+        if isinstance(events, list):
+            result["events"] = [
+                ev for ev in events
+                if not (isinstance(ev, dict) and _is_member_blocked_event(ev.get("event")))
+            ]
     return payload
 
 

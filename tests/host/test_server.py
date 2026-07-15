@@ -311,3 +311,42 @@ async def test_clarification_respond_unscoped_member_allowed(
                        "params": {"auth_token": "t", "request_id": "abc", "choice": "A"}})
     await srv._handle_request(body, send, require_token=True)
     assert reached["n"] == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method", [
+    "host.profile.memory_read",
+    "host.profile.memory_usage",
+    "host.skills.list",
+    "host.skill.read",
+    "host.skill.file",
+    "host.schedule.list",
+    "host.outputs.list",
+    "host.outputs.read",
+    "host.outputs.mark_read",
+    "host.outputs.mark_all_read",
+    "host.outputs.delete",
+    "host.voice.set_auto_read",
+])
+async def test_member_denied_on_management_reads(
+    method: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(host_server, "_check_token_meta", _member(["abby"]))
+    srv = host_server.Server(home=tmp_path)
+    reached = {"n": 0}
+
+    async def stub(_params, _server):
+        reached["n"] += 1
+        return {"ok": True}
+
+    srv.register(method, stub)
+    sent: list[dict] = []
+
+    async def send(p):
+        sent.append(p)
+
+    body = json.dumps({"id": "r", "method": method,
+                       "params": {"auth_token": "t", "profile": "abby"}})
+    await srv._handle_request(body, send, require_token=True)
+    assert reached["n"] == 0
+    assert sent[0]["error"]["message"] == "forbidden"

@@ -14,6 +14,8 @@ class ConnectionContext:
     connection_id: str = HOST_CONNECTION_ID
     device_id: str | None = None
     source: str = "host"
+    # Local socket is sovereign; remote contexts carry the authenticated role for role-aware handlers.
+    role: str = "admin"
 
 
 _current: ContextVar[ConnectionContext] = ContextVar(

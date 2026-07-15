@@ -3222,6 +3222,11 @@ fn poll_inactive_connections(app: AppHandle) {
                 cursors.remove(&id);
                 continue;
             }
+            // Members have no inbox — the daemon filters their events to empty, so polling is pure wasted traffic.
+            if host_client::effective_role(conn).as_deref() == Some("member") {
+                cursors.remove(&id);
+                continue;
+            }
             let cursor = cursors.get(&id).copied();
             let params = serde_json::json!({
                 "after_seq": cursor.unwrap_or(0),
@@ -3406,6 +3411,7 @@ pub fn run() {
                         "error": error,
                         "alpi_version": host_client::version_for(id),
                         "update_available": host_client::update_available_for(id),
+                        "role": host_client::role_for(id),
                     }),
                 );
                 if matches!(status, host_client::ConnectionStatus::Offline)
@@ -3415,6 +3421,11 @@ pub fn run() {
                 }
             });
             spawn_background("probe-active-startup", host_client::probe_active);
+            // Deferred, bounded host.version backfill fills persisted-role gaps (legacy connections.json, never-probed remotes) so inactive-connection fetch/poll gates are right without waiting for the connection sheet.
+            spawn_background("backfill-roles-startup", || {
+                std::thread::sleep(std::time::Duration::from_secs(3));
+                host_client::backfill_missing_roles();
+            });
             spawn_background("probe-active-loop", || loop {
                 std::thread::sleep(std::time::Duration::from_secs(30));
                 host_client::probe_active();

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { connectionsSignature, fetchConnectionOutputs, markAllUnifiedRead, mergeOutputs } from './useUnifiedOutputs';
+import { adminConnectionsOf, connectionsSignature, fetchConnectionOutputs, isMemberOnly, markAllUnifiedRead, mergeOutputs } from './useUnifiedOutputs';
 
 const conn = { id: 'c1', name: 'home', ip: '100.0.0.1', port: 8838, token: 't' };
 
@@ -72,6 +72,47 @@ describe('fetchConnectionOutputs', () => {
   });
 });
 
+describe('adminConnectionsOf', () => {
+  const conns = [{ id: 'c1' }, { id: 'c2' }, { id: 'c3' }];
+
+  it('keeps only admin-role connections', () => {
+    const roles = new Map([['c1', 'admin'], ['c2', 'member'], ['c3', 'admin']]);
+    expect(adminConnectionsOf(conns, roles).map((c) => c.id)).toEqual(['c1', 'c3']);
+  });
+
+  it('excludes unprobed (null) connections — strict admin, not "not member"', () => {
+    const roles = new Map([['c1', 'admin']]);
+    expect(adminConnectionsOf(conns, roles).map((c) => c.id)).toEqual(['c1']);
+  });
+
+  it('returns [] when roleState is empty or missing', () => {
+    expect(adminConnectionsOf(conns, new Map())).toEqual([]);
+    expect(adminConnectionsOf(conns, null)).toEqual([]);
+    expect(adminConnectionsOf(undefined, new Map())).toEqual([]);
+  });
+});
+
+describe('isMemberOnly', () => {
+  const roles = (pairs) => new Map(pairs);
+
+  it('true only when every connection is a KNOWN member', () => {
+    const conns = [{ id: 'a' }, { id: 'b' }];
+    expect(isMemberOnly({ id: 'a' }, conns, roles([['a', 'member'], ['b', 'member']]))).toBe(true);
+  });
+
+  it('false when any role is unknown (unprobed/offline) — not proof of member', () => {
+    const conns = [{ id: 'a' }, { id: 'b' }];
+    expect(isMemberOnly({ id: 'a' }, conns, roles([['a', 'member']]))).toBe(false);
+  });
+
+  it('false when any connection is admin, and false without an endpoint or connections', () => {
+    const conns = [{ id: 'a' }, { id: 'b' }];
+    expect(isMemberOnly({ id: 'a' }, conns, roles([['a', 'member'], ['b', 'admin']]))).toBe(false);
+    expect(isMemberOnly(null, conns, roles([['a', 'member']]))).toBe(false);
+    expect(isMemberOnly({ id: 'a' }, [], new Map())).toBe(false);
+  });
+});
+
 describe('markAllUnifiedRead', () => {
   it('marks each unique (connection, profile) pair once and sums counts', async () => {
     const connections = [conn, { id: 'c2', name: 'work', ip: '100.0.0.2', port: 8838, token: 't2' }];
@@ -94,6 +135,18 @@ describe('markAllUnifiedRead', () => {
     const total = await markAllUnifiedRead([{ connectionId: 'gone', profile: 'x' }], [conn], rpc);
     expect(rpc).not.toHaveBeenCalled();
     expect(total).toBe(0);
+  });
+
+  it('passing admin-only connections skips a member-connection row', async () => {
+    const rows = [
+      { connectionId: 'c1', profile: 'vera' },
+      { connectionId: 'c2', profile: 'secret' },
+    ];
+    const rpc = vi.fn(async () => ({ count: 1 }));
+    const total = await markAllUnifiedRead(rows, [conn], rpc);
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc.mock.calls[0][0].id).toBe('c1');
+    expect(total).toBe(1);
   });
 });
 

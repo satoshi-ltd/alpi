@@ -47,6 +47,7 @@ import { useAllOutputs } from "./hooks/useOutputs.js";
 import { useNavListener } from "./hooks/useNavListener.js";
 import { usePinned } from "./hooks/usePinned.js";
 import { useActiveRole } from "./hooks/useActiveRole.js";
+import { useCloseAdminSurfacesOnDemotion } from "./hooks/useCloseAdminSurfacesOnDemotion.js";
 import { useWorkgroupTasks } from "./hooks/useWorkgroupTasks.js";
 import { markWorkgroupRead } from "./hooks/useReadState.js";
 import { isTtsActive, subscribeTts } from "./lib/tts.js";
@@ -78,6 +79,10 @@ export function isChatSessionData(data) {
   if (first.startsWith("[INBOUND ")) return false;
   if (first.startsWith("[")) return false;
   return true;
+}
+
+export function profileManagementAllowed(role) {
+  return role !== "member";
 }
 
 export function canRefreshProfileThread(view, sessionData) {
@@ -223,6 +228,7 @@ export default function App() {
   const activeRole = useActiveRole();
   // Pre-probe (``null``) defaults to allow — local Unix socket users have no token but are admin-equiv, and the role probe lands within a couple seconds for remote.
   const canAdminEarly = activeRole === "admin" || activeRole == null;
+  const canManageProfileSurfaces = profileManagementAllowed(activeRole);
   const [createProfileOpen, setCreateProfileOpen] = useState(false);
   const onNewProfile = useCallback(() => {
     setCreateProfileOpen(true);
@@ -260,6 +266,11 @@ export default function App() {
   const onBrowseSkills = useCallback(() => setBrowse("skills"), []);
   const onBrowseMemory = useCallback(() => setBrowse("memory"), []);
   const onBrowseSchedule = useCallback(() => setBrowse("schedule"), []);
+  const resetAdminSurfaces = useCallback(() => {
+    setBrowse(null);
+    setNotificationsOpen(false);
+  }, []);
+  useCloseAdminSurfacesOnDemotion(canManageProfileSurfaces, resetAdminSurfaces);
   useEffect(() => subscribeTts(() => setReadAloudActive(isTtsActive())), []);
   const onToggleReadAloud = useCallback(() => {
     setReadAloudTick((n) => n + 1);
@@ -398,15 +409,20 @@ export default function App() {
     activeId: hostConnections.active_id,
   });
   const notificationsUnread = unreadOutputs.length;
+  const trayUnread = canManageProfileSurfaces ? notificationsUnread : 0;
 
   useEffect(() => {
-    invoke("tray_announce_notifications", { unread: notificationsUnread }).catch(() => {});
-  }, [notificationsUnread]);
+    invoke("tray_announce_notifications", { unread: trayUnread }).catch(() => {});
+  }, [trayUnread]);
 
+  // The tray listener registers once; a ref feeds it the live permission so a member-connection click can't arm the modal (which would then pop open on the next switch to admin).
+  const notificationsAllowedRef = useRef(canManageProfileSurfaces);
+  notificationsAllowedRef.current = canManageProfileSurfaces;
   useEffect(() => {
     let cancelled = false;
     let unlisten = null;
     listen("tray:notifications-clicked", () => {
+      if (!notificationsAllowedRef.current) return;
       setNotificationsTarget(null);
       setNotificationsOpen(true);
     })
@@ -835,11 +851,11 @@ export default function App() {
         ? onToggleActiveContextPause
         : null,
     onToggleReadAloud: canReadAloud ? onToggleReadAloud : null,
-    onBrowseTools,
-    onBrowseSkills,
-    onBrowseMemory,
-    onBrowseSchedule,
-    onToggleNotifications: onOpenNotifications,
+    onBrowseTools: canManageProfileSurfaces ? onBrowseTools : null,
+    onBrowseSkills: canManageProfileSurfaces ? onBrowseSkills : null,
+    onBrowseMemory: canManageProfileSurfaces ? onBrowseMemory : null,
+    onBrowseSchedule: canManageProfileSurfaces ? onBrowseSchedule : null,
+    onToggleNotifications: canManageProfileSurfaces ? onOpenNotifications : null,
   });
 
   const pendingTurnForCurrentView = useMemo(
@@ -1144,12 +1160,12 @@ export default function App() {
       activeProfile && adminOnTogglePauseProfile ? onToggleActiveProfilePause : null,
     workgroupPaused: !!activeWorkgroup?.paused,
     onToggleWorkgroupPause: activeWorkgroup ? onToggleActiveWorkgroupPause : null,
-    onBrowseTools,
-    onBrowseSkills,
-    onBrowseMemory,
-    onBrowseSchedule,
+    onBrowseTools: canManageProfileSurfaces ? onBrowseTools : null,
+    onBrowseSkills: canManageProfileSurfaces ? onBrowseSkills : null,
+    onBrowseMemory: canManageProfileSurfaces ? onBrowseMemory : null,
+    onBrowseSchedule: canManageProfileSurfaces ? onBrowseSchedule : null,
     onOpenHistory,
-    onToggleNotifications: onOpenNotifications,
+    onToggleNotifications: canManageProfileSurfaces ? onOpenNotifications : null,
   });
 
   return (
@@ -1185,8 +1201,8 @@ export default function App() {
         onRefreshHostConnectionStatus={onRefreshHostConnectionStatus}
         autoOpenConnectionSwitcher={autoOpenConnectionSwitcher}
         connectionLocked={connectionLocked}
-        onOpenNotifications={onOpenNotifications}
-        notificationsUnread={notificationsUnread}
+        onOpenNotifications={canManageProfileSurfaces ? onOpenNotifications : null}
+        notificationsUnread={canManageProfileSurfaces ? notificationsUnread : 0}
       />
       <main className={styles.main}>
           {view.kind === "settings" && canAdminEarly ? (
@@ -1303,10 +1319,11 @@ export default function App() {
                       prev ? { ...prev, consumed: true } : prev,
                     );
                   }}
-                  onOpenSkills={onBrowseSkills}
-                  onOpenMemory={onBrowseMemory}
-                  onOpenTools={onBrowseTools}
-                  onOpenSchedule={onBrowseSchedule}
+                  onOpenSkills={canManageProfileSurfaces ? onBrowseSkills : null}
+                  onOpenMemory={canManageProfileSurfaces ? onBrowseMemory : null}
+                  onOpenTools={canManageProfileSurfaces ? onBrowseTools : null}
+                  onOpenSchedule={canManageProfileSurfaces ? onBrowseSchedule : null}
+                  canManageProfileSurfaces={canManageProfileSurfaces}
                   onRefreshSession={onRefreshSession}
                   onNewSession={onNewSessionForCurrentProfile}
                   sessionsOpenTick={sessionsDropdownOpenTick}
@@ -1328,21 +1345,21 @@ export default function App() {
       />
       <ToolsModal
         key={`${hostConnections.active_id}:${activeProfileName ?? ""}`}
-        open={browse === "tools"}
+        open={canManageProfileSurfaces && browse === "tools"}
         onClose={onCloseBrowse}
         profile={activeProfileName}
         connectionId={hostConnections.active_id}
       />
       <SkillsModal
         key={`${hostConnections.active_id}:${activeProfileName ?? ""}`}
-        open={browse === "skills"}
+        open={canManageProfileSurfaces && browse === "skills"}
         onClose={onCloseBrowse}
         profile={activeProfileName}
         connectionId={hostConnections.active_id}
       />
       <MemoryModal
         key={`${hostConnections.active_id}:${activeProfileName ?? ""}`}
-        open={browse === "memory"}
+        open={canManageProfileSurfaces && browse === "memory"}
         onClose={onCloseBrowse}
         profile={activeProfileName}
         connectionId={hostConnections.active_id}
@@ -1350,7 +1367,7 @@ export default function App() {
       />
       <ScheduleModal
         key={`${hostConnections.active_id}:${activeProfileName ?? ""}`}
-        open={browse === "schedule"}
+        open={canManageProfileSurfaces && browse === "schedule"}
         onClose={onCloseBrowse}
         profile={activeProfileName}
         connectionId={hostConnections.active_id}
@@ -1383,7 +1400,7 @@ export default function App() {
       />
       <ApprovalModal requests={approval.queue} onResolved={approval.resolve} />
       <ClarificationModal requests={clarification.queue} onResolved={clarification.resolve} />
-      {notificationsOpen && <NotificationsModal
+      {notificationsOpen && canManageProfileSurfaces && <NotificationsModal
         open={notificationsOpen}
         onClose={onCloseNotifications}
         connections={hostConnections.connections}

@@ -581,10 +581,6 @@ async def test_profile_read_file_blocks_symlink_into_denied_subtree(
     [
         "alp/peers.yaml",
         "alp/workgroups/abc/transcript.jsonl",
-        "memories/USER.md",
-        "skills/personal/foo/SKILL.md",
-        "workspace/notes.md",
-        "logs/agent.log",
     ],
 )
 async def test_profile_read_file_allows_member_visible_content(
@@ -619,6 +615,102 @@ async def test_profile_read_file_allows_member_visible_content(
 
     assert "error" not in sent[0], f"{rel_path}: false positive — {sent[0]}"
     assert sent[0]["result"]["text"] == "legit content"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "rel_path",
+    [
+        "memories/USER.md",
+        "skills/personal/foo/SKILL.md",
+        "workspace/notes.md",
+        "logs/agent.log",
+    ],
+)
+async def test_profile_read_file_denies_member_management_content(
+    short_tmp: Path, rel_path: str,
+) -> None:
+    from alpi.host import device_state
+
+    member = devices.add(label="phone", role="member")
+    home = short_tmp / "profiles" / "default"
+    target = home / rel_path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("management content")
+
+    from alpi.host import handlers as host_handlers
+    import unittest.mock as _mock
+    with _mock.patch.object(host_handlers, "_resolve_home", return_value=home):
+        srv = host_server.Server(home=short_tmp)
+        device_state.register(srv)
+        sent: list[dict] = []
+
+        async def send(p):
+            sent.append(p)
+
+        body = {
+            "id": "x", "method": "host.profile.read_file",
+            "params": {
+                "auth_token": member["token"],
+                "profile": "default", "rel_path": rel_path,
+            },
+        }
+        await srv._handle_request(json.dumps(body), send, require_token=True)
+
+    assert sent[0].get("error", {}).get("code") == -32001
+
+
+async def _member_read(home: Path, token: str, rel_path: str) -> dict:
+    from alpi.host import device_state
+    from alpi.host import handlers as host_handlers
+    import unittest.mock as _mock
+
+    with _mock.patch.object(host_handlers, "_resolve_home", return_value=home):
+        srv = host_server.Server(home=home.parent.parent)
+        device_state.register(srv)
+        sent: list[dict] = []
+
+        async def send(p):
+            sent.append(p)
+
+        body = {
+            "id": "x", "method": "host.profile.read_file",
+            "params": {"auth_token": token, "profile": "default", "rel_path": rel_path},
+        }
+        await srv._handle_request(json.dumps(body), send, require_token=True)
+    return sent[0]
+
+
+@pytest.mark.asyncio
+async def test_profile_read_file_member_cannot_escape_alp_via_dotdot(
+    short_tmp: Path,
+) -> None:
+    member = devices.add(label="phone", role="member")
+    home = short_tmp / "profiles" / "default"
+    secret = home / "memories" / "USER.md"
+    secret.parent.mkdir(parents=True, exist_ok=True)
+    secret.write_text("private memory")
+    (home / "alp").mkdir(parents=True, exist_ok=True)
+
+    resp = await _member_read(home, member["token"], "alp/../memories/USER.md")
+    assert resp.get("error", {}).get("code") == -32001, resp
+
+
+@pytest.mark.asyncio
+async def test_profile_read_file_member_cannot_escape_alp_via_symlink(
+    short_tmp: Path,
+) -> None:
+    member = devices.add(label="phone", role="member")
+    home = short_tmp / "profiles" / "default"
+    secret = home / "memories" / "USER.md"
+    secret.parent.mkdir(parents=True, exist_ok=True)
+    secret.write_text("private memory")
+    alp = home / "alp"
+    alp.mkdir(parents=True, exist_ok=True)
+    (alp / "x").symlink_to("../memories/USER.md")
+
+    resp = await _member_read(home, member["token"], "alp/x")
+    assert resp.get("error", {}).get("code") == -32001, resp
 
 
 @pytest.mark.asyncio
