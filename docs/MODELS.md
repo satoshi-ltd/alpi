@@ -9,7 +9,7 @@ shell commands, browser calls, and user-specific state in context?"
 Use this page as a practical selector. Prices, context windows, and
 provider wrappers move quickly; re-check them every 2-3 months.
 
-Last updated: **2026-06-20**.
+Last updated: **2026-07-15**.
 
 ## What matters for alpi
 
@@ -34,8 +34,8 @@ limits, regional availability, and provider wrappers all bias usage.
 
 Common high-usage models in tool-heavy agent workloads currently
 include owl-alpha, MiMo V2.5 Pro / V2.5, DeepSeek V4 Pro / Flash,
-MiniMax M3, Claude Sonnet 4.6 / Opus 4.8, Nemotron 3 Super, and
-OpenAI GPT-5.5 / 5.4-mini.
+MiniMax M3, Claude Sonnet 5 / Opus 4.8 / Fable 5, Nemotron 3 Super, and
+OpenAI GPT-5.6 Sol / Terra.
 
 ## Pick by workload
 
@@ -58,10 +58,10 @@ daily interactive alpi use.
 | **DeepSeek V4 Pro** | `deepseek/deepseek-v4-pro` | Strong tool discipline at 1M context; sensible flagship-class daily driver. |
 | **MiMo V2.5 Pro** | `xiaomi/mimo-v2.5-pro` | Strong adoption in persistent-agent workloads; 1M context, good price-for-quality. |
 | **MiniMax M3** | `minimax/minimax-m3` | Mid-tier agent model; 512K context, decent for persistent sessions. |
-| **Claude Sonnet 4.6** | `anthropic/claude-sonnet-4.6` | Premium daily driver; strongest tool discipline and coding judgement at this tier. |
+| **Claude Sonnet 5** | `anthropic/claude-sonnet-5` | Premium daily driver; strongest tool discipline and coding judgement at this tier. |
 
 If you can only choose one model for a skill-heavy profile, start with
-owl-alpha, DeepSeek V4 Pro, MiMo V2.5 Pro, or Sonnet 4.6 depending on
+owl-alpha, DeepSeek V4 Pro, MiMo V2.5 Pro, or Sonnet 5 depending on
 budget and provider preference.
 
 ### Cheap service turns
@@ -75,8 +75,8 @@ creating or debugging skills.
 | **DeepSeek V4 Flash** | `deepseek/deepseek-v4-flash` | 1M context at the cheap-fast tier; the headroom is useful even for short turns. |
 | **MiMo V2.5** | `xiaomi/mimo-v2.5` | Budget sibling to MiMo V2.5 Pro; 1M context, useful for A/B testing cheap service profiles. |
 | **Claude Haiku 4.5** | `anthropic/claude-haiku-4.5` | Cheap and fast with reasoning support; reliable for short-chain turns. |
-| **GPT-5.4 Mini** | `openai/gpt-5.4-mini` | Reasonable OpenAI budget pick for simple tool use; acceptable as a router only when the skill catalog is clean and small. |
-| **GPT-5.4 Nano** | `openai/gpt-5.4-nano` | Cheapest OpenAI tier; mechanical turns only. |
+| **GPT-5.6 Terra** | `openai/gpt-5.6-terra` | Balanced OpenAI tier for simple tool use; acceptable as a router when the skill catalog is clean and small. |
+| **GPT-5.6 Luna** | `openai/gpt-5.6-luna` | Cheapest OpenAI tier; mechanical turns only. |
 
 ### High-stakes engineering
 
@@ -85,12 +85,10 @@ long debugging sessions, schema changes, release work.
 
 | Model | OpenRouter ID | Why |
 |---|---|---|
-| **Claude Opus 4.8** | `anthropic/claude-opus-4.8` | Flagship — expensive ceiling for hard multi-step engineering and long-context judgement. |
-| **Claude Sonnet 4.6** | `anthropic/claude-sonnet-4.6` | Best daily premium balance for coding-heavy profiles. |
-| **GPT-5.5** | `openai/gpt-5.5` | OpenAI flagship; strong general engineering. |
-| **GPT-5.5 Pro** | `openai/gpt-5.5-pro` | Extended-reasoning variant for the hardest multi-step tasks. |
-| **o3** | `openai/o3` | Heavy-reasoning specialist; not a router, use for one-shot analysis. |
-| **GPT-5.3 Codex** | `openai/gpt-5.3-codex` | Coding-specific; good for repo-tooling profiles. |
+| **Claude Fable 5** | `anthropic/claude-fable-5` | Ceiling — next-gen intelligence for long-running agents; most capable widely-released model. |
+| **Claude Opus 4.8** | `anthropic/claude-opus-4.8` | Flagship for complex agentic coding and enterprise engineering. |
+| **Claude Sonnet 5** | `anthropic/claude-sonnet-5` | Best daily premium balance for coding-heavy profiles. |
+| **GPT-5.6 Sol** | `openai/gpt-5.6-sol` | OpenAI flagship; leads the coding-agent index, strong general engineering. |
 | **Nemotron 3 Super** | `nvidia/nemotron-3-super-120b-a12b` | Open-weight engineering option; 256K context. |
 
 ### Local / sovereign profiles
@@ -116,15 +114,13 @@ latency and one less layer to break.
 
 | Provider | OpenRouter route | Native route |
 |---|---|---|
+| Anthropic | `anthropic/claude-fable-5` | `claude-fable-5` |
 | Anthropic | `anthropic/claude-opus-4.8` | `claude-opus-4-8` (hyphens, not dots) |
-| Anthropic | `anthropic/claude-sonnet-4.6` | `claude-sonnet-4-6` |
+| Anthropic | `anthropic/claude-sonnet-5` | `claude-sonnet-5` |
 | Anthropic | `anthropic/claude-haiku-4.5` | `claude-haiku-4-5` |
-| OpenAI | `openai/gpt-5.5` | `gpt-5.5` (no prefix) |
-| OpenAI | `openai/gpt-5.5-pro` | `gpt-5.5-pro` |
-| OpenAI | `openai/gpt-5.4-mini` | `gpt-5.4-mini` |
-| OpenAI | `openai/gpt-5.4-nano` | `gpt-5.4-nano` |
-| OpenAI | `openai/gpt-5.3-codex` | `gpt-5.3-codex` |
-| OpenAI | `openai/o3` | `o3` |
+| OpenAI | `openai/gpt-5.6-sol` | `gpt-5.6-sol` (alias `gpt-5.6`, no prefix) |
+| OpenAI | `openai/gpt-5.6-terra` | `gpt-5.6-terra` |
+| OpenAI | `openai/gpt-5.6-luna` | `gpt-5.6-luna` |
 
 ## Not recommended as the primary skill router
 
@@ -163,11 +159,11 @@ Unconfigured tiers always resolve to the main model, so none of this
 changes behavior until you opt in. Profiles still split roles best:
 
 - **Personal skill-heavy profile**: owl-alpha, DeepSeek V4 Pro,
-  MiMo V2.5 Pro, or Sonnet 4.6.
+  MiMo V2.5 Pro, or Sonnet 5.
 - **High-volume service profile**: DeepSeek V4 Flash, MiMo V2.5,
-  Haiku 4.5, or GPT-5.4-mini, with fewer skills and tighter prompts.
-- **Engineering profile**: Sonnet 4.6, Opus 4.8, GPT-5.5, GPT-5.5-pro,
-  or o3.
+  Haiku 4.5, or GPT-5.6 Terra, with fewer skills and tighter prompts.
+- **Engineering profile**: Sonnet 5, Opus 4.8, Fable 5, or
+  GPT-5.6 Sol.
 - **Local/private profile**: a current Qwen-coder, Gemma, or codestral
   family model, sized to your VRAM.
 
@@ -180,5 +176,5 @@ Three ways, any of them works:
 - Edit `model:` in `~/.alpi/config.yaml` or
   `~/.alpi/profiles/<name>/config.yaml`.
 
-The choice is per-profile. `alpi -p work` can run Sonnet 4.6 while
+The choice is per-profile. `alpi -p work` can run Sonnet 5 while
 `alpi -p personal` runs MiMo V2.5 without interference.

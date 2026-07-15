@@ -26,6 +26,7 @@ anthropic/claude-opus-4.8-fast: 967232
 anthropic/claude-sonnet-4: 967232
 anthropic/claude-sonnet-4.5: 967232
 anthropic/claude-sonnet-4.6: 967232
+anthropic/claude-sonnet-5: 967232
 arcee-ai/coder-large: 32768
 arcee-ai/trinity-large-thinking: 229376
 arcee-ai/trinity-mini: 98304
@@ -209,6 +210,9 @@ openai/gpt-5.4-nano: 367232
 openai/gpt-5.4-pro: 1017232
 openai/gpt-5.5: 1017232
 openai/gpt-5.5-pro: 1017232
+openai/gpt-5.6-luna: 1017232
+openai/gpt-5.6-sol: 1017232
+openai/gpt-5.6-terra: 1017232
 openai/gpt-audio: 111616
 openai/gpt-audio-mini: 111616
 openai/gpt-chat-latest: 367232

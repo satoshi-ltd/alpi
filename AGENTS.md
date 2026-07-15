@@ -40,7 +40,7 @@ this repository. Hard constraints, not suggestions.
   "Co-Authored-By: Claude", or analogous Anthropic / OpenAI / Google /
   Mistral credits in commit messages, PR descriptions, code comments,
   marketing copy, README, or user-visible UI. Functional API identifiers
-  (model strings like `anthropic/claude-sonnet-4-6`, env var names like
+  (model strings like `anthropic/claude-sonnet-5`, env var names like
   `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY`, provider
   class names, LiteLLM routing prefixes) are exempt — they're protocol
   contracts, not branding. The line: if removing the mention would break

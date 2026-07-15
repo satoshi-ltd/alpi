@@ -27,10 +27,8 @@ def normalise_effort(value: Any) -> str:
 _DIRECT_PATTERNS: tuple[re.Pattern, ...] = (
     re.compile(r"^openai/o[1-9](?:[._-]|$)"),
     re.compile(r"^openai/gpt-5(?:[.-]|$)"),
-    # Two Claude naming conventions in the wild:
-    #   old: anthropic/claude-3-7-sonnet / anthropic/claude-3-5-sonnet (only 3.7+ supports thinking)
-    #   new: anthropic/claude-sonnet-4-6 / claude-opus-4 / claude-haiku-4-5 (Claude 4+ supports thinking)
-    re.compile(r"^anthropic/claude-(?:[4-9]|3-[7-9]|(?:sonnet|opus|haiku)-[4-9])"),
+    # Thinking starts at Claude 3.7 (hence 3-[7-9]); all 4.x+ and the 5 family qualify.
+    re.compile(r"^anthropic/claude-(?:[4-9]|3-[7-9]|(?:sonnet|opus|haiku|fable|mythos)-[4-9])"),
     re.compile(r"^google/gemini-2\.[5-9]"),
     re.compile(r"^deepseek/.*r1"),
     re.compile(r"^xai/grok-(?:3|4)-reasoning"),

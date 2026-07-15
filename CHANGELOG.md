@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.10.31 — 2026-07-15 — current models on tap
+
+- **OpenAI models refreshed to the GPT-5.6 family**: Sol (flagship · coding),
+  Terra (balanced) and Luna (cheap · fast) replace the older 5.3–5.5 lineup.
+- **Anthropic models refreshed**: Claude Fable 5 (new flagship) and Claude
+  Sonnet 5 join Opus 4.8 and Haiku 4.5; the superseded Sonnet 4.6 is dropped.
+
 ## v0.10.30 — 2026-07-15 — member connections stay members
 
 - **Management surfaces are admin-only over remote connections**: memory

@@ -2,19 +2,21 @@
 
 export const CURATED_BY_PROVIDER = {
   openai: [
-    { id: 'gpt-5.5', note: 'flagship' },
-    { id: 'gpt-5.5-pro', note: 'pro · extended reasoning' },
-    { id: 'gpt-5.4-mini', note: 'balanced' },
-    { id: 'gpt-5.4-nano', note: 'cheap · fast' },
-    { id: 'gpt-5.3-codex', note: 'coding' },
-    { id: 'o3', note: 'heavy reasoning' },
+    { id: 'gpt-5.6-sol', note: 'flagship · coding' },
+    { id: 'gpt-5.6-terra', note: 'balanced' },
+    { id: 'gpt-5.6-luna', note: 'cheap · fast' },
   ],
   anthropic: [
-    { id: 'claude-opus-4-8', note: 'flagship' },
-    { id: 'claude-opus-4-7', note: 'previous flagship' },
-    { id: 'claude-sonnet-4-6', note: 'balanced' },
+    { id: 'claude-fable-5', note: 'flagship · 1M' },
+    { id: 'claude-opus-4-8', note: 'agentic coding' },
+    { id: 'claude-sonnet-5', note: 'balanced' },
     { id: 'claude-haiku-4-5', note: 'cheap · fast' },
   ],
+};
+
+export const DEFAULT_MODEL_BY_PROVIDER = {
+  anthropic: 'anthropic/claude-sonnet-5',
+  openai: 'openai/gpt-5.6-terra',
 };
 
 // Flat tuples — Hermes/Metro dev mode has tripped on Object.entries+destructure for-of.

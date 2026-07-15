@@ -14,6 +14,14 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.2.17 — 2026-07-15 — new profiles start on current models
+
+- Creating a profile with an Anthropic or OpenAI key now pins a current model
+  (Claude Sonnet 5 / GPT-5.6 Terra) instead of a retired one, and the model
+  picker lists the current GPT-5.6 and Claude 5 lineups.
+
+_Requires alpi v0.10.31+ for the refreshed model catalog._
+
 ## v0.2.16 — 2026-07-15 — notifications are for admins
 
 - **The notifications inbox is admin-only.** The bell is hidden on member

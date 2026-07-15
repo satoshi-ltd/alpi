@@ -1,30 +1,21 @@
 openai:
-  - id: gpt-5.5
-    note: flagship
+  - id: gpt-5.6-sol
+    note: flagship · coding
     reasoning: true
-  - id: gpt-5.5-pro
-    note: pro · extended reasoning
-    reasoning: true
-  - id: gpt-5.4-mini
+  - id: gpt-5.6-terra
     note: balanced
     reasoning: true
-  - id: gpt-5.4-nano
+  - id: gpt-5.6-luna
     note: cheap · fast
     reasoning: true
-  - id: gpt-5.3-codex
-    note: coding
-    reasoning: true
-  - id: o3
-    note: heavy reasoning
-    reasoning: true
 anthropic:
+  - id: claude-fable-5
+    note: flagship · 1M
+    reasoning: true
   - id: claude-opus-4-8
-    note: flagship
+    note: agentic coding
     reasoning: true
-  - id: claude-opus-4-7
-    note: previous flagship
-    reasoning: true
-  - id: claude-sonnet-4-6
+  - id: claude-sonnet-5
     note: balanced
     reasoning: true
   - id: claude-haiku-4-5
@@ -49,7 +40,7 @@ openrouter:
   - id: nvidia/nemotron-3-super-120b-a12b
     note: open · 256K
     reasoning: true
-  - id: anthropic/claude-sonnet-4.6
+  - id: anthropic/claude-sonnet-5
     note: balanced
     reasoning: true
   - id: anthropic/claude-opus-4.8

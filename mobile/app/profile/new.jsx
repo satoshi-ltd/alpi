@@ -12,6 +12,7 @@ import { useToast } from '../../src/components/Toast';
 import { useProfileSummaries } from '../../src/hooks/useDaemonData';
 import { useEndpoint } from '../../src/lib/EndpointContext';
 import { profileNameError } from '../../src/lib/profileName';
+import { createProfileWithProvider } from '../../src/lib/createProfile';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { AdminGuard } from '../../src/components/AdminGuard';
 
@@ -72,47 +73,15 @@ function NewProfile() {
     if (!ready) return;
     setBusy(true);
     try {
-      await call('host.profile.create', { name: trimmed });
-
-      let suggestedModel = null;
-      if (providerId === 'ollama') {
-        const oname = ollamaName.trim();
-        await call('host.providers.add_ollama', {
-          profile: trimmed,
-          name: oname,
-          url: ollamaUrl.trim().replace(/\/$/, ''),
-        });
-        try {
-          const envelope = await call('host.providers.ollama_models', { profile: trimmed });
-          const first = (envelope?.models ?? []).find((m) => m.startsWith(`${oname}/`));
-          if (first) suggestedModel = first;
-        } catch {
-          // ignore — model can be picked later
-        }
-      } else {
-        await call('host.providers.set_key', {
-          profile: trimmed,
-          key: provider.env,
-          value: apiKey.trim(),
-        });
-        if (providerId === 'openrouter') {
-          const model = openrouterModel.trim().replace(/^openrouter\//, '');
-          await call('host.providers.add_openrouter_model', { profile: trimmed, model });
-          suggestedModel = `openrouter/${model}`;
-        } else if (providerId === 'anthropic') {
-          suggestedModel = 'anthropic/claude-sonnet-4-6';
-        } else if (providerId === 'openai') {
-          suggestedModel = 'openai/gpt-5.4-mini';
-        }
-      }
-
-      if (suggestedModel) {
-        await call('host.config.set_field', {
-          profile: trimmed,
-          key: 'model',
-          value: suggestedModel,
-        }).catch(() => {});
-      }
+      await createProfileWithProvider(call, {
+        name: trimmed,
+        providerId,
+        env: provider?.env,
+        apiKey,
+        ollamaName,
+        ollamaUrl,
+        openrouterModel,
+      });
 
       await summaries.refresh?.();
       toast({ title: 'Profile created', message: `@${trimmed}`, duration: 1800 });

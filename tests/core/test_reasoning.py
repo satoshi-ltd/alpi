@@ -33,18 +33,20 @@ def test_normalise_effort_canonicalises_or_drops(raw, expected) -> None:
 @pytest.mark.parametrize("model", [
     "openai/o3-mini",
     "openai/o4-mini",
-    "openai/gpt-5.4-mini",      # curated catalog
-    "openai/gpt-5.4-nano",      # curated catalog
-    "openai/gpt-5.5",           # curated catalog
-    "openai/gpt-5.5-pro",       # curated catalog
-    "openai/gpt-5",             # custom-typed (catalog miss → regex fallback)
-    "openai/gpt-5-mini",        # custom-typed (regex fallback)
-    "anthropic/claude-sonnet-4-6",
-    "anthropic/claude-opus-4",
+    "openai/gpt-5.6-sol",         # curated catalog
+    "openai/gpt-5.6-terra",       # curated catalog
+    "openai/gpt-5.6-luna",        # curated catalog
+    "openai/gpt-5",               # custom-typed (catalog miss → regex fallback)
+    "openai/gpt-5-mini",          # custom-typed (regex fallback)
+    "anthropic/claude-fable-5",   # curated catalog
+    "anthropic/claude-sonnet-5",  # curated catalog
+    "anthropic/claude-haiku-4-5", # curated catalog
+    "anthropic/claude-opus-4",    # custom-typed (regex fallback)
+    "anthropic/claude-mythos-5",  # custom-typed (regex fallback: fable|mythos branch)
     "google/gemini-2.5-pro",
     "deepseek/deepseek-r1",
     "openrouter/openai/o3-mini",
-    "openrouter/anthropic/claude-sonnet-4-6",
+    "openrouter/anthropic/claude-sonnet-5",
 ])
 def test_supports_reasoning_true_for_known_models(model) -> None:
     assert supports_reasoning(model) is True
@@ -102,7 +104,7 @@ def test_reasoning_kwargs_returns_empty_when_model_unsupported() -> None:
 
 def test_reasoning_kwargs_direct_provider_uses_top_level_param() -> None:
     assert reasoning_kwargs("openai/o3-mini", "high") == {"reasoning_effort": "high"}
-    assert reasoning_kwargs("anthropic/claude-sonnet-4-6", "medium") == {
+    assert reasoning_kwargs("anthropic/claude-sonnet-5", "medium") == {
         "reasoning_effort": "medium",
     }
 

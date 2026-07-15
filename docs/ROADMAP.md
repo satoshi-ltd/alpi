@@ -14,22 +14,15 @@ Legend: ✅ shipped · 🔵 backlog · 🟡 next up · ⏸ blocked · 🔴 gate.
 
 ## v0.11 cycle (open)
 
-**Theme: artifact-capable agents on lighter runtime surfaces.**
-v0.10 retired the chat-app gateways and narrowed email to an on-demand
-tool — the daemon no longer listens on any third-party platform. v0.11
-makes that hardened base more useful for real agentic work: moving
-artefacts between peers without abusing JSON envelopes, and proving
-whether the browser stack can get lighter on small hosts.
+**Theme: peer artefact transfer.**
 
-This cycle should still stay inside surfaces Alpi already owns. No
-worker-pool scheduler, no marketplace, no cloud sandbox, no inbound chat
-gateways, and no default anti-bot posture.
+v0.11 makes ALP capable of moving an explicitly chosen non-inline artefact
+between peers without abusing a JSON envelope. The cycle ships when ALP.5 is
+complete; it does not include speculative browser-runtime work.
 
 | ID | Item | Status |
 |---|---|---|
 | ALP.5 | Blob transfer — `link.put_blob` / `link.get_blob`, content-addressed and chunked, for screenshots, PDFs, skill outputs, and other artefacts that should not live inline in an ALP JSON envelope. | 🟡 |
-| BROWSER.1 | Optional lightweight browser backend — acceptance-test Obscura or a similar CDP backend behind the existing `browser` tool to cut Chromium's footprint on small hosts. | 🔵 |
-| SESS.1 | Drop `schema_version: 1` session-file support — readers stop accepting the pre-v0.10 layout; only `schema_version: 2` loads. | 🔵 |
 
 ### ALP.5. Blob transfer
 
@@ -46,39 +39,6 @@ signature so the receiver can verify end-to-end.
 turn ALP into a shared filesystem, does not add sync folders, and does not
 auto-ship every output attachment. The sender still chooses what to share.
 
-### BROWSER.1. Optional lightweight browser backend
-
-The `browser` tool drives a full Playwright + Chromium install. That is the
-right engine for interactive automation, but Chromium is heavy: a ~520MB
-per-bump download and 200MB+ of RAM, which hurts small or headless hosts. A
-Rust headless engine like Obscura speaks the Chrome DevTools Protocol and
-ships as a ~70MB binary in ~30MB of RAM, so it could back the same tool far
-more cheaply where full fidelity is not required.
-
-It would land as an **opt-in CDP backend behind the existing tool interface** —
-never the default, never with stealth/anti-detect on. Playwright stays the
-engine for the interactive `browser` tool.
-
-**Why it waits.** Obscura is a young, reimplemented engine (V8 plus a partial
-DOM and a CDP subset) with a scraping-evasion trust profile, against a
-battle-tested Playwright + Chromium. It earns adoption only after its source is
-vetted, its WPT conformance is tracked, it passes real acceptance, and it
-measurably cuts Chromium's footprint on a host that needs it.
-
-### SESS.1. Drop schema_version 1 session files
-
-v0.10 introduced `schema_version: 2` session files (capped previews +
-opt-in `*_meta`); the readers still accept the pre-v0.10 `schema_version: 1`
-layout so older sessions keep loading. v0.11 removes that fallback: only v2
-loads, and the v1 read paths come out. Search, recall, and the desktop
-session view all read v2 by then, so the only cost is that sessions written
-before v0.10 stop being machine-readable.
-
-**Why it waits.** Keeping the v1 reader through the v0.10 cycle lets every
-existing session migrate naturally as it is rewritten. Dropping it is a
-clean-up, not a feature — it lands once no active install still depends on
-v1 files.
-
 ---
 
 ## Backlog — demand-gated
@@ -91,6 +51,7 @@ v0.x feature that depends on it. Nothing graduates because it is interesting.
 
 | ID | Item | Status |
 |---|---|---|
+| BROWSER.1 | Optional lightweight browser backend — evaluate Obscura or a similar CDP backend only when Chromium's measured disk or RAM footprint blocks a real target host. | 🔵 |
 | TERM.2 | Docker / SSH terminal backends — isolated or remote command execution for unattended profiles once local sandboxing is no longer enough. | 🔵 |
 | AUDIT.2 | Enterprise audit & accountability — actor attribution on the host plane, append-only / external audit sink, LLM-egress logging + provider policy, at-rest encryption, and RBAC/SSO. | 🔵 |
 | ORG.2.B/C | Workspace overlay (`cfg.workspace_path` as list) + first-class runtime org entity (`~/.alpi/orgs/<id>/`) with roles, event fan-out, and shared knowledge index. | ⏸ |
@@ -108,6 +69,25 @@ v0.x feature that depends on it. Nothing graduates because it is interesting.
 | TTS.1 | Local TTS engine + daemon-served voice — single host-served voice catalog, deprecate desktop-local synthesis. | 🔵 |
 | UX.6 | Desktop `.env` manager — per-profile environment editor (mask/reveal/audit) for keys other than provider keys. | 🔵 |
 | External secrets | Bitwarden / external secret manager resolver for provider keys. | 🔵 |
+
+### BROWSER.1. Optional lightweight browser backend
+
+The `browser` tool drives a full Playwright + Chromium install. That is the
+right engine for interactive automation, but Chromium is heavy: a ~520MB
+per-bump download and 200MB+ of RAM, which hurts small or headless hosts. A
+Rust headless engine like Obscura speaks the Chrome DevTools Protocol and
+ships as a ~70MB binary in ~30MB of RAM, so it could back the same tool far
+more cheaply where full fidelity is not required.
+
+It would land as an **opt-in CDP backend behind the existing tool interface** —
+never the default, never with stealth/anti-detect on. Playwright stays the
+engine for the interactive `browser` tool.
+
+**Promotion condition.** Obscura is a young, reimplemented engine (V8 plus a
+partial DOM and a CDP subset) with a scraping-evasion trust profile, against a
+battle-tested Playwright + Chromium. It earns adoption only after its source is
+vetted, its WPT conformance is tracked, it passes real acceptance, and it
+measurably cuts Chromium's footprint on a host that needs it.
 
 ### TERM.2. Docker / SSH terminal backends
 

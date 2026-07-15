@@ -33,9 +33,9 @@ For profiles with many skills, persistent memory, database state, shell commands
 | DeepSeek V4 Pro | `deepseek/deepseek-v4-pro` | Strong tool discipline at 1M context; sensible flagship-class daily driver. |
 | MiMo V2.5 Pro | `xiaomi/mimo-v2.5-pro` | Strong persistent-agent adoption; 1M context, good price/quality. |
 | MiniMax M3 | `minimax/minimax-m3` | Mid-tier agent model; 512K context. |
-| Claude Sonnet 4.6 | `anthropic/claude-sonnet-4.6` | Premium daily driver; strongest tool discipline at this tier. |
+| Claude Sonnet 5 | `anthropic/claude-sonnet-5` | Premium daily driver; strongest tool discipline at this tier. |
 
-Pick one for a skill-heavy profile: start with owl-alpha, DeepSeek V4 Pro, MiMo V2.5 Pro, or Sonnet 4.6 by budget/provider.
+Pick one for a skill-heavy profile: start with owl-alpha, DeepSeek V4 Pro, MiMo V2.5 Pro, or Sonnet 5 by budget/provider.
 
 ## Cheap service turns
 
@@ -46,8 +46,8 @@ For scheduled-job turns, heartbeats, summaries, simple lookups, low-risk command
 | DeepSeek V4 Flash | `deepseek/deepseek-v4-flash` | 1M context at the cheap-fast tier. |
 | MiMo V2.5 | `xiaomi/mimo-v2.5` | Budget sibling to MiMo V2.5 Pro; 1M context. |
 | Claude Haiku 4.5 | `anthropic/claude-haiku-4.5` | Cheap, fast, reasoning support; reliable on short chains. |
-| GPT-5.4 Mini | `openai/gpt-5.4-mini` | Budget OpenAI; router only when the skill catalog is small and clean. |
-| GPT-5.4 Nano | `openai/gpt-5.4-nano` | Cheapest OpenAI tier; mechanical turns only. |
+| GPT-5.6 Terra | `openai/gpt-5.6-terra` | Balanced OpenAI; router only when the skill catalog is small and clean. |
+| GPT-5.6 Luna | `openai/gpt-5.6-luna` | Cheapest OpenAI tier; mechanical turns only. |
 
 ## High-stakes engineering
 
@@ -55,12 +55,10 @@ When a wrong tool call is expensive: refactors, code review, long debugging, sch
 
 | Model | OpenRouter ID | Notes |
 |---|---|---|
-| Claude Opus 4.8 | `anthropic/claude-opus-4.8` | Flagship — ceiling for hard multi-step engineering and long-context judgement. |
-| Claude Sonnet 4.6 | `anthropic/claude-sonnet-4.6` | Best daily premium balance for coding-heavy profiles. |
-| GPT-5.5 | `openai/gpt-5.5` | OpenAI flagship; strong general engineering. |
-| GPT-5.5 Pro | `openai/gpt-5.5-pro` | Extended reasoning for the hardest tasks. |
-| o3 | `openai/o3` | Heavy-reasoning specialist; not a router, use for one-shot analysis. |
-| GPT-5.3 Codex | `openai/gpt-5.3-codex` | Coding-specific; good for repo-tooling profiles. |
+| Claude Fable 5 | `anthropic/claude-fable-5` | Ceiling — next-gen intelligence for long-running agents; most capable widely-released model. |
+| Claude Opus 4.8 | `anthropic/claude-opus-4.8` | Flagship for complex agentic coding and enterprise engineering. |
+| Claude Sonnet 5 | `anthropic/claude-sonnet-5` | Best daily premium balance for coding-heavy profiles. |
+| GPT-5.6 Sol | `openai/gpt-5.6-sol` | OpenAI flagship; leads the coding-agent index, strong general engineering. |
 | Nemotron 3 Super | `nvidia/nemotron-3-super-120b-a12b` | Open-weight engineering option; 256K context. |
 
 ## Local/private profiles
@@ -75,15 +73,13 @@ When the user has ANTHROPIC_API_KEY or OPENAI_API_KEY, native routes work and us
 
 | Provider | OpenRouter route | Native route |
 |---|---|---|
+| Anthropic | `anthropic/claude-fable-5` | `claude-fable-5` |
 | Anthropic | `anthropic/claude-opus-4.8` | `claude-opus-4-8` (hyphens, not dots) |
-| Anthropic | `anthropic/claude-sonnet-4.6` | `claude-sonnet-4-6` |
+| Anthropic | `anthropic/claude-sonnet-5` | `claude-sonnet-5` |
 | Anthropic | `anthropic/claude-haiku-4.5` | `claude-haiku-4-5` |
-| OpenAI | `openai/gpt-5.5` | `gpt-5.5` (no prefix) |
-| OpenAI | `openai/gpt-5.5-pro` | `gpt-5.5-pro` |
-| OpenAI | `openai/gpt-5.4-mini` | `gpt-5.4-mini` |
-| OpenAI | `openai/gpt-5.4-nano` | `gpt-5.4-nano` |
-| OpenAI | `openai/gpt-5.3-codex` | `gpt-5.3-codex` |
-| OpenAI | `openai/o3` | `o3` |
+| OpenAI | `openai/gpt-5.6-sol` | `gpt-5.6-sol` (alias `gpt-5.6`, no prefix) |
+| OpenAI | `openai/gpt-5.6-terra` | `gpt-5.6-terra` |
+| OpenAI | `openai/gpt-5.6-luna` | `gpt-5.6-luna` |
 
 ## Avoid as primary skill router
 
