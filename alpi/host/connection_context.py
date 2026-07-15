@@ -28,6 +28,14 @@ def current() -> ConnectionContext:
     return _current.get()
 
 
+def can_read_connection(owner_connection_id: str | None) -> bool:
+    """Legacy ownerless sessions belong to host for member reads."""
+    ctx = current()
+    if ctx.role == "admin":
+        return True
+    return (owner_connection_id or HOST_CONNECTION_ID) == ctx.connection_id
+
+
 @contextmanager
 def use(context: ConnectionContext) -> Iterator[None]:
     token = _current.set(context)

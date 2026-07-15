@@ -122,7 +122,14 @@ export default function ChatPane({
     setImageRoots([activeDetail?.workspace]);
   }, [activeDetail?.workspace]);
 
-  const autoRead = !!activeDetail?.voice_auto_read;
+  const serverAutoRead = !!activeDetail?.voice_auto_read;
+  // members can't set the profile-global flag, so their toggle is a per-device pref keyed by connection+profile.
+  const autoReadKey = `alpi:autoread:${connectionId ?? "local"}:${activeProfile?.name ?? ""}`;
+  const [memberAutoRead, setMemberAutoRead] = useState(false);
+  useEffect(() => {
+    try { setMemberAutoRead(localStorage.getItem(autoReadKey) === "1"); } catch { setMemberAutoRead(false); }
+  }, [autoReadKey]);
+  const autoRead = canManageProfileSurfaces ? serverAutoRead : memberAutoRead;
   const ttsVoiceId = activeProfile?.voice_id ?? activeDetail?.voice_id ?? null;
   readAloudStateRef.current = {
     view,
@@ -317,11 +324,17 @@ export default function ChatPane({
           paused={paused}
           onTogglePause={onTogglePause}
           autoRead={autoRead}
-          onToggleAutoRead={activeProfile && canManageProfileSurfaces ? () => {
+          onToggleAutoRead={activeProfile ? () => {
             if (autoRead) clearTtsQueue();
-            invoke("voice_set_auto_read", { profile: activeProfile.name, enabled: !autoRead })
-              .then(() => refreshActiveDetail())
-              .catch((e) => notify({ message: `auto-read toggle failed: ${e}`, variant: "error" }));
+            if (canManageProfileSurfaces) {
+              invoke("voice_set_auto_read", { profile: activeProfile.name, enabled: !autoRead })
+                .then(() => refreshActiveDetail())
+                .catch((e) => notify({ message: `auto-read toggle failed: ${e}`, variant: "error" }));
+            } else {
+              const next = !memberAutoRead;
+              setMemberAutoRead(next);
+              try { localStorage.setItem(autoReadKey, next ? "1" : "0"); } catch { /* */ }
+            }
           } : null}
         />
       )}

@@ -37,6 +37,50 @@ _SENSITIVE_PATH_REGEX: tuple[re.Pattern[str], ...] = (
 )
 
 
+# Off-limits to members for READ as well as write — reading host/ would leak an admin token and escalate.
+_MEMBER_HOME_AREA: frozenset[str] = frozenset({
+    "host", "secrets", "gateway", "cache", "logs", "outputs",
+    "sessions", "memories", "schedule", "skills", "alp",
+})
+_MEMBER_HOME_REGEX = re.compile(
+    r"(?:^|/)\.alpi(?:/profiles/[^/]+)?/"
+    r"(host|secrets|gateway|cache|logs|outputs|sessions|memories|schedule|skills|alp)(?:/|$)"
+)
+_ALP_SECRETS_RE = re.compile(r"(?:^|/)alp/secrets(?:/|$)")
+
+
+def _member_home_area(*paths: Path | str) -> str | None:
+    for p in paths:
+        m = _MEMBER_HOME_REGEX.search(str(p))
+        if m:
+            return m.group(1)
+    # Fallback for a custom ALPI_HOME whose dir is not literally named ``.alpi``.
+    from alpi.home import get_home
+    try:
+        home = get_home().resolve()
+    except Exception:
+        return None
+    for p in paths:
+        try:
+            rel = Path(p).resolve().relative_to(home)
+        except (ValueError, OSError):
+            continue
+        if rel.parts and rel.parts[0] in _MEMBER_HOME_AREA:
+            return rel.parts[0]
+    return None
+
+
+def _member_denied_area(p: Path | str, resolved: Path, *, for_write: bool) -> str | None:
+    area = _member_home_area(p, resolved)
+    if area is None:
+        return None
+    # Members may READ alp/ (peer mentions, workgroup transcripts) — never the keypair, never on write.
+    if area == "alp" and not for_write:
+        if not (_ALP_SECRETS_RE.search(str(p)) or _ALP_SECRETS_RE.search(str(resolved))):
+            return None
+    return area
+
+
 def _workspace_root() -> Path:
     from alpi.home import get_home
     try:
@@ -63,12 +107,14 @@ def _is_sensitive(*paths: Path | str) -> str | None:
     return None
 
 
-def resolve_path(path: str) -> Path:
+def resolve_path(path: str, *, for_write: bool = False) -> Path:
     """Expand + resolve a path and refuse sensitive system locations.
 
     Relative paths root at the active workspace (matches the path rule
     in the system prompt). No workspace sandbox — reads and writes can
     reach anywhere on disk except the entries in the sensitive lists.
+    Member file tools are also fenced out of the home private area, except
+    read-only alp/ transcripts.
     """
     p = Path(path).expanduser()
     if not p.is_absolute():
@@ -77,6 +123,15 @@ def resolve_path(path: str) -> Path:
     hit = _is_sensitive(p, resolved)
     if hit is not None:
         raise ValueError(f"refusing to touch sensitive path: {path}")
+    from alpi.host.connection_context import current
+    if current().role != "admin":
+        area = _member_denied_area(p, resolved, for_write=for_write)
+        if area is not None:
+            verb = "write to" if for_write else "read"
+            raise ValueError(
+                f"members cannot {verb} the profile {area}/ area; "
+                f"this requires an admin device: {path}"
+            )
     return resolved
 
 
@@ -105,4 +160,3 @@ def suggest_similar_paths(target: Path, limit: int = 5) -> list[str]:
         return []
     scored.sort(key=lambda t: (t[0], t[1]))
     return [s for _, s in scored[:limit]]
-

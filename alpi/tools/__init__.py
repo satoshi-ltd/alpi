@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import copy
+
+from alpi.host.connection_context import current
 from alpi.tools.base import Tool, ToolResult
 from alpi.tools._availability import is_available, invalidate as _invalidate_availability
 from alpi.tools import (
@@ -40,6 +43,12 @@ from alpi.tools import (
 
 _TOOLS: dict[str, type[Tool]] = {}
 
+_MEMBER_ALLOWED_ACTIONS: dict[str, frozenset[str]] = {
+    "skill": frozenset({"list", "view", "validate", "run", "test", "invoke"}),
+    "memory": frozenset({"read", "promotion_list"}),
+    "schedule": frozenset({"list"}),
+}
+
 
 def register(cls: type[Tool]) -> type[Tool]:
     _TOOLS[cls.name] = cls
@@ -55,12 +64,14 @@ def get(name: str) -> type[Tool] | None:
 
 
 def schemas(deny: frozenset[str] | set[str] | None = None) -> list[dict]:
-    """Schemas the LLM sees. Unavailable tools (TL.1 probe failed) are filtered so the model can't reach for a broken capability. ``deny`` (per-profile ``tools.deny`` from config) is applied on top — denied tools are simply absent from the schema."""
     deny = deny or frozenset()
-    return [
+    schemas = [
         cls.schema() for cls in _TOOLS.values()
         if is_available(cls)[0] and cls.name not in deny
     ]
+    if current().role != "member":
+        return schemas
+    return [_member_schema(schema) for schema in schemas]
 
 
 def availability_report() -> list[tuple[str, bool, str]]:
@@ -88,6 +99,9 @@ def execute(
             ok=False, output="",
             error=f"tool denied for this profile: {name} (see tools.deny in config.yaml)",
         )
+    member_refusal = _member_mutation_refusal(name, arguments)
+    if member_refusal is not None:
+        return member_refusal
     ok, reason = is_available(cls)
     if not ok:
         return ToolResult(
@@ -100,6 +114,34 @@ def execute(
         return ToolResult(ok=False, output="", error=f"bad arguments for {name}: {e}")
     except Exception as e:  # noqa: BLE001
         return ToolResult(ok=False, output="", error=f"{name} crashed: {e}")
+
+
+def _member_schema(schema: dict) -> dict:
+    name = schema.get("function", {}).get("name", "")
+    allowed = _MEMBER_ALLOWED_ACTIONS.get(name)
+    action = schema.get("function", {}).get("parameters", {}).get("properties", {}).get("action")
+    if allowed is None or not isinstance(action, dict) or not isinstance(action.get("enum"), list):
+        return schema
+    trimmed = copy.deepcopy(schema)
+    enum = trimmed["function"]["parameters"]["properties"]["action"]["enum"]
+    trimmed["function"]["parameters"]["properties"]["action"]["enum"] = [
+        value for value in enum if value in allowed
+    ]
+    return trimmed
+
+
+def _member_mutation_refusal(name: str, arguments: dict) -> ToolResult | None:
+    allowed = _MEMBER_ALLOWED_ACTIONS.get(name)
+    if current().role != "member" or allowed is None:
+        return None
+    action = str(arguments.get("action", "") or "")
+    if action in allowed:
+        return None
+    return ToolResult(
+        ok=False,
+        output="",
+        error=f"members cannot modify {name}; action '{action or '(none)'}' requires an admin device",
+    )
 
 
 # Register every tool exposed by the sibling modules.

@@ -276,9 +276,10 @@ class Delegate(Tool):
 
         cfg = cfg_mod.load(get_home())
         call_kwargs = cfg_mod.resolve_model(cfg, tier=tier)
+        deny_tools = frozenset(cfg.tools.deny)
 
         tools_schema = [
-            s for s in all_schemas()
+            s for s in all_schemas(deny=deny_tools)
             if s.get("function", {}).get("name") in tool_names
         ]
 
@@ -356,7 +357,7 @@ class Delegate(Tool):
                             args = json.loads(tc["arguments"]) if tc["arguments"] else {}
                         except json.JSONDecodeError:
                             args = {}
-                        result = execute(name, args)
+                        result = execute(name, args, deny=deny_tools)
                         payload = result.output if result.ok else f"ERROR: {result.error}"
                         payload = _budget_apply(name, payload)
                     messages.append({

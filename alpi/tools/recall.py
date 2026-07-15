@@ -38,18 +38,21 @@ def _ensure_schema(conn, dim, embedder_name, *, index_mode, force=False) -> None
           source_path TEXT NOT NULL,
           mtime REAL NOT NULL,
           size INTEGER NOT NULL,
-          started_at REAL
+          started_at REAL,
+          connection_id TEXT NOT NULL DEFAULT 'host'
         );
         CREATE TABLE IF NOT EXISTS session_chunks (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           session_id TEXT NOT NULL,
           chunk_index INTEGER NOT NULL,
           content TEXT NOT NULL,
-          started_at REAL
+          started_at REAL,
+          connection_id TEXT NOT NULL DEFAULT 'host'
         );
         CREATE INDEX IF NOT EXISTS session_chunks_by_session ON session_chunks(session_id);
         """
     )
+    _migrate_connection_id(conn)
     conn.execute(
         f"CREATE VIRTUAL TABLE IF NOT EXISTS session_vec USING vec0("
         f"chunk_id INTEGER PRIMARY KEY, embedding float[{dim}])"
@@ -83,14 +86,16 @@ def _ensure_schema(conn, dim, embedder_name, *, index_mode, force=False) -> None
           source_path TEXT NOT NULL,
           mtime REAL NOT NULL,
           size INTEGER NOT NULL,
-          started_at REAL
+          started_at REAL,
+          connection_id TEXT NOT NULL DEFAULT 'host'
         );
         CREATE TABLE session_chunks (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           session_id TEXT NOT NULL,
           chunk_index INTEGER NOT NULL,
           content TEXT NOT NULL,
-          started_at REAL
+          started_at REAL,
+          connection_id TEXT NOT NULL DEFAULT 'host'
         );
         CREATE INDEX session_chunks_by_session ON session_chunks(session_id);
         """
@@ -102,6 +107,13 @@ def _ensure_schema(conn, dim, embedder_name, *, index_mode, force=False) -> None
     _set_meta(conn, "dim", str(dim))
     _set_meta(conn, "embedder", embedder_name)
     conn.commit()
+
+
+def _migrate_connection_id(conn: sqlite3.Connection) -> None:
+    for table in ("session_files", "session_chunks"):
+        cols = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+        if "connection_id" not in cols:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN connection_id TEXT NOT NULL DEFAULT 'host'")
 
 
 def _delete_session(conn: sqlite3.Connection, session_id: str) -> None:
@@ -156,19 +168,23 @@ def index_sessions(
                 seen.add(sid)
                 stat = path.stat()
                 mtime, size = stat.st_mtime, stat.st_size
+                cid = str(data.get("connection_id") or "host")
                 existing = conn.execute(
-                    "SELECT mtime, size FROM session_files WHERE session_id = ?", (sid,),
+                    "SELECT mtime, size, connection_id FROM session_files WHERE session_id = ?", (sid,),
                 ).fetchone()
                 if existing and abs(existing["mtime"] - mtime) < 1e-6 and existing["size"] == size:
+                    if (existing["connection_id"] or "host") != cid:
+                        conn.execute("UPDATE session_files SET connection_id = ? WHERE session_id = ?", (cid, sid))
+                        conn.execute("UPDATE session_chunks SET connection_id = ? WHERE session_id = ?", (cid, sid))
                     skipped += 1
                     continue
                 chunks = _chunk_lines(_transcript(data))
                 started = data.get("started_at")
                 _delete_session(conn, sid)
                 conn.execute(
-                    "INSERT INTO session_files(session_id, source_path, mtime, size, started_at) "
-                    "VALUES(?, ?, ?, ?, ?)",
-                    (sid, str(path), mtime, size, started),
+                    "INSERT INTO session_files(session_id, source_path, mtime, size, started_at, connection_id) "
+                    "VALUES(?, ?, ?, ?, ?, ?)",
+                    (sid, str(path), mtime, size, started, cid),
                 )
                 if not chunks:
                     continue
@@ -178,9 +194,9 @@ def index_sessions(
                     vectors.extend(embedder.embed(bodies[i:i + _EMBED_BATCH]))
                 for chunk_idx, ((_ls, _le, body), vec) in enumerate(zip(chunks, vectors, strict=True)):
                     cur = conn.execute(
-                        "INSERT INTO session_chunks(session_id, chunk_index, content, started_at) "
-                        "VALUES(?, ?, ?, ?)",
-                        (sid, chunk_idx, body, started),
+                        "INSERT INTO session_chunks(session_id, chunk_index, content, started_at, connection_id) "
+                        "VALUES(?, ?, ?, ?, ?)",
+                        (sid, chunk_idx, body, started, cid),
                     )
                     conn.execute(
                         "INSERT INTO session_vec(chunk_id, embedding) VALUES(?, ?)",
@@ -218,33 +234,42 @@ def recall(
     *,
     embedder: embed_mod.Embedder | None = None,
     exclude_id: str | None = None,
+    connection_id: str | None = None,
 ) -> list[dict[str, Any]]:
     embedder = embedder or embed_mod.default()
     conn = open_store(home)
     try:
         _ensure_schema(conn, embedder.dim, embedder.name, index_mode=False)
-        if conn.execute("SELECT COUNT(*) AS n FROM session_chunks").fetchone()["n"] == 0:
+        total = conn.execute("SELECT COUNT(*) AS n FROM session_chunks").fetchone()["n"]
+        if total == 0:
             return []
         qvec = embedder.embed([query])[0]
-        fetch = k + (8 if exclude_id else 0)
-        rows = conn.execute(
-            "SELECT c.session_id, c.content, c.started_at, v.distance "
-            "FROM session_vec v JOIN session_chunks c ON c.id = v.chunk_id "
-            "WHERE v.embedding MATCH ? AND k = ? ORDER BY v.distance",
-            (_vec_blob(qvec), fetch),
-        ).fetchall()
+        fetch = min(total, k + (8 if exclude_id else 0) + (32 if connection_id is not None else 0))
         out: list[dict[str, Any]] = []
-        for r in rows:
-            if exclude_id and r["session_id"] == exclude_id:
-                continue
-            out.append({
-                "session_id": r["session_id"],
-                "when": _fmt_when(r["started_at"]),
-                "snippet": r["content"][:_MAX_SNIPPET],
-                "score": float(r["distance"]),
-            })
-            if len(out) >= k:
+        while True:
+            rows = conn.execute(
+                "SELECT c.session_id, c.content, c.started_at, c.connection_id, v.distance "
+                "FROM session_vec v JOIN session_chunks c ON c.id = v.chunk_id "
+                "WHERE v.embedding MATCH ? AND k = ? ORDER BY v.distance",
+                (_vec_blob(qvec), fetch),
+            ).fetchall()
+            out = []
+            for r in rows:
+                if exclude_id and r["session_id"] == exclude_id:
+                    continue
+                if connection_id is not None and (r["connection_id"] or "host") != connection_id:
+                    continue
+                out.append({
+                    "session_id": r["session_id"],
+                    "when": _fmt_when(r["started_at"]),
+                    "snippet": r["content"][:_MAX_SNIPPET],
+                    "score": float(r["distance"]),
+                })
+                if len(out) >= k:
+                    break
+            if len(out) >= k or fetch >= total:
                 break
+            fetch = min(total, fetch * 4)
         return out
     finally:
         conn.close()
@@ -337,8 +362,12 @@ class RecallSessions(Tool):
             return ToolResult(ok=False, output="", error="Empty query.")
         if k < 1 or k > 50:
             return ToolResult(ok=False, output="", error="k must be in [1, 50].")
+        from alpi.host.connection_context import current
+        ctx = current()
+        scope = None if ctx.role == "admin" else ctx.connection_id
         try:
-            results = recall(get_home(), query.strip(), k, exclude_id=_active_session_id())
+            results = recall(get_home(), query.strip(), k,
+                             exclude_id=_active_session_id(), connection_id=scope)
         except EmbedderMismatch as e:
             return ToolResult(ok=False, output="", error=str(e))
         if not results:

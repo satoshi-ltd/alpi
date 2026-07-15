@@ -239,7 +239,7 @@ def _dispatch(client, action: str, kw: dict) -> ToolResult:
     if action == "download_attachment":
         uid = _require(kw, "uid")
         name = _require(kw, "attachment_name")
-        dest = resolve_path(_require(kw, "dest_path"))
+        dest = resolve_path(_require(kw, "dest_path"), for_write=True)
         client.download_attachment(
             uid=uid, attachment_name=name, dest=dest, folder=folder,
         )

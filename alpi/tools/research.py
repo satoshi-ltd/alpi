@@ -187,9 +187,10 @@ class Research(Tool):
         cfg = cfg_mod.load(get_home())
         call_kwargs = cfg_mod.resolve_model(cfg, tier=depth)
         max_steps = _resolve_depth(cfg, depth)
+        deny_tools = frozenset(cfg.tools.deny)
 
         tools_schema = [
-            s for s in all_schemas()
+            s for s in all_schemas(deny=deny_tools)
             if s.get("function", {}).get("name") in SUB_AGENT_TOOLS
         ]
 
@@ -263,7 +264,7 @@ class Research(Tool):
                             args = json.loads(tc["arguments"]) if tc["arguments"] else {}
                         except json.JSONDecodeError:
                             args = {}
-                        result = execute(name, args)
+                        result = execute(name, args, deny=deny_tools)
                         payload = result.output if result.ok else f"ERROR: {result.error}"
                         payload = _budget_apply(name, payload)
                         from alpi.tools._sanitizer import sanitize_tool_payload

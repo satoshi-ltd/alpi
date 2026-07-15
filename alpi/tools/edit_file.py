@@ -39,7 +39,7 @@ class EditFile(Tool):
 
     def run(self, path: str, old_string: str, new_string: str) -> ToolResult:
         try:
-            p = resolve_path(path)
+            p = resolve_path(path, for_write=True)
         except ValueError as e:
             return ToolResult(ok=False, output="", error=str(e))
         if _is_skill_path(p):

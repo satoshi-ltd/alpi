@@ -33,7 +33,7 @@ class WriteFile(Tool):
 
     def run(self, path: str, content: str) -> ToolResult:
         try:
-            p = resolve_path(path)
+            p = resolve_path(path, for_write=True)
         except ValueError as e:
             return ToolResult(ok=False, output="", error=str(e))
         if _is_skill_path(p):

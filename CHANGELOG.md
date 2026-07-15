@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.10.32 — 2026-07-15 — members can work without changing shared setup
+
+- **Member connections keep the usual working tools** while skills, memory,
+  and schedules stay protected: members can view and run existing skills, but
+  cannot create, change, reset, or delete them; they can read memory and list
+  schedules without changing either.
+- **A member only sees its own conversations**: session search, browsing and
+  semantic recall are scoped to the member's connection — another person's (or
+  the host's) history is invisible.
+- **File tools keep the profile's private files out of reach**: device tokens,
+  keys, secrets, sessions and schedule state are off-limits to member file
+  reads and writes. The workspace and chat transcripts stay open.
+
 ## v0.10.31 — 2026-07-15 — current models on tap
 
 - **OpenAI models refreshed to the GPT-5.6 family**: Sol (flagship · coding),

@@ -72,20 +72,22 @@ class SessionRead(Tool):
 
 
 def _load(sessions_dir: Path, session: str) -> dict | None:
+    from alpi.host.connection_context import can_read_connection
     for path in sessions_dir.glob("*.json"):
         if path.stem != session:
             continue
         try:
-            return json.loads(path.read_text())
+            data = json.loads(path.read_text())
         except Exception:
             return None
+        return data if can_read_connection(data.get("connection_id")) else None
     for path in sessions_dir.glob("*.json"):
         try:
             data = json.loads(path.read_text())
         except Exception:
             continue
         if data.get("id") == session:
-            return data
+            return data if can_read_connection(data.get("connection_id")) else None
     return None
 
 
@@ -130,12 +132,15 @@ def _clip(text: str) -> str:
 
 
 def _list_recent(sessions_dir: Path, limit: int = 15) -> ToolResult:
+    from alpi.host.connection_context import can_read_connection
     cur = current_session_id()
     rows: list[tuple[float, str]] = []
     for path in sessions_dir.glob("*.json"):
         try:
             data = json.loads(path.read_text())
         except Exception:
+            continue
+        if not can_read_connection(data.get("connection_id")):
             continue
         sid = data.get("id", path.stem)
         if sid == cur:

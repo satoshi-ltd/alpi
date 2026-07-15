@@ -11,6 +11,14 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.42 — 2026-07-15 — members get read-aloud back
+
+- **The auto-read toggle returns for member connections as a per-device
+  preference**: turning it on reads replies aloud on that device only and
+  never touches the shared profile setting, which stays admin-controlled.
+
+_Requires alpi v0.10.30+ for the member connection boundary._
+
 ## v0.4.41 — 2026-07-15 — member connections get a clean chat
 
 - **Member connections see a chat-first UI**: skills, memory, tools, schedule,

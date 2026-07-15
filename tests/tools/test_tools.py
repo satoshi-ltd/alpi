@@ -616,7 +616,7 @@ def test_delegate_prefixes_inner_emit_with_step_counter(
     ])
     monkeypatch.setattr(llm, "complete", lambda **_: next(calls))
 
-    def _fake_execute(name: str, args: dict):
+    def _fake_execute(name: str, args: dict, **_kw):
         tool_state_mod.emit_state("writing file…")
         from alpi.tools.base import ToolResult
         return ToolResult(ok=True, output="written")
@@ -657,7 +657,7 @@ def test_research_prefixes_inner_emit_with_step_counter(
     ])
     monkeypatch.setattr(llm, "complete", lambda **_: next(calls))
 
-    def _fake_execute(name: str, args: dict):
+    def _fake_execute(name: str, args: dict, **_kw):
         tool_state_mod.emit_state("searching the web…")
         from alpi.tools.base import ToolResult
         return ToolResult(ok=True, output="hit")

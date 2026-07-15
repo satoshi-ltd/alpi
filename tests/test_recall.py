@@ -156,3 +156,94 @@ def test_force_rebuild(tmp_home, stub_embedder):
     summary = rc.index_sessions(tmp_home, force=True)
     assert summary["indexed_sessions"] == 2
     assert summary["total_sessions"] == 2
+
+
+def _session_cid(home: Path, sid: str, cid: str, text: str) -> None:
+    sdir = home / "sessions"
+    sdir.mkdir(parents=True, exist_ok=True)
+    (sdir / f"{sid}.json").write_text(json.dumps({
+        "id": sid, "started_at": 1000.0, "connection_id": cid,
+        "turns": [{"user": text, "assistant": f"jQuery to React Router — {text}"}],
+    }))
+
+
+def test_recall_scoped_by_connection(tmp_home, stub_embedder):
+    _session_cid(tmp_home, "c1sess", "c1", "the React migration")
+    _session_cid(tmp_home, "c2sess", "c2", "the React migration")
+    _session_cid(tmp_home, "hostsess", "host", "the React migration")
+    rc.index_sessions(tmp_home)
+
+    allr = rc.recall(tmp_home, "React migration to components", k=10)
+    assert {r["session_id"] for r in allr} == {"c1sess", "c2sess", "hostsess"}
+
+    c1 = rc.recall(tmp_home, "React migration to components", k=10, connection_id="c1")
+    assert {r["session_id"] for r in c1} == {"c1sess"}
+
+
+def test_recall_tool_scopes_by_member_role(tmp_home, stub_embedder):
+    _session_cid(tmp_home, "c1sess", "c1", "the React migration")
+    _session_cid(tmp_home, "hostsess", "host", "the React migration")
+    rc.index_sessions(tmp_home)
+    from alpi.host.connection_context import ConnectionContext, use
+    with use(ConnectionContext(connection_id="c1", source="remote", role="member")):
+        out = rc.RecallSessions().run(query="React migration to components", k=10)
+    ids = {r["session_id"] for r in json.loads(out.output)["results"]}
+    assert ids == {"c1sess"}
+
+
+def test_recall_relabels_owner_on_incremental_skip(tmp_home, stub_embedder):
+    _session_cid(tmp_home, "c1sess", "c1", "the React migration")
+    rc.index_sessions(tmp_home)
+
+    from alpi.core.store import open_store
+    conn = open_store(tmp_home)
+    conn.execute("UPDATE session_files SET connection_id = 'host'")
+    conn.execute("UPDATE session_chunks SET connection_id = 'host'")
+    conn.commit()
+    conn.close()
+    assert rc.recall(tmp_home, "React migration", k=5, connection_id="c1") == []
+
+    summary = rc.index_sessions(tmp_home)
+    assert summary["skipped_sessions"] == 1
+    assert {r["session_id"] for r in rc.recall(tmp_home, "React migration", k=5, connection_id="c1")} == {"c1sess"}
+
+
+def _plain_session(home: Path, sid: str, cid: str, text: str) -> None:
+    sdir = home / "sessions"
+    sdir.mkdir(parents=True, exist_ok=True)
+    (sdir / f"{sid}.json").write_text(json.dumps({
+        "id": sid, "started_at": 1000.0, "connection_id": cid,
+        "turns": [{"user": text, "assistant": text}],
+    }))
+
+
+def test_recall_finds_own_behind_many_closer_foreign(tmp_home, stub_embedder):
+    for i in range(40):
+        _plain_session(tmp_home, f"c2_{i}", "c2", "the React migration to components")
+    _plain_session(tmp_home, "mine", "c1", "postgres database backups nightly")
+    rc.index_sessions(tmp_home)
+
+    res = rc.recall(tmp_home, "the React migration to components", k=3, connection_id="c1")
+    assert {r["session_id"] for r in res} == {"mine"}
+
+
+def test_recall_legacy_index_migrates_connection_column(tmp_home, stub_embedder):
+    from alpi.core.store import open_store
+    conn = open_store(tmp_home)
+    conn.executescript(
+        "CREATE TABLE session_files (session_id TEXT PRIMARY KEY, source_path TEXT NOT NULL, "
+        "mtime REAL NOT NULL, size INTEGER NOT NULL, started_at REAL);"
+        "CREATE TABLE session_chunks (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, "
+        "chunk_index INTEGER NOT NULL, content TEXT NOT NULL, started_at REAL);"
+    )
+    conn.commit()
+    conn.close()
+
+    _session_cid(tmp_home, "s1", "c1", "the React migration")
+    rc.index_sessions(tmp_home)
+
+    conn = open_store(tmp_home)
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(session_chunks)").fetchall()}
+    conn.close()
+    assert "connection_id" in cols
+    assert {r["session_id"] for r in rc.recall(tmp_home, "React migration", k=5, connection_id="c1")} == {"s1"}
