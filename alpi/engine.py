@@ -96,12 +96,9 @@ def _platform_hint() -> str:
     return _ph()
 
 
-def _maybe_load_mcps(cfg: cfg_mod.Config) -> list:
-    servers = (cfg.raw.get("mcp") or {}).get("servers") or {}
-    if not servers:
-        return []
+def _maybe_load_mcps(cfg: cfg_mod.Config) -> dict:
     from alpi.mcp import registry as mcp_registry
-    return mcp_registry.load_and_register(cfg)
+    return mcp_registry.mcp_tools_for(cfg)
 
 
 def _profile_name(home: Path) -> str:
@@ -147,9 +144,12 @@ class Engine:
             model=cfg.model,
             connection_id=self.connection_context.connection_id,
         )
-        # Register MCP tools before building the system prompt.
-        self._mcp_clients = _maybe_load_mcps(cfg)
-        self._system_prompt = self._build_system_prompt()
+        from alpi import _timing
+        self._mcp_tools = _maybe_load_mcps(cfg)
+        _timing.mark_current("mcp_ready")
+        with tools.use_mcp_tools(self._mcp_tools):
+            self._system_prompt = self._build_system_prompt()
+        _timing.mark_current("prompt_ready")
         self.session.messages.append({"role": "system", "content": self._system_prompt})
         # UI flips this on new input while a turn is still running.
         self.interrupt_requested: bool = False
@@ -157,6 +157,11 @@ class Engine:
         self._turn_lock = threading.Lock()
         # Post-turn memory reviewer: counter resets when the daemon fires.
         self._turns_since_review: int = 0
+
+    @property
+    def _mcp_clients(self) -> list:
+        from alpi.mcp import registry as mcp_registry
+        return mcp_registry.cached_clients(self.cfg)
 
     def request_interrupt(self, reason: str = "unknown") -> None:
         """Ask the current turn to stop at the next checkpoint."""
@@ -192,11 +197,12 @@ class Engine:
         session_token = set_active_session(self.session.id)
         try:
             with use_connection(self.connection_context):
-                with self._turn_lock:
-                    self._run_turn_locked(
-                        user_text, emit, source=source,
-                        persist_inflight=persist_inflight, attachments=attachments,
-                    )
+                with tools.use_mcp_tools(self._mcp_tools):
+                    with self._turn_lock:
+                        self._run_turn_locked(
+                            user_text, emit, source=source,
+                            persist_inflight=persist_inflight, attachments=attachments,
+                        )
         finally:
             reset_active_session(session_token)
             reset_active_home(home_token)

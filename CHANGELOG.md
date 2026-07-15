@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.10.33 — 2026-07-15 — snappier turns, no dead air before the first reply
+
+- **Tool servers are reused across messages** instead of being restarted and
+  re-handshaked on every send, so every turn after the first starts noticeably
+  faster — and a leak that spawned a fresh set of servers per message is gone.
+- **No more silent gap before the first "thinking"**: a message is acknowledged
+  immediately and the connection is kept alive while the turn spins up, so
+  setup time reads as "working" instead of a frozen screen.
+- **A second message to a conversation that's already replying is turned away
+  at once**, instead of redoing the setup work before noticing it's busy.
+
 ## v0.10.32 — 2026-07-15 — members can work without changing shared setup
 
 - **Member connections keep the usual working tools** while skills, memory,

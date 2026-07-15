@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import contextvars
 import copy
+from contextlib import contextmanager
+from typing import Iterator
 
 from alpi.host.connection_context import current
 from alpi.tools.base import Tool, ToolResult
@@ -43,11 +46,29 @@ from alpi.tools import (
 
 _TOOLS: dict[str, type[Tool]] = {}
 
+_turn_mcp_tools: contextvars.ContextVar[dict[str, type[Tool]]] = contextvars.ContextVar(
+    "turn_mcp_tools", default={}
+)
+
 _MEMBER_ALLOWED_ACTIONS: dict[str, frozenset[str]] = {
     "skill": frozenset({"list", "view", "validate", "run", "test", "invoke"}),
     "memory": frozenset({"read", "promotion_list"}),
     "schedule": frozenset({"list"}),
 }
+
+
+@contextmanager
+def use_mcp_tools(mapping: dict[str, type[Tool]] | None) -> Iterator[None]:
+    token = _turn_mcp_tools.set(dict(mapping) if mapping else {})
+    try:
+        yield
+    finally:
+        _turn_mcp_tools.reset(token)
+
+
+def _current_tools() -> dict[str, type[Tool]]:
+    extra = _turn_mcp_tools.get()
+    return {**_TOOLS, **extra} if extra else _TOOLS
 
 
 def register(cls: type[Tool]) -> type[Tool]:
@@ -56,17 +77,17 @@ def register(cls: type[Tool]) -> type[Tool]:
 
 
 def all_tools() -> list[type[Tool]]:
-    return list(_TOOLS.values())
+    return list(_current_tools().values())
 
 
 def get(name: str) -> type[Tool] | None:
-    return _TOOLS.get(name)
+    return _current_tools().get(name)
 
 
 def schemas(deny: frozenset[str] | set[str] | None = None) -> list[dict]:
     deny = deny or frozenset()
     schemas = [
-        cls.schema() for cls in _TOOLS.values()
+        cls.schema() for cls in _current_tools().values()
         if is_available(cls)[0] and cls.name not in deny
     ]
     if current().role != "member":
@@ -86,9 +107,10 @@ def execute(
     deny: frozenset[str] | set[str] | None = None,
 ) -> ToolResult:
     """Execute a tool by name. Unknown or currently-unavailable names return an error result instead of calling .run(). When ``deny`` includes ``name``, the call is refused — defence in depth against a stale LLM context or prompt injection that names a tool the schema no longer advertises."""
-    cls = _TOOLS.get(name)
+    current_tools = _current_tools()
+    cls = current_tools.get(name)
     if cls is None:
-        available = ", ".join(sorted(_TOOLS.keys()))
+        available = ", ".join(sorted(current_tools.keys()))
         return ToolResult(
             ok=False,
             output="",

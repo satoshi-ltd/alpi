@@ -61,7 +61,7 @@ def test_last_peer_reply_accepts_legacy_result_with_usage_footer() -> None:
 
 def test_maybe_load_mcps_skips_when_no_servers(tmp_path: Path) -> None:
     cfg = config.Config(home=tmp_path, model="", raw={})
-    assert _maybe_load_mcps(cfg) == []
+    assert _maybe_load_mcps(cfg) == {}
 
 
 def test_maybe_load_mcps_delegates_to_registry(monkeypatch, tmp_path: Path) -> None:
@@ -72,11 +72,11 @@ def test_maybe_load_mcps_delegates_to_registry(monkeypatch, tmp_path: Path) -> N
     )
     seen = {}
 
-    def fake_load_and_register(received):
+    def fake_mcp_tools_for(received):
         seen["cfg"] = received
-        return ["client-a"]
+        return {"demo__x": object}
 
-    monkeypatch.setattr("alpi.mcp.registry.load_and_register", fake_load_and_register)
+    monkeypatch.setattr("alpi.mcp.registry.mcp_tools_for", fake_mcp_tools_for)
 
-    assert _maybe_load_mcps(cfg) == ["client-a"]
+    assert _maybe_load_mcps(cfg) == {"demo__x": object}
     assert seen["cfg"] is cfg

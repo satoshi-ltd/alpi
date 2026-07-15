@@ -1,42 +1,150 @@
-"""Load MCP servers from config, spawn them, register their tools."""
+"""Spawn + cache MCP servers per profile; expose their tools as a per-turn map."""
 
 from __future__ import annotations
 
 import atexit
+import hashlib
 import json
 import logging
+import threading
+import time
 from typing import Any
 
 from alpi import config as cfg_mod
 from alpi.mcp.client import MCPClient, MCPError
-from alpi.tools import _TOOLS, register
 from alpi.tools.base import Tool, ToolResult
 
 log = logging.getLogger("alpi.mcp")
 
+_CACHE_LOCK = threading.Lock()
+_CACHE: dict[tuple[str, str], dict[str, Any]] = {}
+_ATEXIT_REGISTERED = False
+_SPAWN_RETRY_BACKOFF_S = 60.0
 
-def load_and_register(cfg: cfg_mod.Config) -> list[MCPClient]:
-    """Spawn every configured MCP server, register their tools."""
-    _stop_existing()
 
+def _config_signature(servers: dict) -> str:
+    return hashlib.sha256(
+        json.dumps(servers, sort_keys=True, default=str).encode("utf-8")
+    ).hexdigest()
+
+
+def _register_shutdown_once() -> None:
+    global _ATEXIT_REGISTERED
+    if not _ATEXIT_REGISTERED:
+        atexit.register(shutdown_all)
+        _ATEXIT_REGISTERED = True
+
+
+def _stop_entry(entry: dict[str, Any]) -> None:
+    for c in entry.get("clients_by_name", {}).values():
+        try:
+            c.stop()
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def shutdown_all() -> None:
+    with _CACHE_LOCK:
+        entries = list(_CACHE.values())
+        _CACHE.clear()
+    for entry in entries:
+        _stop_entry(entry)
+
+
+def _evict_home_locked(home_key: str) -> None:
+    for key in [k for k in _CACHE if k[0] == home_key]:
+        _stop_entry(_CACHE.pop(key))
+
+
+def _rebuild_tool_classes(entry: dict[str, Any]) -> None:
+    entry["clients"] = list(entry["clients_by_name"].values())
+    entry["tool_classes"] = [
+        cls for c in entry["clients_by_name"].values() for cls in _client_tool_classes(c)
+    ]
+
+
+def _ensure_entry(cfg: cfg_mod.Config) -> dict[str, Any] | None:
     servers = (cfg.raw.get("mcp") or {}).get("servers") or {}
+    home_key = str(cfg.home)
     if not isinstance(servers, dict) or not servers:
-        return []
+        with _CACHE_LOCK:
+            _evict_home_locked(home_key)
+        return None
+    sig = _config_signature(servers)
+    key = (home_key, sig)
+    now = time.monotonic()
+
+    with _CACHE_LOCK:
+        for k in [k for k in _CACHE if k[0] == home_key and k[1] != sig]:
+            _stop_entry(_CACHE.pop(k))
+        entry = _CACHE.get(key)
+        live: dict[str, MCPClient] = {}
+        attempts: dict[str, float] = {}
+        if entry is not None:
+            live = {n: c for n, c in entry["clients_by_name"].items() if c.is_running()}
+            entry["clients_by_name"] = live
+            attempts = entry.get("next_attempt", {})
+        to_spawn = [n for n in servers if n not in live and attempts.get(n, 0.0) <= now]
+        if not to_spawn:
+            if entry is None:
+                return None
+            _rebuild_tool_classes(entry)
+            return entry if live else None
 
     from alpi.home import effective_profile_env
     profile_env = effective_profile_env(cfg.home)
+    spawned: dict[str, MCPClient] = {}
+    for name in to_spawn:
+        client = _spawn(name, servers[name], profile_env)
+        if client is not None:
+            spawned[name] = client
 
-    clients: list[MCPClient] = []
-    for name, spec in servers.items():
-        client = _spawn(name, spec, profile_env)
-        if client is None:
-            continue
-        clients.append(client)
-        _register_tools(client)
+    with _CACHE_LOCK:
+        entry = _CACHE.get(key)
+        if entry is None:
+            entry = {"clients_by_name": {}, "clients": [], "tool_classes": [], "next_attempt": {}}
+            _CACHE[key] = entry
+            _register_shutdown_once()
+        cbn: dict[str, MCPClient] = entry["clients_by_name"]
+        att: dict[str, float] = entry.setdefault("next_attempt", {})
+        for name in to_spawn:
+            client = spawned.get(name)
+            if client is not None:
+                if cbn.get(name) is not None and cbn[name].is_running():
+                    client.stop()
+                else:
+                    cbn[name] = client
+                att.pop(name, None)
+            else:
+                att[name] = now + _SPAWN_RETRY_BACKOFF_S
+        for name in [n for n, c in list(cbn.items()) if not c.is_running()]:
+            cbn.pop(name, None)
+        _rebuild_tool_classes(entry)
+        return entry if cbn else None
 
-    # Best-effort cleanup if the process exits without explicit stop.
-    atexit.register(lambda: [c.stop() for c in clients])
-    return clients
+
+def mcp_tools_for(cfg: cfg_mod.Config) -> dict[str, type[Tool]]:
+    entry = _ensure_entry(cfg)
+    if entry is None:
+        return {}
+    return {cls.name: cls for cls in entry["tool_classes"]}
+
+
+def prewarm(cfg: cfg_mod.Config) -> None:
+    try:
+        _ensure_entry(cfg)
+    except Exception:  # noqa: BLE001
+        log.warning("mcp: prewarm failed", exc_info=True)
+
+
+def cached_clients(cfg: cfg_mod.Config) -> list[MCPClient]:
+    servers = (cfg.raw.get("mcp") or {}).get("servers") or {}
+    if not isinstance(servers, dict) or not servers:
+        return []
+    key = (str(cfg.home), _config_signature(servers))
+    with _CACHE_LOCK:
+        entry = _CACHE.get(key)
+        return list(entry["clients"]) if entry else []
 
 
 def _spawn(
@@ -65,10 +173,8 @@ def _spawn(
     return client
 
 
-def _register_tools(client: MCPClient) -> None:
-    for spec in client.list_tools():
-        cls = _make_tool_class(client, spec)
-        register(cls)
+def _client_tool_classes(client: MCPClient) -> list[type[Tool]]:
+    return [_make_tool_class(client, spec) for spec in client.list_tools()]
 
 
 _MCP_SEPARATOR = "__"
@@ -147,8 +253,3 @@ def _render_content(content: list[dict]) -> str:
         else:
             parts.append(f"[{btype or 'unknown'} content omitted]")
     return "\n".join(p for p in parts if p).strip()
-
-
-def _stop_existing() -> None:
-    for tool_name in [n for n in _TOOLS if _MCP_SEPARATOR in n]:
-        del _TOOLS[tool_name]

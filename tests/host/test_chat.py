@@ -375,12 +375,11 @@ async def test_data_chat_send_streams_events_in_order(
     finally:
         await srv.stop()
 
-    kinds = [e.get("event") for e in events]
+    kinds = [e.get("event") for e in events if e.get("event") not in ("preparing", "heartbeat")]
     assert kinds == [
         "session_start", "tool_start", "tool_end", "reply", "done",
     ]
-    # session_start must arrive first so the client can pin the id and replay via host.chat.events_since if the stream dies mid-turn.
-    start = events[0]
+    start = next(e for e in events if e["event"] == "session_start")
     assert start["session_id"] == "fake-session-id"
     assert start["model_used"] == "x"
     reply = next(e for e in events if e["event"] == "reply")
@@ -437,8 +436,7 @@ async def test_data_chat_send_reports_overridden_model(
     finally:
         await srv.stop()
 
-    start = events[0]
-    assert start["event"] == "session_start"
+    start = next(e for e in events if e["event"] == "session_start")
     assert start["model_used"] == "override-model"
 
 
@@ -905,3 +903,126 @@ async def test_data_chat_send_forwards_routing_and_reply_model(
     reply = next(e for e in events if e.get("event") == "reply")
     assert reply["model_used"] == "openrouter/deep"
     assert reply["text"] == "rescued"
+
+
+@pytest.mark.asyncio
+async def test_preparing_and_heartbeat_precede_session_start(
+    monkeypatch, short_tmp: Path,
+) -> None:
+    import time as _time
+
+    home = short_tmp / "h"
+    home.mkdir()
+    load_or_generate(home)
+    from alpi import config as cfg_mod
+    from alpi.host import chat as dc
+
+    monkeypatch.setattr(cfg_mod, "load", lambda h: SimpleNamespace(model="x"))
+
+    class _SlowEngine(_FakeEngine):
+        def __init__(self, *, home: Path, cfg) -> None:  # noqa: ANN001
+            _time.sleep(0.15)
+            super().__init__(home=home, cfg=cfg)
+
+    import alpi.engine
+    monkeypatch.setattr(alpi.engine, "Engine", _SlowEngine)
+    monkeypatch.setattr(dc, "_resolve_home", lambda profile: home)
+
+    srv = host_server.Server(home=home)
+    data_handlers.register(srv)
+    dc.register(srv)
+    await srv.start()
+    try:
+        reader, writer = await asyncio.open_unix_connection(str(srv.socket_path()))
+        writer.write((json.dumps({
+            "id": "req-p", "method": "host.chat.send",
+            "params": {"profile": "default", "text": "hi", "request_id": "req-p"},
+        }) + "\n").encode("utf-8"))
+        await writer.drain()
+        events: list[dict] = []
+        while True:
+            line = await reader.readline()
+            if not line:
+                break
+            events.append(json.loads(line))
+        writer.close()
+        await writer.wait_closed()
+    finally:
+        await srv.stop()
+
+    kinds = [e.get("event") for e in events]
+    ss = kinds.index("session_start")
+    assert "preparing" in kinds and kinds.index("preparing") < ss
+    assert "heartbeat" in kinds and kinds.index("heartbeat") < ss
+
+
+@pytest.mark.asyncio
+async def test_concurrent_sends_same_session_second_gets_busy(
+    monkeypatch, short_tmp: Path,
+) -> None:
+    import threading
+
+    home = short_tmp / "h"
+    home.mkdir()
+    load_or_generate(home)
+    from alpi import config as cfg_mod
+    from alpi.host import chat as dc
+
+    monkeypatch.setattr(cfg_mod, "load", lambda h: SimpleNamespace(model="x"))
+    builds = {"n": 0}
+    release = threading.Event()
+
+    class _BlockingEngine(_FakeEngine):
+        def __init__(self, *, home: Path, cfg) -> None:  # noqa: ANN001
+            builds["n"] += 1
+            release.wait(timeout=5)
+            super().__init__(home=home, cfg=cfg)
+
+    import alpi.engine
+    monkeypatch.setattr(alpi.engine, "Engine", _BlockingEngine)
+    monkeypatch.setattr(dc, "_resolve_home", lambda profile: home)
+
+    sid = "abcdef012345"
+    srv = host_server.Server(home=home)
+    data_handlers.register(srv)
+    dc.register(srv)
+    await srv.start()
+
+    async def _send(rid: str):
+        reader, writer = await asyncio.open_unix_connection(str(srv.socket_path()))
+        writer.write((json.dumps({
+            "id": rid, "method": "host.chat.send",
+            "params": {"profile": "default", "text": "hi", "request_id": rid, "session_id": sid},
+        }) + "\n").encode("utf-8"))
+        await writer.drain()
+        return reader, writer
+
+    try:
+        ra, wa = await _send("A")
+        for _ in range(200):
+            if builds["n"] >= 1:
+                break
+            await asyncio.sleep(0.01)
+        assert builds["n"] == 1
+
+        rb, wb = await _send("B")
+        b_events: list[dict] = []
+        while True:
+            line = await rb.readline()
+            if not line:
+                break
+            b_events.append(json.loads(line))
+        wb.close()
+        await wb.wait_closed()
+
+        release.set()
+        while await ra.readline():
+            pass
+        wa.close()
+        await wa.wait_closed()
+    finally:
+        release.set()
+        await srv.stop()
+
+    assert any(e.get("event") == "error" and e.get("code") == "busy" for e in b_events), b_events
+    assert builds["n"] == 1

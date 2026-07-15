@@ -14,6 +14,8 @@ _active: dict[str, Any] = {}  # request_id -> Engine
 _session_active: dict[tuple[str, str], Any] = {}  # (profile, session_id) -> Engine
 _session_locks: dict[tuple[str, str], asyncio.Lock] = {}
 _HEARTBEAT_PERIOD_S = 5.0
+_PRE_HEARTBEAT_PERIOD_S = 2.0
+_CLAIMING = object()  # placeholder in _session_active while an existing session's turn is being prepared
 
 
 def session_key(profile: str, session_id: str) -> tuple[str, str]:
@@ -92,51 +94,93 @@ async def _data_chat_send(
         from alpi.host.handlers import _check_id
         _check_id(session_id, "session_id")
 
+    from alpi import _timing
+    _timing.mark(request_id, "received")
+
     def _prepare():
-        # cfg load + Engine() (MCP subprocess spawn) + full session hydrate are all blocking — must stay off the loop.
         import alpi.cli as cli_mod
         import alpi.engine as engine_mod
         from alpi import config as cfg_mod
 
-        cfg = cfg_mod.load(home)
-        if isinstance(model_override, str) and model_override:
-            from alpi.providers.reasoning import apply_session_model_override
-            apply_session_model_override(cfg, model_override)
-        engine = engine_mod.Engine(home=home, cfg=cfg)
-        if isinstance(session_id, str) and session_id:
-            if not cli_mod._continue_specific_session(engine, home, session_id):
-                return cfg, None
-            if rewrite_from_turn is not None:
-                _truncate_hydrated_session(engine, rewrite_from_turn)
-        return cfg, engine
+        _timing.set_current(request_id)
+        try:
+            cfg = cfg_mod.load(home)
+            if isinstance(model_override, str) and model_override:
+                from alpi.providers.reasoning import apply_session_model_override
+                apply_session_model_override(cfg, model_override)
+            engine = engine_mod.Engine(home=home, cfg=cfg)
+            if isinstance(session_id, str) and session_id:
+                if not cli_mod._continue_specific_session(engine, home, session_id):
+                    return cfg, None
+                if rewrite_from_turn is not None:
+                    _truncate_hydrated_session(engine, rewrite_from_turn)
+            _timing.mark_current("session_hydrated")
+            return cfg, engine
+        finally:
+            _timing.set_current(None)
 
-    cfg, engine = await asyncio.to_thread(_prepare)
-    if engine is None:
-        await send_frame({"event": "error", "text": f"session not found: {session_id}"})
-        return
-
-    # pin sid before the engine runs — events_since replay needs it pre-run
-    effective_sid = session_id if isinstance(session_id, str) and session_id else engine.session.id
-    persisted_sid = effective_sid
-    skey = session_key(profile, effective_sid)
-
-    session_lock: asyncio.Lock | None = None
-    # Claim atomically under the lock before any await, or the busy gate races.
+    skey: tuple[str, str] | None = None
     busy = False
-    with _active_lock:
-        prev = _session_active.get(skey)
-        if prev is not None and prev is not engine:
-            busy = True
-        else:
-            _active[request_id] = engine
-            _session_active[skey] = engine
+    if isinstance(session_id, str) and session_id:
+        skey = session_key(profile, session_id)
+        with _active_lock:
+            if _session_active.get(skey) is not None:
+                busy = True
+            else:
+                _session_active[skey] = _CLAIMING
     if busy:
+        _timing.done(request_id)
         await send_frame({"event": "error", "text": "session already has a running turn", "code": "busy"})
         return
+
+    engine = None
+    cfg = None
+    persisted_sid = ""
+    session_lock: asyncio.Lock | None = None
     task = None
     heartbeat_task: asyncio.Task | None = None
+    pre_hb_task: asyncio.Task | None = None
     lock_acquired = False
     try:
+        async def _pre_heartbeat() -> None:
+            try:
+                await send_frame({"event": "preparing"})
+                while True:
+                    await send_frame({"event": "heartbeat"})
+                    await asyncio.sleep(_PRE_HEARTBEAT_PERIOD_S)
+            except (asyncio.CancelledError, Exception):  # noqa: BLE001
+                pass
+        pre_hb_task = asyncio.create_task(_pre_heartbeat())
+
+        cfg, engine = await asyncio.to_thread(_prepare)
+
+        pre_hb_task.cancel()
+        try:
+            await pre_hb_task
+        except (asyncio.CancelledError, Exception):  # noqa: BLE001
+            pass
+        pre_hb_task = None
+        _timing.mark(request_id, "prepared")
+
+        if engine is None:
+            await send_frame({"event": "error", "text": f"session not found: {session_id}"})
+            return
+
+        # pin sid before the engine runs — events_since replay needs it pre-run
+        effective_sid = session_id if isinstance(session_id, str) and session_id else engine.session.id
+        persisted_sid = effective_sid
+        if skey is None:
+            skey = session_key(profile, effective_sid)
+        with _active_lock:
+            prev = _session_active.get(skey)
+            if prev is not None and prev is not _CLAIMING and prev is not engine:
+                busy = True
+            else:
+                _active[request_id] = engine
+                _session_active[skey] = engine
+        if busy:
+            await send_frame({"event": "error", "text": "session already has a running turn", "code": "busy"})
+            return
         session_lock = _get_session_lock(skey)
         await session_lock.acquire()
         lock_acquired = True
@@ -203,12 +247,17 @@ async def _data_chat_send(
 
         task = loop.run_in_executor(None, run_engine)
         heartbeat_task = loop.create_task(_heartbeat_loop())
+        _timing.mark(request_id, "stream_open")
 
+        first_signal = False
         while True:
             item = await queue.get()
             if item is SENTINEL:
                 break
             ev: AgentEvent = item
+            if not first_signal and ev.kind in ("reasoning_delta", "assistant_delta", "tool_start"):
+                _timing.mark(request_id, "first_delta")
+                first_signal = True
             if ev.kind == "tool_start":
                 await emit({
                     "event": "tool_start",
@@ -266,6 +315,12 @@ async def _data_chat_send(
         })
         await emit({"event": "done", "session_id": engine.session.id})
     finally:
+        if pre_hb_task is not None:
+            pre_hb_task.cancel()
+            try:
+                await pre_hb_task
+            except (asyncio.CancelledError, Exception):  # noqa: BLE001
+                pass
         if heartbeat_task is not None:
             heartbeat_task.cancel()
             try:
@@ -276,10 +331,11 @@ async def _data_chat_send(
             await task
         with _active_lock:
             _active.pop(request_id, None)
-            if _session_active.get(skey) is engine:
+            if skey is not None and _session_active.get(skey) in (_CLAIMING, engine):
                 _session_active.pop(skey, None)
         if lock_acquired and session_lock is not None:
             session_lock.release()
+        _timing.done(request_id)
 
 
 async def _send_mention(
