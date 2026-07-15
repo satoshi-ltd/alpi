@@ -57,12 +57,10 @@ describe('stageAttachment', () => {
     expect(call.mock.calls[0][1].mime).toBe('image/png');
   });
 
-  it('rejects an unsupported type before calling', async () => {
-    const call = vi.fn();
-    await expect(
-      stageAttachment(call, { profile: 'default', name: 'a.zip', base64: 'AA' }),
-    ).rejects.toThrow(/unsupported/);
-    expect(call).not.toHaveBeenCalled();
+  it('stages an unknown type as an opaque octet-stream file', async () => {
+    const call = vi.fn().mockResolvedValue({ ok: true, attachment: { path: '/p', name: 'run.fit', mime: 'application/octet-stream', size: 1 } });
+    await stageAttachment(call, { profile: 'default', name: 'run.fit', base64: 'AA' });
+    expect(call.mock.calls[0][1].mime).toBe('application/octet-stream');
   });
 
   it('raises a clear error when the daemon rejects', async () => {

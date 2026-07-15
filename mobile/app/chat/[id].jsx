@@ -516,11 +516,7 @@ function ProfileChatInner() {
     try {
       const DocumentPicker = await import('expo-document-picker');
       const res = await DocumentPicker.getDocumentAsync({
-        type: [
-          'image/png', 'image/jpeg', 'image/webp', 'application/pdf',
-          'text/plain', 'text/markdown', 'text/csv', 'application/json',
-          'application/yaml', 'text/html',
-        ],
+        type: '*/*',
         multiple: false,
         copyToCacheDirectory: true,
       });

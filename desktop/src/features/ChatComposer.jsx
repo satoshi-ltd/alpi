@@ -243,7 +243,7 @@ export default function ChatComposer({
         <>
           <IconBtn
             aria-label="Attach files"
-            tip="Attach image, PDF, or text file"
+            tip="Attach files"
             disabled={disabled || daemonOffline}
             onClick={async () => {
               try {

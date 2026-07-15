@@ -68,13 +68,15 @@ async def test_stage_validates_content_like_send(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_stage_rejects_unsupported_mime(tmp_path, monkeypatch):
+async def test_stage_accepts_unknown_mime_as_opaque(tmp_path, monkeypatch):
     from alpi import home as home_mod
     monkeypatch.setattr(home_mod, "_ROOT", tmp_path)
     srv = host_server.Server(home=tmp_path)
     attachments_rpc.register(srv)
-    resp = await _stage(srv, profile="default", name="x.zip", mime="application/zip", data_base64=_b64(b"x"))
-    assert resp["error"]["code"] == -32602
+    resp = await _stage(srv, profile="default", name="run.fit", mime="application/octet-stream", data_base64=_b64(b"\x0e\x10FIT"))
+    assert resp["result"]["ok"] is True
+    assert resp["result"]["attachment"]["mime"] == "application/octet-stream"
+    assert resp["result"]["attachment"]["name"] == "run.fit"
 
 
 @pytest.mark.asyncio
@@ -151,6 +153,35 @@ async def test_fetch_returns_markdown(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_stage_then_fetch_opaque_roundtrip(tmp_path, monkeypatch):
+    from alpi import home as home_mod
+    monkeypatch.setattr(home_mod, "_ROOT", tmp_path)
+    srv = host_server.Server(home=tmp_path)
+    attachments_rpc.register(srv)
+    staged = await _stage(
+        srv, profile="default", name="run.fit",
+        mime="application/octet-stream", data_base64=_b64(b"\x0e\x10FIT"),
+    )
+    path = staged["result"]["attachment"]["path"]
+    resp = await _fetch(srv, profile="default", path=path)
+    r = resp["result"]
+    assert r["mime"] == "application/octet-stream"
+    assert base64.b64decode(r["data_base64"]) == b"\x0e\x10FIT"
+
+
+@pytest.mark.asyncio
+async def test_fetch_denies_opaque_outside_staging(tmp_path, monkeypatch):
+    from alpi import home as home_mod
+    monkeypatch.setattr(home_mod, "_ROOT", tmp_path)
+    srv = host_server.Server(home=tmp_path)
+    attachments_rpc.register(srv)
+    fit = tmp_path / "run.fit"
+    fit.write_bytes(b"\x0e\x10FIT")
+    resp = await _fetch(srv, profile="default", path=str(fit))
+    assert resp["error"]["code"] == -32001
+
+
+@pytest.mark.asyncio
 async def test_fetch_denies_non_image_under_home(tmp_path, monkeypatch):
     # config.yaml / peers.yaml / token .json live under home but outside the
     # workspace — non-image serving must NOT reach them (only images may).
@@ -167,7 +198,7 @@ async def test_fetch_denies_non_image_under_home(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_fetch_rejects_unsupported_type(tmp_path, monkeypatch):
+async def test_fetch_denies_unknown_type_outside_staging(tmp_path, monkeypatch):
     from alpi import home as home_mod
     monkeypatch.setattr(home_mod, "_ROOT", tmp_path)
     srv = host_server.Server(home=tmp_path)
@@ -175,7 +206,7 @@ async def test_fetch_rejects_unsupported_type(tmp_path, monkeypatch):
     p = tmp_path / "archive.zip"
     p.write_bytes(b"PK\x03\x04")
     resp = await _fetch(srv, profile="default", path=str(p))
-    assert resp["error"]["code"] == -32602
+    assert resp["error"]["code"] == -32001
 
 
 @pytest.mark.asyncio

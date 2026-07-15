@@ -67,19 +67,19 @@ def test_validate_accepts_code_files_as_text(tmp_path):
     assert "def f()" in joined
 
 
-def test_validate_rejects_unsupported_code_ext(tmp_path):
+def test_validate_accepts_unknown_ext_as_opaque(tmp_path):
     p = tmp_path / "a.rb"
     p.write_text("puts 1\n")
-    with pytest.raises(att.AttachmentError, match="unsupported type"):
-        att.validate([{"path": str(p)}])
+    out = att.validate([{"path": str(p)}])
+    assert len(out) == 1 and out[0].name == "a.rb"
 
 
-def test_validate_rejects_docx_and_xlsx(tmp_path):
+def test_validate_accepts_office_files_as_opaque(tmp_path):
     for name in ("doc.docx", "sheet.xlsx"):
         p = tmp_path / name
         p.write_bytes(b"PK\x03\x04 office binary")
-        with pytest.raises(att.AttachmentError, match="unsupported type"):
-            att.validate([{"path": str(p)}])
+        out = att.validate([{"path": str(p)}])
+        assert len(out) == 1
 
 
 def test_validate_rejects_binary_disguised_as_text(tmp_path):
@@ -154,11 +154,15 @@ def test_text_file_decodes_non_utf8(tmp_path):
     assert any("caf" in p.get("text", "") for p in parts)  # decoded via fallback
 
 
-def test_validate_rejects_unsupported_mime(tmp_path):
-    p = tmp_path / "evil.exe"
-    p.write_bytes(b"MZ")
-    with pytest.raises(att.AttachmentError, match="unsupported type"):
-        att.validate([{"path": str(p), "mime": "application/x-msdownload"}])
+def test_validate_accepts_opaque_mime_and_notes_the_path(tmp_path):
+    p = tmp_path / "run.fit"
+    p.write_bytes(b"\x0e\x10\x00\x00.FIT binary")
+    out = att.validate([{"path": str(p), "mime": "application/octet-stream"}])
+    assert len(out) == 1 and out[0].mime == "application/octet-stream"
+    parts = att.build_content_parts("do something", out, vision=True)
+    joined = " ".join(x.get("text", "") for x in parts)
+    assert "run.fit" in joined and str(p) in joined
+    assert "not shown inline" in joined
 
 
 def test_validate_rejects_content_type_mismatch(tmp_path):

@@ -62,12 +62,7 @@ async def _stage(params: dict[str, Any], server: host_server.Server) -> dict[str
     mime = str(params.get("mime") or "").strip().lower()
     data_b64 = str(params.get("data_base64") or params.get("data") or "")
 
-    if mime not in att.ALLOWED_MIMES:
-        raise host_server.HandlerError(
-            -32602, f"unsupported type {mime or 'unknown'!r}",
-            {"allowed": sorted(att.ALLOWED_MIMES)},
-        )
-    # Match validate()'s per-type cap so a file that stages can also send.
+    # Match validate()'s per-type cap so a file that stages can also send; unknown types stage as opaque files.
     cap = att.MAX_TEXT_FILE_BYTES if att.is_text(mime) else att.MAX_FILE_BYTES
     # Reject by encoded length before decoding (~4 base64 chars per 3 bytes).
     if len(data_b64) > cap // 3 * 4 + 8:
@@ -93,7 +88,7 @@ async def _stage(params: dict[str, Any], server: host_server.Server) -> dict[str
     path.write_bytes(data)
     # Validate exactly as host.chat.send will, so anything that stages can send.
     try:
-        att.validate([{"path": str(path), "name": name, "mime": mime}])
+        validated = att.validate([{"path": str(path), "name": name, "mime": mime}])
     except att.AttachmentError as e:
         shutil.rmtree(target_dir, ignore_errors=True)
         raise host_server.HandlerError(-32602, str(e)) from e
@@ -102,7 +97,7 @@ async def _stage(params: dict[str, Any], server: host_server.Server) -> dict[str
         "attachment": {
             "path": str(path),
             "name": name,
-            "mime": mime,
+            "mime": validated[0].mime,
             "size": len(data),
         },
     }
@@ -166,15 +161,22 @@ async def _fetch(params: dict[str, Any], server: host_server.Server) -> dict[str
     path = str(params.get("path") or "")
     ext = path.rsplit(".", 1)[-1].lower() if "." in path else ""
     mime = _FETCH_IMG_MIME.get(ext) or att._PRODUCED_EXT_MIME.get("." + ext)
-    if not mime:
-        raise host_server.HandlerError(-32602, "unsupported file type")
+    opaque = mime is None
+    if opaque:
+        mime = "application/octet-stream"
     home = _resolve_home(profile)
     try:
         real = Path(path).resolve(strict=True)
     except OSError:
         raise host_server.HandlerError(-32004, "not-found") from None
     is_image = mime.startswith("image/")
-    allowed = _fetch_allowed(home, real) if is_image else _fetch_nonimage_allowed(home, real)
+    if opaque:
+        # Opaque bytes are served only from the attachment staging area — never out/ or the workspace.
+        allowed = _under_any(real, [_stage_root(home)])
+    elif is_image:
+        allowed = _fetch_allowed(home, real)
+    else:
+        allowed = _fetch_nonimage_allowed(home, real)
     if not real.is_file() or not allowed or _fetch_denied(real):
         raise host_server.HandlerError(-32001, "forbidden", {"detail": "path not readable"})
     data = real.read_bytes()

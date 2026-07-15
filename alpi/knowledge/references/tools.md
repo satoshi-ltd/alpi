@@ -78,8 +78,11 @@ model actually sees.
 
 Inbound per-turn attachments:
 
-- Accepted input types: images (`png/jpeg/webp`), PDF, and text/source files
-  (`txt/md/csv/json/yaml/html`, plus common code suffixes).
+- Any file type is accepted. Known types are read inline: images
+  (`png/jpeg/webp`), PDF, and text/source files (`txt/md/csv/json/yaml/html`,
+  plus common code suffixes). Anything else attaches as an OPAQUE file — not
+  shown inline; you get its name/mime/size and a temp path, and open it
+  yourself with a tool or skill if you need its contents.
 - The engine validates magic bytes, text-vs-binary, per-file caps, turn caps,
   and count caps before the model sees them.
 - PDFs: digital text is extracted (bounded by the text-char cap, no page cap).

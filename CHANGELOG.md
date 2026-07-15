@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.10.35 — 2026-07-15 — attach any file, not just images and docs
+
+- **Any file type can now be attached to chat**: images, PDFs and text are
+  still read inline; anything else (a `.fit`, a spreadsheet, an archive, an
+  export…) rides along as a file the agent can open by path with its tools,
+  instead of being rejected at upload.
+
 ## v0.10.34 — 2026-07-15 — ask for a file, get it as a download
 
 - **Generated files come back as downloads**: when you ask the agent to

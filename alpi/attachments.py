@@ -218,32 +218,26 @@ def validate(
 
         name = str((item or {}).get("name") or path.name).strip() or path.name
         mime = _sniff_mime(path, (item or {}).get("mime"))
-        if mime not in ALLOWED_MIMES:
-            raise AttachmentError(
-                f"{name}: unsupported type {mime or 'unknown'!r} "
-                f"(allowed: {', '.join(sorted(ALLOWED_MIMES))})"
-            )
-
-        # Binary types: trust the bytes over the declared mime (remote uploads).
-        if is_image(mime) or is_pdf(mime):
-            try:
-                with open(path, "rb") as fh:
-                    head = fh.read(1024)
-            except OSError as e:
-                raise AttachmentError(f"{name}: could not read file") from e
-            detected = _detect_magic(head)
-            if detected != mime:
-                raise AttachmentError(
-                    f"{name}: content is not a valid {mime} (looks like {detected or 'unknown'})"
-                )
-        elif is_text(mime):
-            try:
-                with open(path, "rb") as fh:
-                    head = fh.read(4096)
-            except OSError as e:
-                raise AttachmentError(f"{name}: could not read file") from e
-            if _looks_binary(head):
-                raise AttachmentError(f"{name}: looks like binary data, not text")
+        if mime in ALLOWED_MIMES:
+            if is_image(mime) or is_pdf(mime):
+                try:
+                    with open(path, "rb") as fh:
+                        head = fh.read(1024)
+                except OSError as e:
+                    raise AttachmentError(f"{name}: could not read file") from e
+                detected = _detect_magic(head)
+                if detected != mime:
+                    raise AttachmentError(
+                        f"{name}: content is not a valid {mime} (looks like {detected or 'unknown'})"
+                    )
+            elif is_text(mime):
+                try:
+                    with open(path, "rb") as fh:
+                        head = fh.read(4096)
+                except OSError as e:
+                    raise AttachmentError(f"{name}: could not read file") from e
+                if _looks_binary(head):
+                    raise AttachmentError(f"{name}: looks like binary data, not text")
 
         cap = max_text_bytes if is_text(mime) else max_file_bytes
         size = path.stat().st_size
@@ -256,7 +250,7 @@ def validate(
             raise AttachmentError(
                 f"attachments exceed the {max_turn_bytes}-byte per-turn cap"
             )
-        out.append(Attachment(path=path, mime=mime, name=name, size=size))
+        out.append(Attachment(path=path, mime=mime or "application/octet-stream", name=name, size=size))
     return out
 
 
@@ -426,8 +420,12 @@ def build_content_parts(
             parts.append(_text_part(
                 f"--- attached file: {a.name}{trunc} ---\n{body}\n--- end of {a.name} ---"
             ))
-        else:  # validate() should have caught this
-            raise AttachmentError(f"{a.name}: unsupported type {a.mime!r}")
+        else:
+            parts.append(_text_part(
+                f"[attached file {a.name} ({a.mime}, {a.size} bytes) is at {a.path} — "
+                "not shown inline (binary/unknown type). Open it with a tool or skill "
+                "if you need its contents.]"
+            ))
 
     return parts
 

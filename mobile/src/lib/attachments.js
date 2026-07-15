@@ -43,10 +43,9 @@ export function imageCacheKey(endpointId, profile, path) {
 }
 
 export async function stageAttachment(call, { profile, name, mime, base64 }) {
-  const resolvedMime = mime && ALLOWED_MIMES.has(mime) ? mime : mimeFor(name);
-  if (!resolvedMime) {
-    throw new Error(`unsupported file type: ${name}`);
-  }
+  const resolvedMime = mime && ALLOWED_MIMES.has(mime)
+    ? mime
+    : mimeFor(name, 'application/octet-stream');
   let res;
   try {
     res = await call('host.attachments.stage', {

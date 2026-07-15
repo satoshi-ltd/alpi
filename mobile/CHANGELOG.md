@@ -14,6 +14,14 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.2.18 — 2026-07-15 — attach any file type
+
+- **The file picker no longer filters by type**: attach any file — a `.fit`,
+  an export, an archive — not just images, PDFs and text. The agent opens
+  what it can and tells you when a file needs a tool or skill to read.
+
+_Requires alpi v0.10.35+ for opaque-file attachments._
+
 ## v0.2.17 — 2026-07-15 — new profiles start on current models
 
 - Creating a profile with an Anthropic or OpenAI key now pins a current model

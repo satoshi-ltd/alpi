@@ -11,6 +11,14 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.43 — 2026-07-15 — attach any file type
+
+- **Drag or pick any file into chat**: unknown types are no longer silently
+  dropped — they attach as files the agent can open, instead of being limited
+  to images, PDFs and text.
+
+_Requires alpi v0.10.35+ for opaque-file attachments._
+
 ## v0.4.42 — 2026-07-15 — members get read-aloud back
 
 - **The auto-read toggle returns for member connections as a per-device

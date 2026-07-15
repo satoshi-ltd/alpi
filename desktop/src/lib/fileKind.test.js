@@ -22,16 +22,17 @@ describe("attachmentMimeFor / isSupportedAttachment", () => {
     }
   });
 
-  it("rejects unsupported types (zip, office, heic) and code outside the minimal set", () => {
-    for (const name of ["bundle.zip", "doc.docx", "sheet.xlsx", "pic.heic", "deck.pages", "noext", "a.rb", "b.java", "c.cpp"]) {
-      expect(attachmentMimeFor(name)).toBe("");
-      expect(isSupportedAttachment(name)).toBe(false);
+  it("unknown types stage as opaque octet-stream files, not rejected", () => {
+    for (const name of ["bundle.zip", "doc.docx", "sheet.xlsx", "pic.heic", "run.fit", "noext", "a.rb"]) {
+      expect(attachmentMimeFor(name)).toBe("application/octet-stream");
+      expect(isSupportedAttachment(name)).toBe(true);
     }
   });
 
-  it("isSupportedAttachment is true for allowlisted names", () => {
+  it("isSupportedAttachment is true for any real filename", () => {
     expect(isSupportedAttachment("a.png")).toBe(true);
     expect(isSupportedAttachment("a.csv")).toBe(true);
+    expect(isSupportedAttachment("")).toBe(false);
   });
 });
 

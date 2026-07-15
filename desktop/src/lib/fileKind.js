@@ -4,7 +4,6 @@ const CODE_EXT = new Set([
 ]);
 const TEXT_EXT = new Set(["txt", "text", "log", "md", "markdown", "csv"]);
 
-// Allowlist mirror of mobile mimeFor() + alpi/attachments.py; unknown ext → rejected.
 const ATTACHMENT_MIME_BY_EXT = {
   png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg",
   webp: "image/webp", pdf: "application/pdf",
@@ -20,11 +19,11 @@ const ATTACHMENT_MIME_BY_EXT = {
 
 export function attachmentMimeFor(name) {
   const ext = String(name || "").toLowerCase().split(".").pop();
-  return ATTACHMENT_MIME_BY_EXT[ext] || "";
+  return ATTACHMENT_MIME_BY_EXT[ext] || "application/octet-stream";
 }
 
 export function isSupportedAttachment(name) {
-  return attachmentMimeFor(name) !== "";
+  return !!String(name || "").trim();
 }
 
 export function fileKind(name, mime) {
