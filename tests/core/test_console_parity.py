@@ -109,6 +109,26 @@ def test_outputs_cli_list_show_read_all(tmp_home_no_env: Path) -> None:
     assert not outputs.list_outputs(tmp_home_no_env, status="unread")
 
 
+def test_outputs_cli_list_all_profiles(tmp_home_no_env: Path) -> None:
+    abby = tmp_home_no_env / "profiles" / "abby"
+    abby.mkdir(parents=True)
+    outputs.append(tmp_home_no_env, profile="default", body="root row",
+                   type="info", title="Root", delivered_to=[])
+    outputs.append(abby, profile="abby", body="abby row",
+                   type="info", title="Abby", delivered_to=[])
+
+    result = CliRunner().invoke(cli.main, ["outputs", "list", "--all-profiles", "--json"])
+    assert result.exit_code == 0
+    rows = json.loads(result.output)
+    assert [r["profile"] for r in rows] == ["abby", "default"]
+
+    result = CliRunner().invoke(cli.main, ["outputs", "list", "--all-profiles", "-n", "1", "--json"])
+    assert [r["profile"] for r in json.loads(result.output)] == ["abby"]
+
+    result = CliRunner().invoke(cli.main, ["outputs", "list", "--all-profiles"])
+    assert "@abby" in result.output and "@default" in result.output
+
+
 def test_setup_schedules_wizard_fire_pause_delete(tmp_home_no_env: Path, monkeypatch) -> None:
     from alpi.scheduler import jobs_store
 

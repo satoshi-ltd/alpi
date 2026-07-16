@@ -51,6 +51,35 @@ export async function fetchConnectionOutputs(connection, status, previous = null
     return null;
   }
   if (profiles.length === 0) profiles = [{ name: "default", accent: null }];
+
+  // A reply without `aggregate: true` = pre-aggregate daemon (fan out below); a rejection = unreachable, never legacy — falling back there would burn one call per profile.
+  let aggregated;
+  try {
+    aggregated = await invoke("outputs_list", {
+      profile: "",
+      all: true,
+      ...(status ? { status } : {}),
+      limit: DEFAULT_LIMIT,
+      connectionId,
+    });
+  } catch {
+    return null;
+  }
+  if (aggregated?.aggregate === true && Array.isArray(aggregated.outputs)) {
+    const byName = new Map(profiles.map((p) => [p.name, p]));
+    return aggregated.outputs.map((o) => {
+      const p = byName.get(o.profile) ?? {};
+      return {
+        ...o,
+        profile: o.profile || "default",
+        accent: p.accent ?? null,
+        voice_id: p.voice_id ?? null,
+        connectionId,
+        connectionName: connection.name,
+      };
+    });
+  }
+
   const lists = await Promise.all(
     profiles.map((p) =>
       invoke("outputs_list", {

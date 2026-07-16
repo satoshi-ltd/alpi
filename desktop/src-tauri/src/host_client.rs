@@ -36,8 +36,8 @@ const PROBE_RETRY_DELAY_MS: u64 = 350;
 const STICKY_OFFLINE_THRESHOLD: u32 = 2;
 // Bound concurrent request/response RPCs per remote connection so a Settings fan-out (or 10 remotes) can't open a burst of sockets at once. Local socket and streams are uncapped.
 const MAX_INFLIGHT_PER_REMOTE: usize = 4;
-// Must stay under the daemon's websockets ping_interval (20s): an idle pooled socket can't answer pings, so reuse-or-drop before one goes unanswered long enough to be closed.
-const POOL_IDLE_TTL_SECS: u64 = 12;
+// Window: ≥ the 25s inactive poll (so each pass reuses its socket) and < the daemon's ~40s ping deadline (20s idle ping + 20s pong timeout; reuse answers the queued ping on first read).
+const POOL_IDLE_TTL_SECS: u64 = 30;
 const CONNECTIONS_FILE: &str = "connections.json";
 pub const LOCAL_ID: &str = "local";
 
@@ -1651,9 +1651,19 @@ impl WsClient {
     }
 }
 
+// Re-probing a healthy connection must not flip Online→Probing→Online — each transition fans out to the UI and re-triggers per-profile refetches.
+fn should_mark_probing(id: &str) -> bool {
+    status_map()
+        .lock()
+        .map(|map| !matches!(map.get(id), Some(entry) if entry.status == ConnectionStatus::Online))
+        .unwrap_or(true)
+}
+
 pub fn probe_connection(conn: &HostConnection) {
     let id = conn.id().to_string();
-    set_status(&id, ConnectionStatus::Probing, None);
+    if should_mark_probing(&id) {
+        set_status(&id, ConnectionStatus::Probing, None);
+    }
     let timeout = probe_timeout_for(conn);
     let probe_once = || match conn {
         HostConnection::Local { .. } => {
@@ -2398,6 +2408,16 @@ mod tests {
         });
         assert_eq!(calls, 2);
         assert!(r.is_err());
+    }
+
+    #[test]
+    fn probing_is_skipped_for_online_connections_only() {
+        let id = "probe-flip-online";
+        assert!(should_mark_probing(id), "unknown connections still show probing");
+        set_status(id, ConnectionStatus::Online, None);
+        assert!(!should_mark_probing(id), "a healthy connection must not flip to probing");
+        set_status(id, ConnectionStatus::AuthFailed, Some("bad token".into()));
+        assert!(should_mark_probing(id), "non-online states re-enter the probing flow");
     }
 
     #[test]

@@ -44,7 +44,8 @@ def test_tauri_config_declares_macos_hardened_runtime() -> None:
     macos = config["bundle"]["macOS"]
 
     assert macos["hardenedRuntime"] is True
-    assert macos["entitlements"] is None
+    assert macos["entitlements"] == "Entitlements.plist"
+    assert (TAURI_CONF.parent / "Entitlements.plist").is_file()
     assert "signingIdentity" not in macos
     assert "providerShortName" not in macos
 

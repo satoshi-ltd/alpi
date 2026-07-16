@@ -42,6 +42,38 @@ async def test_list_returns_outputs(tmp_path: Path, monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_list_all_aggregates_across_profiles(tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "root"
+    abby = tmp_path / "abby"
+    root.mkdir()
+    abby.mkdir()
+    older = _seed(root, body="root row")
+    newer = _seed(abby, profile="abby", body="abby row")
+
+    homes = {"default": root, "abby": abby}
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: homes[p])
+    monkeypatch.setattr(host_outputs.home_mod, "list_profiles", lambda root=None: ["default", "abby"])
+    srv = host_server.Server(home=root)
+    host_outputs.register(srv)
+
+    resp = await srv._dispatch({
+        "id": "r", "method": "host.outputs.list",
+        "params": {"all": True, "limit": 10},
+    })
+    result = resp["result"]
+    assert result["aggregate"] is True
+    rows = result["outputs"]
+    assert [it["id"] for it in rows] == [newer["id"], older["id"]]
+    assert [it["profile"] for it in rows] == ["abby", "default"]
+
+    capped = await srv._dispatch({
+        "id": "r2", "method": "host.outputs.list",
+        "params": {"all": True, "limit": 1},
+    })
+    assert [it["id"] for it in capped["result"]["outputs"]] == [newer["id"]]
+
+
+@pytest.mark.asyncio
 async def test_list_filters_by_status(tmp_path: Path, monkeypatch) -> None:
     home = tmp_path / "h"
     home.mkdir()

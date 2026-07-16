@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.10.36 — 2026-07-16 — the whole inbox in one call
+
+- **Clients can fetch outputs across every profile in a single request** —
+  `host.outputs.list` accepts `all: true` and returns the merged, newest-first
+  inbox with each row tagged by profile.
+- **`alpi outputs list --all-profiles`** does the same from the console:
+  every profile's inbox merged newest-first, each row tagged `@profile`.
+
 ## v0.10.35 — 2026-07-15 — attach any file, not just images and docs
 
 - **Any file type can now be attached to chat**: images, PDFs and text are

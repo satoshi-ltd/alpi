@@ -2192,8 +2192,14 @@ async fn outputs_list(
     status: Option<String>,
     limit: Option<u32>,
     connection_id: Option<String>,
+    all: Option<bool>,
 ) -> Result<serde_json::Value, String> {
-    let mut params = serde_json::json!({"profile": profile});
+    let aggregate = all == Some(true);
+    let mut params = if aggregate {
+        serde_json::json!({"all": true})
+    } else {
+        serde_json::json!({"profile": profile})
+    };
     if let Some(s) = status {
         params["status"] = serde_json::Value::String(s);
     }
@@ -2206,6 +2212,10 @@ async fn outputs_list(
     })
     .await
     .map_err(|e| format!("outputs_list: {e}"))??;
+    if aggregate {
+        // Pass the reply through whole: `aggregate: true` is the capability marker the JS probes to fall back on pre-aggregate daemons.
+        return Ok(result);
+    }
     Ok(result
         .get("outputs")
         .cloned()

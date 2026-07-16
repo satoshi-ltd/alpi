@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from alpi import home as home_mod
 from alpi import outputs as outputs_mod
 from alpi.host import events as host_events
 from alpi.host import server as host_server
@@ -53,6 +54,20 @@ async def _list(
     limit_raw = (params or {}).get("limit")
     limit = int(limit_raw) if isinstance(limit_raw, (int, float)) else _LIST_DEFAULT_LIMIT
     limit = max(1, min(limit, _LIST_MAX_LIMIT))
+    if (params or {}).get("all"):
+        # `aggregate: True` in the reply is the capability marker clients probe — old daemons ignore `all` and answer without it.
+        def _gather() -> list[dict[str, Any]]:
+            rows: list[dict[str, Any]] = []
+            for name in home_mod.list_profiles():
+                for it in outputs_mod.list_outputs(_resolve_home(name), status=status, limit=limit):
+                    if not it.get("profile"):
+                        it["profile"] = name
+                    rows.append(it)
+            rows.sort(key=lambda it: float(it.get("created_at") or 0.0), reverse=True)
+            return rows[:limit]
+
+        items = await asyncio.to_thread(_gather)
+        return {"outputs": items, "aggregate": True}
     home = _resolve_home(profile)
     items = await asyncio.to_thread(
         outputs_mod.list_outputs, home, status=status, limit=limit,

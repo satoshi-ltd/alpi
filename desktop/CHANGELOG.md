@@ -11,6 +11,19 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.46 — 2026-07-16 — calm connections, faster inbox
+
+- **Remote daemons stop getting hammered in the background.** A healthy
+  connection is no longer re-flagged "probing" on the periodic check, so the
+  app no longer refetches every profile's inbox when nothing changed.
+- **The inbox arrives in one request** — outputs for all profiles come back in
+  a single aggregated call instead of one call per profile.
+- **Fewer reconnects**: idle daemon sockets are reused across the background
+  poll instead of reopening every pass.
+
+_Aggregated inbox needs alpi v0.10.36+; older daemons keep working via the
+per-profile fallback._
+
 ## v0.4.45 — 2026-07-16 — dictation in the composer
 
 - **macOS dictation now works in the composer.** Double-tap Fn (or Edit → Start

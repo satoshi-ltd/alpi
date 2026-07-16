@@ -870,9 +870,10 @@ def outputs_group() -> None:
 @outputs_group.command("list")
 @click.option("-n", "limit", default=20, show_default=True, help="Max rows.")
 @click.option("--unread", is_flag=True, help="Only unread outputs.")
+@click.option("--all-profiles", "all_profiles", is_flag=True, help="Merge every profile's inbox, newest first, tagged by profile.")
 @click.option("--json", "as_json", is_flag=True, help="Emit machine-readable JSON.")
 @click.pass_context
-def outputs_list(ctx: click.Context, limit: int, unread: bool, as_json: bool) -> None:
+def outputs_list(ctx: click.Context, limit: int, unread: bool, all_profiles: bool, as_json: bool) -> None:
     """List recent outputs, newest first."""
     import json as json_mod
     from datetime import datetime
@@ -881,9 +882,22 @@ def outputs_list(ctx: click.Context, limit: int, unread: bool, as_json: bool) ->
 
     h: Path = ctx.obj["home"]
     _bootstrap(h)
-    rows = outputs_mod.list_outputs(
-        h, status="unread" if unread else None, limit=limit,
-    )
+    status = "unread" if unread else None
+    if all_profiles:
+        from alpi import home as home_mod
+
+        root = home_mod.alpi_root()
+        rows = []
+        for name in home_mod.list_profiles(root):
+            profile_home = root if name == "default" else root / "profiles" / name
+            for it in outputs_mod.list_outputs(profile_home, status=status, limit=limit):
+                if not it.get("profile"):
+                    it["profile"] = name
+                rows.append(it)
+        rows.sort(key=lambda it: float(it.get("created_at") or 0.0), reverse=True)
+        rows = rows[:limit]
+    else:
+        rows = outputs_mod.list_outputs(h, status=status, limit=limit)
     if as_json:
         click.echo(json_mod.dumps(rows, indent=2))
         return
@@ -893,8 +907,9 @@ def outputs_list(ctx: click.Context, limit: int, unread: bool, as_json: bool) ->
     for it in rows:
         dot = "●" if it.get("status") == "unread" else "○"
         ts = datetime.fromtimestamp(float(it.get("created_at") or 0)).strftime("%m-%d %H:%M")
+        prof = f" @{it.get('profile')}" if all_profiles else ""
         title = it.get("title") or (it.get("body") or "")[:60].replace("\n", " ")
-        click.echo(f"{dot} {ts}  [{it.get('type', 'info')}] {it.get('id')}  {title}")
+        click.echo(f"{dot} {ts}  [{it.get('type', 'info')}] {it.get('id')}{prof}  {title}")
 
 
 @outputs_group.command("show")

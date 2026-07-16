@@ -49,6 +49,41 @@ describe("useAllOutputs (cross-connection fan-out)", () => {
     });
   });
 
+  it("fetchConnectionOutputs uses the aggregated list when the daemon supports it — one RPC, rows keyed to profiles", async () => {
+    const listCalls = [];
+    invoke.mockImplementation(async (cmd, params) => {
+      if (cmd === "profile_summaries") return [{ name: "abby", accent: "#f00" }, { name: "doc", accent: "#0f0" }];
+      if (cmd === "outputs_list") {
+        listCalls.push(params);
+        return {
+          aggregate: true,
+          outputs: [
+            { id: "d1", created_at: 9, profile: "doc" },
+            { id: "a1", created_at: 5, profile: "abby" },
+          ],
+        };
+      }
+      return null;
+    });
+    const rows = await fetchConnectionOutputs({ id: "c1", name: "home" }, "unread");
+    expect(listCalls).toHaveLength(1);
+    expect(listCalls[0]).toMatchObject({ all: true, status: "unread", connectionId: "c1" });
+    expect(rows.map((r) => r.id)).toEqual(["d1", "a1"]);
+    expect(rows[0]).toMatchObject({ accent: "#0f0", connectionId: "c1", connectionName: "home" });
+    expect(rows[1]).toMatchObject({ accent: "#f00" });
+  });
+
+  it("an aggregate rejection returns null without fanning out per profile", async () => {
+    let listCalls = 0;
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "profile_summaries") return [{ name: "a" }, { name: "b" }];
+      if (cmd === "outputs_list") { listCalls += 1; throw new Error("timeout"); }
+      return null;
+    });
+    expect(await fetchConnectionOutputs({ id: "c1", name: "home" })).toBeNull();
+    expect(listCalls).toBe(1);
+  });
+
   it("fetchConnectionOutputs falls back to the default profile when summaries is empty", async () => {
     invoke.mockImplementation(async (cmd) => (cmd === "profile_summaries" ? [] : [{ id: "d1", created_at: 1 }]));
     const rows = await fetchConnectionOutputs({ id: "c1", name: "home" });
@@ -109,7 +144,7 @@ describe("useAllOutputs (cross-connection fan-out)", () => {
     let listCalls = 0;
     invoke.mockImplementation(async (cmd) => {
       if (cmd === "profile_summaries") return [{ name: "abby" }];
-      if (cmd === "outputs_list") { listCalls += 1; return []; }
+      if (cmd === "outputs_list") { listCalls += 1; return { aggregate: true, outputs: [] }; }
       return null;
     });
     renderHook(() => useAllOutputs({ connections: [{ id: "c1", name: "home" }] }));
@@ -128,7 +163,7 @@ describe("useAllOutputs (cross-connection fan-out)", () => {
     let listCalls = 0;
     invoke.mockImplementation(async (cmd) => {
       if (cmd === "profile_summaries") return [{ name: "abby" }];
-      if (cmd === "outputs_list") { listCalls += 1; return []; }
+      if (cmd === "outputs_list") { listCalls += 1; return { aggregate: true, outputs: [] }; }
       return null;
     });
     renderHook(() => useAllOutputs({ connections: [{ id: "c1", name: "home" }] }));
@@ -374,7 +409,7 @@ describe("useAllOutputs warm start (rows memory)", () => {
       if (cmd === "outputs_list") {
         if (firstCall) {
           firstCall = false;
-          return [{ id: "o1", created_at: 7, profile: "p" }];
+          return { aggregate: true, outputs: [{ id: "o1", created_at: 7, profile: "p" }] };
         }
         return new Promise((res) => { resolveList = res; });
       }
@@ -389,7 +424,7 @@ describe("useAllOutputs warm start (rows memory)", () => {
     await waitFor(() => expect(second.result.current.rows.map((r) => r.id)).toEqual(["o1"]));
     expect(second.result.current.loading).toBe(true);
     await act(async () => {
-      resolveList([{ id: "o2", created_at: 9, profile: "p" }]);
+      resolveList({ aggregate: true, outputs: [{ id: "o2", created_at: 9, profile: "p" }] });
       await new Promise((r) => setTimeout(r, 10));
     });
     expect(second.result.current.rows.map((r) => r.id)).toEqual(["o2"]);
@@ -513,7 +548,7 @@ describe("useAllOutputs credential and failure hardening", () => {
       if (cmd === "profile_summaries") return [{ name: "p" }];
       if (cmd === "outputs_list") {
         call += 1;
-        if (call === 1) return [{ id: "secret-A", created_at: 5, profile: "p" }];
+        if (call === 1) return { aggregate: true, outputs: [{ id: "secret-A", created_at: 5, profile: "p" }] };
         return new Promise((res) => { resolveList = res; });
       }
       return null;
@@ -528,7 +563,7 @@ describe("useAllOutputs credential and failure hardening", () => {
     await waitFor(() => expect(result.current.rows).toEqual([]));
     expect(typeof resolveList).toBe("function");
     await act(async () => {
-      resolveList([{ id: "b-row", created_at: 7, profile: "p" }]);
+      resolveList({ aggregate: true, outputs: [{ id: "b-row", created_at: 7, profile: "p" }] });
       await new Promise((r) => setTimeout(r, 10));
     });
     expect(result.current.rows.map((r) => r.id)).toEqual(["b-row"]);
