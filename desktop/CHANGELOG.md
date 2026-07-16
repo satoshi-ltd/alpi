@@ -11,6 +11,14 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.45 — 2026-07-16 — dictation in the composer
+
+- **macOS dictation now works in the composer.** Double-tap Fn (or Edit → Start
+  Dictation) to speak instead of type — the app now requests microphone access,
+  which macOS blocked before.
+
+_No daemon changes; works with alpi v0.10.35+._
+
 ## v0.4.44 — 2026-07-16 — clearer headers, consistent "alpi"
 
 - **Read notifications stay legible.** Read vs unread now reads from the diamond
