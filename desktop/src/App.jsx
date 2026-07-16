@@ -20,6 +20,7 @@ import MemoryModal from "./features/MemoryModal.jsx";
 import ScheduleModal from "./features/ScheduleModal.jsx";
 import { useCommands } from "./hooks/useCommands.js";
 import { orderedJumpTargets } from "./lib/profile-order.js";
+import { profileLabel } from "./lib/profile-display.js";
 import { installUpdater } from "./lib/updater.js";
 import { findLatestTask } from "./lib/workgroup-tasks.js";
 import { saveCachedMessages } from "./lib/workgroup-cache.js";
@@ -512,7 +513,7 @@ export default function App() {
       .then(() => reload())
       .catch((e) => {
         setProfiles((prev) => prev.map((p) => (p.name === profile.name ? { ...p, paused: !next } : p)));
-        window.notify?.(`Pause @${profile.name} failed: ${String(e)}`, { variant: "error" });
+        window.notify?.(`Pause @${profileLabel(profile.name)} failed: ${String(e)}`, { variant: "error" });
       });
   }, [setProfiles, reload]);
   const adminOnTogglePauseProfile = canAdminEarly ? onTogglePauseProfile : null;

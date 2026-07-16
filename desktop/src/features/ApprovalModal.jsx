@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { profileLabel } from "../lib/profile-display.js";
 import { invoke } from "@tauri-apps/api/core";
 
 import { Button, Diamond, IconBtn, Modal, Tip } from "../primitives/index.js";
@@ -74,7 +75,7 @@ export default function ApprovalModal({ requests, onResolved }) {
               <Diamond color={`var(--c-danger)`} />
             </span>
             {current.profile ? (
-              <span className={styles.profile}>@{current.profile.toUpperCase()}</span>
+              <span className={styles.profile}>@{profileLabel(current.profile).toUpperCase()}</span>
             ) : null}
             <span className={styles.sep}> · </span>
             <span className={styles.surface}>SHELL</span>

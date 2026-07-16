@@ -65,7 +65,7 @@ describe("ConnectionsPage", () => {
       <ConnectionsPage profiles={profiles} activeConnection={{ id: "local", kind: "local" }} />,
     );
 
-    fireEvent.click(await screen.findByText("Local host"));
+    fireEvent.click(await screen.findByText("Local host", { selector: "strong" }));
     expect(await screen.findByText("pairing name")).toBeInTheDocument();
     expect(screen.getByText("pairing port")).toBeInTheDocument();
 
@@ -227,6 +227,11 @@ describe("ConnectionsPage", () => {
       status: "active",
       connectionId: "local",
     }));
+  });
+
+  it("presents the internal default profile as alpi in the hero title", async () => {
+    render(<ConnectionsPage profiles={[{ name: "default", accent: "#abc123" }]} activeConnection={{ id: "local" }} />);
+    expect(await screen.findByText("alpi", { selector: "h1" })).toBeInTheDocument();
   });
 
   it("reuses the existing device pairing modal for a new connection", async () => {

@@ -1,3 +1,5 @@
+import { profileLabel } from "./profile-display.js";
+
 const PEER_PALETTE = [
   "#1877f2", "#e0245e", "#7a3ec3", "#0a84ff", "#ff6b35",
   "#30d158", "#bf5af2", "#ff9f0a", "#5e5ce6", "#64d2ff",
@@ -38,7 +40,7 @@ export function speakerFromIndex(index, msg) {
       const localBio =
         (matchProfile.bio || matchProfile.public_bio || "").trim() || null;
       return {
-        name: matchProfile.name,
+        name: profileLabel(matchProfile.name),
         accent: matchProfile.accent ?? paletteFor(matchProfile.name),
         bio: memberBio || localBio,
       };
@@ -51,5 +53,5 @@ export function speakerFromIndex(index, msg) {
     }
   }
   const handle = String(msg.from || "").replace(/^@/, "");
-  return { name: handle, accent: paletteFor(handle), bio: null };
+  return { name: profileLabel(handle), accent: paletteFor(handle), bio: null };
 }

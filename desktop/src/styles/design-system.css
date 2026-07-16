@@ -874,13 +874,6 @@ a:focus-visible,
   color: var(--ink);
   line-height: var(--lh-tight);
 }
-.ds-chat-header .kicker {
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
-  color: var(--ink-4);
-  align-self: flex-end;
-  padding-bottom: 4px;
-}
 .ds-chat-header .meta-row {
 
   display: flex;

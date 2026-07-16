@@ -19,14 +19,6 @@
   flex-shrink: 0;
 }
 
-.settingsHeader {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-1) var(--space-7) var(--space-4);
-  flex-shrink: 0;
-}
-
 .inner {
   display: flex;
   flex-direction: column;
@@ -147,15 +139,6 @@
   display: inline-flex;
   gap: var(--space-1);
   flex-shrink: 0;
-}
-
-.settingsTitle {
-  font-size: var(--fs-md);
-  font-weight: var(--fw-semibold);
-}
-
-.spacer {
-  flex: 1;
 }
 
 .rowLabel {

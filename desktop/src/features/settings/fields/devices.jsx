@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { profileLabel } from "../../../lib/profile-display.js";
 import { invoke } from "@tauri-apps/api/core";
 import Button from "../../../primitives/Button.jsx";
 import Eyebrow from "../../../primitives/Eyebrow.jsx";
@@ -623,7 +624,7 @@ export function PairDeviceModal({ connectionId, onClose, onPaired }) {
                       >
                         <span className={styles.scopeRowName}>
                           <Diamond color={p.accent || "var(--accent)"} />
-                          <span className={styles.mono}>@{p.name}</span>
+                          <span className={styles.mono}>@{profileLabel(p.name)}</span>
                         </span>
                       </Dropdown.Row>
                     ))}

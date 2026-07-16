@@ -1,4 +1,5 @@
 import { Fragment, memo, useEffect, useMemo, useRef, useState } from "react";
+import { profileLabel } from "../lib/profile-display.js";
 import { useStickyScroll } from "../lib/useStickyScroll.js";
 import { useScrollProgress } from "../lib/useScrollProgress.js";
 import { invoke } from "@tauri-apps/api/core";
@@ -502,7 +503,7 @@ export default function WorkgroupView({
                 <span className={styles.emptyHash} aria-hidden>
                   #
                 </span>
-                <span>no posts yet · direct @{hubName} to open a #task</span>
+                <span>no posts yet · direct @{profileLabel(hubName)} to open a #task</span>
               </div>
             )}
             {messages.length > 0 && (
@@ -831,7 +832,7 @@ function WorkgroupComposer({ paused, offline, mentions, onSend, hubName, hubAcce
         <span className={styles.hintArrow}>→</span>
         <Diamond color={hubAccent} />
         <span>
-          <Mono className={styles.hintMono}>@{hubName}</Mono>
+          <Mono className={styles.hintMono}>@{profileLabel(hubName)}</Mono>
           {" formulates as "}
           <Mono className={styles.hintMono}>#task #&lt;slug&gt;</Mono>
         </span>

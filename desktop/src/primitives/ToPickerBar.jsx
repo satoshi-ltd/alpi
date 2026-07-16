@@ -1,4 +1,5 @@
 import { Diamond, Mono, ChevDownIcon } from "./index.js";
+import { profileLabel } from "../lib/profile-display.js";
 import styles from "./ToPickerBar.module.css";
 
 export default function ToPickerBar({ profile, model, onClick, open }) {
@@ -12,7 +13,7 @@ export default function ToPickerBar({ profile, model, onClick, open }) {
     >
       <span className={`eyebrow ${styles.label}`}>To</span>
       <Diamond color={accent} />
-      <Mono className={styles.handle}>@{profile?.name ?? "—"}</Mono>
+      <Mono className={styles.handle}>@{profileLabel(profile?.name) ?? "—"}</Mono>
       {model && (
         <>
           <span className={styles.sep}>·</span>

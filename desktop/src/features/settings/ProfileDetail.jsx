@@ -10,6 +10,7 @@ import { useUsageDaily } from "../../hooks/useUsage.js";
 import { Section, Row, CopyButton } from "./primitives.jsx";
 import Usage from "./Usage.jsx";
 import { SettingsHero } from "../../primitives/index.js";
+import { profileLabel } from "../../lib/profile-display.js";
 import { CopyIcon, Mono } from "../../primitives/index.js";
 import RefreshBar from "../../primitives/RefreshBar.jsx";
 import { FIELD_KEYS, providerPills } from "./util.js";
@@ -220,7 +221,7 @@ export default function ProfileDetail({
     <main className={styles.detail}>
       <SettingsHero
         kind="profile"
-        id={profile.name}
+        id={profileLabel(profile.name)}
         accent={profile.accent || "var(--accent)"}
         bio={profile.bio || profile.public_bio}
         meta={heroMeta}

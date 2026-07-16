@@ -11,7 +11,6 @@ import {
   MoonIcon,
   SunIcon,
   Tip,
-  ArrowLeftIcon,
   Diamond,
   DiamondStack,
   GearIcon,
@@ -83,7 +82,6 @@ function Sidebar({
   onOpenWorkgroup,
   onOpenSettings,
   onOpenPalette,
-  onCloseSettings,
   onSetSettingsTarget,
   onOpenSettingsTarget,
   onTogglePin,
@@ -365,20 +363,6 @@ function Sidebar({
   return (
     <aside className={styles.sidebar}>
       <div className={styles.titlebarSpacer} aria-hidden data-drag />
-      {inSettings && (
-        <div className={styles.settingsHeader}>
-          <Tip text="Back to chat" side="l">
-            <IconBtn onClick={onCloseSettings} aria-label="Back to chat">
-              <ArrowLeftIcon />
-            </IconBtn>
-          </Tip>
-          <span className={styles.settingsTitle}>
-            Settings
-          </span>
-          <span className={styles.spacer} />
-          <Kbd>⌘,</Kbd>
-        </div>
-      )}
       <div className={styles.inner}>
         <div className={styles.actions}>
           <div className={styles.actionSection}>

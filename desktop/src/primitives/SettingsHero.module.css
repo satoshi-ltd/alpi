@@ -14,7 +14,18 @@
   min-width: 0;
 }
 
+:global(.ds-chat-header).header :global(.title-row) {
+  align-items: baseline;
+}
+:global(.ds-chat-header).header :global(.title-row) > :first-child {
+  align-self: center;
+}
+
 .actions {
   gap: 2px;
   flex-shrink: 0;
+}
+
+.stackGlyph {
+  --stack-bg: var(--bg-pane);
 }

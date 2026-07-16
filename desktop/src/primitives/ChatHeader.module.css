@@ -12,3 +12,7 @@
   gap: 2px;
   flex-shrink: 0;
 }
+
+.stackGlyph {
+  --stack-bg: var(--bg-pane);
+}

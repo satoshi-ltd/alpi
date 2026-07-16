@@ -80,11 +80,11 @@
   min-width: 0;
 }
 
-.rowDiamond { display: inline-flex; opacity: 0.4; }
-.rowUnread .rowDiamond { opacity: 1; }
+.rowDiamond { display: inline-flex; }
+.row:not(.rowUnread) .rowDiamond :global(.ds-diamond) { background: var(--ink-4); }
 
-.rowProfile { color: var(--ink-4); font-weight: var(--fw-regular); }
-.rowUnread .rowProfile { color: var(--ink); font-weight: var(--fw-semibold); }
+.rowProfile { color: var(--ink); font-weight: var(--fw-regular); }
+.rowUnread .rowProfile { font-weight: var(--fw-semibold); }
 
 .rowConn { color: var(--ink-4); }
 
@@ -92,25 +92,24 @@
   font-size: var(--fs-base);
   line-height: var(--lh-tight);
   letter-spacing: -0.005em;
-  font-weight: 450;
-  color: var(--ink-3);
+  font-weight: var(--fw-regular);
+  color: var(--ink);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.rowUnread .rowTitle { font-weight: var(--fw-semibold); color: var(--ink); }
+.rowUnread .rowTitle { font-weight: var(--fw-semibold); }
 
 .rowPreview {
   margin-top: var(--space-1);
   font-size: var(--fs-sm);
   line-height: var(--lh-cozy);
-  color: var(--ink-4);
+  color: var(--ink-3);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.rowUnread .rowPreview { color: var(--ink-3); }
 
 .empty {
   display: flex;

@@ -18,6 +18,7 @@ import {
   PlayIcon,
   SearchIcon,
   SettingsHero,
+  Tip,
   TrashIcon,
 } from "../../primitives/index.js";
 import { useNotify } from "../../primitives/Notification.jsx";
@@ -26,6 +27,7 @@ import { PairDeviceModal } from "./fields/devices.jsx";
 import { HostPortField, PairingNameField } from "./fields/network.jsx";
 import { toUsageDays } from "../../hooks/useUsage.js";
 import { copyText } from "../../lib/clipboard.js";
+import { profileLabel } from "../../lib/profile-display.js";
 import styles from "./ConnectionsPage.module.css";
 
 
@@ -85,6 +87,9 @@ export default function ConnectionsPage({
   const localProfile = activeConnection?.kind === "local"
     ? profiles.find((profile) => profile.name === "default") || null
     : null;
+  const defaultProfile = profiles.find((profile) => profile.name === "default") || null;
+  const heroTitle = profileLabel("default");
+  const heroAccent = defaultProfile?.accent || "var(--accent)";
   const visibleRows = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return rows
@@ -148,12 +153,15 @@ export default function ConnectionsPage({
     <main className={styles.page}>
       <SettingsHero
         kind="connections"
-        id="Connections"
+        id={heroTitle}
+        accent={heroAccent}
         meta={heroMeta}
         actions={(
           <>
             <Button icon={<Icon name="plus" />} onClick={() => setCreating(true)}>New connection</Button>
-            <Button icon={<ArrowLeftIcon />} onClick={onBack} title="Back to settings" />
+            <Tip text="Back to settings" side="r">
+              <IconBtn onClick={onBack} aria-label="Back to settings"><ArrowLeftIcon /></IconBtn>
+            </Tip>
           </>
         )}
       />
@@ -444,7 +452,7 @@ function EditConnectionModal({ row, profiles, connectionArg, onClose, onSaved })
               {!allProfiles && profiles.map((profile) => (
                 <label key={profile.name}>
                   <input type="checkbox" checked={scope.includes(profile.name)} onChange={() => setScope((current) => current.includes(profile.name) ? current.filter((name) => name !== profile.name) : [...current, profile.name])} />
-                  <Checkbox on={scope.includes(profile.name)} />@{profile.name}
+                  <Checkbox on={scope.includes(profile.name)} />@{profileLabel(profile.name)}
                 </label>
               ))}
             </div>

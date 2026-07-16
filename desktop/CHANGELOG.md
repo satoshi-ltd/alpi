@@ -11,6 +11,24 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.44 — 2026-07-16 — clearer headers, consistent "alpi"
+
+- **Read notifications stay legible.** Read vs unread now reads from the diamond
+  colour (muted vs the agent's accent) and the title weight, instead of fading
+  the whole row.
+- **Workgroups wear their stacked-diamond glyph in the header** — the same mark
+  the sidebar uses, replacing the `#`. Hover it to read the workgroup's briefing.
+- **Settings is part of the view, not a separate mode.** The entity's name
+  carries a small "settings" tag and the redundant back-to-chat bar is gone, so
+  there's no jump between chat and settings.
+- **The Connections view shows the alpi identity** — a diamond and the name,
+  instead of a generic globe.
+- **The built-in agent is "alpi" everywhere.** The default profile now reads as
+  `alpi` across headers, pickers, sessions and notifications, matching the
+  sidebar.
+
+_No daemon changes; works with alpi v0.10.35+._
+
 ## v0.4.43 — 2026-07-15 — attach any file type
 
 - **Drag or pick any file into chat**: unknown types are no longer silently

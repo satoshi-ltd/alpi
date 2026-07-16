@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { profileLabel } from "../../lib/profile-display.js";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import {
@@ -271,7 +272,7 @@ export default function ManageSessionsModal({
             <div className={styles.titleRow}>
               <h1 className={styles.title}>Sessions</h1>
               <span className={styles.meta}>
-                @{profile} · {rows.length} threads · {formatKB(totalBytes)}
+                @{profileLabel(profile)} · {rows.length} threads · {formatKB(totalBytes)}
               </span>
             </div>
             <p className={styles.subtitle}>

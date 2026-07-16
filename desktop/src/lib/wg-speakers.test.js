@@ -4,6 +4,7 @@ import { buildSpeakerIndex, paletteFor, speakerFromIndex } from "./wg-speakers.j
 const profiles = [
   { name: "doc", pubkey_b64: "pk-doc", accent: "#123456", bio: "local doc bio" },
   { name: "muse", pubkey_b64: "pk-muse", public_bio: "muse public" },
+  { name: "default", pubkey_b64: "pk-default", accent: "#abc123" },
 ];
 const peers = [{ id: "remote-peer", pubkey: "pk-peer" }];
 const members = [
@@ -51,6 +52,16 @@ describe("speakerFromIndex", () => {
     const s = speakerFromIndex(index, { from_pubkey: "pk-empty-bio", from: "@x" });
     expect(s.name).toBe("  ");
     expect(s.bio).toBeNull();
+  });
+
+  it("renders the internal 'default' profile as its display label (alpi), not the raw id", () => {
+    const s = speakerFromIndex(index, { from_pubkey: "pk-default" });
+    expect(s.name).toBe("alpi");
+  });
+
+  it("labels the @handle fallback too, so an optimistic post from default reads as alpi", () => {
+    const s = speakerFromIndex(index, { from_pubkey: "pk-unknown", from: "@default" });
+    expect(s.name).toBe("alpi");
   });
 
   it("paletteFor is deterministic", () => {

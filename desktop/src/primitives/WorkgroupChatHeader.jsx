@@ -1,4 +1,5 @@
 import { ChatHeader, Diamond, MeterChip, Mono, Tip } from "./index.js";
+import { profileLabel } from "../lib/profile-display.js";
 import SoundWave from "./SoundWave.jsx";
 import HeaderMenu from "./HeaderMenu.jsx";
 import styles from "./WorkgroupChatHeader.module.css";
@@ -30,7 +31,7 @@ export default function WorkgroupChatHeader({
       <span className={`row row-gap ${styles.hubRow}`}>
         <span className={styles.label}>hub</span>
         {diamond}
-        <Mono className={styles.ink2}>{`@${hubName}`}</Mono>
+        <Mono className={styles.ink2}>{`@${profileLabel(hubName)}`}</Mono>
       </span>
       <span className="sep" aria-hidden />
       <span>
@@ -78,6 +79,7 @@ export default function WorkgroupChatHeader({
       kind="workgroup"
       id={workgroup?.name || workgroup?.id || ""}
       accent={accent}
+      bio={workgroup?.briefing}
       meta={meta}
       right={right}
     />

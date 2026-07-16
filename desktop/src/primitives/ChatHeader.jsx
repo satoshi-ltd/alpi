@@ -1,4 +1,4 @@
-import { Diamond, Hash, Tip } from "./index.js";
+import { Diamond, DiamondStack, Tip } from "./index.js";
 import styles from "./ChatHeader.module.css";
 
 export default function ChatHeader({
@@ -12,9 +12,9 @@ export default function ChatHeader({
   const isWg = kind === "workgroup";
   const trimmedBio = (bio || "").trim();
   const glyph = isWg
-    ? <Hash size="md" />
+    ? <DiamondStack color={accent} size="md" className={styles.stackGlyph} />
     : <Diamond color={accent} size="md" />;
-  const titleGlyph = !isWg && trimmedBio
+  const titleGlyph = trimmedBio
     ? <Tip text={trimmedBio} side="l">{glyph}</Tip>
     : glyph;
   return (
@@ -24,7 +24,6 @@ export default function ChatHeader({
           <div className="title-row">
             {titleGlyph}
             <h1>{id}</h1>
-            <span className="kicker">{isWg ? "workgroup" : "profile"}</span>
           </div>
           {meta && <div className="meta-row">{meta}</div>}
         </div>

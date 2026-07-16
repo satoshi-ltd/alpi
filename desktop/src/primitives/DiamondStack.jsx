@@ -1,7 +1,7 @@
 import styles from "./DiamondStack.module.css";
 
-export default function DiamondStack({ color, pulse = false, className = "", style }) {
-  const rootClass = [styles.root, pulse ? styles.pulsing : "", className]
+export default function DiamondStack({ color, size, pulse = false, className = "", style }) {
+  const rootClass = [styles.root, size === "md" ? styles.md : "", pulse ? styles.pulsing : "", className]
     .filter(Boolean)
     .join(" ");
   return (

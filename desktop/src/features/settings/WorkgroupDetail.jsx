@@ -297,6 +297,7 @@ export default function WorkgroupDetail({
         kind="workgroup"
         id={workgroup.name || workgroup.id}
         accent={hub?.accent || "var(--accent)"}
+        bio={workgroup.briefing}
         meta={heroMeta}
         paused={!!workgroup.paused}
         onTogglePause={async () => {

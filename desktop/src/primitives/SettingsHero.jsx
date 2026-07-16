@@ -1,7 +1,7 @@
 import {
   ArrowLeftIcon,
   Diamond,
-  Hash,
+  DiamondStack,
   IconBtn,
   PauseIcon,
   PlayIcon,
@@ -26,12 +26,10 @@ export default function SettingsHero({
   const isWg = kind === "workgroup";
   const isConnections = kind === "connections";
   const trimmedBio = (bio || "").trim();
-  const glyph = isConnections
-    ? <GlobeIcon />
-    : isWg
-      ? <Hash size="md" />
-      : <Diamond color={accent} size="md" />;
-  const titleGlyph = !isWg && !isConnections && trimmedBio
+  const glyph = isWg
+    ? <DiamondStack color={accent} size="md" className={styles.stackGlyph} />
+    : <Diamond color={accent} size="md" />;
+  const titleGlyph = !isConnections && trimmedBio
     ? <Tip text={trimmedBio} side="l" escape>{glyph}</Tip>
     : glyph;
   return (
@@ -45,11 +43,7 @@ export default function SettingsHero({
           <div className="title-row">
             {titleGlyph}
             <h1>{id}</h1>
-            <span className="kicker">
-              {isConnections
-                ? "host · settings"
-                : isWg ? "workgroup · settings" : "profile · settings"}
-            </span>
+            <span className="eyebrow">{isConnections ? "connections" : "settings"}</span>
           </div>
           {meta && <div className="meta-row">{meta}</div>}
         </div>

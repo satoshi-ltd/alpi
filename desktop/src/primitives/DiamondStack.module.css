@@ -1,24 +1,31 @@
 .root {
+  --stack-dot: var(--glyph-size);
+  --stack-box: var(--glyph-size-md);
   position: relative;
   display: inline-block;
-  width: var(--glyph-size-md);
-  height: var(--glyph-size-md);
+  width: var(--stack-box);
+  height: var(--stack-box);
   flex-shrink: 0;
+}
+
+.md {
+  --stack-dot: var(--glyph-size-md);
+  --stack-box: calc(var(--glyph-size-md) * 1.5);
 }
 
 .dot {
   position: absolute;
-  width: var(--glyph-size);
-  height: var(--glyph-size);
+  width: var(--stack-dot);
+  height: var(--stack-dot);
   border-radius: 1.5px;
   background: var(--c, var(--ink-3));
   transform: rotate(45deg);
   top: 50%;
-  margin-top: calc(-1 * var(--glyph-size) / 2);
+  margin-top: calc(-1 * var(--stack-dot) / 2);
 }
 
-.front { left: 0;                            z-index: 2; background: var(--c, var(--ink-3)); }
-.back  { left: calc(var(--glyph-size) / 2);  z-index: 1; background: color-mix(in srgb, var(--c, var(--ink-3)) 35%, var(--bg-side)); }
+.front { left: 0;                           z-index: 2; background: var(--c, var(--ink-3)); }
+.back  { left: calc(var(--stack-dot) / 2);  z-index: 1; background: color-mix(in srgb, var(--c, var(--ink-3)) 35%, var(--stack-bg, var(--bg-side))); }
 
 .pulsing .front {
   animation: stackPulse 1.6s ease-in-out infinite;

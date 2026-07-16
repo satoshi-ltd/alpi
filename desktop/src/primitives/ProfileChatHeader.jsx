@@ -1,4 +1,5 @@
 import { ChatHeader, MeterChip, Mono } from "./index.js";
+import { profileLabel } from "../lib/profile-display.js";
 import SessionsButton from "./SessionsButton.jsx";
 import SoundWave from "./SoundWave.jsx";
 import HeaderMenu from "./HeaderMenu.jsx";
@@ -123,7 +124,7 @@ export default function ProfileChatHeader({
   return (
     <ChatHeader
       kind="profile"
-      id={profile?.name || ""}
+      id={profileLabel(profile?.name) || ""}
       accent={accent}
       bio={profile?.bio || profile?.public_bio}
       meta={meta}
