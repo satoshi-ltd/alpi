@@ -14,6 +14,29 @@ SESSIONS_KEEP_DAYS = 30
 # chat-delivered artifacts in out/ stay downloadable this long before cleanup offers them.
 GENERATED_KEEP_DAYS = 30
 
+GROUP_OF = {
+    "tts": "caches",
+    "inbound_media": "caches",
+    "sessions": "conversations",
+    "mentions": "conversations",
+    "logs": "logs",
+    "schedule": "logs",
+    "curator": "logs",
+    "workgroups": "conversations",
+    "generated": "files",
+    "attachments": "files",
+    "knowledge": "knowledge",
+}
+
+# Render order for the UIs — safe-leaning groups first, conversations last.
+GROUPS = [
+    ("caches", "Caches"),
+    ("logs", "Logs"),
+    ("knowledge", "Knowledge"),
+    ("files", "Files"),
+    ("conversations", "Conversations"),
+]
+
 
 _CLEANUP_CLAIM = object()
 
@@ -86,6 +109,12 @@ def categories(h: Path) -> list[dict[str, Any]]:
                         pass
         return total
 
+    def _mtime(p: Path) -> float:
+        try:
+            return p.stat().st_mtime
+        except OSError:
+            return 0.0
+
     tts_files = _all(_dir("cache/tts"))
     inbound_files = _all(_dir("cache/inbound"))
     old_session_ids, old_sessions_size = _old_sessions(h)
@@ -130,9 +159,13 @@ def categories(h: Path) -> list[dict[str, Any]]:
                         gen_files.append(p)
                 except OSError:
                     pass
+    from alpi.host.attachments_rpc import _STAGE_TTL_SECONDS
+
     att_root = _dir("host/attachments/tmp")
+    att_cutoff = time.time() - _STAGE_TTL_SECONDS
     att_dirs: list[Path] = (
-        [p for p in att_root.iterdir() if p.is_dir()] if att_root.exists() else []
+        [p for p in att_root.iterdir() if p.is_dir() and _mtime(p) < att_cutoff]
+        if att_root.exists() else []
     )
     att_size = sum(_dir_size(d) for d in att_dirs)
 
@@ -209,7 +242,7 @@ def categories(h: Path) -> list[dict[str, Any]]:
         {
             "key": "attachments",
             "label": "Attachment staging",
-            "desc": "uploaded chat attachments staged in `host/attachments/tmp/`",
+            "desc": "expired chat-upload staging in `host/attachments/tmp/` (past the 6h consume window)",
             "files": att_dirs,
             "size": att_size,
             "action": "rmtree",
@@ -243,6 +276,7 @@ def plan(h: Path) -> list[dict[str, Any]]:
             "count": item_count(c),
             "action": c.get("action", "unlink"),
             "destructive": bool(c.get("destructive", False)),
+            "group": GROUP_OF.get(c["key"], "other"),
         }
         for c in categories(h)
     ]

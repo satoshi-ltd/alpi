@@ -54,7 +54,6 @@ vi.mock("./fields/network.jsx", () => ({
   PairingNameField: () => null,
 }));
 vi.mock("./fields/maintenance.jsx", () => ({
-  CleanupField: () => null,
   DeleteProfileAction: () => null,
   StorageField: () => null,
   _clearStorageCache: () => {},

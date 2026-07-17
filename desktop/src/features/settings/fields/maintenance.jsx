@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { createSwrCache } from "../../../lib/swr-cache.js";
 import { useSwrValue } from "../../../hooks/useSwrValue.js";
@@ -8,7 +8,7 @@ import { Row } from "../primitives.jsx";
 import { ConfirmDelete } from "../../../primitives/index.js";
 import { useNotify } from "../../../primitives/Notification.jsx";
 import { Btn } from "../../../primitives/index.js";
-import { STORAGE_SCOPE, formatBytes } from "../util.js";
+import { STORAGE_GROUPS, RECLAIM_NOTES, formatBytes } from "../util.js";
 import styles from "../Settings.module.css";
 
 function storageCacheKey(connectionId, profileName) {
@@ -25,182 +25,163 @@ export function _clearStorageCache() {
   _storageCache.clear();
 }
 
-export function StorageField({ profile, activeConnection, prefetched, onLoadingChange = null }) {
+export function StorageField({ profile, activeConnection, prefetched, onLoadingChange = null, onCleaned }) {
+  const notify = useNotify();
   const connectionId = activeConnection?.id ?? null;
+  const canClean = activeConnection?.kind === "local" || activeConnection?.role === "admin";
   const key = storageCacheKey(connectionId, profile.name);
-  const { data, error, loading } = useSwrValue(
+
+  const { data: usage, error, loading } = useSwrValue(
     _storageCache,
     key,
     { profile: profile.name, connectionId },
     { prefetched },
   );
-  const items = data ?? (error ? [] : null);
-  const isLocal = activeConnection?.kind === "local";
+
+  const [plan, setPlan] = useState(null);
+  const [usageOverride, setUsageOverride] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [confirmKey, setConfirmKey] = useState(null);
+
+  const fetchPlan = useCallback(() => {
+    if (!canClean) {
+      setPlan([]);
+      return Promise.resolve();
+    }
+    return invoke("cleanup_plan", { profile: profile.name, ...(connectionId ? { connectionId } : {}) })
+      .then((rows) => setPlan(Array.isArray(rows) ? rows : []))
+      .catch(() => setPlan([]));
+  }, [profile.name, connectionId, canClean]);
+
+  useEffect(() => {
+    setPlan(null);
+    setUsageOverride(null);
+    setConfirmKey(null);
+    fetchPlan();
+  }, [fetchPlan]);
 
   useEffect(() => {
     onLoadingChange?.(loading);
   }, [loading, onLoadingChange]);
   useEffect(() => () => onLoadingChange?.(false), [onLoadingChange]);
 
-  const visible = (items ?? []).filter(
-    (it) => it.size_bytes > 0 || it.file_count > 0,
-  );
+  const usageBy = useMemo(() => {
+    const m = {};
+    for (const r of usageOverride ?? usage ?? []) m[r.key] = r;
+    return m;
+  }, [usageOverride, usage]);
+  const planByGroup = useMemo(() => {
+    const m = {};
+    for (const r of plan ?? []) (m[r.group] ??= []).push(r);
+    return m;
+  }, [plan]);
 
-  if (items === null) {
-    return (
-      <Row label="size">
-        <span className={styles.muted}>loading…</span>
-      </Row>
-    );
-  }
-
-  if (visible.length === 0) {
-    return (
-      <Row label="size">
-        <span className={styles.muted}>nothing yet</span>
-      </Row>
-    );
-  }
-
-  return (
-    <>
-      {visible.map((it) => (
-        <Row key={it.key} label={it.label}>
-          <span className={styles.inlineRow}>
-            <Chip size="sm" tooltip={STORAGE_SCOPE[it.key]}>
-              {formatBytes(it.size_bytes)}
-            </Chip>
-            <Chip size="sm">
-              {it.file_count} {it.file_count === 1 ? "file" : "files"}
-            </Chip>
-            {isLocal && (
-              <Button
-                size="sm"
-                onClick={() => invoke("reveal_in_finder", { path: it.path })}
-              >
-                Reveal
-              </Button>
-            )}
-          </span>
-        </Row>
-      ))}
-    </>
-  );
-}
-
-export function CleanupField({ profile, activeConnection, onCleaned }) {
-  const notify = useNotify();
-  const connectionId = activeConnection?.id ?? null;
-  const [plan, setPlan] = useState(null);
-  const [busyKey, setBusyKey] = useState(null);
-  const [confirmKey, setConfirmKey] = useState(null);
-
-  const fetchPlan = () =>
-    invoke("cleanup_plan", {
-      profile: profile.name,
-      ...(connectionId ? { connectionId } : {}),
-    })
-      .then((rows) => setPlan(Array.isArray(rows) ? rows : []))
-      .catch(() => setPlan("error"));
-
-  useEffect(() => {
-    setPlan(null);
-    setConfirmKey(null);
-    fetchPlan();
-  }, [profile.name, connectionId]);
-
-  const doClean = async (cat) => {
-    setBusyKey(cat.key);
+  const doClean = useCallback(async (keys, label) => {
+    if (busy || keys.length === 0) return;
+    setBusy(true);
     try {
       const results = await invoke("cleanup_apply", {
         profile: profile.name,
-        keys: [cat.key],
+        keys,
         ...(connectionId ? { connectionId } : {}),
       });
       const rows = Array.isArray(results) ? results : [];
       const failed = rows.filter((r) => !r.ok);
-      const removed = rows.reduce((n, r) => n + (r.removed ?? 0), 0);
       const freed = rows.reduce((n, r) => n + (r.freed_bytes ?? 0), 0);
+      const removed = rows.reduce((n, r) => n + (r.removed ?? 0), 0);
       if (failed.length > 0) {
-        notify({
-          message: `${cat.label}: ${failed[0].errors?.[0] ?? "cleanup failed"}`,
-          variant: "error",
-          duration: 4000,
-        });
+        notify({ message: `${label}: ${failed[0].errors?.[0] ?? "cleanup failed"}`, variant: "error", duration: 4000 });
       } else {
-        notify({ message: `${cat.label}: freed ${formatBytes(freed)}`, variant: "success" });
+        notify({ message: `${label}: freed ${formatBytes(freed)}`, variant: "success" });
       }
       await fetchPlan();
-      if (removed > 0) onCleaned?.();
+      if (removed > 0) {
+        _clearStorageCache();
+        const fresh = await invoke("profile_storage", {
+          profile: profile.name,
+          ...(connectionId ? { connectionId } : {}),
+        }).catch(() => null);
+        if (Array.isArray(fresh)) setUsageOverride(fresh);
+        onCleaned?.();
+      }
     } catch (e) {
-      notify({ message: `${cat.label}: ${String(e)}`, variant: "error", duration: 4000 });
+      notify({ message: `${label}: ${String(e)}`, variant: "error", duration: 4000 });
     } finally {
-      setBusyKey(null);
+      setBusy(false);
     }
-  };
+  }, [busy, profile.name, connectionId, notify, fetchPlan, onCleaned]);
 
-  const clean = (cat) => {
-    if (cat.destructive) {
-      setConfirmKey(cat.key);
-      return;
-    }
-    doClean(cat);
-  };
+  const groups = useMemo(() => STORAGE_GROUPS.map((g) => {
+    const usageRows = g.usage.map((k) => usageBy[k]).filter(Boolean);
+    return {
+      key: g.key,
+      label: g.label,
+      desc: g.desc,
+      size: usageRows.reduce((n, r) => n + r.size_bytes, 0),
+      count: usageRows.reduce((n, r) => n + r.file_count, 0),
+      reclaimable: (planByGroup[g.key] ?? []).some((m) => m.size > 0),
+    };
+  }).filter((g) => g.size > 0 || g.count > 0 || g.reclaimable), [usageBy, planByGroup]);
 
-  if (plan === null) {
-    return (
-      <Row label="cleanup">
-        <span className={styles.muted}>loading…</span>
-      </Row>
-    );
+  const safeMembers = useMemo(
+    () => (plan ?? []).filter((m) => !m.destructive && m.size > 0),
+    [plan],
+  );
+  const safeKeys = safeMembers.map((m) => m.key);
+  const safeSize = safeMembers.reduce((n, m) => n + m.size, 0);
+  const destructive = useMemo(
+    () => (plan ?? []).filter((m) => m.destructive && m.size > 0),
+    [plan],
+  );
+
+  if (usageOverride == null && usage == null && !error) {
+    return <Row label="storage"><span className={styles.muted}>loading…</span></Row>;
   }
-  if (plan === "error") {
-    return (
-      <Row label="cleanup">
-        <span className={styles.muted}>
-          cleanup unavailable — daemon offline or older than 0.10.24
-        </span>
-      </Row>
-    );
+  if (groups.length === 0) {
+    return <Row label="storage"><span className={styles.muted}>nothing yet</span></Row>;
   }
-  const reclaimable = plan.filter((c) => c.size > 0);
-  if (reclaimable.length === 0) {
-    return (
-      <Row label="cleanup">
-        <span className={styles.muted}>nothing to clean</span>
-      </Row>
-    );
-  }
+
   return (
     <>
-      {reclaimable.map((c) => (
-        <Row key={c.key} label={c.label.toLowerCase()}>
+      {groups.map((g) => (
+        <Row key={g.key} label={g.label}>
           <span className={styles.inlineRow}>
-            <Chip size="sm" tooltip={c.desc}>{formatBytes(c.size)}</Chip>
-            <Chip size="sm">{c.count} {c.count === 1 ? "item" : "items"}</Chip>
-            <Button
-              size="sm"
-              variant={c.destructive ? "danger" : "ghost"}
-              disabled={busyKey !== null}
-              onClick={() => clean(c)}
-            >
-              {busyKey === c.key
-                ? "Cleaning…"
-                : c.action === "vacuum" ? "Compact" : "Clean"}
-            </Button>
-            <ConfirmDelete
-              open={confirmKey === c.key}
-              onClose={() => setConfirmKey(null)}
-              onConfirm={() => {
-                setConfirmKey(null);
-                doClean(c);
-              }}
-              title={`Delete ${c.label.toLowerCase()}?`}
-              consequence={`${c.desc}. This cannot be undone.`}
-            />
+            <Chip size="sm" tooltip={g.desc}>{formatBytes(g.size)}</Chip>
+            <Chip size="sm">{g.count} {g.count === 1 ? "file" : "files"}</Chip>
           </span>
         </Row>
       ))}
+
+      {canClean && safeKeys.length > 0 && (
+        <Row label="reclaim">
+          <span className={styles.inlineRow}>
+            <Button size="sm" disabled={busy} onClick={() => doClean(safeKeys, "Clean")}>
+              {busy ? "Cleaning…" : `Clean · ${formatBytes(safeSize)}`}
+            </Button>
+            <span className={styles.muted}>caches, logs and knowledge — always safe</span>
+          </span>
+        </Row>
+      )}
+
+      {canClean && destructive.map((m) => {
+        const note = RECLAIM_NOTES[m.key] ?? m.label.toLowerCase();
+        return (
+          <Row key={m.key} label="delete">
+            <span className={styles.inlineRow}>
+              <Chip size="sm">{formatBytes(m.size)}</Chip>
+              <span className={styles.muted}>{note}</span>
+              <Button size="sm" variant="danger" disabled={busy} onClick={() => setConfirmKey(m.key)}>Delete</Button>
+              <ConfirmDelete
+                open={confirmKey === m.key}
+                onClose={() => setConfirmKey(null)}
+                onConfirm={() => { setConfirmKey(null); doClean([m.key], m.label); }}
+                title={`Delete ${note}?`}
+                consequence={`This permanently deletes ${note}. It cannot be undone.`}
+              />
+            </span>
+          </Row>
+        );
+      })}
     </>
   );
 }

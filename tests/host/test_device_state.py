@@ -669,6 +669,11 @@ async def test_profile_storage_lists_all_known_categories(
     (home / "alp" / "workgroups").mkdir(parents=True)
     (home / "mentions").mkdir(parents=True)
     (home / "mentions" / "peer-a.json").write_text("{}")
+    (home / "out").mkdir(parents=True, exist_ok=True)
+    (home / "out" / "chart.png").write_bytes(b"\x89PNG generated")
+    stage = home / "host" / "attachments" / "tmp" / "abc"
+    stage.mkdir(parents=True)
+    (stage / "scan.pdf").write_bytes(b"%PDF staged")
 
     monkeypatch.setattr(host_handlers, "_resolve_home", lambda p: home)
     srv = host_server.Server(home=home)
@@ -679,17 +684,17 @@ async def test_profile_storage_lists_all_known_categories(
         "params": {"profile": "default"},
     })
     keys = {row["key"] for row in resp["result"]["storage"]}
-    # All non-secret on-disk shapes a user might want to inspect must appear in the report.
     assert keys == {
-        "sessions", "skills", "memories", "knowledge", "outputs",
-        "audio", "logs", "schedule", "workgroups", "mentions",
+        "sessions", "skills", "memories", "knowledge", "outputs", "generated",
+        "audio", "logs", "schedule", "workgroups", "mentions", "attachments",
     }
     by_key = {row["key"]: row for row in resp["result"]["storage"]}
-    # Spot-check that the new shapes actually report > 0 when seeded.
     assert by_key["skills"]["file_count"] > 0, "skills row should pick up SKILL.md"
     assert by_key["memories"]["file_count"] > 0, "memories row should pick up USER.md"
     assert by_key["knowledge"]["file_count"] > 0, "knowledge row should pick up knowledge.sqlite"
     assert by_key["outputs"]["file_count"] > 0, "outputs row should pick up outputs.jsonl"
+    assert by_key["generated"]["file_count"] > 0, "generated row should pick up out/ files"
+    assert by_key["attachments"]["file_count"] > 0, "attachments row should pick up staged uploads"
 
 @pytest.fixture(autouse=True)
 def _fresh_storage_cache():
@@ -720,6 +725,28 @@ async def test_profile_storage_serves_cached_rows_within_ttl(
     second = await srv._dispatch(dict(body))
     assert calls["n"] == 1
     assert first["result"] == second["result"]
+
+
+@pytest.mark.asyncio
+async def test_cleanup_apply_invalidates_storage_cache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = _bootstrap(tmp_path / "h")
+    (home / "cache" / "tts").mkdir(parents=True)
+    (home / "cache" / "tts" / "blob.mp3").write_bytes(b"x" * 128)
+    monkeypatch.setattr(host_handlers, "_resolve_home", lambda p: home)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+
+    await srv._dispatch({"id": "1", "method": "host.profile.storage", "params": {"profile": "default"}})
+    assert host_device_state._storage_cache
+
+    resp = await srv._dispatch({
+        "id": "2", "method": "host.cleanup.apply",
+        "params": {"profile": "default", "keys": ["tts"]},
+    })
+    assert any(r["removed"] for r in resp["result"]["results"])
+    assert host_device_state._storage_cache == {}
 
 
 @pytest.mark.asyncio

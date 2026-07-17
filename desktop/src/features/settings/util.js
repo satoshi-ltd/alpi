@@ -47,6 +47,23 @@ export const STORAGE_SCOPE = {
   mentions: "@-mention threads from ALP peers",
 };
 
+export const RECLAIM_NOTES = {
+  sessions: "chats older than 30 days",
+  generated: "generated files older than 30 days",
+  mentions: "all @-mention threads",
+  workgroups: "all workgroup history",
+};
+
+export const STORAGE_GROUPS = [
+  { key: "conversations", label: "Conversations", usage: ["sessions", "workgroups", "mentions"], desc: "chats, workgroup transcripts and @-mention threads" },
+  { key: "skills", label: "Skills", usage: ["skills"], content: true, desc: STORAGE_SCOPE.skills },
+  { key: "memories", label: "Memories", usage: ["memories"], content: true, desc: STORAGE_SCOPE.memories },
+  { key: "files", label: "Files", usage: ["outputs", "generated", "attachments"], desc: "notifications inbox, generated + staged files" },
+  { key: "knowledge", label: "Knowledge", usage: ["knowledge"], desc: "workspace embeddings (sqlite-vec store)" },
+  { key: "caches", label: "Caches", usage: ["audio"], desc: "TTS output + inbound media — regenerated on demand" },
+  { key: "logs", label: "Logs", usage: ["logs", "schedule"], desc: "agent, approval, schedule + curator diagnostics" },
+];
+
 export const PAID_PROVIDERS = [
   { id: "anthropic", env: "ANTHROPIC_API_KEY", label: "Anthropic" },
   { id: "openai", env: "OPENAI_API_KEY", label: "OpenAI" },

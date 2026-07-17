@@ -398,6 +398,37 @@ def test_setup_cleanup_wizard_deletes_old_sessions(tmp_path: Path, monkeypatch) 
     cli._cleanup_setup(home)
 
     sessions_row = next(r for r in shown[0] if r[1] == "sessions")
-    assert sessions_row[2] != "empty"
+    assert "item" in sessions_row[2]
     assert not old_file.exists()
     assert not sidecar.exists()
+
+
+def test_setup_cleanup_deletes_only_the_chosen_destructive_category(tmp_path, monkeypatch) -> None:
+    import os
+    import time
+
+    from alpi.alp import mention_thread
+
+    home = tmp_path / "h"
+    (home / "sessions").mkdir(parents=True)
+    stale = time.time() - (cleanup.SESSIONS_KEEP_DAYS + 5) * 86_400
+    old = home / "sessions/oldsid.json"
+    old.write_text(json.dumps({"id": "oldsid", "turns": [], "started_at": stale}))
+    os.utime(old, (stale, stale))
+    mention_thread.append(home, "alice", "u", "a")
+
+    shown: list[list] = []
+
+    def fake_menu(_title, items, **_kw):
+        shown.append([(label, key, status) for label, key, status in items])
+        return "sessions" if len(shown) == 1 else None
+
+    monkeypatch.setattr("alpi.ui.menu", fake_menu)
+    monkeypatch.setattr("alpi.ui.confirm", lambda *a, **kw: True)
+    monkeypatch.setattr("alpi.ui.ok_and_wait", lambda *a, **kw: None)
+    cli._cleanup_setup(home)
+
+    keys = {r[1] for r in shown[0]}
+    assert {"sessions", "mentions"} <= keys
+    assert not old.exists()
+    assert (home / "mentions" / "alice.json").exists()

@@ -23,15 +23,27 @@ def test_mentions_category_lists_thread_files(tmp_path: Path) -> None:
     assert mentions["size"] > 0
 
 
-def test_attachments_category_lists_staged_dirs(tmp_path: Path) -> None:
-    d = tmp_path / "host" / "attachments" / "tmp" / "abc123"
-    d.mkdir(parents=True)
-    (d / "scan.pdf").write_bytes(b"%PDF-1.4 staged")
+def test_attachments_category_only_offers_expired_staging(tmp_path: Path) -> None:
+    import os
+    import time
+
+    from alpi.host.attachments_rpc import _STAGE_TTL_SECONDS
+
+    tmp = tmp_path / "host" / "attachments" / "tmp"
+    tmp.mkdir(parents=True)
+    fresh = tmp / "fresh"
+    fresh.mkdir()
+    (fresh / "scan.pdf").write_bytes(b"%PDF still consumable")
+    expired = tmp / "expired"
+    expired.mkdir()
+    (expired / "old.pdf").write_bytes(b"%PDF stale")
+    old = time.time() - _STAGE_TTL_SECONDS - 60
+    os.utime(expired, (old, old))
 
     cats = _cleanup_categories(tmp_path)
     att = next(c for c in cats if c["key"] == "attachments")
 
-    assert [p.name for p in att["files"]] == ["abc123"]
+    assert [p.name for p in att["files"]] == ["expired"]
     assert att["size"] > 0
     assert att["action"] == "rmtree"
 
@@ -277,3 +289,12 @@ def test_ensure_home_leaves_regular_file_named_out(tmp_path: Path) -> None:
     home_mod.ensure_home(home)
     assert (home / "out").read_text() == "i am a file"
     assert home_mod.out_root(home) is None
+
+
+def test_plan_tags_each_key_with_its_group(tmp_path: Path) -> None:
+    from alpi.cleanup import GROUP_OF, plan
+
+    for row in plan(tmp_path):
+        assert row["group"] == GROUP_OF[row["key"]]
+
+

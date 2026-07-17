@@ -36,7 +36,7 @@ import {
   saveCachedMessages,
 } from "../lib/workgroup-cache.js";
 import { fetchWorkgroupTranscript } from "../lib/workgroup-fetch.js";
-import { WorkgroupChatHeader, TasksButton, Eyebrow } from "../primitives/index.js";
+import { WorkgroupChatHeader, TasksButton, Eyebrow, AlpiSilhouette } from "../primitives/index.js";
 import { JumpToLatest, MarkerCard, MessageBubble } from "../primitives/index.js";
 import {
   Banner,
@@ -500,10 +500,9 @@ export default function WorkgroupView({
           <>
             {messages.length === 0 && (
               <div className={styles.empty}>
-                <span className={styles.emptyHash} aria-hidden>
-                  #
-                </span>
-                <span>no posts yet · direct @{profileLabel(hubName)} to open a #task</span>
+                <AlpiSilhouette color={ownerProfile?.accent || "var(--accent)"} />
+                <div className={styles.emptyHeading}>no posts yet</div>
+                <div className={styles.emptyModel}>direct @{profileLabel(hubName)} to open a #task</div>
               </div>
             )}
             {messages.length > 0 && (

@@ -11,6 +11,19 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.47 — 2026-07-17 — simpler storage, friendlier empty workgroups
+
+- **The Storage panel is a clear inventory again.** Raw directories are rolled
+  up into concepts you recognise — Conversations, Skills, Memories, Files,
+  Knowledge, Caches, Logs — each just showing what it uses. One **Clean** button
+  reclaims everything safe at once; destructive categories (old chats, files…)
+  appear separately, each with its own confirmation. No more per-row
+  Reveal/Clean buttons scattered around.
+- **An empty workgroup looks like an empty chat.** It now shows the llama mark
+  and a centered hint instead of a bare `#`.
+
+_Requires alpi v0.11.1+ for the grouped cleanup plan._
+
 ## v0.4.46 — 2026-07-16 — calm connections, faster inbox
 
 - **Remote daemons stop getting hammered in the background.** A healthy

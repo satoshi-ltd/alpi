@@ -42,7 +42,6 @@ import { DaemonField } from "./fields/DaemonField.jsx";
 import { NetworkAddressField } from "./fields/network.jsx";
 import LazyMount from "../../primitives/LazyMount.jsx";
 import {
-  CleanupField,
   DeleteProfileAction,
   StorageField,
   _clearStorageCache as _clearStorageCacheSafe,
@@ -505,14 +504,8 @@ export default function ProfileDetail({
               profile={profile}
               activeConnection={activeConnection}
               prefetched={storagePre}
+              onCleaned={() => { _clearStorageCacheSafe(); onSaved?.(); }}
             />
-            {(activeConnection?.kind === "local" || activeConnection?.role === "admin") && (
-              <CleanupField
-                profile={profile}
-                activeConnection={activeConnection}
-                onCleaned={() => { _clearStorageCacheSafe(); onSaved?.(); }}
-              />
-            )}
           </LazyMount>
         </Section>
 

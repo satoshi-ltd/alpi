@@ -3160,53 +3160,61 @@ def _cleanup_status(h: Path) -> str:
 def _cleanup_setup(h: Path) -> None:
     from alpi import home as home_mod, ui
 
-    from alpi.cleanup import item_count
+    from alpi.cleanup import apply as cleanup_apply, item_count
 
     while True:
-        cats = _cleanup_categories(h)
+        cats = [c for c in _cleanup_categories(h) if item_count(c) > 0]
+        safe_cats = [c for c in cats if not c.get("destructive")]
+        destructive_cats = [c for c in cats if c.get("destructive")]
+        safe_size = sum(c["size"] for c in safe_cats)
+
         items: list = []
-        for c in cats:
+        if safe_cats:
+            items.append((
+                "Clean all safe", "__safe__",
+                f"{home_mod.format_bytes(safe_size)} · caches, logs, knowledge",
+            ))
+        for c in destructive_cats:
             n = item_count(c)
-            if n == 0:
-                status = "empty"
-            else:
-                status = f"{home_mod.format_bytes(c['size'])} · {n} file{'s' if n != 1 else ''}"
-            items.append((c["label"], c["key"], status))
+            items.append((f"{c['label']} ⚠", c["key"], f"{home_mod.format_bytes(c['size'])} · {n} item{'s' if n != 1 else ''}"))
 
         choice = ui.menu(
             ui.crumb("setup", "cleanup"),
             items,
-            subtitle=f"profile: {home_mod.shorten_home(h)}",
+            subtitle=f"profile: {home_mod.shorten_home(h)}" if items else "nothing to reclaim",
             home=h,
             close="Back",
         )
         if choice is None:
             return
-        target = next((c for c in cats if c["key"] == choice), None)
-        if target is None or item_count(target) == 0:
-            continue
 
-        n = item_count(target)
-        size_label = home_mod.format_bytes(target["size"])
+        if choice == "__safe__":
+            targets, verb = safe_cats, f"Reclaim {home_mod.format_bytes(safe_size)} of safe storage?"
+        else:
+            target = next((c for c in destructive_cats if c["key"] == choice), None)
+            if target is None:
+                continue
+            targets = [target]
+            n = item_count(target)
+            verb = (
+                f"Delete {n} item(s) · {home_mod.format_bytes(target['size'])} "
+                f"from {target['label']}? This cannot be undone."
+            )
+
         ui._console.print("")
-        verb = (
-            f"Compact knowledge index and reclaim {size_label}?"
-            if target.get("action") == "vacuum"
-            else f"Delete {n} item(s) · {size_label} from {target['label']}?"
-        )
         if not ui.confirm(f"  {verb}", default=False):
             continue
-        from alpi.cleanup import apply as cleanup_apply
-        result = cleanup_apply(h, target["key"])
-        for err in result["errors"]:
+
+        removed = freed = 0
+        errors: list = []
+        for c in targets:
+            result = cleanup_apply(h, c["key"])
+            errors += result.get("errors", [])
+            removed += result.get("removed", 0)
+            freed += result.get("freed_bytes", 0)
+        for err in errors:
             ui.fail(f"could not delete {err}")
-        if target.get("action") == "vacuum":
-            ui.ok_and_wait(
-                f"compacted {target['label']}: "
-                f"{home_mod.format_bytes(result['before'])} → {home_mod.format_bytes(result['after'])}"
-            )
-        else:
-            ui.ok_and_wait(f"removed {result['removed']} item(s) from {target['label']}")
+        ui.ok_and_wait(f"reclaimed {home_mod.format_bytes(freed)} · {removed} item(s)")
 
 
 @main.group()

@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.11.1 — 2026-07-17 — cleanup you can actually read
+
+- **`setup → Cleanup` is simplified.** Instead of eleven fine-grained
+  directories (including confusing ones like "Curator reports"), it now offers
+  one **Clean all safe** action that reclaims caches, logs and knowledge in a
+  single step, and lists only the destructive categories separately behind a
+  confirm. Empty categories are hidden.
+
 ## v0.11.0 — 2026-07-17 — faster workgroups and verified artefacts
 
 - **Active workgroups now advance in seconds.** Remote subscriptions

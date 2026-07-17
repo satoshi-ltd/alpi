@@ -398,19 +398,23 @@ async def _profile_memory_write(
 
 
 def _storage_rows(home: Path) -> list[dict[str, Any]]:
-    rows = []
-    for key, label, paths in [
+    out = home_mod.out_root(home)
+    specs = [
         ("sessions", "sessions", [home / "sessions"]),
         ("skills", "skills", [home / "skills"]),
         ("memories", "memories", [home / "memories"]),
         ("knowledge", "knowledge", [home / "knowledge.sqlite"]),
         ("outputs", "outputs", [home / "outputs"]),
+        ("generated", "generated", [out] if out is not None else []),
         ("audio", "audio", [home / "cache" / "tts", home / "cache" / "inbound"]),
         ("logs", "logs", [home / "logs"]),
         ("schedule", "schedule", [home / "schedule" / "output"]),
         ("workgroups", "workgroups", [home / "alp" / "workgroups", home / "alp" / "turns.jsonl"]),
         ("mentions", "mentions", [home / "mentions"]),
-    ]:
+        ("attachments", "attachments", [home / "host" / "attachments" / "tmp"]),
+    ]
+    rows = []
+    for key, label, paths in specs:
         size = 0
         count = 0
         for path in paths:
@@ -420,7 +424,7 @@ def _storage_rows(home: Path) -> list[dict[str, Any]]:
         rows.append({
             "key": key,
             "label": label,
-            "path": str(paths[0]),
+            "path": str(paths[0]) if paths else str(home / "out"),
             "size_bytes": size,
             "file_count": count,
         })
@@ -486,6 +490,8 @@ async def _cleanup_apply(
             -32602, "invalid-params", data={"detail": "keys (list) required"},
         )
     results = [await asyncio.to_thread(cleanup.apply, home, k) for k in keys]
+    if any(r.get("removed") for r in results):
+        _clear_storage_cache()
     return {"results": results}
 
 
