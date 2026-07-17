@@ -203,6 +203,93 @@ def test_load_returns_none_for_missing_workgroup(short_tmp: Path) -> None:
     assert wg_mod.load(home, "wg_nonexistent") is None
 
 
+def test_coerce_wait_s_clamps_and_rejects_junk() -> None:
+    assert wg_mod._coerce_wait_s(None) == 0.0
+    assert wg_mod._coerce_wait_s("junk") == 0.0
+    assert wg_mod._coerce_wait_s(-5) == 0.0
+    assert wg_mod._coerce_wait_s(3.5) == 3.5
+    assert wg_mod._coerce_wait_s(9999) == wg_mod._LONG_POLL_MAX_WAIT_S
+
+
+def test_presence_write_is_coalesced() -> None:
+    import datetime as dt
+
+    now = dt.datetime(2026, 7, 17, 12, 0, 30, tzinfo=dt.timezone.utc)
+    assert wg_mod._presence_write_due("", now) is True
+    assert wg_mod._presence_write_due("invalid", now) is True
+    assert wg_mod._presence_write_due("2026-07-17T12:00:01Z", now) is False
+    assert wg_mod._presence_write_due("2026-07-17T12:00:00Z", now) is True
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_pull_long_poll_times_out_empty_and_returns_early_on_post(short_tmp: Path) -> None:
+    import asyncio
+    import time as _t
+
+    alice_home = short_tmp / "alice"
+    alice_home.mkdir()
+    bob_home = short_tmp / "bob"
+    bob_home.mkdir()
+    alice_kp = load_or_generate(alice_home)
+    bob_kp = load_or_generate(bob_home)
+    _pin(alice_home, "bob", bob_kp.pubkey_b64(),
+         ["workgroup.join", "workgroup.post", "workgroup.pull"])
+    wg = wg_mod.create(
+        alice_home, name="lp", hub_kp=alice_kp,
+        member_pubkeys=[bob_kp.pubkey_b64()],
+    )
+    server = alp_server.Server(home=alice_home, agent_name="alice")
+    wg_mod.register(server, alice_home)
+    await server.start()
+    try:
+        join_result = await alp_client.call(
+            socket_path=server.socket_path(), sender=bob_kp,
+            recipient_pubkey_b64=alice_kp.pubkey_b64(),
+            method="workgroup.join", params={"workgroup_id": wg.meta.id},
+        )
+        group_key = wg_mod.open_sealed_group_key(join_result["sealed_key"], bob_kp)
+        members_path = alice_home / "alp" / "workgroups" / wg.meta.id / "members.yaml"
+        presence_mtime = members_path.stat().st_mtime_ns
+
+        t0 = _t.monotonic()
+        empty = await alp_client.call(
+            socket_path=server.socket_path(), sender=bob_kp,
+            recipient_pubkey_b64=alice_kp.pubkey_b64(),
+            method="workgroup.pull",
+            params={"workgroup_id": wg.meta.id, "since": 0, "wait_s": 1.2},
+        )
+        held = _t.monotonic() - t0
+        assert empty["posts"] == []
+        assert held >= 1.0
+        assert members_path.stat().st_mtime_ns == presence_mtime
+
+        async def _post_later() -> None:
+            await asyncio.sleep(0.6)
+            nonce_b64, ct_b64 = wg_mod.encrypt_post(group_key, b"wake up")
+            await alp_client.call(
+                socket_path=server.socket_path(), sender=bob_kp,
+                recipient_pubkey_b64=alice_kp.pubkey_b64(),
+                method="workgroup.post",
+                params={"workgroup_id": wg.meta.id, "nonce": nonce_b64, "ciphertext": ct_b64},
+            )
+
+        poster = asyncio.create_task(_post_later())
+        t0 = _t.monotonic()
+        woke = await alp_client.call(
+            socket_path=server.socket_path(), sender=bob_kp,
+            recipient_pubkey_b64=alice_kp.pubkey_b64(),
+            method="workgroup.pull",
+            params={"workgroup_id": wg.meta.id, "since": 0, "wait_s": 10},
+        )
+        early = _t.monotonic() - t0
+        await poster
+        assert len(woke["posts"]) == 1
+        assert early < 5.0
+    finally:
+        await server.stop()
+
+
 # End-to-end over the Unix socket
 
 

@@ -105,6 +105,8 @@ def _hub_detail_view(home: Path, wg_id: str) -> None:
              _preview(wg.meta.briefing) if wg.meta.briefing else "(empty)"),
             ("Pipeline",        "pipeline",
              " → ".join(wg.meta.pipeline) if wg.meta.pipeline else "deliberation"),
+            ("Quorum timeout",  "quorum",
+             f"{wg.meta.quorum_timeout_seconds}s" if wg.meta.quorum_timeout_seconds else "default 600s"),
             ("Budget",          "budget", _budget_summary(home, wg)),
             ui.Heading("Maintenance"),
             ("Pause" if not wg.meta.paused else "Resume",
@@ -128,6 +130,8 @@ def _hub_detail_view(home: Path, wg_id: str) -> None:
             _edit_briefing(home, wg)
         elif choice == "pipeline":
             _edit_pipeline(home, wg)
+        elif choice == "quorum":
+            _edit_quorum_timeout(home, wg)
         elif choice == "pause":
             wg.meta.paused = True
             from alpi.alp.workgroup import _utcnow, _save_meta, _wg_dir
@@ -456,12 +460,6 @@ def _create_flow(home: Path) -> None:
     if budget is False:
         return ui.cancelled()
 
-    auto_kickoff = ui.confirm(
-        "Auto-kickoff? (members start engaging as soon as their "
-        "service polls — set off for exploratory workgroups)",
-        default=True,
-    )
-
     kp = load_or_generate(home)
     # Hub never calls workgroup.join on itself; plumb hub_bio/voice into the create call directly.
     from alpi import config as _cfg
@@ -472,7 +470,7 @@ def _create_flow(home: Path) -> None:
         wg = wg_mod.create(
             home, name=name, hub_kp=kp,
             member_pubkeys=member_pks, budget=budget or {},
-            briefing=briefing, auto_kickoff=bool(auto_kickoff),
+            briefing=briefing,
             pipeline=pipeline,
             hub_bio=hub_bio, hub_voice=hub_voice,
         )
@@ -611,6 +609,37 @@ def _edit_pipeline(home: Path, wg) -> None:
         return
     _save_meta(_wg_dir(home, wg.meta.id), wg.meta)
     ui.ok_and_wait("pipeline updated")
+
+
+def _edit_quorum_timeout(home: Path, wg) -> None:
+    """Edit quorum_timeout_seconds in place (empty resets to the 600s default)."""
+    from alpi.alp.workgroup import _save_meta, _wg_dir
+
+    current = wg.meta.quorum_timeout_seconds
+    ui.banner(
+        ui.crumb("setup", "workgroups", wg.meta.name, "quorum timeout"),
+        subtitle="how long the hub waits before #done may bypass quorum",
+        home=home,
+    )
+    ui.dim(
+        "A hub `#done` needs every expected member to contribute first;\n"
+        "after this many seconds the check soft-fails so a stuck member\n"
+        "can't freeze the workgroup. Default 600."
+    )
+    ui._console.print("")
+    raw = ui.text(
+        f"Quorum timeout seconds (current: {current or 'default 600'}):",
+        default=str(current) if current else "",
+    )
+    if raw is None:
+        return ui.cancelled()
+    raw = (raw or "").strip()
+    if raw and (not raw.isdigit() or int(raw) <= 0):
+        ui.fail_and_wait("must be a positive integer number of seconds (or empty for default)")
+        return
+    wg.meta.quorum_timeout_seconds = int(raw) if raw else 0
+    _save_meta(_wg_dir(home, wg.meta.id), wg.meta)
+    ui.ok_and_wait("quorum timeout updated")
 
 
 def _preview(text: str, limit: int = 60) -> str:

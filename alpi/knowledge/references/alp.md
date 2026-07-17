@@ -41,6 +41,8 @@ Transport internals are implementation detail unless debugging ALP itself.
 | `link.ping` | Check peer reachability/identity. Answers immediately (5s timeout), independent of engine/turn state; does NOT feed the workgroup roster. |
 | `link.ask` | Run a full agent turn on a peer (its memory/skills/tools). Sole read path into a peer. |
 | `link.cancel` | Cancel an in-flight peer task. |
+| `link.put_blob` | Send an explicitly selected file in verified content-addressed chunks. |
+| `link.get_blob` | Retrieve a previously stored blob by SHA-256. |
 | `workgroup.*` | Group coordination and shared context. |
 
 ## Workgroups
@@ -51,21 +53,21 @@ Over-the-wire verbs: `workgroup.join`, `.post`, `.pull`, `.leave`, `.pause`, `.r
 
 - `join(workgroup_id, bio?)` → `{workgroup_id, name, briefing, sealed_key, key_version, current_key_version, members[]}`. Caller must already be in the roster else `-32008`. `bio` (≤200 bytes) is the caller's self-published role tag-line.
 - `post(workgroup_id, key_version, nonce, ciphertext, cost?)` → `{seq, ts}`. Author encrypts client-side (ChaCha20-Poly1305); the hub stays zero-knowledge. `cost {usd, tokens}` is the author's declared LLM spend, gating the workgroup lifetime budget.
-- `pull(workgroup_id, since)` → `{posts[], head, current_key_version, sealed_key, members[]}`. Canonical fan-out; also stamps `last_seen_at` and refreshes the roster.
+- `pull(workgroup_id, since, wait_s?)` → `{posts[], head, current_key_version, sealed_key, members[]}`. Canonical fan-out; also stamps `last_seen_at` and refreshes the roster. `wait_s` (≤25) long-polls: the hub holds the request and answers early when a fresh post lands.
 
 Roster entry shape: `{pubkey, last_seen_at, bio}`. Group key is a 32-byte key sealed per member; `current_key_version` is monotonic (starts at 1), rotated and bumped on `leave`/`kick`/`add_member` for forward secrecy on new traffic (past transcript stays decryptable). Transcript entries record the `key_version` they were encrypted under.
 
-`#task` / `#done` are **hub-only** lifecycle markers; `#skip` / `#working` are **member-only**. Markers count only at the start of a decrypted line; `#task` requires a `#<slug>` (`[A-Za-z0-9][A-Za-z0-9_-]{0,63}`, lowercased). Single active task at a time; a new `#task` preempts the prior. `#done` needs full + substantive closure quorum (or hard-timeout escape). `#done BLOCKED` halts a pipeline without advancing.
+`#task` / `#done` are **hub-only** lifecycle markers; `#skip` / `#working` are **member-only**. Markers count only at the start of a decrypted line; `#task` requires a `#<slug>` (`[A-Za-z0-9][A-Za-z0-9_-]{0,63}`, lowercased). Single active task at a time; a new `#task` preempts the prior — but re-opening the currently-active slug is rejected (`task-already-active`). `#done` needs full + substantive closure quorum (scoped to the opener's `@participants` when the task is targeted; full roster when collective), with a hard-timeout escape (`meta.quorum_timeout_seconds`, default 600s). `#done BLOCKED` halts a pipeline without advancing. Watchdog closure-only wakes are SDK-enforced (`ALPI_WORKGROUP_CLOSURE_ONLY=1` rejects any non-`#done` post). Each remote subscription owns one concurrent long-poll (`wait_s`≤25s), reopened immediately after an empty success; local hubs use a 5s cached transcript probe. Fresh/open work uses a 10s dispatch cooldown, while transport failures back off exponentially to 15 min. In pipeline workgroups, a non-hub post's `@mentions` wake only the hub (routing goes up, never sideways).
 
 ## Liveness vs presence
 
 Roster "online/offline" is **NOT** a reachability probe. It is computed from `last_seen_at`, a traffic-recency stamp the **hub** writes only when it receives a `workgroup.pull` or `workgroup.post` from a member. Three distinct signals, easy to conflate:
 
-- `last_seen_at` — **presence**. Advances solely on inbound workgroup traffic at the hub. Thresholds: `<90s` → online (≈3 poll ticks at the 30s `WORKGROUP_TICK_SECONDS`), `<30m` → "last seen Nm ago", `≥30m` → "offline >30m".
+- `last_seen_at` — **presence**. Advances solely on inbound workgroup traffic at the hub. Thresholds: `<90s` → online, `<30m` → "last seen Nm ago", `≥30m` → "offline >30m". Remote subscriptions continuously reopen held pulls, so an idle healthy member refreshes presence without launching agent turns.
 - `link.ping` — **liveness/reachability**. Answers immediately (5s timeout), independent of engine/turn state. Does NOT feed the roster.
 - `#working` — **busy/rotation marker**. The peer is mid-turn and asking the hub for more time; alive and reachable; orthogonal to presence.
 
-So roster "offline" means "no recent workgroup pull/post", not "unreachable". A peer can pass `link.ping` instantly yet show stale because workgroup *traffic* stalled — a briefly busy hub event loop, a serial pull backlog across many subscriptions, or a transient hiccup. Members dispatch turns as background tasks, so a long turn alone does not stall the member's own polling.
+So roster "offline" means "no recent workgroup pull/post", not "unreachable". A peer can pass `link.ping` instantly yet show stale because workgroup traffic hit repeated transport failures or the hub event loop stalled. Members dispatch turns as background tasks, and subscriptions poll concurrently, so one long turn or another workgroup's held pull does not stall presence.
 
 Debugging an intra-machine "flap": confirm reachability with `link.ping` before trusting roster status, and check daemon logs for `wg poller pull(...) failed`. No hysteresis today — three consecutive missed pulls cross the 90s window. Tighten (ping-driven presence or a grace tick) only from real timeout logs, not assumption.
 
@@ -87,6 +89,7 @@ ALP/workgroup tasks respect profile budget settings (`budget.daily_usd`, CONFIG.
 | `-32008` | `workgroup-not-member` (`workgroup-not-hub` for hub-only verbs) | Not a pinned member / not the hub. |
 | `-32009` | `workgroup-not-found` | No workgroup with that id at the hub. |
 | `-32010` | `workgroup-paused` | Paused; `post` rejected (`pull`/`join`/`leave` still work). |
+| `-32012` | `blob-not-found` | Requested content hash is absent or fails verification. |
 
 Client-side diagnostics (SDK Python exceptions, no JSON-RPC code, never on wire):
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import shutil
 import tempfile
 from pathlib import Path
@@ -86,6 +87,218 @@ async def test_tcp_ping_roundtrip_with_pinned_peer(short_tmp: Path) -> None:
 
     assert result["nonce"] == "hi-over-tcp"
     assert result["agent_name"] == "bob"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_tcp_reuses_noise_session_for_sequential_calls(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    from alpi.alp import transport_tcp
+
+    alice_home = short_tmp / "alice"
+    bob_home = short_tmp / "bob"
+    alice_home.mkdir()
+    bob_home.mkdir()
+    alice_kp = load_or_generate(alice_home)
+    bob_kp = load_or_generate(bob_home)
+    port = await _pick_free_port()
+    _pin(bob_home, "alice", alice_kp.pubkey_b64(), ["link.ping"])
+
+    handshakes = 0
+    original = transport_tcp.perform_handshake_initiator
+
+    async def counted(*args, **kwargs):
+        nonlocal handshakes
+        handshakes += 1
+        return await original(*args, **kwargs)
+
+    monkeypatch.setattr(transport_tcp, "perform_handshake_initiator", counted)
+    server = alp_server.Server(
+        home=bob_home, tcp_host="127.0.0.1", tcp_port=port,
+    )
+    await server.start()
+    try:
+        for nonce in ("one", "two"):
+            result = await alp_client.call_tcp(
+                host="127.0.0.1",
+                port=port,
+                sender=alice_kp,
+                recipient_pubkey_b64=bob_kp.pubkey_b64(),
+                method="link.ping",
+                params={"nonce": nonce},
+            )
+            assert result["nonce"] == nonce
+    finally:
+        await server.stop()
+
+    assert handshakes == 1
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_workgroup_pull_lanes_do_not_block_each_other(short_tmp: Path) -> None:
+    alice_home = short_tmp / "alice"
+    bob_home = short_tmp / "bob"
+    alice_home.mkdir()
+    bob_home.mkdir()
+    alice_kp = load_or_generate(alice_home)
+    bob_kp = load_or_generate(bob_home)
+    port = await _pick_free_port()
+    _pin(bob_home, "alice", alice_kp.pubkey_b64(), [])
+
+    entered: set[str] = set()
+    both_entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def held_pull(params, peer, server):
+        entered.add(str(params["workgroup_id"]))
+        if len(entered) == 2:
+            both_entered.set()
+        await release.wait()
+        return {"workgroup_id": params["workgroup_id"]}
+
+    server = alp_server.Server(
+        home=bob_home, tcp_host="127.0.0.1", tcp_port=port,
+    )
+    server.register("workgroup.pull", held_pull)
+    await server.start()
+    try:
+        calls = [
+            asyncio.create_task(alp_client.call_tcp(
+                host="127.0.0.1",
+                port=port,
+                sender=alice_kp,
+                recipient_pubkey_b64=bob_kp.pubkey_b64(),
+                method="workgroup.pull",
+                params={"workgroup_id": wg_id},
+                timeout=3,
+            ))
+            for wg_id in ("wg_a", "wg_b")
+        ]
+        await asyncio.wait_for(both_entered.wait(), timeout=2)
+        release.set()
+        results = await asyncio.gather(*calls)
+    finally:
+        release.set()
+        await server.stop()
+
+    assert entered == {"wg_a", "wg_b"}
+    assert {result["workgroup_id"] for result in results} == entered
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_link_cancel_is_not_blocked_by_active_ask(short_tmp: Path) -> None:
+    alice_home = short_tmp / "alice"
+    bob_home = short_tmp / "bob"
+    alice_home.mkdir()
+    bob_home.mkdir()
+    alice_kp = load_or_generate(alice_home)
+    bob_kp = load_or_generate(bob_home)
+    port = await _pick_free_port()
+    _pin(
+        bob_home,
+        "alice",
+        alice_kp.pubkey_b64(),
+        ["link.ask", "link.cancel"],
+    )
+
+    ask_entered = asyncio.Event()
+    cancelled = asyncio.Event()
+
+    async def held_ask(params, peer, server):
+        ask_entered.set()
+        await cancelled.wait()
+        return {"cancelled": True}
+
+    async def cancel(params, peer, server):
+        cancelled.set()
+        return {"cancelled": True}
+
+    server = alp_server.Server(
+        home=bob_home, tcp_host="127.0.0.1", tcp_port=port,
+    )
+    server.register("link.ask", held_ask)
+    server.register("link.cancel", cancel)
+    await server.start()
+    try:
+        ask = asyncio.create_task(alp_client.call_tcp(
+            host="127.0.0.1",
+            port=port,
+            sender=alice_kp,
+            recipient_pubkey_b64=bob_kp.pubkey_b64(),
+            method="link.ask",
+            params={"prompt": "wait"},
+            timeout=3,
+        ))
+        await asyncio.wait_for(ask_entered.wait(), timeout=2)
+        result = await asyncio.wait_for(alp_client.call_tcp(
+            host="127.0.0.1",
+            port=port,
+            sender=alice_kp,
+            recipient_pubkey_b64=bob_kp.pubkey_b64(),
+            method="link.cancel",
+            params={},
+            timeout=3,
+        ), timeout=2)
+        assert result["cancelled"] is True
+        assert (await ask)["cancelled"] is True
+    finally:
+        cancelled.set()
+        await server.stop()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_tcp_stream_session_is_reusable(short_tmp: Path, monkeypatch) -> None:
+    from alpi.alp import transport_tcp
+
+    alice_home = short_tmp / "alice"
+    bob_home = short_tmp / "bob"
+    alice_home.mkdir()
+    bob_home.mkdir()
+    alice_kp = load_or_generate(alice_home)
+    bob_kp = load_or_generate(bob_home)
+    port = await _pick_free_port()
+    _pin(bob_home, "alice", alice_kp.pubkey_b64(), ["test.stream"])
+
+    handshakes = 0
+    original = transport_tcp.perform_handshake_initiator
+
+    async def counted(*args, **kwargs):
+        nonlocal handshakes
+        handshakes += 1
+        return await original(*args, **kwargs)
+
+    async def stream(params, peer, server):
+        yield {"kind": "chunk", "text": "a"}
+        yield {"kind": "final", "text": str(params["value"])}
+
+    monkeypatch.setattr(transport_tcp, "perform_handshake_initiator", counted)
+    server = alp_server.Server(
+        home=bob_home, tcp_host="127.0.0.1", tcp_port=port,
+    )
+    server.register("test.stream", stream)
+    await server.start()
+    try:
+        for value in (1, 2):
+            frames = [
+                frame
+                async for frame in alp_client.call_tcp_stream(
+                    host="127.0.0.1",
+                    port=port,
+                    sender=alice_kp,
+                    recipient_pubkey_b64=bob_kp.pubkey_b64(),
+                    method="test.stream",
+                    params={"value": value},
+                )
+            ]
+            assert frames[-1] == ({"text": str(value)}, "final")
+    finally:
+        await server.stop()
+
+    assert handshakes == 1
 
 
 @pytest.mark.integration

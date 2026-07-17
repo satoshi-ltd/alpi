@@ -54,6 +54,39 @@ def test_targeted_task_does_not_wake_unmentioned_peer() -> None:
     assert reason is None
 
 
+def test_pipeline_sideways_mention_does_not_wake_peer() -> None:
+    posts = [
+        {"seq": 1, "from": "HUB", "text": "@pixel #task #build ship it"},
+        {"seq": 2, "from": "PIXEL", "text": "blocked — @quill and @lingua must fill legal/"},
+    ]
+    trigger, _ = service._should_dispatch(
+        "quill", "QUILL", posts, 0, hub_pubkey="HUB", pipeline=True,
+    )
+    assert trigger is None
+
+
+def test_pipeline_member_mention_of_hub_still_wakes_hub() -> None:
+    posts = [
+        {"seq": 1, "from": "HUB", "text": "@pixel #task #build ship it"},
+        {"seq": 2, "from": "PIXEL", "text": "@mira blocked on legal content"},
+    ]
+    trigger, _ = service._should_dispatch(
+        "mira", "HUB", posts, 0, hub_pubkey="HUB", pipeline=True,
+    )
+    assert trigger is not None
+
+
+def test_non_pipeline_sideways_mention_still_wakes() -> None:
+    posts = [
+        {"seq": 1, "from": "HUB", "text": "#task #debate go"},
+        {"seq": 2, "from": "BOB", "text": "@carol what do you think?"},
+    ]
+    trigger, _ = service._should_dispatch(
+        "carol", "CAROL", posts, 0, hub_pubkey="HUB", pipeline=False,
+    )
+    assert trigger is not None
+
+
 def test_uninteresting_traffic_silent() -> None:
     posts = [
         {"seq": 1, "text": "@bob nice work", "from": "carol_pk"},
@@ -1230,65 +1263,175 @@ def test_poller_start_offset_is_deterministic_and_staggered() -> None:
 
 
 @pytest.mark.asyncio
-async def test_poller_yields_between_subs(monkeypatch) -> None:
+async def test_poller_starts_subscription_pulls_concurrently(monkeypatch) -> None:
     import types
     from alpi.alp import subscription as sub_mod
     from alpi.alp import workgroup as wg_mod
     from alpi.alp import workgroup_client as wc
 
-    subs = [types.SimpleNamespace(wg_id=f"wg{i}") for i in range(10)]
-    beats = {"n": 0}
-    samples: list[int] = []
+    subs = [types.SimpleNamespace(wg_id=f"wg{i}") for i in range(3)]
+    entered: set[str] = set()
+    all_entered = asyncio.Event()
+    release = asyncio.Event()
 
-    async def fake_pull(home, wg_id):
-        samples.append(beats["n"])  # local hubs resolve with no real I/O yield
+    async def fake_pull(home, wg_id, wait_s=0.0):
+        entered.add(wg_id)
+        if len(entered) == len(subs):
+            all_entered.set()
+        await release.wait()
         return [], None
 
     monkeypatch.setattr(service, "_poller_start_offset", lambda _p: 0.0)
     monkeypatch.setattr(sub_mod, "load", lambda home: subs)
-    monkeypatch.setattr(sub_mod, "get", lambda home, wid: types.SimpleNamespace(wg_id=wid))
+    monkeypatch.setattr(
+        sub_mod, "get",
+        lambda home, wid: types.SimpleNamespace(
+            wg_id=wid, recent_posts=[], hub_pubkey="hub", last_responded_seq=0,
+            last_dispatch_at="", paused=False, pipeline=(),
+        ),
+    )
     monkeypatch.setattr(wc, "pull", fake_pull)
     monkeypatch.setattr(wg_mod, "list_workgroups", lambda home: [])
-
-    async def fake_dispatch(home, profile, sub):
-        return None
-
-    monkeypatch.setattr(service, "_maybe_dispatch_for_sub", fake_dispatch)
-
-    async def heartbeat() -> None:
-        while True:
-            beats["n"] += 1
-            await asyncio.sleep(0)
-
-    hb = asyncio.create_task(heartbeat())
     poller = asyncio.create_task(
         service._run_workgroup_poller(Path("/tmp/does-not-matter"), "alice")
     )
     try:
-        # Stop after one tick's sub loop, before the 30s sleep, so samples are in-tick only.
-        for _ in range(200):
-            await asyncio.sleep(0)
-            if len(samples) >= len(subs):
-                break
+        await asyncio.wait_for(all_entered.wait(), timeout=1)
+    finally:
+        release.set()
+        poller.cancel()
+        await asyncio.gather(poller, return_exceptions=True)
+
+    assert entered == {"wg0", "wg1", "wg2"}
+
+
+@pytest.mark.asyncio
+async def test_subscription_empty_pull_reopens_without_idle_backoff(monkeypatch) -> None:
+    import types
+    from alpi.alp import subscription as sub_mod
+    from alpi.alp import workgroup_client as wc
+
+    calls: list[float] = []
+    second_started = asyncio.Event()
+
+    async def fake_pull(home, wg_id, wait_s=0.0):
+        calls.append(wait_s)
+        if len(calls) == 1:
+            return [], 0
+        second_started.set()
+        await asyncio.Event().wait()
+
+    sub = types.SimpleNamespace(
+        wg_id="wg_cold", recent_posts=[], hub_pubkey="hub",
+        last_responded_seq=0, last_dispatch_at="", paused=False, pipeline=(),
+    )
+    monkeypatch.setattr(sub_mod, "get", lambda home, wid: sub)
+    monkeypatch.setattr(wc, "pull", fake_pull)
+    monkeypatch.setattr(service, "_WG_HOT_TICK_SECONDS", 0)
+    monkeypatch.setattr(service, "_maybe_dispatch_for_sub", lambda *a, **k: asyncio.sleep(0))
+
+    worker = asyncio.create_task(
+        service._run_subscription_poller(Path("/tmp/none"), "alice", "wg_cold")
+    )
+    try:
+        await asyncio.wait_for(second_started.wait(), timeout=1)
+    finally:
+        worker.cancel()
+        await asyncio.gather(worker, return_exceptions=True)
+
+    assert calls == [service._WG_LONG_POLL_SECONDS, service._WG_LONG_POLL_SECONDS]
+
+
+@pytest.mark.asyncio
+async def test_removed_subscription_cancels_held_pull(monkeypatch) -> None:
+    import types
+    from alpi.alp import subscription as sub_mod
+    from alpi.alp import workgroup as wg_mod
+    from alpi.alp import workgroup_client as wc
+
+    subs = [types.SimpleNamespace(wg_id="wg_gone")]
+    entered = asyncio.Event()
+    cancelled = asyncio.Event()
+
+    async def fake_pull(home, wg_id, wait_s=0.0):
+        entered.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.set()
+
+    monkeypatch.setattr(service, "_poller_start_offset", lambda _p: 0.0)
+    monkeypatch.setattr(service, "_WG_HOT_TICK_SECONDS", 0.01)
+    monkeypatch.setattr(sub_mod, "load", lambda home: list(subs))
+    monkeypatch.setattr(sub_mod, "get", lambda home, wid: subs[0] if subs else None)
+    monkeypatch.setattr(wc, "pull", fake_pull)
+    monkeypatch.setattr(wg_mod, "list_workgroups", lambda home: [])
+
+    poller = asyncio.create_task(
+        service._run_workgroup_poller(Path("/tmp/none"), "alice")
+    )
+    try:
+        await asyncio.wait_for(entered.wait(), timeout=1)
+        subs.clear()
+        await asyncio.wait_for(cancelled.wait(), timeout=1)
     finally:
         poller.cancel()
-        hb.cancel()
-
-    assert len(samples) == len(subs)
-    # Heartbeat advanced while the poller walked its subs → it yielded per sub.
-    assert samples[-1] - samples[0] >= 5
+        await asyncio.gather(poller, return_exceptions=True)
 
 
 def test_wg_backoff_schedule() -> None:
-    # Steady cadence for the first ticks, then exponential backoff capped.
     assert service._wg_backoff_mult(0) == 1
     assert service._wg_backoff_mult(2) == 1
     assert service._wg_backoff_mult(3) == 2
-    assert service._wg_backoff_mult(4) == service._WG_POLL_BACKOFF_MAX
-    assert service._wg_backoff_mult(5) == service._WG_POLL_BACKOFF_MAX  # capped
+    assert service._wg_backoff_mult(4) == 4
+    assert service._wg_backoff_mult(7) == service._WG_POLL_BACKOFF_MAX  # capped
     assert service._wg_backoff_mult(99) == service._WG_POLL_BACKOFF_MAX
     base = service.WORKGROUP_TICK_SECONDS
-    assert base * service._wg_backoff_mult(99) <= 120  # dormant wg still polled >= every 2 min
+    assert base * service._wg_backoff_mult(99) <= 15 * 60  # failed transport retries never wait past 15 min
+
+
+def test_wg_inflight_dispatch_keeps_workgroup_hot(monkeypatch) -> None:
+    now = 1000.0
+    monkeypatch.setitem(service._INFLIGHT, ("wg_b", "mira"), {"proc": None})
+    try:
+        assert service._wg_is_hot("wg_b", {}, now) is True
+    finally:
+        service._INFLIGHT.pop(("wg_b", "mira"), None)
+
+
+def test_hub_stays_hot_on_pipeline_continuation() -> None:
+    import types
+    wg = types.SimpleNamespace(meta=types.SimpleNamespace(hub_pubkey="HUB", pipeline=("intake", "build")))
+    recent = [
+        {"seq": 1, "from": "HUB", "text": "@bob #task #intake go"},
+        {"seq": 2, "from": "BOB", "text": "intake complete"},
+        {"seq": 3, "from": "HUB", "text": "#done intake verified"},
+    ]
+    assert service._hub_stays_hot(False, wg, recent) is True
+
+
+def test_hub_goes_idle_after_terminal_close() -> None:
+    import types
+    wg = types.SimpleNamespace(meta=types.SimpleNamespace(hub_pubkey="HUB", pipeline=()))
+    recent = [
+        {"seq": 1, "from": "HUB", "text": "#task #x go"},
+        {"seq": 2, "from": "BOB", "text": "answer"},
+        {"seq": 3, "from": "HUB", "text": "#done synthesized"},
+    ]
+    assert service._hub_stays_hot(False, wg, recent) is False
+
+
+def test_hub_goes_idle_after_terminal_pipeline_phase() -> None:
+    import types
+    wg = types.SimpleNamespace(meta=types.SimpleNamespace(
+        hub_pubkey="HUB", pipeline=("intake", "qa"),
+    ))
+    recent = [
+        {"seq": 1, "from": "HUB", "text": "@bob #task #qa verify"},
+        {"seq": 2, "from": "BOB", "text": "verified"},
+        {"seq": 3, "from": "HUB", "text": "#done PASS verified"},
+    ]
+    assert service._hub_stays_hot(False, wg, recent) is False
 
 
 def test_hub_transcript_decrypt_is_cached_by_mtime(short_tmp: Path, monkeypatch) -> None:

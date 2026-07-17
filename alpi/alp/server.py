@@ -67,12 +67,15 @@ class Server:
         self.home = home
         self.agent_name = agent_name
         self.kp: Keypair = load_or_generate(home)
-        self.replay = env.ReplayCache()
+        self.replay = env.ReplayCache(
+            path=home / "alp" / "secrets" / "replay.jsonl",
+        )
         self.rate_limiter = rl.RateLimiter()
         self.handlers: dict[str, Handler] = {}
         self._handshake_sem: asyncio.Semaphore | None = None
         self._server: asyncio.AbstractServer | None = None
         self._tcp_server: asyncio.AbstractServer | None = None
+        self._tcp_writers: set[asyncio.StreamWriter] = set()
         self._tcp_host = tcp_host or ("127.0.0.1" if tcp_port else None)
         self._tcp_port = tcp_port
         self._register_defaults()
@@ -112,6 +115,7 @@ class Server:
         self._server = await asyncio.start_unix_server(
             self._handle_unix_connection,
             path=str(sock),
+            limit=tcp.MAX_FRAME_BYTES + 1,
         )
         sock.chmod(0o600)
         log.info("alp server listening on %s", sock)
@@ -145,6 +149,16 @@ class Server:
             if s is not None:
                 s.close()
                 await s.wait_closed()
+        writers = list(self._tcp_writers)
+        for writer in writers:
+            writer.close()
+        if writers:
+            await asyncio.gather(
+                *(writer.wait_closed() for writer in writers),
+                return_exceptions=True,
+            )
+        self._tcp_writers.clear()
+        self.replay.close()
         self._server = None
         self._tcp_server = None
         sock = self.socket_path()
@@ -205,6 +219,7 @@ class Server:
         writer: asyncio.StreamWriter,
     ) -> None:
         peername = writer.get_extra_info("peername")
+        self._tcp_writers.add(writer)
         try:
             static_x = ed25519_to_x25519_private(self.kp.private)
             sem = self._handshake_sem
@@ -221,36 +236,52 @@ class Server:
                 log.info("alp tcp: handshake failed from %s: %s", peername, e)
                 return
 
-            # One request per connection, mirroring the Unix socket shape.
-            try:
-                plaintext = await tcp.recv_envelope(reader, cs_recv)
-            except tcp.TransportError as e:
-                log.debug("alp tcp: frame read failed: %s", e)
-                return
-            try:
-                body = json.loads(plaintext)
-            except json.JSONDecodeError:
-                log.debug("alp tcp: malformed JSON after decrypt; dropping")
-                return
-
-            # Look up by X25519 first; if not pinned, fall through to
-            # the dispatcher which extracts the Ed25519 from the envelope
-            # and records a pending invite before silent-dropping.
             expected_peer = tcp.find_peer_by_x25519(self.home, remote_x)
-            async for response in self._dispatch_envelopes(body, pinned_peer=expected_peer):
-                payload = json.dumps(
-                    response,
-                    separators=(",", ":"),
-                    ensure_ascii=False,
-                ).encode("utf-8")
+            while True:
                 try:
-                    await tcp.send_envelope(writer, cs_send, payload)
+                    idle_timeout = (
+                        tcp.SESSION_IDLE_TIMEOUT
+                        if expected_peer is not None
+                        else tcp.HANDSHAKE_TIMEOUT
+                    )
+                    plaintext = await asyncio.wait_for(
+                        tcp.recv_envelope(reader, cs_recv),
+                        timeout=idle_timeout,
+                    )
+                except asyncio.TimeoutError:
+                    log.debug("alp tcp: idle session closed from %s", peername)
+                    break
                 except tcp.TransportError as e:
-                    log.debug("alp tcp: send failed: %s", e)
+                    log.debug("alp tcp: session ended from %s: %s", peername, e)
+                    break
+                try:
+                    body = json.loads(plaintext)
+                except json.JSONDecodeError:
+                    log.debug("alp tcp: malformed JSON after decrypt; dropping")
+                    break
+
+                responses = 0
+                async for response in self._dispatch_envelopes(
+                    body,
+                    pinned_peer=expected_peer,
+                ):
+                    responses += 1
+                    payload = json.dumps(
+                        response,
+                        separators=(",", ":"),
+                        ensure_ascii=False,
+                    ).encode("utf-8")
+                    try:
+                        await tcp.send_envelope(writer, cs_send, payload)
+                    except tcp.TransportError as e:
+                        log.debug("alp tcp: send failed: %s", e)
+                        return
+                if responses == 0:
                     break
         except Exception:  # noqa: BLE001
             log.exception("alp tcp connection crashed")
         finally:
+            self._tcp_writers.discard(writer)
             try:
                 writer.close()
                 await writer.wait_closed()

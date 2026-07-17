@@ -9,8 +9,7 @@ only the union of profiles installed under `~/.alpi/profiles/`.
 
 | Org | Purpose | Machine |
 |---|---|---|
-| [`company/`](company/company.md) | Main team building the alpi product (17 profiles, 4 standing workgroups) | dev box + ops box |
-| [`web-factory/`](web-factory/web-factory.md) | Standalone factory producing hotel websites (10 profiles, 3 persistent workgroups + ephemeral per project) | dedicated factory machine |
+| [`web-factory/`](web-factory/web-factory.md) | Standalone factory producing hotel websites (11 profiles, 3 standing workgroups + one persistent `proj-<slug>` workgroup per hotel) | dedicated factory machine |
 | [`lab/`](lab/lab.md) | Minimal ALP protocol testbed — 4 profiles, 1 workgroup, a deterministic check of every workgroup invariant (`test-protocol.py`) | any dev box |
 
 Orgs talk to each other peer-to-peer via ALP. Cross-org workgroups are
@@ -27,14 +26,14 @@ Every org folder follows the same shape:
 ├── user-memory.md        ← USER.md template fed to every agent (placeholders: {name}, {wg_section}, {peers})
 ├── agents/
 │   └── <name>/
-│       ├── agent.md      ← frontmatter (bio, peers, tier, accent, tools_deny) + body
+│       ├── agent.md      ← frontmatter (bio, accent, tools_deny, model/tier overrides) + body
 │       ├── mcp.yaml      ← optional MCP server config
 │       └── skills/
 │           └── <cat>/<slug>/SKILL.md
 ├── workgroups/
 │   └── <name>/workgroup.md
 ├── common/skills/        ← optional shared skills installed across the roster
-└── (org-specific tools)  ← e.g. web-factory/new-project.py, company/test-workgroup-tasks.py
+└── (org-specific tools)  ← e.g. web-factory/new-project.py, lab/test-protocol.py
 ```
 
 A single `organizations/setup.py` reads `<org>/org.yaml` and does the
@@ -42,6 +41,20 @@ mechanical bootstrap work (nuke profiles, write configs, scaffold
 workspace, sync templates, create workgroups, install skills). Org
 shape lives in YAML; only genuinely org-specific tools (per-project
 bootstrap, post-bootstrap task seeding) live next to the org.
+
+Three kinds of file live in an org folder, and only the first is
+consumed by `setup.py`:
+
+1. **Definition** (fixed names, every org has them): `org.yaml`,
+   `<org>.md`, `user-memory.md`, `agents/`, `workgroups/`, `common/`.
+2. **Product content** (only when the org ships something from the
+   repo): web-factory's `templates/`, `factory/`, `library/`,
+   `briefings/` — synced into the workspace via `org.yaml sync:`.
+3. **Operating scripts** (`*.py` at the org root, run by the human, not
+   by bootstrap): lab's protocol/recall test harnesses, web-factory's
+   `new-project.py` / `acceptance.py` / `batch.py` / `sync-template.py`.
+   An org with no runtime rituals has none; an org that runs a
+   production pipeline accumulates them.
 
 ## The single entrypoint
 
@@ -72,10 +85,6 @@ decommissioning an org, or before moving to a different machine.
 ## Bootstrap commands
 
 ```bash
-# Company org (main machine):
-uv run python organizations/setup.py company
-uv run python organizations/company/test-workgroup-tasks.py
-
 # Web factory org (factory machine):
 uv run python organizations/setup.py web-factory
 uv run python organizations/web-factory/new-project.py <slug> --starter <boutique|budget|business|resort>
@@ -107,8 +116,7 @@ uv run python organizations/setup.py web-factory --nuke --workspace
 1. `mkdir organizations/<name>/`
 2. Write `<name>.md` (the design contract).
 3. Write `org.yaml` (workspace, scaffold, voices, common_skills — see
-   [`company/org.yaml`](company/org.yaml) or
-   [`web-factory/org.yaml`](web-factory/org.yaml) as references).
+   [`web-factory/org.yaml`](web-factory/org.yaml) as reference).
 4. Write `user-memory.md` (template with `{name}`, `{wg_section}`,
    `{peers}` placeholders).
 5. Populate `agents/` + `workgroups/`.

@@ -169,6 +169,42 @@ def test_replay_cache_evicts_old_entries() -> None:
     cache.check_and_record("pk", "nonce-1")
 
 
+def test_replay_cache_survives_restart(tmp_path: Path) -> None:
+    path = tmp_path / "alp" / "secrets" / "replay.jsonl"
+    first = env.ReplayCache(path=path)
+    first.check_and_record("pk", "nonce-1")
+    first.close()
+
+    restored = env.ReplayCache(path=path)
+    with pytest.raises(env.ReplayDetected):
+        restored.check_and_record("pk", "nonce-1")
+    restored.close()
+
+    assert path.stat().st_mode & 0o777 == 0o600
+
+
+def test_replay_cache_drops_expired_journal_entries(tmp_path: Path) -> None:
+    path = tmp_path / "replay.jsonl"
+    path.write_text(
+        '{"seen_at":1,"from":"pk","nonce":"nonce-1"}\n',
+        encoding="utf-8",
+    )
+
+    cache = env.ReplayCache(path=path)
+    cache.check_and_record("pk", "nonce-1")
+    cache.close()
+
+
+def test_replay_cache_rejects_symlink_journal(tmp_path: Path) -> None:
+    target = tmp_path / "target"
+    target.write_text("")
+    path = tmp_path / "replay.jsonl"
+    path.symlink_to(target)
+
+    with pytest.raises(env.ReplayStateError):
+        env.ReplayCache(path=path)
+
+
 # Shape failures
 
 

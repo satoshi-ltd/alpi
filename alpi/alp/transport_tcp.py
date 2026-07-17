@@ -12,7 +12,10 @@ import asyncio
 import logging
 import struct
 from pathlib import Path
-from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PublicKey
+from cryptography.hazmat.primitives.asymmetric.x25519 import (
+    X25519PrivateKey,
+    X25519PublicKey,
+)
 from alpi.alp import keys as keys_mod
 from alpi.alp import noise as noise_mod
 from alpi.alp import peers as peers_mod
@@ -22,6 +25,7 @@ DEFAULT_PORT = 7423
 MAX_FRAME_BYTES = 1 * 1024 * 1024  # 1 MiB — soft cap on a single envelope
 HANDSHAKE_TIMEOUT = 10.0  # seconds; handshake must complete within
 FRAME_TIMEOUT = 30.0  # seconds per bulk frame
+SESSION_IDLE_TIMEOUT = 90.0
 
 
 class TransportError(Exception):

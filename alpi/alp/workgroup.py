@@ -25,12 +25,14 @@ On-disk layout under ``~/.alpi/<profile>/alp/workgroups/<wg_id>/``:
 
 from __future__ import annotations
 
+import asyncio as _asyncio
 import base64
 import datetime as _dt
 import json
 import os
 import re as _re
 import secrets
+import time as _time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -68,6 +70,33 @@ _MAX_POST_CIPHERTEXT = 256 * 1024   # bytes of one post's ciphertext
 _MAX_TRANSCRIPT_POSTS = 10_000      # per-workgroup transcript cap
 _MAX_DECLARED_USD = 1000.0          # clamp self-declared cost
 _MAX_DECLARED_TOKENS = 100_000_000
+
+# Long-poll pull: wait_s clamp keeps a held request under the 30s client RPC timeout.
+_LONG_POLL_MAX_WAIT_S = 25.0
+_LONG_POLL_PROBE_SECONDS = 0.5
+_PRESENCE_WRITE_INTERVAL_S = 30.0
+
+
+def _coerce_wait_s(raw: Any) -> float:
+    try:
+        w = float(raw)
+    except (TypeError, ValueError):
+        return 0.0
+    if w <= 0:
+        return 0.0
+    return min(w, _LONG_POLL_MAX_WAIT_S)
+
+
+def _presence_write_due(last_seen_at: str, now: _dt.datetime) -> bool:
+    if not last_seen_at:
+        return True
+    try:
+        previous = _dt.datetime.strptime(
+            last_seen_at, "%Y-%m-%dT%H:%M:%SZ",
+        ).replace(tzinfo=_dt.timezone.utc)
+    except ValueError:
+        return True
+    return (now - previous).total_seconds() >= _PRESENCE_WRITE_INTERVAL_S
 
 
 def _as_float(v: Any) -> float:
@@ -191,8 +220,6 @@ class Meta:
     paused_by: str = ""
     # Hub-injected anchor in every member agent's system prompt — plaintext on the hub since it describes purpose, not transcript content.
     briefing: str = ""
-    # When True, member engines engage with the briefing on their next turn after create — no human prompt required.
-    auto_kickoff: bool = True
     # Push target on ``#done`` landing: ``"none"`` (silent) or ``"notify"`` (native push to the owner's apps).
     notify_on_close: str = "none"
     # Ordered phase slugs (empty = deliberation wg); lets continuation advance phases deterministically. Owners/deliverables live in the org, not here.
@@ -264,7 +291,6 @@ def _load_meta(d: Path) -> Meta | None:
             paused_at=str(raw.get("paused_at") or ""),
             paused_by=str(raw.get("paused_by") or ""),
             briefing=str(raw.get("briefing") or ""),
-            auto_kickoff=bool(raw.get("auto_kickoff", True)),
             notify_on_close=str(raw.get("notify_on_close") or "none"),
             pipeline=pipeline,
             auto_read=bool(raw.get("auto_read", False)),
@@ -293,8 +319,6 @@ def _save_meta(d: Path, meta: Meta) -> None:
             payload["paused_by"] = meta.paused_by
     if meta.briefing:
         payload["briefing"] = meta.briefing
-    if not meta.auto_kickoff:
-        payload["auto_kickoff"] = False
     if meta.notify_on_close and meta.notify_on_close != "none":
         payload["notify_on_close"] = meta.notify_on_close
     if meta.pipeline:
@@ -385,7 +409,6 @@ def create(
     member_pubkeys: list[str],
     budget: dict[str, Any] | None = None,
     briefing: str = "",
-    auto_kickoff: bool = True,
     notify_on_close: str = "none",
     pipeline: tuple[str, ...] | list[str] = (),
     hub_bio: str = "",
@@ -425,7 +448,6 @@ def create(
         current_key_version=1,
         budget=budget,
         briefing=(briefing or "").strip(),
-        auto_kickoff=bool(auto_kickoff),
         notify_on_close=str(notify_on_close or "none"),
         pipeline=_normalize_pipeline(pipeline),
     )
@@ -1031,10 +1053,33 @@ def register(server: alp_server.Server, home: Path) -> None:
         member = wg.member(peer.pubkey)
         if member is None:
             raise alp_server.HandlerError(-32008, "workgroup-not-member")
-        member.last_seen_at = _utcnow()
-        _save_members(_wg_dir(home, wg_id), wg.members)
+        now_dt = _dt.datetime.now(tz=_dt.timezone.utc)
+        persist_presence = _presence_write_due(member.last_seen_at, now_dt)
+        member.last_seen_at = now_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+        if persist_presence:
+            _save_members(_wg_dir(home, wg_id), wg.members)
         all_posts = _read_transcript(_wg_dir(home, wg_id))
         fresh = [p for p in all_posts if int(p.get("seq", 0)) > since]
+        wait_s = _coerce_wait_s((params or {}).get("wait_s"))
+        if not fresh and wait_s > 0:
+            # Stat-probe wait, not an in-process event: the hub's own posts land via direct file append from dispatch subprocesses, invisible to any signal registry in this process.
+            deadline = _time.monotonic() + wait_s
+            wg_dir = _wg_dir(home, wg_id)
+            tpath = wg_dir / _TRANSCRIPT
+            last_size = tpath.stat().st_size if tpath.exists() else 0
+            while _time.monotonic() < deadline:
+                await _asyncio.sleep(_LONG_POLL_PROBE_SECONDS)
+                try:
+                    size = tpath.stat().st_size
+                except OSError:
+                    continue
+                if size == last_size:
+                    continue
+                last_size = size
+                all_posts = _read_transcript(wg_dir)
+                fresh = [p for p in all_posts if int(p.get("seq", 0)) > since]
+                if fresh:
+                    break
         return {
             "posts": fresh,
             "head": all_posts[-1]["seq"] if all_posts else 0,

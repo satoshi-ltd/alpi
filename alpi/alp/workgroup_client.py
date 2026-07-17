@@ -123,6 +123,15 @@ def _check_hub_single_marker(plaintext: str) -> None:
         )
 
 
+def _check_closure_only(plaintext: str) -> None:
+    if os.environ.get("ALPI_WORKGROUP_CLOSURE_ONLY") == "1" and not tasks_mod.is_done(plaintext):
+        raise ValueError(
+            "closure-only: this watchdog wake may only close the task "
+            "(`#done …`) or stay silent — new content would reopen a "
+            "stalled round."
+        )
+
+
 _FULL_QUORUM_TIMEOUT_SECONDS = 10 * 60
 
 
@@ -236,6 +245,16 @@ def _check_hub_rotation(
     )
 
     if tasks_mod.is_task(plaintext):
+        active = tasks_mod.active_task(posts, hub_pubkey=own_pubkey)
+        if active is not None and active.slug:
+            evs = tasks_mod.parse_post(plaintext, 0, own_pubkey)
+            new_slug = next((e.slug for e in evs if e.kind == "task"), "")
+            if new_slug and new_slug == active.slug:
+                raise ValueError(
+                    f"task-already-active: #{new_slug} is already the open "
+                    "task — a duplicate #task only preempts itself. Wait for "
+                    "the owner's handoff or close with #done."
+                )
         return
 
     if tasks_mod.is_done(plaintext):
@@ -345,18 +364,18 @@ def _resolve_hub(home: Path, peer_id: str) -> _Resolved:
 
 
 async def _call(home: Path, kp: Keypair, peer_id: str, method: str,
-                params: dict[str, Any]) -> dict[str, Any]:
+                params: dict[str, Any], timeout: float = 30.0) -> dict[str, Any]:
     res = _resolve_hub(home, peer_id)
     if res.is_tcp():
         return await alp_client.call_tcp(
             host=res.host, port=res.port,
             sender=kp, recipient_pubkey_b64=res.hub_pubkey,
-            method=method, params=params,
+            method=method, params=params, timeout=timeout,
         )
     return await alp_client.call(
         socket_path=res.socket_path,
         sender=kp, recipient_pubkey_b64=res.hub_pubkey,
-        method=method, params=params,
+        method=method, params=params, timeout=timeout,
     )
 
 
@@ -599,6 +618,8 @@ def _post_as_hub(
 
     _validate_task_participants(home, wg, plaintext)
 
+    _check_closure_only(plaintext)
+
     member_pubkeys = [m.pubkey for m in wg.members]
     quorum_roster = _quorum_roster(home, wg, existing, member_pubkeys)
     _check_hub_rotation(
@@ -634,9 +655,9 @@ def _post_as_hub(
 
 
 async def pull(
-    home: Path, wg_id: str, *, since: int | None = None,
+    home: Path, wg_id: str, *, since: int | None = None, wait_s: float = 0.0,
 ) -> tuple[list[dict[str, Any]], int]:
-    """Fetch, decrypt, and cache new posts."""
+    """Fetch/decrypt/cache new posts; ``wait_s`` > 0 long-polls (hub holds ≤25s, answers early on fresh posts)."""
     kp = load_or_generate(home)
     sub = sub_mod.get(home, wg_id)
     if sub is None:
@@ -644,8 +665,11 @@ async def pull(
             f"not subscribed to {wg_id!r} — run `alpi workgroup join` first",
         )
     cursor = sub.last_seq if since is None else int(since)
-    raw = await _call(home, kp, sub.hub_id, "workgroup.pull",
-                      {"workgroup_id": wg_id, "since": cursor})
+    params: dict[str, Any] = {"workgroup_id": wg_id, "since": cursor}
+    if wait_s > 0:
+        params["wait_s"] = float(wait_s)
+    raw = await _call(home, kp, sub.hub_id, "workgroup.pull", params,
+                      timeout=30.0 + max(0.0, float(wait_s)))
 
     server_version = int(raw.get("current_key_version", 1))
     new_sealed = str(raw.get("sealed_key") or "")

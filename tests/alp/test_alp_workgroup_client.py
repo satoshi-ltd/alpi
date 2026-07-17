@@ -726,6 +726,33 @@ def test_member_round_fresh_aborts_when_hub_advanced(monkeypatch) -> None:
         wc._check_member_round_fresh(posts, "HUB")
 
 
+def test_hub_reposting_active_slug_is_rejected() -> None:
+    posts = [_post(1, "HUB", "@bob #task #translation translate everything")]
+    with pytest.raises(ValueError, match="task-already-active"):
+        wc._check_hub_rotation(posts, "HUB", "@bob #task #translation translate everything again", ["BOB"])
+
+
+def test_hub_may_preempt_with_a_different_slug() -> None:
+    posts = [_post(1, "HUB", "@bob #task #translation translate everything")]
+    wc._check_hub_rotation(posts, "HUB", "@bob #task #translation-fix redo the German entries", ["BOB"])
+
+
+def test_closure_only_rejects_content_when_env_set(monkeypatch) -> None:
+    monkeypatch.setenv("ALPI_WORKGROUP_CLOSURE_ONLY", "1")
+    with pytest.raises(ValueError, match="closure-only"):
+        wc._check_closure_only("fresh content that would reopen the round")
+
+
+def test_closure_only_allows_done_when_env_set(monkeypatch) -> None:
+    monkeypatch.setenv("ALPI_WORKGROUP_CLOSURE_ONLY", "1")
+    wc._check_closure_only("#done wrapped up · artifact verified")
+
+
+def test_closure_only_no_op_without_env(monkeypatch) -> None:
+    monkeypatch.delenv("ALPI_WORKGROUP_CLOSURE_ONLY", raising=False)
+    wc._check_closure_only("plain content posts fine")
+
+
 def test_hub_rotation_allows_speaking_after_member() -> None:
     posts = [_post(1, "HUB", "#task"), _post(2, "BOB", "answer")]
     wc._check_hub_rotation(posts, "HUB", "follow-up content", ["BOB", "CAROL"])

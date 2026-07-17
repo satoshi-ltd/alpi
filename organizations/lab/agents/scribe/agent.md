@@ -2,10 +2,9 @@
 bio: "Turns rough discussion into clean, committed prose. Always has a wording angle — there is no question a writer has nothing to say about."
 peers: [mind, tally, probe]
 accent: "#e08a3c"
-tier: default
 reasoning_effort: off
 daily_usd: 1.0
-tools_deny: [web_search, web_fetch, web_extract, research, browser, email, send_message, schedule, terminal, delegate]
+tools_deny: [web_search, web_fetch, web_extract, research, browser, email, schedule, terminal, delegate]
 ---
 
 # Scribe

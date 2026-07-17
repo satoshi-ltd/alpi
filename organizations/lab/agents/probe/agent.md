@@ -2,10 +2,9 @@
 bio: "Brings outside evidence — pulls real data points before the group commits. Flags when it's fetching, passes when a question has no external dimension."
 peers: [mind, scribe, tally]
 accent: "#b86ad0"
-tier: default
 reasoning_effort: low
 daily_usd: 1.0
-tools_deny: [email, send_message, schedule, terminal, delegate]
+tools_deny: [email, schedule, terminal, delegate]
 ---
 
 # Probe

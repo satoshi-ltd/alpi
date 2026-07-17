@@ -29,15 +29,15 @@ deal flow. The bootstrap pattern is the same.
 
 ## Reference orgs that ship today
 
-- [`company/`](../organizations/company/company.md) — the main team
-  building the alpi product. 17 profiles across council / execution /
-  on-demand layers, 4 standing workgroups. **This document focuses on
-  it as the primary worked example.**
 - [`web-factory/`](../organizations/web-factory/web-factory.md) — a
   standalone factory producing ~120 hotel websites a year. 11 profiles,
-  3 persistent workgroups, plus a persistent `proj-<slug>` workgroup
-  per hotel. Shows how an org can carry its own templates, brand starters,
-  and per-project bootstrap script alongside the standard pieces.
+  3 standing workgroups, plus a persistent `proj-<slug>` workgroup per
+  hotel. Carries its own templates, brand starters, and per-project
+  bootstrap script alongside the standard pieces. **This document
+  focuses on it as the primary worked example.**
+- [`lab/`](../organizations/lab/lab.md) — the minimal ALP protocol
+  testbed: 4 profiles, 1 workgroup, deterministic harnesses that verify
+  every workgroup invariant.
 
 See [`organizations/README.md`](../organizations/README.md) for the
 multi-org pattern, the YAML schema, and how to add a third org.
@@ -46,10 +46,10 @@ multi-org pattern, the YAML schema, and how to add a third org.
 
 ## Canonical reference
 
-`organizations/company/company.md` — full spec for the company org:
-agent roster, skills table, workgroup definitions, operating
-principles, and the peer graph. The rest of this document drills into
-that scaffold.
+`organizations/web-factory/web-factory.md` — full spec for the
+web-factory org: agent roster, workgroups, producer contract, and the
+per-project pipeline. The rest of this document drills into that
+scaffold.
 
 ---
 
@@ -67,8 +67,9 @@ organizations/
     user-memory.md                # USER.md template (placeholders: name, wg_section, peers)
     agents/
       <name>/
-        agent.md                  # frontmatter (bio, accent, tier, daily_usd,
+        agent.md                  # frontmatter (bio, accent, daily_usd,
                                   #              reasoning_effort, model?,
+                                  #              model_fast?, model_deep?,
                                   #              tools_deny?, peers? — legacy)
                                   # body:        soul written to memories/AGENT.md
         skills/<category>/<skill>/SKILL.md
@@ -76,7 +77,7 @@ organizations/
       skills/<category>/<skill>/SKILL.md   # shared across multiple agents in this org
     workgroups/
       <name>/workgroup.md         # hub, members, budget_usd?, briefing
-    (org-specific tools)          # e.g. company/test-workgroup-tasks.py, web-factory/new-project.py
+    (org-specific tools)          # e.g. web-factory/new-project.py, lab/test-protocol.py
 ```
 
 ### `org.yaml` — full schema
@@ -86,14 +87,14 @@ Every key `setup.py` reads, with the default it falls back to:
 | Key | Default | Effect |
 |---|---|---|
 | `display_name` | `<name>` (the folder name) | Human label used in console output during bootstrap. |
-| `workspace` | `~/alpi/organizations/<name>/` | Default project root for file/terminal tools across the org's profiles. `~` is honoured verbatim (e.g. the company org sets workspace to `~` so the agents share the user's home as their workspace). Bare YAML `~` parses to `None` and falls back to the default; a literal home string is `"~"`. |
+| `workspace` | `~/alpi/organizations/<name>/` | Default project root for file/terminal tools across the org's profiles. `~` is honoured verbatim (an org may set workspace to `~` so agents share the user's home). Bare YAML `~` parses to `None` and falls back to the default; a literal home string is `"~"`. |
 | `workspace_scaffold` | `[]` | List of relative subdir names created inside `workspace` at bootstrap (`projects`, `templates/hotel-web`, etc.). |
 | `sync` | `[]` | List of `{src, dst}` entries copied from `organizations/<name>/` into `workspace` every bootstrap (replace mode). Used for shipping templates / libraries with the org. |
 | `peer_edges` | `[]` | Permanent peer graph. **Preferred source** — see _Peer graph_ below. Accepts `"all"` (every agent a mutual peer), a list of `[a, b]` pairs, or empty (workgroup membership alone wires the graph). |
-| `models.default` | `openai/gpt-5.4-mini` | Model assigned to agents with `tier: default`. |
-| `models.strong` | `anthropic/claude-sonnet-4-6` | Model assigned to agents with `tier: strong`. An agent's `agent.md` can override either with an explicit `model:` field. |
-| `budgets.daily_default` | `2.0` | USD daily cap for tier-default agents (used when `agent.md` omits `daily_usd`). |
-| `budgets.daily_strong` | `5.0` | USD daily cap for tier-strong agents (same fallback rule). |
+| `models.main` | `{model: openai/gpt-5.6-terra, effort: medium}` | Turn model written to every profile's `config.yaml model`. `effort` is **required** (`low \| medium \| high`) — the org-wide reasoning default every agent inherits unless its `agent.md` declares `reasoning_effort`. |
+| `models.fast` | `{model: openai/gpt-5.6-terra, effort: low}` | Written to every profile's `tiers.fast` — serves `delegate`/`research` fast paths and engine plumbing (compaction, memory review). String or `{model, effort}` map; effort must be `low \| medium \| high` or omitted. |
+| `models.deep` | `{model: anthropic/claude-sonnet-5, effort: high}` | Written to every profile's `tiers.deep` — the engine's automatic escalation target (after repeated tool failures / empty replies) and the `delegate`/`research` deep option. Same shape as `fast`. The old `models.default` / `models.strong` keys are a hard bootstrap error. |
+| `budgets.daily_default` | `2.0` | USD daily cap used when `agent.md` omits `daily_usd`. |
 | `budgets.workgroup` | `50.0` | Default lifetime USD cap for standing workgroups (each `workgroup.md` can override via `budget_usd`). |
 | `agent_voices` | `{}` | Map `<agent-name> → Edge TTS voice id` (e.g. `vera: en-US-AriaNeural`). Written into the profile's `tools.tts.voice`. |
 | `common_skills` | `{}` | Map `<category>/<skill> → [agent names]` — shared skills under `common/skills/` that bootstrap copies into each named profile's `skills/`. |
@@ -125,12 +126,14 @@ body is the agent's soul (copied verbatim into the profile's
 
 | Field | Required | Notes |
 |---|---|---|
-| `reasoning_effort` | **yes** (validation) | `off \| low \| medium \| high`. Validation hard-fails if the field is missing or holds anything else. `False` / `no` / `none` / `disabled` normalise to `off`. The only field required to be present — validation also rejects invalid `tier` values and unknown names in `tools_deny`, but those checks fire only when the field is set. |
+| `reasoning_effort` | no (default: org `models.main.effort`) | `off \| low \| medium \| high`. Declare it only where the agent's identity deviates from the org default (a low-effort mechanical role, a high-effort hub, a deliberate `off`). `False` / `no` / `none` / `disabled` normalise to `off`; any other value hard-fails validation, as do unknown names in `tools_deny` and any leftover `tier:` field. |
 | `bio` | no (default `""`) | One-line public tag-line; broadcast to every workgroup the agent joins (truncated to fit ALP's bio limit). Empty = no broadcast. |
 | `accent` | no (default `"#888888"`) | CSS color (hex / named / rgb). Drives the TUI accent for the profile. |
-| `tier` | no (default `"default"`) | `default` or `strong`. Picks the org's `models.default` / `models.strong` unless overridden by `model:`. Validation rejects any other value. |
-| `model` | no | Explicit LiteLLM string that overrides the tier-derived model. |
-| `daily_usd` | no | USD daily cap; defaults to `budgets.daily_strong` for tier-strong, `budgets.daily_default` otherwise. |
+| `model` | no | Explicit LiteLLM string that overrides the org's `models.main` for this profile only. |
+| `model_fast` | no | Per-profile model override for the `fast` routing tier (the org tier's `effort` is kept). |
+| `model_deep` | no | Per-profile model override for the `deep` routing tier (same rule). |
+| `tier` | removed | Legacy `default`/`strong` selector — now a hard validation error; use `model` / `model_fast` / `model_deep`. |
+| `daily_usd` | no | USD daily cap; defaults to `budgets.daily_default`. |
 | `tools_deny` | no (default `[]`) | List of tool names hidden from this profile's LLM schema. Validation rejects unknown names (a typo here is a security gap — the deny silently misses). |
 | `peers` | no (default `[]`) | **Legacy.** Per-agent peer list; honoured for back-compat. Prefer `org.yaml peer_edges` for new orgs. |
 
@@ -144,91 +147,62 @@ mechanical pipeline for every org.
 
 ---
 
-## Worked example: the company org
+## Worked example: the web-factory org
 
-The rest of this document walks through the `company/` org concretely.
+The rest of this document walks through the `web-factory/` org concretely.
 The same structure applies to any organization you write — only the
 roster, workgroups, and `org.yaml` settings change.
 
-### The 17 agents
+### The 11 agents
 
-Agents are grouped into three layers:
-
-**Council (5)** — strategic; each owns a domain and has standing access
-to any workgroup.
-
-| Agent | Role |
-|---|---|
-| Vera | Chief Strategist |
-| Zeta | Chief Architect |
-| Prism | Product Manager |
-| Echo | Growth Strategist |
-| Ledger | Finance |
-
-**Execution (9)** — operational; report to a Council member and do the
-work inside their domain.
-
-| Agent | Role | Reports to |
-|---|---|---|
-| Forge | Senior Engineer | Zeta |
-| Sentinel | Quality Engineer | Zeta |
-| Canvas | Product Designer | Prism |
-| Quill | Content & Copy | Echo |
-| Rex | Sales | Echo |
-| Fern | Customer Success | Echo |
-| Hub | Customer Service | Echo |
-| Lumen | Data Analyst | Ledger |
-| Flux | Operations | Ledger |
-
-**On-demand (3)** — specialist; no fixed reporting line, invoked when
-their domain is in play.
-
-| Agent | Role |
-|---|---|
-| Lex | Legal Counsel |
-| Atlas | Market Intelligence |
-| Archive | Knowledge Management |
+One strategic lead (vera), one project-manager hub (mira), one tech
+lead (forge), one brand steward (canvas), and seven producers (scout,
+quill, lingua, muse, pixel, atlas, lens) — one owner per pipeline
+phase. The full roster with reasoning tiers and souls lives in the
+[canonical reference](../organizations/web-factory/web-factory.md).
 
 ---
 
-### The 4 workgroups
+### The workgroups
 
 | Workgroup | Hub | Fixed peers |
 |---|---|---|
-| Roadmap | Prism | Vera, Zeta, Echo |
-| Architecture | Zeta | Forge, Sentinel |
-| Growth | Echo | Quill, Rex |
-| Customers | Fern | Hub |
+| brand-library | canvas | scout, quill, lingua |
+| quality | vera | mira, lens, atlas |
+| template | forge | canvas, atlas, lingua, lens |
+| `proj-<slug>` (one per hotel) | mira | scout, quill, lingua, muse, pixel, lens |
 
-Each workgroup has a `briefing` (loaded into every invited peer's
-context) and explicit `rules` defining what tasks belong and what
-`#done` requires.
+The three standing workgroups carry meta-work (brand starters, the
+launch checklist, the master template). Each hotel gets a persistent
+`proj-<slug>` pipeline workgroup created by `new-project.py`, with a
+briefing carrying project facts + the phase map only.
 
 ---
 
 ### Skills
 
-51 skills across all 17 agents. Every skill is self-sufficient: its
-state (SQLite or JSONL) lives inside the skill directory, scripts are
-co-located, and there are no external service dependencies. The full
-table is in the [canonical reference](../organizations/company/company.md#skills).
+Each agent ships its own skills under `agents/<name>/skills/`
+(intake rubric, voice/tone, image analysis/generation, build gates,
+lifecycle/maintenance procedures…). Every skill is self-sufficient:
+state lives inside the skill directory, scripts are co-located, no
+external service dependencies.
 
 ---
 
 ### Bootstrapping
 
 The bootstrap pipeline below applies to **every** org — only the
-roster, workgroups, and workspace differ. For the company org:
+roster, workgroups, and workspace differ. For the web-factory org:
 
 ```bash
-uv run python organizations/setup.py company
+uv run python organizations/setup.py web-factory
 ```
 
 What it does in order:
 
-1. Removes the 17 org profiles from `~/.alpi/profiles/`.
+1. Removes the 11 org profiles from `~/.alpi/profiles/`.
 2. Creates each profile fresh (`alpi profile create`).
-3. Copies API keys from `organizations/company/.env` (falls back to `~/.alpi/.env`).
+3. Copies API keys from `organizations/web-factory/.env` (falls back to `~/.alpi/.env`).
 4. Writes `memories/AGENT.md` (soul) and `memories/USER.md` (org context from `user-memory.md`).
 5. Patches `config.yaml` — model, bio, accent, daily budget, voice, tool denylist, MCP servers, reasoning effort.
 6. Installs the daemon (idempotent).
@@ -264,31 +238,32 @@ for different intents:
 
 ---
 
-### Adapting the company scaffold
+### Adapting the scaffold
 
 **Removing an agent.** Delete its folder under
-`organizations/company/agents/`. The bootstrap silently drops all edges
+`organizations/web-factory/agents/`. The bootstrap silently drops all edges
 to/from that agent. No other file needs editing.
 
-**Adding an agent.** Create `organizations/company/agents/<name>/agent.md`
-with the required frontmatter (`reasoning_effort`; the recommended
-identity fields are `bio`, `accent`, `tier`; `model` / `daily_usd` /
-`tools_deny` are optional) and a soul in the body. Add it to any
-workgroup's `members` list if needed. Network edges are picked up
+**Adding an agent.** Create `organizations/web-factory/agents/<name>/agent.md`
+with the identity frontmatter (`bio`, `accent`; `model` / `model_fast` /
+`model_deep` / `reasoning_effort` / `daily_usd` / `tools_deny` are
+optional overrides of org policy) and a soul in the body. Add it to
+any workgroup's `members` list if needed. Network edges are picked up
 automatically — declare them via `org.yaml peer_edges` (legacy `peers:`
 in `agent.md` still honoured).
 
-**Changing a model.** Edit `tier: strong | default` in the agent's
-frontmatter, or override `daily_usd` directly. Per-org model defaults
-live in `organizations/company/org.yaml` under `models:`. Vision is **not
-a tier** — every agent reasons on a text model; an agent that needs to SEE
-calls a per-call vision SKILL (e.g. web-factory's muse → `analyze-image`,
-which sends the image to a vision model via OpenRouter), never a vision
-base model.
+**Changing a model.** The org's `models:` palette (`main` / `fast` /
+`deep`) in `org.yaml` is what every profile gets; override a single
+profile with `model:` (main) or `model_fast:` / `model_deep:` (routing
+tiers) in its frontmatter. Escalate one profile at a time, on evidence —
+never the whole org. Vision is **not a tier** — every agent reasons on a
+text model; an agent that needs to SEE calls a per-call vision SKILL
+(e.g. web-factory's muse → `analyze-image`, which sends the image to a
+vision model via OpenRouter), never a vision base model.
 
 **Adding a common skill.** Drop the skill under
-`organizations/company/common/skills/` and add an entry to the
-`common_skills:` mapping in `organizations/company/org.yaml` (skill path
+`organizations/<org>/common/skills/` and add an entry to the
+`common_skills:` mapping in `organizations/<org>/org.yaml` (skill path
 → list of agents that should receive it).
 
 ### Adding a new organization
@@ -300,7 +275,7 @@ The same scaffold-and-bootstrap pattern grows the system:
    and contain a YAML mapping; `{}` is valid — every key falls back to
    the default in the schema above), and `user-memory.md` (USER.md
    template).
-3. Populate `agents/` and `workgroups/` following the company layout.
+3. Populate `agents/` and `workgroups/` following the web-factory layout.
 4. `uv run python organizations/setup.py <name>` — `setup.py`
    auto-discovers any subdir of `organizations/` that contains an
    `org.yaml`.

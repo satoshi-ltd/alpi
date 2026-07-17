@@ -1,4 +1,3 @@
-"""Org bootstrap — wipes and rebuilds every profile + persistent workgroup for a single org, then scaffolds its workspace. Org-specific data lives in `organizations/<org>/org.yaml`; everything else is mechanical."""
 from __future__ import annotations
 
 import argparse
@@ -17,12 +16,14 @@ import yaml
 from alpi.providers.reasoning import supports_reasoning
 from alpi.tools.skill import CATEGORIES as ALPI_SKILL_CATEGORIES
 
+# Hard ceiling for any workgroup lifetime budget (org.yaml AND workgroup.md); real project runs land ~$1-2.
+MAX_WORKGROUP_BUDGET_USD = 50.0
+
 ROOT = Path.home() / ".alpi"
 PROFILES_DIR = ROOT / "profiles"
 ORGANIZATION_DIR = Path(__file__).resolve().parent
 REPO_ROOT = ORGANIZATION_DIR.parent
 
-# Populated by init_org() from <org>/org.yaml before any other function runs.
 ORG_NAME: str = ""
 ORG_DIR: Path = Path()
 AGENTS_DIR: Path = Path()
@@ -34,14 +35,34 @@ WORKSPACE_PATH: Path = Path()
 WORKSPACE_SCAFFOLD: list[str] = []
 SYNC_ITEMS: list[dict] = []
 PEER_EDGES: object = []
-MODEL_DEFAULT: str = ""
-MODEL_STRONG: str = ""
+TIER_MAIN: dict[str, str] = {}
+TIER_FAST: dict[str, str] = {}
+TIER_DEEP: dict[str, str] = {}
 BUDGET_DAILY_DEFAULT: float = 0.0
-BUDGET_DAILY_STRONG: float = 0.0
 BUDGET_WG: float = 0.0
 AGENT_VOICES: dict[str, str] = {}
 COMMON_SKILLS: dict[str, list[str]] = {}
 ORG_DISPLAY_NAME: str = ""
+
+
+def _org_tier(org: str, tier: str, raw, require_effort: bool = False) -> dict[str, str]:
+    if isinstance(raw, str):
+        raw = {"model": raw.strip()}
+    if not isinstance(raw, dict):
+        print(f"error: org '{org}' models.{tier} must be a model string or a {{model, effort}} map", file=sys.stderr)
+        sys.exit(2)
+    model = str(raw.get("model", "") or "").strip()
+    effort = str(raw.get("effort", "") or "").strip().lower()
+    if not model:
+        print(f"error: org '{org}' models.{tier} is missing 'model'", file=sys.stderr)
+        sys.exit(2)
+    if require_effort and not effort:
+        print(f"error: org '{org}' models.{tier} must set 'effort' (low | medium | high) — it is the org-wide reasoning default; omitting it would silently run agents with reasoning off", file=sys.stderr)
+        sys.exit(2)
+    if effort and effort not in {"low", "medium", "high"}:
+        print(f"error: org '{org}' models.{tier}.effort '{effort}' invalid — must be low | medium | high{'' if require_effort else ' (or omitted)'}", file=sys.stderr)
+        sys.exit(2)
+    return {"model": model, "effort": effort}
 
 
 def discover_orgs() -> list[str]:
@@ -55,8 +76,8 @@ def init_org(name: str) -> None:
     global ORG_NAME, ORG_DIR, AGENTS_DIR, WORKGROUPS_DIR, COMMON_SKILLS_DIR
     global USER_MEMORY_TEMPLATE, WORKSPACE, WORKSPACE_PATH
     global WORKSPACE_SCAFFOLD, SYNC_ITEMS, PEER_EDGES
-    global MODEL_DEFAULT, MODEL_STRONG
-    global BUDGET_DAILY_DEFAULT, BUDGET_DAILY_STRONG, BUDGET_WG
+    global TIER_MAIN, TIER_FAST, TIER_DEEP
+    global BUDGET_DAILY_DEFAULT, BUDGET_WG
     global AGENT_VOICES, COMMON_SKILLS, ORG_DISPLAY_NAME
 
     org_dir = ORGANIZATION_DIR / name
@@ -82,7 +103,6 @@ def init_org(name: str) -> None:
     COMMON_SKILLS_DIR = org_dir / "common" / "skills"
     USER_MEMORY_TEMPLATE = org_dir / "user-memory.md"
 
-    # Default workspace if the org's YAML doesn't set one: ~/alpi/organizations/<org>/. An explicit "~" keeps the user's home as workspace (current company case). Any other expanduser-compatible string is honoured verbatim. YAML's bare ~ parses to None and triggers the default.
     explicit_ws = cfg.get("workspace")
     workspace_raw = explicit_ws if explicit_ws is not None else f"~/alpi/organizations/{name}"
     try:
@@ -100,13 +120,20 @@ def init_org(name: str) -> None:
     PEER_EDGES = cfg.get("peer_edges", [])
 
     models = cfg.get("models", {}) or {}
-    MODEL_DEFAULT = str(models.get("default", "openai/gpt-5.4-mini"))
-    MODEL_STRONG = str(models.get("strong", "anthropic/claude-sonnet-4-6"))
+    if "default" in models or "strong" in models:
+        print(f"error: org '{name}' models: uses removed keys default/strong — declare main/fast/deep (routing tiers)", file=sys.stderr)
+        sys.exit(2)
+    TIER_MAIN = _org_tier(name, "main", models.get("main", {"model": "openai/gpt-5.6-terra", "effort": "medium"}), require_effort=True)
+    TIER_FAST = _org_tier(name, "fast", models.get("fast", {"model": "openai/gpt-5.6-terra", "effort": "low"}))
+    TIER_DEEP = _org_tier(name, "deep", models.get("deep", {"model": "anthropic/claude-sonnet-5", "effort": "high"}))
 
     budgets = cfg.get("budgets", {}) or {}
     BUDGET_DAILY_DEFAULT = float(budgets.get("daily_default", 2.0))
-    BUDGET_DAILY_STRONG = float(budgets.get("daily_strong", 5.0))
     BUDGET_WG = float(budgets.get("workgroup", 50.0))
+    for key in ("workgroup", "project_workgroup"):
+        if float(budgets.get(key, 0.0)) > MAX_WORKGROUP_BUDGET_USD:
+            print(f"error: org '{name}' budgets.{key} exceeds the ${MAX_WORKGROUP_BUDGET_USD:.0f} workgroup ceiling", file=sys.stderr)
+            sys.exit(2)
 
     AGENT_VOICES = dict(cfg.get("agent_voices") or {})
     COMMON_SKILLS = dict(cfg.get("common_skills") or {})
@@ -144,7 +171,6 @@ ALPI_TOOLS_DIR = REPO_ROOT / "alpi" / "tools"
 
 
 def canonical_tools() -> set[str]:
-    """Read alpi/tools/*.py and return the set of declared tool names (the `name = "…"` class attr on each Tool subclass)."""
     names: set[str] = set()
     if not ALPI_TOOLS_DIR.exists():
         warn(f"alpi/tools/ not found at {ALPI_TOOLS_DIR} — skipping tool registry checks")
@@ -168,14 +194,12 @@ def _parse_frontmatter(path: Path) -> tuple[dict, str]:
 
 
 def validate_org(agents: list[dict], strict: bool = True) -> tuple[list[str], list[str]]:
-    """Validate SKILL.md and agent.md across the org. Returns (hard_errors, warnings). Hard errors block the bootstrap; warnings are advisory."""
     errors: list[str] = []
     warnings: list[str] = []
 
     tools = canonical_tools()
     have_registry = bool(tools)
 
-    # 1. Per-agent: tools_deny in agent.md must reference real tools — typo here is a SECURITY gap (deny silently misses, tool stays enabled).
     if have_registry:
         for agent in agents:
             unknown = [t for t in agent["tools_deny"] if t not in tools]
@@ -183,25 +207,22 @@ def validate_org(agents: list[dict], strict: bool = True) -> tuple[list[str], li
                 rel = (AGENTS_DIR / agent["name"] / "agent.md").relative_to(REPO_ROOT)
                 errors.append(f"{rel}: tools_deny references unknown tool(s) {unknown} — security risk, deny silently misses")
 
-    # 2. Per-agent: a mistyped tier silently resolves to the default model — same silent-miss class as a tools_deny typo.
-    valid_tiers = {"default", "strong"}
     for agent in agents:
-        if agent["tier"] not in valid_tiers:
+        if agent.get("legacy_tier") is not None:
             rel = (AGENTS_DIR / agent["name"] / "agent.md").relative_to(REPO_ROOT)
-            errors.append(f"{rel}: unknown tier '{agent['tier']}' — must be one of: default, strong")
+            errors.append(f"{rel}: 'tier:' was removed — org models declare main/fast/deep; override per-agent with model:/model_fast:/model_deep:")
 
-    # 3. Per-agent: reasoning_effort is REQUIRED in every agent.md. No invisible defaults — reasoning is a property of the agent's identity, not the org's tier policy.
     for agent in agents:
         rel = (AGENTS_DIR / agent["name"] / "agent.md").relative_to(REPO_ROOT)
         eff = agent["reasoning_effort"]
-        if eff == "__missing__":
-            errors.append(f"{rel}: missing required frontmatter field 'reasoning_effort' (off | low | medium | high)")
-            continue
         if eff == "__invalid__":
             errors.append(f"{rel}: reasoning_effort has invalid value — must be one of: off, low, medium, high")
             continue
         if eff in {"low", "medium", "high"} and not supports_reasoning(agent["model"]):
             warnings.append(f"{rel}: reasoning_effort='{eff}' declared but model '{agent['model']}' doesn't support reasoning — value will be ignored")
+        for tier_name, tier in agent["tiers"].items():
+            if tier["effort"] and not supports_reasoning(tier["model"]):
+                warnings.append(f"{rel}: {tier_name} tier effort '{tier['effort']}' declared but model '{tier['model']}' doesn't support reasoning — effort will be dropped")
 
     skill_paths = sorted(list(AGENTS_DIR.rglob("SKILL.md")) + list(COMMON_SKILLS_DIR.rglob("SKILL.md")))
     for skill_path in skill_paths:
@@ -215,8 +236,6 @@ def validate_org(agents: list[dict], strict: bool = True) -> tuple[list[str], li
             errors.append(f"{rel}: missing required frontmatter field 'category'")
         elif cat not in ALPI_SKILL_CATEGORIES:
             errors.append(f"{rel}: category '{cat}' is outside alpi's closed enum — skill will be silently dropped from the system-prompt index. Valid: {sorted(ALPI_SKILL_CATEGORIES)}")
-        # origin must match alpi's runtime schema, else the skill is silently
-        # dropped from the system-prompt index (invisible to the agent).
         origin = fm.get("origin")
         if origin and origin not in ("agent", "user"):
             errors.append(f"{rel}: origin must be 'agent' or 'user' (got '{origin}')")
@@ -238,7 +257,6 @@ def validate_org(agents: list[dict], strict: bool = True) -> tuple[list[str], li
 
 
 def report_validation(errors: list[str], warnings: list[str]) -> bool:
-    """Print findings and return True if bootstrap should proceed."""
     if not errors and not warnings:
         ok(f"validation clean: {len(errors)} errors, {len(warnings)} warnings")
         return True
@@ -271,21 +289,15 @@ def derive_edges(
             seen.add(key)
             edges.append((a, b))
 
-    # Per-agent `peers:` in agent.md is legacy back-compat (still honoured for
-    # orgs that declare it). Preferred source is org.yaml `peer_edges` below —
-    # peers are network infrastructure, not agent identity.
     for agent in agents:
         for peer in agent.get("peers", []):
             _add(agent["name"], peer)
 
-    # Workgroup membership implies a hub↔member edge.
     for wg in workgroups:
         hub = wg["hub"]
         for member in wg["members"]:
             _add(hub, member)
 
-    # Permanent peer edges from org.yaml: "all" → complete graph (every agent a
-    # mutual peer); a list of [a, b] pairs → just those links.
     pe = peer_edges or []
     if pe == "all" or pe == ["all"]:
         names = sorted(existing)
@@ -313,11 +325,14 @@ def load_workgroups() -> list[dict]:
         front = yaml.safe_load(m.group(1)) or {}
         briefing = raw[m.end():].strip()
         briefing = " ".join(briefing.split())
+        budget_usd = float(front.get("budget_usd", BUDGET_WG))
+        if budget_usd > MAX_WORKGROUP_BUDGET_USD:
+            fail(f"{p}: budget_usd {budget_usd:.0f} exceeds the ${MAX_WORKGROUP_BUDGET_USD:.0f} workgroup ceiling")
         wgs.append({
             "name":       p.parent.name,
             "hub":        front["hub"],
             "members":    list(front.get("members", [])),
-            "budget_usd": float(front.get("budget_usd", BUDGET_WG)),
+            "budget_usd": budget_usd,
             "briefing":   briefing,
         })
     return wgs
@@ -331,17 +346,14 @@ def _parse_agent_file(path: Path) -> dict:
     front = yaml.safe_load(m.group(1)) or {}
     soul = raw[m.end():].strip()
 
-    tier = front.get("tier", "default")
-    if "model" in front:
-        model = front["model"]
-    elif tier == "strong":
-        model = MODEL_STRONG
-    else:
-        model = MODEL_DEFAULT
+    model = str(front.get("model", TIER_MAIN["model"]))
+    tiers = {
+        "fast": {"model": str(front.get("model_fast", TIER_FAST["model"])), "effort": TIER_FAST["effort"]},
+        "deep": {"model": str(front.get("model_deep", TIER_DEEP["model"])), "effort": TIER_DEEP["effort"]},
+    }
 
-    daily_usd = float(front.get("daily_usd", BUDGET_DAILY_STRONG if tier == "strong" else BUDGET_DAILY_DEFAULT))
+    daily_usd = float(front.get("daily_usd", BUDGET_DAILY_DEFAULT))
 
-    # Reasoning effort is REQUIRED in every agent.md. validate_org() catches missing or malformed values. Here we just parse and normalise. YAML 1.1 booleanises bare `off` / `no` / `false` to False — handle that. "" means "not declared" (validation will fail later).
     if "reasoning_effort" in front:
         raw_eff = front["reasoning_effort"]
         if raw_eff is False:
@@ -355,14 +367,15 @@ def _parse_agent_file(path: Path) -> dict:
             else:
                 reasoning_effort = "__invalid__"
     else:
-        reasoning_effort = "__missing__"
+        reasoning_effort = TIER_MAIN["effort"]
 
     return {
         "name":             path.parent.name,
         "bio":              front.get("bio", ""),
         "accent":           front.get("accent", "#888888"),
-        "tier":             tier,
         "model":            model,
+        "tiers":            tiers,
+        "legacy_tier":      front.get("tier"),
         "daily_usd":        daily_usd,
         "reasoning_effort": reasoning_effort,
         "soul":             soul,
@@ -479,7 +492,6 @@ _SYNC_KEEP = {"node_modules", "dist", ".astro", ".git", "projects"}
 
 
 def _sync_children(src: Path, dst: Path) -> int:
-    """Mirror src's children into dst, deleting dst children absent from src (except _SYNC_KEEP)."""
     count = 0
     dst.mkdir(parents=True, exist_ok=True)
     src_names = {item.name for item in src.iterdir()}
@@ -506,7 +518,6 @@ def scaffold_workspace() -> None:
     is_home = WORKSPACE_PATH == Path.home()
 
     if is_home and not WORKSPACE_SCAFFOLD and not SYNC_ITEMS:
-        # Workspace points at $HOME with nothing to add — assume the user's home is already real.
         return
 
     if WORKSPACE_PATH.exists() and not WORKSPACE_PATH.is_dir():
@@ -577,11 +588,18 @@ def bootstrap_profiles(agents: list[dict], workgroups: list[dict], env_lines: st
         cfg.setdefault("tui", {})["accent"] = agent["accent"]
         cfg.setdefault("budget", {})["daily_usd"] = agent["daily_usd"]
 
-        # Apply reasoning only when explicitly declared as low/medium/high AND the model supports it. "off" / missing / unsupported-model all collapse to "no reasoning config" — keeps config.yaml minimal and intent explicit (declarations live in agent.md).
         if agent["reasoning_effort"] in {"low", "medium", "high"} and supports_reasoning(agent["model"]):
             cfg["model_reasoning"] = {"effort": agent["reasoning_effort"]}
         else:
             cfg.pop("model_reasoning", None)
+
+        tiers_cfg = {}
+        for tier_name, tier in agent["tiers"].items():
+            entry = {"model": tier["model"]}
+            if tier["effort"] and supports_reasoning(tier["model"]):
+                entry["effort"] = tier["effort"]
+            tiers_cfg[tier_name] = entry
+        cfg["tiers"] = tiers_cfg
 
         if agent["tools_deny"]:
             cfg.setdefault("tools", {})["deny"] = agent["tools_deny"]
@@ -787,7 +805,10 @@ def print_summary(
     print(f"  agents      {GREY}{len(names)}{RESET}")
     print(f"  edges       {GREY}{len(edges)}{RESET}")
     print(f"  workspace   {GREY}{WORKSPACE_PATH}{RESET}")
-    print(f"  model       {GREY}strong={MODEL_STRONG}  default={MODEL_DEFAULT}{RESET}")
+    main_note = f"{TIER_MAIN['model']}/{TIER_MAIN['effort']}"
+    fast_note = f"{TIER_FAST['model']}{'/' + TIER_FAST['effort'] if TIER_FAST['effort'] else ''}"
+    deep_note = f"{TIER_DEEP['model']}{'/' + TIER_DEEP['effort'] if TIER_DEEP['effort'] else ''}"
+    print(f"  models      {GREY}main={main_note}  fast={fast_note}  deep={deep_note}{RESET}")
     print()
 
     grouped: dict[str, list[str]] = {}

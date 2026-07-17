@@ -1,5 +1,39 @@
 # Changelog
 
+## v0.11.0 — 2026-07-17 — faster workgroups and verified artefacts
+
+- **Active workgroups now advance in seconds.** Remote subscriptions
+  hold `workgroup.pull` open and local hubs probe cached transcripts
+  every 5 seconds, so agent-to-agent handoffs no longer wait out a
+  30-second tick.
+- **Idle workgroups stay cheap without going deaf.** Each remote
+  subscription keeps one held pull open, concurrently with every other
+  workgroup, while local hubs use cached transcript probes. Empty groups
+  launch no turns; transport failures back off up to 15 minutes.
+- **Cross-machine workgroups reuse their encrypted TCP sessions.** Repeated
+  pulls and posts no longer pay a Noise handshake each time; independent
+  pull lanes keep one workgroup from blocking another, and idle sessions
+  expire automatically.
+- **Replay protection now survives daemon restarts.** Recent signed-envelope
+  nonces are kept in a bounded private journal for the full replay window.
+- **Tighter task protocol.** Duplicate `#task` re-opening the active slug
+  is rejected; watchdog "closure-only" wakes can only close or stay
+  silent; in pipeline workgroups a member's `@mentions` wake only the
+  hub, so blocker reports can't fan work out sideways.
+- The unused `auto_kickoff` setting was removed, and the workgroup
+  wizard can now edit the closure-quorum timeout per workgroup.
+- **Peers can transfer files without putting them inside ALP JSON messages.**
+  `link.put_blob` and `link.get_blob` move explicitly selected artefacts in
+  signed chunks (encrypted over Noise/TCP), address them by SHA-256, deduplicate
+  verified content and publish downloads only after complete size and hash
+  verification.
+- **Web-factory state follows its workgroup transcript.** `new-project.py
+  --sync-status` repairs `status.yaml` through an explicit, idempotent operation
+  instead of asking the hub to remember duplicate bookkeeping.
+- **Web-factory translations can fan out safely by locale.** Lingua uses up to
+  three bounded delegates with exclusive locale ownership, then validates the
+  complete target set before handing off.
+
 ## v0.10.36 — 2026-07-16 — the whole inbox in one call
 
 - **Clients can fetch outputs across every profile in a single request** —

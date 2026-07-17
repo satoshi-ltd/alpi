@@ -470,15 +470,25 @@ def _poller_start_offset(profile: str) -> float:
     return (h % (WORKGROUP_TICK_SECONDS * 1000)) / 1000.0
 
 
-# Idle subs back off (base → base*MAX) so a fleet of done workgroups stops polling every tick; any new post resets to base.
+# Failed pulls back off to 15 min; successful empty pulls immediately reopen the held request.
 _WG_POLL_STEADY_TICKS = 3
-_WG_POLL_BACKOFF_MAX = 4
+_WG_POLL_BACKOFF_MAX = 30
+_WG_HOT_WINDOW_SECONDS = 120.0
+_WG_HOT_TICK_SECONDS = 5.0
+_WG_LONG_POLL_SECONDS = 25.0
+_HOT_DISPATCH_COOLDOWN_SECONDS = 10
 
 
 def _wg_backoff_mult(idle_ticks: int) -> int:
     if idle_ticks < _WG_POLL_STEADY_TICKS:
         return 1
     return min(_WG_POLL_BACKOFF_MAX, 1 << (idle_ticks - _WG_POLL_STEADY_TICKS + 1))
+
+
+def _wg_is_hot(wid: str, hot_until: dict[str, float], now: float) -> bool:
+    if now < hot_until.get(wid, 0.0):
+        return True
+    return any(key[0] == wid for key in _INFLIGHT)
 
 
 def _sub_stays_hot(new_posts: list, sub) -> bool:
@@ -493,56 +503,137 @@ def _sub_stays_hot(new_posts: list, sub) -> bool:
     ) is not None
 
 
+def _hub_stays_hot(fresh: bool, wg, recent: list[dict]) -> bool:
+    if fresh:
+        return True
+    from alpi.alp import tasks as wg_tasks
+
+    active = wg_tasks.active_task(recent, hub_pubkey=wg.meta.hub_pubkey)
+    if active is not None:
+        return True
+    if not _pipeline_continuation_due(wg, recent, active):
+        return False
+    next_phase, _latest, known = _next_pipeline_phase(wg, recent)
+    return known and next_phase is not None
+
+
+async def _run_subscription_poller(home: Path, profile: str, wg_id: str) -> None:
+    """Keep one held pull open for a subscription; only transport failures back off."""
+    from alpi.alp import subscription as sub_mod
+    from alpi.alp import workgroup_client as wc
+
+    failures = 0
+    hot_until = 0.0
+    while True:
+        if sub_mod.get(home, wg_id) is None:
+            return
+        started = time.monotonic()
+        try:
+            new_posts, _head = await wc.pull(
+                home, wg_id, wait_s=_WG_LONG_POLL_SECONDS,
+            )
+            refreshed = sub_mod.get(home, wg_id)
+            if refreshed is None:
+                return
+            now = time.monotonic()
+            if new_posts:
+                hot_until = now + _WG_HOT_WINDOW_SECONDS
+            hot = (
+                now < hot_until
+                or _sub_stays_hot(new_posts, refreshed)
+                or _wg_is_hot(wg_id, {}, now)
+            )
+            await _maybe_dispatch_for_sub(home, profile, refreshed, hot=hot)
+            failures = 0
+            # A pre-long-poll hub ignores wait_s and answers empty immediately.
+            if not new_posts and time.monotonic() - started < 1.0:
+                await asyncio.sleep(_WG_HOT_TICK_SECONDS)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:  # noqa: BLE001
+            failures += 1
+            delay = WORKGROUP_TICK_SECONDS * _wg_backoff_mult(failures)
+            log.debug("wg poller pull(%s) failed; retry in %.0fs: %s", wg_id, delay, e)
+            await asyncio.sleep(delay)
+
+
 async def _run_workgroup_poller(home: Path, profile: str) -> None:
     """Watch workgroups for new triggers and dispatch turns."""
     from alpi.alp import subscription as sub_mod
     from alpi.alp import workgroup as wg_mod
-    from alpi.alp import workgroup_client as wc
 
     log.info("workgroup poller running (tick=%ss)", WORKGROUP_TICK_SECONDS)
     await asyncio.sleep(_poller_start_offset(profile))
-    due_at: dict[str, float] = {}
-    idle: dict[str, int] = {}
-    while True:
-        try:
-            now = time.monotonic()
-            # Pull member workgroups, then check whether they need a response.
-            for sub in sub_mod.load(home):
-                wid = sub.wg_id
-                if due_at.get(wid, 0.0) > now:  # backed off — not due this tick
-                    continue
-                try:
-                    new_posts, _head = await wc.pull(home, wid)
-                    # Re-load to pick up the freshly-saved cache.
-                    refreshed = sub_mod.get(home, wid)
-                    if refreshed is not None:
-                        await _maybe_dispatch_for_sub(home, profile, refreshed)
-                    idle[wid] = 0 if _sub_stays_hot(new_posts, refreshed) else idle.get(wid, 0) + 1
-                except Exception as e:  # noqa: BLE001
-                    log.debug("wg poller pull(%s) failed: %s", wid, e)
-                    idle[wid] = idle.get(wid, 0) + 1
-                due_at[wid] = now + WORKGROUP_TICK_SECONDS * _wg_backoff_mult(idle[wid])
-                # Local pull() never yields; hand the loop back per sub so a host RPC isn't stuck behind the whole set.
-                await asyncio.sleep(0)
+    sub_workers: dict[str, asyncio.Task] = {}
+    hot_until: dict[str, float] = {}
+    hub_seen: dict[str, int] = {}
+    try:
+        while True:
+            try:
+                subscriptions = {sub.wg_id for sub in sub_mod.load(home)}
+                removed = [wid for wid in sub_workers if wid not in subscriptions]
+                for wid in removed:
+                    sub_workers[wid].cancel()
+                if removed:
+                    await asyncio.gather(
+                        *(sub_workers.pop(wid) for wid in removed),
+                        return_exceptions=True,
+                    )
+                for wid in subscriptions:
+                    worker = sub_workers.get(wid)
+                    if worker is None or worker.done():
+                        if worker is not None:
+                            try:
+                                worker.result()
+                            except asyncio.CancelledError:
+                                pass
+                            except Exception as e:  # noqa: BLE001
+                                log.error("wg pull worker %s exited: %s", wid, e)
+                        sub_workers[wid] = asyncio.create_task(
+                            _run_subscription_poller(home, profile, wid),
+                            name=f"wg-pull-{profile}-{wid}",
+                        )
 
-            # Hub workgroups use the local transcript.
-            for wg in wg_mod.list_workgroups(home):
-                await asyncio.sleep(0)
-                try:
-                    recent = _all_hub_posts_decrypted(home, wg)
-                except Exception as e:  # noqa: BLE001
-                    log.debug("wg poller hub scan(%s) failed: %s", wg.meta.id, e)
-                    continue
-                if not recent:
-                    continue
-                await _maybe_dispatch_for_hub(home, profile, wg, recent)
-        except Exception:  # noqa: BLE001
-            log.exception("workgroup poller tick crashed")
-        await asyncio.sleep(WORKGROUP_TICK_SECONDS)
+                workgroups = wg_mod.list_workgroups(home)
+                active_hubs = {wg.meta.id for wg in workgroups}
+                for state in (hot_until, hub_seen):
+                    for wid in list(state):
+                        if wid not in active_hubs:
+                            state.pop(wid, None)
+
+                now = time.monotonic()
+                for wg in workgroups:
+                    await asyncio.sleep(0)
+                    wid = wg.meta.id
+                    try:
+                        recent = _all_hub_posts_decrypted(home, wg)
+                    except Exception as e:  # noqa: BLE001
+                        log.debug("wg poller hub scan(%s) failed: %s", wid, e)
+                        continue
+                    if not recent:
+                        continue
+                    head = int(recent[-1].get("seq", 0))
+                    fresh = head > hub_seen.get(wid, 0)
+                    hub_seen[wid] = head
+                    if fresh:
+                        hot_until[wid] = now + _WG_HOT_WINDOW_SECONDS
+                    hot = (
+                        _wg_is_hot(wid, hot_until, now)
+                        or _hub_stays_hot(fresh, wg, recent)
+                    )
+                    await _maybe_dispatch_for_hub(home, profile, wg, recent, hot=hot)
+            except Exception:  # noqa: BLE001
+                log.exception("workgroup poller tick crashed")
+            await asyncio.sleep(_WG_HOT_TICK_SECONDS)
+    finally:
+        for worker in sub_workers.values():
+            worker.cancel()
+        if sub_workers:
+            await asyncio.gather(*sub_workers.values(), return_exceptions=True)
 
 
 async def _maybe_dispatch_for_sub(
-    home: Path, profile: str, sub,
+    home: Path, profile: str, sub, hot: bool = False,
 ) -> None:
     """Decide whether a member-side workgroup should dispatch."""
     from alpi.alp import keys as _keys
@@ -553,6 +644,8 @@ async def _maybe_dispatch_for_sub(
     own_pubkey = _keys.load_or_generate(home).pubkey_b64()
     trigger, new_responded = _should_dispatch(
         profile, own_pubkey, sub.recent_posts or [], sub.last_responded_seq,
+        hub_pubkey=str(getattr(sub, "hub_pubkey", "") or ""),
+        pipeline=bool(getattr(sub, "pipeline", None)),
     )
     if not trigger:
         trigger = _working_redispatch_reason(
@@ -567,7 +660,7 @@ async def _maybe_dispatch_for_sub(
             sub.last_responded_seq = new_responded
             sub_mod.upsert(home, sub)
         return
-    if _in_cooldown_str(sub.last_dispatch_at):
+    if _in_cooldown_str(sub.last_dispatch_at, _HOT_DISPATCH_COOLDOWN_SECONDS if hot else None):
         log.info(
             "wg poller: %s skipped (cooldown, reason=%s)",
             sub.wg_id, trigger,
@@ -665,7 +758,7 @@ def _latest_hub_task_seq_for(
 
 
 async def _maybe_dispatch_for_hub(
-    home: Path, profile: str, wg, recent: list[dict],
+    home: Path, profile: str, wg, recent: list[dict], hot: bool = False,
 ) -> None:
     """Decide whether a hub-side workgroup should dispatch."""
     from alpi.alp import keys as _keys
@@ -676,6 +769,8 @@ async def _maybe_dispatch_for_hub(
     last_responded = _get_hub_responded_seq(home, wg.meta.id)
     trigger, new_responded = _should_dispatch(
         profile, own_pubkey, recent, last_responded,
+        hub_pubkey=wg.meta.hub_pubkey,
+        pipeline=bool(wg.meta.pipeline),
     )
     if not trigger:
         if new_responded > last_responded:
@@ -684,7 +779,7 @@ async def _maybe_dispatch_for_hub(
         return
     state = _load_poller_state(home)
     last = state.get("hub_last_dispatch_at", {}).get(wg.meta.id, "")
-    if _in_cooldown_str(last):
+    if _in_cooldown_str(last, _HOT_DISPATCH_COOLDOWN_SECONDS if hot else None):
         log.info(
             "wg poller: %s skipped (cooldown, reason=%s)",
             wg.meta.id, trigger,
@@ -1117,53 +1212,6 @@ def _all_hub_posts_decrypted(home: Path, wg) -> list[dict]:
     return out
 
 
-def _new_hub_posts(home: Path, wg) -> list[dict]:
-    """Return new decrypted hub posts after the saved cursor."""
-    import json
-    from alpi.alp import workgroup as wg_mod
-    from alpi.alp.keys import load_or_generate
-
-    kp = load_or_generate(home)
-    own = wg.member(kp.pubkey_b64())
-    if own is None:
-        return []
-    try:
-        group_key = wg_mod.open_sealed_group_key(own.sealed_key, kp)
-    except Exception:  # noqa: BLE001
-        return []
-
-    cursor = _get_hub_cursor(home, wg.meta.id)
-    transcript_path = home / "alp" / "workgroups" / wg.meta.id / "transcript.jsonl"
-    if not transcript_path.exists():
-        return []
-
-    out: list[dict] = []
-    for line in transcript_path.read_text().splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            entry = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        seq = int(entry.get("seq", 0))
-        if seq <= cursor:
-            continue
-        # Skip posts we (the hub) authored — we don't react to ourselves.
-        if str(entry.get("from") or "") == kp.pubkey_b64():
-            continue
-        if int(entry.get("key_version", 1)) != own.key_version:
-            continue  # past keys not openable on the hub
-        try:
-            text = wg_mod.decrypt_post(
-                group_key, entry["nonce"], entry["ciphertext"],
-            ).decode("utf-8", errors="replace")
-        except Exception:  # noqa: BLE001
-            continue
-        out.append({**entry, "text": text})
-    return out
-
-
 # Hub-side cursor and cooldown state live under the profile root.
 
 
@@ -1187,19 +1235,6 @@ def _save_poller_state(home: Path, state: dict) -> None:
     p = _poller_state_path(home)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(state, separators=(",", ":")))
-
-
-def _get_hub_cursor(home: Path, wg_id: str) -> int:
-    state = _load_poller_state(home)
-    return int(state.get("hub_cursors", {}).get(wg_id, 0))
-
-
-def _set_hub_cursor(home: Path, wg_id: str, seq: int) -> None:
-    state = _load_poller_state(home)
-    cursors = state.setdefault("hub_cursors", {})
-    if int(seq) > int(cursors.get(wg_id, 0)):
-        cursors[wg_id] = int(seq)
-        _save_poller_state(home, state)
 
 
 def _mark_hub_dispatched(home: Path, wg_id: str) -> None:
@@ -1341,7 +1376,7 @@ def _mark_sub_dispatched(home: Path, wg_id: str) -> None:
     sub_mod.upsert(home, sub)
 
 
-def _in_cooldown_str(stamp: str) -> bool:
+def _in_cooldown_str(stamp: str, window: float | None = None) -> bool:
     """Return ``True`` when ``stamp`` is still inside the cooldown."""
     import datetime as _dt
     from alpi.alp.subscription import DISPATCH_COOLDOWN_SECONDS
@@ -1353,13 +1388,15 @@ def _in_cooldown_str(stamp: str) -> bool:
         return False
     last = last.replace(tzinfo=_dt.timezone.utc)
     elapsed = (_dt.datetime.now(tz=_dt.timezone.utc) - last).total_seconds()
-    return elapsed < DISPATCH_COOLDOWN_SECONDS
+    return elapsed < (window if window is not None else DISPATCH_COOLDOWN_SECONDS)
 
 
 def _should_dispatch(
     profile: str, own_pubkey: str,
     recent_posts: list[dict],
     last_responded_seq: int,
+    hub_pubkey: str = "",
+    pipeline: bool = False,
 ) -> tuple[str | None, int]:
     """Decide whether the poller should wake the local agent."""
     from alpi.alp import tasks as wg_tasks
@@ -1404,6 +1441,10 @@ def _should_dispatch(
         if not is_self and profile in mentions:
             # `@` inside `#done` is synthesis, not handoff.
             if any(e.kind == "done" for e in events):
+                continue
+            # Pipeline: a non-hub post's mentions wake only the hub — routing goes up, never sideways.
+            author = str(post.get("from") or "")
+            if pipeline and hub_pubkey and author != hub_pubkey and own_pubkey != hub_pubkey:
                 continue
             return f"@{profile} mentioned (seq #{seq})", high_seq
         if has_task and not mentions:
@@ -1938,6 +1979,7 @@ def _resolve_alp_tcp(cfg, managed: bool, is_default: bool = True) -> tuple[str |
 async def _run_alp(home: Path, profile: str) -> None:
     from alpi import config as cfg_mod
     from alpi import runtime
+    from alpi.alp import blobs as alp_blobs
     from alpi.alp import handlers as alp_handlers
     from alpi.alp import workgroup as alp_workgroup
     from alpi.alp.server import Server
@@ -1954,6 +1996,7 @@ async def _run_alp(home: Path, profile: str) -> None:
         tcp_port=tcp_port,
     )
     alp_handlers.register_link_ask(server, home)
+    alp_blobs.register(server, home)
     alp_workgroup.register(server, home)
     await server.start()
     try:

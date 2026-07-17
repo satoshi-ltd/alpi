@@ -6,13 +6,13 @@ display_name: Protocol Lab
 # No scaffold, no sync.
 
 models:
-  default: openai/gpt-5.4-mini
-  strong: anthropic/claude-sonnet-4-6
-  # Reasoning is per-agent — declared in agents/<name>/agent.md frontmatter.
+  # main = every profile turn model (effort = org default; agent.md reasoning_effort overrides); fast/deep are routing tiers written to every profile.
+  main: { model: openrouter/deepseek/deepseek-v4-flash, effort: medium }
+  fast: { model: openrouter/deepseek/deepseek-v4-flash, effort: low }
+  deep: { model: openrouter/deepseek/deepseek-v4-pro, effort: medium }
 
 budgets:
   daily_default: 1.0
-  daily_strong: 2.0
   workgroup: 20.0
 
 agent_voices: {}

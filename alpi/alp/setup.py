@@ -431,16 +431,17 @@ def _add(home: Path) -> None:
 
 
 def _pick_capabilities() -> list[str]:
-    """Ask for each ALP.1 verb individually. Default both on — that's
-    the usual case and unchecking is one keystroke."""
+    """Ask for each ALP capability individually."""
     verbs = [
-        ("link.ping", "health probe"),
-        ("link.ask", "one-shot turn"),
-        ("link.cancel", "abort an in-flight turn"),
+        ("link.ping", "health probe", True),
+        ("link.ask", "one-shot turn", True),
+        ("link.cancel", "abort an in-flight turn", True),
+        ("link.put_blob", "send content-addressed files", False),
+        ("link.get_blob", "retrieve content-addressed files", False),
     ]
     allow: list[str] = []
-    for verb, desc in verbs:
-        if ui.confirm(f"Allow {verb} ({desc})?", default=True):
+    for verb, desc, default in verbs:
+        if ui.confirm(f"Allow {verb} ({desc})?", default=default):
             allow.append(verb)
     return allow
 

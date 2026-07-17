@@ -132,6 +132,8 @@ before any `id`-based routing occurs.
   allow:
     - link.ping
     - link.ask
+    - link.put_blob
+    - link.get_blob
   rate_limit:
     per_minute: 10
 
@@ -269,6 +271,16 @@ This pattern matches ALP's pinned-pubkey model exactly:
 - Symmetric payloads are sealed with ChaCha20-Poly1305 [RFC8439],
   length-prefixed on the TCP stream.
 
+The resulting Noise session carries sequential request/response exchanges
+until either side closes it. Clients keep a separate session for each
+`workgroup.pull` subscription, one for `link.ask`, and a shared RPC session for
+short calls. A held pull never serialises another workgroup or a post, and
+`link.cancel` can reach a running ask. A per-session lock keeps cipher counters
+ordered; broken sessions are discarded without replaying the request, and the
+next call reconnects. Clients retire sessions after 60 idle seconds and
+responders close them after 90 seconds (10 seconds for an unrecognised Noise
+identity waiting to present its signed envelope).
+
 ALP deliberately does not use TLS or HTTPS. The pinned-key trust
 model plus Noise gives authenticated encryption with forward
 secrecy in a small surface the implementation can own end to end.
@@ -318,7 +330,9 @@ on the wire is a JSON object of the following shape:
   own clock.
 - `alp.nonce` is a 16-byte random value. Receivers reject a
   given `(from, nonce)` pair if they have seen it within the
-  last five minutes.
+  last five minutes. The receiver journals live pairs under
+  `alp/secrets/replay.jsonl`, so restarting the daemon does not
+  reopen that replay window.
 - `alp.sig` is an Ed25519 signature computed over the canonical
   JSON serialisation of the object with the `sig` field
   removed.
@@ -443,6 +457,45 @@ when the user presses Ctrl-C. `link.cancel` is idempotent: a
 cancel on a session that is not running returns
 `cancelled: false` and makes no other changes.
 
+### `link.put_blob` / `link.get_blob`
+
+ALP transfers explicitly selected non-inline artefacts by SHA-256 without
+turning peers into shared filesystems. Blob storage is private to the receiving
+profile under `alp/blobs/<sha256>` and capped at 20 MiB, matching the attachment
+contract.
+
+`link.put_blob` accepts sequential 512 KiB chunks:
+
+```text
+params: {
+  hash: string,       # lowercase SHA-256
+  size: int,
+  offset: int,
+  data: string,       # base64
+  final: bool
+}
+result: { hash, size, next_offset, complete }
+```
+
+The receiver stages chunks privately, requires an exact next offset, and only
+publishes the blob with an atomic rename after its size and full hash match.
+Sending the same verified hash again is idempotent.
+
+`link.get_blob({hash})` streams ordered `{hash, offset, data}` chunks followed
+by a signed final `{hash, size}` frame. The client writes a temporary file and
+publishes the requested destination only after verifying the complete size and
+hash. It never overwrites an existing destination.
+
+Every chunk remains inside a signed ALP envelope; cross-machine transfers also
+use the Noise session's AEAD. The final request/response signs the full content
+hash. Peers need explicit `link.put_blob` and/or `link.get_blob` capabilities.
+Console equivalents:
+
+```bash
+alpi -p sender peers blob-put receiver ./report.pdf
+alpi -p sender peers blob-get receiver <sha256> --output ./report.pdf
+```
+
 ---
 
 ### Reentrancy
@@ -480,6 +533,7 @@ reserved space:
 | `-32008` | `workgroup-not-member` | Caller is not a pinned member of the workgroup. |
 | `-32009` | `workgroup-not-found` | No workgroup with the requested id at the hub. |
 | `-32010` | `workgroup-paused` | Workgroup is paused; `post` rejected. `pull` / `join` / `leave` still work. |
+| `-32012` | `blob-not-found` | Requested content hash is not present or no longer verifies at the peer. |
 
 The standard JSON-RPC codes (`-32600` through `-32603`) retain
 their standard meaning and apply to malformed requests, unknown
@@ -603,7 +657,7 @@ methods callable by pinned peers in the workgroup roster.
   to the transcript and assigns the next monotonic `seq`
   (1-based).
 
-- `workgroup.pull(workgroup_id, since) → {posts[], head, current_key_version, sealed_key, members[]}`
+- `workgroup.pull(workgroup_id, since, wait_s?) → {posts[], head, current_key_version, sealed_key, members[]}`
   Returns every post with `seq > since`, in order, plus the
   current `head` cursor. `since=0` returns the full transcript.
   The response also echoes the caller's currently-sealed group
@@ -614,8 +668,12 @@ methods callable by pinned peers in the workgroup roster.
   (`{pubkey, last_seen_at, bio}` per member) so liveness and
   self-published bios stay current without an extra verb. Pull is
   the canonical fan-out for ALP.3 — each member observes new
-  traffic by polling. SSE-style streaming pull is tracked
-  separately as **ALP.4**.
+  traffic by polling. **Long-poll (ALP.4):** an optional `wait_s`
+  (clamped to 25 s) holds the request at the hub when no fresh
+  posts exist and answers early the moment one lands, giving
+  active members near-instant wake without any push
+  infrastructure; SSE-style continuous streaming remains future
+  work.
 
 - `workgroup.leave(workgroup_id) → {workgroup_id, current_key_version, remaining_members[]}`
   The leaving member is dropped from the roster; the hub mints a
@@ -756,14 +814,12 @@ content of conversations inside it.
 briefing: >
   research peptide candidates for therapeutic protein X.
   deliver a shortlist of 5 with Tanimoto > 0.7 by friday.
-auto_kickoff: true   # default; agents wake on create instead of waiting for first mention
 ```
 
-`auto_kickoff: true` (default) means every member's local engine
-starts engaging with the briefing as soon as their next turn fires
-— no waiting for a first human prompt. Set `false` for
-exploratory workgroups where you want the chat dormant until you
-explicitly speak.
+A freshly created workgroup is dormant until its first post: every
+wake trigger keys off transcript content, so an empty transcript
+wakes nobody. The kickoff is always an explicit first post — the
+hub's opening `#task` (from the TUI, CLI, or a bootstrap script).
 
 **Briefing discipline.** A briefing describes the *problem and
 constraints*, not how the workgroup is meant to operate. It
@@ -964,13 +1020,26 @@ human in the loop. Each member runs a poller that wakes its agent
 on relevant new traffic, plus a pre-turn context hook that injects
 workgroup state into every engine turn.
 
-**Poller.** Each member ticks the workgroups it participates in on
-a fixed interval (the reference implementation uses 30 s). Per
-workgroup it compares the cached transcript against a
-``last_responded_seq`` cursor and dispatches an engine turn when
-any of these triggers fires (in priority order):
+**Poller.** Every remote subscription owns one independent held
+pull (`wait_s`≤25 s), so workgroups wait concurrently and a fresh
+post returns immediately even after a long idle period. An empty
+successful pull is reopened at once; only transport failures back
+off exponentially (30 s to 15 min). Local hub workgroups use a 5 s
+transcript-stat probe whose decrypted result is cached, so an idle
+fleet performs no model work and little file I/O without becoming
+deaf. Fresh posts, open tasks and in-flight dispatches use the
+short 10 s dispatch cooldown. Per workgroup the poller compares
+the cached transcript against a ``last_responded_seq`` cursor and
+dispatches an engine turn when any of these triggers fires (in
+priority order):
 
-1. The newest unresponded post `@`-mentions this member.
+1. The newest unresponded post `@`-mentions this member — unless
+   the mention sits inside a `#done` post (a closure crediting
+   people is synthesis, not a handoff; it wakes nobody), or the
+   workgroup is a **pipeline** and the post's author is not the
+   hub: sideways member→member mentions never wake there (routing
+   goes up — a member reports to the hub, the hub assigns), while
+   member mentions OF the hub still do.
 2. The newest unresponded post opens a collective `#task` with no
    `@`-targets — wakes every member, including the hub.
 3. **The hub authored the active `#task` and a non-hub post is
@@ -982,6 +1051,11 @@ any of these triggers fires (in priority order):
    there is a newer post than our last response.
 5. The opener was collective (no `@`-targets) and there is a newer
    non-self post — keeps every member in the loop on shared work.
+
+When none of these fire, one fallback trigger runs: a member whose
+own latest post in the active task was `#working` (and who has
+posted nothing since) is re-dispatched so the promised delivery
+isn't lost to a missed wake.
 
 A per-workgroup cooldown rate-limits dispatches so two peers don't
 ping-pong. When a trigger fires, the poller invokes one engine turn
@@ -1040,11 +1114,16 @@ post (the hub's post itself opens the round). With that:
    `turn-rotation` until the hub speaks again. The hub itself
    cannot post twice in a row about content; the only allowed
    back-to-back hub post is `#done` (closure).
-2. **Closure quorum (full + substantive).** A hub `#done` is
-   rejected with `closure-quorum` unless BOTH:
+2. **Closure quorum (full + substantive), scoped to the task's
+   participants.** A hub `#done` is rejected with `closure-quorum`
+   unless BOTH:
 
-   - **Full participation**: every member listed in
-     `members.yaml` has posted at least once in the active
+   - **Full participation across the quorum roster**: a `#task`
+     whose opener line `@`-mentions specific members narrows the
+     roster to just those members; a collective task (no mentions)
+     expects every member in `members.yaml`. Mentioned names that
+     resolve to no known member fall back to the full roster. Each
+     expected member must have posted at least once in the active
      task with a CONTRIBUTING post (substantive content OR
      `#skip`). A bare `#working` heartbeat does NOT count;
      the member must come back with substantive or `#skip`.
@@ -1193,6 +1272,20 @@ does not, and operators should pick models with eyes open:
   These are operational levers, not protocol changes. The
   protocol is uniform; quality scales with the model.
 
+**Pipeline workgroups (`meta.pipeline`).** An ordered list of phase
+slugs turns a workgroup into a pipeline: every `#task` must be
+`@`-targeted (`pipeline-task-untargeted` otherwise — each phase has
+one owner), and after the hub's `#done` the runtime detects the
+closure and re-wakes the hub to open the next phase's task (the
+post itself is always authored by the hub's agent, never by code;
+bounded to 3 continuation wakes per closed seq before a
+`wg.blocked` alert). Off-pipeline fix slugs that PREFIX a phase
+(`#build-recheck`, `#content-fix`) canonicalise back to their phase
+for advance/rewind logic, so QA loops don't derail the ladder. The
+closure-quorum grace is per-workgroup via
+`meta.quorum_timeout_seconds` (default 600 s, editable in
+`alpi setup → Workgroups`).
+
 **Stale-task watchdog (escalating).** When the hub itself posted
 last, the standard "new content from another peer" trigger never
 fires for the hub — without intervention the workgroup would
@@ -1205,9 +1298,12 @@ with escalation:
   local job posts nothing while it runs). Any other last post uses
   the short 60-second grace.
 - **Non-pipeline workgroups** get the `closure-or-silence` nudge
-  (post `#done` or stay silent — no new content, which the rotation
-  rule forbids anyway), then a `wg.blocked` alert; a `#done` is
-  terminal there.
+  (post `#done` or stay silent), then a `wg.blocked` alert; a
+  `#done` is terminal there. Closure-only wakes are SDK-enforced:
+  the dispatched turn runs with `ALPI_WORKGROUP_CLOSURE_ONLY=1` and
+  `workgroup_client.post` rejects any non-`#done` post
+  (`closure-only`), so a nudged hub cannot reopen the round with
+  fresh content.
 - **Pipeline workgroups** (ordered `meta.pipeline` slugs) escalate
   across spaced re-fires: a `closure` nudge → a normal-mode
   **repair** (re-verify the on-disk state and re-task or close) → a
@@ -1232,8 +1328,12 @@ turns.jsonl`. The dispatcher writes:
 - `end` with `{ts, duration_s, rc, posts_added, error?}` on
   normal exit.
 - `timeout` with `{ts, duration_s, killed: true}` when a turn
-  exceeds the hard 5-minute ceiling — the dispatcher SIGTERMs
-  with a 5-second grace then SIGKILLs.
+  exceeds its ceiling — two independent limits, both
+  pipeline-aware: an **idle** kill when the subprocess emits no
+  event/output for 180 s (300 s in pipeline workgroups), and a
+  **backstop** kill at 300 s total (900 s in pipeline
+  workgroups). The dispatcher SIGTERMs with a 5-second grace then
+  SIGKILLs.
 - `spawn-failed` with `{ts, error}` if `create_subprocess_exec`
   raised before the child started.
 
@@ -1243,6 +1343,7 @@ This bounds runaway turns and gives a single observable channel
 for "is this peer thinking, idle, or stuck?" — questions that
 were previously answerable only by inspecting `ps` and the raw
 service log.
+
 
 ### Member liveness
 

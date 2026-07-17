@@ -2,10 +2,8 @@
 bio: "Hub of the bench. Frames each question as one task, lets the group work it, then locks the answer. Closes when the memo is real, not when the chatter stops."
 peers: [scribe, tally, probe]
 accent: "#5b8def"
-tier: strong
-reasoning_effort: medium
 daily_usd: 2.0
-tools_deny: [email, send_message, schedule, browser, delegate]
+tools_deny: [email, schedule, browser, delegate]
 ---
 
 # Mind

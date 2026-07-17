@@ -12,35 +12,6 @@ Legend: ✅ shipped · 🔵 backlog · 🟡 next up · ⏸ blocked · 🔴 gate.
 
 ---
 
-## v0.11 cycle (open)
-
-**Theme: peer artefact transfer.**
-
-v0.11 makes ALP capable of moving an explicitly chosen non-inline artefact
-between peers without abusing a JSON envelope. The cycle ships when ALP.5 is
-complete; it does not include speculative browser-runtime work.
-
-| ID | Item | Status |
-|---|---|---|
-| ALP.5 | Blob transfer — `link.put_blob` / `link.get_blob`, content-addressed and chunked, for screenshots, PDFs, skill outputs, and other artefacts that should not live inline in an ALP JSON envelope. | 🟡 |
-
-### ALP.5. Blob transfer
-
-Two new verbs — `link.put_blob(bytes, hash)` and `link.get_blob(hash)` —
-for sharing artefacts that have no business inline in a JSON envelope:
-a PDF, a dataset, the output of a skill, a screenshot.
-
-**Wire shape.** Content-addressed by SHA-256; the recipient stores under
-`~/.alpi/<profile>/alp/blobs/<hash>` and dedups across calls. Chunked
-transfer with per-chunk AEAD; the final frame carries the full-blob
-signature so the receiver can verify end-to-end.
-
-**Scope guard.** ALP.5 is for peer-to-peer artefact transfer only. It does not
-turn ALP into a shared filesystem, does not add sync folders, and does not
-auto-ship every output attachment. The sender still chooses what to share.
-
----
-
 ## Backlog — demand-gated
 
 Items worth keeping, but not committed to a numbered cycle. Some are
@@ -116,9 +87,9 @@ to. See [`organizations/README.md`](../organizations/README.md) and
 [`docs/ORGANIZATION.md`](ORGANIZATION.md).
 
 Layers B and C remain deferred. They're only worth building if the
-convention proves insufficient — non-Archive writers in `company`,
-concurrent scans on the hot path, or enforced access roles across
-humans.
+convention proves insufficient — uncontrolled cross-profile writes in
+web-factory, concurrent scans on the hot path, or enforced access roles
+across humans.
 
 1. **Layer B · Workspace overlay.** `cfg.workspace` (a single string
    today) becomes a list: `[profile_workspace, org_workspace]`. File

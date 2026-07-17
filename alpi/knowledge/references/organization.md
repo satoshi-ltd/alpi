@@ -32,10 +32,10 @@ organizations/
 | `workspace_scaffold` | `[]` | Subdirs created inside `workspace`. |
 | `sync` | `[]` | `{src, dst}` pairs copied into `workspace` every bootstrap (replace mode). |
 | `peer_edges` | `[]` | **Preferred** peer-graph declaration. `"all"` (complete graph), `[[a, b], …]`, or empty. |
-| `models.default` | `openai/gpt-5.4-mini` | Tier-default model. |
-| `models.strong` | `anthropic/claude-sonnet-4-6` | Tier-strong model. |
-| `budgets.daily_default` | `2.0` | USD daily cap for tier-default agents. |
-| `budgets.daily_strong` | `5.0` | USD daily cap for tier-strong agents. |
+| `models.main` | `{model: openai/gpt-5.6-terra, effort: medium}` | Turn model for every profile (`config.yaml model`). `effort` required — the org-wide reasoning default; per-agent `reasoning_effort` overrides it. |
+| `models.fast` | `{model: openai/gpt-5.6-terra, effort: low}` | Written to `tiers.fast` (delegate/research fast + engine plumbing). String or `{model, effort}` map. |
+| `models.deep` | `{model: anthropic/claude-sonnet-5, effort: high}` | Written to `tiers.deep` (auto-escalation target, delegate/research deep). Old `models.default`/`models.strong` keys are a hard bootstrap error. |
+| `budgets.daily_default` | `2.0` | USD daily cap when `agent.md` omits `daily_usd`. |
 | `budgets.workgroup` | `50.0` | Default lifetime cap per workgroup. |
 | `agent_voices` | `{}` | `<agent-name> → Edge TTS voice id`. |
 | `common_skills` | `{}` | `<cat>/<skill> → [agent names]` for `common/skills/` redistribution. |
@@ -52,8 +52,7 @@ Overlap is harmless; edges are deduped.
 
 ## `agent.md` frontmatter
 
-Only field required to be present: `reasoning_effort` (`off | low | medium | high`). Validation also rejects invalid `tier` values and unknown names in `tools_deny`, but those checks fire only when the field is set.
-Optional with defaults: `bio` (`""`), `accent` (`"#888888"`), `tier` (`"default"`; can be `"strong"`), `model` (overrides tier), `daily_usd` (overrides tier budget), `tools_deny` (list of tool names — validation rejects unknown names), `peers` (legacy).
+No required fields. All are optional overrides of org policy: `bio` (`""`), `accent` (`"#888888"`), `model` (overrides `models.main.model`), `model_fast` / `model_deep` (override the tier's model, org effort kept), `reasoning_effort` (`off | low | medium | high`; default = org `models.main.effort` — declare only where identity deviates), `daily_usd` (default `budgets.daily_default`), `tools_deny` (validation rejects unknown names), `peers` (legacy). A leftover `tier:` field hard-fails validation.
 
 Body is the agent's soul, copied verbatim into the profile's `memories/AGENT.md`.
 

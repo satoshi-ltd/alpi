@@ -14,10 +14,12 @@ et al.) live elsewhere.
 from __future__ import annotations
 
 import json
+import os
 import secrets
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any
 
 from cryptography.exceptions import InvalidSignature
@@ -49,6 +51,10 @@ class StaleTimestamp(EnvelopeError):
 
 class ReplayDetected(EnvelopeError):
     """A ``(from, nonce)`` pair was seen within ``REPLAY_WINDOW``."""
+
+
+class ReplayStateError(EnvelopeError):
+    """The durable replay journal could not be read or updated safely."""
 
 
 class WrongRecipient(EnvelopeError):
@@ -265,24 +271,123 @@ def _parse_iso(ts: str) -> datetime:
 
 @dataclass
 class ReplayCache:
-    """In-memory cache of ``(from, nonce)`` pairs seen within
-    ``REPLAY_WINDOW``. Per-process; not shared across restarts — the
-    timestamp skew bound limits what an attacker can replay across a
-    restart (two minutes)."""
+    """Cache of recent ``(from, nonce)`` pairs with optional persistence."""
 
     window: timedelta = field(default_factory=lambda: REPLAY_WINDOW)
+    path: Path | None = None
     _seen: dict[tuple[str, str], float] = field(default_factory=dict)
+    _fd: int | None = field(default=None, init=False, repr=False)
+    _journal_records: int = field(default=0, init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        if self.path is None:
+            return
+        self.path = Path(self.path)
+        self._load()
+        self._open_journal()
 
     def check_and_record(self, from_: str, nonce: str) -> None:
         key = (from_, nonce)
-        now = time.monotonic()
+        now = time.time()
         self._evict(now)
         if key in self._seen:
             raise ReplayDetected(f"nonce already used by {from_}")
+        if self.path is not None:
+            self._append(from_, nonce, now)
         self._seen[key] = now
+        if (
+            self.path is not None
+            and self._journal_records >= 2048
+            and self._journal_records >= max(2048, len(self._seen) * 2)
+        ):
+            self._compact()
 
     def _evict(self, now: float) -> None:
         cutoff = now - self.window.total_seconds()
         stale = [k for k, v in self._seen.items() if v < cutoff]
         for k in stale:
             del self._seen[k]
+
+    def _load(self) -> None:
+        assert self.path is not None
+        if self.path.is_symlink():
+            raise ReplayStateError("replay journal must not be a symlink")
+        if not self.path.exists():
+            return
+        try:
+            lines = self.path.read_text(encoding="utf-8").splitlines()
+        except OSError as e:
+            raise ReplayStateError(f"cannot read replay journal: {e}") from e
+        cutoff = time.time() - self.window.total_seconds()
+        for line in lines:
+            try:
+                record = json.loads(line)
+                seen_at = float(record["seen_at"])
+                from_ = str(record["from"])
+                nonce = str(record["nonce"])
+            except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+                continue
+            if seen_at >= cutoff and from_ and nonce:
+                self._seen[(from_, nonce)] = seen_at
+        self._journal_records = len(lines)
+
+    def _open_journal(self) -> None:
+        assert self.path is not None
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            flags = os.O_WRONLY | os.O_CREAT | os.O_APPEND
+            if hasattr(os, "O_NOFOLLOW"):
+                flags |= os.O_NOFOLLOW
+            self._fd = os.open(self.path, flags, 0o600)
+            os.fchmod(self._fd, 0o600)
+        except OSError as e:
+            raise ReplayStateError(f"cannot open replay journal: {e}") from e
+
+    def _append(self, from_: str, nonce: str, seen_at: float) -> None:
+        if self._fd is None:
+            raise ReplayStateError("replay journal is closed")
+        data = (
+            json.dumps(
+                {"seen_at": seen_at, "from": from_, "nonce": nonce},
+                separators=(",", ":"),
+            ).encode("utf-8")
+            + b"\n"
+        )
+        try:
+            view = memoryview(data)
+            while view:
+                written = os.write(self._fd, view)
+                if written <= 0:
+                    raise OSError("short replay journal write")
+                view = view[written:]
+        except OSError as e:
+            raise ReplayStateError(f"cannot update replay journal: {e}") from e
+        self._journal_records += 1
+
+    def _compact(self) -> None:
+        assert self.path is not None
+        from alpi.secrets_io import safe_write_secret
+
+        self._evict(time.time())
+        content = "".join(
+            json.dumps(
+                {"seen_at": seen_at, "from": from_, "nonce": nonce},
+                separators=(",", ":"),
+            )
+            + "\n"
+            for (from_, nonce), seen_at in self._seen.items()
+        )
+        self.close()
+        try:
+            safe_write_secret(self.path, content)
+        except OSError as e:
+            self._open_journal()
+            raise ReplayStateError(f"cannot compact replay journal: {e}") from e
+        self._journal_records = len(self._seen)
+        self._open_journal()
+
+    def close(self) -> None:
+        if self._fd is None:
+            return
+        os.close(self._fd)
+        self._fd = None

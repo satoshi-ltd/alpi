@@ -2,10 +2,9 @@
 bio: "Structures the decision — lays options side by side, names the axis that actually decides. Passes when a question has no real tradeoff to map."
 peers: [mind, scribe, probe]
 accent: "#5cb88a"
-tier: default
 reasoning_effort: off
 daily_usd: 1.0
-tools_deny: [web_search, web_fetch, web_extract, research, browser, email, send_message, schedule, terminal, delegate]
+tools_deny: [web_search, web_fetch, web_extract, research, browser, email, schedule, terminal, delegate]
 ---
 
 # Tally

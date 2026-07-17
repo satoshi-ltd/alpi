@@ -3594,6 +3594,50 @@ def peers_ping(ctx: click.Context, peer_id: str) -> None:
     )
 
 
+@peers.command("blob-put")
+@click.argument("peer_id")
+@click.argument("source", type=click.Path(path_type=Path, exists=True, dir_okay=False))
+@click.pass_context
+def peers_blob_put(ctx: click.Context, peer_id: str, source: Path) -> None:
+    """Send a file to a peer and print its content hash."""
+    import asyncio
+
+    from alpi.alp import blobs
+    from alpi.alp import client as alp_client
+
+    h: Path = ctx.obj["home"]
+    try:
+        result = asyncio.run(blobs.put(h, peer_id, source))
+    except (blobs.BlobError, alp_client.ClientError) as e:
+        raise click.ClickException(str(e)) from e
+    click.echo(f"{result['hash']}  {result['size']} bytes")
+
+
+@peers.command("blob-get")
+@click.argument("peer_id")
+@click.argument("blob_hash")
+@click.option("--output", "destination", required=True, type=click.Path(path_type=Path))
+@click.pass_context
+def peers_blob_get(
+    ctx: click.Context,
+    peer_id: str,
+    blob_hash: str,
+    destination: Path,
+) -> None:
+    """Retrieve a content-addressed file from a peer."""
+    import asyncio
+
+    from alpi.alp import blobs
+    from alpi.alp import client as alp_client
+
+    h: Path = ctx.obj["home"]
+    try:
+        result = asyncio.run(blobs.get(h, peer_id, blob_hash, destination))
+    except (blobs.BlobError, alp_client.ClientError) as e:
+        raise click.ClickException(str(e)) from e
+    click.echo(f"{result['hash']}  {result['size']} bytes  {result['path']}")
+
+
 @main.group()
 def workgroup() -> None:
     """Manage ALP workgroups; hub verbs (create/kick) vs member verbs (join/post/pull/pause/resume/leave)."""
