@@ -1,0 +1,44 @@
+---
+import site from "../../../config/site";
+import { useT } from "../../../i18n";
+import { byLocale, localePath, pageCopy } from "../../../lib/content";
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import SectionHeader from "../../../components/blocks/SectionHeader.astro";
+import Image from "../../../components/primitives/Image.astro";
+import Badge from "../../../components/primitives/Badge.astro";
+export function getStaticPaths() { return (site.pages?.blog === false ? [] : site.locales.map((lang) => ({ params: { lang } }))); }
+const { lang } = Astro.params as { lang: string };
+const t = useT(lang);
+const posts = await byLocale("posts", lang);
+const own = await pageCopy("blog", lang);
+const v = site.theme;
+---
+<BaseLayout title={own?.seo?.title ?? t("nav.blog")} description={own?.seo?.description} locale={lang}>
+  <section class="section"><div class="container">
+    <SectionHeader eyebrow={t("nav.blog")} title={t("nav.blog")} center={v !== "budget"} as="h1" />
+    <div class={`grid cols-${v === "boutique" ? 2 : 3}`}>
+      {posts.map((p: any) => (
+        <a class="card" href={localePath(lang, "blog", String(p.id).split("/").pop().split(".")[0])}>
+          <Image src={p.data.cover} alt={p.data.title} ratio="16/9" />
+          <div class="body">
+            {p.data.category && <Badge>{p.data.category}</Badge>}
+            <h3>{p.data.title}</h3>
+            {p.data.excerpt && <p class="muted sm">{p.data.excerpt}</p>}
+            {p.data.readingTime && <span class="meta muted">{p.data.readingTime}</span>}
+          </div>
+        </a>
+      ))}
+    </div>
+  </div></section>
+</BaseLayout>
+<style>
+  .grid { display: grid; gap: var(--space-5); }
+  .grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
+  .grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+  .card { border: 1px solid var(--color-line); border-radius: var(--radius); overflow: hidden; }
+  .body { padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+  h3 { font-size: 18px; }
+  .sm { font-size: 12.5px; }
+  .meta { font-size: 11px; }
+  @media (max-width: 720px) { .grid { grid-template-columns: 1fr !important; } }
+</style>

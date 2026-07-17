@@ -1,0 +1,12 @@
+{
+  "lang": "en",
+  "title": "Table for two & late checkout",
+  "description": "A calm little escape.",
+  "includes": [
+    "Desayuno",
+    "Late checkout"
+  ],
+  "priceFrom": 380,
+  "currency": "EUR",
+  "order": 1
+}

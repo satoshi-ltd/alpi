@@ -1,0 +1,12 @@
+{
+  "lang": "es",
+  "title": "Mesa para dos y late checkout",
+  "description": "Una escapada con calma.",
+  "includes": [
+    "Desayuno",
+    "Late checkout"
+  ],
+  "priceFrom": 380,
+  "currency": "EUR",
+  "order": 1
+}

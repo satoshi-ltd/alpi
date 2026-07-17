@@ -1,0 +1,37 @@
+---
+import site from "../../config/site";
+import { useT } from "../../i18n";
+import { byLocale, pageCopy } from "../../lib/content";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import AmenityGrid from "../../components/blocks/AmenityGrid.astro";
+import ExperienceTiles from "../../components/blocks/ExperienceTiles.astro";
+export function getStaticPaths() { return (site.pages?.amenities === false ? [] : site.locales.map((lang) => ({ params: { lang } }))); }
+const { lang } = Astro.params as { lang: string };
+const t = useT(lang);
+const own = await pageCopy("amenities", lang);
+const meetings = site.theme === "business" ? await byLocale("meetings", lang) : [];
+---
+<BaseLayout title={own?.seo?.title ?? t("nav.amenities")} description={own?.seo?.description} locale={lang}>
+  {site.theme === "resort" ? <ExperienceTiles locale={lang} headingLevel="h1" /> : <AmenityGrid locale={lang} headingLevel="h1" />}
+  {meetings.length > 0 && (
+    <section class="section"><div class="container">
+      <div class="mtable">
+        <div class="mhead">{t("section.meetings")}</div>
+        {meetings.map((m: any) => (
+          <div class="mrow">
+            <span class="mname">{m.data.name}</span>
+            <span class="muted">{t("meetings.capacity")} {m.data.capacity}</span>
+            <span class="muted">{m.data.av ?? ""}</span>
+          </div>
+        ))}
+      </div>
+    </div></section>
+  )}
+</BaseLayout>
+<style>
+  .mtable { border: 1px solid var(--color-line); border-radius: var(--radius); overflow: hidden; }
+  .mhead { background: var(--color-surface); padding: 10px 16px; font-weight: 700; font-size: 13px; }
+  .mrow { display: flex; gap: 16px; padding: 11px 16px; border-top: 1px solid var(--color-line); font-size: 13px; }
+  .mname { flex: 2; font-weight: 600; }
+  .mrow .muted { flex: 1; }
+</style>

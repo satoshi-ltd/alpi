@@ -1,0 +1,36 @@
+---
+import { useT } from "../../i18n";
+import { byLocale } from "../../lib/content";
+import SectionHeader from "./SectionHeader.astro";
+import Image from "../primitives/Image.astro";
+interface Props { locale: string; headingLevel?: "h1" | "h2"; }
+const { locale, headingLevel = "h2" } = Astro.props;
+const t = useT(locale);
+// Resort presents amenities as tiles; experiences is an optional enrichment.
+// Fall back to the amenities collection so the uniform content contract (quill
+// always writes amenities/) renders, and amenities.*.image slots are used.
+let items = await byLocale("experiences", locale);
+if (!items.length) items = await byLocale("amenities", locale);
+const label = (d: any) => d.name ?? d.title;
+---
+{items.length > 0 && (
+<section class="section"><div class="container">
+  <SectionHeader title={t("nav.amenities")} center as={headingLevel} />
+  <div class="grid">
+    {items.map((e: any) => (
+      <div class="tile">
+        <Image src={e.data.image} alt={label(e.data)} ratio="4/3" />
+        <span class="label">{label(e.data)}</span>
+      </div>
+    ))}
+  </div>
+</div></section>
+)}
+<style>
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-5); }
+  .tile { position: relative; border-radius: var(--radius); overflow: hidden; }
+  .label { position: absolute; left: 16px; bottom: 14px; z-index: 2; color: #fff;
+    font-family: var(--font-head); font-weight: var(--weight-head); font-size: 19px; text-shadow: 0 1px 6px rgba(0,0,0,.5); }
+  .tile::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 40%, rgba(0,0,0,.4)); }
+  @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+</style>

@@ -1,0 +1,12 @@
+{
+  "lang": "en",
+  "title": "Stay three, pay for two",
+  "description": "Linger a little longer.",
+  "includes": [
+    "Desayuno",
+    "Late checkout"
+  ],
+  "priceFrom": 380,
+  "currency": "EUR",
+  "order": 0
+}

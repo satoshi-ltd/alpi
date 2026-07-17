@@ -1,0 +1,16 @@
+/* Resort — immersive, rounded, playful. Teal + warm coral accent. */
+[data-theme="resort"] {
+  --font-head: "Quicksand", system-ui, sans-serif;
+  --font-body: "Quicksand", system-ui, sans-serif;
+  --weight-head: 700;
+  --color-accent: #0d8a8a;
+  --color-accent-2: #e8943a;
+  --color-ink: #1c2e2c;
+  --color-paper: #f7fbfa;
+  --color-surface: #e2efec;
+  --radius: 16px;
+  --radius-btn: 999px;
+  --space-section: 64px;
+  --tracking-label: 0;
+  --case-label: none;
+}

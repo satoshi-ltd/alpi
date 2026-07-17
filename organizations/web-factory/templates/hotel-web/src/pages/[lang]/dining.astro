@@ -1,0 +1,44 @@
+---
+import site from "../../config/site";
+import { useT } from "../../i18n";
+import { byLocale, localePath, pageCopy } from "../../lib/content";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import SectionHeader from "../../components/blocks/SectionHeader.astro";
+import Image from "../../components/primitives/Image.astro";
+import Button from "../../components/primitives/Button.astro";
+export function getStaticPaths() { return (site.pages?.dining === false ? [] : site.locales.map((lang) => ({ params: { lang } }))); }
+const { lang } = Astro.params as { lang: string };
+const t = useT(lang);
+const venues = await byLocale("dining", lang);
+const own = await pageCopy("dining", lang);
+---
+<BaseLayout title={own?.seo?.title ?? t("nav.dining")} description={own?.seo?.description} locale={lang}>
+  <section class="section"><div class="container">
+    <SectionHeader eyebrow={t("nav.dining")} title={t("nav.dining")} center as="h1" />
+    <div class="grid">
+      {venues.map((d: any) => (
+        <div class="card">
+          <Image src={d.data.image} alt={d.data.name} ratio="16/9" />
+          <div class="body">
+            <h3>{d.data.name}</h3>
+            {d.data.description && <p class="muted">{d.data.description}</p>}
+            {d.data.hours && <p class="hours">{d.data.hours}</p>}
+            {d.data.menu?.length > 0 && (
+              <ul class="menu">{d.data.menu.map((m: string) => <li>{m}</li>)}</ul>
+            )}
+            <Button variant="ghost" size="sm" href={`${localePath(lang, "")}#book`}>{t("cta.reserve")}</Button>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div></section>
+</BaseLayout>
+<style>
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-6); }
+  .card { border: 1px solid var(--color-line); border-radius: var(--radius); overflow: hidden; }
+  .body { padding: 16px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+  h3 { font-size: 20px; }
+  .hours { font-size: 12px; color: var(--color-accent); font-weight: 600; }
+  .menu { columns: 2; margin: 4px 0; padding-left: 16px; font-size: 13px; color: var(--color-muted); }
+  @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+</style>

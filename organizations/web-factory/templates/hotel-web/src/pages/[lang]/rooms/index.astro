@@ -1,0 +1,34 @@
+---
+import site from "../../../config/site";
+import { useT } from "../../../i18n";
+import { byLocale, pageCopy } from "../../../lib/content";
+import BaseLayout from "../../../layouts/BaseLayout.astro";
+import SectionHeader from "../../../components/blocks/SectionHeader.astro";
+import RoomCard from "../../../components/blocks/RoomCard.astro";
+export function getStaticPaths() {
+  return (site.pages?.rooms === false ? [] : site.locales.map((lang) => ({ params: { lang } })));
+}
+const { lang } = Astro.params as { lang: string };
+const t = useT(lang);
+const rooms = await byLocale("rooms", lang);
+const own = await pageCopy("rooms", lang);
+const v = site.theme;
+---
+<BaseLayout title={own?.seo?.title ?? t("nav.rooms")} description={own?.seo?.description} locale={lang}>
+  <section class="section"><div class="container">
+    <SectionHeader eyebrow={t("nav.rooms")} title={t("section.rooms")} center={v !== "budget"} as="h1" />
+    <div class={`grid cols-${v === "boutique" ? 1 : v === "budget" ? 1 : 2}`}>
+      {rooms.map((r: any) => (
+        <RoomCard locale={lang} layout={v === "budget" ? "row" : undefined} name={r.data.name} slug={r.data.slug} summary={r.data.summary}
+          priceFrom={r.data.priceFrom} currency={r.data.currency} image={r.data.image}
+          sizeM2={r.data.sizeM2} bed={r.data.bed} view={r.data.view} />
+      ))}
+    </div>
+  </div></section>
+</BaseLayout>
+<style>
+  .grid { display: grid; gap: var(--space-6); }
+  .grid.cols-1 { grid-template-columns: 1fr; }
+  .grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
+  @media (max-width: 720px) { .grid { grid-template-columns: 1fr !important; } }
+</style>

@@ -1,0 +1,29 @@
+---
+import { useT } from "../../i18n";
+import Image from "../primitives/Image.astro";
+import Eyebrow from "../primitives/Eyebrow.astro";
+import site from "../../config/site";
+interface Props { locale: string; images?: string[]; cols?: number; }
+const { locale, images = [], cols = 4 } = Astro.props;
+const t = useT(locale);
+// Gallery is gated by site.pages.gallery at the call site. When shown, always
+// fill `cols` tiles — real images, else branded placeholders — each with a
+// derived alt, so a missing photo is never a broken or alt-less image.
+const tiles = images.length ? images.slice(0, cols) : Array.from({ length: cols }, () => undefined);
+---
+<section class="section"><div class="container">
+  <div class="head">
+    <div><Eyebrow>{t("nav.gallery")}</Eyebrow><h2>{t("section.gallery")}</h2></div>
+    <a class="link" href={`/${locale}/gallery`}>{t("cta.viewGallery")} →</a>
+  </div>
+  <div class="grid" style={`grid-template-columns:repeat(${cols},1fr)`}>
+    {tiles.map((src, i) => <Image src={src} alt={`${site.brand.name} — ${t("nav.gallery")} ${i + 1}`} ratio="1/1" />)}
+  </div>
+</div></section>
+<style>
+  .head { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 16px; }
+  .head h2 { font-size: 24px; margin-top: 8px; }
+  .link { font-size: 12px; font-weight: 600; color: var(--color-accent); }
+  .grid { display: grid; gap: var(--space-3); }
+  @media (max-width: 720px) { .grid { grid-template-columns: repeat(2,1fr) !important; } }
+</style>

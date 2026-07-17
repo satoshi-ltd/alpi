@@ -1,0 +1,25 @@
+{
+  "lang": "en",
+  "hero": {
+    "eyebrow": "A house by the sea",
+    "title": "Where stillness becomes a place",
+    "subtitle": "Twelve rooms, one quiet promise."
+  },
+  "intro": {
+    "title": "Twelve rooms. One quiet promise.",
+    "body": "Wake to the sound of the sea and a morning with no rush, in a twelve-room villa where nothing is excess and nothing is missing. Every corner is cared for so that resting is the only thing you need to do: washed linen, natural light, honest materials and a service that anticipates without intruding. The old town a walk away; the noise, far off."
+  },
+  "about": {
+    "eyebrow": "The setting",
+    "title": "An old villa, gently restored",
+    "body": "This old villa was restored with care, keeping the clay of the floors, the lime of the walls and the shade of the garden cypresses. It sits a few steps from the old town, yet a world from its noise: a quiet street, a gate, and calm within. We work with natural materials and local trades, and tend the service so it shows only when needed. Twelve rooms, none alike, all made for staying."
+  },
+  "dining": {
+    "title": "Sea, salt and fire",
+    "description": "Our table celebrates the day's catch and produce from the gardens nearby."
+  },
+  "location": {
+    "directions": "20 minutes from the airport, 5 from the beach and a 10-minute walk to the old town."
+  },
+  "gallery": []
+}

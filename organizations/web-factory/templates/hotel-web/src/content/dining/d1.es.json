@@ -1,0 +1,14 @@
+{
+  "lang": "es",
+  "name": "El Faro",
+  "summary": "Mar, sal y fuego",
+  "description": "El Faro es nuestra mesa frente al agua: mar, sal y fuego. Cocinamos la pesca del día y las verduras del huerto cercano, sin artificios, con producto de temporada y brasa. La carta cambia con lo que llega cada mañana del puerto. Vinos de la zona, postres de la casa y sobremesas largas con vistas al horizonte.",
+  "hours": "13:00–23:00",
+  "menu": [
+    "Ostras",
+    "Pescado del día",
+    "Verduras del huerto",
+    "Bizcocho de aceite"
+  ],
+  "order": 0
+}

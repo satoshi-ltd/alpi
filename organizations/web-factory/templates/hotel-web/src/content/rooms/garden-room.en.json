@@ -1,0 +1,22 @@
+{
+  "lang": "en",
+  "name": "Garden Room",
+  "slug": "garden-room",
+  "order": 0,
+  "summary": "A room overlooking the garden with soft light all day.",
+  "description": "A serene room facing the garden, where soft light arrives early and lingers all morning. The king bed wears washed linen and looks onto the cypress trees; a reading chair sits in the corner by the window. The bathroom has a walk-in shower and handmade tile. Made for anyone after quiet, greenery and an unhurried start to the day.",
+  "sizeM2": 24,
+  "capacity": 2,
+  "bed": "King",
+  "view": "Jardín/Garden",
+  "amenities": [
+    "wifi",
+    "aire-acondicionado",
+    "minibar",
+    "balcon"
+  ],
+  "priceFrom": 120,
+  "currency": "EUR",
+  "gallery": [],
+  "featured": false
+}

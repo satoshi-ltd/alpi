@@ -1,0 +1,59 @@
+---
+// Hero — structure varies by theme. Token-driven styling.
+import site from "../../config/site";
+import { useT } from "../../i18n";
+import Eyebrow from "../primitives/Eyebrow.astro";
+import Image from "../primitives/Image.astro";
+import Button from "../primitives/Button.astro";
+import BookingWidget from "./BookingWidget.astro";
+interface Props { locale: string; eyebrow?: string; title: string; subtitle?: string; image?: string; }
+const { locale, eyebrow, title, subtitle, image } = Astro.props;
+const t = useT(locale);
+const v = site.theme;
+const overlay = v === "boutique" || v === "resort"; // text on the image
+---
+{overlay ? (
+  <section class={`hero overlay ${v}`}>
+    <Image src={image} alt={title} ratio={v === "resort" ? "21/9" : "16/9"} radius={false} class="bg" />
+    <div class="inner container">
+      {eyebrow && <Eyebrow class="light">{eyebrow}</Eyebrow>}
+      <h1>{title}</h1>
+      {subtitle && <p class="sub">{subtitle}</p>}
+      {v === "resort" && <Button size="lg" href="#book">{t("cta.reserve")}</Button>}
+    </div>
+    <div class="scrim"></div>
+  </section>
+) : (
+  <section class={`hero split ${v}`}>
+    <div class="container row">
+      <div class="copy">
+        {eyebrow && <Eyebrow>{eyebrow}</Eyebrow>}
+        <h1>{title}</h1>
+        {subtitle && <p class="sub muted">{subtitle}</p>}
+        <div class="bk"><BookingWidget locale={locale} vertical /></div>
+      </div>
+      <div class="media"><Image src={image} alt={title} ratio="4/3" /></div>
+    </div>
+  </section>
+)}
+{overlay && (
+  <div class="container hero-book"><BookingWidget locale={locale} /></div>
+)}
+<style>
+  .hero { position: relative; }
+  .overlay .bg { aspect-ratio: 16/9; }
+  .overlay.resort .bg { aspect-ratio: 21/9; }
+  .scrim { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,.15), rgba(0,0,0,.4)); }
+  .overlay .inner { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center; gap: 14px; }
+  .overlay h1 { color: #fff; font-size: clamp(34px, 5vw, 52px); text-shadow: 0 2px 14px rgba(0,0,0,.4); max-width: 16ch; }
+  .overlay .sub { color: #fff; opacity: .92; }
+  .light { color: #fff !important; }
+  .hero-book { margin-top: -32px; position: relative; z-index: 5; }
+  .split .row { display: flex; gap: 32px; align-items: center; padding-top: var(--space-7); }
+  .split .copy { flex: 1.1; display: flex; flex-direction: column; gap: 16px; }
+  .split .media { flex: 1; }
+  .split h1 { font-size: clamp(28px, 4vw, 38px); }
+  .bk { margin-top: 6px; max-width: 420px; }
+  @media (max-width: 720px) { .split .row { flex-direction: column; } }
+</style>

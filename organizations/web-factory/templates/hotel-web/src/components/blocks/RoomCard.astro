@@ -1,0 +1,52 @@
+---
+// RoomCard — layout varies by theme; same data contract.
+import site from "../../config/site";
+import { useT } from "../../i18n";
+import { localePath } from "../../lib/content";
+import Image from "../primitives/Image.astro";
+import Badge from "../primitives/Badge.astro";
+import Button from "../primitives/Button.astro";
+interface Props {
+  locale: string; name: string; slug: string; summary?: string;
+  priceFrom?: number; currency?: string; image?: string;
+  sizeM2?: number; bed?: string; view?: string; layout?: "row";
+}
+const { locale, name, slug, summary, priceFrom, currency = "EUR", image, sizeM2, bed, view, layout } = Astro.props;
+const t = useT(locale);
+const v = site.theme;
+const href = localePath(locale, "rooms", slug);
+const cur = currency === "EUR" ? "€" : currency === "USD" ? "$" : currency + " ";
+const chips = [sizeM2 && `${sizeM2} m²`, view, bed].filter(Boolean) as string[];
+---
+<article class={`rc ${v} ${layout ?? ""}`}>
+  <a href={href} class="media"><Image src={image} alt={name} ratio={v === "budget" ? "16/10" : "4/3"} /></a>
+  <div class="body">
+    <h3><a href={href}>{name}</a></h3>
+    {summary && (v !== "budget" || layout === "row") && <p class="muted sum">{summary}</p>}
+    {chips.length > 0 && <div class="chips">{chips.map((c) => <Badge>{c}</Badge>)}</div>}
+    <div class="foot">
+      {priceFrom != null
+        ? <span class="price"><span class="muted from">{t("common.from")}</span> {cur}{priceFrom}</span>
+        : <span />}
+      <Button href={href} size="sm" variant={v === "boutique" ? "ghost" : "solid"}>{t("cta.viewRoom")}</Button>
+    </div>
+  </div>
+</article>
+<style>
+  .rc { display: flex; flex-direction: column; }
+  .rc.budget, .rc.business, .rc.resort { border: 1px solid var(--color-line); border-radius: var(--radius); overflow: hidden; }
+  .rc.resort { box-shadow: var(--shadow-md); border: none; }
+  .body { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px 14px; }
+  .rc.boutique .body { padding-inline: 0; }
+  h3 { font-size: 19px; }
+  .rc.budget h3 { font-size: 14px; }
+  .sum { font-size: 13px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .foot { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; }
+  .price { font-family: var(--font-head); font-size: 18px; color: var(--color-accent); }
+  .from { font-family: var(--font-body); font-size: 11px; }
+  .rc.row { flex-direction: row; }
+  .rc.row .media { width: 260px; flex-shrink: 0; }
+  .rc.row .body { flex: 1; justify-content: center; }
+  @media (max-width: 720px) { .rc.row { flex-direction: column; } .rc.row .media { width: 100%; } }
+</style>

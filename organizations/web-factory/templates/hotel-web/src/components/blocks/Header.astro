@@ -1,0 +1,69 @@
+---
+import site from "../../config/site";
+import { useT } from "../../i18n";
+import { localePath } from "../../lib/content";
+import Button from "../primitives/Button.astro";
+import LangSwitcher from "./LangSwitcher.astro";
+
+interface Props { locale: string; hasBooking?: boolean; }
+const { locale, hasBooking = false } = Astro.props;
+const t = useT(locale);
+const v = site.theme;
+const links = site.nav.primary.filter((p) => site.pages[p === "blog" ? "blog" : p] !== false);
+const centered = v === "boutique";
+const utility = v === "business";
+// Pages without an embedded BookingWidget send the CTA to the landing's #book.
+const bookHref = hasBooking ? "#book" : `${localePath(locale, "")}#book`;
+---
+{utility && (
+  <div class="utility">
+    <div class="container ubar">
+      {site.contact.phone && <span>{site.contact.phone}</span>}
+      <span class="sp"></span>
+      {site.nav.showLangSwitcher && <LangSwitcher locale={locale} dark />}
+    </div>
+  </div>
+)}
+<header class={`hdr ${centered ? "centered" : ""}`}>
+  <input id="m-nav" type="checkbox" class="m-toggle" aria-hidden="true" />
+  <div class="container bar">
+    <label for="m-nav" class="burger" aria-label={t("a11y.menu")}><span></span><span></span><span></span></label>
+    <a class="logo" href={`/${locale}`}>{site.brand.logo
+      ? <img class="logo-img" src={site.brand.logo} alt={site.brand.name} />
+      : site.brand.name}</a>
+    <nav class="nav">
+      {links.map((l) => <a href={localePath(locale, l === "landing" ? "" : l)}>{t(`nav.${l}`)}</a>)}
+    </nav>
+    <div class="right">
+      {!utility && site.nav.showLangSwitcher && <LangSwitcher locale={locale} />}
+      <Button href={bookHref} size="sm">{t(`cta.${site.nav.cta}`)}</Button>
+    </div>
+  </div>
+</header>
+<style>
+  .utility { background: var(--color-ink); color: #fff; font-size: 10.5px; }
+  .ubar { display: flex; align-items: center; gap: 16px; height: 32px; }
+  .ubar .sp { flex: 1; }
+  .hdr { border-bottom: 1px solid var(--color-line); background: var(--color-paper); position: sticky; top: 0; z-index: 20; }
+  .bar { display: flex; align-items: center; justify-content: space-between; min-height: var(--nav-h); gap: 20px; }
+  .logo { font-family: var(--font-head); font-weight: var(--weight-head); font-size: 20px;
+    letter-spacing: var(--tracking-label); text-transform: var(--case-label, none); }
+  .logo-img { display: block; height: 30px; width: auto; max-width: 200px; }
+  .nav { display: flex; gap: 22px; font-size: 13px; color: var(--color-muted); }
+  .nav a:hover { color: var(--color-ink); }
+  .right { display: flex; align-items: center; gap: 16px; }
+  .centered .bar { flex-direction: column; gap: 12px; padding-block: 16px; text-align: center; }
+  .centered .nav { order: 3; }
+  .m-toggle { display: none; }
+  .burger { display: none; flex-direction: column; gap: 3px; cursor: pointer; padding: 6px; }
+  .burger span { width: 16px; height: 2px; background: var(--color-ink); border-radius: 2px; }
+  @media (max-width: 720px) {
+    .burger { display: flex; }
+    .centered .bar { flex-direction: row; gap: 20px; padding-block: 0; text-align: left; }
+    .centered .nav { order: 0; }
+    .nav { display: none; position: absolute; top: 100%; left: 0; right: 0; z-index: 30;
+      flex-direction: column; gap: 16px; padding: 18px 20px; font-size: 14px;
+      background: var(--color-paper); border-bottom: 1px solid var(--color-line); }
+    #m-nav:checked ~ .bar .nav { display: flex; }
+  }
+</style>

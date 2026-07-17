@@ -1,0 +1,20 @@
+---
+import site from "../config/site";
+import { useT } from "../i18n";
+import BaseLayout from "../layouts/BaseLayout.astro";
+import Button from "../components/primitives/Button.astro";
+const lang = site.defaultLocale;
+const t = useT(lang);
+---
+<BaseLayout title={t("error.notFound")} locale={lang}>
+  <section class="section"><div class="container nf">
+    <h1>{t("error.notFound")}</h1>
+    <p class="muted">{t("error.notFoundBody")}</p>
+    <Button href={`/${lang}/`}>{t("error.backHome")}</Button>
+  </div></section>
+</BaseLayout>
+<style>
+  .nf { text-align: center; padding-block: 60px; max-width: 480px; margin-inline: auto;
+    display: flex; flex-direction: column; gap: 14px; align-items: center; }
+  h1 { font-size: 30px; }
+</style>

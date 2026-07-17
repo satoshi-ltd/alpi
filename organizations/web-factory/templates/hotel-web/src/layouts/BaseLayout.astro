@@ -1,0 +1,89 @@
+---
+import "../styles/base.css";
+import "../styles/themes/boutique.css";
+import "../styles/themes/budget.css";
+import "../styles/themes/business.css";
+import "../styles/themes/resort.css";
+import site, { tokenStyle } from "../config/site";
+import { useT } from "../i18n";
+import Seo from "../components/Seo.astro";
+import Header from "../components/blocks/Header.astro";
+import Footer from "../components/blocks/Footer.astro";
+
+interface Props {
+  title: string;
+  description?: string;
+  locale: string;
+  image?: string;
+  keywords?: string[];
+  hasBooking?: boolean;
+}
+const { title, description, locale, image, keywords, hasBooking = false } = Astro.props;
+const t = useT(locale);
+const mirai = (site.booking?.provider ?? "").toLowerCase() === "mirai";
+// Mirai ids are numeric; a brief-supplied propertyId like "CASABAHIA-MIRAI" falls back to the demo property.
+const miraiId = /^\d+$/.test(site.booking?.propertyId ?? "") ? site.booking.propertyId : "100379008";
+
+// Theme + token fonts are fixed at build time, so only the active families ship.
+const FONT_PARAMS: Record<string, string> = {
+  "Cormorant Garamond": "Cormorant+Garamond:wght@400;500;600",
+  "Playfair Display": "Playfair+Display:wght@400;500;600;700",
+  "Lora": "Lora:wght@400;500;600",
+  "Jost": "Jost:wght@300;400;500",
+  "Archivo": "Archivo:wght@400;600;700;800",
+  "Libre Franklin": "Libre+Franklin:wght@400;500;600;700",
+  "Quicksand": "Quicksand:wght@400;500;600;700",
+  "DM Sans": "DM+Sans:wght@400;500;600;700",
+  "Work Sans": "Work+Sans:wght@400;500;600;700",
+};
+const THEME_FONTS: Record<string, [string, string]> = {
+  boutique: ["Cormorant Garamond", "Jost"],
+  budget: ["Archivo", "Archivo"],
+  business: ["Libre Franklin", "Libre Franklin"],
+  resort: ["Quicksand", "Quicksand"],
+};
+const THEME_ACCENT: Record<string, string> = {
+  boutique: "#9c6a45", budget: "#1f6feb", business: "#1e3a5f", resort: "#0d8a8a",
+};
+const [defHead, defBody] = THEME_FONTS[site.theme] ?? ["Archivo", "Archivo"];
+const families = [...new Set([site.tokens?.fontHead ?? defHead, site.tokens?.fontBody ?? defBody])];
+const fontParams = families.map((f) => FONT_PARAMS[f]).filter(Boolean);
+const fontHref = fontParams.length
+  ? `https://fonts.googleapis.com/css2?${fontParams.map((p) => `family=${p}`).join("&")}&display=swap`
+  : null;
+const themeColor = site.tokens?.accent ?? THEME_ACCENT[site.theme] ?? "#1d242e";
+// Cyrillic isn't in the curated Latin display fonts — request the subset so ru renders.
+const needsCyrillic = site.locales.includes("ru");
+const fontHrefFull = fontHref && needsCyrillic ? `${fontHref}&subset=cyrillic,latin` : fontHref;
+---
+<!doctype html>
+<html lang={locale} data-theme={site.theme} style={tokenStyle(site.tokens)}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <Seo locale={locale} title={title} description={description} image={image} keywords={keywords} />
+    <meta name="theme-color" content={themeColor} />
+    {fontHref && <link rel="preconnect" href="https://fonts.googleapis.com" />}
+    {fontHref && <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />}
+    {fontHref && <link rel="stylesheet" href={fontHrefFull} />}
+    {mirai && (
+      <link rel="preload" as="style" href="https://static.mirai.com/core/index.css"
+        onload="this.onload=null;this.rel='stylesheet'" />
+    )}
+  </head>
+  <body>
+    <a class="skip" href="#main">{t("a11y.skipToContent")}</a>
+    {mirai && <div id="mirai" data-mirai-id={miraiId} data-locale={locale}></div>}
+    <Header locale={locale} hasBooking={hasBooking} />
+    <main id="main">
+      <slot />
+    </main>
+    <Footer locale={locale} />
+    {mirai && <script is:inline async type="module" defer src="https://static.mirai.com/core/index.js"></script>}
+  </body>
+</html>
+<style>
+  .skip { position: absolute; left: 8px; top: -48px; z-index: 100; background: var(--color-paper);
+    color: var(--color-ink); padding: 8px 14px; border-radius: 4px; font-size: 13px; }
+  .skip:focus { top: 8px; }
+</style>

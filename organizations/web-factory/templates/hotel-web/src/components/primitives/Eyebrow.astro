@@ -1,0 +1,6 @@
+---
+// Eyebrow / kicker label.
+interface Props { class?: string; }
+const { class: cls = "" } = Astro.props;
+---
+<div class={`eyebrow ${cls}`}><slot /></div>

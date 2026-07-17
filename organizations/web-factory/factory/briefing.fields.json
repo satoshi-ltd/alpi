@@ -1,0 +1,68 @@
+{
+  "$comment": "Briefing field schema. Pass it to an AI to generate a complete hotel briefing.md. req=required, decision=influences template choice, binds=binding(s) or use it feeds.",
+  "meta": {
+    "locales": { "req": true, "type": "string[]", "note": "Site languages, e.g. ['es','en']" },
+    "default_locale": { "req": true, "type": "string" },
+    "project_name": { "type": "string" },
+    "domain": { "type": "string" }
+  },
+  "identity": {
+    "name": { "req": true, "type": "string" },
+    "type": { "req": true, "decision": true, "type": "enum", "options": ["boutique", "hostel", "urban-business", "resort", "apart-hotel", "other"] },
+    "star_level": { "decision": true, "type": "number" },
+    "room_count": { "req": true, "decision": true, "type": "number" },
+    "location_context": { "req": true, "decision": true, "type": "string", "note": "city / coast / mountain / island / airport-station" },
+    "target_guest": { "req": true, "decision": true, "type": "string", "note": "couples / families / business / backpacker / luxury" },
+    "price_level": { "req": true, "decision": true, "type": "enum", "options": ["budget", "mid", "high", "luxury"] },
+    "usp": { "req": true, "type": "string", "note": "What makes you special, in one sentence" },
+    "competes_on": { "req": true, "decision": true, "type": "string", "note": "price / design / location / experiences / service" },
+    "brand_keywords": { "decision": true, "type": "string[]", "note": "3 words for the brand's feel" }
+  },
+  "brand": {
+    "style_template": { "type": "string", "optional": true, "note": "boutique | budget | business | resort — when set it WINS and the rubric is skipped" },
+    "logo": { "type": "file" },
+    "tagline": { "type": "string", "binds": ["hero.title"] },
+    "color_primary": { "type": "color" },
+    "color_secondary": { "type": "color" },
+    "font_pref": { "type": "string", "note": "serif / sans / rounded / let-the-ai-decide" },
+    "tone": { "type": "string" },
+    "references": { "type": "string[]" }
+  },
+  "contact": {
+    "phone": { "type": "string" },
+    "email": { "type": "string" },
+    "address": { "req": true, "type": "string", "binds": ["location", "footer"] },
+    "coords": { "type": "string", "note": "lat,lng" },
+    "booking_provider": { "req": true, "type": "string", "note": "Cloudbeds / Mirai / SiteMinder… + ID. The AI only configures the plugin." },
+    "booking_id": { "req": true, "type": "string", "note": "For Mirai: the NUMERIC property id (data-mirai-id). Non-numeric/empty falls back to demo property 100379008." },
+    "socials": { "type": "string[]" }
+  },
+  "content": {
+    "hero": { "binds": ["hero.eyebrow", "hero.title", "hero.subtitle", "hero.image"], "required_binds": ["hero.title"] },
+    "about": { "binds": ["about.title", "about.body", "about.image"] },
+    "rooms": { "type": "collection", "binds": ["rooms[].name", "rooms[].summary", "rooms[].description", "rooms[].sizeM2", "rooms[].capacity", "rooms[].bed", "rooms[].view", "rooms[].amenities[]", "rooms[].priceFrom", "rooms[].image", "rooms[].gallery[]"], "required_binds": ["rooms[].name"] },
+    "amenities": { "type": "collection", "binds": ["amenities[].title", "amenities[].description", "amenities[].image"], "note": "Also a flat list of services (wifi, spa, parking…)" },
+    "dining": { "binds": ["dining.title", "dining.description", "dining.hours", "dining.menu[]", "dining.image", "venues[].name", "venues[].image"] },
+    "experiences": { "type": "collection", "binds": ["experiences[].image", "experiences[].name"], "note": "Mostly resort" },
+    "offers": { "type": "collection", "binds": ["offers[].title", "offers[].description", "offers[].includes[]", "offers[].priceFrom", "offers[].image"] },
+    "gallery": { "type": "collection", "binds": ["gallery[]"], "note": "Photos, categorised if possible" },
+    "testimonials": { "type": "collection", "binds": ["testimonials[].quote", "testimonials[].author"], "note": "+ external scores (Booking, Google, TripAdvisor)" },
+    "location": { "binds": ["location.directions", "location.map"], "note": "+ key distances (airport, station, beach, centre)" },
+    "blog": { "type": "collection", "optional": true, "binds": ["posts[].title", "posts[].category", "posts[].excerpt", "posts[].cover", "post.body"] }
+  },
+  "assets": {
+    "photos": { "type": "folder|url", "note": "Link or folder with the hotel's photos" },
+    "brand_kit": { "type": "file", "note": "Brand manual, palette, licensed fonts" }
+  },
+  "seo": {
+    "meta": { "type": "object", "optional": true, "note": "Title and description per page" },
+    "keywords": { "type": "string[]", "optional": true }
+  },
+  "ai_instructions": [
+    "If brand.style_template pins one of the 4, it wins (record 'pinned by brief'). Otherwise score the 4 styles with decisionRubric (template-spec.json) using 'identity'. On a tie or insufficient info => ask.",
+    "Take defaults[template] and override with 'brand' only when given.",
+    "Fill the 'content' binds per language. A missing fact is omitted and recorded as a gap — never invented; only a missing image may fall back to a tonal placeholder. Never break the layout.",
+    "Enable only pages with enough content (no posts => no blog).",
+    "Generate the briefing.md following briefing.template.md as the output structure."
+  ]
+}

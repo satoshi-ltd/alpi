@@ -1,0 +1,17 @@
+/* Budget — dense, friendly, OTA-like. Blue accent, green prices. */
+[data-theme="budget"] {
+  --font-head: "Archivo", system-ui, sans-serif;
+  --font-body: "Archivo", system-ui, sans-serif;
+  --weight-head: 800;
+  --color-accent: #1f6feb;
+  --color-accent-2: #1850c4;
+  --color-ink: #22262b;
+  --color-paper: #ffffff;
+  --color-surface: #eef1f5;
+  --color-price: #1f8a4c;
+  --radius: 6px;
+  --radius-btn: 6px;
+  --space-section: 40px;
+  --tracking-label: -.01em;
+  --case-label: none;
+}

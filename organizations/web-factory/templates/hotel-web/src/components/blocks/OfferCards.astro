@@ -1,0 +1,60 @@
+---
+import { useT } from "../../i18n";
+import { byLocale, localePath } from "../../lib/content";
+import SectionHeader from "./SectionHeader.astro";
+import Image from "../primitives/Image.astro";
+import Button from "../primitives/Button.astro";
+import site from "../../config/site";
+interface Props { locale: string; limit?: number; headingLevel?: "h1" | "h2"; }
+const { locale, limit, headingLevel = "h2" } = Astro.props;
+const t = useT(locale);
+let items = await byLocale("offers", locale);
+if (limit) items = items.slice(0, limit);
+const codeOffer = site.theme === "budget" ? items.find((e: any) => e.data.code) : null;
+const cur = "€";
+---
+{items.length > 0 && (
+<section class="section"><div class="container">
+  <SectionHeader eyebrow={t("nav.offers")} title={t("nav.offers")} center={site.theme !== "budget"} as={headingLevel} />
+  <div class="grid">
+    {items.map((e: any) => (
+      <div class="card">
+        <div class="media">
+          <Image src={e.data.image} alt={e.data.title} ratio="16/9" />
+          {site.theme === "budget" && e.data.discountPct ? <span class="off">−{e.data.discountPct}%</span> : null}
+        </div>
+        <div class="body">
+          <h3>{e.data.title}</h3>
+          {e.data.description && <p class="muted sm">{e.data.description}</p>}
+          {e.data.includes?.length > 0 && (
+            <ul class="inc">{e.data.includes.map((i: string) => <li>{i}</li>)}</ul>
+          )}
+          <div class="foot">
+            {e.data.priceFrom && <span class="price">{t("common.from")} {cur}{e.data.priceFrom}</span>}
+            <Button href={localePath(locale, "offers")} size="sm" variant="ghost">{t("cta.explore")}</Button>
+          </div>
+        </div>
+      </div>
+    ))}
+  </div>
+  {codeOffer && (
+    <div class="codebox"><span>{t("offers.useCode")} <b>{codeOffer.data.code}</b>{codeOffer.data.discountPct ? ` · −${codeOffer.data.discountPct}%` : ""}</span></div>
+  )}
+</div></section>
+)}
+<style>
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-5); }
+  .card { border: 1px solid var(--color-line); border-radius: var(--radius); overflow: hidden; }
+  .body { padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+  h3 { font-size: 16px; }
+  .sm { font-size: 12.5px; }
+  .inc { margin: 0; padding-left: 16px; font-size: 12px; color: var(--color-muted); }
+  .foot { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; }
+  .price { font-weight: 700; color: var(--color-accent); }
+  @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+  .media { position: relative; }
+  .off { position: absolute; top: 10px; left: 10px; z-index: 2; background: var(--color-accent); color: #fff;
+    font-size: 12px; font-weight: 800; padding: 4px 8px; border-radius: var(--radius); }
+  .codebox { margin-top: 14px; background: var(--color-surface); border-radius: var(--radius); padding: 12px 14px; font-size: 13px; }
+  .codebox b { color: var(--color-accent); }
+</style>

@@ -1,0 +1,22 @@
+{
+  "lang": "es",
+  "name": "Garden Room",
+  "slug": "garden-room",
+  "order": 0,
+  "summary": "Habitación con vistas al jardín y luz suave todo el día.",
+  "description": "Una habitación serena orientada al jardín, donde la luz entra suave desde primera hora y se queda toda la mañana. La cama king viste lino lavado y mira a los cipreses; un sillón de lectura ocupa el rincón junto a la ventana. Baño con ducha de obra y azulejo artesano. Pensada para quien busca silencio, verde y un despertar sin prisa.",
+  "sizeM2": 24,
+  "capacity": 2,
+  "bed": "King",
+  "view": "Jardín/Garden",
+  "amenities": [
+    "wifi",
+    "aire-acondicionado",
+    "minibar",
+    "balcon"
+  ],
+  "priceFrom": 120,
+  "currency": "EUR",
+  "gallery": [],
+  "featured": false
+}

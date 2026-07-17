@@ -1,0 +1,37 @@
+---
+import site from "../../config/site";
+import { useT } from "../../i18n";
+import { pageCopy } from "../../lib/content";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import SectionHeader from "../../components/blocks/SectionHeader.astro";
+import Image from "../../components/primitives/Image.astro";
+export function getStaticPaths() { return (site.pages?.about === false ? [] : site.locales.map((lang) => ({ params: { lang } }))); }
+const { lang } = Astro.params as { lang: string };
+const t = useT(lang);
+const copy = await pageCopy("home", lang);
+const a = copy?.about;
+const own = await pageCopy("about", lang);
+---
+<BaseLayout title={own?.seo?.title ?? t("nav.about")} description={own?.seo?.description} locale={lang}>
+  <section class="section"><div class="container narrow">
+    <SectionHeader eyebrow={a?.eyebrow ?? t("nav.about")} title={a?.title ?? site.brand.name} center as="h1" />
+    {a?.body && <p class="muted lead">{a.body}</p>}
+  </div>
+  <div class="container"><div class="media"><Image src={a?.image} alt={a?.title} ratio="21/9" /></div></div>
+  {site.theme === "boutique" && a?.values?.length > 0 && (
+    <div class="container"><div class="values">
+      {a.values.map((vl: any) => (
+        <div class="val"><h2>{vl.title}</h2>{vl.body && <p class="muted">{vl.body}</p>}</div>
+      ))}
+    </div></div>
+  )}
+  </section>
+</BaseLayout>
+<style>
+  .narrow { max-width: 640px; margin-inline: auto; text-align: center; margin-bottom: 28px; }
+  .lead { font-size: 16px; }
+  .media { margin-top: 8px; }
+  .values { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; margin-top: 34px; text-align: center; }
+  .val h2 { font-size: 20px; margin-bottom: 8px; }
+  @media (max-width: 720px) { .values { grid-template-columns: 1fr; } }
+</style>

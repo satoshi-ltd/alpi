@@ -1,0 +1,38 @@
+---
+import site from "../../config/site";
+import { useT } from "../../i18n";
+import { pageCopy } from "../../lib/content";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import SectionHeader from "../../components/blocks/SectionHeader.astro";
+import Image from "../../components/primitives/Image.astro";
+// `site.pages.gallery` is the master switch (scout turns it off when the hotel
+// has no photos). When ON, the page always renders — real images, else branded
+// placeholder tiles — so the nav target always resolves and is never empty.
+export function getStaticPaths() {
+  if (site.pages?.gallery === false) return [];
+  return site.locales.map((lang) => ({ params: { lang } }));
+}
+const { lang } = Astro.params as { lang: string };
+const t = useT(lang);
+const copy = await pageCopy("home", lang);
+const gallery = copy?.gallery ?? [];
+const own = await pageCopy("gallery", lang);
+const tiles = gallery.length ? gallery : Array.from({ length: 9 }, () => undefined);
+---
+<BaseLayout title={own?.seo?.title ?? t("nav.gallery")} description={own?.seo?.description} locale={lang}>
+  <section class="section"><div class="container">
+    <SectionHeader eyebrow={t("nav.gallery")} title={t("section.gallery")} center as="h1" />
+    <div class={`masonry ${site.theme}`}>
+      {tiles.map((src: string | undefined, i: number) => (
+        <Image src={src} alt={`${site.brand.name} — ${t("nav.gallery")} ${i + 1}`} ratio={i % 3 === 0 ? "3/4" : "4/3"} />
+      ))}
+    </div>
+  </div></section>
+</BaseLayout>
+<style>
+  .masonry { column-count: 3; column-gap: var(--space-4); }
+  /* :global — the tiles are <Image> components, so they don't carry this file's scope cid. */
+  .masonry > :global(*) { margin-bottom: var(--space-4); break-inside: avoid; }
+  .masonry.budget { column-count: 4; }
+  @media (max-width: 720px) { .masonry { column-count: 2; } }
+</style>

@@ -1,0 +1,53 @@
+name: web-factory
+display_name: Web Factory
+
+workspace: ~/git/web-factory
+
+# Permanent peer edges = network infrastructure (who CAN talk to whom), not
+# agent identity. "all" = every agent is a mutual peer, so mira can spin up a
+# proj-<slug> workgroup with any roster. Workgroup memberships add their own
+# hub↔member edges on top.
+peer_edges: all
+
+# Subdirs created inside the workspace at bootstrap.
+workspace_scaffold:
+  - templates/hotel-web
+  - projects
+  - archive
+
+# Each src dir's children are copied (replace mode) into dst, every bootstrap:
+# the 4-theme Astro kit (template) + the machine-readable contract (factory/).
+sync:
+  - src: templates/hotel-web
+    dst: templates/hotel-web
+  - src: factory
+    dst: factory
+  - src: library
+    dst: library
+
+models:
+  # main = every profile turn model (effort = org default; agent.md reasoning_effort overrides); fast = delegate/research + engine plumbing; deep = auto-escalation target.
+  main: { model: openrouter/deepseek/deepseek-v4-flash, effort: medium }
+  fast: { model: openrouter/deepseek/deepseek-v4-flash, effort: low }
+  deep: { model: openrouter/deepseek/deepseek-v4-pro, effort: medium }
+  # vision is a per-call SKILL (muse/analyze-image → OpenRouter), not a base-model tier; everyone reasons on text.
+
+budgets:
+  daily_default: 2.0       # fallback only — every agent.md declares daily_usd
+  workgroup: 50.0          # standing workgroups (brand-library / quality / template)
+  project_workgroup: 50.0  # per-project proj-<slug> pipeline; new-project.py reads this (real runs land ~$1-2)
+
+agent_voices:
+  vera:   en-US-AriaNeural
+  mira:   es-ES-ElviraNeural
+  scout:  en-GB-MaisieNeural
+  forge:  es-ES-AlvaroNeural
+  pixel:  en-AU-WilliamNeural
+  canvas: en-US-JennyNeural
+  muse:   en-US-EmmaNeural
+  quill:  it-IT-ElsaNeural
+  lingua: pt-PT-RaquelNeural
+  atlas:  en-US-GuyNeural
+  lens:   en-US-DavisNeural
+
+common_skills: {}

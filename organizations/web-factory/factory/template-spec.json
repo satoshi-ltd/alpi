@@ -1,0 +1,92 @@
+{
+  "$comment": "Machine contract the agent network consumes. The AI produces DATA ONLY: theme + tokens + content. It never touches components or CSS. See AGENTS.md.",
+  "version": "1.0",
+
+  "templates": ["boutique", "budget", "business", "resort"],
+
+  "decisionRubric": {
+    "boutique": ["independent", "design/editorial", "<40 rooms", "dining-led", "quiet luxury", "storytelling"],
+    "budget":   ["price-competitive", "2-3 star / hostel", "competes with OTAs", "free cancellation", "no-frills", "high volume"],
+    "business": ["city / airport", "corporate", "meetings & events", "business traveler", "work stays", "location-led"],
+    "resort":   ["holiday destination", "beach / mountain / island", "all-inclusive", "families", "spa & activities", "getaway"],
+    "rule": "A brief that names the template explicitly WINS (record 'pinned by brief'); otherwise score all 4 and pick the highest. Tie or thin brief => ask for confirmation. Never switch template over a colour nuance (that is a token)."
+  },
+
+  "tokenContract": {
+    "$comment": "Tokens the AI may edit. The rest (accentSoft, line, muted) are derived via color-mix and are off-limits.",
+    "editable": {
+      "fontHead":  { "type": "font",   "desc": "Heading font" },
+      "fontBody":  { "type": "font",   "desc": "Body font" },
+      "accent":    { "type": "color",  "desc": "Primary brand colour (buttons, kickers, highlighted prices)" },
+      "accent2":   { "type": "color",  "desc": "Secondary colour (ghost borders, details)" },
+      "ink":       { "type": "color",  "desc": "Primary text colour" },
+      "paper":     { "type": "color",  "desc": "Page background" },
+      "surface":   { "type": "color",  "desc": "Card / placeholder surface" }
+    },
+    "derived": ["accentSoft", "line", "muted"],
+    "locked": ["spacing scale", "shadow scale", "breakpoints", "corner radius (per-theme, not per-hotel)", "per-template structure/variant"]
+  },
+
+  "defaults": {
+    "boutique": { "fontHead": "Cormorant Garamond", "fontBody": "Jost",           "accent": "#9c6a45", "accent2": "#6f4e34", "ink": "#2c2722", "paper": "#fbf9f6", "surface": "#ece8e2", "vibe": "Editorial, serif, airy, discreet booking" },
+    "budget":   { "fontHead": "Archivo",            "fontBody": "Archivo",        "accent": "#1f6feb", "accent2": "#1850c4", "ink": "#22262b", "paper": "#ffffff", "surface": "#eef1f5", "vibe": "Dense OTA-style, search + price up top, badges" },
+    "business": { "fontHead": "Libre Franklin",     "fontBody": "Libre Franklin", "accent": "#1e3a5f", "accent2": "#36577e", "ink": "#1d242e", "paper": "#ffffff", "surface": "#eceff3", "vibe": "Clean grid, utility bar, location + efficiency" },
+    "resort":   { "fontHead": "Quicksand",          "fontBody": "Quicksand",      "accent": "#0d8a8a", "accent2": "#e8943a", "ink": "#1c2e2c", "paper": "#f7fbfa", "surface": "#e2efec", "vibe": "Immersive, full-bleed imagery, experiences, large radii" }
+  },
+
+  "fontOptions": {
+    "head": ["Cormorant Garamond", "Playfair Display", "Lora", "Jost", "Archivo", "Libre Franklin", "Quicksand", "DM Sans", "Work Sans"],
+    "body": ["Jost", "Archivo", "Libre Franklin", "Quicksand", "DM Sans", "Work Sans"]
+  },
+
+  "pages": {
+    "$comment": "Page inventory. booking is NOT a page (the plugin handles it). The guests/dates/rooms selector is embedded in landing and room detail.",
+    "list": ["landing", "rooms", "roomDetail", "amenities", "dining", "gallery", "offers", "location", "about", "blog", "post"],
+    "bookingHandledByPlugin": true,
+    "bookingSelectorOn": ["landing", "roomDetail"]
+  },
+
+  "nav": {
+    "$comment": "nav.cta is an i18n KEY SUFFIX rendered as t('cta.<value>') — only these values are valid; free text ('reservar') prints the raw key in the header. The template localises it per locale.",
+    "cta": ["book", "reserve"]
+  },
+
+  "booking": {
+    "$comment": "provider 'mirai' mounts @mirai/core's <Finder> for real (core assets + repository instance injected by the layout). propertyId must be the NUMERIC Mirai id from the brief; empty or non-numeric falls back to the demo property 100379008. Other providers render the inert mock until their embed lands in BookingWidget.",
+    "providers": ["mirai (live finder)", "other (inert mock)"],
+    "demoPropertyId": "100379008"
+  },
+
+  "i18n": {
+    "routing": "/[lang]/...",
+    "contentField": "lang",
+    "uiStrings": "i18n/*.json (NOT editorial content)",
+    "supportedLocales": ["es", "en", "fr", "de", "it", "pt", "nl", "ca", "ru", "zh-Hans"],
+    "localeNote": "scout picks site.locales from the hotel's target MARKET (light research at intake), constrained to supportedLocales. A market locale outside this set is a template gap to flag for forge, never a silent drop."
+  },
+
+  "bindingCatalogue": {
+    "$comment": "The agent fills exactly these fields per page; [] means a repeating collection. OPTIONAL per-page SEO: any enabled page may ship pages/<page>.<lang>.json with seo{title,description,keywords}; without it the template falls back to '<PageName> — <home seo.description>' localized.",
+    "landing": ["hero.eyebrow", "hero.title", "hero.subtitle", "hero.image", "bookingWidget (plugin)", "page.intro.title", "page.intro.body", "about.eyebrow", "about.title", "about.body", "about.image", "rooms[].image", "rooms[].name", "experiences[].image", "offers[].image"],
+    "rooms": ["page.title", "page.intro.title", "page.intro.body", "rooms[].image", "rooms[].name", "rooms[].summary", "rooms[].priceFrom"],
+    "roomDetail": ["room.image", "room.label", "room.name", "room.description", "room.amenities[]", "room.priceFrom", "room.gallery[]"],
+    "amenities": ["page.title", "page.intro.title", "page.intro.body", "amenities[].image", "amenities[].title", "amenities[].description", "amenities[].category (budget groups its checklist by it)", "meetings[].name (business)", "meetings[].capacity (business)", "meetings[].av (business)"],
+    "dining": ["page.title", "dining.image", "dining.title", "dining.description", "dining.menu[]", "dining.hours", "venues[].image", "venues[].name"],
+    "gallery": ["page.title", "gallery[]"],
+    "offers": ["page.title", "page.intro.title", "page.intro.body", "offers[].image", "offers[].title", "offers[].description", "offers[].priceFrom", "offers[].includes[]", "offers[].discountPct (budget badge)", "offers[].code (budget promo box)"],
+    "location": ["page.title", "location.map", "location.directions", "contact.details"],
+    "about": ["about.title", "about.body", "about.image", "about.values[] (boutique: title + body)"],
+    "blog": ["page.title", "posts[].cover", "posts[].title", "posts[].excerpt", "posts[].category"],
+    "legal": ["legal[].title", "legal[].body — file `legal/<slug>.<lang>.md` — slug from the filename stem, SAME stem across locales (the switcher and hreflang swap only the locale) (VERBATIM hotel-supplied text — privacy/terms/cookies; agents place it, NEVER draft legal copy; no text => no pages, footer shows no legal links)"],
+    "post": ["post.title", "post.cover", "post.body"]
+  },
+
+  "guardrails": [
+    "The AI produces DATA, not layout code.",
+    "Never edit files under components/, base tokens, or CSS.",
+    "All content is validated at build (Zod); invalid data fails the build with a clear error.",
+    "One hotel = one template. Never mix two templates' structures.",
+    "Missing photo => use the Image component placeholder, never break the layout.",
+    "Legal copy (privacy/terms) is hotel-supplied VERBATIM — an agent never drafts, translates-creatively, or invents legal text."
+  ]
+}

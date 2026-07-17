@@ -1,0 +1,12 @@
+{
+  "lang": "es",
+  "title": "Tres noches, paga dos",
+  "description": "Quédate un poco más.",
+  "includes": [
+    "Desayuno",
+    "Late checkout"
+  ],
+  "priceFrom": 380,
+  "currency": "EUR",
+  "order": 0
+}

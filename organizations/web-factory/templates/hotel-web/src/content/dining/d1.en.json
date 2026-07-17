@@ -1,0 +1,14 @@
+{
+  "lang": "en",
+  "name": "El Faro",
+  "summary": "Sea, salt and fire",
+  "description": "El Faro is our table by the water: sea, salt and fire. We cook the day's catch and vegetables from the nearby garden, without fuss, with seasonal produce over coals. The menu changes with what arrives each morning from the port. Local wines, house desserts and long lunches with a view of the horizon.",
+  "hours": "1pm–11pm",
+  "menu": [
+    "Ostras",
+    "Pescado del día",
+    "Verduras del huerto",
+    "Bizcocho de aceite"
+  ],
+  "order": 0
+}
