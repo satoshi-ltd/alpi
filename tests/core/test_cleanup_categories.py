@@ -298,3 +298,45 @@ def test_plan_tags_each_key_with_its_group(tmp_path: Path) -> None:
         assert row["group"] == GROUP_OF[row["key"]]
 
 
+
+
+def test_cleaning_workgroups_archives_each_group_spend_first(tmp_path: Path) -> None:
+    import json as _json
+
+    from alpi import cleanup as cleanup_mod
+    from alpi import ledger
+
+    wg = tmp_path / "alp" / "workgroups" / "proj-x"
+    wg.mkdir(parents=True)
+    (wg / "transcript.jsonl").write_text(
+        _json.dumps({"seq": 1, "cost": {"usd": 0.25, "tokens_in": 100, "tokens_out": 40}}) + "\n"
+        + _json.dumps({"seq": 2, "cost": {"usd": 0.75, "tokens_in": 200, "tokens_out": 60}}) + "\n",
+    )
+
+    result = cleanup_mod.apply(tmp_path, "workgroups")
+    assert result["ok"]
+    assert not (wg / "transcript.jsonl").exists()
+
+    rec = next(r for r in ledger.read_archive(tmp_path) if r["kind"] == "workgroup" and r["id"] == "proj-x")
+    assert rec["cost_usd"] == 1.0
+    assert rec["tokens_in"] == 300 and rec["tokens_out"] == 100
+
+
+def test_cleaning_workgroups_aborts_when_spend_archive_fails(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    from alpi import cleanup as cleanup_mod
+    from alpi import ledger
+
+    transcript = tmp_path / "alp" / "workgroups" / "proj-x" / "transcript.jsonl"
+    transcript.parent.mkdir(parents=True)
+    transcript.write_text('{"seq":1,"cost":{"usd":0.25}}\n')
+
+    def fail_archive(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(ledger, "archive_entity", fail_archive)
+    result = cleanup_mod.apply(tmp_path, "workgroups")
+    assert result["ok"] is False
+    assert result["removed"] == 0
+    assert transcript.exists()

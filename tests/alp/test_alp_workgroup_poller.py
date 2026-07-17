@@ -7,6 +7,7 @@ import datetime as _dt
 import shutil
 import tempfile
 import time
+import types
 from pathlib import Path
 
 import pytest
@@ -74,6 +75,44 @@ def test_pipeline_member_mention_of_hub_still_wakes_hub() -> None:
         "mira", "HUB", posts, 0, hub_pubkey="HUB", pipeline=True,
     )
     assert trigger is not None
+
+
+@pytest.mark.asyncio
+async def test_gate_opened_task_bypasses_member_cooldown(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    home = short_tmp / "lingua"
+    home.mkdir()
+    posts = [
+        {"seq": 1, "from": "HUB", "text": "@quill #task #content write"},
+        {"seq": 2, "from": "QUILL", "text": "content complete"},
+        {"seq": 3, "from": "HUB", "text": "#done content verified · gate:npm · ok"},
+        {"seq": 4, "from": "HUB", "text": "@lingua #task #translation translate"},
+    ]
+    sub = types.SimpleNamespace(
+        wg_id="wg_fast", name="project", hub_pubkey="HUB",
+        pipeline=("content", "translation"), recent_posts=posts,
+        last_responded_seq=2, last_dispatch_at=service._utcnow_iso(), paused=False,
+    )
+    kp = types.SimpleNamespace(pubkey_b64=lambda: "LINGUA")
+    monkeypatch.setattr("alpi.alp.keys.load_or_generate", lambda home: kp)
+    monkeypatch.setattr(sub_mod, "upsert", lambda *args: None)
+    monkeypatch.setattr(service, "_in_cooldown_str", lambda *args: True)
+    monkeypatch.setattr(service, "_latest_hub_task_seq_for", lambda *args: 4)
+
+    async def fake_turn(*args, **kwargs):
+        return None
+
+    spawned: list[str] = []
+
+    def fake_spawn(wg_id, coro):
+        spawned.append(wg_id)
+        coro.close()
+
+    monkeypatch.setattr(service, "_dispatch_workgroup_turn", fake_turn)
+    monkeypatch.setattr(service, "_spawn_dispatch", fake_spawn)
+    await service._maybe_dispatch_for_sub(home, "lingua", sub, hot=True)
+    assert spawned == ["wg_fast"]
 
 
 def test_non_pipeline_sideways_mention_still_wakes() -> None:

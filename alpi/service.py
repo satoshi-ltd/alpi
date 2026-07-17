@@ -503,6 +503,27 @@ def _sub_stays_hot(new_posts: list, sub) -> bool:
     ) is not None
 
 
+def _gate_opened_active_task(posts: list[dict], hub_pubkey: str) -> bool:
+    from alpi.alp import tasks as wg_tasks
+
+    active = wg_tasks.active_task(posts, hub_pubkey=hub_pubkey)
+    if active is None:
+        return False
+    opener_index = next((
+        i for i, post in enumerate(posts)
+        if int(post.get("seq", 0)) == active.opened_seq
+        and str(post.get("from") or "") == hub_pubkey
+    ), -1)
+    if opener_index <= 0:
+        return False
+    previous = next((
+        post for post in reversed(posts[:opener_index])
+        if str(post.get("from") or "") == hub_pubkey
+    ), None)
+    text = str((previous or {}).get("text") or "")
+    return wg_tasks.is_done(text) and "· gate:" in text
+
+
 def _hub_stays_hot(fresh: bool, wg, recent: list[dict]) -> bool:
     if fresh:
         return True
@@ -567,6 +588,15 @@ async def _run_workgroup_poller(home: Path, profile: str) -> None:
     sub_workers: dict[str, asyncio.Task] = {}
     hot_until: dict[str, float] = {}
     hub_seen: dict[str, int] = {}
+
+    from alpi.alp import wakes
+    wake = asyncio.Event()
+
+    def _on_post(wid: str) -> None:
+        hot_until[wid] = time.monotonic() + _WG_HOT_WINDOW_SECONDS
+        wake.set()
+
+    wakes.register(home, _on_post)
     try:
         while True:
             try:
@@ -624,8 +654,13 @@ async def _run_workgroup_poller(home: Path, profile: str) -> None:
                     await _maybe_dispatch_for_hub(home, profile, wg, recent, hot=hot)
             except Exception:  # noqa: BLE001
                 log.exception("workgroup poller tick crashed")
-            await asyncio.sleep(_WG_HOT_TICK_SECONDS)
+            try:
+                await asyncio.wait_for(wake.wait(), timeout=_WG_HOT_TICK_SECONDS)
+            except asyncio.TimeoutError:
+                pass
+            wake.clear()
     finally:
+        wakes.unregister(home)
         for worker in sub_workers.values():
             worker.cancel()
         if sub_workers:
@@ -660,7 +695,16 @@ async def _maybe_dispatch_for_sub(
             sub.last_responded_seq = new_responded
             sub_mod.upsert(home, sub)
         return
-    if _in_cooldown_str(sub.last_dispatch_at, _HOT_DISPATCH_COOLDOWN_SECONDS if hot else None):
+    gate_opened = _gate_opened_active_task(
+        sub.recent_posts or [], sub.hub_pubkey,
+    )
+    if (
+        not gate_opened
+        and _in_cooldown_str(
+            sub.last_dispatch_at,
+            _HOT_DISPATCH_COOLDOWN_SECONDS if hot else None,
+        )
+    ):
         log.info(
             "wg poller: %s skipped (cooldown, reason=%s)",
             sub.wg_id, trigger,
@@ -757,6 +801,81 @@ def _latest_hub_task_seq_for(
     return best
 
 
+# (wg_id, owner_post_seq) pairs whose gate already ran — reruns wait for a NEWER owner post, so a failing gate can't spin on every 5s scan.
+_GATE_ATTEMPTED: dict[tuple[str, str, int], bool] = {}
+_GATE_ATTEMPTED_CAP = 512
+
+
+async def _maybe_gate_advance(
+    home: Path, wg, recent: list[dict], own_pubkey: str,
+) -> bool | str | None:
+    """True = phase advanced mechanically; str = gate failed (reason for the LLM wake); None = no gate applies."""
+    from alpi import config as cfg_mod
+    from alpi.alp import peers as peers_mod
+    from alpi.alp import pipeline_gates as gates
+    from alpi.alp import tasks as wg_tasks
+    from alpi.alp import workgroup_client as wc
+
+    if not getattr(wg.meta, "pipeline_steps", None) or not recent:
+        return None
+    active = wg_tasks.active_task(recent, hub_pubkey=wg.meta.hub_pubkey)
+    if active is None:
+        return None
+    step = gates.step_for(wg.meta, active.slug)
+    if step is None:
+        return None
+    owner_peer = next(
+        (p for p in peers_mod.load(home) if p.id.lower() == step.owner.lower()),
+        None,
+    )
+    if owner_peer is None:
+        return None
+    last_hub_seq = max(
+        (int(p.get("seq", 0)) for p in recent if str(p.get("from") or "") == own_pubkey),
+        default=active.opened_seq,
+    )
+    latest = next((
+        p for p in reversed(recent)
+        if int(p.get("seq", 0)) > max(active.opened_seq, last_hub_seq)
+        and str(p.get("from") or "") == owner_peer.pubkey
+        and not wg_tasks.is_working(str(p.get("text") or ""))
+        and not wg_tasks.is_skip(str(p.get("text") or ""))
+    ), None)
+    if latest is None:
+        return None
+    latest_seq = int(latest.get("seq", 0))
+    key = (str(home), wg.meta.id, latest_seq)
+    if key in _GATE_ATTEMPTED:
+        return None
+    if len(_GATE_ATTEMPTED) >= _GATE_ATTEMPTED_CAP:
+        _GATE_ATTEMPTED.pop(next(iter(_GATE_ATTEMPTED)))
+    _GATE_ATTEMPTED[key] = True
+
+    workspace = cfg_mod.load(home).workspace_path or home
+    passed, output = await asyncio.to_thread(gates.run_gate, step, workspace)
+    try:
+        gates.write_gate_log(
+            home / "alp" / "workgroups" / wg.meta.id,
+            step, latest_seq, passed, output,
+        )
+    except OSError as e:
+        return f"GATE {step.phase} audit FAILED: {e}"
+    if not passed:
+        log.info("wg gate %s/%s FAILED (seq %s)", wg.meta.id, step.phase, latest_seq)
+        return f"GATE {step.phase} FAILED: {output[-300:]}"
+    try:
+        await wc.post(home, wg.meta.id, gates.done_text(step, output).encode())
+        nxt = gates.next_task_text(step)
+        if nxt:
+            await wc.post(home, wg.meta.id, nxt.encode())
+    except Exception as e:  # noqa: BLE001
+        log.error("wg gate %s/%s advance post failed: %s", wg.meta.id, step.phase, e)
+        return f"GATE {step.phase} passed but the advance post failed: {e}"
+    _set_hub_responded_seq(home, wg.meta.id, latest_seq)
+    log.info("wg gate %s/%s PASSED → %s (seq %s)", wg.meta.id, step.phase, step.next_phase or "end", latest_seq)
+    return True
+
+
 async def _maybe_dispatch_for_hub(
     home: Path, profile: str, wg, recent: list[dict], hot: bool = False,
 ) -> None:
@@ -766,12 +885,17 @@ async def _maybe_dispatch_for_hub(
     if getattr(wg.meta, "paused", False):  # paused → no activity dispatch, no watchdog, no burn
         return
     own_pubkey = _keys.load_or_generate(home).pubkey_b64()
+    gate_fail = await _maybe_gate_advance(home, wg, recent, own_pubkey)
+    if gate_fail is True:
+        return
     last_responded = _get_hub_responded_seq(home, wg.meta.id)
     trigger, new_responded = _should_dispatch(
         profile, own_pubkey, recent, last_responded,
         hub_pubkey=wg.meta.hub_pubkey,
         pipeline=bool(wg.meta.pipeline),
     )
+    if trigger and isinstance(gate_fail, str):
+        trigger = f"{trigger} · {gate_fail}"
     if not trigger:
         if new_responded > last_responded:
             _set_hub_responded_seq(home, wg.meta.id, new_responded)

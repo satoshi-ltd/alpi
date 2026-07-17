@@ -282,6 +282,40 @@ def plan(h: Path) -> list[dict[str, Any]]:
     ]
 
 
+def _archive_workgroups(h: Path) -> list[str]:
+    from alpi import ledger
+    from alpi.alp import workgroup as alp_wg
+
+    root = h / "alp" / "workgroups"
+    if not root.exists():
+        return []
+    errors: list[str] = []
+    for d in root.iterdir():
+        if not d.is_dir():
+            continue
+        try:
+            entries = alp_wg._read_transcript(d)
+        except Exception as e:  # noqa: BLE001
+            errors.append(f"{d.name}: cannot read spend ({e})")
+            continue
+        cost = tin = tout = 0.0
+        for e in entries:
+            c = e.get("cost") or {}
+            cost += float(c.get("usd") or 0.0)
+            tin += int(c.get("tokens_in") or 0)
+            tout += int(c.get("tokens_out") or c.get("tokens") or 0)
+        try:
+            source_at = entries[0].get("ts") if entries else None
+            ledger.archive_entity(
+                h, "workgroup", d.name,
+                cost_usd=cost, tokens_in=int(tin), tokens_out=int(tout),
+                connection_id="host", source_at=source_at,
+            )
+        except (OSError, ValueError, TypeError) as e:
+            errors.append(f"{d.name}: {e}")
+    return errors
+
+
 def apply(h: Path, key: str) -> dict[str, Any]:
     """Reclaim one category. Returns ``{key, ok, removed, freed_bytes, errors}``."""
     target = next((c for c in categories(h) if c["key"] == key), None)
@@ -292,6 +326,13 @@ def apply(h: Path, key: str) -> dict[str, Any]:
         return _apply_sessions(h, target)
     if not target["files"]:
         return {"key": key, "ok": True, "removed": 0, "freed_bytes": 0, "errors": []}
+    if key == "workgroups":
+        archive_errors = _archive_workgroups(h)
+        if archive_errors:
+            return {
+                "key": key, "ok": False, "removed": 0,
+                "freed_bytes": 0, "errors": archive_errors,
+            }
 
     errors: list[str] = []
     if target.get("action") == "vacuum":

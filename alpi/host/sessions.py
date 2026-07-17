@@ -319,11 +319,13 @@ def _large_session_row(
     }
 
 
-def _large_session_head_fields(p: Path) -> dict[str, Any]:
+def _large_session_head_fields(p: Path, *, strict: bool = False) -> dict[str, Any]:
     try:
         with p.open("rb") as fh:
             text = fh.read(_HEAD_READ_BYTES).decode("utf-8", errors="replace")
     except OSError:
+        if strict:
+            raise
         return {}
     out: dict[str, Any] = {}
     for m in _STRING_FIELD_RE.finditer(text):
@@ -439,6 +441,20 @@ def delete_session(home: Path, session_id: str) -> bool:
     """Remove ``<id>.json`` + ``_events_<id>.jsonl``. Returns True iff the session file existed."""
     main, sidecar = session_paths(home, session_id)
     existed = main.exists()
+    if existed:
+        try:
+            fields = _large_session_head_fields(main, strict=True)
+            from alpi import ledger
+            ledger.archive_entity(
+                home, "session", session_id,
+                cost_usd=float(fields.get("cost_usd") or 0.0),
+                tokens_in=int(fields.get("input_tokens") or 0),
+                tokens_out=int(fields.get("output_tokens") or 0),
+                connection_id=str(fields.get("connection_id") or "host"),
+                source_at=fields.get("started_at"),
+            )
+        except (OSError, ValueError, TypeError):
+            return False
     try:
         main.unlink()
     except FileNotFoundError:

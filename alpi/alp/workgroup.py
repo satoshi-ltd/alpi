@@ -224,6 +224,8 @@ class Meta:
     notify_on_close: str = "none"
     # Ordered phase slugs (empty = deliberation wg); lets continuation advance phases deterministically. Owners/deliverables live in the org, not here.
     pipeline: tuple[str, ...] = ()
+    # Hub-local gate specs per phase ({phase: {owner, next?, task?, gate: {argv, cwd?}}}); never transmitted on the wire, never accepts remote text.
+    pipeline_steps: dict = field(default_factory=dict)
     # Hub-local desktop playback preference — not replicated to members
     auto_read: bool = False
     # Closure-quorum grace (s) before the hub may `#done` with no substantive peer input; 0 = the _FULL_QUORUM_TIMEOUT_SECONDS default.
@@ -293,6 +295,7 @@ def _load_meta(d: Path) -> Meta | None:
             briefing=str(raw.get("briefing") or ""),
             notify_on_close=str(raw.get("notify_on_close") or "none"),
             pipeline=pipeline,
+            pipeline_steps=raw.get("pipeline_steps") if isinstance(raw.get("pipeline_steps"), dict) else {},
             auto_read=bool(raw.get("auto_read", False)),
             quorum_timeout_seconds=_coerce_positive_int(raw.get("quorum_timeout_seconds")),
         )
@@ -323,6 +326,8 @@ def _save_meta(d: Path, meta: Meta) -> None:
         payload["notify_on_close"] = meta.notify_on_close
     if meta.pipeline:
         payload["pipeline"] = list(meta.pipeline)
+    if meta.pipeline_steps:
+        payload["pipeline_steps"] = dict(meta.pipeline_steps)
     if meta.auto_read:
         payload["auto_read"] = True
     if meta.quorum_timeout_seconds:
@@ -1028,6 +1033,9 @@ def register(server: alp_server.Server, home: Path) -> None:
             pass
 
         _emit_hub_wg_mention(home, wg, entry, nonce, ciphertext)
+
+        from alpi.alp import wakes
+        wakes.fire(home, wg_id)
 
         return {"seq": seq, "ts": entry["ts"]}
 

@@ -36,6 +36,17 @@ BLOCKED_FOR_DELEGATE: frozenset[str] = frozenset({
 })
 
 MAX_STEPS = 30
+MAX_STEPS_CAP = 100
+
+
+def _clamp_steps(raw: int) -> int:
+    try:
+        n = int(raw)
+    except (TypeError, ValueError):
+        return MAX_STEPS
+    if n <= 0:
+        return MAX_STEPS
+    return min(n, MAX_STEPS_CAP)
 
 
 def _system_prompt(workspace: Path | None) -> str:
@@ -112,7 +123,12 @@ class Delegate(Tool):
         "project structure) via `context`.\n"
         "\n"
         "For independent parallel work, pass `tasks: [{goal, context, "
-        "toolsets}]` (up to 3) and they run concurrently."
+        "toolsets}]` (up to 3) in ONE call and they run concurrently. "
+        "Calling delegate several times in a row runs each call to "
+        "completion before the next starts — sequential calls are SERIAL, "
+        "never parallel. Each sub-agent is capped at `max_steps` LLM/tool "
+        "rounds (default 30): size goals so reads+writes fit, or raise "
+        "`max_steps` for bulk file work."
     )
     parameters = {
         "type": "object",
@@ -172,6 +188,14 @@ class Delegate(Tool):
                     "top-level goal/context/toolsets."
                 ),
             },
+            "max_steps": {
+                "type": "integer",
+                "description": (
+                    f"LLM/tool-round ceiling per sub-agent (default {MAX_STEPS}, "
+                    f"max {MAX_STEPS_CAP}). Raise for bulk file work where "
+                    "reads+writes exceed the default."
+                ),
+            },
         },
     }
 
@@ -182,17 +206,19 @@ class Delegate(Tool):
         toolsets: list[str] | None = None,
         tier: str = "main",
         tasks: list[dict] | None = None,
+        max_steps: int = 0,
     ) -> ToolResult:
+        steps = _clamp_steps(max_steps)
         if tasks:
-            return self._run_batch(tasks)
+            return self._run_batch(tasks, steps)
         if not goal:
             return ToolResult(
                 ok=False, output="",
                 error="'goal' required when not using 'tasks'",
             )
-        return self._run_single(goal, context, toolsets, tier)
+        return self._run_single(goal, context, toolsets, tier, steps)
 
-    def _run_batch(self, tasks: list[dict]) -> ToolResult:
+    def _run_batch(self, tasks: list[dict], max_steps: int = 0) -> ToolResult:
         if len(tasks) > MAX_PARALLEL_TASKS:
             return ToolResult(
                 ok=False, output="",
@@ -232,6 +258,7 @@ class Delegate(Tool):
                     task.get("context", ""),
                     task.get("toolsets"),
                     task.get("tier", "main"),
+                    max_steps,
                 )
 
         with ThreadPoolExecutor(max_workers=min(MAX_PARALLEL_TASKS, total)) as ex:
@@ -252,7 +279,9 @@ class Delegate(Tool):
         context: str = "",
         toolsets: list[str] | None = None,
         tier: str = "main",
+        max_steps: int = 0,
     ) -> ToolResult:
+        step_cap = _clamp_steps(max_steps)
         from alpi.tools import execute, schemas as all_schemas
 
         tier = (tier or "main").strip().lower()
@@ -293,7 +322,7 @@ class Delegate(Tool):
 
         iteration = 0
         final_text = ""
-        while iteration < MAX_STEPS:
+        while iteration < step_cap:
             if tool_state_mod.is_interrupted():
                 return ToolResult(ok=True, output=(
                     "[delegate: interrupted by user before completing]"
@@ -303,7 +332,7 @@ class Delegate(Tool):
             except ledger.BudgetExceeded as e:
                 return ToolResult(ok=False, output="", error=str(e))
             iteration += 1
-            prefix = f"step {iteration}/{MAX_STEPS}"
+            prefix = f"step {iteration}/{step_cap}"
             tool_state_mod.emit_state(prefix)
             try:
                 out = llm.complete(
@@ -376,7 +405,7 @@ class Delegate(Tool):
             messages.append({
                 "role": "user",
                 "content": (
-                    f"You've used your {MAX_STEPS}-step budget. Stop working "
+                    f"You've used your {step_cap}-step budget. Stop working "
                     "and write your final summary now with what you accomplished. "
                     "Do not call any tools."
                 ),
@@ -391,7 +420,7 @@ class Delegate(Tool):
                 out.input_tokens, out.output_tokens, out.cost_usd,
             )
             if not final_text:
-                final_text = f"[delegate: {MAX_STEPS}-step budget exhausted, no summary]"
+                final_text = f"[delegate: {step_cap}-step budget exhausted, no summary]"
         return ToolResult(ok=True, output=final_text)
 
 

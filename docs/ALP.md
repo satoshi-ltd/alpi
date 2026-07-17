@@ -1276,10 +1276,27 @@ does not, and operators should pick models with eyes open:
 slugs turns a workgroup into a pipeline: every `#task` must be
 `@`-targeted (`pipeline-task-untargeted` otherwise — each phase has
 one owner), and after the hub's `#done` the runtime detects the
-closure and re-wakes the hub to open the next phase's task (the
-post itself is always authored by the hub's agent, never by code;
-bounded to 3 continuation wakes per closed seq before a
-`wg.blocked` alert). Off-pipeline fix slugs that PREFIX a phase
+closure and re-wakes the hub to open the next phase's task (bounded
+to 3 continuation wakes per closed seq before a `wg.blocked` alert).
+
+**Deterministic phase gates (`meta.pipeline_steps`, hub-local).** A
+phase may declare `{owner, next, task, gate: {argv, cwd?}}` in the
+hub's own metadata — never transmitted on the wire, never accepting
+remote text into `argv`/`cwd`. When the expected owner posts while
+that phase is active, the runtime executes the gate locally
+(`shell=False`, cwd jailed inside the configured workspace, minimal
+env without profile secrets, bounded timeout and output) and, on
+success, closes the phase and opens the next one itself through the
+normal hub SDK path — rotation, quorum and `task-already-active`
+still apply, and the machine-authored close is auditable
+(`#done <phase> verified · gate:<check> · …` plus a private
+`gates/<phase>-<seq>.log`, mode 0600). A failing gate never
+advances: it wakes the hub's agent with the bounded error, one
+attempt per owner post. Phases without a step (or whose transition
+needs judgment — intake signals, QA) stay LLM-owned. Each accepted
+`workgroup.post` also nudges the hub's poller in-process
+(`alp/wakes.py`), so gate reactions are near-immediate; polling
+remains the recovery path. Off-pipeline fix slugs that PREFIX a phase
 (`#build-recheck`, `#content-fix`) canonicalise back to their phase
 for advance/rewind logic, so QA loops don't derail the ladder. The
 closure-quorum grace is per-workgroup via

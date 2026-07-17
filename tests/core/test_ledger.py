@@ -261,6 +261,17 @@ def test_save_swallows_oserror_so_record_does_not_kill_the_turn(
     ledger_mod.record(home, usd=0.10, tokens=50)
 
 
+def test_spend_archive_deduplicates_retries_but_keeps_recreated_entities(
+    home: Path,
+) -> None:
+    values = {"cost_usd": 0.25, "tokens_in": 100, "tokens_out": 20}
+    ledger.archive_entity(home, "workgroup", "proj-x", source_at="first", **values)
+    ledger.archive_entity(home, "workgroup", "proj-x", source_at="first", **values)
+    ledger.archive_entity(home, "workgroup", "proj-x", source_at="second", **values)
+    rows = [row for row in ledger.read_archive(home) if row["id"] == "proj-x"]
+    assert [row["source_at"] for row in rows] == ["first", "second"]
+
+
 def test_budget_usd_or_uncapped(home: Path) -> None:
     assert ledger._budget({}) == (None, 0)
     assert ledger._budget({"daily_usd": 5.0}) == ("usd", 5.0)

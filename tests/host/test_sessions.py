@@ -29,6 +29,7 @@ def _seed_session(
     first_user: str,
     started_at: float = 1714000000.0,
     last_turn_at: float | None = None,
+    connection_id: str = "host",
 ) -> Path:
     p = home / "sessions" / f"{sid}.json"
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -40,6 +41,7 @@ def _seed_session(
         "input_tokens": 10,
         "output_tokens": 20,
         "cost_usd": 0.001,
+        "connection_id": connection_id,
         "last_ctx_tokens": 5,
         "turns": [
             {"at": turn_at, "user": first_user, "assistant": "ok", "tools": []},
@@ -941,3 +943,71 @@ async def test_session_read_runs_off_the_event_loop(
     result = await _read_rpc(tmp_path, monkeypatch, {"id": "multi3"})
     assert result["total_turns"] == 3
     assert "_load" in seen
+
+
+def test_delete_session_archives_spend_before_removing(tmp_path: Path) -> None:
+    from alpi import ledger
+
+    _seed_session(tmp_path, "sid1", "hello", connection_id="conn-1")
+    assert data_sessions.delete_session(tmp_path, "sid1") is True
+
+    assert not (tmp_path / "sessions" / "sid1.json").exists()
+    archive = ledger.read_archive(tmp_path)
+    rec = next(r for r in archive if r["kind"] == "session" and r["id"] == "sid1")
+    assert rec["cost_usd"] == 0.001
+    assert rec["tokens_in"] == 10 and rec["tokens_out"] == 20
+    assert rec["connection_id"] == "conn-1"
+    assert rec["source_at"] == 1714000000.0
+
+
+def test_delete_session_archive_survives_a_second_delete(tmp_path: Path) -> None:
+    from alpi import ledger
+
+    _seed_session(tmp_path, "sidA", "one")
+    data_sessions.delete_session(tmp_path, "sidA")
+    _seed_session(tmp_path, "sidB", "two")
+    data_sessions.delete_session(tmp_path, "sidB")
+
+    ids = [r["id"] for r in ledger.read_archive(tmp_path) if r["kind"] == "session"]
+    assert ids == ["sidA", "sidB"]
+
+
+def test_delete_session_aborts_when_spend_archive_fails(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    from alpi import ledger
+
+    main = _seed_session(tmp_path, "sid-fail", "hello")
+
+    def fail_archive(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(ledger, "archive_entity", fail_archive)
+    assert data_sessions.delete_session(tmp_path, "sid-fail") is False
+    assert main.exists()
+
+
+def test_delete_session_retry_does_not_duplicate_spend(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    from alpi import ledger
+
+    main = _seed_session(tmp_path, "sid-retry", "hello")
+    real_unlink = Path.unlink
+    fail_main = True
+
+    def unlink_once(path: Path, *args, **kwargs):
+        nonlocal fail_main
+        if path == main and fail_main:
+            fail_main = False
+            raise OSError("busy")
+        return real_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", unlink_once)
+    assert data_sessions.delete_session(tmp_path, "sid-retry") is False
+    assert data_sessions.delete_session(tmp_path, "sid-retry") is True
+    rows = [
+        row for row in ledger.read_archive(tmp_path)
+        if row["kind"] == "session" and row["id"] == "sid-retry"
+    ]
+    assert len(rows) == 1

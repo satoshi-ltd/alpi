@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import threading
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -142,6 +143,81 @@ def save(home: Path, data: dict[str, Any]) -> None:
             tmp.unlink()
         except OSError:
             pass
+
+
+def archive_path(home: Path) -> Path:
+    return home / "logs" / "spend_archive.jsonl"
+
+
+def archive_entity(
+    home: Path,
+    kind: str,
+    entity_id: str,
+    *,
+    cost_usd: float = 0.0,
+    tokens_in: int = 0,
+    tokens_out: int = 0,
+    connection_id: str = "",
+    source_at: str | float | None = None,
+) -> None:
+    cost = round(float(cost_usd or 0.0), 6)
+    tin = int(tokens_in or 0)
+    tout = int(tokens_out or 0)
+    if cost <= 0 and tin <= 0 and tout <= 0:
+        return
+    rec = {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "kind": str(kind),
+        "id": str(entity_id),
+        "cost_usd": cost,
+        "tokens_in": tin,
+        "tokens_out": tout,
+    }
+    if connection_id:
+        rec["connection_id"] = str(connection_id)
+    if source_at not in (None, ""):
+        rec["source_at"] = source_at
+    p = archive_path(home)
+    try:
+        with _lock:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            if p.exists():
+                for line in p.read_text(encoding="utf-8").splitlines():
+                    try:
+                        prior = json.loads(line)
+                    except ValueError:
+                        continue
+                    if (
+                        prior.get("kind") == rec["kind"]
+                        and prior.get("id") == rec["id"]
+                        and prior.get("source_at") == rec.get("source_at")
+                    ):
+                        return
+            with p.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(rec, separators=(",", ":")) + "\n")
+                fh.flush()
+                os.fsync(fh.fileno())
+    except OSError as e:
+        raise OSError(f"cannot persist spend archive: {e}") from e
+
+
+def read_archive(home: Path) -> list[dict[str, Any]]:
+    p = archive_path(home)
+    if not p.exists():
+        return []
+    out: list[dict[str, Any]] = []
+    try:
+        for line in p.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                out.append(json.loads(line))
+            except ValueError:
+                continue
+    except OSError:
+        return []
+    return out
 
 
 def _budget(cfg_budget: dict[str, Any] | None) -> tuple[str | None, float]:

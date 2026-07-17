@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.11.2 — 2026-07-17 — verified pipelines and durable spend
+
+- **Spend survives deletion.** Removing a chat session or a workgroup now
+  durably writes its total cost, token counts and connection attribution to an
+  idempotent append-only archive (`logs/spend_archive.jsonl`) before the files
+  go. Cleanup aborts rather than deleting data when that archive cannot be
+  confirmed.
+- **Mechanical pipeline transitions no longer need an orchestration turn.**
+  Hub-local `pipeline_steps` can run a bounded deterministic gate after the
+  expected owner hands off, persist its private audit log, close the verified
+  phase and open the next task through the normal workgroup SDK.
+- **Local handoffs wake immediately.** Accepted posts nudge the owning hub
+  poller in-process while the existing poll remains the recovery path; tasks
+  opened by a verified gate bypass only the handoff cooldown.
+- **Bulk delegates can request a larger bounded work loop.** `delegate` now
+  accepts `max_steps` up to 100 LLM/tool rounds, including parallel batches.
+
 ## v0.11.1 — 2026-07-17 — cleanup you can actually read
 
 - **`setup → Cleanup` is simplified.** Instead of eleven fine-grained

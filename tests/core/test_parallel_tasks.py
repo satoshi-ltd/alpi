@@ -100,7 +100,7 @@ def test_delegate_rejects_missing_goal() -> None:
 
 
 def test_delegate_batch_runs_and_aggregates(monkeypatch) -> None:
-    def fake_single(self, goal, context="", toolsets=None, tier="main"):
+    def fake_single(self, goal, context="", toolsets=None, tier="main", max_steps=0):
         return ToolResult(ok=True, output=f"did: {goal}")
 
     monkeypatch.setattr(Delegate, "_run_single", fake_single)
@@ -119,7 +119,7 @@ def test_delegate_batch_uses_per_task_emit(monkeypatch) -> None:
     emits: list[str] = []
     S.set_emit(lambda label, err: emits.append(label))
 
-    def fake_single(self, goal, context="", toolsets=None, tier="main"):
+    def fake_single(self, goal, context="", toolsets=None, tier="main", max_steps=0):
         S.emit_state("inside")
         return ToolResult(ok=True, output="ok")
 
@@ -142,7 +142,7 @@ def test_parallel_subagents_keep_connection_context(monkeypatch) -> None:
         seen.append(("research", current().connection_id, current().device_id))
         return ToolResult(ok=True, output=brief)
 
-    def fake_delegate(self, goal, context="", toolsets=None, tier="main"):
+    def fake_delegate(self, goal, context="", toolsets=None, tier="main", max_steps=0):
         seen.append(("delegate", current().connection_id, current().device_id))
         return ToolResult(ok=True, output=goal)
 
@@ -158,3 +158,25 @@ def test_parallel_subagents_keep_connection_context(monkeypatch) -> None:
         ("delegate", "conn_javi", "dev_phone"),
         ("delegate", "conn_javi", "dev_phone"),
     ]
+
+
+def test_delegate_clamp_steps_defaults_and_caps() -> None:
+    from alpi.tools.delegate import MAX_STEPS, MAX_STEPS_CAP, _clamp_steps
+
+    assert _clamp_steps(0) == MAX_STEPS
+    assert _clamp_steps(-5) == MAX_STEPS
+    assert _clamp_steps("junk") == MAX_STEPS
+    assert _clamp_steps(60) == 60
+    assert _clamp_steps(10_000) == MAX_STEPS_CAP
+
+
+def test_delegate_batch_threads_max_steps_to_workers(monkeypatch) -> None:
+    seen: list[int] = []
+
+    def fake_single(self, goal, context="", toolsets=None, tier="main", max_steps=0):
+        seen.append(max_steps)
+        return ToolResult(ok=True, output="ok")
+
+    monkeypatch.setattr(Delegate, "_run_single", fake_single)
+    Delegate().run(tasks=[{"goal": "a"}, {"goal": "b"}], max_steps=60)
+    assert seen == [60, 60]
