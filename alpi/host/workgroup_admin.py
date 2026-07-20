@@ -89,6 +89,10 @@ async def _create(
     if isinstance(pipeline_raw, str):
         pipeline_raw = [p.strip() for p in pipeline_raw.split(",") if p.strip()]
 
+    pipeline_steps = params.get("pipeline_steps") or None
+    quorum_raw = params.get("quorum_timeout_seconds")
+    quorum = int(quorum_raw) if isinstance(quorum_raw, (int, float)) else 0
+
     from alpi import config as cfg_mod
     from alpi.alp import workgroup as wg_mod
     from alpi.alp.keys import load_or_generate
@@ -105,6 +109,8 @@ async def _create(
             budget=budget,
             briefing=briefing,
             pipeline=pipeline_raw,
+            pipeline_steps=pipeline_steps,
+            quorum_timeout_seconds=quorum,
             hub_bio=hub_bio,
             hub_voice=hub_voice,
         )
@@ -245,17 +251,13 @@ async def _remove(
 ) -> dict[str, Any]:
     """Hub-only: delete a workgroup (transcript + members) and cascade
     to local subscriptions on this machine. Mirrors ``workgroup remove``."""
-    import shutil
-
     profile = str(params.get("profile") or "")
     wg_id = str(params.get("wg_id") or "").strip()
     _check_id(wg_id, "wg_id")
     home = _resolve_home(profile)
 
-    from alpi.alp import subscription as sub_mod
     from alpi.alp import workgroup as wg_mod
     from alpi.alp.keys import load_or_generate
-    from alpi.home import _ROOT
 
     wg = wg_mod.load(home, wg_id)
     if wg is None:
@@ -264,31 +266,7 @@ async def _remove(
     if wg.meta.hub_pubkey != own_pubkey:
         raise host_server.HandlerError(-32001, "forbidden", data={"detail": "only the hub can remove this workgroup"})
 
-    shutil.rmtree(home / "alp" / "workgroups" / wg_id, ignore_errors=True)
-    try:
-        from alpi.tools.workgroup_search import forget_workgroup
-        forget_workgroup(home, wg_id)
-    except Exception:  # noqa: BLE001
-        pass
-
-    purged: list[str] = []
-    profiles_root = _ROOT / "profiles"
-    if profiles_root.exists():
-        for prof_dir in profiles_root.iterdir():
-            if not prof_dir.is_dir():
-                continue
-            try:
-                if sub_mod.get(prof_dir, wg_id) is not None:
-                    sub_mod.remove(prof_dir, wg_id)
-                    purged.append(prof_dir.name)
-            except Exception:  # noqa: BLE001
-                pass
-    try:
-        if sub_mod.get(_ROOT, wg_id) is not None:
-            sub_mod.remove(_ROOT, wg_id)
-            purged.append("default")
-    except Exception:  # noqa: BLE001
-        pass
+    purged = wg_mod.destroy(home, wg_id)
 
     _emit_workgroup_changed(home, wg_id, "removed")
     return {"ok": True, "purged": sorted(set(purged))}

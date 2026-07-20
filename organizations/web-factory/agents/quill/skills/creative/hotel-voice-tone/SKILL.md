@@ -44,9 +44,8 @@ build — a bad shape fails loudly.
 
 ## Write directly — don't explore. The project's `content/` is empty by
 design; you fill it. **Do not spend the turn searching the filesystem** for
-examples — the exact shapes are here, and the template has a full set at
-`templates/hotel-web/src/content/**` (read ONE entry there if unsure, then
-write). Aim: `write_file` every entry this turn, then hand off.
+examples — the exact shapes are here. Aim: `write_file` every entry this turn,
+then hand off.
 
 ### Fields per entry (write valid JSON; one file per entry, `lang` = source locale)
 `src/content/pages/home.<lang>.json`:

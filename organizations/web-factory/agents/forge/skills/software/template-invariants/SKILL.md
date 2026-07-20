@@ -52,7 +52,7 @@ When someone (canvas, atlas, lens, mira) wants to change something:
 
 ## Output: ADR
 
-When a template change is justified, write an ADR at `templates/hotel-web/decisions/<seq>-<slug>.md`:
+When a template change is justified, write an ADR at `decisions/<seq>-<slug>.md` (repo root of the template checkout, satoshi-ltd/alpi-mirai-web-factory):
 
 ```markdown
 # <seq> · <title>

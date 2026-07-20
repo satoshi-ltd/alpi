@@ -1188,6 +1188,70 @@ async fn workgroup_create(
 }
 
 #[tauri::command]
+async fn workgroup_pick_recipe(
+    app: tauri::AppHandle,
+    connection_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let picked = tauri::async_runtime::spawn_blocking(move || {
+        app.dialog()
+            .file()
+            .add_filter("recipe", &["yaml", "yml"])
+            .set_title("Import recipe")
+            .blocking_pick_file()
+    })
+    .await
+    .map_err(|e| format!("join: {e}"))?;
+    let path = match picked.and_then(|f| f.into_path().ok()) {
+        Some(p) => p,
+        None => return Ok(serde_json::Value::Null),
+    };
+    let recipe_id = path
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let yaml = std::fs::read_to_string(&path).map_err(|e| format!("read {}: {e}", path.display()))?;
+    let describe_params = serde_json::json!({ "yaml": yaml, "recipe_id": recipe_id });
+    let cid = connection_id.clone();
+    let meta = tauri::async_runtime::spawn_blocking(move || match cid.as_deref() {
+        Some(c) => host_client::call_for(c, "host.workgroup.recipes.describe", describe_params),
+        None => host_client::call("host.workgroup.recipes.describe", describe_params),
+    })
+    .await
+    .map_err(|e| format!("join: {e}"))??;
+    Ok(serde_json::json!({ "yaml": yaml, "recipe_id": recipe_id, "meta": meta }))
+}
+
+#[tauri::command]
+async fn workgroup_launch_recipe(
+    profile: String,
+    yaml: String,
+    recipe_id: Option<String>,
+    params: serde_json::Value,
+    briefing: Option<String>,
+    inputs: Option<serde_json::Value>,
+    connection_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let mut p = serde_json::json!({
+        "profile": profile,
+        "yaml": yaml,
+        "recipe_id": recipe_id.unwrap_or_else(|| "recipe".to_string()),
+        "params": params,
+    });
+    if let Some(b) = briefing {
+        p["briefing"] = serde_json::Value::String(b);
+    }
+    if let Some(v) = inputs {
+        p["inputs"] = v;
+    }
+    tauri::async_runtime::spawn_blocking(move || match connection_id.as_deref() {
+        Some(cid) => host_client::call_for(cid, "host.workgroup.launch_recipe", p),
+        None => host_client::call("host.workgroup.launch_recipe", p),
+    })
+    .await
+    .map_err(|e| format!("join: {e}"))?
+}
+
+#[tauri::command]
 async fn workgroup_update(
     profile: String,
     wg_id: String,
@@ -3569,6 +3633,8 @@ pub fn run() {
             workgroup_action,
             workgroup_update,
             workgroup_create,
+            workgroup_pick_recipe,
+            workgroup_launch_recipe,
             workgroup_add_member,
             tray_announce_update,
             tray_announce_notifications,

@@ -33,7 +33,8 @@ state (archived).
 
 ### Build phases — 6 (Lean), STRICTLY sequential, one owner each
 
-The factory is the 4-theme Astro kit (`templates/hotel-web/`). Agents
+The factory is the 4-theme Astro kit — the git base repo cloned into each
+`projects/<slug>/`. Agents
 produce **only data** — `src/config/site.json` (scout) and `src/content/**`
 (quill/lingua) — never components, themes, or `.ts`. **design + seo are NOT
 phases**: the themes carry the design (canvas advises brand tokens only if
@@ -44,7 +45,7 @@ per-page meta live in the fixed template) plus the `seo` copy quill writes.
 `intake` (ONLY on the trivial path: `visual_assets: not_required` +
 `assets/` empty → straight to `content`, no muse ping ever), `content`,
 `translation` and `build`, opening the next phase the moment the owner's
-handoff passes the local gate (`check-intake` / `content-check` / `dist`
+handoff passes the local gate (`intake-check` / `content-check` / `dist`
 on disk) — you will see machine-authored `#done … · gate:<check>` posts in
 the transcript. Do NOT re-close or re-open those phases; your judgment
 turns are the non-trivial `assets` path (signal `required`/`optional`, or
@@ -238,16 +239,16 @@ theme: boutique
 state: launched              # one of: created | intake | assets | content | translation | build | qa | iterating | blocked | launched | maintenance | archived
 created: 2026-05-29
 launched_at: 2026-06-09      # null until launch
-launch_target: 2026-06-09    # provisional from new-project.py, scout may revise
+launch_target: 2026-06-09    # provisional from the recipe launch, scout may revise
 archived_at: null            # null until terminal archive
 iterations: 1                # cumulative QA-fix rounds; useful for portfolio review
 history:
   - state: created
     at: 2026-05-29
-    by: new-project.py
+    by: recipe
   - state: intake
     at: 2026-05-29
-    by: new-project.py
+    by: recipe
     note: kickoff task posted to scout
   - state: content
     at: 2026-06-02
@@ -279,9 +280,8 @@ Append to `history` on every transition. Never delete entries.
 
 **State must match disk.** If `dist/` is green but `state` is still `build`,
 close build and open `#qa` — do **not** re-run content/intake "to be safe". After
-a PASS, `state` is `launched` and qa never reopens. Run `python new-project.py
-<slug> --audit` (read-only) to flag a `state` that disagrees with what's on disk
-before acting on a stale wake.
+a PASS, `state` is `launched` and qa never reopens. On a stale wake, reconcile
+`state` by reading the transcript + what's on disk before acting.
 
 ## Blockers and overrides
 

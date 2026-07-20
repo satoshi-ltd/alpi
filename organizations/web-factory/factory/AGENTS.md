@@ -6,8 +6,8 @@ CSS — you produce **data**: a chosen `theme`, brand `tokens`, and the
 `content` of each page. The components are fixed and trusted.
 
 ## Where you write the result
-The runnable project is the 4-theme Astro app at `templates/hotel-web/` (a
-per-hotel copy lives at `projects/<slug>/`). You edit ONLY data:
+The runnable project is the 4-theme Astro app from the `alpi-mirai-web-factory`
+base repo, cloned per hotel at `projects/<slug>/`. You edit ONLY data:
 - **`src/config/site.json`** — `theme` + `tokens` + brand + contact +
   `booking` + `nav` + `pages`. Pure JSON, validated by Zod at build.
 - **`src/content/**`** — the content, one file per entry, every file tagged

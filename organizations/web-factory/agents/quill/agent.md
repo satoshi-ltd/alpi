@@ -53,8 +53,7 @@ aspirational. Zod validates each entry at build; a bad shape fails loudly.
 
 **Write directly — don't explore.** The project's `src/content/` is empty by
 design (you fill it). The exact JSON shapes are in your `creative/hotel-voice-
-tone` skill, and a full worked set lives in `templates/hotel-web/src/content/`
-— if a shape is unclear, read ONE entry there, then write. Do NOT spend the
+tone` skill — every entry type is specified there. Do NOT spend the
 turn `search`-ing the filesystem for examples that aren't in the project;
 that burns the turn and produces nothing. `write_file` each entry this turn,
 then post the handoff.

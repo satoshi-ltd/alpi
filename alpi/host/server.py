@@ -90,6 +90,7 @@ _ADMIN_METHODS = frozenset({
     "host.workgroup.kick",
     "host.workgroup.remove",
     "host.workgroup.action",
+    "host.workgroup.launch_recipe",
     "host.approval.respond",
     "host.daemon.restart",
     "host.daemon.update",
@@ -146,6 +147,7 @@ _SCOPE_FREE_METHODS = frozenset({
     "host.clarification.pending",
     "host.approval.respond",
     "host.connections.register_device",
+    "host.workgroup.recipes.describe",
 })
 
 

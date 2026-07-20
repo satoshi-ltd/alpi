@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.11.3 — 2026-07-19 — workgroup recipes
+
+- **Launch a whole workgroup from a recipe file.** A recipe is a reusable,
+  git-tracked YAML file describing a workgroup — its hub, members, briefing, start
+  task, pipeline and gates, and an optional git project to clone and seed. It
+  declares the values a launch supplies: single-line `params` (interpolated into
+  the workgroup) and multiline `inputs` (written verbatim to files in the clone,
+  e.g. a raw client brief). `alpi workgroup launch --recipe <file> --param slug=…
+  --input brief=<file>` validates it, clones and seeds the project, writes the
+  inputs, creates the workgroup and posts the first task in one step — rolling
+  everything back if any part fails.
+- **Recipes are plain files, not installed state.** The daemon keeps no
+  catalogue; it reads a recipe's contents at launch and validates them
+  (parameters, pipeline, hub ownership) before anything is created.
+- **Hardened peer workgroup access.** A malformed workgroup id from a paired
+  peer can no longer reach another profile's workgroup data; ids are now strictly
+  validated everywhere they arrive over the wire.
+- **Web Factory creates each hotel from a recipe.** Spinning up a project is now
+  a single `workgroup launch --recipe` against the web-factory `hotel` recipe; the
+  old per-project `new-project.py` / `sync-template.py` scripts and the bundled
+  `hotel-web` template are gone — the template lives in its own git base repo the
+  launch clones, and template updates reach a live project via `git pull`.
+- **Post-launch changes stay with the hub.** New locale, rebrand, content or a
+  new section come in as a maintenance request; the hub classifies it, routes the
+  owners, and closes only once the change is rebuilt into the live site.
+
 ## v0.11.2 — 2026-07-17 — verified pipelines and durable spend
 
 - **Spend survives deletion.** Removing a chat session or a workgroup now

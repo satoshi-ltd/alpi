@@ -38,10 +38,10 @@ content fixtures.
   components and per-style variations.
 - `factory/visual-reference.html` is the packaged offline render of the same
   design (bindings toggle included).
-- `templates/hotel-web/src/styles/themes/*.css` + `factory/template-spec.json`
+- the base repo's `src/styles/themes/*.css` + `factory/template-spec.json`
   (`defaults`, `fontOptions`, `decisionRubric`) are the **production** form of
   the 4 starters.
 
 Design changes flow: wireframes → `template` workgroup decision (ADR when
-significant) → `templates/hotel-web/`. The wireframes are reference, not
+significant) → the `alpi-mirai-web-factory` base repo. The wireframes are reference, not
 build input — nothing imports them at build time.

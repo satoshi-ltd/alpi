@@ -32,9 +32,9 @@ Routine edits (bug fix, prose tweak, dependency bump within semver minor) skip t
 
 ## Approach
 
-1. **Number the ADR**: scan `templates/hotel-web/decisions/` for the highest sequence number, increment by 1
+1. **Number the ADR**: scan `decisions/` at the template-checkout root (satoshi-ltd/alpi-mirai-web-factory) for the highest sequence number, increment by 1
 2. **Slug from the change**: `<seq>-<kebab-case-summary>.md`
-3. **Write the ADR** at `templates/hotel-web/decisions/<seq>-<slug>.md` using the format below
+3. **Write the ADR** at `decisions/<seq>-<slug>.md` (template-checkout root) using the format below
 4. **Post in `template` wg**: link + 1-line summary asking for review
 5. **Status transitions**:
    - `proposed` — under review
@@ -68,7 +68,7 @@ What other approaches were considered:
 Concrete change. Be specific:
 - File: `src/content/config.ts`
 - Change: add `seasonalBanner: z.optional(...)` to the page schema
-- Migration: existing projects pick up the optional field on next `--workspace-only` sync; no breaking change
+- Migration: existing project clones pick up the optional field via a `git pull`/merge of the base repo (or a fresh clone); no breaking change
 - Backwards compatibility: yes / no — if no, document the upgrade path
 
 If the change touches multiple files, list each one.

@@ -19,7 +19,7 @@ Atlas does NOT run this preventively on every project — the QA walk catches th
 ## Inputs
 
 - The Lighthouse report from lens (URL + which CWV failed + on which page/locale)
-- `templates/hotel-web/performance/budget.yaml` — the contract thresholds
+- `projects/<slug>/performance/budget.yaml` — the contract thresholds
 - The local preview build (`npm run preview` running)
 
 ## Approach

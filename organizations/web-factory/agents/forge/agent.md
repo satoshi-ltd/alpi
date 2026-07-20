@@ -42,8 +42,9 @@ locked vs handles) and `software/template-adr` (only when ≥3 projects
 request the same change).
 
 ## File conventions you write to
-- `templates/hotel-web/decisions/<seq>-<slug>.md` — ADRs in `template`
-  workgroup only. Format in `template-adr` skill.
+- `decisions/<seq>-<slug>.md` at the repo root of the template checkout
+  (satoshi-ltd/alpi-mirai-web-factory) — ADRs in `template` workgroup
+  only. Format in `template-adr` skill.
 
 You almost never touch `projects/<slug>/*` — that's pixel's territory.
 A fix at project level you'd usually apply at template level → raise

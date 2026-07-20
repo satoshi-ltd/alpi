@@ -9,8 +9,8 @@ only the union of profiles installed under `~/.alpi/profiles/`.
 
 | Org | Purpose | Machine |
 |---|---|---|
-| [`web-factory/`](web-factory/web-factory.md) | Standalone factory producing hotel websites (11 profiles, 3 standing workgroups + one persistent `proj-<slug>` workgroup per hotel) | dedicated factory machine |
-| [`lab/`](lab/lab.md) | Minimal ALP protocol testbed — 4 profiles, 1 workgroup, a deterministic check of every workgroup invariant (`test-protocol.py`) | any dev box |
+| [`web-factory/`](web-factory/README.md) | Standalone factory producing hotel websites (11 profiles, 3 standing workgroups + one persistent `proj-<slug>` workgroup per hotel) | dedicated factory machine |
+| [`lab/`](lab/README.md) | Minimal ALP protocol testbed — 4 profiles, 1 workgroup, a deterministic check of every workgroup invariant (`test-protocol.py`) | any dev box |
 
 Orgs talk to each other peer-to-peer via ALP. Cross-org workgroups are
 not supported by convention — keeps the namespace clean.
@@ -33,7 +33,7 @@ Every org folder follows the same shape:
 ├── workgroups/
 │   └── <name>/workgroup.md
 ├── common/skills/        ← optional shared skills installed across the roster
-└── (org-specific tools)  ← e.g. web-factory/new-project.py, lab/test-protocol.py
+└── (org-specific tools)  ← e.g. web-factory/recipes/hotel.yaml, lab/test-protocol.py
 ```
 
 A single `organizations/setup.py` reads `<org>/org.yaml` and does the
@@ -52,7 +52,7 @@ consumed by `setup.py`:
    `briefings/` — synced into the workspace via `org.yaml sync:`.
 3. **Operating scripts** (`*.py` at the org root, run by the human, not
    by bootstrap): lab's protocol/recall test harnesses, web-factory's
-   `new-project.py` / `acceptance.py` / `batch.py` / `sync-template.py`.
+   `tools/acceptance.py` / `tools/batch.py`.
    An org with no runtime rituals has none; an org that runs a
    production pipeline accumulates them.
 
@@ -87,7 +87,7 @@ decommissioning an org, or before moving to a different machine.
 ```bash
 # Web factory org (factory machine):
 uv run python organizations/setup.py web-factory
-uv run python organizations/web-factory/new-project.py <slug> --starter <boutique|budget|business|resort>
+alpi -p mira workgroup launch --recipe organizations/web-factory/recipes/hotel.yaml --param slug=<slug>
 
 # Protocol testbed (any dev box) — bootstrap, then verify every ALP invariant:
 uv run python organizations/setup.py lab
@@ -127,7 +127,7 @@ uv run python organizations/setup.py web-factory --nuke --workspace
    orgs are physically resolved by running each org on its own machine.
    If two orgs must coexist on one machine, prefix agent names (e.g.
    `co-vera`, `wf-vera`) — currently an open question per
-   `web-factory/web-factory.md` §15.
+   `web-factory/README.md` §15.
 
 ## Phase 2 · cross-org ALP
 

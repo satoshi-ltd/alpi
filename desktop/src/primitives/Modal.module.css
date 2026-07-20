@@ -20,6 +20,7 @@
   gap: var(--space-3);
   min-width: 460px;
   max-width: min(560px, calc(100vw - var(--space-10)));
+  max-height: calc(100vh - var(--space-10));
 }
 
 .titleRow {
@@ -28,6 +29,16 @@
   justify-content: space-between;
   gap: var(--space-3);
   margin-bottom: var(--space-4);
+  flex: 0 0 auto;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
 }
 
 .title {

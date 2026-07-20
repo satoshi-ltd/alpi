@@ -11,16 +11,22 @@ briefings/<slug>/
 Run a hotel through the pipeline:
 
 ```bash
-new-project.py <slug> --brief briefings/<slug>/brief.md --assets briefings/<slug>/assets/
+alpi -p mira workgroup launch \
+  --recipe organizations/web-factory/recipes/hotel.yaml \
+  --param slug=<slug> \
+  --input brief=briefings/<slug>/brief.md \
+  --assets briefings/<slug>/assets
 ```
 
-`new-project.py` copies the brief to `projects/<slug>/brief.md` and the photos
-into the project; muse triages and restores them (`kind: restored`).
+`--input brief=<file>` seeds `projects/<slug>/brief.md` (the recipe's declared
+`brief` input) before kickoff. `--assets <dir>` copies the hotel's photos into
+`projects/<slug>/assets/` before kickoff; muse triages and restores them
+(`kind: restored`). Drop `--assets` when the hotel supplied no photos.
 
 ## What's here
 
 - `golden/`, `visual/`, `restore/` — the three automated acceptance fixtures
-  (`acceptance.py golden|visual|restore`).
+  (`tools/acceptance.py golden|visual|restore`).
 - `boutique/`, `budget/`, `business/`, `resort/` — one rough sales-note brief
   per theme, for manual theme testing.
 - `jaime-primero/` — a real hotel (Hotel Jaime I, Salou).

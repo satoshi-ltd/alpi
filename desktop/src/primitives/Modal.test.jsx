@@ -19,3 +19,18 @@ describe("Modal focus return", () => {
     opener.remove();
   });
 });
+
+describe("Modal content wrapper", () => {
+  it("groups all children in one scrollable content region", () => {
+    const { getByText } = render(
+      <Modal open title="T">
+        <div>alpha</div>
+        <div>beta</div>
+      </Modal>,
+    );
+    const a = getByText("alpha");
+    const b = getByText("beta");
+    expect(a.parentElement).toBe(b.parentElement);
+    expect(a.parentElement.className).toMatch(/content/);
+  });
+});

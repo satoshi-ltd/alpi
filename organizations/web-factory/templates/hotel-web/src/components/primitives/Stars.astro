@@ -1,8 +1,0 @@
----
-interface Props { n?: number; }
-const { n = 5 } = Astro.props;
----
-<span class="stars" role="img" aria-label={`${n}/5`}>{Array.from({ length: n }).map(() => "★").join("")}</span>
-<style>
-  .stars { color: var(--color-accent); font-size: 12px; letter-spacing: 1px; }
-</style>

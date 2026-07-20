@@ -48,18 +48,3 @@ def test_no_locale_list_hardcoded_in_web_factory_skills():
         "is added or removed):\n  "
         + "\n  ".join(f"{p}: matched {seq!r} in …{snip}…" for p, seq, snip in leak[:6])
     )
-
-
-def test_template_i18n_dir_matches_supported_locales():
-    supported = set(_supported_locales())
-    i18n_dir = WEB_FACTORY / "templates" / "hotel-web" / "src" / "i18n"
-    assert i18n_dir.exists(), (
-        f"templates/hotel-web/src/i18n/ missing — the factory ships a hotel "
-        f"template with one JSON per supported locale; that directory is "
-        f"part of the contract, not optional"
-    )
-    shipped = {p.stem for p in i18n_dir.glob("*.json")}
-    assert supported == shipped, (
-        f"template-spec.json supportedLocales drift from src/i18n/*.json: "
-        f"declared-only={sorted(supported - shipped)}, shipped-only={sorted(shipped - supported)}"
-    )

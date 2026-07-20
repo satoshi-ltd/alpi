@@ -32,6 +32,7 @@ import json
 import os
 import re as _re
 import secrets
+import shutil as _shutil
 import time as _time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -230,6 +231,8 @@ class Meta:
     auto_read: bool = False
     # Closure-quorum grace (s) before the hub may `#done` with no substantive peer input; 0 = the _FULL_QUORUM_TIMEOUT_SECONDS default.
     quorum_timeout_seconds: int = 0
+    # Recipe launch provenance (recipe_id, digest, params, project dest, template commit); informational — editing the source recipe never mutates this.
+    launch: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -248,7 +251,13 @@ def _root(home: Path) -> Path:
     return home / _WG_DIR
 
 
+_WG_ID_RE = _re.compile(r"^[A-Za-z0-9_-]+$")
+
+
 def _wg_dir(home: Path, wg_id: str) -> Path:
+    # wg_id is off-the-wire — reject separators/`..` so a peer can't reach a sibling profile's workgroups.
+    if not _WG_ID_RE.match(wg_id or ""):
+        raise ValueError(f"invalid workgroup id: {wg_id!r}")
     return _root(home) / wg_id
 
 
@@ -298,6 +307,7 @@ def _load_meta(d: Path) -> Meta | None:
             pipeline_steps=raw.get("pipeline_steps") if isinstance(raw.get("pipeline_steps"), dict) else {},
             auto_read=bool(raw.get("auto_read", False)),
             quorum_timeout_seconds=_coerce_positive_int(raw.get("quorum_timeout_seconds")),
+            launch=raw.get("launch") if isinstance(raw.get("launch"), dict) else {},
         )
     except KeyError:
         return None
@@ -332,6 +342,8 @@ def _save_meta(d: Path, meta: Meta) -> None:
         payload["auto_read"] = True
     if meta.quorum_timeout_seconds:
         payload["quorum_timeout_seconds"] = meta.quorum_timeout_seconds
+    if meta.launch:
+        payload["launch"] = dict(meta.launch)
     (d / _META).write_text(yaml.safe_dump(payload, sort_keys=False, allow_unicode=True))
 
 
@@ -416,6 +428,9 @@ def create(
     briefing: str = "",
     notify_on_close: str = "none",
     pipeline: tuple[str, ...] | list[str] = (),
+    pipeline_steps: Any = None,
+    quorum_timeout_seconds: int = 0,
+    launch: dict | None = None,
     hub_bio: str = "",
     hub_voice: str = "",
 ) -> Workgroup:
@@ -424,6 +439,8 @@ def create(
     if not name:
         raise ValueError("workgroup name required")
     budget = _validate_budget(budget or {})
+    norm_pipeline = _normalize_pipeline(pipeline)
+    norm_steps = validate_pipeline_steps(norm_pipeline, pipeline_steps)
 
     hub_pk = hub_kp.pubkey_b64()
     roster = [hub_pk]
@@ -445,43 +462,79 @@ def create(
     d = _wg_dir(home, wg_id)
     d.mkdir(parents=True, exist_ok=True)
 
-    meta = Meta(
-        id=wg_id,
-        name=name,
-        hub_pubkey=hub_pk,
-        created_at=_utcnow(),
-        current_key_version=1,
-        budget=budget,
-        briefing=(briefing or "").strip(),
-        notify_on_close=str(notify_on_close or "none"),
-        pipeline=_normalize_pipeline(pipeline),
-    )
-    _save_meta(d, meta)
+    try:
+        meta = Meta(
+            id=wg_id,
+            name=name,
+            hub_pubkey=hub_pk,
+            created_at=_utcnow(),
+            current_key_version=1,
+            budget=budget,
+            briefing=(briefing or "").strip(),
+            notify_on_close=str(notify_on_close or "none"),
+            pipeline=norm_pipeline,
+            pipeline_steps=norm_steps,
+            quorum_timeout_seconds=_coerce_positive_int(quorum_timeout_seconds),
+            launch=dict(launch) if launch else {},
+        )
+        _save_meta(d, meta)
 
-    now = _utcnow()
-    members: list[Member] = []
-    for pk in roster:
-        sealed = seal_group_key(group_key, pk)
-        m = Member(pubkey=pk, sealed_key=sealed, key_version=1)
-        if pk == hub_pk:
-            m.joined = True
-            m.joined_at = now
-            m.last_seen_at = now
-            if hub_bio:
-                m.bio = hub_bio[:_BIO_MAX]
-            if hub_voice:
-                m.voice = hub_voice[:_VOICE_MAX]
-        members.append(m)
-    _save_members(d, members)
+        now = _utcnow()
+        members: list[Member] = []
+        for pk in roster:
+            sealed = seal_group_key(group_key, pk)
+            m = Member(pubkey=pk, sealed_key=sealed, key_version=1)
+            if pk == hub_pk:
+                m.joined = True
+                m.joined_at = now
+                m.last_seen_at = now
+                if hub_bio:
+                    m.bio = hub_bio[:_BIO_MAX]
+                if hub_voice:
+                    m.voice = hub_voice[:_VOICE_MAX]
+            members.append(m)
+        _save_members(d, members)
 
-    (d / _TRANSCRIPT).touch()
-    (d / _LEDGER).write_text(json.dumps(
-        {"usd": 0.0, "tokens": 0, "posts": 0}, separators=(",", ":"),
-    ))
-
-    wg = Workgroup(meta=meta, members=members)
-    _auto_join_local_members(home, wg)
+        (d / _TRANSCRIPT).touch()
+        (d / _LEDGER).write_text(json.dumps(
+            {"usd": 0.0, "tokens": 0, "posts": 0}, separators=(",", ":"),
+        ))
+        wg = Workgroup(meta=meta, members=members)
+        _auto_join_local_members(home, wg)
+    except BaseException:
+        destroy(home, wg_id)
+        raise
     return wg
+
+
+def destroy(home: Path, wg_id: str) -> list[str]:
+    from alpi.alp import subscription as sub_mod
+    from alpi.home import _ROOT
+
+    _shutil.rmtree(_wg_dir(home, wg_id), ignore_errors=True)
+    try:
+        from alpi.tools.workgroup_search import forget_workgroup
+        forget_workgroup(home, wg_id)
+    except Exception:  # noqa: BLE001
+        pass
+    purged: list[str] = []
+    profiles_root = _ROOT / "profiles"
+    for prof_dir in (profiles_root.iterdir() if profiles_root.exists() else []):
+        if not prof_dir.is_dir():
+            continue
+        try:
+            if sub_mod.get(prof_dir, wg_id) is not None:
+                sub_mod.remove(prof_dir, wg_id)
+                purged.append(prof_dir.name)
+        except Exception:  # noqa: BLE001
+            continue
+    try:
+        if sub_mod.get(_ROOT, wg_id) is not None:
+            sub_mod.remove(_ROOT, wg_id)
+            purged.append("default")
+    except Exception:  # noqa: BLE001
+        pass
+    return purged
 
 
 def _auto_join_local_members(hub_home: Path, wg: "Workgroup") -> None:
@@ -840,6 +893,50 @@ def _normalize_pipeline(raw: Any) -> tuple[str, ...]:
         seen.add(slug)
         out.append(slug)
     return tuple(out)
+
+
+def validate_pipeline_steps(
+    pipeline: tuple[str, ...], pipeline_steps: Any,
+) -> dict[str, dict]:
+    if not pipeline_steps:
+        return {}
+    if not isinstance(pipeline_steps, dict):
+        raise ValueError(f"pipeline_steps must be a mapping, got {type(pipeline_steps).__name__}")
+    phases = set(pipeline)
+    out: dict[str, dict] = {}
+    for phase, raw in pipeline_steps.items():
+        phase = str(phase).strip().lower()
+        if not _PIPELINE_SLUG_RE.match(phase):
+            raise ValueError(f"pipeline_steps key {phase!r} is not a valid phase slug")
+        if pipeline and phase not in phases:
+            raise ValueError(f"pipeline_steps key {phase!r} is not in the pipeline {list(pipeline)}")
+        if not isinstance(raw, dict):
+            raise ValueError(f"pipeline_steps[{phase!r}] must be a mapping")
+        owner = str(raw.get("owner") or "").strip()
+        if not owner:
+            raise ValueError(f"pipeline_steps[{phase!r}] missing 'owner'")
+        step: dict[str, Any] = {"owner": owner}
+        nxt = raw.get("next")
+        if nxt is not None:
+            nxt = str(nxt).strip().lower()
+            if pipeline and nxt not in phases:
+                raise ValueError(f"pipeline_steps[{phase!r}].next {nxt!r} is not in the pipeline")
+            step["next"] = nxt
+        if raw.get("task"):
+            step["task"] = str(raw["task"])
+        gate = raw.get("gate")
+        if gate is not None:
+            if not isinstance(gate, dict):
+                raise ValueError(f"pipeline_steps[{phase!r}].gate must be a mapping")
+            argv = gate.get("argv")
+            if not isinstance(argv, list) or not argv or not all(isinstance(a, str) and a for a in argv):
+                raise ValueError(f"pipeline_steps[{phase!r}].gate.argv must be a non-empty list of strings")
+            cwd = gate.get("cwd", "")
+            if not isinstance(cwd, str):
+                raise ValueError(f"pipeline_steps[{phase!r}].gate.cwd must be a string")
+            step["gate"] = {"argv": list(argv), "cwd": cwd}
+        out[phase] = step
+    return out
 
 
 def _validate_budget(budget: dict[str, Any]) -> dict[str, Any]:

@@ -11,6 +11,18 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.48 — 2026-07-19 — launch workgroups from a recipe
+
+- **Import a recipe file and launch.** The New Workgroup dialog gains an
+  **Import recipe…** button: pick a `.yaml` recipe from disk, the daemon reads and
+  validates it, and the dialog builds the form the recipe declares — the hub, an
+  editable briefing, and a **Recipe inputs** section with a field per parameter
+  and a text box per input (e.g. a raw brief). Required inputs must be filled
+  before Launch, which creates the whole workgroup (clone, seed, first task) in
+  one step. Recipes are plain git files; nothing is stored on the daemon.
+
+_Requires alpi v0.11.3+ for recipe launch._
+
 ## v0.4.47 — 2026-07-17 — simpler storage, friendlier empty workgroups
 
 - **The Storage panel is a clear inventory again.** Raw directories are rolled

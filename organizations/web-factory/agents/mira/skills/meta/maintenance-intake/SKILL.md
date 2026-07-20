@@ -37,7 +37,7 @@ Apply `mira/meta/scope-bend-decision` thinking, but post-launch. Categories:
 | **Photography refresh** | "We've done a new shoot, replace the hero" | Pixel reprocesses + wires. Canvas reviews if hero variant needs change. Week. |
 | **Rebrand within theme** | "Our new brand colour is teal instead of bronze" | Canvas recommends the `site.json` `tokens` override; scout applies it; lens verifies contrast. Days. |
 | **New section** | "We want a journal page" | Turn the page on in `site.json.pages`, quill writes the content, lingua translates, pixel rebuilds, lens audits. Week. |
-| **Template-layer tweak** | "Smooth scrolling", "blur behind the header", a hover effect — behaviour/style of the fixed design layer | Never per-project work (no agent may edit components/CSS in a clone). Route to the `template` workgroup: forge lands it in the master template (or declines per the 80/20 rule). If it lands, port it to THIS project with `sync-template.py <slug>` (re-copies the fixed layer only), then pixel rebuilds and lens spot-checks. Week. |
+| **Template-layer tweak** | "Smooth scrolling", "blur behind the header", a hover effect — behaviour/style of the fixed design layer | Never per-project work (no agent may edit components/CSS in a clone). Route to the `template` workgroup: forge lands it in the master template (or declines per the 80/20 rule). If it lands, port the landed base-repo change into `projects/<slug>` via a `git pull`/`merge` of the base repo, then pixel rebuilds and lens spot-checks. Week. |
 | **Major redesign** | "We want to switch from boutique to resort theme" | A theme switch is just `site.json.theme` + new content for the theme's sections — but if it's a full re-do, spawn `proj-<slug>-v2`. |
 | **Out of scope** | "Can you also handle our PMS?", "Can you build our booking engine?" | Decline; mira routes to sales for a different scope of engagement. |
 
@@ -116,6 +116,13 @@ Classification: <category>
 - CHANGELOG.md updated with a one-line entry
 ```
 
+> **Sequence the rebuild; a data owner finishing is NOT the task finishing.** A
+> maint change is done only when it is live in the rebuilt `dist/`. After the
+> data owners finish (scout/quill/lingua), route to **pixel** to `npm run ship`
+> and confirm the change is actually in `dist/` before you `#done`. Never mark a
+> `#working` owner "stalled" — a slow owner (e.g. lingua translating a whole
+> locale, ~1 day) is not a stalled one; wait for the handoff, don't preempt.
+
 ### 4. On completion
 
 When the owner posts `#done`:
@@ -132,7 +139,7 @@ When the owner posts `#done`:
 
 ### Special handling
 
-**Major redesign / starter switch**: route to a sub-project. Use `new-project.py` to create `proj-<slug>-v2`, treat the original as legacy until cutover. Then the original archives normally via `project-archive`.
+**Major redesign / starter switch**: route to a sub-project. Launch the recipe with slug `<slug>-v2` to create `proj-<slug>-v2`, treat the original as legacy until cutover. Then the original archives normally via `project-archive`.
 
 **Hotel sends a "list of 12 things"**: split each into its own changes/<seq> entry. Don't bundle. Each gets its own `#task` so the workgroup stays focused.
 

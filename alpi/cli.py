@@ -3753,11 +3753,14 @@ def _read_local_transcript(h: Path, wg_id: str) -> list[dict]:
               help="Ordered pipeline phase slugs, comma-separated "
                    "(e.g. 'intake,content,build,qa'). Empty = a normal "
                    "deliberation workgroup.")
+@click.option("--quorum-timeout", type=int, default=0,
+              help="Closure-quorum grace in seconds (0 = default 600). "
+                   "Deterministic gate configs come from `workgroup launch`, not here.")
 @click.pass_context
 def workgroup_create(
     ctx: click.Context, name: str,
     members: tuple[str, ...], budget_usd: float | None,
-    briefing: str, pipeline: str,
+    briefing: str, pipeline: str, quorum_timeout: int,
 ) -> None:
     """Create a workgroup as hub; members are pubkeys or pinned peer ids."""
     from alpi.alp import peers as peers_mod
@@ -3786,13 +3789,62 @@ def workgroup_create(
             h, name=name, hub_kp=load_or_generate(h),
             member_pubkeys=pubkeys, budget=budget,
             briefing=(briefing or "").strip(),
-            pipeline=phases,
+            pipeline=phases, quorum_timeout_seconds=quorum_timeout,
             hub_bio=hub_bio, hub_voice=hub_voice,
         )
     except ValueError as e:
         raise click.ClickException(str(e))
     pipe_note = f" · pipeline {'→'.join(wg.meta.pipeline)}" if wg.meta.pipeline else ""
     click.echo(f"created {wg.meta.id} · {len(wg.members)} members{pipe_note}")
+
+
+@workgroup.command("launch")
+@click.option("--recipe", "recipe_path", required=True, type=click.Path(exists=True, dir_okay=False, path_type=Path),
+              help="Path to a recipe .yaml file (git-tracked; read and sent by content).")
+@click.option("--param", "param_pairs", multiple=True, metavar="KEY=VALUE",
+              help="Recipe parameter. Repeat for each declared param, e.g. --param slug=casa-bahia.")
+@click.option("--briefing", default=None, help="Override the recipe's briefing draft (the workgroup's meta briefing).")
+@click.option("--input", "input_pairs", multiple=True, metavar="NAME=FILE",
+              help="Recipe input; FILE's contents seed the declared input (e.g. --input brief=./brief.md). Repeat per input.")
+@click.option("--assets", "assets_path", default=None, type=click.Path(exists=True, file_okay=False, path_type=Path),
+              help="Folder of assets copied into the project's assets/ before kickoff.")
+@click.pass_context
+def workgroup_launch(
+    ctx: click.Context, recipe_path: Path,
+    param_pairs: tuple[str, ...], briefing: str | None,
+    input_pairs: tuple[str, ...], assets_path: Path | None,
+) -> None:
+    """Launch a workgroup from a recipe file (clone+seed+create+kickoff, one operation)."""
+    import asyncio
+
+    from alpi.host import recipes as host_recipes
+
+    h: Path = ctx.obj["home"]
+    params: dict[str, str] = {}
+    for pair in param_pairs:
+        if "=" not in pair:
+            raise click.ClickException(f"--param must be KEY=VALUE, got {pair!r}")
+        k, v = pair.split("=", 1)
+        params[k.strip()] = v
+    inputs: dict[str, str] = {}
+    for pair in input_pairs:
+        name, sep, path = pair.partition("=")
+        if not sep or not name.strip():
+            raise click.ClickException(f"--input must be NAME=FILE, got {pair!r}")
+        f = Path(path)
+        if not f.is_file():
+            raise click.ClickException(f"--input {name.strip()}: file not found: {path}")
+        inputs[name.strip()] = f.read_text()
+    try:
+        result = asyncio.run(host_recipes.launch(
+            h, recipe_path.read_text(), params,
+            briefing_override=briefing, recipe_id=recipe_path.stem,
+            inputs=inputs, assets_src=assets_path,
+        ))
+    except ValueError as e:
+        raise click.ClickException(str(e))
+    proj = f" · project {result['project_path']}" if result.get("project_path") else ""
+    click.echo(f"launched {result['workgroup_id']}{proj}")
 
 
 @workgroup.command("join")

@@ -851,6 +851,164 @@ introduced as `"Sommelier — maps acidity, tannin, sweetness"`
 already knows their slice of any food workgroup; the briefing
 doesn't need to reiterate.
 
+### Recipes (host-plane launch)
+
+Creating a workgroup by hand means naming it, picking members,
+writing a briefing, and — for a pipeline — spelling out every
+phase, owner, and gate. For workgroups launched repeatedly with
+the same shape (a standing review board, a per-project production
+line), that shape is *constant*; only a parameter or two and the
+brief change. A **recipe** captures the constant shape as data, so
+a launch is "load this file, fill the blanks."
+
+A recipe is a plain YAML file — a git artifact, not owned by any
+profile and never stored in `~/.alpi`. There is no catalogue and
+no install step: the client reads the `.yaml` and hands its
+*contents* to the daemon. Recipes stay reviewable in version
+control and shareable across machines without a per-daemon
+registry.
+
+Recipes are a **host-plane** convenience, not part of the ALP wire
+protocol — ALP gains no recipe or project verbs. A launch just
+assembles the existing `workgroup.create` primitive (plus, when
+asked, a project clone) from the resolved file. Two host methods:
+
+- `host.workgroup.recipes.describe(yaml)` — parse a recipe and
+  return its shape (hub, declared params + patterns, briefing
+  draft, whether it clones a project). Scope-free; the desktop
+  uses it to render the launch form.
+- `host.workgroup.launch_recipe(profile, yaml, params, briefing?, inputs?)`
+  — admin verb; `profile` must be the recipe's hub and own the
+  launch. `inputs` is a `{name: value}` map for the recipe's
+  declared inputs (below).
+
+**Three shapes from one format.** A recipe declares only what it
+needs:
+
+- *Deliberation* — `task` only, no pipeline, no project: a
+  round-table that opens on its kickoff post.
+- *Pipeline* — adds `pipeline` + `pipeline_steps` (see
+  *Deterministic phase gates*): an ordered, gated production line.
+- *Project* — adds a `project` block: clone a template repo into
+  the workspace and seed it before the pipeline starts.
+
+**Parameters vs inputs — two kinds of operator-supplied value.**
+
+- `params` are single-line **interpolation tokens**: every `{name}`
+  in the recipe's strings is a declared param, each required, with
+  an optional `pattern` regex the value must fullmatch. Resolution
+  is a single non-recursive pass — a param cannot smuggle in YAML, a
+  marker (`#done`/`#task`), or a newline (all rejected). Undeclared
+  placeholders or unsupplied params fail the launch before anything
+  is created.
+- `inputs` are multiline **file seeds**: arbitrary operator-provided
+  text written verbatim to a file in the clone. Each input declares
+  a `dest` (relative path inside the project), an optional `label` /
+  `placeholder` for the form, and `required` (default true). Inputs
+  are *not* interpolated and carry no injection surface — they are
+  content, not tokens — so they carry the material a param can't
+  (a whole client brief). Inputs require a `project` block.
+
+This split is why web-factory keeps the *workgroup briefing*
+(metadata, a param-interpolated string) separate from the *hotel
+brief* (an input written to `brief.md`): different roles, different
+constraints.
+
+**The atomic launch.** A project recipe materialises as one unit,
+rolled back whole on any failure:
+
+```
+validate → clone (into staging) → seed → move into place →
+write recipe inputs + copy assets → workgroup.create → kickoff post
+```
+
+The dynamic values — the operator-edited briefing, the declared
+`inputs`, and any `assets/` — land *before* `create` and the
+kickoff, so the first `#task` reaches a project that already
+carries its final files. Required inputs are validated before the
+clone, so a missing one fails fast with no orphaned project. A
+failure at any later step removes the workgroup (including the local
+member subscriptions auto-join created) and the cloned project; the
+launch returns `{workgroup_id, project_path}` only after every step
+succeeds.
+
+**Seed** writes template config before the pipeline runs, via two
+explicit ops under `project.seed`:
+
+- `json_merge: {path: {…}}` — deep-merge a patch into an existing
+  JSON file (objects merge; scalars and arrays replace).
+- `files: {path: contents}` — write a fixed file outright (e.g. an
+  `intake.md` stub the pipeline later fills). Seed is recipe-authored
+  boilerplate; operator-supplied content is an `input`, not a seed.
+
+**Provenance.** The launched workgroup records its origin in
+`meta.launch` — recipe id, content digest, resolved params,
+project destination, and the template commit it cloned — so an
+audit can tie a running workgroup back to the exact recipe that
+produced it. Editing the source recipe never mutates a live
+workgroup.
+
+**Surfaces.** Launch from the CLI —
+
+```
+alpi workgroup launch --recipe hotel.yaml \
+  --param slug=casa-bahia --input brief=./brief.md --assets ./photos
+```
+
+`--input NAME=FILE` seeds the declared input `NAME` with FILE's
+contents (repeatable). Or launch from the desktop New Workgroup
+modal ("Import recipe…"), which describes the file, groups the
+standard workgroup fields (hub, name, briefing) and then a **recipe
+inputs** section — a field per declared param and a textarea per
+declared input — and lets the operator edit the briefing draft
+before launching.
+
+A worked recipe (only `{slug}` varies per launch):
+
+```yaml
+hub: mira
+members: [scout, quill, lingua, pixel, lens]
+name: "proj-{slug}"
+quorum_timeout_seconds: 180
+budget_usd: 50
+
+params:
+  slug:
+    pattern: "^[a-z0-9][a-z0-9-]{0,63}$"
+
+inputs:
+  brief:
+    label: "Client brief (immutable)"
+    dest: brief.md
+    required: true
+    placeholder: "paste the raw client brief"
+
+briefing: |
+  Workgroup for '{slug}' — produce its launch-ready site.
+  Raw brief (immutable): projects/{slug}/brief.md
+
+task: "@scout #task #intake · start {slug}"
+
+pipeline: [intake, content, translation, build, qa]
+pipeline_steps:
+  intake:      { owner: scout,  next: content,     gate: { argv: [python3, scripts/intake-check.py],  cwd: "projects/{slug}" } }
+  content:     { owner: quill,  next: translation, gate: { argv: [python3, scripts/content-check.py], cwd: "projects/{slug}" } }
+  translation: { owner: lingua, next: build,       gate: { argv: [python3, scripts/content-check.py], cwd: "projects/{slug}" } }
+  build:       { owner: pixel,  next: qa,          gate: { argv: [test, -d, dist],                    cwd: "projects/{slug}" } }
+  qa:          { owner: lens }
+
+project:
+  template_repo: git@github.com:acme/site-template.git
+  dest: "projects/{slug}"
+  seed:
+    files:
+      intake.md: "# Intake — {slug}\n\n(scout fills this in the intake phase)"
+```
+
+A recipe's gates are `argv` run node-free on the daemon (the
+example uses `python3`), matching *Deterministic phase gates* — the
+checks are raw commands, never engine turns.
+
 ### In-chat protocol
 
 The wire-level transport doesn't change. **All semantics below

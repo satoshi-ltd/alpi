@@ -4,8 +4,8 @@
 **Commercial (Mirai)**: María Ruiz
 **Outcome**: hotel signed. Kickoff to factory authorised.
 
-This file is the raw client brief used to seed `proj-casa-bahia` via
-`new-project.py`. Treat it as audit trail — agents read it, never edit.
+This file is the raw client brief used to seed `proj-casa-bahia` via the
+recipe launch (`workgroup launch --recipe`). Treat it as audit trail — agents read it, never edit.
 
 ---
 

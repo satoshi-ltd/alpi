@@ -29,13 +29,13 @@ deal flow. The bootstrap pattern is the same.
 
 ## Reference orgs that ship today
 
-- [`web-factory/`](../organizations/web-factory/web-factory.md) — a
+- [`web-factory/`](../organizations/web-factory/README.md) — a
   standalone factory producing ~120 hotel websites a year. 11 profiles,
   3 standing workgroups, plus a persistent `proj-<slug>` workgroup per
-  hotel. Carries its own templates, brand starters, and per-project
-  bootstrap script alongside the standard pieces. **This document
+  hotel. Carries its own brand starters, factory contract, and a launch
+  recipe alongside the standard pieces. **This document
   focuses on it as the primary worked example.**
-- [`lab/`](../organizations/lab/lab.md) — the minimal ALP protocol
+- [`lab/`](../organizations/lab/README.md) — the minimal ALP protocol
   testbed: 4 profiles, 1 workgroup, deterministic harnesses that verify
   every workgroup invariant.
 
@@ -46,7 +46,7 @@ multi-org pattern, the YAML schema, and how to add a third org.
 
 ## Canonical reference
 
-`organizations/web-factory/web-factory.md` — full spec for the
+`organizations/web-factory/README.md` — full spec for the
 web-factory org: agent roster, workgroups, producer contract, and the
 per-project pipeline. The rest of this document drills into that
 scaffold.
@@ -77,7 +77,7 @@ organizations/
       skills/<category>/<skill>/SKILL.md   # shared across multiple agents in this org
     workgroups/
       <name>/workgroup.md         # hub, members, budget_usd?, briefing
-    (org-specific tools)          # e.g. web-factory/new-project.py, lab/test-protocol.py
+    (org-specific tools)          # e.g. web-factory/recipes/hotel.yaml, lab/test-protocol.py
 ```
 
 ### `org.yaml` — full schema
@@ -88,7 +88,7 @@ Every key `setup.py` reads, with the default it falls back to:
 |---|---|---|
 | `display_name` | `<name>` (the folder name) | Human label used in console output during bootstrap. |
 | `workspace` | `~/alpi/organizations/<name>/` | Default project root for file/terminal tools across the org's profiles. `~` is honoured verbatim (an org may set workspace to `~` so agents share the user's home). Bare YAML `~` parses to `None` and falls back to the default; a literal home string is `"~"`. |
-| `workspace_scaffold` | `[]` | List of relative subdir names created inside `workspace` at bootstrap (`projects`, `templates/hotel-web`, etc.). |
+| `workspace_scaffold` | `[]` | List of relative subdir names created inside `workspace` at bootstrap (`projects`, `archive`, etc.). |
 | `sync` | `[]` | List of `{src, dst}` entries copied from `organizations/<name>/` into `workspace` every bootstrap (replace mode). Used for shipping templates / libraries with the org. |
 | `peer_edges` | `[]` | Permanent peer graph. **Preferred source** — see _Peer graph_ below. Accepts `"all"` (every agent a mutual peer), a list of `[a, b]` pairs, or empty (workgroup membership alone wires the graph). |
 | `models.main` | `{model: openai/gpt-5.6-terra, effort: medium}` | Turn model written to every profile's `config.yaml model`. `effort` is **required** (`low \| medium \| high`) — the org-wide reasoning default every agent inherits unless its `agent.md` declares `reasoning_effort`. |
@@ -159,7 +159,7 @@ One strategic lead (vera), one project-manager hub (mira), one tech
 lead (forge), one brand steward (canvas), and seven producers (scout,
 quill, lingua, muse, pixel, atlas, lens) — one owner per pipeline
 phase. The full roster with reasoning tiers and souls lives in the
-[canonical reference](../organizations/web-factory/web-factory.md).
+[canonical reference](../organizations/web-factory/README.md).
 
 ---
 
@@ -174,8 +174,9 @@ phase. The full roster with reasoning tiers and souls lives in the
 
 The three standing workgroups carry meta-work (brand starters, the
 launch checklist, the master template). Each hotel gets a persistent
-`proj-<slug>` pipeline workgroup created by `new-project.py`, with a
-briefing carrying project facts + the phase map only.
+`proj-<slug>` pipeline workgroup launched from
+`organizations/web-factory/recipes/hotel.yaml`, with a briefing carrying
+project facts + the phase map only.
 
 ---
 
@@ -223,9 +224,8 @@ for different intents:
 - `--skills-only` — re-sync SKILL.md files into existing profiles. No
   profile wipe.
 - `--workspace-only` — re-sync workspace scaffold + templates/assets
-  (useful when iterating on `web-factory/templates/` or
-  `web-factory/library/`; no-op for orgs without a synced
-  workspace).
+  (useful when iterating on `web-factory/library/`; no-op for orgs
+  without a synced workspace).
 - `--no-check` — skip the pre-bootstrap validation gate. Use sparingly,
   only when iterating on tooling itself.
 - `--nuke` — destroy all profiles for this org under `~/.alpi/profiles/`.

@@ -2151,6 +2151,7 @@ async def _run_host(home: Path, profile: str) -> None:
     from alpi.host import tools as host_tools
     from alpi.host import usage as host_usage
     from alpi import runtime
+    from alpi.host import recipes as host_recipes
     from alpi.host import workgroup_admin as host_wg_admin
     from alpi.host.network import host_allow_public_bind, resolve_host_tcp_bind
     from alpi.host.server import Server as HostServer
@@ -2177,6 +2178,7 @@ async def _run_host(home: Path, profile: str) -> None:
     host_clarification.register(server)
     host_schedule.register(server)
     host_wg_admin.register(server)
+    host_recipes.register(server)
     host_probes.register(server)
     host_connections.register(server)
     host_network.register(server)

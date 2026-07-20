@@ -3,23 +3,16 @@ display_name: Web Factory
 
 workspace: ~/git/web-factory
 
-# Permanent peer edges = network infrastructure (who CAN talk to whom), not
-# agent identity. "all" = every agent is a mutual peer, so mira can spin up a
-# proj-<slug> workgroup with any roster. Workgroup memberships add their own
-# hub↔member edges on top.
+# "all" = every agent is a mutual peer; workgroup rosters add hub↔member edges on top.
 peer_edges: all
 
-# Subdirs created inside the workspace at bootstrap.
+# the Astro template lives in the git base repo the recipe clones, not a local copy.
 workspace_scaffold:
-  - templates/hotel-web
   - projects
   - archive
 
-# Each src dir's children are copied (replace mode) into dst, every bootstrap:
-# the 4-theme Astro kit (template) + the machine-readable contract (factory/).
+# each src dir's children are copied (replace mode) into dst every bootstrap.
 sync:
-  - src: templates/hotel-web
-    dst: templates/hotel-web
   - src: factory
     dst: factory
   - src: library
@@ -35,7 +28,7 @@ models:
 budgets:
   daily_default: 2.0       # fallback only — every agent.md declares daily_usd
   workgroup: 50.0          # standing workgroups (brand-library / quality / template)
-  project_workgroup: 50.0  # per-project proj-<slug> pipeline; new-project.py reads this (real runs land ~$1-2)
+  project_workgroup: 50.0  # per-project proj-<slug> pipeline; the recipe sets this (real runs land ~$1-2)
 
 agent_voices:
   vera:   en-US-AriaNeural

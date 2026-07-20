@@ -1,0 +1,65 @@
+hub: mira
+members: [scout, quill, lingua, muse, pixel, lens]
+name: "proj-{slug}"
+quorum_timeout_seconds: 180
+budget_usd: 50
+
+params:
+  slug:
+    pattern: "^[a-z0-9][a-z0-9-]{0,63}$"
+
+inputs:
+  brief:
+    label: "Hotel brief (immutable)"
+    dest: brief.md
+    required: true
+    placeholder: "paste the raw client brief — the immutable source of truth for the whole build"
+
+briefing: |
+  Workgroup for hotel '{slug}' — produce its launch-ready website.
+  Brief (raw, immutable): projects/{slug}/brief.md
+  Contract: factory/template-spec.json · agents produce ONLY data (src/config/site.json + src/content/**) · components, themes and *.ts are the fixed design layer.
+  Pipeline, one owner per phase: #intake @scout · #assets @muse · #content @quill · #translation @lingua · #build @pixel · #qa @lens.
+  The hub (mira) runs the phase procedure from its meta/project-lifecycle skill.
+
+task: |
+  @scout #task #intake · pick the theme + write src/config/site.json + intake.md
+
+  Kickoff for proj-{slug}. Raw brief at `projects/{slug}/brief.md`. Deliverables and rubric: your craft + factory/template-spec.json. End the handoff with the `visual_assets:` signal line.
+
+# assets is intentionally gateless: intake's gate branches to content (trivial path) or fails to the hub, which opens assets for muse.
+pipeline: [intake, assets, content, translation, build, qa]
+pipeline_steps:
+  intake:
+    owner: scout
+    next: content
+    task: "pick the theme + write src/config/site.json + intake.md; end the handoff with the visual_assets: signal line"
+    gate: { argv: [python3, scripts/intake-check.py], cwd: "projects/{slug}" }
+  content:
+    owner: quill
+    next: translation
+    task: "write the source-locale content under src/content/** per the binding catalogue (factory/template-spec.json); every pages/*.json intro is an object, never a string; NEVER write image/gallery paths"
+    gate: { argv: [python3, scripts/content-check.py], cwd: "projects/{slug}" }
+  translation:
+    owner: lingua
+    next: build
+    task: "translate every source entry into the locales declared in site.json (run your multi-locale-translation-pass skill)"
+    gate: { argv: [python3, scripts/content-check.py], cwd: "projects/{slug}" }
+  build:
+    owner: pixel
+    next: qa
+    task: "green npm run ship ONLY (manifest → build → preflight), dist/ on disk"
+    gate: { argv: [test, "-d", dist], cwd: "projects/{slug}" }
+  qa:
+    owner: lens
+    task: "audit projects/{slug}/dist/ against the launch checklist; one PASS/FAIL verdict"
+
+project:
+  template_repo: "git@github.com:satoshi-ltd/alpi-mirai-web-factory.git"
+  dest: "projects/{slug}"
+  seed:
+    files:
+      intake.md: |
+        # Intake — {slug}
+
+        (scout fills theme rationale, voice, and the facts the content phase needs from brief.md)
