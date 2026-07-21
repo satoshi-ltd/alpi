@@ -59,11 +59,42 @@ clients and peers are told to dial. Ports are per-plane.
 State (profiles, keys, config, sessions) lives under `/data` — mount a volume
 so it survives restarts.
 
-## MCP servers
+## Node runtime and private Git recipes
 
-The image ships Node 22, so MCP servers launched with `npx …` work out of the
-box. The npx cache lives in `/data/.npm` and persists in the volume — a
-server's first launch downloads once per volume, not once per container start.
+The image ships Node.js 24 LTS, npm, and npx. Node is a first-class runtime: it
+runs npm-based project gates as well as MCP servers launched through `npx`, and a
+container never depends on its Docker host's Node install. Native daemon
+installations must expose Node.js 24 LTS (`node`, `npm`, `npx`) on the service
+PATH. The npm/npx cache lives in `/data/.npm` and persists in the volume, so a
+package is downloaded once per volume rather than once per container start.
+
+A plain container needs nothing more. **Only if a recipe clones a project repo**
+— its setup phase runs `git clone` + `npm ci` inside the container — does the
+deployment also need:
+
+- outbound DNS and HTTPS to GitHub and `registry.npmjs.org`;
+- a writable `/data` volume owned by the runtime user (UID/GID 1000);
+- room for one clone and `node_modules` per project, plus the shared npm cache.
+
+**If that recipe uses an SSH URL** (`git@github.com:…`), provision a dedicated
+deploy key and `known_hosts` in `/data/.ssh`, owned by UID 1000, at runtime —
+never bake SSH keys or tokens into the image or repository. The image includes
+`openssh-client`, and Git inherits `HOME=/data` so it resolves these credentials
+normally:
+
+```sh
+mkdir -p data/alpi/.ssh
+sudo chown -R 1000:1000 data/alpi
+chmod 700 data/alpi/.ssh
+chmod 600 data/alpi/.ssh/id_ed25519
+```
+
+Verify the runtime inside the container after rebuilding:
+
+```sh
+docker compose exec alpi sh -lc \
+  'node --version && npm --version && npx --version && git --version && ssh -V'
+```
 
 ## Fleets (several machines)
 

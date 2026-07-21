@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.11.5 — 2026-07-21 — Node 24 in the container image
+
+- **The Docker image ships Node.js 24 LTS.** A dockerized daemon runs npm-based
+  project gates and `npx`-launched MCP servers on its own, without relying on the
+  host's Node install.
+- **Dockerized daemons can clone private project repos over SSH.** The image now
+  includes an SSH client, so a recipe whose setup clones a private template
+  (`git clone` + `npm ci`) works inside the container. Provide a deploy key under
+  `/data/.ssh` at runtime; credentials are never baked into the image.
+
 ## v0.11.4 — 2026-07-21 — read-only knowledge relays
 
 - **A profile can be a read-only front door to another agent.** Point a profile

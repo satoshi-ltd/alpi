@@ -1,6 +1,6 @@
-FROM node:22-slim AS node
+FROM node:24-trixie-slim AS node
 
-FROM python:3.11-slim
+FROM python:3.11-slim-trixie
 
 ENV ALPI_PLATFORM=docker \
     HOME=/data \
@@ -12,14 +12,18 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
         git \
+        openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
-# Node for npx-launched MCP servers — copied from the official image (same Debian base): apt ships Node 18 (EOL), NodeSource drags a toolchain; the npx cache lands in $HOME/.npm → persists in /data.
+# Copy Node from the matching official Debian base; npm cache persists under $HOME/.npm.
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
 COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
 RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
     && ln -s /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
-    && node --version && npm --version && npx --version
+    && test "$(node -p 'process.versions.node.split(".")[0]')" = "24" \
+    && node --version \
+    && npm --version \
+    && npx --version
 
 WORKDIR /app
 # Only what the build needs — never the whole repo (a stray .venv / node_modules
