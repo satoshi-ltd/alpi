@@ -535,6 +535,21 @@ alp:
   tcp_port: 7423
 ```
 
+### Relay
+
+Turns a profile into a **read-only front door** to one designated peer. When set, the engine offers the profile **only the `peer` tool** and hard-gates every turn: the agent MUST consult that pinned peer via `peer` before it can produce a final answer — a call to any other peer id is rejected before it runs, an empty reply does not count, and if the turn ends (or hits the step/time limit) without a valid reply it fails closed with a fixed message rather than answer from the model's own knowledge. The peer's reply is surfaced as the answer. So you only pin that peer in `peers.yaml` with `link.ask` — no separate `tools.deny` needed.
+
+This makes the **relay side** read-only, structurally. It does **not** make the target agent immutable: an inbound `link.ask` runs a full turn on the target with the target's own tools, so keeping the knowledge source unwritable is the target profile's responsibility — deny its mutating tools there, and restrict which paired devices may address it via a member connection's `profile_scope` (see *Host* below — `service.host: false` on the target is **not** a per-profile access control). The relay does not police the peer.
+
+| Key | Default | Notes |
+|---|---|---|
+| `relay.peer` | unset | The pinned `peer_id` this profile must consult before answering. Unset = no relay gate (normal profile). |
+
+```yaml
+relay:
+  peer: agora
+```
+
 ### Ollama
 
 Ollama is a first-class provider. One entry per server — local, remote, different ports — each with its own user-chosen `name` that becomes the model prefix (`home/gemma4:e4b`, `gpu-box/qwen3:14b`). On every request against an Ollama server, `num_ctx` is auto-resolved from `/api/show` and injected so the model sees the full prompt instead of being truncated to Ollama's 2K default.
@@ -659,6 +674,14 @@ not here — this section is just the host plane's port, pairing name, and the
 public-bind opt-in. `host.device_name` controls the visible pairing label for
 new devices.
 It is optional; when empty, alpi falls back to the platform hostname.
+
+**`service.host` is not per-profile access control.** It toggles whether the
+daemon runs the host plane (that plane lives with the `default` profile). The
+single host socket serves every sibling profile, and **admin** connections plus
+direct local socket access reach any profile regardless of it. To limit which
+profiles a *paired device* (a **member** connection) may address, scope that
+connection with `profile_scope` — that, not `service.host: false` on the target,
+is what keeps a named profile off a given device's reach.
 
 On regular macOS/Linux installs, leaving `network.host` empty keeps auto
 mode: Tailscale first, then LAN, used as both the advertised address and the

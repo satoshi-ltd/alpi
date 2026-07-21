@@ -15,6 +15,7 @@ from alpi import clock, config as cfg_mod
 from alpi import llm, session, tools
 from alpi.tools._budget import apply as _budget_apply
 from alpi.tools._sanitizer import sanitize_tool_payload
+from alpi.tools.base import ToolResult
 from alpi.session import ASSISTANT_CAP, ToolLog, truncate_result
 
 
@@ -127,6 +128,14 @@ class AgentEvent:
 EventSink = Callable[[AgentEvent], None]
 
 
+def _schema_name(schema: dict) -> str:
+    return (schema.get("function") or {}).get("name") or schema.get("name") or ""
+
+
+def _relay_fallback(peer: str) -> str:
+    return f"I can only answer using '{peer}' and couldn't consult it for this. Please try again."
+
+
 class Engine:
     def __init__(self, home: Path, cfg: cfg_mod.Config):
         from alpi.host.connection_context import ConnectionContext, current
@@ -221,6 +230,7 @@ class Engine:
             self.cfg.tools.deny = fresh.tools.deny
             self.cfg.tiers = fresh.tiers
             self.cfg.fallback_models = fresh.fallback_models
+            self.cfg.relay = fresh.relay
         except Exception:  # noqa: BLE001
             pass
         try:
@@ -275,6 +285,23 @@ class Engine:
             hint = ""
         if hint:
             self.session.messages.append({"role": "system", "content": hint})
+
+        relay_peer = str((self.cfg.relay or {}).get("peer") or "").strip()
+        relay_consulted = False
+        relay_retry_done = False
+        self.session.messages[:] = [
+            m for m in self.session.messages
+            if not (m.get("role") == "system"
+                    and isinstance(m.get("content"), str)
+                    and m["content"].startswith("[relay] "))
+        ]
+        if relay_peer:
+            self.session.messages.append({"role": "system", "content": (
+                f"[relay] You are a read-only relay for peer '{relay_peer}' and hold no knowledge "
+                f"of your own. Before any final answer you MUST consult '{relay_peer}' via "
+                f"peer(peer_id='{relay_peer}', prompt=...) and answer only from its reply — never "
+                "from your own or general knowledge."
+            )})
 
         # Reset per-turn workgroup usage tracking.
         from alpi.tools import _state as _wg_state
@@ -332,6 +359,8 @@ class Engine:
 
         deny_tools = frozenset(self.cfg.tools.deny)
         schemas = tools.schemas(deny=deny_tools)
+        if relay_peer:
+            schemas = [s for s in schemas if _schema_name(s) == "peer"]
         route_tier = _route_tier_from_env()
         routed_model = cfg_mod.tier_model(self.cfg, route_tier)
         call_kwargs = cfg_mod.resolve_model(self.cfg, tier=route_tier)
@@ -527,6 +556,26 @@ class Engine:
                             ),
                         })
                         continue
+                    if relay_peer and not relay_consulted:
+                        if not relay_retry_done:
+                            relay_retry_done = True
+                            remaining = max_steps - step_idx - 1
+                            self.session.messages.append({
+                                "role": "user",
+                                "content": (
+                                    f"[engine] You must consult peer '{relay_peer}' before "
+                                    f"answering. Call peer(peer_id='{relay_peer}', prompt=...) now "
+                                    "and base your reply only on what it returns. This consumed "
+                                    f"one of your remaining {remaining} steps."
+                                ),
+                            })
+                            continue
+                        content = _relay_fallback(relay_peer)
+                        emit(AgentEvent(kind="assistant_done", text=content, final=True))
+                        final_assistant = content
+                        turn_error = f"relay: no valid reply from '{relay_peer}'"
+                        emit(AgentEvent(kind="done"))
+                        return
                     if not content.strip() and not turn_produced and not _empty_retry_done:
                         _empty_retry_done = True
                         if not escalated:
@@ -626,10 +675,23 @@ class Engine:
 
                     tool_started = time.time()
                     try:
-                        result = tools.execute(name, args, deny=deny_tools)
+                        if relay_peer and (
+                            name != "peer"
+                            or str(args.get("peer_id") or "").strip() != relay_peer
+                        ):
+                            result = ToolResult(
+                                ok=False, output="",
+                                error=f"relay mode: only peer '{relay_peer}' may be consulted",
+                            )
+                        else:
+                            result = tools.execute(name, args, deny=deny_tools)
                     finally:
                         tool_state_mod.set_emit(None)
                     duration = time.time() - tool_started
+
+                    if (relay_peer and result.ok
+                            and _peer_reply_from_payload(result.output).strip()):
+                        relay_consulted = True
 
                     payload = result.output if result.ok else f"ERROR: {result.error}"
                     payload = _budget_apply(name, payload)
@@ -692,8 +754,9 @@ class Engine:
                     return
 
                 peer_reply = _last_peer_reply(turn_tools)
-                if peer_reply:
+                if peer_reply and (not relay_peer or relay_consulted):
                     final_assistant = peer_reply
+                    turn_completed = True
                     emit(AgentEvent(kind="assistant_done", text=peer_reply, final=True))
                     emit(AgentEvent(kind="done"))
                     return
@@ -708,6 +771,14 @@ class Engine:
                         escalated = True
                         turn_routing.append(note)
                         emit(AgentEvent(kind="routing", model=turn_model, text=note))
+
+            if relay_peer and not relay_consulted and not self.interrupt_requested:
+                content = _relay_fallback(relay_peer)
+                emit(AgentEvent(kind="assistant_done", text=content, final=True))
+                final_assistant = content
+                turn_error = f"relay: no valid reply from '{relay_peer}'"
+                emit(AgentEvent(kind="done"))
+                return
 
             if not turn_error and not self.interrupt_requested:
                 _wrap_reason = (

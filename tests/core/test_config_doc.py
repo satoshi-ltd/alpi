@@ -13,7 +13,7 @@ _DOC_KEY_RE = re.compile(r"`([a-z][a-z0-9_]*(?:\.[a-z_<>0-9]+)*)`")
 _DOC_TOP_LEVEL_PREFIXES = {
     "model", "model_reasoning", "fallback_models", "workspace", "providers",
     "tools", "tui", "mcp", "email", "runtime", "memory", "alp", "host",
-    "network", "budget", "service", "public_bio", "paused", "tiers",
+    "network", "budget", "service", "relay", "public_bio", "paused", "tiers",
 }
 
 
@@ -34,6 +34,7 @@ DOCUMENTED_BUT_PARSED_ELSEWHERE = {
     "service.host",
     "mcp.servers",
     "providers.openrouter.models",
+    "relay.peer",
 }
 
 
@@ -42,7 +43,7 @@ CODE_LEAVES_INTENTIONALLY_UNDOCUMENTED: set[str] = {"email.accounts"}
 
 _CONFIG_CONTAINER_FIELDS = {
     "providers", "tools", "memory", "model_reasoning", "runtime",
-    "tui", "email", "alp", "host", "network", "budget", "service", "tiers",
+    "tui", "email", "alp", "host", "network", "budget", "service", "relay", "tiers",
 }
 
 _CONFIG_INTERNAL_FIELDS = {"home", "raw"}

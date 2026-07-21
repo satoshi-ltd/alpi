@@ -191,6 +191,7 @@ class Config:
     network: dict[str, Any] = field(default_factory=dict)
     budget: dict[str, Any] = field(default_factory=dict)
     service: dict[str, Any] = field(default_factory=dict)
+    relay: dict[str, Any] = field(default_factory=dict)
     workspace: str = ""  # "" → fall back to cwd
     # One-line public tag-line broadcast to every workgroup this
     # profile joins. Source of truth for ``Member.bio`` on the hub.
@@ -394,6 +395,7 @@ def load(home: Path) -> Config:
         network=dict(data.get("network") or {}),
         budget=dict(data.get("budget") or {}),
         service=dict(data.get("service") or {}),
+        relay=dict(data.get("relay") or {}),
         workspace=str(data.get("workspace", "") or ""),
         public_bio=str(data.get("public_bio", "") or ""),
         paused=bool(data.get("paused", False)),
@@ -411,6 +413,8 @@ def save(cfg: Config) -> None:
     }
     if cfg.workspace:
         data["workspace"] = cfg.workspace
+    if cfg.relay:
+        data["relay"] = cfg.relay
     if cfg.public_bio:
         data["public_bio"] = cfg.public_bio
     if cfg.paused:

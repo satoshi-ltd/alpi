@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.11.4 — 2026-07-21 — read-only knowledge relays
+
+- **A profile can be a read-only front door to another agent.** Point a profile
+  at a designated peer (`relay: {peer: <id>}`) and the engine makes it a pure
+  conduit: it is offered only the `peer` tool, must consult that designated peer
+  before it can answer, and fails closed rather than answer from its own
+  knowledge — enforced by the engine, not just a prompt. The relay locks down
+  the front door only; keeping the knowledge agent itself unwritable is its own
+  concern — its tool permissions, plus a paired device's `profile_scope` to limit
+  which profiles that device may address (admin and local daemon access stay
+  unrestricted). The relay does not police the peer.
+- **Cross-agent spend is attributed to the caller.** When one agent answers
+  another's question over ALP, that turn's cost is now recorded against the
+  calling peer (`peer:<id>`) in the daily ledger's connection breakdown instead
+  of the generic `host` bucket.
+
 ## v0.11.3 — 2026-07-19 — workgroup recipes
 
 - **Launch a whole workgroup from a recipe file.** A recipe is a reusable,

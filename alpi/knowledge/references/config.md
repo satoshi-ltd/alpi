@@ -136,6 +136,17 @@ Use the canonical registered name. `knowledge` is the user/workspace OKF wiki;
 (typos are harmless). A bare string (`deny: terminal`) collapses to `[]`, not a
 per-char iteration.
 
+## Relay (read-only front door to one peer)
+
+`relay.peer` makes a profile a pure conduit to one pinned peer. The engine then offers only the `peer` tool and hard-gates every turn: it must consult that exact peer via `link.ask` before answering; a wrong peer id is rejected pre-execute, an empty reply doesn't count, and a turn that ends (or hits the step/time limit) with no valid reply fails closed with a fixed message instead of answering from the model's own knowledge. The peer's reply is surfaced verbatim. Just pin the peer in `peers.yaml` with `link.ask` — no separate `tools.deny` needed.
+
+```yaml
+relay:
+  peer: agora
+```
+
+This locks down the relay side only. It does NOT make the target immutable — an inbound `link.ask` runs a full turn on the target with the target's own tools. Keep the source unwritable via the target profile's own tool denies, and restrict which paired devices can address it with a member connection's `profile_scope`. Note: `service.host: false` is not per-profile access control — the `default` host socket still serves sibling profiles, and admin/local access ignore scoping.
+
 ## Network (shared accessible address)
 
 `network.host` (default `""`) is the address other machines and your devices reach this profile at. Empty = auto-detect (Tailscale first, then private LAN). Any reachable host works: Tailscale/WireGuard/VPN address, private hostname/MagicDNS name, LAN IP, `0.0.0.0`, or public IP. A public IP additionally needs `host.allow_public_bind: true`; that gate applies to the shared bind used by both planes (host plane + ALP listener), so without it neither binds TCP. One address shared by every listener, each on its own port.

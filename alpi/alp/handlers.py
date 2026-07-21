@@ -102,12 +102,16 @@ async def _run_turn_stream(
         from alpi import ledger
         from alpi.alp import mention_thread
         from alpi.engine import Engine
+        from alpi.host import connection_context as conn_ctx
 
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue = asyncio.Queue()
         SENTINEL = object()
         cfg = cfg_mod.load(home)
         engine = Engine(home=home, cfg=cfg)
+        engine.connection_context = conn_ctx.ConnectionContext(
+            connection_id=f"peer:{peer_id}", source="peer",
+        )
         thread = mention_thread.load(home, peer_id)
         mention_thread.hydrate(engine.session.messages, thread)
         active.engine = engine
@@ -193,6 +197,10 @@ def _run_turn(
 
     cfg = cfg_mod.load(home)
     engine = Engine(home=home, cfg=cfg)
+    from alpi.host import connection_context as conn_ctx
+    engine.connection_context = conn_ctx.ConnectionContext(
+        connection_id=f"peer:{peer_id}", source="peer",
+    )
 
     thread = mention_thread.load(home, peer_id)
     mention_thread.hydrate(engine.session.messages, thread)
