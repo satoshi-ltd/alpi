@@ -266,3 +266,118 @@ async def test_action_rejects_unknown(short_tmp: Path, monkeypatch) -> None:
         "params": {"profile": "default", "wg_id": "deadbeef", "action": "explode"},
     })
     assert resp["error"]["code"] == -32602
+
+
+@pytest.mark.asyncio
+async def test_remove_archives_spend_before_deleting(short_tmp: Path, monkeypatch) -> None:
+    home = short_tmp / "h"
+    _seed(home)
+    from alpi import home as home_mod
+    monkeypatch.setattr(home_mod, "_ROOT", short_tmp)
+    monkeypatch.setattr(home_mod, "home_for", lambda profile: home)
+
+    srv = host_server.Server(home=home)
+    workgroup_admin.register(srv)
+    create = await srv._dispatch({
+        "id": "a1", "method": "host.workgroup.create",
+        "params": {"profile": "default", "name": "research", "members": []},
+    })
+    wg_id = create["result"]["wg_id"]
+    import json as json_mod
+    (home / "alp" / "workgroups" / wg_id / "transcript.jsonl").write_text(
+        json_mod.dumps({
+            "seq": 1, "ts": 1.0, "from": "x", "key_version": 1,
+            "nonce": "n", "ciphertext": "c",
+            "cost": {"usd": 0.5, "tokens_in": 10, "tokens_out": 5},
+        }) + "\n"
+    )
+
+    remove = await srv._dispatch({
+        "id": "a2", "method": "host.workgroup.remove",
+        "params": {"profile": "default", "wg_id": wg_id},
+    })
+    assert remove["result"]["ok"]
+
+    from alpi import ledger
+    records = ledger.read_archive(home)
+    rec = next((r for r in records if r["kind"] == "workgroup" and r["id"] == wg_id), None)
+    assert rec is not None
+    assert rec["cost_usd"] == 0.5
+
+
+@pytest.mark.asyncio
+async def test_remove_aborts_when_spend_archive_fails(short_tmp: Path, monkeypatch) -> None:
+    home = short_tmp / "h"
+    _seed(home)
+    from alpi import home as home_mod
+    monkeypatch.setattr(home_mod, "_ROOT", short_tmp)
+    monkeypatch.setattr(home_mod, "home_for", lambda profile: home)
+
+    srv = host_server.Server(home=home)
+    workgroup_admin.register(srv)
+    create = await srv._dispatch({
+        "id": "f1", "method": "host.workgroup.create",
+        "params": {"profile": "default", "name": "research", "members": []},
+    })
+    wg_id = create["result"]["wg_id"]
+    wg_dir = home / "alp" / "workgroups" / wg_id
+
+    def boom(*_a, **_kw):
+        raise OSError("disk full")
+
+    monkeypatch.setattr("alpi.ledger.archive_entity", boom)
+    resp = await srv._dispatch({
+        "id": "f2", "method": "host.workgroup.remove",
+        "params": {"profile": "default", "wg_id": wg_id},
+    })
+    assert "error" in resp
+    assert "spend archive failed" in str(resp["error"])
+    assert wg_dir.exists()
+
+
+@pytest.mark.asyncio
+async def test_remove_aborts_when_delete_fails(short_tmp: Path, monkeypatch) -> None:
+    from alpi import home as home_mod
+    from alpi.host import events as host_events
+
+    home = short_tmp / "h"
+    _seed(home)
+    monkeypatch.setattr(home_mod, "_ROOT", short_tmp)
+    monkeypatch.setattr(home_mod, "home_for", lambda profile: home)
+    srv = host_server.Server(home=home)
+    workgroup_admin.register(srv)
+
+    create = await srv._dispatch({
+        "id": "d1", "method": "host.workgroup.create",
+        "params": {"profile": "default", "name": "research", "members": []},
+    })
+    wg_id = create["result"]["wg_id"]
+    wg_dir = home / "alp" / "workgroups" / wg_id
+
+    captured: list[tuple[str, dict]] = []
+    monkeypatch.setattr(
+        host_events, "emit",
+        lambda kind, data=None: captured.append((kind, data or {})),
+    )
+
+    import shutil as real_shutil
+    real_rmtree = real_shutil.rmtree
+
+    def boom(path, *a, **kw):
+        if str(path).rstrip("/").endswith(wg_id):
+            raise OSError("permission denied")
+        return real_rmtree(path, *a, **kw)
+
+    monkeypatch.setattr("alpi.alp.workgroup._shutil.rmtree", boom)
+    resp = await srv._dispatch({
+        "id": "d2", "method": "host.workgroup.remove",
+        "params": {"profile": "default", "wg_id": wg_id},
+    })
+
+    assert "error" in resp
+    assert "permission denied" in str(resp["error"])
+    assert wg_dir.exists()
+    assert not any(
+        k == "workgroup_changed" and d.get("action") == "removed"
+        for k, d in captured
+    )

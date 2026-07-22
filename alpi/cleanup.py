@@ -282,10 +282,33 @@ def plan(h: Path) -> list[dict[str, Any]]:
     ]
 
 
-def _archive_workgroups(h: Path) -> list[str]:
+def archive_workgroup_spend(h: Path, wg_dir: Path) -> str | None:
     from alpi import ledger
     from alpi.alp import workgroup as alp_wg
 
+    try:
+        entries = alp_wg._read_transcript(wg_dir)
+    except Exception as e:  # noqa: BLE001
+        return f"{wg_dir.name}: cannot read spend ({e})"
+    cost = tin = tout = 0.0
+    for e in entries:
+        c = e.get("cost") or {}
+        cost += float(c.get("usd") or 0.0)
+        tin += int(c.get("tokens_in") or 0)
+        tout += int(c.get("tokens_out") or c.get("tokens") or 0)
+    try:
+        source_at = entries[0].get("ts") if entries else None
+        ledger.archive_entity(
+            h, "workgroup", wg_dir.name,
+            cost_usd=cost, tokens_in=int(tin), tokens_out=int(tout),
+            connection_id="host", source_at=source_at,
+        )
+    except (OSError, ValueError, TypeError) as e:
+        return f"{wg_dir.name}: {e}"
+    return None
+
+
+def _archive_workgroups(h: Path) -> list[str]:
     root = h / "alp" / "workgroups"
     if not root.exists():
         return []
@@ -293,26 +316,9 @@ def _archive_workgroups(h: Path) -> list[str]:
     for d in root.iterdir():
         if not d.is_dir():
             continue
-        try:
-            entries = alp_wg._read_transcript(d)
-        except Exception as e:  # noqa: BLE001
-            errors.append(f"{d.name}: cannot read spend ({e})")
-            continue
-        cost = tin = tout = 0.0
-        for e in entries:
-            c = e.get("cost") or {}
-            cost += float(c.get("usd") or 0.0)
-            tin += int(c.get("tokens_in") or 0)
-            tout += int(c.get("tokens_out") or c.get("tokens") or 0)
-        try:
-            source_at = entries[0].get("ts") if entries else None
-            ledger.archive_entity(
-                h, "workgroup", d.name,
-                cost_usd=cost, tokens_in=int(tin), tokens_out=int(tout),
-                connection_id="host", source_at=source_at,
-            )
-        except (OSError, ValueError, TypeError) as e:
-            errors.append(f"{d.name}: {e}")
+        err = archive_workgroup_spend(h, d)
+        if err:
+            errors.append(err)
     return errors
 
 

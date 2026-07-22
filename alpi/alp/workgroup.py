@@ -508,10 +508,27 @@ def create(
 
 
 def destroy(home: Path, wg_id: str) -> list[str]:
+    # Tolerant (ignore_errors) — for recipe-launch rollbacks; user-facing deletes go through remove().
+    _shutil.rmtree(_wg_dir(home, wg_id), ignore_errors=True)
+    return _purge_after_delete(home, wg_id)
+
+
+def remove(home: Path, wg_id: str) -> list[str]:
+    # Canonical user-facing delete: spend survives deletion, or nothing is deleted.
+    from alpi.cleanup import archive_workgroup_spend
+
+    wg_dir = _wg_dir(home, wg_id)
+    archive_err = archive_workgroup_spend(home, wg_dir)
+    if archive_err:
+        raise OSError(f"spend archive failed; workgroup not removed: {archive_err}")
+    _shutil.rmtree(wg_dir)
+    return _purge_after_delete(home, wg_id)
+
+
+def _purge_after_delete(home: Path, wg_id: str) -> list[str]:
     from alpi.alp import subscription as sub_mod
     from alpi.home import _ROOT
 
-    _shutil.rmtree(_wg_dir(home, wg_id), ignore_errors=True)
     try:
         from alpi.tools.workgroup_search import forget_workgroup
         forget_workgroup(home, wg_id)

@@ -3994,11 +3994,8 @@ def workgroup_add_member(ctx: click.Context, wg_id: str, member: str) -> None:
 @click.pass_context
 def workgroup_remove(ctx: click.Context, wg_id: str, yes: bool) -> None:
     """Hub-only: delete a workgroup permanently and purge local subscriptions."""
-    import shutil
-    from alpi.alp import subscription as sub_mod
     from alpi.alp import workgroup as wg_mod
     from alpi.alp.keys import load_or_generate
-    from alpi.home import _ROOT
 
     h: Path = ctx.obj["home"]
     wg = wg_mod.load(h, wg_id)
@@ -4013,32 +4010,10 @@ def workgroup_remove(ctx: click.Context, wg_id: str, yes: bool) -> None:
         default=False,
     ):
         raise click.ClickException("aborted")
-    shutil.rmtree(h / "alp" / "workgroups" / wg_id, ignore_errors=True)
     try:
-        from alpi.tools.workgroup_search import forget_workgroup
-        forget_workgroup(h, wg_id)
-    except Exception:  # noqa: BLE001
-        pass
-
-    # Hub removal orphans local subscriptions; cross-machine peers must `leave` themselves.
-    profiles_root = _ROOT / "profiles"
-    purged: list[str] = []
-    if profiles_root.exists():
-        for prof_dir in profiles_root.iterdir():
-            if not prof_dir.is_dir():
-                continue
-            try:
-                if sub_mod.get(prof_dir, wg_id) is not None:
-                    sub_mod.remove(prof_dir, wg_id)
-                    purged.append(prof_dir.name)
-            except Exception:  # noqa: BLE001
-                pass
-    try:
-        if sub_mod.get(_ROOT, wg_id) is not None:
-            sub_mod.remove(_ROOT, wg_id)
-            purged.append("default")
-    except Exception:  # noqa: BLE001
-        pass
+        purged = wg_mod.remove(h, wg_id)
+    except OSError as e:
+        raise click.ClickException(str(e))
 
     click.echo(f"removed {wg_id}")
     if purged:

@@ -11,6 +11,18 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.50 — 2026-07-22 — clean exits when deleting
+
+- **Deleting or leaving a workgroup no longer strands the settings pane.** After
+  the confirmation completes, settings navigates back to the first profile
+  instead of showing an empty panel pointed at something that no longer exists.
+- **The delete-profile dialog now tells the truth.** A deleted profile is moved
+  to `~/.alpi/.trash/` on the daemon's machine (recoverable by hand), not wiped
+  outright — the confirmation copy said "cannot be undone" and has been fixed.
+
+Requires alpi ≥ 0.11.6; pair with alpi ≥ 0.11.7 for the guarantee that deleting
+a workgroup archives its spend history first.
+
 ## v0.4.49 — 2026-07-22 — reliable large attachments
 
 - **Attaching a big file to a remote profile no longer drops the session.**

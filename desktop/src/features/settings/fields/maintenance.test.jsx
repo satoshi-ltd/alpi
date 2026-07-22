@@ -158,3 +158,28 @@ describe("StorageField", () => {
     await waitFor(() => expect(screen.getByText(formatBytes(999))).toBeInTheDocument());
   });
 });
+
+describe("DeleteProfileAction", () => {
+  it("typed confirm calls onDelete with the profile name", async () => {
+    const { DeleteProfileAction } = await import("./maintenance.jsx");
+    const onDelete = vi.fn();
+    render(<DeleteProfileAction profile={{ name: "gus" }} onDelete={onDelete} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete profile" }));
+    fireEvent.change(screen.getAllByRole("textbox").at(-1), { target: { value: "gus" } });
+    fireEvent.click(screen.getByRole("button", { name: "Delete @gus" }));
+
+    expect(onDelete).toHaveBeenCalledWith("gus");
+  });
+
+  it("stays disarmed until the exact profile name is typed", async () => {
+    const { DeleteProfileAction } = await import("./maintenance.jsx");
+    const onDelete = vi.fn();
+    render(<DeleteProfileAction profile={{ name: "gus" }} onDelete={onDelete} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete profile" }));
+    fireEvent.change(screen.getAllByRole("textbox").at(-1), { target: { value: "gu" } });
+    expect(screen.getByRole("button", { name: "Delete @gus" })).toBeDisabled();
+    expect(onDelete).not.toHaveBeenCalled();
+  });
+});

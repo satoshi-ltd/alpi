@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.11.7 — 2026-07-22 — spend survives workgroup deletion everywhere
+
+- **Deleting a workgroup now preserves its spend history on every surface.**
+  One canonical delete — used by the apps' delete button, `alpi workgroup
+  remove`, and the TUI wizard — archives the workgroup's total cost and tokens
+  before destroying the transcript (the same contract storage cleanup already
+  honored) and refuses to delete anything if that archive cannot be written.
+- **A failed delete no longer reports success.** If removing the workgroup
+  directory fails (permissions, I/O), the operation reports the failure;
+  subscriptions and search index are only purged after the directory is gone.
+
 ## v0.11.6 — 2026-07-22 — large attachments over remote connections
 
 - **Attaching files from a remote device no longer kills the session.** Sending

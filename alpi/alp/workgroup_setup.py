@@ -811,7 +811,10 @@ def _delete_flow(home: Path, wg) -> bool:
     ):
         ui.cancelled()
         return False
-    import shutil
-    shutil.rmtree(home / "alp" / "workgroups" / wg.meta.id, ignore_errors=True)
+    try:
+        wg_mod.remove(home, wg.meta.id)
+    except OSError as e:
+        ui.fail_and_wait(str(e))
+        return False
     ui.ok_and_wait(f"deleted {wg.meta.id}")
     return True

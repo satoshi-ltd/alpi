@@ -78,6 +78,10 @@ export default function Settings({
           connectionId={activeConnection?.id ?? null}
           connectionSyncing={connectionSyncing}
           onSaved={onRefresh}
+          onGone={() => {
+            const first = profiles[0]?.name ?? null;
+            setTarget(first ? { kind: "profile", id: first } : null);
+          }}
           onOpenChat={onOpenChat}
         />
       )}

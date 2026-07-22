@@ -266,7 +266,10 @@ async def _remove(
     if wg.meta.hub_pubkey != own_pubkey:
         raise host_server.HandlerError(-32001, "forbidden", data={"detail": "only the hub can remove this workgroup"})
 
-    purged = wg_mod.destroy(home, wg_id)
+    try:
+        purged = wg_mod.remove(home, wg_id)
+    except OSError as e:
+        raise host_server.HandlerError(-32603, "internal-error", data={"detail": str(e)})
 
     _emit_workgroup_changed(home, wg_id, "removed")
     return {"ok": True, "purged": sorted(set(purged))}

@@ -68,6 +68,7 @@ export default function WorkgroupDetail({
   connectionId = null,
   connectionSyncing = false,
   onSaved,
+  onGone,
   onOpenChat,
 }) {
   const membersKey = membersCacheKey(connectionId, workgroup.profile, workgroup.id);
@@ -249,6 +250,7 @@ export default function WorkgroupDetail({
       });
       if (action === "kick") await reloadMembers();
       await onSaved?.();
+      if (action === "remove" || action === "leave") onGone?.();
     } catch (e) {
       notify({
         message: `${action} failed: ${String(e)}`,

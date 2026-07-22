@@ -207,8 +207,8 @@ export function DeleteProfileAction({ profile, onDelete, autoConfirm = false, on
         Delete profile
       </Btn>
       <span className={styles.muted}>
-        removes ~/.alpi/profiles/{profile.name}/ — daemon picks up the
-        change on its next restart
+        moves ~/.alpi/profiles/{profile.name}/ to ~/.alpi/.trash/ — daemon
+        picks up the change on its next restart
       </span>
       <ConfirmDelete
         mode="typed"
@@ -216,7 +216,7 @@ export function DeleteProfileAction({ profile, onDelete, autoConfirm = false, on
         onClose={() => setOpen(false)}
         onConfirm={() => onDelete?.(profile.name)}
         title={`Delete profile @${profile.name}?`}
-        consequence={`This wipes ~/.alpi/profiles/${profile.name}/ on disk — sessions, RAG, ALP keypair, every secret stored under it. Cannot be undone.`}
+        consequence={`This retires the whole profile — sessions, RAG, ALP keypair, every secret stored under it. The folder is moved to ~/.alpi/.trash/ on the daemon's machine; restoring it back is a manual filesystem operation.`}
         typeToConfirm={profile.name}
         confirmLabel={`Delete @${profile.name}`}
       />
