@@ -2561,6 +2561,27 @@ async fn attachment_thumb(path: String, mime: String, roots: Option<Vec<String>>
     .flatten()
 }
 
+// Must stay in sync with alpi/attachments.py MAX_FILE_BYTES / MAX_TEXT_FILE_BYTES / TEXT_MIMES.
+const ATTACHMENT_MAX_FILE_BYTES: u64 = 20 * 1024 * 1024;
+const ATTACHMENT_MAX_TEXT_BYTES: u64 = 2 * 1024 * 1024;
+const ATTACHMENT_TEXT_MIMES: [&str; 9] = [
+    "text/plain", "text/markdown", "text/csv",
+    "application/json", "text/html",
+    "application/yaml", "text/yaml", "application/x-yaml", "text/x-yaml",
+];
+
+fn validate_attachment_size(mime: &str, size: u64) -> Result<(), String> {
+    let cap = if ATTACHMENT_TEXT_MIMES.contains(&mime) {
+        ATTACHMENT_MAX_TEXT_BYTES
+    } else {
+        ATTACHMENT_MAX_FILE_BYTES
+    };
+    if size > cap {
+        return Err(format!("file is too large ({} MB max)", cap / (1024 * 1024)));
+    }
+    Ok(())
+}
+
 // Remote daemon can't read local paths — upload bytes, return the daemon-side path.
 #[tauri::command]
 async fn attachment_stage(
@@ -2575,10 +2596,14 @@ async fn attachment_stage(
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .ok_or_else(|| format!("invalid path: {path}"))?;
+    let size = std::fs::metadata(p)
+        .map_err(|e| format!("read {path}: {e}"))?
+        .len();
+    validate_attachment_size(&mime, size).map_err(|e| format!("{name}: {e}"))?;
     let bytes = std::fs::read(p).map_err(|e| format!("read {path}: {e}"))?;
     let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
     let res = tauri::async_runtime::spawn_blocking(move || {
-        host_client::call(
+        host_client::call_fetch(
             "host.attachments.stage",
             serde_json::json!({"profile": profile, "name": name, "mime": mime, "data_base64": b64}),
         )
@@ -3796,5 +3821,41 @@ mod oauth_callback_tests {
     fn input_returns_empty_when_no_query() {
         let (c, s, e) = parse_oauth_callback_input("http://127.0.0.1:1/");
         assert!(c.is_empty() && s.is_empty() && e.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod attachment_size_tests {
+    use super::*;
+
+    #[test]
+    fn general_files_pass_up_to_20_mib() {
+        assert!(validate_attachment_size("application/pdf", ATTACHMENT_MAX_FILE_BYTES).is_ok());
+        assert!(validate_attachment_size("image/png", 5 * 1024 * 1024).is_ok());
+    }
+
+    #[test]
+    fn general_files_over_20_mib_are_rejected() {
+        let err = validate_attachment_size("application/pdf", ATTACHMENT_MAX_FILE_BYTES + 1)
+            .unwrap_err();
+        assert!(err.contains("20 MB max"), "{err}");
+    }
+
+    #[test]
+    fn text_files_cap_at_2_mib() {
+        assert!(validate_attachment_size("text/plain", ATTACHMENT_MAX_TEXT_BYTES).is_ok());
+        let err = validate_attachment_size("text/plain", ATTACHMENT_MAX_TEXT_BYTES + 1)
+            .unwrap_err();
+        assert!(err.contains("2 MB max"), "{err}");
+    }
+
+    #[test]
+    fn every_text_mime_gets_the_text_cap() {
+        for mime in ATTACHMENT_TEXT_MIMES {
+            assert!(
+                validate_attachment_size(mime, ATTACHMENT_MAX_TEXT_BYTES + 1).is_err(),
+                "{mime} should use the text cap",
+            );
+        }
     }
 }

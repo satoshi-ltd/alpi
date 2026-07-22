@@ -14,6 +14,14 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.2.19 — 2026-07-22 — reliable large attachments
+
+- **Attaching a big file no longer drops the session.** Files are size-checked
+  before upload — 20 MB general, 2 MB for text files — with a clear "too large"
+  message instead of a dead connection, and uploads get the same 60-second
+  window as downloads, so a multi-megabyte PDF over Tailscale doesn't time out
+  halfway. Requires alpi ≥ 0.11.6 on the daemon for the transport-side fix.
+
 ## v0.2.18 — 2026-07-15 — attach any file type
 
 - **The file picker no longer filters by type**: attach any file — a `.fit`,

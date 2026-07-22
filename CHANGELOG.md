@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.11.6 — 2026-07-22 — large attachments over remote connections
+
+- **Attaching files from a remote device no longer kills the session.** Sending
+  an attachment bigger than ~750 KB from a paired desktop/mobile app connected
+  over the network made the daemon drop the whole connection ("websocket closed")
+  before the file was even received. Both host-plane transports now accept
+  messages sized to the 20 MiB attachment contract; within that window, a
+  per-type cap violation (e.g. an over-cap text file) gets a structured error on
+  a connection that stays alive. Anything larger never leaves the device: paired
+  apps (desktop ≥ 0.4.49, mobile ≥ 0.2.19) check the cap before uploading, and
+  give large uploads a 60-second window.
+
 ## v0.11.5 — 2026-07-21 — Node 24 in the container image
 
 - **The Docker image ships Node.js 24 LTS.** A dockerized daemon runs npm-based

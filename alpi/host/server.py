@@ -18,6 +18,11 @@ log = logging.getLogger("alpi.host.server")
 
 DEFAULT_TCP_PORT = 49200
 
+def _max_message_bytes() -> int:
+    # Sized to the attachment contract: staging inlines a whole file as base64 in one JSON-RPC message.
+    from alpi.attachments import MAX_FILE_BYTES
+    return MAX_FILE_BYTES * 4 // 3 + 64 * 1024
+
 # Reserved for the local Unix socket — even an admin remote device cannot rebind the network or restart the daemon.
 _LOCAL_ONLY_METHODS = frozenset({
     "host.network.status",
@@ -233,7 +238,7 @@ class Server:
         if sock.exists():
             sock.unlink()
         self._server = await asyncio.start_unix_server(
-            self._handle_unix, path=str(sock),
+            self._handle_unix, path=str(sock), limit=_max_message_bytes(),
         )
         sock.chmod(0o600)
         log.info("host server listening on %s", sock)
@@ -244,7 +249,7 @@ class Server:
         # permessage-deflate: 50–80% off JSON-RPC payloads on remote Tailscale; clients that don't negotiate fall back to raw.
         self._ws_server = await ws_serve(
             self._handle_websocket, host=host, port=port,
-            compression="deflate",
+            compression="deflate", max_size=_max_message_bytes(),
         )
         log.info("host server listening on ws://%s:%d", host, port)
 

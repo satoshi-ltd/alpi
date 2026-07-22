@@ -42,10 +42,46 @@ export function imageCacheKey(endpointId, profile, path) {
   return `${endpointId || ''}:${profile || ''}:${path || ''}`;
 }
 
-export async function stageAttachment(call, { profile, name, mime, base64 }) {
-  const resolvedMime = mime && ALLOWED_MIMES.has(mime)
+// Must stay in sync with alpi/attachments.py MAX_FILE_BYTES / MAX_TEXT_FILE_BYTES / TEXT_MIMES.
+export const MAX_FILE_BYTES = 20 * 1024 * 1024;
+export const MAX_TEXT_FILE_BYTES = 2 * 1024 * 1024;
+const TEXT_MIMES = new Set([
+  'text/plain', 'text/markdown', 'text/csv',
+  'application/json', 'text/html',
+  'application/yaml', 'text/yaml', 'application/x-yaml', 'text/x-yaml',
+]);
+
+export function attachmentByteCap(mime) {
+  return TEXT_MIMES.has(mime) ? MAX_TEXT_FILE_BYTES : MAX_FILE_BYTES;
+}
+
+export function resolveAttachmentMime(name, mime) {
+  return mime && ALLOWED_MIMES.has(mime)
     ? mime
     : mimeFor(name, 'application/octet-stream');
+}
+
+export function oversizeError(name, mime, bytes) {
+  const cap = attachmentByteCap(mime);
+  if (bytes > cap) {
+    return `${name} is too large (${Math.round(cap / (1024 * 1024))} MB max)`;
+  }
+  return null;
+}
+
+function base64ByteLength(b64) {
+  const s = String(b64 || '');
+  const pad = s.endsWith('==') ? 2 : s.endsWith('=') ? 1 : 0;
+  return Math.floor(s.length / 4) * 3 - pad;
+}
+
+export async function stageAttachment(call, { profile, name, mime, base64, size }) {
+  const resolvedMime = resolveAttachmentMime(name, mime);
+  const bytes = Number.isFinite(size) && size > 0
+    ? size
+    : base64ByteLength(base64);
+  const err = oversizeError(name, resolvedMime, bytes);
+  if (err) throw new Error(err);
   let res;
   try {
     res = await call('host.attachments.stage', {
@@ -53,7 +89,7 @@ export async function stageAttachment(call, { profile, name, mime, base64 }) {
       name,
       mime: resolvedMime,
       data_base64: base64,
-    });
+    }, { timeoutMs: FETCH_TIMEOUT_MS });
   } catch (e) {
     throw new Error(`could not upload ${name}: ${e?.message || e}`);
   }

@@ -455,3 +455,142 @@ async def test_ws_accepts_request_with_valid_token(
             assert response["result"] == {"pong": True}
         finally:
             await srv.stop()
+
+
+@pytest.mark.asyncio
+async def test_ws_accepts_attachment_sized_messages(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    # 5 MiB message > the websockets library's 1 MiB default max_size — must be answered, not closed with 1009.
+    home = short_tmp / "h"
+    home.mkdir()
+    from alpi import home as home_mod
+    monkeypatch.setattr(home_mod, "_ROOT", short_tmp)
+    from alpi.host import devices
+    row = devices.add(label="test", role="member")
+
+    with patch.object(host_server.Server, "_validate_tcp_bind",
+                      staticmethod(lambda b, allow_public_bind=False: b)):
+        srv = host_server.Server(home=home, tcp_bind=("127.0.0.1", 0))
+
+        async def handler(params, _s):
+            return {"echo_len": len(params.get("blob") or "")}
+
+        srv.register("host.ping", handler)
+        await srv.start()
+        try:
+            port = srv._ws_server.sockets[0].getsockname()[1]
+            blob = "A" * (5 * 1024 * 1024)
+            async with websockets.connect(
+                f"ws://127.0.0.1:{port}", max_size=None,
+            ) as ws:
+                await ws.send(json.dumps({
+                    "id": "1",
+                    "method": "host.ping",
+                    "params": {"auth_token": row["token"], "blob": blob},
+                }))
+                response = json.loads(await ws.recv())
+            assert response["result"] == {"echo_len": len(blob)}
+        finally:
+            await srv.stop()
+
+
+@pytest.mark.asyncio
+async def test_ws_stages_multi_mib_attachment_and_rejects_over_cap(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    import base64 as b64mod
+    from alpi.host import attachments_rpc
+
+    home = short_tmp / "h"
+    home.mkdir()
+    from alpi import home as home_mod
+    monkeypatch.setattr(home_mod, "_ROOT", short_tmp)
+    from alpi.host import devices
+    row = devices.add(label="test", role="member")
+
+    with patch.object(host_server.Server, "_validate_tcp_bind",
+                      staticmethod(lambda b, allow_public_bind=False: b)):
+        srv = host_server.Server(home=home, tcp_bind=("127.0.0.1", 0))
+        attachments_rpc.register(srv)
+        await srv.start()
+        try:
+            port = srv._ws_server.sockets[0].getsockname()[1]
+            png = b"\x89PNG\r\n\x1a\n" + b"\x00" * (2 * 1024 * 1024)
+            over_text = "x" * (3 * 1024 * 1024)
+            async with websockets.connect(
+                f"ws://127.0.0.1:{port}", max_size=None,
+            ) as ws:
+                await ws.send(json.dumps({
+                    "id": "1", "method": "host.attachments.stage",
+                    "params": {
+                        "auth_token": row["token"], "profile": "default",
+                        "name": "big.png", "mime": "image/png",
+                        "data_base64": b64mod.b64encode(png).decode(),
+                    },
+                }))
+                staged = json.loads(await ws.recv())
+                assert staged["result"]["ok"] is True
+                assert staged["result"]["attachment"]["size"] == len(png)
+
+                await ws.send(json.dumps({
+                    "id": "2", "method": "host.attachments.stage",
+                    "params": {
+                        "auth_token": row["token"], "profile": "default",
+                        "name": "big.txt", "mime": "text/plain",
+                        "data_base64": b64mod.b64encode(over_text.encode()).decode(),
+                    },
+                }))
+                rejected = json.loads(await ws.recv())
+                assert rejected["error"]["code"] == -32602
+                assert "cap" in rejected["error"]["message"]
+
+                await ws.send(json.dumps({
+                    "id": "3", "method": "host.attachments.stage",
+                    "params": {
+                        "auth_token": row["token"], "profile": "default",
+                        "name": "ok.png", "mime": "image/png",
+                        "data_base64": b64mod.b64encode(b"\x89PNG\r\n\x1a\nok").decode(),
+                    },
+                }))
+                after = json.loads(await ws.recv())
+                assert after["result"]["ok"] is True
+        finally:
+            await srv.stop()
+
+
+@pytest.mark.asyncio
+async def test_unix_socket_accepts_large_messages(short_tmp: Path) -> None:
+    # >64 KiB line exceeds asyncio's default StreamReader limit — must be answered, not dropped.
+    import asyncio
+    home = short_tmp / "h"
+    home.mkdir()
+    srv = host_server.Server(home=home)
+
+    async def handler(params, _s):
+        return {"echo_len": len(params.get("blob") or "")}
+
+    srv.register("host.ping", handler)
+    await srv.start()
+    try:
+        reader, writer = await asyncio.open_unix_connection(
+            path=str(srv.socket_path()), limit=host_server._max_message_bytes(),
+        )
+        blob = "A" * (256 * 1024)
+        writer.write((json.dumps({
+            "id": "1", "method": "host.ping", "params": {"blob": blob},
+        }) + "\n").encode())
+        await writer.drain()
+        response = json.loads(await reader.readline())
+        writer.close()
+        await writer.wait_closed()
+        assert response["result"] == {"echo_len": len(blob)}
+    finally:
+        await srv.stop()
+
+
+def test_max_message_bytes_covers_the_attachment_cap() -> None:
+    from alpi.attachments import MAX_FILE_BYTES
+    import base64
+    encoded = len(base64.b64encode(b"x" * MAX_FILE_BYTES))
+    assert host_server._max_message_bytes() > encoded

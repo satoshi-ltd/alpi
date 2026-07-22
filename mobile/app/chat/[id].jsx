@@ -26,7 +26,7 @@ import { askUserNoAnswerTag } from '../../src/features/chat/askUserAnswer';
 import { Diamond } from '../../src/components/Diamond';
 import { SessionsSheet } from '../../src/features/sheets/SessionsSheet';
 import { useChatSend } from '../../src/hooks/useChatSend';
-import { stageAttachment } from '../../src/lib/attachments';
+import { oversizeError, resolveAttachmentMime, stageAttachment } from '../../src/lib/attachments';
 import { useProfileSummaries, useSessionsList } from '../../src/hooks/useDaemonData';
 import { useSessionTranscript } from '../../src/hooks/useSessionTranscript';
 import { useDebouncedCallback } from '../../src/hooks/useDebouncedCallback';
@@ -523,10 +523,15 @@ function ProfileChatInner() {
       if (res.canceled) return;
       const asset = res.assets?.[0];
       if (!asset) return;
+      if (Number.isFinite(asset.size) && asset.size > 0) {
+        const err = oversizeError(asset.name, resolveAttachmentMime(asset.name, asset.mimeType), asset.size);
+        if (err) throw new Error(err);
+      }
       const { readAsStringAsync } = await import('expo-file-system/legacy').catch(() => import('expo-file-system'));
       const base64 = await readAsStringAsync(asset.uri, { encoding: 'base64' });
       const staged = await stageAttachment(call, {
         profile: profile.name, name: asset.name, mime: asset.mimeType, base64,
+        size: asset.size,
       });
       setAttachments((prev) => [...prev, { ...staged, localUri: asset.uri }]);
     } catch (e) {
