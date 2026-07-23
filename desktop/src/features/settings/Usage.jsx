@@ -18,7 +18,7 @@ function tokensOf(d) {
   return (d.tokIn || 0) + (d.tokOut || 0);
 }
 
-export default function Usage({ days = [], accent = "var(--accent)", capLine = null }) {
+export default function Usage({ days = [], accent = "var(--accent)", capLine = null, total30 = null }) {
   const [hover, setHover] = useState(null);
   if (!days.length) return null;
 
@@ -134,7 +134,9 @@ export default function Usage({ days = [], accent = "var(--accent)", capLine = n
           output
         </div>
         <div className={`${styles.totals} tnum`}>
-          14-day total {usd(totCost)} · {fmtTok(totIn)} in / {fmtTok(totOut)} out
+          {total30
+            ? <>30-day total {usd(total30.cost || 0)} · {fmtTok(total30.tokIn || 0)} in / {fmtTok(total30.tokOut || 0)} out</>
+            : <>14-day total {usd(totCost)} · {fmtTok(totIn)} in / {fmtTok(totOut)} out</>}
         </div>
       </div>
     </div>

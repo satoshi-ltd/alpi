@@ -277,7 +277,8 @@ observability, the signals to watch:
   `history` map of per-day totals (usd + input/output tokens) — the
   authoritative spend record, including non-token costs like image
   generation that session files never see; `host.usage.daily`
-  (admin-only) serves the last 14 days of it to clients.
+  (admin-only) serves the last 14 days of it to clients, plus a `total30`
+  aggregate over the full 30-day retention.
 - **`approval.log` triggers.** Any line with a
   `caution always-approved` entry means the allowlist grew — a
   new command pattern is now auto-permitted for this profile. Put

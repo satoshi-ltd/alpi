@@ -11,6 +11,13 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.51 — 2026-07-23 — monthly total under the usage chart
+
+- **The usage footer now shows the 30-day total** (cost and tokens) while the
+  bars keep showing the recent 14-day trend — the monthly number you want to
+  know without squeezing 30 unreadable bars into the chart. Requires alpi ≥
+  0.11.10; against older daemons the footer falls back to the 14-day total.
+
 ## v0.4.50 — 2026-07-22 — clean exits when deleting
 
 - **Deleting or leaving a workgroup no longer strands the settings pane.** After

@@ -734,7 +734,7 @@ def _snapshot_payload(
 ) -> dict[str, Any]:
     from concurrent.futures import ThreadPoolExecutor
 
-    from alpi.host.usage import compute_daily, price_out
+    from alpi.host.usage import daily_payload
     from alpi.mail import accounts as accounts_mod
     from alpi.scheduler import jobs_store
 
@@ -748,7 +748,7 @@ def _snapshot_payload(
 
     sections: dict[str, Any] = {
         "detail": lambda: _profile_detail_payload(home),
-        "usage": lambda: {"days": compute_daily(home), "priceOut": price_out(cfg_mod.load(home).model or "")},
+        "usage": lambda: daily_payload(home),
         "workgroups": lambda: {"workgroups": _aggregate_workgroups(profile)},
         "email": lambda: {"accounts": accounts_mod.list_accounts(home)},
         "storage": lambda: {"storage": _storage_rows_cached(home)},

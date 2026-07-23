@@ -736,7 +736,9 @@ Verb namespaces in current shape:
   finds the right `alp.sock` — the alias never has to match the
   remote profile's name.
 - **`host.usage.daily`** / **`host.usage.workgroup.daily`** (admin-only) —
-  last 14 days of per-day token usage + cost. Profile usage reads the
+  a 14-day per-day series of token usage + cost; the profile payload also
+  carries a `total30` aggregate over the ledger's 30-day retention (the same
+  payload feeds the profile snapshot's `usage` section). Profile usage reads the
   `ledger.json` 30-day history (authoritative for ALL spend, including
   non-token costs like image generation); workgroup usage reads the hub
   transcript (per-post declared cost). Both bucket by UTC day, so the

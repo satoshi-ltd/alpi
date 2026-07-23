@@ -138,3 +138,24 @@ describe("Usage", () => {
     expect(screen.getByText("50K")).toBeTruthy();
   });
 });
+
+describe("30-day footer total", () => {
+  it("shows the 30-day total when the daemon provides it", () => {
+    const days = makeDays([{ label: "M", tokIn: 1_000_000, tokOut: 0, today: true }]);
+    render(
+      <Usage
+        days={days}
+        accent="#3fb37a"
+        total30={{ spanDays: 30, cost: 4.2, tokIn: 30_000_000, tokOut: 900_000 }}
+      />,
+    );
+    expect(screen.getByText(/30-day total \$4\.20/)).toBeTruthy();
+    expect(screen.getByText(/30M in \/ 900K out/)).toBeTruthy();
+  });
+
+  it("falls back to the 14-day total against older daemons", () => {
+    const days = makeDays([{ label: "M", tokIn: 1_000_000, tokOut: 0, today: true }]);
+    render(<Usage days={days} accent="#3fb37a" />);
+    expect(screen.getByText(/14-day total/)).toBeTruthy();
+  });
+});

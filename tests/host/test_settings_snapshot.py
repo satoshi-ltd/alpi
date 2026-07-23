@@ -203,3 +203,21 @@ async def test_snapshot_without_sections_param_returns_everything(
     srv = _seed(home, monkeypatch)
     result = (await _snapshot(srv))["result"]
     assert set(result) == {"detail", "usage", "schedules", "workgroups", "email", "storage"}
+
+
+@pytest.mark.asyncio
+async def test_profile_snapshot_usage_is_the_canonical_daily_payload(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = _bootstrap(tmp_path / "h")
+    srv = _seed(home, monkeypatch)
+    from alpi.host import usage as host_usage
+    host_usage.register(srv)
+
+    snap = (await _snapshot(srv))["result"]["usage"]
+    daily = (await srv._dispatch({
+        "id": "u", "method": "host.usage.daily", "params": {"profile": "default"},
+    }))["result"]
+
+    assert snap == daily
+    assert "total30" in snap and snap["total30"]["spanDays"] == 30

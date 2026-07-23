@@ -333,6 +333,7 @@ export default function ProfileDetail({
                 days={usage.days}
                 accent={profile.accent || "var(--accent)"}
                 capLine={capUsd}
+                total30={usage.total30}
               />
             ) : (
               <span className={styles.muted}>loading…</span>

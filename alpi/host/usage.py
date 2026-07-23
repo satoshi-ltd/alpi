@@ -124,6 +124,19 @@ def compute_daily(home: Path, today: date | None = None) -> list[dict[str, Any]]
     return bucket_history(history, today or _utc_today())
 
 
+def compute_total30(home: Path, today: date | None = None) -> dict[str, Any]:
+    """Whole-retention totals (ledger keeps 30 days) for the 'monthly cost' number next to the 14-day chart."""
+    from alpi import ledger
+    history = ledger.snapshot(home).get("history") or {}
+    days = bucket_history(history, today or _utc_today(), span=30)
+    return {
+        "spanDays": 30,
+        "cost": round(sum(d["cost"] for d in days), 6),
+        "tokIn": sum(d["tokIn"] for d in days),
+        "tokOut": sum(d["tokOut"] for d in days),
+    }
+
+
 def compute_workgroup_daily(
     home: Path, wg_id: str, today: date | None = None,
 ) -> list[dict[str, Any]]:
@@ -140,15 +153,20 @@ def _profile_model(home: Path) -> str:
         return ""
 
 
-def _daily_payload(home: Path) -> dict[str, Any]:
-    return {"days": compute_daily(home), "priceOut": price_out(_profile_model(home))}
+def daily_payload(home: Path) -> dict[str, Any]:
+    """Canonical usage payload — host.usage.daily and the profile snapshot's usage section must stay identical."""
+    return {
+        "days": compute_daily(home),
+        "total30": compute_total30(home),
+        "priceOut": price_out(_profile_model(home)),
+    }
 
 
 async def _usage_daily(params: dict[str, Any], _server: host_server.Server) -> dict[str, Any]:
     profile = str((params or {}).get("profile") or "")
     home = _resolve_home(profile)
     # price_out imports litellm (slow first import) and may fetch OpenRouter pricing — keep it off the loop too.
-    return await asyncio.to_thread(_daily_payload, home)
+    return await asyncio.to_thread(daily_payload, home)
 
 
 async def _workgroup_usage_daily(

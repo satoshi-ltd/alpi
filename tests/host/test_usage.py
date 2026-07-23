@@ -122,4 +122,34 @@ async def test_usage_daily_prices_off_the_event_loop(
     monkeypatch.setattr(usage.asyncio, "to_thread", spy)
     resp = await usage._usage_daily({"profile": "default"}, None)
     assert "days" in resp and "priceOut" in resp
-    assert "_daily_payload" in seen
+    assert "daily_payload" in seen
+
+
+def test_compute_total30_sums_the_whole_retention_window(tmp_path: Path, monkeypatch) -> None:
+    import json
+    from datetime import date, timedelta
+
+    home = tmp_path / "h"
+    (home / "logs").mkdir(parents=True)
+    today = date(2026, 7, 23)
+    monkeypatch.setattr("alpi.ledger._today_utc", lambda: today.isoformat())
+    history = {}
+    for i in (0, 10, 20, 29):
+        history[(today - timedelta(days=i)).isoformat()] = {
+            "usd": 1.0, "tokens": 100, "tokens_in": 60, "tokens_out": 40,
+        }
+    history[(today - timedelta(days=35)).isoformat()] = {
+        "usd": 99.0, "tokens": 1, "tokens_in": 1, "tokens_out": 0,
+    }
+    (home / "logs" / "ledger.json").write_text(json.dumps({
+        "day": today.isoformat(),
+        "profile": {"usd": 0.0, "tokens": 0},
+        "by_peer": {}, "by_connection": {}, "history": history,
+    }))
+
+    total = usage.compute_total30(home, today)
+
+    assert total["spanDays"] == 30
+    assert total["cost"] == 4.0, "the 35-day-old entry stays out of the window"
+    assert total["tokIn"] == 240
+    assert total["tokOut"] == 160

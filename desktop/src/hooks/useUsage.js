@@ -33,10 +33,15 @@ function useUsageCall(command, params, ready, prefetched, defer = false) {
     { enabled: ready, defer, prefetched },
   );
   if (prefetched !== undefined) {
-    return { days: toUsageDays(prefetched?.days), priceOut: prefetched?.priceOut, loading: false };
+    return {
+      days: toUsageDays(prefetched?.days),
+      priceOut: prefetched?.priceOut,
+      total30: prefetched?.total30 ?? null,
+      loading: false,
+    };
   }
-  if (!data) return { days: [], priceOut: undefined, loading };
-  return { days: toUsageDays(data.days), priceOut: data.priceOut, loading };
+  if (!data) return { days: [], priceOut: undefined, total30: null, loading };
+  return { days: toUsageDays(data.days), priceOut: data.priceOut, total30: data.total30 ?? null, loading };
 }
 
 export function useUsageDaily(profile, connectionId = null, prefetched, defer = false) {

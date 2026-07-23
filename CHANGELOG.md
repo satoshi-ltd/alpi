@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.11.10 — 2026-07-23 — monthly spend at a glance
+
+- **The usage feed now carries a 30-day total.** `host.usage.daily` returns a
+  `total30` block (cost, tokens in/out over the ledger's full 30-day retention)
+  alongside the 14-day daily series, so clients can show the monthly cost as a
+  number next to the recent-trend chart.
+
 ## v0.11.9 — 2026-07-23 — provider hiccups no longer kill a turn
 
 - **A transient provider error mid-stream now retries instead of erroring the
