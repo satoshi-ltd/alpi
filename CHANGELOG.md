@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.11.8 — 2026-07-22 — workgroup dispatch survives daemon restarts
+
+- **A daemon restart mid-turn no longer orphans an open task.** A member's
+  response cursor now advances only when its dispatched turn actually
+  completes, so after a crash or restart the still-open task re-dispatches
+  within one poller tick instead of being silently forgotten. This is
+  at-least-once semantics: duplicate posts are guarded by the rotation rules,
+  but a turn that crashed after an external side effect may repeat it on the
+  re-run.
+- **A stalled pipeline phase gets re-tasked, never silently skipped.** The hub
+  may now re-open the same phase for its owner when the owner never responded,
+  the repair wake tells the hub that this is the one correct move, and closing
+  a phase whose owner never posted is mechanically rejected — skipping stays
+  possible but loud, via `#done skipped · <reason>` or `#done BLOCKED ·
+  <reason>`.
+
 ## v0.11.7 — 2026-07-22 — spend survives workgroup deletion everywhere
 
 - **Deleting a workgroup now preserves its spend history on every surface.**

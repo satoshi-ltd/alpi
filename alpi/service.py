@@ -730,7 +730,7 @@ async def _maybe_dispatch_for_sub(
         default=0,
     )
     started_against = _latest_hub_task_seq_for(home, sub.wg_id, sub.hub_pubkey)
-    sub.last_responded_seq = new_responded
+    # Cooldown stamp only; last_responded_seq advances on completion so a crash re-dispatches.
     sub.last_dispatch_at = _utcnow_iso()
     sub_mod.upsert(home, sub)
     # Spawn dispatch in the background so polling and preemption keep moving.
@@ -742,6 +742,7 @@ async def _maybe_dispatch_for_sub(
             round_hub_seq=round_seq,
             hub_pubkey=sub.hub_pubkey,
             started_against_task_seq=started_against,
+            member_responded_seq=new_responded,
         ),
     )
 
@@ -1249,8 +1250,12 @@ async def _maybe_watchdog_close(
         reason = (
             f"watchdog: task open (seq #{last_seq}), {count} nudges no "
             f"progress for {int(age)}s — REPAIR: re-verify the on-disk "
-            "state, then re-task the owner with the correct path/spec, "
-            "or close if it's actually done"
+            "state, then RE-TASK the owner: post a NEW "
+            "`@<owner> #task #<same-phase> <correct path/spec>` — opening "
+            "a `#task` is always allowed even though you (hub) spoke "
+            "last, so never fall back to a plain reply. Close with "
+            "`#done` ONLY if the deliverable is actually done; a `#done` "
+            "on a phase whose owner never delivered is forbidden"
         )
     else:
         stall_kind = (
@@ -1778,6 +1783,7 @@ async def _dispatch_workgroup_turn(
     pipeline: bool = False,
     round_hub_seq: int | None = None,
     hub_pubkey: str = "", started_against_task_seq: int = 0,
+    member_responded_seq: int | None = None,
 ) -> None:
     """Spawn a background ``chat --once`` turn for a workgroup."""
     turn_timeout = _turn_timeout_for(pipeline)
@@ -2022,6 +2028,34 @@ async def _dispatch_workgroup_turn(
         "posts_added": posts_added,
         **extra,
     })
+    if member_responded_seq is not None and _should_advance_cursor(
+        rc, posts_added, preempted, timed_out,
+    ):
+        _advance_member_cursor(home, wg_id, int(member_responded_seq))
+
+
+def _should_advance_cursor(
+    rc: int, posts_added: int, preempted: bool, timed_out: bool,
+) -> bool:
+    """Deliberate silence (rc 0) or a delivered post counts as responded; crash/timeout/preempt re-dispatches. A killed turn can exit rc 0 via a SIGTERM handler, so timed_out gates on delivery, not rc."""
+    if preempted:
+        return False
+    if timed_out:
+        return posts_added > 0
+    return rc == 0 or posts_added > 0
+
+
+def _advance_member_cursor(home: Path, wg_id: str, responded_seq: int) -> None:
+    from alpi.alp import subscription as sub_mod
+    try:
+        sub = sub_mod.get(home, wg_id)
+        if sub is None:
+            return
+        if responded_seq > int(sub.last_responded_seq or 0):
+            sub.last_responded_seq = responded_seq
+            sub_mod.upsert(home, sub)
+    except Exception as e:  # noqa: BLE001
+        log.warning("wg poller: cursor advance failed for %s: %s", wg_id, e)
 
 
 WORKGROUP_TICK_SECONDS = 30

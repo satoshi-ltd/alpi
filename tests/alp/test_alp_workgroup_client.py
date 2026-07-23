@@ -727,7 +727,11 @@ def test_member_round_fresh_aborts_when_hub_advanced(monkeypatch) -> None:
 
 
 def test_hub_reposting_active_slug_is_rejected() -> None:
-    posts = [_post(1, "HUB", "@bob #task #translation translate everything")]
+    # A stalled task (no member response yet) may be re-tasked with the same slug; the duplicate is only rejected once members responded.
+    posts = [
+        _post(1, "HUB", "@bob #task #translation translate everything"),
+        _post(2, "BOB", "#working translating the catalogue"),
+    ]
     with pytest.raises(ValueError, match="task-already-active"):
         wc._check_hub_rotation(posts, "HUB", "@bob #task #translation translate everything again", ["BOB"])
 

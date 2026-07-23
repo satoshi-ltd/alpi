@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -226,10 +227,80 @@ def _validate_task_participants(home: Path, wg, plaintext: str) -> None:
         )
 
 
+def _check_pipeline_close_owner(
+    home: Path, wg, posts: list[dict], plaintext: str, own_pubkey: str,
+) -> bool:
+    """Reject a hub `#done` on a pipeline phase whose owner never posted.
+    Returns True only when this close is an explicit `skipped ·`/`blocked ·`
+    override of the ACTIVE pipeline phase (the caller then waives quorum)."""
+    if not tasks_mod.is_done(plaintext):
+        return False
+    pipeline = [str(x) for x in (getattr(wg.meta, "pipeline", ()) or ())]
+    if not pipeline:
+        return False
+    active = tasks_mod.active_task(posts, hub_pubkey=own_pubkey)
+    if active is None or not active.slug or active.slug not in pipeline:
+        return False
+    if _explicit_close_override(plaintext, own_pubkey):
+        return True
+    id_to_pubkey: dict[str, str] = {}
+    for m in wg.members:
+        peer = peers_mod.get_by_pubkey(home, m.pubkey)
+        if peer and peer.id:
+            id_to_pubkey[peer.id.lower()] = m.pubkey
+    participants = [str(pid) for pid in (active.participants or ())]
+    unresolved = [pid for pid in participants if pid.lower() not in id_to_pubkey]
+    if unresolved:
+        raise ValueError(
+            "phase-owner-unresolved: closing `#" + active.slug + "` but "
+            + ", ".join(f"@{pid}" for pid in unresolved)
+            + " no longer resolves to a pinned member — owner participation "
+            "cannot be verified. Re-pin the peer, or close loudly with "
+            "`#done skipped · <reason>` / `#done BLOCKED · <reason>`."
+        )
+    owner_pubkeys = {id_to_pubkey[pid.lower()] for pid in participants}
+    in_task = [p for p in posts if int(p.get("seq", 0)) > int(active.opened_seq)]
+    if owner_pubkeys:
+        owner_posted = any(
+            str(p.get("from") or "") in owner_pubkeys for p in in_task
+        )
+    else:
+        owner_posted = any(
+            str(p.get("from") or "") != own_pubkey for p in in_task
+        )
+    if owner_posted:
+        return False
+    owners = ", ".join(f"@{pid}" for pid in participants) or "the owner"
+    first_owner = f"@{participants[0]}" if participants else "@<owner>"
+    raise ValueError(
+        f"phase-owner-missing: closing `#{active.slug}` but {owners} never "
+        "posted in this task — the deliverable cannot exist. RE-TASK the "
+        f"owner instead: `{first_owner} #task #{active.slug} "
+        "<what to produce>` (a new `#task` is allowed even though you spoke "
+        "last). To skip the phase deliberately, close loudly with "
+        "`#done skipped · <reason>` or `#done BLOCKED · <reason>` — the "
+        "`· <reason>` part is required."
+    )
+
+
+_OVERRIDE_RE = re.compile(r"^(?:skipped|blocked)\s*·\s*\S", re.IGNORECASE)
+
+
+def _explicit_close_override(plaintext: str, own_pubkey: str) -> bool:
+    """`#done skipped · <reason>` / `#done blocked · <reason>` — exact form, non-empty reason."""
+    if not tasks_mod.is_done(plaintext):
+        return False
+    evs = tasks_mod.parse_post(plaintext, 0, own_pubkey, hub_pubkey=own_pubkey)
+    result = next((e.text for e in evs if e.kind == "done"), "")
+    return bool(_OVERRIDE_RE.match(result.strip()))
+
+
 def _check_hub_rotation(
     posts: list[dict], own_pubkey: str, plaintext: str,
     member_pubkeys: list[str] | None = None,
     quorum_timeout: int = _FULL_QUORUM_TIMEOUT_SECONDS,
+    *, allow_stalled_retask: bool = False,
+    pipeline_close_override: bool = False,
 ) -> None:
     """Reject hub back-to-back content or premature `#done`."""
     if not posts:
@@ -250,14 +321,25 @@ def _check_hub_rotation(
             evs = tasks_mod.parse_post(plaintext, 0, own_pubkey)
             new_slug = next((e.slug for e in evs if e.kind == "task"), "")
             if new_slug and new_slug == active.slug:
-                raise ValueError(
-                    f"task-already-active: #{new_slug} is already the open "
-                    "task — a duplicate #task only preempts itself. Wait for "
-                    "the owner's handoff or close with #done."
+                # Pipeline-only: a stalled phase may be re-tasked with the same slug; #working is a heartbeat, not a response.
+                stalled = allow_stalled_retask and not any(
+                    int(p.get("seq", 0)) > int(active.opened_seq)
+                    and str(p.get("from") or "") != own_pubkey
+                    and not tasks_mod.is_working(str(p.get("text") or ""))
+                    for p in posts
                 )
+                if not stalled:
+                    raise ValueError(
+                        f"task-already-active: #{new_slug} is already the open "
+                        "task and its members have responded — a duplicate "
+                        "#task only preempts itself. Wait for the owner's "
+                        "handoff or close with #done."
+                    )
         return
 
     if tasks_mod.is_done(plaintext):
+        if pipeline_close_override:
+            return  # explicit `skipped ·`/`blocked ·` close — quorum does not apply
         opener = _opener_post(posts, own_pubkey)
         if opener is None:
             if not is_back_to_back:
@@ -622,9 +704,15 @@ def _post_as_hub(
 
     member_pubkeys = [m.pubkey for m in wg.members]
     quorum_roster = _quorum_roster(home, wg, existing, member_pubkeys)
+    is_pipeline = bool(getattr(wg.meta, "pipeline", ()) or ())
+    close_override = _check_pipeline_close_owner(
+        home, wg, existing, plaintext, kp.pubkey_b64(),
+    )
     _check_hub_rotation(
         existing, kp.pubkey_b64(), plaintext, quorum_roster,
         wg.meta.quorum_timeout_seconds or _FULL_QUORUM_TIMEOUT_SECONDS,
+        allow_stalled_retask=is_pipeline,
+        pipeline_close_override=close_override,
     )
 
     group_key = wg_mod.open_sealed_group_key(own.sealed_key, kp)
