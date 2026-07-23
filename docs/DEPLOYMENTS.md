@@ -99,7 +99,9 @@ clients pair to it. No web terminal — reach the TUI with `docker exec`.
 ```
 
 - **Image / package:** `satoshiltd/alpi`, built from `docker/`.
-  Compose and full instructions in [docker/README.md](../docker/README.md).
+  Compose and full instructions in [docker/README.md](../docker/README.md)
+  — including a Kubernetes section for running the same image as a
+  single-writer stateful workload.
 - **Profiles:** starts with `default`, same multi-profile layout as any
   Linux install. Several agents on one host = distinct ports per
   container (see [§3](#3-one-machine-many-profiles) for the profile

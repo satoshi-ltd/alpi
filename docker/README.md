@@ -114,6 +114,34 @@ hot-reload within seconds — connections, peers and workgroups stay up. Only a
 change to `ALPI_NETWORK_HOST` or the pairing host port still needs a restart
 (in compose: edit the env/ports and `docker compose up -d` to recreate).
 
+## Kubernetes
+
+The same image runs in a cluster as a plain **stateful, single-writer**
+workload. There is no Helm chart or manifest set yet — these are the
+constraints that matter when you write your own:
+
+- **`replicas: 1`, always.** A daemon owns its home exclusively
+  (`service.lock`); there is no leader election, no shared-home HA.
+  Run more agents by running more single-replica workloads, one
+  volume each — that's a fleet, not a replica set.
+- **StatefulSet + PVC** (`ReadWriteOnce`) mounted at `/data`, with
+  `runAsUser: 1000` / `fsGroup: 1000` — the image's runtime user owns
+  the volume, exactly like the plain-Docker layout.
+- **Env**: `ALPI_ALP_TCP_PORT` and `ALPI_HOST_TCP_PORT` pick the two
+  listener ports; `ALPI_NETWORK_HOST` must be the address peers and
+  paired apps will actually dial — a LoadBalancer/Service address or,
+  better, a Tailscale/WireGuard overlay IP from a sidecar-less node
+  network. Keep both ports off the public internet.
+- **Service** exposing the two TCP ports; a plain TCP `readinessProbe`
+  on the host-plane port is enough (the WebSocket listener accepts as
+  soon as the daemon is up).
+- **Secrets**: `.env` files under `/data/.alpi/` (root and per profile)
+  — project them from Kubernetes Secrets via an initContainer or
+  `kubectl exec` once per credential change; never bake keys into the
+  image.
+- **Egress**: HTTPS to your model provider; GitHub + the npm registry
+  only when recipes clone projects (see the section above).
+
 ## Updating
 
 Pull the latest image and recreate only the containers whose image changed:

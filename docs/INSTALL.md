@@ -14,6 +14,34 @@ service backends). The path is the same as Linux once WSL2 is up.
 > alpi setup                     # use
 > ```
 
+## Requirements
+
+alpi runs the same daemon and home layout in three shapes: **native**
+(the personal agent next to your shell), **Docker** (headless fleet
+daemons), and **Kubernetes** (the same image as a stateful workload).
+
+| | Native | Docker | Kubernetes |
+|---|---|---|---|
+| Platform | Linux, macOS (Windows → WSL2) | any Docker host | any cluster |
+| Python | 3.10–3.13 (uv manages it) | in the image | in the image |
+| Node.js | 24 LTS on the service PATH — needed for `npx`-launched MCP servers and npm project gates; optional if you use neither | in the image | in the image |
+| git / ssh | `git`; `openssh-client` only when recipes clone private repos | in the image | in the image |
+| Service manager | launchd (macOS) / systemd user + lingering (Linux) — installed by `alpi setup` | `--restart unless-stopped` | the pod controller |
+| State | `~/.alpi` + your workspace | a volume at `/data`, owned by UID/GID 1000 | a PVC at `/data` (RWO), `runAsUser`/`fsGroup` 1000 |
+| Inbound network | none required; ALP `7423` + host plane `49200` only when peers or paired apps dial in — bind a private/overlay address (Tailscale, WireGuard) | publish both ports on a private address; override with `ALPI_ALP_TCP_PORT` / `ALPI_HOST_TCP_PORT` | a Service on both TCP ports |
+| Outbound network | HTTPS to your model provider (or a local Ollama) | same, plus GitHub + npm registry only when recipes clone projects | same |
+
+**Docker.** The official image is `satoshiltd/alpi` (Python + Node 24 +
+git + ssh client; entrypoint `alpi-docker`; `HOME=/data`, so `/data/.alpi`
+is the daemon home). One daemon per container; reach the TUI with
+`docker exec -it <name> alpi`. Full guide: [docker/README.md](../docker/README.md)
+and the fleet shapes in [DEPLOYMENTS.md](DEPLOYMENTS.md).
+
+**Kubernetes.** No manifests or Helm chart ship yet, but the image runs
+as a plain stateful, single-writer workload — see the Kubernetes section
+of [docker/README.md](../docker/README.md) for the constraints that
+matter (`replicas: 1`, PVC, `ALPI_NETWORK_HOST`, probes, secrets).
+
 ## Recommended — `uv tool install`
 
 [uv](https://docs.astral.sh/uv/) is alpi's recommended installer. It
@@ -129,9 +157,11 @@ uv run alpi
   trust.
 - **No Homebrew formula.** `uv tool install` already covers macOS
   cleanly. Maintaining a Tap is duplicate work without a payoff.
-- **No Docker image.** alpi is a personal CLI agent — it lives next
-  to your shell, your editor, your dotfiles. Containerising it
-  fights its own design.
+- **Docker is for fleets, not for the personal agent.** The personal
+  CLI lives next to your shell, your editor, your dotfiles — install it
+  natively. For headless always-on daemons (home servers, company
+  fleets) there IS an official image, `satoshiltd/alpi` — see
+  Requirements above and [docker/README.md](../docker/README.md).
 - **No platform installers (.pkg, .msi).** Same reasoning: install
   via the language toolchain you already have.
 

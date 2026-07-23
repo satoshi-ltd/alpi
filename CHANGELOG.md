@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.11.11 — 2026-07-24 — install requirements for every deployment shape
+
+- **INSTALL.md now opens with a requirements matrix** for the three ways to run
+  alpi — native, Docker, and Kubernetes: Python/Node versions, service manager,
+  state layout, and the exact inbound/outbound network needs of each shape.
+- **docker/README.md gains a Kubernetes section**: the image runs as a plain
+  stateful single-writer workload — `replicas: 1` always, PVC at `/data`
+  (UID/GID 1000), `ALPI_NETWORK_HOST` as the dial address, TCP readiness on the
+  host-plane port, secrets as `.env` files never baked into the image.
+- Retired the outdated "there is no Docker image" claim — the official image is
+  `satoshiltd/alpi`, for headless fleet daemons; the personal agent stays a
+  native install.
+
 ## v0.11.10 — 2026-07-23 — monthly spend at a glance
 
 - **The usage feed now carries a 30-day total.** `host.usage.daily` returns a
