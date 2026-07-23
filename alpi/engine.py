@@ -410,61 +410,82 @@ class Engine:
                 accumulated_text: list[str] = []
                 reasoning_text: list[str] = []
                 final: dict = {}
-                try:
-                    for chunk in llm.stream(
-                        messages=self.session.messages, tools=schemas,
-                        rt=self.cfg.runtime, **call_kwargs,
-                    ):
-                        if self.interrupt_requested:
-                            break
-                        if chunk.get("final"):
-                            final = chunk
+                call_done = False
+                # Same-step loop: a fallback retries THIS call — step_idx advances only when an LLM call completes.
+                while not call_done:
+                    if self.interrupt_requested:
+                        self._finalize_interrupt(emit)
+                        return
+                    if turn_deadline is not None and time.time() >= turn_deadline:
+                        deadline_hit = True
+                        break
+                    accumulated_text = []
+                    reasoning_text = []
+                    final = {}
+                    try:
+                        for chunk in llm.stream(
+                            messages=self.session.messages, tools=schemas,
+                            rt=self.cfg.runtime, **call_kwargs,
+                        ):
+                            if self.interrupt_requested:
+                                break
+                            if chunk.get("retry_reset"):
+                                reasoning_text = []
+                                if turn_deadline is not None and time.time() >= turn_deadline:
+                                    deadline_hit = True
+                                    break
+                                continue
+                            if chunk.get("final"):
+                                final = chunk
+                                continue
+                            reasoning_delta = chunk.get("reasoning_delta") or ""
+                            if reasoning_delta:
+                                reasoning_text.append(reasoning_delta)
+                                emit(AgentEvent(kind="reasoning_delta", text=reasoning_delta))
+                            text_delta = chunk.get("text_delta") or ""
+                            if text_delta:
+                                if first_text_delta_at is None:
+                                    first_text_delta_at = time.time()
+                                accumulated_text.append(text_delta)
+                                emit(AgentEvent(kind="assistant_delta", text=text_delta))
+                        call_done = True
+                    except Exception as e:  # noqa: BLE001
+                        # Same-model transient retries live in llm.stream; here only the fallback chain, and only while no VISIBLE text reached the client (reasoning deltas are ephemeral and replayable).
+                        fb_applied = False
+                        if not accumulated_text:
+                            while fallback_queue:
+                                fb_model = fallback_queue.pop(0)
+                                if fb_model == turn_model:
+                                    continue
+                                try:
+                                    fb_kwargs = cfg_mod.resolve_model(self.cfg, model=fb_model)
+                                except Exception:  # noqa: BLE001
+                                    continue
+                                fb_kwargs.update(_pc.cache_kwargs_for_model(fb_kwargs.get("model", "")))
+                                import logging
+                                logging.getLogger("alpi.engine").warning(
+                                    "model %s failed (%s); falling back to %s",
+                                    turn_model, e, fb_model,
+                                )
+                                failed_model = turn_model
+                                call_kwargs = fb_kwargs
+                                turn_model = fb_model
+                                turn_effort = ""
+                                turn_routing.append(f"fallback:{fb_model}")
+                                # raw provider error may carry credentials; frames persist for replay
+                                emit(AgentEvent(
+                                    kind="routing", model=fb_model,
+                                    text=f"model {failed_model} failed; falling back to {fb_model}",
+                                ))
+                                fb_applied = True
+                                break
+                        if fb_applied:
                             continue
-                        reasoning_delta = chunk.get("reasoning_delta") or ""
-                        if reasoning_delta:
-                            reasoning_text.append(reasoning_delta)
-                            emit(AgentEvent(kind="reasoning_delta", text=reasoning_delta))
-                        text_delta = chunk.get("text_delta") or ""
-                        if text_delta:
-                            if first_text_delta_at is None:
-                                first_text_delta_at = time.time()
-                            accumulated_text.append(text_delta)
-                            emit(AgentEvent(kind="assistant_delta", text=text_delta))
-                except Exception as e:  # noqa: BLE001
-                    # Fallback chain: only before any output reached the client — a partially-streamed step can't be replayed on another model.
-                    fb_applied = False
-                    if not accumulated_text and not reasoning_text:
-                        while fallback_queue:
-                            fb_model = fallback_queue.pop(0)
-                            if fb_model == turn_model:
-                                continue
-                            try:
-                                fb_kwargs = cfg_mod.resolve_model(self.cfg, model=fb_model)
-                            except Exception:  # noqa: BLE001
-                                continue
-                            fb_kwargs.update(_pc.cache_kwargs_for_model(fb_kwargs.get("model", "")))
-                            import logging
-                            logging.getLogger("alpi.engine").warning(
-                                "model %s failed (%s); falling back to %s",
-                                turn_model, e, fb_model,
-                            )
-                            failed_model = turn_model
-                            call_kwargs = fb_kwargs
-                            turn_model = fb_model
-                            turn_effort = ""
-                            turn_routing.append(f"fallback:{fb_model}")
-                            # raw provider error may carry credentials; frames persist for replay
-                            emit(AgentEvent(
-                                kind="routing", model=fb_model,
-                                text=f"model {failed_model} failed; falling back to {fb_model}",
-                            ))
-                            fb_applied = True
-                            break
-                    if fb_applied:
-                        continue
-                    turn_error = str(e)
-                    emit(AgentEvent(kind="error", text=turn_error))
-                    return
+                        turn_error = str(e)
+                        emit(AgentEvent(kind="error", text=turn_error))
+                        return
+                if deadline_hit:
+                    break
 
                 if self.interrupt_requested:
                     partial = "".join(accumulated_text)

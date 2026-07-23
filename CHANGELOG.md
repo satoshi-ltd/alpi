@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.11.9 — 2026-07-23 — provider hiccups no longer kill a turn
+
+- **A transient provider error mid-stream now retries instead of erroring the
+  chat.** When the model's upstream stalls while the agent is still thinking
+  (reasoning emitted, no visible text yet), the engine retries the step — same
+  model first, then the configured `fallback_models` — and the turn continues.
+  Wrapped provider errors (e.g. a timeout inside a mid-stream fallback error)
+  are now recognized as transient. Once visible text has streamed, a break
+  still surfaces rather than duplicating half-written output.
+
 ## v0.11.8 — 2026-07-22 — workgroup dispatch survives daemon restarts
 
 - **A daemon restart mid-turn no longer orphans an open task.** A member's

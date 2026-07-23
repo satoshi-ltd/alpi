@@ -185,7 +185,7 @@ def is_free_model(model: str) -> bool:
     return False
 
 
-def _is_transient(exc: Exception) -> bool:
+def _is_transient_single(exc: Exception) -> bool:
     if isinstance(exc, ProviderStalled):
         return True
     name = type(exc).__name__
@@ -196,6 +196,22 @@ def _is_transient(exc: Exception) -> bool:
     if name in _TRANSIENT_EXC_NAMES:
         return True
     return isinstance(code, int) and (code == 429 or code >= 500)
+
+
+def is_transient(exc: Exception) -> bool:
+    """Wrapper errors (litellm MidStreamFallbackError etc.) hide the real Timeout in the cause chain."""
+    seen: set[int] = set()
+    cur: Exception | None = exc
+    while cur is not None and id(cur) not in seen:
+        seen.add(id(cur))
+        if _is_transient_single(cur):
+            return True
+        cur = getattr(cur, "original_exception", None) or cur.__cause__
+    return False
+
+
+def _is_transient(exc: Exception) -> bool:
+    return is_transient(exc)
 
 
 def _backoff_sleep(base: float, attempt: int) -> None:
@@ -352,7 +368,7 @@ def stream(
 
     attempt = 0
     while True:
-        produced = False
+        visible = False
         tool_calls_accum: dict[int, dict[str, str]] = {}
         last_chunk = None
         try:
@@ -362,16 +378,18 @@ def stream(
                 norm = _normalize_chunk(chunk, tool_calls_accum)
                 if norm is None:
                     continue
-                produced = True
+                if norm.get("text_delta"):
+                    visible = True
                 yield norm
             yield _final_chunk(last_chunk, tool_calls_accum, model)
             return
         except Exception as exc:  # noqa: BLE001
-            # Retry only before any output reached the consumer — a partially-streamed
-            # turn can't be safely replayed; surface it instead.
-            if not produced and _is_transient(exc) and attempt < max_retries:
+            # Retry until VISIBLE text reached the consumer — reasoning/tool deltas are ephemeral and safe to replay; streamed text is not.
+            if not visible and _is_transient(exc) and attempt < max_retries:
                 attempt += 1
                 _backoff_sleep(backoff, attempt)
+                # Engine signal, yielded AFTER the backoff: a consumer that stops here (interrupt/deadline) prevents the next provider call entirely.
+                yield {"retry_reset": True}
                 continue
             raise
 
