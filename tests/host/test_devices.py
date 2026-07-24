@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import multiprocessing as mp
 import os
 import shutil
 import tempfile
@@ -51,6 +52,44 @@ def test_revoke(short_tmp: Path) -> None:
     assert devices.revoke(row["token"]) is True
     assert devices.is_valid(row["token"]) is False
     assert devices.revoke(row["token"]) is False  # idempotent
+
+
+def _dev_add_worker(root_str: str, label: str, delay: float, barrier) -> None:
+    import time as _time
+
+    from alpi import home as home_mod
+    from alpi.host import devices as dev
+
+    home_mod._ROOT = Path(root_str)
+    dev._invalidate_cache()
+    original = dev.save
+
+    def slow(devs):
+        _time.sleep(delay)  # widen the read→write window so a missing cross-process lock loses updates
+        original(devs)
+
+    dev.save = slow
+    barrier.wait()
+    dev.add(label=label, role="member")
+
+
+def test_concurrent_add_across_processes(short_tmp: Path) -> None:
+    ctx = mp.get_context()
+    barrier = ctx.Barrier(3)
+    root = str(short_tmp)
+    procs = [
+        ctx.Process(target=_dev_add_worker, args=(root, f"dev{i}", 0.4, barrier))
+        for i in range(3)
+    ]
+    for p in procs:
+        p.start()
+    for p in procs:
+        p.join(30)
+    for p in procs:
+        assert p.exitcode == 0
+    devices._invalidate_cache()
+    labels = sorted(d["label"] for d in devices.load())
+    assert labels == ["dev0", "dev1", "dev2"], labels
 
 
 def test_touch_updates_last_seen(short_tmp: Path) -> None:

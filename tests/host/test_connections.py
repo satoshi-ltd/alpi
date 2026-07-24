@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import multiprocessing as mp
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -26,6 +27,220 @@ def _root(monkeypatch, tmp_path: Path) -> Path:
     monkeypatch.setattr(home, "_ROOT", tmp_path)
     connections.invalidate_cache()
     return tmp_path
+
+
+def _conn_op_worker(root_str: str, op: str, op_args: tuple, delay: float, barrier) -> None:
+    import time as _time
+
+    from alpi import home as home_mod
+    from alpi.host import connections as conn
+
+    home_mod._ROOT = Path(root_str)
+    conn.invalidate_cache()
+    original = conn._atomic_write
+
+    def slow(data):
+        _time.sleep(delay)  # widen the read→write window so a missing cross-process lock loses updates
+        original(data)
+
+    conn._atomic_write = slow
+    barrier.wait()
+    getattr(conn, op)(*op_args)
+
+
+def test_concurrent_create_across_processes_keeps_both(monkeypatch, tmp_path: Path) -> None:
+    root = _root(monkeypatch, tmp_path)
+    ctx = mp.get_context()
+    barrier = ctx.Barrier(2)
+    procs = [
+        ctx.Process(target=_conn_op_worker, args=(str(root), "create_connection", (label,), 0.4, barrier))
+        for label in ("one", "two")
+    ]
+    for p in procs:
+        p.start()
+    for p in procs:
+        p.join(30)
+    for p in procs:
+        assert p.exitcode == 0
+    connections.invalidate_cache()
+    labels = sorted(c["label"] for c in connections.list_connections())
+    assert labels == ["one", "two"], labels
+
+
+def test_concurrent_add_and_revoke_across_processes(monkeypatch, tmp_path: Path) -> None:
+    root = _root(monkeypatch, tmp_path)
+    conn, dev1 = connections.create_connection("base")
+    connections.add_device(conn["id"])
+    connections.invalidate_cache()
+    ctx = mp.get_context()
+    barrier = ctx.Barrier(2)
+    p_add = ctx.Process(target=_conn_op_worker, args=(str(root), "add_device", (conn["id"],), 0.4, barrier))
+    p_rev = ctx.Process(target=_conn_op_worker, args=(str(root), "revoke_device", (conn["id"], dev1["id"]), 0.4, barrier))
+    p_add.start()
+    p_rev.start()
+    p_add.join(30)
+    p_rev.join(30)
+    assert p_add.exitcode == 0
+    assert p_rev.exitcode == 0
+    connections.invalidate_cache()
+    row = next(c for c in connections.list_connections() if c["id"] == conn["id"])
+    active = [d for d in row["devices"] if d["status"] != "deleted"]
+    revoked = [d for d in row["devices"] if d["status"] == "deleted"]
+    assert len(active) == 2, [(d["id"], d["status"]) for d in row["devices"]]
+    assert any(d["id"] == dev1["id"] for d in revoked), "revoke was lost"
+
+
+def _legacy_hold_and_write_worker(root_str: str, barrier) -> None:
+    import time as _time
+
+    from alpi import home as home_mod
+    from alpi.host import devices as dev
+
+    home_mod._ROOT = Path(root_str)
+    dev._invalidate_cache()
+    with dev._store_lock():
+        rows = dev._read_strict()
+        barrier.wait()
+        _time.sleep(0.4)  # hold devices.lock across the migrator's read window
+        rows.append({
+            "token": "legacy-new-token",
+            "label": "added-during-migration",
+            "created": 100,
+            "last_seen": None,
+            "role": "member",
+            "profile_scope": [],
+        })
+        dev.save(rows)
+
+
+def _migrate_worker(root_str: str, barrier) -> None:
+    from alpi import home as home_mod
+    from alpi.host import connections as conn
+
+    home_mod._ROOT = Path(root_str)
+    conn.invalidate_cache()
+    barrier.wait()
+    conn.load_store()
+
+
+def test_migration_coordinates_with_legacy_writer(monkeypatch, tmp_path: Path) -> None:
+    root = _root(monkeypatch, tmp_path)
+    legacy = root / "host" / "devices.yaml"
+    legacy.parent.mkdir(parents=True)
+    legacy.write_text(yaml.safe_dump([{
+        "token": "dev0-token", "label": "dev0", "created": 10,
+        "last_seen": 20, "role": "member", "profile_scope": [],
+    }]))
+    ctx = mp.get_context()
+    barrier = ctx.Barrier(2)
+    p_write = ctx.Process(target=_legacy_hold_and_write_worker, args=(str(root), barrier))
+    p_migrate = ctx.Process(target=_migrate_worker, args=(str(root), barrier))
+    p_write.start()
+    p_migrate.start()
+    p_write.join(30)
+    p_migrate.join(30)
+    assert p_write.exitcode == 0
+    assert p_migrate.exitcode == 0
+    connections.invalidate_cache()
+    labels = {c["label"] for c in connections.list_connections(include_deleted=True)}
+    assert "added-during-migration" in labels, labels
+
+
+def _add_and_report_worker(root_str: str, conn_id: str, queue, barrier) -> None:
+    from alpi import home as home_mod
+    from alpi.host import connections as conn
+
+    home_mod._ROOT = Path(root_str)
+    conn.invalidate_cache()
+    barrier.wait()
+    try:
+        conn.add_device(conn_id)
+        queue.put("added")
+    except KeyError:
+        queue.put("not-found")
+
+
+def _revoke_worker(root_str: str, token_id: str, barrier) -> None:
+    import asyncio
+
+    from alpi import home as home_mod
+    from alpi.host import connections as conn
+
+    home_mod._ROOT = Path(root_str)
+    conn.invalidate_cache()
+    barrier.wait()
+    asyncio.run(conn._legacy_revoke({"token_id": token_id}, None))
+
+
+def test_legacy_revoke_add_device_toctou(monkeypatch, tmp_path: Path) -> None:
+    root = _root(monkeypatch, tmp_path)
+    conn, dev1 = connections.create_connection("base")
+    connections.invalidate_cache()
+    token_id = dev1["token"][-8:]
+    ctx = mp.get_context()
+    barrier = ctx.Barrier(2)
+    queue = ctx.Queue()
+    p_rev = ctx.Process(target=_revoke_worker, args=(str(root), token_id, barrier))
+    p_add = ctx.Process(target=_add_and_report_worker, args=(str(root), conn["id"], queue, barrier))
+    p_rev.start()
+    p_add.start()
+    p_rev.join(30)
+    p_add.join(30)
+    assert p_rev.exitcode == 0
+    assert p_add.exitcode == 0
+    add_result = queue.get(timeout=5)
+    connections.invalidate_cache()
+    row = next((c for c in connections.list_connections(include_deleted=True) if c["id"] == conn["id"]), None)
+    assert row is not None
+    if add_result == "added":
+        assert row["status"] != "deleted", row
+        by_id = {d["id"]: d for d in row["devices"]}
+        active = [d for d in row["devices"] if d["status"] != "deleted"]
+        assert len(active) == 1, row["devices"]
+        assert by_id[dev1["id"]]["status"] == "deleted", row["devices"]
+    else:
+        assert add_result == "not-found"
+        assert row["status"] == "deleted", row
+
+
+def test_revoke_by_token_id_revokes_only_target(monkeypatch, tmp_path: Path) -> None:
+    _root(monkeypatch, tmp_path)
+    conn, dev1 = connections.create_connection("base")
+    _conn2, dev2 = connections.add_device(conn["id"])
+    connections.invalidate_cache()
+    assert connections.revoke_by_token_id(dev1["token"][-8:]) is True
+    connections.invalidate_cache()
+    row = next(c for c in connections.list_connections(include_deleted=True) if c["id"] == conn["id"])
+    assert row["status"] != "deleted"
+    by_id = {d["id"]: d for d in row["devices"]}
+    assert by_id[dev1["id"]]["status"] == "deleted"
+    assert by_id[dev2["id"]]["status"] != "deleted"
+
+
+def test_revoke_by_token_id_deletes_connection_for_last_unused_device(monkeypatch, tmp_path: Path) -> None:
+    _root(monkeypatch, tmp_path)
+    conn, dev1 = connections.create_connection("base")
+    connections.invalidate_cache()
+    assert connections.revoke_by_token_id(dev1["token"][-8:]) is True
+    connections.invalidate_cache()
+    row = next(c for c in connections.list_connections(include_deleted=True) if c["id"] == conn["id"])
+    assert row["status"] == "deleted"
+
+
+def test_legacy_save_does_not_resurrect_after_migration(monkeypatch, tmp_path: Path) -> None:
+    from alpi.host import devices
+
+    root = _root(monkeypatch, tmp_path)
+    (root / "host").mkdir(parents=True)
+    (root / "host" / "connections.yaml").write_text(
+        yaml.safe_dump({"version": 1, "connections": []}),
+    )
+    legacy = root / "host" / "devices.yaml"
+    devices.save([{
+        "token": "x", "label": "y", "created": 1,
+        "last_seen": None, "role": "member", "profile_scope": [],
+    }])
+    assert not legacy.exists()
 
 
 def test_migrates_devices_store_without_rotating_tokens(monkeypatch, tmp_path: Path) -> None:

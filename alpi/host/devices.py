@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import contextlib
 import hmac
 import os
 import re
 import secrets
+import sys
 import threading
 import time
 from pathlib import Path
@@ -12,6 +14,13 @@ from typing import Any
 import yaml
 
 from alpi.host import server as host_server
+
+if sys.platform == "win32":
+    import msvcrt
+    _fcntl = None
+else:
+    import fcntl as _fcntl
+    msvcrt = None
 
 
 def _tokens_match(stored: str, presented: str) -> bool:
@@ -101,6 +110,10 @@ def _store_path() -> Path:
     return _ROOT / "host" / "devices.yaml"
 
 
+def _canonical_store_exists() -> bool:
+    return _store_path().with_name("connections.yaml").exists()
+
+
 def _guard_pytest_isolation(path: Path) -> None:
     """Refuse to write the real developer store from inside a pytest run. We had a regression where a test fixture forgot to monkeypatch ``alpi.home._ROOT`` and the parametrized case silently appended `seed` rows to ``~/.alpi/host/devices.yaml`` on every test run. This guard is cheap and catches the next slip in the same shape."""
     if "PYTEST_CURRENT_TEST" not in os.environ:
@@ -136,6 +149,28 @@ def _invalidate_cache() -> None:
     with _cache_lock:
         _cached = None
         _cached_at = 0.0
+
+
+@contextlib.contextmanager
+def _store_lock():
+    lock_path = _store_path().with_name("devices.lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    f = open(lock_path, "w")  # noqa: SIM115 — held for the critical section
+    try:
+        if sys.platform == "win32":
+            msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
+        else:
+            _fcntl.flock(f.fileno(), _fcntl.LOCK_EX)
+        yield
+    finally:
+        try:
+            if sys.platform == "win32":
+                f.seek(0)
+                msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                _fcntl.flock(f.fileno(), _fcntl.LOCK_UN)
+        finally:
+            f.close()
 
 
 class StoreUnavailable(Exception):
@@ -199,6 +234,8 @@ def _load_cached() -> list[dict[str, Any]]:
 
 def save(devices: list[dict[str, Any]]) -> None:
     """Atomic write via tmp+rename so a crashed daemon never leaves a half-written devices.yaml that would lock out every paired client."""
+    if _canonical_store_exists():
+        return
     path = _store_path()
     _guard_pytest_isolation(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -227,19 +264,20 @@ def is_valid(token: str) -> bool:
 
 
 def touch(token: str) -> None:
-    try:
-        devices = _read_strict()
-    except StoreUnavailable:
-        return
-    now = int(time.time())
-    changed = False
-    for d in devices:
-        if _tokens_match(d["token"], token):
-            d["last_seen"] = now
-            changed = True
-            break
-    if changed:
-        save(devices)
+    with _store_lock():
+        try:
+            devices = _read_strict()
+        except StoreUnavailable:
+            return
+        now = int(time.time())
+        changed = False
+        for d in devices:
+            if _tokens_match(d["token"], token):
+                d["last_seen"] = now
+                changed = True
+                break
+        if changed:
+            save(devices)
 
 
 # Validate + record last_seen in one call; writes only when last_seen is stale to keep auth I/O bounded.
@@ -276,18 +314,19 @@ def validate_and_lookup(
     scope = _normalise_profile_scope(devices[match_idx].get("profile_scope"))
     last = devices[match_idx].get("last_seen") or 0
     if now - int(last) >= min_interval:
-        try:
-            fresh = _read_strict()
-        except StoreUnavailable:
-            return True, role, scope
-        changed = False
-        for d in fresh:
-            if _tokens_match(d["token"], token):
-                d["last_seen"] = now
-                changed = True
-                break
-        if changed:
-            save(fresh)
+        with _store_lock():
+            try:
+                fresh = _read_strict()
+            except StoreUnavailable:
+                return True, role, scope
+            changed = False
+            for d in fresh:
+                if _tokens_match(d["token"], token):
+                    d["last_seen"] = now
+                    changed = True
+                    break
+            if changed:
+                save(fresh)
     return True, role, scope
 
 
@@ -295,7 +334,6 @@ def add(
     label: str = "", role: str = "member",
     profile_scope: list[str] | None = None,
 ) -> dict[str, Any]:
-    devices = _read_strict()
     # 24 bytes urlsafe = 32 chars, 192 bits entropy — keeps the QR small.
     row = {
         "token": secrets.token_urlsafe(24),
@@ -305,8 +343,10 @@ def add(
         "role": _normalise_role(role),
         "profile_scope": _normalise_profile_scope(profile_scope),
     }
-    devices.append(row)
-    save(devices)
+    with _store_lock():
+        devices = _read_strict()
+        devices.append(row)
+        save(devices)
     return row
 
 
@@ -314,32 +354,34 @@ def set_role(token: str, role: str) -> bool:
     """Flip role on an existing device; unknown roles are silently rejected to avoid widening the enum on disk."""
     if role not in _VALID_ROLES:
         return False
-    try:
-        devices = _read_strict()
-    except StoreUnavailable:
-        return False
-    changed = False
-    for d in devices:
-        if _tokens_match(d["token"], token):
-            if d.get("role") != role:
-                d["role"] = role
-                changed = True
-            break
-    if changed:
-        save(devices)
+    with _store_lock():
+        try:
+            devices = _read_strict()
+        except StoreUnavailable:
+            return False
+        changed = False
+        for d in devices:
+            if _tokens_match(d["token"], token):
+                if d.get("role") != role:
+                    d["role"] = role
+                    changed = True
+                break
+        if changed:
+            save(devices)
     return changed
 
 
 def revoke(token: str) -> bool:
-    try:
-        devices = _read_strict()
-    except StoreUnavailable:
-        return False
-    before = len(devices)
-    devices = [d for d in devices if not _tokens_match(d["token"], token)]
-    if len(devices) == before:
-        return False
-    save(devices)
+    with _store_lock():
+        try:
+            devices = _read_strict()
+        except StoreUnavailable:
+            return False
+        before = len(devices)
+        devices = [d for d in devices if not _tokens_match(d["token"], token)]
+        if len(devices) == before:
+            return False
+        save(devices)
     return True
 
 
@@ -349,54 +391,57 @@ _ORPHAN_TTL_S = 24 * 3600
 def prune_orphans(now: int | None = None, ttl_seconds: int = _ORPHAN_TTL_S) -> int:
     # Drop tokens that never connected (last_seen is None) and are older than the TTL — handles modal-close / crash mid-pair leaving the row behind. last_seen is the only signal that survives label rename.
     cutoff = (now if now is not None else int(time.time())) - ttl_seconds
-    try:
-        devices = _read_strict()
-    except StoreUnavailable:
-        return 0
-    kept = [
-        d for d in devices
-        if not (
-            d.get("last_seen") is None
-            and int(d.get("created") or 0) <= cutoff
-        )
-    ]
-    dropped = len(devices) - len(kept)
-    if dropped:
-        save(kept)
+    with _store_lock():
+        try:
+            devices = _read_strict()
+        except StoreUnavailable:
+            return 0
+        kept = [
+            d for d in devices
+            if not (
+                d.get("last_seen") is None
+                and int(d.get("created") or 0) <= cutoff
+            )
+        ]
+        dropped = len(devices) - len(kept)
+        if dropped:
+            save(kept)
     return dropped
 
 
 def set_profile_scope(token: str, profile_scope: list[str]) -> bool:
-    try:
-        devices = _read_strict()
-    except StoreUnavailable:
-        return False
     normalised = _normalise_profile_scope(profile_scope)
-    changed = False
-    for d in devices:
-        if _tokens_match(d["token"], token):
-            if d.get("profile_scope") != normalised:
-                d["profile_scope"] = normalised
-                changed = True
-            break
-    if changed:
-        save(devices)
+    with _store_lock():
+        try:
+            devices = _read_strict()
+        except StoreUnavailable:
+            return False
+        changed = False
+        for d in devices:
+            if _tokens_match(d["token"], token):
+                if d.get("profile_scope") != normalised:
+                    d["profile_scope"] = normalised
+                    changed = True
+                break
+        if changed:
+            save(devices)
     return changed
 
 
 def rename(token: str, label: str) -> bool:
-    try:
-        devices = _read_strict()
-    except StoreUnavailable:
-        return False
-    changed = False
-    for d in devices:
-        if _tokens_match(d["token"], token):
-            d["label"] = (label or "").strip() or d["label"]
-            changed = True
-            break
-    if changed:
-        save(devices)
+    with _store_lock():
+        try:
+            devices = _read_strict()
+        except StoreUnavailable:
+            return False
+        changed = False
+        for d in devices:
+            if _tokens_match(d["token"], token):
+                d["label"] = (label or "").strip() or d["label"]
+                changed = True
+                break
+        if changed:
+            save(devices)
     return changed
 
 

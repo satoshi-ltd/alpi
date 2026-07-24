@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import contextlib
 import hmac
 import os
 import re
 import secrets
+import sys
 import threading
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -15,6 +18,13 @@ import yaml
 from alpi.host import server as host_server
 from alpi.host.connection_context import ConnectionContext
 
+if sys.platform == "win32":
+    import msvcrt
+    _fcntl = None
+else:
+    import fcntl as _fcntl
+    msvcrt = None
+
 
 SCHEMA_VERSION = 1
 _VALID_ROLES = frozenset({"member", "admin"})
@@ -22,7 +32,6 @@ _VALID_STATUSES = frozenset({"active", "disabled", "deleted"})
 _VALID_CLIENTS = frozenset({"desktop", "mobile", "unknown"})
 _SAFE_PROFILE = re.compile(r"^[A-Za-z0-9_-]+$")
 _CORRUPT_SCOPE = "<corrupt>"
-_lock = threading.RLock()
 _cache_lock = threading.Lock()
 _cached: dict[str, Any] | None = None
 _cached_at = 0.0
@@ -64,6 +73,32 @@ def store_path() -> Path:
 
 def legacy_store_path() -> Path:
     return _root() / "host" / "devices.yaml"
+
+
+def _lock_path() -> Path:
+    return _root() / "host" / "connections.lock"
+
+
+@contextlib.contextmanager
+def _locked() -> Iterator[None]:
+    lp = _lock_path()
+    lp.parent.mkdir(parents=True, exist_ok=True)
+    f = open(lp, "w")  # noqa: SIM115 — held for the critical section
+    try:
+        if sys.platform == "win32":
+            msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
+        else:
+            _fcntl.flock(f.fileno(), _fcntl.LOCK_EX)
+        yield
+    finally:
+        try:
+            if sys.platform == "win32":
+                f.seek(0)
+                msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                _fcntl.flock(f.fileno(), _fcntl.LOCK_UN)
+        finally:
+            f.close()
 
 
 def _new_id(prefix: str) -> str:
@@ -233,12 +268,14 @@ def _atomic_write(data: dict[str, Any]) -> None:
     invalidate_cache()
 
 
-def _migrate_if_needed() -> None:
+def _migrate_if_needed_inside_lock() -> None:
     target = store_path()
     legacy = legacy_store_path()
     if target.exists() or not legacy.exists():
         return
-    with _lock:
+    from alpi.host import devices
+    # lock order: connections.lock then devices.lock, never the reverse
+    with devices._store_lock():
         if target.exists() or not legacy.exists():
             return
         data = _from_legacy(_read_yaml(legacy))
@@ -251,17 +288,21 @@ def _migrate_if_needed() -> None:
         os.replace(legacy, backup)
 
 
+def _load_inside_lock() -> dict[str, Any]:
+    _migrate_if_needed_inside_lock()
+    path = store_path()
+    if not path.exists():
+        return {"version": SCHEMA_VERSION, "connections": []}
+    return _normalise_store(_read_yaml(path))
+
+
 def load_store() -> dict[str, Any]:
-    with _lock:
-        _migrate_if_needed()
-        path = store_path()
-        if not path.exists():
-            return {"version": SCHEMA_VERSION, "connections": []}
-        return _normalise_store(_read_yaml(path))
+    with _locked():
+        return _load_inside_lock()
 
 
 def save_store(data: dict[str, Any]) -> None:
-    with _lock:
+    with _locked():
         _atomic_write(_normalise_store(data))
 
 
@@ -333,8 +374,8 @@ def public_connection(row: dict[str, Any]) -> dict[str, Any]:
 def create_connection(
     label: str, *, role: str = "member", profile_scope: list[str] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    with _lock:
-        data = load_store()
+    with _locked():
+        data = _load_inside_lock()
         now = int(time.time())
         device = _normalise_device({
             "id": _new_id("dev"),
@@ -357,8 +398,8 @@ def create_connection(
 
 
 def add_device(connection_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
-    with _lock:
-        data = load_store()
+    with _locked():
+        data = _load_inside_lock()
         connection = next(
             (c for c in data["connections"] if c["id"] == connection_id and c["status"] != "deleted"),
             None,
@@ -379,13 +420,13 @@ def update_connection(
     connection_id: str, *, label: str | None = None, role: str | None = None,
     profile_scope: list[str] | None = None, status: str | None = None,
 ) -> bool:
-    with _lock:
+    with _locked():
         clean_label = None
         if label is not None:
             clean_label = label.strip()
             if not clean_label:
                 return False
-        data = load_store()
+        data = _load_inside_lock()
         row = next((c for c in data["connections"] if c["id"] == connection_id), None)
         if row is None:
             return False
@@ -407,44 +448,68 @@ def update_connection(
         return True
 
 
+def _mark_device_deleted(device: dict[str, Any]) -> None:
+    device["token_id"] = device.get("token_id") or str(device.get("token") or "")[-8:]
+    device["token"] = ""
+    device["status"] = "deleted"
+
+
+def _mark_connection_deleted(connection: dict[str, Any]) -> None:
+    connection["status"] = "deleted"
+    connection["deleted_at"] = int(time.time())
+    for device in connection["devices"]:
+        _mark_device_deleted(device)
+
+
 def delete_connection(connection_id: str) -> bool:
-    with _lock:
-        data = load_store()
+    with _locked():
+        data = _load_inside_lock()
         row = next((c for c in data["connections"] if c["id"] == connection_id), None)
         if row is None:
             return False
-        row["status"] = "deleted"
-        row["deleted_at"] = int(time.time())
-        for device in row["devices"]:
-            device["token_id"] = device.get("token_id") or str(device.get("token") or "")[-8:]
-            device["token"] = ""
-            device["status"] = "deleted"
+        _mark_connection_deleted(row)
         _atomic_write(data)
         return True
 
 
 def revoke_device(connection_id: str, device_id: str) -> bool:
-    with _lock:
-        data = load_store()
+    with _locked():
+        data = _load_inside_lock()
         row = next((c for c in data["connections"] if c["id"] == connection_id), None)
         if row is None:
             return False
         device = next((d for d in row["devices"] if d["id"] == device_id), None)
         if device is None:
             return False
-        device["token_id"] = device.get("token_id") or str(device.get("token") or "")[-8:]
-        device["token"] = ""
-        device["status"] = "deleted"
+        _mark_device_deleted(device)
         _atomic_write(data)
         return True
+
+
+def revoke_by_token_id(token_id: str) -> bool:
+    with _locked():
+        data = _load_inside_lock()
+        for connection in data["connections"]:
+            for device in connection["devices"]:
+                current = device.get("token_id") or str(device.get("token") or "")[-8:]
+                if current != token_id:
+                    continue
+                active = [d for d in connection["devices"] if d["status"] != "deleted"]
+                if not device.get("last_seen") and len(active) == 1:
+                    _mark_connection_deleted(connection)
+                else:
+                    _mark_device_deleted(device)
+                _atomic_write(data)
+                return True
+        return False
 
 
 def register_device(token: str, *, client: str, name: str, app_version: str) -> bool:
     client = client if client in _VALID_CLIENTS else "unknown"
     clean_name = name.strip()
     clean_version = app_version.strip()
-    with _lock:
-        data = load_store()
+    with _locked():
+        data = _load_inside_lock()
         for connection in data["connections"]:
             for device in connection["devices"]:
                 if _tokens_match(str(device.get("token") or ""), token):
@@ -495,8 +560,8 @@ def authenticate(token: str, min_interval: float = 60.0) -> AuthResult:
 
 
 def _touch(token: str, now: int, min_interval: float) -> None:
-    with _lock:
-        data = load_store()
+    with _locked():
+        data = _load_inside_lock()
         for connection in data["connections"]:
             for device in connection["devices"]:
                 if _tokens_match(device.get("token", ""), token):
@@ -675,14 +740,7 @@ async def _legacy_list(_params: dict[str, Any], _server: host_server.Server) -> 
 
 
 async def _legacy_revoke(params: dict[str, Any], _server: host_server.Server) -> dict[str, Any]:
-    found = _find_token_id(str((params or {}).get("token_id") or ""))
-    if found is None:
-        return {"ok": True, "existed": False}
-    connection, device = found
-    active_devices = [item for item in connection["devices"] if item["status"] != "deleted"]
-    if not device.get("last_seen") and len(active_devices) == 1:
-        return {"ok": True, "existed": delete_connection(connection["id"])}
-    return {"ok": True, "existed": revoke_device(connection["id"], device["id"])}
+    return {"ok": True, "existed": revoke_by_token_id(str((params or {}).get("token_id") or ""))}
 
 
 async def _legacy_rename(params: dict[str, Any], _server: host_server.Server) -> dict[str, Any]:

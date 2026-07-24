@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.11.13 — 2026-07-24 — paired devices survive concurrent edits
+
+- **A paired device no longer vanishes** when another device is added or revoked
+  at the same moment. Changes from the apps, the CLI, and the running daemon are
+  now serialized, so two simultaneous edits can no longer overwrite each other.
+
 ## v0.11.12 — 2026-07-24 — recipe launches carry text only
 
 - **`alpi workgroup launch` no longer accepts `--assets`.** A launch carries
