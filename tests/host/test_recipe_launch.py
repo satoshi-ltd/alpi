@@ -243,14 +243,11 @@ params: { n: { required: true } }
 
 
 @pytest.mark.asyncio
-async def test_launch_seeds_brief_and_assets_before_kickoff(tmp_path, monkeypatch):
+async def test_launch_seeds_brief_before_kickoff(tmp_path, monkeypatch):
     from alpi.alp import workgroup_client as wc_mod
     repo = _fixture_repo(tmp_path)
     home = _hub_home(tmp_path)
     _pin_member(home, "scout")
-    assets_in = tmp_path / "assets_in"
-    assets_in.mkdir()
-    (assets_in / "hero.jpg").write_bytes(b"img")
     dest = tmp_path / "ws" / "projects" / "casa-bahia"
 
     seen = {}
@@ -258,17 +255,15 @@ async def test_launch_seeds_brief_and_assets_before_kickoff(tmp_path, monkeypatc
 
     async def spy_post(*args, **kwargs):
         seen["brief"] = (dest / "brief.md").read_text()
-        seen["asset"] = (dest / "assets" / "hero.jpg").read_bytes()
         return await orig_post(*args, **kwargs)
 
     monkeypatch.setattr(wc_mod, "post", spy_post)
 
     await host_recipes.launch(
         home, _project_recipe(repo, with_brief=True), {"slug": "casa-bahia"},
-        inputs={"brief": "# Real client brief\nfacts here"}, assets_src=assets_in,
+        inputs={"brief": "# Real client brief\nfacts here"},
     )
     assert seen["brief"] == "# Real client brief\nfacts here"
-    assert seen["asset"] == b"img"
 
 
 @pytest.mark.asyncio
@@ -391,22 +386,6 @@ async def test_launch_interpolates_briefing_override(tmp_path):
     )
     wg = wg_mod.load(home, result["workgroup_id"])
     assert wg.meta.briefing == "Workgroup for hotel 'casa-bahia' — edited"
-
-
-@pytest.mark.asyncio
-async def test_launch_rolls_back_inputs_on_bad_assets(tmp_path):
-    repo = _fixture_repo(tmp_path)
-    home = _hub_home(tmp_path)
-    _pin_member(home, "scout")
-    not_a_dir = tmp_path / "afile"
-    not_a_dir.write_text("x")
-
-    with pytest.raises(ValueError, match="assets source is not a directory"):
-        await host_recipes.launch(
-            home, _project_recipe(repo), {"slug": "casa-bahia"}, assets_src=not_a_dir,
-        )
-    assert not (tmp_path / "ws" / "projects" / "casa-bahia").exists()
-    assert not any((home / "alp" / "workgroups").glob("wg_*")) if (home / "alp" / "workgroups").exists() else True
 
 
 @pytest.mark.asyncio

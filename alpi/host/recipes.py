@@ -97,16 +97,6 @@ def _validate_input_dests(inputs: dict) -> None:
                 raise LaunchError(f"inputs {n1!r} and {n2!r} resolve to nested dests: {p1} vs {p2}")
 
 
-def _apply_assets(dest: Path, assets_src: Path) -> None:
-    if not assets_src.is_dir():
-        raise LaunchError(f"assets source is not a directory: {assets_src}")
-    target = dest / "assets"
-    target.mkdir(parents=True, exist_ok=True)
-    for f in sorted(assets_src.iterdir()):
-        if f.is_file() and not f.name.startswith("."):
-            shutil.copy2(f, target / f.name)
-
-
 def _prepare_project(workspace: Path, spec_project: dict) -> tuple[Path, str]:
     dest = (workspace / spec_project["dest"]).resolve()
     dest.relative_to(workspace.resolve())
@@ -150,7 +140,7 @@ def _kickoff_text(task: str, pipeline: tuple[str, ...], steps: dict) -> str:
 async def launch(
     home: Path, recipe_yaml: str, params: dict[str, str],
     briefing_override: str | None = None, recipe_id: str = "recipe",
-    inputs: dict[str, str] | None = None, assets_src: Path | None = None,
+    inputs: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     from alpi import home as home_mod
     from alpi import recipes as recipes_mod
@@ -208,8 +198,6 @@ async def launch(
                 if val is None or str(val) == "":
                     continue
                 await asyncio.to_thread(_write_input, created_dest, ispec["dest"], str(val))
-            if assets_src is not None:
-                await asyncio.to_thread(_apply_assets, created_dest, assets_src)
         provenance = {
             "recipe_id": recipe.recipe_id,
             "recipe_digest": recipe.digest,

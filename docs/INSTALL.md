@@ -25,7 +25,7 @@ daemons), and **Kubernetes** (the same image as a stateful workload).
 | Platform | Linux, macOS (Windows → WSL2) | any Docker host | any cluster |
 | Python | 3.10–3.13 (uv manages it) | in the image | in the image |
 | Node.js | 24 LTS on the service PATH — needed for `npx`-launched MCP servers and npm project gates; optional if you use neither | in the image | in the image |
-| git / ssh | `git`; `openssh-client` only when recipes clone private repos | in the image | in the image |
+| git | required when the daemon clones projects (workgroup recipes, repo-working agents); plus `openssh-client` for SSH-URL clones. A chat-only agent needs neither | in the image | in the image |
 | Service manager | launchd (macOS) / systemd user + lingering (Linux) — installed by `alpi setup` | `--restart unless-stopped` | the pod controller |
 | State | `~/.alpi` + your workspace | a volume at `/data`, owned by UID/GID 1000 | a PVC at `/data` (RWO), `runAsUser`/`fsGroup` 1000 |
 | Inbound network | none required; ALP `7423` + host plane `49200` only when peers or paired apps dial in — bind a private/overlay address (Tailscale, WireGuard) | publish both ports on a private address; override with `ALPI_ALP_TCP_PORT` / `ALPI_HOST_TCP_PORT` | a Service on both TCP ports |

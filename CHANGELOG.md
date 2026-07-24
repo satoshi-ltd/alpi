@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.11.12 — 2026-07-24 — recipe launches carry text only
+
+- **`alpi workgroup launch` no longer accepts `--assets`.** A launch carries
+  the recipe's declared text inputs (e.g. the client brief as markdown) and
+  nothing else — binary media never travels at launch.
+- **Binary files arrive after launch**: add them to the project's own git,
+  following its template's structure, and open a follow-up task for the crew.
+- A non-UTF-8 file passed to `--input` now fails with a clear message instead
+  of a traceback: launch inputs are text-only.
+
 ## v0.11.11 — 2026-07-24 — install requirements for every deployment shape
 
 - **INSTALL.md now opens with a requirements matrix** for the three ways to run

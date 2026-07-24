@@ -121,3 +121,23 @@ def test_logs_help_lists_source_filter() -> None:
 # affected subsystems log + skip, siblings keep running. The previous
 # ``test_service_start_rejects_*`` tests gated on the old per-profile
 # workspace check at ``service start`` and have been removed.
+
+
+def test_workgroup_launch_is_text_only() -> None:
+    result = CliRunner().invoke(cli.main, ["workgroup", "launch", "--help"])
+    assert result.exit_code == 0
+    assert "--input" in result.output
+    assert "--assets" not in result.output
+
+
+def test_workgroup_launch_rejects_binary_input(tmp_path) -> None:
+    recipe = tmp_path / "r.yaml"
+    recipe.write_text("hub: mira\nmembers: [scout]\ninputs:\n  brief: {dest: brief.md}\n")
+    binary = tmp_path / "photo.jpg"
+    binary.write_bytes(b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\xfe\xab")
+    result = CliRunner().invoke(cli.main, [
+        "workgroup", "launch", "--recipe", str(recipe), "--input", f"brief={binary}",
+    ])
+    assert result.exit_code != 0
+    assert "text-only" in result.output
+    assert "Traceback" not in result.output

@@ -3806,13 +3806,11 @@ def workgroup_create(
 @click.option("--briefing", default=None, help="Override the recipe's briefing draft (the workgroup's meta briefing).")
 @click.option("--input", "input_pairs", multiple=True, metavar="NAME=FILE",
               help="Recipe input; FILE's contents seed the declared input (e.g. --input brief=./brief.md). Repeat per input.")
-@click.option("--assets", "assets_path", default=None, type=click.Path(exists=True, file_okay=False, path_type=Path),
-              help="Folder of assets copied into the project's assets/ before kickoff.")
 @click.pass_context
 def workgroup_launch(
     ctx: click.Context, recipe_path: Path,
     param_pairs: tuple[str, ...], briefing: str | None,
-    input_pairs: tuple[str, ...], assets_path: Path | None,
+    input_pairs: tuple[str, ...],
 ) -> None:
     """Launch a workgroup from a recipe file (clone+seed+create+kickoff, one operation)."""
     import asyncio
@@ -3834,12 +3832,19 @@ def workgroup_launch(
         f = Path(path)
         if not f.is_file():
             raise click.ClickException(f"--input {name.strip()}: file not found: {path}")
-        inputs[name.strip()] = f.read_text()
+        try:
+            inputs[name.strip()] = f.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError) as e:
+            raise click.ClickException(
+                f"--input {name.strip()}: {path} is not readable as UTF-8 text "
+                f"({e.__class__.__name__}). Launch inputs are text-only; add "
+                "binary media to the project's git after launch."
+            )
     try:
         result = asyncio.run(host_recipes.launch(
             h, recipe_path.read_text(), params,
             briefing_override=briefing, recipe_id=recipe_path.stem,
-            inputs=inputs, assets_src=assets_path,
+            inputs=inputs,
         ))
     except ValueError as e:
         raise click.ClickException(str(e))

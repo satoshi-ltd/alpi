@@ -919,13 +919,14 @@ rolled back whole on any failure:
 
 ```
 validate → clone (into staging) → seed → move into place →
-write recipe inputs + copy assets → workgroup.create → kickoff post
+write recipe inputs → workgroup.create → kickoff post
 ```
 
 The dynamic values — the operator-edited briefing, the declared
-`inputs`, and any `assets/` — land *before* `create` and the
+`inputs` — land *before* `create` and the
 kickoff, so the first `#task` reaches a project that already
-carries its final files. Required inputs are validated before the
+carries its final declared input files; binary media is added to the
+project's git after launch. Required inputs are validated before the
 clone, so a missing one fails fast with no orphaned project. A
 failure at any later step removes the workgroup (including the local
 member subscriptions auto-join created) and the cloned project; the
@@ -952,7 +953,7 @@ workgroup.
 
 ```
 alpi workgroup launch --recipe hotel.yaml \
-  --param slug=casa-bahia --input brief=./brief.md --assets ./photos
+  --param slug=casa-bahia --input brief=./brief.md
 ```
 
 `--input NAME=FILE` seeds the declared input `NAME` with FILE's
