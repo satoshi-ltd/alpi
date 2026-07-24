@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.11.14 — 2026-07-24 — responsive local reads
+
+- **Fixes the slowness and spurious "daemon disconnected" notices** introduced
+  in 0.11.13: reading connections no longer waits on the write lock, so profile
+  summaries and workgroup lists return fast instead of stalling or timing out.
+  Concurrent device edits stay safely serialized.
+
 ## v0.11.13 — 2026-07-24 — paired devices survive concurrent edits
 
 - **A paired device no longer vanishes** when another device is added or revoked

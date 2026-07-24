@@ -288,17 +288,29 @@ def _migrate_if_needed_inside_lock() -> None:
         os.replace(legacy, backup)
 
 
-def _load_inside_lock() -> dict[str, Any]:
-    _migrate_if_needed_inside_lock()
+def _migrate_if_needed() -> None:
+    if store_path().exists() or not legacy_store_path().exists():
+        return
+    with _locked():
+        _migrate_if_needed_inside_lock()
+
+
+def _read_store() -> dict[str, Any]:
     path = store_path()
     if not path.exists():
         return {"version": SCHEMA_VERSION, "connections": []}
     return _normalise_store(_read_yaml(path))
 
 
+def _load_inside_lock() -> dict[str, Any]:
+    _migrate_if_needed_inside_lock()
+    return _read_store()
+
+
 def load_store() -> dict[str, Any]:
-    with _locked():
-        return _load_inside_lock()
+    # lock-free read: _atomic_write's rename makes every read see a whole file; only writers/migration take the lock
+    _migrate_if_needed()
+    return _read_store()
 
 
 def save_store(data: dict[str, Any]) -> None:

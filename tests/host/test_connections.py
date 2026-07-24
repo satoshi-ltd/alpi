@@ -203,6 +203,24 @@ def test_legacy_revoke_add_device_toctou(monkeypatch, tmp_path: Path) -> None:
         assert row["status"] == "deleted", row
 
 
+def test_read_path_is_lock_free(monkeypatch, tmp_path: Path) -> None:
+    _root(monkeypatch, tmp_path)
+    connections.create_connection("x")
+    connections.invalidate_cache()
+    calls = []
+    original_locked = connections._locked
+
+    def spy():
+        calls.append(1)
+        return original_locked()
+
+    monkeypatch.setattr(connections, "_locked", spy)
+    connections.load_store()
+    connections.list_connections()
+    connections.authenticate("nope")
+    assert calls == [], "read path must not take the exclusive lock (perf regression guard)"
+
+
 def test_revoke_by_token_id_revokes_only_target(monkeypatch, tmp_path: Path) -> None:
     _root(monkeypatch, tmp_path)
     conn, dev1 = connections.create_connection("base")
