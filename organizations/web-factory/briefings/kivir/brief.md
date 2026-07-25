@@ -38,9 +38,8 @@ omitted (never invented); pricing is dynamic via Mirai, so no `priceFrom`.
 
 ## Theme
 
-This is a `boutique`. (Independent, design/editorial story, 31 < 40
-rooms, gastronomy as a selling point via Doña Emilia, quiet luxury — the
-boutique rubric signals all fire.)
+Use `signature`. The independent editorial story, 31-room scale,
+gastronomy and quiet-luxury positioning match the default signature system.
 
 ## Target market and languages
 
@@ -145,9 +144,9 @@ shower.
 
 ## Visual policy
 
-Real photos are supplied in `assets/` — **restore them, never regenerate
-from scratch**. Muse triages each with its eyes and wires it to its slot
-(`kind: restored`): `hero-guadalquivir.webp` → `home.hero.image`;
+Real photos are supplied in `assets/source/` — **reuse them, never regenerate
+them from scratch**. Muse inspects each file and maps it to its slot
+(`kind: supplied`): `hero-guadalquivir.webp` → `home.hero.image`;
 `ambience-seville-*.webp` → home gallery; `restaurant-dona-emilia-*.webp`
 → dining slots; `room-deluxe.jpg`, `room-premium.jpg`,
 `room-junior-suite.jpg`, `room-premium-terrace.jpg` → their room slugs.
@@ -158,7 +157,7 @@ from scratch**. Muse triages each with its eyes and wires it to its slot
 - Write Spanish first, then the other locales scout selects.
 - Keep room names as given. Do not invent sizes, prices or facts not
   above.
-- No lorem, no `[NEEDS HOTEL]` in shipped data.
-- Do not edit components, styles, themes, schemas, or TypeScript files.
+- No lorem, no `[NEEDS HOTEL]` in generated project data.
+- Do not edit runtime code, components, styles, themes, schemas or scripts.
 - Legal pages (privacy/cookies) are hotel-supplied verbatim — do not
   draft.

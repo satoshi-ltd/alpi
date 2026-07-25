@@ -4,8 +4,8 @@
 **Commercial (Mirai)**: María Ruiz
 **Outcome**: hotel signed. Kickoff to factory authorised.
 
-This file is the raw client brief used to seed `proj-casa-bahia` via the
-recipe launch (`workgroup launch --recipe`). Treat it as audit trail — agents read it, never edit.
+This file is the raw client brief used to seed the `casa-bahia` project through
+the hotel recipe. Treat it as audit trail — agents read it, never edit.
 
 ---
 
@@ -49,18 +49,18 @@ recipe launch (`workgroup launch --recipe`). Treat it as audit trail — agents 
 ## Photography
 
 - Photo shoot by Juan Pacheco (local photographer, Cádiz-based). If the
-  files are available, they sit in `projects/casa-bahia/assets/` next to
-  this brief — local-first, no external links. If that folder is empty,
-  build with the starter's fallbacks (no invented or stock imagery).
+  files are available, they sit in the cloned project's `assets/source/`
+  directory — local-first, no external links. If it is empty, mark the
+  affected manifest slots as `none` (no invented or stock imagery).
 - Style direction (applies whether or not photos exist): "moody,
-  available light, no flash". Editorial — fits the boutique starter.
+  available light, no flash". Editorial — fits the `signature` theme.
 - One specific room she mentioned: "la habitación de la esquina" —
   corner room with views to both the street and the inner patio. She
   said this is the room everyone asks for.
 
 ## Constraints
 
-- Launch target: end of August 2026, before September peak.
+- Internal review target: end of August 2026, before September peak.
 - Budget: standard package per Mirai's commercial offer.
 - No CMS — "I don't want to log into anything, just trust you to update
   prices when I ask".
@@ -119,16 +119,16 @@ This is confirmed data — not call hearsay:
 
 ## Assets (local-first)
 
-- Any photos + the seashell logo SVG live in `projects/casa-bahia/assets/`
-  if the owner provided them. Nothing is fetched from a link. Whatever is
-  in that folder is fair game; whatever is missing falls back to the
-  starter's defaults — never invent or stock-source an image.
+- Any photos + the seashell logo SVG live in the cloned project's
+  `assets/source/` directory if the owner provided them. Nothing is fetched
+  from a link. Muse maps usable files in `assets/manifest.yaml`; missing
+  factual imagery is recorded as `none` — never invented or stock-sourced.
 
 ## Closing notes
 
 María was warm, opinionated about voice, and explicitly NOT a
-"premium / exclusive / world-class" kind of client. The boutique
-starter feels right based on this conversation, but scout should
-confirm with the questionnaire + competitive scan.
+"premium / exclusive / world-class" kind of client. `signature` feels right
+based on this conversation, but Scout should confirm it against the theme
+selection rules and competitive scan.
 
 — María Ruiz (commercial)

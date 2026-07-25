@@ -56,7 +56,7 @@ def main() -> None:
 
     # Mode guardrail: writing into a project is allowed ONLY inside a workgroup
     # turn (the daemon sets ALPI_WORKGROUP_DISPATCH then). In a direct chat there
-    # is no project — refuse to touch one, so a chat can never corrupt a launched
+    # is no project — refuse to touch one, so a chat can never corrupt a verified
     # site's assets. Prompt rules alone proved insufficient (Muse hijacked a project).
     in_workgroup = bool(os.environ.get("ALPI_WORKGROUP_DISPATCH"))
     projects_root = os.path.abspath(os.path.join(workspace, "projects")) + os.sep

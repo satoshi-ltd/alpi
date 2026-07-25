@@ -1,4 +1,3 @@
-import json
 import re
 from pathlib import Path
 
@@ -6,7 +5,6 @@ import pytest
 
 ORGS_ROOT = Path(__file__).resolve().parents[1]
 WEB_FACTORY = ORGS_ROOT / "web-factory"
-SPEC = WEB_FACTORY / "factory" / "template-spec.json"
 
 pytestmark = pytest.mark.skipif(
     not WEB_FACTORY.exists(),
@@ -14,8 +12,8 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def _supported_locales() -> list[str]:
-    return list(json.loads(SPEC.read_text())["i18n"]["supportedLocales"])
+def _scanner_locale_vocabulary() -> list[str]:
+    return ["es", "en", "fr", "de", "it", "pt"]
 
 
 def _locale_sequence_pattern(locales: list[str]) -> re.Pattern:
@@ -28,7 +26,7 @@ def _locale_sequence_pattern(locales: list[str]) -> re.Pattern:
 
 
 def test_no_locale_list_hardcoded_in_web_factory_skills():
-    supported = _supported_locales()
+    supported = _scanner_locale_vocabulary()
     pat = _locale_sequence_pattern(supported)
 
     leak: list[tuple[str, str, str]] = []

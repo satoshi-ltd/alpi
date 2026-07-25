@@ -21,7 +21,7 @@ def test_hotel_recipe_resolves_and_forms_valid_workgroup():
     assert set(rec.members) == {"scout", "quill", "lingua", "muse", "pixel", "lens"}
 
     spec = r.resolve(rec, {"slug": "casa-bahia"})
-    assert spec["name"] == "proj-casa-bahia"
+    assert spec["name"] == "site-casa-bahia"
     assert spec["project"]["dest"] == "projects/casa-bahia"
 
     pipeline = wg._normalize_pipeline(spec["pipeline"])
@@ -29,20 +29,22 @@ def test_hotel_recipe_resolves_and_forms_valid_workgroup():
     roster = set(spec["members"]) | {spec["hub"]}
     assert all(s["owner"] in roster for s in steps.values())
 
-    assert "assets" in pipeline
-    assert "assets" not in steps
-    assert steps["intake"]["next"] == "content"
-    for phase in ("intake", "content", "translation", "build"):
+    assert pipeline[0] == "setup"
+    assert steps["intake"]["next"] == "assets"
+    assert steps["setup"]["gate"]["argv"] == ["npm", "run", "check:setup"]
+    assert steps["assets"]["gate"]["argv"] == ["npm", "run", "assets:optimize"]
+    for phase in ("setup", "intake", "assets", "content", "translation", "build"):
         assert "gate" in steps[phase]
+    assert steps["qa"]["gate"]["argv"] == ["npm", "run", "check:final"]
 
 
 def test_hotel_recipe_carries_briefing_and_start_task():
     rec = r.load_recipe(_RECIPES / "hotel.yaml")
     spec = r.resolve(rec, {"slug": "casa-bahia"})
     assert "Workgroup for hotel 'casa-bahia'" in spec["briefing"]
-    assert spec["task"].startswith("@scout #task #intake")
-    assert "Kickoff for proj-casa-bahia" in spec["task"]
-    assert set(spec["project"]["seed"]["files"]) == {"intake.md"}
+    assert "Working language" in spec["briefing"]
+    assert spec["task"].startswith("@pixel #task #setup")
+    assert set(spec["project"]["seed"]["files"]) == {"work/intake.md"}
     assert spec["inputs"]["brief"]["dest"] == "brief.md"
     assert spec["inputs"]["brief"]["required"] is True
 
@@ -93,16 +95,15 @@ async def test_hotel_recipe_launches_full_workgroup(tmp_path):
     )
 
     wgo = wg.load(home, result["workgroup_id"])
-    assert wgo.meta.name == "proj-casa-bahia"
+    assert wgo.meta.name == "site-casa-bahia"
     assert "Workgroup for hotel 'casa-bahia'" in wgo.meta.briefing
-    assert wgo.meta.pipeline == ("intake", "assets", "content", "translation", "build", "qa")
+    assert wgo.meta.pipeline == ("setup", "intake", "assets", "content", "translation", "build", "qa")
     assert len(wgo.members) == len(_MEMBERS) + 1  # members + hub
 
     dest = ws / "projects" / "casa-bahia"
     assert (dest / "brief.md").read_text() == "# Real client brief for casa-bahia"
-    assert (dest / "intake.md").exists()
+    assert (dest / "work" / "intake.md").exists()
 
     from alpi.service import _all_hub_posts_decrypted
     texts = "\n".join(str(p.get("text") or "") for p in _all_hub_posts_decrypted(home, wgo))
-    assert "@scout #task #intake" in texts
-    assert "Kickoff for proj-casa-bahia" in texts
+    assert "@pixel #task #setup" in texts

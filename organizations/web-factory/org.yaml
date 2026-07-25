@@ -17,6 +17,8 @@ sync:
     dst: factory
   - src: library
     dst: library
+  - src: tools
+    dst: tools
 
 models:
   # main = every profile turn model (effort = org default; agent.md reasoning_effort overrides); fast = delegate/research + engine plumbing; deep = auto-escalation target.
@@ -27,20 +29,16 @@ models:
 
 budgets:
   daily_default: 2.0       # fallback only — every agent.md declares daily_usd
-  workgroup: 50.0          # standing workgroups (brand-library / quality / template)
+  workgroup: 50.0          # reserved for standing workgroups
   project_workgroup: 50.0  # per-project proj-<slug> pipeline; the recipe sets this (real runs land ~$1-2)
 
 agent_voices:
-  vera:   en-US-AriaNeural
   mira:   es-ES-ElviraNeural
   scout:  en-GB-MaisieNeural
-  forge:  es-ES-AlvaroNeural
   pixel:  en-AU-WilliamNeural
-  canvas: en-US-JennyNeural
   muse:   en-US-EmmaNeural
   quill:  it-IT-ElsaNeural
   lingua: pt-PT-RaquelNeural
-  atlas:  en-US-GuyNeural
   lens:   en-US-DavisNeural
 
 common_skills: {}

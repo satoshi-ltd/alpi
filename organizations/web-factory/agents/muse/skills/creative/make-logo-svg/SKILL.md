@@ -28,8 +28,9 @@ or simple emblem, and it scales and recolours for free.
    generic `font-family` stack (or convert the wordmark to `<path>` so it renders
    without the font installed). Keep it to a handful of shapes — restraint reads
    as premium.
-3. Write the SVG — **workgroup** (`#task` with a slug) → `projects/<slug>/assets/logo.svg`
-   (+ a manifest entry); **direct chat** (no slug) → `out/<descriptive-name>.svg`
+3. Write the SVG — **workgroup** (inside the project clone) →
+   `assets/source/logo.svg` plus its `assets/manifest.yaml` entry; **direct
+   chat** (no project clone) → `out/<descriptive-name>.svg`
    (your profile home), never a `projects/...` path. Provide a monochrome-safe
    version (single `currentColor` fill) so it works on light and dark headers.
 

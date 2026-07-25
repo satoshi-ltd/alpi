@@ -1,18 +1,19 @@
-You are {name}, one agent in a web factory producing ~120 hotel websites a year from the 4-theme master template (the `alpi-mirai-web-factory` git base repo, cloned per project) — agents fill data (site config + typed content), never components, themes, or schema.
-§
-The user you serve is the factory operator: the human who feeds briefs, asks for status, and requests artifacts directly. Chat replies follow the operator's language (currently Spanish); every file, handoff, and site deliverable is written in English or the site's declared locales.
-§
-Interpret dates, deadlines, and launch targets in the operator's timezone (currently Asia/Bangkok, UTC+7).
-§
-Workgroups you belong to:
-{wg_section}
-§
-Fixed peers: {peers}. You don't carry the topology in your head — when invited to a workgroup, its briefing gives the mission, the pipeline, the hub, and the handoff expected of you; address handoffs to the hub.
-§
-Workgroup markers (`#task`, `#done`, `#working`) and `workgroup_post` belong ONLY to real workgroup turns. In direct chat answer as an independent specialist; a project name mentioned in chat is context, not permission to act on its files.
-§
-When the operator asks about a project, disk is truth: read `projects/<slug>/status.yaml` and the files on disk — never answer project state from memory or from old conversations.
-§
-Structured state (project status, manifests, change docs, counters) lives in project files and skill state, never in MEMORY.md — reserve MEMORY.md for durable operator preferences and corrections.
-§
-How you work is defined in the repo (`organizations/web-factory/`), deployed by bootstrap. If the operator asks to change your behaviour, point them there — never rewrite your own AGENT.md.
+# Web Factory operating memory
+
+- The organization is in test mode; it does not deploy or publish.
+- Every hotel has a stable slug and an independent clone under `projects/<slug>`.
+- The upstream base repository is `satoshi-ltd/alpi-mirai-web-factory`.
+- Kivara remains the upstream demo while the three themes mature.
+- New clones are neutralized with `npm run site:init` through the bootstrap tool.
+- Client media belongs in `assets/source/`; optimized derivatives are generated.
+- Missing required media defaults to a descriptive local placeholder. Image
+  generation is opt-in and requires explicit client or hub authorization.
+- Themes are `essential`, `signature`, and `immersive`.
+- Explicit client choice wins; an agent may decide from evidence; otherwise use
+  `signature`.
+- The cloned template specification and schemas are authoritative.
+- Project agents edit content/config/assets only. Framework changes go upstream.
+- No invented hotel facts, facilities, room imagery, certifications, or legal
+  claims.
+- A project is complete for this phase only when `npm run verify` passes and Lens
+  records QA PASS.

@@ -1,6 +1,6 @@
 hub: mira
-members: [scout, quill, lingua, muse, pixel, lens]
-name: "proj-{slug}"
+members: [scout, muse, quill, lingua, pixel, lens]
+name: "site-{slug}"
 quorum_timeout_seconds: 180
 budget_usd: 50
 
@@ -13,53 +13,67 @@ inputs:
     label: "Hotel brief (immutable)"
     dest: brief.md
     required: true
-    placeholder: "paste the raw client brief — the immutable source of truth for the whole build"
+    placeholder: "Paste the raw client brief. It remains the factual source of truth."
 
 briefing: |
-  Workgroup for hotel '{slug}' — produce its launch-ready website.
-  Brief (raw, immutable): projects/{slug}/brief.md
-  Contract: factory/template-spec.json · agents produce ONLY data (src/config/site.json + src/content/**) · components, themes and *.ts are the fixed design layer.
-  Pipeline, one owner per phase: #intake @scout · #assets @muse · #content @quill · #translation @lingua · #build @pixel · #qa @lens.
-  The hub (mira) runs the phase procedure from its meta/project-lifecycle skill.
+  Workgroup for hotel '{slug}'. The project is an independent clone at projects/{slug}/.
+  Read brief.md and the cloned project's factory/template-spec.json before authoring.
+  The project contract, scripts and schemas in that clone are authoritative.
+  Authoring boundary: src/config/site.json, src/content/** (except config.js),
+  assets/manifest.yaml and assets/source/**. Do not modify runtime or design files.
+  Pipeline: #setup @pixel · #intake @scout · #assets @muse · #content @quill ·
+  #translation @lingua · #build @pixel · #qa @lens.
+  Working language: post in English unless the hub addresses you in Spanish.
+  The hotel's content keeps its own locales — this rule is only about
+  workgroup posts.
 
 task: |
-  @scout #task #intake · pick the theme + write src/config/site.json + intake.md
+  @pixel #task #setup · initialize the cloned hotel project at projects/{slug}.
 
-  Kickoff for proj-{slug}. Raw brief at `projects/{slug}/brief.md`. Deliverables and rubric: your craft + factory/template-spec.json. End the handoff with the `visual_assets:` signal line.
-
-# assets is intentionally gateless: intake's gate branches to content (trivial path) or fails to the hub, which opens assets for muse.
-pipeline: [intake, assets, content, translation, build, qa]
+pipeline: [setup, intake, assets, content, translation, build, qa]
 pipeline_steps:
+  setup:
+    owner: pixel
+    next: intake
+    task: "initialize the clone and neutralize the demo data"
+    gate: { argv: [npm, run, "check:setup"], cwd: "projects/{slug}" }
   intake:
     owner: scout
+    next: assets
+    task: "produce work/intake.md and src/config/site.json from brief.md"
+    gate: { argv: [npm, run, check:config], cwd: "projects/{slug}" }
+  assets:
+    owner: muse
     next: content
-    task: "pick the theme + write src/config/site.json + intake.md; end the handoff with the visual_assets: signal line"
-    gate: { argv: [python3, scripts/intake-check.py], cwd: "projects/{slug}" }
+    task: "produce assets/manifest.yaml from the supplied media and the intake, then optimize"
+    gate: { argv: [npm, run, assets:optimize], cwd: "projects/{slug}" }
   content:
     owner: quill
     next: translation
-    task: "write the source-locale content under src/content/** per the binding catalogue (factory/template-spec.json); every pages/*.json intro is an object, never a string; NEVER write image/gallery paths"
-    gate: { argv: [python3, scripts/content-check.py], cwd: "projects/{slug}" }
+    task: "author the source-locale content in src/content/**"
+    gate: { argv: [npm, run, check:content], cwd: "projects/{slug}" }
   translation:
     owner: lingua
     next: build
-    task: "translate every source entry into the locales declared in site.json (run your multi-locale-translation-pass skill)"
-    gate: { argv: [python3, scripts/content-check.py], cwd: "projects/{slug}" }
+    task: "bring every declared locale to parity with the source content"
+    gate: { argv: [npm, run, check:content:all], cwd: "projects/{slug}" }
   build:
     owner: pixel
     next: qa
-    task: "green npm run ship ONLY (manifest → build → preflight), dist/ on disk"
-    gate: { argv: [test, "-d", dist], cwd: "projects/{slug}" }
+    task: "build the selected tier and validate the generated dist"
+    gate: { argv: [npm, run, check:dist], cwd: "projects/{slug}" }
   qa:
     owner: lens
-    task: "audit projects/{slug}/dist/ against the launch checklist; one PASS/FAIL verdict"
+    task: "audit the built dist and return one QA PASS or QA FAIL verdict"
+    gate: { argv: [npm, run, "check:final"], cwd: "projects/{slug}" }
 
 project:
   template_repo: "git@github.com:satoshi-ltd/alpi-mirai-web-factory.git"
   dest: "projects/{slug}"
   seed:
     files:
-      intake.md: |
+      work/intake.md: |
         # Intake — {slug}
 
-        (scout fills theme rationale, voice, and the facts the content phase needs from brief.md)
+        Pixel initializes the clone. Scout records the chosen theme, rationale,
+        locales, confirmed facts, gaps and enabled sections here.

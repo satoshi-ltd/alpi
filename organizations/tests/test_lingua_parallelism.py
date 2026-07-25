@@ -28,7 +28,8 @@ def test_lingua_has_no_delegate_and_script_owns_the_files():
         / "multi-locale-translation-pass" / "SKILL.md"
     )
     assert "delegate" not in skill["tools"]
-    assert "OPENROUTER_API_KEY" in skill["requires_env"]
+    assert "terminal" not in skill["tools"]
+    assert skill["requires_env"] == []
 
 
 def _project(tmp_path: Path) -> Path:

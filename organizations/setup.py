@@ -315,7 +315,7 @@ def derive_edges(
 def load_workgroups() -> list[dict]:
     paths = sorted(WORKGROUPS_DIR.glob("*/workgroup.md"))
     if not paths:
-        fail(f"no workgroup files found in {WORKGROUPS_DIR}/*/workgroup.md")
+        return []
     wgs = []
     for p in paths:
         raw = p.read_text()

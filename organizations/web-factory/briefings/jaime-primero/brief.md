@@ -35,8 +35,8 @@ omitted (never invented); pricing is dynamic via Mirai, so no `priceFrom`.
 
 ## Theme
 
-This is a `resort`. (Family destination, beach/Costa Daurada, pools, splash
-park, activities, all-inclusive — the resort rubric signals all fire.)
+Use `immersive`. The dense family-resort programme, pools, splash park,
+activities and all-inclusive proposition need the strongest visual narrative.
 
 ## Target market and languages
 
@@ -124,19 +124,19 @@ omit them; Mirai serves live rates.
 
 ## Visual policy
 
-Real photos are supplied in `assets/` — **restore them, never regenerate from
-scratch**. Muse triages each with its eyes and wires it to its slot
-(`kind: restored`): `hero.jpg`/`resort.jpg` → `home.hero.image`; pool, splash
+Real photos are supplied in `assets/source/` — **reuse them, never regenerate
+them from scratch**. Muse inspects each file and maps it to its slot
+(`kind: supplied`): `hero.jpg`/`resort.jpg` → `home.hero.image`; pool, splash
 park, slides, water-games, restaurant, show-cooking, Palm Corner, bar and play
 areas → the relevant amenity/dining slots and the home gallery. `logo.png`
 already exists — use it as `brand.logo`, no SVG needed. No real room photo was
-supplied, so the four room types keep tonal placeholders (honest launch
-state — never fabricate a room).
+supplied, so their factual image slots remain `none` in the manifest (honest
+test state — never fabricate a room).
 
 ## Content guardrails
 
 - Write Spanish first, then the other locales scout selects.
 - Keep room names as given. Do not invent sizes, prices or facts not above.
-- No lorem, no `[NEEDS HOTEL]` in shipped data.
-- Do not edit components, styles, themes, schemas, or TypeScript files.
+- No lorem, no `[NEEDS HOTEL]` in generated project data.
+- Do not edit runtime code, components, styles, themes, schemas or scripts.
 - Legal pages (privacy/cookies) are hotel-supplied verbatim — do not draft.

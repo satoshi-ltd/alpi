@@ -11,13 +11,14 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def test_scout_skill_references_template_spec_for_locales():
+def test_scout_skill_references_clone_locale_sources():
     body = SCOUT_SKILL.read_text()
-    assert "factory/template-spec.json" in body, (
-        "scout/intake-interview/SKILL.md must point at factory/template-spec.json "
-        "as the single source of truth for locales (do not duplicate the list)."
+    assert "src/i18n/" in body, (
+        "scout/intake-interview/SKILL.md must point at the clone's src/i18n/*.json "
+        "dictionaries as the supported-locale source of truth."
     )
-    assert "supportedLocales" in body, (
-        "scout/intake-interview/SKILL.md must reference "
-        "i18n.supportedLocales explicitly."
+    assert "route-slugs" in body, (
+        "scout/intake-interview/SKILL.md must reference src/config/route-slugs.js "
+        "as the mirror of the supported-locale set."
     )
+    assert "read what the clone actually ships" in body

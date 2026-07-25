@@ -19,6 +19,8 @@ _BARE_MD_RE = re.compile(r"`([A-Za-z][A-Za-z0-9_.-]*\.md)`")
 
 _RUNTIME_PATH_PREFIXES = ("projects/", "archive/", "src/", "public/")
 
+_CLONE_RUNTIME_FILES = {"factory/template-spec.json", "factory/budget.yaml"}
+
 _RUNTIME_BARE_NAMES = {
     "intake.md", "brief.md", "AGENT.md", "USER.md",
     "CHANGELOG.md",
@@ -49,7 +51,7 @@ def test_internal_factory_links_resolve_on_disk():
         for line in _walk_lines_outside_code(text):
             for m in _PREFIXED_LINK_RE.finditer(line):
                 ref = m.group(1)
-                if ref.startswith(_RUNTIME_PATH_PREFIXES):
+                if ref.startswith(_RUNTIME_PATH_PREFIXES) or ref in _CLONE_RUNTIME_FILES:
                     continue
                 if "*" in ref:
                     continue

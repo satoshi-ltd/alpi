@@ -18,6 +18,11 @@ enhance/reshoot a real hotel photo to look its best. Don't pass fabricated
 imagery off as a *specific real room* the hotel never supplied. Logos go through
 `make-logo-svg`.
 
+This skill is **opt-in** for hotel projects. Use it only when the client or hub
+has explicitly authorized generated imagery for the current project. A missing
+source by itself is not authorization: record `kind: placeholder` with visible
+descriptive `text` and useful `alt` in `assets/manifest.yaml` instead.
+
 ## How to run it — scripted, never the shell
 
 This is a scripted skill. Call it through the runtime, which spawns
@@ -32,10 +37,9 @@ skill(action="run", name="generate-image",
 - **Do NOT** run a shell command, `python`, or `python3` yourself, and do NOT
   reference any `factory/tools/...` path. The runtime owns execution; chaining
   the shell yourself is the wrong path (missing key, wrong interpreter, retries).
-- `--out`: an absolute path is used as-is. A relative `projects/...` path resolves
-  against the **workspace** (project asset); any other relative path resolves
-  against your **profile home** (personal chat output). So a workgroup uses
-  `projects/<slug>/assets/<name>.png`; a direct chat uses `out/<name>.png` (→
+- `--out`: an absolute path is used as-is. In a project workgroup, write the
+  source into the clone's `assets/source/<name>.png` and register it in
+  `assets/manifest.yaml`. In direct chat use `out/<name>.png` (→
   `~/.alpi/profiles/<you>/out/`). **Not `/tmp/`** — ephemeral, unreferenceable
   next turn, and never a bare filename. `--input` must be **absolute** (the
   attachment or the last real `out`); never guess `/data/attachments`.

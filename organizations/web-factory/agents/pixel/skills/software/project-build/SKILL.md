@@ -1,55 +1,44 @@
 ---
 name: project-build
-description: Take a project from `translation complete` to `build green` — run `npm run ship` (apply-assets-manifest → build → preflight), set SITE_URL, hand the dist/ to lens. The manifest owns public/img; no image, component or schema editing.
+description: Build and verify one cloned hotel project with the commands owned by the current Astro template.
 category: software
-version: 0.2.0
+version: 1.0.0
 origin: user
 requires_env: []
-tools: [read_file, search, write_file, edit_file, terminal]
-keywords: ['build', 'astro', 'npm', 'assets', 'dist']
+tools: [read_file, search, terminal]
+keywords: ['build', 'astro', 'verify', 'dist']
 created_at: 2026-05-29
 ---
 
 ## When to use
-When mira opens the `build` task — scout's `site.json` is on disk and quill +
-lingua have filled `src/content/**` for every locale in `site.json.locales`.
-You turn data into a green static build with real assets.
+
+After intake, assets, content and translation are complete.
 
 ## Inputs
-- `projects/<slug>/src/config/site.json` (theme + config) and
-  `src/content/**` (the content the build renders).
-- `projects/<slug>/assets/` — source photos + logo the hotel provided
-  (local-first; may be empty).
 
-## What you do NOT touch
-`src/components/`, `src/styles/themes/`, `src/config/*.ts`,
-`src/content/config.ts`. That is the fixed design layer. You touch
-`public/img/` and run the build — nothing else.
+- `src/config/site.json`
+- `src/content/**`, except the content schema
+- `assets/manifest.yaml` and `assets/source/**`
+- `factory/template-spec.json`
 
-## Approach
-1. **Build** — `npm install`, then `SITE_URL=https://<domain> npm run ship`
-   (domain from `site.json` / the brief). **`ship` is the only valid build
-   path** — it runs `apply-assets-manifest` (materialises every `assets.yaml`
-   asset into `public/img/` and wires its slot deterministically — you never
-   optimise or wire images by hand), then the **Zod** build, then **preflight**.
-   A missing photo is fine: the `<Image>` component renders a tonal placeholder,
-   never a broken layout. Never fetch from a URL; never invent or stock images.
-2. **Triage** — if `ship` fails on data, it is the **owner's** fix, not
-   yours: tag scout (site.json / contact), quill (content/copy), or lingua
-   (a locale's entries). Never edit content to force a pass; never disable a
-   check. Your job is a green `ship`.
-3. **Hand off** — `dist/` is the launch artifact. Post:
-   `@mira · build complete · npm run ship green · dist/ at projects/<slug>/dist/`.
+## Build flow
 
-## Common failure modes
-| Symptom | Cause | Fix |
-|---|---|---|
-| Zod error on `site.json` | bad/missing field | tag scout — it's the config |
-| Zod error on a content entry | missing required field | tag quill/lingua |
-| locale page empty | a declared locale has no content | block on lingua |
-| build times out | oversized image in `public/img/` | compress to budget |
+1. Install dependencies with `npm ci` when a lockfile is present, otherwise
+   `npm install`.
+2. Run `npm run verify`. This is the complete selected-tier verification path.
+3. For interactive review, use `npm run preview` and then `npm run serve`.
+4. For three-theme internal review only, use `npm run preview:all` and then
+   `npm run serve:all`.
 
-## Voice
-- Numbers in the handoff: page count, locales, bundle size.
-- Surface + block data issues to the owner; never guess-fix content.
-- Never disable a check to make a build pass.
+`npm run build` produces the clean selected-tier `dist/`. The multi-theme draft
+artifact is never the project deliverable.
+
+## Boundaries
+
+Do not edit runtime, components, styles, schemas or build scripts to force a
+project through. Route data, content, locale and asset failures to their owner.
+Do not deploy, create repositories, stage, commit or push.
+
+## Handoff
+
+Report the selected theme, commands run, `dist/` path, and exact pass/fail output.
