@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.11.15 — 2026-07-25 — smooth daemon under busy workgroups
+
+- **Fixes the periodic freezes and "daemon disconnected" notices** on daemons
+  hosting several active workgroups: member-subscription state is now parsed
+  ~50x faster and cached between polls, so the background pull traffic no
+  longer starves the daemon while the apps wait.
+
 ## v0.11.14 — 2026-07-24 — responsive local reads
 
 - **Fixes the slowness and spurious "daemon disconnected" notices** introduced

@@ -38,7 +38,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-import yaml
+
+from alpi import yamlfast
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric.x25519 import (
     X25519PrivateKey,
@@ -282,7 +283,7 @@ def _load_meta(d: Path) -> Meta | None:
     p = d / _META
     if not p.exists():
         return None
-    raw = yaml.safe_load(p.read_text()) or {}
+    raw = yamlfast.safe_load(p.read_text()) or {}
     if not isinstance(raw, dict):
         return None
     # Tolerant load: a legacy/corrupt `pipeline` degrades to a normal wg, never crashes the poll (strict validation is on create/update).
@@ -344,14 +345,14 @@ def _save_meta(d: Path, meta: Meta) -> None:
         payload["quorum_timeout_seconds"] = meta.quorum_timeout_seconds
     if meta.launch:
         payload["launch"] = dict(meta.launch)
-    (d / _META).write_text(yaml.safe_dump(payload, sort_keys=False, allow_unicode=True))
+    (d / _META).write_text(yamlfast.safe_dump(payload, sort_keys=False, allow_unicode=True))
 
 
 def _load_members(d: Path) -> list[Member]:
     p = d / _MEMBERS
     if not p.exists():
         return []
-    raw = yaml.safe_load(p.read_text()) or []
+    raw = yamlfast.safe_load(p.read_text()) or []
     if not isinstance(raw, list):
         return []
     out: list[Member] = []
@@ -393,7 +394,7 @@ def _save_members(d: Path, members: list[Member]) -> None:
         if m.voice:
             entry["voice"] = m.voice
         data.append(entry)
-    (d / _MEMBERS).write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
+    (d / _MEMBERS).write_text(yamlfast.safe_dump(data, sort_keys=False, allow_unicode=True))
 
 
 def load(home: Path, wg_id: str) -> Workgroup | None:

@@ -1398,3 +1398,82 @@ def test_coerce_pipeline_tolerates_legacy_and_garbage() -> None:
     assert sub_mod.coerce_pipeline(True) == ()      # legacy pipeline: true
     assert sub_mod.coerce_pipeline(None) == ()
     assert sub_mod.coerce_pipeline("nope") == ()
+
+
+def test_load_parses_once_until_file_changes(short_tmp: Path, monkeypatch) -> None:
+    home = short_tmp / "carol"; home.mkdir()
+    sub = sub_mod.Subscription(
+        wg_id="wg_cache", name="site", hub_id="hub",
+        hub_pubkey="h" * 44, last_seq=1,
+    )
+    sub_mod.upsert(home, sub)
+
+    from alpi import yamlfast
+    calls = {"n": 0}
+    real = yamlfast.safe_load
+
+    def counting(text):
+        calls["n"] += 1
+        return real(text)
+
+    monkeypatch.setattr(sub_mod.yamlfast, "safe_load", counting)
+
+    first = sub_mod.load(home)
+    second = sub_mod.load(home)
+    third = sub_mod.get(home, "wg_cache")
+    assert calls["n"] == 1, calls
+    assert [s.wg_id for s in first] == [s.wg_id for s in second] == ["wg_cache"]
+    assert third is not None and third.last_seq == 1
+
+    sub.last_seq = 7
+    sub_mod.upsert(home, sub)  # save invalidates the cache
+    reloaded = sub_mod.get(home, "wg_cache")
+    assert reloaded is not None and reloaded.last_seq == 7
+    assert calls["n"] >= 2
+
+
+def test_cached_load_returns_independent_subscriptions(short_tmp: Path) -> None:
+    home = short_tmp / "dave"; home.mkdir()
+    sub = sub_mod.Subscription(
+        wg_id="wg_iso", name="site", hub_id="hub",
+        hub_pubkey="h" * 44,
+    )
+    sub.append_recent([{"seq": 1, "text": "hello"}])
+    sub_mod.upsert(home, sub)
+
+    a = sub_mod.get(home, "wg_iso")
+    a.recent_posts[0]["text"] = "mutated"
+    a.roster["x"] = "y"
+    b = sub_mod.get(home, "wg_iso")
+    assert b.recent_posts[0]["text"] == "hello"
+    assert b.roster == {}
+
+
+def test_external_write_busts_cache_via_mtime(short_tmp: Path, monkeypatch) -> None:
+    home = short_tmp / "erin"; home.mkdir()
+    sub = sub_mod.Subscription(
+        wg_id="wg_ext", name="site", hub_id="hub",
+        hub_pubkey="h" * 44, last_seq=1,
+    )
+    sub_mod.upsert(home, sub)
+
+    from alpi import yamlfast
+    calls = {"n": 0}
+    real = yamlfast.safe_load
+
+    def counting(text):
+        calls["n"] += 1
+        return real(text)
+
+    monkeypatch.setattr(sub_mod.yamlfast, "safe_load", counting)
+
+    assert sub_mod.get(home, "wg_ext").last_seq == 1
+    assert calls["n"] == 1
+
+    # external writer (another process): mutates the file directly, no _invalidate_cache in this process
+    p = sub_mod.path(home)
+    p.write_text(p.read_text().replace("last_seq: 1", "last_seq: 777"))
+
+    refreshed = sub_mod.get(home, "wg_ext")
+    assert refreshed is not None and refreshed.last_seq == 777
+    assert calls["n"] == 2, calls

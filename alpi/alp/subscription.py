@@ -22,12 +22,14 @@ transcript history past a rotation stays decryptable.
 from __future__ import annotations
 
 import os
+import threading
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+from alpi import yamlfast
 from alpi.alp.keys import Keypair
 from alpi.alp import workgroup as wg_mod
 
@@ -111,16 +113,43 @@ def path(home: Path) -> Path:
     return home / _SECRETS_DIR / _FILENAME
 
 
+# pollers call load() 4-5x per pull on the event loop — without this mtime cache the YAML parse starves it
+_raw_cache: dict[str, tuple[tuple[int, int], list]] = {}
+_raw_cache_lock = threading.Lock()
+
+
+def _invalidate_cache(p: Path) -> None:
+    with _raw_cache_lock:
+        _raw_cache.pop(str(p), None)
+
+
+def _read_raw(p: Path) -> list:
+    try:
+        st = p.stat()
+    except OSError:
+        return []
+    stamp = (st.st_mtime_ns, st.st_size)
+    key = str(p)
+    with _raw_cache_lock:
+        hit = _raw_cache.get(key)
+        if hit is not None and hit[0] == stamp:
+            return hit[1]
+    try:
+        raw = yamlfast.safe_load(p.read_text()) or []
+    except (OSError, yaml.YAMLError):
+        return []
+    if not isinstance(raw, list):
+        return []
+    with _raw_cache_lock:
+        _raw_cache[key] = (stamp, raw)
+    return raw
+
+
 def load(home: Path) -> list[Subscription]:
     p = path(home)
     if not p.exists():
         return []
-    try:
-        raw = yaml.safe_load(p.read_text()) or []
-    except yaml.YAMLError:
-        return []
-    if not isinstance(raw, list):
-        return []
+    raw = _read_raw(p)
     out: list[Subscription] = []
     for entry in raw:
         if not isinstance(entry, dict):
@@ -198,7 +227,8 @@ def save(home: Path, subs: list[Subscription]) -> None:
         if s.recent_posts:
             entry["recent_posts"] = s.recent_posts
         data.append(entry)
-    p.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
+    p.write_text(yamlfast.safe_dump(data, sort_keys=False, allow_unicode=True))
+    _invalidate_cache(p)
     try:
         os.chmod(p, 0o600)
     except OSError:
