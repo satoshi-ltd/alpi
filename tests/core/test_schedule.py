@@ -264,6 +264,66 @@ def test_tick_fires_due_jobs_and_updates_last_run(monkeypatch, tmp_home_no_env: 
     assert merged[0]["last_run_status"] == "ok"
 
 
+def test_tick_fires_nothing_while_profile_paused(monkeypatch, tmp_home_no_env: Path) -> None:
+    jobs = [{
+        "id": "abc123", "kind": "cron", "expression": "* * * * *",
+        "prompt": "ping",
+        "last_run_at": None,
+    }]
+    scheduler._save_jobs(tmp_home_no_env, jobs)
+    fired = []
+    monkeypatch.setattr(
+        scheduler, "run_job",
+        lambda job, home: (fired.append(job["id"]) or scheduler.JobOutcome(True, "ok")),
+    )
+
+    (tmp_home_no_env / "config.yaml").write_text("paused: true\n")
+    assert scheduler.tick(tmp_home_no_env) == []
+    assert fired == []
+
+    (tmp_home_no_env / "config.yaml").write_text("paused: false\n")
+    results = scheduler.tick(tmp_home_no_env)
+    assert results == [("abc123", True, "ok")]
+    assert fired == ["abc123"]
+
+
+def test_pause_mid_tick_stops_remaining_jobs(monkeypatch, tmp_home_no_env: Path) -> None:
+    jobs = [
+        {"id": "first", "kind": "cron", "expression": "* * * * *", "prompt": "a", "last_run_at": None},
+        {"id": "second", "kind": "cron", "expression": "* * * * *", "prompt": "b", "last_run_at": None},
+    ]
+    scheduler._save_jobs(tmp_home_no_env, jobs)
+    ran = []
+
+    def run_and_pause(job, home):
+        ran.append(job["id"])
+        if job["id"] == "first":
+            (tmp_home_no_env / "config.yaml").write_text("paused: true\n")
+        return scheduler.JobOutcome(True, "ok")
+
+    monkeypatch.setattr(scheduler, "run_job", run_and_pause)
+    results = scheduler.tick(tmp_home_no_env)
+    assert ran == ["first"], ran
+    assert results == [("first", True, "ok")]
+    merged = {j["id"]: j for j in jobs_store.read(tmp_home_no_env)}
+    assert merged["first"]["last_run_at"] is not None
+    assert merged["second"].get("last_run_at") is None
+
+
+def test_fire_by_id_bypasses_profile_pause(monkeypatch, tmp_home_no_env: Path) -> None:
+    jobs = [{"id": "abc123", "kind": "cron", "expression": "* * * * *", "prompt": "ping", "last_run_at": None}]
+    scheduler._save_jobs(tmp_home_no_env, jobs)
+    (tmp_home_no_env / "config.yaml").write_text("paused: true\n")
+    ran = []
+    monkeypatch.setattr(
+        scheduler, "run_job",
+        lambda job, home: (ran.append(job["id"]) or scheduler.JobOutcome(True, "ok")),
+    )
+    ok, _msg = scheduler.fire_by_id(tmp_home_no_env, "abc123")
+    assert ok is True
+    assert ran == ["abc123"]
+
+
 def test_tick_skips_not_due(monkeypatch, tmp_home_no_env: Path) -> None:
     # Job's next fire is an hour away.
     now = datetime.now(timezone.utc)

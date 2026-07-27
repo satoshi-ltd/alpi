@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.11.16 — 2026-07-27 — pausing a profile pauses its schedules
+
+- **A paused profile no longer fires its scheduled jobs.** "Pause profile"
+  used to only block the chat while crons kept running in the background;
+  now the scheduler skips every job of a paused profile until you resume it.
+- Manually firing a job stays possible while paused — an explicit request
+  always wins, same as firing a paused job.
+
 ## v0.11.15 — 2026-07-25 — smooth daemon under busy workgroups
 
 - **Fixes the periodic freezes and "daemon disconnected" notices** on daemons

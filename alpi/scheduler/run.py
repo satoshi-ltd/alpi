@@ -617,6 +617,15 @@ def _record_schedule_run(
         pass
 
 
+def _profile_paused(home: Path) -> bool:
+    # fail-open: an unreadable config must not silence the scheduler
+    from alpi import config as cfg_mod
+    try:
+        return bool(cfg_mod.load(home).paused)
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def tick(home: Path, now: datetime | None = None) -> list[tuple[str, bool, str]]:
     """Run one pass: fire every due job, persist ``last_run_at`` on success."""
     now = now or _now()
@@ -631,6 +640,9 @@ def tick(home: Path, now: datetime | None = None) -> list[tuple[str, bool, str]]
     for job in jobs:
         if not is_due(job, now=now, home=home):
             continue
+        # per-job re-check (jobs run up to 1h; pause can land mid-tick); break, not return — finished jobs must keep their stamp
+        if _profile_paused(home):
+            break
         job_id = str(job.get("id", "?"))
         log.info("firing job %s (%s)", job_id, job.get("kind", "cron"))
         _started = time.time()
