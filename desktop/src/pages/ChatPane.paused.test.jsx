@@ -46,17 +46,18 @@ describe("ChatPane — a paused profile is read-only", () => {
   });
 });
 
-describe("ChatPane — interleaved reasoning and tools", () => {
-  it("renders each reasoning segment before the tool it preceded, in execution order", () => {
+describe("ChatPane — consolidated tool module and reasoning", () => {
+  it("shows the active tool, buckets the rest, and puts the reasoning chain below", () => {
     const profile = { name: "a", model: "x/y" };
     const turn = {
       at: 0,
       user: "hi",
       assistant: "answer",
       reasoned_s: 5,
+      reasoning: "let me search\n\nnow read the file",
       tools: [
-        { name: "knowledge", reasoning: "let me search", args: { action: "search", query: "x" }, tool_id: "t1", ok: true, at: 5, duration_s: 1 },
-        { name: "read_file", reasoning: "now read the file", args: { path: "p" }, tool_id: "t2", ok: true, at: 8, duration_s: 1 },
+        { name: "knowledge", args: { action: "search", query: "x" }, tool_id: "t1", ok: true, at: 5, duration_s: 1 },
+        { name: "read_file", args: { path: "p" }, tool_id: "t2", ok: true, at: 8, duration_s: 1 },
       ],
     };
     const { container } = render(
@@ -71,11 +72,40 @@ describe("ChatPane — interleaved reasoning and tools", () => {
       />,
     );
     const text = container.textContent;
-    const order = ["Thought for 5s", "knowledge", "Thought for 2s", "read_file"].map((s) => text.indexOf(s));
-    expect(order.every((v, i) => v >= 0 && (i === 0 || v > order[i - 1]))).toBe(true);
+    expect(text).toContain("2 tool calls");
+    const bucketIdx = text.indexOf("2 tool calls");
+    const reasoningIdx = text.indexOf("thinking · 5s");
+    expect(bucketIdx).toBeGreaterThanOrEqual(0);
+    expect(reasoningIdx).toBeGreaterThan(bucketIdx);
   });
 
-  it("a grouped tool expander exposes aria-expanded and toggles it", () => {
+  it("a running turn keeps the active call out of the bucket", () => {
+    const profile = { name: "a", model: "x/y" };
+    const turn = {
+      user: "hi",
+      tools: [
+        { name: "read_file", args: { path: "a" }, tool_id: "t1", ok: true },
+        { name: "terminal", args: { command: "b" }, tool_id: "t2", ok: null },
+      ],
+      reasoningPreview: "",
+      pending: true,
+    };
+    render(
+      <ChatPane
+        view={{ kind: "profile", profile: profile.name, sessionId: "s1" }}
+        profiles={[profile]}
+        activeProfile={profile}
+        sessionData={{ turns: [turn], last_ctx_tokens: 0, in_flight: true }}
+        onSend={vi.fn()}
+        onRewriteMessage={vi.fn()}
+        onRetryMessage={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("+1 previous tool call")).toBeTruthy();
+    expect(screen.getByText("terminal")).toBeTruthy();
+  });
+
+  it("the finished-tools bucket exposes aria-expanded and toggles it", () => {
     const profile = { name: "a", model: "x/y" };
     const turn = {
       at: 0,
@@ -97,10 +127,31 @@ describe("ChatPane — interleaved reasoning and tools", () => {
         onRetryMessage={vi.fn()}
       />,
     );
-    const btn = screen.getByLabelText(/Expand 2 terminal calls/);
+    const btn = screen.getByLabelText(/Show 2 tool calls/);
     expect(btn).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(btn);
     expect(btn).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("a single tool shows inline, no bucket", () => {
+    const profile = { name: "a", model: "x/y" };
+    const turn = {
+      at: 0, user: "hi", assistant: "ok",
+      tools: [{ name: "read", args: { path: "a" }, tool_id: "t1", ok: true, at: 1, duration_s: 1 }],
+    };
+    render(
+      <ChatPane
+        view={{ kind: "profile", profile: profile.name, sessionId: "s1" }}
+        profiles={[profile]}
+        activeProfile={profile}
+        sessionData={{ turns: [turn], last_ctx_tokens: 0 }}
+        onSend={vi.fn()}
+        onRewriteMessage={vi.fn()}
+        onRetryMessage={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("read")).toBeTruthy();
+    expect(screen.queryByText(/tool calls?$/)).toBeNull();
   });
 });
 

@@ -12,7 +12,8 @@ import { useScrollProgress } from "../lib/useScrollProgress.js";
 import { useScrollAnchor } from "../lib/useScrollAnchor.js";
 import { useDelayedFlag } from "../lib/useDelayedFlag.js";
 import { relativeTime } from "../lib/time.js";
-import { reasoningSteps } from "../lib/reasoningSteps.js";
+import { turnParts } from "../lib/reasoningSteps.js";
+import { CaretIcon, Icon } from "../primitives/icons.jsx";
 import { profileLabel } from "../lib/profile-display.js";
 import { ChatLoadSkeleton } from "./ChatSkeletons.jsx";
 import SearchBar from "../primitives/SearchBar.jsx";
@@ -27,6 +28,7 @@ import { setImageRoots } from "../lib/imageRoots.js";
 import { Banner, JumpToLatest, MessageBubble, NewChatHero, ProfileChatHeader } from "../primitives/index.js";
 import { ProfileMessage } from "../primitives/index.js";
 import {
+  Activity,
   AlpiSilhouette,
   CopyIcon as DSCopyIcon,
   Diamond,
@@ -615,17 +617,9 @@ const Turn = memo(function Turn({
 }) {
   const notify = useNotify();
   const allTools = turn.tools ?? [];
-  const steps = reasoningSteps(turn);
+  const parts = turnParts(turn);
   const peerTool = peerReplyFrom(allTools);
-  const askUserAnswers = allTools
-    .filter((t) => t.name === "ask_user")
-    .map((t) => ({
-      tool_id: t.tool_id,
-      result: (t.output || t.result || "").trim(),
-      question: t.args?.question || "",
-    }))
-    .filter((a) => a.result);
-  const lastAskUserAnswer = askUserAnswers[askUserAnswers.length - 1]?.result;
+  const lastAskUserAnswer = parts.askUsers[parts.askUsers.length - 1]?.result;
   // Only suppress the assistant message when it is the *exact* echo of the
   // ask_user result. If the model adds genuine commentary after a cancel /
   // timeout / no-handler (e.g. "no problem, defaulting to X"), keep it.
@@ -698,26 +692,20 @@ const Turn = memo(function Turn({
           <Markdown as="div" source={turn.user} className="alpi-md" />
         </ProfileMessage>
       )}
-      {steps.length > 0 && (
+      {(parts.tools.length > 0 || parts.askUsers.length > 0 || parts.reasoning) && (
         <div className={styles.steps}>
-          {steps.map((step, i) => {
-            if (step.kind === "reasoning") {
-              return <Reasoning key={`r-${i}`} text={step.text} seconds={step.seconds} />;
-            }
-            if (step.kind === "askUser") {
-              return step.result ? (
-                <AskUserAnswer key={`a-${i}`} result={step.result} question={step.question} accent={accent} />
-              ) : null;
-            }
-            const tools = step.tools.map((t) => compactProducedTool(t, turn.output_attachments));
-            return (
-              <div key={`t-${i}`} className={styles.toolGroup}>
-                {groupConsecutiveTools(tools).map((g, j) => (
-                  <ToolGroupCard key={`g-${j}-${g.tools[0].tool_id ?? g.name}`} group={g} accent={accent} />
-                ))}
-              </div>
-            );
-          })}
+          {parts.tools.length > 0 && (
+            <ToolModule
+              tools={parts.tools.map((t) => compactProducedTool(t, turn.output_attachments))}
+              accent={accent}
+            />
+          )}
+          {parts.askUsers.map((a, i) => (
+            <AskUserAnswer key={`a-${a.tool_id ?? i}`} result={a.result} question={a.question} accent={accent} />
+          ))}
+          {parts.reasoning && (
+            <Reasoning text={parts.reasoning} seconds={parts.reasonedSeconds} flat />
+          )}
         </div>
       )}
       {turn.assistant && !hideAssistant && peerTool && (
@@ -914,93 +902,18 @@ function renderPreview(str) {
   );
 }
 
-// Adjacent same-name tools collapse into one row with ×N badge + per-call dots; click to expand.
-function groupConsecutiveTools(tools) {
-  const groups = [];
-  for (const t of tools) {
-    const last = groups[groups.length - 1];
-    if (last && last.name === t.name) {
-      last.tools.push(t);
-    } else {
-      groups.push({ name: t.name, tools: [t] });
-    }
-  }
-  return groups;
-}
-
 function statusOf(t) {
   return t.ok === null || t.ok === undefined ? "running" : t.ok ? "ok" : "fail";
 }
 
-const ToolGroupCard = memo(function ToolGroupCard({ group, accent }) {
-  const [expanded, setExpanded] = useState(false);
-  if (group.tools.length === 1) {
-    const t = group.tools[0];
-    return (
-      <ToolCard
-        name={t.name}
-        preview={previewForArgs(t.args)}
-        ok={t.ok ?? null}
-        accent={accent}
-      />
-    );
-  }
-  // Group derives its visual status from the worst child: any failed → fail; any running → running; else ok.
-  const groupStatus = group.tools.some((t) => statusOf(t) === "fail")
-    ? "fail"
-    : group.tools.some((t) => statusOf(t) === "running")
-      ? "running"
-      : "ok";
-  const diamondColor = groupStatus === "fail" ? "var(--c-danger)" : (accent || undefined);
-  const rootStyle = groupStatus === "running" && accent ? { "--accent": accent } : undefined;
-  const last = group.tools[group.tools.length - 1];
-  return (
-    <>
-      <button
-        type="button"
-        className={`${styles.tool} ${styles[`tool_${groupStatus}`]} ${styles.toolGroupClickable}`}
-        style={rootStyle}
-        onClick={() => setExpanded((v) => !v)}
-        aria-expanded={expanded}
-        aria-label={expanded ? "Collapse tool group" : `Expand ${group.tools.length} ${group.name} calls`}
-      >
-        <Diamond color={diamondColor} className={styles.toolIcon} />
-        <span className={styles.toolName}>{group.name}</span>
-        <span className={styles.toolGroupBadge}>×{group.tools.length}</span>
-        <span className={styles.toolGroupDots}>
-          {group.tools.map((t, i) => (
-            <span
-              key={t.tool_id ?? i}
-              className={`${styles.toolGroupDot} ${styles[`toolGroupDot_${statusOf(t)}`]}`}
-            />
-          ))}
-        </span>
-        {last.args ? (
-          <span className={styles.toolPreview}>{renderPreview(previewForArgs(last.args))}</span>
-        ) : null}
-      </button>
-      {expanded && group.tools.map((t, i) => (
-        <div key={t.tool_id ?? `${t.name}:${i}`} className={styles.toolGroupChild}>
-          <ToolCard
-            name={t.name}
-            preview={previewForArgs(t.args)}
-            ok={t.ok ?? null}
-            accent={accent}
-          />
-        </div>
-      ))}
-    </>
-  );
-});
-
 function PendingTurn({ turn, accent, profiles }) {
   const allTools = turn.tools ?? [];
-  const steps = reasoningSteps({
-    at: turn.at,
+  const parts = turnParts({
     tools: allTools,
     reasoning: turn.reasoningPreview,
     reasoned_s: turn.reasoned_s,
-  }, { active: !turn.assistantPreview });
+  });
+  const active = !turn.assistantPreview;
   const peerTool = peerReplyFrom(allTools);
   return (
     <div className={styles.turn}>
@@ -1012,26 +925,20 @@ function PendingTurn({ turn, accent, profiles }) {
           <Markdown as="div" source={turn.user} className="alpi-md" />
         </ProfileMessage>
       )}
-      {steps.length > 0 && (
+      {(parts.tools.length > 0 || parts.askUsers.length > 0 || parts.reasoning || active) && (
         <div className={styles.steps}>
-          {steps.map((step, i) => {
-            if (step.kind === "reasoning") {
-              return <Reasoning key={`r-${i}`} text={step.text} seconds={step.seconds} streaming={step.trailing} />;
-            }
-            if (step.kind === "askUser") {
-              return step.result ? (
-                <AskUserAnswer key={`a-${i}`} result={step.result} question={step.question} accent={accent} />
-              ) : null;
-            }
-            const tools = step.tools.map((t) => compactProducedTool(t, turn.output_attachments));
-            return (
-              <div key={`t-${i}`} className={styles.toolGroup}>
-                {groupConsecutiveTools(tools).map((g, j) => (
-                  <ToolGroupCard key={`g-${j}-${g.tools[0].tool_id ?? g.name}`} group={g} accent={accent} />
-                ))}
-              </div>
-            );
-          })}
+          {parts.tools.length > 0 && (
+            <ToolModule
+              tools={parts.tools.map((t) => compactProducedTool(t, turn.output_attachments))}
+              accent={accent}
+            />
+          )}
+          {parts.askUsers.map((a, i) => (
+            <AskUserAnswer key={`a-${a.tool_id ?? i}`} result={a.result} question={a.question} accent={accent} />
+          ))}
+          {(parts.reasoning || active) && (
+            <Reasoning text={parts.reasoning} seconds={parts.reasonedSeconds} streaming={active} flat />
+          )}
         </div>
       )}
       {turn.assistantPreview && peerTool && (
@@ -1053,22 +960,95 @@ function PendingTurn({ turn, accent, profiles }) {
   );
 }
 
-const ToolCard = memo(function ToolCard({ name, preview, ok, accent }) {
+const ToolCard = memo(function ToolCard({ name, preview, ok, accent, primary = false }) {
   const status = ok === null ? "running" : ok ? "ok" : "fail";
-  const diamondColor =
-    status === "fail" ? "var(--c-danger)" : (accent || undefined);
-  const rootStyle = status === "running" && accent
-    ? { "--accent": accent }
-    : undefined;
+  const iconColor =
+    status === "fail" ? "var(--c-danger)"
+      : primary ? (accent || "var(--ink-2)")
+        : "var(--ink-3)";
   return (
-    <div
-      className={`${styles.tool} ${styles[`tool_${status}`]}`}
-      style={rootStyle}
-    >
-      <Diamond color={diamondColor} className={styles.toolIcon} />
+    <div className={`${styles.tool} ${styles[`tool_${status}`]}`}>
+      <Icon name="cpu" size={14} color={iconColor} className={styles.toolIcon} />
       <span className={styles.toolName}>{name}</span>
       {preview && (
         <span className={styles.toolPreview}>{renderPreview(preview)}</span>
+      )}
+      {status === "running" && (
+        <Activity size="sm" tint={accent} className={styles.toolActivity} />
+      )}
+    </div>
+  );
+});
+
+const ToolModule = memo(function ToolModule({ tools, accent }) {
+  const [expanded, setExpanded] = useState(false);
+  if (!tools.length) return null;
+  const runningIdx = tools.findIndex((t) => t.ok == null);
+  const active = runningIdx >= 0;
+
+  if (tools.length === 1) {
+    const t = tools[0];
+    return (
+      <div className={styles.toolModule}>
+        <ToolCard
+          name={t.name}
+          preview={previewForArgs(t.args)}
+          ok={t.ok ?? null}
+          accent={accent}
+          primary
+        />
+      </div>
+    );
+  }
+
+  const primary = active ? tools[runningIdx] : null;
+  const bucket = active ? tools.filter((_, i) => i !== runningIdx) : tools;
+  const n = bucket.length;
+  const noun = n === 1 ? "tool call" : "tool calls";
+  const failed = bucket.filter((t) => statusOf(t) === "fail").length;
+  const collapsedLabel = active ? `+${n} previous ${noun}` : `${n} ${noun}`;
+  const expandedLabel = active ? "Hide previous tool calls" : "Hide tool calls";
+  return (
+    <div className={styles.toolModule}>
+      <button
+        type="button"
+        className={styles.toolBucket}
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+        aria-label={expanded ? expandedLabel : `Show ${collapsedLabel.replace(/^\+/, "")}`}
+      >
+        <CaretIcon
+          size={12}
+          className={`${styles.toolBucketChev} ${expanded ? styles.toolBucketChevOpen : ""}`}
+        />
+        <span className={styles.toolBucketLabel}>
+          {expanded ? expandedLabel : collapsedLabel}
+        </span>
+        {!expanded && failed > 0 && (
+          <span className={styles.toolBucketFailed}>
+            <Icon name="triangle-alert" size={13} color="var(--c-danger)" />
+            {failed} failed
+          </span>
+        )}
+      </button>
+      {expanded && bucket.map((t, i) => (
+        <div key={t.tool_id ?? `${t.name}:${i}`} className={styles.toolBucketChild}>
+          <ToolCard
+            name={t.name}
+            preview={previewForArgs(t.args)}
+            ok={t.ok ?? null}
+            accent={accent}
+          />
+        </div>
+      ))}
+      {primary && (
+        <ToolCard
+          name={primary.name}
+          preview={previewForArgs(primary.args)}
+          ok={primary.ok ?? null}
+          accent={accent}
+          primary
+        />
       )}
     </div>
   );

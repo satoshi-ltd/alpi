@@ -11,6 +11,19 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.52 — 2026-07-28 — cleaner tool calls in chat
+
+- **Tool calls are now one tidy module.** While the agent works you see the
+  active call — in your profile colour, gently pulsing — with any earlier calls
+  tucked into a collapsible **"+N previous tool calls"**. Once it answers, the
+  calls fold into a single **"N tool calls"** line (a lone call stays inline) so
+  the eye goes straight to the reply.
+- **Reasoning moved below the tools** as one "thinking" block with a one-line
+  peek you can expand.
+- **Failed calls stand out**: the collapsed bucket shows **"△ N failed"**.
+
+Presentation only — no daemon contract changes. Requires alpi ≥ 0.11.10.
+
 ## v0.4.51 — 2026-07-23 — monthly total under the usage chart
 
 - **The usage footer now shows the 30-day total** (cost and tokens) while the

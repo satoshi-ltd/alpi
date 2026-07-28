@@ -134,15 +134,6 @@
   user-select: none;
 }
 
-.toolGroup {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  width: 100%;
-  margin-left: auto;
-  margin-right: auto;
-}
-
 .steps {
   display: flex;
   flex-direction: column;
@@ -215,10 +206,7 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-2) var(--space-5);
-  border-radius: var(--r-md);
-  background: color-mix(in srgb, var(--ink) 3%, var(--bg-pane));
-  border: .5px solid var(--line);
+  padding: 2px 0;
   font-family: var(--font-mono);
   font-size: var(--fs-sm);
   color: var(--ink-2);
@@ -226,25 +214,12 @@
   max-width: 100%;
 }
 
-.tool_running {
-  border-color: color-mix(in srgb, var(--accent, var(--ink)) 55%, transparent);
-  background: color-mix(in srgb, var(--accent, var(--ink)) 5%, var(--bg-pane));
-  animation: toolRunningPulse 1.4s ease-in-out infinite;
-}
-
-@keyframes toolRunningPulse {
-  0%, 100% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent, var(--ink)) 0%, transparent);
-  }
-  50% {
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent, var(--ink)) 22%, transparent);
-  }
-}
-
-
 .toolIcon { flex-shrink: 0; }
-
-.tool_fail .toolIcon { --c: var(--c-danger); }
+.tool_running .toolIcon { animation: toolIconPulse 1.4s ease-in-out infinite; }
+@keyframes toolIconPulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}
 
 .toolName {
   font-family: var(--font-mono);
@@ -253,6 +228,8 @@
   color: var(--ink);
   flex-shrink: 0;
 }
+
+.tool_fail .toolName { color: var(--c-danger); }
 
 .toolPreview {
   font-family: var(--font-mono);
@@ -275,49 +252,60 @@
   color: var(--ink-2);
 }
 
-/* Group header: inherits .tool styling (border, bg, etc) — only adds cursor + reset button defaults. */
-.toolGroupClickable {
-  cursor: pointer;
-  appearance: none;
-  text-align: left;
-}
-
-.toolGroupBadge {
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
-  color: var(--ink-3);
-  background: color-mix(in srgb, var(--ink) 8%, transparent);
-  border-radius: var(--r-sm);
-  padding: 0 5px;
-  height: 15px;
-  line-height: 15px;
+.toolBucketFailed {
   display: inline-flex;
   align-items: center;
+  gap: 4px;
   flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--c-danger);
 }
 
-.toolGroupDots {
+.toolModule {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.toolBucket {
   display: inline-flex;
-  gap: 3px;
-  flex-shrink: 0;
+  align-items: center;
+  gap: var(--space-2);
+  align-self: flex-start;
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 2px 0;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+  text-align: left;
 }
-.toolGroupDot {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: var(--ink-4);
+.toolBucket:hover { color: var(--ink-2); }
+
+.toolBucketChev,
+.toolBucketChevOpen {
+  flex: none;
+  width: 11px;
+  height: 11px;
+  color: var(--ink-3);
+  transition: transform var(--dur-2) var(--ease);
 }
-.toolGroupDot_running { background: var(--accent, var(--ink-2)); animation: toolDotPulse 1s ease-in-out infinite; }
-.toolGroupDot_ok      { background: color-mix(in srgb, var(--ink) 35%, transparent); }
-.toolGroupDot_fail    { background: var(--c-danger); }
-@keyframes toolDotPulse {
-  0%, 100% { opacity: 0.4; }
-  50%      { opacity: 1; }
+.toolBucketChev { transform: rotate(-90deg); }
+.toolBucketChevOpen { transform: rotate(0deg); }
+
+.toolBucketLabel { white-space: nowrap; }
+
+.toolBucketChild {
+  padding-left: var(--space-6);
 }
 
-/* Expanded children: same ToolCard styling, just indented under the parent header. */
-.toolGroupChild {
-  padding-left: var(--space-7);
+.toolActivity {
+  margin-left: var(--space-2);
+  flex: none;
 }
 
 .toolError {

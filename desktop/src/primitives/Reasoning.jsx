@@ -20,12 +20,14 @@ export function thoughtLabel(seconds) {
   return seconds >= 1 ? `Thought for ${fmtDuration(seconds)}` : "Thought";
 }
 
-export default function Reasoning({ text, seconds, streaming = false }) {
+export default function Reasoning({ text, seconds, streaming = false, flat = false }) {
   if (!streaming && !String(text || "").trim()) return null;
-  return streaming ? <Thinking text={text} /> : <Finished text={text} seconds={seconds} />;
+  return streaming
+    ? <Thinking text={text} flat={flat} />
+    : <Finished text={text} seconds={seconds} flat={flat} />;
 }
 
-function Thinking({ text }) {
+function Thinking({ text, flat }) {
   const boxRef = useRef(null);
   const [open, setOpen] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -40,7 +42,7 @@ function Thinking({ text }) {
   const lines = toLines(text);
   const lastLine = lines[lines.length - 1] ?? "";
   return (
-    <div className={styles.trace}>
+    <div className={flat ? styles.flat : styles.trace}>
       <button
         type="button"
         className={`${styles.disclosure} ${styles.live}`}
@@ -63,23 +65,29 @@ function Thinking({ text }) {
   );
 }
 
-function Finished({ text, seconds }) {
+function Finished({ text, seconds, flat }) {
   const [open, setOpen] = useState(false);
+  const lines = toLines(text);
+  const lastLine = lines[lines.length - 1] ?? "";
+  const label = flat
+    ? (seconds >= 1 ? `thinking · ${fmtDuration(seconds)}` : "thinking")
+    : thoughtLabel(seconds);
   return (
-    <div className={styles.trace}>
+    <div className={flat ? styles.flat : styles.trace}>
       <button
         type="button"
-        className={styles.disclosure}
+        className={flat ? `${styles.disclosure} ${styles.live}` : styles.disclosure}
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-label={open ? "Collapse reasoning" : "Expand reasoning"}
       >
         <CaretIcon className={open ? styles.chevOpen : styles.chev} />
-        <span className={styles.thoughtLabel}>{thoughtLabel(seconds)}</span>
+        <span className={flat ? styles.thinkingLabel : styles.thoughtLabel}>{label}</span>
+        {flat && !open && lastLine && <span className={styles.peek}>{lastLine}</span>}
       </button>
       {open && (
         <div className={styles.full}>
-          {toLines(text).map((r, i) => (
+          {lines.map((r, i) => (
             <div key={i} className={styles.line}>{r}</div>
           ))}
         </div>
