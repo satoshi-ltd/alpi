@@ -58,6 +58,59 @@ def test_subscription_block_has_wg_id_and_briefing(short_tmp: Path) -> None:
     assert "design" in block
 
 
+def test_subscription_briefing_is_injected_beyond_post_preview(short_tmp: Path) -> None:
+    home = short_tmp / "alice"
+    home.mkdir()
+    load_or_generate(home)
+    briefing = "first line\n" + "member context " * 30
+    sub_mod.upsert(home, sub_mod.Subscription(
+        wg_id="wg_design", name="design", hub_id="bob", hub_pubkey="bobkey",
+        briefing=briefing,
+    ))
+
+    block = agent_context.build(home)
+
+    assert block is not None
+    assert briefing.splitlines()[1].strip() in block
+    assert "  briefing: first line\n            member context" in block
+
+
+def test_subscription_briefing_truncation_is_visible(short_tmp: Path) -> None:
+    home = short_tmp / "alice"
+    home.mkdir()
+    load_or_generate(home)
+    briefing = "x" * (agent_context._BRIEFING_INJECT_CHARS + 100)
+    sub_mod.upsert(home, sub_mod.Subscription(
+        wg_id="wg_design", name="design", hub_id="bob", hub_pubkey="bobkey",
+        briefing=briefing,
+    ))
+
+    block = agent_context.build(home)
+
+    assert block is not None
+    assert f"… [briefing truncated at {agent_context._BRIEFING_INJECT_CHARS} chars]" in block
+    rendered = block.split("  briefing: ", 1)[1].splitlines()[0]
+    assert len(rendered) == agent_context._BRIEFING_INJECT_CHARS
+
+
+def test_recent_posts_keep_the_short_preview(short_tmp: Path) -> None:
+    home = short_tmp / "alice"
+    home.mkdir()
+    load_or_generate(home)
+    post = "p" * 300
+    sub = sub_mod.Subscription(
+        wg_id="wg_design", name="design", hub_id="bob", hub_pubkey="bobkey",
+    )
+    sub.append_recent([{"seq": 1, "text": post, "from": "bobkey"}])
+    sub_mod.upsert(home, sub)
+
+    block = agent_context.build(home)
+
+    assert block is not None
+    assert post not in block
+    assert "p" * (agent_context._POST_PREVIEW_CHARS - 1) + "…" in block
+
+
 def test_active_task_surfaces_in_block(short_tmp: Path) -> None:
     home = short_tmp / "alice"; home.mkdir()
     load_or_generate(home)
@@ -128,6 +181,23 @@ def test_hub_workgroup_briefing_and_id_in_block(short_tmp: Path) -> None:
     assert "hosted" in block
     assert f"wg_id={wg.meta.id}" in block
     assert "scratchpad" in block
+
+
+def test_hub_workgroup_injects_multiline_briefing(short_tmp: Path) -> None:
+    home = short_tmp / "alice"
+    home.mkdir()
+    kp = load_or_generate(home)
+    second = "hub context " * 30
+    wg_mod.create(
+        home, name="hosted", hub_kp=kp, member_pubkeys=[],
+        briefing=f"first line\n{second}",
+    )
+
+    block = agent_context.build(home)
+
+    assert block is not None
+    assert second.strip() in block
+    assert "  briefing: first line\n            hub context" in block
 
 
 def test_block_contains_engagement_guardrails(short_tmp: Path) -> None:

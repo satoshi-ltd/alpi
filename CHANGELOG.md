@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.11.17 — 2026-07-28 — files move with the workgroup
+
+- **Any workgroup member can now send, rediscover, and fetch files through the hub.**
+  Files stay end-to-end encrypted, transfer in bounded chunks, are addressed
+  by their SHA-256 digest, and leave only a small `#file` marker in the shared
+  transcript. Existing chat attachments can be forwarded directly from an
+  agent turn with the new `workgroup_file` tool.
+- **Members now receive the workgroup's actual briefing.** Up to 4096
+  characters are injected for both hubs and members, with visible truncation
+  beyond that limit; recent post previews remain compact.
+
 ## v0.11.16 — 2026-07-27 — pausing a profile pauses its schedules
 
 - **A paused profile no longer fires its scheduled jobs.** "Pause profile"

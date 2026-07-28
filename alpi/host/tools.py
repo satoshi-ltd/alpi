@@ -26,7 +26,7 @@ _CATEGORIES: list[tuple[str, tuple[str, ...]]] = [
     ("Agent", ("skill", "schedule", "delegate", "research", "todo", "alpi_knowledge")),
     ("Media", ("tts", "stt")),
     ("System", ("terminal", "db")),
-    ("Collab", ("workgroup_post", "workgroup_search", "index_workgroups")),
+    ("Collab", ("workgroup_post", "workgroup_file", "workgroup_search", "index_workgroups")),
 ]
 
 

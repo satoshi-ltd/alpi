@@ -21,6 +21,7 @@ On-disk layout under ``~/.alpi/<profile>/alp/workgroups/<wg_id>/``:
     members.yaml      # [{pubkey, sealed_key, key_version, joined, joined_at}]
     transcript.jsonl  # one ciphertext post per line, tagged with key_version + cost
     ledger.json       # {usd, tokens, posts} cumulative across the workgroup's life
+    files/            # encrypted file sidecars keyed by plaintext SHA-256
 """
 
 from __future__ import annotations
@@ -991,7 +992,7 @@ def _gate_post(meta: Meta, ledger: dict[str, Any], cost: dict[str, Any]) -> None
 
 
 def register(server: alp_server.Server, home: Path) -> None:
-    """Register workgroup.{join,post,pull,leave}; handlers verify roster and raise -32008 workgroup-not-member."""
+    """Register workgroup protocol handlers for this hub."""
 
     async def workgroup_join(
         params: dict[str, Any],
@@ -1320,3 +1321,5 @@ def register(server: alp_server.Server, home: Path) -> None:
     server.register("workgroup.leave", workgroup_leave)
     server.register("workgroup.pause", workgroup_pause)
     server.register("workgroup.resume", workgroup_resume)
+    from alpi.alp import workgroup_files
+    workgroup_files.register(server, home)

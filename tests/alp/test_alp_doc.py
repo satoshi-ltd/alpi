@@ -10,7 +10,7 @@ ALP_INIT = REPO / "alpi" / "alp" / "__init__.py"
 
 
 SILENT_DROPPED_ENVELOPE_ERRORS = {"-32002", "-32003", "-32006"}
-CLIENT_SIDE_ONLY_CODES = {"-32004", "-32011"}
+CLIENT_SIDE_ONLY_CODES = {"-32004"}
 
 
 def _handler_run_turn_return_keys() -> set[str]:

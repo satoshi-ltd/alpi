@@ -25,6 +25,7 @@ from alpi.home import _ROOT
 
 _RECENT_POSTS = 5            # show last N in the system-prompt block
 _POST_PREVIEW_CHARS = 220
+_BRIEFING_INJECT_CHARS = 4096
 _MAX_BLOCKS = 10             # ceiling — protects token budget
 
 
@@ -358,7 +359,7 @@ def _format_subscription_block(
         f"(wg_id={sub.wg_id} · joined · hub @{sub.hub_id})",
     ]
     if sub.briefing:
-        lines.append(f"  briefing: {_preview(sub.briefing)}")
+        lines.extend(_format_briefing(sub.briefing))
     if sub.roster:
         roster_line = _format_roster(sub.roster, aliases, sub.roster_bios)
         if roster_line:
@@ -456,7 +457,7 @@ def _format_hub_block(
     last = decrypted[-_RECENT_POSTS:]
     lines = [f"#{wg.meta.name}  (wg_id={wg.meta.id} · hosting · you are the hub)"]
     if wg.meta.briefing:
-        lines.append(f"  briefing: {_preview(wg.meta.briefing)}")
+        lines.extend(_format_briefing(wg.meta.briefing))
     if wg.members:
         roster = {m.pubkey: m.last_seen_at for m in wg.members}
         bios = {m.pubkey: m.bio for m in wg.members if m.bio}
@@ -516,6 +517,15 @@ def _preview(text: str) -> str:
     if len(text) <= _POST_PREVIEW_CHARS:
         return text
     return text[: _POST_PREVIEW_CHARS - 1] + "…"
+
+
+def _format_briefing(text: str) -> list[str]:
+    text = text.strip()
+    if len(text) > _BRIEFING_INJECT_CHARS:
+        tail = f"… [briefing truncated at {_BRIEFING_INJECT_CHARS} chars]"
+        text = text[: _BRIEFING_INJECT_CHARS - len(tail)].rstrip() + tail
+    parts = text.splitlines() or [""]
+    return [f"  briefing: {parts[0]}", *(f"            {line}" for line in parts[1:])]
 
 
 def _load_local_transcript(home: Path, wg_id: str) -> list[dict]:

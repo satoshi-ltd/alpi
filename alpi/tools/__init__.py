@@ -41,6 +41,7 @@ from alpi.tools import (
     web_fetch,
     web_search,
     workgroup as workgroup_tool,
+    workgroup_file as workgroup_file_tool,
     write_file,
 )
 
@@ -201,6 +202,7 @@ for _mod in (
     stt_tool,
     peer,
     workgroup_tool,
+    workgroup_file_tool,
     ask_user_tool,
     attach_file_tool,
 ):

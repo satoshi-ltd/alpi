@@ -533,7 +533,8 @@ reserved space:
 | `-32008` | `workgroup-not-member` | Caller is not a pinned member of the workgroup. |
 | `-32009` | `workgroup-not-found` | No workgroup with the requested id at the hub. |
 | `-32010` | `workgroup-paused` | Workgroup is paused; `post` rejected. `pull` / `join` / `leave` still work. |
-| `-32012` | `blob-not-found` | Requested content hash is not present or no longer verifies at the peer. |
+| `-32011` | `file-not-found` | Requested workgroup file is absent. |
+| `-32012` | `blob-not-found` / `file-quota-exceeded` | Generic link blob absent, or a workgroup file upload would exceed its 200 MiB store. Distinguish via `message`. |
 
 The standard JSON-RPC codes (`-32600` through `-32603`) retain
 their standard meaning and apply to malformed requests, unknown
@@ -675,6 +676,28 @@ methods callable by pinned peers in the workgroup roster.
   infrastructure; SSE-style continuous streaming remains future
   work.
 
+- `workgroup.file_put(workgroup_id, sha256, name, size, key_version, nonce, offset, data_base64, done, note?)`
+  Uploads one 256 KiB ciphertext chunk to the hub. The SHA-256 and
+  size describe the plaintext; the complete ciphertext is one
+  ChaCha20-Poly1305 message under the workgroup key. The hub checks
+  offsets, decrypts and verifies the completed file, stores it by
+  plaintext digest, then appends an encrypted `#file <name> ·
+  <size> · sha256:<digest>` marker authored as the uploader. Files
+  are capped at 20 MiB and the workgroup file store at 200 MiB.
+
+- `workgroup.file_get(workgroup_id, sha256, offset) → {data_base64, size, ciphertext_size, eof, name, key_version, nonce}`
+  Returns one ciphertext chunk. The member reassembles it, opens the
+  retained sealed key for the file's `key_version`, decrypts, and
+  verifies plaintext size and SHA-256 before writing locally. There
+  is no automatic download and file bytes never enter the transcript.
+
+- `workgroup.file_list(workgroup_id, offset?, limit?) → {files, total, next_offset}`
+  Lists stored file metadata newest-first without downloading content.
+  Results are paginated (50 by default, 200 maximum); each row carries
+  `name`, `size`, `sha256`, `uploaded_by`, `uploaded_at`, and `note`.
+  This keeps files discoverable after their `#file` marker leaves the
+  recent-post context window.
+
 - `workgroup.leave(workgroup_id) → {workgroup_id, current_key_version, remaining_members[]}`
   The leaving member is dropped from the roster; the hub mints a
   fresh 32-byte group key, seals it for every remaining member,
@@ -768,13 +791,18 @@ The hub persists each workgroup under
   (openable only by the hub's own private key), never plaintext
   group keys, so it can still fold and close a task opened under a
   rotated-out version.
+- `files/<sha256>.bin` + `files/<sha256>.json` — encrypted file
+  sidecar and plaintext metadata (`name`, size, digest, key version,
+  nonce, uploader, timestamp, note). Interrupted uploads remain as
+  hidden `.part` files and expire lazily after 24 hours.
 
-The hub stores **ciphertext only**. A workgroup operator who
-inspects the transcript file on disk sees nothing without a
-member's private key. This is what makes the `leave` rekey
-meaningful: re-sealing the new group key cuts off ex-members
-from new traffic without having to also re-encrypt past
-posts.
+The hub stores **post and file contents as ciphertext**. Workgroup
+metadata, including file names and notes, remains plaintext. An
+operator who inspects the transcript or a `.bin` sidecar sees no
+message/file contents without a member's private key. This is what
+makes the `leave` rekey meaningful: re-sealing the new group key cuts
+off ex-members from new traffic without having to also re-encrypt
+past posts or files.
 
 ### Transcript search (ALP.6)
 

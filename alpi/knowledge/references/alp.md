@@ -49,11 +49,12 @@ Transport internals are implementation detail unless debugging ALP itself.
 
 Workgroups coordinate multiple alpi profiles/peers around a shared task space hosted by a **hub** (authoritative transcript + group key). They involve: member identities, shared briefing/context, group key/versioning, hub state, liveness, budget controls, human participation rules. Answer concretely: identity, membership, briefing, budget, liveness, or cancellation.
 
-Over-the-wire verbs: `workgroup.join`, `.post`, `.pull`, `.leave`, `.pause`, `.resume`. `workgroup.create` is a local hub primitive (TUI/CLI), not on the wire.
+Over-the-wire verbs: `workgroup.join`, `.post`, `.pull`, `.file_put`, `.file_get`, `.file_list`, `.leave`, `.pause`, `.resume`. `workgroup.create` is a local hub primitive (TUI/CLI), not on the wire.
 
 - `join(workgroup_id, bio?)` → `{workgroup_id, name, briefing, sealed_key, key_version, current_key_version, members[]}`. Caller must already be in the roster else `-32008`. `bio` (≤200 bytes) is the caller's self-published role tag-line.
 - `post(workgroup_id, key_version, nonce, ciphertext, cost?)` → `{seq, ts}`. Author encrypts client-side (ChaCha20-Poly1305); the hub stays zero-knowledge. `cost {usd, tokens}` is the author's declared LLM spend, gating the workgroup lifetime budget.
 - `pull(workgroup_id, since, wait_s?)` → `{posts[], head, current_key_version, sealed_key, members[]}`. Canonical fan-out; also stamps `last_seen_at` and refreshes the roster. `wait_s` (≤25) long-polls: the hub holds the request and answers early when a fresh post lands.
+- `file_put(...)` / `file_get(...)` transfer encrypted file sidecars through the hub in 256 KiB ciphertext chunks. `file_list(offset?, limit?)` pages through metadata newest-first so older files remain discoverable after their marker leaves recent context. Files are content-addressed by plaintext SHA-256, capped at 20 MiB each / 200 MiB per workgroup, encrypted once with the versioned group key, and announced only by an encrypted `#file <name> · <size> · sha256:<digest>` transcript marker. The `workgroup_file` tool lists files, sends workspace/current-turn attachment paths, and fetches a digest on demand; agents must never paste file contents into posts. Old files remain decryptable through retained sealed key versions.
 
 Roster entry shape: `{pubkey, last_seen_at, bio}`. Group key is a 32-byte key sealed per member; `current_key_version` is monotonic (starts at 1), rotated and bumped on `leave`/`kick`/`add_member` for forward secrecy on new traffic (past transcript stays decryptable). Transcript entries record the `key_version` they were encrypted under.
 
@@ -99,7 +100,8 @@ ALP/workgroup tasks respect profile budget settings (`budget.daily_usd`, CONFIG.
 | `-32008` | `workgroup-not-member` (`workgroup-not-hub` for hub-only verbs) | Not a pinned member / not the hub. |
 | `-32009` | `workgroup-not-found` | No workgroup with that id at the hub. |
 | `-32010` | `workgroup-paused` | Paused; `post` rejected (`pull`/`join`/`leave` still work). |
-| `-32012` | `blob-not-found` | Requested content hash is absent or fails verification. |
+| `-32011` | `file-not-found` | Requested workgroup file is absent. |
+| `-32012` | `blob-not-found` / `file-quota-exceeded` | Generic link blob absent, or workgroup file store would exceed 200 MiB. |
 
 Client-side diagnostics (SDK Python exceptions, no JSON-RPC code, never on wire):
 

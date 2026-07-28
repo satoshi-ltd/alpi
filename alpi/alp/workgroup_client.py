@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+import base64
+import hashlib
 import os
 import re
 from dataclasses import dataclass
@@ -10,6 +13,7 @@ from typing import Any
 
 from alpi.alp import client as alp_client
 from alpi.alp import peers as peers_mod
+from alpi.alp import server as alp_server
 from alpi.alp import subscription as sub_mod
 from alpi.alp import tasks as tasks_mod
 from alpi.alp import workgroup as wg_mod
@@ -612,6 +616,230 @@ async def post(
     result = await _call(home, kp, sub.hub_id, "workgroup.post", params)
     _emit_wg_post(home, wg_id, result)
     return result
+
+
+def _file_group_key(home: Path, wg_id: str, version: int | None = None) -> tuple[bytes, int]:
+    kp = load_or_generate(home)
+    wg = wg_mod.load(home, wg_id)
+    if wg is not None and wg.meta.hub_pubkey == kp.pubkey_b64():
+        keys = wg_mod.hub_group_keys(home, wg, kp)
+        selected = int(version or wg.meta.current_key_version)
+        key = keys.get(selected)
+        if key is None:
+            raise ValueError(f"no group key version {selected} for {wg_id!r}")
+        return key, selected
+    sub = sub_mod.get(home, wg_id)
+    if sub is None:
+        raise ValueError(
+            f"not subscribed to {wg_id!r} — run `alpi workgroup join` first",
+        )
+    selected = int(version or sub.latest_version())
+    sealed = sub.sealed_for(selected)
+    if not sealed:
+        raise ValueError(f"no group key version {selected} for {wg_id!r}")
+    return wg_mod.open_sealed_group_key(sealed, kp), selected
+
+
+async def send_file(
+    home: Path,
+    wg_id: str,
+    source: Path,
+    *,
+    note: str = "",
+) -> dict[str, Any]:
+    from alpi.alp import workgroup_files as wf
+
+    source = source.expanduser()
+    data = await asyncio.to_thread(source.read_bytes)
+    if not data:
+        raise ValueError("workgroup files cannot be empty")
+    if len(data) > wf.MAX_FILE_BYTES:
+        raise ValueError(f"file exceeds {wf.MAX_FILE_BYTES} bytes")
+    name = wf._validate_name(source.name)
+    note = wf._validate_note(note)
+    digest = hashlib.sha256(data).hexdigest()
+    kp = load_or_generate(home)
+    wg = wg_mod.load(home, wg_id)
+    local_hub = wg is not None and wg.meta.hub_pubkey == kp.pubkey_b64()
+    if local_hub and wg.meta.paused:
+        raise ValueError("workgroup is paused")
+    if not local_hub:
+        try:
+            await pull(home, wg_id)
+        except Exception:  # noqa: BLE001
+            pass
+    group_key, version = _file_group_key(home, wg_id)
+    nonce, encoded = wg_mod.encrypt_post(group_key, data)
+    ciphertext = base64.b64decode(encoded)
+    params_base = {
+        "workgroup_id": wg_id,
+        "sha256": digest,
+        "name": name,
+        "size": len(data),
+        "key_version": version,
+        "nonce": nonce,
+        "note": note,
+    }
+    offset = 0
+    busy_deadline = asyncio.get_running_loop().time() + 300.0
+    while offset < len(ciphertext):
+        chunk = ciphertext[offset: offset + wf.CHUNK_BYTES]
+        params = {
+            **params_base,
+            "offset": offset,
+            "data_base64": base64.b64encode(chunk).decode("ascii"),
+            "done": offset + len(chunk) == len(ciphertext),
+        }
+        if local_hub:
+            try:
+                result = await asyncio.to_thread(
+                    wf.put_chunk, home, wg, kp, kp.pubkey_b64(), params,
+                )
+            except alp_server.HandlerError as e:
+                raise alp_client.ClientError(
+                    f"hub rejected: {e.code} {e.message}",
+                ) from e
+        else:
+            sub = sub_mod.get(home, wg_id)
+            if sub is None:
+                raise ValueError(f"not subscribed to {wg_id!r}")
+            result = await _call(
+                home, kp, sub.hub_id, "workgroup.file_put", params, timeout=60.0,
+            )
+        if result.get("busy"):
+            if asyncio.get_running_loop().time() >= busy_deadline:
+                raise alp_client.ClientError(
+                    "another upload of this workgroup file is still in progress",
+                )
+            await asyncio.sleep(0.05)
+            continue
+        if result.get("complete"):
+            return {
+                "sha256": digest,
+                "size": len(data),
+                "name": name,
+                "existed": bool(result.get("existed")),
+                "marker": wf._marker_text(name, len(data), digest, note),
+            }
+        next_offset = int(result.get("next_offset", -1))
+        if next_offset <= offset or next_offset > len(ciphertext):
+            raise alp_client.ClientError("hub returned an invalid file offset")
+        offset = next_offset
+    raise alp_client.ClientError("hub did not complete the workgroup file upload")
+
+
+async def get_file(
+    home: Path,
+    wg_id: str,
+    digest: str,
+) -> tuple[dict[str, Any], bytes]:
+    from alpi.alp import workgroup_files as wf
+
+    digest = wf._validate_hash(digest)
+    kp = load_or_generate(home)
+    wg = wg_mod.load(home, wg_id)
+    local_hub = wg is not None and wg.meta.hub_pubkey == kp.pubkey_b64()
+    sub = None if local_hub else sub_mod.get(home, wg_id)
+    if not local_hub and sub is None:
+        raise ValueError(
+            f"not subscribed to {wg_id!r} — run `alpi workgroup join` first",
+        )
+    offset = 0
+    ciphertext = bytearray()
+    metadata: dict[str, Any] | None = None
+    while True:
+        if local_hub:
+            try:
+                result = await asyncio.to_thread(
+                    wf.get_chunk, home, wg_id, digest, offset,
+                )
+            except alp_server.HandlerError as e:
+                raise alp_client.ClientError(
+                    f"hub rejected: {e.code} {e.message}",
+                ) from e
+        else:
+            result = await _call(
+                home, kp, sub.hub_id, "workgroup.file_get",
+                {"workgroup_id": wg_id, "sha256": digest, "offset": offset},
+                timeout=60.0,
+            )
+        current = {
+            key: result.get(key)
+            for key in ("name", "size", "sha256", "key_version", "nonce", "ciphertext_size")
+        }
+        if metadata is None:
+            metadata = current
+        elif current != metadata:
+            raise alp_client.ClientError("workgroup file metadata changed during download")
+        try:
+            chunk = base64.b64decode(str(result.get("data_base64") or ""), validate=True)
+        except Exception as e:  # noqa: BLE001
+            raise alp_client.ClientError("hub returned invalid file data") from e
+        ciphertext.extend(chunk)
+        if len(ciphertext) > wf.MAX_FILE_BYTES + 16:
+            raise alp_client.ClientError("workgroup file exceeds the local size limit")
+        offset += len(chunk)
+        if result.get("eof"):
+            break
+        if not chunk:
+            raise alp_client.ClientError("hub returned an empty non-final file chunk")
+    if metadata is None or offset != int(metadata["ciphertext_size"]):
+        raise alp_client.ClientError("workgroup file download ended early")
+    if metadata["sha256"] != digest:
+        raise alp_client.ClientError("hub returned the wrong workgroup file")
+    group_key, _ = _file_group_key(home, wg_id, int(metadata["key_version"]))
+    try:
+        plaintext = wg_mod.decrypt_post(
+            group_key,
+            str(metadata["nonce"]),
+            base64.b64encode(bytes(ciphertext)).decode("ascii"),
+        )
+    except Exception as e:  # noqa: BLE001
+        raise alp_client.ClientError("workgroup file failed authentication") from e
+    if (
+        len(plaintext) != int(metadata["size"])
+        or hashlib.sha256(plaintext).hexdigest() != digest
+    ):
+        raise alp_client.ClientError("workgroup file failed size or sha256 verification")
+    return metadata, plaintext
+
+
+async def list_files(
+    home: Path,
+    wg_id: str,
+    *,
+    offset: int = 0,
+    limit: int = 50,
+) -> dict[str, Any]:
+    from alpi.alp import workgroup_files as wf
+
+    kp = load_or_generate(home)
+    wg = wg_mod.load(home, wg_id)
+    local_hub = wg is not None and wg.meta.hub_pubkey == kp.pubkey_b64()
+    if local_hub:
+        return await asyncio.to_thread(
+            wf.list_metadata,
+            home,
+            wg_id,
+            offset,
+            limit,
+        )
+    sub = sub_mod.get(home, wg_id)
+    if sub is None:
+        raise ValueError(
+            f"not subscribed to {wg_id!r} — run `alpi workgroup join` first",
+        )
+    return await _call(
+        home,
+        kp,
+        sub.hub_id,
+        "workgroup.file_list",
+        {
+            "workgroup_id": wg_id,
+            "offset": offset,
+            "limit": limit,
+        },
+    )
 
 
 def _emit_wg_post(home: Path, wg_id: str, result: dict[str, Any] | None) -> None:
