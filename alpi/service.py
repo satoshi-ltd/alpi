@@ -729,6 +729,8 @@ async def _maybe_dispatch_for_sub(
         ),
         default=0,
     )
+    if _budget_blocks_dispatch(home, profile, sub.wg_id, sub.name):
+        return
     started_against = _latest_hub_task_seq_for(home, sub.wg_id, sub.hub_pubkey)
     # Cooldown stamp only; last_responded_seq advances on completion so a crash re-dispatches.
     sub.last_dispatch_at = _utcnow_iso()
@@ -923,6 +925,8 @@ async def _maybe_dispatch_for_hub(
     started_against = _latest_hub_task_seq_for(
         home, wg.meta.id, wg.meta.hub_pubkey,
     )
+    if _budget_blocks_dispatch(home, profile, wg.meta.id, wg.meta.name):
+        return
     _set_hub_responded_seq(home, wg.meta.id, new_responded)
     _mark_hub_dispatched(home, wg.meta.id)
     _spawn_dispatch(
@@ -1161,6 +1165,8 @@ async def _maybe_watchdog_close(
         return
     if (wg.meta.id, profile) in _INFLIGHT:
         return
+    if _budget_blocks_dispatch(home, profile, wg.meta.id, wg.meta.name):
+        return
 
     started_against = _latest_hub_task_seq_for(
         home, wg.meta.id, wg.meta.hub_pubkey,
@@ -1364,6 +1370,39 @@ def _save_poller_state(home: Path, state: dict) -> None:
     p = _poller_state_path(home)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(state, separators=(",", ":")))
+
+
+def _budget_blocks_dispatch(
+    home: Path, profile: str, wg_id: str, wg_name: str,
+) -> bool:
+    from alpi import config as cfg_mod
+    from alpi import ledger as ledger_mod
+
+    try:
+        ledger_mod.check(home, cfg_mod.load(home).budget)
+        return False
+    except ledger_mod.BudgetExceeded as exc:
+        used, cap = exc.used, exc.cap
+    except Exception:  # noqa: BLE001
+        return False
+
+    state = _load_poller_state(home)
+    seen = state.setdefault("budget_blocked", {})
+    today = _utcnow_iso()[:10]
+    if seen.get(wg_id) != today:
+        seen[wg_id] = today
+        _save_poller_state(home, state)
+        log.warning(
+            "wg poller: %s blocked — profile '%s' is over its daily budget "
+            "($%.2f / $%.2f); turns resume at UTC midnight or when the cap is raised",
+            wg_id, profile, used, cap,
+        )
+        _append_turn_event(home, {
+            "ts": _utcnow_iso(), "event": "budget-exhausted",
+            "profile": profile, "wg_id": wg_id, "wg_name": wg_name,
+            "used": round(used, 4), "cap": cap,
+        })
+    return True
 
 
 def _mark_hub_dispatched(home: Path, wg_id: str) -> None:

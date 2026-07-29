@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.11.18 — 2026-07-29 — a profile out of budget says so
+
+- **A profile that hits its daily cap no longer stalls its workgroups in
+  silence.** The poller checks the cap before starting a turn, so it stops
+  burning subprocesses that die with no reply, and records the block once per
+  workgroup per day in the turn log.
+- **A blocked turn keeps its place in the queue.** The check runs before any
+  poller cursor moves, so the watchdog's recovery attempts are not spent while
+  the agent has no budget — raising the cap resumes the phase where it left
+  off instead of finding it abandoned.
+- **Turns aborted on budget now report it.** They were being logged as
+  "Reached max tool steps", which sent diagnosis after a step limit that had
+  not been reached; the real cause now survives into the run ledger.
+
 ## v0.11.17 — 2026-07-28 — files move with the workgroup
 
 - **Any workgroup member can now send, rediscover, and fetch files through the hub.**

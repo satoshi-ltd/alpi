@@ -871,11 +871,12 @@ class Engine:
                     emit(AgentEvent(kind="error", text=str(e)))
                     return
 
-            turn_error = (
-                "Reached the time limit; stopping." if deadline_hit
-                else "Reached max tool steps; stopping."
-            )
-            emit(AgentEvent(kind="error", text=turn_error))
+            if not turn_error:
+                turn_error = (
+                    "Reached the time limit; stopping." if deadline_hit
+                    else "Reached max tool steps; stopping."
+                )
+                emit(AgentEvent(kind="error", text=turn_error))
         finally:
             todo_mod.reset_store(todo_token)
             # Replace the in-flight stub from turn-start, or append if an early exception aborted before it was logged.
