@@ -6,7 +6,7 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { Icon } from '../../components/Icon';
 import { useTheme } from '../../theme/ThemeContext';
 import { lineHeights, space } from '../../theme/tokens';
-import { thoughtLabel } from './reasoningLabel';
+import { fmtDuration, thoughtLabel } from './reasoningLabel';
 
 const STREAM_WINDOW_H = 116;
 const STREAM_FADE_H = 28;
@@ -18,13 +18,16 @@ function toLines(text) {
     .filter((s) => s.trim());
 }
 
-export function Reasoning({ text, seconds, streaming = false }) {
+export function Reasoning({ text, seconds, streaming = false, flat = false }) {
   if (!streaming && !String(text || '').trim()) return null;
-  return streaming ? <Thinking text={text} /> : <Finished text={text} seconds={seconds} />;
+  return streaming
+    ? <Thinking text={text} flat={flat} />
+    : <Finished text={text} seconds={seconds} flat={flat} />;
 }
 
-function Trace({ children }) {
+function Trace({ flat, children }) {
   const { colors } = useTheme();
+  if (flat) return <View>{children}</View>;
   return (
     <View style={{ borderLeftWidth: 2, borderLeftColor: colors.line2, paddingLeft: space.s6 }}>
       {children}
@@ -55,7 +58,7 @@ function Lines({ text, size }) {
   );
 }
 
-function Thinking({ text }) {
+function Thinking({ text, flat }) {
   const { colors, fonts, fontSizes } = useTheme();
   const scrollRef = useRef(null);
   const [open, setOpen] = useState(false);
@@ -67,7 +70,7 @@ function Thinking({ text }) {
   const lines = toLines(text);
   const lastLine = lines[lines.length - 1] ?? '';
   return (
-    <Trace>
+    <Trace flat={flat}>
       <Pressable
         onPress={() => setOpen((v) => !v)}
         hitSlop={8}
@@ -77,13 +80,13 @@ function Thinking({ text }) {
         <View style={{ transform: [{ rotate: open ? '0deg' : '-90deg' }] }}>
           <Icon name="chevron-down" size={12} color={colors.ink3} />
         </View>
-        <Text style={{ color: colors.ink4, fontFamily: fonts.mono, fontSize: fontSizes.xs }}>
+        <Text style={{ color: flat ? colors.ink3 : colors.ink4, fontFamily: fonts.mono, fontSize: flat ? fontSizes.sm : fontSizes.xs }}>
           {`thinking · ${elapsed}s`}
         </Text>
         {!open && lastLine ? (
           <Text
             numberOfLines={1}
-            style={{ flex: 1, color: colors.ink4, fontFamily: fonts.mono, fontSize: fontSizes.xs, opacity: 0.7 }}
+            style={{ flex: 1, color: colors.ink4, fontFamily: fonts.mono, fontSize: flat ? fontSizes.sm : fontSizes.xs, opacity: 0.7 }}
           >
             {lastLine}
           </Text>
@@ -120,12 +123,17 @@ function Thinking({ text }) {
   );
 }
 
-function Finished({ text, seconds }) {
+function Finished({ text, seconds, flat }) {
   const { colors, fonts, fontSizes } = useTheme();
   const { height } = useWindowDimensions();
   const [open, setOpen] = useState(false);
+  const lines = toLines(text);
+  const lastLine = lines[lines.length - 1] ?? '';
+  const label = flat
+    ? (seconds >= 1 ? `thinking · ${fmtDuration(seconds)}` : 'thinking')
+    : thoughtLabel(seconds);
   return (
-    <Trace>
+    <Trace flat={flat}>
       <Pressable
         onPress={() => setOpen((v) => !v)}
         hitSlop={8}
@@ -136,8 +144,16 @@ function Finished({ text, seconds }) {
           <Icon name="chevron-down" size={12} color={colors.ink3} />
         </View>
         <Text style={{ color: colors.ink3, fontFamily: fonts.mono, fontSize: fontSizes.sm }}>
-          {thoughtLabel(seconds)}
+          {label}
         </Text>
+        {flat && !open && lastLine ? (
+          <Text
+            numberOfLines={1}
+            style={{ flex: 1, color: colors.ink4, fontFamily: fonts.mono, fontSize: fontSizes.sm, opacity: 0.7 }}
+          >
+            {lastLine}
+          </Text>
+        ) : null}
       </Pressable>
       {open ? (
         <ScrollView

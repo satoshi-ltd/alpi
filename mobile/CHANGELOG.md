@@ -14,6 +14,18 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.2.20 — 2026-07-29 — cleaner tool calls in chat
+
+- **Tool calls are now one tidy module.** While the agent works you see the
+  active call — in the profile colour, gently pulsing — with any earlier calls
+  tucked into a collapsible **"+N previous tool calls"**. Once it answers, the
+  calls fold into a single **"N tool calls"** line (a lone call stays inline).
+- **Reasoning moved below the tools** as one "thinking" block with a one-line
+  peek you can expand.
+- **Failed calls stand out**: the collapsed bucket shows **"△ N failed"**.
+
+Presentation only — no daemon contract changes. Requires alpi ≥ 0.11.10.
+
 ## v0.2.19 — 2026-07-22 — reliable large attachments
 
 - **Attaching a big file no longer drops the session.** Files are size-checked

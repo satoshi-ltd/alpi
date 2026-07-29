@@ -9,7 +9,7 @@ import { Button } from '../../src/components/Button';
 import { useToast } from '../../src/components/Toast';
 import { ProfileAssistantMessage, ProfileUserMessage } from '../../src/features/chat/Bubble';
 import { Reasoning } from '../../src/features/chat/Reasoning';
-import { reasoningSteps } from '../../src/features/chat/reasoningSteps';
+import { turnParts } from '../../src/features/chat/reasoningSteps';
 import { ChatHeader } from '../../src/features/chat/ChatHeader';
 import { SoundWave } from '../../src/features/chat/SoundWave';
 import { enqueueReadAloud } from '../../src/lib/readAloud';
@@ -21,7 +21,7 @@ import { compactProducedTool } from '../../src/lib/producedAttachments';
 import { profileLabel } from '../../src/lib/profileLabel';
 import { mergeStreamingTurn, isInterruptedTurn, isLastTurnInFlight, consumeAutoRead, routedModelFor, baselineModelFor } from '../../src/features/chat/chatTurns';
 import { ChatSkeleton } from '../../src/features/chat/ChatSkeleton';
-import { ToolCallGroup, groupConsecutiveTools } from '../../src/features/chat/ToolCallRow';
+import { ToolModule } from '../../src/features/chat/ToolCallRow';
 import { askUserNoAnswerTag } from '../../src/features/chat/askUserAnswer';
 import { Diamond } from '../../src/components/Diamond';
 import { SessionsSheet } from '../../src/features/sheets/SessionsSheet';
@@ -65,20 +65,13 @@ const TURN_STYLES = StyleSheet.create({
 
 const TurnBlock = memo(function TurnBlock({ turn, turnIndex, profileName, profileModel, accent, colors, fonts, fontSizes, onActionTarget, inFlight = false }) {
   const ts = turn.at ? relativeTime(turn.at * 1000) : '';
-  const askUsers = (turn.tools ?? []).filter((t) => t.name === 'ask_user');
-  const askUserAnswers = askUsers
-    .map((t) => ({
-      tool_id: t.tool_id,
-      result: (t.output || t.result || '').trim(),
-      question: t.args?.question || '',
-    }))
-    .filter((t) => t.result);
-  const lastAnswer = askUserAnswers[askUserAnswers.length - 1]?.result;
+  const parts = turnParts(turn);
+  const lastAnswer = parts.askUsers[parts.askUsers.length - 1]?.result;
   // Suppress only on exact echo; useful commentary after cancel/timeout/no-handler stays visible.
   const assistantEchoesAsk = lastAnswer && turn.assistant?.trim() === lastAnswer;
   const showAssistant = (!!turn.assistant || turn.output_attachments?.length > 0) && !assistantEchoesAsk;
   const routedModel = routedModelFor(turn, profileModel);
-  const steps = reasoningSteps(turn, { active: turn.pending && !showAssistant });
+  const active = turn.pending && !showAssistant;
   return (
     <View style={TURN_STYLES.block}>
       {turn.user ? (
@@ -91,41 +84,33 @@ const TurnBlock = memo(function TurnBlock({ turn, turnIndex, profileName, profil
           onLongPress={() => onActionTarget({ kind: 'user', text: turn.user, turnIndex })}
         />
       ) : null}
-      {steps.length > 0 ? (
+      {(parts.tools.length > 0 || parts.askUsers.length > 0 || parts.reasoning || active) ? (
         <View style={TURN_STYLES.steps}>
-          {steps.map((step, i) => {
-            if (step.kind === 'reasoning') {
-              return (
-                <Reasoning
-                  key={`r-${i}`}
-                  text={step.text}
-                  seconds={step.seconds}
-                  streaming={turn.pending && step.trailing}
-                />
-              );
-            }
-            if (step.kind === 'askUser') {
-              return step.result ? (
-                <AskUserAnswer
-                  key={`a-${i}`}
-                  result={step.result}
-                  question={step.question}
-                  accent={accent}
-                  colors={colors}
-                  fonts={fonts}
-                  fontSizes={fontSizes}
-                />
-              ) : null;
-            }
-            const tools = step.tools.map((t) => compactProducedTool(t, turn.output_attachments));
-            return (
-              <View key={`t-${i}`} style={TURN_STYLES.tools}>
-                {groupConsecutiveTools(tools).map((g, j) => (
-                  <ToolCallGroup key={`g-${j}-${g.tools[0].tool_id ?? g.name}`} group={g} accent={accent} />
-                ))}
-              </View>
-            );
-          })}
+          {parts.tools.length > 0 ? (
+            <ToolModule
+              tools={parts.tools.map((t) => compactProducedTool(t, turn.output_attachments))}
+              accent={accent}
+            />
+          ) : null}
+          {parts.askUsers.map((a, i) => (
+            <AskUserAnswer
+              key={`a-${a.tool_id ?? i}`}
+              result={a.result}
+              question={a.question}
+              accent={accent}
+              colors={colors}
+              fonts={fonts}
+              fontSizes={fontSizes}
+            />
+          ))}
+          {(parts.reasoning || active) ? (
+            <Reasoning
+              text={parts.reasoning}
+              seconds={parts.reasonedSeconds}
+              streaming={active}
+              flat
+            />
+          ) : null}
         </View>
       ) : null}
       {showAssistant ? (
