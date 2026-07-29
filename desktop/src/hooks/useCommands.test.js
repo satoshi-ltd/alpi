@@ -43,6 +43,34 @@ describe("useCommands", () => {
     );
   });
 
+  it("exposes the sidebar filter with ⌘S when a toggle is provided", () => {
+    const onToggleSidebarSearch = vi.fn();
+    const commands = renderCommands({ onToggleSidebarSearch });
+    const command = commands.find((cmd) => cmd.id === "view:find");
+
+    expect(command).toMatchObject({
+      group: "General",
+      label: "Filter alpis & workgroups",
+      hint: "⌘S",
+    });
+    command.action();
+    expect(onToggleSidebarSearch).toHaveBeenCalledTimes(1);
+  });
+
+  it("labels the filter as close while the sidebar search is open", () => {
+    const commands = renderCommands({
+      onToggleSidebarSearch: vi.fn(),
+      sidebarSearchOpen: true,
+    });
+
+    expect(commands.find((cmd) => cmd.id === "view:find")?.label).toBe("Close filter");
+  });
+
+  it("omits the sidebar filter without a toggle", () => {
+    const commands = renderCommands();
+    expect(commands.find((cmd) => cmd.id === "view:find")).toBeUndefined();
+  });
+
   it("shows profile sessions as a profile command", () => {
     const onOpenHistory = vi.fn();
     const commands = renderCommands({ onOpenHistory });

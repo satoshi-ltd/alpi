@@ -9,6 +9,8 @@ export function useWindowChrome({
   onNewWorkgroup,
   onOpenSettings,
   onToggleSearch,
+  onToggleSidebarSearch,
+  sidebarSearchAvailableRef,
   onTogglePalette,
   paletteOpenRef,
   onClosePalette,
@@ -55,6 +57,7 @@ export function useWindowChrome({
       const cmd = e.metaKey || e.ctrlKey;
       if (!cmd) return;
       const key = e.key.toLowerCase();
+      const canSidebarSearch = !!sidebarSearchAvailableRef?.current;
       const isShortcut =
         /^[1-9]$/.test(key) ||
         key === "n" ||
@@ -62,6 +65,7 @@ export function useWindowChrome({
         key === "f" ||
         key === "k" ||
         key === "o" ||
+        (key === "s" && !e.shiftKey && canSidebarSearch) ||
         (e.shiftKey && (key === "t" || key === "s" || key === "m" || key === "e" || key === "h" || key === "l" || key === "p" || key === "r" || key === "n" || key === "w"));
       if (paletteOpenRef?.current && isShortcut && key !== "k") {
         onClosePalette?.();
@@ -134,6 +138,12 @@ export function useWindowChrome({
         onToggleNotifications?.();
         return;
       }
+      if (key === "s" && !e.shiftKey && !e.altKey && canSidebarSearch) {
+        e.preventDefault();
+        e.stopPropagation();
+        onToggleSidebarSearch?.();
+        return;
+      }
       if (e.shiftKey && key === "l") {
         if (onToggleReadAloud) {
           e.preventDefault();
@@ -179,5 +189,5 @@ export function useWindowChrome({
     }
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [viewRef, setView, onJumpToProfile, onNewProfile, onNewWorkgroup, onOpenSettings, onToggleSearch, onTogglePalette, paletteOpenRef, onClosePalette, activeProfileName, historyKind, onOpenHistory, onRefreshThread, onToggleContextPause, onToggleReadAloud, onBrowseTools, onBrowseSkills, onBrowseMemory, onBrowseSchedule, onToggleNotifications]);
+  }, [viewRef, setView, onJumpToProfile, onNewProfile, onNewWorkgroup, onOpenSettings, onToggleSearch, onToggleSidebarSearch, sidebarSearchAvailableRef, onTogglePalette, paletteOpenRef, onClosePalette, activeProfileName, historyKind, onOpenHistory, onRefreshThread, onToggleContextPause, onToggleReadAloud, onBrowseTools, onBrowseSkills, onBrowseMemory, onBrowseSchedule, onToggleNotifications]);
 }

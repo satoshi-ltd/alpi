@@ -8,6 +8,8 @@ export function useCommands({
   onOpenSettings,
   onCloseSettings,
   onToggleSearch,
+  onToggleSidebarSearch,
+  sidebarSearchOpen = false,
   onNewProfile,
   onNewWorkgroup,
   onNewChat,
@@ -42,6 +44,16 @@ export function useCommands({
         hint: "⌘1–9",
       },
     ];
+
+    if (onToggleSidebarSearch) {
+      cmds.push({
+        id: "view:find",
+        group: "General",
+        label: sidebarSearchOpen ? "Close filter" : "Filter alpis & workgroups",
+        hint: "⌘S",
+        action: () => onToggleSidebarSearch(),
+      });
+    }
 
     if (historyKind === "sessions" && activeProfileName && onOpenHistory) {
       cmds.push({
@@ -228,6 +240,8 @@ export function useCommands({
     onOpenSettings,
     onCloseSettings,
     onToggleSearch,
+    onToggleSidebarSearch,
+    sidebarSearchOpen,
     onNewProfile,
     onNewWorkgroup,
     onNewChat,

@@ -245,6 +245,13 @@ export default function App() {
   useEffect(() => {
     searchOpenRef.current = searchOpen;
   }, [searchOpen]);
+  const [sidebarSearchOpen, setSidebarSearchOpen] = useState(false);
+  const sidebarSearchAvailableRef = useRef(false);
+  const onToggleSidebarSearch = useCallback(
+    () => setSidebarSearchOpen((v) => !v),
+    [],
+  );
+  const onCloseSidebarSearch = useCallback(() => setSidebarSearchOpen(false), []);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const paletteOpenRef = useRef(false);
   useEffect(() => {
@@ -837,6 +844,8 @@ export default function App() {
     onNewWorkgroup: adminOnNewWorkgroup,
     onOpenSettings: adminOnOpenSettings,
     onToggleSearch,
+    onToggleSidebarSearch,
+    sidebarSearchAvailableRef,
     onTogglePalette,
     paletteOpenRef,
     onClosePalette,
@@ -1078,6 +1087,12 @@ export default function App() {
       activeConnection.status === "disabled" ||
       activeConnection.status === "auth-failed");
 
+  const sidebarSearchAvailable = !daemonOffline && view.kind !== "settings";
+  useEffect(() => {
+    sidebarSearchAvailableRef.current = sidebarSearchAvailable;
+    if (!sidebarSearchAvailable) setSidebarSearchOpen(false);
+  }, [sidebarSearchAvailable]);
+
   const [autostartPhase, setAutostartPhase] = useState("idle");
   useDaemonAutostart({ activeConnection, onAttempt: setAutostartPhase });
 
@@ -1145,6 +1160,8 @@ export default function App() {
     onOpenSettings: adminOnOpenSettings,
     onCloseSettings: closeSettings,
     onToggleSearch,
+    onToggleSidebarSearch: sidebarSearchAvailable ? onToggleSidebarSearch : null,
+    sidebarSearchOpen,
     onNewProfile: adminOnNewProfile,
     onNewWorkgroup: adminOnNewWorkgroup,
     onNewChat,
@@ -1204,6 +1221,8 @@ export default function App() {
         connectionLocked={connectionLocked}
         onOpenNotifications={canManageProfileSurfaces ? onOpenNotifications : null}
         notificationsUnread={canManageProfileSurfaces ? notificationsUnread : 0}
+        searchOpen={sidebarSearchOpen}
+        onCloseSearch={onCloseSidebarSearch}
       />
       <main className={styles.main}>
           {view.kind === "settings" && canAdminEarly ? (

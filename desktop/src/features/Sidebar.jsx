@@ -20,6 +20,7 @@ import {
   PlusIcon,
   SearchIcon,
   TrashIcon,
+  XIcon,
   ArchiveIcon,
 } from "../primitives/index.js";
 import { relativeTime } from "../lib/time.js";
@@ -94,8 +95,20 @@ function Sidebar({
   connectionLocked = false,
   onOpenNotifications,
   notificationsUnread = 0,
+  searchOpen = false,
+  onCloseSearch,
 }) {
   const inSettings = view.kind === "settings";
+  const [query, setQuery] = useState("");
+  const searchInputRef = useRef(null);
+  useEffect(() => {
+    if (searchOpen) {
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    } else {
+      setQuery("");
+    }
+  }, [searchOpen]);
 
   const connId = hostConnections?.active_id ?? "local";
   const showLoadingRows = useDelayedFlag(
@@ -193,12 +206,33 @@ function Sidebar({
     return map;
   }, [profiles]);
 
-  const hasPinned = pinnedProfiles.length > 0 || pinnedWorkgroups.length > 0;
-
   const pinnedItems = useMemo(
     () => orderPinnedItems(pinnedProfiles, pinnedWorkgroups),
     [pinnedProfiles, pinnedWorkgroups],
   );
+
+  const q = searchOpen ? query.trim().toLowerCase() : "";
+  const matchProfile = (p) =>
+    !q ||
+    p.name.toLowerCase().includes(q) ||
+    profileLabel(p.name).toLowerCase().includes(q);
+  const matchWorkgroup = (w) =>
+    !q ||
+    (w.name ?? "").toLowerCase().includes(q) ||
+    String(w.id ?? "").toLowerCase().includes(q);
+  const filteredProfiles = q ? sortedProfiles.filter(matchProfile) : sortedProfiles;
+  const filteredWorkgroups = q ? sortedWorkgroups.filter(matchWorkgroup) : sortedWorkgroups;
+  const filteredPinnedItems = q
+    ? pinnedItems.filter((it) =>
+        it.kind === "profile" ? matchProfile(it.item) : matchWorkgroup(it.item),
+      )
+    : pinnedItems;
+  const hasPinned = filteredPinnedItems.length > 0;
+  const noMatches =
+    !!q &&
+    filteredProfiles.length === 0 &&
+    filteredWorkgroups.length === 0 &&
+    filteredPinnedItems.length === 0;
 
   const navRef = useRef(null);
   const [navHeight, setNavHeight] = useState(0);
@@ -234,9 +268,10 @@ function Sidebar({
   ]);
 
   const [showAllAlpis, setShowAllAlpis] = useState(false);
-  const hasAlpisOverflow = sortedProfiles.length > maxAlpisVisible;
-  const visibleAlpis =
-    hasAlpisOverflow && !showAllAlpis
+  const hasAlpisOverflow = !q && sortedProfiles.length > maxAlpisVisible;
+  const visibleAlpis = q
+    ? filteredProfiles
+    : hasAlpisOverflow && !showAllAlpis
       ? sortedProfiles.slice(0, maxAlpisVisible)
       : sortedProfiles;
   const hiddenAlpisCount = sortedProfiles.length - maxAlpisVisible;
@@ -378,20 +413,51 @@ function Sidebar({
             />
           </div>
           {!daemonOffline && !inSettings && (
-            <button
-              type="button"
-              className="ds-sb-row"
-              data-active={inEmpty || undefined}
-              onClick={onNewChat}
-              style={inEmpty ? { background: "var(--selected)" } : undefined}
-            >
-              <PlusIcon />
-              <span className={styles.rowLabel}>New chat</span>
-              <span className={styles.kbdGroup} aria-hidden>
-                <Kbd>⌘</Kbd>
-                <Kbd>N</Kbd>
-              </span>
-            </button>
+            searchOpen ? (
+              <div className={styles.searchRow} role="search">
+                <SearchIcon className={styles.searchIcon} />
+                <input
+                  ref={searchInputRef}
+                  className={styles.searchInput}
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      onCloseSearch?.();
+                    }
+                  }}
+                  placeholder="Filter alpis & workgroups…"
+                  spellCheck={false}
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  aria-label="Filter alpis and workgroups"
+                />
+                <button
+                  type="button"
+                  className={styles.searchClose}
+                  onClick={onCloseSearch}
+                  aria-label="Close filter"
+                >
+                  <XIcon size={14} />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="ds-sb-row"
+                data-active={inEmpty || undefined}
+                onClick={onNewChat}
+                style={inEmpty ? { background: "var(--selected)" } : undefined}
+              >
+                <PlusIcon />
+                <span className={styles.rowLabel}>New chat</span>
+                <span className={styles.kbdGroup} aria-hidden>
+                  <Kbd>⌘</Kbd>
+                  <Kbd>N</Kbd>
+                </span>
+              </button>
+            )
           )}
         </div>
 
@@ -403,7 +469,7 @@ function Sidebar({
           )}
           {hasPinned && (
             <Section label="Pinned" containerRef={pinnedSectionRef}>
-              {pinnedItems.map((it) =>
+              {filteredPinnedItems.map((it) =>
                 it.kind === "profile"
                   ? renderProfileRow(it.item, "pin:")
                   : renderWorkgroupRow(it.item, "pin:"),
@@ -411,7 +477,7 @@ function Sidebar({
             </Section>
           )}
 
-          {sortedProfiles.length > 0 && (
+          {filteredProfiles.length > 0 && (
             <Section
               label={inSettings ? "Profiles" : "Alpis"}
               labelRef={alpisLabelRef}
@@ -446,7 +512,7 @@ function Sidebar({
             </Section>
           )}
 
-          {sortedWorkgroups.length > 0 && (
+          {filteredWorkgroups.length > 0 && (
             <Section
               label="Workgroups"
               containerRef={workgroupsSectionRef}
@@ -460,8 +526,11 @@ function Sidebar({
                 ) : null
               }
             >
-              {sortedWorkgroups.map((w) => renderWorkgroupRow(w))}
+              {filteredWorkgroups.map((w) => renderWorkgroupRow(w))}
             </Section>
+          )}
+          {noMatches && (
+            <div className={styles.searchEmpty}>No alpis or workgroups match</div>
           )}
         </nav>
       </div>

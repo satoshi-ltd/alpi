@@ -11,6 +11,16 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.4.53 — 2026-07-29 — filter alpis & workgroups
+
+- **Filter the sidebar with ⌘S.** Press ⌘S (or pick it from the command
+  palette) and the "New chat" row turns into a search box — type to narrow the
+  pinned, alpis, and workgroups lists in place. Esc or ✕ closes it.
+- **Tidier workgroup names**: they now read in the same type as your alpis, with
+  no `#` prefix.
+
+Presentation only — no daemon contract changes. Requires alpi ≥ 0.11.10.
+
 ## v0.4.52 — 2026-07-28 — cleaner tool calls in chat
 
 - **Tool calls are now one tidy module.** While the agent works you see the

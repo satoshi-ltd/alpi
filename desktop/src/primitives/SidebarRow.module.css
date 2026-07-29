@@ -6,7 +6,6 @@
 
 .label {
   flex: 1;
-  /* font-size/weight come from .sb-name / .sb-hash global classes — don't override here, those classes set the type spec per kind. */
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

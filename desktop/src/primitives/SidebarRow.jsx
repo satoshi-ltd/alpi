@@ -29,7 +29,6 @@ export default function SidebarRow({
       ? `color-mix(in srgb, ${color} 90%, var(--ink))`
       : "var(--ink)"
     : null;
-  const labelClass = kind === "workgroup" ? "sb-hash" : "sb-name";
   const stateMod = unread ? " is-unr" : sel ? " is-sel" : "";
   return (
     <button
@@ -54,10 +53,10 @@ export default function SidebarRow({
         </span>
       )}
       <span
-        className={`${labelClass}${stateMod} ${styles.label}`.trim()}
+        className={`sb-name${stateMod} ${styles.label}`.trim()}
         style={tintedColor ? { color: "inherit" } : undefined}
       >
-        {kind === "workgroup" ? `#${id}` : id}
+        {id}
       </span>
       {muted && !isNeedsProvider && <MuteIcon className={styles.mute} />}
       {trailing !== undefined && trailing !== null && (

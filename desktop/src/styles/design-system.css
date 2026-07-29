@@ -780,10 +780,6 @@ a:focus-visible,
 .sb-name.is-sel { font-weight: var(--fw-medium); color: var(--ink); }
 .sb-name.is-unr { font-weight: var(--fw-semibold); color: var(--ink); }
 
-.sb-hash        { font-family: var(--font-mono); font-size: var(--fs-sm); font-weight: var(--fw-regular); line-height: var(--lh-tight); color: var(--ink-3); }
-.sb-hash.is-sel { font-weight: var(--fw-medium); color: var(--ink); }
-.sb-hash.is-unr { font-weight: var(--fw-semibold); color: var(--ink); }
-
 .sb-ts          { font-family: var(--font-mono); font-size: var(--fs-xs); font-weight: var(--fw-medium); line-height: var(--lh-tight); color: var(--ink-3); }
 .sb-ts.is-unr   { font-weight: var(--fw-semibold); color: var(--ink); }
 

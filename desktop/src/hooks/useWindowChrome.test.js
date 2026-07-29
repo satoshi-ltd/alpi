@@ -69,6 +69,44 @@ describe("useWindowChrome", () => {
     chrome.unmount();
   });
 
+  it("toggles the sidebar filter on ⌘S without shift when available", () => {
+    const onToggleSidebarSearch = vi.fn();
+    const chrome = mountWindowChrome({
+      onToggleSidebarSearch,
+      sidebarSearchAvailableRef: { current: true },
+    });
+
+    press("s", { metaKey: true });
+
+    expect(onToggleSidebarSearch).toHaveBeenCalledTimes(1);
+    expect(chrome.onBrowseSkills).not.toHaveBeenCalled();
+    chrome.unmount();
+  });
+
+  it("ignores ⌘S when the sidebar filter is unavailable", () => {
+    const onToggleSidebarSearch = vi.fn();
+    const chrome = mountWindowChrome({
+      onToggleSidebarSearch,
+      sidebarSearchAvailableRef: { current: false },
+    });
+
+    press("s", { metaKey: true });
+
+    expect(onToggleSidebarSearch).not.toHaveBeenCalled();
+    chrome.unmount();
+  });
+
+  it("keeps ⇧⌘S on skills, not the sidebar filter", () => {
+    const onToggleSidebarSearch = vi.fn();
+    const chrome = mountWindowChrome({ onToggleSidebarSearch });
+
+    press("s", { metaKey: true, shiftKey: true });
+
+    expect(onToggleSidebarSearch).not.toHaveBeenCalled();
+    expect(chrome.onBrowseSkills).toHaveBeenCalledTimes(1);
+    chrome.unmount();
+  });
+
   it("opens notifications from any view", () => {
     const chrome = mountWindowChrome({ activeProfileName: null });
 
