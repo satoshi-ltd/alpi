@@ -178,3 +178,93 @@ def test_load_recipe_uses_filename_stem_as_id(tmp_path):
     r = recipes.load_recipe(p)
     assert r.recipe_id == "tier-pro"
     assert r.hub == "mira"
+
+
+OPS = VALID.replace(
+    "  qa: { owner: lens }",
+    """  qa: { owner: lens }
+  media-update: { owner: muse, next: media-build, gate: { argv: [npm, run, "assets:optimize"], cwd: "projects/{slug}" } }
+  media-build: { owner: pixel, next: media-qa }
+  media-qa: { owner: lens }
+operations:
+  media-update:
+    steps: [media-update, media-build, media-qa]""",
+)
+
+
+def test_operations_parse_as_ordered_chains() -> None:
+    r = recipes.parse_recipe(OPS, "hotel")
+    assert r.operations == {"media-update": ("media-update", "media-build", "media-qa")}
+    assert {"media-update", "media-build", "media-qa"} <= set(r.pipeline_steps)
+    assert list(r.pipeline) == ["intake", "content", "qa"], "launch pipeline unchanged"
+
+
+def test_operations_reach_resolve_for_the_launcher() -> None:
+    spec = recipes.resolve(recipes.parse_recipe(OPS, "hotel"), {"slug": "abc", "tier": "pro"})
+    assert spec["operations"] == {"media-update": ["media-update", "media-build", "media-qa"]}
+
+
+def test_operation_must_start_with_a_step_named_after_itself() -> None:
+    bad = OPS.replace("    steps: [media-update, media-build, media-qa]",
+                      "    steps: [media-build, media-qa]")
+    with pytest.raises(recipes.RecipeError, match="must start with a step named"):
+        recipes.parse_recipe(bad, "hotel")
+
+
+def test_operation_step_needs_a_pipeline_steps_entry() -> None:
+    bad = OPS.replace("    steps: [media-update, media-build, media-qa]",
+                      "    steps: [media-update, media-ship]")
+    with pytest.raises(recipes.RecipeError, match="has no pipeline_steps entry"):
+        recipes.parse_recipe(bad, "hotel")
+
+
+def test_operation_rejects_duplicate_steps() -> None:
+    bad = OPS.replace("    steps: [media-update, media-build, media-qa]",
+                      "    steps: [media-update, media-build, media-build]")
+    with pytest.raises(recipes.RecipeError, match="duplicates"):
+        recipes.parse_recipe(bad, "hotel")
+
+
+def test_operations_must_be_a_mapping() -> None:
+    bad = OPS.replace("operations:\n  media-update:\n    steps: [media-update, media-build, media-qa]",
+                      "operations: [media-update]")
+    with pytest.raises(recipes.RecipeError, match="operations must be a mapping"):
+        recipes.parse_recipe(bad, "hotel")
+
+
+def test_recipe_without_operations_still_loads() -> None:
+    r = recipes.parse_recipe(VALID, "hotel")
+    assert r.operations == {}
+
+
+def test_operations_must_be_disjoint_from_the_launch_pipeline() -> None:
+    bad = OPS.replace("    steps: [media-update, media-build, media-qa]",
+                      "    steps: [media-update, qa]")
+    with pytest.raises(recipes.RecipeError, match="also a launch pipeline phase"):
+        recipes.parse_recipe(bad, "hotel")
+
+
+def test_operations_must_be_disjoint_from_each_other() -> None:
+    bad = OPS.replace("""operations:
+  media-update:
+    steps: [media-update, media-build, media-qa]""",
+"""operations:
+  media-update:
+    steps: [media-update, media-build]
+  media-qa:
+    steps: [media-qa, media-build]""")
+    with pytest.raises(recipes.RecipeError, match="chains must be disjoint"):
+        recipes.parse_recipe(bad, "hotel")
+
+
+def test_operations_require_a_pipeline() -> None:
+    bad = OPS.replace("pipeline: [intake, content, qa]\n", "")
+    with pytest.raises(recipes.RecipeError, match="operations without a pipeline"):
+        recipes.parse_recipe(bad, "hotel")
+
+
+def test_operation_step_slug_must_be_valid() -> None:
+    bad = OPS.replace("    steps: [media-update, media-build, media-qa]",
+                      '    steps: [media-update, "Media Build"]')
+    with pytest.raises(recipes.RecipeError, match="is not a valid slug"):
+        recipes.parse_recipe(bad, "hotel")

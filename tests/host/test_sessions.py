@@ -517,6 +517,8 @@ def test_delete_session_returns_false_when_missing(tmp_path: Path) -> None:
 async def test_sessions_delete_rpc_deletes_each_id(
     tmp_path: Path, monkeypatch,
 ) -> None:
+    from alpi.host import device_state
+
     home = tmp_path / "home"
     home.mkdir()
     _seed_session(home, "a", "a")
@@ -524,14 +526,17 @@ async def test_sessions_delete_rpc_deletes_each_id(
     srv = host_server.Server(home=home)
     data_handlers.register(srv)
     monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+    # An omitted profile arrives as "", while the cache is keyed by name — assert the effect, not the argument.
+    device_state._summary_cache["default"] = (float("inf"), {"latest_session": "a"})
 
     response = await srv._dispatch({
         "id": "r", "method": "host.sessions.delete",
-        "params": {"profile": "default", "ids": ["a", "b"]},
+        "params": {"ids": ["a", "b"]},
     })
     assert response["result"] == {"deleted": ["a", "b"], "errors": []}
     assert not (home / "sessions" / "a.json").exists()
     assert not (home / "sessions" / "b.json").exists()
+    assert "default" not in device_state._summary_cache
 
 
 @pytest.mark.asyncio

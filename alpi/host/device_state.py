@@ -146,9 +146,7 @@ async def _profile_summaries(
     _params: dict[str, Any], _server: host_server.Server,
 ) -> dict[str, Any]:
     """Hot path: inbox/sidebar listing for every connected profile. Returns only the lightweight ``_profile_summary`` shape — settings/profile screens fetch the heavy bits per-profile via ``host.profile.detail``. Pre-split this was ~10KB/profile; now ~1KB."""
-    return await asyncio.to_thread(
-        lambda: {"profiles": [_profile_summary(p) for p in _profiles()]},
-    )
+    return {"profiles": [dict(r) for r in await _summaries_coalesced()]}
 
 
 async def _profile_detail(
@@ -193,6 +191,55 @@ def _profile_summary(row: dict[str, Any]) -> dict[str, Any]:
         # Lightweight "is the profile chat-ready?" hint so inbox/empty-state can decide without paying the cost of a host.profile.detail roundtrip per profile.
         "has_any_provider": _has_any_provider(home, cfg),
     }
+
+
+_SUMMARY_TTL_S = 3.0
+_summary_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+_summary_gen: dict[str, int] = {}
+_summary_state_lock = threading.Lock()
+_summary_gate: tuple[Any, asyncio.Lock] | None = None
+
+
+def invalidate_summary(profile: str | None = None) -> None:
+    with _summary_state_lock:
+        if profile is None:
+            _summary_cache.clear()
+            for name in _summary_gen:
+                _summary_gen[name] += 1
+        else:
+            name = str(profile)
+            _summary_cache.pop(name, None)
+            _summary_gen[name] = _summary_gen.get(name, 0) + 1
+
+
+def _summary_rows() -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for row in _profiles():
+        name = str(row["name"])
+        with _summary_state_lock:
+            hit = _summary_cache.get(name)
+            fresh = hit is not None and time.monotonic() - hit[0] < _SUMMARY_TTL_S
+            # Registering the generation here is what lets a concurrent full clear bump it.
+            gen = _summary_gen.setdefault(name, 0)
+        if fresh:
+            rows.append(hit[1])
+            continue
+        value = _profile_summary(row)
+        with _summary_state_lock:
+            if _summary_gen.get(name, 0) == gen:
+                _summary_cache[name] = (time.monotonic(), value)
+        rows.append(value)
+    return rows
+
+
+async def _summaries_coalesced() -> list[dict[str, Any]]:
+    global _summary_gate
+
+    loop = asyncio.get_running_loop()
+    if _summary_gate is None or _summary_gate[0] is not loop:
+        _summary_gate = (loop, asyncio.Lock())
+    async with _summary_gate[1]:
+        return await asyncio.to_thread(_summary_rows)
 
 
 def _has_any_provider(home: Path, cfg: cfg_mod.Config) -> bool:
@@ -464,10 +511,9 @@ async def _profile_storage(
 def _emit_config_changed(home: Path, scope: str) -> None:
     from alpi import home as home_mod
     from alpi.host import events as host_events
-    host_events.emit("config_changed", {
-        "profile": home_mod.profile_name(home),
-        "scope": scope,
-    })
+    profile = home_mod.profile_name(home)
+    invalidate_summary(profile)
+    host_events.emit("config_changed", {"profile": profile, "scope": scope})
 
 
 async def _cleanup_plan(

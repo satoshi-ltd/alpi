@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import re as _re
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -31,11 +32,87 @@ class Recipe:
     budget_usd: float | None
     pipeline: tuple[str, ...]
     pipeline_steps: dict
+    operations: dict
     params: dict
     inputs: dict
     project: dict | None
     raw: dict = field(default_factory=dict)
 
+
+_PIPELINE_SLUG_RE = _re.compile(r"^[a-z0-9][a-z0-9_-]*$")
+
+
+def _coerce_operations(
+    recipe_id: str, raw: Any, steps: dict, pipeline: tuple[str, ...],
+) -> dict:
+    # Chains must be disjoint: a slug in two of them would make the active chain depend on YAML order.
+    if raw is None:
+        return {}
+    if not pipeline:
+        raise RecipeError(
+            f"recipe {recipe_id!r} declares operations without a pipeline; operations are "
+            "post-launch chains and the launch pipeline drives continuation"
+        )
+    if not isinstance(raw, dict):
+        raise RecipeError(f"recipe {recipe_id!r} operations must be a mapping")
+    out: dict[str, tuple[str, ...]] = {}
+    claimed: dict[str, str] = {}
+    for name, body in raw.items():
+        name = str(name).strip().lower()
+        if not name:
+            raise RecipeError(f"recipe {recipe_id!r} operations has an empty name")
+        if not isinstance(body, dict):
+            raise RecipeError(f"recipe {recipe_id!r} operations[{name!r}] must be a mapping")
+        ordered = body.get("steps")
+        if not isinstance(ordered, list) or not ordered:
+            raise RecipeError(
+                f"recipe {recipe_id!r} operations[{name!r}].steps must be a non-empty list"
+            )
+        slugs = tuple(str(x).strip().lower() for x in ordered)
+        if slugs[0] != name:
+            raise RecipeError(
+                f"recipe {recipe_id!r} operations[{name!r}] must start with a step named "
+                f"{name!r} so `#task #{name}` opens it; got {slugs[0]!r}"
+            )
+        if len(set(slugs)) != len(slugs):
+            raise RecipeError(f"recipe {recipe_id!r} operations[{name!r}].steps has duplicates")
+        for slug in slugs:
+            if not _PIPELINE_SLUG_RE.match(slug):
+                raise RecipeError(
+                    f"recipe {recipe_id!r} operations[{name!r}] step {slug!r} is not a valid slug"
+                )
+            if slug not in steps:
+                raise RecipeError(
+                    f"recipe {recipe_id!r} operations[{name!r}] step {slug!r} has no "
+                    "pipeline_steps entry"
+                )
+            if slug in pipeline:
+                raise RecipeError(
+                    f"recipe {recipe_id!r} operations[{name!r}] step {slug!r} is also a launch "
+                    "pipeline phase; chains must be disjoint"
+                )
+            owner = claimed.get(slug)
+            if owner is not None:
+                raise RecipeError(
+                    f"recipe {recipe_id!r} step {slug!r} belongs to operations {owner!r} and "
+                    f"{name!r}; chains must be disjoint"
+                )
+            claimed[slug] = name
+        if name in out:
+            raise RecipeError(f"recipe {recipe_id!r} has duplicate operation {name!r}")
+        out[name] = slugs
+    # Order is checked only once every chain is known to be disjoint.
+    for name, slugs in out.items():
+        for i, slug in enumerate(slugs):
+            declared = str((steps.get(slug) or {}).get("next") or "")
+            successor = slugs[i + 1] if i + 1 < len(slugs) else ""
+            if declared and declared != successor:
+                raise RecipeError(
+                    f"recipe {recipe_id!r} operations[{name!r}] step {slug!r} declares "
+                    f"next={declared!r} but steps order the successor as "
+                    f"{successor or '<none>'!r}"
+                )
+    return out
 
 def _coerce_members(raw: Any) -> tuple[str, ...]:
     if raw is None:
@@ -129,6 +206,11 @@ def parse_recipe(text: str, recipe_id: str) -> Recipe:
     if not isinstance(steps, dict):
         raise RecipeError(f"recipe {recipe_id!r} pipeline_steps must be a mapping")
 
+    operations = _coerce_operations(
+        recipe_id, data.get("operations"), steps,
+        tuple(str(x).strip().lower() for x in pipeline),
+    )
+
     project = data.get("project")
     if project is not None:
         if not isinstance(project, dict):
@@ -159,6 +241,7 @@ def parse_recipe(text: str, recipe_id: str) -> Recipe:
         budget_usd=budget_usd,
         pipeline=tuple(str(p).strip() for p in pipeline),
         pipeline_steps=steps,
+        operations=operations,
         params=_coerce_params(data.get("params")),
         inputs=_coerce_inputs(data.get("inputs"), project is not None),
         project=project,
@@ -238,6 +321,7 @@ def resolve(recipe: Recipe, params: dict[str, str]) -> dict:
         "budget_usd": recipe.budget_usd,
         "pipeline": list(recipe.pipeline),
         "pipeline_steps": _interp(recipe.pipeline_steps, params),
+        "operations": {k: list(v) for k, v in (recipe.operations or {}).items()},
         "inputs": _interp(recipe.inputs, params),
         "project": _interp(recipe.project, params) if recipe.project else None,
     }

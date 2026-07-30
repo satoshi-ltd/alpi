@@ -81,11 +81,12 @@ def _params(d: dict[str, Any], *keys: str) -> tuple[Any, ...]:
 def _emit_config_changed(home: Path, scope: str) -> None:
     """Notify subscribers that this profile's config (cfg.yaml or .env) changed. Lazy-imported to keep `alpi.host.config` importable in contexts without an event bus."""
     from alpi import home as home_mod
+    from alpi.host import device_state
     from alpi.host import events as host_events
-    host_events.emit("config_changed", {
-        "profile": home_mod.profile_name(home),
-        "scope": scope,
-    })
+    profile = home_mod.profile_name(home)
+    # Drop the cached summary BEFORE the event, or the reload it triggers re-reads the stale one.
+    device_state.invalidate_summary(profile)
+    host_events.emit("config_changed", {"profile": profile, "scope": scope})
 
 
 def _emit_email_changed(home: Path, account_id: str, action: str) -> None:
@@ -109,7 +110,9 @@ def _emit_peers_changed(home: Path, action: str, peer_id: str = "") -> None:
 
 
 def _emit_profile_changed(name: str, action: str) -> None:
+    from alpi.host import device_state
     from alpi.host import events as host_events
+    device_state.invalidate_summary()
     host_events.emit("profile_changed", {
         "profile": name,
         "action": action,

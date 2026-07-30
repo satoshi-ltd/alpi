@@ -160,7 +160,14 @@ async def launch(
     if unpinned:
         raise LaunchError(f"recipe members not pinned as peers of {profile}: {unpinned}")
     pipeline = wg_mod._normalize_pipeline(spec["pipeline"])
-    steps = wg_mod.validate_pipeline_steps(pipeline, spec["pipeline_steps"])
+    operations = {
+        str(k): tuple(str(x).strip().lower() for x in v)
+        for k, v in (spec.get("operations") or {}).items()
+    }
+    op_phases = tuple(slug for slugs in operations.values() for slug in slugs)
+    steps = wg_mod.validate_pipeline_steps(
+        pipeline, spec["pipeline_steps"], extra_phases=op_phases,
+    )
     roster = set(spec["members"]) | {profile}
     for phase, st in steps.items():
         if st["owner"] not in roster:
@@ -210,7 +217,7 @@ async def launch(
             member_pubkeys=[peers[m].pubkey for m in spec["members"] if m in peers],
             budget={"max_usd": spec["budget_usd"]} if spec["budget_usd"] else {},
             briefing=briefing,
-            pipeline=pipeline, pipeline_steps=steps,
+            pipeline=pipeline, pipeline_steps=steps, operations=operations,
             quorum_timeout_seconds=spec["quorum_timeout_seconds"],
             launch=provenance,
         )

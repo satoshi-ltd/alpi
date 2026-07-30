@@ -833,28 +833,20 @@ async def _maybe_gate_advance(
     )
     if owner_peer is None:
         return None
-    last_hub_seq = max(
-        (int(p.get("seq", 0)) for p in recent if str(p.get("from") or "") == own_pubkey),
-        default=active.opened_seq,
+    # Only the opener bounds the round: a later hub note must not hide the delivery.
+    latest_seq = gates.owner_post_under_gate(
+        recent, {owner_peer.pubkey}, own_pubkey, int(active.opened_seq),
     )
-    latest = next((
-        p for p in reversed(recent)
-        if int(p.get("seq", 0)) > max(active.opened_seq, last_hub_seq)
-        and str(p.get("from") or "") == owner_peer.pubkey
-        and not wg_tasks.is_working(str(p.get("text") or ""))
-        and not wg_tasks.is_skip(str(p.get("text") or ""))
-    ), None)
-    if latest is None:
+    if latest_seq is None:
         return None
-    latest_seq = int(latest.get("seq", 0))
     key = (str(home), wg.meta.id, latest_seq)
     if key in _GATE_ATTEMPTED:
         return None
+    workspace = cfg_mod.load(home).workspace_path or home
+    # Marked here, not earlier: anything that fails before the run must stay retryable.
     if len(_GATE_ATTEMPTED) >= _GATE_ATTEMPTED_CAP:
         _GATE_ATTEMPTED.pop(next(iter(_GATE_ATTEMPTED)))
     _GATE_ATTEMPTED[key] = True
-
-    workspace = cfg_mod.load(home).workspace_path or home
     passed, output = await asyncio.to_thread(gates.run_gate, step, workspace)
     try:
         gates.write_gate_log(
@@ -865,7 +857,11 @@ async def _maybe_gate_advance(
         return f"GATE {step.phase} audit FAILED: {e}"
     if not passed:
         log.info("wg gate %s/%s FAILED (seq %s)", wg.meta.id, step.phase, latest_seq)
-        return f"GATE {step.phase} FAILED: {output[-300:]}"
+        return (
+            f"GATE {step.phase} FAILED: {output[-300:]} — RE-TASK "
+            f"@{step.owner} with #{step.phase} so the check re-runs on their "
+            f"next post; opening a differently-named task abandons the phase."
+        )
     try:
         await wc.post(home, wg.meta.id, gates.done_text(step, output).encode())
         nxt = gates.next_task_text(step)
@@ -891,6 +887,8 @@ async def _maybe_dispatch_for_hub(
     gate_fail = await _maybe_gate_advance(home, wg, recent, own_pubkey)
     if gate_fail is True:
         return
+    if gate_fail is None:
+        _warn_gate_overdue(home, wg, recent, own_pubkey)
     last_responded = _get_hub_responded_seq(home, wg.meta.id)
     trigger, new_responded = _should_dispatch(
         profile, own_pubkey, recent, last_responded,
@@ -1001,8 +999,12 @@ def _next_pipeline_phase(wg, recent: list[dict]) -> tuple[str | None, str, bool]
     """
     from alpi.alp import tasks as wg_tasks
 
-    pipeline = list(getattr(wg.meta, "pipeline", ()) or ())
-    if not pipeline:
+    launch = list(getattr(wg.meta, "pipeline", ()) or ())
+    operations = {
+        str(k): [str(x) for x in v]
+        for k, v in (getattr(wg.meta, "operations", None) or {}).items()
+    }
+    if not launch and not operations:
         return None, "", True
     events: list = []
     for p in recent:
@@ -1013,20 +1015,34 @@ def _next_pipeline_phase(wg, recent: list[dict]) -> tuple[str | None, str, bool]
     closed = [t for t in wg_tasks.fold_tasks(events) if not t.is_open]
     if not closed:
         return None, "", True
-    # A `#done BLOCKED · …` halts the pipeline — no advance, no reopen. Check the
-    # latest close (by seq) regardless of slug: a block usually lands on a variant (`#qa-recheck`), not the canonical phase. A later normal close supersedes it.
-    latest_closed = max(closed, key=lambda t: t.closed_seq or 0)
-    if (latest_closed.result or "").strip().upper().startswith("BLOCKED"):
-        return None, latest_closed.slug, True
     # Drive ordering off the latest closed task whose slug is a CANONICAL
     # pipeline phase — ignore off-pipeline re-task variants (e.g. the hub
     # re-tasking `#build-recheck` while the phase is `#build`). Continuation
     # only fires when no task is open, so the canonical phase is genuinely
     # finished by the time we advance.
+    # The LATEST close alone picks the chain, or an ad-hoc `#done` resurrects finished work.
+    chains = [c for c in [launch, *operations.values()] if c]
+    latest_overall = max(closed, key=lambda t: t.closed_seq or 0)
+    # Exact membership wins: a declared `content-update` is never a `content-*` variant.
+    owning = [c for c in chains if latest_overall.slug in c]
+    if not owning:
+        # Longest matched phase wins across chains, not just within one.
+        matched = [
+            (c, _canonical_pipeline_slug(latest_overall.slug, c)) for c in chains
+        ]
+        matched = [(c, m) for c, m in matched if m]
+        if matched:
+            best = max(len(m) for _c, m in matched)
+            owning = [c for c, m in matched if len(m) == best]
+    if len(owning) != 1:
+        return None, latest_overall.slug, False
+    pipeline = owning[0]
+    # BLOCKED halts a DECLARED chain; an unknown slug stays unknown (checked above).
+    if (latest_overall.result or "").strip().upper().startswith("BLOCKED"):
+        return None, latest_overall.slug, True
     in_pipeline = [t for t in closed if t.slug in pipeline]
     if not in_pipeline:
-        latest_any = max(closed, key=lambda t: t.closed_seq or 0).slug
-        return None, latest_any, False
+        return None, latest_overall.slug, False
     term = max(in_pipeline, key=lambda t: t.closed_seq or 0)
     latest = term.slug
     idx = pipeline.index(latest)
@@ -1051,6 +1067,59 @@ def _next_pipeline_phase(wg, recent: list[dict]) -> tuple[str | None, str, bool]
     if fix_after:
         return (pipeline[idx - 1] if idx >= 1 else latest), latest, True
     return None, latest, True
+
+
+_GATE_OVERDUE_WARNED: set[tuple[str, str, int]] = set()
+
+
+def _warn_gate_overdue(home: Path, wg, recent: list[dict], own_pubkey: str) -> None:
+    from alpi.alp import peers as peers_mod
+    from alpi.alp import pipeline_gates as gates
+    from alpi.alp import tasks as wg_tasks
+    from alpi.alp import workgroup as wg_mod
+
+    active = wg_tasks.active_task(recent, hub_pubkey=wg.meta.hub_pubkey)
+    if active is None or not active.slug:
+        return
+    step = gates.step_for(wg.meta, active.slug)
+    if step is None:
+        return
+    owner = next(
+        (p for p in peers_mod.load(home) if p.id.lower() == step.owner.lower()), None,
+    )
+    if owner is None:
+        key = (wg.meta.id, active.slug, 0)
+        if key in _GATE_OVERDUE_WARNED:
+            return
+        _GATE_OVERDUE_WARNED.add(key)
+        log.warning(
+            "wg poller: %s gate cannot start — `#%s` declares `%s` but its owner "
+            "@%s is not pinned as a peer, so no post can be attributed to it",
+            wg.meta.id, active.slug, " ".join(step.argv), step.owner,
+        )
+        return
+    seq = gates.owner_post_under_gate(
+        recent, {owner.pubkey}, own_pubkey, int(active.opened_seq),
+    )
+    if seq is None:
+        return
+    wg_dir = wg_mod._wg_dir(home, wg.meta.id)
+    # A verdict either way means the gate ran; only a missing log is the anomaly.
+    if gates.gate_log_verdict(wg_dir, active.slug, seq) is not None:
+        return
+    key = (wg.meta.id, active.slug, seq)
+    if key in _GATE_OVERDUE_WARNED:
+        return
+    _GATE_OVERDUE_WARNED.add(key)
+    attempted = (str(home), wg.meta.id, seq) in _GATE_ATTEMPTED
+    log.warning(
+        "wg poller: %s gate overdue — `#%s` declares `%s` but it never ran on "
+        "@%s's post (seq #%d); %s. The phase cannot close until it does.",
+        wg.meta.id, active.slug, " ".join(step.argv), step.owner, seq,
+        "the run was started and left no log, so it died mid-flight"
+        if attempted else
+        "it was never started, so a precondition declined it",
+    )
 
 
 # Per-(wg, slug) dedup so a misconfigured pipeline emits `wg.blocked` once,
@@ -1885,8 +1954,10 @@ async def _dispatch_workgroup_turn(
             "ACTIVE TASK in your workgroup context block. If the task "
             "asks for evidence (cite sources, search the web, "
             "benchmarks, etc.), you MUST do that work BEFORE posting "
-            "anything substantive — use `web_search` / `web_fetch` / "
-            "`research` first, then post citing what you found. "
+            "anything substantive — use `web_search` to find URLs and "
+            "`web_extract` to read them (`web_fetch` returns a whole page and "
+            "is only for when you need one verbatim), then post citing what "
+            "you found. "
             "\n\nFollow your `Workgroup engagement rules` exactly. "
             "Valid actions, in priority:"
             "\n  1. [hub only] If the deliverable is in the "

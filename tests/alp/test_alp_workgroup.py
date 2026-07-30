@@ -1941,3 +1941,93 @@ def test_load_meta_tolerant_to_bad_quorum_timeout(short_tmp: Path) -> None:
         meta_path.write_text(_yaml.safe_dump(raw))
         reloaded = wg_mod.load(home, wg.meta.id)
         assert reloaded is not None and reloaded.meta.quorum_timeout_seconds == 0
+
+
+def test_create_persists_operations_and_their_steps(short_tmp: Path) -> None:
+    home = short_tmp / "hub"
+    home.mkdir()
+    kp = load_or_generate(home)
+    wg = wg_mod.create(
+        home, name="proj", hub_kp=kp, member_pubkeys=[],
+        pipeline=["intake", "build"],
+        pipeline_steps={
+            "intake": {"owner": "scout", "next": "build"},
+            "build": {"owner": "pixel"},
+            "media-update": {"owner": "muse", "next": "media-qa"},
+            "media-qa": {"owner": "lens"},
+        },
+        operations={"media-update": ["media-update", "media-qa"]},
+    )
+    meta = wg_mod.load(home, wg.meta.id).meta
+    assert meta.pipeline == ("intake", "build")
+    assert meta.operations == {"media-update": ("media-update", "media-qa")}
+    assert {"media-update", "media-qa"} <= set(meta.pipeline_steps)
+
+
+def test_create_rejects_an_operation_not_named_after_its_first_step(short_tmp: Path) -> None:
+    home = short_tmp / "hub"
+    home.mkdir()
+    kp = load_or_generate(home)
+    with pytest.raises(ValueError, match="must start with a step named"):
+        wg_mod.create(
+            home, name="x", hub_kp=kp, member_pubkeys=[],
+            pipeline=["intake"],
+            pipeline_steps={"intake": {"owner": "scout"}, "media-qa": {"owner": "lens"}},
+            operations={"media-update": ["media-qa"]},
+        )
+
+
+def test_pipeline_steps_outside_pipeline_and_operations_still_rejected(short_tmp: Path) -> None:
+    home = short_tmp / "hub"
+    home.mkdir()
+    kp = load_or_generate(home)
+    with pytest.raises(ValueError, match="neither the pipeline"):
+        wg_mod.create(
+            home, name="x", hub_kp=kp, member_pubkeys=[],
+            pipeline=["intake"],
+            pipeline_steps={"intake": {"owner": "scout"}, "stray": {"owner": "lens"}},
+        )
+
+
+def test_create_without_operations_keeps_them_empty(short_tmp: Path) -> None:
+    home = short_tmp / "hub"
+    home.mkdir()
+    kp = load_or_generate(home)
+    wg = wg_mod.create(home, name="proj", hub_kp=kp, member_pubkeys=[], pipeline=["intake"])
+    assert wg_mod.load(home, wg.meta.id).meta.operations == {}
+
+
+@pytest.mark.parametrize("ops,needle", [
+    ({"x": []}, "non-empty list"),
+    ({"x": "xyz"}, "non-empty list"),
+    ({"Bad Op": ["bad op"]}, "not a valid slug"),
+    ({"x": ["x", "x"]}, "duplicate steps"),
+    ({"x": ["y"]}, "must start with a step named"),
+    ({"x": ["x", "intake"]}, "chains must be disjoint"),
+    ({"x": ["x", "shared"], "z": ["z", "shared"]}, "chains must be disjoint"),
+    ("nope", "must be a mapping"),
+])
+def test_create_rejects_malformed_operations(short_tmp: Path, ops, needle) -> None:
+    home = short_tmp / "hub"
+    home.mkdir()
+    kp = load_or_generate(home)
+    steps = {
+        "intake": {"owner": "scout"}, "x": {"owner": "muse"}, "y": {"owner": "muse"},
+        "z": {"owner": "muse"}, "shared": {"owner": "lens"}, "bad op": {"owner": "lens"},
+    }
+    with pytest.raises(ValueError, match=needle):
+        wg_mod.create(
+            home, name="x", hub_kp=kp, member_pubkeys=[],
+            pipeline=["intake"], pipeline_steps=steps, operations=ops,
+        )
+
+
+def test_create_rejects_operations_without_a_pipeline(short_tmp: Path) -> None:
+    home = short_tmp / "hub"
+    home.mkdir()
+    kp = load_or_generate(home)
+    with pytest.raises(ValueError, match="operations require a pipeline"):
+        wg_mod.create(
+            home, name="x", hub_kp=kp, member_pubkeys=[],
+            pipeline_steps={"x": {"owner": "muse"}}, operations={"x": ["x"]},
+        )

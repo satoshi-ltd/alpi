@@ -181,6 +181,16 @@ def _quorum_roster(
     return roster or member_pubkeys
 
 
+def _workflow_phase_owner(wg, slug: str) -> str:
+    workflow = {str(x) for x in (getattr(wg.meta, "pipeline", ()) or ())}
+    for slugs in (getattr(wg.meta, "operations", None) or {}).values():
+        workflow.update(str(x) for x in slugs)
+    if slug not in workflow:
+        return ""
+    raw = (getattr(wg.meta, "pipeline_steps", None) or {}).get(slug)
+    return str((raw or {}).get("owner") or "").strip() if isinstance(raw, dict) else ""
+
+
 def _validate_task_participants(home: Path, wg, plaintext: str) -> None:
     """Validate a hub `#task` opener before it lands in the transcript:
 
@@ -229,6 +239,15 @@ def _validate_task_participants(home: Path, wg, plaintext: str) -> None:
             "members — an unknown mention opens a task that wakes nobody. "
             "Fix the handle, or omit mentions for a collective task."
         )
+    for ev in task_events:
+        owner = _workflow_phase_owner(wg, ev.slug)
+        if owner and owner.lower() not in {p.lower() for p in ev.participants}:
+            raise ValueError(
+                f"workflow-task-owner-missing: `#{ev.slug}` declares @{owner} "
+                "as its owner, so the opener must mention that profile. Other "
+                "participants may be included, but cannot replace the declared "
+                f"owner. Use `@{owner} #task #{ev.slug} <what to produce>`."
+            )
 
 
 def _check_pipeline_close_owner(
@@ -239,11 +258,14 @@ def _check_pipeline_close_owner(
     override of the ACTIVE pipeline phase (the caller then waives quorum)."""
     if not tasks_mod.is_done(plaintext):
         return False
-    pipeline = [str(x) for x in (getattr(wg.meta, "pipeline", ()) or ())]
-    if not pipeline:
-        return False
     active = tasks_mod.active_task(posts, hub_pubkey=own_pubkey)
-    if active is None or not active.slug or active.slug not in pipeline:
+    if active is None or not active.slug:
+        return False
+    declared_owner = _workflow_phase_owner(wg, active.slug)
+    workflow = {str(x) for x in (getattr(wg.meta, "pipeline", ()) or ())}
+    for slugs in (getattr(wg.meta, "operations", None) or {}).values():
+        workflow.update(str(x) for x in slugs)
+    if active.slug not in workflow:
         return False
     if _explicit_close_override(plaintext, own_pubkey):
         return True
@@ -252,7 +274,10 @@ def _check_pipeline_close_owner(
         peer = peers_mod.get_by_pubkey(home, m.pubkey)
         if peer and peer.id:
             id_to_pubkey[peer.id.lower()] = m.pubkey
-    participants = [str(pid) for pid in (active.participants or ())]
+    if declared_owner:
+        participants = [declared_owner]
+    else:
+        participants = [str(pid) for pid in (active.participants or ())]
     unresolved = [pid for pid in participants if pid.lower() not in id_to_pubkey]
     if unresolved:
         raise ValueError(
@@ -262,17 +287,14 @@ def _check_pipeline_close_owner(
             "cannot be verified. Re-pin the peer, or close loudly with "
             "`#done skipped · <reason>` / `#done BLOCKED · <reason>`."
         )
+    from alpi.alp import pipeline_gates as gates_mod
+
     owner_pubkeys = {id_to_pubkey[pid.lower()] for pid in participants}
-    in_task = [p for p in posts if int(p.get("seq", 0)) > int(active.opened_seq)]
-    if owner_pubkeys:
-        owner_posted = any(
-            str(p.get("from") or "") in owner_pubkeys for p in in_task
-        )
-    else:
-        owner_posted = any(
-            str(p.get("from") or "") != own_pubkey for p in in_task
-        )
-    if owner_posted:
+    delivered_seq = gates_mod.owner_post_under_gate(
+        posts, owner_pubkeys, own_pubkey, int(active.opened_seq),
+    )
+    if delivered_seq is not None:
+        _require_passing_gate(home, wg, active, delivered_seq, own_pubkey)
         return False
     owners = ", ".join(f"@{pid}" for pid in participants) or "the owner"
     first_owner = f"@{participants[0]}" if participants else "@<owner>"
@@ -284,6 +306,54 @@ def _check_pipeline_close_owner(
         "last). To skip the phase deliberately, close loudly with "
         "`#done skipped · <reason>` or `#done BLOCKED · <reason>` — the "
         "`· <reason>` part is required."
+    )
+
+
+def _check_gated_phase_not_abandoned(
+    wg, posts: list[dict], plaintext: str, own_pubkey: str,
+) -> None:
+    from alpi.alp import pipeline_gates as gates_mod
+
+    if not tasks_mod.is_task(plaintext):
+        return
+    active = tasks_mod.active_task(posts, hub_pubkey=own_pubkey)
+    if active is None or not active.slug:
+        return
+    if gates_mod.step_for(wg.meta, active.slug) is None:
+        return
+    evs = tasks_mod.parse_post(plaintext, 0, own_pubkey)
+    new_slug = next((e.slug for e in evs if e.kind == "task"), "")
+    if not new_slug or new_slug == active.slug:
+        return
+    # A differently named repair abandons the checked phase, so only same-slug re-tasking is valid.
+    raise ValueError(
+        f"phase-gate-abandoned: `#{active.slug}` declares a check and is still "
+        f"open, so `#{new_slug}` would leave it behind and the pipeline could "
+        f"never advance past it. To repair a failed check, RE-TASK THE SAME "
+        f"PHASE — `@<owner> #task #{active.slug} <what to fix>` is allowed even "
+        "though you spoke last, and the check re-runs on the owner's next post. "
+        f"To move on without it, close it first with `#done BLOCKED · <reason>` "
+        "or `#done skipped · <reason>`."
+    )
+
+
+def _require_passing_gate(
+    home: Path, wg, active, latest: int, own_pubkey: str,
+) -> None:
+    from alpi.alp import pipeline_gates as gates_mod
+
+    step = gates_mod.step_for(wg.meta, active.slug)
+    if step is None:
+        return
+    wg_dir = wg_mod._wg_dir(home, wg.meta.id)
+    if gates_mod.gate_log_verdict(wg_dir, active.slug, latest) is True:
+        return
+    raise ValueError(
+        f"phase-gate-unverified: `#{active.slug}` declares the gate "
+        f"`{' '.join(step.argv)}` and it has not passed on the owner's latest "
+        f"post (seq #{latest}). A summary is not a green check. Have the owner "
+        f"post again so the gate re-runs, or close loudly with `#done BLOCKED "
+        "· <reason>` if the gate cannot pass."
     )
 
 
@@ -936,6 +1006,7 @@ def _post_as_hub(
     close_override = _check_pipeline_close_owner(
         home, wg, existing, plaintext, kp.pubkey_b64(),
     )
+    _check_gated_phase_not_abandoned(wg, existing, plaintext, kp.pubkey_b64())
     _check_hub_rotation(
         existing, kp.pubkey_b64(), plaintext, quorum_roster,
         wg.meta.quorum_timeout_seconds or _FULL_QUORUM_TIMEOUT_SECONDS,

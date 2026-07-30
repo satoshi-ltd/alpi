@@ -877,10 +877,21 @@ def test_hub_rotation_done_allowed_when_unnamed_member_absent() -> None:
     wc._check_hub_rotation(posts, "HUB", "#done verified", ["SCOUT_PK"])
 
 
-def _fake_wg(hub_pubkey: str, member_pubkeys: list[str], pipeline: tuple = ()):
+def _fake_wg(
+    hub_pubkey: str,
+    member_pubkeys: list[str],
+    pipeline: tuple = (),
+    pipeline_steps: dict | None = None,
+    operations: dict | None = None,
+):
     import types
     return types.SimpleNamespace(
-        meta=types.SimpleNamespace(hub_pubkey=hub_pubkey, pipeline=pipeline),
+        meta=types.SimpleNamespace(
+            hub_pubkey=hub_pubkey,
+            pipeline=pipeline,
+            pipeline_steps=pipeline_steps or {},
+            operations=operations or {},
+        ),
         members=[types.SimpleNamespace(pubkey=pk) for pk in member_pubkeys],
     )
 
@@ -1336,6 +1347,56 @@ def test_validate_pipeline_task_requires_participants(short_tmp: Path) -> None:
     wc._validate_task_participants(home, wg, "@pixel #task #build do the build")
 
 
+def test_validate_workflow_task_requires_declared_owner(short_tmp: Path) -> None:
+    home = short_tmp / "hubowner"; home.mkdir()
+    _pin(home, "muse", "MUSE_PK", ["workgroup.post"])
+    _pin(home, "canvas", "CANVAS_PK", ["workgroup.post"])
+    wg = _fake_wg(
+        "HUB", ["MUSE_PK", "CANVAS_PK"], pipeline=("intake",),
+        pipeline_steps={
+            "intake": {"owner": "muse"},
+            "media-update": {"owner": "muse"},
+        },
+        operations={"media-update": ("media-update",)},
+    )
+
+    with pytest.raises(ValueError, match="workflow-task-owner-missing"):
+        wc._validate_task_participants(
+            home, wg, "@canvas #task #media-update install client media",
+        )
+    wc._validate_task_participants(
+        home, wg, "@muse @canvas #task #media-update install client media",
+    )
+
+
+def test_gate_less_workflow_close_requires_declared_owner(short_tmp: Path) -> None:
+    home = short_tmp / "hubclose"; home.mkdir()
+    _pin(home, "muse", "MUSE_PK", ["workgroup.post"])
+    _pin(home, "canvas", "CANVAS_PK", ["workgroup.post"])
+    wg = _fake_wg(
+        "HUB", ["MUSE_PK", "CANVAS_PK"], pipeline=("intake",),
+        pipeline_steps={
+            "intake": {"owner": "muse"},
+            "media-update": {"owner": "muse"},
+        },
+        operations={"media-update": ("media-update",)},
+    )
+    posts = [
+        _post(1, "HUB", "@canvas #task #media-update install client media"),
+        _post(2, "CANVAS_PK", "media installed"),
+    ]
+
+    with pytest.raises(ValueError, match="phase-owner-missing"):
+        wc._check_pipeline_close_owner(
+            home, wg, posts, "#done media update complete", "HUB",
+        )
+
+    posts.append(_post(3, "MUSE_PK", "verified media map"))
+    assert wc._check_pipeline_close_owner(
+        home, wg, posts, "#done media update complete", "HUB",
+    ) is False
+
+
 def test_validate_non_pipeline_collective_task_allowed(short_tmp: Path) -> None:
     """A non-pipeline (deliberation) workgroup still allows collective tasks."""
     home = short_tmp / "hubdelib"; home.mkdir()
@@ -1477,3 +1538,171 @@ def test_external_write_busts_cache_via_mtime(short_tmp: Path, monkeypatch) -> N
     refreshed = sub_mod.get(home, "wg_ext")
     assert refreshed is not None and refreshed.last_seq == 777
     assert calls["n"] == 2, calls
+
+
+def _op_hub(home: Path):
+    muse_home = home.parent / f"{home.name}-muse"
+    canvas_home = home.parent / f"{home.name}-canvas"
+    muse_home.mkdir(exist_ok=True)
+    canvas_home.mkdir(exist_ok=True)
+    muse_pk = load_or_generate(muse_home).pubkey_b64()
+    canvas_pk = load_or_generate(canvas_home).pubkey_b64()
+    _pin(home, "muse", muse_pk, ["workgroup.post"])
+    _pin(home, "canvas", canvas_pk, ["workgroup.post"])
+    return wg_mod.create(
+        home, name="site", hub_kp=load_or_generate(home),
+        member_pubkeys=[muse_pk, canvas_pk],
+        pipeline=["intake", "qa"],
+        pipeline_steps={
+            "intake": {"owner": "muse", "next": "qa"},
+            "qa": {"owner": "muse"},
+            "media-update": {"owner": "muse", "next": "media-qa"},
+            "media-qa": {"owner": "muse"},
+        },
+        operations={"media-update": ["media-update", "media-qa"]},
+    )
+
+
+@pytest.mark.asyncio
+async def test_post_rejects_an_operation_task_targeted_at_the_wrong_owner(
+    short_tmp: Path,
+) -> None:
+    home = short_tmp / "hubwrong"; home.mkdir()
+    wg = _op_hub(home)
+
+    with pytest.raises(ValueError, match="workflow-task-owner-missing"):
+        await wc.post(
+            home, wg.meta.id,
+            b"@canvas #task #media-update install client media",
+        )
+
+
+@pytest.mark.asyncio
+async def test_post_rejects_closing_an_operation_phase_with_no_owner_delivery(
+    short_tmp: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = short_tmp / "hub"; home.mkdir()
+    wg = _op_hub(home)
+
+    await wc.post(home, wg.meta.id, b"@muse #task #media-update map the client media")
+    with pytest.raises(ValueError, match="phase-owner-missing"):
+        await wc.post(home, wg.meta.id, b"#done media-update complete")
+
+
+@pytest.mark.asyncio
+async def test_post_allows_blocked_override_on_an_operation_phase(
+    short_tmp: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = short_tmp / "hub"; home.mkdir()
+    wg = _op_hub(home)
+
+    await wc.post(home, wg.meta.id, b"@muse #task #media-update map the client media")
+    out = await wc.post(
+        home, wg.meta.id,
+        "#done BLOCKED · media-update · logo format unsupported".encode(),
+    )
+    assert isinstance(out.get("seq"), int)
+
+
+@pytest.mark.asyncio
+async def test_post_allows_skipped_override_on_an_operation_phase(
+    short_tmp: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = short_tmp / "hub"; home.mkdir()
+    wg = _op_hub(home)
+
+    await wc.post(home, wg.meta.id, b"@muse #task #media-qa audit the rebuild")
+    out = await wc.post(home, wg.meta.id, "#done skipped · no media changed".encode())
+    assert isinstance(out.get("seq"), int)
+
+
+def _gated_hub(home: Path):
+    scout_home = home.parent / f"{home.name}-scout"
+    scout_home.mkdir(exist_ok=True)
+    pk = load_or_generate(scout_home).pubkey_b64()
+    _pin(home, "scout", pk, ["workgroup.post"])
+    wg = wg_mod.create(
+        home, name="site", hub_kp=load_or_generate(home), member_pubkeys=[pk],
+        pipeline=["intake", "qa"],
+        pipeline_steps={
+            "intake": {
+                "owner": "scout", "next": "qa",
+                "gate": {"argv": ["npm", "run", "check:config"], "cwd": "p"},
+            },
+            "qa": {"owner": "scout"},
+        },
+    )
+    return wg, pk
+
+
+def _member_post(home: Path, wg, pubkey: str, text: str) -> int:
+    import json as _json
+
+    kp = load_or_generate(home)
+    keys = wg_mod.hub_group_keys(home, wg, kp)
+    version = max(keys)
+    nonce, ct = wg_mod.encrypt_post(keys[version], text.encode())
+    path = home / "alp" / "workgroups" / wg.meta.id / "transcript.jsonl"
+    lines = [ln for ln in path.read_text().splitlines() if ln.strip()]
+    seq = (_json.loads(lines[-1])["seq"] + 1) if lines else 1
+    with path.open("a") as fh:
+        fh.write(_json.dumps({
+            "seq": seq, "ts": "2026-07-30T00:00:00Z", "from": pubkey,
+            "key_version": version, "nonce": nonce, "ciphertext": ct,
+        }) + "\n")
+    return seq
+
+
+@pytest.mark.asyncio
+async def test_working_only_cannot_close_a_gated_phase(short_tmp: Path) -> None:
+    home = short_tmp / "hub"; home.mkdir()
+    wg, pk = _gated_hub(home)
+    await wc.post(home, wg.meta.id, b"@scout #task #intake produce site.json")
+    _member_post(home, wg, pk, "#working still reading the brief")
+    with pytest.raises(ValueError, match="phase-owner-missing"):
+        await wc.post(home, wg.meta.id, b"#done intake complete")
+
+
+@pytest.mark.asyncio
+async def test_skip_only_cannot_close_a_gated_phase(short_tmp: Path) -> None:
+    home = short_tmp / "hub"; home.mkdir()
+    wg, pk = _gated_hub(home)
+    await wc.post(home, wg.meta.id, b"@scout #task #intake produce site.json")
+    _member_post(home, wg, pk, "#skip not my phase")
+    with pytest.raises(ValueError, match="phase-owner-missing"):
+        await wc.post(home, wg.meta.id, b"#done intake complete")
+
+
+@pytest.mark.asyncio
+async def test_blocked_override_closes_a_gated_phase_with_only_working(
+    short_tmp: Path,
+) -> None:
+    home = short_tmp / "hub"; home.mkdir()
+    wg, pk = _gated_hub(home)
+    await wc.post(home, wg.meta.id, b"@scout #task #intake produce site.json")
+    _member_post(home, wg, pk, "#working still reading the brief")
+    await wc.post(
+        home, wg.meta.id,
+        "#done BLOCKED · scout cannot reach the engine id".encode(),
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_hub_note_after_delivery_does_not_hide_it(short_tmp: Path) -> None:
+    from alpi.alp import pipeline_gates as gates
+
+    home = short_tmp / "hub"; home.mkdir()
+    wg, pk = _gated_hub(home)
+    await wc.post(home, wg.meta.id, b"@scout #task #intake produce site.json")
+    delivered = _member_post(home, wg, pk, "wrote src/config/site.json")
+    await wc.post(home, wg.meta.id, b"noted, one clarification on scope follows")
+
+    posts = [
+        {"seq": 1, "from": "HUB", "text": "@scout #task #intake produce site.json"},
+        {"seq": delivered, "from": pk, "text": "wrote src/config/site.json"},
+        {"seq": delivered + 1, "from": "HUB", "text": "one more note on scope"},
+    ]
+    assert gates.owner_post_under_gate(posts, {pk}, "HUB", 1) == delivered
+
+    with pytest.raises(ValueError, match="phase-gate-unverified"):
+        await wc.post(home, wg.meta.id, b"#done intake complete")

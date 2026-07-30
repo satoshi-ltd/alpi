@@ -32,7 +32,7 @@ def test_validate_pipeline_steps_empty_is_empty():
 
 @pytest.mark.parametrize("steps, needle", [
     ("not-a-dict", "must be a mapping"),
-    ({"nope": {"owner": "scout"}}, "not in the pipeline"),
+    ({"nope": {"owner": "scout"}}, "neither the pipeline"),
     ({"intake": {"next": "content"}}, "missing 'owner'"),
     ({"intake": {"owner": "scout", "next": "ghost"}}, "next"),
     ({"intake": {"owner": "scout", "gate": {"argv": []}}}, "non-empty list"),
@@ -70,7 +70,7 @@ def test_create_rejects_malformed_steps(tmp_path):
     home = tmp_path / "hub"
     home.mkdir()
     kp = load_or_generate(home)
-    with pytest.raises(ValueError, match="not in the pipeline"):
+    with pytest.raises(ValueError, match="neither the pipeline"):
         wg_mod.create(
             home, name="proj-y", hub_kp=kp, member_pubkeys=[],
             pipeline=["intake"], pipeline_steps={"ghost": {"owner": "x"}},
@@ -103,3 +103,25 @@ def test_create_defaults_unchanged_when_omitted(tmp_path):
     reloaded = wg_mod.load(home, wg.meta.id)
     assert reloaded.meta.pipeline_steps == {}
     assert reloaded.meta.quorum_timeout_seconds == 0
+
+
+def test_launch_next_may_skip_a_gateless_phase():
+    import types
+
+    from alpi.alp import pipeline_gates as gates
+
+    meta = types.SimpleNamespace(pipeline=PIPELINE, pipeline_steps=STEPS, operations={})
+    step = gates.step_for(meta, "intake")
+    assert step is not None, "a valid launch gate must not be silently disabled"
+    assert step.next_phase == "content"
+    assert step.next_owner == "quill"
+
+
+def test_launch_next_outside_the_pipeline_is_still_rejected():
+    import types
+
+    from alpi.alp import pipeline_gates as gates
+
+    steps = {**STEPS, "intake": {**STEPS["intake"], "next": "nowhere"}}
+    meta = types.SimpleNamespace(pipeline=PIPELINE, pipeline_steps=steps, operations={})
+    assert gates.step_for(meta, "intake") is None

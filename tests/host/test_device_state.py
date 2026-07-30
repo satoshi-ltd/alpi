@@ -652,6 +652,43 @@ async def test_profile_summaries_does_not_block_loop(
 
 
 @pytest.mark.asyncio
+async def test_profile_summaries_cache_collapses_repeat_polls(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = _bootstrap(tmp_path / "h")
+    monkeypatch.setattr(host_device_state.home_mod, "_ROOT", home)
+    host_device_state.invalidate_summary()
+
+    calls = {"n": 0}
+    real = host_device_state._profile_summary
+
+    def counting(row):
+        calls["n"] += 1
+        return real(row)
+
+    monkeypatch.setattr(host_device_state, "_profile_summary", counting)
+
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+
+    async def summaries():
+        return await srv._dispatch(
+            {"id": "s", "method": "host.profile.summaries", "params": {}},
+        )
+
+    r1 = await summaries()
+    n_profiles = len(r1["result"]["profiles"])
+    assert n_profiles >= 1
+    r2 = await summaries()
+    assert calls["n"] == n_profiles, "second poll re-walked profiles instead of serving cache"
+    assert r2["result"]["profiles"] == r1["result"]["profiles"]
+
+    host_device_state.invalidate_summary()
+    await summaries()
+    assert calls["n"] == 2 * n_profiles, "clearing the cache must force a fresh walk"
+
+
+@pytest.mark.asyncio
 async def test_profile_storage_lists_all_known_categories(
     tmp_path: Path, monkeypatch,
 ) -> None:
@@ -1086,3 +1123,172 @@ async def test_memory_usage_over_flag_at_boundary(
     })
     ag = resp["result"]["files"]["AGENT.md"]
     assert ag["over"] is True
+
+
+@pytest.mark.asyncio
+async def test_summaries_burst_collapses_and_frees_the_executor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import asyncio
+    import time as _time
+
+    home = _bootstrap(tmp_path / "h")
+    monkeypatch.setattr(host_device_state.home_mod, "_ROOT", home)
+    host_device_state.invalidate_summary()
+
+    calls = {"n": 0}
+    real = host_device_state._profile_summary
+
+    def slow(row):
+        calls["n"] += 1
+        _time.sleep(0.25)
+        return real(row)
+
+    monkeypatch.setattr(host_device_state, "_profile_summary", slow)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+
+    async def summaries():
+        return await srv._dispatch(
+            {"id": "s", "method": "host.profile.summaries", "params": {}},
+        )
+
+    burst = [asyncio.create_task(summaries()) for _ in range(40)]
+    await asyncio.sleep(0.05)
+
+    started = _time.monotonic()
+    await asyncio.wait_for(asyncio.to_thread(lambda: None), timeout=2.0)
+    unrelated_latency = _time.monotonic() - started
+
+    results = await asyncio.gather(*burst)
+    n_profiles = len(results[0]["result"]["profiles"])
+
+    assert calls["n"] == n_profiles, (
+        f"burst of 40 polls walked {calls['n']} times for {n_profiles} profile(s) — "
+        "the single-flight is not collapsing them"
+    )
+    assert unrelated_latency < 0.15, (
+        f"an unrelated to_thread waited {unrelated_latency*1000:.0f}ms — the burst is "
+        "parking executor threads, which is what starves every other host call"
+    )
+
+
+@pytest.mark.asyncio
+async def test_config_change_invalidates_the_summary_before_emitting(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from alpi.host import config as host_config
+
+    home = _bootstrap(tmp_path / "h")
+    monkeypatch.setattr(host_device_state.home_mod, "_ROOT", home)
+    host_device_state.invalidate_summary()
+
+    calls = {"n": 0}
+    real = host_device_state._profile_summary
+
+    def counting(row):
+        calls["n"] += 1
+        return real(row)
+
+    monkeypatch.setattr(host_device_state, "_profile_summary", counting)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+
+    async def summaries():
+        return await srv._dispatch(
+            {"id": "s", "method": "host.profile.summaries", "params": {}},
+        )
+
+    r1 = await summaries()
+    n_profiles = len(r1["result"]["profiles"])
+    await summaries()
+    assert calls["n"] == n_profiles, "cache did not warm"
+
+    host_config._emit_config_changed(home, scope="providers")
+
+    await summaries()
+    assert calls["n"] == 2 * n_profiles, (
+        "a config mutation left the sidebar serving the cached summary — the "
+        "desktop's reload would show stale state until the TTL expired"
+    )
+
+
+@pytest.mark.asyncio
+async def test_invalidation_during_a_walk_is_not_overwritten(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import asyncio
+    import threading as _threading
+
+    home = _bootstrap(tmp_path / "h")
+    monkeypatch.setattr(host_device_state.home_mod, "_ROOT", home)
+    host_device_state.invalidate_summary()
+
+    entered = _threading.Event()
+    release = _threading.Event()
+    state = {"value": "old"}
+
+    def gated(row):
+        snapshot = state["value"]
+        entered.set()
+        release.wait(timeout=5)
+        return {**row, "marker": snapshot}
+
+    monkeypatch.setattr(host_device_state, "_profile_summary", gated)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+
+    async def summaries():
+        return await srv._dispatch(
+            {"id": "s", "method": "host.profile.summaries", "params": {}},
+        )
+
+    inflight = asyncio.create_task(summaries())
+    await asyncio.to_thread(entered.wait, 5)
+
+    state["value"] = "new"
+    host_device_state.invalidate_summary("default")
+    release.set()
+    await inflight
+
+    monkeypatch.setattr(
+        host_device_state, "_profile_summary", lambda row: {**row, "marker": state["value"]},
+    )
+    reload_resp = await summaries()
+    markers = [p["marker"] for p in reload_resp["result"]["profiles"]]
+    assert "old" not in markers, (
+        "the in-flight walk re-cached the pre-mutation summary, so the reload the "
+        f"event triggered still served it: {markers}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_set_field_rpc_refreshes_the_summary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = _bootstrap(tmp_path / "h")
+    monkeypatch.setattr(host_device_state.home_mod, "_ROOT", home)
+    monkeypatch.setattr(host_handlers, "_resolve_home", lambda profile: home)
+    host_device_state.invalidate_summary()
+
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+
+    async def summaries():
+        return await srv._dispatch(
+            {"id": "s", "method": "host.profile.summaries", "params": {}},
+        )
+
+    before = await summaries()
+    assert before["result"]["profiles"][0]["paused"] is not True
+
+    await srv._dispatch({
+        "id": "f", "method": "host.config.set_field",
+        "params": {"profile": "default", "key": "paused", "value": True},
+    })
+
+    after = await summaries()
+    assert after["result"]["profiles"][0]["paused"] is True, (
+        "host.config.set_field emitted its event without dropping the cached "
+        "summary — the desktop's reload would show the pre-edit value"
+    )

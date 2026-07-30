@@ -229,6 +229,7 @@ class Meta:
     pipeline: tuple[str, ...] = ()
     # Hub-local gate specs per phase ({phase: {owner, next?, task?, gate: {argv, cwd?}}}); never transmitted on the wire, never accepts remote text.
     pipeline_steps: dict = field(default_factory=dict)
+    operations: dict = field(default_factory=dict)
     # Hub-local desktop playback preference — not replicated to members
     auto_read: bool = False
     # Closure-quorum grace (s) before the hub may `#done` with no substantive peer input; 0 = the _FULL_QUORUM_TIMEOUT_SECONDS default.
@@ -307,6 +308,11 @@ def _load_meta(d: Path) -> Meta | None:
             notify_on_close=str(raw.get("notify_on_close") or "none"),
             pipeline=pipeline,
             pipeline_steps=raw.get("pipeline_steps") if isinstance(raw.get("pipeline_steps"), dict) else {},
+            operations={
+                str(k): tuple(str(x) for x in v)
+                for k, v in (raw.get("operations") or {}).items()
+                if isinstance(v, (list, tuple))
+            } if isinstance(raw.get("operations"), dict) else {},
             auto_read=bool(raw.get("auto_read", False)),
             quorum_timeout_seconds=_coerce_positive_int(raw.get("quorum_timeout_seconds")),
             launch=raw.get("launch") if isinstance(raw.get("launch"), dict) else {},
@@ -340,6 +346,8 @@ def _save_meta(d: Path, meta: Meta) -> None:
         payload["pipeline"] = list(meta.pipeline)
     if meta.pipeline_steps:
         payload["pipeline_steps"] = dict(meta.pipeline_steps)
+    if meta.operations:
+        payload["operations"] = {k: list(v) for k, v in meta.operations.items()}
     if meta.auto_read:
         payload["auto_read"] = True
     if meta.quorum_timeout_seconds:
@@ -420,6 +428,47 @@ def list_workgroups(home: Path) -> list[Workgroup]:
     return out
 
 
+def _normalize_operations(operations: Any, pipeline: tuple[str, ...]) -> dict[str, tuple[str, ...]]:
+    # Persistence boundary: reject here too, the recipe parser is not the only caller.
+    if not operations:
+        return {}
+    if not isinstance(operations, dict):
+        raise ValueError(f"operations must be a mapping, got {type(operations).__name__}")
+    if operations and not pipeline:
+        raise ValueError("operations require a pipeline: they are post-launch chains")
+    out: dict[str, tuple[str, ...]] = {}
+    claimed: dict[str, str] = {}
+    for name, raw in operations.items():
+        op = str(name).strip().lower()
+        if not _PIPELINE_SLUG_RE.match(op):
+            raise ValueError(f"operation name {name!r} is not a valid slug")
+        if op in out:
+            raise ValueError(f"duplicate operation {op!r}")
+        if not isinstance(raw, (list, tuple)) or not raw:
+            raise ValueError(f"operation {op!r} steps must be a non-empty list")
+        slugs = tuple(str(x).strip().lower() for x in raw)
+        for slug in slugs:
+            if not _PIPELINE_SLUG_RE.match(slug):
+                raise ValueError(f"operation {op!r} step {slug!r} is not a valid slug")
+        if len(set(slugs)) != len(slugs):
+            raise ValueError(f"operation {op!r} has duplicate steps")
+        if slugs[0] != op:
+            raise ValueError(f"operation {op!r} must start with a step named {op!r}")
+        for slug in slugs:
+            if slug in pipeline:
+                raise ValueError(
+                    f"operation {op!r} step {slug!r} is also a pipeline phase; chains must be disjoint"
+                )
+            if slug in claimed:
+                raise ValueError(
+                    f"step {slug!r} belongs to operations {claimed[slug]!r} and {op!r}; "
+                    "chains must be disjoint"
+                )
+            claimed[slug] = op
+        out[op] = slugs
+    return out
+
+
 def create(
     home: Path,
     *,
@@ -431,6 +480,7 @@ def create(
     notify_on_close: str = "none",
     pipeline: tuple[str, ...] | list[str] = (),
     pipeline_steps: Any = None,
+    operations: dict | None = None,
     quorum_timeout_seconds: int = 0,
     launch: dict | None = None,
     hub_bio: str = "",
@@ -442,7 +492,23 @@ def create(
         raise ValueError("workgroup name required")
     budget = _validate_budget(budget or {})
     norm_pipeline = _normalize_pipeline(pipeline)
-    norm_steps = validate_pipeline_steps(norm_pipeline, pipeline_steps)
+    norm_ops = _normalize_operations(operations, norm_pipeline)
+    norm_steps = validate_pipeline_steps(
+        norm_pipeline, pipeline_steps,
+        extra_phases=tuple(s for slugs in norm_ops.values() for s in slugs),
+    )
+    for op, slugs in norm_ops.items():
+        missing = [s for s in slugs if s not in norm_steps]
+        if missing:
+            raise ValueError(f"operation {op!r} steps have no pipeline_steps entry: {missing}")
+        for i, slug in enumerate(slugs):
+            declared = str((norm_steps.get(slug) or {}).get("next") or "")
+            successor = slugs[i + 1] if i + 1 < len(slugs) else ""
+            if declared and declared != successor:
+                raise ValueError(
+                    f"operation {op!r} step {slug!r} declares next={declared!r} but its "
+                    f"chain orders the successor as {successor or '<none>'!r}"
+                )
 
     hub_pk = hub_kp.pubkey_b64()
     roster = [hub_pk]
@@ -476,6 +542,7 @@ def create(
             notify_on_close=str(notify_on_close or "none"),
             pipeline=norm_pipeline,
             pipeline_steps=norm_steps,
+            operations=norm_ops,
             quorum_timeout_seconds=_coerce_positive_int(quorum_timeout_seconds),
             launch=dict(launch) if launch else {},
         )
@@ -916,19 +983,23 @@ def _normalize_pipeline(raw: Any) -> tuple[str, ...]:
 
 def validate_pipeline_steps(
     pipeline: tuple[str, ...], pipeline_steps: Any,
+    extra_phases: tuple[str, ...] = (),
 ) -> dict[str, dict]:
     if not pipeline_steps:
         return {}
     if not isinstance(pipeline_steps, dict):
         raise ValueError(f"pipeline_steps must be a mapping, got {type(pipeline_steps).__name__}")
-    phases = set(pipeline)
+    phases = set(pipeline) | set(extra_phases)
     out: dict[str, dict] = {}
     for phase, raw in pipeline_steps.items():
         phase = str(phase).strip().lower()
         if not _PIPELINE_SLUG_RE.match(phase):
             raise ValueError(f"pipeline_steps key {phase!r} is not a valid phase slug")
         if pipeline and phase not in phases:
-            raise ValueError(f"pipeline_steps key {phase!r} is not in the pipeline {list(pipeline)}")
+            raise ValueError(
+                f"pipeline_steps key {phase!r} is in neither the pipeline {list(pipeline)} "
+                f"nor any operation"
+            )
         if not isinstance(raw, dict):
             raise ValueError(f"pipeline_steps[{phase!r}] must be a mapping")
         owner = str(raw.get("owner") or "").strip()

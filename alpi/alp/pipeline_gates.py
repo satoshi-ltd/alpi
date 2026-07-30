@@ -8,7 +8,6 @@ import tempfile
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 GATE_TIMEOUT_SECONDS = 180
 GATE_OUTPUT_CAP = 8_000
@@ -26,6 +25,26 @@ class GateStep:
     next_task: str
     argv: tuple[str, ...]
     cwd: str
+
+
+def operation_chain_for(meta, phase: str) -> tuple[str, ...] | None:
+    """The operation owning ``phase``, or None when it is a launch phase."""
+    for slugs in (getattr(meta, "operations", None) or {}).values():
+        if phase in tuple(slugs):
+            return tuple(slugs)
+    return None
+
+
+def chain_for(meta, phase: str) -> tuple[str, ...] | None:
+    """``()`` = no chain declared (unconstrained); ``None`` = chains exist and phase is in none."""
+    pipeline = tuple(getattr(meta, "pipeline", ()) or ())
+    operations = getattr(meta, "operations", None) or {}
+    if phase in pipeline:
+        return pipeline
+    for slugs in operations.values():
+        if phase in tuple(slugs):
+            return tuple(slugs)
+    return None if (pipeline or operations) else ()
 
 
 def step_for(meta, phase: str) -> GateStep | None:
@@ -46,15 +65,27 @@ def step_for(meta, phase: str) -> GateStep | None:
         or not isinstance(cwd, str)
     ):
         return None
-    pipeline = tuple(getattr(meta, "pipeline", ()) or ())
-    if pipeline and phase not in pipeline:
+    chain = chain_for(meta, phase)
+    if chain is None:
         return None
-    next_phase = str(raw.get("next") or "")
+    declared = str(raw.get("next") or "")
+    operation = operation_chain_for(meta, phase)
+    if operation is not None:
+        # An operation's order lives in its `steps`; `next` may only restate it.
+        idx = operation.index(phase)
+        successor = operation[idx + 1] if idx + 1 < len(operation) else ""
+        if declared and declared != successor:
+            return None
+        next_phase = successor
+    else:
+        # The launch pipeline keeps `next` authoritative: it may skip gate-less phases.
+        next_phase = declared
+        if next_phase and chain and next_phase not in chain:
+            return None
     nxt = steps.get(next_phase) if next_phase else None
     if next_phase and (
         not isinstance(nxt, dict)
         or not str(nxt.get("owner") or "")
-        or (pipeline and next_phase not in pipeline)
     ):
         return None
     next_owner = str(nxt.get("owner") or "") if isinstance(nxt, dict) else ""
@@ -124,6 +155,35 @@ def run_gate(step: GateStep, workspace: Path) -> tuple[bool, str]:
     if timed_out:
         return False, f"gate timed out after {GATE_TIMEOUT_SECONDS}s"
     return returncode == 0, out
+
+
+def gate_log_verdict(wg_dir: Path, phase: str, seq: int) -> bool | None:
+    """``None`` = the gate never ran on the post at ``seq``; else its verdict."""
+    try:
+        record = json.loads(
+            (wg_dir / "gates" / f"{phase}-{seq}.log").read_text(encoding="utf-8"),
+        )
+    except (OSError, ValueError):
+        return None
+    if str(record.get("phase") or "") != phase:
+        return None
+    return bool(record.get("passed"))
+
+
+def owner_post_under_gate(
+    posts: list[dict], owner_pubkeys: set[str], hub_pubkey: str, opened_seq: int,
+) -> int | None:
+    from alpi.alp import tasks as tasks_mod
+
+    seqs = [
+        int(p.get("seq", 0)) for p in posts
+        if int(p.get("seq", 0)) > opened_seq
+        and (str(p.get("from") or "") in owner_pubkeys if owner_pubkeys
+             else str(p.get("from") or "") != hub_pubkey)
+        and not tasks_mod.is_working(str(p.get("text") or ""))
+        and not tasks_mod.is_skip(str(p.get("text") or ""))
+    ]
+    return max(seqs) if seqs else None
 
 
 def write_gate_log(wg_dir: Path, step: GateStep, seq: int, passed: bool, output: str) -> None:

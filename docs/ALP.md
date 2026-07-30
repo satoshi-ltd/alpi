@@ -920,6 +920,34 @@ needs:
 - *Project* — adds a `project` block: clone a template repo into
   the workspace and seed it before the pipeline starts.
 
+**Operations — post-launch chains.** A pipeline runs once, at
+launch. Work that arrives later (client photography, a fresh set of
+facts) is declared as an `operation`: a named ordered step list the
+daemon advances with the same resolver, gates and turn rotation as
+`pipeline`.
+
+```yaml
+operations:
+  media-update:
+    steps: [media-update, media-config, media-build, media-qa]
+```
+
+- Each step needs its own `pipeline_steps` entry (owner, optional
+  `next`, optional `gate`) — the same shape a launch phase uses.
+- The first step MUST carry the operation's own name, so
+  `@owner #task #<operation>` starts it with no alias layer.
+- Steps stay OUT of `pipeline`, so closing the launch pipeline still
+  completes it and the operation waits for its trigger.
+- An operation may run again for every later delivery: re-opening its
+  first step advances the chain from the start.
+- **Chains must be disjoint.** A slug may belong to `pipeline` or to
+  exactly one operation, never to two — otherwise the active chain
+  would depend on YAML order. Declaring `operations` without a
+  `pipeline` is rejected.
+- The chain is chosen from the LATEST close alone. A `#done` whose
+  slug belongs to no declared chain resolves as unknown, and the core
+  opens nothing rather than resurrecting finished work.
+
 **Parameters vs inputs — two kinds of operator-supplied value.**
 
 - `params` are single-line **interpolation tokens**: every `{name}`
@@ -1480,7 +1508,34 @@ still apply, and the machine-authored close is auditable
 `gates/<phase>-<seq>.log`, mode 0600). A failing gate never
 advances: it wakes the hub's agent with the bounded error, one
 attempt per owner post. Phases without a step (or whose transition
-needs judgment — intake signals, QA) stay LLM-owned. Each accepted
+needs judgment — intake signals, QA) stay LLM-owned, and so does a
+step that declares `{owner, next, task}` but omits `gate`: it is
+still dispatched and owner-typed, it just closes on quorum instead of
+on a check. Omitting the gate is the right call for a phase that may
+legitimately produce nothing — one whose owner can answer `#done
+skipped · <reason>` — because a gate there would fail a correct
+outcome.
+
+**Two authorities decide the successor, and they are not the same
+one.** The continuation path (a phase closed by quorum, gate-less or
+LLM-owned) advances by POSITION in the chain: `_next_pipeline_phase`
+returns the slug after the latest close in `meta.pipeline` (or in the
+owning operation) and never reads `pipeline_steps`. The gate path
+reads `next` from the step. Keep them consistent — a `next` that
+disagrees with the list order makes a phase advance differently
+depending on whether its gate ran. Within an operation the order lives
+in `steps` and `next` may only restate it (a disagreeing `next` is
+rejected); in the launch pipeline `next` stays authoritative and may
+skip a gate-less phase on purpose.
+
+**Who writes the successor's `#task` also follows from that split.** On the
+gate path the daemon opens the next phase itself with the step's declared
+`task` verbatim (`@owner #task #<phase> · <task>`). On the continuation
+path it wakes the hub AGENT, which authors the opener in its own words —
+so the successor's declared `task` is never sent. Making a phase gate-less
+therefore delegates the wording of the NEXT phase's task to the hub, and
+any recipe-side length or content discipline on that text stops binding.
+Each accepted
 `workgroup.post` also nudges the hub's poller in-process
 (`alp/wakes.py`), so gate reactions are near-immediate; polling
 remains the recovery path. Off-pipeline fix slugs that PREFIX a phase

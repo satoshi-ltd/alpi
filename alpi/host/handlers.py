@@ -195,4 +195,8 @@ async def _sessions_delete(
             deleted.append(sid)
         else:
             errors.append({"id": sid, "code": "not-found"})
+    if deleted:
+        from alpi.host import device_state
+        # Keyed by profile NAME: the raw param is "" for the default profile, which matches nothing.
+        device_state.invalidate_summary(home_mod.profile_name(home))
     return {"deleted": deleted, "errors": errors}

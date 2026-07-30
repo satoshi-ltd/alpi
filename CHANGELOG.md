@@ -1,5 +1,52 @@
 # Changelog
 
+## v0.11.19 — 2026-07-30 — declared post-launch chains, and gates that cannot be talked past
+
+- **A recipe can now declare `operations`: named chains of steps the daemon
+  advances on its own, exactly like the launch pipeline.** Post-launch work —
+  installing client photography, folding in new facts — no longer depends on the
+  hub remembering a multi-step sequence; the ordered list is read from the
+  recipe, so opening one task runs the whole chain.
+- **An operation runs only when asked.** Its steps stay out of `pipeline`, so
+  closing the launch pipeline still completes it; the operation waits for its
+  trigger and can run again for every later delivery.
+- **A step in no declared chain is still never guessed.** The core reports it as
+  unknown rather than inventing a successor, and a `#done BLOCKED` halts an
+  operation the same way it halts the launch pipeline.
+- **The desktop stops dropping its connection under load.** The per-profile
+  listing behind the sidebar was recomputed from disk on every request, so a
+  burst of them could tie up the daemon and leave every other call timing out.
+  A burst now produces one computation, and the requests waiting on it no longer
+  hold the daemon's worker threads while they wait.
+- **The sidebar still updates the moment something changes.** Sharing that
+  listing could have left it showing an old model, pause state or last chat for a
+  few seconds after a change; anything that alters it now refreshes it before the
+  desktop is told to reload.
+- **A phase that declares a check now closes on that check, not on a summary.**
+  Until now the check could veto the owner's handoff but not the close itself, so
+  a workgroup could be moved forward on an assurance that the check had passed.
+  Closing a checked phase now requires the check to have actually passed on the
+  owner's latest delivery.
+- **A checked phase cannot be left behind by renaming it.** Repairing a failed
+  check by opening a differently-named task abandoned the phase: it was never
+  closed, and the pipeline could not advance past it. The repair is to re-open
+  the same phase, which is allowed even when the hub spoke last, and the failure
+  message now says so.
+- **A heartbeat is not a delivery, and a later note cannot hide one.** A phase no
+  longer closes when its owner only said it was still working or that the phase
+  was not theirs; and a coordination note posted after a delivery no longer stops
+  the check from ever running on it.
+- **A stuck check says so.** When a phase's check never runs, the daemon warns
+  once naming the phase, the command and the delivery it was waiting on —
+  previously the work simply stopped with nothing in the log to explain it.
+- **Deliberate dead ends still close.** `#done BLOCKED · <reason>` and
+  `#done skipped · <reason>` are unchanged, and remain the honest way past a
+  check that cannot pass.
+- **Agents doing research read pages instead of downloading them.** The
+  per-turn guidance now points at the extracting reader first, which returns an
+  answer rather than a whole page — the previous wording steered every agent to
+  the most expensive option.
+
 ## v0.11.18 — 2026-07-29 — a profile out of budget says so
 
 - **A profile that hits its daily cap no longer stalls its workgroups in

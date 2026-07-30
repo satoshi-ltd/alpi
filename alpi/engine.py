@@ -1223,11 +1223,14 @@ class Engine:
         path = self.session.save()
         if path is not None:
             try:
+                from alpi.host import device_state
                 from alpi.host import events as data_events
+                profile = _profile_name(self.home)
+                device_state.invalidate_summary(profile)
                 data_events.emit(
                     "session_changed",
                     {
-                        "profile": _profile_name(self.home),
+                        "profile": profile,
                         "id": self.session.id,
                         "subdir": self.session.subdir,
                     },

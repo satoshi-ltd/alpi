@@ -319,3 +319,152 @@ def test_local_wake_registration_is_recoverable(tmp_path):
     wakes.unregister(tmp_path)
     wakes.fire(tmp_path, "wg_ignored")
     assert seen == ["wg_fast"]
+
+
+OP_STEPS = {
+    **STEPS,
+    "build": {"owner": "pixel", "gate": {"cwd": "projects/casa", "argv": ["true"]}},
+    "media-update": {
+        "owner": "muse", "next": "media-qa", "task": "map the client media",
+        "gate": {"cwd": "projects/casa", "argv": ["npm", "run", "assets:optimize"]},
+    },
+    "media-qa": {"owner": "lens", "gate": {"cwd": "projects/casa", "argv": ["true"]}},
+}
+
+
+def _op_meta():
+    return types.SimpleNamespace(
+        pipeline_steps=OP_STEPS,
+        pipeline=("content", "translation", "build"),
+        operations={"media-update": ("media-update", "media-qa")},
+        paused=False,
+    )
+
+
+def test_step_for_resolves_operation_steps():
+    step = gates.step_for(_op_meta(), "media-update")
+    assert (step.owner, step.next_phase, step.next_owner) == ("muse", "media-qa", "lens")
+    assert step.argv == ("npm", "run", "assets:optimize")
+
+
+def test_step_for_resolves_an_operations_terminal_step():
+    step = gates.step_for(_op_meta(), "media-qa")
+    assert step.owner == "lens" and step.next_phase == ""
+    assert gates.next_task_text(step) is None
+
+
+def test_step_for_still_rejects_a_phase_in_no_chain():
+    meta = _op_meta()
+    meta.pipeline_steps = {**OP_STEPS, "stray": {"owner": "lens", "gate": {"cwd": "", "argv": ["true"]}}}
+    assert gates.step_for(meta, "stray") is None
+
+
+def test_chain_for_picks_the_owning_chain():
+    meta = _op_meta()
+    assert gates.chain_for(meta, "content") == ("content", "translation", "build")
+    assert gates.chain_for(meta, "media-qa") == ("media-update", "media-qa")
+    assert gates.chain_for(meta, "nope") is None
+    assert gates.chain_for(types.SimpleNamespace(pipeline=(), operations={}), "x") == ()
+
+
+def test_step_for_rejects_a_next_outside_its_own_chain():
+    meta = _op_meta()
+    meta.pipeline_steps = {**OP_STEPS, "media-update": {**OP_STEPS["media-update"], "next": "build"}}
+    assert gates.step_for(meta, "media-update") is None
+
+
+@pytest.mark.asyncio
+async def test_operation_gate_posts_done_and_opens_its_next_step(tmp_path, monkeypatch):
+    from alpi import service
+
+    home = tmp_path / "hub"
+    home.mkdir()
+    wg = types.SimpleNamespace(meta=types.SimpleNamespace(
+        id="wg_op", hub_pubkey="HUB", **{
+            k: v for k, v in vars(_op_meta()).items()
+        },
+    ))
+    recent = [
+        {"seq": 1, "from": "HUB", "text": "@muse #task #media-update map the client media"},
+        {"seq": 2, "from": "MUSEPK", "text": "manifest complete · 20 files mapped"},
+    ]
+    monkeypatch.setattr(
+        "alpi.alp.peers.load",
+        lambda h: [types.SimpleNamespace(id="muse", pubkey="MUSEPK")],
+    )
+    monkeypatch.setattr(
+        "alpi.alp.pipeline_gates.run_gate", lambda step, ws: (True, "assets ready"),
+    )
+    posted: list[str] = []
+
+    async def fake_post(h, wid, text, cost=None):
+        posted.append(text.decode())
+        return {"seq": 3 + len(posted)}
+
+    monkeypatch.setattr("alpi.alp.workgroup_client.post", fake_post)
+    monkeypatch.setattr(service, "_set_hub_responded_seq", lambda *a: None)
+    service._GATE_ATTEMPTED.clear()
+
+    assert await service._maybe_gate_advance(home, wg, recent, "HUB") is True
+    assert posted[0].startswith("#done media-update verified · gate:")
+    assert posted[1].startswith("@lens #task #media-qa")
+
+
+@pytest.mark.asyncio
+async def test_failing_operation_gate_does_not_advance(tmp_path, monkeypatch):
+    from alpi import service
+
+    home = tmp_path / "hub"
+    home.mkdir()
+    wg = types.SimpleNamespace(meta=types.SimpleNamespace(
+        id="wg_op2", hub_pubkey="HUB", **{k: v for k, v in vars(_op_meta()).items()},
+    ))
+    recent = [
+        {"seq": 1, "from": "HUB", "text": "@muse #task #media-update map it"},
+        {"seq": 2, "from": "MUSEPK", "text": "manifest complete"},
+    ]
+    monkeypatch.setattr(
+        "alpi.alp.peers.load",
+        lambda h: [types.SimpleNamespace(id="muse", pubkey="MUSEPK")],
+    )
+    monkeypatch.setattr(
+        "alpi.alp.pipeline_gates.run_gate",
+        lambda step, ws: (False, "3 supplied slots have no derivative"),
+    )
+    posted: list[str] = []
+
+    async def fake_post(h, wid, text, cost=None):
+        posted.append(text.decode())
+        return {"seq": 9}
+
+    monkeypatch.setattr("alpi.alp.workgroup_client.post", fake_post)
+    monkeypatch.setattr(service, "_set_hub_responded_seq", lambda *a: None)
+    service._GATE_ATTEMPTED.clear()
+
+    out = await service._maybe_gate_advance(home, wg, recent, "HUB")
+    assert isinstance(out, str) and "derivative" in out
+    assert posted == [], "a red gate never posts a #done"
+
+
+@pytest.mark.parametrize("declared,ok", [
+    ("media-qa", False),      # forward skip over media-config
+    ("media-update", False),  # backwards
+    ("", True),               # omitted → derived from the chain
+    ("media-config", True),   # restates the chain
+])
+def test_operation_next_must_restate_the_chain_order(declared, ok):
+    chain = ("media-update", "media-config", "media-qa")
+    steps = {
+        "media-update": {"owner": "muse", "gate": {"cwd": "p", "argv": ["true"]},
+                         **({"next": declared} if declared else {})},
+        "media-config": {"owner": "scout", "gate": {"cwd": "p", "argv": ["true"]}},
+        "media-qa": {"owner": "lens", "gate": {"cwd": "p", "argv": ["true"]}},
+    }
+    meta = types.SimpleNamespace(
+        pipeline_steps=steps, pipeline=("content",), operations={"media-update": chain},
+    )
+    step = gates.step_for(meta, "media-update")
+    if not ok:
+        assert step is None
+    else:
+        assert step is not None and step.next_phase == "media-config"
