@@ -1866,18 +1866,18 @@ async def test_workgroup_verbs_bypass_peer_allow_list(short_tmp: Path) -> None:
         await server.stop()
 
 
-def test_create_persists_pipeline_phases(short_tmp: Path) -> None:
-    """`create(pipeline=[...])` persists the ordered phase list; default is ()."""
+def test_create_persists_the_launch_chain(short_tmp: Path) -> None:
     home = short_tmp / "hub"
     home.mkdir()
     kp = load_or_generate(home)
     wg = wg_mod.create(
         home, name="proj", hub_kp=kp, member_pubkeys=[],
-        pipeline=["intake", "design", "content"],
+        pipelines={"intake": ["intake", "design", "content"]},
+        launch_pipeline="intake",
     )
-    assert wg_mod.load(home, wg.meta.id).meta.pipeline == ("intake", "design", "content")
+    assert wg_mod.load(home, wg.meta.id).meta.launch_chain == ("intake", "design", "content")
     wg2 = wg_mod.create(home, name="delib", hub_kp=kp, member_pubkeys=[])
-    assert wg_mod.load(home, wg2.meta.id).meta.pipeline == ()
+    assert wg_mod.load(home, wg2.meta.id).meta.launch_chain == ()
 
 
 def test_create_rejects_invalid_and_duplicate_pipeline_slugs(short_tmp: Path) -> None:
@@ -1885,26 +1885,9 @@ def test_create_rejects_invalid_and_duplicate_pipeline_slugs(short_tmp: Path) ->
     home.mkdir()
     kp = load_or_generate(home)
     with pytest.raises(ValueError, match="invalid pipeline phase slug"):
-        wg_mod.create(home, name="x", hub_kp=kp, member_pubkeys=[], pipeline=["Bad Slug"])
+        wg_mod.create(home, name="x", hub_kp=kp, member_pubkeys=[], pipelines={"bad": ["Bad Slug"]})
     with pytest.raises(ValueError, match="duplicate pipeline phase slug"):
-        wg_mod.create(home, name="y", hub_kp=kp, member_pubkeys=[], pipeline=["seo", "seo"])
-
-
-def test_load_meta_tolerant_to_legacy_pipeline_bool(short_tmp: Path) -> None:
-    """A legacy `pipeline: true` meta loads as a normal workgroup (() ) instead
-    of crashing the poll — strict validation only applies on create/update."""
-    home = short_tmp / "hub"
-    home.mkdir()
-    kp = load_or_generate(home)
-    wg = wg_mod.create(home, name="legacy", hub_kp=kp, member_pubkeys=[])
-    meta_path = home / "alp" / "workgroups" / wg.meta.id / "meta.yaml"
-    import yaml as _yaml
-    raw = _yaml.safe_load(meta_path.read_text())
-    raw["pipeline"] = True  # legacy bool
-    meta_path.write_text(_yaml.safe_dump(raw))
-    reloaded = wg_mod.load(home, wg.meta.id)
-    assert reloaded is not None
-    assert reloaded.meta.pipeline == ()
+        wg_mod.create(home, name="y", hub_kp=kp, member_pubkeys=[], pipelines={"seo": ["seo", "seo"]})
 
 
 def test_meta_quorum_timeout_round_trips(short_tmp: Path) -> None:
@@ -1943,71 +1926,146 @@ def test_load_meta_tolerant_to_bad_quorum_timeout(short_tmp: Path) -> None:
         assert reloaded is not None and reloaded.meta.quorum_timeout_seconds == 0
 
 
-def test_create_persists_operations_and_their_steps(short_tmp: Path) -> None:
+def _pipeline_meta(
+    pipelines: dict, launch: str | None, steps: dict | None = None,
+) -> wg_mod.Meta:
+    return wg_mod.Meta(
+        id="wg-x", name="x", hub_pubkey="pk", created_at="2026-01-01T00:00:00Z",
+        pipelines={k: tuple(v) for k, v in pipelines.items()},
+        launch_pipeline=launch,
+        pipeline_steps={k: dict(v) for k, v in (steps or {}).items()},
+    )
+
+
+def _write_raw_meta(home: Path, wg_id: str, hub_pubkey: str, extra: dict) -> Path:
+    import yaml as _yaml
+    d = home / "alp" / "workgroups" / wg_id
+    d.mkdir(parents=True)
+    (d / "meta.yaml").write_text(_yaml.safe_dump({
+        "id": wg_id, "name": "old", "hub_pubkey": hub_pubkey,
+        "created_at": "2026-07-01T00:00:00Z", **extra,
+    }))
+    (d / "members.yaml").write_text(_yaml.safe_dump([]))
+    (d / "transcript.jsonl").touch()
+    return d
+
+
+def test_create_persists_named_chains_and_their_steps(short_tmp: Path) -> None:
     home = short_tmp / "hub"
     home.mkdir()
     kp = load_or_generate(home)
     wg = wg_mod.create(
         home, name="proj", hub_kp=kp, member_pubkeys=[],
-        pipeline=["intake", "build"],
+        pipelines={
+            "intake": ["intake", "build"],
+            "media-update": ["media-update", "media-qa"],
+        },
+        launch_pipeline="intake",
         pipeline_steps={
-            "intake": {"owner": "scout", "next": "build"},
+            "intake": {"owner": "scout"},
             "build": {"owner": "pixel"},
-            "media-update": {"owner": "muse", "next": "media-qa"},
+            "media-update": {"owner": "muse"},
             "media-qa": {"owner": "lens"},
         },
-        operations={"media-update": ["media-update", "media-qa"]},
     )
     meta = wg_mod.load(home, wg.meta.id).meta
-    assert meta.pipeline == ("intake", "build")
-    assert meta.operations == {"media-update": ("media-update", "media-qa")}
+    assert meta.pipelines == {
+        "intake": ("intake", "build"),
+        "media-update": ("media-update", "media-qa"),
+    }
+    assert meta.launch_pipeline == "intake"
+    assert meta.launch_chain == ("intake", "build")
+    assert wg_mod.dormant_pipelines(meta) == {
+        "media-update": ("media-update", "media-qa"),
+    }
     assert {"media-update", "media-qa"} <= set(meta.pipeline_steps)
 
 
-def test_create_rejects_an_operation_not_named_after_its_first_step(short_tmp: Path) -> None:
+@pytest.mark.parametrize("retired", [
+    {"pipeline": ["intake", "build"]},
+    {"operations": {"media-update": ["media-update", "media-qa"]}},
+])
+def test_create_no_longer_accepts_the_retired_kwargs(short_tmp: Path, retired) -> None:
     home = short_tmp / "hub"
     home.mkdir()
     kp = load_or_generate(home)
-    with pytest.raises(ValueError, match="must start with a step named"):
+    with pytest.raises(TypeError, match="unexpected keyword argument"):
+        wg_mod.create(home, name="x", hub_kp=kp, member_pubkeys=[], **retired)
+
+
+def test_create_rejects_a_chain_not_keyed_by_its_first_phase(short_tmp: Path) -> None:
+    home = short_tmp / "hub"
+    home.mkdir()
+    kp = load_or_generate(home)
+    with pytest.raises(ValueError, match="must be keyed by its first phase"):
         wg_mod.create(
             home, name="x", hub_kp=kp, member_pubkeys=[],
-            pipeline=["intake"],
+            pipelines={"intake": ["intake"], "media-update": ["media-qa"]},
+            launch_pipeline="intake",
             pipeline_steps={"intake": {"owner": "scout"}, "media-qa": {"owner": "lens"}},
-            operations={"media-update": ["media-qa"]},
         )
 
 
-def test_pipeline_steps_outside_pipeline_and_operations_still_rejected(short_tmp: Path) -> None:
+def test_pipeline_steps_outside_every_declared_chain_still_rejected(short_tmp: Path) -> None:
     home = short_tmp / "hub"
     home.mkdir()
     kp = load_or_generate(home)
-    with pytest.raises(ValueError, match="neither the pipeline"):
+    with pytest.raises(
+        ValueError,
+        match=r"pipeline_steps key 'ghost' belongs to no declared pipeline \['intake'\]",
+    ):
         wg_mod.create(
             home, name="x", hub_kp=kp, member_pubkeys=[],
-            pipeline=["intake"],
-            pipeline_steps={"intake": {"owner": "scout"}, "stray": {"owner": "lens"}},
+            pipelines={"intake": ["intake"]}, launch_pipeline="intake",
+            pipeline_steps={"intake": {"owner": "scout"}, "ghost": {"owner": "lens"}},
         )
 
 
-def test_create_without_operations_keeps_them_empty(short_tmp: Path) -> None:
+def test_pipeline_steps_reject_author_supplied_next(short_tmp: Path) -> None:
     home = short_tmp / "hub"
     home.mkdir()
     kp = load_or_generate(home)
-    wg = wg_mod.create(home, name="proj", hub_kp=kp, member_pubkeys=[], pipeline=["intake"])
-    assert wg_mod.load(home, wg.meta.id).meta.operations == {}
+    with pytest.raises(
+        ValueError,
+        match=(
+            r"pipeline_steps\['intake'\].next is derived from pipelines\['intake'\]; "
+            r"remove next"
+        ),
+    ):
+        wg_mod.create(
+            home, name="x", hub_kp=kp, member_pubkeys=[],
+            pipelines={"intake": ["intake", "build"]}, launch_pipeline="intake",
+            pipeline_steps={
+                "intake": {"owner": "scout", "next": "build"},
+                "build": {"owner": "pixel"},
+            },
+        )
 
 
-@pytest.mark.parametrize("ops,needle", [
-    ({"x": []}, "non-empty list"),
-    ({"x": "xyz"}, "non-empty list"),
+def test_create_without_dormant_chains_leaves_only_the_launch_chain(short_tmp: Path) -> None:
+    home = short_tmp / "hub"
+    home.mkdir()
+    kp = load_or_generate(home)
+    wg = wg_mod.create(
+        home, name="proj", hub_kp=kp, member_pubkeys=[],
+        pipelines={"intake": ["intake"]}, launch_pipeline="intake",
+    )
+    meta = wg_mod.load(home, wg.meta.id).meta
+    assert meta.pipelines == {"intake": ("intake",)}
+    assert wg_mod.dormant_pipelines(meta) == {}
+
+
+@pytest.mark.parametrize("pipelines,needle", [
+    ({"x": []}, "non-empty phase list"),
+    ({"x": "xyz"}, "must be a list of phase slugs"),
     ({"Bad Op": ["bad op"]}, "not a valid slug"),
-    ({"x": ["x", "x"]}, "duplicate steps"),
-    ({"x": ["y"]}, "must start with a step named"),
-    ({"x": ["x", "intake"]}, "chains must be disjoint"),
+    ({"x": ["x", "x"]}, "duplicate pipeline phase slug"),
+    ({"x": ["y"]}, "must be keyed by its first phase"),
+    ({"x": ["x", "intake"], "intake": ["intake"]}, "chains must be disjoint"),
     ({"x": ["x", "shared"], "z": ["z", "shared"]}, "chains must be disjoint"),
     ("nope", "must be a mapping"),
 ])
-def test_create_rejects_malformed_operations(short_tmp: Path, ops, needle) -> None:
+def test_create_rejects_malformed_pipelines(short_tmp: Path, pipelines, needle) -> None:
     home = short_tmp / "hub"
     home.mkdir()
     kp = load_or_generate(home)
@@ -2018,16 +2076,217 @@ def test_create_rejects_malformed_operations(short_tmp: Path, ops, needle) -> No
     with pytest.raises(ValueError, match=needle):
         wg_mod.create(
             home, name="x", hub_kp=kp, member_pubkeys=[],
-            pipeline=["intake"], pipeline_steps=steps, operations=ops,
+            pipelines=pipelines, pipeline_steps=steps,
         )
 
 
-def test_create_rejects_operations_without_a_pipeline(short_tmp: Path) -> None:
+def test_create_rejects_an_unknown_launch_pipeline(short_tmp: Path) -> None:
     home = short_tmp / "hub"
     home.mkdir()
     kp = load_or_generate(home)
-    with pytest.raises(ValueError, match="operations require a pipeline"):
+    with pytest.raises(ValueError, match="is not one of"):
         wg_mod.create(
             home, name="x", hub_kp=kp, member_pubkeys=[],
-            pipeline_steps={"x": {"owner": "muse"}}, operations={"x": ["x"]},
+            pipelines={"intake": ["intake"]}, launch_pipeline="build",
         )
+    with pytest.raises(ValueError, match="without any pipelines"):
+        wg_mod.create(
+            home, name="y", hub_kp=kp, member_pubkeys=[], launch_pipeline="intake",
+        )
+
+
+def test_meta_launch_chain_is_a_read_only_derived_view() -> None:
+    meta = _pipeline_meta({"intake": ["intake", "build"]}, "intake")
+    assert meta.launch_chain == ("intake", "build")
+    assert not hasattr(meta, "pipeline")
+    assert not hasattr(meta, "operations")
+    with pytest.raises(AttributeError):
+        meta.launch_chain = ("other",)
+
+
+def test_meta_carries_launch_provenance_beside_canonical_chains(short_tmp: Path) -> None:
+    home = short_tmp / "hub"
+    home.mkdir()
+    hub_kp = load_or_generate(home)
+    launch_provenance = {
+        "recipe_id": "hotel-site",
+        "digest": "sha256:abc123",
+        "params": {"slug": "hotel-abad"},
+        "project": "/git/web-factory/hotel-abad",
+        "template_commit": "953de0d",
+    }
+    _write_raw_meta(home, "wg_canon", hub_kp.pubkey_b64(), {
+        "pipelines": {
+            "intake": ["intake", "build"],
+            "media-update": ["media-update", "media-qa"],
+        },
+        "launch_pipeline": "intake",
+        "pipeline_steps": {
+            "intake": {"owner": "scout", "next": "build"},
+            "build": {"owner": "pixel"},
+            "media-update": {"owner": "muse", "next": "media-qa"},
+            "media-qa": {"owner": "lens"},
+        },
+        "launch": launch_provenance,
+    })
+
+    meta = wg_mod.load(home, "wg_canon").meta
+    assert meta.pipelines == {
+        "intake": ("intake", "build"),
+        "media-update": ("media-update", "media-qa"),
+    }
+    assert meta.launch_pipeline == "intake"
+    assert meta.launch_chain == ("intake", "build")
+    assert wg_mod.dormant_pipelines(meta) == {
+        "media-update": ("media-update", "media-qa"),
+    }
+    assert meta.launch == launch_provenance
+    assert all("next" not in spec for spec in meta.pipeline_steps.values())
+
+
+@pytest.mark.parametrize("retired", [
+    {"pipeline": ["intake", "build"]},
+    {"operations": {"media-update": ["media-update", "media-qa"]}},
+])
+def test_meta_on_the_retired_shape_does_not_load(short_tmp: Path, retired, caplog) -> None:
+    home = short_tmp / "hub"
+    home.mkdir()
+    hub_kp = load_or_generate(home)
+    _write_raw_meta(home, "wg_retired", hub_kp.pubkey_b64(), {
+        "pipelines": {"intake": ["intake", "build"]},
+        "launch_pipeline": "intake",
+        "pipeline_steps": {"intake": {"owner": "scout"}, "build": {"owner": "pixel"}},
+        **retired,
+    })
+    with caplog.at_level("WARNING", logger="alpi.alp.workgroup"):
+        assert wg_mod.load(home, "wg_retired") is None
+        assert wg_mod.load(home, "wg_retired") is None
+    warnings = [r for r in caplog.records if "did not load" in r.message]
+    assert len(warnings) == 1
+    assert "wg_retired" in warnings[0].getMessage()
+    assert "retired" in warnings[0].getMessage()
+
+
+def test_save_meta_writes_no_retired_or_derived_keys(short_tmp: Path) -> None:
+    import yaml as _yaml
+    home = short_tmp / "hub"
+    home.mkdir()
+    kp = load_or_generate(home)
+    wg = wg_mod.create(
+        home, name="proj", hub_kp=kp, member_pubkeys=[],
+        pipelines={
+            "intake": ["intake", "build"],
+            "media-update": ["media-update", "media-qa"],
+        },
+        launch_pipeline="intake",
+        pipeline_steps={
+            "intake": {"owner": "scout"},
+            "build": {"owner": "pixel"},
+            "media-update": {"owner": "muse"},
+            "media-qa": {"owner": "lens"},
+        },
+    )
+    meta_path = home / "alp" / "workgroups" / wg.meta.id / "meta.yaml"
+    raw = _yaml.safe_load(meta_path.read_text())
+    assert raw["pipelines"] == {
+        "intake": ["intake", "build"],
+        "media-update": ["media-update", "media-qa"],
+    }
+    assert raw["launch_pipeline"] == "intake"
+    assert "pipeline" not in raw
+    assert "operations" not in raw
+    assert all("next" not in spec for spec in raw["pipeline_steps"].values())
+    assert wg_mod.load(home, wg.meta.id) is not None
+
+
+def test_launchless_meta_writes_no_launch_selector(short_tmp: Path) -> None:
+    import yaml as _yaml
+    home = short_tmp / "hub"
+    home.mkdir()
+    kp = load_or_generate(home)
+    wg = wg_mod.create(
+        home, name="idle", hub_kp=kp, member_pubkeys=[],
+        pipelines={"media-update": ["media-update", "media-qa"]},
+        pipeline_steps={
+            "media-update": {"owner": "muse"},
+            "media-qa": {"owner": "lens"},
+        },
+    )
+    meta_path = home / "alp" / "workgroups" / wg.meta.id / "meta.yaml"
+    raw = _yaml.safe_load(meta_path.read_text())
+    assert raw["pipelines"] == {"media-update": ["media-update", "media-qa"]}
+    assert "launch_pipeline" not in raw
+    assert "pipeline" not in raw
+    assert "operations" not in raw
+    assert all("next" not in spec for spec in raw["pipeline_steps"].values())
+
+    reloaded = wg_mod.load(home, wg.meta.id).meta
+    assert reloaded.launch_pipeline is None
+    assert reloaded.launch_chain == ()
+
+
+def test_meta_save_load_save_round_trips_byte_identical(short_tmp: Path) -> None:
+    home = short_tmp / "hub"
+    home.mkdir()
+    kp = load_or_generate(home)
+    wg = wg_mod.create(
+        home, name="rt", hub_kp=kp, member_pubkeys=[],
+        budget={"max_usd": 5.0},
+        briefing="ship the site",
+        notify_on_close="notify",
+        pipelines={
+            "intake": ["intake", "build"],
+            "media-update": ["media-update", "media-qa"],
+        },
+        launch_pipeline="intake",
+        pipeline_steps={
+            "intake": {"owner": "scout", "task": "gather #intake"},
+            "build": {"owner": "pixel", "gate": {"argv": ["make", "build"], "cwd": "/tmp"}},
+            "media-update": {"owner": "muse"},
+            "media-qa": {"owner": "lens", "gate": {"argv": ["make", "qa"]}},
+        },
+        quorum_timeout_seconds=120,
+        launch={"recipe_id": "hotel-site", "digest": "sha256:abc123"},
+    )
+    d = home / "alp" / "workgroups" / wg.meta.id
+    first = (d / "meta.yaml").read_bytes()
+    reloaded = wg_mod._load_meta(d)
+    wg_mod._save_meta(d, reloaded)
+    assert (d / "meta.yaml").read_bytes() == first
+    again = wg_mod._load_meta(d)
+    assert again.pipelines == reloaded.pipelines
+    assert again.launch_pipeline == reloaded.launch_pipeline
+    assert again.pipeline_steps == reloaded.pipeline_steps
+
+
+def test_load_meta_strips_derived_next_from_pipeline_steps(short_tmp: Path) -> None:
+    import yaml as _yaml
+    home = short_tmp / "hub"
+    home.mkdir()
+    kp = load_or_generate(home)
+    wg = wg_mod.create(
+        home, name="stripnext", hub_kp=kp, member_pubkeys=[],
+        pipelines={"intake": ["intake", "build"]}, launch_pipeline="intake",
+        pipeline_steps={"intake": {"owner": "scout"}, "build": {"owner": "pixel"}},
+    )
+    meta_path = home / "alp" / "workgroups" / wg.meta.id / "meta.yaml"
+    raw = _yaml.safe_load(meta_path.read_text())
+    raw["pipeline_steps"]["intake"]["next"] = "bogus"
+    raw["pipeline_steps"]["build"]["next"] = "intake"
+    meta_path.write_text(_yaml.safe_dump(raw))
+
+    meta = wg_mod.load(home, wg.meta.id).meta
+    assert meta.pipeline_steps == {"intake": {"owner": "scout"}, "build": {"owner": "pixel"}}
+    assert wg_mod.pipeline_successor(meta, "intake") == "build"
+    assert wg_mod.pipeline_successor(meta, "build") == ""
+
+
+@pytest.mark.parametrize("gone", [
+    "set_launch_chain",
+    "resolve_pipelines",
+    "legacy_pipelines",
+    "legacy_operations",
+    "_prune_orphan_steps",
+])
+def test_post_launch_chain_editing_helpers_are_gone(gone: str) -> None:
+    assert not hasattr(wg_mod, gone)

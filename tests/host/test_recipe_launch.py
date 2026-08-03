@@ -10,6 +10,7 @@ from alpi.alp import workgroup as wg_mod
 from alpi.alp.keys import load_or_generate
 from alpi.alp.peers import Peer
 from alpi.host import recipes as host_recipes
+from alpi.host import workgroup as host_wg
 
 pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="git not installed")
 
@@ -54,18 +55,38 @@ def _pin_member(home: Path, name: str, pubkey: str | None = None) -> str:
     return pk
 
 
-def _project_recipe(repo: Path, with_brief: bool = False) -> str:
+_CANONICAL_CHAINS = """pipelines:
+  intake: [intake, content]
+  media-update: [media-update, media-recheck]
+launch: intake
+"""
+
+_RETIRED_CHAINS = """pipeline: [intake, content]
+operations:
+  media-update:
+    steps: [media-update, media-recheck]
+"""
+
+_EXPECTED_CHAINS = {
+    "intake": ("intake", "content"),
+    "media-update": ("media-update", "media-recheck"),
+}
+
+
+def _project_recipe(repo: Path, with_brief: bool = False, retired: bool = False) -> str:
     inputs = "\ninputs:\n  brief: { dest: brief.md, required: true }\n" if with_brief else ""
+    chains = _RETIRED_CHAINS if retired else _CANONICAL_CHAINS
     return f"""
 hub: mira
 members: [scout]
 name: "proj-{{slug}}"
 quorum_timeout_seconds: 120
 briefing: "Hotel {{slug}}"
-pipeline: [intake, content]
-pipeline_steps:
-  intake: {{ owner: scout, next: content, task: "start {{slug}}", gate: {{ argv: ["true"], cwd: "projects/{{slug}}" }} }}
+{chains}pipeline_steps:
+  intake: {{ owner: scout, task: "start {{slug}}", gate: {{ argv: ["true"], cwd: "projects/{{slug}}" }} }}
   content: {{ owner: scout }}
+  media-update: {{ owner: scout, task: "refresh media for {{slug}}" }}
+  media-recheck: {{ owner: scout }}
 params:
   slug: {{ pattern: "^[a-z0-9-]+$" }}
 {inputs}project:
@@ -87,11 +108,33 @@ params:
 """
 
 
+_IDLE_RECIPE = """
+hub: mira
+members: [scout]
+name: "idle-{slug}"
+pipelines:
+  media-update: [media-update, media-recheck]
+pipeline_steps:
+  media-update: { owner: scout, task: "refresh media for {slug}" }
+  media-recheck: { owner: scout }
+params:
+  slug: { pattern: "^[a-z0-9-]+$" }
+"""
+
+_LAUNCHING_RECIPE = _IDLE_RECIPE + "launch: media-update\n"
+
+
+def _bodies(home: Path, wg_id: str) -> list[str]:
+    return [p["body"] for p in host_wg.decrypt_transcript(home, wg_id)]
+
+
 def test_recipe_verb_gating_invariants():
     from alpi.host import server as host_server
     assert "host.workgroup.launch_recipe" in host_server._ADMIN_METHODS
+    assert "host.workgroup.trigger" in host_server._ADMIN_METHODS
     assert "host.workgroup.recipes.describe" in host_server._SCOPE_FREE_METHODS
     assert "host.workgroup.launch_recipe" not in host_server._SCOPE_FREE_METHODS
+    assert "host.workgroup.trigger" not in host_server._SCOPE_FREE_METHODS
 
 
 @pytest.mark.asyncio
@@ -101,7 +144,49 @@ async def test_describe_returns_shape_without_storing(tmp_path):
     assert "topic" in res["params"]
     assert res["has_project"] is False
     assert res["task"] == "@scout discuss {topic}"
+    assert res["pipelines"] == {}
+    assert res["launch_pipeline"] is None
+    assert res["pipeline_mode"] is False
+    assert "pipeline" not in res
+    assert "operations" not in res
     assert not (tmp_path / "recipes").exists()
+
+
+@pytest.mark.asyncio
+async def test_describe_reports_every_chain_and_the_launch_selector(tmp_path):
+    res = await host_recipes._describe({"yaml": _project_recipe(tmp_path / "repo")}, None)
+    assert res["pipelines"] == {
+        "intake": ["intake", "content"],
+        "media-update": ["media-update", "media-recheck"],
+    }
+    assert res["launch_pipeline"] == "intake"
+    assert res["pipeline_mode"] is True
+    assert "pipeline" not in res
+
+
+@pytest.mark.asyncio
+async def test_describe_distinguishes_idle_from_launching_recipe():
+    idle = await host_recipes._describe({"yaml": _IDLE_RECIPE}, None)
+    launching = await host_recipes._describe({"yaml": _LAUNCHING_RECIPE}, None)
+    assert idle["pipelines"] == launching["pipelines"]
+    assert idle["launch_pipeline"] is None
+    assert idle["pipeline_mode"] is True
+    assert launching["launch_pipeline"] == "media-update"
+    assert launching["pipeline_mode"] is True
+    assert "pipeline" not in idle
+    assert "pipeline" not in launching
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("retired", [
+    "pipeline: [intake]\n",
+    "operations:\n  patch:\n    steps: [patch, patch-qa]\n",
+])
+async def test_describe_rejects_the_retired_shape(retired):
+    from alpi.host import server as host_server
+    with pytest.raises(host_server.HandlerError) as ei:
+        await host_recipes._describe({"yaml": _IDLE_RECIPE + retired}, None)
+    assert "declares retired" in str(ei.value.data)
 
 
 @pytest.mark.asyncio
@@ -133,8 +218,16 @@ async def test_launch_project_recipe_end_to_end(tmp_path):
 
     wg = wg_mod.load(home, result["workgroup_id"])
     assert wg.meta.name == "proj-casa-bahia"
-    assert wg.meta.pipeline == ("intake", "content")
-    assert wg.meta.pipeline_steps["intake"]["gate"]["cwd"] == "projects/casa-bahia"
+    assert wg.meta.pipelines == _EXPECTED_CHAINS
+    assert wg.meta.launch_pipeline == "intake"
+    assert wg.meta.launch_chain == ("intake", "content")
+    assert wg_mod.dormant_pipelines(wg.meta) == {
+        "media-update": ("media-update", "media-recheck"),
+    }
+    assert wg.meta.pipeline_steps["intake"]["gate"] == {
+        "argv": ["true"], "cwd": "projects/casa-bahia",
+    }
+    assert "next" not in wg.meta.pipeline_steps["intake"]
     assert wg.meta.quorum_timeout_seconds == 120
     assert wg.meta.launch["recipe_id"] == "recipe"
     assert wg.meta.launch["params"] == {"slug": "casa-bahia"}
@@ -142,6 +235,67 @@ async def test_launch_project_recipe_end_to_end(tmp_path):
 
     transcript = (home / "alp" / "workgroups" / wg.meta.id / "transcript.jsonl").read_text()
     assert transcript.strip()
+    assert _bodies(home, wg.meta.id) == ["@scout #task #intake · start casa-bahia"]
+
+
+@pytest.mark.asyncio
+async def test_launch_rejects_a_recipe_on_the_retired_shape(tmp_path):
+    repo = _fixture_repo(tmp_path)
+    home = _hub_home(tmp_path)
+    _pin_member(home, "scout")
+
+    with pytest.raises(ValueError, match="declares retired"):
+        await host_recipes.launch(
+            home, _project_recipe(repo, retired=True), {"slug": "casa-dos"},
+        )
+    assert not (tmp_path / "ws" / "projects" / "casa-dos").exists()
+    root = home / "alp" / "workgroups"
+    assert not (list(root.glob("wg_*")) if root.exists() else [])
+
+
+@pytest.mark.asyncio
+async def test_launch_launchless_pipeline_recipe_posts_no_kickoff(tmp_path):
+    home = _hub_home(tmp_path)
+    _pin_member(home, "scout")
+
+    result = await host_recipes.launch(home, _IDLE_RECIPE, {"slug": "casa-bahia"})
+
+    wg = wg_mod.load(home, result["workgroup_id"])
+    assert wg.meta.name == "idle-casa-bahia"
+    assert wg.meta.pipelines == {"media-update": ("media-update", "media-recheck")}
+    assert wg.meta.launch_pipeline is None
+    assert wg.meta.launch_chain == ()
+    assert wg.meta.pipeline_steps["media-update"]["task"] == "refresh media for casa-bahia"
+    assert (home / "alp" / "workgroups" / wg.meta.id / "transcript.jsonl").read_text() == ""
+    assert _bodies(home, wg.meta.id) == []
+
+
+@pytest.mark.asyncio
+async def test_launch_selected_chain_kickoff_comes_from_its_first_phase(tmp_path):
+    home = _hub_home(tmp_path)
+    _pin_member(home, "scout")
+
+    result = await host_recipes.launch(home, _LAUNCHING_RECIPE, {"slug": "casa-bahia"})
+
+    wg = wg_mod.load(home, result["workgroup_id"])
+    assert wg.meta.launch_pipeline == "media-update"
+    assert _bodies(home, wg.meta.id) == [
+        "@scout #task #media-update · refresh media for casa-bahia",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_launch_rejects_step_owner_outside_roster(tmp_path):
+    repo = _fixture_repo(tmp_path)
+    home = _hub_home(tmp_path)
+    _pin_member(home, "scout")
+    recipe = _project_recipe(repo).replace(
+        "content: { owner: scout }", "content: { owner: ghost }",
+    )
+    with pytest.raises(ValueError, match="is not in the roster"):
+        await host_recipes.launch(home, recipe, {"slug": "casa-bahia"})
+    assert not (tmp_path / "ws" / "projects" / "casa-bahia").exists()
+    assert not (list((home / "alp" / "workgroups").glob("wg_*")) if (home / "alp" / "workgroups").exists() else [])
 
 
 @pytest.mark.asyncio
@@ -201,7 +355,11 @@ async def test_launch_deliberation_recipe_no_project(tmp_path):
     assert result["project_path"] is None
     wg = wg_mod.load(home, result["workgroup_id"])
     assert wg.meta.name == "debate-pricing"
-    assert wg.meta.pipeline == ()
+    assert wg.meta.pipelines == {}
+    assert wg.meta.launch_pipeline is None
+    assert wg.meta.launch_chain == ()
+    assert wg_mod.is_pipeline_workgroup(wg.meta) is False
+    assert _bodies(home, wg.meta.id) == ["@scout discuss pricing"]
 
 
 @pytest.mark.asyncio

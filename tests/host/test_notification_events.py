@@ -143,7 +143,7 @@ async def test_wg_done_emits_from_hub_post_unit(
     hub_home, wg, _ = _wg_with_hub(tmp_path)
     monkeypatch.setattr(
         wc, "_post_as_hub",
-        lambda home, wg, kp, text, cost: {"seq": 7, "ts": "now"},
+        lambda home, wg, kp, text, cost, **_: {"seq": 7, "ts": "now"},
     )
     await wc.post(hub_home, wg.meta.id, b"#done shipped the v0.5 cycle")
     emits = [d for k, d in captured if k == "wg.done"]
@@ -161,7 +161,7 @@ async def test_wg_done_silent_for_non_done_post(
     hub_home, wg, _ = _wg_with_hub(tmp_path)
     monkeypatch.setattr(
         wc, "_post_as_hub",
-        lambda home, wg, kp, text, cost: {"seq": 1, "ts": "now"},
+        lambda home, wg, kp, text, cost, **_: {"seq": 1, "ts": "now"},
     )
     await wc.post(hub_home, wg.meta.id, b"regular substantive message, no markers")
     assert not [k for k, _ in captured if k == "wg.done"]
@@ -175,7 +175,7 @@ async def test_wg_done_emits_for_handle_prefixed_marker(
     hub_home, wg, _ = _wg_with_hub(tmp_path)
     monkeypatch.setattr(
         wc, "_post_as_hub",
-        lambda home, wg, kp, text, cost: {"seq": 3, "ts": "now"},
+        lambda home, wg, kp, text, cost, **_: {"seq": 3, "ts": "now"},
     )
     await wc.post(hub_home, wg.meta.id, b"@vera @echo #done locked v0.6 scope")
     emits = [d for k, d in captured if k == "wg.done"]
@@ -190,7 +190,7 @@ async def test_wg_done_silent_when_marker_is_inline_not_line_anchored(
     hub_home, wg, _ = _wg_with_hub(tmp_path)
     monkeypatch.setattr(
         wc, "_post_as_hub",
-        lambda home, wg, kp, text, cost: {"seq": 4, "ts": "now"},
+        lambda home, wg, kp, text, cost, **_: {"seq": 4, "ts": "now"},
     )
     await wc.post(hub_home, wg.meta.id, b"I'll #done it tomorrow when ready")
     assert not [k for k, _ in captured if k == "wg.done"]

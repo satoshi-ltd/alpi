@@ -14,7 +14,7 @@ python3 ../../tools/bootstrap_project.py .
 
 This installs dependencies, runs `npm run site:init` to replace the Kivara demo
 with neutral project data, restores client-supplied files into `assets/source/`,
-and runs `npm run check:config`.
+and runs `npm run check:intake`.
 
 ## Allowed authoring surface
 
@@ -56,18 +56,18 @@ resize, AVIF encoding and budgets.
 ## Commands
 
 ```bash
-npm run check:config
+npm run check:intake
 npm run check:content
-npm run check:content:all
+npm run check:locales
 npm run assets:optimize
 npm run preview
 npm run build
 npm run verify
 ```
 
-Use the phase gate that matches the artifact being produced: `check:config`
+Use the phase gate that matches the artifact being produced: `check:intake`
 after setup/intake, `check:content` after source-locale authoring, and
-`check:content:all` after translation. `check` remains the holistic final source
+`check:locales` after translation. `check` remains the holistic final source
 check and must not gate an intermediate phase.
 
 `preview` builds the selected tier in draft mode. `build` creates the clean

@@ -360,6 +360,7 @@ def _format_subscription_block(
     ]
     if sub.briefing:
         lines.extend(_format_briefing(sub.briefing))
+    lines.extend(_format_pipelines(sub.pipelines, sub.launch_pipeline, sub.phase_map))
     if sub.roster:
         roster_line = _format_roster(sub.roster, aliases, sub.roster_bios)
         if roster_line:
@@ -458,6 +459,10 @@ def _format_hub_block(
     lines = [f"#{wg.meta.name}  (wg_id={wg.meta.id} · hosting · you are the hub)"]
     if wg.meta.briefing:
         lines.extend(_format_briefing(wg.meta.briefing))
+    lines.extend(_format_pipelines(
+        wg.meta.pipelines, wg.meta.launch_pipeline,
+        wg_mod.safe_phase_map(wg.meta),
+    ))
     if wg.members:
         roster = {m.pubkey: m.last_seen_at for m in wg.members}
         bios = {m.pubkey: m.bio for m in wg.members if m.bio}
@@ -517,6 +522,31 @@ def _preview(text: str) -> str:
     if len(text) <= _POST_PREVIEW_CHARS:
         return text
     return text[: _POST_PREVIEW_CHARS - 1] + "…"
+
+
+def _format_pipelines(
+    pipelines: dict, launch_pipeline: str | None, phase_map: dict,
+) -> list[str]:
+    """The declared chains with each phase's owner — replaces narrating them in a briefing."""
+    if not pipelines:
+        return []
+    lines = ["  pipelines:"]
+    for key, chain in pipelines.items():
+        arrow = " → ".join(
+            f"#{slug}" + (
+                f" @{(phase_map.get(slug) or {}).get('owner')}"
+                if (phase_map.get(slug) or {}).get("owner") else ""
+            )
+            for slug in chain
+        )
+        mark = " (launch)" if key == launch_pipeline else ""
+        lines.append(f"  - {key}: {arrow}{mark}")
+    if launch_pipeline is None:
+        lines.append(
+            "  - no launch pipeline: nothing starts on its own; the hub triggers a "
+            "chain by name",
+        )
+    return lines
 
 
 def _format_briefing(text: str) -> list[str]:

@@ -1,14 +1,11 @@
 import { describe, it, expect } from "vitest";
 import {
-  canonicalPhase,
   classifyMessage,
-  findBlocked,
   findLatestTask,
   parseDone,
   parseSkip,
   parseTaskOpen,
   parseWorking,
-  pipelineState,
   validateTaskShape,
 } from "./workgroup-tasks.js";
 
@@ -183,74 +180,5 @@ describe("findLatestTask", () => {
       seq: 1,
       result: null,
     });
-  });
-});
-
-describe("findBlocked", () => {
-  const hub = "hub";
-  it("flags a #done BLOCKED close", () => {
-    const msgs = [
-      { seq: 1, from_pubkey: hub, body: "@pixel #task #build wire it" },
-      { seq: 2, from_pubkey: hub, body: "#done BLOCKED build · deps missing" },
-    ];
-    expect(findBlocked(msgs, hub)).toEqual({ slug: "build", reason: "BLOCKED build · deps missing" });
-  });
-
-  it("a green close is not blocked", () => {
-    const msgs = [
-      { seq: 1, from_pubkey: hub, body: "#task #qa audit" },
-      { seq: 2, from_pubkey: hub, body: "#done qa green" },
-    ];
-    expect(findBlocked(msgs, hub)).toBeNull();
-  });
-
-  it("a re-task after the block clears it", () => {
-    const msgs = [
-      { seq: 1, from_pubkey: hub, body: "#task #build go" },
-      { seq: 2, from_pubkey: hub, body: "#done BLOCKED build" },
-      { seq: 3, from_pubkey: hub, body: "@pixel #task #build-recheck retry" },
-    ];
-    expect(findBlocked(msgs, hub)).toBeNull();
-  });
-});
-
-describe("pipelineState", () => {
-  const hub = "hub";
-  const pipe = ["interview", "synthesize", "recommend"];
-
-  it("marks completed / blocked / pending (mockup case)", () => {
-    const msgs = [
-      { seq: 1, from_pubkey: hub, body: "@a #task #interview do it" },
-      { seq: 2, from_pubkey: hub, body: "#done interview green" },
-      { seq: 3, from_pubkey: hub, body: "@a #task #synthesize do it" },
-      { seq: 4, from_pubkey: hub, body: "#done BLOCKED synthesize · no transcripts" },
-    ];
-    expect(pipelineState(pipe, msgs, hub)).toEqual([
-      { slug: "interview", state: "completed", seq: 2 },
-      { slug: "synthesize", state: "blocked", seq: 4 },
-      { slug: "recommend", state: "pending", seq: null },
-    ]);
-  });
-
-  it("marks the open phase as current and points at its opener seq", () => {
-    const msgs = [
-      { seq: 1, from_pubkey: hub, body: "#done interview green" },
-      { seq: 2, from_pubkey: hub, body: "@a #task #synthesize go" },
-    ];
-    const st = pipelineState(pipe, msgs, hub);
-    expect(st[1]).toEqual({ slug: "synthesize", state: "current", seq: 2 });
-  });
-
-  it("empty pipeline → []", () => {
-    expect(pipelineState([], [{ seq: 1, from_pubkey: hub, body: "#task #x" }], hub)).toEqual([]);
-  });
-});
-
-describe("canonicalPhase", () => {
-  const pipe = ["interview", "synthesize", "recommend"];
-  it("maps literal + variant + null", () => {
-    expect(canonicalPhase("synthesize", pipe)).toBe("synthesize");
-    expect(canonicalPhase("synthesize-recheck", pipe)).toBe("synthesize");
-    expect(canonicalPhase("nope", pipe)).toBeNull();
   });
 });

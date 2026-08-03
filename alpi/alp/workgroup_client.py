@@ -181,11 +181,23 @@ def _quorum_roster(
     return roster or member_pubkeys
 
 
+def _own_profile_id(home: Path) -> str:
+    try:
+        from alpi.home import profile_name
+        return (profile_name(home) or "").lower()
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _hub_owns_phase(home: Path, wg, slug: str) -> bool:
+    """A declared phase whose owner IS the hub profile: the hub is the worker, not the orchestrator."""
+    owner = _workflow_phase_owner(wg, slug)
+    own_id = _own_profile_id(home)
+    return bool(owner and own_id and owner.lower() == own_id)
+
+
 def _workflow_phase_owner(wg, slug: str) -> str:
-    workflow = {str(x) for x in (getattr(wg.meta, "pipeline", ()) or ())}
-    for slugs in (getattr(wg.meta, "operations", None) or {}).values():
-        workflow.update(str(x) for x in slugs)
-    if slug not in workflow:
+    if wg_mod.pipeline_for_phase(wg.meta, slug) is None:
         return ""
     raw = (getattr(wg.meta, "pipeline_steps", None) or {}).get(slug)
     return str((raw or {}).get("owner") or "").strip() if isinstance(raw, dict) else ""
@@ -209,7 +221,7 @@ def _validate_task_participants(home: Path, wg, plaintext: str) -> None:
         return
     parts = [p for ev in task_events for p in ev.participants]
     if not parts:
-        if getattr(wg.meta, "pipeline", False):
+        if wg_mod.is_pipeline_workgroup(wg.meta):
             raise ValueError(
                 "pipeline-task-untargeted: in a pipeline workgroup every "
                 "`#task` must name its owner(s) with `@`-mentions on the "
@@ -262,10 +274,7 @@ def _check_pipeline_close_owner(
     if active is None or not active.slug:
         return False
     declared_owner = _workflow_phase_owner(wg, active.slug)
-    workflow = {str(x) for x in (getattr(wg.meta, "pipeline", ()) or ())}
-    for slugs in (getattr(wg.meta, "operations", None) or {}).values():
-        workflow.update(str(x) for x in slugs)
-    if active.slug not in workflow:
+    if wg_mod.pipeline_for_phase(wg.meta, active.slug) is None:
         return False
     if _explicit_close_override(plaintext, own_pubkey):
         return True
@@ -274,6 +283,10 @@ def _check_pipeline_close_owner(
         peer = peers_mod.get_by_pubkey(home, m.pubkey)
         if peer and peer.id:
             id_to_pubkey[peer.id.lower()] = m.pubkey
+    # The hub is nobody's peer, so a phase it owns itself would read as unresolvable.
+    own_id = _own_profile_id(home)
+    if own_id:
+        id_to_pubkey.setdefault(own_id, own_pubkey)
     if declared_owner:
         participants = [declared_owner]
     else:
@@ -337,6 +350,84 @@ def _check_gated_phase_not_abandoned(
     )
 
 
+def _check_blocked_phase_not_skipped(
+    wg, posts: list[dict], plaintext: str, own_pubkey: str,
+) -> None:
+    """A BLOCKED close halts its chain; only re-opening the blocked phase (or an operator trigger) may move it."""
+    if not tasks_mod.is_task(plaintext):
+        return
+    if tasks_mod.active_task(posts, hub_pubkey=own_pubkey) is not None:
+        return
+    events: list = []
+    for p in posts:
+        events += tasks_mod.parse_post(
+            str(p.get("text") or ""), int(p.get("seq", 0)),
+            str(p.get("from") or ""), hub_pubkey=own_pubkey,
+        )
+    closed = [t for t in tasks_mod.fold_tasks(events) if not t.is_open]
+    if not closed:
+        return
+    latest = max(closed, key=lambda t: t.closed_seq or 0)
+    if not (latest.result or "").strip().upper().startswith("BLOCKED"):
+        return
+    blocked_owner = wg_mod.canonical_pipeline_phase(wg.meta, latest.slug)
+    if blocked_owner is None:
+        return
+    chain_key, blocked_phase = blocked_owner
+    evs = tasks_mod.parse_post(plaintext, 0, own_pubkey)
+    new_slug = next((e.slug for e in evs if e.kind == "task"), "")
+    new_owner = wg_mod.canonical_pipeline_phase(wg.meta, new_slug) if new_slug else None
+    if new_owner is None or new_owner[0] != chain_key or new_owner[1] == blocked_phase:
+        return
+    raise ValueError(
+        f"blocked-phase-not-cleared: `#{blocked_phase}` closed BLOCKED, which "
+        f"halts the `{chain_key}` chain — opening `#{new_slug}` would advance "
+        f"past a phase that never passed. Re-open `#{blocked_phase}` so its "
+        "close continues the chain, or leave the chain halted."
+    )
+
+
+_QA_VERDICTS = ("QA BLOCKED", "QA FAIL", "QA PASS")
+
+
+def _check_qa_verdict_respected(
+    home: Path, wg, posts: list[dict], plaintext: str, own_pubkey: str,
+) -> None:
+    """A hub close may not claim PASS over the phase owner's FAIL/BLOCKED verdict."""
+    if not tasks_mod.is_done(plaintext):
+        return
+    active = tasks_mod.active_task(posts, hub_pubkey=own_pubkey)
+    if active is None or not active.slug:
+        return
+    declared_owner = _workflow_phase_owner(wg, active.slug)
+    if not declared_owner:
+        return
+    owner_pubkeys = {own_pubkey} if declared_owner.lower() == _own_profile_id(home) else set()
+    for m in wg.members:
+        peer = peers_mod.get_by_pubkey(home, m.pubkey)
+        if peer and peer.id and peer.id.lower() == declared_owner.lower():
+            owner_pubkeys.add(m.pubkey)
+    verdict = ""
+    for p in posts:
+        if int(p.get("seq", 0)) <= int(active.opened_seq):
+            continue
+        if str(p.get("from") or "") not in owner_pubkeys:
+            continue
+        text = str(p.get("text") or "")
+        for token in _QA_VERDICTS:
+            if token in text:
+                verdict = token
+    if verdict in ("QA FAIL", "QA BLOCKED") and not (
+        "FAIL" in plaintext or "BLOCKED" in plaintext
+    ):
+        raise ValueError(
+            f"qa-verdict-mismatch: the phase owner's verdict was `{verdict}` and "
+            "this close does not carry it — quote the verdict, re-task the "
+            "findings to their owner, or close `#done BLOCKED · <reason>`. A "
+            "close may not claim PASS over the owner's FAIL."
+        )
+
+
 def _require_passing_gate(
     home: Path, wg, active, latest: int, own_pubkey: str,
 ) -> None:
@@ -375,6 +466,7 @@ def _check_hub_rotation(
     quorum_timeout: int = _FULL_QUORUM_TIMEOUT_SECONDS,
     *, allow_stalled_retask: bool = False,
     pipeline_close_override: bool = False,
+    hub_owns_active_phase: bool = False,
 ) -> None:
     """Reject hub back-to-back content or premature `#done`."""
     if not posts:
@@ -414,6 +506,9 @@ def _check_hub_rotation(
     if tasks_mod.is_done(plaintext):
         if pipeline_close_override:
             return  # explicit `skipped ·`/`blocked ·` close — quorum does not apply
+        if hub_owns_active_phase:
+            # `_check_pipeline_close_owner` still requires the hub's own delivery post.
+            return
         opener = _opener_post(posts, own_pubkey)
         if opener is None:
             if not is_back_to_back:
@@ -471,6 +566,8 @@ def _check_hub_rotation(
 
     if not is_back_to_back:
         return  # Someone else spoke last; new round, hub may speak.
+    if hub_owns_active_phase:
+        return  # Producing the deliverable for a phase it owns is not orchestration.
     raise ValueError(
         "turn-rotation: hub spoke last. Wait for a member or use `#done`."
     )
@@ -563,7 +660,7 @@ async def join(home: Path, peer_id: str, wg_id: str) -> sub_mod.Subscription:
     if not sub.name:
         sub.name = str(result.get("name") or "")
     sub.briefing = str(result.get("briefing") or "")
-    sub.pipeline = sub_mod.coerce_pipeline(result.get("pipeline"))
+    sub.absorb_pipeline_state(result)
     sub.paused = bool(result.get("paused", False))
     sub.upsert_key(int(result.get("key_version", 1)), str(result["sealed_key"]))
     _absorb_roster(sub, result.get("members"))
@@ -599,6 +696,7 @@ def _absorb_roster(sub: sub_mod.Subscription, raw) -> None:
 async def post(
     home: Path, wg_id: str, text: bytes,
     cost: dict[str, Any] | None = None,
+    *, operator_abandon: bool = False,
 ) -> dict[str, Any]:
     """Encrypt `text` under the latest key and send it to the hub."""
     kp = load_or_generate(home)
@@ -613,7 +711,7 @@ async def post(
     wg = wg_mod.load(home, wg_id)
     if wg is not None and wg.meta.hub_pubkey == kp.pubkey_b64():
         _check_hub_single_marker(_plaintext)
-        result = _post_as_hub(home, wg, kp, text, cost)
+        result = _post_as_hub(home, wg, kp, text, cost, operator_abandon=operator_abandon)
         _emit_wg_post(home, wg_id, result)
         if tasks_mod.is_done(_plaintext):
             try:
@@ -929,6 +1027,7 @@ def _emit_wg_post(home: Path, wg_id: str, result: dict[str, Any] | None) -> None
 def _post_as_hub(
     home: Path, wg, kp: Keypair, text: bytes,
     cost: dict[str, Any] | None,
+    *, operator_abandon: bool = False,
 ) -> dict[str, Any]:
     """Write a hub post directly into the local transcript."""
     import datetime as _dt
@@ -1002,16 +1101,25 @@ def _post_as_hub(
 
     member_pubkeys = [m.pubkey for m in wg.members]
     quorum_roster = _quorum_roster(home, wg, existing, member_pubkeys)
-    is_pipeline = bool(getattr(wg.meta, "pipeline", ()) or ())
+    is_pipeline = wg_mod.is_pipeline_workgroup(wg.meta)
     close_override = _check_pipeline_close_owner(
         home, wg, existing, plaintext, kp.pubkey_b64(),
     )
-    _check_gated_phase_not_abandoned(wg, existing, plaintext, kp.pubkey_b64())
+    if not operator_abandon:
+        # The guard stops the HUB renaming its way past a red gate, not an operator.
+        _check_gated_phase_not_abandoned(wg, existing, plaintext, kp.pubkey_b64())
+        _check_blocked_phase_not_skipped(wg, existing, plaintext, kp.pubkey_b64())
+    _check_qa_verdict_respected(home, wg, existing, plaintext, kp.pubkey_b64())
+    active_phase = tasks_mod.active_task(existing, hub_pubkey=kp.pubkey_b64())
     _check_hub_rotation(
         existing, kp.pubkey_b64(), plaintext, quorum_roster,
         wg.meta.quorum_timeout_seconds or _FULL_QUORUM_TIMEOUT_SECONDS,
         allow_stalled_retask=is_pipeline,
         pipeline_close_override=close_override,
+        hub_owns_active_phase=(
+            active_phase is not None
+            and _hub_owns_phase(home, wg, active_phase.slug)
+        ),
     )
 
     group_key = wg_mod.open_sealed_group_key(own.sealed_key, kp)
@@ -1074,9 +1182,9 @@ async def pull(
     head = int(raw.get("head", cursor))
     if head > sub.last_seq:
         sub.last_seq = head
-    # Refresh the pipeline phase list every pull so a hub-side change after
-    # join propagates to already-subscribed members (default: keep current).
-    sub.pipeline = sub_mod.coerce_pipeline(raw.get("pipeline", sub.pipeline))
+    # Refresh definitions on every pull so a hub-side edit reaches subscribers without a rejoin.
+    if any(k in raw for k in ("pipelines", "launch_pipeline", "pipeline_mode")):
+        sub.absorb_pipeline_state(raw)
     sub.paused = bool(raw.get("paused", sub.paused))
     sub.append_recent(decrypted)
     _absorb_roster(sub, raw.get("members"))
@@ -1127,6 +1235,127 @@ def _emit_wg_mentions(
             })
         except Exception:  # noqa: BLE001
             pass
+
+
+def _emit_workgroup_changed(home: Path, wg_id: str, action: str) -> None:
+    try:
+        from alpi.home import profile_name
+        from alpi.host import events as host_events
+        host_events.emit("workgroup_changed", {
+            "profile": profile_name(home),
+            "wg_id": wg_id,
+            "action": action,
+        })
+    except Exception:  # noqa: BLE001
+        pass
+
+
+class TriggerError(ValueError):
+    """Rejected trigger; ``code`` is the stable reason clients surface verbatim."""
+
+    def __init__(self, code: str, detail: str):
+        super().__init__(f"{code}: {detail}")
+        self.code = code
+        self.detail = detail
+
+
+_TRIGGER_LOCKS: dict[str, asyncio.Lock] = {}
+_TRIGGER_LOCKS_CAP = 256
+
+
+def _trigger_lock(home: Path, wg_id: str) -> asyncio.Lock:
+    # Serialises check-then-post per workgroup so two clients cannot open competing chains.
+    key = f"{home}:{wg_id}"
+    lock = _TRIGGER_LOCKS.get(key)
+    if lock is None:
+        if len(_TRIGGER_LOCKS) >= _TRIGGER_LOCKS_CAP:
+            for stale, held in list(_TRIGGER_LOCKS.items()):
+                if not held.locked():
+                    del _TRIGGER_LOCKS[stale]
+        lock = asyncio.Lock()
+        _TRIGGER_LOCKS[key] = lock
+    return lock
+
+
+def _run_being_stopped(key: str, state: dict[str, Any] | None) -> dict[str, Any] | None:
+    """What this trigger will stop, so every surface can say it before and after; a blocked run counts — what it loses is its position."""
+    run = (state or {}).get("pipeline_run") or {}
+    status = str(run.get("status") or "")
+    if not status or status == "completed":
+        return None
+    active = (state or {}).get("active") or {}
+    return {
+        "pipeline": str(run.get("pipeline") or ""),
+        "phase": str(run.get("current_phase") or ""),
+        "status": str(run.get("status") or ""),
+        "open_task": str(active.get("slug") or "") or None,
+        "same_pipeline": str(run.get("pipeline") or "") == key,
+    }
+
+
+async def trigger_pipeline(
+    home: Path, wg_id: str, pipeline: str,
+) -> dict[str, Any]:
+    """Hub-admin only: publishes the recipe-authored owner/task verbatim, never preempts, never invents text."""
+    from alpi.host import workgroup as host_wg
+
+    key = str(pipeline or "").strip().lower()
+    if not key:
+        raise TriggerError("pipeline-required", "a pipeline key is required")
+    async with _trigger_lock(home, wg_id):
+        wg = wg_mod.load(home, wg_id)
+        if wg is None:
+            if sub_mod.get(home, wg_id) is not None:
+                raise TriggerError(
+                    "pipeline-trigger-not-hub",
+                    "only the hub may start a pipeline in this workgroup",
+                )
+            raise TriggerError("workgroup-not-found", f"workgroup {wg_id!r} not found")
+        own_pubkey = load_or_generate(home).pubkey_b64()
+        if wg.meta.hub_pubkey != own_pubkey:
+            raise TriggerError(
+                "pipeline-trigger-not-hub",
+                "only the hub may start a pipeline in this workgroup",
+            )
+        if wg.meta.paused:
+            raise TriggerError(
+                "workgroup-paused", "resume the workgroup before starting a pipeline",
+            )
+        chain = wg.meta.pipelines.get(key)
+        if not chain:
+            raise TriggerError(
+                "pipeline-unknown",
+                f"{key!r} is not a declared pipeline; known: {sorted(wg.meta.pipelines)}",
+            )
+        phase = chain[0]
+        spec = (wg.meta.pipeline_steps or {}).get(phase) or {}
+        owner = str(spec.get("owner") or "").strip()
+        task = str(spec.get("task") or "").strip()
+        if not owner or not task:
+            raise TriggerError(
+                "pipeline-trigger-contract-missing",
+                f"pipeline {key!r} declares no owner/task for its first phase "
+                f"#{phase}, so the opener cannot be authored from the recipe",
+            )
+        state = await asyncio.to_thread(host_wg.fold_task_state, home, wg_id)
+        stopped = _run_being_stopped(key, state)
+        try:
+            # One chain at a time: the opener preempts whatever was mid-flight.
+            result = await post(
+                home, wg_id, f"@{owner} #task #{phase} · {task}".encode(),
+                operator_abandon=True,
+            )
+        except ValueError as e:
+            # Keep the coded contract: clients switch on `.code`, never on prose.
+            raise TriggerError("pipeline-trigger-rejected", str(e)) from e
+    _emit_workgroup_changed(home, wg_id, "trigger")
+    return {
+        "ok": True,
+        "pipeline": key,
+        "phase": phase,
+        "seq": result.get("seq") if isinstance(result, dict) else None,
+        "stopped": stopped,
+    }
 
 
 async def leave(home: Path, wg_id: str) -> dict[str, Any]:

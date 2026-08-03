@@ -25,7 +25,7 @@ globalThis.ResizeObserver ??= class {
   disconnect() {}
 };
 
-const workgroup = { id: "launch", profile: "hub", hub_id: "hub", paused: false, auto_read: false, members: 1, pipeline: [] };
+const workgroup = { id: "launch", profile: "hub", hub_id: "hub", paused: false, auto_read: false, members: 1 };
 const profiles = [{ name: "hub", accent: "#5588ff", pubkey_b64: "hub-pubkey" }];
 
 beforeEach(() => {

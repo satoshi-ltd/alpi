@@ -4,7 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { radii, space , fontSizes} from '../../../src/theme/tokens';
+import { radii, space } from '../../../src/theme/tokens';
 
 import { ActionSheet } from '../../../src/components/ActionSheet';
 import { Diamond } from '../../../src/components/Diamond';
@@ -19,6 +19,7 @@ import { useProfileSummaries, useWorkgroupMembers } from '../../../src/hooks/use
 import { useProfile, useWorkgroup } from '../../../src/hooks/useSubject';
 import { useEndpoint } from '../../../src/lib/EndpointContext';
 import { EditBudgetSheet } from '../../../src/features/sheets/EditBudgetSheet';
+import { PipelinesSection } from '../../../src/features/workgroups/PipelinesSection';
 import { accentForProfile } from '../../../src/theme/accents';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { AdminGuard } from '../../../src/components/AdminGuard';
@@ -240,34 +241,7 @@ function WorkgroupSettings() {
           onPress={isHub ? () => router.push(`/wg/${id}/briefing`) : undefined}
           chevron={isHub}
         />
-        <SectionHeader>Pipeline · task order the hub runs</SectionHeader>
-        {(wg.pipeline ?? []).length > 0 ? (
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.s3, paddingHorizontal: space.s8, paddingVertical: space.s4 }}>
-            {wg.pipeline.map((s, i) => (
-              <View
-                key={s}
-                style={{
-                  flexDirection: 'row', alignItems: 'center', gap: space.s2,
-                  paddingHorizontal: space.s4, paddingVertical: space.s2,
-                  borderWidth: 0.5, borderColor: colors.line2, borderRadius: radii.md,
-                  backgroundColor: colors.bgInput,
-                }}
-              >
-                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4 }}>{i + 1}</Text>
-                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink }}>#{s}</Text>
-              </View>
-            ))}
-          </View>
-        ) : (
-          <View style={{ paddingHorizontal: space.s8, paddingVertical: space.s4 }}>
-            <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }}>
-              No pipeline · deliberation workgroup
-            </Text>
-          </View>
-        )}
-        {isHub ? (
-          <Row label="Edit pipeline" onPress={() => router.push(`/wg/${id}/pipeline`)} chevron />
-        ) : null}
+        <PipelinesSection workgroup={wg} />
 
         <SectionHeader>Members · {memberRows.length || wg.members || 0}</SectionHeader>
         {memberRows.map((m, i) => {

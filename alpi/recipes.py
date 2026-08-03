@@ -30,89 +30,73 @@ class Recipe:
     task: str
     quorum_timeout_seconds: int
     budget_usd: float | None
-    pipeline: tuple[str, ...]
+    pipelines: dict
+    launch_pipeline: str | None
     pipeline_steps: dict
-    operations: dict
     params: dict
     inputs: dict
     project: dict | None
     raw: dict = field(default_factory=dict)
 
+    @property
+    def launch_chain(self) -> tuple[str, ...]:
+        return tuple(self.pipelines.get(self.launch_pipeline or "", ()))
 
-_PIPELINE_SLUG_RE = _re.compile(r"^[a-z0-9][a-z0-9_-]*$")
+
+_TASK_SLUG_RE = _re.compile(r"#([a-z0-9][a-z0-9_-]*)")
 
 
-def _coerce_operations(
-    recipe_id: str, raw: Any, steps: dict, pipeline: tuple[str, ...],
-) -> dict:
-    # Chains must be disjoint: a slug in two of them would make the active chain depend on YAML order.
-    if raw is None:
-        return {}
-    if not pipeline:
-        raise RecipeError(
-            f"recipe {recipe_id!r} declares operations without a pipeline; operations are "
-            "post-launch chains and the launch pipeline drives continuation"
+def _coerce_pipelines(recipe_id: str, data: dict) -> tuple[dict, str | None]:
+    """A recipe is the ONLY place chains are declared; the retired `pipeline`/`operations` pair is rejected."""
+    from alpi.alp import workgroup as wg_mod
+
+    try:
+        wg_mod.reject_retired_keys(data, f"recipe {recipe_id!r}")
+        pipelines = wg_mod.normalize_pipelines(data.get("pipelines"))
+        return pipelines, wg_mod.normalize_launch_pipeline(
+            pipelines, data.get("launch"),
         )
-    if not isinstance(raw, dict):
-        raise RecipeError(f"recipe {recipe_id!r} operations must be a mapping")
-    out: dict[str, tuple[str, ...]] = {}
-    claimed: dict[str, str] = {}
-    for name, body in raw.items():
-        name = str(name).strip().lower()
-        if not name:
-            raise RecipeError(f"recipe {recipe_id!r} operations has an empty name")
-        if not isinstance(body, dict):
-            raise RecipeError(f"recipe {recipe_id!r} operations[{name!r}] must be a mapping")
-        ordered = body.get("steps")
-        if not isinstance(ordered, list) or not ordered:
+    except ValueError as e:
+        raise RecipeError(f"recipe {recipe_id!r} {e}" if str(e).startswith(("pipeline", "launch", "phase", "duplicate")) else str(e))
+
+
+def _check_launch_semantics(
+    recipe_id: str, pipelines: dict, launch_pipeline: str | None,
+    steps: dict, task: str,
+) -> None:
+    if steps and not pipelines:
+        raise RecipeError(
+            f"recipe {recipe_id!r} declares pipeline_steps without any pipeline; gate "
+            "specs with no chain to order them would run unconstrained"
+        )
+    for key, chain in pipelines.items():
+        missing = [slug for slug in chain if not (steps.get(slug) or {}).get("owner")]
+        if missing:
             raise RecipeError(
-                f"recipe {recipe_id!r} operations[{name!r}].steps must be a non-empty list"
+                f"recipe {recipe_id!r} pipeline {key!r} has phases with no owner in "
+                f"pipeline_steps: {missing}"
             )
-        slugs = tuple(str(x).strip().lower() for x in ordered)
-        if slugs[0] != name:
+        spec = steps.get(chain[0]) or {}
+        if not str(spec.get("task") or "").strip():
             raise RecipeError(
-                f"recipe {recipe_id!r} operations[{name!r}] must start with a step named "
-                f"{name!r} so `#task #{name}` opens it; got {slugs[0]!r}"
+                f"recipe {recipe_id!r} pipeline {key!r} cannot be triggered: its first "
+                f"phase {chain[0]!r} must declare both an owner and a task"
             )
-        if len(set(slugs)) != len(slugs):
-            raise RecipeError(f"recipe {recipe_id!r} operations[{name!r}].steps has duplicates")
-        for slug in slugs:
-            if not _PIPELINE_SLUG_RE.match(slug):
-                raise RecipeError(
-                    f"recipe {recipe_id!r} operations[{name!r}] step {slug!r} is not a valid slug"
-                )
-            if slug not in steps:
-                raise RecipeError(
-                    f"recipe {recipe_id!r} operations[{name!r}] step {slug!r} has no "
-                    "pipeline_steps entry"
-                )
-            if slug in pipeline:
-                raise RecipeError(
-                    f"recipe {recipe_id!r} operations[{name!r}] step {slug!r} is also a launch "
-                    "pipeline phase; chains must be disjoint"
-                )
-            owner = claimed.get(slug)
-            if owner is not None:
-                raise RecipeError(
-                    f"recipe {recipe_id!r} step {slug!r} belongs to operations {owner!r} and "
-                    f"{name!r}; chains must be disjoint"
-                )
-            claimed[slug] = name
-        if name in out:
-            raise RecipeError(f"recipe {recipe_id!r} has duplicate operation {name!r}")
-        out[name] = slugs
-    # Order is checked only once every chain is known to be disjoint.
-    for name, slugs in out.items():
-        for i, slug in enumerate(slugs):
-            declared = str((steps.get(slug) or {}).get("next") or "")
-            successor = slugs[i + 1] if i + 1 < len(slugs) else ""
-            if declared and declared != successor:
-                raise RecipeError(
-                    f"recipe {recipe_id!r} operations[{name!r}] step {slug!r} declares "
-                    f"next={declared!r} but steps order the successor as "
-                    f"{successor or '<none>'!r}"
-                )
-    return out
+    if not task:
+        return
+    if pipelines and launch_pipeline is None:
+        raise RecipeError(
+            f"recipe {recipe_id!r} declares pipelines with no `launch` but also a `task`; "
+            "an idle pipeline workgroup posts no kickoff — drop the task or select a launch"
+        )
+    if launch_pipeline is not None:
+        first = pipelines[launch_pipeline][0]
+        if first not in set(_TASK_SLUG_RE.findall(task.lower())):
+            raise RecipeError(
+                f"recipe {recipe_id!r} task must open the launch pipeline's first phase "
+                f"`#{first}`"
+            )
+
 
 def _coerce_members(raw: Any) -> tuple[str, ...]:
     if raw is None:
@@ -198,18 +182,17 @@ def parse_recipe(text: str, recipe_id: str) -> Recipe:
         except (TypeError, ValueError):
             raise RecipeError(f"recipe {recipe_id!r} budget_usd must be a number")
 
-    pipeline = data.get("pipeline") or []
-    if not isinstance(pipeline, list):
-        raise RecipeError(f"recipe {recipe_id!r} pipeline must be a list")
+    pipelines, launch_pipeline = _coerce_pipelines(recipe_id, data)
 
-    steps = data.get("pipeline_steps") or {}
-    if not isinstance(steps, dict):
+    if data.get("pipeline_steps") is not None and not isinstance(data["pipeline_steps"], dict):
         raise RecipeError(f"recipe {recipe_id!r} pipeline_steps must be a mapping")
-
-    operations = _coerce_operations(
-        recipe_id, data.get("operations"), steps,
-        tuple(str(x).strip().lower() for x in pipeline),
-    )
+    from alpi.alp import workgroup as wg_mod
+    try:
+        steps = wg_mod.validate_pipeline_steps(pipelines, data.get("pipeline_steps"))
+    except ValueError as e:
+        raise RecipeError(f"recipe {recipe_id!r} {e}")
+    task = str(data.get("task") or "")
+    _check_launch_semantics(recipe_id, pipelines, launch_pipeline, steps, task.strip())
 
     project = data.get("project")
     if project is not None:
@@ -236,12 +219,12 @@ def parse_recipe(text: str, recipe_id: str) -> Recipe:
         members=_coerce_members(data.get("members")),
         name=name,
         briefing=str(data.get("briefing") or ""),
-        task=str(data.get("task") or ""),
+        task=task,
         quorum_timeout_seconds=int(data.get("quorum_timeout_seconds") or 0),
         budget_usd=budget_usd,
-        pipeline=tuple(str(p).strip() for p in pipeline),
+        pipelines=pipelines,
+        launch_pipeline=launch_pipeline,
         pipeline_steps=steps,
-        operations=operations,
         params=_coerce_params(data.get("params")),
         inputs=_coerce_inputs(data.get("inputs"), project is not None),
         project=project,
@@ -319,9 +302,9 @@ def resolve(recipe: Recipe, params: dict[str, str]) -> dict:
         "task": _interp(recipe.task, params),
         "quorum_timeout_seconds": recipe.quorum_timeout_seconds,
         "budget_usd": recipe.budget_usd,
-        "pipeline": list(recipe.pipeline),
+        "pipelines": {k: list(v) for k, v in (recipe.pipelines or {}).items()},
+        "launch_pipeline": recipe.launch_pipeline,
         "pipeline_steps": _interp(recipe.pipeline_steps, params),
-        "operations": {k: list(v) for k, v in (recipe.operations or {}).items()},
         "inputs": _interp(recipe.inputs, params),
         "project": _interp(recipe.project, params) if recipe.project else None,
     }

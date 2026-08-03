@@ -1,8 +1,8 @@
 ---
 name: review-orders
-description: Process a human review work order (REV-*) into per-owner fix tasks, verify closure note by note, and re-run the gates.
+description: Materialize a human review work order (REV-*), triage every note to one declared review phase, and close note by note once the chain has run.
 category: meta
-version: 1.0.0
+version: 2.0.0
 origin: user
 requires_env: []
 tools: [read_file, write_file, search, terminal, workgroup_post]
@@ -15,52 +15,69 @@ created_at: 2026-07-25
 A review work order is a human-authored markdown document produced by the
 template's draft preview tools: requests keyed by stable note ids
 (`REV-<REF>-NN`), grouped by page, optionally closing with an
-`## Approved appearance configuration` JSON block. It arrives as a `#review`
-task either INLINE (the full document pasted in the post) or as a reference
-to an existing `work/review/REV-*.md` file. Treat it as a reduced briefing.
+`## Approved appearance configuration` JSON block. Treat it as a reduced
+briefing.
 
-## Step 1 — materialize, always first
+The `review` pipeline is declared in the recipe and the daemon sequences it:
 
-Inline document → write it VERBATIM to `work/review/<review-id>.md` before
-anything else. Referenced file → verify it exists on disk. The file is
-immutable input, like `brief.md`: never edit, renumber, or reword it. Every
-later task cites the file plus note ids — never re-paste the document into a
-task (task text is re-injected into every member turn; the file is read once
-by whoever needs it).
+```
+review @mira → review-config @scout → review-content @quill →
+review-translation @lingua → review-media @muse → review-build @pixel →
+review-qa @lens → review-close @mira
+```
 
-## Step 2 — triage every note to exactly one owner
+Start it with `alpi -p mira workgroup trigger <wg_id> review` (or the Run
+action in the app). The opener is the recipe's, not yours. Do not re-derive
+this order in a post and never fan out `#review-fix` tasks — the phases ARE
+the fan-out, and a phase with nothing to do closes as `skipped`.
 
-| Signal | Owner |
-|---|---|
-| `Source:` under `src/content/**`, or copy/order/structure requests on entries and pages | quill |
-| `(only this locale)` on a non-source locale, or translation quality | lingua |
-| `Source:` under `assets/manifest.yaml`, or image/media requests | muse |
-| `## Approved appearance configuration` block, or site.json-level requests (nav, sections, theme, booking) | scout |
-| Requests that need runtime edits (`src/i18n/*`, components, styles, scripts) — e.g. chrome labels with no `Source:` | NOBODY — out of boundary |
+## Phase `review` — materialize, always first
+
+An inline document → write it VERBATIM to `work/review/<review-id>.md` before
+anything else. VERBATIM is a COPY operation, not a retelling: reproduce the
+source text character by character, from `# Review work order` to the last
+line. You are NOT allowed to rewrite a note's request from your own analysis
+of the project — a note you "improved" is a fabricated client request, the
+worst failure of this protocol. Before triaging, re-read the file you wrote
+and compare each note id's request against the source; any mismatch means you
+rewrite the file, not the notes. A referenced file → verify it exists on disk.
+The file is immutable input, like `brief.md`: never edit, renumber, or reword
+it.
+
+Then post your triage: for each note id, the phase that owns it. Cite the file
+plus note ids and never re-paste the document into a task or a triage post —
+that text is re-injected into every member turn, while the file is read once by
+whoever needs it. Close with `#done review triaged · <n> notes → <phases>`. The
+daemon opens `review-config` next.
 
 Only id + URL + the request text are guaranteed per note; missing optional
 fields (Locale, Node, Source, Current) never block triage — locate the target
 by searching the quoted `Current:` text in the content files of the URL's
-page. Out-of-boundary notes are NEVER fixed by members: collect them for the
-template-gap section of your closing report.
+page.
 
-## Step 3 — dispatch in this order, thin tasks only
+## Triage: every note to exactly one phase
 
-1. scout — apply the appearance JSON verbatim onto `src/config/site.json`
-   (schema-legal keys only) plus config-level notes; gate `check:config`.
-2. quill — source-locale content notes; gate `check:content`.
-3. lingua — locale-specific notes + parity for whatever quill changed; gate
-   `check:content:all`.
-4. muse — manifest/media notes; gate `assets:optimize`.
-5. pixel — rebuild; gate `check:dist`.
-6. lens — re-audit the touched pages; one QA verdict.
+| Signal | Phase |
+|---|---|
+| `## Approved appearance configuration` block, or site.json-level requests (nav, sections, theme, booking) | `review-config` |
+| `Source:` under `src/content/**`, or copy/order/structure requests on entries and pages | `review-content` |
+| `(only this locale)` on a non-source locale, or translation quality | `review-translation` |
+| `Source:` under `assets/manifest.yaml`, or image/media requests | `review-media` |
+| Requests that need runtime edits (`src/i18n/*`, components, styles, scripts) — e.g. chrome labels with no `Source:` | NOBODY — out of boundary |
 
-One task per owner, skip empty stages:
-`@<owner> #task #review-fix <review-id> · notes <ids> · work/review/<review-id>.md`.
-Owners apply ONLY their notes. A failed gate follows the standard rule: the
-phase re-opens with a fresh task; it is never advanced red.
+Out-of-boundary notes are NEVER fixed by members: carry them to
+`review-close` as `template-gap`.
 
-## Step 4 — close note by note
+## The fix phases
+
+Each owner reads `work/review/<review-id>.md`, applies ONLY the notes triaged
+to their phase, and hands off. `review-translation` also restores parity for
+whatever `review-content` changed. An empty category is closed explicitly with
+`#done skipped · no <category> notes in <review-id>` — the phase stays in the
+chain, it does not disappear. A failed gate re-opens the SAME phase with a
+fresh task; it is never advanced red.
+
+## Phase `review-close` — close note by note
 
 The closing `#done` lists EVERY note id with exactly one outcome:
 

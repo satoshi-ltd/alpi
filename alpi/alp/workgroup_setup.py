@@ -103,8 +103,9 @@ def _hub_detail_view(home: Path, wg_id: str) -> None:
              f"{len(wg.members)} pinned"),
             ("Briefing",        "briefing",
              _preview(wg.meta.briefing) if wg.meta.briefing else "(empty)"),
-            ("Pipeline",        "pipeline",
-             " → ".join(wg.meta.pipeline) if wg.meta.pipeline else "deliberation"),
+            ("Pipelines",       "pipelines", _pipelines_summary(wg.meta)),
+            ("Trigger pipeline", "trigger",
+             "start a declared pipeline with its recipe-authored opener"),
             ("Quorum timeout",  "quorum",
              f"{wg.meta.quorum_timeout_seconds}s" if wg.meta.quorum_timeout_seconds else "default 600s"),
             ("Budget",          "budget", _budget_summary(home, wg)),
@@ -128,8 +129,10 @@ def _hub_detail_view(home: Path, wg_id: str) -> None:
             _edit_budget(home, wg)
         elif choice == "briefing":
             _edit_briefing(home, wg)
-        elif choice == "pipeline":
-            _edit_pipeline(home, wg)
+        elif choice == "pipelines":
+            _show_pipelines(home, wg)
+        elif choice == "trigger":
+            _trigger_pipeline_flow(home, wg)
         elif choice == "quorum":
             _edit_quorum_timeout(home, wg)
         elif choice == "pause":
@@ -440,13 +443,6 @@ def _create_flow(home: Path) -> None:
         return ui.cancelled()
     briefing = (briefing or "").strip()
 
-    pipeline_raw = ui.text(
-        "Pipeline phases, comma-separated (ENTER for deliberation):",
-        default="",
-    )
-    if pipeline_raw is None:
-        return ui.cancelled()
-    pipeline = [p.strip() for p in (pipeline_raw or "").split(",") if p.strip()]
 
     pinned = peers_mod.load(home)
     if not pinned:
@@ -471,7 +467,6 @@ def _create_flow(home: Path) -> None:
             home, name=name, hub_kp=kp,
             member_pubkeys=member_pks, budget=budget or {},
             briefing=briefing,
-            pipeline=pipeline,
             hub_bio=hub_bio, hub_voice=hub_voice,
         )
     except ValueError as e:
@@ -578,37 +573,97 @@ def _edit_briefing(home: Path, wg) -> None:
     ui.ok_and_wait("briefing updated")
 
 
-def _edit_pipeline(home: Path, wg) -> None:
-    """Edit the ordered pipeline phase slugs. Empty means normal deliberation."""
-    from alpi.alp.workgroup import _normalize_pipeline, _save_meta, _wg_dir
+def _pipelines_summary(meta) -> str:
+    if not meta.pipelines:
+        return "deliberation"
+    return f"{len(meta.pipelines)} · launch: {meta.launch_pipeline or 'none'}"
 
-    current = ", ".join(wg.meta.pipeline)
+
+def _show_pipelines(home: Path, wg) -> None:
+    """Read-only listing: every declared chain plus the launch marker and the active run."""
+    from alpi.host import workgroup as host_wg
+
     ui.banner(
-        ui.crumb("setup", "workgroups", wg.meta.name, "pipeline"),
-        subtitle="ordered phase slugs",
+        ui.crumb("setup", "workgroups", wg.meta.name, "pipelines"),
+        subtitle=_pipelines_summary(wg.meta),
         home=home,
     )
-    ui.dim(
-        "Pipeline workgroups auto-continue after each `#done` by moving\n"
-        "through these slugs in order. Leave empty for a normal deliberation\n"
-        "workgroup."
-    )
+    if not wg.meta.pipelines:
+        ui.dim("No pipelines declared — this is a deliberation workgroup.")
+        ui.press_enter()
+        return
+    rows = [
+        [key, " → ".join(chain), "launch" if key == wg.meta.launch_pipeline else ""]
+        for key, chain in wg.meta.pipelines.items()
+    ]
+    ui.columns(rows)
     ui._console.print("")
-    raw = ui.text(
-        f"Pipeline (current: {current or 'deliberation'}):",
-        default=current,
+    if wg.meta.launch_pipeline is None:
+        ui.dim(
+            "No launch pipeline — nothing starts on its own. Use "
+            "'Trigger pipeline' to start a declared chain."
+        )
+    ui.dim("Chains are declared by the recipe and are read-only here.")
+    try:
+        run = (host_wg.fold_task_state(home, wg.meta.id) or {}).get("pipeline_run")
+    except Exception:  # noqa: BLE001
+        run = None
+    if run:
+        detail = " · ".join(
+            f"{p['slug']} {p['state']}" for p in run["phases"]
+            if p["state"] != "pending"
+        )
+        ui.dim(f"Active pipeline: {run['pipeline']} [{run['status']}] · {detail}")
+    ui.press_enter()
+
+
+def _trigger_pipeline_flow(home: Path, wg) -> None:
+    """Pick a declared pipeline and start it with the recipe-authored opener."""
+    from alpi.alp import workgroup_client as wc
+
+    if not wg.meta.pipelines:
+        ui.fail_and_wait("no pipelines declared in this workgroup")
+        return
+    ui.banner(
+        ui.crumb("setup", "workgroups", wg.meta.name, "trigger"),
+        subtitle="the opener comes from the recipe, not from you",
+        home=home,
     )
-    if raw is None:
+    items: list = []
+    for key, chain in wg.meta.pipelines.items():
+        spec = (wg.meta.pipeline_steps or {}).get(chain[0]) or {}
+        owner = str(spec.get("owner") or "").strip()
+        task = str(spec.get("task") or "").strip()
+        hint = (
+            f"@{owner} #{chain[0]} · {_preview(task)}" if owner and task
+            else "not triggerable — no declared owner/task for its first phase"
+        )
+        items.append((key, key, hint))
+    choice = ui.menu("", items, home=home, close="Back")
+    if choice is None:
+        return
+    chain = wg.meta.pipelines[choice]
+    spec = (wg.meta.pipeline_steps or {}).get(chain[0]) or {}
+    owner = str(spec.get("owner") or "").strip()
+    task = str(spec.get("task") or "").strip()
+    if not owner or not task:
+        ui.fail_and_wait(
+            f"pipeline-trigger-contract-missing: #{chain[0]} declares no owner/task"
+        )
+        return
+    ui._console.print("")
+    ui.dim(f"@{owner} #task #{chain[0]} · {task}")
+    if not ui.confirm(f"Start {choice}?", default=False):
         return ui.cancelled()
     try:
-        wg.meta.pipeline = _normalize_pipeline(
-            [p.strip() for p in (raw or "").split(",") if p.strip()],
-        )
+        result = asyncio.run(wc.trigger_pipeline(home, wg.meta.id, choice))
     except ValueError as e:
         ui.fail_and_wait(str(e))
         return
-    _save_meta(_wg_dir(home, wg.meta.id), wg.meta)
-    ui.ok_and_wait("pipeline updated")
+    ui.ok_and_wait(
+        f"triggered {result['pipeline']} · opened #{result['phase']} "
+        f"at seq {result['seq']}"
+    )
 
 
 def _edit_quorum_timeout(home: Path, wg) -> None:

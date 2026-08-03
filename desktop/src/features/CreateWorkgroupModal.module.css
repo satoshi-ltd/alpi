@@ -29,6 +29,40 @@
   color: var(--ink-2);
 }
 
+.recipePipelines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.recipePipeline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.recipePipelineHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.recipePipelineName {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--ink);
+}
+
+.recipePipelineCount {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+.recipeIdle {
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+
 .chips {
   display: flex;
   flex-wrap: wrap;
@@ -50,11 +84,6 @@
   font-family: var(--font-mono);
   font-size: var(--fs-sm);
   color: var(--ink);
-}
-
-.sectionDivider {
-  padding-top: var(--space-6);
-  border-top: 1px solid var(--line);
 }
 
 .growCap {

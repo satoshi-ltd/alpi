@@ -269,3 +269,71 @@ def test_hub_workgroup_renders_own_bio(short_tmp: Path) -> None:
     block = agent_context.build(home)
     assert block is not None
     assert "product engineer — velocity" in block
+
+
+def test_member_block_renders_the_declared_chains_with_owners(short_tmp: Path) -> None:
+    home = short_tmp / "quill"; home.mkdir()
+    load_or_generate(home)
+    sub = sub_mod.Subscription(
+        wg_id="wg_site", name="site", hub_id="mira", hub_pubkey="mirakey",
+    )
+    sub.absorb_pipeline_state({
+        "pipelines": {
+            "setup": ["setup", "content", "qa"],
+            "media-update": ["media-update", "media-qa"],
+        },
+        "launch_pipeline": "setup",
+        "pipeline_mode": True,
+        "phase_map": {
+            "setup": {"owner": "pixel", "task": "initialize the clone"},
+            "content": {"owner": "quill"},
+            "media-update": {"owner": "muse"},
+        },
+    })
+    sub_mod.upsert(home, sub)
+
+    block = agent_context.build(home)
+    assert "pipelines:" in block
+    assert "- setup: #setup @pixel → #content @quill → #qa (launch)" in block
+    assert "- media-update: #media-update @muse → #media-qa" in block
+
+
+def test_launchless_member_block_says_nothing_starts_on_its_own(short_tmp: Path) -> None:
+    home = short_tmp / "muse"; home.mkdir()
+    load_or_generate(home)
+    sub = sub_mod.Subscription(
+        wg_id="wg_idle", name="idle", hub_id="mira", hub_pubkey="mirakey",
+    )
+    sub.absorb_pipeline_state({
+        "pipelines": {"media-update": ["media-update", "media-qa"]},
+        "launch_pipeline": None,
+        "pipeline_mode": True,
+        "phase_map": {"media-update": {"owner": "muse"}},
+    })
+    sub_mod.upsert(home, sub)
+
+    block = agent_context.build(home)
+    assert "no launch pipeline" in block
+    assert "(launch)" not in block
+
+
+def test_hub_block_renders_chains_and_never_the_gate_commands(short_tmp: Path) -> None:
+    home = short_tmp / "mira"; home.mkdir(parents=True)
+    kp = load_or_generate(home)
+    wg_mod.create(
+        home, name="site", hub_kp=kp, member_pubkeys=[],
+        pipelines={"setup": ["setup", "qa"]},
+        launch_pipeline="setup",
+        pipeline_steps={
+            "setup": {
+                "owner": "mira", "task": "initialize the clone",
+                "gate": {"argv": ["npm", "run", "check:setup"], "cwd": "projects/x"},
+            },
+            "qa": {"owner": "mira", "task": "audit it"},
+        },
+    )
+
+    block = agent_context.build(home)
+    assert "- setup: #setup @mira → #qa @mira (launch)" in block
+    assert "check:setup" not in block
+    assert "projects/x" not in block

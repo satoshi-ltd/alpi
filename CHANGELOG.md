@@ -1,5 +1,65 @@
 # Changelog
 
+## v0.12.0 — 2026-07-31 — one map of named pipelines, declared only by a recipe
+
+**Breaking:** the old `pipeline` + `operations` recipe shape is gone. A recipe
+now declares `pipelines` (a map of named ordered chains) and `launch`. A recipe,
+workgroup or subscription still carrying the old keys is rejected rather than
+converted, so a workgroup created before this release stops loading. Relaunch it
+from the updated recipe — there is no migration, and only a recipe can supply the
+per-phase owners a chain needs anyway. Upgrade hubs and members together: a
+member on this release joined to an older hub degrades that workgroup to a
+deliberation one.
+
+- **One place declares the work, one place drives it.** `pipelines:` is a map of
+  named chains and `launch:` names the one the kickoff opens. There is no second
+  "operations" concept and no per-step `next` — the chain is the order, so a
+  phase can no longer advance one way after a green check and another way after
+  a quorum close.
+- **Only a recipe declares a pipeline.** Creating a workgroup by hand makes a
+  deliberation workgroup, and no surface edits a chain after launch. A phase
+  without a declared owner and task cannot be dispatched at all, and only a
+  recipe can supply those — so editing the phase list from a client was never
+  really editing the pipeline. Changing a chain means editing the recipe.
+- **Any declared chain can be started by name.** `alpi workgroup trigger <wg_id>
+  <pipeline>` publishes the recipe's own owner and task, verbatim. Starting the
+  media update no longer depends on somebody remembering how the first task was
+  worded, and a chain whose first phase declares no owner or task is rejected
+  instead of started with invented text.
+- **Pipelines run one at a time.** Starting a chain stops whatever was mid-flight
+  and says what it stopped — the console prints it, the apps warn before you
+  confirm. The displaced phase is recorded as preempted, never as done.
+- **A workgroup can now wait.** Declaring pipelines without a `launch` creates an
+  idle maintenance workgroup: nothing posts, nothing runs, and every declared
+  chain sits ready until you trigger it.
+- **Members are told what the workflow is.** Joining or polling a workgroup
+  returns its chains and each phase's owner, so an agent reads the workflow from
+  the daemon instead of from a briefing paragraph kept in sync by hand. Gate
+  commands still never leave the hub.
+- **The console and both apps show which chain is actually running.** Task state
+  carries the selected pipeline run, so a maintenance chain shows as itself
+  rather than as the launch pipeline, an ad-hoc task clears the strip instead of
+  leaving a finished chain on screen, and running the same chain twice starts
+  from the beginning again.
+- **A skipped phase reads as skipped.** A deliberate `#done skipped · <reason>`
+  still advances the chain but is no longer indistinguishable from work that was
+  actually done — in the phase strip and in the task list.
+- **A repair stays inside its phase.** Only `-fix` and `-recheck` map back to a
+  phase, so an operational chain like `content-update` can never be swallowed by
+  the `content` phase — which is what used to make post-QA behaviour depend on
+  the wording of the previous close.
+- **A recipe with a gap now fails loudly.** Every phase of every declared chain
+  needs an owner, every chain's first phase needs an owner and a task, and gate
+  specs without a chain to order them are rejected — previously a typo could
+  leave a check silently disarmed.
+- **A phase the hub owns is worked by the hub.** Turn rotation and closure quorum
+  used to make a hub-owned phase impossible to close, which is what the review
+  protocol needs.
+- **The web factory's three post-launch protocols are real chains.** Media
+  update, content update and review are declared pipelines with owners, tasks and
+  gates, so the review order no longer fans out from prose and an empty category
+  closes as skipped instead of disappearing.
+
 ## v0.11.19 — 2026-07-30 — declared post-launch chains, and gates that cannot be talked past
 
 - **A recipe can now declare `operations`: named chains of steps the daemon

@@ -43,6 +43,7 @@ export { default as NavRow } from "./NavRow.jsx";
 export { default as NewChatHero } from "./NewChatHero.jsx";
 export { default as PeerPopover } from "./PeerPopover.jsx";
 export { default as Pill } from "./Pill.jsx";
+export { default as PipelineStages } from "./PipelineStages.jsx";
 export { default as Popover } from "./Popover.jsx";
 export { default as ProfileChatHeader } from "./ProfileChatHeader.jsx";
 export { default as ProfileMessage } from "./ProfileMessage.jsx";

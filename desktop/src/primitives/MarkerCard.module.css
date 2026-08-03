@@ -20,6 +20,15 @@
 .root :global(.ds-marker) { border-radius: var(--r-sm) var(--r-2xl) var(--r-2xl) var(--r-2xl); }
 .rootRight :global(.ds-marker) { border-radius: var(--r-2xl) var(--r-sm) var(--r-2xl) var(--r-2xl); }
 
+.closeBlocked :global(.ds-marker.done) {
+  background: color-mix(in srgb, var(--c-danger) 12%, var(--bg-pane));
+}
+.closeBlocked :global(.ds-marker.done) :global(.ey) { color: var(--c-danger); }
+.closeSkipped :global(.ds-marker.done) {
+  background: color-mix(in srgb, var(--c-warning) 12%, var(--bg-pane));
+}
+.closeSkipped :global(.ds-marker.done) :global(.ey) { color: var(--c-warning); }
+
 .meta {
   display: flex;
   flex-direction: row;

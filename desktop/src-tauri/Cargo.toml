@@ -1,6 +1,6 @@
 [package]
 name = "alpi-desktop"
-version = "0.4.53"
+version = "0.5.0"
 description = "alpi desktop — filesystem-level wizard for the local alpi profile"
 authors = ["@soyjavi"]
 edition = "2021"
@@ -20,7 +20,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = ["tray-icon", "image-png"] }
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde_json = { version = "1", features = ["preserve_order"] }
 dirs = "5"
 ureq = { version = "2", default-features = false, features = ["json"] }
 notify = "6"

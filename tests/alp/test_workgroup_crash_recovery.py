@@ -33,7 +33,9 @@ def _sub(home: Path, *, last_responded_seq: int = 0, last_dispatch_at: str = "")
         wg_id="wg_crash", name="proj", hub_id="mira", hub_pubkey="HUB",
         last_responded_seq=last_responded_seq,
         last_dispatch_at=last_dispatch_at,
-        pipeline=("intake", "assets"),
+        pipelines={"intake": ("intake", "assets")},
+        launch_pipeline="intake",
+        pipeline_mode=True,
         recent_posts=[_post(5, "HUB", "@scout #task #intake produce work/intake.md")],
     )
     sub_mod.upsert(home, sub)
@@ -87,7 +89,10 @@ def test_cursor_advances_only_via_completion_helper(short_tmp: Path) -> None:
 
 def _pipeline_wg() -> types.SimpleNamespace:
     return types.SimpleNamespace(
-        meta=types.SimpleNamespace(pipeline=("intake", "assets")),
+        meta=types.SimpleNamespace(
+            pipelines={"intake": ("intake", "assets")},
+            launch_pipeline="intake",
+        ),
         members=[types.SimpleNamespace(pubkey="SCOUT_PK")],
     )
 
@@ -301,7 +306,8 @@ async def test_override_survives_the_full_hub_post_chain(short_tmp: Path) -> Non
     wg = wg_mod.create(
         hub_home, name="proj", hub_kp=hub_kp,
         member_pubkeys=[scout_kp.pubkey_b64()],
-        pipeline=("intake", "assets"),
+        pipelines={"intake": ("intake", "assets")},
+        launch_pipeline="intake",
     )
 
     await wc.post(
@@ -330,60 +336,77 @@ async def test_override_survives_the_full_hub_post_chain(short_tmp: Path) -> Non
         )
 
 
-def _operation_wg() -> types.SimpleNamespace:
+def _dormant_pipeline_wg() -> types.SimpleNamespace:
     return types.SimpleNamespace(
         meta=types.SimpleNamespace(
-            pipeline=("intake", "assets"),
-            operations={"media-update": ("media-update", "media-qa")},
+            pipelines={
+                "intake": ("intake", "assets"),
+                "media-update": ("media-update", "media-qa"),
+            },
+            launch_pipeline="intake",
         ),
         members=[types.SimpleNamespace(pubkey="SCOUT_PK")],
     )
 
 
-def test_operation_phase_close_without_owner_delivery_is_rejected(monkeypatch) -> None:
+def test_dormant_pipeline_declares_its_own_chain_beside_the_launch_one() -> None:
+    from alpi.alp import workgroup as wg_mod
+
+    meta = _dormant_pipeline_wg().meta
+    assert wg_mod.dormant_pipelines(meta) == {
+        "media-update": ("media-update", "media-qa"),
+    }
+    assert meta.pipelines[meta.launch_pipeline] == ("intake", "assets")
+    assert wg_mod.pipeline_for_phase(meta, "media-qa") == (
+        "media-update", ("media-update", "media-qa"),
+    )
+
+
+def test_dormant_phase_close_without_owner_delivery_is_rejected(monkeypatch) -> None:
     _patch_peer_ids(monkeypatch)
     posts = [_post(1, "HUB", "@scout #task #media-update map the client media")]
     with pytest.raises(ValueError, match="phase-owner-missing"):
         wc._check_pipeline_close_owner(
-            Path("/nonexistent"), _operation_wg(), posts, "#done media-update", "HUB",
+            Path("/nonexistent"), _dormant_pipeline_wg(), posts, "#done media-update", "HUB",
         )
 
 
-def test_operation_phase_close_allowed_once_the_owner_delivers(monkeypatch) -> None:
+def test_dormant_phase_close_allowed_once_the_owner_delivers(monkeypatch) -> None:
     _patch_peer_ids(monkeypatch)
     posts = [
         _post(1, "HUB", "@scout #task #media-update map the client media"),
         _post(2, "SCOUT_PK", "manifest complete · 20 files mapped"),
     ]
     assert wc._check_pipeline_close_owner(
-        Path("/nonexistent"), _operation_wg(), posts, "#done media-update verified", "HUB",
+        Path("/nonexistent"), _dormant_pipeline_wg(), posts,
+        "#done media-update verified", "HUB",
     ) is False
 
 
-def test_operation_phase_blocked_override_waives_quorum(monkeypatch) -> None:
+def test_dormant_phase_blocked_override_waives_quorum(monkeypatch) -> None:
     _patch_peer_ids(monkeypatch)
     posts = [_post(1, "HUB", "@scout #task #media-update map the client media")]
     assert wc._check_pipeline_close_owner(
-        Path("/nonexistent"), _operation_wg(), posts,
+        Path("/nonexistent"), _dormant_pipeline_wg(), posts,
         "#done BLOCKED · media-update · template gap", "HUB",
     ) is True
 
 
-def test_operation_phase_skipped_override_waives_quorum(monkeypatch) -> None:
+def test_dormant_phase_skipped_override_waives_quorum(monkeypatch) -> None:
     _patch_peer_ids(monkeypatch)
     posts = [_post(1, "HUB", "@scout #task #media-qa audit the rebuild")]
     assert wc._check_pipeline_close_owner(
-        Path("/nonexistent"), _operation_wg(), posts,
+        Path("/nonexistent"), _dormant_pipeline_wg(), posts,
         "#done skipped · no media changed", "HUB",
     ) is True
 
 
-def test_operation_phase_owner_unresolved_is_rejected(monkeypatch) -> None:
+def test_dormant_phase_owner_unresolved_is_rejected(monkeypatch) -> None:
     monkeypatch.setattr(wc.peers_mod, "get_by_pubkey", lambda home, pk: None)
     posts = [_post(1, "HUB", "@scout #task #media-update map it")]
     with pytest.raises(ValueError, match="phase-owner-unresolved"):
         wc._check_pipeline_close_owner(
-            Path("/nonexistent"), _operation_wg(), posts, "#done media-update", "HUB",
+            Path("/nonexistent"), _dormant_pipeline_wg(), posts, "#done media-update", "HUB",
         )
 
 
@@ -391,15 +414,15 @@ def _gated_wg() -> types.SimpleNamespace:
     return types.SimpleNamespace(
         meta=types.SimpleNamespace(
             id="wg_gated",
-            pipeline=("intake", "assets"),
+            pipelines={"intake": ("intake", "assets")},
+            launch_pipeline="intake",
             pipeline_steps={
                 "intake": {
-                    "owner": "scout", "next": "assets",
+                    "owner": "scout",
                     "gate": {"argv": ["npm", "run", "check:config"], "cwd": "p"},
                 },
                 "assets": {"owner": "scout"},
             },
-            operations={},
         ),
         members=[types.SimpleNamespace(pubkey="SCOUT_PK")],
     )

@@ -18,9 +18,7 @@ import { relativeTime } from "../lib/time.js";
 import { useTranscriptSearch } from "../hooks/useTranscriptSearch.js";
 import {
   classifyMessage,
-  findBlocked,
   findLatestTask,
-  pipelineState,
   parseDone,
   parseSkip,
   parseTaskOpen,
@@ -37,6 +35,7 @@ import {
 } from "../lib/workgroup-cache.js";
 import { fetchWorkgroupTranscript } from "../lib/workgroup-fetch.js";
 import { WorkgroupChatHeader, TasksButton, Eyebrow, AlpiSilhouette } from "../primitives/index.js";
+import { FOLD_CLOSED_CAP, doneOutcome, tasksFromFold } from "../primitives/TasksButton.jsx";
 import { JumpToLatest, MarkerCard, MessageBubble } from "../primitives/index.js";
 import {
   Banner,
@@ -110,6 +109,8 @@ export default function WorkgroupView({
   );
   const [error, setError] = useState(null);
   const [costs, setCosts] = useState({});
+  const [taskState, setTaskState] = useState(null);
+  const [taskStateStale, setTaskStateStale] = useState(false);
   const scrollRef = useStickyScroll([messages]);
   const refreshMountedRef = useRef(false);
   const pauseMountedRef = useRef(false);
@@ -136,11 +137,11 @@ export default function WorkgroupView({
       profiles.find((p) => p.name === workgroup.profile)?.pubkey_b64 ?? null,
     [profiles, workgroup.profile],
   );
-  const activeTask = useMemo(
+  const localTask = useMemo(
     () => findLatestTask(messages, hubPubkey),
     [messages, hubPubkey],
   );
-  const blocked = useMemo(() => findBlocked(messages, hubPubkey), [messages, hubPubkey]);
+  const blocked = taskState?.blocked ?? null;
   const blockedReason = useMemo(() => {
     if (!blocked) return "";
     const slug = blocked.slug || "";
@@ -150,9 +151,24 @@ export default function WorkgroupView({
       .replace(/^[\s·:—-]+/, "")
       .trim();
   }, [blocked]);
-  const phases = useMemo(
-    () => pipelineState(workgroup.pipeline || [], messages, hubPubkey),
-    [workgroup.pipeline, messages, hubPubkey],
+  const run = taskState?.pipeline_run ?? null;
+  const hostActive = taskState?.active ?? null;
+  const foldedTasks = useMemo(() => tasksFromFold(taskState), [taskState]);
+  // The local derivation only sees the loaded tail, so it is the fallback, never a second answer.
+  const activeTask = useMemo(() => {
+    if (taskState == null) return localTask;
+    if (hostActive == null) return null;
+    return {
+      slug: hostActive.slug ?? null,
+      text: hostActive.title ?? "",
+      seq: hostActive.opened_seq ?? null,
+      state: "open",
+      result: null,
+    };
+  }, [taskState, hostActive, localTask]);
+  const loadedSeqs = useMemo(
+    () => new Set((messages ?? []).map((m) => m.seq)),
+    [messages],
   );
   // A `#working` is stale once superseded — either by a later post from the same author, or by the hub's `#done` that closes the task. A member `#skip` is a per-peer pass, not a close, so it never marks others' `#working` stale. Scope resets when we cross a `#task` boundary going backwards.
   const workingStale = useMemo(() => {
@@ -316,6 +332,19 @@ export default function WorkgroupView({
       .then((p) => !cancelled && setPeers(parsePeers(p)))
       .catch(() => {});
 
+    invoke("workgroup_tasks", {
+      profile: workgroup.profile,
+      wgId: workgroup.id,
+      ...(connectionId ? { connectionId } : {}),
+    })
+      .then((res) => {
+        if (cancelled) return;
+        setTaskState(res && typeof res === "object" ? res : null);
+        setTaskStateStale(false);
+      })
+      // Stale, not dropped: dropping hides a blocked workgroup, keeping it silently asserts a stale chain.
+      .catch(() => !cancelled && setTaskStateStale(true));
+
     fetchWorkgroupTranscript(connectionId, workgroup.profile, workgroup.id)
       .then((rows) => {
         if (cancelled) return;
@@ -365,7 +394,8 @@ export default function WorkgroupView({
       const kind = frame?.event;
       const data = frame?.data ?? {};
       if (
-        (kind === "wg.post" || kind === "wg.done" || kind === "wg.task" || kind === "wg.skip") &&
+        (kind === "wg.post" || kind === "wg.done" || kind === "wg.task"
+          || kind === "wg.skip" || kind === "workgroup_changed") &&
         data.profile === workgroup.profile &&
         data.wg_id === workgroup.id
       ) bump();
@@ -389,8 +419,16 @@ export default function WorkgroupView({
     if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
   };
 
-  const banners = (blocked || workgroup.paused) && (
+  const banners = (blocked || workgroup.paused || taskStateStale) && (
     <>
+      {taskStateStale && (
+        <Banner kind="warning">
+          <span data-testid="pipeline-stale">
+            <strong>Workgroup state unavailable.</strong> The daemon did not answer, so the
+            phase strip and the blocked banner may be out of date.
+          </span>
+        </Banner>
+      )}
       {blocked && (
         <Banner kind="danger" pulsing>
           <span className={styles.blockedLine}>
@@ -441,6 +479,8 @@ export default function WorkgroupView({
         tasksButton={
           <TasksButton
             thread={messages ?? []}
+            tasks={foldedTasks}
+            historyCapped={(taskState?.closed?.length ?? 0) >= FOLD_CLOSED_CAP}
             hubColor={ownerProfile?.accent}
             hubPubkey={hubPubkey}
             openTick={taskHistoryOpenTick}
@@ -452,25 +492,45 @@ export default function WorkgroupView({
         }
       />
       {banners}
-      {phases.length > 0 && (
+      {run && Array.isArray(run.phases) && run.phases.length > 0 && (
         <div className={styles.pipeline}>
-          <Eyebrow className={styles.pipelineLabel}>pipeline</Eyebrow>
-          {phases.map((p, i) => (
-            <Fragment key={p.slug}>
-              {i > 0 && <span className={styles.pipelineSep} aria-hidden>›</span>}
-              <Chip
-                size="sm"
-                ghost={p.state !== "blocked"}
-                state={p.state === "blocked" ? "error" : undefined}
-                icon={p.state === "pending" ? undefined : <PhaseIcon state={p.state} accent={ownerProfile?.accent} />}
-                tooltip={p.seq != null ? `Jump to #${p.slug}` : undefined}
-                onClick={p.seq != null ? () => jumpToSeq(p.seq) : undefined}
-                disabled={p.seq == null}
-              >
-                #{p.slug}
-              </Chip>
-            </Fragment>
-          ))}
+          <Eyebrow className={styles.pipelineLabel}>pipeline · {run.pipeline}</Eyebrow>
+          {run.phases.map((p, i) => {
+            const state = phaseVisual(p, run.status);
+            const canJump = p.seq != null && loadedSeqs.has(p.seq);
+            const tip = canJump
+              ? [`Jump to #${p.slug}`, state === "current" ? hostActive?.title : null]
+                .filter(Boolean).join(" · ")
+              : phaseUnavailable(p);
+            return (
+              <Fragment key={p.slug}>
+                {i > 0 && <span className={styles.pipelineSep} aria-hidden>›</span>}
+                <span
+                  className={`${styles.phase} ${state === "skipped" ? styles.phaseSkipped : ""}`.trim()}
+                  data-phase={p.slug}
+                  data-phase-state={state}
+                  title={canJump ? undefined : tip}
+                  aria-disabled={canJump ? undefined : "true"}
+                >
+                  <Chip
+                    size="sm"
+                    ghost={state !== "blocked"}
+                    state={state === "blocked" ? "error" : undefined}
+                    icon={state === "pending" ? undefined : <PhaseIcon state={state} accent={ownerProfile?.accent} />}
+                    tooltip={canJump ? tip || undefined : undefined}
+                    onClick={canJump ? () => jumpToSeq(p.seq) : undefined}
+                    disabled={!canJump}
+                  >
+                    #{p.slug}
+                  </Chip>
+                </span>
+              </Fragment>
+            );
+          })}
+          {RUN_STATUS[run.status] && (
+            <Chip size="sm" state={RUN_STATUS[run.status]}>{runStatusText(run.status)}</Chip>
+          )}
+
         </div>
       )}
       {searchOpen && (
@@ -639,8 +699,38 @@ function renderWgFooter({
 
 const PHASE_ICON = {
   completed: { name: "check", color: "var(--c-success)" },
+  skipped: { name: "x", color: "var(--c-warning)" },
   blocked: { name: "ban", color: "var(--c-danger)" },
 };
+
+const RUN_STATUS = {
+  blocked: "error",
+  completed: "on",
+  between: "off",
+};
+
+const RUN_STATUS_TEXT = {
+  running: "running",
+  between: "between phases",
+  blocked: "blocked",
+  completed: "completed",
+};
+
+function runStatusText(status) {
+  return RUN_STATUS_TEXT[status] ?? "unfinished";
+}
+
+function phaseUnavailable(phase) {
+  if (phase.seq == null) {
+    return `#${phase.slug} has not opened yet — nothing to jump to`;
+  }
+  return `#${phase.slug} opened at post #${phase.seq}, outside the loaded history`;
+}
+
+// A blocked run keeps its phase `current`; the strip shows that phase as the block.
+function phaseVisual(phase, status) {
+  return status === "blocked" && phase.state === "current" ? "blocked" : phase.state;
+}
 
 function PhaseIcon({ state, accent }) {
   if (state === "current") return <Dot pulse color={accent || "var(--accent)"} />;
@@ -745,6 +835,7 @@ const WgMessage = memo(function WgMessage({
     return (
       <MarkerCard
         variant={variant}
+        outcome={done ? doneOutcome(body) : null}
         label={isStale ? "WORK" : undefined}
         stale={isStale}
         side={isFromHub ? "right" : "left"}

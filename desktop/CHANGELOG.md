@@ -11,6 +11,30 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.5.0 — 2026-07-31 — every pipeline, run from the chat
+
+- **Workgroup settings now list every declared pipeline**, not just the one that
+  ran at launch, with a `launch` chip on the one the kickoff opens. They are
+  read-only: pipelines are declared by the recipe, so there is no longer a stage
+  editor to half-edit them from here.
+- **The chat header shows the chain that is actually running.** During a
+  maintenance run it says so by name, a repeated run starts from the beginning
+  again, and an ad-hoc task clears the strip instead of leaving a finished chain
+  on screen.
+- **A skipped phase looks skipped**, not completed — in the strip and in the task
+  list. A blocked close no longer reads as a green tick.
+- **The workgroup state says when it is unavailable** instead of quietly looking
+  healthy when the daemon does not answer.
+- **A workgroup left behind by the pipeline upgrade says so**: its settings read
+  "relaunch it from its recipe" instead of posing as a deliberation workgroup.
+- **Importing a recipe widens the New Workgroup modal and lists every declared
+  pipeline** — name, phases and the launch marker, in the recipe's own order.
+- **Importing a recipe shows what it will do** — its launch pipeline and how many
+  chains it declares — so an idle recipe is recognisable before you create it.
+
+_Requires alpi ≥ 0.12.0 — the retired `pipeline` + `operations` shape is gone from
+the wire, and this release reads only `pipelines` / `launch_pipeline` / `phase_map`._
+
 ## v0.4.53 — 2026-07-29 — filter alpis & workgroups
 
 - **Filter the sidebar with ⌘S.** Press ⌘S (or pick it from the command

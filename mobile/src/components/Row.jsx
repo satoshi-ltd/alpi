@@ -22,7 +22,7 @@ export function SectionHeader({ children }) {
   );
 }
 
-export function Row({ label, helper, value, leading, trailing, onPress, onLongPress, danger, chevron = true, labelLines = 1 }) {
+export function Row({ label, helper, value, leading, trailing, onPress, onLongPress, danger, disabled = false, chevron = true, labelLines = 1 }) {
   const { colors, fonts, fontSizes } = useTheme();
 
   const body = (
@@ -34,6 +34,7 @@ export function Row({ label, helper, value, leading, trailing, onPress, onLongPr
         paddingVertical: space.s6,
         gap: space.s5,
         backgroundColor: colors.bgPane,
+        opacity: disabled ? 0.45 : 1,
       }}
     >
       {leading ? <View>{leading}</View> : null}
@@ -85,13 +86,13 @@ export function Row({ label, helper, value, leading, trailing, onPress, onLongPr
         )
       ) : null}
       {trailing}
-      {chevron && onPress && !danger ? (
+      {chevron && onPress && !disabled && !danger ? (
         <Text style={{ color: colors.ink4, fontSize: fontSizes.xl }}>›</Text>
       ) : null}
     </View>
   );
 
-  if (!onPress && !onLongPress) return body;
+  if (disabled || (!onPress && !onLongPress)) return body;
   return (
     <Pressable
       onPress={onPress}

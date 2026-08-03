@@ -27,28 +27,20 @@ class GateStep:
     cwd: str
 
 
-def operation_chain_for(meta, phase: str) -> tuple[str, ...] | None:
-    """The operation owning ``phase``, or None when it is a launch phase."""
-    for slugs in (getattr(meta, "operations", None) or {}).values():
-        if phase in tuple(slugs):
-            return tuple(slugs)
-    return None
-
-
 def chain_for(meta, phase: str) -> tuple[str, ...] | None:
     """``()`` = no chain declared (unconstrained); ``None`` = chains exist and phase is in none."""
-    pipeline = tuple(getattr(meta, "pipeline", ()) or ())
-    operations = getattr(meta, "operations", None) or {}
-    if phase in pipeline:
-        return pipeline
-    for slugs in operations.values():
-        if phase in tuple(slugs):
-            return tuple(slugs)
-    return None if (pipeline or operations) else ()
+    from alpi.alp import workgroup as wg_mod
+
+    owner = wg_mod.pipeline_for_phase(meta, phase)
+    if owner is not None:
+        return owner[1]
+    return None if wg_mod.is_pipeline_workgroup(meta) else ()
 
 
 def step_for(meta, phase: str) -> GateStep | None:
     """Resolve the gate step for ``phase`` from hub-local meta; None = LLM-owned transition."""
+    from alpi.alp import workgroup as wg_mod
+
     steps = getattr(meta, "pipeline_steps", None) or {}
     raw = steps.get(phase)
     if not isinstance(raw, dict):
@@ -65,23 +57,9 @@ def step_for(meta, phase: str) -> GateStep | None:
         or not isinstance(cwd, str)
     ):
         return None
-    chain = chain_for(meta, phase)
-    if chain is None:
+    if chain_for(meta, phase) is None:
         return None
-    declared = str(raw.get("next") or "")
-    operation = operation_chain_for(meta, phase)
-    if operation is not None:
-        # An operation's order lives in its `steps`; `next` may only restate it.
-        idx = operation.index(phase)
-        successor = operation[idx + 1] if idx + 1 < len(operation) else ""
-        if declared and declared != successor:
-            return None
-        next_phase = successor
-    else:
-        # The launch pipeline keeps `next` authoritative: it may skip gate-less phases.
-        next_phase = declared
-        if next_phase and chain and next_phase not in chain:
-            return None
+    next_phase = wg_mod.pipeline_successor(meta, phase)
     nxt = steps.get(next_phase) if next_phase else None
     if next_phase and (
         not isinstance(nxt, dict)

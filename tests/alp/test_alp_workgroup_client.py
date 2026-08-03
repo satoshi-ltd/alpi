@@ -880,17 +880,19 @@ def test_hub_rotation_done_allowed_when_unnamed_member_absent() -> None:
 def _fake_wg(
     hub_pubkey: str,
     member_pubkeys: list[str],
-    pipeline: tuple = (),
+    pipelines: dict | None = None,
+    launch_pipeline: str | None = None,
     pipeline_steps: dict | None = None,
-    operations: dict | None = None,
 ):
     import types
+    chains = {k: tuple(v) for k, v in (pipelines or {}).items()}
     return types.SimpleNamespace(
         meta=types.SimpleNamespace(
+            id="wg_fake",
             hub_pubkey=hub_pubkey,
-            pipeline=pipeline,
+            pipelines=chains,
+            launch_pipeline=launch_pipeline,
             pipeline_steps=pipeline_steps or {},
-            operations=operations or {},
         ),
         members=[types.SimpleNamespace(pubkey=pk) for pk in member_pubkeys],
     )
@@ -1321,18 +1323,122 @@ def test_validate_task_participants_ignores_non_task(short_tmp: Path) -> None:
     wc._validate_task_participants(home, wg, "thanks @sout for the help")
 
 
-def test_subscription_pipeline_flag_persists(short_tmp: Path) -> None:
-    """The `pipeline` flag (propagated from the hub on join) survives
-    save/load so the member dispatch can pick the longer turn budget."""
+def test_subscription_pipeline_state_persists(short_tmp: Path) -> None:
+    """Chain definitions propagated on join survive save/load, so member dispatch keeps the pipeline turn budget."""
     home = short_tmp / "m"; home.mkdir()
     sub = sub_mod.Subscription(
         wg_id="wg_p", name="proj", hub_id="mira", hub_pubkey="x" * 44,
-        pipeline=("intake", "design"),
+        pipelines={
+            "intake": ("intake", "design"),
+            "media-update": ("media-update",),
+        },
+        launch_pipeline="intake",
+        pipeline_mode=True,
+        phase_map={"intake": {"owner": "scout", "task": "produce intake.md"}},
     )
     sub_mod.upsert(home, sub)
     loaded = sub_mod.get(home, "wg_p")
     assert loaded is not None
-    assert loaded.pipeline == ("intake", "design")
+    assert loaded.pipelines == {
+        "intake": ("intake", "design"),
+        "media-update": ("media-update",),
+    }
+    assert loaded.launch_pipeline == "intake"
+    assert loaded.pipeline_mode is True
+    assert loaded.phase_map == {
+        "intake": {"owner": "scout", "task": "produce intake.md"},
+    }
+    assert loaded.launch_chain == ("intake", "design")
+
+
+def test_subscription_launch_chain_is_read_only_derived() -> None:
+    """`launch_chain` is the selected chain, never a second authority."""
+    sub = sub_mod.Subscription(
+        wg_id="wg_p", name="proj", hub_id="mira", hub_pubkey="x" * 44,
+        pipelines={"intake": ("intake", "design"), "media-update": ("media-update",)},
+        launch_pipeline="media-update",
+    )
+    assert sub.launch_chain == ("media-update",)
+    sub.launch_pipeline = None
+    assert sub.launch_chain == ()
+    assert not hasattr(sub, "pipeline")
+    with pytest.raises(AttributeError):
+        sub.launch_chain = ("nope",)
+
+
+@pytest.mark.parametrize("retired", [
+    "  pipeline:\n    - intake\n    - design\n",
+    "  operations:\n    media-update:\n      - media-update\n",
+])
+def test_subscription_entry_on_the_retired_shape_is_skipped(
+    short_tmp: Path, retired: str, caplog,
+) -> None:
+    home = short_tmp / "retired"; home.mkdir()
+    p = sub_mod.path(home)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(
+        "- wg_id: wg_old\n"
+        "  name: proj\n"
+        "  hub_id: mira\n"
+        "  hub_pubkey: " + "x" * 44 + "\n"
+        "  last_seq: 4\n" + retired,
+    )
+    with caplog.at_level("WARNING", logger="alpi.alp.subscription"):
+        assert sub_mod.get(home, "wg_old") is None
+        assert sub_mod.load(home) == []
+    warnings = [r for r in caplog.records if "skipped" in r.message]
+    assert len(warnings) == 1
+    assert "wg_old" in warnings[0].getMessage()
+
+
+def test_launchless_subscription_stays_in_pipeline_mode(short_tmp: Path) -> None:
+    """Dormant-only chains still mean pipeline rules: `pipeline_mode` true, no launch selected, empty launch chain."""
+    home = short_tmp / "idle"; home.mkdir()
+    sub = sub_mod.Subscription(
+        wg_id="wg_idle", name="proj", hub_id="mira", hub_pubkey="x" * 44,
+    )
+    sub.absorb_pipeline_state({
+        "pipelines": {"media-update": ["media-update", "media-qa"]},
+        "launch_pipeline": None,
+        "pipeline_mode": True,
+        "phase_map": {"media-update": {"owner": "muse"}},
+    })
+    assert sub.pipelines == {"media-update": ("media-update", "media-qa")}
+    assert sub.launch_pipeline is None
+    assert sub.pipeline_mode is True
+    assert sub.launch_chain == ()
+    sub_mod.upsert(home, sub)
+    loaded = sub_mod.get(home, "wg_idle")
+    assert loaded is not None
+    assert loaded.pipeline_mode is True
+    assert loaded.launch_pipeline is None
+    assert loaded.pipelines == {"media-update": ("media-update", "media-qa")}
+
+
+def test_phase_map_drops_gate_argv_and_cwd(short_tmp: Path) -> None:
+    """A hub that ever leaked gate commands gets them stripped member-side, in memory and on disk."""
+    home = short_tmp / "gk"; home.mkdir()
+    sub = sub_mod.Subscription(
+        wg_id="wg_g", name="proj", hub_id="mira", hub_pubkey="x" * 44,
+    )
+    sub.absorb_pipeline_state({
+        "pipelines": {"intake": ["intake"]},
+        "launch_pipeline": "intake",
+        "phase_map": {
+            "intake": {
+                "owner": "scout", "task": "produce intake.md",
+                "gate": {"argv": ["npm", "run", "check:config"], "cwd": "site"},
+            },
+        },
+    })
+    assert sub.phase_map == {
+        "intake": {"owner": "scout", "task": "produce intake.md"},
+    }
+    sub_mod.upsert(home, sub)
+    saved = sub_mod.path(home).read_text()
+    assert "argv" not in saved
+    assert "check:config" not in saved
+    assert "cwd" not in saved
 
 
 def test_validate_pipeline_task_requires_participants(short_tmp: Path) -> None:
@@ -1340,7 +1446,10 @@ def test_validate_pipeline_task_requires_participants(short_tmp: Path) -> None:
     a collective task (no mentions) is rejected before it lands."""
     home = short_tmp / "hubpipe"; home.mkdir()
     _pin(home, "pixel", "PIXEL_PK", ["workgroup.post"])
-    wg = _fake_wg("HUB", ["PIXEL_PK"], pipeline=["build"])
+    wg = _fake_wg(
+        "HUB", ["PIXEL_PK"],
+        pipelines={"build": ["build"]}, launch_pipeline="build",
+    )
     with pytest.raises(ValueError, match="pipeline-task-untargeted"):
         wc._validate_task_participants(home, wg, "#task #build do the build")
     # Targeted is fine.
@@ -1352,12 +1461,13 @@ def test_validate_workflow_task_requires_declared_owner(short_tmp: Path) -> None
     _pin(home, "muse", "MUSE_PK", ["workgroup.post"])
     _pin(home, "canvas", "CANVAS_PK", ["workgroup.post"])
     wg = _fake_wg(
-        "HUB", ["MUSE_PK", "CANVAS_PK"], pipeline=("intake",),
+        "HUB", ["MUSE_PK", "CANVAS_PK"],
+        pipelines={"intake": ("intake",), "media-update": ("media-update",)},
+        launch_pipeline="intake",
         pipeline_steps={
             "intake": {"owner": "muse"},
             "media-update": {"owner": "muse"},
         },
-        operations={"media-update": ("media-update",)},
     )
 
     with pytest.raises(ValueError, match="workflow-task-owner-missing"):
@@ -1374,12 +1484,13 @@ def test_gate_less_workflow_close_requires_declared_owner(short_tmp: Path) -> No
     _pin(home, "muse", "MUSE_PK", ["workgroup.post"])
     _pin(home, "canvas", "CANVAS_PK", ["workgroup.post"])
     wg = _fake_wg(
-        "HUB", ["MUSE_PK", "CANVAS_PK"], pipeline=("intake",),
+        "HUB", ["MUSE_PK", "CANVAS_PK"],
+        pipelines={"intake": ("intake",), "media-update": ("media-update",)},
+        launch_pipeline="intake",
         pipeline_steps={
             "intake": {"owner": "muse"},
             "media-update": {"owner": "muse"},
         },
-        operations={"media-update": ("media-update",)},
     )
     posts = [
         _post(1, "HUB", "@canvas #task #media-update install client media"),
@@ -1401,7 +1512,7 @@ def test_validate_non_pipeline_collective_task_allowed(short_tmp: Path) -> None:
     """A non-pipeline (deliberation) workgroup still allows collective tasks."""
     home = short_tmp / "hubdelib"; home.mkdir()
     _pin(home, "pixel", "PIXEL_PK", ["workgroup.post"])
-    wg = _fake_wg("HUB", ["PIXEL_PK"], pipeline=())
+    wg = _fake_wg("HUB", ["PIXEL_PK"])
     wc._validate_task_participants(home, wg, "#task #adr decide the thing")
 
 
@@ -1411,20 +1522,24 @@ def test_quorum_roster_multi_participant(short_tmp: Path) -> None:
     _pin(home, "pixel", "PIXEL_PK", ["workgroup.post"])
     _pin(home, "atlas", "ATLAS_PK", ["workgroup.post"])
     _pin(home, "quill", "QUILL_PK", ["workgroup.post"])
-    wg = _fake_wg("HUB", ["PIXEL_PK", "ATLAS_PK", "QUILL_PK"], pipeline=["build"])
+    wg = _fake_wg(
+        "HUB", ["PIXEL_PK", "ATLAS_PK", "QUILL_PK"],
+        pipelines={"build": ["build"]}, launch_pipeline="build",
+    )
     posts = [{"seq": 1, "from": "HUB", "text": "@pixel @atlas #task #build go"}]
     roster = wc._quorum_roster(home, wg, posts, ["PIXEL_PK", "ATLAS_PK", "QUILL_PK"])
     assert set(roster) == {"PIXEL_PK", "ATLAS_PK"}  # quill not named → not in quorum
 
 
 @pytest.mark.asyncio
-async def test_pull_updates_subscription_pipeline(short_tmp: Path, monkeypatch) -> None:
-    """A hub-side pipeline toggle after join propagates to the member on pull."""
+async def test_pull_ignores_a_retired_pipeline_field_from_an_old_hub(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    """A hub still answering with `pipeline` declares no chain the member will honour."""
     home = short_tmp / "m"; home.mkdir()
     load_or_generate(home)
     sub = sub_mod.Subscription(
         wg_id="wg_p", name="proj", hub_id="hub", hub_pubkey="x" * 44,
-        pipeline=(),
     )
     sub.upsert_key(1, "sealed")
     sub_mod.upsert(home, sub)
@@ -1434,7 +1549,61 @@ async def test_pull_updates_subscription_pipeline(short_tmp: Path, monkeypatch) 
 
     monkeypatch.setattr(wc, "_call", fake_call)
     await wc.pull(home, "wg_p")
-    assert sub_mod.get(home, "wg_p").pipeline == ("intake", "design")
+    reloaded = sub_mod.get(home, "wg_p")
+    assert reloaded.pipelines == {}
+    assert reloaded.launch_pipeline is None
+    assert reloaded.launch_chain == ()
+    assert reloaded.pipeline_mode is False
+
+
+@pytest.mark.asyncio
+async def test_pull_refreshes_changed_definitions_without_rejoin(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    """Hub-side chain edits (new chain, moved launch, new task text) reach an existing subscription on the next pull."""
+    home = short_tmp / "m2"; home.mkdir()
+    load_or_generate(home)
+    sub = sub_mod.Subscription(
+        wg_id="wg_r", name="proj", hub_id="hub", hub_pubkey="x" * 44,
+        pipelines={"intake": ("intake", "qa")},
+        launch_pipeline="intake",
+        pipeline_mode=True,
+        phase_map={"intake": {"owner": "scout", "task": "produce intake.md"}},
+    )
+    sub.upsert_key(1, "sealed")
+    sub_mod.upsert(home, sub)
+
+    payload = {
+        "posts": [], "head": 0, "current_key_version": 1,
+        "pipelines": {
+            "media-update": ["media-update", "media-qa"],
+            "intake": ["intake", "qa"],
+        },
+        "launch_pipeline": "media-update",
+        "pipeline_mode": True,
+        "phase_map": {
+            "intake": {"owner": "scout", "task": "produce intake.md v2"},
+            "media-update": {"owner": "muse", "task": "install client media"},
+        },
+    }
+
+    async def fake_call(*a, **k):
+        return payload
+
+    monkeypatch.setattr(wc, "_call", fake_call)
+    await wc.pull(home, "wg_r")
+
+    reloaded = sub_mod.get(home, "wg_r")
+    assert reloaded.pipelines == {
+        "media-update": ("media-update", "media-qa"),
+        "intake": ("intake", "qa"),
+    }
+    assert reloaded.launch_pipeline == "media-update"
+    assert reloaded.launch_chain == ("media-update", "media-qa")
+    assert reloaded.phase_map["intake"]["task"] == "produce intake.md v2"
+    assert reloaded.phase_map["media-update"] == {
+        "owner": "muse", "task": "install client media",
+    }
 
 
 def test_effective_profile_env_adds_node_when_missing(short_tmp: Path, monkeypatch) -> None:
@@ -1452,13 +1621,15 @@ def test_effective_profile_env_adds_node_when_missing(short_tmp: Path, monkeypat
     assert "/fake/node/bin" not in env2["PATH"].split(":")
 
 
-def test_coerce_pipeline_tolerates_legacy_and_garbage() -> None:
-    """A list/tuple passes through; legacy bool / None / garbage → ()."""
-    assert sub_mod.coerce_pipeline(["intake", "design"]) == ("intake", "design")
-    assert sub_mod.coerce_pipeline(("a", "b")) == ("a", "b")
-    assert sub_mod.coerce_pipeline(True) == ()      # legacy pipeline: true
-    assert sub_mod.coerce_pipeline(None) == ()
-    assert sub_mod.coerce_pipeline("nope") == ()
+def test_pipelines_from_raw_degrades_junk_and_rejects_the_retired_shape() -> None:
+    assert not hasattr(sub_mod, "coerce_pipeline")
+    assert wg_mod.pipelines_from_raw({"pipelines": {"intake": ["intake", "design"]}}) == (
+        {"intake": ("intake", "design")}, None,
+    )
+    for junk in (True, None, "nope", {"pipelines": "nope"}, {"pipelines": {"x": ["y"]}}):
+        assert wg_mod.pipelines_from_raw(junk) == ({}, None)
+    with pytest.raises(ValueError, match="declares retired"):
+        wg_mod.pipelines_from_raw({"pipeline": ["intake", "design"]})
 
 
 def test_load_parses_once_until_file_changes(short_tmp: Path, monkeypatch) -> None:
@@ -1540,7 +1711,7 @@ def test_external_write_busts_cache_via_mtime(short_tmp: Path, monkeypatch) -> N
     assert calls["n"] == 2, calls
 
 
-def _op_hub(home: Path):
+def _dormant_chain_hub(home: Path):
     muse_home = home.parent / f"{home.name}-muse"
     canvas_home = home.parent / f"{home.name}-canvas"
     muse_home.mkdir(exist_ok=True)
@@ -1552,23 +1723,26 @@ def _op_hub(home: Path):
     return wg_mod.create(
         home, name="site", hub_kp=load_or_generate(home),
         member_pubkeys=[muse_pk, canvas_pk],
-        pipeline=["intake", "qa"],
+        pipelines={
+            "intake": ["intake", "qa"],
+            "media-update": ["media-update", "media-qa"],
+        },
+        launch_pipeline="intake",
         pipeline_steps={
-            "intake": {"owner": "muse", "next": "qa"},
+            "intake": {"owner": "muse"},
             "qa": {"owner": "muse"},
-            "media-update": {"owner": "muse", "next": "media-qa"},
+            "media-update": {"owner": "muse"},
             "media-qa": {"owner": "muse"},
         },
-        operations={"media-update": ["media-update", "media-qa"]},
     )
 
 
 @pytest.mark.asyncio
-async def test_post_rejects_an_operation_task_targeted_at_the_wrong_owner(
+async def test_post_rejects_a_dormant_chain_task_targeted_at_the_wrong_owner(
     short_tmp: Path,
 ) -> None:
     home = short_tmp / "hubwrong"; home.mkdir()
-    wg = _op_hub(home)
+    wg = _dormant_chain_hub(home)
 
     with pytest.raises(ValueError, match="workflow-task-owner-missing"):
         await wc.post(
@@ -1578,11 +1752,11 @@ async def test_post_rejects_an_operation_task_targeted_at_the_wrong_owner(
 
 
 @pytest.mark.asyncio
-async def test_post_rejects_closing_an_operation_phase_with_no_owner_delivery(
+async def test_post_rejects_closing_a_dormant_chain_phase_with_no_owner_delivery(
     short_tmp: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     home = short_tmp / "hub"; home.mkdir()
-    wg = _op_hub(home)
+    wg = _dormant_chain_hub(home)
 
     await wc.post(home, wg.meta.id, b"@muse #task #media-update map the client media")
     with pytest.raises(ValueError, match="phase-owner-missing"):
@@ -1590,11 +1764,11 @@ async def test_post_rejects_closing_an_operation_phase_with_no_owner_delivery(
 
 
 @pytest.mark.asyncio
-async def test_post_allows_blocked_override_on_an_operation_phase(
+async def test_post_allows_blocked_override_on_a_dormant_chain_phase(
     short_tmp: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     home = short_tmp / "hub"; home.mkdir()
-    wg = _op_hub(home)
+    wg = _dormant_chain_hub(home)
 
     await wc.post(home, wg.meta.id, b"@muse #task #media-update map the client media")
     out = await wc.post(
@@ -1605,11 +1779,11 @@ async def test_post_allows_blocked_override_on_an_operation_phase(
 
 
 @pytest.mark.asyncio
-async def test_post_allows_skipped_override_on_an_operation_phase(
+async def test_post_allows_skipped_override_on_a_dormant_chain_phase(
     short_tmp: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     home = short_tmp / "hub"; home.mkdir()
-    wg = _op_hub(home)
+    wg = _dormant_chain_hub(home)
 
     await wc.post(home, wg.meta.id, b"@muse #task #media-qa audit the rebuild")
     out = await wc.post(home, wg.meta.id, "#done skipped · no media changed".encode())
@@ -1623,10 +1797,11 @@ def _gated_hub(home: Path):
     _pin(home, "scout", pk, ["workgroup.post"])
     wg = wg_mod.create(
         home, name="site", hub_kp=load_or_generate(home), member_pubkeys=[pk],
-        pipeline=["intake", "qa"],
+        pipelines={"intake": ["intake", "qa"]},
+        launch_pipeline="intake",
         pipeline_steps={
             "intake": {
-                "owner": "scout", "next": "qa",
+                "owner": "scout",
                 "gate": {"argv": ["npm", "run", "check:config"], "cwd": "p"},
             },
             "qa": {"owner": "scout"},
@@ -1706,3 +1881,416 @@ async def test_a_hub_note_after_delivery_does_not_hide_it(short_tmp: Path) -> No
 
     with pytest.raises(ValueError, match="phase-gate-unverified"):
         await wc.post(home, wg.meta.id, b"#done intake complete")
+
+
+_CHAIN_STEPS = {
+    "intake": {
+        "owner": "muse", "task": "produce intake.md",
+        "gate": {"argv": ["npm", "run", "check:config"], "cwd": "app"},
+    },
+    "qa": {"owner": "muse"},
+    "media-update": {"owner": "muse", "task": "install client media"},
+    "media-qa": {"owner": "muse"},
+}
+
+
+def _chain_hub(
+    home: Path, *, launch: str | None = "intake", steps: dict | None = None,
+):
+    muse_home = home.parent / f"{home.name}-muse"
+    muse_home.mkdir(exist_ok=True)
+    muse_pk = load_or_generate(muse_home).pubkey_b64()
+    _pin(home, "muse", muse_pk, ["workgroup.post"])
+    wg = wg_mod.create(
+        home, name="site", hub_kp=load_or_generate(home),
+        member_pubkeys=[muse_pk],
+        pipelines={
+            "intake": ["intake", "qa"],
+            "media-update": ["media-update", "media-qa"],
+        },
+        launch_pipeline=launch,
+        pipeline_steps=_CHAIN_STEPS if steps is None else steps,
+    )
+    return wg, muse_pk
+
+
+def _transcript_texts(home: Path, wg) -> list[str]:
+    kp = load_or_generate(home)
+    keys = wg_mod.hub_group_keys(home, wg, kp)
+    out: list[str] = []
+    for entry in wg_mod._read_transcript(wg_mod._wg_dir(home, wg.meta.id)):
+        key = keys[int(entry.get("key_version", 1))]
+        out.append(wg_mod.decrypt_post(
+            key, entry["nonce"], entry["ciphertext"],
+        ).decode("utf-8"))
+    return out
+
+
+async def _hub_handler(
+    home: Path, method: str, params: dict, member_pk: str,
+) -> dict:
+    server = alp_server.Server(home=home, agent_name="hub")
+    wg_mod.register(server, home)
+    peer = Peer(id="muse", pubkey=member_pk, allow=[])
+    return await server.handlers[method](params, peer, server)
+
+
+@pytest.mark.asyncio
+async def test_join_and_pull_payloads_carry_canonical_chain_state(
+    short_tmp: Path,
+) -> None:
+    """Members learn chains, selector, mode and safe owners/tasks — never a gate command."""
+    home = short_tmp / "hubwire"; home.mkdir()
+    wg, muse_pk = _chain_hub(home)
+
+    for method in ("workgroup.join", "workgroup.pull"):
+        payload = await _hub_handler(
+            home, method, {"workgroup_id": wg.meta.id, "since": 0}, muse_pk,
+        )
+        assert payload["pipelines"] == {
+            "intake": ["intake", "qa"],
+            "media-update": ["media-update", "media-qa"],
+        }, method
+        assert payload["launch_pipeline"] == "intake", method
+        assert payload["pipeline_mode"] is True, method
+        assert payload["phase_map"]["intake"] == {
+            "owner": "muse", "task": "produce intake.md",
+        }, method
+        assert payload["phase_map"]["qa"] == {"owner": "muse"}, method
+        assert "pipeline" not in payload, method
+        assert "operations" not in payload, method
+
+        import json as _json
+        blob = _json.dumps(payload)
+        assert "argv" not in blob, method
+        assert "cwd" not in blob, method
+        assert "check:config" not in blob, method
+        assert all(
+            set(spec) <= {"owner", "task"}
+            for spec in payload["phase_map"].values()
+        ), method
+
+
+@pytest.mark.asyncio
+async def test_member_absorbs_join_payload_without_persisting_gates(
+    short_tmp: Path,
+) -> None:
+    """The subscription file mirrors the chains but never the gate command."""
+    home = short_tmp / "hubwire2"; home.mkdir()
+    member_home = short_tmp / "member2"; member_home.mkdir()
+    wg, muse_pk = _chain_hub(home)
+    payload = await _hub_handler(
+        home, "workgroup.join", {"workgroup_id": wg.meta.id}, muse_pk,
+    )
+
+    sub = sub_mod.Subscription(
+        wg_id=wg.meta.id, name="site", hub_id="hub", hub_pubkey=wg.meta.hub_pubkey,
+    )
+    sub.absorb_pipeline_state(payload)
+    sub_mod.upsert(member_home, sub)
+
+    loaded = sub_mod.get(member_home, wg.meta.id)
+    assert loaded.pipelines == {
+        "intake": ("intake", "qa"),
+        "media-update": ("media-update", "media-qa"),
+    }
+    assert loaded.launch_pipeline == "intake"
+    assert loaded.pipeline_mode is True
+    assert loaded.phase_map["intake"] == {
+        "owner": "muse", "task": "produce intake.md",
+    }
+    saved = sub_mod.path(member_home).read_text()
+    assert "argv" not in saved
+    assert "cwd" not in saved
+    assert "check:config" not in saved
+
+
+@pytest.mark.asyncio
+async def test_launchless_workgroup_reports_pipeline_mode_on_the_wire(
+    short_tmp: Path,
+) -> None:
+    """Dormant-only chains: no selector, still pipeline mode."""
+    home = short_tmp / "hubidlewire"; home.mkdir()
+    wg, muse_pk = _chain_hub(home, launch=None)
+    payload = await _hub_handler(
+        home, "workgroup.join", {"workgroup_id": wg.meta.id}, muse_pk,
+    )
+    assert set(payload["pipelines"]) == {"intake", "media-update"}
+    assert payload["launch_pipeline"] is None
+    assert payload["pipeline_mode"] is True
+    assert "pipeline" not in payload
+
+
+@pytest.mark.asyncio
+async def test_launchless_workgroup_rejects_untargeted_task_and_open_closure(
+    short_tmp: Path,
+) -> None:
+    """A launchless pipeline workgroup keeps both pipeline guards: targeted tasks only, and no close without the owner's delivery."""
+    home = short_tmp / "hubidle"; home.mkdir()
+    wg, muse_pk = _chain_hub(home, launch=None)
+
+    with pytest.raises(ValueError, match="pipeline-task-untargeted"):
+        await wc.post(
+            home, wg.meta.id, b"#task #media-update install client media",
+        )
+    await wc.post(
+        home, wg.meta.id, b"@muse #task #media-update install client media",
+    )
+    with pytest.raises(ValueError, match="phase-owner-missing"):
+        await wc.post(home, wg.meta.id, b"#done media update complete")
+
+
+@pytest.mark.asyncio
+async def test_trigger_pipeline_posts_the_declared_opener_verbatim(
+    short_tmp: Path,
+) -> None:
+    """The opener is authored byte for byte from `pipeline_steps`, never invented."""
+    home = short_tmp / "hubtrig"; home.mkdir()
+    wg, muse_pk = _chain_hub(home, launch=None)
+
+    out = await wc.trigger_pipeline(home, wg.meta.id, "media-update")
+    assert out == {
+        "ok": True, "pipeline": "media-update", "phase": "media-update",
+        "seq": 1, "stopped": None,
+    }
+    assert _transcript_texts(home, wg) == [
+        "@muse #task #media-update · install client media",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_trigger_pipeline_normalizes_the_requested_key(
+    short_tmp: Path,
+) -> None:
+    home = short_tmp / "hubtrignorm"; home.mkdir()
+    wg, muse_pk = _chain_hub(home, launch=None)
+    out = await wc.trigger_pipeline(home, wg.meta.id, "  Media-Update  ")
+    assert out["pipeline"] == "media-update"
+    assert out["phase"] == "media-update"
+
+
+@pytest.mark.asyncio
+async def test_trigger_pipeline_rejects_an_empty_key(short_tmp: Path) -> None:
+    home = short_tmp / "hubtrigempty"; home.mkdir()
+    wg, muse_pk = _chain_hub(home, launch=None)
+    with pytest.raises(wc.TriggerError) as exc:
+        await wc.trigger_pipeline(home, wg.meta.id, "   ")
+    assert exc.value.code == "pipeline-required"
+    assert _transcript_texts(home, wg) == []
+
+
+@pytest.mark.asyncio
+async def test_trigger_pipeline_rejects_an_unknown_pipeline(
+    short_tmp: Path,
+) -> None:
+    home = short_tmp / "hubtrigunknown"; home.mkdir()
+    wg, muse_pk = _chain_hub(home, launch=None)
+    with pytest.raises(wc.TriggerError) as exc:
+        await wc.trigger_pipeline(home, wg.meta.id, "ghost")
+    assert exc.value.code == "pipeline-unknown"
+    assert _transcript_texts(home, wg) == []
+
+
+@pytest.mark.asyncio
+async def test_trigger_pipeline_rejects_a_paused_workgroup(
+    short_tmp: Path,
+) -> None:
+    home = short_tmp / "hubtrigpaused"; home.mkdir()
+    wg, muse_pk = _chain_hub(home, launch=None)
+    await wc.pause(home, wg.meta.id)
+    with pytest.raises(wc.TriggerError) as exc:
+        await wc.trigger_pipeline(home, wg.meta.id, "media-update")
+    assert exc.value.code == "workgroup-paused"
+    assert _transcript_texts(home, wg) == []
+
+
+@pytest.mark.asyncio
+async def test_trigger_pipeline_rejects_a_workgroup_we_only_subscribe_to(
+    short_tmp: Path,
+) -> None:
+    home = short_tmp / "trigmember"; home.mkdir()
+    load_or_generate(home)
+    sub_mod.upsert(home, sub_mod.Subscription(
+        wg_id="wg_remote", name="site", hub_id="mira", hub_pubkey="x" * 44,
+        pipelines={"media-update": ("media-update",)},
+        launch_pipeline="media-update",
+        pipeline_mode=True,
+    ))
+    with pytest.raises(wc.TriggerError) as exc:
+        await wc.trigger_pipeline(home, "wg_remote", "media-update")
+    assert exc.value.code == "pipeline-trigger-not-hub"
+
+
+@pytest.mark.asyncio
+async def test_trigger_pipeline_rejects_an_unknown_workgroup(
+    short_tmp: Path,
+) -> None:
+    home = short_tmp / "trignowhere"; home.mkdir()
+    load_or_generate(home)
+    with pytest.raises(wc.TriggerError) as exc:
+        await wc.trigger_pipeline(home, "wg_nope", "media-update")
+    assert exc.value.code == "workgroup-not-found"
+
+
+@pytest.mark.asyncio
+async def test_trigger_pipeline_stops_the_chain_that_was_in_flight(
+    short_tmp: Path,
+) -> None:
+    """Pipelines run one at a time: starting one stops whatever was mid-flight."""
+    home = short_tmp / "hubtrigbusy"; home.mkdir()
+    wg, muse_pk = _chain_hub(home, launch=None)
+    await wc.trigger_pipeline(home, wg.meta.id, "media-update")
+
+    out = await wc.trigger_pipeline(home, wg.meta.id, "intake")
+    assert out["ok"] is True and out["pipeline"] == "intake"
+    assert out["stopped"] == {
+        "pipeline": "media-update",
+        "phase": "media-update",
+        "status": "running",
+        "open_task": "media-update",
+        "same_pipeline": False,
+    }
+    assert _transcript_texts(home, wg) == [
+        "@muse #task #media-update · install client media",
+        "@muse #task #intake · produce intake.md",
+    ]
+
+    from alpi.host import workgroup as host_wg
+    state = host_wg.fold_task_state(home, wg.meta.id)
+    assert state["pipeline_run"]["pipeline"] == "intake"
+    stopped = next(c for c in state["closed"] if c["slug"] == "media-update")
+    assert stopped["result"] == "preempted by #intake"
+
+
+@pytest.mark.asyncio
+async def test_a_stopped_phase_is_never_reported_as_completed(
+    short_tmp: Path,
+) -> None:
+    home = short_tmp / "hubtrigpre"; home.mkdir()
+    wg, muse_pk = _chain_hub(home, launch=None)
+    await wc.trigger_pipeline(home, wg.meta.id, "media-update")
+    await wc.trigger_pipeline(home, wg.meta.id, "intake")
+
+    from alpi.host import workgroup as host_wg
+    run = host_wg.fold_task_state(home, wg.meta.id)["pipeline_run"]
+    assert run["pipeline"] == "intake"
+    assert [p["state"] for p in run["phases"]][0] == "current"
+
+
+@pytest.mark.asyncio
+async def test_trigger_reports_a_blocked_run_it_displaces(
+    short_tmp: Path,
+) -> None:
+    """A blocked run counts as stopped: what the trigger costs it is its position."""
+    home = short_tmp / "hubtrigblocked"; home.mkdir()
+    wg, muse_pk = _chain_hub(home, launch=None)
+    await wc.trigger_pipeline(home, wg.meta.id, "media-update")
+    await wc.post(home, wg.meta.id, "#done BLOCKED · gate red".encode())
+
+    out = await wc.trigger_pipeline(home, wg.meta.id, "intake")
+    assert out["stopped"] == {
+        "pipeline": "media-update",
+        "phase": "media-update",
+        "status": "blocked",
+        "open_task": None,
+        "same_pipeline": False,
+    }
+
+
+@pytest.mark.asyncio
+async def test_trigger_pipeline_rejects_a_first_phase_without_a_contract(
+    short_tmp: Path,
+) -> None:
+    """No declared owner/task for the first phase means there is no opener to author."""
+    home = short_tmp / "hubtrigbare"; home.mkdir()
+    wg, muse_pk = _chain_hub(
+        home, launch=None,
+        steps={"media-update": {"owner": "muse"}, "qa": {"owner": "muse"}},
+    )
+    with pytest.raises(wc.TriggerError) as exc:
+        await wc.trigger_pipeline(home, wg.meta.id, "media-update")
+    assert exc.value.code == "pipeline-trigger-contract-missing"
+    assert _transcript_texts(home, wg) == []
+
+    with pytest.raises(wc.TriggerError) as exc2:
+        await wc.trigger_pipeline(home, wg.meta.id, "intake")
+    assert exc2.value.code == "pipeline-trigger-contract-missing"
+    assert _transcript_texts(home, wg) == []
+
+
+@pytest.mark.asyncio
+async def test_a_completed_pipeline_can_be_triggered_again(
+    short_tmp: Path,
+) -> None:
+    home = short_tmp / "hubtrigagain"; home.mkdir()
+    wg, muse_pk = _chain_hub(home, launch=None)
+
+    first = await wc.trigger_pipeline(home, wg.meta.id, "media-update")
+    _member_post(home, wg, muse_pk, "media installed · logo + hero swapped")
+    await wc.post(home, wg.meta.id, b"#done media-update complete")
+
+    second = await wc.trigger_pipeline(home, wg.meta.id, "media-update")
+    assert second["ok"] is True
+    assert second["seq"] > first["seq"]
+    assert _transcript_texts(home, wg)[-1] == (
+        "@muse #task #media-update · install client media"
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_blocked_phase_cannot_be_advanced_past(short_tmp: Path) -> None:
+    """After `#done BLOCKED` on a phase, opening its chain's successor is refused; re-opening the phase is the way out."""
+    home = short_tmp / "hubblocked"; home.mkdir()
+    wg, muse_pk = _chain_hub(home, launch=None)
+    await wc.trigger_pipeline(home, wg.meta.id, "intake")
+    await wc.post(home, wg.meta.id, "#done BLOCKED · gate red and unfixable today".encode())
+
+    with pytest.raises(ValueError, match="blocked-phase-not-cleared"):
+        await wc.post(home, wg.meta.id, b"@muse #task #qa \xc2\xb7 audit anyway")
+
+    result = await wc.post(home, wg.meta.id, b"@muse #task #intake \xc2\xb7 second try")
+    assert result.get("seq")
+
+
+@pytest.mark.asyncio
+async def test_operator_trigger_may_restart_a_blocked_chain(short_tmp: Path) -> None:
+    home = short_tmp / "hubblockedtrig"; home.mkdir()
+    wg, muse_pk = _chain_hub(home, launch=None)
+    await wc.trigger_pipeline(home, wg.meta.id, "intake")
+    await wc.post(home, wg.meta.id, "#done BLOCKED · halted".encode())
+
+    out = await wc.trigger_pipeline(home, wg.meta.id, "media-update")
+    assert out["ok"] is True
+
+
+def test_qa_verdict_mismatch_is_rejected(short_tmp: Path, monkeypatch) -> None:
+    import types
+
+    home = short_tmp / "qaverdict"; home.mkdir()
+    load_or_generate(home)
+    wg = types.SimpleNamespace(
+        meta=types.SimpleNamespace(
+            pipelines={"intake": ("intake", "qa")}, launch_pipeline="intake",
+            pipeline_steps={"qa": {"owner": "lens"}},
+        ),
+        members=[types.SimpleNamespace(pubkey="LENSPK")],
+    )
+    monkeypatch.setattr(
+        "alpi.alp.peers.get_by_pubkey",
+        lambda h, pk: types.SimpleNamespace(id="lens") if pk == "LENSPK" else None,
+    )
+    posts = [
+        {"seq": 1, "from": "HUB", "text": "@lens #task #qa audit it"},
+        {"seq": 2, "from": "LENSPK", "text": "Verdict: **QA FAIL** · broken alt text"},
+    ]
+    with pytest.raises(ValueError, match="qa-verdict-mismatch"):
+        wc._check_qa_verdict_respected(
+            home, wg, posts, "#done qa PASS · all gates green", "HUB",
+        )
+    wc._check_qa_verdict_respected(
+        home, wg, posts, "#done BLOCKED · lens found real defects", "HUB",
+    )
+    posts[1]["text"] = "Verdict: **QA PASS** · clean"
+    wc._check_qa_verdict_respected(
+        home, wg, posts, "#done qa PASS · quoting lens", "HUB",
+    )

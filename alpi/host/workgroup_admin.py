@@ -20,6 +20,7 @@ def register(server: host_server.Server) -> None:
     server.register("host.workgroup.remove", _remove)
     server.register("host.workgroup.action", _action)
     server.register("host.workgroup.post", _post)
+    server.register("host.workgroup.trigger", _trigger)
 
 
 def _resolve_home(profile: str):
@@ -83,13 +84,6 @@ async def _create(
 
     briefing = str(params.get("briefing") or "").strip()
 
-    # Ordered pipeline phase slugs — a list, or a comma-separated string from
-    # a UI field. Empty = a normal deliberation workgroup.
-    pipeline_raw = params.get("pipeline") or []
-    if isinstance(pipeline_raw, str):
-        pipeline_raw = [p.strip() for p in pipeline_raw.split(",") if p.strip()]
-
-    pipeline_steps = params.get("pipeline_steps") or None
     quorum_raw = params.get("quorum_timeout_seconds")
     quorum = int(quorum_raw) if isinstance(quorum_raw, (int, float)) else 0
 
@@ -108,8 +102,6 @@ async def _create(
             member_pubkeys=pubkeys,
             budget=budget,
             briefing=briefing,
-            pipeline=pipeline_raw,
-            pipeline_steps=pipeline_steps,
             quorum_timeout_seconds=quorum,
             hub_bio=hub_bio,
             hub_voice=hub_voice,
@@ -152,16 +144,11 @@ async def _update(
     if briefing is not None:
         wg.meta.briefing = str(briefing).strip()
         changes.append("briefing")
-    pipeline = params.get("pipeline")
-    if pipeline is not None:
-        # List, or a comma-separated string from a UI field. Empty clears it.
-        if isinstance(pipeline, str):
-            pipeline = [p.strip() for p in pipeline.split(",") if p.strip()]
-        try:
-            wg.meta.pipeline = wg_mod._normalize_pipeline(pipeline)
-        except ValueError as e:
-            raise host_server.HandlerError(-32602, "invalid-params", data={"detail": str(e)})
-        changes.append("pipeline")
+    if params.get("pipeline") is not None:
+        raise host_server.HandlerError(
+            -32602, "invalid-params",
+            data={"detail": "pipelines are declared by a recipe; they cannot be edited here"},
+        )
     if clear_budget:
         wg.meta.budget = {}
         changes.append("budget cleared")
@@ -185,7 +172,7 @@ async def _update(
     if not changes:
         raise host_server.HandlerError(
             -32602, "invalid-params",
-            data={"detail": "nothing to update — pass briefing, pipeline, budget_usd, clear_budget or auto_read"},
+            data={"detail": "nothing to update — pass briefing, budget_usd, clear_budget or auto_read"},
         )
 
     wg_mod._save_meta(wg_mod._wg_dir(home, wg_id), wg.meta)
@@ -301,6 +288,28 @@ async def _action(
     # pause/resume/leave change observable state for every subscribed client; without an emit other apps would only notice on next manual reload.
     _emit_workgroup_changed(home, wg_id, action)
     return {"ok": True, "action": action}
+
+
+async def _trigger(
+    params: dict[str, Any], _server: host_server.Server,
+) -> dict[str, Any]:
+    """Start a declared pipeline by key; the daemon authors the opener from the recipe."""
+    profile = str(params.get("profile") or "")
+    wg_id = str(params.get("wg_id") or "").strip()
+    pipeline = str(params.get("pipeline") or "").strip()
+    if not pipeline:
+        raise host_server.HandlerError(-32602, "invalid-params", data={"detail": "pipeline required"})
+    _check_id(wg_id, "wg_id")
+    home = _resolve_home(profile)
+
+    from alpi.alp import workgroup_client as wc
+    try:
+        result = await wc.trigger_pipeline(home, wg_id, pipeline)
+    except wc.TriggerError as e:
+        raise host_server.HandlerError(-32602, e.code, data={"detail": e.detail})
+    except ValueError as e:
+        raise host_server.HandlerError(-32602, "invalid-params", data={"detail": str(e)})
+    return result
 
 
 async def _post(

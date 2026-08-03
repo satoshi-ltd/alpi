@@ -57,6 +57,18 @@
   color: var(--ink-4);
 }
 
+.phase {
+  display: inline-flex;
+  align-items: center;
+}
+
+.phaseSkipped {
+  text-decoration: line-through;
+  text-decoration-color: var(--c-warning);
+  text-decoration-thickness: 1px;
+  opacity: var(--alpha-muted);
+}
+
 .blockedLine {
   display: block;
   overflow: hidden;

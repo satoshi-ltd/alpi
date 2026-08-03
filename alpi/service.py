@@ -503,6 +503,36 @@ def _sub_stays_hot(new_posts: list, sub) -> bool:
     ) is not None
 
 
+def _wg_is_pipeline(wg) -> bool:
+    from alpi.alp import workgroup as wg_mod
+
+    return wg_mod.is_pipeline_workgroup(wg.meta)
+
+
+def _hub_phase_turn_budget(wg, recent: list) -> int:
+    from alpi.alp import workgroup as wg_mod
+
+    return _phase_turn_budget(
+        wg_mod.safe_phase_map(wg.meta), recent, wg.meta.hub_pubkey,
+    )
+
+
+def _phase_turn_budget(phase_map: dict, posts: list, hub_pubkey: str) -> int:
+    from alpi.alp import tasks as wg_tasks
+
+    try:
+        active = wg_tasks.active_task(posts or [], hub_pubkey=hub_pubkey or None)
+    except Exception:  # noqa: BLE001
+        return 0
+    if active is None or not active.slug:
+        return 0
+    spec = (phase_map or {}).get(active.slug) or {}
+    try:
+        return int(spec.get("turn_budget_s") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def _gate_opened_active_task(posts: list[dict], hub_pubkey: str) -> bool:
     from alpi.alp import tasks as wg_tasks
 
@@ -680,7 +710,7 @@ async def _maybe_dispatch_for_sub(
     trigger, new_responded = _should_dispatch(
         profile, own_pubkey, sub.recent_posts or [], sub.last_responded_seq,
         hub_pubkey=str(getattr(sub, "hub_pubkey", "") or ""),
-        pipeline=bool(getattr(sub, "pipeline", None)),
+        pipeline=bool(getattr(sub, "pipeline_mode", False)),
     )
     if not trigger:
         trigger = _working_redispatch_reason(
@@ -740,10 +770,14 @@ async def _maybe_dispatch_for_sub(
         sub.wg_id,
         _dispatch_workgroup_turn(
             home, profile, sub.wg_id, sub.name, trigger,
-            pipeline=bool(getattr(sub, "pipeline", None)),
+            pipeline=bool(getattr(sub, "pipeline_mode", False)),
             round_hub_seq=round_seq,
             hub_pubkey=sub.hub_pubkey,
             started_against_task_seq=started_against,
+            turn_budget_s=_phase_turn_budget(
+                getattr(sub, "phase_map", None) or {},
+                sub.recent_posts or [], sub.hub_pubkey,
+            ),
             member_responded_seq=new_responded,
         ),
     )
@@ -807,6 +841,10 @@ def _latest_hub_task_seq_for(
 # (wg_id, owner_post_seq) pairs whose gate already ran — reruns wait for a NEWER owner post, so a failing gate can't spin on every 5s scan.
 _GATE_ATTEMPTED: dict[tuple[str, str, int], bool] = {}
 _GATE_ATTEMPTED_CAP = 512
+# Daemon-authored repair rounds per (home, wg, phase, opener seq); past the cap the hub is woken for judgment.
+_GATE_REPAIR_ROUNDS = 3
+_GATE_REPAIRS: dict[tuple[str, str, str, int], int] = {}
+_GATE_REPAIRS_CAP = 512
 
 
 async def _maybe_gate_advance(
@@ -857,20 +895,49 @@ async def _maybe_gate_advance(
         return f"GATE {step.phase} audit FAILED: {e}"
     if not passed:
         log.info("wg gate %s/%s FAILED (seq %s)", wg.meta.id, step.phase, latest_seq)
+        rkey = (str(home), wg.meta.id, step.phase, int(active.opened_seq))
+        rounds = _GATE_REPAIRS.get(rkey, 0) + 1
+        if len(_GATE_REPAIRS) >= _GATE_REPAIRS_CAP:
+            _GATE_REPAIRS.pop(next(iter(_GATE_REPAIRS)))
+        _GATE_REPAIRS[rkey] = rounds
+        if rounds <= _GATE_REPAIR_ROUNDS:
+            note = (
+                f"@{step.owner} gate red on #{step.phase} "
+                f"(repair round {rounds}/{_GATE_REPAIR_ROUNDS}) — fix these and "
+                f"re-deliver on this same task:\n{output[-900:]}"
+            )
+            try:
+                res = await wc.post(home, wg.meta.id, note.encode())
+                if isinstance(res, dict):
+                    _set_hub_responded_seq(home, wg.meta.id, int(res.get("seq", latest_seq)))
+                log.info(
+                    "wg gate %s/%s repair note posted (round %d)",
+                    wg.meta.id, step.phase, rounds,
+                )
+                return True
+            except Exception as e:  # noqa: BLE001
+                log.error("wg gate %s/%s repair note failed: %s", wg.meta.id, step.phase, e)
         return (
-            f"GATE {step.phase} FAILED: {output[-300:]} — RE-TASK "
-            f"@{step.owner} with #{step.phase} so the check re-runs on their "
-            f"next post; opening a differently-named task abandons the phase."
+            f"GATE {step.phase} FAILED after {rounds} repair rounds: {output[-300:]} — "
+            f"RE-TASK @{step.owner} with #{step.phase} so the check re-runs on their "
+            f"next post, close `#done skipped · <reason>` if the phase is judged "
+            f"complete without it, or halt with `#done BLOCKED · <reason>`."
         )
+    last_posted = latest_seq
     try:
-        await wc.post(home, wg.meta.id, gates.done_text(step, output).encode())
+        res = await wc.post(home, wg.meta.id, gates.done_text(step, output).encode())
+        if isinstance(res, dict):
+            last_posted = int(res.get("seq", last_posted))
         nxt = gates.next_task_text(step)
         if nxt:
-            await wc.post(home, wg.meta.id, nxt.encode())
+            res = await wc.post(home, wg.meta.id, nxt.encode())
+            if isinstance(res, dict):
+                last_posted = int(res.get("seq", last_posted))
     except Exception as e:  # noqa: BLE001
         log.error("wg gate %s/%s advance post failed: %s", wg.meta.id, step.phase, e)
         return f"GATE {step.phase} passed but the advance post failed: {e}"
-    _set_hub_responded_seq(home, wg.meta.id, latest_seq)
+    # Cursor past our own advance posts, or the poller wakes the hub over them and it may duplicate the opener.
+    _set_hub_responded_seq(home, wg.meta.id, last_posted)
     log.info("wg gate %s/%s PASSED → %s (seq %s)", wg.meta.id, step.phase, step.next_phase or "end", latest_seq)
     return True
 
@@ -893,7 +960,7 @@ async def _maybe_dispatch_for_hub(
     trigger, new_responded = _should_dispatch(
         profile, own_pubkey, recent, last_responded,
         hub_pubkey=wg.meta.hub_pubkey,
-        pipeline=bool(wg.meta.pipeline),
+        pipeline=_wg_is_pipeline(wg),
     )
     if trigger and isinstance(gate_fail, str):
         trigger = f"{trigger} · {gate_fail}"
@@ -931,9 +998,10 @@ async def _maybe_dispatch_for_hub(
         wg.meta.id,
         _dispatch_workgroup_turn(
             home, profile, wg.meta.id, wg.meta.name, trigger,
-            pipeline=bool(getattr(wg.meta, "pipeline", ())),
+            pipeline=_wg_is_pipeline(wg),
             hub_pubkey=wg.meta.hub_pubkey,
             started_against_task_seq=started_against,
+            turn_budget_s=_hub_phase_turn_budget(wg, recent),
         ),
     )
 
@@ -948,10 +1016,11 @@ def _pipeline_continuation_due(wg, recent: list[dict], active) -> bool:
     for non-pipeline workgroups (a `#done` there is terminal), or when a
     member spoke last, or when the last post wasn't a `#done`."""
     from alpi.alp import tasks as wg_tasks
+    from alpi.alp import workgroup as wg_mod
 
     if active is not None or not recent:
         return False
-    if not getattr(wg.meta, "pipeline", False):
+    if not wg_mod.is_pipeline_workgroup(wg.meta):
         return False
     last_post = recent[-1]
     if str(last_post.get("from") or "") != wg.meta.hub_pubkey:
@@ -960,13 +1029,16 @@ def _pipeline_continuation_due(wg, recent: list[dict], active) -> bool:
 
 
 def _canonical_pipeline_slug(slug: str, pipeline: list[str]) -> str | None:
-    # Map a closed task's slug to its pipeline phase: literal, or a `<phase>-*` fix/recheck variant.
+    """Closed recovery mapping inside ONE chain: exact phase, else exactly one `-fix`/`-recheck` suffix."""
+    from alpi.alp import workgroup as wg_mod
+
     if slug in pipeline:
         return slug
-    # Longest phase first so `qa-final-recheck` maps to `qa-final`, not `qa`.
-    for phase in sorted(pipeline, key=len, reverse=True):
-        if slug.startswith(f"{phase}-"):
-            return phase
+    for suffix in wg_mod._RECOVERY_SUFFIXES:
+        if slug.endswith(suffix):
+            base = slug[: -len(suffix)]
+            if base in pipeline:
+                return base
     return None
 
 
@@ -998,13 +1070,9 @@ def _next_pipeline_phase(wg, recent: list[dict]) -> tuple[str | None, str, bool]
       (misconfigured); the core must NOT guess a next phase.
     """
     from alpi.alp import tasks as wg_tasks
+    from alpi.alp import workgroup as wg_mod
 
-    launch = list(getattr(wg.meta, "pipeline", ()) or ())
-    operations = {
-        str(k): [str(x) for x in v]
-        for k, v in (getattr(wg.meta, "operations", None) or {}).items()
-    }
-    if not launch and not operations:
+    if not wg_mod.is_pipeline_workgroup(wg.meta):
         return None, "", True
     events: list = []
     for p in recent:
@@ -1015,28 +1083,12 @@ def _next_pipeline_phase(wg, recent: list[dict]) -> tuple[str | None, str, bool]
     closed = [t for t in wg_tasks.fold_tasks(events) if not t.is_open]
     if not closed:
         return None, "", True
-    # Drive ordering off the latest closed task whose slug is a CANONICAL
-    # pipeline phase — ignore off-pipeline re-task variants (e.g. the hub
-    # re-tasking `#build-recheck` while the phase is `#build`). Continuation
-    # only fires when no task is open, so the canonical phase is genuinely
-    # finished by the time we advance.
     # The LATEST close alone picks the chain, or an ad-hoc `#done` resurrects finished work.
-    chains = [c for c in [launch, *operations.values()] if c]
     latest_overall = max(closed, key=lambda t: t.closed_seq or 0)
-    # Exact membership wins: a declared `content-update` is never a `content-*` variant.
-    owning = [c for c in chains if latest_overall.slug in c]
-    if not owning:
-        # Longest matched phase wins across chains, not just within one.
-        matched = [
-            (c, _canonical_pipeline_slug(latest_overall.slug, c)) for c in chains
-        ]
-        matched = [(c, m) for c, m in matched if m]
-        if matched:
-            best = max(len(m) for _c, m in matched)
-            owning = [c for c, m in matched if len(m) == best]
-    if len(owning) != 1:
+    canonical = wg_mod.canonical_pipeline_phase(wg.meta, latest_overall.slug)
+    if canonical is None:
         return None, latest_overall.slug, False
-    pipeline = owning[0]
+    pipeline = list(wg.meta.pipelines[canonical[0]])
     # BLOCKED halts a DECLARED chain; an unknown slug stays unknown (checked above).
     if (latest_overall.result or "").strip().upper().startswith("BLOCKED"):
         return None, latest_overall.slug, True
@@ -1047,7 +1099,7 @@ def _next_pipeline_phase(wg, recent: list[dict]) -> tuple[str | None, str, bool]
     latest = term.slug
     idx = pipeline.index(latest)
     if idx + 1 < len(pipeline):
-        return pipeline[idx + 1], latest, True
+        return wg_mod.pipeline_successor(wg.meta, latest), latest, True
     # Terminal phase closed. The latest close mapping to it — canonical OR a
     # `<phase>-*` fix/recheck variant — decides: a green recheck COMPLETES the
     # pipeline (don't reopen build→qa after a passed qa-recheck). Only when the
@@ -1060,8 +1112,15 @@ def _next_pipeline_phase(wg, recent: list[dict]) -> tuple[str | None, str, bool]
     latest_terminal = max(terminal_closes, key=lambda t: t.closed_seq or 0)
     if _is_success_result(latest_terminal.result or ""):
         return None, latest, True
+    # A repair of THIS chain or an ad-hoc slug is a fix in flight; a dormant chain's own phase is not.
+    def _is_fix(slug: str) -> bool:
+        if slug in pipeline:
+            return False
+        canon = wg_mod.canonical_pipeline_phase(wg.meta, slug)
+        return canon is None or canon[0] == canonical[0]
+
     fix_after = any(
-        t.slug not in pipeline and (t.opened_seq or 0) > (term.opened_seq or 0)
+        _is_fix(t.slug) and (t.opened_seq or 0) > (term.opened_seq or 0)
         for t in closed
     )
     if fix_after:
@@ -1143,7 +1202,7 @@ async def _maybe_watchdog_close(
     Two modes:
     - **closure** (a task is open): nudge the hub to `#done` or stay
       silent — never re-task. The deliberation default.
-    - **continuation** (no open task, non-empty `meta.pipeline` slug list):
+    - **continuation** (no open task, at least one declared chain):
       after a `#done` with no successor, give the hub a bounded number of
       normal wakes to open the next phase's `#task` — the next slug is
       computed from the ordered list. Off for non-pipeline workgroups
@@ -1163,8 +1222,9 @@ async def _maybe_watchdog_close(
             return
         nxt, latest_slug, known = _next_pipeline_phase(wg, recent)
         if not known:
-            # Closed a phase the pipeline doesn't list → don't guess.
-            _emit_wg_blocked_once(home, wg.meta.id, latest_slug, 0)
+            # Alert only when a launch chain was driving; an idle workgroup does ad-hoc work by design.
+            if getattr(wg.meta, "launch_pipeline", None):
+                _emit_wg_blocked_once(home, wg.meta.id, latest_slug, 0)
             return
         if nxt is None:
             return  # last phase done — pipeline complete, nothing to open
@@ -1197,7 +1257,7 @@ async def _maybe_watchdog_close(
         and "#working" in str(last_post.get("text") or "")
     )
     stale_threshold = (
-        _turn_timeout_for(bool(getattr(wg.meta, "pipeline", ())))
+        _turn_timeout_for(_wg_is_pipeline(wg))
         if last_is_member_working
         else _HUB_FOLLOWUP_STALE_SECONDS
     )
@@ -1269,18 +1329,21 @@ async def _maybe_watchdog_close(
             _dispatch_workgroup_turn(
                 home, profile, wg.meta.id, wg.meta.name, reason,
                 continuation=True, next_phase=next_phase,
-                pipeline=bool(getattr(wg.meta, "pipeline", ())),
+                pipeline=_wg_is_pipeline(wg),
                 hub_pubkey=wg.meta.hub_pubkey,
                 started_against_task_seq=started_against,
             ),
         )
         return
 
+    # An in-flight turn is progress the transcript cannot show yet; a nudge here re-tasks over live work and the preempt watcher kills it.
+    if any(key[0] == wg.meta.id for key in _INFLIGHT):
+        return
     last_author_is_hub = str(
         last_post.get("from") or ""
     ) == wg.meta.hub_pubkey
     count = _bump_hub_watchdog_count(home, wg.meta.id, last_seq)
-    is_pipeline = bool(getattr(wg.meta, "pipeline", False))
+    is_pipeline = _wg_is_pipeline(wg)
     repair = is_pipeline and count == 2
     final_repair = is_pipeline and count == 3
     if count == 2:
@@ -1353,7 +1416,7 @@ async def _maybe_watchdog_close(
         _dispatch_workgroup_turn(
             home, profile, wg.meta.id, wg.meta.name, reason,
             closure_only=not (repair or final_repair),
-            pipeline=bool(getattr(wg.meta, "pipeline", ())),
+            pipeline=_wg_is_pipeline(wg),
             hub_pubkey=wg.meta.hub_pubkey,
             started_against_task_seq=started_against,
         ),
@@ -1892,9 +1955,10 @@ async def _dispatch_workgroup_turn(
     round_hub_seq: int | None = None,
     hub_pubkey: str = "", started_against_task_seq: int = 0,
     member_responded_seq: int | None = None,
+    turn_budget_s: int = 0,
 ) -> None:
     """Spawn a background ``chat --once`` turn for a workgroup."""
-    turn_timeout = _turn_timeout_for(pipeline)
+    turn_timeout = turn_budget_s or _turn_timeout_for(pipeline)
     if continuation:
         nxt = next_phase or "<next>"
         prompt = (

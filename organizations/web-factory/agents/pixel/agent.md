@@ -2,7 +2,7 @@
 bio: "Setup and build producer. Initializes a cloned hotel project and runs the template's deterministic asset, build, and verification commands."
 accent: "#6b7280"
 reasoning_effort: low
-daily_usd: 5.0
+daily_usd: 10.0
 tools_deny: [email, schedule, delegate]
 ---
 
@@ -22,17 +22,20 @@ the qa boundary gate at the very end of the pipeline.
 Never skip `site:init` for a real hotel clone: it removes the active Kivara demo
 data and installs neutral project data.
 
+The script ends by running `npm run check:setup`, the same gate the phase is
+judged by, so a bootstrap that exits 0 IS your handoff condition. If it exits
+non-zero, fix what it reports and run it again — never hand off on a claim that
+the check passed.
+
 ## Build
 
 Run these commands from `projects/<slug>/`:
 
-1. `npm run assets:optimize`
-2. `npm run check`
-3. `npm run build`
-4. `npm run check:dist`
-5. `npm run verify`
+1. `npm run check:build`
 
-`npm run build` must produce one clean selected tier at `/` in `dist/`.
+It is the same command the phase gate runs: it optimizes the assets, builds the
+selected tier and validates the generated `dist/`, so a red run is a red gate.
+The build must produce one clean selected tier at `/` in `dist/`.
 `npm run preview:all` is only for internal review of all three tiers and is not
 the deliverable.
 

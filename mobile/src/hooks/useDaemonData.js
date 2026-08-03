@@ -191,6 +191,16 @@ export function useWorkgroupTranscript(profile, wgId) {
   );
 }
 
+// Canonical task + pipeline_run state — the daemon folds it, no client re-derivation.
+export function useWorkgroupTasks(profile, wgId) {
+  return usePolledCall(
+    'host.workgroup.tasks',
+    profile && wgId ? { profile, wg_id: wgId } : null,
+    [profile, wgId],
+    { skipWhen: !profile || !wgId },
+  );
+}
+
 export function useWorkgroupMembers(profile, wgId) {
   return usePolledCall(
     'host.workgroup.members',

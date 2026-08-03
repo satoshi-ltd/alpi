@@ -14,6 +14,7 @@ import pytest
 
 from alpi import service
 from alpi.alp import subscription as sub_mod
+from alpi.alp import workgroup as wg_mod
 
 
 @pytest.fixture
@@ -91,7 +92,8 @@ async def test_gate_opened_task_bypasses_member_cooldown(
     ]
     sub = types.SimpleNamespace(
         wg_id="wg_fast", name="project", hub_pubkey="HUB",
-        pipeline=("content", "translation"), recent_posts=posts,
+        pipelines={"content": ("content", "translation")},
+        launch_pipeline="content", pipeline_mode=True, recent_posts=posts,
         last_responded_seq=2, last_dispatch_at=service._utcnow_iso(), paused=False,
     )
     kp = types.SimpleNamespace(pubkey_b64=lambda: "LINGUA")
@@ -611,17 +613,21 @@ async def test_dispatch_installs_and_pops_inflight_under_tuple_key(
 import types as _types
 
 
-def _pipe_wg(pipeline=True, hub: str = "HUB", operations=None):
-    # `pipeline` is now an ordered slug list. Map the legacy bool args used
-    # across these tests: True → a default phase list, False → empty.
+def _pipe_wg(pipeline=True, hub: str = "HUB", dormant=None, steps=None):
+    # `pipeline` is the launch chain: True → a default phase list, False → launchless.
     if pipeline is True:
         pipeline = ("intake", "design", "content")
     elif not pipeline:
         pipeline = ()
+    launch = tuple(pipeline)[0] if pipeline else None
+    pipelines = {launch: tuple(pipeline)} if launch else {}
+    for key, phases in (dormant or {}).items():
+        pipelines[key] = tuple(phases)
     return _types.SimpleNamespace(
-        meta=_types.SimpleNamespace(
-            id="wg1", name="proj", hub_pubkey=hub, pipeline=tuple(pipeline),
-            operations={k: tuple(v) for k, v in (operations or {}).items()},
+        meta=wg_mod.Meta(
+            id="wg1", name="proj", hub_pubkey=hub, created_at="",
+            pipelines=pipelines, launch_pipeline=launch,
+            pipeline_steps=steps or {},
         ),
     )
 
@@ -1022,8 +1028,10 @@ def test_canonical_pipeline_slug_maps_variants() -> None:
     assert service._canonical_pipeline_slug("qa-recheck", pipe) == "qa"
     assert service._canonical_pipeline_slug("content-fix", pipe) == "content"
     assert service._canonical_pipeline_slug("design", pipe) is None
-    # Longest-prefix wins so a `qa-final` phase isn't shadowed by `qa`.
     assert service._canonical_pipeline_slug("qa-final-recheck", ["qa", "qa-final"]) == "qa-final"
+    assert service._canonical_pipeline_slug("qa-final-recheck", ["qa"]) is None
+    assert service._canonical_pipeline_slug("content-update", pipe) is None
+    assert service._canonical_pipeline_slug("content-fix-recheck", pipe) is None
 
 
 def test_is_success_result() -> None:
@@ -1231,7 +1239,8 @@ def test_subscription_paused_round_trips(short_tmp: Path) -> None:
 def _fake_hub_wg(paused: bool):
     from types import SimpleNamespace
     return SimpleNamespace(meta=SimpleNamespace(
-        paused=paused, hub_pubkey="hub_pk", id="wg_x", name="proj-x", pipeline=(),
+        paused=paused, hub_pubkey="hub_pk", id="wg_x", name="proj-x",
+        pipelines={}, launch_pipeline=None,
     ))
 
 
@@ -1327,7 +1336,7 @@ async def test_poller_starts_subscription_pulls_concurrently(monkeypatch) -> Non
         sub_mod, "get",
         lambda home, wid: types.SimpleNamespace(
             wg_id=wid, recent_posts=[], hub_pubkey="hub", last_responded_seq=0,
-            last_dispatch_at="", paused=False, pipeline=(),
+            last_dispatch_at="", paused=False, pipeline_mode=False,
         ),
     )
     monkeypatch.setattr(wc, "pull", fake_pull)
@@ -1363,7 +1372,7 @@ async def test_subscription_empty_pull_reopens_without_idle_backoff(monkeypatch)
 
     sub = types.SimpleNamespace(
         wg_id="wg_cold", recent_posts=[], hub_pubkey="hub",
-        last_responded_seq=0, last_dispatch_at="", paused=False, pipeline=(),
+        last_responded_seq=0, last_dispatch_at="", paused=False, pipeline_mode=False,
     )
     monkeypatch.setattr(sub_mod, "get", lambda home, wid: sub)
     monkeypatch.setattr(wc, "pull", fake_pull)
@@ -1440,8 +1449,7 @@ def test_wg_inflight_dispatch_keeps_workgroup_hot(monkeypatch) -> None:
 
 
 def test_hub_stays_hot_on_pipeline_continuation() -> None:
-    import types
-    wg = types.SimpleNamespace(meta=types.SimpleNamespace(hub_pubkey="HUB", pipeline=("intake", "build")))
+    wg = _pipe_wg(["intake", "build"])
     recent = [
         {"seq": 1, "from": "HUB", "text": "@bob #task #intake go"},
         {"seq": 2, "from": "BOB", "text": "intake complete"},
@@ -1451,8 +1459,7 @@ def test_hub_stays_hot_on_pipeline_continuation() -> None:
 
 
 def test_hub_goes_idle_after_terminal_close() -> None:
-    import types
-    wg = types.SimpleNamespace(meta=types.SimpleNamespace(hub_pubkey="HUB", pipeline=()))
+    wg = _pipe_wg(False)
     recent = [
         {"seq": 1, "from": "HUB", "text": "#task #x go"},
         {"seq": 2, "from": "BOB", "text": "answer"},
@@ -1462,10 +1469,7 @@ def test_hub_goes_idle_after_terminal_close() -> None:
 
 
 def test_hub_goes_idle_after_terminal_pipeline_phase() -> None:
-    import types
-    wg = types.SimpleNamespace(meta=types.SimpleNamespace(
-        hub_pubkey="HUB", pipeline=("intake", "qa"),
-    ))
+    wg = _pipe_wg(["intake", "qa"])
     recent = [
         {"seq": 1, "from": "HUB", "text": "@bob #task #qa verify"},
         {"seq": 2, "from": "BOB", "text": "verified"},
@@ -1541,7 +1545,7 @@ def test_sub_stays_hot_ignores_member_authored_markers() -> None:
     closed = posts + [{"seq": 3, "from": "hub_pk", "text": "#done shipped"}]
     assert service._sub_stays_hot([], types.SimpleNamespace(recent_posts=closed, hub_pubkey="hub_pk")) is False
 
-MEDIA_OP = {"media-update": ["media-update", "media-config", "media-build", "media-qa"]}
+MEDIA_CHAIN = {"media-update": ["media-update", "media-config", "media-build", "media-qa"]}
 LAUNCH = ["setup", "intake", "build", "qa"]
 
 
@@ -1553,14 +1557,79 @@ def _closed(*pairs):
     return recent
 
 
-def test_operation_step_chains_within_its_own_chain() -> None:
-    wg = _pipe_wg(LAUNCH, operations=MEDIA_OP)
+def _closed_chain(chain, upto):
+    return _closed(*[(slug, 2 + 2 * n) for n, slug in enumerate(chain[:upto])])
+
+
+def test_launch_chain_is_the_derived_pipeline_view() -> None:
+    wg = _pipe_wg(LAUNCH, dormant=MEDIA_CHAIN)
+    assert wg.meta.launch_pipeline == "setup"
+    assert wg.meta.launch_chain == tuple(LAUNCH)
+    assert wg_mod.dormant_pipelines(wg.meta) == {
+        "media-update": tuple(MEDIA_CHAIN["media-update"]),
+    }
+
+
+def test_pipeline_successor_is_shared_and_terminal_is_empty() -> None:
+    wg = _pipe_wg(LAUNCH, dormant=MEDIA_CHAIN)
+    for chain in (LAUNCH, MEDIA_CHAIN["media-update"]):
+        for phase, nxt in zip(chain, chain[1:]):
+            assert wg_mod.pipeline_successor(wg.meta, phase) == nxt
+        assert wg_mod.pipeline_successor(wg.meta, chain[-1]) == ""
+    assert wg_mod.pipeline_successor(wg.meta, "hotfix") == ""
+
+
+def test_continuation_takes_the_shared_successor_for_every_phase() -> None:
+    wg = _pipe_wg(LAUNCH, dormant=MEDIA_CHAIN)
+    for chain in (LAUNCH, MEDIA_CHAIN["media-update"]):
+        for i, phase in enumerate(chain[:-1]):
+            got = service._next_pipeline_phase(wg, _closed_chain(chain, i + 1))
+            assert got == (chain[i + 1], phase, True), f"after {phase}: got {got!r}"
+            assert got[0] == wg_mod.pipeline_successor(wg.meta, phase)
+
+
+def test_gate_step_and_continuation_agree_on_the_successor() -> None:
+    from alpi.alp import pipeline_gates as gates
+
+    steps = {
+        slug: {
+            "owner": "pixel", "task": f"run {slug}",
+            "gate": {"argv": ["true"], "cwd": ""},
+        }
+        for slug in LAUNCH
+    }
+    wg = _pipe_wg(LAUNCH, steps=steps)
+    for i, phase in enumerate(LAUNCH[:-1]):
+        nxt, _latest, known = service._next_pipeline_phase(
+            wg, _closed_chain(LAUNCH, i + 1),
+        )
+        step = gates.step_for(wg.meta, phase)
+        assert known and step is not None
+        assert step.next_phase == nxt
+    assert gates.step_for(wg.meta, LAUNCH[-1]).next_phase == ""
+
+
+def test_launchless_workgroup_is_idle_then_continues_its_opened_chain() -> None:
+    wg = _pipe_wg(False, dormant=MEDIA_CHAIN)
+    assert wg.meta.launch_pipeline is None
+    assert wg.meta.launch_chain == ()
+    assert service._wg_is_pipeline(wg) is True
+    assert service._next_pipeline_phase(wg, []) == (None, "", True)
+    recent = _closed(("media-update", 2))
+    assert service._pipeline_continuation_due(wg, recent, None) is True
+    assert service._next_pipeline_phase(wg, recent) == ("media-config", "media-update", True)
+    adhoc = _closed(("hotfix", 20))
+    assert service._next_pipeline_phase(wg, adhoc) == (None, "hotfix", False)
+
+
+def test_dormant_chain_step_chains_within_its_own_chain() -> None:
+    wg = _pipe_wg(LAUNCH, dormant=MEDIA_CHAIN)
     recent = _closed(("setup", 2), ("intake", 4), ("build", 6), ("qa", 8), ("media-update", 10))
     assert service._next_pipeline_phase(wg, recent) == ("media-config", "media-update", True)
 
 
-def test_operation_runs_to_its_last_step_then_completes() -> None:
-    wg = _pipe_wg(LAUNCH, operations=MEDIA_OP)
+def test_dormant_chain_runs_to_its_last_step_then_completes() -> None:
+    wg = _pipe_wg(LAUNCH, dormant=MEDIA_CHAIN)
     steps = ["media-update", "media-config", "media-build", "media-qa"]
     expected = ["media-config", "media-build", "media-qa", None]
     for i, want in enumerate(expected):
@@ -1570,8 +1639,8 @@ def test_operation_runs_to_its_last_step_then_completes() -> None:
         assert latest == steps[i]
 
 
-def test_launch_terminal_does_not_leak_into_the_operation() -> None:
-    wg = _pipe_wg(LAUNCH, operations=MEDIA_OP)
+def test_launch_terminal_does_not_leak_into_a_dormant_chain() -> None:
+    wg = _pipe_wg(LAUNCH, dormant=MEDIA_CHAIN)
     recent = _closed(("setup", 2), ("intake", 4), ("build", 6))
     recent += [
         {"seq": 7, "from": "HUB", "text": "@lens #task #qa go"},
@@ -1581,15 +1650,15 @@ def test_launch_terminal_does_not_leak_into_the_operation() -> None:
     assert (nxt, latest, known) == (None, "qa", True)
 
 
-def test_operation_without_declaration_is_unknown_not_guessed() -> None:
+def test_undeclared_chain_close_is_unknown_not_guessed() -> None:
     wg = _pipe_wg(LAUNCH)
     recent = _closed(("media-update", 10))
     nxt, latest, known = service._next_pipeline_phase(wg, recent)
     assert (nxt, latest, known) == (None, "media-update", False)
 
 
-def test_operation_blocked_close_halts_the_chain() -> None:
-    wg = _pipe_wg(LAUNCH, operations=MEDIA_OP)
+def test_dormant_chain_blocked_close_halts_the_chain() -> None:
+    wg = _pipe_wg(LAUNCH, dormant=MEDIA_CHAIN)
     recent = _closed(("qa", 8), ("media-update", 10))
     recent += [
         {"seq": 11, "from": "HUB", "text": "@scout #task #media-config go"},
@@ -1599,8 +1668,8 @@ def test_operation_blocked_close_halts_the_chain() -> None:
     assert (nxt, known) == (None, True)
 
 
-def test_operation_can_run_twice_for_a_second_media_drop() -> None:
-    wg = _pipe_wg(LAUNCH, operations=MEDIA_OP)
+def test_dormant_chain_can_run_twice_for_a_second_media_drop() -> None:
+    wg = _pipe_wg(LAUNCH, dormant=MEDIA_CHAIN)
     first = _closed(("qa", 8), ("media-update", 10), ("media-config", 12),
                     ("media-build", 14), ("media-qa", 16))
     assert service._next_pipeline_phase(wg, first)[0] is None
@@ -1609,13 +1678,13 @@ def test_operation_can_run_twice_for_a_second_media_drop() -> None:
 
 
 def test_adhoc_close_after_launch_completes_resurrects_nothing() -> None:
-    wg = _pipe_wg(LAUNCH, operations=MEDIA_OP)
+    wg = _pipe_wg(LAUNCH, dormant=MEDIA_CHAIN)
     recent = _closed(("setup", 2), ("intake", 4), ("build", 6), ("qa", 8), ("hotfix", 10))
     assert service._next_pipeline_phase(wg, recent) == (None, "hotfix", False)
 
 
-def test_adhoc_close_after_an_operation_completes_resurrects_nothing() -> None:
-    wg = _pipe_wg(LAUNCH, operations=MEDIA_OP)
+def test_adhoc_close_after_a_dormant_chain_completes_resurrects_nothing() -> None:
+    wg = _pipe_wg(LAUNCH, dormant=MEDIA_CHAIN)
     recent = _closed(
         ("qa", 8), ("media-update", 10), ("media-config", 12),
         ("media-build", 14), ("media-qa", 16), ("hotfix", 18),
@@ -1624,7 +1693,7 @@ def test_adhoc_close_after_an_operation_completes_resurrects_nothing() -> None:
 
 
 def test_variant_close_selects_its_chain_without_advancing_it() -> None:
-    wg = _pipe_wg(LAUNCH, operations=MEDIA_OP)
+    wg = _pipe_wg(LAUNCH, dormant=MEDIA_CHAIN)
     recent = _closed(("qa", 8), ("media-update", 10))
     recent += [
         {"seq": 11, "from": "HUB", "text": "@scout #task #media-config-fix go"},
@@ -1633,29 +1702,47 @@ def test_variant_close_selects_its_chain_without_advancing_it() -> None:
     assert service._next_pipeline_phase(wg, recent) == ("media-config", "media-update", True)
 
 
-PREFIX_OP = {"content-update": ["content-update", "content-qa"]}
-PREFIX_LAUNCH = ["content", "qa"]
+CONTENT_CHAIN = {"content-update": ["content-update", "content-qa"]}
+CONTENT_LAUNCH = ["content", "qa"]
 
 
-def test_exact_membership_beats_a_prefix_variant_match() -> None:
-    wg = _pipe_wg(PREFIX_LAUNCH, operations=PREFIX_OP)
+def test_declared_phase_resolves_to_its_own_chain_not_a_suffix_base() -> None:
+    wg = _pipe_wg(CONTENT_LAUNCH, dormant=CONTENT_CHAIN)
     recent = _closed(("content", 2), ("qa", 4), ("content-update", 6))
     assert service._next_pipeline_phase(wg, recent) == ("content-qa", "content-update", True)
 
 
-def test_prefix_variant_resolves_to_the_longest_declared_phase() -> None:
-    wg = _pipe_wg(PREFIX_LAUNCH, operations=PREFIX_OP)
+def test_content_update_close_never_advances_the_content_chain() -> None:
+    wg = _pipe_wg(CONTENT_LAUNCH, dormant=CONTENT_CHAIN)
+    assert wg_mod.canonical_pipeline_phase(wg.meta, "content-update") == (
+        "content-update", "content-update",
+    )
+    nxt, latest, known = service._next_pipeline_phase(wg, _closed(("content-update", 2)))
+    assert (nxt, latest, known) == ("content-qa", "content-update", True)
+    assert latest != "content"
+    assert nxt != "qa"
+
+
+def test_recovery_suffix_resolves_by_exact_base_membership() -> None:
+    wg = _pipe_wg(CONTENT_LAUNCH, dormant=CONTENT_CHAIN)
     recent = _closed(("qa", 4), ("content-update", 6), ("content-update-fix", 8))
     assert service._next_pipeline_phase(wg, recent) == ("content-qa", "content-update", True)
 
 
-def test_launch_phase_still_chains_when_an_operation_shares_its_prefix() -> None:
-    wg = _pipe_wg(PREFIX_LAUNCH, operations=PREFIX_OP)
+def test_closed_suffix_rule_rejects_an_open_prefix_match() -> None:
+    wg = _pipe_wg(CONTENT_LAUNCH, dormant=CONTENT_CHAIN)
+    assert wg_mod.canonical_pipeline_phase(wg.meta, "content-update-tweak") is None
+    recent = _closed(("content-update-tweak", 2))
+    assert service._next_pipeline_phase(wg, recent) == (None, "content-update-tweak", False)
+
+
+def test_launch_phase_chains_even_when_a_dormant_chain_shares_its_prefix() -> None:
+    wg = _pipe_wg(CONTENT_LAUNCH, dormant=CONTENT_CHAIN)
     assert service._next_pipeline_phase(wg, _closed(("content", 2))) == ("qa", "content", True)
 
 
 def test_blocked_on_an_undeclared_slug_stays_unknown() -> None:
-    wg = _pipe_wg(LAUNCH, operations=MEDIA_OP)
+    wg = _pipe_wg(LAUNCH, dormant=MEDIA_CHAIN)
     recent = _closed(("qa", 8))
     recent += [
         {"seq": 9, "from": "HUB", "text": "@x #task #hotfix go"},
@@ -1664,11 +1751,137 @@ def test_blocked_on_an_undeclared_slug_stays_unknown() -> None:
     assert service._next_pipeline_phase(wg, recent) == (None, "hotfix", False)
 
 
-def test_blocked_on_a_declared_operation_phase_halts_it() -> None:
-    wg = _pipe_wg(LAUNCH, operations=MEDIA_OP)
+def test_blocked_on_a_declared_dormant_phase_halts_it() -> None:
+    wg = _pipe_wg(LAUNCH, dormant=MEDIA_CHAIN)
     recent = _closed(("qa", 8), ("media-update", 10))
     recent += [
         {"seq": 11, "from": "HUB", "text": "@scout #task #media-config go"},
         {"seq": 12, "from": "HUB", "text": "#done BLOCKED · media-config · gap"},
     ]
     assert service._next_pipeline_phase(wg, recent) == (None, "media-config", True)
+
+
+class _FakeTurnProc:
+    returncode = None
+
+    def __init__(self) -> None:
+        self.terminated = False
+
+    def terminate(self) -> None:
+        self.terminated = True
+
+
+def _inflight_member(home: Path, wg_id: str, hub_pk: str, posts: list[dict]) -> dict:
+    sub = sub_mod.Subscription(
+        wg_id=wg_id, name="site", hub_id="mira", hub_pubkey=hub_pk,
+    )
+    sub.recent_posts = posts
+    sub_mod.upsert(home, sub)
+    return {
+        "proc": _FakeTurnProc(), "profile": "alice", "wg_name": "site",
+        "hub_pubkey": hub_pk, "started_against_task_seq": 3,
+    }
+
+
+async def _watch_ticks(home: Path, seconds: float) -> None:
+    task = asyncio.create_task(service._run_preempt_watcher(home, "alice"))
+    try:
+        await asyncio.sleep(seconds)
+    finally:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+
+@pytest.mark.asyncio
+async def test_preempt_watcher_sigterms_a_dispatch_started_against_an_older_task(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    home = short_tmp / "alice"; home.mkdir()
+    hub_pk = "hub_pk"
+    info = _inflight_member(home, "wg_p", hub_pk, [
+        {"seq": 3, "text": "@alice #task #setup · go", "from": hub_pk},
+        {"seq": 5, "text": "@alice #task #qa · audit", "from": hub_pk},
+    ])
+    service._INFLIGHT[("wg_p", "alice")] = info
+    monkeypatch.setattr(service, "_PREEMPT_TICK_SECONDS", 0.01)
+    try:
+        await _watch_ticks(home, 0.1)
+        assert info["proc"].terminated is True
+        assert info["preempted"] is True
+        assert info["preempted_by_seq"] == 5
+    finally:
+        service._INFLIGHT.pop(("wg_p", "alice"), None)
+
+
+@pytest.mark.asyncio
+async def test_preempt_watcher_ignores_a_hub_done(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    """Only a fresh `#task` preempts; a `#done` is left to the SDK `stale-round` check."""
+    home = short_tmp / "alice"; home.mkdir()
+    hub_pk = "hub_pk"
+    info = _inflight_member(home, "wg_d", hub_pk, [
+        {"seq": 3, "text": "@alice #task #setup · go", "from": hub_pk},
+        {"seq": 6, "text": "#done wrapped", "from": hub_pk},
+    ])
+    service._INFLIGHT[("wg_d", "alice")] = info
+    monkeypatch.setattr(service, "_PREEMPT_TICK_SECONDS", 0.01)
+    try:
+        await _watch_ticks(home, 0.1)
+        assert info["proc"].terminated is False
+        assert "preempted" not in info
+    finally:
+        service._INFLIGHT.pop(("wg_d", "alice"), None)
+
+
+@pytest.mark.asyncio
+async def test_watchdog_stall_path_defers_to_an_inflight_member_turn(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    """An in-flight dispatch is progress; the stall watchdog must not re-task over it."""
+    import datetime as _dt
+
+    home = short_tmp / "hub"; home.mkdir()
+    old = (
+        _dt.datetime.now(tz=_dt.timezone.utc) - _dt.timedelta(hours=2)
+    ).strftime("%Y-%m-%dT%H:%M:%SZ")
+    wg = types.SimpleNamespace(meta=types.SimpleNamespace(
+        id="wg_ff", name="site", hub_pubkey="HUB", paused=False,
+        pipelines={"intake": ("intake", "qa")}, launch_pipeline="intake",
+        pipeline_steps={}, quorum_timeout_seconds=0,
+    ))
+    recent = [
+        {"seq": 1, "from": "HUB", "text": "@scout #task #intake go", "ts": old},
+        {"seq": 2, "from": "SCOUTPK", "text": "#working reading files", "ts": old},
+    ]
+    spawned: list[str] = []
+    monkeypatch.setattr(service, "_spawn_dispatch", lambda wid, coro: spawned.append(wid))
+    monkeypatch.setattr(service, "_dispatch_workgroup_turn", lambda *a, **k: None)
+    monkeypatch.setattr(service, "_budget_blocks_dispatch", lambda *a, **k: False)
+
+    service._INFLIGHT[("wg_ff", "scout")] = {"profile": "scout"}
+    try:
+        await service._maybe_watchdog_close(home, "mira", wg, recent)
+        assert spawned == []
+    finally:
+        service._INFLIGHT.pop(("wg_ff", "scout"), None)
+
+    await service._maybe_watchdog_close(home, "mira", wg, recent)
+    assert spawned == ["wg_ff"]
+
+
+def test_phase_turn_budget_reads_the_active_phase_spec() -> None:
+    phase_map = {"intake": {"owner": "scout", "turn_budget_s": 1800}, "qa": {"owner": "lens"}}
+    posts = [
+        {"seq": 1, "from": "HUB", "text": "@scout #task #intake go"},
+        {"seq": 2, "from": "SCOUTPK", "text": "#working"},
+    ]
+    assert service._phase_turn_budget(phase_map, posts, "HUB") == 1800
+    posts.append({"seq": 3, "from": "HUB", "text": "#done wrapped"})
+    posts.append({"seq": 4, "from": "HUB", "text": "@lens #task #qa audit"})
+    assert service._phase_turn_budget(phase_map, posts, "HUB") == 0
+    assert service._phase_turn_budget({}, posts, "HUB") == 0
+    assert service._phase_turn_budget(phase_map, [], "HUB") == 0

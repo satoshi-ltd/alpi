@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 import sys
@@ -13,6 +14,23 @@ from pathlib import Path
 def run(command: list[str], cwd: Path) -> None:
     print(f"+ {' '.join(command)}")
     subprocess.run(command, cwd=cwd, check=True)
+
+
+def neutralize_legal(project: Path) -> bool:
+    """The scaffold ships an empty-but-present `legal.company` with legal pages off, and the config gate reads presence."""
+    config = project / "src" / "config" / "site.json"
+    try:
+        data = json.loads(config.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    if not data.get("legal") or (data.get("pages") or {}).get("legal") is True:
+        return False
+    data["legal"] = False
+    config.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8",
+    )
+    print("+ neutralized site.json legal (no company declared, legal pages off)")
+    return True
 
 
 def main() -> int:
@@ -66,7 +84,8 @@ def main() -> int:
                 continue
             shutil.rmtree(item) if item.is_dir() else item.unlink()
 
-    run(["npm", "run", "check"], project)
+    neutralize_legal(project)
+    run(["npm", "run", "check:setup"], project)
     print("Project initialized. Kivara demo removed; supplied assets are in assets/source/.")
     return 0
 

@@ -1,14 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildTasks,
-  canonicalPhase,
   classifyMessage,
-  findBlocked,
   parseDone,
   parseSkip,
   parseTaskOpen,
   parseWorking,
-  pipelineState,
   validateTaskShape,
 } from './parseMarkers.js';
 
@@ -162,7 +159,7 @@ describe('buildTasks', () => {
     expect(tasks[0].status).toBe('working');
   });
 
-  it('a new hub #task preempts the previous one as skip', () => {
+  it('a new hub #task preempts the previous one', () => {
     const msgs = [
       { seq: 1, from_pubkey: 'hub', body: '#task #first First' },
       { seq: 2, from_pubkey: 'peer', body: 'some input' },
@@ -170,8 +167,20 @@ describe('buildTasks', () => {
     ];
     const tasks = buildTasks(msgs, 'hub');
     expect(tasks).toHaveLength(2);
-    expect(tasks[0].status).toBe('skip');
+    expect(tasks[0].status).toBe('preempted');
     expect(tasks[1].status).toBe('working');
+  });
+
+  it('a deliberate skip and a BLOCKED close never read as done', () => {
+    const tasks = buildTasks([
+      { seq: 1, from_pubkey: 'hub', body: '#task #media-config wire the logo' },
+      { seq: 2, from_pubkey: 'hub', body: '#done skipped · no config change needed' },
+      { seq: 3, from_pubkey: 'hub', body: '#task #media-build rebuild' },
+      { seq: 4, from_pubkey: 'hub', body: '#done BLOCKED · the template cannot build' },
+      { seq: 5, from_pubkey: 'hub', body: '#task #media-qa audit' },
+      { seq: 6, from_pubkey: 'hub', body: '#done qa green' },
+    ], 'hub');
+    expect(tasks.map((t) => t.status)).toEqual(['skipped', 'blocked', 'done']);
   });
 
   it('only the hub closes with #done', () => {
@@ -194,72 +203,5 @@ describe('buildTasks', () => {
     expect(tasks).toHaveLength(1);
     expect(tasks[0].slug).toBe('live');
     expect(tasks[0].status).toBe('working');
-  });
-});
-
-describe('findBlocked', () => {
-  it('flags a #done BLOCKED close as blocked', () => {
-    const msgs = [
-      { seq: 1, from_pubkey: 'hub', body: '@pixel #task #build wire it' },
-      { seq: 2, from_pubkey: 'hub', body: '#done BLOCKED build · deps missing' },
-    ];
-    expect(findBlocked(msgs, 'hub')).toEqual({ slug: 'build', reason: 'BLOCKED build · deps missing' });
-  });
-
-  it('a green close is not blocked', () => {
-    const msgs = [
-      { seq: 1, from_pubkey: 'hub', body: '#task #qa audit' },
-      { seq: 2, from_pubkey: 'hub', body: '#done qa green' },
-    ];
-    expect(findBlocked(msgs, 'hub')).toBeNull();
-  });
-
-  it('a re-task after the block clears the banner', () => {
-    const msgs = [
-      { seq: 1, from_pubkey: 'hub', body: '#task #build go' },
-      { seq: 2, from_pubkey: 'hub', body: '#done BLOCKED build' },
-      { seq: 3, from_pubkey: 'hub', body: '@pixel #task #build-recheck retry' },
-    ];
-    expect(findBlocked(msgs, 'hub')).toBeNull();
-  });
-});
-
-describe('canonicalPhase', () => {
-  const pipe = ['interview', 'synthesize', 'recommend'];
-  it('maps literal + variant + null', () => {
-    expect(canonicalPhase('synthesize', pipe)).toBe('synthesize');
-    expect(canonicalPhase('synthesize-recheck', pipe)).toBe('synthesize');
-    expect(canonicalPhase('nope', pipe)).toBeNull();
-  });
-});
-
-describe('pipelineState', () => {
-  const hub = 'hub';
-  const pipe = ['interview', 'synthesize', 'recommend'];
-
-  it('marks completed / blocked / pending (mockup case)', () => {
-    const msgs = [
-      { seq: 1, from_pubkey: hub, body: '@a #task #interview do it' },
-      { seq: 2, from_pubkey: hub, body: '#done interview green' },
-      { seq: 3, from_pubkey: hub, body: '@a #task #synthesize do it' },
-      { seq: 4, from_pubkey: hub, body: '#done BLOCKED synthesize · no transcripts' },
-    ];
-    expect(pipelineState(pipe, msgs, hub)).toEqual([
-      { slug: 'interview', state: 'completed', seq: 2 },
-      { slug: 'synthesize', state: 'blocked', seq: 4 },
-      { slug: 'recommend', state: 'pending', seq: null },
-    ]);
-  });
-
-  it('marks the open phase as current and points at its opener seq', () => {
-    const msgs = [
-      { seq: 1, from_pubkey: hub, body: '#done interview green' },
-      { seq: 2, from_pubkey: hub, body: '@a #task #synthesize go' },
-    ];
-    expect(pipelineState(pipe, msgs, hub)[1]).toEqual({ slug: 'synthesize', state: 'current', seq: 2 });
-  });
-
-  it('empty pipeline → []', () => {
-    expect(pipelineState([], [{ seq: 1, from_pubkey: hub, body: '#task #x' }], hub)).toEqual([]);
   });
 });

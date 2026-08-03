@@ -1263,6 +1263,34 @@ def _skill_body_from_text(text: str) -> str:
 
 
 
+def _pipeline_row(raw: dict[str, Any]) -> dict[str, Any]:
+    """Definitions only — this row never decrypts, so run state comes from ``host.workgroup.tasks``."""
+    from alpi.alp import subscription as sub_mod
+    from alpi.alp import workgroup as wg_mod
+
+    needs_relaunch = False
+    try:
+        pipelines, launch = wg_mod.pipelines_from_raw(raw)
+    except ValueError:
+        # Retired shape: the poller refuses to load this workgroup, so the row must not read as healthy.
+        pipelines, launch, needs_relaunch = {}, None, True
+    declared_mode = raw.get("pipeline_mode")
+    steps = raw.get("pipeline_steps")
+    phase_map = (
+        sub_mod.coerce_phase_map(steps if isinstance(steps, dict) else None)
+        or sub_mod.coerce_phase_map(raw.get("phase_map"))
+    )
+    return {
+        "pipelines": {k: list(v) for k, v in pipelines.items()},
+        "launch_pipeline": launch,
+        "pipeline_mode": (
+            bool(declared_mode) if declared_mode is not None else bool(pipelines)
+        ),
+        "phase_map": phase_map,
+        "needs_relaunch": needs_relaunch,
+    }
+
+
 def _workgroups_for(profile: str) -> list[dict[str, Any]]:
     home = _resolve_home(profile)
     rows = _hub_workgroups(home, profile) + _subscribed_workgroups(home, profile)
@@ -1292,7 +1320,7 @@ def _hub_workgroups(home: Path, profile: str) -> list[dict[str, Any]]:
             "profile": profile,
             "name": meta.get("name"),
             "briefing": meta.get("briefing"),
-            "pipeline": meta.get("pipeline") if isinstance(meta.get("pipeline"), list) else [],
+            **_pipeline_row(meta),
             "paused": bool(meta.get("paused", False)),
             "auto_read": bool(meta.get("auto_read", False)),
             "members": len(members) if isinstance(members, list) else 0,
@@ -1325,7 +1353,7 @@ def _subscribed_workgroups(home: Path, profile: str) -> list[dict[str, Any]]:
             "profile": profile,
             "name": sub.get("name"),
             "briefing": sub.get("briefing"),
-            "pipeline": sub.get("pipeline") if isinstance(sub.get("pipeline"), list) else [],
+            **_pipeline_row(sub),
             "paused": False,
             "members": len(roster) if isinstance(roster, dict) else 0,
             "mtime": mtime,

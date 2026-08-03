@@ -14,6 +14,24 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.3.0 — 2026-07-31 — the recipe declares, the chat runs
+
+- **Workgroup settings now list every declared pipeline**, with the launch chain
+  marked. They are read-only: pipelines come from the recipe, so the stage editor
+  is gone — changing a chain means editing the recipe and launching again.
+- **Start a pipeline from the chat**, where the workgroup is actually driven. The
+  daemon writes the opener from the recipe; the app only names the chain.
+- **The phase strip follows the chain that is actually running**, names it, and
+  disappears when the latest work is not part of a chain.
+- **A skipped phase looks skipped**, not completed, and a blocked close no longer
+  reads as a green tick.
+- **Manual create makes a deliberation workgroup** — it no longer offers a
+  pipeline field, because only a recipe can declare one.
+
+Requires alpi ≥ 0.12.0. This release reads only `pipelines` / `launch_pipeline` /
+`phase_map`; the retired `pipeline` field is gone from the daemon, so an older
+build shows no phase strip against a 0.12 daemon.
+
 ## v0.2.20 — 2026-07-29 — cleaner tool calls in chat
 
 - **Tool calls are now one tidy module.** While the agent works you see the

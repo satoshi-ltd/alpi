@@ -9,7 +9,9 @@ import {
   Eyebrow,
   Field,
   Modal,
+  PipelineStages,
   Textarea,
+  XIcon,
 } from "../primitives/index.js";
 import { useNotify } from "../primitives/Notification.jsx";
 import { useProfileDetail } from "../hooks/useProfileDetail.js";
@@ -34,7 +36,6 @@ export default function CreateWorkgroupModal({
   const [name, setName] = useState("");
   const [memberIds, setMemberIds] = useState([]);
   const [briefing, setBriefing] = useState("");
-  const [pipeline, setPipeline] = useState("");
   const [busy, setBusy] = useState(false);
   const [importing, setImporting] = useState(false);
   const [recipeYaml, setRecipeYaml] = useState(null);
@@ -49,7 +50,6 @@ export default function CreateWorkgroupModal({
     setName("");
     setMemberIds([]);
     setBriefing("");
-    setPipeline("");
     setBusy(false);
     setImporting(false);
     setRecipeYaml(null);
@@ -79,6 +79,10 @@ export default function CreateWorkgroupModal({
   const recipeHub = recipeMeta?.hub || "";
   const declaredParams = recipeMeta?.params || {};
   const declaredInputs = recipeMeta?.inputs || {};
+  const recipePipelines = recipeMeta?.pipelines || {};
+  const recipePipelineKeys = Object.keys(recipePipelines);
+  const recipeLaunch = recipeMeta?.launch_pipeline || null;
+  const recipeIdle = recipePipelineKeys.length > 0 && !recipeLaunch;
   const paramsFilled = Object.keys(declaredParams).every(
     (k) => (paramValues[k] || "").trim().length > 0,
   );
@@ -148,7 +152,12 @@ export default function CreateWorkgroupModal({
           ),
           ...(connectionId ? { connectionId } : {}),
         });
-        notify({ message: `Launched from recipe ${recipeMeta?.id || ""}`, variant: "success" });
+        notify({
+          message: recipeIdle
+            ? `Created idle from recipe ${recipeMeta?.id || ""} — trigger a pipeline when ready`
+            : `Launched from recipe ${recipeMeta?.id || ""}`,
+          variant: "success",
+        });
         onCreated?.(res?.workgroup_id, recipeHub);
       } else {
         const wgId = await invoke("workgroup_create", {
@@ -157,7 +166,6 @@ export default function CreateWorkgroupModal({
           memberPeerIds: memberIds,
           budgetUsd: null,
           briefing: briefing.trim() || null,
-          pipeline: pipeline.trim() || null,
           ...(connectionId ? { connectionId } : {}),
         });
         notify({ message: `Workgroup #${name.trim()} created`, variant: "success" });
@@ -197,15 +205,25 @@ export default function CreateWorkgroupModal({
   }
 
   return (
-    <Modal open title="New workgroup" onClose={onClose} width="var(--modal-md)">
+    <Modal
+      open
+      title="New workgroup"
+      onClose={onClose}
+      width={isRecipe ? "var(--modal-lg)" : "var(--modal-md)"}
+    >
       <div className={styles.body}>
         <div className={styles.field}>
           <div className={styles.recipeHead}>
-            <Eyebrow>{isRecipe ? "HUB — FROM RECIPE" : "HUB"}</Eyebrow>
+            <Eyebrow>HUB</Eyebrow>
             {isRecipe ? (
-              <Button variant="ghost" size="sm" onClick={clearRecipe} disabled={busy}>
-                Clear recipe
-              </Button>
+              <Chip
+                size="sm"
+                onClick={busy ? undefined : clearRecipe}
+                tooltip="Clear recipe"
+              >
+                {recipeMeta?.id || "recipe"}
+                <XIcon style={{ width: 10, height: 10, strokeWidth: 2 }} />
+              </Chip>
             ) : (
               <Button
                 variant="ghost"
@@ -310,20 +328,30 @@ export default function CreateWorkgroupModal({
           />
         </div>
 
-        {!isRecipe && (
+        {isRecipe && recipePipelineKeys.length > 0 && (
           <div className={styles.field}>
-            <Eyebrow>PIPELINE (OPTIONAL)</Eyebrow>
-            <Field
-              value={pipeline}
-              onChange={(e) => setPipeline(e.target.value)}
-              placeholder="intake, content, build, qa"
-            />
-          </div>
-        )}
-
-        {isRecipe && (Object.keys(declaredParams).length > 0 || Object.keys(declaredInputs).length > 0) && (
-          <div className={styles.sectionDivider}>
-            <Eyebrow>RECIPE INPUTS</Eyebrow>
+            <Eyebrow>PIPELINES</Eyebrow>
+            <div className={styles.recipePipelines}>
+              {Object.entries(recipePipelines).map(([key, phases]) => (
+                <div key={key} className={styles.recipePipeline}>
+                  <div className={styles.recipePipelineHead}>
+                    <span className={styles.recipePipelineName}>{key}</span>
+                    <span className={styles.recipePipelineCount}>
+                      {(phases || []).length} phase{(phases || []).length === 1 ? "" : "s"}
+                    </span>
+                    {key === recipeLaunch && (
+                      <Chip size="sm" state="on">launch</Chip>
+                    )}
+                  </div>
+                  <PipelineStages phases={phases || []} />
+                </div>
+              ))}
+              {recipeIdle && (
+                <span className={styles.recipeIdle}>
+                  No launch pipeline · created idle, every chain awaits a trigger
+                </span>
+              )}
+            </div>
           </div>
         )}
 
@@ -359,7 +387,7 @@ export default function CreateWorkgroupModal({
         <div className={styles.footer}>
           <DialogFooter
             onCancel={onClose}
-            primaryLabel={isRecipe ? "Launch" : "Create"}
+            primaryLabel={isRecipe ? (recipeIdle ? "Create idle workgroup" : "Launch") : "Create"}
             primaryDisabled={!canSubmit}
             primaryLoading={busy}
             onPrimary={submit}

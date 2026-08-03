@@ -29,10 +29,10 @@ After the source-locale content is approved and before the project build.
    source material.
 4. Use natural locale-specific copy, not word-for-word output. Check for source
    language leakage on every rendered page.
-5. Run `npm run check:content:all` and resolve missing locale files, structure mismatches,
+5. Run `npm run check:locales` and resolve missing locale files, structure mismatches,
    route collisions and untranslated prose before handoff.
 
 ## Handoff
 
 Report source locale, completed target locales, warnings for proper nouns, and
-the result of `npm run check:content:all`.
+the result of `npm run check:locales`.

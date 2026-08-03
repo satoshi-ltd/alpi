@@ -123,12 +123,12 @@ def _prepare_project(workspace: Path, spec_project: dict) -> tuple[Path, str]:
     return dest, commit
 
 
-def _kickoff_text(task: str, pipeline: tuple[str, ...], steps: dict) -> str:
+def _kickoff_text(task: str, launch_chain: tuple[str, ...], steps: dict) -> str:
     if task:
         return task
-    if not pipeline:
+    if not launch_chain:
         return ""
-    first = pipeline[0]
+    first = launch_chain[0]
     step = steps.get(first) or {}
     owner = step.get("owner")
     if not owner:
@@ -159,15 +159,11 @@ async def launch(
     unpinned = [m for m in spec["members"] if m != profile and m not in peers]
     if unpinned:
         raise LaunchError(f"recipe members not pinned as peers of {profile}: {unpinned}")
-    pipeline = wg_mod._normalize_pipeline(spec["pipeline"])
-    operations = {
-        str(k): tuple(str(x).strip().lower() for x in v)
-        for k, v in (spec.get("operations") or {}).items()
-    }
-    op_phases = tuple(slug for slugs in operations.values() for slug in slugs)
-    steps = wg_mod.validate_pipeline_steps(
-        pipeline, spec["pipeline_steps"], extra_phases=op_phases,
+    pipelines = wg_mod.normalize_pipelines(spec.get("pipelines"))
+    launch_pipeline = wg_mod.normalize_launch_pipeline(
+        pipelines, spec.get("launch_pipeline"),
     )
+    steps = wg_mod.validate_pipeline_steps(pipelines, spec["pipeline_steps"])
     roster = set(spec["members"]) | {profile}
     for phase, st in steps.items():
         if st["owner"] not in roster:
@@ -217,12 +213,13 @@ async def launch(
             member_pubkeys=[peers[m].pubkey for m in spec["members"] if m in peers],
             budget={"max_usd": spec["budget_usd"]} if spec["budget_usd"] else {},
             briefing=briefing,
-            pipeline=pipeline, pipeline_steps=steps, operations=operations,
+            pipelines=pipelines, launch_pipeline=launch_pipeline,
+            pipeline_steps=steps,
             quorum_timeout_seconds=spec["quorum_timeout_seconds"],
             launch=provenance,
         )
         created_wg_dir = home / "alp" / "workgroups" / wg.meta.id
-        kick = _kickoff_text(spec["task"], pipeline, steps)
+        kick = _kickoff_text(spec["task"], wg.meta.launch_chain, steps)
         if kick:
             await wc.post(home, wg.meta.id, kick.encode())
     except BaseException:
@@ -247,7 +244,10 @@ async def _describe(params: dict[str, Any], _server: host_server.Server) -> dict
     return {
         "id": r.recipe_id, "digest": r.digest, "hub": r.hub,
         "members": list(r.members), "name": r.name, "briefing": r.briefing,
-        "task": r.task, "params": r.params, "inputs": r.inputs, "pipeline": list(r.pipeline),
+        "task": r.task, "params": r.params, "inputs": r.inputs,
+        "pipelines": {k: list(v) for k, v in r.pipelines.items()},
+        "launch_pipeline": r.launch_pipeline,
+        "pipeline_mode": bool(r.pipelines),
         "has_project": r.project is not None,
     }
 

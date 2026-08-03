@@ -1154,7 +1154,6 @@ async fn workgroup_create(
     member_peer_ids: Vec<String>,
     budget_usd: Option<f64>,
     briefing: Option<String>,
-    pipeline: Option<String>,
     connection_id: Option<String>,
 ) -> Result<String, String> {
     let mut params = serde_json::json!({
@@ -1167,10 +1166,6 @@ async fn workgroup_create(
     }
     if let Some(b) = briefing.filter(|s| !s.is_empty()) {
         params["briefing"] = serde_json::Value::String(b);
-    }
-    // Comma-separated phase slugs; the host splits + validates. Empty → none.
-    if let Some(p) = pipeline.filter(|s| !s.trim().is_empty()) {
-        params["pipeline"] = serde_json::Value::String(p);
     }
     let result = tauri::async_runtime::spawn_blocking(move || {
         match connection_id.as_deref() {
@@ -1258,17 +1253,12 @@ async fn workgroup_update(
     briefing: Option<String>,
     budget_usd: Option<f64>,
     clear_budget: Option<bool>,
-    pipeline: Option<String>,
     auto_read: Option<bool>,
     connection_id: Option<String>,
 ) -> Result<(), String> {
     let mut params = serde_json::json!({ "profile": profile, "wg_id": wg_id });
     if let Some(b) = briefing {
         params["briefing"] = serde_json::Value::String(b);
-    }
-    // comma-separated phase slugs, empty string clears the pipeline
-    if let Some(p) = pipeline {
-        params["pipeline"] = serde_json::Value::String(p);
     }
     if let Some(a) = auto_read {
         params["auto_read"] = serde_json::json!(a);
@@ -3114,6 +3104,20 @@ fn workgroup_transcript_blocking(
 }
 
 #[tauri::command]
+async fn workgroup_tasks(
+    profile: String,
+    wg_id: String,
+    connection_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let params = serde_json::json!({ "profile": profile, "wg_id": wg_id });
+    off_main(move || match connection_id.as_deref() {
+        Some(cid) => host_client::call_for(cid, "host.workgroup.tasks", params),
+        None => host_client::call("host.workgroup.tasks", params),
+    })
+    .await?
+}
+
+#[tauri::command]
 async fn workgroup_post(
     profile: String,
     wg_id: String,
@@ -3657,6 +3661,7 @@ pub fn run() {
             workgroup_members,
             workgroup_action,
             workgroup_update,
+            workgroup_tasks,
             workgroup_create,
             workgroup_pick_recipe,
             workgroup_launch_recipe,

@@ -1,6 +1,6 @@
 # Lens — QA gate
 
-Audits the dist Pixel already built: runs `check:dist` + `check:boundary`
+Audits the dist Pixel already built: runs `check:audit`
 (NEVER `verify`/`build` — they rebuild the artifact under audit), then
 inspects routing, SEO, localization, content truthfulness, assets and
 integration. Brevity alone is never a defect; a featured block without a

@@ -27,7 +27,7 @@ When translating a project or checking localized routes.
 
 ## Validation
 
-Run `npm run check:content:all` after locale changes. Treat route collisions, missing
+Run `npm run check:locales` after locale changes. Treat route collisions, missing
 alternates, duplicate canonical pages, and untranslated prose as failures.
 
 ## Handoff

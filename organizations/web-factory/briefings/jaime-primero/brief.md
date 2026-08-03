@@ -35,15 +35,16 @@ omitted (never invented); pricing is dynamic via Mirai, so no `priceFrom`.
 
 ## Theme
 
-Use `immersive`. The dense family-resort programme, pools, splash park,
-activities and all-inclusive proposition need the strongest visual narrative.
+Use `signature`. The dense family-resort programme — pools, splash park,
+activities and the all-inclusive proposition — carries the visual narrative
+through the full content ladder.
 
 ## Target market and languages
 
-The official site serves **Spanish, Catalan, English, French and Russian** —
-a Costa Daurada family resort drawing domestic Spanish + local Catalan guests
-plus French and Russian tour markets and UK/international families. Decide
-`locales` from this market.
+Source language: Spanish. Site locales: **Spanish, Catalan, English, French
+and Russian** — the set the official site serves. A Costa Daurada family resort
+drawing domestic Spanish and local Catalan guests plus French and Russian tour
+markets and UK/international families.
 
 ## Contact
 
@@ -51,7 +52,7 @@ plus French and Russian tour markets and UK/international families. Decide
 - **Phone**: +34 977 38 83 92.
 - **Email**: reserves@hoteljaimeprimero.com.
 - **Facebook**: `https://www.facebook.com/hoteljaimeprimero`
-- **Instagram**: `https://www.instagram.com/hoteljaimeprimero`
+- **Instagram**: `https://www.instagram.com/hotel.jaime.primero`
 
 ## Pages
 
@@ -121,22 +122,3 @@ omit them; Mirai serves live rates.
 - Directions copy: Hotel Jaime I sits in Salou on the Costa Daurada, minutes
   from the beach and a short hop from PortAventura World — the heart of a
   family holiday on Spain's golden coast.
-
-## Visual policy
-
-Real photos are supplied in `assets/source/` — **reuse them, never regenerate
-them from scratch**. Muse inspects each file and maps it to its slot
-(`kind: supplied`): `hero.jpg`/`resort.jpg` → `home.hero.image`; pool, splash
-park, slides, water-games, restaurant, show-cooking, Palm Corner, bar and play
-areas → the relevant amenity/dining slots and the home gallery. `logo.png`
-already exists — use it as `brand.logo`, no SVG needed. No real room photo was
-supplied, so their factual image slots remain `none` in the manifest (honest
-test state — never fabricate a room).
-
-## Content guardrails
-
-- Write Spanish first, then the other locales scout selects.
-- Keep room names as given. Do not invent sizes, prices or facts not above.
-- No lorem, no `[NEEDS HOTEL]` in generated project data.
-- Do not edit runtime code, components, styles, themes, schemas or scripts.
-- Legal pages (privacy/cookies) are hotel-supplied verbatim — do not draft.

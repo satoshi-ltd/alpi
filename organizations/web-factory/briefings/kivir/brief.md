@@ -13,6 +13,7 @@ omitted (never invented); pricing is dynamic via Mirai, so no `priceFrom`.
 
 - **Project slug**: `hotel-kivir`
 - **Legal/display name**: Hotel Kivir
+- **Category**: 4 stars
 - **Domain**: `hotelkivir.com`
 - **Site URL**: `https://www.hotelkivir.com`
 - **Booking provider**: Mirai
@@ -43,10 +44,10 @@ gastronomy and quiet-luxury positioning match the default signature system.
 
 ## Target market and languages
 
-The official site serves **Spanish, English, French, German, Italian and
-Portuguese**. Seville draws domestic Spanish guests plus strong French,
-Italian, Portuguese, German and Anglophone city-break markets. Decide
-`locales` from this market. Source language: Spanish.
+Source language: Spanish. Site locales: **Spanish, English, French, German,
+Italian and Portuguese** — the set the official site serves. Seville draws
+domestic Spanish guests plus strong French, Italian, Portuguese, German and
+Anglophone city-break markets.
 
 ## Contact
 
@@ -54,7 +55,7 @@ Italian, Portuguese, German and Anglophone city-break markets. Decide
 - **Phone**: +34 954 59 13 43.
 - **WhatsApp**: +34 689 127 168.
 - **Email**: kivir@hotelkivir.com.
-- **Instagram**: `https://www.instagram.com/hotelkivir`
+- **Instagram**: `https://www.instagram.com/hotelkivirsevilla`
 - **Facebook**: `https://www.facebook.com/hotelkivir`
 - **TikTok**: `https://www.tiktok.com/@hotelkivir`
 
@@ -102,6 +103,14 @@ shower.
    - Description: the house signature — your own terrace above the
      Guadalquivir, the Triana bridge as a backdrop.
 
+## Practical information
+
+- **Check-in**: from 14:00.
+- **Pets**: not admitted.
+- **Guest profile**: recommended for adults; there are no family rooms.
+- **Parking**: no hotel car park. The nearby Colón car park is the one the
+  hotel points guests to; its price is the operator's, not the hotel's.
+
 ## Amenities and services
 
 1. **Rooftop pool and solarium** — plunge pool with skyline views.
@@ -141,23 +150,3 @@ shower.
   where the old city meets the Guadalquivir — Triana across the bridge,
   the Torre del Oro down the promenade, and the Giralda a short walk
   behind.
-
-## Visual policy
-
-Real photos are supplied in `assets/source/` — **reuse them, never regenerate
-them from scratch**. Muse inspects each file and maps it to its slot
-(`kind: supplied`): `hero-guadalquivir.webp` → `home.hero.image`;
-`ambience-seville-*.webp` → home gallery; `restaurant-dona-emilia-*.webp`
-→ dining slots; `room-deluxe.jpg`, `room-premium.jpg`,
-`room-junior-suite.jpg`, `room-premium-terrace.jpg` → their room slugs.
-`logo-kivir.webp` already exists — use it as `brand.logo`, no SVG needed.
-
-## Content guardrails
-
-- Write Spanish first, then the other locales scout selects.
-- Keep room names as given. Do not invent sizes, prices or facts not
-  above.
-- No lorem, no `[NEEDS HOTEL]` in generated project data.
-- Do not edit runtime code, components, styles, themes, schemas or scripts.
-- Legal pages (privacy/cookies) are hotel-supplied verbatim — do not
-  draft.

@@ -19,53 +19,122 @@ briefing: |
   Workgroup for hotel '{slug}'. The project is an independent clone at projects/{slug}/.
   Read brief.md and the cloned project's factory/template-spec.json before authoring.
   The project contract, scripts and schemas in that clone are authoritative.
-  Authoring boundary: src/config/site.json, src/content/** (except config.js),
-  assets/manifest.yaml and assets/source/**. Do not modify runtime or design files.
-  Pipeline: #setup @pixel · #intake @scout · #assets @muse · #content @quill ·
-  #translation @lingua · #build @pixel · #qa @lens.
-  Working language: post in English unless the hub addresses you in Spanish.
-  The hotel's content keeps its own locales — this rule is only about
-  workgroup posts.
+  Authoring boundary: src/config/site.json, src/content/** (except config.js), assets/manifest.yaml and assets/source/**. Do not modify runtime or design files.
+  The daemon sequences every declared pipeline and hydrates its phases and owners into your context; each owner's contract carries the how.
+  Working language: post in English unless the hub addresses you in Spanish. The hotel's content keeps its own locales — this rule is only about workgroup posts.
 
 task: |
   @pixel #task #setup · initialize the cloned hotel project at projects/{slug}.
 
-pipeline: [setup, intake, assets, content, translation, build, qa]
+pipelines:
+  setup: [setup, enrich, intake, assets, content, translation, build, qa]
+  media-update: [media-update, media-config, media-build, media-qa]
+  content-update: [content-update, content-copy, content-locales, content-build, content-qa]
+  review: [review, review-config, review-content, review-translation, review-media, review-build, review-qa, review-close]
+launch: setup
+
 pipeline_steps:
   setup:
     owner: pixel
-    next: intake
     task: "initialize the clone and neutralize the demo data"
     gate: { argv: [npm, run, "check:setup"], cwd: "projects/{slug}" }
+  enrich:
+    owner: scout
+    task: "research the hotel's public footprint into work/enrichment.md, or hand off skipped when the web is unavailable"
+    turn_budget_s: 1800
+    gate: { argv: [npm, run, "check:enrichment"], cwd: "projects/{slug}" }
   intake:
     owner: scout
-    next: assets
-    task: "produce work/intake.md and src/config/site.json from brief.md"
-    gate: { argv: [npm, run, check:config], cwd: "projects/{slug}" }
+    task: "produce work/intake.md and src/config/site.json from brief.md and work/enrichment.md"
+    turn_budget_s: 1800
+    gate: { argv: [npm, run, "check:intake"], cwd: "projects/{slug}" }
   assets:
     owner: muse
-    next: content
     task: "produce assets/manifest.yaml from the supplied media and the intake, then optimize"
-    gate: { argv: [npm, run, assets:optimize], cwd: "projects/{slug}" }
+    gate: { argv: [npm, run, "check:assets"], cwd: "projects/{slug}" }
   content:
     owner: quill
-    next: translation
     task: "author the source-locale content in src/content/**"
+    turn_budget_s: 1800
     gate: { argv: [npm, run, check:content], cwd: "projects/{slug}" }
   translation:
     owner: lingua
-    next: build
     task: "bring every declared locale to parity with the source content"
-    gate: { argv: [npm, run, check:content:all], cwd: "projects/{slug}" }
+    turn_budget_s: 1800
+    gate: { argv: [npm, run, "check:locales"], cwd: "projects/{slug}" }
   build:
     owner: pixel
-    next: qa
     task: "build the selected tier and validate the generated dist"
-    gate: { argv: [npm, run, check:dist], cwd: "projects/{slug}" }
+    gate: { argv: [npm, run, "check:build"], cwd: "projects/{slug}" }
   qa:
     owner: lens
     task: "audit the built dist and return one QA PASS or QA FAIL verdict"
-    gate: { argv: [npm, run, "check:final"], cwd: "projects/{slug}" }
+
+  media-update:
+    owner: muse
+    task: "map the client media now in assets/source/ to manifest slots"
+    gate: { argv: [npm, run, "check:assets"], cwd: "projects/{slug}" }
+  media-config:
+    owner: scout
+    task: "point brand.logo and the gallery page at the slots the manifest now supplies"
+    gate: { argv: [npm, run, "check:intake"], cwd: "projects/{slug}" }
+  media-build:
+    owner: pixel
+    task: "rebuild the selected tier with the optimized client media"
+    gate: { argv: [npm, run, "check:build"], cwd: "projects/{slug}" }
+  media-qa:
+    owner: lens
+    task: "audit the rebuilt dist and return one QA PASS or QA FAIL verdict"
+
+  content-update:
+    owner: scout
+    task: "fold the verified update material staged in work/ into site.json and work/intake.md"
+    gate: { argv: [npm, run, "check:intake"], cwd: "projects/{slug}" }
+  content-copy:
+    owner: quill
+    task: "apply the folded facts to the source-locale content in src/content/**"
+    gate: { argv: [npm, run, check:content], cwd: "projects/{slug}" }
+  content-locales:
+    owner: lingua
+    task: "bring every declared locale back to parity with the updated source content"
+    gate: { argv: [npm, run, "check:locales"], cwd: "projects/{slug}" }
+  content-build:
+    owner: pixel
+    task: "rebuild the selected tier with the updated content"
+    gate: { argv: [npm, run, "check:build"], cwd: "projects/{slug}" }
+  content-qa:
+    owner: lens
+    task: "audit the rebuilt dist and return one QA PASS or QA FAIL verdict"
+
+  review:
+    owner: mira
+    task: "materialize every unclosed work/review/REV-*.md and triage each note to one owner"
+  review-config:
+    owner: scout
+    task: "apply the approved appearance configuration and the config-level notes"
+    gate: { argv: [npm, run, "check:intake"], cwd: "projects/{slug}" }
+  review-content:
+    owner: quill
+    task: "apply the source-locale content notes of the open review order"
+    gate: { argv: [npm, run, check:content], cwd: "projects/{slug}" }
+  review-translation:
+    owner: lingua
+    task: "apply the locale-specific notes and restore parity for the changed content"
+    gate: { argv: [npm, run, "check:locales"], cwd: "projects/{slug}" }
+  review-media:
+    owner: muse
+    task: "apply the manifest and media notes of the open review order"
+    gate: { argv: [npm, run, "check:assets"], cwd: "projects/{slug}" }
+  review-build:
+    owner: pixel
+    task: "rebuild the selected tier with the applied review fixes"
+    gate: { argv: [npm, run, "check:build"], cwd: "projects/{slug}" }
+  review-qa:
+    owner: lens
+    task: "re-audit the touched pages and return one QA PASS or QA FAIL verdict"
+  review-close:
+    owner: mira
+    task: "close every note id as applied, rejected or template-gap"
 
 project:
   template_repo: "git@github.com:satoshi-ltd/alpi-mirai-web-factory.git"
@@ -75,5 +144,21 @@ project:
       work/intake.md: |
         # Intake — {slug}
 
-        Pixel initializes the clone. Scout records the chosen theme, rationale,
-        locales, confirmed facts, gaps and enabled sections here.
+        Pixel initializes the clone. Scout records here: the chosen theme and
+        makeup with their rationale, the locales, the confirmed facts, the gaps
+        no source covers, and the enabled sections. Free prose everywhere except
+        the table below, which `npm run check:intake` parses verbatim.
+
+        ## Canonical slugs
+
+        Every named room, amenity, dining venue and experience gets exactly one
+        row: a unique kebab-case slug within its collection, and a composition
+        of `label`, `summary` or `body` that binds Quill — a `label` entry never
+        carries a summary. Amenity rows hold only describable services and spaces —
+        `summary` or `body`, with `facts` when the sources state them; commodity
+        one-liners (wifi, reception) belong on the practical-information page,
+        not in this collection. A `label` amenity row needs an explicit
+        `label: <reason>` note below the table.
+
+        | collection | slug | name | composition |
+        |---|---|---|---|

@@ -19,11 +19,20 @@ function mix(hex, pct, base) {
   return `rgb(${r},${g},${b})`;
 }
 
+const CLOSED = new Set(['done', 'skipped', 'blocked', 'preempted']);
+
 function StatusIcon({ status, accent, colors }) {
   if (status === 'done') {
     return <Text style={{ color: accent, fontSize: fontSizes.xl, lineHeight: 18, fontFamily: fonts.sans.bold }}>✓</Text>;
   }
-  if (status === 'skip') {
+  if (status === 'blocked') {
+    return (
+      <Text style={{ color: colors.danger, fontSize: fontSizes.xl, lineHeight: 18, fontFamily: fonts.sans.bold }}>
+        ⨯
+      </Text>
+    );
+  }
+  if (status === 'skipped' || status === 'preempted') {
     return (
       <View
         style={{
@@ -54,9 +63,9 @@ function StatusIcon({ status, accent, colors }) {
 
 export function TasksSheet({ open, onClose, tasks = [], workgroupId, accent, onPick }) {
   const { colors, fonts, fontSizes } = useTheme();
-  const closed = tasks.filter((t) => t.status === 'done' || t.status === 'skip').length;
+  const closed = tasks.filter((t) => CLOSED.has(t.status)).length;
   const total = tasks.length;
-  const hasActive = tasks.some((t) => t.status !== 'done' && t.status !== 'skip');
+  const hasActive = tasks.some((t) => !CLOSED.has(t.status));
 
   return (
     <Sheet
@@ -85,10 +94,14 @@ export function TasksSheet({ open, onClose, tasks = [], workgroupId, accent, onP
           </View>
         ) : (
           tasks.map((t) => {
-            const isDone = t.status === 'done';
-            const isSkip = t.status === 'skip';
-            const statusLabel = isDone ? 'done' : isSkip ? 'skipped' : 'working';
-            const statusColor = isSkip ? colors.warning : mix(accent ?? colors.ink3, 0.7, colors.ink3);
+            const isSoft = t.status === 'skipped' || t.status === 'preempted';
+            const isBlocked = t.status === 'blocked';
+            const statusLabel = CLOSED.has(t.status) ? t.status : 'working';
+            const statusColor = isBlocked
+              ? colors.danger
+              : isSoft
+                ? colors.warning
+                : mix(accent ?? colors.ink3, 0.7, colors.ink3);
             return (
               <Pressable
                 key={t.id}

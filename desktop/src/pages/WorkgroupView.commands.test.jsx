@@ -35,7 +35,6 @@ const workgroup = {
   paused: false,
   auto_read: false,
   members: 1,
-  pipeline: [],
 };
 
 const profiles = [

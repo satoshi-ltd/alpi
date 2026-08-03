@@ -3651,6 +3651,41 @@ def workgroup() -> None:
     """Manage ALP workgroups; hub verbs (create/kick) vs member verbs (join/post/pull/pause/resume/leave)."""
 
 
+def _pipelines_summary(pipelines: dict, launch_pipeline: str | None) -> str:
+    if not pipelines:
+        return ""
+    return f"  pipelines: {len(pipelines)} · launch: {launch_pipeline or 'none'}"
+
+
+def _echo_pipelines(pipelines: dict, launch_pipeline: str | None) -> None:
+    if not pipelines:
+        return
+    click.echo("Pipelines")
+    width = max(len(k) for k in pipelines)
+    for key, chain in pipelines.items():
+        mark = "   launch" if key == launch_pipeline else ""
+        click.echo(f"  {key.ljust(width)}  {' → '.join(chain)}{mark}")
+    if launch_pipeline is None:
+        click.echo("  no launch pipeline — trigger a declared pipeline when needed")
+
+
+def _echo_active_pipeline(home: Path, wg_id: str) -> None:
+    # Never inferred from the launch selector: the transcript picks the visible run.
+    from alpi.host import workgroup as host_wg
+
+    try:
+        run = (host_wg.fold_task_state(home, wg_id) or {}).get("pipeline_run")
+    except Exception:  # noqa: BLE001
+        return
+    if not run:
+        return
+    detail = " · ".join(
+        f"{p['slug']} {p['state']}" for p in run["phases"] if p["state"] != "pending"
+    )
+    line = f"Active pipeline: {run['pipeline']} [{run['status']}]"
+    click.echo(f"{line} · {detail}" if detail else line)
+
+
 @workgroup.command("list")
 @click.pass_context
 def workgroup_list(ctx: click.Context) -> None:
@@ -3668,11 +3703,17 @@ def workgroup_list(ctx: click.Context) -> None:
         click.echo("hub of:")
         for w in hub:
             paused = " [paused]" if w.meta.paused else ""
-            click.echo(f"  {w.meta.id}  {w.meta.name}  ({len(w.members)} members){paused}")
+            click.echo(
+                f"  {w.meta.id}  {w.meta.name}  ({len(w.members)} members)"
+                f"{_pipelines_summary(w.meta.pipelines, w.meta.launch_pipeline)}{paused}"
+            )
     if sub:
         click.echo("member of:")
         for s in sub:
-            click.echo(f"  {s.wg_id}  {s.name}  via @{s.hub_id}  (seq {s.last_seq})")
+            click.echo(
+                f"  {s.wg_id}  {s.name}  via @{s.hub_id}  (seq {s.last_seq})"
+                f"{_pipelines_summary(s.pipelines, s.launch_pipeline)}"
+            )
 
 
 @workgroup.command("show")
@@ -3695,6 +3736,8 @@ def workgroup_show(ctx: click.Context, wg_id: str) -> None:
         click.echo(f"  key v    {wg.meta.current_key_version}")
         if wg.meta.budget:
             click.echo(f"  budget   {wg.meta.budget}")
+        _echo_pipelines(wg.meta.pipelines, wg.meta.launch_pipeline)
+        _echo_active_pipeline(h, wg_id)
         member = wg.member(kp.pubkey_b64())
         if member is None:
             return
@@ -3722,6 +3765,7 @@ def workgroup_show(ctx: click.Context, wg_id: str) -> None:
     click.echo(f"  hub      @{s.hub_id}")
     click.echo(f"  cursor   seq {s.last_seq}")
     click.echo(f"  keys     v{s.latest_version()} cached")
+    _echo_pipelines(s.pipelines, s.launch_pipeline)
     click.echo("(use `alpi workgroup pull` to fetch + decrypt the transcript)")
 
 
@@ -3749,18 +3793,14 @@ def _read_local_transcript(h: Path, wg_id: str) -> list[dict]:
               help="Lifetime USD cap.")
 @click.option("--briefing", default="",
               help="Initial briefing text. Hub can edit later via set-briefing.")
-@click.option("--pipeline", default="",
-              help="Ordered pipeline phase slugs, comma-separated "
-                   "(e.g. 'intake,content,build,qa'). Empty = a normal "
-                   "deliberation workgroup.")
 @click.option("--quorum-timeout", type=int, default=0,
               help="Closure-quorum grace in seconds (0 = default 600). "
-                   "Deterministic gate configs come from `workgroup launch`, not here.")
+                   "Pipelines come from `workgroup launch`, not here.")
 @click.pass_context
 def workgroup_create(
     ctx: click.Context, name: str,
     members: tuple[str, ...], budget_usd: float | None,
-    briefing: str, pipeline: str, quorum_timeout: int,
+    briefing: str, quorum_timeout: int,
 ) -> None:
     """Create a workgroup as hub; members are pubkeys or pinned peer ids."""
     from alpi.alp import peers as peers_mod
@@ -3783,19 +3823,20 @@ def workgroup_create(
     hub_cfg = config.load(h)
     hub_bio = (hub_cfg.public_bio or "").strip()
     hub_voice = (hub_cfg.tools.tts.voice or "").strip()
-    phases = [p.strip() for p in pipeline.split(",") if p.strip()]
     try:
         wg = wg_mod.create(
             h, name=name, hub_kp=load_or_generate(h),
             member_pubkeys=pubkeys, budget=budget,
             briefing=(briefing or "").strip(),
-            pipeline=phases, quorum_timeout_seconds=quorum_timeout,
+            quorum_timeout_seconds=quorum_timeout,
             hub_bio=hub_bio, hub_voice=hub_voice,
         )
     except ValueError as e:
         raise click.ClickException(str(e))
-    pipe_note = f" · pipeline {'→'.join(wg.meta.pipeline)}" if wg.meta.pipeline else ""
-    click.echo(f"created {wg.meta.id} · {len(wg.members)} members{pipe_note}")
+    click.echo(
+        f"created {wg.meta.id} · {len(wg.members)} members · deliberation "
+        "(pipelines come from `workgroup launch --recipe`)"
+    )
 
 
 @workgroup.command("launch")
@@ -4035,13 +4076,10 @@ def workgroup_remove(ctx: click.Context, wg_id: str, yes: bool) -> None:
               help="Set the lifetime USD cap.")
 @click.option("--clear-budget", is_flag=True, default=False,
               help="Remove any lifetime budget.")
-@click.option("--pipeline", default=None,
-              help="Replace ordered pipeline phase slugs, comma-separated. "
-                   "Pass an empty string to clear.")
 @click.pass_context
 def workgroup_update(
     ctx: click.Context, wg_id: str, briefing: str | None,
-    budget_usd: float | None, clear_budget: bool, pipeline: str | None,
+    budget_usd: float | None, clear_budget: bool,
 ) -> None:
     """Hub-only: edit a workgroup's mutable metadata."""
     from alpi.alp import workgroup as wg_mod
@@ -4062,16 +4100,6 @@ def workgroup_update(
     if briefing is not None:
         wg.meta.briefing = (briefing or "").strip()
         changes.append(f"briefing={len(wg.meta.briefing)} chars")
-    if pipeline is not None:
-        try:
-            wg.meta.pipeline = wg_mod._normalize_pipeline(
-                [p.strip() for p in pipeline.split(",") if p.strip()],
-            )
-        except ValueError as e:
-            raise click.ClickException(str(e))
-        changes.append(
-            "pipeline=" + ("→".join(wg.meta.pipeline) if wg.meta.pipeline else "cleared"),
-        )
     if clear_budget:
         wg.meta.budget = {}
         changes.append("budget cleared")
@@ -4082,10 +4110,45 @@ def workgroup_update(
         changes.append(f"budget=${budget_usd:.2f}")
     if not changes:
         raise click.ClickException(
-            "nothing to update — pass --briefing, --pipeline, --budget-usd or --clear-budget"
+            "nothing to update — pass --briefing, --budget-usd or --clear-budget"
         )
     wg_mod._save_meta(wg_mod._wg_dir(h, wg_id), wg.meta)
     click.echo(f"updated {wg_id} · {' · '.join(changes)}")
+
+
+@workgroup.command("trigger")
+@click.argument("wg_id")
+@click.argument("pipeline")
+@click.pass_context
+def workgroup_trigger(ctx: click.Context, wg_id: str, pipeline: str) -> None:
+    """Hub-only: start a declared pipeline by key.
+
+    The opener is authored from the recipe — its first phase's declared owner and
+    task, verbatim, with no free-text suffix. Pipelines run one at a time: starting
+    one stops whatever was mid-flight, preempting an open task if there is one. A
+    paused workgroup, or a pipeline with no declared first-phase contract, is
+    rejected rather than guessed at.
+    """
+    import asyncio
+
+    from alpi.alp import workgroup_client as wc
+
+    h: Path = ctx.obj["home"]
+    try:
+        result = asyncio.run(wc.trigger_pipeline(h, wg_id, pipeline))
+    except ValueError as e:
+        raise click.ClickException(str(e))
+    stopped = result.get("stopped")
+    if stopped:
+        click.echo(
+            f"stopped {stopped['pipeline']} ({stopped['status']} at "
+            f"#{stopped['phase']})"
+            + (f" · preempted open #{stopped['open_task']}" if stopped["open_task"] else "")
+        )
+    click.echo(
+        f"triggered {result['pipeline']} · opened #{result['phase']} "
+        f"at seq {result['seq']}"
+    )
 
 
 @workgroup.command("turns")

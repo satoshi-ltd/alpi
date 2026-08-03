@@ -30,5 +30,5 @@ Theme selection order:
 3. `signature` fallback.
 
 Use only `essential`, `signature` or `immersive`, and choose a makeup valid for
-that theme. Run `npm run check:config` before handoff. Report warnings separately from
+that theme. Run `npm run check:intake` before handoff. Report warnings separately from
 blocking errors.

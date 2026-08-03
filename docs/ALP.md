@@ -913,40 +913,102 @@ asked, a project clone) from the resolved file. Two host methods:
 **Three shapes from one format.** A recipe declares only what it
 needs:
 
-- *Deliberation* — `task` only, no pipeline, no project: a
+- *Deliberation* — `task` only, no pipelines, no project: a
   round-table that opens on its kickoff post.
-- *Pipeline* — adds `pipeline` + `pipeline_steps` (see
-  *Deterministic phase gates*): an ordered, gated production line.
+- *Pipeline* — adds `pipelines` + `pipeline_steps` (see
+  *Deterministic phase gates*): one or more ordered, gated chains.
 - *Project* — adds a `project` block: clone a template repo into
-  the workspace and seed it before the pipeline starts.
+  the workspace and seed it before the launch chain starts.
 
-**Operations — post-launch chains.** A pipeline runs once, at
-launch. Work that arrives later (client photography, a fresh set of
-facts) is declared as an `operation`: a named ordered step list the
-daemon advances with the same resolver, gates and turn rotation as
-`pipeline`.
+**Named pipelines — one map, one order.** A recipe declares every
+chain in a single map and names which one the launch kickoff opens.
+There is no second "operations" concept and no per-step `next`:
 
 ```yaml
-operations:
-  media-update:
-    steps: [media-update, media-config, media-build, media-qa]
+pipelines:
+  setup: [setup, enrich, intake, assets, content, translation, build, qa]
+  media-update: [media-update, media-config, media-build, media-qa]
+launch: setup
 ```
 
-- Each step needs its own `pipeline_steps` entry (owner, optional
-  `next`, optional `gate`) — the same shape a launch phase uses.
-- The first step MUST carry the operation's own name, so
-  `@owner #task #<operation>` starts it with no alias layer.
-- Steps stay OUT of `pipeline`, so closing the launch pipeline still
-  completes it and the operation waits for its trigger.
-- An operation may run again for every later delivery: re-opening its
-  first step advances the chain from the start.
-- **Chains must be disjoint.** A slug may belong to `pipeline` or to
-  exactly one operation, never to two — otherwise the active chain
-  would depend on YAML order. Declaring `operations` without a
-  `pipeline` is rejected.
+- Every key MUST equal its own first phase, so the key is an identity
+  the task protocol already carries — `#task #<pipeline>` opens it
+  with no alias layer to resolve.
+- **Phases are globally disjoint.** A slug belongs to exactly one
+  chain, so a task slug has at most one owning pipeline and the active
+  chain never depends on YAML order.
+- `launch` is optional. Without it the workgroup starts **idle**: no
+  kickoff post, no active phase, and every declared chain waits for an
+  explicit trigger. A recipe that declares `pipelines` without
+  `launch` may not also declare a `task` — posting it would break the
+  promise that nothing starts on its own, and silently dropping it
+  would hide an authoring mistake.
+- Order lives in the chain and nowhere else. A `pipeline_steps` entry
+  that declares `next` is rejected, naming the source of truth:
+  `pipeline_steps['content'].next is derived from pipelines['setup']`.
+- A chain may run again for every later delivery; each run starts
+  fresh (see *Pipeline runs*).
 - The chain is chosen from the LATEST close alone. A `#done` whose
   slug belongs to no declared chain resolves as unknown, and the core
   opens nothing rather than resurrecting finished work.
+
+**Triggering a declared pipeline.** Any declared chain is addressable
+by key:
+
+```text
+alpi -p <hub> workgroup trigger <wg_id> <pipeline>
+```
+
+The host verb is `host.workgroup.trigger(profile, wg_id, pipeline)`.
+The daemon resolves the chain's first phase and publishes exactly
+
+```text
+@<declared owner> #task #<first phase> · <declared task>
+```
+
+copied verbatim from `pipeline_steps` — clients never author that
+post, so a chain cannot start on operator prose that drifted from the
+recipe. It follows the normal workgroup post path, so owner
+validation, transcript ordering, events, dispatch and gate handling
+stay single-sourced. **Pipelines run one at a time.** Starting a chain stops whatever was
+mid-flight: the opener preempts an open task (the transcript records the
+displaced phase as `preempted by #<slug>`, never as done) and the
+displaced run stops being advanced. The trigger returns what it stopped
+(`{pipeline, phase, status, open_task, same_pipeline}` or `null`) so
+every surface can name it before and after — a `blocked` run counts as
+stopped too, since what it loses is its position. An operator starting a chain
+is an explicit abandon, so the trigger is exempt from the
+`phase-gate-abandoned` guard — that guard exists to stop the HUB talking
+its way past a red gate, not to stop a human changing course.
+
+Trigger is hub-admin only. An unknown key, a paused workgroup, a
+subscriber, or a first phase with no declared owner/task
+(`pipeline-trigger-contract-missing`) are rejected without appending
+anything. Recipe validation enforces that contract for every
+declared chain, including the launch one, so a recipe cannot ship a
+chain nobody can start.
+
+**A recipe is the only place chains are declared.** There is no manual
+pipeline creation and no post-launch editing: `workgroup create` makes
+a deliberation workgroup, `workgroup update` refuses a `pipeline`
+argument, and every client surface is read-only. The reason is
+structural — a client can edit a phase *list* but cannot write
+`pipeline_steps`, and a phase with no declared owner and task cannot be
+dispatched or triggered. Changing a chain means editing the recipe and
+launching again.
+
+**The retired shape is rejected, not migrated.** `pipeline: [...]` plus
+`operations: {name: {steps: [...]}}` is gone. A recipe carrying either
+key is a `RecipeError`; a `meta.yaml` carrying either does not load (the
+daemon logs which workgroup and why, and skips it, and its
+`host.workgroups.list` row carries `needs_relaunch: true` so the apps can
+say so); a subscription entry carrying either is skipped — logged once,
+and dropped for good on the next save. Nothing writes those keys any
+more.
+
+A workgroup created before the upgrade therefore stops loading. There is
+no migration path by design: relaunch it from the updated recipe, which
+is the only thing that can supply `pipeline_steps` anyway.
 
 **Parameters vs inputs — two kinds of operator-supplied value.**
 
@@ -1046,13 +1108,15 @@ briefing: |
 
 task: "@scout #task #intake · start {slug}"
 
-pipeline: [intake, content, translation, build, qa]
+pipelines:
+  intake: [intake, content, translation, build, qa]
+launch: intake
 pipeline_steps:
-  intake:      { owner: scout,  next: content,     gate: { argv: [python3, scripts/intake-check.py],  cwd: "projects/{slug}" } }
-  content:     { owner: quill,  next: translation, gate: { argv: [python3, scripts/content-check.py], cwd: "projects/{slug}" } }
-  translation: { owner: lingua, next: build,       gate: { argv: [python3, scripts/content-check.py], cwd: "projects/{slug}" } }
-  build:       { owner: pixel,  next: qa,          gate: { argv: [test, -d, dist],                    cwd: "projects/{slug}" } }
-  qa:          { owner: lens }
+  intake:      { owner: scout,  task: "start {slug}",              gate: { argv: [python3, scripts/intake-check.py],  cwd: "projects/{slug}" } }
+  content:     { owner: quill,  task: "author the source locale",  gate: { argv: [python3, scripts/content-check.py], cwd: "projects/{slug}" } }
+  translation: { owner: lingua, task: "bring locales to parity",   gate: { argv: [python3, scripts/content-check.py], cwd: "projects/{slug}" } }
+  build:       { owner: pixel,  task: "build the site",            gate: { argv: [test, -d, dist],                    cwd: "projects/{slug}" } }
+  qa:          { owner: lens,   task: "audit and return a verdict" }
 
 project:
   template_repo: git@github.com:acme/site-template.git
@@ -1487,15 +1551,26 @@ does not, and operators should pick models with eyes open:
   These are operational levers, not protocol changes. The
   protocol is uniform; quality scales with the model.
 
-**Pipeline workgroups (`meta.pipeline`).** An ordered list of phase
-slugs turns a workgroup into a pipeline: every `#task` must be
+**Pipeline workgroups (`meta.pipelines`).** Declaring at least one
+named chain turns a workgroup into a pipeline: every `#task` must be
 `@`-targeted (`pipeline-task-untargeted` otherwise — each phase has
 one owner), and after the hub's `#done` the runtime detects the
 closure and re-wakes the hub to open the next phase's task (bounded
 to 3 continuation wakes per closed seq before a `wg.blocked` alert).
+The flag is `pipelines`, not the launch selector: an idle workgroup
+that declares chains but selects none for launch gets the same
+targeting, turn budgets and closure rules as one that launches.
+
+**What members learn.** `workgroup.join` and `workgroup.pull` carry
+`pipelines`, `launch_pipeline`, `pipeline_mode` and a `phase_map` of
+`{owner, task?}` per phase — never gate `argv`/`cwd`, never gate
+output, never recipe provenance. Every successful pull refreshes them,
+so a hub-side edit reaches existing subscriptions without a rejoin,
+and the member's agent context renders the chains directly instead of
+depending on a briefing that narrates them by hand.
 
 **Deterministic phase gates (`meta.pipeline_steps`, hub-local).** A
-phase may declare `{owner, next, task, gate: {argv, cwd?}}` in the
+phase may declare `{owner, task, gate: {argv, cwd?}}` in the
 hub's own metadata — never transmitted on the wire, never accepting
 remote text into `argv`/`cwd`. When the expected owner posts while
 that phase is active, the runtime executes the gate locally
@@ -1509,26 +1584,21 @@ still apply, and the machine-authored close is auditable
 advances: it wakes the hub's agent with the bounded error, one
 attempt per owner post. Phases without a step (or whose transition
 needs judgment — intake signals, QA) stay LLM-owned, and so does a
-step that declares `{owner, next, task}` but omits `gate`: it is
+step that declares `{owner, task}` but omits `gate`: it is
 still dispatched and owner-typed, it just closes on quorum instead of
 on a check. Omitting the gate is the right call for a phase that may
 legitimately produce nothing — one whose owner can answer `#done
 skipped · <reason>` — because a gate there would fail a correct
 outcome.
 
-**Two authorities decide the successor, and they are not the same
-one.** The continuation path (a phase closed by quorum, gate-less or
-LLM-owned) advances by POSITION in the chain: `_next_pipeline_phase`
-returns the slug after the latest close in `meta.pipeline` (or in the
-owning operation) and never reads `pipeline_steps`. The gate path
-reads `next` from the step. Keep them consistent — a `next` that
-disagrees with the list order makes a phase advance differently
-depending on whether its gate ran. Within an operation the order lives
-in `steps` and `next` may only restate it (a disagreeing `next` is
-rejected); in the launch pipeline `next` stays authoritative and may
-skip a gate-less phase on purpose.
+**One authority decides the successor.** Both the continuation path (a
+phase closed by quorum, gate-less or LLM-owned) and the gate path call
+`pipeline_successor(meta, phase)`: the slug after `phase` in its own
+chain, empty at the terminal phase. A phase can no longer advance
+differently depending on whether its gate ran, and there is no way to
+declare an order that disagrees with the chain.
 
-**Who writes the successor's `#task` also follows from that split.** On the
+**Order is single-sourced, but who WRITES the successor's `#task` still differs by path.** On the
 gate path the daemon opens the next phase itself with the step's declared
 `task` verbatim (`@owner #task #<phase> · <task>`). On the continuation
 path it wakes the hub AGENT, which authors the opener in its own words —
@@ -1538,9 +1608,134 @@ any recipe-side length or content discipline on that text stops binding.
 Each accepted
 `workgroup.post` also nudges the hub's poller in-process
 (`alp/wakes.py`), so gate reactions are near-immediate; polling
-remains the recovery path. Off-pipeline fix slugs that PREFIX a phase
-(`#build-recheck`, `#content-fix`) canonicalise back to their phase
-for advance/rewind logic, so QA loops don't derail the ladder. The
+remains the recovery path.
+
+**Recovery slugs are a closed allowlist.** Exact phase membership wins
+first; otherwise exactly one of `-fix` or `-recheck` is stripped and
+the remainder must itself be a declared phase. `#content-fix` and
+`#content-recheck` canonicalise back to `#content` so QA loops don't
+derail the ladder, while a declared operational chain like
+`#content-update` is never swallowed by `#content` — that used to make
+the post-QA behaviour depend on the prose of the prior close. There is
+no open `<phase>-*` match and no longest-prefix rule.
+
+**Pipeline runs.** Static definitions and the currently relevant run
+are separate surfaces. `host.workgroups.list` returns the definitions
+without decrypting anything; `host.workgroup.tasks` folds the task
+ledger and adds `pipeline_run`:
+
+```json
+{
+  "pipeline": "media-update",
+  "status": "running",
+  "started_seq": 37,
+  "current_phase": "media-build",
+  "phases": [
+    {"slug": "media-update", "state": "completed", "seq": 40},
+    {"slug": "media-config", "state": "skipped", "seq": 42},
+    {"slug": "media-build", "state": "current", "seq": 43},
+    {"slug": "media-qa", "state": "pending", "seq": null}
+  ]
+}
+```
+
+`status` is `running` (a mapped task is open), `between` (a
+non-terminal phase closed and its successor is not open yet),
+`blocked`, or `completed` (the terminal phase closed). A
+`#done skipped · <reason>` advances the chain but records `skipped` —
+never collapsed into `completed`. A blocked phase stays `current` and
+the run-level status carries the failure.
+
+The LATEST task overall selects the visible run, so an ad-hoc task
+opened after a chain makes `pipeline_run` null rather than leaving a
+finished chain on screen. Runs are cut at boundaries, not at every
+occurrence of a first slug: a same-slug reopen — the first phase
+included — is another attempt inside the current run and the latest
+attempt owns the phase's visible state, while a first-phase opener
+that finds the run sitting elsewhere is an explicit restart. A
+preempted attempt is never `completed`. The fold is cached by
+transcript identity plus a fingerprint of the definitions, so a
+metadata edit can't serve a stale mapping and repeated reads don't
+re-decrypt. Console, desktop and mobile all consume this contract;
+none of them decides independently which pipeline is active.
+
+**Re-tasking, and what actually stops a peer.** Opening a new `#task`
+is the single way to change direction. `fold_tasks` keeps one task open
+at a time, so the previous one closes with
+`result = "preempted by #<new slug>"` — a preemption is never reported
+as done, in the fold or in any client.
+
+A peer already working does not merely have its answer ignored; two
+independent mechanisms stop it:
+
+- the **preempt watcher** (`_run_preempt_watcher`, 5 s tick) compares
+  each in-flight dispatch's `started_against_task_seq` against the
+  hub's latest `#task` seq and sends `SIGTERM` to the subprocess when a
+  newer one exists;
+- if a turn survives that anyway, its post is rejected by the SDK with
+  `stale-round`: the dispatcher stamps `ALPI_WORKGROUP_ROUND_HUB_SEQ`
+  into the child's environment, and `_check_member_round_fresh` refuses
+  a post whose round the hub has already moved past.
+
+Only a fresh `#task` preempts. A hub `#done` is caught by
+`stale-round` alone, by design — closing a task is not a change of
+direction.
+
+**In a deliberation workgroup** any hub `#task` is accepted, including
+a collective one with no `@`-mentions, and re-tasking with a different
+slug is the normal pivot. Re-opening the slug that is already active is
+rejected (`task-already-active`) — a duplicate would only preempt
+itself. A `#done` there is terminal: nothing continues afterwards.
+
+**In a pipeline workgroup the same pivot is deliberately harder.**
+Every `#task` must name its owner (`pipeline-task-untargeted`
+otherwise), and a declared phase's opener must mention the owner the
+recipe declared (`workflow-task-owner-missing`). On top of that:
+
+| While the open phase is… | A manual `#task <other slug>` |
+|---|---|
+| gate-less | accepted — it preempts, and the chain stops being reported |
+| gated | **rejected** with `phase-gate-abandoned` |
+
+The refusal is the point. If the hub could open `#build` while
+`#content` sat red, the gate would be worth nothing — the guard exists
+so a failed check cannot be renamed out of the way. Because nearly
+every phase in a production recipe declares a gate, a hand-written
+`#task` mid-chain will usually be refused; `workgroup trigger` is the
+one path exempt from it, since there the decision to abandon is
+explicitly an operator's.
+
+**An ad-hoc task stops the chain, and the chain does not resume by
+itself.** A slug that belongs to no declared pipeline makes
+`pipeline_run` null and leaves the core with nothing to infer:
+
+```text
+@pixel #task #hotfix urgent      → pipeline_run: null
+#done hotfix shipped             → next None, known False — no advance
+```
+
+`_next_pipeline_phase` reports the close as unknown rather than
+guessing a successor. Two ways out, and they are not equivalent:
+
+- **re-open the phase** — `@scout #task #setup …` puts the run back at
+  that phase with the earlier ones `pending`, and its close continues
+  the chain normally (`#setup` → `#build`);
+- **trigger the chain again** — starts a *fresh* run from its first
+  phase, discarding the position it had reached.
+
+So recovery after a detour is a phase re-open, not a re-trigger. The
+same distinction applies to a chain a trigger has just displaced: what
+was lost is its *position*, not its work — the transcript still holds
+every post, and re-opening the phase it had reached picks it back up.
+
+**Where each surface stands.** Definitions are read-only everywhere
+outside the recipe, and the apps are read-only on runtime too: the chat
+shows the running chain, settings list the declared chains and mark the
+launch one, and neither starts anything. The trigger is an operator
+verb: `workgroup trigger` on the console, `host.workgroup.trigger` on
+the host plane.
+
+The
 closure-quorum grace is per-workgroup via
 `meta.quorum_timeout_seconds` (default 600 s, editable in
 `alpi setup → Workgroups`).

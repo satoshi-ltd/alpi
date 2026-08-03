@@ -30,6 +30,7 @@ import asyncio as _asyncio
 import base64
 import datetime as _dt
 import json
+import logging as _logging
 import os
 import re as _re
 import secrets
@@ -57,6 +58,10 @@ from alpi.alp.noise import (
     ed25519_to_x25519_public,
 )
 
+
+_log = _logging.getLogger("alpi.alp.workgroup")
+# Warn-once: the poller re-loads every workgroup each tick.
+_warned_unloadable: set[str] = set()
 
 _WG_DIR = "alp/workgroups"
 _META = "meta.yaml"
@@ -225,17 +230,22 @@ class Meta:
     briefing: str = ""
     # Push target on ``#done`` landing: ``"none"`` (silent) or ``"notify"`` (native push to the owner's apps).
     notify_on_close: str = "none"
-    # Ordered phase slugs (empty = deliberation wg); lets continuation advance phases deterministically. Owners/deliverables live in the org, not here.
-    pipeline: tuple[str, ...] = ()
-    # Hub-local gate specs per phase ({phase: {owner, next?, task?, gate: {argv, cwd?}}}); never transmitted on the wire, never accepts remote text.
+    # Named ordered chains, each keyed by its own first phase (empty = deliberation wg); the single source of phase order for gates and continuation.
+    pipelines: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    # Which chain the launch kickoff opens; None = idle workgroup whose chains wait for an explicit trigger.
+    launch_pipeline: str | None = None
+    # Hub-local gate specs per phase ({phase: {owner, task?, gate: {argv, cwd?}}}); never transmitted on the wire, never accepts remote text.
     pipeline_steps: dict = field(default_factory=dict)
-    operations: dict = field(default_factory=dict)
     # Hub-local desktop playback preference — not replicated to members
     auto_read: bool = False
     # Closure-quorum grace (s) before the hub may `#done` with no substantive peer input; 0 = the _FULL_QUORUM_TIMEOUT_SECONDS default.
     quorum_timeout_seconds: int = 0
     # Recipe launch provenance (recipe_id, digest, params, project dest, template commit); informational — editing the source recipe never mutates this.
     launch: dict = field(default_factory=dict)
+
+    @property
+    def launch_chain(self) -> tuple[str, ...]:
+        return self.pipelines.get(self.launch_pipeline or "", ())
 
 
 @dataclass
@@ -288,11 +298,13 @@ def _load_meta(d: Path) -> Meta | None:
     raw = yamlfast.safe_load(p.read_text()) or {}
     if not isinstance(raw, dict):
         return None
-    # Tolerant load: a legacy/corrupt `pipeline` degrades to a normal wg, never crashes the poll (strict validation is on create/update).
     try:
-        pipeline = _normalize_pipeline(raw.get("pipeline"))
-    except ValueError:
-        pipeline = ()
+        pipelines, launch_pipeline = pipelines_from_raw(raw)
+    except ValueError as e:
+        if str(d) not in _warned_unloadable:
+            _warned_unloadable.add(str(d))
+            _log.warning("workgroup %s did not load: %s", d.name, e)
+        return None
     try:
         return Meta(
             id=str(raw["id"]),
@@ -306,13 +318,9 @@ def _load_meta(d: Path) -> Meta | None:
             paused_by=str(raw.get("paused_by") or ""),
             briefing=str(raw.get("briefing") or ""),
             notify_on_close=str(raw.get("notify_on_close") or "none"),
-            pipeline=pipeline,
-            pipeline_steps=raw.get("pipeline_steps") if isinstance(raw.get("pipeline_steps"), dict) else {},
-            operations={
-                str(k): tuple(str(x) for x in v)
-                for k, v in (raw.get("operations") or {}).items()
-                if isinstance(v, (list, tuple))
-            } if isinstance(raw.get("operations"), dict) else {},
+            pipelines=pipelines,
+            launch_pipeline=launch_pipeline,
+            pipeline_steps=_steps_without_next(raw.get("pipeline_steps")),
             auto_read=bool(raw.get("auto_read", False)),
             quorum_timeout_seconds=_coerce_positive_int(raw.get("quorum_timeout_seconds")),
             launch=raw.get("launch") if isinstance(raw.get("launch"), dict) else {},
@@ -342,12 +350,12 @@ def _save_meta(d: Path, meta: Meta) -> None:
         payload["briefing"] = meta.briefing
     if meta.notify_on_close and meta.notify_on_close != "none":
         payload["notify_on_close"] = meta.notify_on_close
-    if meta.pipeline:
-        payload["pipeline"] = list(meta.pipeline)
+    if meta.pipelines:
+        payload["pipelines"] = {k: list(v) for k, v in meta.pipelines.items()}
+    if meta.launch_pipeline:
+        payload["launch_pipeline"] = meta.launch_pipeline
     if meta.pipeline_steps:
         payload["pipeline_steps"] = dict(meta.pipeline_steps)
-    if meta.operations:
-        payload["operations"] = {k: list(v) for k, v in meta.operations.items()}
     if meta.auto_read:
         payload["auto_read"] = True
     if meta.quorum_timeout_seconds:
@@ -428,47 +436,6 @@ def list_workgroups(home: Path) -> list[Workgroup]:
     return out
 
 
-def _normalize_operations(operations: Any, pipeline: tuple[str, ...]) -> dict[str, tuple[str, ...]]:
-    # Persistence boundary: reject here too, the recipe parser is not the only caller.
-    if not operations:
-        return {}
-    if not isinstance(operations, dict):
-        raise ValueError(f"operations must be a mapping, got {type(operations).__name__}")
-    if operations and not pipeline:
-        raise ValueError("operations require a pipeline: they are post-launch chains")
-    out: dict[str, tuple[str, ...]] = {}
-    claimed: dict[str, str] = {}
-    for name, raw in operations.items():
-        op = str(name).strip().lower()
-        if not _PIPELINE_SLUG_RE.match(op):
-            raise ValueError(f"operation name {name!r} is not a valid slug")
-        if op in out:
-            raise ValueError(f"duplicate operation {op!r}")
-        if not isinstance(raw, (list, tuple)) or not raw:
-            raise ValueError(f"operation {op!r} steps must be a non-empty list")
-        slugs = tuple(str(x).strip().lower() for x in raw)
-        for slug in slugs:
-            if not _PIPELINE_SLUG_RE.match(slug):
-                raise ValueError(f"operation {op!r} step {slug!r} is not a valid slug")
-        if len(set(slugs)) != len(slugs):
-            raise ValueError(f"operation {op!r} has duplicate steps")
-        if slugs[0] != op:
-            raise ValueError(f"operation {op!r} must start with a step named {op!r}")
-        for slug in slugs:
-            if slug in pipeline:
-                raise ValueError(
-                    f"operation {op!r} step {slug!r} is also a pipeline phase; chains must be disjoint"
-                )
-            if slug in claimed:
-                raise ValueError(
-                    f"step {slug!r} belongs to operations {claimed[slug]!r} and {op!r}; "
-                    "chains must be disjoint"
-                )
-            claimed[slug] = op
-        out[op] = slugs
-    return out
-
-
 def create(
     home: Path,
     *,
@@ -478,9 +445,9 @@ def create(
     budget: dict[str, Any] | None = None,
     briefing: str = "",
     notify_on_close: str = "none",
-    pipeline: tuple[str, ...] | list[str] = (),
+    pipelines: dict | None = None,
+    launch_pipeline: str | None = None,
     pipeline_steps: Any = None,
-    operations: dict | None = None,
     quorum_timeout_seconds: int = 0,
     launch: dict | None = None,
     hub_bio: str = "",
@@ -491,24 +458,9 @@ def create(
     if not name:
         raise ValueError("workgroup name required")
     budget = _validate_budget(budget or {})
-    norm_pipeline = _normalize_pipeline(pipeline)
-    norm_ops = _normalize_operations(operations, norm_pipeline)
-    norm_steps = validate_pipeline_steps(
-        norm_pipeline, pipeline_steps,
-        extra_phases=tuple(s for slugs in norm_ops.values() for s in slugs),
-    )
-    for op, slugs in norm_ops.items():
-        missing = [s for s in slugs if s not in norm_steps]
-        if missing:
-            raise ValueError(f"operation {op!r} steps have no pipeline_steps entry: {missing}")
-        for i, slug in enumerate(slugs):
-            declared = str((norm_steps.get(slug) or {}).get("next") or "")
-            successor = slugs[i + 1] if i + 1 < len(slugs) else ""
-            if declared and declared != successor:
-                raise ValueError(
-                    f"operation {op!r} step {slug!r} declares next={declared!r} but its "
-                    f"chain orders the successor as {successor or '<none>'!r}"
-                )
+    norm_pipelines = normalize_pipelines(pipelines)
+    norm_launch = normalize_launch_pipeline(norm_pipelines, launch_pipeline)
+    norm_steps = validate_pipeline_steps(norm_pipelines, pipeline_steps)
 
     hub_pk = hub_kp.pubkey_b64()
     roster = [hub_pk]
@@ -540,9 +492,9 @@ def create(
             budget=budget,
             briefing=(briefing or "").strip(),
             notify_on_close=str(notify_on_close or "none"),
-            pipeline=norm_pipeline,
+            pipelines=norm_pipelines,
+            launch_pipeline=norm_launch,
             pipeline_steps=norm_steps,
-            operations=norm_ops,
             quorum_timeout_seconds=_coerce_positive_int(quorum_timeout_seconds),
             launch=dict(launch) if launch else {},
         )
@@ -701,6 +653,8 @@ def _auto_join_local_members(hub_home: Path, wg: "Workgroup") -> None:
         sub.hub_id = hub_id
         sub.hub_pubkey = wg.meta.hub_pubkey
         sub.briefing = wg.meta.briefing
+        # Before the first pull, or an idle pipeline workgroup dispatches turn one under deliberation rules.
+        sub.absorb_pipeline_state(_wire_pipeline_state(wg.meta))
         sub.upsert_key(m.key_version, m.sealed_key)
         if not sub.joined_at:
             sub.joined_at = now
@@ -955,6 +909,8 @@ def _save_ledger(d: Path, ledger: dict[str, Any]) -> None:
 
 
 _PIPELINE_SLUG_RE = _re.compile(r"^[a-z0-9][a-z0-9_-]*$")
+# Closed allowlist: any wider rule would let an operational chain name resolve to an unrelated phase.
+_RECOVERY_SUFFIXES = ("-fix", "-recheck")
 
 
 def _normalize_pipeline(raw: Any) -> tuple[str, ...]:
@@ -981,39 +937,225 @@ def _normalize_pipeline(raw: Any) -> tuple[str, ...]:
     return tuple(out)
 
 
+def normalize_pipelines(raw: Any) -> dict[str, tuple[str, ...]]:
+    """Each key must equal its own first phase and phases are globally disjoint, so a task slug has at most one owning pipeline."""
+    if not raw:
+        return {}
+    if not isinstance(raw, dict):
+        raise ValueError(
+            f"pipelines must be a mapping of name → phase list, got {type(raw).__name__}"
+        )
+    out: dict[str, tuple[str, ...]] = {}
+    claimed: dict[str, str] = {}
+    for name, chain in raw.items():
+        key = str(name).strip().lower()
+        if not _PIPELINE_SLUG_RE.match(key):
+            raise ValueError(f"pipeline name {name!r} is not a valid slug")
+        if key in out:
+            raise ValueError(f"duplicate pipeline {key!r}")
+        slugs = _normalize_pipeline(chain)
+        if not slugs:
+            raise ValueError(f"pipeline {key!r} must declare a non-empty phase list")
+        if slugs[0] != key:
+            raise ValueError(
+                f"pipeline {key!r} must be keyed by its first phase so `#task #{key}` "
+                f"opens it; got {slugs[0]!r}"
+            )
+        for slug in slugs:
+            if slug in claimed:
+                raise ValueError(
+                    f"phase {slug!r} belongs to pipelines {claimed[slug]!r} and {key!r}; "
+                    "chains must be disjoint"
+                )
+            claimed[slug] = key
+        out[key] = slugs
+    return out
+
+
+def normalize_launch_pipeline(
+    pipelines: dict[str, tuple[str, ...]], raw: Any,
+) -> str | None:
+    key = str(raw or "").strip().lower()
+    if not key:
+        return None
+    if not pipelines:
+        raise ValueError(f"launch pipeline {key!r} declared without any pipelines")
+    if key not in pipelines:
+        raise ValueError(
+            f"launch pipeline {key!r} is not one of {sorted(pipelines)}"
+        )
+    return key
+
+
+RETIRED_PIPELINE_KEYS = ("pipeline", "operations")
+
+
+def reject_retired_keys(raw: Any, where: str) -> None:
+    """The split `pipeline` + `operations` shape is gone; a file still carrying it must not load."""
+    if not isinstance(raw, dict):
+        return
+    present = [k for k in RETIRED_PIPELINE_KEYS if raw.get(k)]
+    if present:
+        raise ValueError(
+            f"{where} declares retired {'/'.join(present)}; declare `pipelines` "
+            "(a map of named chains) plus `launch_pipeline` instead"
+        )
+
+
+def pipelines_from_raw(raw: Any) -> tuple[dict[str, tuple[str, ...]], str | None]:
+    """Junk degrades to no pipelines; the retired shape raises so the caller can refuse the file."""
+    if not isinstance(raw, dict):
+        return {}, None
+    reject_retired_keys(raw, "this workgroup")
+    try:
+        pipelines = normalize_pipelines(raw.get("pipelines"))
+        return pipelines, normalize_launch_pipeline(
+            pipelines, raw.get("launch_pipeline"),
+        )
+    except ValueError:
+        return {}, None
+
+
+def is_pipeline_workgroup(meta: Any) -> bool:
+    return bool(getattr(meta, "pipelines", None))
+
+
+def pipeline_for_phase(
+    meta: Any, phase: str,
+) -> tuple[str, tuple[str, ...]] | None:
+    for key, chain in (getattr(meta, "pipelines", None) or {}).items():
+        if phase in chain:
+            return key, tuple(chain)
+    return None
+
+
+def canonical_pipeline_phase(meta: Any, slug: str) -> tuple[str, str] | None:
+    """Exact membership wins, then one allowlisted suffix is stripped: no open `<phase>-*` match, so a declared `content-update` is never swallowed by `content`."""
+    slug = str(slug or "").strip().lower()
+    if not slug:
+        return None
+    exact = pipeline_for_phase(meta, slug)
+    if exact is not None:
+        return exact[0], slug
+    for suffix in _RECOVERY_SUFFIXES:
+        if not slug.endswith(suffix):
+            continue
+        base = slug[: -len(suffix)]
+        owner = pipeline_for_phase(meta, base) if base else None
+        if owner is not None:
+            return owner[0], base
+    return None
+
+
+def pipeline_successor(meta: Any, phase: str) -> str:
+    """The one direct successor of an exact declared phase; "" when terminal or unknown."""
+    owner = pipeline_for_phase(meta, phase)
+    if owner is None:
+        return ""
+    chain = owner[1]
+    idx = chain.index(phase)
+    return chain[idx + 1] if idx + 1 < len(chain) else ""
+
+
+def safe_phase_map(meta: Any) -> dict[str, dict[str, str]]:
+    """Owner, declared task and turn budget only — gate argv/cwd, gate output and provenance never leave the hub."""
+    out: dict[str, dict[str, str]] = {}
+    for phase, raw in (getattr(meta, "pipeline_steps", None) or {}).items():
+        if not isinstance(raw, dict):
+            continue
+        owner = str(raw.get("owner") or "").strip()
+        if not owner:
+            continue
+        entry: dict[str, Any] = {"owner": owner}
+        task = str(raw.get("task") or "").strip()
+        if task:
+            entry["task"] = task
+        try:
+            budget = int(raw.get("turn_budget_s") or 0)
+        except (TypeError, ValueError):
+            budget = 0
+        if budget > 0:
+            entry["turn_budget_s"] = budget
+        out[str(phase)] = entry
+    return out
+
+
+def _wire_pipeline_state(meta: Any) -> dict[str, Any]:
+    """What a member is allowed to learn: chains, selector, mode and safe owners/tasks — never gates."""
+    return {
+        "pipelines": {k: list(v) for k, v in (meta.pipelines or {}).items()},
+        "launch_pipeline": meta.launch_pipeline,
+        "pipeline_mode": is_pipeline_workgroup(meta),
+        "phase_map": safe_phase_map(meta),
+    }
+
+
+def dormant_pipelines(meta: Any) -> dict[str, tuple[str, ...]]:
+    """Every declared chain except the selected launch one: read-only, trigger-only."""
+    launch = getattr(meta, "launch_pipeline", None)
+    return {
+        k: tuple(v)
+        for k, v in (getattr(meta, "pipelines", None) or {}).items()
+        if k != launch
+    }
+
+
+def _steps_without_next(raw: Any) -> dict[str, dict]:
+    if not isinstance(raw, dict):
+        return {}
+    return {
+        str(phase): {k: v for k, v in spec.items() if k != "next"}
+        for phase, spec in raw.items()
+        if isinstance(spec, dict)
+    }
+
+
 def validate_pipeline_steps(
-    pipeline: tuple[str, ...], pipeline_steps: Any,
-    extra_phases: tuple[str, ...] = (),
+    pipelines: dict[str, tuple[str, ...]] | None, pipeline_steps: Any,
 ) -> dict[str, dict]:
     if not pipeline_steps:
         return {}
     if not isinstance(pipeline_steps, dict):
         raise ValueError(f"pipeline_steps must be a mapping, got {type(pipeline_steps).__name__}")
-    phases = set(pipeline) | set(extra_phases)
+    pipelines = pipelines or {}
+    phases = {slug for chain in pipelines.values() for slug in chain}
     out: dict[str, dict] = {}
     for phase, raw in pipeline_steps.items():
         phase = str(phase).strip().lower()
         if not _PIPELINE_SLUG_RE.match(phase):
             raise ValueError(f"pipeline_steps key {phase!r} is not a valid phase slug")
-        if pipeline and phase not in phases:
+        if pipelines and phase not in phases:
             raise ValueError(
-                f"pipeline_steps key {phase!r} is in neither the pipeline {list(pipeline)} "
-                f"nor any operation"
+                f"pipeline_steps key {phase!r} belongs to no declared pipeline "
+                f"{sorted(pipelines)}"
             )
         if not isinstance(raw, dict):
             raise ValueError(f"pipeline_steps[{phase!r}] must be a mapping")
         owner = str(raw.get("owner") or "").strip()
         if not owner:
             raise ValueError(f"pipeline_steps[{phase!r}] missing 'owner'")
+        if raw.get("next") is not None:
+            owning = next((k for k, c in pipelines.items() if phase in c), "")
+            source = f"pipelines[{owning!r}]" if owning else "the pipeline order"
+            raise ValueError(
+                f"pipeline_steps[{phase!r}].next is derived from {source}; remove next"
+            )
         step: dict[str, Any] = {"owner": owner}
-        nxt = raw.get("next")
-        if nxt is not None:
-            nxt = str(nxt).strip().lower()
-            if pipeline and nxt not in phases:
-                raise ValueError(f"pipeline_steps[{phase!r}].next {nxt!r} is not in the pipeline")
-            step["next"] = nxt
         if raw.get("task"):
             step["task"] = str(raw["task"])
+        budget = raw.get("turn_budget_s")
+        if budget is not None:
+            try:
+                budget = int(budget)
+            except (TypeError, ValueError):
+                raise ValueError(
+                    f"pipeline_steps[{phase!r}].turn_budget_s must be an integer"
+                )
+            if not 60 <= budget <= 3600:
+                raise ValueError(
+                    f"pipeline_steps[{phase!r}].turn_budget_s must be 60..3600 seconds"
+                )
+            step["turn_budget_s"] = budget
         gate = raw.get("gate")
         if gate is not None:
             if not isinstance(gate, dict):
@@ -1098,7 +1240,7 @@ def register(server: alp_server.Server, home: Path) -> None:
             "workgroup_id": wg.meta.id,
             "name": wg.meta.name,
             "briefing": wg.meta.briefing,
-            "pipeline": list(wg.meta.pipeline),
+            **_wire_pipeline_state(wg.meta),
             "paused": wg.meta.paused,
             "sealed_key": member.sealed_key,
             "key_version": member.key_version,
@@ -1279,7 +1421,7 @@ def register(server: alp_server.Server, home: Path) -> None:
             "posts": fresh,
             "head": all_posts[-1]["seq"] if all_posts else 0,
             "current_key_version": wg.meta.current_key_version,
-            "pipeline": list(wg.meta.pipeline),
+            **_wire_pipeline_state(wg.meta),
             "paused": wg.meta.paused,
             "sealed_key": member.sealed_key,
             "members": [

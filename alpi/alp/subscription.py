@@ -21,6 +21,7 @@ transcript history past a rotation stays decryptable.
 
 from __future__ import annotations
 
+import logging as _logging
 import os
 import threading
 from dataclasses import dataclass, field, asdict
@@ -37,6 +38,10 @@ from alpi.alp import workgroup as wg_mod
 _SECRETS_DIR = "alp/secrets"
 _FILENAME = "subscriptions.yaml"
 
+_log = _logging.getLogger("alpi.alp.subscription")
+# Warn-once: load() runs every poller tick, and the next save() drops the entry permanently.
+_warned_skipped: set[str] = set()
+
 
 @dataclass
 class SealedKey:
@@ -48,11 +53,29 @@ RECENT_POSTS_CACHE = 20  # last N posts cached locally for engine context
 DISPATCH_COOLDOWN_SECONDS = 60  # min gap between auto-dispatches per workgroup
 
 
-def coerce_pipeline(value: Any) -> tuple[str, ...]:
-    """Normalise a pipeline value from disk or the wire to a tuple of phase
-    slugs. Anything that isn't a list/tuple — legacy ``True``, ``None``,
-    garbage — degrades to ``()`` instead of raising (no crash on old data)."""
-    return tuple(value) if isinstance(value, (list, tuple)) else ()
+def coerce_phase_map(value: Any) -> dict[str, dict[str, Any]]:
+    """Owner/task/turn budget only — a hub that ever sends more (gate argv, cwd) gets it dropped here."""
+    if not isinstance(value, dict):
+        return {}
+    out: dict[str, dict[str, Any]] = {}
+    for phase, spec in value.items():
+        if not isinstance(spec, dict):
+            continue
+        owner = str(spec.get("owner") or "").strip()
+        if not owner:
+            continue
+        entry: dict[str, Any] = {"owner": owner}
+        task = str(spec.get("task") or "").strip()
+        if task:
+            entry["task"] = task
+        try:
+            budget = int(spec.get("turn_budget_s") or 0)
+        except (TypeError, ValueError):
+            budget = 0
+        if budget > 0:
+            entry["turn_budget_s"] = budget
+        out[str(phase)] = entry
+    return out
 
 
 @dataclass
@@ -67,8 +90,13 @@ class Subscription:
     joined_at: str = ""
     # Hub-side anchor cached locally so the engine pre-turn hook gives the member's agent the same briefing the hub's agent sees. Refreshed on every successful ``workgroup.join``.
     briefing: str = ""
-    # Mirror of hub's `meta.pipeline` (join/pull); non-empty → member uses the longer production turn budget.
-    pipeline: tuple[str, ...] = ()
+    # Mirror of the hub's named chains (join/pull) — definitions only, never gate commands.
+    pipelines: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    launch_pipeline: str | None = None
+    # Explicit so member behavior never depends on a launch pipeline existing; `pipeline_mode` → longer production turn budget.
+    pipeline_mode: bool = False
+    # Safe projection of the hub's phase specs: owner + declared task only.
+    phase_map: dict[str, dict[str, str]] = field(default_factory=dict)
     # Mirror of hub's `meta.paused` (join/pull); True → the member poller skips dispatch (no wasted turns on a paused wg).
     paused: bool = False
     # Decoupled from ``last_seq`` so a tick that pulls a new post but skips on cooldown doesn't lose the trigger — next tick re-evaluates against the cache.
@@ -78,6 +106,21 @@ class Subscription:
     roster_voices: dict[str, str] = field(default_factory=dict)
     last_dispatch_at: str = ""
     recent_posts: list[dict] = field(default_factory=list)
+
+    @property
+    def launch_chain(self) -> tuple[str, ...]:
+        return self.pipelines.get(self.launch_pipeline or "", ())
+
+    def absorb_pipeline_state(self, raw: dict[str, Any]) -> None:
+        try:
+            pipelines, launch = wg_mod.pipelines_from_raw(raw)
+        except ValueError:
+            pipelines, launch = {}, None
+        self.pipelines = pipelines
+        self.launch_pipeline = launch
+        mode = raw.get("pipeline_mode")
+        self.pipeline_mode = bool(mode) if mode is not None else bool(pipelines)
+        self.phase_map = coerce_phase_map(raw.get("phase_map"))
 
     def latest_version(self) -> int:
         if not self.sealed_keys:
@@ -155,6 +198,16 @@ def load(home: Path) -> list[Subscription]:
         if not isinstance(entry, dict):
             continue
         try:
+            pipelines, launch = wg_mod.pipelines_from_raw(entry)
+        except ValueError as e:
+            wg_id = str(entry.get("wg_id") or "?")
+            key = f"{home}:{wg_id}"
+            if key not in _warned_skipped:
+                _warned_skipped.add(key)
+                _log.warning("subscription %s skipped (dropped on next save): %s", wg_id, e)
+            continue
+        declared_mode = entry.get("pipeline_mode")
+        try:
             sub = Subscription(
                 wg_id=str(entry["wg_id"]),
                 name=str(entry.get("name") or ""),
@@ -164,7 +217,13 @@ def load(home: Path) -> list[Subscription]:
                 joined_at=str(entry.get("joined_at") or ""),
                 last_dispatch_at=str(entry.get("last_dispatch_at") or ""),
                 briefing=str(entry.get("briefing") or ""),
-                pipeline=coerce_pipeline(entry.get("pipeline")),
+                pipelines=pipelines,
+                launch_pipeline=launch,
+                pipeline_mode=(
+                    bool(declared_mode) if declared_mode is not None
+                    else bool(pipelines)
+                ),
+                phase_map=coerce_phase_map(entry.get("phase_map")),
                 paused=bool(entry.get("paused", False)),
                 last_responded_seq=int(entry.get("last_responded_seq", 0)),
                 roster=dict(entry.get("roster") or {}),
@@ -212,8 +271,14 @@ def save(home: Path, subs: list[Subscription]) -> None:
             entry["last_dispatch_at"] = s.last_dispatch_at
         if s.briefing:
             entry["briefing"] = s.briefing
-        if s.pipeline:
-            entry["pipeline"] = list(s.pipeline)
+        if s.pipelines:
+            entry["pipelines"] = {k: list(v) for k, v in s.pipelines.items()}
+        if s.launch_pipeline:
+            entry["launch_pipeline"] = s.launch_pipeline
+        if s.pipeline_mode:
+            entry["pipeline_mode"] = True
+        if s.phase_map:
+            entry["phase_map"] = s.phase_map
         if s.paused:
             entry["paused"] = True
         if s.last_responded_seq:

@@ -9,6 +9,7 @@ import {
   SkipIcon,
   Tag,
   Tip,
+  XIcon,
 } from "./index.js";
 import { Popover } from "./index.js";
 import styles from "./TasksButton.module.css";
@@ -41,7 +42,56 @@ function readMarker(body) {
   return null;
 }
 
-// Only the hub opens (`#task`) and closes (`#done`) tasks. A member's `#skip`/`#working` are round signals that never touch task lifecycle. "skip" status here means preempted: the hub opened a new `#task` before closing this one with `#done` (alpi/alp/tasks.py fold_tasks).
+// `fold_task_state` returns `closed[-20:]`, so a full window means there is older history.
+export const FOLD_CLOSED_CAP = 20;
+
+const SKIPPED_CLOSE_RE = /^skipped\s*·\s*\S/i;
+
+// Outcome vocabulary matches the daemon fold: `#done skipped · <reason>` is skipped, `#done BLOCKED · …` is blocked, neither is done.
+export function closeStatus(result) {
+  const text = (result ?? "").trim();
+  if (/^blocked\b/i.test(text)) return "blocked";
+  if (SKIPPED_CLOSE_RE.test(text)) return "skipped";
+  if (/^preempted\b/i.test(text)) return "preempted";
+  return "done";
+}
+
+// Reads the outcome off the `#done` line alone — prose above a close must never decide its colour.
+export function doneOutcome(body) {
+  for (const line of String(body || "").split("\n")) {
+    const m = DONE_LINE_RE.exec(line);
+    if (m) return closeStatus(m[1]);
+  }
+  return "done";
+}
+
+const CLOSED = ["done", "skipped", "blocked", "preempted"];
+
+// Rows straight from `host.workgroup.tasks`: the daemon's `blocked` flag outranks the close text.
+export function tasksFromFold(state) {
+  if (!state || typeof state !== "object") return null;
+  const rows = (Array.isArray(state.closed) ? state.closed : [])
+    .slice()
+    .sort((a, b) => (a.closed_seq ?? 0) - (b.closed_seq ?? 0))
+    .map((row) => ({
+      seq: row.closed_seq ?? null,
+      slug: row.slug ?? "",
+      title: "",
+      status: row.blocked ? "blocked" : closeStatus(row.result),
+      result: row.result ?? "",
+    }));
+  if (state.active) {
+    rows.push({
+      seq: state.active.opened_seq ?? null,
+      slug: state.active.slug ?? "",
+      title: state.active.title ?? "",
+      status: "working",
+    });
+  }
+  return rows;
+}
+
+// Only the hub opens (`#task`) and closes (`#done`) tasks. A member's `#skip`/`#working` are round signals that never touch task lifecycle. "preempted" means the hub opened a new `#task` before closing this one (alpi/alp/tasks.py fold_tasks).
 export function deriveTasks(thread = [], hubPubkey = null) {
   const tasks = [];
   let active = null;
@@ -49,7 +99,7 @@ export function deriveTasks(thread = [], hubPubkey = null) {
     const mk = readMarker(msg.body);
     const fromHub = !hubPubkey || msg.from_pubkey === hubPubkey;
     if (mk?.kind === "task" && fromHub) {
-      if (active) active.status = "skip";
+      if (active) active.status = "preempted";
       active = {
         seq: msg.seq,
         slug: mk.slug,
@@ -62,7 +112,8 @@ export function deriveTasks(thread = [], hubPubkey = null) {
     }
     if (!active) continue;
     if (mk?.kind === "done" && fromHub) {
-      active.status = "done";
+      active.result = mk.text ?? "";
+      active.status = closeStatus(active.result);
       active = null;
       continue;
     }
@@ -73,9 +124,43 @@ export function deriveTasks(thread = [], hubPubkey = null) {
 
 const STATE_LABEL = {
   done: "done",
-  skip: "skipped",
+  skipped: "skipped",
+  blocked: "blocked",
+  preempted: "preempted",
   working: "working",
 };
+
+function summarize(tasks) {
+  const closed = tasks.filter((t) => CLOSED.includes(t.status));
+  const active = tasks.find((t) => !CLOSED.includes(t.status)) ?? null;
+  const last = closed[closed.length - 1] ?? null;
+  const stillBlocked = last?.status === "blocked" ? last : null;
+  const allGreen = closed.every((t) => t.status === "done");
+  const outcome = tasks.length === 0 || active
+    ? null
+    : stillBlocked
+      ? "blocked"
+      : allGreen
+        ? "done"
+        : "closed";
+  return {
+    total: tasks.length,
+    closedCount: closed.length,
+    blockedCount: stillBlocked ? 1 : 0,
+    lastBlocked: stillBlocked,
+    allGreen,
+    active,
+    outcome,
+  };
+}
+
+const RESOLVED_LABEL = { done: "All tasks resolved", closed: "All tasks closed" };
+const RESOLVED_TIP = {
+  blocked: "A task closed blocked · click for history",
+  done: "All tasks resolved · click for history",
+  closed: "All tasks closed · click for history",
+};
+const GLYPH_STATUS = { blocked: "blocked", done: "done", closed: "skipped" };
 
 function StatusGlyph({ status, color }) {
   if (status === "done") {
@@ -83,9 +168,16 @@ function StatusGlyph({ status, color }) {
       <CheckIcon style={{ width: 14, height: 14, strokeWidth: 2.2, color }} />
     );
   }
-  if (status === "skip") {
+  if (status === "blocked") {
     return (
       <SkipIcon
+        style={{ width: 13, height: 13, strokeWidth: 2, color: "var(--c-danger)" }}
+      />
+    );
+  }
+  if (status === "skipped" || status === "preempted") {
+    return (
+      <XIcon
         style={{ width: 13, height: 13, strokeWidth: 2, color: "var(--c-warning)" }}
       />
     );
@@ -93,7 +185,15 @@ function StatusGlyph({ status, color }) {
   return <Dot pulse color={color} />;
 }
 
-export default function TasksButton({ thread = [], hubColor, hubPubkey = null, openTick = 0, onJump }) {
+export default function TasksButton({
+  thread = [],
+  tasks: folded = null,
+  hubColor,
+  hubPubkey = null,
+  openTick = 0,
+  onJump,
+  historyCapped = false,
+}) {
   const [open, setOpen] = useState(false);
   const mountedRef = useRef(false);
 
@@ -105,11 +205,11 @@ export default function TasksButton({ thread = [], hubColor, hubPubkey = null, o
     if (openTick > 0) setOpen(true);
   }, [openTick]);
 
-  const tasks = useMemo(() => deriveTasks(thread, hubPubkey), [thread, hubPubkey]);
-  const total = tasks.length;
-  const closed = tasks.filter((t) => t.status === "done" || t.status === "skip")
-    .length;
-  const active = tasks.find((t) => !["done", "skip"].includes(t.status));
+  // The local derivation only sees the loaded tail, so folded rows win whenever the daemon answered.
+  const derived = useMemo(() => deriveTasks(thread, hubPubkey), [thread, hubPubkey]);
+  const tasks = folded ?? derived;
+  const { total, closedCount, blockedCount, lastBlocked, allGreen, active, outcome } =
+    useMemo(() => summarize(tasks), [tasks]);
   const activeLabel = active ? active.title || active.slug : null;
   const truncated =
     activeLabel && activeLabel.length > 32
@@ -118,14 +218,19 @@ export default function TasksButton({ thread = [], hubColor, hubPubkey = null, o
 
   const triggerLabel = active
     ? truncated
-    : total > 0
-      ? "All tasks resolved"
-      : "No tasks yet";
+    : outcome === "blocked"
+      ? `Blocked at #${lastBlocked.slug}`
+      : RESOLVED_LABEL[outcome] ?? "No tasks yet";
   const tipText = active
     ? "Active #task · click for history"
-    : total > 0
-      ? "All tasks resolved · click for history"
-      : "Direct @hub to open a #task";
+    : RESOLVED_TIP[outcome] ?? "Direct @hub to open a #task";
+  const countLabel = blockedCount > 0
+    ? `${closedCount}/${total} closed · ${blockedCount} blocked`
+    : allGreen
+      ? `${closedCount}/${total} done`
+      : `${closedCount}/${total} closed`;
+  // The fold ships only the last 20 closes; never present a capped window as the whole history.
+  const historyLabel = historyCapped ? `${countLabel} · recent history` : countLabel;
   const headEyebrow = active
     ? "Active task"
     : total > 0
@@ -142,9 +247,10 @@ export default function TasksButton({ thread = [], hubColor, hubPubkey = null, o
         <Btn variant="ghost" onClick={() => setOpen((o) => !o)} className={styles.trigger}>
           {active ? (
             <Dot pulse color={hubColor} />
-          ) : total > 0 ? (
-            <CheckIcon
-              style={{ width: 13, height: 13, strokeWidth: 2.2, color: hubColor || "var(--c-success)" }}
+          ) : outcome ? (
+            <StatusGlyph
+              status={GLYPH_STATUS[outcome]}
+              color={hubColor || "var(--c-success)"}
             />
           ) : (
             <span className={styles.openRing} aria-hidden />
@@ -152,7 +258,7 @@ export default function TasksButton({ thread = [], hubColor, hubPubkey = null, o
           <span className={styles.triggerLabel}>{triggerLabel}</span>
           {total > 0 && (
             <Mono className={`tnum ${styles.triggerCount}`}>
-              {closed}/{total}
+              {closedCount}/{total}
             </Mono>
           )}
           <ChevDownIcon className={styles.chev} />
@@ -163,11 +269,7 @@ export default function TasksButton({ thread = [], hubColor, hubPubkey = null, o
         <div className={styles.head}>
           <div className={styles.headTitle}>
             <Eyebrow>{headEyebrow}</Eyebrow>
-            {total > 0 && (
-              <Tag>
-                {closed}/{total} done
-              </Tag>
-            )}
+            {total > 0 && <Tag>{historyLabel}</Tag>}
           </div>
           <p className={styles.headHelp}>{headHelp}</p>
         </div>
@@ -190,10 +292,14 @@ export default function TasksButton({ thread = [], hubColor, hubPubkey = null, o
                 <div className={styles.title}>{t.title || t.slug}</div>
                 <div className={styles.meta}>
                   <Mono>#{t.slug}</Mono>
-                  <span className={styles.metaSep}>·</span>
-                  <Mono className="tnum">
-                    {t.contributions} msg{t.contributions === 1 ? "" : "s"}
-                  </Mono>
+                  {t.contributions != null && (
+                    <>
+                      <span className={styles.metaSep}>·</span>
+                      <Mono className="tnum">
+                        {t.contributions} msg{t.contributions === 1 ? "" : "s"}
+                      </Mono>
+                    </>
+                  )}
                   <span className={styles.metaSep}>·</span>
                   <span>{STATE_LABEL[t.status] || t.status}</span>
                 </div>

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -52,10 +52,23 @@ describe("CreateWorkgroupModal", () => {
         memberPeerIds: ["peer-1"],
         budgetUsd: null,
         briefing: null,
-        pipeline: null,
         connectionId: "casa",
       });
     });
+  });
+
+  it("offers no pipeline field on the manual path", () => {
+    invoke.mockImplementation(async () => null);
+    render(
+      <CreateWorkgroupModal
+        open
+        profiles={[{ name: "mira", counts: { peers: 1 } }]}
+        connectionId="casa"
+      />,
+    );
+
+    expect(screen.queryByText(/pipeline/i)).toBeNull();
+    expect(screen.queryByPlaceholderText("intake, content, build, qa")).toBeNull();
   });
 
   const HOTEL_RECIPE = {
@@ -100,7 +113,7 @@ describe("CreateWorkgroupModal", () => {
 
     const slug = await screen.findByPlaceholderText("^[a-z-]+$");
     fireEvent.change(slug, { target: { value: "casa-bahia" } });
-    expect(screen.getByText("HUB — FROM RECIPE")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Import recipe…" })).toBeNull();
     expect(screen.getByDisplayValue("Hotel draft briefing")).toBeTruthy();
 
     expect(screen.getByRole("button", { name: "Launch" }).disabled).toBe(true);
@@ -203,7 +216,7 @@ describe("CreateWorkgroupModal", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Import recipe…" }));
-    await screen.findByText("HUB — FROM RECIPE");
+    await screen.findByRole("button", { name: "Launch" });
 
     rerender(
       <CreateWorkgroupModal
@@ -213,7 +226,7 @@ describe("CreateWorkgroupModal", () => {
       />,
     );
 
-    expect(screen.getByText("HUB — FROM RECIPE")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Launch" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Import recipe…" })).toBeNull();
   });
 
@@ -248,6 +261,150 @@ describe("CreateWorkgroupModal", () => {
     });
   });
 
+  it("a recipe preview lists every pipeline in declared order and marks the launch one", async () => {
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "workgroup_pick_recipe") {
+        return {
+          yaml: "hub: mira\nname: n\n",
+          recipe_id: "hotel",
+          meta: {
+            id: "hotel",
+            hub: "mira",
+            name: "n",
+            params: {},
+            inputs: {},
+            pipelines: { setup: ["setup", "enrich"], "media-update": ["media-update", "media-qa"] },
+            launch_pipeline: "setup",
+            pipeline_mode: true,
+          },
+        };
+      }
+      return null;
+    });
+    render(
+      <CreateWorkgroupModal
+        open
+        profiles={[{ name: "mira", counts: { peers: 1 } }]}
+        connectionId="casa"
+      />,
+    );
+
+    expect(document.querySelector(".anim-dialog").style.width).toBe("var(--modal-md)");
+
+    fireEvent.click(screen.getByRole("button", { name: "Import recipe…" }));
+    await screen.findByText("PIPELINES");
+    expect(document.querySelector(".anim-dialog").style.width).toBe("var(--modal-lg)");
+
+    const phases = screen.getAllByText(/^#[a-z0-9-]+$/).map((el) => el.textContent);
+    expect(phases).toEqual(["#setup", "#enrich", "#media-update", "#media-qa"]);
+    expect(screen.getAllByText("2 phases")).toHaveLength(2);
+    expect(screen.getAllByText("launch")).toHaveLength(1);
+    expect(
+      within(screen.getByText("setup").parentElement).getByText("launch"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("media-update")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Launch" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /hotel/ }));
+    expect(screen.getByRole("button", { name: "Import recipe…" })).toBeInTheDocument();
+    expect(screen.queryByText("PIPELINES")).toBeNull();
+    expect(document.querySelector(".anim-dialog").style.width).toBe("var(--modal-md)");
+  });
+
+  it("a launchless recipe previews as idle and creates instead of launching", async () => {
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "workgroup_pick_recipe") {
+        return {
+          yaml: "hub: mira\nname: n\n",
+          recipe_id: "idle",
+          meta: {
+            id: "idle",
+            hub: "mira",
+            name: "n",
+            params: {},
+            inputs: {},
+            pipelines: { "media-update": ["media-update", "media-qa"] },
+            launch_pipeline: null,
+            pipeline_mode: true,
+          },
+        };
+      }
+      if (cmd === "workgroup_launch_recipe") return { workgroup_id: "wg-idle" };
+      return null;
+    });
+    const onCreated = vi.fn();
+    render(
+      <CreateWorkgroupModal
+        open
+        profiles={[{ name: "mira", counts: { peers: 1 } }]}
+        connectionId="casa"
+        onCreated={onCreated}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Import recipe…" }));
+    await screen.findByText("PIPELINES");
+    expect(
+      screen.getByText("No launch pipeline · created idle, every chain awaits a trigger"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("#media-update")).toBeInTheDocument();
+    expect(screen.getByText("#media-qa")).toBeInTheDocument();
+    expect(screen.queryByText("launch")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Launch" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Create idle workgroup" }));
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith("wg-idle", "mira"));
+    expect(notifyMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining("Created idle from recipe idle"),
+      }),
+    );
+  });
+
+  it("a recipe with no pipelines launches and never claims to be idle", async () => {
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "workgroup_pick_recipe") {
+        return {
+          yaml: "hub: mira\nname: n\n",
+          recipe_id: "chat",
+          meta: {
+            id: "chat",
+            hub: "mira",
+            name: "n",
+            params: {},
+            inputs: {},
+            pipelines: {},
+            launch_pipeline: null,
+            task: "@scout discuss the plan",
+          },
+        };
+      }
+      if (cmd === "workgroup_launch_recipe") return { workgroup_id: "wg-chat" };
+      return null;
+    });
+    const onCreated = vi.fn();
+    render(
+      <CreateWorkgroupModal
+        open
+        profiles={[{ name: "mira", counts: { peers: 1 } }]}
+        connectionId="casa"
+        onCreated={onCreated}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Import recipe…" }));
+    await screen.findByRole("button", { name: "Launch" });
+    expect(screen.queryByText("PIPELINES")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Launch" }));
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith("wg-chat", "mira"));
+    expect(notifyMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining("Launched from recipe chat"),
+      }),
+    );
+  });
+
   it("an optional recipe input left empty does not block Launch and is omitted", async () => {
     invoke.mockImplementation(async (cmd) => {
       if (cmd === "workgroup_pick_recipe") {
@@ -276,7 +433,7 @@ describe("CreateWorkgroupModal", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Import recipe…" }));
-    await screen.findByText("HUB — FROM RECIPE");
+    await screen.findByRole("button", { name: "Launch" });
     expect(screen.getByRole("button", { name: "Launch" }).disabled).toBe(false);
 
     fireEvent.click(screen.getByRole("button", { name: "Launch" }));

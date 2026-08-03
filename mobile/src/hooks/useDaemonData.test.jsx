@@ -300,6 +300,71 @@ describe('seedCache + useSessionsList skipWhen', () => {
   });
 });
 
+describe("useWorkgroupTasks", () => {
+  const RUN = {
+    active: { slug: "media-build", title: "rebuild", opened_seq: 43 },
+    closed: [{ slug: "media-config", result: "skipped · no config change", closed_seq: 42, blocked: false }],
+    blocked: null,
+    pipeline_run: {
+      pipeline: "media-update",
+      status: "running",
+      started_seq: 37,
+      current_phase: "media-build",
+      phases: [
+        { slug: "media-update", state: "completed", seq: 40 },
+        { slug: "media-config", state: "skipped", seq: 42 },
+        { slug: "media-build", state: "current", seq: 43 },
+        { slug: "media-qa", state: "pending", seq: null },
+      ],
+    },
+  };
+
+  function wrapperFor(call, endpoint = { id: "ep1" }) {
+    return ({ children }) => (
+      <EndpointContext.Provider value={{ endpoint, call }}>{children}</EndpointContext.Provider>
+    );
+  }
+
+  it("asks the daemon for the canonical fold", async () => {
+    const { useWorkgroupTasks } = await import("./useDaemonData");
+    const call = vi.fn(async () => RUN);
+    const { result } = renderHook(() => useWorkgroupTasks("mira", "wg1"), { wrapper: wrapperFor(call) });
+    await waitFor(() => expect(result.current.data?.pipeline_run?.pipeline).toBe("media-update"));
+    expect(call).toHaveBeenCalledWith("host.workgroup.tasks", { profile: "mira", wg_id: "wg1" });
+    expect(result.current.data.pipeline_run.phases[1].state).toBe("skipped");
+  });
+
+  it("issues no RPC without a profile or a workgroup", async () => {
+    const { useWorkgroupTasks } = await import("./useDaemonData");
+    const call = vi.fn(async () => RUN);
+    renderHook(() => useWorkgroupTasks(null, "wg1"), { wrapper: wrapperFor(call) });
+    renderHook(() => useWorkgroupTasks("mira", null), { wrapper: wrapperFor(call) });
+    await Promise.resolve();
+    expect(call).not.toHaveBeenCalled();
+  });
+
+  it("refresh re-folds so an ad-hoc task drops the prior run", async () => {
+    const { useWorkgroupTasks } = await import("./useDaemonData");
+    const call = vi.fn()
+      .mockResolvedValueOnce(RUN)
+      .mockResolvedValueOnce({
+        active: { slug: "hotfix", title: "patch", opened_seq: 60 },
+        closed: [],
+        blocked: null,
+        pipeline_run: null,
+      });
+    const { result } = renderHook(() => useWorkgroupTasks("mira", "wg1"), { wrapper: wrapperFor(call) });
+    await waitFor(() => expect(result.current.data?.pipeline_run).toBeTruthy());
+
+    await act(async () => {
+      await result.current.refresh();
+    });
+
+    expect(result.current.data.pipeline_run).toBe(null);
+    expect(result.current.data.active.slug).toBe("hotfix");
+  });
+});
+
 describe("useProfileMemory", () => {
   it("exposes per-file usage alongside the raw text", async () => {
     const call = vi.fn(async (method) => {

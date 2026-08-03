@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { radii, space , fontSizes} from '../../src/theme/tokens';
 
@@ -16,12 +16,13 @@ import { ChatSkeleton } from '../../src/features/chat/ChatSkeleton';
 import { Composer } from '../../src/features/chat/Composer';
 import { MarkerCard } from '../../src/features/chat/MarkerCard';
 import { MessageActionsSheet } from '../../src/features/chat/MessageActionsSheet';
-import { buildTasks, classifyMessage, findBlocked, pipelineState } from '../../src/features/chat/parseMarkers';
-import { Icon } from '../../src/components/Icon';
+import { buildTasks, classifyMessage } from '../../src/features/chat/parseMarkers';
+import { PipelineLauncher, PipelineStrip } from '../../src/features/chat/PipelineStrip';
 import { TasksSheet } from '../../src/features/sheets/TasksSheet';
 import {
   useProfileSummaries,
   useWorkgroupMembers,
+  useWorkgroupTasks,
   useWorkgroupTranscript,
   useWorkgroups,
 } from '../../src/hooks/useDaemonData';
@@ -31,6 +32,7 @@ import { useEndpoint } from '../../src/lib/EndpointContext';
 import { isForeignConnection } from '../../src/features/aln/deeplink';
 import { markWorkgroupRead } from '../../src/lib/readState';
 import { resolveMembers } from '../../src/lib/workgroupMembers';
+import { runPipelineTrigger } from '../../src/lib/workgroupPipelines';
 import { accentForProfile } from '../../src/theme/accents';
 import { useTheme } from '../../src/theme/ThemeContext';
 
@@ -56,35 +58,6 @@ const WG_STYLES = StyleSheet.create({
     flex: 1,
     fontSize: fontSizes.sm,
     lineHeight: fontSizes.sm * 1.4,
-  },
-  pipeline: {
-    flexGrow: 0,
-    flexShrink: 0,
-  },
-  pipelineContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.s3,
-    paddingHorizontal: space.s7,
-    paddingVertical: space.s4,
-  },
-  pipelineLabel: {
-    fontSize: fontSizes.xs,
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-  },
-  pipelineSep: {
-    fontSize: fontSizes.sm,
-    marginRight: space.s3,
-  },
-  phaseWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  phase: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.s1,
   },
 });
 
@@ -165,8 +138,9 @@ const WgList = forwardRef(function WgList(
     scrollToSeq: (seq) => {
       if (seq == null) return;
       // Expand page window before scroll — inverted FlatList without getItemLayout throws on offscreen indices.
-      const idx = messages.length - 1 - messages.findIndex((m) => m.seq === seq);
-      if (idx < 0) return;
+      const at = messages.findIndex((m) => m.seq === seq);
+      if (at < 0) return;
+      const idx = messages.length - 1 - at;
       if (idx >= pageSize) {
         setPageSize((n) => Math.max(n, idx + 5));
         setTimeout(() => listRef.current?.scrollToIndex?.({ index: idx, animated: false, viewPosition: 0.3 }), 0);
@@ -240,38 +214,6 @@ const WgList = forwardRef(function WgList(
   );
 });
 
-function PipelinePhase({ phase, colors, fonts, accent, onPress }) {
-  const { slug, state } = phase;
-  const icon =
-    state === 'completed' ? <Icon name="check" size={12} color={colors.success} />
-    : state === 'blocked' ? <Icon name="ban" size={12} color={colors.danger} />
-    : state === 'current' ? <Dot color={accent ?? colors.ink} pulse />
-    : null;
-  const textColor =
-    state === 'blocked' ? colors.danger
-    : state === 'current' ? accent
-    : state === 'pending' ? colors.ink3
-    : colors.ink2;
-  const Wrapper = onPress ? Pressable : View;
-  return (
-    <Wrapper
-      onPress={onPress}
-      style={[
-        WG_STYLES.phase,
-        state === 'blocked' && {
-          backgroundColor: `${colors.danger}17`,
-          borderRadius: 999,
-          paddingHorizontal: space.s3,
-          paddingVertical: 2,
-        },
-      ]}
-    >
-      {icon}
-      <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: textColor }}>#{slug}</Text>
-    </Wrapper>
-  );
-}
-
 function TasksHeaderButton({ tasks, accent, onPress }) {
   const { colors, fonts, fontSizes } = useTheme();
   const closed = tasks.filter((t) => t.status === 'done' || t.status === 'skip').length;
@@ -339,6 +281,7 @@ function WorkgroupChatInner() {
 
   const profile = wg?.profile ?? null;
   const transcript = useWorkgroupTranscript(profile, id);
+  const taskState = useWorkgroupTasks(profile, id);
   const memberList = useWorkgroupMembers(profile, id);
 
   // Mark read on entry + each turn — wg.mtime advances with every post.
@@ -376,6 +319,7 @@ function WorkgroupChatInner() {
   // Coalesced: each refresh re-fetches and decrypts the 200-post tail, so post bursts must collapse into one.
   const refreshTranscript = useDebouncedCallback(() => {
     transcript.refresh();
+    taskState.refresh();
     setOptimistic([]);
   }, 400);
   useEventEffect(['wg.post', 'wg.done', 'workgroup_members'], (ev) => {
@@ -407,7 +351,8 @@ function WorkgroupChatInner() {
   }, [messages]);
 
   const tasks = useMemo(() => buildTasks(messages, hubPubkey), [messages, hubPubkey]);
-  const blocked = useMemo(() => findBlocked(messages, hubPubkey), [messages, hubPubkey]);
+  const pipelineRun = taskState.data?.pipeline_run ?? null;
+  const blocked = taskState.data?.blocked ?? null;
 
   const autoRead = !!wg?.auto_read;
   const voiceMap = useMemo(() => {
@@ -450,21 +395,6 @@ function WorkgroupChatInner() {
       }
     }
   }, [messages, autoRead, id, ownPubkey, voiceMap, call, transcript.data, summaries.data, profile]);
-  const phases = useMemo(
-    () => pipelineState(wg?.pipeline || [], messages, hubPubkey),
-    [wg?.pipeline, messages, hubPubkey],
-  );
-  const activePhase = useMemo(() => {
-    if (!phases.length) return 0;
-    const b = phases.findIndex((p) => p.state === 'blocked');
-    if (b >= 0) return b;
-    const c = phases.findIndex((p) => p.state === 'current');
-    if (c >= 0) return c;
-    let last = 0;
-    phases.forEach((p, i) => { if (p.state === 'completed') last = i; });
-    return last;
-  }, [phases]);
-  const pipelineScrollRef = useRef(null);
   const blockedReason = useMemo(() => {
     if (!blocked) return '';
     const slug = blocked.slug || '';
@@ -497,6 +427,7 @@ function WorkgroupChatInner() {
     try {
       await call('host.workgroup.post', { profile, wg_id: id, text: trimmed });
       await transcript.refresh();
+      taskState.refresh();
       setOptimistic((cur) => cur.filter((m) => m.seq !== tempSeq));
     } catch (e) {
       setOptimistic((cur) =>
@@ -505,6 +436,17 @@ function WorkgroupChatInner() {
     } finally {
       setSending(false);
     }
+  };
+
+  const runPipeline = async (chain) => {
+    const outcome = await runPipelineTrigger(call, { workgroup: wg, chain });
+    if (!outcome.ok) {
+      toast({ title: 'Trigger rejected', message: outcome.message, duration: 3200 });
+      return;
+    }
+    toast({ title: `#${outcome.pipeline} started`, message: `opened #${outcome.phase}` });
+    taskState.refresh();
+    transcript.refresh();
   };
 
   if (!endpoint) {
@@ -603,40 +545,18 @@ function WorkgroupChatInner() {
           </Text>
         </View>
       ) : null}
-      {phases.length ? (
-        <ScrollView
-          ref={pipelineScrollRef}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={WG_STYLES.pipeline}
-          contentContainerStyle={WG_STYLES.pipelineContent}
-        >
-          <Text style={[WG_STYLES.pipelineLabel, { fontFamily: fonts.mono, color: colors.ink3 }]}>
-            PIPELINE
-          </Text>
-          {phases.map((p, i) => (
-            <View
-              key={p.slug}
-              style={WG_STYLES.phaseWrap}
-              onLayout={(e) => {
-                if (i === activePhase) {
-                  const x = Math.max(0, e.nativeEvent.layout.x - 24);
-                  pipelineScrollRef.current?.scrollTo?.({ x, animated: false });
-                }
-              }}
-            >
-              {i > 0 ? <Text style={[WG_STYLES.pipelineSep, { color: colors.ink4 ?? colors.ink3 }]}>›</Text> : null}
-              <PipelinePhase
-                phase={p}
-                colors={colors}
-                fonts={fonts}
-                accent={accent}
-                onPress={p.seq != null ? () => listApiRef.current?.scrollToSeq?.(p.seq) : undefined}
-              />
-            </View>
-          ))}
-        </ScrollView>
-      ) : null}
+      <PipelineStrip
+        run={pipelineRun}
+        accent={accent}
+        onPickSeq={(seq) => listApiRef.current?.scrollToSeq?.(seq)}
+      />
+      <PipelineLauncher
+        workgroup={wg}
+        tasks={taskState.data}
+        accent={accent}
+        onRun={runPipeline}
+      />
+
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <WgList
           ref={listApiRef}

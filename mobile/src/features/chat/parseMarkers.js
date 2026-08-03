@@ -57,7 +57,17 @@ export function parseSkip(body) {
   return content === null ? null : { content };
 }
 
-// Walks a transcript, one entry per hub `#task` opener. Only the hub opens (`#task`) and closes (`#done`); a member's `#skip`/`#working` are round signals that never touch lifecycle. "skip" status means preempted: the hub opened a new `#task` before closing this one with `#done` (alpi/alp/tasks.py fold_tasks). msgs counts every post inside the range.
+const SKIPPED_CLOSE_RE = /^skipped\s*·\s*\S/i;
+
+// Outcome vocabulary matches the daemon fold: a `#done skipped · <reason>` is `skipped`, a `#done BLOCKED · …` is `blocked`, neither is `done`.
+export function closeStatus(result) {
+  const text = String(result ?? '').trim();
+  if (/^blocked\b/i.test(text)) return 'blocked';
+  if (SKIPPED_CLOSE_RE.test(text)) return 'skipped';
+  return 'done';
+}
+
+// Walks a transcript, one entry per hub `#task` opener. Only the hub opens (`#task`) and closes (`#done`); a member's `#skip`/`#working` are round signals that never touch lifecycle. "preempted" means the hub opened a new `#task` before closing this one (alpi/alp/tasks.py fold_tasks). msgs counts every post inside the range.
 export function buildTasks(messages, hubPubkey = null) {
   const tasks = [];
   let current = null;
@@ -66,7 +76,7 @@ export function buildTasks(messages, hubPubkey = null) {
     const fromHub = !hubPubkey || m.from_pubkey === hubPubkey;
     if (c.variant === 'task' && fromHub) {
       if (current) {
-        current.status = 'skip';
+        current.status = 'preempted';
         tasks.push(current);
       }
       current = {
@@ -80,8 +90,8 @@ export function buildTasks(messages, hubPubkey = null) {
     } else if (current) {
       current.msgs += 1;
       if (c.variant === 'done' && fromHub) {
-        current.status = 'done';
         current.result = c.text || '';
+        current.status = closeStatus(current.result);
         tasks.push(current);
         current = null;
       }
@@ -89,61 +99,6 @@ export function buildTasks(messages, hubPubkey = null) {
   }
   if (current) tasks.push(current);
   return tasks;
-}
-
-// Halted: the latest task closed `#done BLOCKED · …` and nothing re-tasked after.
-export function findBlocked(messages, hubPubkey = null) {
-  const tasks = buildTasks(messages, hubPubkey);
-  const last = tasks[tasks.length - 1];
-  if (!last || last.status !== 'done') return null;
-  return /^\s*blocked\b/i.test(last.result || '')
-    ? { slug: last.slug, reason: last.result }
-    : null;
-}
-
-export function canonicalPhase(slug, pipeline) {
-  if (!slug || !pipeline) return null;
-  if (pipeline.includes(slug)) return slug;
-  for (const p of [...pipeline].sort((a, b) => b.length - a.length)) {
-    if (slug.startsWith(`${p}-`)) return p;
-  }
-  return null;
-}
-
-export function pipelineState(pipeline, messages, hubPubkey = null) {
-  if (!pipeline || pipeline.length === 0) return [];
-  const completed = new Set();
-  const seqByPhase = {};
-  let openSlug = null;
-  let cur = null;
-  for (const m of messages || []) {
-    const fromHub = !hubPubkey || m.from_pubkey === hubPubkey;
-    const cls = classifyMessage(m.body);
-    if (cls.variant === 'task' && fromHub) {
-      cur = cls.task.slug;
-      openSlug = cls.task.slug;
-      const ph = canonicalPhase(cls.task.slug, pipeline);
-      if (ph) seqByPhase[ph] = m.seq;
-    } else if (cur && fromHub && cls.variant === 'done') {
-      const ph = canonicalPhase(cur, pipeline);
-      if (ph) {
-        seqByPhase[ph] = m.seq;
-        if (!/^\s*blocked\b/i.test(cls.text || '')) completed.add(ph);
-      }
-      cur = null;
-      openSlug = null;
-    }
-  }
-  const blocked = findBlocked(messages, hubPubkey);
-  const blockedPhase = blocked ? canonicalPhase(blocked.slug, pipeline) : null;
-  const currentPhase = openSlug ? canonicalPhase(openSlug, pipeline) : null;
-  return pipeline.map((slug) => {
-    let state = 'pending';
-    if (slug === blockedPhase) state = 'blocked';
-    else if (slug === currentPhase) state = 'current';
-    else if (completed.has(slug)) state = 'completed';
-    return { slug, state, seq: seqByPhase[slug] ?? null };
-  });
 }
 
 export function classifyMessage(body) {
