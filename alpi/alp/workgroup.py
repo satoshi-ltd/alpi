@@ -1124,18 +1124,17 @@ def pipeline_for_phase(
 
 
 def canonical_pipeline_phase(meta: Any, slug: str) -> tuple[str, str] | None:
-    """Exact membership wins, then one allowlisted suffix is stripped: no open `<phase>-*` match, so a declared `content-update` is never swallowed by `content`."""
+    """Exact membership first, then the LONGEST declared-phase prefix — shortest-first would let `content` swallow the declared `content-update` chain."""
     slug = str(slug or "").strip().lower()
     if not slug:
         return None
     exact = pipeline_for_phase(meta, slug)
     if exact is not None:
         return exact[0], slug
-    for suffix in _RECOVERY_SUFFIXES:
-        if not slug.endswith(suffix):
-            continue
-        base = slug[: -len(suffix)]
-        owner = pipeline_for_phase(meta, base) if base else None
+    parts = slug.split("-")
+    for cut in range(len(parts) - 1, 0, -1):
+        base = "-".join(parts[:cut])
+        owner = pipeline_for_phase(meta, base)
         if owner is not None:
             return owner[0], base
     return None

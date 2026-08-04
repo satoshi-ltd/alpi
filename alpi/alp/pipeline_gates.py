@@ -184,8 +184,10 @@ def paths_violations(wg_dir: Path, step: GateStep, workspace: Path) -> str:
         return ""
     return (
         f"BOUNDARY {step.phase}: files outside @{step.owner}'s declared paths "
-        "changed during this phase — restore each file, or route the change to "
-        "the phase that owns it:\n" + "\n".join(sorted(offenders))
+        "changed during this phase. Name each file below in your handoff so the "
+        "hub routes it to the phase that owns it — posting is always available "
+        "to you. Undo it yourself ONLY if your own tools can restore the exact "
+        "state you found:\n" + "\n".join(sorted(offenders))
     )
 
 

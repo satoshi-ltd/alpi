@@ -1639,14 +1639,17 @@ Each accepted
 (`alp/wakes.py`), so gate reactions are near-immediate; polling
 remains the recovery path.
 
-**Recovery slugs are a closed allowlist.** Exact phase membership wins
-first; otherwise exactly one of `-fix` or `-recheck` is stripped and
-the remainder must itself be a declared phase. `#content-fix` and
-`#content-recheck` canonicalise back to `#content` so QA loops don't
-derail the ladder, while a declared operational chain like
-`#content-update` is never swallowed by `#content` — that used to make
-the post-QA behaviour depend on the prose of the prior close. There is
-no open `<phase>-*` match and no longest-prefix rule.
+**A recovery slug resolves to its longest declared phase.** Exact phase
+membership wins first; otherwise the longest declared-phase prefix of
+the slug is the phase it repairs, so `#content-fix`, `#content-recheck`
+and an invented `#content-repair` all canonicalise back to `#content`,
+and a green repair of the TERMINAL phase completes the run instead of
+reopening the phase before it. Longest — not shortest — is what keeps a
+declared operational chain like `#content-update` from being swallowed
+by `#content`. A `#task` whose slug still maps to no declared chain is
+REFUSED at post time (`task-slug-unroutable`, naming the declared
+phases): an unroutable opener nulls the run and closing it advances
+nothing, which used to strand a pipeline with every check green.
 
 **Pipeline runs.** Static definitions and the currently relevant run
 are separate surfaces. `host.workgroups.list` returns the definitions

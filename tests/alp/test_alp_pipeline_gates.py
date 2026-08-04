@@ -480,19 +480,31 @@ def test_a_declared_fix_phase_resolves_to_itself():
     ("content-fix", "content"),
     ("content-recheck", "content"),
     ("translation-fix", "translation"),
-    ("content-update", None),
-    ("content-anything", None),
-    ("content-fix-fix", None),
-    ("content-rechecked", None),
+    ("content-anything", "content"),
+    ("content-fix-fix", "content"),
+    ("content-rechecked", "content"),
+    ("content-update", "content"),
     ("fix", None),
+    ("nosuchphase-fix", None),
 ])
-def test_only_fix_and_recheck_recover_to_a_declared_phase(slug, base):
+def test_any_suffix_recovers_to_its_declared_phase(slug, base):
+    """A two-suffix allowlist froze a run for 80 minutes on an invented `-repair`."""
     meta = _meta({})
     resolved = wg_mod.canonical_pipeline_phase(meta, slug)
     if base is None:
         assert resolved is None
     else:
         assert resolved == ("content", base)
+
+
+def test_a_declared_chain_phase_still_wins_over_its_prefix():
+    meta = _meta({}, pipelines={
+        "content": ("content", "build"),
+        "content-update": ("content-update", "content-build"),
+    })
+    assert wg_mod.canonical_pipeline_phase(meta, "content-update") == (
+        "content-update", "content-update",
+    )
 
 
 @pytest.mark.asyncio

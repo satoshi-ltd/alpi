@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.12.4 — 2026-08-04 — a stalled run tells someone
+
+- **An invented repair slug no longer strands the run.** A phase named
+  `#intake-repair` belonged to no chain, so closing it advanced nothing and the
+  run sat with every check green for over an hour. Any `<phase>-<suffix>` now
+  recovers to its phase, and an opener that still maps nowhere is refused at
+  post time naming the forms that work.
+- **A halt that names another member gets one wake.** Closing BLOCKED while
+  writing "this belongs to @quill" described a hand-off nobody opened; the hub
+  is now woken once to open it or to say plainly that nobody can act.
+- **A boundary finding leads with the action its owner can take.** It used to
+  say "restore each file" to owners with no way to restore anything, which
+  burned three repair rounds twice; naming the file in the handoff comes first.
+
 ## v0.12.3 — 2026-08-04 — the model list tells the truth again
 
 - **DeepSeek V4 Flash 0731 is now a first-class pick.** It keeps the 1M context

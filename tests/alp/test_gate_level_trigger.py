@@ -382,3 +382,45 @@ def test_phase_owner_exemption_survives_the_post_window():
     assert wc._member_owns_active_phase(sub, None, "muse") is False
     sub.recent_posts = [{"seq": 70, "from": "HUB", "text": "@scout no phase named here"}]
     assert wc._member_owns_active_phase(sub, None, "scout") is False
+
+
+def test_unroutable_task_slug_is_refused_at_post_time():
+    import types
+    wg = types.SimpleNamespace(meta=types.SimpleNamespace(
+        pipelines={"setup": ("intake", "content"), "media-update": ("media-update",)},
+        launch_pipeline="setup",
+    ))
+    wc._check_task_slug_is_routable(wg, "@scout #task #intake-fix go")
+    wc._check_task_slug_is_routable(wg, "@scout #task #intake do it")
+    with pytest.raises(ValueError, match="task-slug-unroutable"):
+        wc._check_task_slug_is_routable(wg, "@scout #task #table-fix rename rows")
+    try:
+        wc._check_task_slug_is_routable(wg, "@scout #task #nope go")
+    except ValueError as e:
+        assert "intake" in str(e) and "content" in str(e)
+    else:
+        raise AssertionError("an unroutable slug must be refused")
+
+
+def test_blocked_close_naming_another_owner_draws_a_routing_wake():
+    owners = {"quill", "lingua", "muse", "pixel"}
+    assert service._terminal_close_needs_routing(
+        "BLOCKED · #build halted — schema mismatch in @quill/@lingua's domain", owners,
+    ) is True
+    assert service._terminal_close_needs_routing(
+        "BLOCKED · template gap in document-head generation, nobody can act", owners,
+    ) is False
+    assert service._terminal_close_needs_routing(
+        "BLOCKED · waiting on @client media", owners,
+    ) is False
+    assert service._terminal_close_needs_routing("qa verified · gate:npm · clean", owners) is False
+
+
+def test_blocked_naming_its_own_owner_is_just_a_halt():
+    owners = {"lens", "quill", "muse"}
+    assert service._terminal_close_needs_routing(
+        "BLOCKED · @lens cannot complete the audit", owners, "lens",
+    ) is False
+    assert service._terminal_close_needs_routing(
+        "BLOCKED · @lens cannot audit — schema is @quill's", owners, "lens",
+    ) is True

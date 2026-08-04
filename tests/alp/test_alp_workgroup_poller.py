@@ -1729,11 +1729,14 @@ def test_recovery_suffix_resolves_by_exact_base_membership() -> None:
     assert service._next_pipeline_phase(wg, recent) == ("content-qa", "content-update", True)
 
 
-def test_closed_suffix_rule_rejects_an_open_prefix_match() -> None:
+def test_an_invented_suffix_keeps_the_run_representable() -> None:
+    """An unmapped slug returned known=False, and the watchdog then had no phase to wake anyone about."""
     wg = _pipe_wg(CONTENT_LAUNCH, dormant=CONTENT_CHAIN)
-    assert wg_mod.canonical_pipeline_phase(wg.meta, "content-update-tweak") is None
-    recent = _closed(("content-update-tweak", 2))
-    assert service._next_pipeline_phase(wg, recent) == (None, "content-update-tweak", False)
+    assert wg_mod.canonical_pipeline_phase(wg.meta, "content-update-tweak") == (
+        "content-update", "content-update",
+    )
+    recent = _closed(("content", 2), ("qa", 4), ("content-tweak", 6))
+    assert service._next_pipeline_phase(wg, recent)[2] is True
 
 
 def test_launch_phase_chains_even_when_a_dormant_chain_shares_its_prefix() -> None:
@@ -1885,3 +1888,17 @@ def test_phase_turn_budget_reads_the_active_phase_spec() -> None:
     assert service._phase_turn_budget(phase_map, posts, "HUB") == 0
     assert service._phase_turn_budget({}, posts, "HUB") == 0
     assert service._phase_turn_budget(phase_map, [], "HUB") == 0
+
+
+def test_a_green_repair_of_the_terminal_phase_completes_the_pipeline() -> None:
+    """A chain-local suffix allowlist reopened build after a verified `#qa-repair`."""
+    wg = _pipe_wg(LAUNCH, dormant=MEDIA_CHAIN)
+    recent = _closed(("setup", 2), ("intake", 4), ("build", 6))
+    recent += [
+        {"seq": 7, "from": "HUB", "text": "@lens #task #qa audit"},
+        {"seq": 8, "from": "HUB", "text": "#done QA FAIL · 3 findings"},
+        {"seq": 9, "from": "HUB", "text": "@scout #task #qa-repair fix them"},
+        {"seq": 10, "from": "HUB", "text": "#done qa-repair verified · gate:npm · clean"},
+    ]
+    assert wg_mod.canonical_pipeline_phase(wg.meta, "qa-repair")[1] == "qa"
+    assert service._next_pipeline_phase(wg, recent) == (None, "qa", True)

@@ -148,6 +148,28 @@ def _check_task_shape(plaintext: str) -> None:
         )
 
 
+def _check_task_slug_is_routable(wg, plaintext: str) -> None:
+    """An unroutable opener leaves the run with no pipeline, so closing it advances nothing."""
+    if not wg_mod.is_pipeline_workgroup(wg.meta):
+        return
+    opens = [
+        e for e in tasks_mod.parse_post(plaintext, 0, "", hub_pubkey="")
+        if e.kind == "task" and e.slug
+    ]
+    if not opens:
+        return
+    slug = opens[0].slug
+    if wg_mod.canonical_pipeline_phase(wg.meta, slug) is not None:
+        return
+    phases = sorted({p for chain in (wg.meta.pipelines or {}).values() for p in chain})
+    raise ValueError(
+        f"task-slug-unroutable: `#{slug}` belongs to no declared chain, so the "
+        "daemon cannot sequence it and closing it would advance nothing. Use a "
+        "declared phase or a repair of one (`#<phase>`, `#<phase>-fix`). "
+        f"Declared phases: {', '.join(phases)}."
+    )
+
+
 def _check_hub_single_marker(plaintext: str) -> None:
     """One post = one transition. A hub post carrying more than one lifecycle
     marker — `#done` + `#task`, two `#task` openers, or two `#done` closers — is
@@ -1213,6 +1235,7 @@ def _post_as_hub_locked(
         # The guard stops the HUB renaming its way past a red gate, not an operator.
         _check_gated_phase_not_abandoned(wg, existing, plaintext, kp.pubkey_b64())
         _check_blocked_phase_not_skipped(wg, existing, plaintext, kp.pubkey_b64())
+        _check_task_slug_is_routable(wg, plaintext)
     _check_qa_verdict_respected(home, wg, existing, plaintext, kp.pubkey_b64())
     active_phase = tasks_mod.active_task(existing, hub_pubkey=kp.pubkey_b64())
     _check_hub_rotation(

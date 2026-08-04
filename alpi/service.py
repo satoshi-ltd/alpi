@@ -1063,7 +1063,7 @@ def _pipeline_continuation_due(wg, recent: list[dict], active) -> bool:
 
 
 def _canonical_pipeline_slug(slug: str, pipeline: list[str]) -> str | None:
-    """Closed recovery mapping inside ONE chain: exact phase, else exactly one `-fix`/`-recheck` suffix."""
+    """Closed recovery mapping inside ONE chain, where a declared sibling chain is invisible: exact phase, else exactly one `-fix`/`-recheck` suffix."""
     from alpi.alp import workgroup as wg_mod
 
     if slug in pipeline:
@@ -1089,6 +1089,8 @@ def _is_success_result(result: str) -> bool:
         or text.startswith("ok")
         or text.startswith("verified")
         or text.startswith("verificado")
+        # The daemon's own machine close reads `<phase> verified · gate:<argv0>`.
+        or "verified · gate:" in text
     )
 
 
@@ -1119,12 +1121,33 @@ _FAILURE_RE = re.compile(
 )
 
 
-def _terminal_close_needs_routing(result: str) -> bool:
+def _blocked_close_names_owner(
+    result: str, owners: set[str], blocked_owner: str = "",
+) -> str:
+    """Only ANOTHER owner is a pending hand-off; the blocked phase's own owner naming itself is just the halt."""
+    text = (result or "").strip()
+    if not text.upper().startswith("BLOCKED"):
+        return ""
+    for mention in _re_findall_mentions(text):
+        if mention in owners and mention != (blocked_owner or "").lower():
+            return mention
+    return ""
+
+
+def _re_findall_mentions(text: str) -> list[str]:
+    return [m.lower() for m in re.findall(r"@([A-Za-z0-9_-]+)", text)]
+
+
+def _terminal_close_needs_routing(
+    result: str, owners: set[str] | None = None, blocked_owner: str = "",
+) -> bool:
     """Explicit failure words only — "not provably green" (a machine `verified · gate:` close) must never draw a routing wake."""
     text = (result or "").strip()
     if not text:
         return False
-    if text.upper().startswith("BLOCKED") or text.lower().startswith("preempted"):
+    if text.upper().startswith("BLOCKED"):
+        return bool(_blocked_close_names_owner(text, owners or set(), blocked_owner))
+    if text.lower().startswith("preempted"):
         return False
     if re.match(r"^skipped\s*·", text, re.IGNORECASE):
         return False
@@ -1179,9 +1202,15 @@ def _next_pipeline_phase(wg, recent: list[dict]) -> tuple[str | None, str, bool]
     # terminal's latest close still isn't a success AND a fix is in flight do we
     # rebuild (re-run the phase before the terminal so it re-audits a fresh
     # artifact); the continuation cap bounds the loop.
-    terminal_closes = [
-        t for t in closed if _canonical_pipeline_slug(t.slug, pipeline) == latest
-    ]
+    # Meta-aware, not chain-local: `qa-repair` is a repair of qa, while a dormant
+    # chain's own phase resolves to ITS chain and must not count as one.
+    def _closes_terminal(slug: str) -> bool:
+        if slug == latest:
+            return True
+        canon = wg_mod.canonical_pipeline_phase(wg.meta, slug)
+        return canon is not None and canon[0] == canonical[0] and canon[1] == latest
+
+    terminal_closes = [t for t in closed if _closes_terminal(t.slug)]
     latest_terminal = max(terminal_closes, key=lambda t: t.closed_seq or 0)
     if _is_success_result(latest_terminal.result or ""):
         return None, latest, True
@@ -1300,7 +1329,17 @@ async def _maybe_watchdog_close(
                 _emit_wg_blocked_once(home, wg.meta.id, latest_slug, 0)
             return
         if nxt is None:
-            if not _terminal_close_needs_routing(_latest_close_result(wg, recent)):
+            declared_owners = {
+                str((step or {}).get("owner") or "").lower()
+                for step in (getattr(wg.meta, "pipeline_steps", None) or {}).values()
+            } - {""}
+            blocked_owner = str(
+                ((getattr(wg.meta, "pipeline_steps", None) or {}).get(latest_slug) or {})
+                .get("owner") or "",
+            )
+            if not _terminal_close_needs_routing(
+                _latest_close_result(wg, recent), declared_owners, blocked_owner,
+            ):
                 return  # complete, halted loudly, or deliberately skipped
             # Once the hub's own failing close is the newest post, no other path wakes it.
             next_phase = ""
@@ -2063,8 +2102,8 @@ async def _dispatch_workgroup_turn(
         prompt = (
             f"[workgroup-routing] '#{wg_name or wg_id}' (wg_id={wg_id}). "
             f"{reason}.\n\n"
-            "The terminal phase closed with a FAILING verdict and the close "
-            "routed nothing — a finding named only in prose moves nothing. "
+            "The phase closed FAILING or BLOCKED naming another owner, and the "
+            "close routed nothing — a finding named only in prose moves nothing. "
             "This is the one automatic wake on it.\n\n"
             "Read the failing close, then RE-TASK each finding to its owning "
             f"phase: one `workgroup_post(wg_id=\"{wg_id}\", text=\"@<owner> "
