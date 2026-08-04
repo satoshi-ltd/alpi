@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { canRefreshProfileThread, profileManagementAllowed,
   connectionFailureMessage,
   isChatSessionData,
+  profileSurfaceKey,
   settingsTargetAfterExit,
   settingsTargetForChatView,
 } from "./App.jsx";
@@ -97,5 +98,32 @@ describe("profileManagementAllowed", () => {
     expect(profileManagementAllowed("admin")).toBe(true);
     expect(profileManagementAllowed(null)).toBe(true);
     expect(profileManagementAllowed(undefined)).toBe(true);
+  });
+});
+
+describe("profileSurfaceKey", () => {
+  const surfaces = ["tools", "skills", "memory", "schedule"];
+
+  it("keeps the four sibling modals distinct on the same connection and profile", () => {
+    const keys = surfaces.map((s) => profileSurfaceKey(s, "local", "lens"));
+    expect(new Set(keys).size).toBe(4);
+  });
+
+  it("stays distinct when no profile is selected", () => {
+    const keys = surfaces.map((s) => profileSurfaceKey(s, "local", null));
+    expect(new Set(keys).size).toBe(4);
+    expect(keys).not.toContain("local:");
+  });
+
+  it("still remounts when the connection or the profile changes", () => {
+    expect(profileSurfaceKey("tools", "local", "lens")).not.toBe(
+      profileSurfaceKey("tools", "office", "lens"),
+    );
+    expect(profileSurfaceKey("tools", "local", "lens")).not.toBe(
+      profileSurfaceKey("tools", "local", "lingua"),
+    );
+    expect(profileSurfaceKey("tools", "local", "lens")).toBe(
+      profileSurfaceKey("tools", "local", "lens"),
+    );
   });
 });

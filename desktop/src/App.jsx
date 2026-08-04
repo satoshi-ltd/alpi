@@ -108,6 +108,11 @@ export function settingsTargetAfterExit(target, previous) {
   return { kind: "profile", id: null };
 }
 
+export function profileSurfaceKey(surface, connectionId, profile) {
+  // Sibling modals share connection+profile: without the surface prefix React collapses all but one.
+  return `${surface}:${connectionId ?? ""}:${profile ?? ""}`;
+}
+
 export function settingsTargetForChatView(view, selectedProfile = null) {
   if (view?.kind === "profile") return { kind: "profile", id: view.profile };
   if (view?.kind === "workgroup") return { kind: "workgroup", id: view.id };
@@ -1364,21 +1369,21 @@ export default function App() {
         commands={paletteCommands}
       />
       <ToolsModal
-        key={`${hostConnections.active_id}:${activeProfileName ?? ""}`}
+        key={profileSurfaceKey("tools", hostConnections.active_id, activeProfileName)}
         open={canManageProfileSurfaces && browse === "tools"}
         onClose={onCloseBrowse}
         profile={activeProfileName}
         connectionId={hostConnections.active_id}
       />
       <SkillsModal
-        key={`${hostConnections.active_id}:${activeProfileName ?? ""}`}
+        key={profileSurfaceKey("skills", hostConnections.active_id, activeProfileName)}
         open={canManageProfileSurfaces && browse === "skills"}
         onClose={onCloseBrowse}
         profile={activeProfileName}
         connectionId={hostConnections.active_id}
       />
       <MemoryModal
-        key={`${hostConnections.active_id}:${activeProfileName ?? ""}`}
+        key={profileSurfaceKey("memory", hostConnections.active_id, activeProfileName)}
         open={canManageProfileSurfaces && browse === "memory"}
         onClose={onCloseBrowse}
         profile={activeProfileName}
@@ -1386,7 +1391,7 @@ export default function App() {
         canEdit={canAdminEarly}
       />
       <ScheduleModal
-        key={`${hostConnections.active_id}:${activeProfileName ?? ""}`}
+        key={profileSurfaceKey("schedule", hostConnections.active_id, activeProfileName)}
         open={canManageProfileSurfaces && browse === "schedule"}
         onClose={onCloseBrowse}
         profile={activeProfileName}

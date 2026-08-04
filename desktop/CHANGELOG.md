@@ -11,6 +11,15 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.5.1 — 2026-08-04 — each panel keeps its own alpi
+
+- **Tools, Skills, Memory and Schedule no longer share one identity.** The four
+  panels were keyed identically, so switching alpi or connection could leave one
+  of them holding what the previous one had loaded. Each now reloads for the alpi
+  you are actually looking at.
+
+Fix only — no daemon contract changes. Requires alpi ≥ 0.12.0.
+
 ## v0.5.0 — 2026-07-31 — every pipeline, run from the chat
 
 - **Workgroup settings now list every declared pipeline**, not just the one that
