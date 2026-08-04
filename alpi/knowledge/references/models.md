@@ -29,13 +29,12 @@ For profiles with many skills, persistent memory, database state, shell commands
 
 | Model | OpenRouter ID | Notes |
 |---|---|---|
-| owl-alpha | `owl-alpha` | Most-used OpenRouter model for tool-heavy workloads; 1M context, alpha channel (occasional wrapper churn). |
 | DeepSeek V4 Pro | `deepseek/deepseek-v4-pro` | Strong tool discipline at 1M context; sensible flagship-class daily driver. |
 | MiMo V2.5 Pro | `xiaomi/mimo-v2.5-pro` | Strong persistent-agent adoption; 1M context, good price/quality. |
 | MiniMax M3 | `minimax/minimax-m3` | Mid-tier agent model; 512K context. |
 | Claude Sonnet 5 | `anthropic/claude-sonnet-5` | Premium daily driver; strongest tool discipline at this tier. |
 
-Pick one for a skill-heavy profile: start with owl-alpha, DeepSeek V4 Pro, MiMo V2.5 Pro, or Sonnet 5 by budget/provider.
+Pick one for a skill-heavy profile: start with DeepSeek V4 Pro, MiMo V2.5 Pro, or Sonnet 5 by budget/provider.
 
 ## Cheap service turns
 
@@ -43,7 +42,7 @@ For scheduled-job turns, heartbeats, summaries, simple lookups, low-risk command
 
 | Model | OpenRouter ID | Notes |
 |---|---|---|
-| DeepSeek V4 Flash | `deepseek/deepseek-v4-flash` | 1M context at the cheap-fast tier. |
+| DeepSeek V4 Flash | `deepseek/deepseek-v4-flash-0731` | 1M context at the cheap-fast tier; pinned snapshot. Caps replies at 64K output, so it is the wrong pick for a single very long generation. |
 | MiMo V2.5 | `xiaomi/mimo-v2.5` | Budget sibling to MiMo V2.5 Pro; 1M context. |
 | Claude Haiku 4.5 | `anthropic/claude-haiku-4.5` | Cheap, fast, reasoning support; reliable on short chains. |
 | GPT-5.6 Terra | `openai/gpt-5.6-terra` | Balanced OpenAI; router only when the skill catalog is small and clean. |

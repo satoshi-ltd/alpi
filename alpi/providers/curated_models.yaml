@@ -22,10 +22,7 @@ anthropic:
     note: cheap · fast
     reasoning: true
 openrouter:
-  - id: owl-alpha
-    note: alpha · 1M
-    reasoning: true
-  - id: deepseek/deepseek-v4-flash
+  - id: deepseek/deepseek-v4-flash-0731
     note: cheap · fast · 1M
     reasoning: true
   - id: minimax/minimax-m3

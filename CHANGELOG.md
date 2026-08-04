@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.12.3 — 2026-08-04 — the model list tells the truth again
+
+- **DeepSeek V4 Flash 0731 is now a first-class pick.** It keeps the 1M context
+  of the model it replaces at roughly two thirds of the price, and it shows up
+  in `alpi setup` and `/model` like any other curated model.
+- **A model you pick gets the context window it actually has.** The catalogue
+  had drifted since it was last refreshed, so some models were credited with
+  less room than they really offer — DeepSeek V4 Flash among them, which was
+  short by about 50K tokens on every turn.
+- **Retired models no longer clutter the picker.** Thirty-seven entries that
+  the provider has since dropped are gone, `owl-alpha` included — it had been
+  offered for weeks after it stopped existing, which meant picking it left a
+  profile unable to answer at all.
+- **Pinned snapshots over moving names.** The curated DeepSeek entry now names
+  a dated snapshot, so a provider swapping what a generic name points to can no
+  longer change how your agents behave overnight.
+
 ## v0.12.2 — 2026-08-04 — a repair keeps its voice to the end of a phase
 
 - **An owner repairing its own phase is no longer silenced deep into it.** The

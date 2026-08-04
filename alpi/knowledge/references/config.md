@@ -41,7 +41,7 @@
 ## Model examples
 
 ```yaml
-model: openrouter/owl-alpha
+model: openrouter/deepseek/deepseek-v4-flash-0731
 ```
 
 ```yaml

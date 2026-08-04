@@ -33,15 +33,15 @@ that data as a weak signal, not a ranking: defaults, price, rate
 limits, regional availability, and provider wrappers all bias usage.
 
 Common high-usage models in tool-heavy agent workloads currently
-include owl-alpha, MiMo V2.5 Pro / V2.5, DeepSeek V4 Pro / Flash,
-MiniMax M3, Claude Sonnet 5 / Opus 4.8 / Fable 5, Nemotron 3 Super, and
-OpenAI GPT-5.6 Sol / Terra.
+include MiMo V2.5 Pro / V2.5, DeepSeek V4 Pro / V4 Flash, MiniMax M3,
+Claude Sonnet 5 / Opus 4.8 / Fable 5, Nemotron 3 Super, and OpenAI
+GPT-5.6 Sol / Terra.
 
 ## Pick by workload
 
 The tables below use **OpenRouter routes** as the primary ID — a
 single OPENROUTER_API_KEY covers every entry, and several picks
-(owl-alpha, MiMo, DeepSeek, MiniMax, Nemotron) only ship via
+(MiMo, DeepSeek, MiniMax, Nemotron) only ship via
 OpenRouter. For Anthropic and OpenAI you can also use **native
 routes** if you have those provider keys; the convention is shown
 under the tables.
@@ -54,15 +54,14 @@ daily interactive alpi use.
 
 | Model | OpenRouter ID | Why |
 |---|---|---|
-| **owl-alpha** | `owl-alpha` | Most-used OpenRouter model for tool-heavy workloads; 1M context, alpha channel — fast iteration, expect occasional wrapper churn. |
 | **DeepSeek V4 Pro** | `deepseek/deepseek-v4-pro` | Strong tool discipline at 1M context; sensible flagship-class daily driver. |
 | **MiMo V2.5 Pro** | `xiaomi/mimo-v2.5-pro` | Strong adoption in persistent-agent workloads; 1M context, good price-for-quality. |
 | **MiniMax M3** | `minimax/minimax-m3` | Mid-tier agent model; 512K context, decent for persistent sessions. |
 | **Claude Sonnet 5** | `anthropic/claude-sonnet-5` | Premium daily driver; strongest tool discipline and coding judgement at this tier. |
 
 If you can only choose one model for a skill-heavy profile, start with
-owl-alpha, DeepSeek V4 Pro, MiMo V2.5 Pro, or Sonnet 5 depending on
-budget and provider preference.
+DeepSeek V4 Pro, MiMo V2.5 Pro, or Sonnet 5 depending on budget and
+provider preference.
 
 ### Cheap service turns
 
@@ -72,7 +71,7 @@ creating or debugging skills.
 
 | Model | OpenRouter ID | Why |
 |---|---|---|
-| **DeepSeek V4 Flash** | `deepseek/deepseek-v4-flash` | 1M context at the cheap-fast tier; the headroom is useful even for short turns. |
+| **DeepSeek V4 Flash** | `deepseek/deepseek-v4-flash-0731` | 1M context at the cheap-fast tier, and the cheapest way to get that headroom. Pinned snapshot rather than the moving alias, so a silent swap can't change behaviour under you. Replies cap at 64K output. |
 | **MiMo V2.5** | `xiaomi/mimo-v2.5` | Budget sibling to MiMo V2.5 Pro; 1M context, useful for A/B testing cheap service profiles. |
 | **Claude Haiku 4.5** | `anthropic/claude-haiku-4.5` | Cheap and fast with reasoning support; reliable for short-chain turns. |
 | **GPT-5.6 Terra** | `openai/gpt-5.6-terra` | Balanced OpenAI tier for simple tool use; acceptable as a router when the skill catalog is clean and small. |
@@ -158,8 +157,8 @@ routing around it (see `docs/CONFIG.md` → `tiers` / `fallback_models`):
 Unconfigured tiers always resolve to the main model, so none of this
 changes behavior until you opt in. Profiles still split roles best:
 
-- **Personal skill-heavy profile**: owl-alpha, DeepSeek V4 Pro,
-  MiMo V2.5 Pro, or Sonnet 5.
+- **Personal skill-heavy profile**: DeepSeek V4 Pro, MiMo V2.5 Pro,
+  or Sonnet 5.
 - **High-volume service profile**: DeepSeek V4 Flash, MiMo V2.5,
   Haiku 4.5, or GPT-5.6 Terra, with fewer skills and tighter prompts.
 - **Engineering profile**: Sonnet 5, Opus 4.8, Fable 5, or
