@@ -61,9 +61,11 @@ def build(home: Path) -> str | None:
         f"{len(subs)} joined, {len(hubs)} hosting) ==="
     )
     zone = _budget_zone(home)
+    # Stable-first for provider prefix caching: volatile bytes (roster liveness, recent posts, budget %) sink to the tail.
+    out = header + "\n\n" + WORKGROUP_GUARDRAILS + "\n\n" + "\n\n".join(blocks)
     if zone:
-        header += f"\n{zone}"
-    return header + "\n\n" + "\n\n".join(blocks) + "\n\n" + WORKGROUP_GUARDRAILS
+        out += f"\n\n{zone}"
+    return out
 
 
 def _budget_zone(home: Path) -> str:

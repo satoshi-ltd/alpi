@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.12.1 — 2026-08-03 — pipelines that recover on their own
+
+- **A removed workgroup stays removed.** Deleting one could race a member's
+  in-flight write and quietly resurrect its subscription — ten came back across
+  five profiles in one measured fleet teardown. Removals are now sticky, and a
+  deliberate re-join still works.
+- **A stalled pipeline recovers without an operator.** If the owner fixed the
+  files but never re-posted, the check re-runs before the hub is woken and a
+  green result closes the phase by itself; resuming a paused workgroup re-fires
+  a check that was parked behind the pause; and a final verdict that fails gets
+  one wake to route its findings instead of freezing the run.
+- **A repair can arrive in pieces.** The phase owner is no longer silenced for
+  posting a fix note before the re-delivery, and after a blocked phase the hub
+  may re-open any earlier phase — rewinding re-walks the chain forward.
+- **A recipe can declare which files each phase may touch.** Editing outside the
+  declared paths turns the check red naming each file, before the check runs —
+  measured twice, an agent editing another's files was how a red check got
+  forced green.
+- **Workgroup turns cache better.** The per-turn prompt now keeps its stable
+  text first and the volatile lines last, so providers that price cached input
+  can actually reuse the prefix between turns.
+
 ## v0.12.0 — 2026-07-31 — one map of named pipelines, declared only by a recipe
 
 **Breaking:** the old `pipeline` + `operations` recipe shape is gone. A recipe

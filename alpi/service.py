@@ -7,6 +7,7 @@ import hashlib
 import logging
 import os
 import platform
+import re
 import shutil
 import signal
 import subprocess
@@ -847,8 +848,32 @@ _GATE_REPAIRS: dict[tuple[str, str, str, int], int] = {}
 _GATE_REPAIRS_CAP = 512
 
 
+async def _ensure_phase_baseline(home: Path, wg, recent: list[dict]) -> None:
+    """Backstop only — the authoritative snapshot lands in the `#task` accept path; this covers openers that predate that path."""
+    from alpi import config as cfg_mod
+    from alpi.alp import pipeline_gates as gates
+    from alpi.alp import tasks as wg_tasks
+
+    if not getattr(wg.meta, "pipeline_steps", None) or not recent:
+        return
+    active = wg_tasks.active_task(recent, hub_pubkey=wg.meta.hub_pubkey)
+    if active is None:
+        return
+    step = gates.step_for(wg.meta, active.slug)
+    if step is None or not step.paths:
+        return
+    workspace = cfg_mod.load(home).workspace_path or home
+    try:
+        await asyncio.to_thread(
+            gates.snapshot_baseline,
+            home / "alp" / "workgroups" / wg.meta.id, step, workspace,
+        )
+    except OSError as e:
+        log.warning("wg %s baseline snapshot failed: %s", wg.meta.id, e)
+
+
 async def _maybe_gate_advance(
-    home: Path, wg, recent: list[dict], own_pubkey: str,
+    home: Path, wg, recent: list[dict], own_pubkey: str, *, force: bool = False,
 ) -> bool | str | None:
     """True = phase advanced mechanically; str = gate failed (reason for the LLM wake); None = no gate applies."""
     from alpi import config as cfg_mod
@@ -878,14 +903,22 @@ async def _maybe_gate_advance(
     if latest_seq is None:
         return None
     key = (str(home), wg.meta.id, latest_seq)
-    if key in _GATE_ATTEMPTED:
+    if key in _GATE_ATTEMPTED and not force:
         return None
     workspace = cfg_mod.load(home).workspace_path or home
     # Marked here, not earlier: anything that fails before the run must stay retryable.
     if len(_GATE_ATTEMPTED) >= _GATE_ATTEMPTED_CAP:
         _GATE_ATTEMPTED.pop(next(iter(_GATE_ATTEMPTED)))
     _GATE_ATTEMPTED[key] = True
-    passed, output = await asyncio.to_thread(gates.run_gate, step, workspace)
+    violations = await asyncio.to_thread(
+        gates.paths_violations,
+        home / "alp" / "workgroups" / wg.meta.id, step, workspace,
+    )
+    if violations:
+        # Boundary red before the command: gate pressure is what causes cross-phase edits.
+        passed, output = False, violations
+    else:
+        passed, output = await asyncio.to_thread(gates.run_gate, step, workspace)
     try:
         gates.write_gate_log(
             home / "alp" / "workgroups" / wg.meta.id,
@@ -951,6 +984,7 @@ async def _maybe_dispatch_for_hub(
     if getattr(wg.meta, "paused", False):  # paused → no activity dispatch, no watchdog, no burn
         return
     own_pubkey = _keys.load_or_generate(home).pubkey_b64()
+    await _ensure_phase_baseline(home, wg, recent)
     gate_fail = await _maybe_gate_advance(home, wg, recent, own_pubkey)
     if gate_fail is True:
         return
@@ -1056,6 +1090,45 @@ def _is_success_result(result: str) -> bool:
         or text.startswith("verified")
         or text.startswith("verificado")
     )
+
+
+def _latest_close_result(wg, recent: list[dict]) -> str:
+    from alpi.alp import tasks as wg_tasks
+
+    events: list = []
+    for p in recent:
+        events += wg_tasks.parse_post(
+            str(p.get("text") or ""), int(p.get("seq", 0)),
+            str(p.get("from") or ""), hub_pubkey=wg.meta.hub_pubkey,
+        )
+    closed = [t for t in wg_tasks.fold_tasks(events) if not t.is_open]
+    if not closed:
+        return ""
+    return max(closed, key=lambda t: t.closed_seq or 0).result or ""
+
+
+# Negated mentions ("0 errors", "error-free", "no failures") are neutralized before failure words match.
+_NEGATED_FAILURE_RE = re.compile(
+    r"\b(?:0|zero|no|without|sin)\s+(?:errors?|failures?|fail(?:ure)?s?)\b"
+    r"|\b(?:error|failure)[- ]free\b",
+    re.IGNORECASE,
+)
+_FAILURE_RE = re.compile(
+    r"\bfail(?:s|ed|ing|ure|ures)?\b|\berrors?\b|\bnot\s+pass(?:ed|ing)?\b",
+    re.IGNORECASE,
+)
+
+
+def _terminal_close_needs_routing(result: str) -> bool:
+    """Explicit failure words only — "not provably green" (a machine `verified · gate:` close) must never draw a routing wake."""
+    text = (result or "").strip()
+    if not text:
+        return False
+    if text.upper().startswith("BLOCKED") or text.lower().startswith("preempted"):
+        return False
+    if re.match(r"^skipped\s*·", text, re.IGNORECASE):
+        return False
+    return bool(_FAILURE_RE.search(_NEGATED_FAILURE_RE.sub(" ", text)))
 
 
 def _next_pipeline_phase(wg, recent: list[dict]) -> tuple[str | None, str, bool]:
@@ -1227,8 +1300,12 @@ async def _maybe_watchdog_close(
                 _emit_wg_blocked_once(home, wg.meta.id, latest_slug, 0)
             return
         if nxt is None:
-            return  # last phase done — pipeline complete, nothing to open
-        next_phase = nxt
+            if not _terminal_close_needs_routing(_latest_close_result(wg, recent)):
+                return  # complete, halted loudly, or deliberately skipped
+            # Once the hub's own failing close is the newest post, no other path wakes it.
+            next_phase = ""
+        else:
+            next_phase = nxt
         last_post = recent[-1]
     else:
         posts_in_task = [
@@ -1308,17 +1385,25 @@ async def _maybe_watchdog_close(
         # count FIRST — once at the cap, return without writing (no
         # per-tick `poller_state.json` churn) until the transcript moves.
         cur = cont_count if cont_seq == last_seq else 0
-        if cur >= _CONTINUATION_MAX_FIRES:
+        max_fires = _CONTINUATION_MAX_FIRES if next_phase else 1
+        if cur >= max_fires:
             # All attempts spent on this `#done` seq and the transcript
             # never moved (a new post would reset the seq). NOW we know it's
             # stuck — surface `wg.blocked` once, then return without writing.
             _emit_wg_blocked_once(home, wg.meta.id, f"seq{last_seq}", cur)
             return
         cnt = _bump_hub_continuation_count(home, wg.meta.id, last_seq)
-        reason = (
-            f"watchdog: task closed (seq #{last_seq}), open next phase "
-            f"`#{next_phase}` — pipeline continuation (attempt {cnt})"
-        )
+        if next_phase:
+            reason = (
+                f"watchdog: task closed (seq #{last_seq}), open next phase "
+                f"`#{next_phase}` — pipeline continuation (attempt {cnt})"
+            )
+        else:
+            reason = (
+                f"watchdog: terminal phase closed FAILING (seq #{last_seq}) and "
+                "the close routed nothing — route the findings or leave the run "
+                "halted"
+            )
         log.info(
             "wg poller: %s dispatching continuation (reason=%s)",
             wg.meta.id, reason,
@@ -1339,6 +1424,13 @@ async def _maybe_watchdog_close(
     # An in-flight turn is progress the transcript cannot show yet; a nudge here re-tasks over live work and the preempt watcher kills it.
     if any(key[0] == wg.meta.id for key in _INFLIGHT):
         return
+    # The owner may have fixed the workspace without re-posting; verify once before spending a wake.
+    forced = await _maybe_gate_advance(
+        home, wg, recent, wg.meta.hub_pubkey, force=True,
+    )
+    if forced is True:
+        return
+    gate_note = forced if isinstance(forced, str) else ""
     last_author_is_hub = str(
         last_post.get("from") or ""
     ) == wg.meta.hub_pubkey
@@ -1403,6 +1495,8 @@ async def _maybe_watchdog_close(
             f"watchdog: {stall_kind} (seq #{last_seq}), nothing new for "
             f"{int(age)}s — closure-or-silence only"
         )
+    if gate_note:
+        reason = f"{reason} · {gate_note}"
     log.info(
         "wg poller: %s dispatching %s (reason=%s)",
         wg.meta.id,
@@ -1583,6 +1677,12 @@ _RESUMABLE_POLLER_TABLES = (
 def reset_workgroup_poller_state(home: Path, wg_id: str) -> None:
     """Drop the per-wg poller guards for ``wg_id`` so resume re-opens normal
     dispatch/watchdog evaluation. No auto-post — the next tick decides."""
+    # In-memory edge state: without this a delivery parked behind a pause never re-fires its gate.
+    key_home = str(home)
+    for k in [k for k in _GATE_ATTEMPTED if k[0] == key_home and k[1] == wg_id]:
+        del _GATE_ATTEMPTED[k]
+    for k in [k for k in _GATE_REPAIRS if k[0] == key_home and k[1] == wg_id]:
+        del _GATE_REPAIRS[k]
     state = _load_poller_state(home)
     changed = False
     for table in _RESUMABLE_POLLER_TABLES:
@@ -1959,7 +2059,24 @@ async def _dispatch_workgroup_turn(
 ) -> None:
     """Spawn a background ``chat --once`` turn for a workgroup."""
     turn_timeout = turn_budget_s or _turn_timeout_for(pipeline)
-    if continuation:
+    if continuation and not next_phase:
+        prompt = (
+            f"[workgroup-routing] '#{wg_name or wg_id}' (wg_id={wg_id}). "
+            f"{reason}.\n\n"
+            "The terminal phase closed with a FAILING verdict and the close "
+            "routed nothing — a finding named only in prose moves nothing. "
+            "This is the one automatic wake on it.\n\n"
+            "Read the failing close, then RE-TASK each finding to its owning "
+            f"phase: one `workgroup_post(wg_id=\"{wg_id}\", text=\"@<owner> "
+            "#task #<phase> · <the finding>\")` per phase, most upstream "
+            "first. Opening a `#task` is always allowed even though you (hub) "
+            "spoke last.\n\n"
+            "If the findings genuinely cannot be routed to any phase, end the "
+            "turn SILENT — the run stays halted and visible. Do not post "
+            "prose; rotation will reject it."
+        )
+        env_extra: dict[str, str] = {}
+    elif continuation:
         nxt = next_phase or "<next>"
         prompt = (
             f"[workgroup-continuation] '#{wg_name or wg_id}' "

@@ -43,7 +43,7 @@ def _current_round_posts(
 
 def _check_member_rotation(
     posts: list[dict], own_pubkey: str, hub_pubkey: str,
-    plaintext: str = "",
+    plaintext: str = "", *, phase_owner: bool = False,
 ) -> None:
     """Reject posts that would violate member rotation."""
     round_posts = _current_round_posts(posts, hub_pubkey)
@@ -66,12 +66,26 @@ def _check_member_rotation(
                 "content or `#skip` to post again."
             )
         return
+    if phase_owner:
+        # Rotation guards peer ping-pong, not an owner iterating on its own open phase.
+        return
     if prior_consuming >= 1:
         raise ValueError(
             "turn-rotation: you already posted in the current "
             "round (since the hub's last post). Stay silent until "
             "the hub speaks again."
         )
+
+
+def _member_owns_active_phase(sub, active, own_id: str) -> bool:
+    """Only the phase's DECLARED owner iterates freely — a merely-mentioned participant keeps rotation."""
+    if not (getattr(sub, "pipeline_mode", False) and active is not None and own_id):
+        return False
+    canon = wg_mod.canonical_pipeline_phase(sub, active.slug)
+    if canon is None:
+        return False
+    owner = str((sub.phase_map.get(canon[1]) or {}).get("owner") or "")
+    return owner.lower() == own_id
 
 
 def _check_member_round_fresh(
@@ -379,11 +393,19 @@ def _check_blocked_phase_not_skipped(
     new_owner = wg_mod.canonical_pipeline_phase(wg.meta, new_slug) if new_slug else None
     if new_owner is None or new_owner[0] != chain_key or new_owner[1] == blocked_phase:
         return
+    chain = tuple((getattr(wg.meta, "pipelines", None) or {}).get(chain_key) or ())
+    if (
+        new_owner[1] in chain and blocked_phase in chain
+        and chain.index(new_owner[1]) < chain.index(blocked_phase)
+    ):
+        # A rewind re-walks forward through the blocked phase, so nothing is skipped.
+        return
     raise ValueError(
         f"blocked-phase-not-cleared: `#{blocked_phase}` closed BLOCKED, which "
         f"halts the `{chain_key}` chain — opening `#{new_slug}` would advance "
-        f"past a phase that never passed. Re-open `#{blocked_phase}` so its "
-        "close continues the chain, or leave the chain halted."
+        f"past a phase that never passed. Re-open `#{blocked_phase}` — or any "
+        "phase EARLIER in the chain — so its close continues the chain, or "
+        "leave the chain halted."
     )
 
 
@@ -645,6 +667,7 @@ async def join(home: Path, peer_id: str, wg_id: str) -> sub_mod.Subscription:
     if voice:
         params["voice"] = voice
     result = await _call(home, kp, peer_id, "workgroup.join", params)
+    sub_mod.revive(home, wg_id)
     res = _resolve_hub(home, peer_id)
     sub = sub_mod.get(home, wg_id) or sub_mod.Subscription(
         wg_id=wg_id,
@@ -763,8 +786,10 @@ async def post(
     sub = sub_mod.get(home, wg_id) or sub
     posts_view = list(sub.recent_posts or [])
     _check_member_round_fresh(posts_view, sub.hub_pubkey)
+    _active = tasks_mod.active_task(posts_view, hub_pubkey=sub.hub_pubkey)
     _check_member_rotation(
         posts_view, kp.pubkey_b64(), sub.hub_pubkey, plaintext,
+        phase_owner=_member_owns_active_phase(sub, _active, _own_profile_id(home)),
     )
 
     version = sub.latest_version()
@@ -1024,17 +1049,65 @@ def _emit_wg_post(home: Path, wg_id: str, result: dict[str, Any] | None) -> None
         pass
 
 
+def _paths_step(meta, slug: str):
+    from alpi.alp import pipeline_gates as gates
+
+    step = gates.step_for(meta, slug)
+    return step if step is not None and step.paths else None
+
+
+def _baselines_before_post(home: Path, wg, d: Path, events) -> list[str]:
+    """The baseline must exist before the opener is readable, or the owner's first edits land inside it."""
+    from alpi import config as cfg_mod
+    from alpi.alp import pipeline_gates as gates
+
+    if not getattr(wg.meta, "pipeline_steps", None):
+        return []
+    workspace = cfg_mod.load(home).workspace_path or home
+    created: list[str] = []
+    for ev in events:
+        if ev.kind != "task":
+            continue
+        step = _paths_step(wg.meta, ev.slug)
+        if step is None:
+            continue
+        try:
+            if gates.snapshot_baseline(d, step, workspace):
+                created.append(step.phase)
+        except OSError as e:
+            for phase in created:
+                gates.clear_baseline(d, phase)
+            raise ValueError(f"phase baseline snapshot failed: {e}") from e
+    return created
+
+
+def _baselines_after_post(wg, d: Path, events, active_phase) -> None:
+    """A run's baseline dies with the run: `#done` close or cross-phase preemption; a same-phase re-task keeps it."""
+    from alpi.alp import pipeline_gates as gates
+
+    if not getattr(wg.meta, "pipeline_steps", None) or active_phase is None:
+        return
+    ended = any(ev.kind == "done" for ev in events) or any(
+        ev.kind == "task" and ev.slug != active_phase.slug for ev in events
+    )
+    if not ended:
+        return
+    step = _paths_step(wg.meta, active_phase.slug)
+    if step is None:
+        return
+    try:
+        gates.clear_baseline(d, step.phase)
+    except OSError:
+        pass
+
+
 def _post_as_hub(
     home: Path, wg, kp: Keypair, text: bytes,
     cost: dict[str, Any] | None,
     *, operator_abandon: bool = False,
 ) -> dict[str, Any]:
     """Write a hub post directly into the local transcript."""
-    import datetime as _dt
-    from alpi.alp.workgroup import (
-        _append_transcript, _gate_post, _load_ledger, _save_ledger,
-        _read_transcript, _wg_dir,
-    )
+    from alpi.alp.workgroup import _transcript_write_lock, _wg_dir
 
     own = wg.member(kp.pubkey_b64())
     if own is None:
@@ -1042,14 +1115,25 @@ def _post_as_hub(
     if wg.meta.paused:
         raise ValueError("workgroup is paused")
 
-    cost_dict = dict(cost) if cost else {}
     d = _wg_dir(home, wg.meta.id)
-    ledger = _load_ledger(d)
+    # Read, validate, baseline and append under ONE lock — a post validated on a stale transcript must never land.
+    with _transcript_write_lock(d):
+        return _post_as_hub_locked(
+            home, wg, own, kp, text, dict(cost) if cost else {}, d,
+            operator_abandon=operator_abandon,
+        )
 
-    try:
-        _gate_post(wg.meta, ledger, cost_dict)
-    except Exception as e:  # noqa: BLE001
-        raise ValueError(str(e)) from e
+
+def _post_as_hub_locked(
+    home: Path, wg, own, kp: Keypair, text: bytes,
+    cost_dict: dict[str, Any], d: Path,
+    *, operator_abandon: bool,
+) -> dict[str, Any]:
+    import datetime as _dt
+    from alpi.alp import pipeline_gates as gates
+    from alpi.alp.workgroup import (
+        _admit_post_locked, _gate_post, _load_ledger, _read_transcript,
+    )
 
     existing_raw = _read_transcript(d)
 
@@ -1122,31 +1206,40 @@ def _post_as_hub(
         ),
     )
 
-    group_key = wg_mod.open_sealed_group_key(own.sealed_key, kp)
-    nonce, ct = wg_mod.encrypt_post(group_key, text)
-
-    seq = (existing[-1]["seq"] + 1) if existing else 1
-    ts = _dt.datetime.now(tz=_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    entry: dict[str, Any] = {
-        "seq": seq, "ts": ts, "from": kp.pubkey_b64(),
-        "key_version": own.key_version, "nonce": nonce, "ciphertext": ct,
-    }
     declared_usd = float(cost_dict.get("usd", 0.0)) if cost_dict else 0.0
     declared_tokens = int(cost_dict.get("tokens", 0)) if cost_dict else 0
     declared_in = int(cost_dict.get("tokens_in", 0)) if cost_dict else 0
     declared_out = int(cost_dict.get("tokens_out", 0)) if cost_dict else 0
-    if declared_usd or declared_tokens:
-        entry["cost"] = {"usd": declared_usd, "tokens": declared_tokens}
-        if declared_in or declared_out:
-            entry["cost"]["tokens_in"] = declared_in
-            entry["cost"]["tokens_out"] = declared_out
-    _append_transcript(d, entry)
+    # Budget/cap verdict precedes the baseline write so a rejected opener leaves no trace.
+    try:
+        _gate_post(wg.meta, _load_ledger(d), {"usd": declared_usd, "tokens": declared_tokens})
+    except Exception as e:  # noqa: BLE001
+        raise ValueError(str(e)) from e
 
-    ledger["usd"] = float(ledger.get("usd", 0.0)) + declared_usd
-    ledger["tokens"] = int(ledger.get("tokens", 0)) + declared_tokens
-    ledger["posts"] = int(ledger.get("posts", 0)) + 1
-    _save_ledger(d, ledger)
-    return {"seq": seq, "ts": ts}
+    post_events = tasks_mod.parse_post(plaintext, 0, kp.pubkey_b64())
+    created_baselines = _baselines_before_post(home, wg, d, post_events)
+
+    try:
+        group_key = wg_mod.open_sealed_group_key(own.sealed_key, kp)
+        nonce, ct = wg_mod.encrypt_post(group_key, text)
+
+        ts = _dt.datetime.now(tz=_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        entry: dict[str, Any] = {
+            "seq": 0, "ts": ts, "from": kp.pubkey_b64(),
+            "key_version": own.key_version, "nonce": nonce, "ciphertext": ct,
+        }
+        if declared_usd or declared_tokens:
+            entry["cost"] = {"usd": declared_usd, "tokens": declared_tokens}
+            if declared_in or declared_out:
+                entry["cost"]["tokens_in"] = declared_in
+                entry["cost"]["tokens_out"] = declared_out
+        entry = _admit_post_locked(d, wg.meta, entry, declared_usd, declared_tokens)
+    except Exception as e:  # noqa: BLE001
+        for phase in created_baselines:
+            gates.clear_baseline(d, phase)
+        raise ValueError(str(e)) from e
+    _baselines_after_post(wg, d, post_events, active_phase)
+    return {"seq": int(entry["seq"]), "ts": ts}
 
 
 async def pull(

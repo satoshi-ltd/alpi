@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import logging as _logging
 import os
+import re
 import threading
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
@@ -37,6 +38,8 @@ from alpi.alp import workgroup as wg_mod
 
 _SECRETS_DIR = "alp/secrets"
 _FILENAME = "subscriptions.yaml"
+_TOMBSTONES_DIR = "subscriptions.removed.d"
+_TOMBSTONE_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 _log = _logging.getLogger("alpi.alp.subscription")
 # Warn-once: load() runs every poller tick, and the next save() drops the entry permanently.
@@ -156,6 +159,38 @@ def path(home: Path) -> Path:
     return home / _SECRETS_DIR / _FILENAME
 
 
+def _tombstones_dir(home: Path) -> Path:
+    return home / _SECRETS_DIR / _TOMBSTONES_DIR
+
+
+def tombstones(home: Path) -> set[str]:
+    try:
+        return set(os.listdir(_tombstones_dir(home)))
+    except OSError:
+        return set()
+
+
+def tombstone(home: Path, wg_id: str) -> None:
+    """One atomic marker file per id (no read-modify-write to race, no eviction ever); load() hides and save() drops marked ids in every process."""
+    if not _TOMBSTONE_ID_RE.match(wg_id or ""):
+        return
+    d = _tombstones_dir(home)
+    d.mkdir(mode=0o700, parents=True, exist_ok=True)
+    (d / wg_id).touch()
+    _invalidate_cache(path(home))
+
+
+def revive(home: Path, wg_id: str) -> None:
+    """A deliberate re-join lifts the tombstone; a stale write-back never calls this."""
+    if not _TOMBSTONE_ID_RE.match(wg_id or ""):
+        return
+    try:
+        (_tombstones_dir(home) / wg_id).unlink()
+    except OSError:
+        return
+    _invalidate_cache(path(home))
+
+
 # pollers call load() 4-5x per pull on the event loop — without this mtime cache the YAML parse starves it
 _raw_cache: dict[str, tuple[tuple[int, int], list]] = {}
 _raw_cache_lock = threading.Lock()
@@ -193,9 +228,12 @@ def load(home: Path) -> list[Subscription]:
     if not p.exists():
         return []
     raw = _read_raw(p)
+    dead = tombstones(home)
     out: list[Subscription] = []
     for entry in raw:
         if not isinstance(entry, dict):
+            continue
+        if str(entry.get("wg_id") or "") in dead:
             continue
         try:
             pipelines, launch = wg_mod.pipelines_from_raw(entry)
@@ -255,8 +293,11 @@ def load(home: Path) -> list[Subscription]:
 def save(home: Path, subs: list[Subscription]) -> None:
     p = path(home)
     p.parent.mkdir(parents=True, exist_ok=True)
+    dead = tombstones(home)
     data: list[dict[str, Any]] = []
     for s in subs:
+        if s.wg_id in dead:
+            continue
         entry: dict[str, Any] = {
             "wg_id": s.wg_id,
             "name": s.name,

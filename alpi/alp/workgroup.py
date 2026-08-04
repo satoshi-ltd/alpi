@@ -29,6 +29,7 @@ from __future__ import annotations
 import asyncio as _asyncio
 import base64
 import datetime as _dt
+import fcntl as _fcntl
 import json
 import logging as _logging
 import os
@@ -36,8 +37,9 @@ import re as _re
 import secrets
 import shutil as _shutil
 import time as _time
+from contextlib import contextmanager as _contextmanager
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 
@@ -561,14 +563,19 @@ def _purge_after_delete(home: Path, wg_id: str) -> list[str]:
         if not prof_dir.is_dir():
             continue
         try:
-            if sub_mod.get(prof_dir, wg_id) is not None:
-                sub_mod.remove(prof_dir, wg_id)
+            had = sub_mod.get(prof_dir, wg_id) is not None
+            # Unconditional: a write-back in flight resurrects a plain remove.
+            sub_mod.tombstone(prof_dir, wg_id)
+            if had:
+                sub_mod.save(prof_dir, sub_mod.load(prof_dir))
                 purged.append(prof_dir.name)
         except Exception:  # noqa: BLE001
             continue
     try:
-        if sub_mod.get(_ROOT, wg_id) is not None:
-            sub_mod.remove(_ROOT, wg_id)
+        had = sub_mod.get(_ROOT, wg_id) is not None
+        sub_mod.tombstone(_ROOT, wg_id)
+        if had:
+            sub_mod.save(_ROOT, sub_mod.load(_ROOT))
             purged.append("default")
     except Exception:  # noqa: BLE001
         pass
@@ -855,6 +862,80 @@ def _emit_hub_wg_mention(
         pass
 
 
+@_contextmanager
+def _transcript_write_lock(d: Path):
+    # flock spans read-seq + append so two same-machine writers cannot mint one seq.
+    d.mkdir(parents=True, exist_ok=True)
+    with open(d / ".transcript.lock", "w") as fh:
+        _fcntl.flock(fh, _fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            _fcntl.flock(fh, _fcntl.LOCK_UN)
+
+
+def append_with_seq(d: Path, entry: dict[str, Any]) -> dict[str, Any]:
+    """Assign the next seq and append atomically with respect to other local writers."""
+    with _transcript_write_lock(d):
+        existing = _read_transcript(d)
+        entry["seq"] = (existing[-1]["seq"] + 1) if existing else 1
+        _append_transcript(d, entry)
+    return entry
+
+
+def admit_post(
+    d: Path, meta: "Meta", entry: dict[str, Any],
+    declared_usd: float = 0.0, declared_tokens: int = 0,
+    *, enforce_cap: bool = False, reject_nonce_reuse: bool = False,
+) -> dict[str, Any]:
+    """Budget gate, cap, nonce, seq+append and ledger under ONE lock — split apart, concurrent writers overwrite each other's ledger and race past the cap."""
+    with _transcript_write_lock(d):
+        return _admit_post_locked(
+            d, meta, entry, declared_usd, declared_tokens,
+            enforce_cap=enforce_cap, reject_nonce_reuse=reject_nonce_reuse,
+        )
+
+
+def _admit_post_locked(
+    d: Path, meta: "Meta", entry: dict[str, Any],
+    declared_usd: float = 0.0, declared_tokens: int = 0,
+    *, enforce_cap: bool = False, reject_nonce_reuse: bool = False,
+) -> dict[str, Any]:
+    # flock is not reentrant across fds: callers already inside _transcript_write_lock must use this, never admit_post.
+    ledger = _load_ledger(d)
+    _gate_post(meta, ledger, {"usd": declared_usd, "tokens": declared_tokens})
+    existing = _read_transcript(d)
+    if enforce_cap and len(existing) >= _MAX_TRANSCRIPT_POSTS:
+        raise alp_server.HandlerError(
+            -32010, "workgroup-full",
+            data={"detail": f"transcript at cap ({_MAX_TRANSCRIPT_POSTS} posts)"},
+        )
+    if reject_nonce_reuse and any(
+        e.get("nonce") == entry.get("nonce")
+        and _as_int(e.get("key_version", 1)) == _as_int(entry.get("key_version", 1))
+        for e in existing
+    ):
+        raise alp_server.HandlerError(
+            -32602, "invalid-params",
+            data={"detail": "nonce reuse for this key_version"},
+        )
+    entry["seq"] = (existing[-1]["seq"] + 1) if existing else 1
+    transcript = d / _TRANSCRIPT
+    prev_size = transcript.stat().st_size if transcript.exists() else 0
+    _append_transcript(d, entry)
+    ledger["usd"] = float(ledger.get("usd", 0.0)) + declared_usd
+    ledger["tokens"] = int(ledger.get("tokens", 0)) + declared_tokens
+    ledger["posts"] = int(ledger.get("posts", 0)) + 1
+    try:
+        _save_ledger(d, ledger)
+    except Exception:
+        # Still under the lock: truncating the append keeps transcript and ledger consistent — a phase must never open without its accounting.
+        with transcript.open("rb+") as fh:
+            fh.truncate(prev_size)
+        raise
+    return entry
+
+
 def _read_transcript(d: Path) -> list[dict[str, Any]]:
     p = d / _TRANSCRIPT
     if not p.exists():
@@ -897,15 +978,28 @@ def _load_ledger(d: Path) -> dict[str, Any]:
 
 
 def _save_ledger(d: Path, ledger: dict[str, Any]) -> None:
+    import tempfile
     d.mkdir(parents=True, exist_ok=True)
-    (d / _LEDGER).write_text(json.dumps(
+    text = json.dumps(
         {
             "usd": float(ledger.get("usd", 0.0)),
             "tokens": int(ledger.get("tokens", 0)),
             "posts": int(ledger.get("posts", 0)),
         },
         separators=(",", ":"),
-    ))
+    )
+    fd, tmp_name = tempfile.mkstemp(dir=str(d), prefix=f".{_LEDGER}.", suffix=".tmp")
+    tmp = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        os.chmod(tmp, 0o600)
+        os.replace(str(tmp), str(d / _LEDGER))
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise
 
 
 _PIPELINE_SLUG_RE = _re.compile(r"^[a-z0-9][a-z0-9_-]*$")
@@ -1167,6 +1261,29 @@ def validate_pipeline_steps(
             if not isinstance(cwd, str):
                 raise ValueError(f"pipeline_steps[{phase!r}].gate.cwd must be a string")
             step["gate"] = {"argv": list(argv), "cwd": cwd}
+        paths = raw.get("paths")
+        if paths is not None:
+            if not isinstance(paths, list) or not all(
+                isinstance(g, str) and g.strip() for g in paths
+            ):
+                raise ValueError(
+                    f"pipeline_steps[{phase!r}].paths must be a list of relative "
+                    "path globs"
+                )
+            for g in paths:
+                pp = PurePosixPath(g.strip())
+                if pp.is_absolute() or ".." in pp.parts:
+                    raise ValueError(
+                        f"pipeline_steps[{phase!r}].paths entry {g!r} must stay "
+                        "inside the project"
+                    )
+            if "gate" not in step:
+                raise ValueError(
+                    f"pipeline_steps[{phase!r}].paths needs a gate — the gate's "
+                    "cwd anchors the project root and its run is when the "
+                    "boundary is checked"
+                )
+            step["paths"] = [g.strip() for g in paths]
         out[phase] = step
     return out
 
@@ -1311,24 +1428,8 @@ def register(server: alp_server.Server, home: Path) -> None:
         declared_tokens = max(declared_tokens, declared_in + declared_out)
 
         d = _wg_dir(home, wg_id)
-        ledger = _load_ledger(d)
-        _gate_post(wg.meta, ledger, {"usd": declared_usd, "tokens": declared_tokens})
-
-        existing = _read_transcript(d)
-        if len(existing) >= _MAX_TRANSCRIPT_POSTS:
-            raise alp_server.HandlerError(
-                -32010, "workgroup-full",
-                data={"detail": f"transcript at cap ({_MAX_TRANSCRIPT_POSTS} posts)"},
-            )
-        if any(e.get("nonce") == nonce and _as_int(e.get("key_version", 1)) == key_version
-               for e in existing):
-            raise alp_server.HandlerError(
-                -32602, "invalid-params",
-                data={"detail": "nonce reuse for this key_version"},
-            )
-        seq = (existing[-1]["seq"] + 1) if existing else 1
         entry: dict[str, Any] = {
-            "seq": seq,
+            "seq": 0,
             "ts": _utcnow(),
             "from": peer.pubkey,
             "key_version": key_version,
@@ -1340,12 +1441,11 @@ def register(server: alp_server.Server, home: Path) -> None:
             if declared_in or declared_out:
                 entry["cost"]["tokens_in"] = declared_in
                 entry["cost"]["tokens_out"] = declared_out
-        _append_transcript(d, entry)
-
-        ledger["usd"] = float(ledger.get("usd", 0.0)) + declared_usd
-        ledger["tokens"] = int(ledger.get("tokens", 0)) + declared_tokens
-        ledger["posts"] = int(ledger.get("posts", 0)) + 1
-        _save_ledger(d, ledger)
+        entry = admit_post(
+            d, wg.meta, entry, declared_usd, declared_tokens,
+            enforce_cap=True, reject_nonce_reuse=True,
+        )
+        seq = int(entry["seq"])
 
         member.last_seen_at = entry["ts"]
         _save_members(d, wg.members)

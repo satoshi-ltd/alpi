@@ -337,3 +337,25 @@ def test_hub_block_renders_chains_and_never_the_gate_commands(short_tmp: Path) -
     assert "- setup: #setup @mira → #qa @mira (launch)" in block
     assert "check:setup" not in block
     assert "projects/x" not in block
+
+
+def test_block_orders_stable_content_before_volatile(short_tmp: Path) -> None:
+    """Provider prefix caching: the static guardrails precede the per-turn churn (roster liveness, recent posts, budget %), which sinks to the tail."""
+    home = short_tmp / "cachet"; home.mkdir()
+    load_or_generate(home)
+    (home / "config.yaml").write_text("budget:\n  daily_usd: 10.0\n")
+    from alpi import ledger
+    ledger.record(home, usd=9.0, tokens=100, tokens_in=80, tokens_out=20)
+    sub = sub_mod.Subscription(
+        wg_id="wg_c", name="site", hub_id="mira", hub_pubkey="HUB",
+        briefing="stable briefing text",
+    )
+    sub.append_recent([{"seq": 9, "text": "volatile recent post", "from": "HUB"}])
+    sub_mod.upsert(home, sub)
+
+    block = agent_context.build(home)
+    guard = block.index("=== Workgroup engagement rules ===")
+    wg = block.index("wg_id=wg_c")
+    budget = block.index("BUDGET:")
+    assert guard < wg < budget
+    assert block.rstrip().endswith(block[budget:].rstrip())

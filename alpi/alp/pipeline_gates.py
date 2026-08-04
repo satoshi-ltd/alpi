@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import fnmatch
+import hashlib
 import json
 import os
 import signal
@@ -25,6 +27,7 @@ class GateStep:
     next_task: str
     argv: tuple[str, ...]
     cwd: str
+    paths: tuple[str, ...] = ()
 
 
 def chain_for(meta, phase: str) -> tuple[str, ...] | None:
@@ -68,10 +71,121 @@ def step_for(meta, phase: str) -> GateStep | None:
         return None
     next_owner = str(nxt.get("owner") or "") if isinstance(nxt, dict) else ""
     next_task = str(nxt.get("task") or "") if isinstance(nxt, dict) else ""
+    paths = raw.get("paths")
     return GateStep(
         phase=phase, owner=owner,
         next_phase=next_phase, next_owner=next_owner, next_task=next_task,
         argv=tuple(argv), cwd=cwd,
+        paths=tuple(str(g) for g in paths) if isinstance(paths, list) else (),
+    )
+
+
+# Derived/heavy trees are outside every authoring boundary; pruning them keeps the walk cheap.
+_SCAN_EXCLUDE = {".git", "node_modules", "dist", ".astro", "public", "__pycache__", ".venv", ".cache"}
+# A gate's own `npm install` rewrites these, so they are nobody's deliverable.
+_SCAN_EXCLUDE_FILES = {
+    "package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "pnpm-lock.yaml",
+    "bun.lockb", ".DS_Store",
+}
+
+
+# Keyed by phase, never opener seq — a per-seq key lets a re-task whitewash earlier out-of-paths edits.
+def _baseline_path(wg_dir: Path, phase: str) -> Path:
+    return wg_dir / "phase_baselines" / f"{phase}.json"
+
+
+def _file_stamp(fp: Path) -> str | None:
+    """Content digest, never mtime: restoring a file must clear its violation, and a rewrite always moves mtime."""
+    h = hashlib.blake2b(digest_size=16)
+    try:
+        with fp.open("rb") as fh:
+            for chunk in iter(lambda: fh.read(65536), b""):
+                h.update(chunk)
+    except OSError:
+        return None
+    return h.hexdigest()
+
+
+def _scan_project(root: Path) -> dict[str, str]:
+    out: dict[str, str] = {}
+    if not root.is_dir():
+        return out
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in _SCAN_EXCLUDE]
+        for fn in filenames:
+            if fn in _SCAN_EXCLUDE_FILES:
+                continue
+            stamp = _file_stamp(Path(dirpath) / fn)
+            if stamp is not None:
+                out[(Path(dirpath) / fn).relative_to(root).as_posix()] = stamp
+    return out
+
+
+# Same jail as run_gate: an escaping cwd never gets scanned, and run_gate reds it anyway.
+def _project_root(step: GateStep, workspace: Path) -> Path | None:
+    root = (workspace / step.cwd).resolve() if step.cwd else workspace.resolve()
+    try:
+        root.relative_to(workspace.resolve())
+    except ValueError:
+        return None
+    return root
+
+
+def snapshot_baseline(wg_dir: Path, step: GateStep, workspace: Path) -> bool:
+    """Record the project's file state when the phase opens; True only when THIS call wrote it."""
+    if not step.paths:
+        return False
+    root = _project_root(step, workspace)
+    if root is None:
+        return False
+    bp = _baseline_path(wg_dir, step.phase)
+    if bp.exists():
+        return False
+    bp.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    snapshot = _scan_project(root)
+    tmp = bp.with_suffix(".tmp")
+    tmp.write_text(json.dumps(snapshot, separators=(",", ":")))
+    os.replace(tmp, bp)
+    return True
+
+
+def clear_baseline(wg_dir: Path, phase: str) -> None:
+    _baseline_path(wg_dir, phase).unlink(missing_ok=True)
+
+
+def paths_violations(wg_dir: Path, step: GateStep, workspace: Path) -> str:
+    """Out-of-paths changes as a re-taskable red; "" = clean, and a missing baseline fails open."""
+    if not step.paths:
+        return ""
+    root = _project_root(step, workspace)
+    if root is None:
+        return ""
+    bp = _baseline_path(wg_dir, step.phase)
+    try:
+        baseline = json.loads(bp.read_text())
+    except (OSError, ValueError):
+        return ""
+    current = _scan_project(root)
+    allowed = tuple(step.paths)
+
+    def _within(rel: str) -> bool:
+        return any(fnmatch.fnmatchcase(rel, g) for g in allowed)
+
+    offenders: list[str] = []
+    for rel, stamp in current.items():
+        if baseline.get(rel) == stamp or _within(rel):
+            continue
+        offenders.append(f"  {rel} — {'changed' if rel in baseline else 'created'}, "
+                         f"outside: {', '.join(allowed)}")
+    for rel in baseline:
+        if rel not in current and not _within(rel):
+            offenders.append(f"  {rel} — deleted, outside: {', '.join(allowed)}")
+    if not offenders:
+        return ""
+    return (
+        f"BOUNDARY {step.phase}: files outside @{step.owner}'s declared paths "
+        "changed during this phase — restore each file, or route the change to "
+        "the phase that owns it:\n" + "\n".join(sorted(offenders))
     )
 
 

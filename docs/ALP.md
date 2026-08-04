@@ -1591,6 +1591,35 @@ legitimately produce nothing — one whose owner can answer `#done
 skipped · <reason>` — because a gate there would fail a correct
 outcome.
 
+**Per-phase authorship (`pipeline_steps.*.paths`, hub-local).** A gated
+phase may declare the path globs its owner is allowed to touch. When the
+task opens the daemon snapshots the project's file state (derived trees
+— `node_modules`, `dist`, `.git`, `.astro`, `public` — excluded); when
+the gate would run, changes outside the declared globs red the phase
+*before the command executes*, naming each file and its owner — gate
+pressure is precisely what causes cross-phase edits, so the edit is
+surfaced instead of graded. A missing baseline (daemon restarted
+mid-phase) fails open: the boundary is a net, not a wall. `paths`
+requires a `gate` — its `cwd` anchors the project root and its run is
+the check moment.
+
+**The gate is level-triggered where the transcript alone would strand a
+run.** Four behaviours close the measured stall family: a watchdog wake
+on a stale gated task re-runs the gate first, so an owner who fixed the
+workspace without re-posting gets a machine close instead of a wasted
+hub wake — and a still-red re-run puts the fresh findings into the wake.
+`workgroup resume` clears the in-memory gate state for the workgroup, so
+a delivery parked behind a pause re-fires its gate on the next tick. A
+terminal close whose verdict carries an explicit failure word (`QA FAIL
+· …`) and routes nothing draws exactly ONE follow-up wake — re-task the
+findings or leave the run halted, loudly. And the targeted phase owner
+is exempt from the one-post-per-round rotation cap: a repair delivery
+may arrive in pieces (a fix note, then the re-delivery the gate re-runs
+on) without muting the owner. A `#done BLOCKED` still halts its chain,
+but a hub `#task` on any phase EARLIER in the chain is now allowed — a
+rewind re-walks forward through the blocked phase, so nothing is
+skipped.
+
 **One authority decides the successor.** Both the continuation path (a
 phase closed by quorum, gate-less or LLM-owned) and the gate path call
 `pipeline_successor(meta, phase)`: the slug after `phase` in its own
