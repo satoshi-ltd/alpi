@@ -77,11 +77,31 @@ def _check_member_rotation(
         )
 
 
+_PHASE_TAG_RE = re.compile(r"#([a-z0-9][a-z0-9-]*)")
+
+
+def _hub_named_phase(sub, own_id: str) -> str:
+    """The opener scrolls out of the recent-post window in long repair sequences; the daemon's own notes still name the phase."""
+    for post in reversed(list(sub.recent_posts or [])):
+        if str(post.get("from") or "") != sub.hub_pubkey:
+            continue
+        text = str(post.get("text") or "")
+        if f"@{own_id}" not in text:
+            continue
+        for tag in _PHASE_TAG_RE.findall(text):
+            if tag in (sub.phase_map or {}):
+                return tag
+    return ""
+
+
 def _member_owns_active_phase(sub, active, own_id: str) -> bool:
     """Only the phase's DECLARED owner iterates freely — a merely-mentioned participant keeps rotation."""
-    if not (getattr(sub, "pipeline_mode", False) and active is not None and own_id):
+    if not (getattr(sub, "pipeline_mode", False) and own_id):
         return False
-    canon = wg_mod.canonical_pipeline_phase(sub, active.slug)
+    slug = active.slug if active is not None else _hub_named_phase(sub, own_id)
+    if not slug:
+        return False
+    canon = wg_mod.canonical_pipeline_phase(sub, slug)
     if canon is None:
         return False
     owner = str((sub.phase_map.get(canon[1]) or {}).get("owner") or "")

@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.12.2 — 2026-08-04 — a repair keeps its voice to the end of a phase
+
+- **An owner repairing its own phase is no longer silenced deep into it.** The
+  exemption that lets a fix note and its re-delivery arrive as two posts stopped
+  applying once the phase's opening task scrolled out of the member's recent
+  view — which is exactly what happens after a few repair rounds. One phase sat
+  frozen for over two hours in that state; it now finishes on its own.
+
 ## v0.12.1 — 2026-08-03 — pipelines that recover on their own
 
 - **A removed workgroup stays removed.** Deleting one could race a member's

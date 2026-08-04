@@ -360,3 +360,25 @@ async def test_rewind_past_a_blocked_phase_is_allowed(tmp_path):
 
     result = await wc.post(home, wg.meta.id, "@muse #task #intake · redo the intake".encode())
     assert result.get("seq")
+
+
+def test_phase_owner_exemption_survives_the_post_window():
+    import types
+    sub = types.SimpleNamespace(
+        pipeline_mode=True,
+        hub_pubkey="HUB",
+        pipelines={"media-update": ("media-update", "media-config")},
+        phase_map={
+            "media-update": {"owner": "muse"},
+            "media-config": {"owner": "scout"},
+        },
+        recent_posts=[
+            {"seq": 61, "from": "SCOUTPK", "text": "manifest slots pointed"},
+            {"seq": 62, "from": "HUB", "text": "@scout gate red on #media-config (repair round 3/3)"},
+            {"seq": 63, "from": "SCOUTPK", "text": "restored the file"},
+        ],
+    )
+    assert wc._member_owns_active_phase(sub, None, "scout") is True
+    assert wc._member_owns_active_phase(sub, None, "muse") is False
+    sub.recent_posts = [{"seq": 70, "from": "HUB", "text": "@scout no phase named here"}]
+    assert wc._member_owns_active_phase(sub, None, "scout") is False
