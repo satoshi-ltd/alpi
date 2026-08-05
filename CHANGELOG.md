@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.12.5 — 2026-08-05 — a reply says when it landed
+
+- **A turn now records when it ended, not only when it started.** Turns that
+  chain dozens of tools run for many minutes, and the reply was carrying the
+  timestamp of the question — a fresh answer showed up already twenty-five
+  minutes old. Clients get an `ended_at` alongside `at` and can stamp each side
+  of the exchange honestly.
+- **Session recency follows the end of the last turn**, so a long piece of work
+  no longer sorts and dates itself by the moment it was asked for.
+
+Sessions written before this release carry no end stamp and keep reading exactly
+as they did.
+
 ## v0.12.4 — 2026-08-04 — a stalled run tells someone
 
 - **An invented repair slug no longer strands the run.** A phase named

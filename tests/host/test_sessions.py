@@ -95,6 +95,26 @@ def test_list_sessions_tolerates_corrupt_started_at(tmp_path: Path) -> None:
     assert by_id["bad"]["updated_at"] > 0
 
 
+def test_session_recency_uses_the_turn_end_not_its_start(tmp_path: Path) -> None:
+    p = tmp_path / "sessions" / "long.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({
+        "id": "long",
+        "model": "openrouter/x",
+        "started_at": 1_714_000_000.0,
+        "turns": [{
+            "at": 1_714_000_000.0,
+            "ended_at": 1_714_001_532.0,
+            "user": "research this",
+            "assistant": "done",
+            "tools": [],
+        }],
+    }), encoding="utf-8")
+
+    row = data_sessions.list_sessions(tmp_path)[0]
+    assert row["updated_at"] == pytest.approx(1_714_001_532.0)
+
+
 def test_list_sessions_classifies_kinds(tmp_path: Path) -> None:
     _seed_session(tmp_path, "a", "[INBOUND IMAP] hi")
     _seed_session(tmp_path, "b", "[SCHEDULED: digest]")

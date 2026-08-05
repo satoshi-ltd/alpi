@@ -47,6 +47,7 @@ export { default as PipelineStages } from "./PipelineStages.jsx";
 export { default as Popover } from "./Popover.jsx";
 export { default as ProfileChatHeader } from "./ProfileChatHeader.jsx";
 export { default as ProfileMessage } from "./ProfileMessage.jsx";
+export { default as RelativeTime } from "./RelativeTime.jsx";
 export { default as RefreshBar } from "./RefreshBar.jsx";
 export { default as RefreshButton } from "./RefreshButton.jsx";
 export { default as SearchBar } from "./SearchBar.jsx";

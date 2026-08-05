@@ -14,7 +14,7 @@ import SearchBar from "../primitives/SearchBar.jsx";
 import Markdown from "../primitives/Markdown.jsx";
 import { setImageRoots } from "../lib/imageRoots.js";
 import { useProfileDetail } from "../hooks/useProfileDetail.js";
-import { relativeTime } from "../lib/time.js";
+import RelativeTime from "../primitives/RelativeTime.jsx";
 import { useTranscriptSearch } from "../hooks/useTranscriptSearch.js";
 import {
   classifyMessage,
@@ -658,8 +658,8 @@ function renderWgFooter({
   const tipText = !online && !isPlaying
     ? "Offline — TTS unavailable"
     : isLoading ? "Loading…" : isPlaying ? "Stop" : "Read aloud";
-  // Workgroup `at` is an ISO string; relativeTime expects unix seconds.
-  const stamp = at ? relativeTime(Date.parse(at) / 1000) : "";
+  // Workgroup `at` is an ISO string; RelativeTime expects unix seconds.
+  const stampTs = at ? Date.parse(at) / 1000 : 0;
   return (
     <>
       <Tip text="Copy" side="up">
@@ -692,7 +692,9 @@ function renderWgFooter({
           )}
         </IconBtn>
       </Tip>
-      {stamp && <Mono className={`tnum ${styles.footerTime}`}>{stamp}</Mono>}
+      {stampTs ? (
+        <Mono className={`tnum ${styles.footerTime}`}><RelativeTime ts={stampTs} /></Mono>
+      ) : null}
     </>
   );
 }

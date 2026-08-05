@@ -11,7 +11,7 @@ import { useStickyScroll } from "../lib/useStickyScroll.js";
 import { useScrollProgress } from "../lib/useScrollProgress.js";
 import { useScrollAnchor } from "../lib/useScrollAnchor.js";
 import { useDelayedFlag } from "../lib/useDelayedFlag.js";
-import { relativeTime } from "../lib/time.js";
+import RelativeTime from "../primitives/RelativeTime.jsx";
 import { turnParts } from "../lib/reasoningSteps.js";
 import { CaretIcon, Icon } from "../primitives/icons.jsx";
 import { profileLabel } from "../lib/profile-display.js";
@@ -659,7 +659,7 @@ const Turn = memo(function Turn({
           footer={
             <>
               <Mono className={`tnum ${styles.userActionTime}`}>
-                {relativeTime(turn.at)}
+                <RelativeTime ts={turn.at} />
               </Mono>
               {onRewriteMessage && (
                 <Tip text="Edit message" side="up">
@@ -759,7 +759,7 @@ const Turn = memo(function Turn({
                 </IconBtn>
               </Tip>
               <span className={styles.agentMeta}>
-                <Mono className="tnum">{relativeTime(turn.at)}</Mono>
+                <Mono className="tnum"><RelativeTime ts={turn.ended_at || turn.at} /></Mono>
                 {turn.tokens != null && (
                   <>
                     <span className={styles.agentMetaSep}>·</span>

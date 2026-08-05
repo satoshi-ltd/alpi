@@ -2,7 +2,7 @@ import AlpiSilhouette from "./AlpiSilhouette.jsx";
 import { profileLabel } from "../lib/profile-display.js";
 import Diamond from "./Diamond.jsx";
 import Mono from "./Mono.jsx";
-import { relativeTime } from "../lib/time.js";
+import RelativeTime from "./RelativeTime.jsx";
 import styles from "./NewChatHero.module.css";
 
 export default function NewChatHero({
@@ -44,7 +44,7 @@ export default function NewChatHero({
                       <Mono className={styles.recentHandle}>@{profileLabel(s.profile)}</Mono>
                       <span className={styles.recentText}>{s.first_user}</span>
                       <span className={styles.recentTime}>
-                        {relativeTime(s.updated_at || s.mtime)}
+                        <RelativeTime ts={s.updated_at || s.mtime} />
                       </span>
                     </button>
                   </li>

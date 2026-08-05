@@ -23,7 +23,7 @@ import {
   XIcon,
   ArchiveIcon,
 } from "../primitives/index.js";
-import { relativeTime } from "../lib/time.js";
+import RelativeTime from "../primitives/RelativeTime.jsx";
 import { cycleTheme, nextTheme, useTheme } from "../lib/theme.js";
 import { profileLabel } from "../lib/profile-display.js";
 import {
@@ -721,7 +721,7 @@ const ProfileRow = memo(function ProfileRow({
   const trailing = unread
     ? <span className="sb-unread-dot" aria-label="unread" />
     : sessionRecency > 0
-      ? <span className="tnum sb-ts">{relativeTime(sessionRecency)}</span>
+      ? <span className="tnum sb-ts"><RelativeTime ts={sessionRecency} /></span>
       : null;
   const label = profileLabel(profile.name);
   const incompleteHint = `@${label}, needs provider — tap to set up`;
@@ -810,7 +810,7 @@ const WorkgroupRow = memo(function WorkgroupRow({
   const trailing = unread
     ? <span className="sb-unread-dot" aria-label="unread" />
     : mtime > 0
-      ? <span className="tnum sb-ts">{relativeTime(mtime)}</span>
+      ? <span className="tnum sb-ts"><RelativeTime ts={mtime} /></span>
       : null;
 
   return (

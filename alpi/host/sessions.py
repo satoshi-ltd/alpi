@@ -260,7 +260,7 @@ def _row_from_data(sid: str, data: dict[str, Any], *, mtime: int, size_bytes: in
     last_turn_at = 0.0
     if turns:
         for t in reversed(turns):
-            v = t.get("at") if isinstance(t, dict) else None
+            v = (t.get("ended_at") or t.get("at")) if isinstance(t, dict) else None
             if isinstance(v, (int, float)) and v > last_turn_at:
                 last_turn_at = float(v)
                 break

@@ -11,6 +11,18 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.5.2 — 2026-08-05 — timestamps that follow the clock
+
+- **The reply is stamped when it landed, not when you asked.** On a turn that
+  worked for twenty-five minutes the answer appeared already reading "25m". The
+  question keeps its own time, so you can see how long the work took.
+- **Relative timestamps now tick by themselves.** A "now" used to stay "now"
+  until something else happened to redraw the view; chat, workgroup posts and the
+  sidebar all keep up with the clock on their own.
+
+Requires alpi ≥ 0.12.0; the reply stamp needs alpi ≥ 0.12.5 and falls back to the
+question's time against older daemons.
+
 ## v0.5.1 — 2026-08-04 — each panel keeps its own alpi
 
 - **Tools, Skills, Memory and Schedule no longer share one identity.** The four

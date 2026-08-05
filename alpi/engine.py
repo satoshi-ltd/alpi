@@ -350,6 +350,7 @@ class Engine:
         self.session.log_turn(
             user=user_text, assistant="", tools=[],
             started_at=turn_started, attachments=att_meta,
+            ended_at=0.0,  # the stub has not ended: a reply stamp here would read as "finished at turn start".
         )
         if persist_inflight:
             try:
@@ -886,7 +887,7 @@ class Engine:
                 else time.time()
             )
             final_turn = session.Turn(
-                at=turn_started, user=user_text,
+                at=turn_started, ended_at=time.time(), user=user_text,
                 tools=turn_tools, assistant=final_assistant,
                 reasoning="\n\n".join(p for p in turn_reasoning_parts if p),
                 reasoned_s=max(0.0, reasoned_until - turn_started),

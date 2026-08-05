@@ -285,3 +285,33 @@ def test_turn_model_round_trips_and_is_omitted_when_empty(tmp_path: Path) -> Non
     loaded = load_turns(payload)
     assert loaded[0].model == "openrouter/deep"
     assert loaded[1].model == ""
+
+
+def test_end_stamp_round_trips_and_the_inflight_stub_carries_none() -> None:
+    from alpi.session import _serialize_turn_v2
+
+    session = Session(home=Path("/tmp"), model="m")
+    session.log_turn(user="a", assistant="", tools=[], started_at=1.0, ended_at=0.0)
+    session.log_turn(user="b", assistant="done", tools=[], started_at=2.0, ended_at=95.0)
+
+    rows = [_serialize_turn_v2(t, redact=lambda v: v) for t in session.turns]
+    assert "ended_at" not in rows[0]
+    assert rows[1]["ended_at"] == 95.0
+
+    loaded = load_turns({"turns": rows})
+    assert loaded[0].ended_at == 0.0
+    assert loaded[1].ended_at == 95.0
+
+
+def test_log_turn_stamps_the_end_by_default() -> None:
+    session = Session(home=Path("/tmp"), model="m")
+    with patch("alpi.session.time.time", return_value=500.0):
+        session.log_turn(user="a", assistant="ok", tools=[], started_at=100.0)
+
+    assert session.turns[0].at == 100.0
+    assert session.turns[0].ended_at == 500.0
+
+
+def test_turns_from_older_sessions_load_without_an_end_stamp() -> None:
+    loaded = load_turns({"turns": [{"at": 7.0, "user": "a", "assistant": "b"}]})
+    assert loaded[0].ended_at == 0.0

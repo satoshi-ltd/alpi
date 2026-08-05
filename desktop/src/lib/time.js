@@ -68,10 +68,10 @@ export function shortDate(unixSeconds) {
   return d.getFullYear() === new Date().getFullYear() ? SHORT.format(d) : LONG.format(d);
 }
 
-export function relativeTime(unixSeconds) {
+export function relativeTime(unixSeconds, nowMs = Date.now()) {
   if (!unixSeconds) return "";
   const ms = unixSeconds * 1000;
-  const now = Date.now();
+  const now = nowMs;
   const diff = Math.max(0, now - ms);
   const minutes = Math.floor(diff / 60000);
   if (minutes < 1) return "now";

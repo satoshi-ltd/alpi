@@ -120,3 +120,27 @@ def test_interrupted_turn_still_leaves_one_turn(
     final = json.loads(sess_path.read_text())
     assert len(final["turns"]) == 1
     assert final["turns"][0]["user"] == "research"
+
+
+def test_reply_stamp_tracks_turn_end_not_turn_start(
+    engine: Engine, monkeypatch,
+) -> None:
+    import time as _time
+
+    sess_path = engine.home / engine.session.subdir / f"{engine.session.id}.json"
+    mid: list[dict] = []
+
+    def slow_stream(messages, tools, **kwargs):
+        mid.append(json.loads(sess_path.read_text()))
+        _time.sleep(0.05)
+        yield from _stream_one("reply text")
+
+    monkeypatch.setattr("alpi.llm.stream", slow_stream)
+
+    engine.run_turn("hello", emit=lambda _e: None)
+    engine.save_session()
+
+    assert "ended_at" not in mid[0]["turns"][0]
+
+    turn = json.loads(sess_path.read_text())["turns"][0]
+    assert turn["ended_at"] - turn["at"] >= 0.05

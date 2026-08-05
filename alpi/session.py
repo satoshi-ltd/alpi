@@ -41,6 +41,7 @@ class Turn:
     user: str
     tools: list[ToolLog]
     assistant: str        # alpi's final text reply (last no-tool-calls message)
+    ended_at: float = 0.0  # `at` is turn START; a long turn's reply is minutes younger. 0 = pre-0.12.5 session.
     reasoning: str = ""
     reasoned_s: float = 0.0
     attachments: list[dict[str, Any]] = field(default_factory=list)  # bytes-free; carries a best-effort local path (may be unfetchable cross-client / post-TTL)
@@ -88,10 +89,12 @@ class Session:
         started_at: float | None = None,
         attachments: list[dict[str, Any]] | None = None,
         interrupted: bool = False,
+        ended_at: float | None = None,
     ) -> None:
         """Append a completed user turn to the persistent log."""
         self.turns.append(Turn(
             at=started_at if started_at is not None else time.time(),
+            ended_at=time.time() if ended_at is None else ended_at,
             user=user,
             tools=tools,
             assistant=assistant,
@@ -149,6 +152,8 @@ class Session:
 
 def _serialize_turn_v2(t: Turn, *, redact) -> dict[str, Any]:  # noqa: ANN001
     row: dict[str, Any] = {"at": t.at}
+    if t.ended_at:
+        row["ended_at"] = t.ended_at
     _put(row, "user", redact(t.user), USER_CAP)
     _put(row, "assistant", redact(t.assistant), ASSISTANT_CAP)
     row["tools"] = [_serialize_tool_v2(tl, redact=redact) for tl in t.tools]
@@ -308,6 +313,7 @@ def load_turns(data: dict[str, Any]) -> list[Turn]:
             user=str(t.get("user", "")),
             tools=tools,
             assistant=str(t.get("assistant", "")),
+            ended_at=float(t.get("ended_at", 0) or 0),
             reasoning=_preview(t.get("reasoning")),
             reasoned_s=float(t.get("reasoned_s", 0)),
             attachments=list(t.get("attachments") or []),
