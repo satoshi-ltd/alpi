@@ -844,6 +844,12 @@ _GATE_ATTEMPTED: dict[tuple[str, str, int], bool] = {}
 _GATE_ATTEMPTED_CAP = 512
 # Daemon-authored repair rounds per (home, wg, phase, opener seq); past the cap the hub is woken for judgment.
 _GATE_REPAIR_ROUNDS = 3
+# A red verdict is provisional: the owner may correct the workspace and never post again.
+_GATE_RECHECK_AT: dict[tuple[str, str, int], float] = {}
+_GATE_RECHECK_SECONDS = 120
+_GATE_RED_SIGNATURE: dict[tuple[str, str, int], str] = {}
+# A gate's own output moves the signature, so pre != post alone never means "fixed".
+_GATE_RED_RETRY: set[tuple[str, str, int]] = set()
 _GATE_REPAIRS: dict[tuple[str, str, str, int], int] = {}
 _GATE_REPAIRS_CAP = 512
 
@@ -872,8 +878,25 @@ async def _ensure_phase_baseline(home: Path, wg, recent: list[dict]) -> None:
         log.warning("wg %s baseline snapshot failed: %s", wg.meta.id, e)
 
 
+def _gate_recheck_due(home: Path, wg_id: str, phase: str, seq: int) -> bool:
+    from alpi.alp import pipeline_gates as gates
+
+    if gates.gate_log_verdict(home / "alp" / "workgroups" / wg_id, phase, seq) is not False:
+        return False
+    if any(k[0] == wg_id for k in _INFLIGHT):
+        return False
+    key = (str(home), wg_id, seq)
+    now = time.monotonic()
+    if now - _GATE_RECHECK_AT.get(key, 0.0) < _GATE_RECHECK_SECONDS:
+        return False
+    if len(_GATE_RECHECK_AT) >= _GATE_ATTEMPTED_CAP:
+        _GATE_RECHECK_AT.pop(next(iter(_GATE_RECHECK_AT)))
+    _GATE_RECHECK_AT[key] = now
+    return True
+
+
 async def _maybe_gate_advance(
-    home: Path, wg, recent: list[dict], own_pubkey: str, *, force: bool = False,
+    home: Path, wg, recent: list[dict], own_pubkey: str,
 ) -> bool | str | None:
     """True = phase advanced mechanically; str = gate failed (reason for the LLM wake); None = no gate applies."""
     from alpi import config as cfg_mod
@@ -903,13 +926,28 @@ async def _maybe_gate_advance(
     if latest_seq is None:
         return None
     key = (str(home), wg.meta.id, latest_seq)
-    if key in _GATE_ATTEMPTED and not force:
-        return None
+    recheck = False
+    if key in _GATE_ATTEMPTED:
+        if not _gate_recheck_due(home, wg.meta.id, step.phase, latest_seq):
+            return None
+        recheck = True
     workspace = cfg_mod.load(home).workspace_path or home
+    evaluated_sig = await asyncio.to_thread(
+        gates.workspace_signature, step, workspace,
+    )
+    consumed_retry = False
+    if recheck and key in _GATE_RED_SIGNATURE and evaluated_sig == _GATE_RED_SIGNATURE[key]:
+        if key not in _GATE_RED_RETRY:
+            return None
+        _GATE_RED_RETRY.discard(key)
+        consumed_retry = True
+    elif recheck:
+        _GATE_RED_RETRY.discard(key)
     # Marked here, not earlier: anything that fails before the run must stay retryable.
     if len(_GATE_ATTEMPTED) >= _GATE_ATTEMPTED_CAP:
         _GATE_ATTEMPTED.pop(next(iter(_GATE_ATTEMPTED)))
     _GATE_ATTEMPTED[key] = True
+    _GATE_RECHECK_AT[key] = time.monotonic()
     violations = await asyncio.to_thread(
         gates.paths_violations,
         home / "alp" / "workgroups" / wg.meta.id, step, workspace,
@@ -928,6 +966,18 @@ async def _maybe_gate_advance(
         return f"GATE {step.phase} audit FAILED: {e}"
     if not passed:
         log.info("wg gate %s/%s FAILED (seq %s)", wg.meta.id, step.phase, latest_seq)
+        if len(_GATE_RED_SIGNATURE) >= _GATE_ATTEMPTED_CAP:
+            _GATE_RED_SIGNATURE.pop(next(iter(_GATE_RED_SIGNATURE)))
+        post_sig = await asyncio.to_thread(
+            gates.workspace_signature, step, workspace,
+        )
+        _GATE_RED_SIGNATURE[key] = post_sig
+        # A retry run may not re-arm, or a self-mutating gate loops.
+        if not consumed_retry and post_sig != evaluated_sig:
+            _GATE_RED_RETRY.add(key)
+        if recheck:
+            # A silent re-run must never consume a repair round nor re-post.
+            return None
         rkey = (str(home), wg.meta.id, step.phase, int(active.opened_seq))
         rounds = _GATE_REPAIRS.get(rkey, 0) + 1
         if len(_GATE_REPAIRS) >= _GATE_REPAIRS_CAP:
@@ -937,7 +987,8 @@ async def _maybe_gate_advance(
             note = (
                 f"@{step.owner} gate red on #{step.phase} "
                 f"(repair round {rounds}/{_GATE_REPAIR_ROUNDS}) — fix these and "
-                f"re-deliver on this same task:\n{output[-900:]}"
+                f"re-deliver on this same task:\n"
+                f"{output[-gates.GATE_FINDINGS_POST_CHARS:]}"
             )
             try:
                 res = await wc.post(home, wg.meta.id, note.encode())
@@ -1463,13 +1514,10 @@ async def _maybe_watchdog_close(
     # An in-flight turn is progress the transcript cannot show yet; a nudge here re-tasks over live work and the preempt watcher kills it.
     if any(key[0] == wg.meta.id for key in _INFLIGHT):
         return
-    # The owner may have fixed the workspace without re-posting; verify once before spending a wake.
-    forced = await _maybe_gate_advance(
-        home, wg, recent, wg.meta.hub_pubkey, force=True,
-    )
-    if forced is True:
+    verified = await _maybe_gate_advance(home, wg, recent, wg.meta.hub_pubkey)
+    if verified is True:
         return
-    gate_note = forced if isinstance(forced, str) else ""
+    gate_note = verified if isinstance(verified, str) else ""
     last_author_is_hub = str(
         last_post.get("from") or ""
     ) == wg.meta.hub_pubkey
@@ -1722,6 +1770,11 @@ def reset_workgroup_poller_state(home: Path, wg_id: str) -> None:
         del _GATE_ATTEMPTED[k]
     for k in [k for k in _GATE_REPAIRS if k[0] == key_home and k[1] == wg_id]:
         del _GATE_REPAIRS[k]
+    for table in (_GATE_RECHECK_AT, _GATE_RED_SIGNATURE):
+        for k in [k for k in table if k[0] == key_home and k[1] == wg_id]:
+            del table[k]
+    for k in [k for k in _GATE_RED_RETRY if k[0] == key_home and k[1] == wg_id]:
+        _GATE_RED_RETRY.discard(k)
     state = _load_poller_state(home)
     changed = False
     for table in _RESUMABLE_POLLER_TABLES:

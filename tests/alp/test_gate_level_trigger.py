@@ -45,6 +45,9 @@ def _recent():
 def _clear_gate_state():
     service._GATE_ATTEMPTED.clear()
     service._GATE_REPAIRS.clear()
+    service._GATE_RECHECK_AT.clear()
+    service._GATE_RED_SIGNATURE.clear()
+    service._GATE_RED_RETRY.clear()
 
 
 @pytest.fixture(autouse=True)
@@ -61,12 +64,30 @@ def _mock_owner(monkeypatch):
     )
 
 
+def _mock_workspace(monkeypatch, tmp_path):
+    project = tmp_path / "ws"
+    project.mkdir(exist_ok=True)
+    (project / "a.txt").write_text("one")
+    monkeypatch.setattr(
+        "alpi.config.load",
+        lambda h: types.SimpleNamespace(workspace_path=project),
+    )
+    counter = {"n": 0}
+
+    def touch():
+        counter["n"] += 1
+        (project / "a.txt").write_text(f"edit-{counter['n']}")
+
+    return project, touch
+
+
 @pytest.mark.asyncio
-async def test_forced_rerun_recovers_a_silent_fixer(tmp_path, monkeypatch):
+async def test_a_silent_fixer_is_recovered_without_a_wake(tmp_path, monkeypatch):
     home = tmp_path / "hub"
     home.mkdir()
     wg = _gated_wg()
     _mock_owner(monkeypatch)
+    _, touch = _mock_workspace(monkeypatch, tmp_path)
     verdict = {"passed": False}
     monkeypatch.setattr(
         "alpi.alp.pipeline_gates.run_gate",
@@ -84,14 +105,370 @@ async def test_forced_rerun_recovers_a_silent_fixer(tmp_path, monkeypatch):
     assert await service._maybe_gate_advance(home, wg, _recent(), "HUB") is True
     assert "repair round 1/3" in posted[0]
 
-    verdict["passed"] = True
-    assert await service._maybe_gate_advance(home, wg, _recent(), "HUB") is None
-
     posted.clear()
-    out = await service._maybe_gate_advance(home, wg, _recent(), "HUB", force=True)
+    verdict["passed"] = True
+    touch()
+    monkeypatch.setattr(service, "_GATE_RECHECK_SECONDS", 0)
+    out = await service._maybe_gate_advance(home, wg, _recent(), "HUB")
     assert out is True
     assert posted[0].startswith("#done content verified")
     assert posted[1].startswith("@lingua #task #translation")
+
+
+@pytest.mark.asyncio
+async def test_a_still_red_recheck_stays_silent(tmp_path, monkeypatch):
+    home = tmp_path / "hub"
+    home.mkdir()
+    wg = _gated_wg()
+    _mock_owner(monkeypatch)
+    monkeypatch.setattr(
+        "alpi.alp.pipeline_gates.run_gate", lambda step, ws: (False, "9 FAILs"),
+    )
+    posted: list[str] = []
+
+    async def fake_post(h, wid, text, cost=None):
+        posted.append(text.decode())
+        return {"seq": 10 + len(posted)}
+
+    monkeypatch.setattr("alpi.alp.workgroup_client.post", fake_post)
+    monkeypatch.setattr(service, "_set_hub_responded_seq", lambda *a: None)
+
+    assert await service._maybe_gate_advance(home, wg, _recent(), "HUB") is True
+    assert len(posted) == 1
+
+    monkeypatch.setattr(service, "_GATE_RECHECK_SECONDS", 0)
+    for _ in range(3):
+        assert await service._maybe_gate_advance(home, wg, _recent(), "HUB") is None
+    assert len(posted) == 1
+    assert max(service._GATE_REPAIRS.values()) == 1
+
+
+@pytest.mark.asyncio
+async def test_an_unchanged_workspace_is_never_re_gated(tmp_path, monkeypatch):
+    home = tmp_path / "hub"
+    home.mkdir()
+    project = tmp_path / "ws"
+    project.mkdir()
+    (project / "a.txt").write_text("one")
+    wg = _gated_wg()
+    _mock_owner(monkeypatch)
+    monkeypatch.setattr(
+        "alpi.config.load",
+        lambda h: types.SimpleNamespace(workspace_path=project),
+    )
+    runs = {"n": 0}
+
+    def _run(step, ws):
+        runs["n"] += 1
+        return False, "still thin"
+
+    monkeypatch.setattr("alpi.alp.pipeline_gates.run_gate", _run)
+
+    async def fake_post(h, wid, text, cost=None):
+        return {"seq": 11}
+
+    monkeypatch.setattr("alpi.alp.workgroup_client.post", fake_post)
+    monkeypatch.setattr(service, "_set_hub_responded_seq", lambda *a: None)
+    monkeypatch.setattr(service, "_GATE_RECHECK_SECONDS", 0)
+
+    await service._maybe_gate_advance(home, wg, _recent(), "HUB")
+    assert runs["n"] == 1
+
+    for _ in range(4):
+        assert await service._maybe_gate_advance(home, wg, _recent(), "HUB") is None
+    assert runs["n"] == 1, "an unchanged workspace must not respawn the gate"
+
+    (project / "a.txt").write_text("two")
+    assert await service._maybe_gate_advance(home, wg, _recent(), "HUB") is None
+    assert runs["n"] == 2, "a changed workspace earns exactly one new attempt"
+    for _ in range(3):
+        await service._maybe_gate_advance(home, wg, _recent(), "HUB")
+    assert runs["n"] == 2
+
+
+@pytest.mark.parametrize("tree", ["dist", "public", ".astro"])
+def test_the_signature_sees_the_outputs_a_gate_reads(tmp_path, tree):
+    from alpi.alp import pipeline_gates as gates
+
+    project = tmp_path / "ws"
+    (project / "src").mkdir(parents=True)
+    (project / "src" / "a.json").write_text("x")
+    (project / tree).mkdir()
+    (project / tree / "index.html").write_text("v1")
+    step = gates.GateStep(
+        phase="build", owner="pixel", next_phase="", next_owner="", next_task="",
+        argv=("true",), cwd="", paths=("src/**",),
+    )
+    before = gates.workspace_signature(step, project)
+    (project / tree / "index.html").write_text("v2-fixed")
+    assert gates.workspace_signature(step, project) != before, (
+        f"a build gate reads {tree}/, so a fix there must move the signature"
+    )
+
+
+def test_the_signature_sees_a_mode_change(tmp_path):
+    import os
+    from alpi.alp import pipeline_gates as gates
+
+    project = tmp_path / "ws"
+    project.mkdir()
+    script = project / "check.sh"
+    script.write_text("#!/bin/sh\n")
+    os.chmod(script, 0o644)
+    step = gates.GateStep(
+        phase="build", owner="pixel", next_phase="", next_owner="", next_task="",
+        argv=("true",), cwd="", paths=("src/**",),
+    )
+    before = gates.workspace_signature(step, project)
+    os.chmod(script, 0o755)
+    assert gates.workspace_signature(step, project) != before, (
+        "a gate that failed on a non-executable script must see the chmod"
+    )
+
+
+def test_the_signature_sees_an_empty_directory(tmp_path):
+    from alpi.alp import pipeline_gates as gates
+
+    project = tmp_path / "ws"
+    project.mkdir()
+    (project / "a.txt").write_text("x")
+    step = gates.GateStep(
+        phase="build", owner="pixel", next_phase="", next_owner="", next_task="",
+        argv=("true",), cwd="", paths=("src/**",),
+    )
+    before = gates.workspace_signature(step, project)
+    (project / "expected-dir").mkdir()
+    assert gates.workspace_signature(step, project) != before
+
+
+def test_the_signature_ignores_dependencies(tmp_path):
+    from alpi.alp import pipeline_gates as gates
+
+    project = tmp_path / "ws"
+    (project / "src").mkdir(parents=True)
+    (project / "src" / "a.json").write_text("x")
+    (project / "node_modules" / "pkg").mkdir(parents=True)
+    (project / "node_modules" / "pkg" / "i.js").write_text("v1")
+    step = gates.GateStep(
+        phase="build", owner="pixel", next_phase="", next_owner="", next_task="",
+        argv=("true",), cwd="", paths=("src/**",),
+    )
+    before = gates.workspace_signature(step, project)
+    (project / "node_modules" / "pkg" / "i.js").write_text("v2")
+    assert gates.workspace_signature(step, project) == before
+
+
+@pytest.mark.asyncio
+async def test_a_fix_landing_mid_run_is_retried(tmp_path, monkeypatch):
+    home = tmp_path / "hub"
+    home.mkdir()
+    wg = _gated_wg()
+    _mock_owner(monkeypatch)
+    project, touch = _mock_workspace(monkeypatch, tmp_path)
+    runs = {"n": 0}
+
+    def _run(step, ws):
+        runs["n"] += 1
+        touch()
+        return False, "9 FAILs"
+
+    monkeypatch.setattr("alpi.alp.pipeline_gates.run_gate", _run)
+
+    async def fake_post(h, wid, text, cost=None):
+        return {"seq": 11}
+
+    monkeypatch.setattr("alpi.alp.workgroup_client.post", fake_post)
+    monkeypatch.setattr(service, "_set_hub_responded_seq", lambda *a: None)
+    monkeypatch.setattr(service, "_GATE_RECHECK_SECONDS", 0)
+
+    await service._maybe_gate_advance(home, wg, _recent(), "HUB")
+    assert runs["n"] == 1
+    await service._maybe_gate_advance(home, wg, _recent(), "HUB")
+    assert runs["n"] == 2, "the file changed during the failing run; the next poll must retry"
+
+    for _ in range(4):
+        await service._maybe_gate_advance(home, wg, _recent(), "HUB")
+    assert runs["n"] == 2, "a gate that rewrites its own output must not re-arm itself"
+
+
+@pytest.mark.asyncio
+async def test_a_fix_landing_during_a_later_recheck_is_retried(tmp_path, monkeypatch):
+    home = tmp_path / "hub"
+    home.mkdir()
+    wg = _gated_wg()
+    _mock_owner(monkeypatch)
+    project, touch = _mock_workspace(monkeypatch, tmp_path)
+    runs = {"n": 0}
+
+    def _run(step, ws):
+        runs["n"] += 1
+        if runs["n"] == 2:
+            touch()
+        return False, "9 FAILs"
+
+    monkeypatch.setattr("alpi.alp.pipeline_gates.run_gate", _run)
+
+    async def fake_post(h, wid, text, cost=None):
+        return {"seq": 11}
+
+    monkeypatch.setattr("alpi.alp.workgroup_client.post", fake_post)
+    monkeypatch.setattr(service, "_set_hub_responded_seq", lambda *a: None)
+    monkeypatch.setattr(service, "_GATE_RECHECK_SECONDS", 0)
+
+    await service._maybe_gate_advance(home, wg, _recent(), "HUB")
+    assert runs["n"] == 1
+
+    touch()
+    await service._maybe_gate_advance(home, wg, _recent(), "HUB")
+    assert runs["n"] == 2, "an external change must earn a run"
+
+    await service._maybe_gate_advance(home, wg, _recent(), "HUB")
+    assert runs["n"] == 3, "the fix that landed during run 2 must still earn a retry"
+
+    for _ in range(3):
+        await service._maybe_gate_advance(home, wg, _recent(), "HUB")
+    assert runs["n"] == 3, "and that retry is not re-armed by itself"
+
+
+@pytest.mark.asyncio
+async def test_an_unknowable_workspace_is_still_only_spawned_once(tmp_path, monkeypatch):
+    home = tmp_path / "hub"
+    home.mkdir()
+    wg = _gated_wg()
+    _mock_owner(monkeypatch)
+    _mock_workspace(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        "alpi.alp.pipeline_gates.workspace_signature", lambda step, ws: "",
+    )
+    runs = {"n": 0}
+
+    def _run(step, ws):
+        runs["n"] += 1
+        return False, "9 FAILs"
+
+    monkeypatch.setattr("alpi.alp.pipeline_gates.run_gate", _run)
+
+    async def fake_post(h, wid, text, cost=None):
+        return {"seq": 11}
+
+    monkeypatch.setattr("alpi.alp.workgroup_client.post", fake_post)
+    monkeypatch.setattr(service, "_set_hub_responded_seq", lambda *a: None)
+    monkeypatch.setattr(service, "_GATE_RECHECK_SECONDS", 0)
+
+    await service._maybe_gate_advance(home, wg, _recent(), "HUB")
+    for _ in range(4):
+        await service._maybe_gate_advance(home, wg, _recent(), "HUB")
+    assert runs["n"] == 1, "an unknown signature must not loop the subprocess forever"
+
+
+@pytest.mark.asyncio
+async def test_a_recheck_waits_out_its_interval(tmp_path, monkeypatch):
+    home = tmp_path / "hub"
+    home.mkdir()
+    wg = _gated_wg()
+    _mock_owner(monkeypatch)
+    _, touch = _mock_workspace(monkeypatch, tmp_path)
+    runs = {"n": 0}
+
+    def _run(step, ws):
+        runs["n"] += 1
+        return False, "9 FAILs"
+
+    monkeypatch.setattr("alpi.alp.pipeline_gates.run_gate", _run)
+
+    async def fake_post(h, wid, text, cost=None):
+        return {"seq": 11}
+
+    monkeypatch.setattr("alpi.alp.workgroup_client.post", fake_post)
+    monkeypatch.setattr(service, "_set_hub_responded_seq", lambda *a: None)
+
+    await service._maybe_gate_advance(home, wg, _recent(), "HUB")
+    assert runs["n"] == 1
+    for _ in range(5):
+        touch()
+        assert await service._maybe_gate_advance(home, wg, _recent(), "HUB") is None
+    assert runs["n"] == 1, "the interval must hold the subprocess off even when files move"
+
+    monkeypatch.setattr(service, "_GATE_RECHECK_SECONDS", 0)
+    touch()
+    assert await service._maybe_gate_advance(home, wg, _recent(), "HUB") is None
+    assert runs["n"] == 2
+
+
+@pytest.mark.asyncio
+async def test_a_live_owner_turn_defers_the_recheck(tmp_path, monkeypatch):
+    home = tmp_path / "hub"
+    home.mkdir()
+    wg = _gated_wg()
+    _mock_owner(monkeypatch)
+    _, touch = _mock_workspace(monkeypatch, tmp_path)
+    verdict = {"passed": False}
+    monkeypatch.setattr(
+        "alpi.alp.pipeline_gates.run_gate",
+        lambda step, ws: (verdict["passed"], "clean" if verdict["passed"] else "9 FAILs"),
+    )
+
+    async def fake_post(h, wid, text, cost=None):
+        return {"seq": 11}
+
+    monkeypatch.setattr("alpi.alp.workgroup_client.post", fake_post)
+    monkeypatch.setattr(service, "_set_hub_responded_seq", lambda *a: None)
+
+    await service._maybe_gate_advance(home, wg, _recent(), "HUB")
+    verdict["passed"] = True
+    touch()
+    monkeypatch.setattr(service, "_GATE_RECHECK_SECONDS", 0)
+    service._INFLIGHT[(wg.meta.id, "lingua")] = {}
+    try:
+        assert await service._maybe_gate_advance(home, wg, _recent(), "HUB") is None
+    finally:
+        service._INFLIGHT.pop((wg.meta.id, "lingua"), None)
+    assert await service._maybe_gate_advance(home, wg, _recent(), "HUB") is True
+
+
+@pytest.mark.asyncio
+async def test_new_owner_delivery_gets_a_fresh_gate_verdict(tmp_path, monkeypatch):
+    home = tmp_path / "hub"
+    home.mkdir()
+    wg = _gated_wg("wg_fresh_delivery")
+    _mock_owner(monkeypatch)
+    verdicts = iter([(False, "first delivery is red"), (True, "second delivery is green")])
+    runs: list[int] = []
+
+    def fake_gate(step, workspace):
+        runs.append(1)
+        return next(verdicts)
+
+    monkeypatch.setattr("alpi.alp.pipeline_gates.run_gate", fake_gate)
+    posted: list[str] = []
+
+    async def fake_post(home_arg, wg_id, text, cost=None):
+        posted.append(text.decode())
+        return {"seq": 10 + len(posted)}
+
+    monkeypatch.setattr("alpi.alp.workgroup_client.post", fake_post)
+    monkeypatch.setattr(service, "_set_hub_responded_seq", lambda *args: None)
+
+    first = _recent()
+    assert await service._maybe_gate_advance(home, wg, first, "HUB") is True
+    assert posted == [
+        "@quill gate red on #content (repair round 1/3) — fix these and "
+        "re-deliver on this same task:\nfirst delivery is red",
+    ]
+
+    second = [
+        *first,
+        {"seq": 3, "from": "HUB", "ts": _OLD, "text": posted[0]},
+        {"seq": 4, "from": "QUILLPK", "ts": _OLD, "text": "content repaired"},
+    ]
+    assert await service._maybe_gate_advance(home, wg, second, "HUB") is True
+
+    assert len(runs) == 2
+    assert posted[1].startswith("#done content verified")
+    assert posted[2].startswith("@lingua #task #translation")
+    gate_dir = home / "alp" / "workgroups" / "wg_fresh_delivery" / "gates"
+    assert '"passed": false' in (gate_dir / "content-2.log").read_text()
+    assert '"passed": true' in (gate_dir / "content-4.log").read_text()
 
 
 @pytest.mark.asyncio
@@ -116,7 +493,13 @@ async def test_watchdog_reruns_the_gate_instead_of_waking(tmp_path, monkeypatch)
     monkeypatch.setattr(
         service, "_spawn_dispatch", lambda wid, coro: (coro.close(), spawned.append(wid)),
     )
+    from alpi.alp import pipeline_gates as gates_mod
+    step = gates_mod.step_for(wg.meta, "content")
+    gates_mod.write_gate_log(
+        home / "alp" / "workgroups" / "wg_wd1", step, 2, False, "9 FAILs",
+    )
     service._GATE_ATTEMPTED[(str(home), "wg_wd1", 2)] = True
+    monkeypatch.setattr(service, "_GATE_RECHECK_SECONDS", 0)
 
     await service._maybe_watchdog_close(home, "mira", wg, _recent())
     assert spawned == []
@@ -124,19 +507,28 @@ async def test_watchdog_reruns_the_gate_instead_of_waking(tmp_path, monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_watchdog_wake_carries_the_fresh_red_findings(tmp_path, monkeypatch):
+async def test_a_stalled_red_gate_is_not_respawned_per_watchdog_pass(tmp_path, monkeypatch):
     home = tmp_path / "hub"
     home.mkdir()
     (home / "config.yaml").write_text("{}\n")
     wg = _gated_wg("wg_wd2")
     _mock_owner(monkeypatch)
-    monkeypatch.setattr(
-        "alpi.alp.pipeline_gates.run_gate",
-        lambda step, ws: (False, "still red: deluxe summary missing"),
-    )
+    runs = {"n": 0}
+
+    def _run(step, ws):
+        runs["n"] += 1
+        return False, "still red: deluxe summary missing"
+
+    monkeypatch.setattr("alpi.alp.pipeline_gates.run_gate", _run)
     monkeypatch.setattr(service, "_set_hub_responded_seq", lambda *a: None)
+    from alpi.alp import pipeline_gates as gates_mod
+    step = gates_mod.step_for(wg.meta, "content")
+    gates_mod.write_gate_log(
+        home / "alp" / "workgroups" / "wg_wd2", step, 2, False, "9 FAILs",
+    )
     service._GATE_ATTEMPTED[(str(home), "wg_wd2", 2)] = True
     service._GATE_REPAIRS[(str(home), "wg_wd2", "content", 1)] = 3
+    monkeypatch.setattr(service, "_GATE_RECHECK_SECONDS", 0)
 
     captured: list[str] = []
 
@@ -152,9 +544,13 @@ async def test_watchdog_wake_carries_the_fresh_red_findings(tmp_path, monkeypatc
     monkeypatch.setattr(service, "_emit_wg_blocked", lambda *a, **k: None)
 
     await service._maybe_watchdog_close(home, "mira", wg, _recent())
-    assert captured, "the wake must still fire when the forced re-run stays red"
-    assert "GATE content FAILED" in captured[0]
-    assert "deluxe summary missing" in captured[0]
+    assert captured, "the wake must still fire when the recheck stays red"
+    assert runs["n"] == 1
+    assert max(service._GATE_REPAIRS.values()) == 3, "a silent recheck spends no repair round"
+
+    for _ in range(4):
+        await service._maybe_watchdog_close(home, "mira", wg, _recent())
+    assert runs["n"] == 1, "an unchanged stalled workspace must never respawn the gate"
 
 
 def test_resume_level_triggers_the_gate(tmp_path):
@@ -424,3 +820,15 @@ def test_blocked_naming_its_own_owner_is_just_a_halt():
     assert service._terminal_close_needs_routing(
         "BLOCKED · @lens cannot audit — schema is @quill's", owners, "lens",
     ) is True
+
+
+def test_the_session_separates_unreported_from_a_measured_miss(tmp_path):
+    from alpi.session import Session
+    s = Session(home=tmp_path, model="m")
+    s.record(input_tokens=1000, output_tokens=50, cost=0.01)
+    assert (s.cached_input_tokens, s.cache_measured_input_tokens) == (0, 0)
+    s.record(input_tokens=1000, output_tokens=50, cost=0.01, cached_input_tokens=0)
+    assert (s.cached_input_tokens, s.cache_measured_input_tokens) == (0, 1000)
+    s.record(input_tokens=1000, output_tokens=50, cost=0.01, cached_input_tokens=800)
+    assert (s.cached_input_tokens, s.cache_measured_input_tokens) == (800, 2000)
+    assert s.input_tokens == 3000

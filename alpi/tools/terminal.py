@@ -125,6 +125,7 @@ def _record_terminal_run(
         run_ledger.record(
             home, kind="terminal", outcome=outcome, elapsed_s=elapsed, at=at,
             profile=profile_name(home),
+            workgroup_id=os.environ.get("ALPI_WORKGROUP_DISPATCH") or None,
             backend=("sandbox" if sandbox_enabled else "local"),
             exit_code=exit_code, timeout_reason=timeout_reason, pid=pid,
             output_tail=output_tail,

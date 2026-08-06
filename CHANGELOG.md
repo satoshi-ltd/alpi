@@ -1,5 +1,44 @@
 # Changelog
 
+## v0.12.6 — 2026-08-06 — a red gate says what it found, and notices when it's fixed
+
+- **The hub no longer gets "unverified" when the gate actually has a verdict.**
+  A gate result is now tied to the exact delivery it judged, so closing a phase
+  either passes, or reports the real findings with the command that produced them
+  and what to do next. An owner delivered twice, was told only that its work was
+  unverified both times, and gave up with a skip on work that was correct.
+- **Gate findings reach the member who has to act on them.** The workgroup block
+  showed every post trimmed to a couple of lines, so a check that prints its
+  passing assertions before its failure delivered the header and nothing else. A
+  translator spent three repair rounds asking for output it had already been
+  sent, reconstructing the rules from the check script instead. A post that names
+  you now carries the full findings a gate can report; everything else stays
+  trimmed.
+- **A red gate no longer strands a run that was already fixed.** The verdict is
+  provisional: the workspace is re-checked on its own, without needing another
+  message from the owner, and a phase corrected in place closes by itself. One
+  run finished its work, went unnoticed for 28 minutes and was discarded. A
+  re-check that still fails stays quiet — it never repeats findings and never
+  spends one of the owner's repair rounds.
+- **Prefix-cache telemetry, end to end.** The share of a prompt the provider
+  served from its cache travels with the turn's usage event, accumulates on the
+  session, survives a session reload, and lands on each workgroup post and its
+  usage buckets beside the tokens it belongs to. Wrap-up, compaction and
+  tool-side LLM calls contribute their share too, instead of counting as
+  uncached. A provider that reports nothing is recorded as unmeasured — absent,
+  never a zero — and every total carries its own honest denominator, so a fleet
+  hit rate can no longer be biased down by silence. Measured on a five-hotel
+  run: 84% of input reused.
+- **A re-checked gate no longer re-runs against an unchanged project.** The
+  workspace is fingerprinted when a gate goes red, so the check is spawned again
+  only once something actually moved. Without it a permanently red gate whose
+  command runs near its timeout could keep a process alive almost continuously,
+  once per hotel.
+- **Shell runs say which workgroup they came from.** Commands were logged without
+  the workgroup and, deliberately, without the command line, which left no way to
+  tell whose turn touched a file. The workgroup id now travels with the record;
+  the command line still never does.
+
 ## v0.12.5 — 2026-08-05 — a reply says when it landed
 
 - **A turn now records when it ended, not only when it started.** Turns that

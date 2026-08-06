@@ -501,8 +501,19 @@ def _require_passing_gate(
     if step is None:
         return
     wg_dir = wg_mod._wg_dir(home, wg.meta.id)
-    if gates_mod.gate_log_verdict(wg_dir, active.slug, latest) is True:
+    record = gates_mod.gate_log_record(wg_dir, active.slug, latest)
+    if record is not None and bool(record.get("passed")):
         return
+    if record is not None:
+        output = str(record.get("output") or "gate returned no findings").strip()
+        raise ValueError(
+            f"phase-gate-failed: `#{active.slug}` ran `{' '.join(step.argv)}` "
+            f"on the owner's latest post (seq #{latest}) and failed:\n"
+            f"{output[-gates_mod.GATE_FINDINGS_POST_CHARS:]}\n"
+            "Have the owner fix these findings and post a new "
+            "delivery so the gate runs against that new post, or close loudly "
+            "with `#done BLOCKED · <reason>` if the gate cannot pass."
+        )
     raise ValueError(
         f"phase-gate-unverified: `#{active.slug}` declares the gate "
         f"`{' '.join(step.argv)}` and it has not passed on the owner's latest "
@@ -1253,6 +1264,12 @@ def _post_as_hub_locked(
     declared_tokens = int(cost_dict.get("tokens", 0)) if cost_dict else 0
     declared_in = int(cost_dict.get("tokens_in", 0)) if cost_dict else 0
     declared_out = int(cost_dict.get("tokens_out", 0)) if cost_dict else 0
+    raw_cached = cost_dict.get("cached_in") if cost_dict else None
+    declared_measured = max(0, min(
+        int(cost_dict.get("measured_in", declared_in)) if cost_dict else 0,
+        declared_in,
+    )) if raw_cached is not None else 0
+    declared_cached = max(0, min(int(raw_cached), declared_measured)) if raw_cached is not None else None
     # Budget/cap verdict precedes the baseline write so a rejected opener leaves no trace.
     try:
         _gate_post(wg.meta, _load_ledger(d), {"usd": declared_usd, "tokens": declared_tokens})
@@ -1276,6 +1293,9 @@ def _post_as_hub_locked(
             if declared_in or declared_out:
                 entry["cost"]["tokens_in"] = declared_in
                 entry["cost"]["tokens_out"] = declared_out
+                if declared_cached is not None:
+                    entry["cost"]["cached_in"] = declared_cached
+                    entry["cost"]["measured_in"] = declared_measured
         entry = _admit_post_locked(d, wg.meta, entry, declared_usd, declared_tokens)
     except Exception as e:  # noqa: BLE001
         for phase in created_baselines:

@@ -59,26 +59,28 @@ def set_usage_sink(sink: Optional[UsageFn]) -> None:
     _usage_sink.set(sink)
 
 
-def record_usage(input_tokens: int, output_tokens: int, cost_usd: float) -> None:
+def record_usage(
+    input_tokens: int, output_tokens: int, cost_usd: float,
+    cached_input_tokens: int | None = None,
+) -> None:
     sink = _usage_sink.get()
     if sink is not None:
         try:
             sink(int(input_tokens), int(output_tokens), float(cost_usd))
         except Exception:
             pass
-    tally = _turn_usage.get()
-    if tally is not None:
-        try:
-            tally["tokens_in"] = int(tally.get("tokens_in", 0)) + int(input_tokens)
-            tally["tokens_out"] = int(tally.get("tokens_out", 0)) + int(output_tokens)
-            tally["usd"] = float(tally.get("usd", 0.0)) + float(cost_usd)
-        except Exception:  # noqa: BLE001
-            pass
+    try:
+        bump_turn_usage(input_tokens, output_tokens, cost_usd, cached_input_tokens)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def reset_turn_usage() -> None:
     """Start a fresh per-turn usage tally."""
-    _turn_usage.set({"tokens_in": 0, "tokens_out": 0, "usd": 0.0})
+    _turn_usage.set({
+        "tokens_in": 0, "tokens_out": 0, "usd": 0.0,
+        "cached_in": 0, "measured_in": 0,
+    })
 
 
 def get_turn_usage() -> Optional[dict]:
@@ -87,14 +89,20 @@ def get_turn_usage() -> Optional[dict]:
     return dict(tally) if tally is not None else None
 
 
-def bump_turn_usage(input_tokens: int, output_tokens: int, cost_usd: float) -> None:
-    """Update only the per-turn tally."""
+def bump_turn_usage(
+    input_tokens: int, output_tokens: int, cost_usd: float,
+    cached_input_tokens: int | None = None,
+) -> None:
+    """``cached_input_tokens=None`` = unreported; never coerce to 0, which is a measured miss."""
     tally = _turn_usage.get()
     if tally is None:
         return
     tally["tokens_in"] = int(tally.get("tokens_in", 0)) + int(input_tokens)
     tally["tokens_out"] = int(tally.get("tokens_out", 0)) + int(output_tokens)
     tally["usd"] = float(tally.get("usd", 0.0)) + float(cost_usd)
+    if cached_input_tokens is not None:
+        tally["cached_in"] = int(tally.get("cached_in", 0)) + int(cached_input_tokens)
+        tally["measured_in"] = int(tally.get("measured_in", 0)) + int(input_tokens)
 
 
 def reset_skill_env() -> None:

@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import signal
+import stat
 import subprocess
 import tempfile
 import threading
@@ -14,6 +15,8 @@ from pathlib import Path
 GATE_TIMEOUT_SECONDS = 180
 GATE_OUTPUT_CAP = 8_000
 GATE_LOG_CAP = 64_000
+# agent_context sizes its directed-post budget off this constant.
+GATE_FINDINGS_POST_CHARS = 900
 # Minimal env on purpose: gate commands never see the profile's secrets (.env keys stay out).
 _GATE_ENV_KEYS = ("PATH", "HOME", "LANG", "LC_ALL", "TMPDIR")
 
@@ -149,6 +152,49 @@ def snapshot_baseline(wg_dir: Path, step: GateStep, workspace: Path) -> bool:
     return True
 
 
+# NOT _SCAN_EXCLUDE: a build gate observes dist/ and public/.
+_SIGNATURE_EXCLUDE = {".git", "node_modules", ".venv", ".cache", "__pycache__"}
+
+
+def _signature_entry(fp: Path) -> str | None:
+    try:
+        st = fp.lstat()
+    except OSError:
+        return None
+    mode = f"{stat.S_IMODE(st.st_mode):04o}"
+    if stat.S_ISLNK(st.st_mode):
+        try:
+            return f"l:{mode}:{os.readlink(fp)}"
+        except OSError:
+            return None
+    stamp = _file_stamp(fp)
+    return None if stamp is None else f"f:{mode}:{stamp}"
+
+
+def workspace_signature(step: GateStep, workspace: Path) -> str:
+    root = _project_root(step, workspace)
+    if root is None:
+        return ""
+    h = hashlib.blake2b(digest_size=16)
+    entries: list[tuple[str, str]] = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in _SIGNATURE_EXCLUDE]
+        here = Path(dirpath)
+        for dn in dirnames:
+            entries.append(((here / dn).relative_to(root).as_posix(), "d:"))
+        for fn in filenames:
+            fp = here / fn
+            entry = _signature_entry(fp)
+            if entry is not None:
+                entries.append((fp.relative_to(root).as_posix(), entry))
+    for rel, entry in sorted(entries):
+        h.update(rel.encode("utf-8", "replace"))
+        h.update(b"\0")
+        h.update(entry.encode("utf-8", "replace"))
+        h.update(b"\0")
+    return h.hexdigest()
+
+
 def clear_baseline(wg_dir: Path, phase: str) -> None:
     _baseline_path(wg_dir, phase).unlink(missing_ok=True)
 
@@ -251,17 +297,30 @@ def run_gate(step: GateStep, workspace: Path) -> tuple[bool, str]:
     return returncode == 0, out
 
 
-def gate_log_verdict(wg_dir: Path, phase: str, seq: int) -> bool | None:
-    """``None`` = the gate never ran on the post at ``seq``; else its verdict."""
+def gate_log_record(wg_dir: Path, phase: str, seq: int) -> dict | None:
+    """Fail CLOSED on any unexpected shape: a truthy non-bool `passed` would read a red gate as green."""
     try:
         record = json.loads(
             (wg_dir / "gates" / f"{phase}-{seq}.log").read_text(encoding="utf-8"),
         )
     except (OSError, ValueError):
         return None
-    if str(record.get("phase") or "") != phase:
+    if not isinstance(record, dict):
         return None
-    return bool(record.get("passed"))
+    if record.get("phase") != phase:
+        return None
+    logged = record.get("task_seq")
+    if type(logged) is not int or logged != seq:
+        return None
+    if not isinstance(record.get("passed"), bool):
+        return None
+    return record
+
+
+def gate_log_verdict(wg_dir: Path, phase: str, seq: int) -> bool | None:
+    """``None`` = the gate never ran on the post at ``seq``, or its record is unreadable."""
+    record = gate_log_record(wg_dir, phase, seq)
+    return None if record is None else bool(record.get("passed"))
 
 
 def owner_post_under_gate(

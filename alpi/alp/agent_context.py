@@ -17,6 +17,7 @@ import json
 from pathlib import Path
 
 from alpi.alp import subscription as sub_mod
+from alpi.alp import pipeline_gates
 from alpi.alp import tasks
 from alpi.alp import workgroup as wg_mod
 from alpi.alp.keys import load_or_generate
@@ -25,6 +26,7 @@ from alpi.home import _ROOT
 
 _RECENT_POSTS = 5            # show last N in the system-prompt block
 _POST_PREVIEW_CHARS = 220
+_DIRECTED_POST_CHARS = pipeline_gates.GATE_FINDINGS_POST_CHARS + 200
 _BRIEFING_INJECT_CHARS = 4096
 _MAX_BLOCKS = 10             # ceiling — protects token budget
 
@@ -380,8 +382,10 @@ def _format_subscription_block(
         lines.append("  recent:")
         for p in last:
             who = aliases.get(p.get("from", ""), _short_author(p.get("from", "")))
-            text = _preview(str(p.get("text", "")))
-            lines.append(f"    [#{p.get('seq')}] {who}: {text}")
+            raw = str(p.get("text", ""))
+            lines.append(
+                f"    [#{p.get('seq')}] {who}: {_preview(raw, _post_cap(raw, own_id))}",
+            )
     if mentions:
         lines.append(
             f"  → @{own_id} mentioned in {mentions} of the last "
@@ -486,8 +490,9 @@ def _format_hub_block(
         lines.append("  recent:")
         for p in last:
             who = aliases.get(p.get("from", ""), _short_author(p.get("from", "")))
+            raw = str(p.get("text", ""))
             lines.append(
-                f"    [#{p.get('seq')}] {who}: {_preview(str(p.get('text','')))}",
+                f"    [#{p.get('seq')}] {who}: {_preview(raw, _post_cap(raw, own_id))}",
             )
     return "\n".join(lines)
 
@@ -519,11 +524,17 @@ def _short_author(pubkey: str) -> str:
     return f"author {pubkey[:12]}…" if pubkey else "author ?"
 
 
-def _preview(text: str) -> str:
+def _preview(text: str, cap: int = _POST_PREVIEW_CHARS) -> str:
     text = text.strip()
-    if len(text) <= _POST_PREVIEW_CHARS:
+    if len(text) <= cap:
         return text
-    return text[: _POST_PREVIEW_CHARS - 1] + "…"
+    return text[: cap - 1] + "…"
+
+
+def _post_cap(text: str, own_id: str) -> int:
+    if own_id and any(m == own_id for m in tasks.mentions_in(text)):
+        return _DIRECTED_POST_CHARS
+    return _POST_PREVIEW_CHARS
 
 
 def _format_pipelines(

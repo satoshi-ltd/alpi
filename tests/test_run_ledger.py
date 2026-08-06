@@ -59,6 +59,22 @@ def test_read_filters_by_kind(home: Path) -> None:
     assert len(run_ledger.read(home, kind="agent")) == 1
 
 
+def test_a_shell_run_inside_a_workgroup_turn_is_attributable(
+    home: Path, monkeypatch,
+) -> None:
+    from alpi.tools import terminal
+
+    monkeypatch.setenv("ALPI_WORKGROUP_DISPATCH", "wg_abad")
+    monkeypatch.setattr("alpi.home.get_home", lambda: home)
+    monkeypatch.setattr(terminal, "_sandbox_config", lambda: (False, {}))
+    terminal._record_terminal_run(
+        outcome="ok", at=1.0, elapsed=0.2, exit_code=0, output_tail="done",
+    )
+    row = run_ledger.read(home, kind="terminal")[0]
+    assert row["workgroup_id"] == "wg_abad"
+    assert "command" not in row
+
+
 def test_invalid_kind_and_outcome_are_clamped(home: Path) -> None:
     run_ledger.record(home, kind="bogus", outcome="weird", elapsed_s=1.0)
     r = run_ledger.read(home)[0]

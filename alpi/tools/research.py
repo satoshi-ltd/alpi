@@ -224,6 +224,7 @@ class Research(Tool):
                                   error=f"research LLM call failed: {e}")
             tool_state_mod.record_usage(
                 out.input_tokens, out.output_tokens, out.cost_usd,
+                getattr(out, "cached_tokens", None),
             )
 
             content = out.content or ""
@@ -298,6 +299,7 @@ class Research(Tool):
                                   error=f"research synthesis failed: {e}")
             tool_state_mod.record_usage(
                 out.input_tokens, out.output_tokens, out.cost_usd,
+                getattr(out, "cached_tokens", None),
             )
             if not final_text:
                 final_text = f"[research: {max_steps}-step budget exhausted, no synthesis]"

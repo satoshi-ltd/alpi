@@ -67,6 +67,8 @@ class Session:
     # Persisted log of completed user turns.
     turns: list[Turn] = field(default_factory=list)
     input_tokens: int = 0       # cumulative across all turns in this session
+    cached_input_tokens: int = 0  # of cache_measured_input_tokens, the share served from the provider's prefix cache
+    cache_measured_input_tokens: int = 0  # input from completions that reported cache info at all; the honest hit-rate denominator
     output_tokens: int = 0      # cumulative across all turns in this session
     last_ctx_tokens: int = 0    # size of the last LLM prompt (current context window usage)
     cost_usd: float = 0.0
@@ -75,9 +77,15 @@ class Session:
     def elapsed(self) -> float:
         return time.time() - self.started_at
 
-    def record(self, *, input_tokens: int, output_tokens: int, cost: float) -> None:
+    def record(
+        self, *, input_tokens: int, output_tokens: int, cost: float,
+        cached_input_tokens: int | None = None,
+    ) -> None:
         self.input_tokens += input_tokens
         self.output_tokens += output_tokens
+        if cached_input_tokens is not None:
+            self.cached_input_tokens += cached_input_tokens
+            self.cache_measured_input_tokens += input_tokens
         self.cost_usd += cost
 
     def log_turn(
@@ -127,6 +135,8 @@ class Session:
             "started_at": self.started_at,
             "elapsed": self.elapsed,
             "input_tokens": self.input_tokens,
+            "cached_input_tokens": self.cached_input_tokens,
+            "cache_measured_input_tokens": self.cache_measured_input_tokens,
             "output_tokens": self.output_tokens,
             "cost_usd": self.cost_usd,
             "last_ctx_tokens": self.last_ctx_tokens,

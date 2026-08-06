@@ -902,6 +902,7 @@ def maintain_knowledge(
     from alpi.tools import _state as tool_state_mod
     tool_state_mod.record_usage(
         completion.input_tokens, completion.output_tokens, completion.cost_usd,
+        getattr(completion, "cached_tokens", None),
     )
     proposal = _parse_llm_json(completion.content)
     if not apply:

@@ -11,6 +11,22 @@ from alpi.home import get_home
 from alpi.tools.base import Tool, ToolResult
 
 
+def _declared_cost(tally: dict | None) -> dict | None:
+    if not tally:
+        return None
+    cost = {
+        "usd": float(tally.get("usd", 0.0)),
+        "tokens": int(tally.get("tokens_in", 0)) + int(tally.get("tokens_out", 0)),
+        "tokens_in": int(tally.get("tokens_in", 0)),
+        "tokens_out": int(tally.get("tokens_out", 0)),
+    }
+    # Absent = unmeasured; 0 = measured miss. Never write an unmeasured zero.
+    if int(tally.get("measured_in", 0)) > 0:
+        cost["cached_in"] = int(tally.get("cached_in", 0))
+        cost["measured_in"] = int(tally.get("measured_in", 0))
+    return cost
+
+
 class WorkgroupPostTool(Tool):
     name = "workgroup_post"
     description = (
@@ -43,15 +59,7 @@ class WorkgroupPostTool(Tool):
 
         # Auto-declare the current turn's spend for the hub ledger.
         from alpi.tools import _state as _wg_state
-        tally = _wg_state.get_turn_usage()
-        cost = None
-        if tally:
-            cost = {
-                "usd": float(tally.get("usd", 0.0)),
-                "tokens": int(tally.get("tokens_in", 0)) + int(tally.get("tokens_out", 0)),
-                "tokens_in": int(tally.get("tokens_in", 0)),
-                "tokens_out": int(tally.get("tokens_out", 0)),
-            }
+        cost = _declared_cost(_wg_state.get_turn_usage())
 
         try:
             result = asyncio.run(

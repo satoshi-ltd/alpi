@@ -170,6 +170,10 @@ def _hydrate_from_path(engine: Engine, path: Path, console=None) -> bool:
         engine.session.id = data["id"]
     engine.session.connection_id = str(data.get("connection_id") or "host")
     engine.session.input_tokens = int(data.get("input_tokens", 0))
+    engine.session.cached_input_tokens = int(data.get("cached_input_tokens", 0))
+    engine.session.cache_measured_input_tokens = int(
+        data.get("cache_measured_input_tokens", 0),
+    )
     engine.session.output_tokens = int(data.get("output_tokens", 0))
     engine.session.cost_usd = float(data.get("cost_usd", 0.0))
     saved_ctx = int(data.get("last_ctx_tokens", 0))

@@ -111,6 +111,55 @@ def test_recent_posts_keep_the_short_preview(short_tmp: Path) -> None:
     assert "p" * (agent_context._POST_PREVIEW_CHARS - 1) + "…" in block
 
 
+def test_a_gate_repair_note_reaches_its_owner_whole(short_tmp: Path, monkeypatch) -> None:
+    fake_root = short_tmp / "alpi-root"
+    home = fake_root / "profiles" / "alice"
+    home.mkdir(parents=True)
+    monkeypatch.setattr("alpi.alp.agent_context._ROOT", fake_root)
+    load_or_generate(home)
+    defect = (
+        "src/content/rooms/doble-superior.fr.json:1  INVALID CONTENT SCHEMA: "
+        "summary exceeds its layout-safe character limit\n"
+        "  rooms/doble-superior.fr.summary has 181 characters; maximum is 180"
+    )
+    note = (
+        "@alice gate red on #translation (repair round 1/3) — fix these and "
+        "re-deliver on this same task:\n"
+        + "PASS  a locale assertion nobody needs to act on\n" * 12
+        + "CHECK locales FAILED — fix these before handoff:\n" + defect
+    )
+    assert len(note) > agent_context._POST_PREVIEW_CHARS * 2
+    sub = sub_mod.Subscription(
+        wg_id="wg_hotel", name="hotel", hub_id="mira", hub_pubkey="mirakey",
+    )
+    sub.append_recent([{"seq": 9, "text": note, "from": "mirakey"}])
+    sub_mod.upsert(home, sub)
+
+    block = agent_context.build(home)
+
+    assert block is not None
+    assert "181 characters; maximum is 180" in block
+
+
+def test_a_repair_note_for_someone_else_stays_previewed(short_tmp: Path, monkeypatch) -> None:
+    fake_root = short_tmp / "alpi-root"
+    home = fake_root / "profiles" / "alice"
+    home.mkdir(parents=True)
+    monkeypatch.setattr("alpi.alp.agent_context._ROOT", fake_root)
+    load_or_generate(home)
+    note = "@bob gate red on #translation — " + "PASS noise\n" * 90 + "the tail"
+    sub = sub_mod.Subscription(
+        wg_id="wg_hotel", name="hotel", hub_id="mira", hub_pubkey="mirakey",
+    )
+    sub.append_recent([{"seq": 9, "text": note, "from": "mirakey"}])
+    sub_mod.upsert(home, sub)
+
+    block = agent_context.build(home)
+
+    assert block is not None
+    assert "the tail" not in block
+
+
 def test_active_task_surfaces_in_block(short_tmp: Path) -> None:
     home = short_tmp / "alice"; home.mkdir()
     load_or_generate(home)

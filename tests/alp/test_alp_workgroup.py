@@ -1126,7 +1126,10 @@ async def test_post_persists_token_split_in_transcript(short_tmp: Path) -> None:
                 "key_version": 1,
                 "nonce": nonce,
                 "ciphertext": ct,
-                "cost": {"usd": 0.05, "tokens": 1000, "tokens_in": 700, "tokens_out": 300},
+                "cost": {
+                    "usd": 0.05, "tokens": 1000, "tokens_in": 700,
+                    "tokens_out": 300, "cached_in": 9000,
+                },
             },
         )
         d = hub_home / "alp" / "workgroups" / wg.meta.id
@@ -1134,6 +1137,8 @@ async def test_post_persists_token_split_in_transcript(short_tmp: Path) -> None:
         assert entry["cost"]["tokens_in"] == 700
         assert entry["cost"]["tokens_out"] == 300
         assert entry["cost"]["tokens"] == 1000
+        # A share cannot exceed its base, or a fleet reports a hit rate above 100%.
+        assert entry["cost"]["cached_in"] == 700
     finally:
         await server.stop()
 

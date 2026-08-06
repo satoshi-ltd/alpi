@@ -1284,6 +1284,17 @@ budget. Whichever is tighter wins:
 The hub gates against **author-declared** spend: the
 `cost: {usd, tokens}` field on each `workgroup.post` is taken at
 face value (the envelope is signed, so we know who claimed it).
+An author MAY also split the total — `tokens_in`, `tokens_out`,
+`cached_in` and `measured_in`. `measured_in` is the input from
+completions whose provider reported cache info at all: the honest
+denominator for a hit rate. `cached_in` is the prefix-cache share of
+that, and the hub clamps both (`cached <= measured <= tokens_in`), since
+a share cannot exceed its base. The distinction the fields carry is
+absence: an ABSENT `cached_in` means the provider reported nothing,
+while `0` means a measured miss — the two must never be conflated,
+because coercing silence to zero biases every fleet hit rate down.
+Entries written before the split carry `cached_in` alone; readers use
+`tokens_in` as their denominator.
 This is the same trust model the profile-level ledger applies to
 LiteLLM's reported cost — declarations come from a known
 identity, not from a verified receipt. The author SHOULD report
@@ -1604,10 +1615,19 @@ requires a `gate` — its `cwd` anchors the project root and its run is
 the check moment.
 
 **The gate is level-triggered where the transcript alone would strand a
-run.** Four behaviours close the measured stall family: a watchdog wake
-on a stale gated task re-runs the gate first, so an owner who fixed the
-workspace without re-posting gets a machine close instead of a wasted
-hub wake — and a still-red re-run puts the fresh findings into the wake.
+run.** Four behaviours close the measured stall family: a red verdict is
+provisional, so the poller re-runs the gate on the open phase — no new
+post required, no hub wake spent — and an owner who fixed the workspace
+without re-posting gets a machine close. A still-red re-run is SILENT:
+it neither re-posts the round's findings nor consumes a repair round,
+because the note the owner needs is already in the transcript. Re-runs
+are held to one per phase per interval, skipped while a turn is live for
+the workgroup, and skipped again unless the project's content fingerprint
+moved since the red verdict — so a permanently red gate is spawned once,
+not on every tick. A watchdog pass verifies through those SAME guards —
+there is no bypass, because an unguarded verification respawns a stalled
+red gate's command on every tick. The wake still fires either way; the
+findings it would re-carry are already in the transcript.
 `workgroup resume` clears the in-memory gate state for the workgroup, so
 a delivery parked behind a pause re-fires its gate on the next tick. A
 terminal close whose verdict carries an explicit failure word (`QA FAIL

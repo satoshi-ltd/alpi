@@ -34,7 +34,31 @@ class Completion:
     output_tokens: int
     cost_usd: float
     raw: Any
+    cached_tokens: int | None = None
 
+
+
+def _cached_tokens(usage: Any) -> int | None:
+    """``None`` = the provider reported nothing, which is NOT a miss."""
+    if not usage:
+        return None
+    details = getattr(usage, "prompt_tokens_details", None)
+    raw = getattr(details, "cached_tokens", None) if details is not None else None
+    if raw is None:
+        # Its default is 0, so only a positive value proves the provider reported.
+        private = getattr(usage, "_cache_read_input_tokens", None)
+        raw = private if isinstance(private, int) and private > 0 else None
+    if raw is None:
+        return None
+    try:
+        hit = int(raw)
+    except (TypeError, ValueError):
+        return None
+    try:
+        prompt = int(getattr(usage, "prompt_tokens", 0) or 0)
+    except (TypeError, ValueError):
+        prompt = 0
+    return max(0, min(hit, max(0, prompt)))
 
 def _silence_litellm() -> None:
     import logging
@@ -319,6 +343,7 @@ def _final_chunk(last_chunk, tool_calls_accum: dict, model: str) -> dict:
         "input_tokens": getattr(usage, "prompt_tokens", 0) if usage else 0,
         "output_tokens": getattr(usage, "completion_tokens", 0) if usage else 0,
         "cost_usd": float(cost),
+        "cached_tokens": _cached_tokens(usage),
     }
 
 
@@ -454,4 +479,5 @@ def complete(
         output_tokens=getattr(usage, "completion_tokens", 0) if usage else 0,
         cost_usd=float(cost),
         raw=response,
+        cached_tokens=_cached_tokens(usage),
     )

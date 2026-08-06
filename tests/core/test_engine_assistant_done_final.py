@@ -99,7 +99,7 @@ def test_max_steps_cap_triggers_wrap_up_final_reply(
     usage_calls: list = []
     monkeypatch.setattr(
         "alpi.tools._state.bump_turn_usage",
-        lambda i, o, c: usage_calls.append((i, o, c)),
+        lambda i, o, c, cached=0: usage_calls.append((i, o, c)),
     )
 
     def fake_stream(messages, tools, **kwargs):

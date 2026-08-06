@@ -461,7 +461,7 @@ def test_gated_phase_cannot_close_over_a_red_gate(short_tmp: Path, monkeypatch) 
     _patch_peer_ids(monkeypatch)
     home = short_tmp / "h"; home.mkdir(parents=True)
     _write_gate(home, "intake", 2, passed=False)
-    with pytest.raises(ValueError, match="phase-gate-unverified"):
+    with pytest.raises(ValueError, match="phase-gate-failed.*seq #2"):
         wc._check_pipeline_close_owner(
             home, _gated_wg(), _delivered(),
             "#done intake verified — gate failure fixed", "HUB",

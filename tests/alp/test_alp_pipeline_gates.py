@@ -150,6 +150,18 @@ def test_write_gate_log_is_private_and_capped(tmp_path):
     assert len(record["output"]) <= gates.GATE_LOG_CAP
 
 
+def test_gate_log_record_belongs_to_the_delivery_in_its_filename(tmp_path):
+    step = gates.GateStep("content", "quill", "", "", "", ("true",), "")
+    gates.write_gate_log(tmp_path, step, 7, True, "clean")
+    log = tmp_path / "gates" / "content-7.log"
+    record = json.loads(log.read_text())
+    record["task_seq"] = 6
+    log.write_text(json.dumps(record))
+
+    assert gates.gate_log_record(tmp_path, "content", 7) is None
+    assert gates.gate_log_verdict(tmp_path, "content", 7) is None
+
+
 def test_write_gate_log_surfaces_persistence_failure(tmp_path, monkeypatch):
     step = gates.GateStep("content", "quill", "", "", "", ("true",), "")
 
@@ -632,3 +644,63 @@ async def test_gate_advance_moves_the_hub_cursor_past_its_own_posts(tmp_path, mo
 
     assert await service._maybe_gate_advance(home, wg, recent, "HUB") is True
     assert cursor == [4]
+
+
+@pytest.mark.asyncio
+async def test_each_delivery_gets_its_own_gate_run(tmp_path, monkeypatch):
+    """Keyed by phase alone, a second delivery would replay the first verdict."""
+    from alpi import service
+
+    home = tmp_path / "hub"
+    home.mkdir()
+    wg = types.SimpleNamespace(meta=types.SimpleNamespace(
+        id="wg_two", hub_pubkey="HUB",
+        pipelines={"content": ("content", "translation")},
+        launch_pipeline="content",
+        pipeline_steps=STEPS, paused=False,
+    ))
+    monkeypatch.setattr(
+        "alpi.alp.peers.load",
+        lambda h: [types.SimpleNamespace(id="quill", pubkey="QUILLPK")],
+    )
+    runs: list[int] = []
+    monkeypatch.setattr(
+        "alpi.alp.pipeline_gates.run_gate",
+        lambda step, ws: (runs.append(1), (False, "still thin"))[1],
+    )
+
+    async def fake_post(h, wid, text, cost=None):
+        return {"seq": 99}
+
+    monkeypatch.setattr("alpi.alp.workgroup_client.post", fake_post)
+    monkeypatch.setattr(service, "_set_hub_responded_seq", lambda h, w, s: None)
+    service._GATE_ATTEMPTED.clear()
+    service._GATE_REPAIRS.clear()
+
+    first = [
+        {"seq": 1, "from": "HUB", "text": "@quill #task #content write it"},
+        {"seq": 2, "from": "QUILLPK", "text": "content complete"},
+    ]
+    await service._maybe_gate_advance(home, wg, first, "HUB")
+    await service._maybe_gate_advance(home, wg, first, "HUB")
+    assert len(runs) == 1, "the same delivery must not be re-gated"
+
+    second = first + [{"seq": 5, "from": "QUILLPK", "text": "fixed and re-delivered"}]
+    await service._maybe_gate_advance(home, wg, second, "HUB")
+    assert len(runs) == 2, "a new delivery must get its own gate run"
+
+
+@pytest.mark.parametrize("payload", [
+    "[]",
+    '{"phase": "content", "task_seq": "oops", "passed": true}',
+    '{"phase": "content", "task_seq": 7, "passed": "false"}',
+])
+def test_a_malformed_gate_record_never_reads_as_a_verdict(tmp_path, payload):
+    """`passed: "false"` is truthy — a red gate must not read as green."""
+    from alpi.alp import pipeline_gates as gates
+
+    d = tmp_path / "wg"
+    (d / "gates").mkdir(parents=True)
+    (d / "gates" / "content-7.log").write_text(payload, encoding="utf-8")
+    assert gates.gate_log_record(d, "content", 7) is None
+    assert gates.gate_log_verdict(d, "content", 7) is None

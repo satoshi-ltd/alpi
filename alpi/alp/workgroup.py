@@ -1423,6 +1423,15 @@ def register(server: alp_server.Server, home: Path) -> None:
         declared_tokens = max(0, min(_as_int(cost.get("tokens")), _MAX_DECLARED_TOKENS))
         declared_in = max(0, min(_as_int(cost.get("tokens_in")), _MAX_DECLARED_TOKENS))
         declared_out = max(0, min(_as_int(cost.get("tokens_out")), _MAX_DECLARED_TOKENS))
+        # Cached is a SHARE of measured_in (<= tokens_in), never an addition; absent = unmeasured.
+        raw_cached = cost.get("cached_in") if isinstance(cost, dict) else None
+        declared_measured = max(0, min(
+            _as_int(cost.get("measured_in", declared_in)), declared_in,
+        )) if raw_cached is not None else 0
+        declared_cached = (
+            max(0, min(_as_int(raw_cached), declared_measured))
+            if raw_cached is not None else None
+        )
         # Keep the combined total consistent with the split for the gate + usage.
         declared_tokens = max(declared_tokens, declared_in + declared_out)
 
@@ -1440,6 +1449,9 @@ def register(server: alp_server.Server, home: Path) -> None:
             if declared_in or declared_out:
                 entry["cost"]["tokens_in"] = declared_in
                 entry["cost"]["tokens_out"] = declared_out
+                if declared_cached is not None:
+                    entry["cost"]["cached_in"] = declared_cached
+                    entry["cost"]["measured_in"] = declared_measured
         entry = admit_post(
             d, wg.meta, entry, declared_usd, declared_tokens,
             enforce_cap=True, reject_nonce_reuse=True,

@@ -40,12 +40,16 @@ def _window(
     for i in range(span - 1, -1, -1):
         iso = (today - timedelta(days=i)).isoformat()
         b = by_day.get(iso) or {"tokIn": 0, "tokOut": 0, "cost": 0.0}
-        out.append({
+        row = {
             "iso": iso,
             "tokIn": int(b["tokIn"]),
             "tokOut": int(b["tokOut"]),
             "cost": round(float(b["cost"]), 6),
-        })
+        }
+        if "cachedIn" in b:
+            row["cachedIn"] = int(b["cachedIn"])
+            row["measuredIn"] = int(b["measuredIn"])
+        out.append(row)
     return out
 
 
@@ -88,7 +92,9 @@ def bucket_workgroup(
         day = _iso_day(e.get("ts"))
         if day is None:
             continue
-        b = by_day.setdefault(day.isoformat(), {"tokIn": 0, "tokOut": 0, "cost": 0.0})
+        b = by_day.setdefault(day.isoformat(), {
+            "tokIn": 0, "tokOut": 0, "cost": 0.0, "cachedIn": 0, "measuredIn": 0,
+        })
         tin = cost.get("tokens_in")
         tout = cost.get("tokens_out")
         if tin is not None or tout is not None:
@@ -96,6 +102,11 @@ def bucket_workgroup(
             b["tokOut"] += int(tout or 0)
         else:
             b["tokIn"] += int(cost.get("tokens") or 0)
+        cached = cost.get("cached_in")
+        if cached is not None:
+            b["cachedIn"] += int(cached or 0)
+            # cached_in without measured_in exists on disk; its denominator is tokens_in, never 0.
+            b["measuredIn"] += int(cost.get("measured_in", tin or 0) or 0)
         b["cost"] += float(cost.get("usd") or 0.0)
     return _window(by_day, today, span)
 

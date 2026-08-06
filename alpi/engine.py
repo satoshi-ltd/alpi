@@ -117,6 +117,7 @@ class AgentEvent:
     ok: bool = True
     tokens_in: int = 0
     tokens_out: int = 0
+    cached_in: int = 0
     cost: float = 0.0
     tool_id: str = ""
     # True only on the turn's terminal `assistant_done`; preamble emissions stay False. Contract in AGENTS.md.
@@ -516,12 +517,14 @@ class Engine:
                     input_tokens=final.get("input_tokens", 0),
                     output_tokens=final.get("output_tokens", 0),
                     cost=final.get("cost_usd", 0.0),
+                    cached_input_tokens=final.get("cached_tokens"),
                 )
                 from alpi.tools import _state as _wg_state
                 _wg_state.bump_turn_usage(
                     int(final.get("input_tokens", 0)),
                     int(final.get("output_tokens", 0)),
                     float(final.get("cost_usd", 0.0)),
+                    final.get("cached_tokens"),
                 )
                 from alpi import ledger as _ledger
                 _ledger.record(
@@ -534,10 +537,12 @@ class Engine:
                     cfg_budget=self.cfg.budget,
                 )
                 self.session.last_ctx_tokens = int(final.get("input_tokens", 0))
+
                 emit(AgentEvent(
                     kind="usage",
                     tokens_in=final.get("input_tokens", 0),
                     tokens_out=final.get("output_tokens", 0),
+                    cached_in=int(final.get("cached_tokens") or 0),
                     cost=final.get("cost_usd", 0.0),
                     model=turn_model,
                 ))
@@ -842,12 +847,14 @@ class Engine:
                             input_tokens=wrap_final.get("input_tokens", 0),
                             output_tokens=wrap_final.get("output_tokens", 0),
                             cost=wrap_final.get("cost_usd", 0.0),
+                            cached_input_tokens=wrap_final.get("cached_tokens"),
                         )
                         from alpi.tools import _state as _wg_state
                         _wg_state.bump_turn_usage(
                             int(wrap_final.get("input_tokens", 0)),
                             int(wrap_final.get("output_tokens", 0)),
                             float(wrap_final.get("cost_usd", 0.0)),
+                            wrap_final.get("cached_tokens"),
                         )
                         from alpi import ledger as _ledger
                         _ledger.record(
@@ -1109,11 +1116,13 @@ class Engine:
             tokens_in = int(getattr(out, "input_tokens", 0) or 0)
             tokens_out = int(getattr(out, "output_tokens", 0) or 0)
             cost = float(getattr(out, "cost_usd", 0.0) or 0.0)
+            cached = getattr(out, "cached_tokens", None)
             self.session.record(
                 input_tokens=tokens_in, output_tokens=tokens_out, cost=cost,
+                cached_input_tokens=cached,
             )
             from alpi.tools import _state as _wg_state
-            _wg_state.bump_turn_usage(tokens_in, tokens_out, cost)
+            _wg_state.bump_turn_usage(tokens_in, tokens_out, cost, cached)
             _ledger.record_completion(self.home, out, cfg_budget=self.cfg.budget)
             emit(AgentEvent(
                 kind="usage", tokens_in=tokens_in, tokens_out=tokens_out,
