@@ -362,6 +362,56 @@ async def test_an_unknowable_workspace_is_still_only_spawned_once(tmp_path, monk
 
 
 @pytest.mark.asyncio
+async def test_an_abandoned_stall_stops_bumping_and_logging(tmp_path, monkeypatch, caplog):
+    home = tmp_path / "hub"
+    home.mkdir()
+    (home / "config.yaml").write_text("{}\n")
+    wg = _gated_wg("wg_stall")
+    _mock_owner(monkeypatch)
+    monkeypatch.setattr(
+        "alpi.alp.pipeline_gates.run_gate", lambda step, ws: (False, "9 FAILs"),
+    )
+    monkeypatch.setattr(service, "_set_hub_responded_seq", lambda *a: None)
+    monkeypatch.setattr(service, "_emit_wg_blocked", lambda *a, **k: None)
+
+    async def fake_post(h, wid, text, cost=None):
+        return {"seq": 11}
+
+    monkeypatch.setattr("alpi.alp.workgroup_client.post", fake_post)
+
+    def fake_dispatch(h, profile, wg_id, wg_name, reason, **kwargs):
+        async def _noop():
+            return None
+        return _noop()
+
+    monkeypatch.setattr(service, "_dispatch_workgroup_turn", fake_dispatch)
+    monkeypatch.setattr(service, "_spawn_dispatch", lambda wid, coro: coro.close())
+    monkeypatch.setattr(service, "_in_cooldown_str", lambda *a, **k: False)
+    monkeypatch.setattr(service, "_HUB_WATCHDOG_REFIRE_SECONDS", 0)
+
+    bumps = {"n": 0}
+    real_bump = service._bump_hub_watchdog_count
+
+    def counting_bump(h, wid, seq):
+        bumps["n"] += 1
+        return real_bump(h, wid, seq)
+
+    monkeypatch.setattr(service, "_bump_hub_watchdog_count", counting_bump)
+
+    for _ in range(5):
+        await service._maybe_watchdog_close(home, "mira", wg, _recent())
+    assert bumps["n"] == 4, "the recovery evaluations each earn a bump (call 1 goes to the gate's repair note)"
+
+    import logging
+    caplog.clear()
+    with caplog.at_level(logging.WARNING):
+        for _ in range(6):
+            await service._maybe_watchdog_close(home, "mira", wg, _recent())
+    assert bumps["n"] == 4, "an abandoned stall must never bump again"
+    assert "task stalled" not in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_a_recheck_waits_out_its_interval(tmp_path, monkeypatch):
     home = tmp_path / "hub"
     home.mkdir()

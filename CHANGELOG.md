@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.12.7 — 2026-08-06 — an abandoned task stops shouting
+
+- **A terminally stalled task no longer spams the log and the poller state.**
+  Once a task has spent every recovery wake, each poll tick was still counting
+  another "closure nudge", writing it to disk and logging a warning — 317 of
+  them in under an hour on one stalled hotel. The recovery ladder is untouched
+  and each of its steps still fires exactly once; past the last one, the poller
+  goes quiet until a new post moves the task.
+
 ## v0.12.6 — 2026-08-06 — a red gate says what it found, and notices when it's fixed
 
 - **The hub no longer gets "unverified" when the gate actually has a verdict.**

@@ -1521,8 +1521,12 @@ async def _maybe_watchdog_close(
     last_author_is_hub = str(
         last_post.get("from") or ""
     ) == wg.meta.hub_pubkey
-    count = _bump_hub_watchdog_count(home, wg.meta.id, last_seq)
     is_pipeline = _wg_is_pipeline(wg)
+    prior = _peek_hub_watchdog_count(home, wg.meta.id, last_seq)
+    if (is_pipeline and prior >= 4) or (not is_pipeline and prior >= 3):
+        # Already abandoned: bumping or logging here repeats per poll tick forever.
+        return
+    count = _bump_hub_watchdog_count(home, wg.meta.id, last_seq)
     repair = is_pipeline and count == 2
     final_repair = is_pipeline and count == 3
     if count == 2:
@@ -1831,6 +1835,11 @@ def _bump_hub_watchdog_count(home: Path, wg_id: str, seq: int) -> int:
         table[wg_id] = [int(seq), int(entry[1]) + 1]
     _save_poller_state(home, state)
     return int(table[wg_id][1])
+
+
+def _peek_hub_watchdog_count(home: Path, wg_id: str, seq: int) -> int:
+    entry = _load_poller_state(home).get("hub_watchdog_fire_count", {}).get(wg_id)
+    return int(entry[1]) if entry and int(entry[0]) == int(seq) else 0
 
 
 def _emit_wg_blocked(home: Path, wg_id: str, seq: int, nudges: int) -> None:
