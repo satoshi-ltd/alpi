@@ -204,7 +204,6 @@ export function MemberRow({ member, isHub, note, onRemove }) {
             </button>
           </Tip>
           <ConfirmDelete
-            mode="simple"
             open={confirm}
             onClose={() => setConfirm(false)}
             onConfirm={onRemove}

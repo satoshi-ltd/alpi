@@ -170,14 +170,16 @@ export function StorageField({ profile, activeConnection, prefetched, onLoadingC
             <span className={styles.inlineRow}>
               <Chip size="sm">{formatBytes(m.size)}</Chip>
               <span className={styles.muted}>{note}</span>
-              <Button size="sm" variant="danger" disabled={busy} onClick={() => setConfirmKey(m.key)}>Delete</Button>
-              <ConfirmDelete
-                open={confirmKey === m.key}
-                onClose={() => setConfirmKey(null)}
-                onConfirm={() => { setConfirmKey(null); doClean([m.key], m.label); }}
-                title={`Delete ${note}?`}
-                consequence={`This permanently deletes ${note}. It cannot be undone.`}
-              />
+              <span className={styles.confirmAnchor}>
+                <Button size="sm" variant="danger" disabled={busy} onClick={() => setConfirmKey(m.key)}>Delete</Button>
+                <ConfirmDelete
+                  open={confirmKey === m.key}
+                  onClose={() => setConfirmKey(null)}
+                  onConfirm={() => { setConfirmKey(null); doClean([m.key], m.label); }}
+                  title={`Delete ${note}?`}
+                  consequence={`This permanently deletes ${note}. It cannot be undone.`}
+                />
+              </span>
             </span>
           </Row>
         );
@@ -211,7 +213,6 @@ export function DeleteProfileAction({ profile, onDelete, autoConfirm = false, on
         picks up the change on its next restart
       </span>
       <ConfirmDelete
-        mode="typed"
         open={open}
         onClose={() => setOpen(false)}
         onConfirm={() => onDelete?.(profile.name)}

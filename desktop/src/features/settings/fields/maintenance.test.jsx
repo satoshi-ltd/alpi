@@ -183,3 +183,18 @@ describe("DeleteProfileAction", () => {
     expect(onDelete).not.toHaveBeenCalled();
   });
 });
+
+describe("StorageField — the destructive confirm has a positioned anchor", () => {
+  it("keeps the confirm as a sibling of its trigger inside a relative wrapper", async () => {
+    mockAll();
+    render(<StorageField profile={{ name: "doc" }} activeConnection={local} />);
+    const trigger = await screen.findByRole("button", { name: "Delete" });
+    fireEvent.click(trigger);
+
+    const confirm = (await screen.findAllByRole("button", { name: "Delete" }))
+      .find((b) => b !== trigger);
+    const anchor = trigger.parentElement;
+    expect(anchor.className).toMatch(/confirmAnchor/);
+    expect(anchor.contains(confirm)).toBe(true);
+  });
+});

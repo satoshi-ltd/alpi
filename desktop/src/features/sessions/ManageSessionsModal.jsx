@@ -412,8 +412,6 @@ export default function ManageSessionsModal({
       </div>
 
       <ConfirmDelete
-        mode="typed"
-        anchored={false}
         open={confirmOpen}
         onClose={() => setConfirmOpen(false)}
         onConfirm={handleDelete}

@@ -6,7 +6,6 @@ import { Field } from "./index.js";
 import styles from "./ConfirmDelete.module.css";
 
 export default function ConfirmDelete({
-  mode = "simple",
   open,
   onClose,
   onConfirm,
@@ -16,23 +15,25 @@ export default function ConfirmDelete({
   cancelLabel = "Cancel",
   typeToConfirm,
   anchored = true,
-  width = mode === "typed" ? "var(--pop-xl)" : "var(--pop-md)",
+  width,
 }) {
   const [typed, setTyped] = useState("");
   useEffect(() => {
     if (!open) setTyped("");
   }, [open]);
 
-  const isTyped = mode === "typed";
-  const armed = isTyped ? typed === typeToConfirm : true;
+  const needsTyping = !!typeToConfirm;
+  const asModal = !anchored || needsTyping;
+  const armed = needsTyping ? typed === typeToConfirm : true;
+  const resolvedWidth = width ?? (asModal ? "var(--pop-xl)" : "var(--pop-md)");
 
   const body = (
-    <div className={`${styles.body} ${isTyped ? styles.typed : ""}`}>
+    <div className={`${styles.body} ${asModal ? styles.inModal : ""}`}>
       <div className={styles.heading}>
         <div className={styles.title}>{title}</div>
         {consequence && <div className={styles.consequence}>{consequence}</div>}
       </div>
-      {isTyped && typeToConfirm && (
+      {needsTyping && (
         <div className={styles.typedBlock}>
           <div className={styles.typedHint}>
             <span className={styles.typedHintLabel}>Type</span>
@@ -61,30 +62,22 @@ export default function ConfirmDelete({
     </div>
   );
 
-  if (isTyped) {
+  if (asModal) {
     return (
-      <Modal open={open} onClose={onClose} width={width}>
+      <Modal open={open} onClose={onClose} width={resolvedWidth}>
         {body}
       </Modal>
     );
   }
-  if (anchored) {
-    return (
-      <Popover open={open} onClose={onClose} width={width} align="right">
-        {body}
-      </Popover>
-    );
-  }
   return (
-    <Modal open={open} onClose={onClose} width={width}>
+    <Popover open={open} onClose={onClose} width={resolvedWidth} align="right">
       {body}
-    </Modal>
+    </Popover>
   );
 }
 
 export function ConfirmDeleteAction({
   label,
-  mode = "simple",
   title,
   consequence,
   typeToConfirm,
@@ -94,6 +87,7 @@ export function ConfirmDeleteAction({
   disabled = false,
   loading = false,
   triggerVariant = "alink",
+  anchored = true,
 }) {
   const [open, setOpen] = useState(false);
   const triggerClass =
@@ -111,7 +105,7 @@ export function ConfirmDeleteAction({
         {loading ? "Working…" : label}
       </button>
       <ConfirmDelete
-        mode={mode}
+        anchored={anchored}
         open={open}
         onClose={() => setOpen(false)}
         onConfirm={onConfirm}

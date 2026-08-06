@@ -21,23 +21,17 @@ export default function Modal({
 
   useEffect(() => {
     if (!visible) return undefined;
-    function onClick(e) {
-      if (!closeOnBackdrop) return;
-      if (wrapRef.current && !wrapRef.current.contains(e.target)) onClose?.();
-    }
     function onKey(e) {
       if (e.key === "Escape") {
         e.preventDefault();
         onClose?.();
       }
     }
-    document.addEventListener("mousedown", onClick);
     document.addEventListener("keydown", onKey);
     return () => {
-      document.removeEventListener("mousedown", onClick);
       document.removeEventListener("keydown", onKey);
     };
-  }, [visible, onClose, closeOnBackdrop]);
+  }, [visible, onClose]);
 
   const openerRef = useRef(null);
   const prevVisibleRef = useRef(false);
@@ -59,7 +53,12 @@ export default function Modal({
   if (!visible) return null;
 
   const body = (
-    <div className={`anim-overlay ${styles.backdrop}`}>
+    <div
+      className={`anim-overlay ${styles.backdrop}`}
+      onMouseDown={(e) => {
+        if (closeOnBackdrop && e.target === e.currentTarget) onClose?.();
+      }}
+    >
       <div
         ref={wrapRef}
         className={`anim-dialog ${styles.modal}`}

@@ -490,3 +490,32 @@ describe("EmailCell daemon events", () => {
     expect(invoke).not.toHaveBeenCalled();
   });
 });
+
+describe("EmailCell — removing an account with a real click sequence", () => {
+  it("survives the mousedown that precedes the click on the confirm", async () => {
+    invoke.mockImplementation(async (command) => {
+      if (command === "email_status") return TWO_ACCOUNTS;
+      if (command === "email_config") {
+        return { type: "gmail", address: "me@gmail.com" };
+      }
+      if (command === "probe_email") return [{ name: "me_gmail_com", status: "on" }];
+      return null;
+    });
+    render(<EmailCell profile={profile} connectionId="casa" />);
+    fireEvent.click(await screen.findByRole("button", { name: "me@gmail.com" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Remove account" }));
+
+    const buttons = await screen.findAllByRole("button", { name: "Remove" });
+    const confirm = buttons[buttons.length - 1];
+    fireEvent.mouseDown(confirm);
+    fireEvent.click(confirm);
+
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith("email_remove", {
+        profile: "concierge",
+        id: "me_gmail_com",
+        connectionId: "casa",
+      });
+    });
+  });
+});

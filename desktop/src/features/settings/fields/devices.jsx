@@ -202,7 +202,6 @@ export function DevicesField({
       )}
       {revokeTarget && (
         <ConfirmDelete
-          mode="typed"
           open
           onClose={() => setRevokeTarget(null)}
           onConfirm={() => revoke(revokeTarget.token_id)}

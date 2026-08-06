@@ -503,6 +503,7 @@ function EmailEditorModal({ profile, account, connectionId = null, onClose, onSa
       )}
       <div className={styles.popoverFooter}>
         <ConfirmDeleteAction
+          anchored={false}
           label="Remove account"
           title={`Remove ${account.address || account.id}?`}
           consequence={

@@ -589,7 +589,6 @@ export default function WorkgroupDetail({
                 Delete workgroup…
               </button>
               <ConfirmDelete
-                mode="typed"
                 open={deleteOpen}
                 onClose={() => setDeleteOpen(false)}
                 onConfirm={() => act("remove")}

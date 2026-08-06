@@ -53,7 +53,6 @@ export function DaemonField() {
         {busy === "restart" ? "Restarting…" : "Restart daemon"}
       </Button>
       <ConfirmDelete
-        mode="typed"
         open={confirming}
         onClose={() => setConfirming(false)}
         onConfirm={restart}

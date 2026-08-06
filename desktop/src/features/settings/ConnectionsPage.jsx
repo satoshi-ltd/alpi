@@ -309,7 +309,6 @@ export default function ConnectionsPage({
       {deleteTarget && (
         <ConfirmDelete
           open
-          mode="typed"
           title={`Delete connection ${deleteTarget.label}?`}
           consequence="Every linked device loses access. Sessions and usage remain attributed to this connection."
           typeToConfirm={deleteTarget.label}

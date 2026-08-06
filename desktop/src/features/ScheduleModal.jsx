@@ -180,7 +180,7 @@ export default function ScheduleModal({ open, onClose, profile, connectionId }) 
                 <I.Trash />
               </IconBtn>
               <ConfirmDelete
-                mode="simple"
+                anchored={false}
                 open={confirm}
                 onClose={() => setConfirm(false)}
                 onConfirm={() => remove(active.id)}

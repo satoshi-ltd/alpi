@@ -4,8 +4,9 @@
   gap: var(--space-7);
   padding: var(--space-5);
 }
-.body.typed {
-  padding: var(--space-8) var(--space-8) var(--space-7);
+.body.inModal {
+  padding: 0;
+  gap: var(--space-8);
 }
 
 .heading {
@@ -15,25 +16,22 @@
 }
 
 .title {
-  font-size: var(--fs-base);
+  font-size: var(--fs-lg);
   font-weight: var(--fw-semibold);
   color: var(--ink);
   letter-spacing: -0.01em;
   line-height: var(--lh-cozy);
 }
-.body.typed .title {
+
+.body.inModal .title {
   font-size: var(--fs-xl);
-  color: var(--c-danger);
 }
 
 .consequence {
-  font-size: var(--fs-sm);
+  font-size: var(--fs-md);
   color: var(--ink);
   line-height: var(--lh-normal);
   text-wrap: pretty;
-}
-.body.typed .consequence {
-  font-size: var(--fs-md);
 }
 
 .typedBlock {

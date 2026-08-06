@@ -362,6 +362,11 @@
   min-width: 0;
 }
 
+.confirmAnchor {
+  position: relative;
+  display: inline-flex;
+}
+
 .inlineRowCenter {
   justify-content: center;
 }
