@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.12.10 — 2026-08-07 — WSS gets a front door
+
+- **The supplied Docker overlay terminates public TLS without publishing the
+  daemon.** Caddy serves the configured domain on ports 80/443 and forwards
+  WebSocket upgrades over the private Compose network. The overlay removes the
+  base mappings for the host plane and ALP, so ports 49200 and 7423 do not
+  become accidental Internet entry points.
+- **Custom host-plane ports stay coherent through the proxy.**
+  `ALPI_HOST_TCP_PORT` now drives the daemon listener, its direct Docker
+  mapping and Caddy's private upstream. Deployments that use 49201, 30494 or
+  another per-instance port no longer need to edit the Caddyfile separately.
+- **The WSS runbook covers the whole operator path.** DNS, firewall rules,
+  Compose version requirements, effective-config verification, certificate
+  checks, public-route configuration, scoped pairing, external-network tests,
+  updates and rollback are documented together. The packaged knowledge
+  references carry the same deployment and security boundaries.
+- **The publish suite no longer searches serialized YAML for arbitrary
+  substrings.** Workgroup tests inspect the parsed phase map, so a random
+  Base64 public key containing text such as `cwd` cannot fail an otherwise
+  valid release.
+
 ## v0.12.9 — 2026-08-07 — a public socket has finite patience
 
 - **Unauthenticated WebSockets no longer get unlimited time or capacity.** The

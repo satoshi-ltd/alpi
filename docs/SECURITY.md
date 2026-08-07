@@ -182,6 +182,12 @@ doesn't reach:
   The token layer authenticates the device in both cases. Public plaintext WS
   addresses and hostname-based plaintext routes are rejected from endpoint
   configuration. Automatic fallback routes pass through the same validator.
+  In the supplied Docker WSS topology, Caddy is the only published service:
+  the Compose overlay resets the daemon's `49200` and `7423` mappings and
+  publishes only `80/443`. Operators must verify the merged Compose output and
+  the external firewall; the daemon cannot infer host port publication from
+  inside a container. See
+  [`docker/README.md`](../docker/README.md#secure-internet-access-wss).
 
   **Connections carry a role.** Each connection has an `admin` or `member`
   role and an optional profile scope shared by its devices. The dispatcher

@@ -123,6 +123,46 @@ clients pair to it. No web terminal — reach the TUI with `docker exec`.
   + global config) into a single passphrase-encrypted file; `alpi
   restore` reverses it. You can also back up the mounted volume.
 
+### Public client access through WSS
+
+Internet-facing Desktop/Mobile access uses a TLS reverse proxy. The daemon
+continues speaking plaintext WebSocket only inside the private host or Compose
+network:
+
+```text
+client -> wss://your.domain.com:443 -> Caddy -> alpi:49200
+```
+
+Use the supplied `docker-compose.wss.yml` overlay and `docker/Caddyfile`. The
+overlay publishes Caddy on `80/443`, removes the base mappings for `49200` and
+`7423`, and forwards to the effective `ALPI_HOST_TCP_PORT` over the private
+Compose network. It requires Docker Compose 2.24.4 or newer for `!reset`.
+
+The operator must still complete four independent steps:
+
+1. point `ALPI_DOMAIN` in public DNS at the Docker host;
+2. allow public TCP 80/443 and deny the daemon ports;
+3. configure `wss://your.domain.com` as the **Public route** under
+   `alpi setup -> Connections -> Network`;
+4. create a scoped connection and test its pairing from an external network.
+
+Existing clients keep the URL selected at their original pairing. A device
+stored as `ws://HOST_IP:PORT` does not automatically adopt the new Public
+route and goes offline when the overlay removes that mapping. Re-pair each
+existing physical client through **Add device** on its current connection,
+select WSS, verify it, then revoke the old direct-WS device credential. The
+connection's role and profile scope remain unchanged.
+
+`!reset` is scoped to the named Compose service. The supplied overlay protects
+`alpi` only; every additional service such as the commented `alpi-2` template
+must remove/reset its own `ports:` and receive its own Caddy upstream.
+
+The proxy and the advertised route are deliberately separate: starting Caddy
+does not mint credentials or rewrite Alpi config, and adding `host.endpoints`
+does not open a port or obtain a certificate. See the complete commands,
+certificate checks, update procedure and custom-port behavior in
+[docker/README.md](../docker/README.md#secure-internet-access-wss).
+
 ## 3. One machine, many profiles
 
 Same machine, multiple profiles with different roles, linked
@@ -155,11 +195,11 @@ starter kit on a single host.
 - **Capabilities are how you specialise.** `cron` might only grant
   `link.ask` to `assistant` and nothing to `researcher`.
   `researcher` grants `link.ask` to both.
-- **Per-profile services.** Each profile's `service:` block in
-  `config.yaml` decides what the daemon spawns: `assistant` runs
-  scheduler + ALP; `cron` runs only the scheduler;
-  `researcher` only ALP. Add or remove a profile and `alpi daemon
-  restart` to apply.
+- **Capabilities are always supervised.** Scheduler, ALP and workgroup tasks
+  are fixed daemon capabilities. Actual activity is controlled by jobs, peer
+  grants and workgroup membership rather than subsystem on/off switches. Add or
+  remove a profile and restart the daemon to refresh the supervised profile
+  set.
 - **Best for:** family on one home server, individual with
   specialised-role agents, prototyping an enterprise rollout on
   one box before distributing.

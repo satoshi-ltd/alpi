@@ -26,11 +26,11 @@ services:
     environment:
       # Reachable endpoint advertised to clients (LAN IP, Tailscale IP, or host).
       ALPI_NETWORK_HOST: ${HOST_IP}
-      ALPI_HOST_TCP_PORT: 49200   # control plane (desktop/mobile pairing)
-      ALPI_ALP_TCP_PORT: 7423     # ALP peer network (cross-machine workgroups)
+      ALPI_HOST_TCP_PORT: ${ALPI_HOST_TCP_PORT:-49200}   # control plane (desktop/mobile pairing)
+      ALPI_ALP_TCP_PORT: ${ALPI_ALP_TCP_PORT:-7423}      # ALP peer network (cross-machine workgroups)
     ports:
-      - "${HOST_IP}:49200:49200"
-      - "${HOST_IP}:7423:7423"
+      - "${HOST_IP}:${ALPI_HOST_TCP_PORT:-49200}:${ALPI_HOST_TCP_PORT:-49200}"
+      - "${HOST_IP}:${ALPI_ALP_TCP_PORT:-7423}:${ALPI_ALP_TCP_PORT:-7423}"
     volumes:
       - ./data/alpi:/data
 

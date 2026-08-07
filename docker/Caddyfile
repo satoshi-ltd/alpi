@@ -1,0 +1,3 @@
+{$ALPI_DOMAIN} {
+	reverse_proxy alpi:{$ALPI_UPSTREAM_PORT}
+}

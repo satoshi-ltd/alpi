@@ -5,7 +5,8 @@
 To let external code (a Node/Java service, CI step, script) talk to a
 profile or workgroup, the code becomes a **host-plane client** of a
 specific daemon — the same role the apps play. It dials the daemon over a
-WebSocket on the private network (Tailscale/LAN) and authenticates with a
+WebSocket on a private network (Tailscale/LAN) or through a
+certificate-validated WSS reverse proxy and authenticates with a
 device credential under a **connection**, calling the same `host.*` JSON-RPC methods. There is no
 public HTTP API and no cloud middleman. Use ALP only when you need a
 first-class peer identity (`@mention`, peer-level workgroup membership) or
@@ -15,14 +16,15 @@ the network is untrusted.
 
 | | Host-plane connection | ALP peer |
 |---|---|---|
-| Use when | trusted private net (Tailscale/LAN) | untrusted net, or first-class peer identity |
-| Transport | WebSocket + JSON-RPC, plain `ws://` | Noise_XK over TCP, signed Ed25519 envelopes |
+| Use when | app/integration needs the host API | first-class peer identity |
+| Transport | WebSocket + JSON-RPC; private `ws://` or public `wss://` | Noise_XK over TCP, signed Ed25519 envelopes |
 | Auth | bearer device token, profile-scoped | keypair pinned in `peers.yaml`, capability `allow` list |
 | Cost | a WebSocket + JSON | embed an ALP client (handshake + signing) |
 | Port | 49200 (`host.tcp_port`) | 7423 (ALP TCP) |
 
-Confidentiality of the host WebSocket comes from running over
-Tailscale/LAN — it is not TLS. Never expose it publicly.
+Use plaintext `ws://` only with a private IP literal over Tailscale/LAN. Public
+access requires a hostname, a valid certificate and `wss://`; keep the
+daemon's plaintext listener private behind the reverse proxy.
 
 ## Host-plane client recipe
 
@@ -36,7 +38,8 @@ Tailscale/LAN — it is not TLS. Never expose it publicly.
    it may reach. The full token is shown once (QR + `alpi://device?…`
    link). A member token scoped to one profile is blocked from every
    `_ADMIN_METHODS` method and gets scope-filtered responses/events.
-3. **Dial (machine A).** Open `ws://<ip>:<port>`. Every request carries
+3. **Dial (machine A).** Open `ws://<private-ip>:<port>` or
+   `wss://your.domain.com`. Every request carries
    `params.auth_token`. One WebSocket message = one JSON object.
 4. **Revoke.** `alpi setup` → Connections → select the device, or `host.connections.revoke_device`
    (**admin-only** — a member token cannot revoke).
@@ -87,8 +90,9 @@ keys and does the group crypto. `create`/`update`/`add_member`/`kick`/
 
 - Scope every integration token to one profile; one token per integration
   so revocation is isolated.
-- Private network only; keep `host.allow_public_bind: false`. The token is
-  a bearer secret — keep it out of source control.
+- Keep `host.allow_public_bind: false`. Use direct WS only on a private network;
+  public access goes through certificate-validated WSS while the daemon port
+  remains private. The token is a bearer secret — keep it out of source control.
 - Inbound text drives the target profile with its full tool set — scope
   the profile's tools (`tools.deny`, sandbox) to what the integration
   needs; treat it as reachable by whatever reaches the integration.

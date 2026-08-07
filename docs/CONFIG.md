@@ -667,7 +667,7 @@ host:
   tcp_port: 49200
   device_name: ""
   endpoints:
-    - url: wss://client.example.com
+    - url: wss://your.domain.com
       label: Secure Internet
     - url: ws://100.64.10.2:49200
       label: Direct
@@ -727,7 +727,8 @@ opted-in public IP binds `0.0.0.0`, and a public IP without
 `0.0.0.0` inside the container. A LAN or `100.x` Tailscale IP in
 `ALPI_NETWORK_HOST` can produce the direct client route. A hostname, including
 MagicDNS, is still valid for ALP but desktop/mobile need an explicit `wss://`
-entry in `host.endpoints` (see `docker/README.md`).
+entry in `host.endpoints` (see
+[`docker/README.md`](../docker/README.md#secure-internet-access-wss)).
 
 Connection identities and per-device WS credentials live at
 ``~/.alpi/host/connections.yaml`` (mode 0600). Manage them through

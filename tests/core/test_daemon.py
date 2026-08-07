@@ -544,3 +544,30 @@ def test_docker_compose_raises_file_descriptor_limit() -> None:
     nofile = compose["services"]["alpi"]["ulimits"]["nofile"]
     assert nofile["soft"] == 8192
     assert nofile["hard"] == 8192
+
+
+def test_wss_compose_keeps_daemon_ports_private_and_tracks_custom_port() -> None:
+    import yaml
+
+    class ComposeLoader(yaml.SafeLoader):
+        pass
+
+    ComposeLoader.add_constructor(
+        "!reset", lambda loader, node: loader.construct_sequence(node),
+    )
+    repo_root = Path(__file__).resolve().parents[2]
+    overlay_path = repo_root / "docker-compose.wss.yml"
+    caddy_path = repo_root / "docker" / "Caddyfile"
+    overlay_text = overlay_path.read_text()
+    overlay = yaml.load(overlay_text, Loader=ComposeLoader)
+
+    assert "ports: !reset []" in overlay_text
+    assert overlay["services"]["alpi"]["ports"] == []
+    assert overlay["services"]["alpi"]["expose"] == [
+        "${ALPI_HOST_TCP_PORT:-49200}",
+    ]
+    assert overlay["services"]["caddy"]["ports"] == ["80:80", "443:443"]
+    assert overlay["services"]["caddy"]["environment"]["ALPI_UPSTREAM_PORT"] == (
+        "${ALPI_HOST_TCP_PORT:-49200}"
+    )
+    assert "reverse_proxy alpi:{$ALPI_UPSTREAM_PORT}" in caddy_path.read_text()

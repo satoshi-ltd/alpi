@@ -58,7 +58,7 @@ host:
   allow_public_bind: false # keep false — public IPs are rejected unless this is true
   device_name: ""          # pairing label; defaults to the hostname
   endpoints:
-    - url: wss://client.example.com
+    - url: wss://your.domain.com
       label: Secure Internet
     - url: ws://100.64.10.2:49200
       label: Direct
@@ -70,6 +70,10 @@ explicitly set `host.allow_public_bind: true` (don't, for an integration).
 
 Configure routes in `alpi setup` → **Connections** → **Network**. Their order
 is preserved and the first route is the default encoded in a pairing code.
+For the supplied Docker/Caddy topology, follow
+[`docker/README.md`](../docker/README.md#secure-internet-access-wss): the proxy
+must be reachable and its certificate valid before a client can dial the
+advertised route.
 
 ## Step 2 — create a scoped connection
 
@@ -270,9 +274,11 @@ Member-callable workgroup methods (all take `profile`, scope-checked):
 
 - **Scope to one profile.** A `member` token restricted to a single
   profile cannot touch any other profile or any admin method.
-- **Private network only.** Dial over Tailscale or a trusted LAN. Leave
-  `host.allow_public_bind: false`. The token is a bearer secret; treat it like
-  a password and keep it out of source control.
+- **Use an encrypted route.** Dial a private IP over Tailscale/trusted LAN, or
+  use certificate-validated `wss://` through a reverse proxy for Internet
+  access. Leave `host.allow_public_bind: false` and keep the daemon's plaintext
+  listener private. The token is a bearer secret; treat it like a password and
+  keep it out of source control.
 - **Revoke on rotation.** Each integration gets its own token so you can
   revoke one without disturbing the others.
 - **Inbound text drives an agent with tools.** Every message you send is

@@ -208,7 +208,7 @@ See [docs/SECURITY.md](docs/SECURITY.md) for the full model.
 - [docs/MODELS.md](docs/MODELS.md) — model recommendations for
   tool-heavy agent use.
 - [docs/DEPLOYMENTS.md](docs/DEPLOYMENTS.md) — laptop, home server,
-  multi-profile, multi-device, family/team, enterprise shapes.
+  Docker/WSS, multi-profile, multi-device, family/team, enterprise shapes.
 - [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) — talk to a profile or
   workgroup from your own code (device token, host-plane WebSocket,
   Node example).

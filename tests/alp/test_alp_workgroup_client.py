@@ -10,6 +10,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
+import yaml
 
 from alpi.alp import peers as peers_mod
 from alpi.alp import server as alp_server
@@ -1435,10 +1436,10 @@ def test_phase_map_drops_gate_argv_and_cwd(short_tmp: Path) -> None:
         "intake": {"owner": "scout", "task": "produce intake.md"},
     }
     sub_mod.upsert(home, sub)
-    saved = sub_mod.path(home).read_text()
-    assert "argv" not in saved
-    assert "check:config" not in saved
-    assert "cwd" not in saved
+    saved = yaml.safe_load(sub_mod.path(home).read_text())
+    assert saved[0]["phase_map"]["intake"] == {
+        "owner": "scout", "task": "produce intake.md",
+    }
 
 
 def test_validate_pipeline_task_requires_participants(short_tmp: Path) -> None:
@@ -1960,11 +1961,6 @@ async def test_join_and_pull_payloads_carry_canonical_chain_state(
         assert "pipeline" not in payload, method
         assert "operations" not in payload, method
 
-        import json as _json
-        blob = _json.dumps(payload)
-        assert "argv" not in blob, method
-        assert "cwd" not in blob, method
-        assert "check:config" not in blob, method
         assert all(
             set(spec) <= {"owner", "task"}
             for spec in payload["phase_map"].values()
@@ -1999,10 +1995,13 @@ async def test_member_absorbs_join_payload_without_persisting_gates(
     assert loaded.phase_map["intake"] == {
         "owner": "muse", "task": "produce intake.md",
     }
-    saved = sub_mod.path(member_home).read_text()
-    assert "argv" not in saved
-    assert "cwd" not in saved
-    assert "check:config" not in saved
+    saved = yaml.safe_load(sub_mod.path(member_home).read_text())
+    saved_sub = next(row for row in saved if row["wg_id"] == wg.meta.id)
+    assert saved_sub["phase_map"] == loaded.phase_map
+    assert all(
+        set(spec) <= {"owner", "task", "turn_budget_s"}
+        for spec in saved_sub["phase_map"].values()
+    )
 
 
 @pytest.mark.asyncio

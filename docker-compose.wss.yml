@@ -1,0 +1,25 @@
+services:
+  alpi:
+    ports: !reset []
+    expose:
+      - "${ALPI_HOST_TCP_PORT:-49200}"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - alpi
+    environment:
+      ALPI_DOMAIN: ${ALPI_DOMAIN}
+      ALPI_UPSTREAM_PORT: ${ALPI_HOST_TCP_PORT:-49200}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -123,6 +123,14 @@ connection `host`.
 Local-only verbs (admin role does not unlock them): `host.network.status`,
 `host.network.set_advertised`, `host.network.restart_host_server`.
 
+Public client access must terminate certificate-validated WSS at a reverse
+proxy. The supplied Docker overlay publishes only Caddy on 80/443 and resets
+the direct host-plane and ALP mappings; verify the merged Compose output and
+the external firewall because a daemon inside Docker cannot observe host port
+publication. `host.endpoints` is advertisement only: it neither opens ports nor
+obtains certificates. Caddy still forwards every RPC to Alpi's normal
+per-device authentication.
+
 `host.profile.read_file` denies secret content regardless of role, checked
 by path *components* (not just top-level prefixes), so nested ones don't
 slip through:
