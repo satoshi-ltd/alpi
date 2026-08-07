@@ -26,14 +26,6 @@ export const FIELD_KEYS = {
   reasoningEffort: "model_reasoning.effort",
 };
 
-export const SUBSYSTEMS = ["schedule", "alp", "workgroups"];
-
-export const SUBSYSTEM_DESC = {
-  schedule: "Cron jobs",
-  alp: "Inter-machine peer protocol",
-  workgroups: "Workgroup background poller",
-};
-
 export const STORAGE_SCOPE = {
   sessions: "chat transcripts",
   skills: "user-created skills (scripts, references, state)",
@@ -103,20 +95,6 @@ export const ALLOW_METHODS = [
     desc: "Abort an in-flight turn the peer started via link.ask. Useless without link.ask granted.",
   },
 ];
-
-// Short network-type prefix for an address, for chips like `tailscale:7423`.
-// Falls back to `tcp` for hostnames / public / auto (no recognised private IP).
-export function scopeLabel(host) {
-  const ip = (host || "").trim().replace(/:\d+$/, "");
-  const m = ip.match(/^(\d+)\.(\d+)\.\d+\.\d+$/);
-  if (m) {
-    const a = Number(m[1]);
-    const b = Number(m[2]);
-    if (a === 100 && b >= 64 && b <= 127) return "tailscale";
-    if (a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)) return "lan";
-  }
-  return "tcp";
-}
 
 export function formatTcpLabel(host, port) {
   const h = (host || "").trim();

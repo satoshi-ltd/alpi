@@ -230,12 +230,8 @@ the receiver needs to pin.
 ### Intra-machine — Unix-domain socket
 
 Path: `~/.alpi/<profile>/alp/alp.sock`, served by the alpi
-daemon when this profile's `alp` service is enabled (`service.alp:
-true` — default), mode `0600`. The listener shares the daemon's
-asyncio loop with this profile's other services; toggle
-`service.alp: false` for profiles that need the scheduler
-but no ALP, or `service.schedule: false` for an ALP-only relay
-profile.
+daemon for every profile, mode `0600`. The listener is an internal
+daemon task isolated from the scheduler and workgroup poller.
 Filesystem permissions gate access to the socket file; every
 envelope on the socket is still signed as a second, orthogonal
 layer of defence.
@@ -256,8 +252,7 @@ in Docker; with no reachable address it stays Unix-only. **Named profiles are
 Unix-only** unless they set their own explicit, unique `alp.tcp_port` (otherwise
 profiles would collide on the shared port). A profile is configured once and
 both the ALP peer listener and the device-pairing host plane use the same
-address, on their own ports. (`service.alp: false` disables ALP for a profile
-entirely.)
+address, on their own ports.
 Connection establishment uses the **Noise_XK** handshake pattern
 from the Noise Protocol Framework [NOISE], where the responder's
 static public key is known to the initiator in advance and the

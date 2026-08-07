@@ -588,21 +588,36 @@ def _pairing_network() -> dict[str, Any]:
     from alpi.host.network import (
         classify_scope,
         resolve_host_endpoint,
+        resolve_host_endpoints,
         resolve_host_pairing_name,
         resolve_host_tcp_port,
+        pairing_unavailable_detail,
     )
-    endpoint = resolve_host_endpoint(_root())
-    if endpoint is None:
+    try:
+        endpoints = resolve_host_endpoints(_root())
+    except ValueError as exc:
+        raise host_server.HandlerError(
+            -32010, "invalid-advertised-endpoints", data={"detail": str(exc)},
+        ) from exc
+    if not endpoints:
         raise host_server.HandlerError(
             -32010, "no-advertised-host",
-            data={"detail": "Cannot pair: no Tailscale or LAN address detected."},
+            data={"detail": pairing_unavailable_detail(_root())},
         )
-    host, raw_scope = endpoint
+    endpoint = resolve_host_endpoint(_root())
+    legacy = {}
+    if endpoint is not None:
+        host, raw_scope = endpoint
+        legacy = {
+            "host": host,
+            "scope": classify_scope(host, raw_scope),
+            "is_override": raw_scope == "configured",
+            "port": resolve_host_tcp_port(_root()),
+        }
     return {
-        "host": host,
-        "scope": classify_scope(host, raw_scope),
-        "is_override": raw_scope == "configured",
-        "port": resolve_host_tcp_port(_root()),
+        **legacy,
+        "url": endpoints[0]["url"],
+        "endpoints": endpoints,
         "pairing_name": resolve_host_pairing_name(_root()),
     }
 

@@ -111,7 +111,8 @@ clients pair to it. No web terminal — reach the TUI with `docker exec`.
   `/data/.alpi` the profile root — state survives restarts.
 - **Reachability:** the container can't see the host's network
   interfaces, so set `ALPI_NETWORK_HOST` to the address clients
-  dial — a LAN IP, or a Tailscale IP/MagicDNS for off-network access
+  dial — a LAN/Tailscale IP for direct WS, or a hostname paired with an
+  explicit certificate-validated `wss://` entry in `host.endpoints`
   (**Tailscale is optional**). The control plane binds `0.0.0.0`
   inside the container; you map a host port to it.
 - **Remote access split:** `49200` is the host plane used by paired

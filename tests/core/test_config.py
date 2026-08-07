@@ -40,6 +40,25 @@ def test_save_roundtrips(tmp_home_no_env: Path) -> None:
     assert reloaded.tools.web_extract.model.startswith("openrouter/google/gemini")
 
 
+def test_save_migrates_legacy_service_prefetch_and_drops_switches(
+    tmp_home_no_env: Path,
+) -> None:
+    import yaml
+
+    (tmp_home_no_env / "config.yaml").write_text(yaml.safe_dump({
+        "model": "openai/gpt-4o",
+        "service": {"schedule": False, "alp": False, "prefetch": "all"},
+    }))
+
+    cfg = config.load(tmp_home_no_env)
+    assert cfg.runtime.prefetch == "all"
+    config.save(cfg)
+
+    on_disk = yaml.safe_load((tmp_home_no_env / "config.yaml").read_text())
+    assert "service" not in on_disk
+    assert on_disk["runtime"]["prefetch"] == "all"
+
+
 def test_save_keeps_email_accounts_dropping_unknown_keys(tmp_home_no_env: Path) -> None:
     """email.accounts persists per-account rows; unknown per-account keys are dropped."""
     import yaml

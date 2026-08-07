@@ -52,6 +52,18 @@ function test(name, fn) {
 
 const endpoint = { ip: '127.0.0.1', port: 9999, token: 't' };
 
+await test('wss endpoints are passed to the native WebSocket unchanged', async () => {
+  _resetPoolForTests();
+  nextWs = null;
+  const secure = { url: 'wss://client.example.com', token: 'secure' };
+  const pending = call(secure, 'host.echo', {});
+  const ws = nextWs;
+  assert.strictEqual(ws.url, 'wss://client.example.com');
+  ws.open();
+  ws.message({ id: JSON.parse(ws.sent[0]).id, result: { ok: true } });
+  assert.deepStrictEqual(await pending, { ok: true });
+});
+
 await test('two concurrent calls share one ws and resolve by id', async () => {
   _resetPoolForTests();
   nextWs = null;

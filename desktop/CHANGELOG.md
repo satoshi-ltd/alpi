@@ -11,6 +11,47 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.5.3 — 2026-08-06 — the secure route is a real route
+
+- **Remote connections now dial complete `ws://` or `wss://` URLs.** WSS uses
+  the public certificate roots and validates the hostname; a bad, expired or
+  mismatched certificate fails closed instead of degrading to plaintext.
+- **Pairing can offer more than one way into the same Alpi.** Pick Secure
+  Internet or Direct when generating a device code; the device gets an
+  independent token either way and can be revoked without affecting its
+  siblings.
+- **Client access stays in the single Service section.** Address and port share
+  one row, without network-provider labels. Name follows, then a read-only
+  private WS route and one optional public WSS route with Add, Edit and Remove.
+  An older running daemon reports that a restart is required instead of silently
+  hiding route setup.
+- **The network rows now match what they actually control.** Address is detected
+  and read-only, its adjacent port is editable with an explicit daemon restart,
+  and instance name is editable without a restart. A port supplied through
+  `ALPI_HOST_TCP_PORT` is displayed as deployment-managed rather than offering
+  an edit that `config.yaml` cannot override.
+- **Pairing route selectors show the URL that will actually be stored.** Internal
+  route labels remain wire-compatible with older clients but no longer obscure
+  the address in Desktop setup or pairing dialogs.
+- **Existing Desktop connection files migrate from `host + port`** without
+  asking the user to pair again.
+- **A Desktop rollback no longer makes every remote connection disappear.** New
+  connection files retain complete URLs while also writing the legacy host and
+  port fields expected by 0.5.2, so its parser does not discard the whole file.
+- **The connection switcher displays migrated endpoints correctly.** Existing
+  `host + port` entries and new complete URLs no longer render as
+  `undefined:undefined` while switching daemons.
+- **Settings no longer pretend daemon internals are feature switches.** The
+  subsystem chips are gone; scheduler, ALP and workgroups stay available, while
+  their real controls remain with schedules, peers and workgroups.
+- **Pairing failures preserve the daemon's useful diagnosis.** A hostname that
+  needs WSS is shown as that exact configuration problem rather than a generic
+  private-network detection failure. Pairing links also carry stable connection
+  identity so Mobile can replace a repeated pairing instead of duplicating it.
+
+Requires alpi ≥ 0.12.8 for multiple advertised routes. Connections paired
+against older daemons remain compatible through their direct WS URL.
+
 ## v0.5.2 — 2026-08-05 — timestamps that follow the clock
 
 - **The reply is stamped when it landed, not when you asked.** On a turn that

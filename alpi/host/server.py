@@ -34,6 +34,7 @@ _LOCAL_ONLY_CONFIG_KEYS = frozenset({
     "alp.tcp_port",
     "host.tcp_port",
     "host.allow_public_bind",
+    "host.endpoints",
     "network.host",
 })
 
@@ -206,16 +207,16 @@ class Server:
             raise ValueError(
                 f"host TCP listener refuses to bind to {host!r}: a public IP "
                 "exposes the host control plane. Set `host.allow_public_bind: "
-                "true` to override (or use a Tailscale / private-LAN / private "
+                "true` to override (or use a private network / private "
                 "hostname address)."
             )
-        # Auto-detected binds are Tailscale/private-LAN (and 0.0.0.0 in docker);
+        # Auto-detected binds are private addresses (and 0.0.0.0 in docker);
         # anything else here is the operator's explicit choice (public IP or
         # custom hostname) — flag it.
         if host != "0.0.0.0" and not _is_private_or_overlay(host):
             log.warning(
-                "host TCP listener bound to %r — this is outside Tailscale/"
-                "private LAN; ensure device-pairing is your only access control.",
+                "host TCP listener bound to %r — this is outside private "
+                "network ranges; ensure device-pairing is your only access control.",
                 host,
             )
         return host, port

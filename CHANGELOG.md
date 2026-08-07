@@ -1,5 +1,61 @@
 # Changelog
 
+## v0.12.8 — 2026-08-06 — one connection, every safe route
+
+- **Pairing now advertises complete, ordered WebSocket routes.** A host can put
+  `wss://client.example.com` first for Internet access and keep a direct
+  `ws://100.x:49200` fallback on a private network. The selected URL is transport
+  metadata only: every device still receives its own token under the same
+  connection, role and profile scope.
+- **Old pairings keep working.** With no `host.endpoints`, Alpi synthesizes the
+  existing direct route. Desktop and mobile continue to read legacy `host +
+  port` links while new QR codes use the smaller `url` shape without a protocol
+  version flag.
+- **Client access settings now distinguish facts from controls.** `alpi setup →
+  Connections → Network` and the local Desktop profile show the detected
+  address without pretending it is a user choice. The port sits beside that
+  address and remains editable with an explicit daemon restart; the instance
+  name edits in place. The private WS route is derived from the address and
+  port, while one optional public WSS route can be added or removed. When
+  `ALPI_HOST_TCP_PORT` owns the port in Docker, setup reports
+  it as environment-managed instead of saving an ineffective config override.
+  URL validation rejects credentials, paths, duplicate routes, non-WebSocket
+  schemes and plaintext WS to public IPs.
+- **A Caddy deployment overlay makes public WSS concrete.** The supplied
+  compose overlay obtains and renews a certificate automatically, proxies the
+  WebSocket upgrade to Alpi and resets the inherited `49200/7423` publications,
+  so the effective WSS deployment exposes only `80/443`.
+- **Plaintext routes cannot hide behind hostnames.** `ws://` now requires a
+  private IP literal; hostnames (including `localhost` and alternate
+  numeric IPv4 forms) require certificate-validated `wss://`. Automatic direct
+  routes pass through the same validator and disappear when they are unsafe.
+  Pairing errors now identify this hostname/WSS requirement instead of blaming
+  private-address detection.
+- **A public route no longer replaces safe private access.** When
+  `host.endpoints` contains only WSS, Alpi appends the private WS route derived
+  from the current address and listen port. Explicit WS routes keep their
+  configured order for backward compatibility.
+- **The daemon no longer exposes fake subsystem switches.** Scheduler, ALP,
+  workgroups and the default host plane are fixed, independently guarded tasks;
+  jobs, workgroups, peer grants and connection scopes remain the real controls.
+  Generic host config verbs reject the removed `service.*` fields instead of
+  storing dead state. Legacy `service.prefetch` migrates to `runtime.prefetch`
+  when config is saved. Existing removed switches produce a startup warning and
+  an `alpi doctor` warning before a later save removes the obsolete block.
+- **Invalid endpoint configuration remains recoverable.** Network status now
+  reports a specific configuration error instead of collapsing into an internal
+  RPC failure. Generic config writes cannot store `host.endpoints`; clients must
+  use the validated network verb, while the local unset operation remains
+  available to repair configuration left by an older build.
+- **Pairing codes keep stable connection identity.** Desktop and console QR/link
+  payloads now include the connection id, allowing Mobile to refresh the same
+  scoped connection without adding duplicate rows. Different connection scopes
+  to the same daemon still remain independent.
+- **The WSS Docker update path preserves its exposure boundary.** Deployment
+  docs require Compose 2.24.4 or newer for `!reset`, call out its silent behavior
+  in older versions, and keep both compose files in WSS update commands so a
+  routine update cannot republish ports `49200` and `7423`.
+
 ## v0.12.7 — 2026-08-06 — an abandoned task stops shouting
 
 - **A terminally stalled task no longer spams the log and the poller state.**

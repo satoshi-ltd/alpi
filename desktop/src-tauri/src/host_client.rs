@@ -9,9 +9,11 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
+use base64::Engine;
 use flate2::{Decompress, FlushDecompress, Status};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use sha1::{Digest, Sha1};
 
 #[cfg(unix)]
 use crate::home::resolve_root;
@@ -319,7 +321,9 @@ pub enum HostConnection {
     Remote {
         id: String,
         name: String,
+        #[serde(rename = "url")]
         host: String,
+        #[serde(default, skip_serializing_if = "is_zero_port")]
         port: u16,
         token: String,
         #[serde(default)]
@@ -427,24 +431,32 @@ impl HostConnection {
                 device_id,
                 last_connected,
                 ..
-            } => json!({
-                "id": id,
-                "name": name,
-                "kind": "remote",
-                "host": host,
-                "port": port,
-                "token_id": token.chars().rev().take(8).collect::<String>().chars().rev().collect::<String>(),
-                "revoked": revoked,
-                "status": status.as_str(),
-                "error": error,
-                "alpi_version": alpi_version,
-                "update_available": update_available,
-                "device_id": device_id,
-                "role": role,
-                "last_connected": last_connected,
-            }),
+            } => {
+                let endpoint_url = parse_remote_endpoint(host, *port)
+                    .map(|endpoint| endpoint.url)
+                    .unwrap_or_else(|_| format!("ws://{host}:{port}"));
+                json!({
+                    "id": id,
+                    "name": name,
+                    "kind": "remote",
+                    "url": endpoint_url,
+                    "token_id": token.chars().rev().take(8).collect::<String>().chars().rev().collect::<String>(),
+                    "revoked": revoked,
+                    "status": status.as_str(),
+                    "error": error,
+                    "alpi_version": alpi_version,
+                    "update_available": update_available,
+                    "device_id": device_id,
+                    "role": role,
+                    "last_connected": last_connected,
+                })
+            }
         }
     }
+}
+
+fn is_zero_port(port: &u16) -> bool {
+    *port == 0
 }
 
 #[cfg(test)]
@@ -469,6 +481,50 @@ fn connections_path() -> Result<PathBuf, String> {
     Ok(connections_dir()?.join(CONNECTIONS_FILE))
 }
 
+fn decode_connections(text: &str) -> Result<ConnectionsState, serde_json::Error> {
+    let mut value: Value = serde_json::from_str(text)?;
+    if let Some(rows) = value.get_mut("connections").and_then(Value::as_array_mut) {
+        for row in rows {
+            let Some(object) = row.as_object_mut() else {
+                continue;
+            };
+            if object.get("kind").and_then(Value::as_str) != Some("remote") {
+                continue;
+            }
+            if object.contains_key("url") {
+                object.remove("host");
+            } else if let Some(host) = object.remove("host") {
+                object.insert("url".to_string(), host);
+            }
+        }
+    }
+    serde_json::from_value(value)
+}
+
+fn connections_disk_value(state: &ConnectionsState) -> Result<Value, String> {
+    let mut value = serde_json::to_value(state).map_err(|e| format!("encode: {e}"))?;
+    if let Some(rows) = value.get_mut("connections").and_then(Value::as_array_mut) {
+        for row in rows {
+            let Some(object) = row.as_object_mut() else {
+                continue;
+            };
+            if object.get("kind").and_then(Value::as_str) != Some("remote") {
+                continue;
+            }
+            let Some(url) = object.get("url").and_then(Value::as_str) else {
+                continue;
+            };
+            let legacy_port = object.get("port").and_then(Value::as_u64).unwrap_or(0) as u16;
+            let Ok(endpoint) = parse_remote_endpoint(url, legacy_port) else {
+                continue;
+            };
+            object.insert("host".to_string(), Value::String(endpoint.host));
+            object.insert("port".to_string(), json!(endpoint.port));
+        }
+    }
+    Ok(value)
+}
+
 pub fn load_connections() -> ConnectionsState {
     let path = match connections_path() {
         Ok(p) => p,
@@ -478,7 +534,7 @@ pub fn load_connections() -> ConnectionsState {
         Ok(t) => t,
         Err(_) => return ConnectionsState::default(),
     };
-    let mut state: ConnectionsState = match serde_json::from_str(&text) {
+    let mut state: ConnectionsState = match decode_connections(&text) {
         Ok(s) => s,
         Err(_) => return ConnectionsState::default(),
     };
@@ -581,7 +637,8 @@ fn save_connections(state: &ConnectionsState) -> Result<(), String> {
     fs::create_dir_all(&dir).map_err(|e| format!("create {}: {e}", dir.display()))?;
     let path = connections_path()?;
     let tmp = path.with_extension("json.tmp");
-    let text = serde_json::to_string_pretty(state).map_err(|e| format!("encode: {e}"))?;
+    let value = connections_disk_value(state)?;
+    let text = serde_json::to_string_pretty(&value).map_err(|e| format!("encode: {e}"))?;
     let mut f = open_private(&tmp)
         .map_err(|e| format!("open {}: {e}", tmp.display()))?;
     f.write_all(text.as_bytes())
@@ -683,35 +740,33 @@ pub fn forget_connection(id: String) -> Result<(), String> {
 
 pub fn add_remote_connection(
     name: String,
-    host: String,
-    port: u16,
+    url: String,
     token: String,
 ) -> Result<String, String> {
-    if host.trim().is_empty() {
-        return Err("host is required".to_string());
+    if !url.trim().starts_with("ws://") && !url.trim().starts_with("wss://") {
+        return Err("remote URL must use ws:// or wss://".to_string());
     }
-    if !is_valid_host(host.trim()) {
-        return Err("remote host must be an IP address or hostname".to_string());
-    }
+    let endpoint = parse_remote_endpoint(url.trim(), 0)?;
     if token.trim().is_empty() {
         return Err("token is required".to_string());
     }
     let id = format!(
-        "remote-{}-{}",
-        host.trim().replace(|c: char| !c.is_ascii_alphanumeric(), "-"),
-        port,
+        "remote-{}-{}-{}",
+        if endpoint.secure { "wss" } else { "ws" },
+        endpoint.host.replace(|c: char| !c.is_ascii_alphanumeric(), "-"),
+        endpoint.port,
     );
     try_mutate_connections(|state| {
         state.connections.retain(|c| c.id() != id);
         state.connections.push(HostConnection::Remote {
             id: id.clone(),
             name: if name.trim().is_empty() {
-                host.trim().to_string()
+                endpoint.host.clone()
             } else {
                 name.trim().to_string()
             },
-            host: host.trim().to_string(),
-            port,
+            host: endpoint.url.clone(),
+            port: 0,
             token: token.trim().to_string(),
             revoked: false,
             device_id: None,
@@ -1001,7 +1056,7 @@ fn call_local_inner(method: &str, params: Value, timeout: Duration) -> Result<Va
     let path = socket_path()?;
     if !path.exists() {
         return Err(format!(
-            "alpi daemon socket not found at {} — is the host subsystem enabled (alpi setup → Service → Subsystems)?",
+            "alpi daemon socket not found at {} — is the daemon running?",
             path.display()
         ));
     }
@@ -1115,7 +1170,7 @@ where
     let path = socket_path()?;
     if !path.exists() {
         return Err(format!(
-            "alpi daemon socket not found at {} — is the host subsystem enabled (alpi setup → Service → Subsystems)?",
+            "alpi daemon socket not found at {} — is the daemon running?",
             path.display()
         ));
     }
@@ -1371,6 +1426,100 @@ fn is_valid_host(host: &str) -> bool {
     host.parse::<IpAddr>().is_ok() || is_valid_hostname(host)
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RemoteEndpoint {
+    url: String,
+    host: String,
+    port: u16,
+    secure: bool,
+}
+
+fn parse_remote_endpoint(value: &str, legacy_port: u16) -> Result<RemoteEndpoint, String> {
+    let value = value.trim();
+    let (secure, authority) = if let Some(rest) = value.strip_prefix("wss://") {
+        (true, rest)
+    } else if let Some(rest) = value.strip_prefix("ws://") {
+        (false, rest)
+    } else {
+        if !is_valid_host(value) || legacy_port == 0 {
+            return Err("remote endpoint must be a ws:// or wss:// URL".to_string());
+        }
+        return Ok(RemoteEndpoint {
+            url: format!("ws://{}:{legacy_port}", bracket_host(value)),
+            host: value.to_string(),
+            port: legacy_port,
+            secure: false,
+        });
+    };
+    let authority = authority.strip_suffix('/').unwrap_or(authority);
+    if authority.is_empty()
+        || authority.contains('/')
+        || authority.contains('?')
+        || authority.contains('#')
+        || authority.contains('@')
+    {
+        return Err("remote URL cannot contain credentials, a path, query, or fragment".to_string());
+    }
+    let default_port = if secure { 443 } else { 80 };
+    let (host, port) = if let Some(rest) = authority.strip_prefix('[') {
+        let close = rest
+            .find(']')
+            .ok_or_else(|| "invalid bracketed IPv6 address".to_string())?;
+        let host = &rest[..close];
+        let suffix = &rest[close + 1..];
+        let port = if suffix.is_empty() {
+            default_port
+        } else {
+            suffix
+                .strip_prefix(':')
+                .ok_or_else(|| "invalid remote URL port".to_string())?
+                .parse::<u16>()
+                .map_err(|_| "invalid remote URL port".to_string())?
+        };
+        (host.to_string(), port)
+    } else if let Some((candidate, raw_port)) = authority.rsplit_once(':') {
+        if candidate.contains(':') {
+            return Err("IPv6 addresses must be enclosed in brackets".to_string());
+        }
+        let port = raw_port
+            .parse::<u16>()
+            .map_err(|_| "invalid remote URL port".to_string())?;
+        (candidate.to_string(), port)
+    } else {
+        (authority.to_string(), default_port)
+    };
+    if !is_valid_host(&host) {
+        return Err("remote URL host must be an IP address or hostname".to_string());
+    }
+    if port == 0 {
+        return Err("remote URL port must be between 1 and 65535".to_string());
+    }
+    let port_suffix = if port == default_port {
+        String::new()
+    } else {
+        format!(":{port}")
+    };
+    Ok(RemoteEndpoint {
+        url: format!(
+            "{}://{}{}",
+            if secure { "wss" } else { "ws" },
+            bracket_host(&host),
+            port_suffix,
+        ),
+        host,
+        port,
+        secure,
+    })
+}
+
+fn bracket_host(host: &str) -> String {
+    if host.contains(':') {
+        format!("[{host}]")
+    } else {
+        host.to_string()
+    }
+}
+
 fn resolve_addrs(host: &str, port: u16) -> Result<Vec<SocketAddr>, String> {
     if let Ok(ip) = host.parse::<IpAddr>() {
         return Ok(vec![SocketAddr::new(ip, port)]);
@@ -1404,6 +1553,20 @@ fn ws_deflate_accepted(response_head: &str) -> bool {
         }
     }
     false
+}
+
+fn ws_header<'a>(response_head: &'a str, target: &str) -> Option<&'a str> {
+    response_head.lines().skip(1).find_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        name.trim().eq_ignore_ascii_case(target).then(|| value.trim())
+    })
+}
+
+fn ws_expected_accept(key: &str) -> String {
+    let mut digest = Sha1::new();
+    digest.update(key.as_bytes());
+    digest.update(b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
+    base64::engine::general_purpose::STANDARD.encode(digest.finalize())
 }
 
 // RFC 7692: strip happens server-side, so the 00 00 FF FF tail is re-appended before a raw inflate; the Decompress persists per connection because context takeover shares the dictionary across messages.
@@ -1442,28 +1605,70 @@ fn inflate_ws_message(inflater: &mut Decompress, payload: &[u8]) -> Result<Vec<u
     Ok(out)
 }
 
+enum WsStream {
+    Plain(TcpStream),
+    Tls(Box<rustls::StreamOwned<rustls::ClientConnection, TcpStream>>),
+}
+
+impl WsStream {
+    fn tcp(&self) -> &TcpStream {
+        match self {
+            Self::Plain(stream) => stream,
+            Self::Tls(stream) => &stream.sock,
+        }
+    }
+}
+
+impl Read for WsStream {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        match self {
+            Self::Plain(stream) => stream.read(buf),
+            Self::Tls(stream) => stream.read(buf),
+        }
+    }
+}
+
+impl Write for WsStream {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        match self {
+            Self::Plain(stream) => stream.write(buf),
+            Self::Tls(stream) => stream.write(buf),
+        }
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        match self {
+            Self::Plain(stream) => stream.flush(),
+            Self::Tls(stream) => stream.flush(),
+        }
+    }
+}
+
 struct WsClient {
-    stream: TcpStream,
+    stream: WsStream,
     inflater: Option<Decompress>,
 }
 
 impl WsClient {
     fn connect(
-        host: &str,
-        port: u16,
+        remote: &str,
+        legacy_port: u16,
         connect_timeout: Duration,
         read_timeout: Duration,
     ) -> Result<Self, String> {
+        let endpoint = parse_remote_endpoint(remote, legacy_port)?;
+        let host = endpoint.host.as_str();
+        let port = endpoint.port;
         let addrs = resolve_addrs(host, port)?;
         let mut stream = None;
-        let mut last_err = format!("connect ws://{host}:{port}: no address");
+        let mut last_err = format!("connect {}: no address", endpoint.url);
         for addr in &addrs {
             match TcpStream::connect_timeout(addr, connect_timeout) {
                 Ok(s) => {
                     stream = Some(s);
                     break;
                 }
-                Err(e) => last_err = format!("connect ws://{host}:{port} ({addr}): {e}"),
+                Err(e) => last_err = format!("connect {} ({addr}): {e}", endpoint.url),
             }
         }
         let stream = stream.ok_or(last_err)?;
@@ -1475,16 +1680,38 @@ impl WsClient {
             .with_time(Duration::from_secs(WS_KEEPALIVE_IDLE_SECS))
             .with_interval(Duration::from_secs(WS_KEEPALIVE_INTERVAL_SECS));
         socket.set_tcp_keepalive(&ka).ok();
-        let mut stream = stream;
+        let mut stream = if endpoint.secure {
+            let roots = rustls::RootCertStore::from_iter(
+                webpki_roots::TLS_SERVER_ROOTS.iter().cloned(),
+            );
+            let config = rustls::ClientConfig::builder()
+                .with_root_certificates(roots)
+                .with_no_client_auth();
+            let server_name = rustls::pki_types::ServerName::try_from(endpoint.host.clone())
+                .map_err(|_| "invalid TLS server name".to_string())?;
+            let connection = rustls::ClientConnection::new(Arc::new(config), server_name)
+                .map_err(|e| format!("tls setup: {e}"))?;
+            WsStream::Tls(Box::new(rustls::StreamOwned::new(connection, stream)))
+        } else {
+            WsStream::Plain(stream)
+        };
         stream
+            .tcp()
             .set_read_timeout(Some(read_timeout))
             .map_err(|e| format!("set read timeout: {e}"))?;
         stream
+            .tcp()
             .set_write_timeout(Some(read_timeout))
             .map_err(|e| format!("set write timeout: {e}"))?;
-        let key = "dGhlIHNhbXBsZSBub25jZQ==";
+        let key = base64::engine::general_purpose::STANDARD
+            .encode(uuid::Uuid::new_v4().as_bytes());
         let req = format!(
-            "GET / HTTP/1.1\r\nHost: {host}:{port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Extensions: permessage-deflate; client_max_window_bits\r\n\r\n"
+            "GET / HTTP/1.1\r\nHost: {}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Extensions: permessage-deflate; client_max_window_bits\r\n\r\n",
+            if port == if endpoint.secure { 443 } else { 80 } {
+                bracket_host(host)
+            } else {
+                format!("{}:{port}", bracket_host(host))
+            }
         );
         stream
             .write_all(req.as_bytes())
@@ -1507,15 +1734,21 @@ impl WsClient {
                 head.lines().next().unwrap_or("")
             ));
         }
+        let expected_accept = ws_expected_accept(&key);
+        if ws_header(&head, "Sec-WebSocket-Accept") != Some(expected_accept.as_str()) {
+            return Err("websocket handshake failed: invalid Sec-WebSocket-Accept".to_string());
+        }
         let inflater = ws_deflate_accepted(&head).then(|| Decompress::new(false));
         Ok(Self { stream, inflater })
     }
 
     fn set_timeouts(&mut self, timeout: Duration) -> Result<(), String> {
         self.stream
+            .tcp()
             .set_read_timeout(Some(timeout))
             .map_err(|e| format!("set read timeout: {e}"))?;
         self.stream
+            .tcp()
             .set_write_timeout(Some(timeout))
             .map_err(|e| format!("set write timeout: {e}"))
     }
@@ -2025,11 +2258,102 @@ mod tests {
         let back: HostConnection = serde_json::from_str(&text).unwrap();
         assert_eq!(back.last_role(), Some("member"));
 
-        let legacy: HostConnection = serde_json::from_str(
-            r#"{"kind":"remote","id":"r","name":"R","host":"1.1.1.1","port":49200,"token":"t"}"#,
+        let legacy = decode_connections(
+            r#"{"active_id":"r","connections":[{"kind":"remote","id":"r","name":"R","host":"1.1.1.1","port":49200,"token":"t"}]}"#,
         )
         .unwrap();
-        assert_eq!(legacy.last_role(), None);
+        assert_eq!(legacy.connections[0].last_role(), None);
+    }
+
+    #[test]
+    fn remote_endpoint_parses_and_canonicalizes_ws_and_wss() {
+        assert_eq!(
+            parse_remote_endpoint("wss://client.example.com:443/", 0).unwrap(),
+            RemoteEndpoint {
+                url: "wss://client.example.com".to_string(),
+                host: "client.example.com".to_string(),
+                port: 443,
+                secure: true,
+            },
+        );
+        assert_eq!(
+            parse_remote_endpoint("ws://100.64.10.2:49200", 0).unwrap().port,
+            49200,
+        );
+        assert_eq!(
+            parse_remote_endpoint("100.64.10.2", 49200).unwrap().url,
+            "ws://100.64.10.2:49200",
+        );
+    }
+
+    #[test]
+    fn remote_endpoint_rejects_non_websocket_or_ambiguous_urls() {
+        for value in [
+            "https://client.example.com",
+            "wss://user:secret@client.example.com",
+            "wss://client.example.com/rpc",
+            "ws://client.example.com:0",
+        ] {
+            assert!(parse_remote_endpoint(value, 0).is_err(), "accepted {value}");
+        }
+    }
+
+    #[test]
+    fn remote_connection_json_reads_legacy_host_and_writes_url() {
+        let state = decode_connections(
+            r#"{"active_id":"r","connections":[{"kind":"remote","id":"r","name":"R","host":"100.64.0.1","port":49200,"token":"t"}]}"#,
+        )
+        .unwrap();
+        let value = serde_json::to_value(&state.connections[0]).unwrap();
+        assert_eq!(value["url"], json!("100.64.0.1"));
+        assert!(value.get("host").is_none());
+    }
+
+    #[test]
+    fn connections_file_keeps_legacy_host_and_port_for_desktop_rollback() {
+        let _fs = TEST_FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = std::env::temp_dir().join(format!(
+            "alpi-conns-rollback-test-{}",
+            std::process::id(),
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        *config_dir_override().lock().unwrap() = Some(dir.clone());
+
+        let state = ConnectionsState {
+            active_id: "secure".to_string(),
+            connections: vec![HostConnection::Remote {
+                id: "secure".to_string(),
+                name: "Secure".to_string(),
+                host: "wss://client.example.com".to_string(),
+                port: 0,
+                token: "secret".to_string(),
+                revoked: false,
+                device_id: None,
+                last_connected: None,
+                last_role: None,
+            }],
+        };
+        save_connections(&state).unwrap();
+
+        let text = std::fs::read_to_string(dir.join("connections.json")).unwrap();
+        let value: Value = serde_json::from_str(&text).unwrap();
+        let row = &value["connections"][0];
+        assert_eq!(row["url"], json!("wss://client.example.com"));
+        assert_eq!(row["host"], json!("client.example.com"));
+        assert_eq!(row["port"], json!(443));
+
+        let loaded = load_connections();
+        match &loaded.connections[1] {
+            HostConnection::Remote { host, port, .. } => {
+                assert_eq!(host, "wss://client.example.com");
+                assert_eq!(*port, 443);
+            }
+            HostConnection::Local { .. } => panic!("expected remote connection"),
+        }
+
+        *config_dir_override().lock().unwrap() = None;
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     fn remote_with_role(id: &str, last_role: Option<&str>) -> HostConnection {
@@ -2100,7 +2424,7 @@ mod tests {
         forget.join().unwrap();
 
         let text = std::fs::read_to_string(dir.join("connections.json")).unwrap();
-        let parsed: ConnectionsState = serde_json::from_str(&text).expect("valid JSON on disk");
+        let parsed = decode_connections(&text).expect("valid connections on disk");
         let ids: Vec<&str> = parsed.connections.iter().map(|c| c.id()).collect();
         assert!(ids.contains(&"remote-a"), "remote-a must survive: {ids:?}");
         assert!(
@@ -2329,6 +2653,16 @@ mod tests {
         assert!(!ws_deflate_accepted(
             "HTTP/1.1 101 X\r\nX-Other: permessage-deflate\r\n\r\n"
         ));
+    }
+
+    #[test]
+    fn websocket_accept_matches_rfc6455_and_header_is_case_insensitive() {
+        assert_eq!(
+            ws_expected_accept("dGhlIHNhbXBsZSBub25jZQ=="),
+            "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=",
+        );
+        let head = "HTTP/1.1 101 Switching Protocols\r\nsec-websocket-accept: value\r\n\r\n";
+        assert_eq!(ws_header(head, "Sec-WebSocket-Accept"), Some("value"));
     }
 
     #[test]

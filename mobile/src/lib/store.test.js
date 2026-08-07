@@ -54,6 +54,8 @@ describe("store.loadConnections", () => {
     const { loadConnections } = await import("./store.js");
     const state = await loadConnections();
     expect(state.connections.map((c) => c.id)).toEqual(["c-1"]);
+    expect(state.connections[0].url).toBe("ws://100.0.0.1:49200");
+    expect(state.connections[0].ip).toBeUndefined();
   });
 
   it("drops connections that lack deviceId — daemon identity is mandatory, no legacy fallback", async () => {
@@ -96,6 +98,15 @@ describe("store.saveConnection", () => {
     expect(state.connections).toHaveLength(1);
     expect(state.active_id).toBe("c-1");
     expect(state.connections[0].deviceId).toBe("mac");
+    expect(state.connections[0].url).toBe("ws://1.1.1.1:49200");
+  });
+
+  it("persists secure WebSocket URLs without legacy host fields", async () => {
+    const { saveConnection } = await import("./store.js");
+    const state = await saveConnection({ id: "secure", name: "n", url: "wss://client.example.com", token: "t", deviceId: "phone" });
+    expect(state.connections[0].url).toBe("wss://client.example.com");
+    expect(state.connections[0].ip).toBeUndefined();
+    expect(state.connections[0].port).toBeUndefined();
   });
 
   it("replaces by id without duplicating", async () => {
@@ -105,6 +116,55 @@ describe("store.saveConnection", () => {
     expect(state.connections).toHaveLength(1);
     expect(state.connections[0].name).toBe("renamed");
     expect(state.connections[0].token).toBe("t2");
+  });
+
+  it("re-pairing the same server connection replaces its route and token", async () => {
+    const { saveConnection } = await import("./store.js");
+    const first = await saveConnection({
+      name: "home",
+      url: "ws://192.168.1.10:49200",
+      token: "private-token",
+      deviceId: "daemon-1",
+      connectionId: "conn-1",
+    });
+    const originalId = first.connections[0].id;
+
+    const state = await saveConnection({
+      name: "home",
+      url: "wss://client.example.com",
+      token: "public-token",
+      deviceId: "daemon-1",
+      connectionId: "conn-1",
+    });
+
+    expect(state.connections).toHaveLength(1);
+    expect(state.connections[0].id).toBe(originalId);
+    expect(state.connections[0].url).toBe("wss://client.example.com");
+    expect(state.connections[0].token).toBe("public-token");
+  });
+
+  it("keeps distinct connection scopes on the same daemon", async () => {
+    const { saveConnection } = await import("./store.js");
+    await saveConnection({
+      name: "member",
+      url: "wss://client.example.com",
+      token: "member-token",
+      deviceId: "daemon-1",
+      connectionId: "member-connection",
+    });
+    const state = await saveConnection({
+      name: "admin",
+      url: "wss://client.example.com",
+      token: "admin-token",
+      deviceId: "daemon-1",
+      connectionId: "admin-connection",
+    });
+
+    expect(state.connections).toHaveLength(2);
+    expect(state.connections.map((c) => c.connectionId).sort()).toEqual([
+      "admin-connection",
+      "member-connection",
+    ]);
   });
 
   it("refuses to save without a deviceId — pairing must capture daemon identity", async () => {

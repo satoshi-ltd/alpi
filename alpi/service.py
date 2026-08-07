@@ -28,22 +28,6 @@ _PROFILE_RESCAN_SECONDS = 5.0
 # Public — orchestration
 
 
-def enabled_subsystems(home: Path) -> dict[str, bool]:
-    """Read which subsystems this profile wants; missing config means all on."""
-    from alpi import config as cfg_mod
-    return _subsystem_flags(cfg_mod.load(home))
-
-
-def _subsystem_flags(cfg) -> dict[str, bool]:
-    raw = getattr(cfg, "service", None) or {}
-    return {
-        "schedule": bool(raw.get("schedule", True)),
-        "alp": bool(raw.get("alp", True)),
-        "workgroups": bool(raw.get("workgroups", True)),
-        "host": bool(raw.get("host", True)),
-    }
-
-
 def daemon_pid_path(root: Path) -> Path:
     return root / "service.pid"
 
@@ -183,7 +167,8 @@ def _prefetch_mode(root: Path) -> str:
     from alpi import runtime
 
     try:
-        raw = str(((cfg_mod.load(root).service or {}).get("prefetch")) or "").strip().lower()
+        cfg = cfg_mod.load(root)
+        raw = str(cfg.runtime.prefetch or "").strip().lower()
     except Exception:  # noqa: BLE001
         raw = ""
     if raw in ("off", "all", "auto"):
@@ -270,12 +255,6 @@ async def _main_all(root: Path, profiles: list[str]) -> None:
     registry: dict[str, dict[str, Any]] = {}
     _start_new_profiles(root, profiles, registry)
 
-    if not any(rt["tasks"] for rt in registry.values()):
-        log.warning(
-            "no profile subsystems enabled at boot — central will rescan every %.0fs",
-            _PROFILE_RESCAN_SECONDS,
-        )
-
     while not stop.is_set():
         try:
             await asyncio.wait_for(stop.wait(), timeout=_PROFILE_RESCAN_SECONDS)
@@ -306,42 +285,49 @@ def _start_new_profiles(
     profiles: list[str],
     registry: dict[str, dict[str, Any]],
 ) -> None:
-    """Start subsystems for new profiles; per-profile errors do not block the rest."""
+    """Start daemon tasks for new profiles; one bad profile does not block the rest."""
     for profile in profiles:
         if profile in registry:
             continue
         home = _profile_home(root, profile)
         try:
-            subsystems = enabled_subsystems(home)
             fps = _reload_fingerprints(home)
+            _warn_legacy_service_switches(home, profile)
         except Exception:  # noqa: BLE001
             log.exception(
                 "profile %s: cannot read config — retry next tick", profile,
             )
             continue
-        task_map = _profile_tasks(home, profile, subsystems)
+        task_map = _profile_tasks(home, profile)
         registry[profile] = {"tasks": task_map, "fps": fps}
         count = sum(len(ts) for ts in task_map.values())
         if count:
-            log.info(
-                "profile %s: started %d subsystem task(s)",
-                profile, count,
-            )
-        else:
-            log.info("profile %s: no subsystems enabled", profile)
+            log.info("profile %s: started %d daemon task(s)", profile, count)
 
 
-# Hot-reloadable per profile; "host" is deliberately absent — restarting it would drop every paired client, so it only moves on explicit daemon restart.
-_RELOADABLE_SUBSYSTEMS = ("schedule", "alp", "workgroups")
+def _warn_legacy_service_switches(home: Path, profile: str) -> None:
+    from alpi import config as cfg_mod
+
+    switches = cfg_mod.legacy_service_switches(cfg_mod.load(home))
+    if not switches:
+        return
+    detail = ", ".join(
+        f"service.{name}={value!r}" for name, value in switches.items()
+    )
+    log.warning(
+        "profile %s: ignoring removed service switches (%s); all daemon "
+        "capabilities will start — remove these keys from %s",
+        profile, detail, home / "config.yaml",
+    )
 
 
 def _reload_fingerprints(home: Path) -> dict[str, str]:
-    # Only inputs a subsystem task caches at startup belong here — schedule jobs and workgroup subscriptions are re-read every tick and must never force a restart.
+    # Schedule jobs and workgroup subscriptions are re-read every tick. The ALP
+    # listener alone caches network inputs and can be replaced without dropping clients.
     from alpi import config as cfg_mod
 
     cfg = cfg_mod.load(home)
     return {
-        "flags": repr(sorted(_subsystem_flags(cfg).items())),
         "alp": repr((
             (cfg.alp or {}).get("tcp_port"),
             (cfg.network or {}).get("host"),
@@ -350,7 +336,7 @@ def _reload_fingerprints(home: Path) -> dict[str, str]:
     }
 
 
-async def _stop_subsystem_tasks(rt: dict[str, Any], name: str) -> None:
+async def _stop_task_group(rt: dict[str, Any], name: str) -> None:
     tasks = rt["tasks"].pop(name, [])
     for t in tasks:
         t.cancel()
@@ -366,9 +352,9 @@ async def _reconcile_profiles(
         home = _profile_home(root, profile)
         if not home.exists():
             for name in list(rt["tasks"]):
-                await _stop_subsystem_tasks(rt, name)
+                await _stop_task_group(rt, name)
             del registry[profile]
-            log.info("profile %s: home gone — subsystems stopped", profile)
+            log.info("profile %s: home gone — daemon tasks stopped", profile)
             continue
         try:
             fps = _reload_fingerprints(home)
@@ -380,76 +366,59 @@ async def _reconcile_profiles(
             continue
         if fps == rt["fps"]:
             continue
-        try:
-            flags = enabled_subsystems(home)
-        except Exception:  # noqa: BLE001
-            continue
-        for name in _RELOADABLE_SUBSYSTEMS:
-            want = bool(flags.get(name))
-            have = bool(rt["tasks"].get(name))
-            input_changed = fps.get(name) != rt["fps"].get(name)
-            if want == have and not (want and input_changed):
-                continue
-            await _stop_subsystem_tasks(rt, name)
-            if want:
-                rt["tasks"][name] = _subsystem_tasks(home, profile, name)
-            log.info(
-                "profile %s: %s %s (hot reload)",
-                profile, name,
-                "restarted" if want and have
-                else "started" if want else "stopped",
-            )
+        if fps.get("alp") != rt["fps"].get("alp"):
+            await _stop_task_group(rt, "alp")
+            rt["tasks"]["alp"] = _task_group(home, profile, "alp")
+            log.info("profile %s: alp listener restarted (hot reload)", profile)
         rt["fps"] = fps
 
 
-def _profile_tasks(
-    home: Path, profile: str, subsystems: dict[str, bool],
-) -> dict[str, list[asyncio.Task]]:
+def _profile_tasks(home: Path, profile: str) -> dict[str, list[asyncio.Task]]:
     out: dict[str, list[asyncio.Task]] = {}
-    for name, enabled in subsystems.items():
-        if not enabled:
-            continue
-        tasks = _subsystem_tasks(home, profile, name)
+    names = ["schedule", "alp", "workgroups"]
+    if profile == "default":
+        names.append("host")
+    for name in names:
+        tasks = _task_group(home, profile, name)
         if tasks:
             out[name] = tasks
     return out
 
 
-def _subsystem_tasks(home: Path, profile: str, name: str) -> list[asyncio.Task]:
+def _task_group(home: Path, profile: str, name: str) -> list[asyncio.Task]:
     if name == "schedule":
         return [asyncio.create_task(
-            _supervise(_run_scheduler, home, profile, "schedule"),
+            _guard_task(_run_scheduler, home, profile, "schedule"),
             name=f"{profile}/schedule",
         )]
     if name == "alp":
         return [asyncio.create_task(
-            _supervise(_run_alp, home, profile, "alp"),
+            _guard_task(_run_alp, home, profile, "alp"),
             name=f"{profile}/alp",
         )]
     # Host plane is default-only.
     if name == "host" and profile == "default":
         return [asyncio.create_task(
-            _supervise(_run_host, home, profile, "host"),
+            _guard_task(_run_host, home, profile, "host"),
             name=f"{profile}/host",
         )]
     if name == "workgroups":
         return [
             asyncio.create_task(
-                _supervise(_run_workgroup_poller, home, profile, "workgroups"),
+                _guard_task(_run_workgroup_poller, home, profile, "workgroups"),
                 name=f"{profile}/workgroups",
             ),
             asyncio.create_task(
-                _supervise(_run_preempt_watcher, home, profile, "workgroup-preempt"),
+                _guard_task(_run_preempt_watcher, home, profile, "workgroup-preempt"),
                 name=f"{profile}/workgroup-preempt",
             ),
         ]
     return []
 
 
-async def _supervise(coro_fn, home: Path, profile: str, name: str) -> None:
-    """Wrap a subsystem so one crash does not take down the others."""
+async def _guard_task(coro_fn, home: Path, profile: str, name: str) -> None:
+    """Keep one daemon task failure from taking down unrelated capabilities."""
     try:
-        # Some subsystems need the profile name; others only need home.
         if name in ("alp", "workgroups", "workgroup-preempt", "host"):
             await coro_fn(home, profile)
         else:
@@ -457,7 +426,7 @@ async def _supervise(coro_fn, home: Path, profile: str, name: str) -> None:
     except asyncio.CancelledError:
         raise
     except Exception:  # noqa: BLE001
-        log.exception("subsystem %s crashed — staying down, other subsystems unaffected", name)
+        log.exception("daemon task %s crashed — unrelated tasks remain available", name)
 
 
 async def _run_scheduler(home: Path) -> None:
@@ -2557,7 +2526,7 @@ async def _run_alp(home: Path, profile: str) -> None:
 
 async def _run_host(home: Path, profile: str) -> None:
     if profile != "default":
-        log.warning("host subsystem requested for %r — only default can host", profile)
+        log.warning("host task requested for %r — only default can host", profile)
         return
 
     from alpi.host import approval as host_approval
@@ -2740,12 +2709,7 @@ def daemon_status(root: Path) -> dict[str, Any]:
         _detect_backend() == "systemd" and _daemon_unit_path().exists()
     ) else None
 
-    profiles: dict[str, dict[str, bool]] = {}
-    for name in home_mod.list_profiles(root):
-        try:
-            profiles[name] = enabled_subsystems(home_mod.home_for(name))
-        except Exception:  # noqa: BLE001
-            profiles[name] = {}
+    profiles = home_mod.list_profiles(root)
 
     info: dict[str, Any] = {
         "pid": pid,

@@ -107,9 +107,30 @@ async def test_status_reports_in_use_host_and_port(
     assert result["scope_in_use"] is None
     assert result["host_in_use"] is None
     assert result["port"] == 49200
+    assert result["port_source"] == "default"
+    assert result["configured_endpoints"] == []
     assert result["candidates"]["tailscale"] is None
     assert result["candidates"]["lan"] is None
     assert result["candidates"]["configured"] is None
+
+
+@pytest.mark.asyncio
+async def test_status_reports_environment_managed_port(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = _bootstrap(tmp_path)
+    cfg = cfg_mod.load(home)
+    cfg.host = {"tcp_port": 49999}
+    cfg_mod.save(cfg)
+    monkeypatch.setenv("ALPI_HOST_TCP_PORT", "49202")
+    _stub_probes(monkeypatch)
+
+    srv = host_server.Server(home=home)
+    network_rpc.register(srv)
+    resp = await srv._dispatch({"id": "n", "method": "host.network.status", "params": {}})
+
+    assert resp["result"]["port"] == 49202
+    assert resp["result"]["port_source"] == "environment"
 
 
 @pytest.mark.asyncio
@@ -228,6 +249,27 @@ async def test_status_configured_overrides_docker(
 
 
 @pytest.mark.asyncio
+async def test_status_reports_invalid_configured_endpoints_cleanly(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = _bootstrap(tmp_path)
+    cfg = cfg_mod.load(home)
+    cfg.host = {"endpoints": "wss://client.example.com"}
+    cfg_mod.save(cfg)
+    _stub_probes(monkeypatch, lan="192.168.1.10")
+
+    srv = host_server.Server(home=home)
+    network_rpc.register(srv)
+    resp = await srv._dispatch({
+        "id": "n", "method": "host.network.status", "params": {},
+    })
+
+    assert resp["error"]["code"] == -32010
+    assert resp["error"]["message"] == "invalid-advertised-endpoints"
+    assert "list" in resp["error"]["data"]["detail"]
+
+
+@pytest.mark.asyncio
 async def test_status_classifies_override_by_host_character(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -330,6 +372,42 @@ async def test_set_advertised_no_op_when_unchanged(
         "params": {"host": "myhost.local", "device_name": "x"},
     })
     assert resp["result"] == {"ok": True, "restart_needed": False}
+
+
+@pytest.mark.asyncio
+async def test_set_advertised_persists_ordered_endpoints(tmp_path: Path) -> None:
+    home = _bootstrap(tmp_path)
+    srv = host_server.Server(home=home)
+    network_rpc.register(srv)
+    endpoints = [
+        {"url": "wss://client.example.com:443/", "label": "Secure Internet"},
+        {"url": "ws://100.64.10.2:49200", "label": "Direct"},
+    ]
+
+    resp = await srv._dispatch({
+        "id": "n", "method": "host.network.set_advertised",
+        "params": {"endpoints": endpoints},
+    })
+
+    assert resp["result"]["restart_needed"] is False
+    assert cfg_mod.load(home).host["endpoints"] == [
+        {"url": "wss://client.example.com", "label": "Secure Internet"},
+        endpoints[1],
+    ]
+
+
+@pytest.mark.asyncio
+async def test_set_advertised_rejects_non_websocket_endpoint(tmp_path: Path) -> None:
+    home = _bootstrap(tmp_path)
+    srv = host_server.Server(home=home)
+    network_rpc.register(srv)
+
+    resp = await srv._dispatch({
+        "id": "n", "method": "host.network.set_advertised",
+        "params": {"endpoints": [{"url": "https://client.example.com", "label": "Bad"}]},
+    })
+
+    assert resp["error"]["message"] == "invalid-endpoints"
 
 
 @pytest.mark.asyncio
@@ -476,6 +554,7 @@ async def test_set_advertised_partial_call_with_only_device_name_preserves_host(
         "params": {"device_name": "new-name"},
     })
     assert resp["result"]["ok"] is True
+    assert resp["result"]["restart_needed"] is False
 
     cfg2 = cfg_mod.load(home)
     assert cfg2.network["host"] == "keep.me"

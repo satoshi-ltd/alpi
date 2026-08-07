@@ -100,7 +100,7 @@ alpi workgroup pause|resume|leave <wg_id>          membership ops
 alpi workgroup kick <wg_id> <member-id|pubkey>     hub-only; rotates the group key
 ```
 
-**Shape rules:** containers (profile, peers, workgroups) get `list/create/remove` (or `add/remove`). The daemon gets `start/stop/restart/status/install/uninstall` under `alpi daemon`; the same lifecycle is also reachable from `alpi setup → Services → Daemon` (default profile only) so users have one canonical place. The first `alpi setup` auto-installs the daemon — no opt-in step. Per-profile services (schedule, alp, workgroups, host) toggle from `alpi setup → Services → Subsystems` or directly via the `service:` block in each profile's `config.yaml`. Interactive wizards live exclusively under `alpi setup`; never add a per-feature wizard command.
+**Shape rules:** containers (profile, peers, workgroups) get `list/create/remove` (or `add/remove`). The daemon gets `start/stop/restart/status/install/uninstall` under `alpi daemon`; the same lifecycle is also reachable from `alpi setup → Services → Daemon` (default profile only) so users have one canonical place. The first `alpi setup` auto-installs the daemon — no opt-in step. Scheduler, ALP, workgroups, and host are fixed daemon capabilities; their useful controls live with jobs, peers/workgroups, connections, and network settings. Interactive wizards live exclusively under `alpi setup`; never add a per-feature wizard command.
 
 **Command ordering** in `--help` is frequency-first, not alphabetical: `chat → setup → doctor → logs → profile → peers → workgroup → schedule → daemon`. See `_OrderedGroup` in `cli.py`.
 
@@ -121,7 +121,7 @@ alpi/
 ├── home.py                 profile path resolution
 ├── config.py               YAML load/save, defaults, deep merge
 ├── ui.py                   shared wizard/menu primitives
-├── service.py              unified orchestrator — runs every enabled subsystem on one asyncio loop; install/uninstall launchd / systemd unit per profile
+├── service.py              unified orchestrator — runs isolated daemon tasks on one asyncio loop; installs one launchd / systemd unit per machine
 ├── ledger.py               daily spend ledger (logs/ledger.json: live counters + 30-day per-day history) + profile cap gate
 ├── outputs.py              persistent inbox JSONL store (notify + schedule failures)
 ├── status.py               canonical /status rows (TUI + apps share this)
@@ -167,7 +167,7 @@ alpi/
 │   ├── connections.py     host.connections.* identities, device credentials and devices.yaml migration
 │   ├── connection_context.py request-scoped connection/device attribution
 │   ├── attachments_rpc.py host.attachments.{stage,fetch} — stage uploads in, fetch serves a tool-produced output attachment's bytes out (scoped to the profile's workspace/home/temp) so rich clients render images inline + other files as a metadata chip; text surfaces get a shared listing
-│   ├── network_rpc.py     host.network.{status,set_advertised,restart_host_server} — pairing endpoint query + override (parity with `alpi setup → Connections → Network`); scope classified by host character via network.classify_scope (tailscale / lan / custom / docker) so clients don't surface the "configured" resolution-path detail
+│   ├── network_rpc.py     host.network.{status,set_advertised,restart_host_server} — bind status plus ordered WS/WSS pairing-route configuration (parity with `alpi setup → Connections → Network`)
 │   ├── probes.py          host.email.probe, host.peers.ping, host.model.ctx_window
 │   ├── schedule.py        host.schedule.{list,remove,set_paused,fire}
 │   ├── outputs.py         host.outputs.{list,read,mark_read,mark_all_read,delete}
@@ -328,7 +328,7 @@ The third retrieval surface on the same store: semantic search over **hub-owned*
 
 **Forgettable.** Removing a workgroup purges its index in both delete paths — the host RPC (`host/workgroup_admin.py::_remove`) and the CLI (`alpi workgroup remove`) call `workgroup_search.forget_workgroup`; `index_workgroups` orphan-sweeps any tracked workgroup whose directory is gone. No auto-injection into workgroup turns. ALP encryption/transcript behaviour is untouched — this only reads through the existing decrypt path.
 
-**Asset prefetch (`service.py::_prefetch_assets`)**. Scheduled by `_main_all` at boot+600 s — deliberately past the client-reconnection rush (at boot+5 s the Chromium unzip + ONNX load starved small Docker hosts, which read as "the machine is blocked"). Gated by `service.prefetch` on the root profile: `auto` (default) fetches the fastembed weights only when some profile has `knowledge.sqlite`, and Chromium only when some profile leaves the `browser` tool un-denied; `all` forces both; `off` — the default under `ALPI_PLATFORM=docker` — skips prefetch entirely. Every asset still fetches lazily on first use, so `off` costs latency, never functionality. `ensure_weights_cached()` downloads through a throwaway embedder and releases the ONNX session instead of leaving ~150 MB resident in every daemon; the first real `embed()` lazy-loads from the disk cache. `ensure_chromium()` warns and stays retryable when the install fails, and after a successful install prunes stale `chromium*` builds (each playwright bump orphans ~520 MB; firefox/webkit are never touched, and nothing is pruned unless the wanted build exists on disk). RapidOCR remains first-use. Concurrent loaders keep the double-checked locking (`_load`, `_ocr_reader`, `ensure_chromium`).
+**Asset prefetch (`service.py::_prefetch_assets`)**. Scheduled by `_main_all` at boot+600 s — deliberately past the client-reconnection rush (at boot+5 s the Chromium unzip + ONNX load starved small Docker hosts, which read as "the machine is blocked"). Gated by `runtime.prefetch` on the root profile: `auto` (default) fetches the fastembed weights only when some profile has `knowledge.sqlite`, and Chromium only when some profile leaves the `browser` tool un-denied; `all` forces both; `off` — the default under `ALPI_PLATFORM=docker` — skips prefetch entirely. Every asset still fetches lazily on first use, so `off` costs latency, never functionality. `ensure_weights_cached()` downloads through a throwaway embedder and releases the ONNX session instead of leaving ~150 MB resident in every daemon; the first real `embed()` lazy-loads from the disk cache. `ensure_chromium()` warns and stays retryable when the install fails, and after a successful install prunes stale `chromium*` builds (each playwright bump orphans ~520 MB; firefox/webkit are never touched, and nothing is pruned unless the wanted build exists on disk). RapidOCR remains first-use. Concurrent loaders keep the double-checked locking (`_load`, `_ocr_reader`, `ensure_chromium`).
 
 ### Skills
 
@@ -430,22 +430,17 @@ One alpi daemon per machine, every profile inside. A single
 launchd plist (`com.alpi.daemon`) on macOS or systemd-user unit
 (`alpi-daemon.service`) on Linux supervises one Python process
 that hosts every profile under `~/.alpi/` (default plus each
-`profiles/<name>/`) on the same asyncio loop. Per-(profile,
-service) tasks are independently supervised — a crash in one
-profile's scheduler leaves siblings untouched. Tasks are named
-`<profile>/<service>` (e.g. `doc/schedule`, `builder/alp`) so logs
-+ `asyncio.all_tasks()` stay readable.
-
-Per-profile services (`service.{schedule, alp,
-workgroups, host}` in each profile's `config.yaml`):
+`profiles/<name>/`) on the same asyncio loop. Per-profile tasks are
+independently guarded — a crash in one profile's scheduler leaves
+siblings untouched. Tasks are named `<profile>/<capability>` (e.g.
+`doc/schedule`, `builder/alp`) so logs + `asyncio.all_tasks()` stay
+readable. These are internal capabilities, not configurable services:
 
 - **schedule** — cron tick loop.
 - **alp** — ALP **listener** (inbound). Serves the full protocol
   on a Unix socket plus optional Noise_XK on TCP: `link.ping`,
   `link.ask`, `link.cancel` **and** every `workgroup.*`
-  verb. When this is off, no peer can reach you, no hub
-  can fan out workgroup posts to you, and no `@-mention` to this
-  profile resolves.
+  verb.
 - **workgroups** — the **poller** (outbound). Periodically calls
   `workgroup.pull` against the hubs of every workgroup this profile
   subscribes to, decrypts new posts, and dispatches an autonomous
@@ -455,16 +450,16 @@ workgroups, host}` in each profile's `config.yaml`):
   because direction and lifecycle are different — outbound vs
   inbound, periodic vs reactive — so a poller crash (timeout
   against a dead hub, decrypt failure on a malformed post) doesn't
-  take the listener down. The naming is a historical artefact:
-  workgroups IS ALP, this service is its client half.
+  take the listener down. Workgroups is ALP; this task is its client half.
 - **host** — *default profile only*. The control-plane Unix socket
   (`~/.alpi/host/host.sock`) the desktop / mobile client uses to
   drive the daemon. Refused on non-default profiles fast — the
   client always targets default's socket and reaches sibling
   profiles via the `profile` param on each verb.
 
-Default if a key is missing: every service on (so the desktop
-"just works" after install).
+All capabilities start for every profile; the host plane is default-only.
+Jobs and workgroups retain their own enabled/paused state, and access control
+lives in peer grants and connection roles/scopes.
 
 `alpi.service.serve_all(root)` is the foreground entry point
 called from `alpi daemon start` and from the supervising unit's
@@ -472,17 +467,15 @@ ExecStart. It:
 
 1. Walks `~/.alpi/` (default + every `profiles/<name>/`) to
    discover profiles.
-2. For each profile reads `service.*` toggles; missing block →
-   every service on.
-3. Configures the root logger at `~/.alpi/logs/service.log` (stderr
+2. Configures the root logger at `~/.alpi/logs/service.log` (stderr
    only when it's a TTY, to avoid double-writes under launchd).
-4. Sets the process title to `alpi (daemon, N profiles)` via
+3. Sets the process title to `alpi (daemon, N profiles)` via
    `setproctitle`.
-5. Writes `~/.alpi/service.pid`.
-6. Spawns one supervised asyncio task per (profile, service) and
-   waits. `_supervise` wraps each one so a crash leaves siblings
+4. Writes `~/.alpi/service.pid`.
+5. Spawns the fixed task set for every profile and waits. `_guard_task`
+   wraps each one so a crash leaves siblings
    running.
-7. SIGTERM / SIGINT cancels every task cooperatively; PID file
+6. SIGTERM / SIGINT cancels every task cooperatively; PID file
    removed on exit.
 
 **Operational invariants of `serve_all`** (each one is the root cause of a real production incident; do not regress):
@@ -515,7 +508,7 @@ boundary; no peer identity, no envelope, no Noise handshake. Desktop
 and future mobile clients talk to this API; they do not read profile
 files directly.
 
-Only the `default` profile hosts this subsystem — the client
+Only the `default` profile hosts this plane — the client
 always targets default's socket and reaches sibling profiles via
 the `profile` parameter on each verb. `_run_host` refuses to bind
 on any other profile even if the toggle leaks via manual config
@@ -536,7 +529,7 @@ Two transports, one dispatcher:
    trust = filesystem perms. Used by desktop on the same machine.
    No token required.
 2. **WebSocket** (`ws://<bind>:49200` by default). Used by mobile
-   and any remote desktop. `network.host` is the *advertised* address;
+   and any remote desktop. `network.host` drives the direct bind/address;
    the *bind* is derived from it (see `config` / `security`): empty →
    auto-detected Tailscale CGNAT (`100.64.0.0/10`) then private RFC1918
    LAN; a private/Tailscale IP → that IP; a hostname or an opted-in
@@ -550,19 +543,23 @@ Two transports, one dispatcher:
    (`ws_serve(compression="deflate")`); JSON-RPC payloads drop
    50–80% on the wire. Clients that don't negotiate fall back to
    raw. Mobile and desktop keep a persistent multiplexed WS pool
-   per `(ip, port, token)` so RPCs don't pay a TCP+WS handshake
+   per `(URL, token)` so RPCs don't pay a TCP+WS handshake
    every call — the dominant cost of "remote alpi feels slow" on
    Tailscale. Streams (`host.chat.send`, `host.events.subscribe`)
    open their own dedicated socket.
 
-Bind and advertised endpoint are intentionally separate concerns.
+Bind and advertised routes are intentionally separate concerns.
 The daemon chooses where the host-plane server listens; `Connections →
-Network` chooses what the paired client should dial. On a normal Mac or
-Linux install those often collapse to the same Tailscale or LAN address.
+Network` stores an ordered `host.endpoints` list of complete `ws://` or
+`wss://` URLs and chooses what the paired client should dial. Plain WS requires
+a private IP literal; hostnames require WSS, and synthesized routes
+pass through the same validator. WSS terminates
+at a certificate-validating reverse proxy and forwards to the same daemon
+listener; it does not create another authorization plane. On a normal Mac or
+Linux install those often collapse to the same private address.
 In Docker they do not: the daemon binds `0.0.0.0` inside the container
-while the QR advertises `ALPI_NETWORK_HOST` — a LAN IP, a Tailscale
-`100.x` address, or a MagicDNS hostname that resolves to the host machine
-outside the container.
+while the QR advertises a configured `host.endpoints` route or a safe private
+IP derived from `ALPI_NETWORK_HOST`.
 
 Wire shape (both transports):
 
@@ -657,7 +654,7 @@ Verb namespaces in current shape:
   the per-post loop (was O(N) Curve25519 unseals per fetch).
 - **`host.profile.summaries`** — lightweight inbox/sidebar shape:
   `name`, `model`, `accent`, `latest_session`, `counts`, `budget_*`,
-  `pubkey_b64`, `has_any_provider`, `subsystems`. No peers/models/
+  `pubkey_b64`, `has_any_provider`. No peers/models/
   mcps/provider_keys/sandbox/voice — those live in **`host.profile.detail`**
   (`{workspace, tcp_port, advertise_host, provider_keys, provider_ollama,
   sandbox*, voice_*, mcps, peers, models}`), fetched lazily by
@@ -971,14 +968,14 @@ Adding a new source is two lines: `from alpi._log import get_subsystem_logger; l
 
 ### Doctor (`alpi/doctor.py`)
 
-`alpi doctor` — live health check. Verifies each subsystem actually **responds**, not just that it's configured. Same entry point from the CLI and from `alpi setup → Health check`; the status in the setup menu row (`all green` / `N warning(s)` / `N failing`) runs the full check too.
+`alpi doctor` — live health check. Verifies external capabilities actually **respond**, not just that they're configured. Same entry point from the CLI and from `alpi setup → Health check`; the status in the setup menu row (`all green` / `N warning(s)` / `N failing`) runs the full check too.
 
 Checks:
 
 - **Model** — `cfg.model` set + provider's API key present in `.env` or env.
 - **Workspace** — configured + exists + writable.
 - **Email** (live) — IMAP login + SMTP handshake, Gmail OAuth token refresh.
-- **Service** — `service.installed(profile)` + `service.running_pid(home)` to distinguish "installed but dead" from "running" from "not installed". A second info row lists which subsystems the config has enabled.
+- **Service** — daemon installation + PID checks distinguish "installed but dead" from "running" from "not installed".
 - **MCPs** (live) — spawn each configured server, `list_tools`, stop. Parallelised; per-server timeout 8 s.
 - **Security** — sandbox backend binary on PATH (if `tools.terminal.sandbox: true`), approval allowlist count.
 

@@ -57,6 +57,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "stream_idle_timeout_s": 120,
         "max_retries": 2,
         "retry_backoff_s": 1.5,
+        "prefetch": "",
     },
 }
 
@@ -167,6 +168,7 @@ class RuntimeConfig:
     stream_idle_timeout_s: float = 120.0
     max_retries: int = 2
     retry_backoff_s: float = 1.5
+    prefetch: str = ""
 
 
 @dataclass
@@ -190,7 +192,6 @@ class Config:
     # alp.tcp_port). See docs/ALP.md → Transport and docs/CONFIG.md → network.
     network: dict[str, Any] = field(default_factory=dict)
     budget: dict[str, Any] = field(default_factory=dict)
-    service: dict[str, Any] = field(default_factory=dict)
     relay: dict[str, Any] = field(default_factory=dict)
     workspace: str = ""  # "" → fall back to cwd
     # One-line public tag-line broadcast to every workgroup this
@@ -223,6 +224,16 @@ class Config:
     @property
     def config_path(self) -> Path:
         return self.home / "config.yaml"
+
+
+_REMOVED_SERVICE_SWITCHES = ("schedule", "alp", "workgroups", "host")
+
+
+def legacy_service_switches(cfg: Config) -> dict[str, Any]:
+    raw = cfg.raw.get("service")
+    if not isinstance(raw, dict):
+        return {}
+    return {name: raw[name] for name in _REMOVED_SERVICE_SWITCHES if name in raw}
 
 
 def _non_negative_float(value: Any, default: float) -> float:
@@ -370,12 +381,18 @@ def load(home: Path) -> Config:
     )
 
     rt_raw = data.get("runtime") or {}
+    legacy_service = user_data.get("service") or {}
+    if not isinstance(legacy_service, dict):
+        legacy_service = {}
     rt_defaults = DEFAULT_CONFIG["runtime"]
     runtime_cfg = RuntimeConfig(
         first_byte_timeout_s=_non_negative_float(rt_raw.get("first_byte_timeout_s"), rt_defaults["first_byte_timeout_s"]),
         stream_idle_timeout_s=_non_negative_float(rt_raw.get("stream_idle_timeout_s"), rt_defaults["stream_idle_timeout_s"]),
         max_retries=_non_negative_int(rt_raw.get("max_retries"), rt_defaults["max_retries"]),
         retry_backoff_s=_non_negative_float(rt_raw.get("retry_backoff_s"), rt_defaults["retry_backoff_s"]),
+        prefetch=str(
+            rt_raw.get("prefetch") or legacy_service.get("prefetch") or ""
+        ).strip().lower(),
     )
 
     return Config(
@@ -394,7 +411,6 @@ def load(home: Path) -> Config:
         host=dict(data.get("host") or {}),
         network=dict(data.get("network") or {}),
         budget=dict(data.get("budget") or {}),
-        service=dict(data.get("service") or {}),
         relay=dict(data.get("relay") or {}),
         workspace=str(data.get("workspace", "") or ""),
         public_bio=str(data.get("public_bio", "") or ""),
@@ -456,13 +472,13 @@ def save(cfg: Config) -> None:
     if cfg.budget:
         data["budget"] = cfg.budget
 
-    if cfg.service:
-        data["service"] = cfg.service
-
     rt_defaults = RuntimeConfig()
     runtime_delta = {
         k: getattr(cfg.runtime, k)
-        for k in ("first_byte_timeout_s", "stream_idle_timeout_s", "max_retries", "retry_backoff_s")
+        for k in (
+            "first_byte_timeout_s", "stream_idle_timeout_s", "max_retries",
+            "retry_backoff_s", "prefetch",
+        )
         if getattr(cfg.runtime, k) != getattr(rt_defaults, k)
     }
     if runtime_delta:

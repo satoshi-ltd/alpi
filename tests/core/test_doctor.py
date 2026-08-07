@@ -173,6 +173,37 @@ def test_network_exposure_silent_on_private_ip(tmp_path: Path) -> None:
     assert doctor._check_network_exposure(_cfg_with_network(tmp_path, "192.168.1.5")) == []
 
 
+def test_network_exposure_warns_that_docker_publish_state_is_external(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    monkeypatch.setenv("ALPI_PLATFORM", "docker")
+
+    checks = doctor._check_network_exposure(
+        _cfg_with_network(tmp_path, "client.example.com"),
+    )
+
+    assert [c.status for c in checks] == ["warn"]
+    assert "docker compose config" in checks[0].detail
+
+
+def test_security_warns_about_ignored_legacy_service_switches(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    from alpi import config as cfg_mod
+
+    monkeypatch.delenv("ALPI_PLATFORM", raising=False)
+    (tmp_path / "config.yaml").write_text(
+        "model: x\nservice:\n  alp: false\n  schedule: false\n"
+    )
+
+    checks = doctor._check_security(cfg_mod.load(tmp_path))
+
+    warning = next(c for c in checks if c.name == "Removed service switches")
+    assert warning.status == "warn"
+    assert "service.alp" in warning.detail
+    assert "all daemon capabilities start" in warning.detail
+
+
 def test_cli_doctor_command_exits_nonzero_on_fail(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("ALPI_HOME", str(tmp_path))
     (tmp_path / "config.yaml").write_text("model: \n")

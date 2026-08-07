@@ -40,7 +40,7 @@ export default function Pair() {
         throw new PairingError('Connection disabled by host. Ask an admin to enable it in Settings → Connections.');
       }
       if (status !== 'online') {
-        throw new PairingError(`Daemon unreachable at ${endpoint.ip}:${endpoint.port}. Make sure the daemon is running, both devices are on the same network, and the port is open.`);
+        throw new PairingError(`Daemon unreachable at ${endpoint.url}. Make sure the daemon is running, the route is reachable, and the port is open.`);
       }
       if (!deviceId) {
         throw new PairingError('Daemon too old or host.version unavailable. Update alpi to v0.6.6 or newer and retry.');
@@ -191,7 +191,7 @@ export default function Pair() {
             <TextInput
               value={text}
               onChangeText={setText}
-              placeholder="alpi://device?host=…&port=…&name=…&token=…"
+              placeholder="alpi://device?url=wss://…&name=…&token=…"
               placeholderTextColor={colors.ink4}
               multiline
               numberOfLines={3}

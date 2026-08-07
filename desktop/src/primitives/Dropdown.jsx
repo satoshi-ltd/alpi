@@ -80,7 +80,14 @@ export default function Dropdown({
     const top = dir === "up" ? t.top - m.height - 6 : t.bottom + 6;
     const left = al === "left" ? t.left : t.right - m.width;
 
-    setResolved({ direction: dir, align: al, ready: true, top, left });
+    setResolved({
+      direction: dir,
+      align: al,
+      ready: true,
+      top,
+      left,
+      triggerWidth: t.width,
+    });
   }, [open, direction, align, portal]);
 
   const close = () => setOpen(false);
@@ -96,7 +103,7 @@ export default function Dropdown({
         style={
           portal
             ? {
-                width,
+                width: fullWidth ? (resolved.triggerWidth ?? width) : width,
                 top: resolved.top ?? 0,
                 left: resolved.left ?? 0,
                 visibility: resolved.ready ? "visible" : "hidden",

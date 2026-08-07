@@ -350,12 +350,11 @@ async fn host_connection_forget(id: String) -> Result<(), String> {
 #[tauri::command]
 async fn host_connection_add_remote(
     name: String,
-    host: String,
-    port: u16,
+    url: String,
     token: String,
 ) -> Result<String, String> {
     off_main(move || {
-        let id = host_client::add_remote_connection(name, host, port, token)?;
+        let id = host_client::add_remote_connection(name, url, token)?;
         let device_name = std::env::var("HOSTNAME").unwrap_or_else(|_| "Desktop".into());
         let _ = host_client::call_for(
             &id,
@@ -1047,6 +1046,7 @@ async fn network_status() -> Result<serde_json::Value, String> {
 async fn network_set_advertised(
     host: Option<String>,
     device_name: Option<String>,
+    endpoints: Option<serde_json::Value>,
 ) -> Result<serde_json::Value, String> {
     // Only forward the fields the caller actually set — omitted keys are
     // preserved by the host RPC (host = network.host, device_name = host.device_name).
@@ -1056,6 +1056,9 @@ async fn network_set_advertised(
     }
     if let Some(n) = device_name {
         params.insert("device_name".into(), serde_json::json!(n));
+    }
+    if let Some(value) = endpoints {
+        params.insert("endpoints".into(), value);
     }
     let value = tauri::async_runtime::spawn_blocking(move || {
         host_client::call(

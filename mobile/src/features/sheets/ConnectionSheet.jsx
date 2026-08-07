@@ -111,7 +111,7 @@ export function ConnectionSheet({ open, onClose }) {
                     </View>
                   }
                   label={c.name}
-                  helper={version ? `${c.ip}:${c.port} · v${version}` : `${c.ip}:${c.port}`}
+                  helper={version ? `${c.url} · v${version}` : c.url}
                   value={
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2 }}>
                       {upd ? <Tag label="update" tone="warn" /> : null}
@@ -141,7 +141,7 @@ export function ConnectionSheet({ open, onClose }) {
         open={!!target}
         onClose={() => setTarget(null)}
         title={target?.name ?? ''}
-        subtitle={target ? `${target.ip}:${target.port}` : ''}
+        subtitle={target?.url || ''}
         actions={
           target
             ? [
@@ -174,7 +174,7 @@ export function ConnectionSheet({ open, onClose }) {
         title={`Forget ${confirmForget?.name ?? ''}`}
         body={
           <>
-            Removes the pairing token for <Code>{confirmForget?.name}</Code> (<Code>{confirmForget?.ip}:{confirmForget?.port}</Code>). <Bold>You'll need to scan a new QR to reconnect.</Bold>
+            Removes the pairing token for <Code>{confirmForget?.name}</Code> (<Code>{confirmForget?.url}</Code>). <Bold>You'll need to scan a new QR to reconnect.</Bold>
           </>
         }
         expected={confirmForget?.name ?? ''}

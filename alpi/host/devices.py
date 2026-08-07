@@ -487,7 +487,7 @@ async def _generate(
             -32010,
             "no-advertised-host",
             data={
-                "detail": "Cannot pair — no Tailscale or LAN address detected.",
+                "detail": "Cannot pair — no private network address detected.",
                 "diagnosis": diag,
                 "summary": " · ".join(bits) or "nothing detected",
             },

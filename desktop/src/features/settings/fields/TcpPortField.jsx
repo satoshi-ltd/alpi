@@ -6,7 +6,7 @@ import Chip from "../../../primitives/Chip.jsx";
 import Field from "../../../primitives/Field.jsx";
 import { useNotify } from "../../../primitives/Notification.jsx";
 import { useDismissOnOutside } from "../../../hooks/useDismissOnOutside.js";
-import { scopeLabel } from "../util.js";
+import { formatTcpLabel } from "../util.js";
 import styles from "../Settings.module.css";
 
 const DEFAULT_ALP_PORT = 7423;
@@ -20,7 +20,7 @@ export function TcpPortField({ profile, onSaved }) {
   const [port, setPort] = useState(String(effective));
   const [saving, setSaving] = useState(false);
 
-  const scope = scopeLabel(profile.advertise_host);
+  const endpoint = formatTcpLabel(profile.advertise_host, effective);
 
   useEffect(() => { setPort(String(profile.tcp_port || DEFAULT_ALP_PORT)); }, [profile.tcp_port]);
   useDismissOnOutside({ open, onClose: () => setOpen(false), wrapRef });
@@ -70,11 +70,11 @@ export function TcpPortField({ profile, onSaved }) {
         tooltip={
           <>
             <div>ALP peer TCP listener</div>
-            <div className={styles.tooltipStatus}>{scope}:{effective} · click to edit port</div>
+            <div className={styles.tooltipStatus}>{endpoint} · click to edit port</div>
           </>
         }
       >
-        {scope}:{effective}
+        {endpoint}
       </Chip>
       {open && (
         <div className={styles.popover}>

@@ -8,7 +8,7 @@ from pathlib import Path
 import yaml
 import pytest
 
-from alpi import cli, ledger, ui
+from alpi import cli, config as cfg_mod, ledger, ui
 from alpi.host import (
     _chat_events,
     chat,
@@ -396,6 +396,61 @@ async def test_pairing_preflight_does_not_create_orphan_credentials(
 
 
 @pytest.mark.asyncio
+async def test_pairing_hostname_error_points_to_wss_configuration(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    _root(monkeypatch, tmp_path)
+    cfg = cfg_mod.load(tmp_path)
+    cfg.network = {"host": "box.tail1234.ts.net"}
+    cfg_mod.save(cfg)
+
+    with pytest.raises(HandlerError) as error:
+        await connections._create({"label": "Phone"}, Server(tmp_path))
+
+    assert error.value.code == -32010
+    assert "box.tail1234.ts.net" in error.value.data["detail"]
+    assert "wss://" in error.value.data["detail"]
+    assert "host.endpoints" in error.value.data["detail"]
+    assert connections.list_connections() == []
+
+
+@pytest.mark.asyncio
+async def test_pairing_payload_advertises_ordered_routes(monkeypatch, tmp_path: Path) -> None:
+    from alpi.host import network
+
+    _root(monkeypatch, tmp_path)
+    endpoints = [
+        {"url": "wss://client.example.com", "label": "Secure Internet"},
+        {"url": "ws://100.64.10.2:49200", "label": "Direct"},
+    ]
+    monkeypatch.setattr(network, "resolve_host_endpoints", lambda _home: endpoints)
+    monkeypatch.setattr(network, "resolve_host_endpoint", lambda _home: ("100.64.10.2", "tailscale"))
+    monkeypatch.setattr(network, "resolve_host_tcp_port", lambda _home: 49200)
+    monkeypatch.setattr(network, "resolve_host_pairing_name", lambda _home: "Alpi Host")
+
+    result = await connections._create({"label": "Javi"}, Server(tmp_path))
+
+    assert result["url"] == "wss://client.example.com"
+    assert result["endpoints"] == endpoints
+    assert result["host"] == "100.64.10.2"
+    assert result["port"] == 49200
+
+
+def test_console_pairing_data_keeps_connection_identity() -> None:
+    payload, link = cli._pairing_code_data(
+        "wss://client.example.com", "Client", "secret-token", "conn_123",
+    )
+
+    assert payload == {
+        "u": "wss://client.example.com",
+        "n": "Client",
+        "t": "secret-token",
+        "c": "conn_123",
+    }
+    assert "connection_id=conn_123" in link
+
+
+@pytest.mark.asyncio
 async def test_legacy_pairing_cancel_removes_an_unused_connection(
     monkeypatch, tmp_path: Path,
 ) -> None:
@@ -629,6 +684,82 @@ def test_console_connections_limits_recent_rows_and_searches_all_devices(
     assert all(entry[0] != "Person 010" for entry in first_rows)
     assert any(entry[0] == "Person 010" for entry in menu_calls[1] if isinstance(entry, tuple))
     assert detail_calls == ["conn_010"]
+
+
+def test_console_network_setup_edits_native_listen_port_and_restarts(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    from alpi import config as cfg_mod
+
+    root = _root(monkeypatch, tmp_path)
+    cfg = cfg_mod.Config(home=root, model="openai/x")
+    cfg.network = {"host": "192.168.1.20"}
+    cfg_mod.save(cfg)
+    monkeypatch.delenv("ALPI_HOST_TCP_PORT", raising=False)
+    values = iter(["49201", "Studio", "wss://client.example.com"])
+    prompts = []
+    restarts = []
+
+    def text(prompt, **_kwargs):
+        prompts.append(prompt)
+        return next(values)
+
+    monkeypatch.setattr(ui, "text", text)
+    monkeypatch.setattr(ui, "ok_and_wait", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        cli,
+        "_restart_daemon_for_apply",
+        lambda root_path: restarts.append(root_path) or " · daemon restarting",
+    )
+
+    cli._devices_network_setup(root)
+
+    stored = cfg_mod.load(root)
+    assert stored.host["tcp_port"] == 49201
+    assert stored.host["device_name"] == "Studio"
+    assert stored.host["endpoints"] == [
+        {"label": "Public", "url": "wss://client.example.com"},
+    ]
+    assert "Port:" in prompts
+    assert restarts == [root]
+
+
+def test_console_network_setup_does_not_override_environment_port(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    from alpi import config as cfg_mod
+
+    root = _root(monkeypatch, tmp_path)
+    cfg = cfg_mod.Config(home=root, model="openai/x")
+    cfg.network = {"host": "192.168.1.20"}
+    cfg.host = {"tcp_port": 49999}
+    cfg_mod.save(cfg)
+    monkeypatch.setenv("ALPI_PLATFORM", "docker")
+    monkeypatch.setenv("ALPI_NETWORK_HOST", "192.168.1.20")
+    monkeypatch.setenv("ALPI_HOST_TCP_PORT", "49202")
+    values = iter(["Satoshi", "wss://satoshi.example.com"])
+    prompts = []
+    restarts = []
+
+    def text(prompt, **_kwargs):
+        prompts.append(prompt)
+        return next(values)
+
+    monkeypatch.setattr(ui, "text", text)
+    monkeypatch.setattr(ui, "ok_and_wait", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        cli,
+        "_restart_daemon_for_apply",
+        lambda root_path: restarts.append(root_path) or " · daemon restarting",
+    )
+
+    cli._devices_network_setup(root)
+
+    stored = cfg_mod.load(root)
+    assert stored.host["tcp_port"] == 49999
+    assert stored.host["device_name"] == "Satoshi"
+    assert not any(prompt.startswith("Port:") for prompt in prompts)
+    assert restarts == []
 
 
 def test_console_profile_edit_rejects_unknown_names_and_hides_action_for_admin(

@@ -58,12 +58,15 @@ def _probe_endpoints() -> dict[str, Any]:
 async def _status(_params: dict[str, Any], server: host_server.Server) -> dict[str, Any]:
     # Resolution order: configured → managed-runtime hint → tailscale → lan. Probes run once off-loop.
     import asyncio
+    import os
 
     from alpi import config as cfg_mod
     from alpi import runtime
     from alpi.host.network import (
         _advertise_host_hint,
         _is_private_lan,
+        normalize_host_endpoints,
+        resolve_host_endpoints,
         resolve_host_pairing_name,
         resolve_host_tcp_port,
     )
@@ -73,6 +76,17 @@ async def _status(_params: dict[str, Any], server: host_server.Server) -> dict[s
     configured = str((cfg.network or {}).get("host") or "").strip() or None
     is_docker = runtime.is_docker()
     advertise_hint = _advertise_host_hint() if is_docker else None
+    raw_environment_port = str(os.environ.get("ALPI_HOST_TCP_PORT") or "").strip()
+    try:
+        environment_port = int(raw_environment_port)
+    except ValueError:
+        environment_port = 0
+    if 1 <= environment_port <= 65535:
+        port_source = "environment"
+    elif (cfg.host or {}).get("tcp_port"):
+        port_source = "config"
+    else:
+        port_source = "default"
 
     probes = await asyncio.to_thread(_probe_endpoints)
 
@@ -91,12 +105,26 @@ async def _status(_params: dict[str, Any], server: host_server.Server) -> dict[s
     else:
         host_in_use, raw_scope = None, None
 
+    try:
+        endpoints = resolve_host_endpoints(home)
+        configured_endpoints = normalize_host_endpoints(
+            (cfg.host or {}).get("endpoints")
+        )
+    except ValueError as exc:
+        raise host_server.HandlerError(
+            -32010, "invalid-advertised-endpoints", data={"detail": str(exc)},
+        ) from exc
+
     return {
         "scope_in_use": classify_scope(host_in_use, raw_scope),
         "host_in_use": host_in_use,
         "is_override": raw_scope == "configured",
         "port": resolve_host_tcp_port(home),
+        "port_source": port_source,
         "device_name": resolve_host_pairing_name(home),
+        "endpoints": endpoints,
+        "configured_endpoints": configured_endpoints,
+        "is_endpoints_override": bool((cfg.host or {}).get("endpoints")),
         "candidates": {
             "tailscale": probes["tailscale"],
             "lan": probes["lan"],
@@ -127,9 +155,21 @@ async def _set_advertised(
     p = params or {}
     host_param = p.get("host", _SENTINEL)
     name_param = p.get("device_name", _SENTINEL)
+    endpoints_param = p.get("endpoints", _SENTINEL)
 
     host_in = str(host_param).strip() if host_param is not _SENTINEL else _SENTINEL
     name_in = str(name_param).strip() if name_param is not _SENTINEL else _SENTINEL
+    if endpoints_param is _SENTINEL:
+        endpoints_in = _SENTINEL
+    else:
+        from alpi.host.network import normalize_host_endpoints
+
+        try:
+            endpoints_in = normalize_host_endpoints(endpoints_param)
+        except ValueError as exc:
+            raise host_server.HandlerError(
+                -32602, "invalid-endpoints", data={"detail": str(exc)},
+            ) from exc
 
     if isinstance(host_in, str) and host_in:
         err = _validate_advertised_host(host_in)
@@ -143,6 +183,7 @@ async def _set_advertised(
     host_cfg = dict(cfg.host or {})
     net_cfg = dict(cfg.network or {})
     changed = False
+    restart_needed = False
 
     # The accessible address is shared (network.host); the pairing name is
     # host-plane only.
@@ -151,9 +192,11 @@ async def _set_advertised(
             if net_cfg.get("host") != host_in:
                 net_cfg["host"] = host_in
                 changed = True
+                restart_needed = True
         elif "host" in net_cfg:
             net_cfg.pop("host", None)
             changed = True
+            restart_needed = True
 
     if name_in is not _SENTINEL:
         if name_in:
@@ -164,12 +207,21 @@ async def _set_advertised(
             host_cfg.pop("device_name", None)
             changed = True
 
+    if endpoints_in is not _SENTINEL:
+        if endpoints_in:
+            if host_cfg.get("endpoints") != endpoints_in:
+                host_cfg["endpoints"] = endpoints_in
+                changed = True
+        elif "endpoints" in host_cfg:
+            host_cfg.pop("endpoints", None)
+            changed = True
+
     if changed:
         cfg.host = host_cfg
         cfg.network = net_cfg
         cfg_mod.save(cfg)
 
-    return {"ok": True, "restart_needed": changed}
+    return {"ok": True, "restart_needed": restart_needed}
 
 
 async def _restart_host_server(

@@ -75,7 +75,7 @@ in one profile's service leaves siblings untouched.
 
 | What it does | Lifecycle | Install / config |
 |---|---|---|
-| Boots one task per (profile, service) on a single asyncio loop: scheduler tick, ALP socket (Unix + optional TCP/Noise_XK), workgroups poller, host plane. Toggle which services run for a profile via `service.{schedule,alp,workgroups,host}: bool` in that profile's `config.yaml`. | `alpi daemon start\|stop\|restart\|status` | auto-installed on first `alpi setup`; manage from `alpi setup → Services → Daemon` (default profile only) |
+| Boots isolated tasks on one asyncio loop: scheduler tick, ALP socket (Unix + optional TCP/Noise_XK), workgroups poller, and the default host plane. These are fixed daemon capabilities; feature-level state lives with jobs, peers, workgroups, and connections. | `alpi daemon start\|stop\|restart\|status` | auto-installed on first `alpi setup`; manage from `alpi setup → Services → Daemon` (default profile only) |
 
 There's exactly one daemon per machine, one plist / unit. Adding
 a new profile just creates a directory under `~/.alpi/profiles/`;
@@ -376,9 +376,9 @@ phone home, so there's no "recover from the cloud" path.
 ## Common failure modes
 
 **"Listener not running"** when calling `@peer …`. The peer's
-daemon is down or its `alp` service is disabled for that profile.
-Check `alpi daemon status` on the peer's machine and the
-`service.alp` flag in the peer profile's `config.yaml`.
+daemon is down, its address is unreachable, or its ALP listener failed.
+Check `alpi daemon status`, `alpi doctor`, and `service.log` on the
+peer's machine.
 
 **Two daemons running simultaneously.** `ps aux | grep "alpi ("`
 shows more than one `alpi (daemon, …)` entry. Usually after a

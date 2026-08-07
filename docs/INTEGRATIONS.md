@@ -11,8 +11,8 @@ for agent-to-agent links see [ALP.md](ALP.md).
 
 There is no public HTTP API and there is no cloud middleman. Your code
 becomes a **host-plane client** of a specific daemon — the same role the
-mobile app plays. It dials the daemon over a WebSocket on the private
-network (Tailscale or LAN), authenticates with one device credential under a
+mobile app plays. It dials the daemon over a WebSocket on a private network or
+through a TLS reverse proxy, authenticates with one device credential under a
 **connection**, and
 calls the same `host.*` JSON-RPC methods the apps use.
 
@@ -39,9 +39,10 @@ calls the same `host.*` JSON-RPC methods the apps use.
 For "a script on the private net wants to ask a profile", the device-token
 route is the right one. The rest of this doc covers it.
 
-The WebSocket is plain `ws://` (not TLS). Confidentiality comes from
-running over Tailscale or a trusted LAN — do not expose the listener to
-the public internet (see [Security](#security)).
+Use `ws://` only with a Tailscale/private IP literal over a trusted network;
+hostname routes require `wss://`. For Internet access, expose a reverse proxy
+on `wss://` and keep the daemon's plaintext listener private.
+Desktop and mobile validate the proxy certificate and reject invalid TLS.
 
 ## Step 1 — turn on the listener (machine B)
 
@@ -56,14 +57,19 @@ host:
   tcp_port: 49200          # default
   allow_public_bind: false # keep false — public IPs are rejected unless this is true
   device_name: ""          # pairing label; defaults to the hostname
+  endpoints:
+    - url: wss://client.example.com
+      label: Secure Internet
+    - url: ws://100.64.10.2:49200
+      label: Direct
 ```
 
 By default the listener binds to the machine's Tailscale address if one
 is detected, otherwise the LAN address. A public IP is refused unless you
 explicitly set `host.allow_public_bind: true` (don't, for an integration).
 
-To find the `host:port` to dial, run `alpi setup` → **Connections**: the
-header shows the resolved endpoint, e.g. `tailscale · 100.64.50.234:49200`.
+Configure routes in `alpi setup` → **Connections** → **Network**. Their order
+is preserved and the first route is the default encoded in a pairing code.
 
 ## Step 2 — create a scoped connection
 
@@ -75,8 +81,8 @@ Run `alpi setup` → **Connections** → **New connection** on machine B:
 3. Restrict it to the profile(s) it may reach (e.g. `abby`). Blank means
    all profiles — avoid that for an integration.
 
-You get a QR code, an `alpi://device?host=…&port=…&name=…&token=…` link,
-and the token for its first device. Copy the **token** and the **host:port**
+You get a QR code, an `alpi://device?url=…&name=…&token=…` link,
+and the token for its first device. Copy the **token** and the **URL**
 to machine A. Add another device from the connection detail when another
 client should share the same sessions and accounting; it receives a separate
 token so either device can be revoked without affecting the other.

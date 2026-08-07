@@ -45,42 +45,25 @@ describe("ConnectionsPage", () => {
     expect(screen.getByText("14-day total $0.42 · 100 in / 20 out")).toBeInTheDocument();
   });
 
-  it("shows pairing name and port only inside the local host detail", async () => {
-    invoke.mockImplementation((command) => command === "connections_summary" ? Promise.resolve({
-      ...summary,
-      connections: [{
-        id: "host",
-        label: "Host",
-        status: "active",
-        role: "admin",
-        last_seen: Math.floor(Date.now() / 1000),
-        sessions: 2,
-        cost_14d: 0.1,
-        usage_days: [],
-        devices: [],
-      }],
-    }) : Promise.resolve({ ok: true }));
-    const profiles = [{ name: "default", advertise_host: "" }];
-    const { rerender } = render(
-      <ConnectionsPage profiles={profiles} activeConnection={{ id: "local", kind: "local" }} />,
+  it("keeps host network setup out of connection administration", async () => {
+    render(
+      <ConnectionsPage
+        profiles={[{ name: "default", advertise_host: "" }]}
+        activeConnection={{ id: "local", kind: "local" }}
+      />,
     );
 
-    fireEvent.click(await screen.findByText("Local host", { selector: "strong" }));
-    expect(await screen.findByText("pairing name")).toBeInTheDocument();
-    expect(screen.getByText("pairing port")).toBeInTheDocument();
-
-    rerender(
-      <ConnectionsPage profiles={profiles} activeConnection={{ id: "remote", kind: "remote", role: "admin" }} />,
-    );
-    await waitFor(() => expect(screen.queryByText("pairing name")).toBeNull());
-    expect(screen.queryByText("pairing port")).toBeNull();
+    expect(await screen.findByText("Javi")).toBeInTheDocument();
+    expect(screen.queryByText("Client access")).toBeNull();
+    expect(screen.queryByText("WS / WSS routes")).toBeNull();
+    expect(invoke).not.toHaveBeenCalledWith("network_status");
   });
 
   it("adds another device to the existing connection", async () => {
     invoke.mockImplementation((command) => {
       if (command === "connections_summary") return Promise.resolve(summary);
       if (command === "connections_add_device") return Promise.resolve({
-        label: "Javi", pairing_name: "Atlas daemon", host: "100.64.0.1", port: 49200, token: "token",
+        label: "Javi", pairing_name: "Atlas daemon", url: "wss://client.example.com", token: "token",
       });
       return Promise.resolve({ ok: true });
     });
@@ -93,6 +76,7 @@ describe("ConnectionsPage", () => {
     }));
     expect(await screen.findByText("Pair a device with Javi")).toBeInTheDocument();
     expect(screen.getByText(/alpi:\/\/device/).textContent).toContain("name=Atlas+daemon");
+    expect(screen.getByText(/alpi:\/\/device/).textContent).toContain("url=wss%3A%2F%2Fclient.example.com");
   });
 
   it("confirms before revoking one device", async () => {

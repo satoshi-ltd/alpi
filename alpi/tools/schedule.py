@@ -295,7 +295,7 @@ class Schedule(Tool):
             from alpi import home as home_mod
             from alpi import service as svc
             running = svc.daemon_running_pid(home_mod._ROOT) is not None
-            if running and svc.enabled_subsystems(home).get("schedule"):
+            if running:
                 hint = "daemon is running — job will fire on schedule"
             else:
                 hint = "start the daemon ('alpi daemon start' or install it) to fire jobs"

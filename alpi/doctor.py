@@ -563,12 +563,6 @@ def _check_services(home: Path, profile: str) -> list[Check]:
         out.append(Check("Services", "Daemon", "info",
                          "not installed — `alpi setup → Daemon` to enable"))
 
-    on = [k for k, v in svc.enabled_subsystems(home).items() if v]
-    out.append(Check(
-        "Services", "Subsystems", "info",
-        f"enabled: {', '.join(on) if on else '(none)'}",
-    ))
-
     out.extend(_check_alp(home))
 
     jobs_file = home / "schedule" / "jobs.json"
@@ -800,6 +794,14 @@ def _check_security(cfg: cfg_mod.Config) -> list[Check]:
     else:
         out.append(Check("Security", "Approval allowlist", "info", "empty"))
 
+    legacy_switches = cfg_mod.legacy_service_switches(cfg)
+    if legacy_switches:
+        names = ", ".join(f"service.{name}" for name in legacy_switches)
+        out.append(Check(
+            "Security", "Removed service switches", "warn",
+            f"ignored: {names} — all daemon capabilities start; remove these keys",
+        ))
+
     out.extend(_check_network_exposure(cfg))
     return out
 
@@ -811,7 +813,13 @@ def _check_network_exposure(cfg: cfg_mod.Config) -> list[Check]:
     from alpi.host.network import resolve_bind_host
 
     configured = str((cfg.network or {}).get("host") or "").strip() or None
-    if not configured or runtime.is_docker():
+    if runtime.is_docker():
+        return [Check(
+            "Security", "Docker exposure", "warn",
+            "the container bind cannot reveal host port publishing — verify "
+            "`docker compose config`, the host firewall, and the security group",
+        )]
+    if not configured:
         return []
     allow_public = bool((cfg.host or {}).get("allow_public_bind"))
     bind = resolve_bind_host(configured, is_docker=False, allow_public=allow_public)
@@ -822,10 +830,11 @@ def _check_network_exposure(cfg: cfg_mod.Config) -> list[Check]:
     except ValueError:
         return [Check("Security", "Network exposure", "warn",
                       f"network.host {configured!r} binds all interfaces (0.0.0.0) — "
-                      "pairing token + firewall/NAT are the only access control")]
+                      "configure a wss:// endpoint and verify firewall/NAT")]
     return [Check("Security", "Network exposure", "warn",
                   f"network.host {configured} is public (allow_public_bind on) — "
-                  "the pairing port and ALP listener face the public internet")]
+                  "direct ws:// advertisement is disabled; configure wss:// and "
+                  "protect the pairing port and ALP listener")]
 
 
 # Helpers

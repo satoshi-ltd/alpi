@@ -44,14 +44,14 @@ vi.mock("./fields/alp.jsx", () => ({
 }));
 vi.mock("./fields/services.jsx", () => ({
   EmailCell: () => null,
-  SubsystemsCell: () => null,
 }));
 vi.mock("./fields/devices.jsx", () => ({ DevicesField: () => null }));
 vi.mock("./fields/DaemonField.jsx", () => ({ DaemonField: () => null }));
 vi.mock("./fields/network.jsx", () => ({
-  HostPortField: () => null,
-  NetworkAddressField: () => null,
-  PairingNameField: () => null,
+  NetworkAddressField: () => <span>client address</span>,
+  PairingNameField: () => <span>client name</span>,
+  PrivateRouteField: () => <span>private route</span>,
+  PublicRouteField: () => <span>public route</span>,
 }));
 vi.mock("./fields/maintenance.jsx", () => ({
   DeleteProfileAction: () => null,
@@ -73,6 +73,32 @@ describe("ProfileDetail", () => {
     );
 
     expect(screen.getByRole("progressbar", { name: "Fetching latest settings" })).toBeInTheDocument();
+  });
+
+  it("keeps daemon and client access in one Service section", () => {
+    const view = render(
+      <ProfileDetail
+        profile={{ name: "default" }}
+        profiles={[]}
+        activeConnection={{ id: "local", kind: "local" }}
+      />,
+    );
+
+    expect(screen.getAllByText("Service")).toHaveLength(1);
+    expect(screen.queryByText("Client access")).toBeNull();
+    expect(screen.getByText("client address")).toBeInTheDocument();
+    expect(screen.getByText("client name")).toBeInTheDocument();
+    expect(screen.getByText("private route")).toBeInTheDocument();
+    expect(screen.getByText("public route")).toBeInTheDocument();
+
+    view.rerender(
+      <ProfileDetail
+        profile={{ name: "default" }}
+        profiles={[]}
+        activeConnection={{ id: "remote", kind: "remote", role: "admin" }}
+      />,
+    );
+    expect(screen.queryByText("private route")).toBeNull();
   });
 });
 

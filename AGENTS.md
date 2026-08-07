@@ -132,15 +132,20 @@ every ``host.*`` verb the UI calls.
 
 - **`host.network.*` is the canonical network config surface for
   desktop/mobile.** `host.network.status` returns
-  `{scope_in_use, host_in_use, is_override, port, device_name,
+  `{scope_in_use, host_in_use, is_override, port, device_name, endpoints,
+  is_endpoints_override,
   candidates: {tailscale, lan, configured, docker}, diagnosis}` so clients
   can show the live pairing endpoint AND let the user pick a different one
   without dropping to `alpi setup`. `scope_in_use` is the network
   character of the host (`tailscale | lan | custom | docker`) computed
   via `network.classify_scope` — NOT the resolution path. `is_override`
-  carries the "this came from `cfg.host.tcp_host`" bit separately.
-  `host.network.set_advertised({host, device_name})` persists
-  `cfg.host.tcp_host` + `cfg.host.device_name`; empty `host` unsets the
+  carries the "this came from `cfg.network.host`" bit separately.
+  `host.network.set_advertised({host, device_name, endpoints})` persists
+  `cfg.network.host`, `cfg.host.device_name`, and the ordered
+  `cfg.host.endpoints`; empty values unset their override. Endpoint URLs accept
+  only `ws://` / `wss://`, reject credentials/paths and public plaintext WS,
+  and are advertisement metadata — they do not change the daemon bind.
+  Empty `host` unsets the
   override (back to auto-detect). Validation rejects public IPs (token
   leak), loopback, multicast/link-local/reserved, and malformed
   hostnames — accepts RFC1918, Tailscale CGNAT (100.64/10), and any

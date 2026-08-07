@@ -12,6 +12,14 @@ function tooltipFor(_connection, status) {
     : "Switch connection";
 }
 
+export function connectionEndpoint(connection) {
+  if (connection?.kind !== "remote") return "host.sock";
+  if (connection.url) return connection.url;
+  if (connection.host && connection.port) return `${connection.host}:${connection.port}`;
+  if (connection.host) return connection.host;
+  return "endpoint unavailable";
+}
+
 export function useFireOnce(signal, onTrigger) {
   const firedRef = useRef(false);
   useEffect(() => {
@@ -48,10 +56,7 @@ export default function ConnectionSwitcher({
     connections.find((c) => c.id === activeId) ??
     connections.find((c) => c.kind === "local");
   const label = active?.kind === "remote" ? active.name : "Local";
-  const caption =
-    active?.kind === "remote"
-      ? `${active.host}:${active.port}`
-      : "host.sock";
+  const caption = connectionEndpoint(active);
   const activeStatus = active?.status ?? "unknown";
 
   useEffect(
@@ -99,8 +104,7 @@ export default function ConnectionSwitcher({
           id: c.id,
           kind: c.kind,
           name: c.kind === "remote" ? c.name : "Local daemon",
-          host:
-            c.kind === "remote" ? `${c.host}:${c.port}` : "host.sock",
+          host: connectionEndpoint(c),
           status: c.status,
           alpi_version: c.alpi_version ?? null,
         }))}

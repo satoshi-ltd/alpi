@@ -187,6 +187,36 @@ describe("useHostConnections.onSetHostConnection", () => {
   });
 });
 
+describe("useHostConnections.onAddHostConnection", () => {
+  it.each([
+    [
+      JSON.stringify({ u: "wss://client.example.com", n: "Client", t: "secret" }),
+      "wss://client.example.com",
+    ],
+    [
+      "alpi://device?host=100.64.0.1&port=49200&name=Legacy&token=secret",
+      "ws://100.64.0.1:49200",
+    ],
+  ])("stores a complete endpoint URL from new and legacy pairings", async (payload, url) => {
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "host_connections") return makeConnections("local");
+      if (cmd === "profile_summaries" || cmd === "workgroups") return [];
+      return null;
+    });
+    const { result } = renderHostConnections();
+    await waitFor(() => expect(result.current.hostConnections.connections.length).toBe(2));
+    invoke.mockClear();
+
+    await act(async () => { await result.current.onAddHostConnection(payload); });
+
+    expect(invoke).toHaveBeenCalledWith("host_connection_add_remote", {
+      name: expect.any(String),
+      url,
+      token: "secret",
+    });
+  });
+});
+
 describe("useHostConnections.touchWorkgroup", () => {
   it("patches only the matching workgroup's mtime locally, without any RPC", async () => {
     invoke.mockImplementation(async (cmd) => {

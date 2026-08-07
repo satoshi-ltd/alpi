@@ -36,7 +36,6 @@
 .usageSection { margin-bottom: var(--space-8); }
 .sectionLabel { margin-bottom: var(--space-5); font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); }
 .sectionLabel span { margin-left: 12px; text-transform: none; }
-.hostSection { border-top: .5px solid var(--line); padding-top: var(--space-7); }
 .devicesSection { border-top: .5px solid var(--line); padding-top: var(--space-7); }
 .sectionHead { display: flex; justify-content: space-between; align-items: center; }
 .sectionHead h2 { margin: 0 0 var(--space-4); color: var(--ink-4); font-family: var(--font-mono); font-size: 10px; font-weight: var(--fw-regular); text-transform: uppercase; }

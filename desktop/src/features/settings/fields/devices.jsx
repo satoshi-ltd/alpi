@@ -340,6 +340,7 @@ export function PairDeviceModal({ connectionId, onClose, onPaired }) {
   );
   const [label, setLabel] = useState("");
   const [payload, setPayload] = useState(null);
+  const [endpointUrl, setEndpointUrl] = useState("");
   const [qrSvg, setQrSvg] = useState("");
   const [warn, setWarn] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -425,16 +426,18 @@ export function PairDeviceModal({ connectionId, onClose, onPaired }) {
       const tokenId = token.slice(-8);
       pendingTokenIdRef.current = tokenId;
       setPayload({ ...p, token_id: tokenId });
+      setEndpointUrl(p?.url || p?.endpoints?.[0]?.url || (p?.host && p?.port ? `ws://${p.host}:${p.port}` : ""));
     } catch (e) {
       generatedRef.current = false;
       const msg = String(e);
       if (msg.includes("no-advertised-host")) {
         const hint = msg.split("—").slice(1).join("—").trim();
         setWarn(
-          "Cannot pair — no Tailscale or LAN address detected. " +
-          (hint ? `Detected: ${hint}. ` : "") +
-          "Connect to Wi-Fi / Ethernet, install Tailscale, " +
-          "or set network.host in config.yaml.",
+          hint || (
+            "Cannot pair — no private network address detected. " +
+            "Connect the machine to a reachable private network or " +
+            "set network.host in config.yaml."
+          ),
         );
       } else {
         notify({ message: `generate: ${msg}`, variant: "error", duration: 4000 });
@@ -445,31 +448,34 @@ export function PairDeviceModal({ connectionId, onClose, onPaired }) {
   }
 
   const trimmed = label.trim();
-  const ready = Boolean(payload?.host && payload?.port);
+  const ready = Boolean(endpointUrl);
 
   const desktopLink = useMemo(() => {
     if (!ready) return "";
     const params = new URLSearchParams({
-      host: payload.host,
-      port: String(payload.port),
+      url: endpointUrl,
       name: trimmed || "device",
       token: payload.token,
+      ...(payload.connection_id ? { connection_id: payload.connection_id } : {}),
     });
     return `alpi://device?${params.toString()}`;
-  }, [ready, payload, trimmed]);
+  }, [ready, endpointUrl, payload, trimmed]);
 
   useEffect(() => {
     if (!ready || !trimmed) { setQrSvg(""); return; }
     let cancelled = false;
     const qrPayload = JSON.stringify({
-      i: payload.host, p: payload.port, n: trimmed, t: payload.token,
+      u: endpointUrl,
+      n: trimmed,
+      t: payload.token,
+      ...(payload.connection_id ? { c: payload.connection_id } : {}),
     });
     import("qrcode").then(({ default: QRCode }) =>
       QRCode.toString(qrPayload, { type: "svg", margin: 1, errorCorrectionLevel: "L" })
     ).then((svg) => { if (!cancelled) setQrSvg(svg); })
      .catch((e) => notify({ message: `QR: ${String(e)}`, variant: "error" }));
     return () => { cancelled = true; };
-  }, [ready, payload, trimmed, notify]);
+  }, [ready, endpointUrl, payload, trimmed, notify]);
 
   async function copyLink() {
     if (await copyText(desktopLink)) notify({ message: "Pairing link copied", variant: "success" });
@@ -577,6 +583,7 @@ export function PairDeviceModal({ connectionId, onClose, onPaired }) {
             direction="down"
             align="left"
             variant="field"
+            portal
             fullWidth
           >
             {() => (
@@ -646,11 +653,20 @@ export function PairDeviceModal({ connectionId, onClose, onPaired }) {
             </div>
             <div className={styles.devicePairMeta}>
               <Eyebrow as="div">Host</Eyebrow>
+              {(payload.endpoints?.length || 0) > 1 && (
+                <select
+                  className={styles.input}
+                  value={endpointUrl}
+                  onChange={(event) => setEndpointUrl(event.target.value)}
+                  aria-label="Pairing route"
+                >
+                  {payload.endpoints.map((endpoint) => (
+                    <option key={endpoint.url} value={endpoint.url}>{endpoint.url}</option>
+                  ))}
+                </select>
+              )}
               <div className={styles.mono}>
-                {payload.scope ? (
-                  <span className={scopeChipClass(payload.scope, styles)}>{payload.scope}</span>
-                ) : null}
-                {ready ? `${payload.host}:${payload.port}` : "…"}
+                {ready ? endpointUrl : "…"}
               </div>
               <Eyebrow as="div" className={styles.devicePairMetaSpacer}>
                 Token
@@ -659,7 +675,7 @@ export function PairDeviceModal({ connectionId, onClose, onPaired }) {
                 {payload.token ? `…${payload.token.slice(-8)}` : "…"}
               </div>
               <div className={`${styles.muted} ${styles.devicePairMetaSpacer}`}>
-                {scopeHint(payload.scope)}
+                Scan with the Alpi app on the other device, or copy the link below.
               </div>
             </div>
           </div>
@@ -700,34 +716,5 @@ export function PairDeviceModal({ connectionId, onClose, onPaired }) {
         />
       )}
     </Modal>
-  );
-}
-
-function scopeChipClass(scope, styles) {
-  if (scope === "tailscale") return styles.scopeChipTailscale;
-  if (scope === "lan") return styles.scopeChipLan;
-  if (scope === "custom") return styles.scopeChipConfigured;
-  return styles.scopeChip;
-}
-
-const SCOPE_HINTS = {
-  tailscale:
-    "Reachable on any network the other device is on. " +
-    "Scan with the Alpi app on the other device, or copy the link below.",
-  lan:
-    "Same Wi-Fi only — the other device must share this network. " +
-    "Switch to Tailscale in Settings → Service → address for remote pairing.",
-  custom:
-    "Using your custom advertised hostname. " +
-    "Scan with the Alpi app on the other device, or copy the link below.",
-  umbrel:
-    "Reachable at the Umbrel hostname. " +
-    "Scan with the Alpi app on the other device, or copy the link below.",
-};
-
-function scopeHint(scope) {
-  return (
-    SCOPE_HINTS[scope] ||
-    "Scan with the Alpi app on the other device, or copy the link below."
   );
 }

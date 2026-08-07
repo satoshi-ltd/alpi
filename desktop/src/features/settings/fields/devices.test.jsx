@@ -8,7 +8,7 @@ vi.mock("../../../primitives/Notification.jsx", () => ({
   useNotify: () => notifyMock,
 }));
 
-import { DevicesField, _clearDevicesCache } from "./devices.jsx";
+import { DevicesField, PairDeviceModal, _clearDevicesCache } from "./devices.jsx";
 
 beforeEach(() => {
   _clearDevicesCache();
@@ -87,5 +87,87 @@ describe("DevicesField", () => {
     fireEvent.click(screen.getByRole("button", { name: /1 device/i }));
     expect(await screen.findByText("Casa tablet")).toBeInTheDocument();
     expect(invoke).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("PairDeviceModal", () => {
+  it("includes the stable server connection id in the pairing link", async () => {
+    invoke.mockImplementation((command) => {
+      if (command === "profile_summaries") return Promise.resolve([]);
+      if (command === "devices_generate") {
+        return Promise.resolve({
+          connection_id: "conn-1",
+          token: "secret",
+          url: "wss://client.example.com",
+          endpoints: [{ label: "Public", url: "wss://client.example.com" }],
+        });
+      }
+      return Promise.resolve(null);
+    });
+
+    render(<PairDeviceModal onClose={() => {}} onPaired={() => {}} />);
+
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Phone" } });
+    fireEvent.click(screen.getByRole("button", { name: "Generate pairing code" }));
+
+    expect(await screen.findByText(/connection_id=conn-1/)).toBeInTheDocument();
+  });
+
+  it("shows the WSS requirement when the configured address is a hostname", async () => {
+    invoke.mockImplementation((command) => {
+      if (command === "profile_summaries") return Promise.resolve([]);
+      if (command === "devices_generate") {
+        return Promise.reject(new Error(
+          "alp -32010: no-advertised-host — Cannot pair: 'box.tail1234.ts.net' is a hostname. Configure a certificate-validated wss:// URL in host.endpoints.",
+        ));
+      }
+      return Promise.resolve(null);
+    });
+
+    render(<PairDeviceModal onClose={() => {}} onPaired={() => {}} />);
+
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "Phone" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Generate pairing code" }));
+
+    expect(await screen.findByText(/box\.tail1234\.ts\.net.*wss:\/\//i))
+      .toBeInTheDocument();
+    expect(notifyMock).not.toHaveBeenCalled();
+  });
+
+  it("portals the profile selector outside the scrollable modal content", async () => {
+    invoke.mockImplementation((command) => {
+      if (command === "profile_summaries") {
+        return Promise.resolve([
+          { name: "default", accent: "#d6aa45" },
+          { name: "atlas", accent: "#22c55e" },
+        ]);
+      }
+      return Promise.resolve(null);
+    });
+
+    render(<PairDeviceModal onClose={() => {}} onPaired={() => {}} />);
+
+    const trigger = await screen.findByRole("button", { name: "All profiles" });
+    vi.spyOn(trigger, "getBoundingClientRect").mockReturnValue({
+      bottom: 200,
+      height: 60,
+      left: 140,
+      right: 780,
+      top: 140,
+      width: 640,
+      x: 140,
+      y: 140,
+      toJSON: () => ({}),
+    });
+    const modal = screen.getByText("Pair a new device").parentElement.parentElement;
+    fireEvent.click(trigger);
+    const option = await screen.findByRole("button", { name: /Restrict to/i });
+    const menu = option.parentElement.parentElement;
+
+    expect(modal).not.toContainElement(option);
+    expect(document.body).toContainElement(option);
+    expect(menu).toHaveStyle({ width: "640px" });
   });
 });

@@ -28,7 +28,7 @@ alpi daemon restart
 
 - Image `satoshiltd/alpi`; daemon is PID 1. UI via `docker exec -it <name> alpi` (no web terminal).
 - Volume mounts at `/data`; `HOME=/data` makes `/data/.alpi` the profile root, surviving restarts.
-- Container binds `0.0.0.0`; set `ALPI_NETWORK_HOST` to the address clients dial (LAN IP, or Tailscale IP/MagicDNS for off-network). It can't see the host's interfaces, so this knob carries the advertised address.
+- Container binds `0.0.0.0`; set `ALPI_NETWORK_HOST` to the address clients dial (LAN/Tailscale IP for direct WS, or a hostname with an explicit certificate-validated `wss://` entry in `host.endpoints`). It can't see the host's interfaces, so this knob carries the advertised address.
 - Ports: `49200` = host plane for paired desktop/mobile (`host.*`, TCP/WS); `7423` = ALP peer traffic (`link.*`, `workgroup.*`, Noise_XK), only for cross-machine peers.
 
 ## Decision rules

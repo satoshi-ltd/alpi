@@ -130,7 +130,7 @@ def test_server_refuses_unsafe_bind(tmp_path: Path, addr: str) -> None:
     """Loopback, IPv6 unspecified, empty — all rejected."""
     home = tmp_path / "h"
     home.mkdir()
-    with pytest.raises(ValueError, match="Tailscale|private LAN"):
+    with pytest.raises(ValueError, match="private network"):
         host_server.Server(home=home, tcp_bind=(addr, 49200))
 
 

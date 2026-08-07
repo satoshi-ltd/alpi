@@ -679,7 +679,7 @@ def tick(home: Path, now: datetime | None = None) -> list[tuple[str, bool, str]]
 
 async def serve(home: Path) -> None:
     """Async entry point for the orchestrator. Sleeps between ticks
-    using ``asyncio.sleep`` so other subsystems share the same loop.
+    using ``asyncio.sleep`` so other daemon tasks share the same loop.
 
     ``tick`` runs in a dedicated thread executor so a long-running
     ``subprocess.run`` (up to the per-job ``timeout``, default 900s,

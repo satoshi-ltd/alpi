@@ -1,4 +1,4 @@
-// alpi://device?host=…&port=…&name=…&token=…  →  endpoint shape used by lib/store.
+import { normalizeEndpointUrl } from './endpoint.js';
 
 export class PairingError extends Error {}
 
@@ -22,23 +22,43 @@ function parseUri(uri) {
   } catch {
     throw new PairingError('alpi:// link is malformed');
   }
-  const host = params.get('host');
-  const port = Number(params.get('port'));
+  const legacyHost = params.get('host');
+  const legacyPort = Number(params.get('port'));
   const token = params.get('token');
-  const name = params.get('name') ?? host;
-  if (!host || !port || !token) {
-    throw new PairingError('alpi:// link missing host, port, or token');
+  const candidate = params.get('url') || (legacyHost && legacyPort ? `ws://${legacyHost}:${legacyPort}` : '');
+  if (!candidate || !token) {
+    throw new PairingError('alpi:// link missing URL or token');
   }
-  return { name, ip: host, port, token, kind: 'remote' };
+  try {
+    const url = normalizeEndpointUrl(candidate);
+    const name = params.get('name') ?? new URL(url).hostname;
+    const connectionId = params.get('connection_id') || params.get('c') || '';
+    return {
+      name, url, token, kind: 'remote',
+      ...(connectionId ? { connectionId } : {}),
+    };
+  } catch (error) {
+    throw new PairingError(error.message);
+  }
 }
 
 function parseJson(obj) {
-  const ip = obj.ip ?? obj.i ?? obj.host;
-  const port = Number(obj.port ?? obj.p);
+  const legacyHost = obj.ip ?? obj.i ?? obj.host;
+  const legacyPort = Number(obj.port ?? obj.p);
+  const candidate = obj.url ?? obj.u ?? (legacyHost && legacyPort ? `ws://${legacyHost}:${legacyPort}` : '');
   const token = obj.token ?? obj.t;
-  const name = obj.name ?? obj.n ?? ip;
-  if (!ip || !port || !token) {
-    throw new PairingError('Pairing JSON missing host, port, or token');
+  if (!candidate || !token) {
+    throw new PairingError('Pairing JSON missing URL or token');
   }
-  return { name, ip, port, token, kind: 'remote' };
+  try {
+    const url = normalizeEndpointUrl(candidate);
+    const name = obj.name ?? obj.n ?? new URL(url).hostname;
+    const connectionId = obj.connection_id ?? obj.c ?? '';
+    return {
+      name, url, token, kind: 'remote',
+      ...(connectionId ? { connectionId: String(connectionId) } : {}),
+    };
+  } catch (error) {
+    throw new PairingError(error.message);
+  }
 }

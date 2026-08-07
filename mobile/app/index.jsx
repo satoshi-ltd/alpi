@@ -170,7 +170,7 @@ export default function Inbox() {
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
       <ConnHeader
         name={endpoint?.name ?? 'No daemon'}
-        host={endpoint ? `${endpoint.ip}:${endpoint.port}` : 'not paired'}
+        host={endpoint?.url || 'not paired'}
         status={daemonStatus}
         unread={canAdmin ? unreadCount : 0}
         onConnPress={() => setSheet('conn')}

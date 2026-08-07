@@ -177,11 +177,6 @@ def _profile_summary(row: dict[str, Any]) -> dict[str, Any]:
         "voice_id": cfg.tools.tts.voice,
         "bio": cfg.public_bio or None,
         "paused": cfg.paused,
-        "subsystems": {
-            "schedule": cfg.service.get("schedule", True) is not False,
-            "alp": cfg.service.get("alp", True) is not False,
-            "workgroups": cfg.service.get("workgroups", True) is not False,
-        },
         "budget_daily_usd": cfg.budget.get("daily_usd"),
         "budget_used_usd": used_usd,
         "budget_used_tokens": used_tokens,
@@ -546,6 +541,18 @@ async def _config_set_field(
 ) -> dict[str, Any]:
     home = _resolve_home(str(params.get("profile") or ""))
     key = str(params.get("key") or "")
+    _reject_removed_config_key(key)
+    if key == "host.endpoints":
+        raise host_server.HandlerError(
+            -32602,
+            "invalid-params",
+            data={
+                "detail": (
+                    "host.endpoints must be changed through "
+                    "host.network.set_advertised"
+                ),
+            },
+        )
     value = params.get("value")
     data = _load_user_yaml(home)
     coerced = _coerce_config_value(key, value)
@@ -602,12 +609,27 @@ async def _config_unset_field(
 ) -> dict[str, Any]:
     home = _resolve_home(str(params.get("profile") or ""))
     key = str(params.get("key") or "")
+    _reject_removed_config_key(key)
     data = _load_user_yaml(home)
     _unset_dotted(data, key)
     _prune_empty_tiers(data)
     _write_user_yaml(home, data)
     _emit_config_changed(home, scope=key.split(".", 1)[0] or "field")
     return {"ok": True}
+
+
+def _reject_removed_config_key(key: str) -> None:
+    if key == "service" or key.startswith("service."):
+        raise host_server.HandlerError(
+            -32602,
+            "invalid-params",
+            data={
+                "detail": (
+                    "service switches were removed; daemon capabilities "
+                    "are always available"
+                ),
+            },
+        )
 
 
 async def _email_status(

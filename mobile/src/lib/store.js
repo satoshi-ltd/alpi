@@ -1,4 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
+import { endpointUrl } from './endpoint.js';
 
 const KEY = 'alpi.connections';
 // Wiped on clearAll() so an old build's leftover token does not linger after unpair. Never read/migrated.
@@ -19,7 +20,9 @@ function genId() {
 
 function normalize(state) {
   if (!state || typeof state !== 'object') return { v: 1, active_id: null, connections: [] };
-  const connections = Array.isArray(state.connections) ? state.connections.filter(isValidConnection) : [];
+  const connections = Array.isArray(state.connections)
+    ? state.connections.map(normalizeConnection).filter(Boolean)
+    : [];
   let activeId = typeof state.active_id === 'string' ? state.active_id : null;
   if (activeId && !connections.find((c) => c.id === activeId)) {
     activeId = connections[0]?.id ?? null;
@@ -27,15 +30,20 @@ function normalize(state) {
   return { v: 1, active_id: activeId, connections };
 }
 
-function isValidConnection(c) {
-  return c
+function normalizeConnection(c) {
+  if (!(c
     && typeof c.id === 'string'
-    && typeof c.ip === 'string'
-    && typeof c.port === 'number'
     && typeof c.token === 'string'
     && typeof c.name === 'string'
     && typeof c.deviceId === 'string'
-    && c.deviceId.length > 0;
+    && c.deviceId.length > 0)) return null;
+  try {
+    const { ip, port, ...rest } = c;
+    const url = endpointUrl(c);
+    return url ? { ...rest, url } : null;
+  } catch {
+    return null;
+  }
 }
 
 async function readRaw() {
@@ -87,19 +95,39 @@ export async function saveConnection(endpoint) {
     throw new Error('saveConnection requires a deviceId — pair against an alpi daemon v0.6.6 or newer.');
   }
   const state = await loadConnections();
-  const id = endpoint.id ?? genId();
-  const existingIdx = state.connections.findIndex((c) => c.id === id);
+  const connectionId = typeof endpoint.connectionId === 'string' && endpoint.connectionId
+    ? endpoint.connectionId
+    : null;
+  let existingIdx = endpoint.id
+    ? state.connections.findIndex((c) => c.id === endpoint.id)
+    : -1;
+  if (existingIdx < 0 && connectionId) {
+    existingIdx = state.connections.findIndex(
+      (c) => c.deviceId === endpoint.deviceId && c.connectionId === connectionId,
+    );
+  }
+  if (existingIdx < 0 && !endpoint.id) {
+    const sameDaemon = state.connections
+      .map((connection, index) => ({ connection, index }))
+      .filter(({ connection }) => (
+        connection.deviceId === endpoint.deviceId
+        && (!connectionId || !connection.connectionId)
+      ));
+    if (sameDaemon.length === 1) existingIdx = sameDaemon[0].index;
+  }
+  const existing = existingIdx >= 0 ? state.connections[existingIdx] : null;
+  const id = endpoint.id ?? existing?.id ?? genId();
   const conn = {
     id,
     name: endpoint.name ?? 'alpi',
-    ip: endpoint.ip,
-    port: endpoint.port,
+    url: endpointUrl(endpoint),
     token: endpoint.token,
     kind: 'remote',
     added_at: Date.now(),
     last_connected: Date.now(),
     deviceId: endpoint.deviceId,
-    role: endpoint.role ?? state.connections[existingIdx]?.role ?? null,
+    connectionId: connectionId ?? existing?.connectionId ?? null,
+    role: endpoint.role ?? existing?.role ?? null,
   };
   if (existingIdx >= 0) state.connections[existingIdx] = conn;
   else state.connections.push(conn);

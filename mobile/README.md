@@ -27,9 +27,9 @@ Prerequisites on the alpi side:
 - Host-plane TCP listener enabled (`alpi setup → Connections → Network`).
 - A pairing QR (or `alpi://` URL) generated on the desktop / TUI.
 
-The QR / URL encodes daemon IP, TCP port, profile, and a device token.
-The mobile app persists pairings via `expo-secure-store` and can hold
-multiple paired daemons.
+The QR / URL encodes the complete WS/WSS route, instance name, stable connection
+identity, and device token. The mobile app persists pairings via
+`expo-secure-store` and can hold multiple paired daemons.
 
 ## What works today
 
@@ -53,7 +53,7 @@ multiple paired daemons.
   pause/resume, briefing edit, budget edit, members list, add member,
   kick, leave/delete.
 - **Profile settings.** Overview, model picker (PickerRow), budget,
-  workspace, accent, subsystem toggles (schedule/alp/workgroups),
+  workspace and accent,
   email, identity, peers, schedule, sandbox, voice,
   MCP add/remove, providers (Ollama-first, then cloud keys),
   brain (skills, memories, tools), storage breakdown, delete profile.

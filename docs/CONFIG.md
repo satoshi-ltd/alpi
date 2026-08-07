@@ -32,13 +32,12 @@ Three options:
   `alpi setup → Cleanup` inspects the profile's heavy dirs (audio
   cache, old sessions, schedule output) and the knowledge index SQLite
   freelist (VACUUM-not-unlink), with one-shot confirmation per
-  category. `alpi setup → Services` exposes two rows:
-  **Daemon** (default profile only — install / uninstall / start /
-  stop / restart of the per-machine launchd plist or systemd-user
-  unit) and **Subsystems** (per-profile toggles for
-  scheduler / ALP / workgroups / host, plus the inter-machine TCP
-  port for ALP). The first `alpi setup` auto-installs the daemon,
-  so the lifecycle row is mostly read-only after that.
+  category. `alpi setup → Services` exposes daemon lifecycle (default
+  profile), the shared accessible address, schedules, and client
+  connections. The ALP section owns its peer TCP listener. Scheduler,
+  ALP, workgroups, and the default host plane are daemon capabilities,
+  not user-selectable services. The first `alpi setup` auto-installs
+  the daemon, so the lifecycle row is mostly read-only after that.
 - **Edit the YAML**: open `~/.alpi/config.yaml` (or
   `~/.alpi/profiles/<name>/config.yaml` for non-default profiles)
   and change values manually. Restart whatever surface was affected.
@@ -276,12 +275,17 @@ any output reaches the consumer. A timeout of `0` disables that watchdog.
 | `runtime.stream_idle_timeout_s` | `120` | seconds (`0` = off) | next turn |
 | `runtime.max_retries` | `2` | int | next turn |
 | `runtime.retry_backoff_s` | `1.5` | seconds (base; exponential + jitter) | next turn |
+| `runtime.prefetch` | `""` | `"" \| auto \| all \| off` | next daemon start |
 
 `first_byte_timeout_s` is generous so slow reasoning models aren't killed before
 their first token; bump it for very slow local Ollama or long-thinking models.
 Retries fire only for transient failures (timeouts, connection drops, 429/5xx)
 and only before any token has streamed — a partially-streamed turn is surfaced,
 not silently replayed.
+
+An empty `runtime.prefetch` selects `auto` outside Docker and `off` in Docker.
+`all` forces Chromium and embedding weights to warm after daemon startup; `off`
+keeps their existing first-use loading behavior.
 
 ### Model reasoning
 
@@ -503,17 +507,18 @@ each on its own port. Configure it once.
 
 | Key | Default | Effect |
 |---|---|---|
-| `network.host` | `""` | The address other machines and your devices reach this profile at. Empty = auto-detect (Tailscale first, then a private LAN address). Any reachable host works: a Tailscale / WireGuard / VPN address, a private hostname or MagicDNS name, a LAN IP, `0.0.0.0`, or a public IP. A public IP additionally needs `host.allow_public_bind: true`; that gate applies to the shared bind used by **both** planes (host control plane + ALP listener), so without it neither binds TCP. |
+| `network.host` | `""` | Shared bind/ALP address. Empty = auto-detect a reachable private address. A private IP literal also produces the automatic direct `ws://` client route. Hostnames require an explicit certificate-validated `wss://` entry in `host.endpoints`; they never produce a plaintext route. A public IP additionally needs `host.allow_public_bind: true`; that gate applies to the shared bind used by **both** planes (host control plane + ALP listener), so without it neither binds TCP. |
 
 ```yaml
 network:
-  host: ""        # empty = auto-detect Tailscale → LAN
+  host: ""        # empty = auto-detect a private address
 ```
 
-Set it via `alpi setup → Connections → Network` or the desktop app
-(`Connections → Network`). Ports stay per-plane (`host.tcp_port`, `alp.tcp_port`).
-A public IP is `config.yaml`-only: the desktop rejects it, and it also requires
-`host.allow_public_bind: true` — set both keys by hand.
+The detected address is shown read-only in `alpi setup → Connections → Network`
+and Desktop (`Settings → profile → Service`). Set an explicit address in
+`config.yaml`, or with `ALPI_NETWORK_HOST` in Docker. Ports stay per-plane
+(`host.tcp_port`, `alp.tcp_port`). A public IP also requires
+`host.allow_public_bind: true`; set both keys by hand.
 
 ### ALP
 
@@ -524,7 +529,7 @@ the machine has a reachable address — bound to the shared `network.host`
 **Named profiles stay Unix-only** unless they set their own explicit, unique
 `alp.tcp_port` (otherwise every profile would fight over the shared port). With
 no reachable address (no `network.host`, no Tailscale/LAN, not Docker) even
-`default` stays Unix-only. Turn ALP off entirely with `service.alp: false`.
+`default` stays Unix-only.
 
 | Key | Default | Notes |
 |---|---|---|
@@ -539,7 +544,7 @@ alp:
 
 Turns a profile into a **read-only front door** to one designated peer. When set, the engine offers the profile **only the `peer` tool** and hard-gates every turn: the agent MUST consult that pinned peer via `peer` before it can produce a final answer — a call to any other peer id is rejected before it runs, an empty reply does not count, and if the turn ends (or hits the step/time limit) without a valid reply it fails closed with a fixed message rather than answer from the model's own knowledge. The peer's reply is surfaced as the answer. So you only pin that peer in `peers.yaml` with `link.ask` — no separate `tools.deny` needed.
 
-This makes the **relay side** read-only, structurally. It does **not** make the target agent immutable: an inbound `link.ask` runs a full turn on the target with the target's own tools, so keeping the knowledge source unwritable is the target profile's responsibility — deny its mutating tools there, and restrict which paired devices may address it via a member connection's `profile_scope` (see *Host* below — `service.host: false` on the target is **not** a per-profile access control). The relay does not police the peer.
+This makes the **relay side** read-only, structurally. It does **not** make the target agent immutable: an inbound `link.ask` runs a full turn on the target with the target's own tools, so keeping the knowledge source unwritable is the target profile's responsibility — deny its mutating tools there, and restrict which paired devices may address it via a member connection's `profile_scope` (see *Host* below). The relay does not police the peer.
 
 | Key | Default | Notes |
 |---|---|---|
@@ -625,25 +630,18 @@ in headers itself.
 change is picked up when that profile's MCP subprocess is next (re)started —
 restart the daemon or re-bootstrap the profile.
 
-### Services (per profile)
+### Daemon capabilities
 
-Which services the alpi daemon spawns for THIS profile. The
-daemon itself is one-per-machine (see [OPERATIONS.md →
-Daemon](OPERATIONS.md)); these flags only decide what it
-activates here.
+The one-per-machine daemon starts the scheduler, ALP listener, and workgroup
+poller for every profile, plus the host control plane for `default`. They are
+fixed internal tasks rather than configuration switches. Control behavior at
+the owning boundary instead: enable/remove jobs, pause/leave workgroups,
+grant/revoke peers, and scope/revoke client connections.
 
-```yaml
-service:
-  schedule: true    # cron tick loop
-  alp: true         # peer-to-peer ALP listener
-  workgroups: true  # ALP.3 outbound poller for joined workgroups
-  host: true        # control-plane socket for desktop / mobile clients (default profile only)
-```
-
-The block name remains `service:` for back-compat; conceptually
-each entry is a service the daemon runs for this profile. Missing
-keys default to ``True``. Toggling takes effect at the next
-``alpi daemon restart``.
+Legacy `service.schedule`, `service.alp`, `service.workgroups`, and
+`service.host` keys are ignored. The daemon logs a warning at startup and
+`alpi doctor` reports them until the block is removed; all capabilities still
+start. A legacy `service.prefetch` value migrates to `runtime.prefetch` on save.
 
 `host` is meaningful only on the ``default`` profile; on any other
 profile the toggle is honoured but the runner refuses to bind a
@@ -661,27 +659,44 @@ mobile / remote desktop use this path.
 |---|---|---|
 | `host.tcp_port` | `49200` | WebSocket port for device pairing (the host plane's own port). |
 | `host.device_name` | `""` | Optional pairing name shown in `Devices`. Empty = auto, otherwise embedded in the pairing QR and device list. |
-| `host.allow_public_bind` | `false` | Opt-in to let the shared network bind use a **public IP**. Affects **both** the host control plane and the ALP listener — both derive their bind from `network.host`, so without it neither binds TCP on a public address. A Tailscale / private-LAN / hostname address needs no opt-in; only a public IP does. |
+| `host.endpoints` | `[]` | Ordered explicit routes advertised in new pairing codes. Each row is `{url, label}` for wire compatibility. Desktop and setup manage one optional public `wss://` route. When no explicit `ws://` row exists, Alpi appends the private route derived from `network.host` and `host.tcp_port`; unsafe or unavailable addresses produce no private route. Explicit WS rows remain supported for compatibility. |
+| `host.allow_public_bind` | `false` | Opt-in to let the shared network bind use a **public IP**. Affects **both** the host control plane and the ALP listener — both derive their bind from `network.host`, so without it neither binds TCP on a public address. A private or hostname address needs no opt-in; only a public IP does. |
 
 ```yaml
 host:
   tcp_port: 49200
   device_name: ""
+  endpoints:
+    - url: wss://client.example.com
+      label: Secure Internet
+    - url: ws://100.64.10.2:49200
+      label: Direct
 ```
 
 The address itself lives in `network.host` (shared with the ALP listener),
-not here — this section is just the host plane's port, pairing name, and the
-public-bind opt-in. `host.device_name` controls the visible pairing label for
-new devices.
+not here. `host.endpoints` is advertisement only: it does not open listeners,
+terminate TLS, or change authentication. A `wss://` route normally points at a
+TLS reverse proxy such as Caddy, which forwards to the daemon's `tcp_port`.
+The Service UI shows that derived WS endpoint as **Private route** and the
+configured WSS endpoint as **Public route**. Removing the public route removes
+only WSS advertisement; private access continues whenever a safe private
+address exists.
+The listen port is editable in Desktop and `alpi setup` and requires a daemon
+restart. `ALPI_HOST_TCP_PORT` takes precedence over `host.tcp_port`; when set by
+a Docker deployment, change both that environment value and the matching 1:1
+port mapping, then recreate the container. Multiple containers on one host use
+distinct effective ports such as `49200`, `49201`, and `49202`.
+`host.device_name` controls the visible pairing label for new devices.
 It is optional; when empty, alpi falls back to the platform hostname.
+Plaintext hostname routes are rejected because DNS may resolve them to a public
+address (including alternate numeric IPv4 forms). Use a private IP literal for
+direct WS or a certificate-validated hostname with WSS.
 
-**`service.host` is not per-profile access control.** It toggles whether the
-daemon runs the host plane (that plane lives with the `default` profile). The
-single host socket serves every sibling profile, and **admin** connections plus
-direct local socket access reach any profile regardless of it. To limit which
-profiles a *paired device* (a **member** connection) may address, scope that
-connection with `profile_scope` — that, not `service.host: false` on the target,
-is what keeps a named profile off a given device's reach.
+The host plane lives with the `default` profile and its single socket serves
+every sibling profile. **Admin** connections plus direct local socket access
+reach any profile. To limit which profiles a paired **member** connection may
+address, scope that connection with `profile_scope`; daemon task configuration
+is not an access-control boundary.
 
 On regular macOS/Linux installs, leaving `network.host` empty keeps auto
 mode: Tailscale first, then LAN, used as both the advertised address and the
@@ -689,9 +704,10 @@ bind. Setting it advertises that address to clients/peers; the bind is
 derived separately — a private/Tailscale IP binds itself, a hostname or an
 opted-in public IP binds `0.0.0.0`, and a public IP without
 `host.allow_public_bind` refuses to bind at all. In Docker the daemon binds
-`0.0.0.0` inside the container while clients dial the address you advertise
-via `ALPI_NETWORK_HOST` — a LAN IP, a `100.x` Tailscale IP, or a MagicDNS
-hostname (see `docker/README.md`).
+`0.0.0.0` inside the container. A LAN or `100.x` Tailscale IP in
+`ALPI_NETWORK_HOST` can produce the direct client route. A hostname, including
+MagicDNS, is still valid for ALP but desktop/mobile need an explicit `wss://`
+entry in `host.endpoints` (see `docker/README.md`).
 
 Connection identities and per-device WS credentials live at
 ``~/.alpi/host/connections.yaml`` (mode 0600). Manage them through

@@ -1,4 +1,5 @@
 // auth_token injected into every request; daemon: alpi/host/server.py::_check_token.
+import { endpointUrl } from './endpoint.js';
 
 export class RpcError extends Error {
   constructor(code, message, data) {
@@ -32,7 +33,7 @@ function buildParams(endpoint, params) {
 }
 
 function endpointKey(endpoint) {
-  return `${endpoint?.ip || ''}:${endpoint?.port || ''}|${endpoint?.token || ''}`;
+  return `${endpointUrl(endpoint)}|${endpoint?.token || ''}`;
 }
 
 function nextId() {
@@ -60,7 +61,7 @@ function ensureEntry(endpoint) {
   let entry = _pool.get(key);
   if (entry && !entry.closed) return entry;
 
-  const url = `ws://${endpoint.ip}:${endpoint.port}`;
+  const url = endpointUrl(endpoint);
   const ws = new WebSocket(url);
   entry = {
     key,
@@ -168,7 +169,7 @@ const STREAM_OPEN_TIMEOUT_MS = 8000;
 
 // Stream sockets NOT pooled — chat is long-lived, must not contend with unary RPCs. `cancelMethod` opt-in (chat: 'host.chat.cancel').
 export function callStream(endpoint, method, params, handlers) {
-  const url = `ws://${endpoint.ip}:${endpoint.port}`;
+  const url = endpointUrl(endpoint);
   const ws = new WebSocket(url);
   const id = nextId();
   let closed = false;

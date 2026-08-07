@@ -42,17 +42,12 @@ def test_list_profiles_when_no_profiles_subdir(tmp_path: Path) -> None:
     assert home_mod.list_profiles(root) == ["default"]
 
 
-def test_profile_tasks_respects_subsystem_flags(tmp_path: Path) -> None:
-    """Only enabled subsystems get tasks; host stays default-only."""
+def test_profile_tasks_starts_all_profile_capabilities(tmp_path: Path) -> None:
     home = tmp_path / "h"
     home.mkdir()
-    subs = {
-        "schedule": False, "alp": True,
-        "host": True, "workgroups": False,
-    }
 
     async def run() -> list[str]:
-        task_map = service._profile_tasks(home, "alice", subs)
+        task_map = service._profile_tasks(home, "alice")
         tasks = [t for ts in task_map.values() for t in ts]
         names = [t.get_name() for t in tasks]
         for t in tasks:
@@ -62,26 +57,21 @@ def test_profile_tasks_respects_subsystem_flags(tmp_path: Path) -> None:
 
     names = asyncio.run(run())
     assert "alice/alp" in names
-    assert "alice/schedule" not in names
-    # Host is blocked twice: task assembly and supervisor.
+    assert "alice/schedule" in names
+    assert "alice/workgroups" in names
+    assert "alice/workgroup-preempt" in names
     assert not any(n.endswith("/host") for n in names)
-    # Workgroups off means no poller or preempt watcher.
-    assert not any("workgroup" in n for n in names)
 
 
 def test_profile_tasks_workgroups_includes_preempt_watcher(
     tmp_path: Path,
 ) -> None:
-    """Workgroups enable both the poller and the preempt watcher."""
+    """Every profile gets both workgroup background tasks."""
     home = tmp_path / "h"
     home.mkdir()
-    subs = {
-        "gateway": False, "schedule": False, "alp": False,
-        "host": False, "workgroups": True,
-    }
 
     async def run() -> list[str]:
-        task_map = service._profile_tasks(home, "alice", subs)
+        task_map = service._profile_tasks(home, "alice")
         tasks = [t for ts in task_map.values() for t in ts]
         names = [t.get_name() for t in tasks]
         for t in tasks:
@@ -97,13 +87,9 @@ def test_profile_tasks_workgroups_includes_preempt_watcher(
 def test_profile_tasks_host_only_for_default(tmp_path: Path) -> None:
     home = tmp_path / "h"
     home.mkdir()
-    subs = {
-        "gateway": False, "schedule": False, "alp": False,
-        "host": True, "workgroups": False,
-    }
 
     async def run() -> list[str]:
-        task_map = service._profile_tasks(home, "default", subs)
+        task_map = service._profile_tasks(home, "default")
         tasks = [t for ts in task_map.values() for t in ts]
         names = [t.get_name() for t in tasks]
         for t in tasks:
@@ -138,6 +124,17 @@ def test_daemon_running_pid_clears_stale(tmp_path: Path) -> None:
     p.write_text("999999")  # well past PID_MAX on any sane host
     assert service.daemon_running_pid(root) is None
     assert not p.exists()
+
+
+def test_daemon_status_lists_profiles_without_internal_task_state(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    root = _make_root(tmp_path, ["alfa"])
+    monkeypatch.setattr(service, "_detect_backend", lambda: None)
+
+    info = service.daemon_status(root)
+
+    assert info["profiles"] == ["default", "alfa"]
 
 
 def test_install_daemon_writes_plist_and_bootstraps(
@@ -226,14 +223,14 @@ def test_systemd_install_runs_enable_linger(
 
 
 @pytest.mark.asyncio
-async def test_supervise_isolates_subsystem_crash() -> None:
+async def test_guard_task_isolates_task_crash() -> None:
     """Crashes stay isolated inside the supervisor."""
 
     async def boom(home: Path, profile: str) -> None:
         raise RuntimeError("synthetic crash")
 
     # ``alp`` exercises the (home, profile) call shape.
-    await service._supervise(boom, Path("/tmp"), "alice", "alp")
+    await service._guard_task(boom, Path("/tmp"), "alice", "alp")
     # If we got here, the crash was swallowed.
 
 
@@ -305,7 +302,7 @@ def test_start_new_profiles_skips_already_active(
 
     calls: list[tuple[Path, str]] = []
 
-    def fake_profile_tasks(home, profile, subsystems):
+    def fake_profile_tasks(home, profile):
         calls.append((home, profile))
         return {}
 
@@ -331,16 +328,15 @@ def test_start_new_profiles_retries_on_config_error(
 
     seen_homes: list[Path] = []
 
-    def flaky(home: Path) -> dict[str, bool]:
+    real_fingerprints = service._reload_fingerprints
+
+    def flaky(home: Path) -> dict[str, str]:
         seen_homes.append(home)
         if len(seen_homes) == 1:
             raise RuntimeError("synthetic yaml error")
-        return {
-            "gateway": False, "schedule": False, "alp": False,
-            "host": False, "workgroups": False,
-        }
+        return real_fingerprints(home)
 
-    monkeypatch.setattr(service, "enabled_subsystems", flaky)
+    monkeypatch.setattr(service, "_reload_fingerprints", flaky)
     monkeypatch.setattr(service, "_profile_tasks", lambda *_: {})
 
     registry: dict = {}
@@ -352,16 +348,12 @@ def test_start_new_profiles_retries_on_config_error(
     assert seen_homes == [expected_home, expected_home]
 
 
-def test_start_new_profiles_marks_zero_subsystem_profile_active(
+def test_start_new_profiles_marks_empty_task_profile_active(
     monkeypatch, tmp_path: Path,
 ) -> None:
-    """Profile with everything disabled is still marked active to stop log spam."""
+    """An empty internal task map is still marked active to stop log spam."""
     root = _make_root(tmp_path, ["alfa"])
 
-    monkeypatch.setattr(service, "enabled_subsystems", lambda _: {
-        "gateway": False, "schedule": False, "alp": False,
-        "host": False, "workgroups": False,
-    })
     monkeypatch.setattr(service, "_profile_tasks", lambda *_: {})
 
     registry: dict = {}
@@ -370,6 +362,22 @@ def test_start_new_profiles_marks_zero_subsystem_profile_active(
 
     assert set(registry) == {"alfa"}
     assert registry["alfa"]["tasks"] == {}
+
+
+def test_start_new_profiles_warns_about_ignored_legacy_service_switches(
+    monkeypatch, tmp_path: Path, caplog,
+) -> None:
+    root = _make_root(tmp_path, [])
+    (root / "config.yaml").write_text(
+        "model: x\nservice:\n  alp: false\n  schedule: false\n"
+    )
+    monkeypatch.setattr(service, "_profile_tasks", lambda *_: {})
+
+    service._start_new_profiles(root, ["default"], {})
+
+    assert "ignoring removed service switches" in caplog.text
+    assert "service.alp=False" in caplog.text
+    assert "all daemon capabilities will start" in caplog.text
 
 
 @pytest.mark.asyncio
@@ -384,7 +392,7 @@ async def test_main_all_picks_up_runtime_profile(
 
     started: list[tuple[Path, str]] = []
 
-    def fake_profile_tasks(home, profile, subsystems):
+    def fake_profile_tasks(home, profile):
         started.append((home, profile))
         t = asyncio.create_task(asyncio.sleep(60), name=f"{profile}/fake")
         return {"fake": [t]}
@@ -420,7 +428,7 @@ async def test_main_all_picks_up_runtime_profile(
             pass
 
 
-def _fake_subsystem_tasks_factory(created: list):
+def _fake_task_group_factory(created: list):
     def fake(home, profile, name):
         t = asyncio.create_task(
             asyncio.sleep(60), name=f"{profile}/{name}#{len(created)}",
@@ -436,7 +444,7 @@ async def test_reconcile_ignores_provider_key_changes(
 ) -> None:
     root = _make_root(tmp_path, [])
     created: list = []
-    monkeypatch.setattr(service, "_subsystem_tasks", _fake_subsystem_tasks_factory(created))
+    monkeypatch.setattr(service, "_task_group", _fake_task_group_factory(created))
 
     registry: dict = {}
     service._start_new_profiles(root, ["default"], registry)
@@ -454,28 +462,24 @@ async def test_reconcile_ignores_provider_key_changes(
 
 
 @pytest.mark.asyncio
-async def test_reconcile_applies_subsystem_toggle_without_restart(
+async def test_reconcile_restarts_only_alp_when_listener_changes(
     monkeypatch, tmp_path: Path,
 ) -> None:
     root = _make_root(tmp_path, [])
     created: list = []
-    monkeypatch.setattr(service, "_subsystem_tasks", _fake_subsystem_tasks_factory(created))
+    monkeypatch.setattr(service, "_task_group", _fake_task_group_factory(created))
 
     registry: dict = {}
     service._start_new_profiles(root, ["default"], registry)
     schedule_task = registry["default"]["tasks"]["schedule"][0]
     alp_task = registry["default"]["tasks"]["alp"][0]
 
-    (root / "config.yaml").write_text("model: x\nservice:\n  schedule: false\n")
+    (root / "config.yaml").write_text("model: x\nalp:\n  tcp_port: 8123\n")
     await service._reconcile_profiles(root, registry)
 
-    assert schedule_task.cancelled()
-    assert "schedule" not in registry["default"]["tasks"]
-    assert registry["default"]["tasks"]["alp"][0] is alp_task
-
-    (root / "config.yaml").write_text("model: x\nservice:\n  schedule: true\n")
-    await service._reconcile_profiles(root, registry)
-    assert "schedule" in registry["default"]["tasks"]
+    assert not schedule_task.cancelled()
+    assert alp_task.cancelled()
+    assert registry["default"]["tasks"]["alp"][0] is not alp_task
 
     for ts in registry["default"]["tasks"].values():
         for t in ts:
@@ -494,7 +498,7 @@ async def test_reconcile_stops_tasks_when_profile_home_disappears(
 
     root = _make_root(tmp_path, ["alfa"])
     created: list = []
-    monkeypatch.setattr(service, "_subsystem_tasks", _fake_subsystem_tasks_factory(created))
+    monkeypatch.setattr(service, "_task_group", _fake_task_group_factory(created))
 
     registry: dict = {}
     service._start_new_profiles(root, ["alfa"], registry)
@@ -540,3 +544,10 @@ def test_docker_compose_raises_file_descriptor_limit() -> None:
     nofile = compose["services"]["alpi"]["ulimits"]["nofile"]
     assert nofile["soft"] == 8192
     assert nofile["hard"] == 8192
+
+
+def test_wss_compose_overlay_removes_direct_daemon_ports() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    overlay = (repo_root / "docker-compose.wss.yml").read_text()
+
+    assert "alpi:\n    ports: !reset []" in overlay

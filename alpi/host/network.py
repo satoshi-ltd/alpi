@@ -6,6 +6,8 @@ import os
 import shutil
 import subprocess
 import socket
+from typing import Any
+from urllib.parse import urlsplit
 from pathlib import Path
 
 from alpi import runtime
@@ -142,6 +144,121 @@ def resolve_host_pairing_name(home: Path) -> str:
     return socket.gethostname() or "Alpi"
 
 
+def normalize_host_endpoints(value: Any) -> list[dict[str, str]]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ValueError("endpoints must be a list")
+    if len(value) > 8:
+        raise ValueError("at most 8 endpoints are allowed")
+    endpoints: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for index, item in enumerate(value):
+        if not isinstance(item, dict):
+            raise ValueError(f"endpoint {index + 1} must be an object")
+        raw_url = str(item.get("url") or "").strip()
+        label = str(item.get("label") or "").strip()
+        if not raw_url:
+            raise ValueError(f"endpoint {index + 1} needs a URL")
+        if not label:
+            raise ValueError(f"endpoint {index + 1} needs a label")
+        if len(label) > 48:
+            raise ValueError(f"endpoint {index + 1} label is too long")
+        if "," in label or "=" in label:
+            raise ValueError(f"endpoint {index + 1} label cannot contain ',' or '='")
+        try:
+            parsed = urlsplit(raw_url)
+            port = parsed.port
+        except ValueError as exc:
+            raise ValueError(f"endpoint {index + 1} has an invalid URL: {exc}") from exc
+        if parsed.scheme not in {"ws", "wss"}:
+            raise ValueError(f"endpoint {index + 1} must use ws:// or wss://")
+        if not parsed.hostname:
+            raise ValueError(f"endpoint {index + 1} needs a hostname")
+        if port == 0:
+            raise ValueError(f"endpoint {index + 1} port must be between 1 and 65535")
+        if parsed.username or parsed.password:
+            raise ValueError(f"endpoint {index + 1} cannot contain credentials")
+        if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
+            raise ValueError(f"endpoint {index + 1} cannot contain a path, query, or fragment")
+        host = parsed.hostname.rstrip(".")
+        if ":" not in host and not all(
+            part and len(part) <= 63 and part[0] != "-" and part[-1] != "-"
+            and all((char.isascii() and char.isalnum()) or char == "-" for char in part)
+            for part in host.split(".")
+        ):
+            raise ValueError(f"endpoint {index + 1} has an invalid hostname")
+        try:
+            ip = ipaddress.ip_address(host)
+        except ValueError:
+            ip = None
+        if parsed.scheme == "ws" and ip is None:
+            raise ValueError(
+                f"endpoint {index + 1} must use wss:// for hostnames; "
+                "ws:// requires a private IP literal"
+            )
+        if ip is not None:
+            if (
+                ip.is_loopback or ip.is_unspecified or ip.is_multicast
+                or ip.is_link_local or ip.is_reserved
+            ):
+                raise ValueError(f"endpoint {index + 1} has an unsafe advertised address")
+            if parsed.scheme == "ws" and not (
+                is_tailscale_ip(host)
+                or any(ip in net for net in _PRIVATE_RANGES)
+                or ip.is_private
+            ):
+                raise ValueError(
+                    f"endpoint {index + 1} exposes a pairing token over a public ws:// address"
+                )
+        host_text = f"[{host}]" if ":" in host else host
+        default_port = 443 if parsed.scheme == "wss" else 80
+        suffix = f":{port}" if port is not None and port != default_port else ""
+        url = f"{parsed.scheme}://{host_text}{suffix}"
+        if url in seen:
+            raise ValueError(f"endpoint {index + 1} duplicates {url}")
+        seen.add(url)
+        endpoints.append({"url": url, "label": label})
+    return endpoints
+
+
+def resolve_host_endpoints(home: Path) -> list[dict[str, str]]:
+    from alpi import config as cfg_mod
+
+    cfg = cfg_mod.load(home)
+    configured = normalize_host_endpoints((cfg.host or {}).get("endpoints"))
+    if configured and any(row["url"].startswith("ws://") for row in configured):
+        return configured
+    endpoint = resolve_host_endpoint(home)
+    if endpoint is None:
+        return configured
+    host, _scope = endpoint
+    host_text = f"[{host}]" if ":" in host else host
+    fallback = [{
+        "url": f"ws://{host_text}:{resolve_host_tcp_port(home)}",
+        "label": "Direct",
+    }]
+    try:
+        direct = normalize_host_endpoints(fallback)
+    except ValueError:
+        direct = []
+    return configured + direct
+
+
+def pairing_unavailable_detail(home: Path) -> str:
+    endpoint = resolve_host_endpoint(home)
+    if endpoint is not None:
+        host, _scope = endpoint
+        try:
+            ipaddress.ip_address(host.rstrip("."))
+        except ValueError:
+            return (
+                f"Cannot pair: {host!r} is a hostname. Configure a "
+                "certificate-validated wss:// URL in host.endpoints."
+            )
+    return "Cannot pair: no private network address detected."
+
+
 def _configured_host(home: Path) -> str | None:
     from alpi import config as cfg_mod
 
@@ -235,8 +352,11 @@ def classify_scope(host: str | None, raw_scope: str | None) -> str | None:
 __all__ = [
     "classify_scope",
     "detect_bind_ip",
+    "normalize_host_endpoints",
+    "pairing_unavailable_detail",
     "resolve_bind_host",
     "resolve_host_endpoint",
+    "resolve_host_endpoints",
     "resolve_host_pairing_name",
     "resolve_host_tcp_bind",
     "resolve_host_tcp_port",

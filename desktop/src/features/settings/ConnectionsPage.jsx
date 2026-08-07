@@ -24,7 +24,6 @@ import {
 import { useNotify } from "../../primitives/Notification.jsx";
 import Usage from "./Usage.jsx";
 import { PairDeviceModal } from "./fields/devices.jsx";
-import { HostPortField, PairingNameField } from "./fields/network.jsx";
 import { toUsageDays } from "../../hooks/useUsage.js";
 import { copyText } from "../../lib/clipboard.js";
 import { profileLabel } from "../../lib/profile-display.js";
@@ -44,11 +43,10 @@ function usd(value) {
   return `$${Number(value || 0).toFixed(2)}`;
 }
 
-function pairingLink(payload) {
-  if (!payload?.host || !payload?.port || !payload?.token) return "";
+function pairingLink(payload, endpointUrl = payload?.url) {
+  if (!endpointUrl || !payload?.token) return "";
   const query = new URLSearchParams({
-    host: payload.host,
-    port: String(payload.port),
+    url: endpointUrl,
     name: payload.pairing_name || payload.label || "Alpi",
     token: payload.token,
   });
@@ -84,9 +82,6 @@ export default function ConnectionsPage({
 
   const rows = data?.connections || [];
   const totals = data?.totals || {};
-  const localProfile = activeConnection?.kind === "local"
-    ? profiles.find((profile) => profile.name === "default") || null
-    : null;
   const defaultProfile = profiles.find((profile) => profile.name === "default") || null;
   const heroTitle = profileLabel("default");
   const heroAccent = defaultProfile?.accent || "var(--accent)";
@@ -269,7 +264,6 @@ export default function ConnectionsPage({
                   <ConnectionDetail
                     row={row}
                     connectionArg={connectionArg}
-                    localProfile={localProfile}
                     onChanged={reload}
                     onPair={setPairing}
                   />
@@ -323,10 +317,9 @@ export default function ConnectionsPage({
 
 
 function ConnectionDetail({
-  row, connectionArg, localProfile, onChanged, onPair,
+  row, connectionArg, onChanged, onPair,
 }) {
   const notify = useNotify();
-  const isHost = row.id === "host";
 
   async function addDevice() {
     try {
@@ -360,15 +353,7 @@ function ConnectionDetail({
         <Usage days={toUsageDays(row.usage_days)} accent="var(--accent)" />
       </section>
 
-      {isHost && localProfile && (
-        <section className={styles.hostSection}>
-          <div className={styles.sectionHead}><h2>Pairing</h2></div>
-          <PairingNameField />
-          <HostPortField profile={localProfile} />
-        </section>
-      )}
-
-      {!isHost && (
+      {row.id !== "host" && (
         <section className={styles.devicesSection}>
           <div className={styles.sectionHead}>
             <h2>Devices</h2>
@@ -473,7 +458,11 @@ function EditConnectionModal({ row, profiles, connectionArg, onClose, onSaved })
 function PairingModal({ payload, onClose }) {
   const notify = useNotify();
   const [qr, setQr] = useState("");
-  const link = useMemo(() => pairingLink(payload), [payload]);
+  const endpoints = payload.endpoints?.length
+    ? payload.endpoints
+    : [{ url: payload.url || `ws://${payload.host}:${payload.port}`, label: "Direct" }];
+  const [endpointUrl, setEndpointUrl] = useState(payload.url || endpoints[0].url);
+  const link = useMemo(() => pairingLink(payload, endpointUrl), [payload, endpointUrl]);
 
   useEffect(() => {
     let cancelled = false;
@@ -492,7 +481,14 @@ function PairingModal({ payload, onClose }) {
     <Modal title={`Pair a device with ${payload.label}`} onClose={onClose} width="var(--modal-md)">
       <div className={styles.pairing}>
         <div className={styles.qr} dangerouslySetInnerHTML={{ __html: qr }} />
-        <div><Mono>{payload.host}:{payload.port}</Mono><p>Scan from desktop or mobile. This device receives its own credential under the same connection.</p></div>
+        <div>
+          {endpoints.length > 1 && (
+            <select value={endpointUrl} onChange={(event) => setEndpointUrl(event.target.value)} className={styles.select} aria-label="Pairing route">
+              {endpoints.map((endpoint) => <option key={endpoint.url} value={endpoint.url}>{endpoint.url}</option>)}
+            </select>
+          )}
+          <Mono>{endpointUrl}</Mono><p>Scan from desktop or mobile. This device receives its own credential under the same connection.</p>
+        </div>
       </div>
       <div className={styles.link}><Mono>{link}</Mono><Button icon={<CopyIcon />} onClick={copy} title="Copy pairing link" /></div>
       <div className={styles.modalActions}><Button onClick={onClose}>Done</Button></div>

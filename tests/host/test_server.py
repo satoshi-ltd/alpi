@@ -140,7 +140,13 @@ def _admin():
 @pytest.mark.asyncio
 @pytest.mark.parametrize("method", ["host.config.set_field", "host.config.unset_field"])
 @pytest.mark.parametrize(
-    "key", ["alp.tcp_port", "host.tcp_port", "host.allow_public_bind", "network.host"],
+    "key", [
+        "alp.tcp_port",
+        "host.tcp_port",
+        "host.allow_public_bind",
+        "host.endpoints",
+        "network.host",
+    ],
 )
 async def test_config_field_local_only_key_blocked_over_remote(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, method: str, key: str,

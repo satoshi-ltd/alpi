@@ -118,20 +118,3 @@ async def test_providers_set_key_rejects_dangerous_input(
         "id": "r", "method": "host.providers.set_key", "params": params,
     })
     assert response["error"]["code"] == expected_code
-
-
-def test_default_profile_has_host_on_by_default(tmp_path: Path) -> None:
-    """The default profile enables host by default."""
-    home = tmp_path / "h"
-    home.mkdir()
-    (home / "config.yaml").write_text("model: x\n")
-    on = service.enabled_subsystems(home)
-    assert on["host"] is True
-
-
-def test_host_can_be_disabled_explicitly(tmp_path: Path) -> None:
-    home = tmp_path / "h"
-    home.mkdir()
-    (home / "config.yaml").write_text("model: x\nservice:\n  host: false\n")
-    on = service.enabled_subsystems(home)
-    assert on["host"] is False

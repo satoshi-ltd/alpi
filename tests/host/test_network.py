@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from alpi import config as cfg_mod
 from alpi.host import network
 
@@ -220,6 +222,106 @@ def test_resolve_host_pairing_name_falls_back_to_system_hostname(
     monkeypatch.setattr("alpi.host.network.socket.gethostname", lambda: "MacBook-Pro-M4.local")
 
     assert network.resolve_host_pairing_name(home) == "MacBook-Pro-M4.local"
+
+
+def test_normalize_host_endpoints_accepts_ws_and_wss() -> None:
+    assert network.normalize_host_endpoints([
+        {"url": "wss://client.example.com:443/", "label": "Secure Internet"},
+        {"url": "ws://100.64.10.2:49200", "label": "Direct"},
+    ]) == [
+        {"url": "wss://client.example.com", "label": "Secure Internet"},
+        {"url": "ws://100.64.10.2:49200", "label": "Direct"},
+    ]
+
+
+@pytest.mark.parametrize("url", [
+    "http://client.example.com",
+    "ws://8.8.8.8:49200",
+    "ws://client.example.com",
+    "ws://localhost",
+    "ws://134744072",
+    "wss://user:secret@client.example.com",
+    "wss://client.example.com/rpc",
+    "ws://client.example.com:0",
+    "wss://bad_host.example",
+])
+def test_normalize_host_endpoints_rejects_unsafe_urls(url: str) -> None:
+    with pytest.raises(ValueError):
+        network.normalize_host_endpoints([{"url": url, "label": "Bad"}])
+
+
+def test_pairing_unavailable_detail_explains_hostname_wss_requirement(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    cfg = cfg_mod.Config(home=home, model="openai/x")
+    cfg.network = {"host": "box.tail1234.ts.net"}
+    cfg_mod.save(cfg)
+
+    detail = network.pairing_unavailable_detail(home)
+
+    assert "box.tail1234.ts.net" in detail
+    assert "wss://" in detail
+    assert "host.endpoints" in detail
+
+
+def test_resolve_host_endpoints_prefers_configured_order(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    cfg = cfg_mod.Config(home=home, model="openai/x")
+    cfg.host = {"endpoints": [
+        {"url": "wss://client.example.com", "label": "Secure"},
+        {"url": "ws://100.64.10.2:49200", "label": "Direct"},
+    ]}
+    cfg_mod.save(cfg)
+
+    assert network.resolve_host_endpoints(home)[0]["url"] == "wss://client.example.com"
+
+
+def test_resolve_host_endpoints_adds_private_route_to_public_route(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    cfg = cfg_mod.Config(home=home, model="openai/x")
+    cfg.network = {"host": "192.168.1.20"}
+    cfg.host = {"tcp_port": 49201, "endpoints": [
+        {"url": "wss://client.example.com", "label": "Public"},
+    ]}
+    cfg_mod.save(cfg)
+
+    assert network.resolve_host_endpoints(home) == [
+        {"url": "wss://client.example.com", "label": "Public"},
+        {"url": "ws://192.168.1.20:49201", "label": "Direct"},
+    ]
+
+
+@pytest.mark.parametrize("host", ["client.example.com", "localhost", "134744072"])
+def test_resolve_host_endpoints_refuses_unsafe_synthesized_ws(
+    tmp_path: Path, host: str,
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    cfg = cfg_mod.Config(home=home, model="openai/x")
+    cfg.network = {"host": host}
+    cfg_mod.save(cfg)
+
+    assert network.resolve_host_endpoints(home) == []
+
+
+def test_resolve_host_endpoints_keeps_private_ip_fallback(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    cfg = cfg_mod.Config(home=home, model="openai/x")
+    cfg.network = {"host": "192.168.1.20"}
+    cfg.host = {"tcp_port": 49200}
+    cfg_mod.save(cfg)
+
+    assert network.resolve_host_endpoints(home) == [{
+        "url": "ws://192.168.1.20:49200",
+        "label": "Direct",
+    }]
 
 
 def test_lan_parser_extracts_private_address() -> None:

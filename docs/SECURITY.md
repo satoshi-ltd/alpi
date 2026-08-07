@@ -170,12 +170,18 @@ doesn't reach:
     first connection is minted locally over the Unix socket
     (`alpi setup → Connections → + New connection` on the daemon host),
     which bypasses token auth entirely — there is no remote
-    bootstrap path.
+    bootstrap path. `host.endpoints` may advertise direct `ws://` routes only
+    with private/Tailscale IP literals; every hostname requires `wss://`.
+    WSS is terminated by a certificate-
+    validating reverse proxy; the daemon still authenticates every forwarded
+    request with the same per-device token. The route is client-side transport
+    metadata, never an authorization boundary.
 
-  Defense in depth: the network layer (Tailscale / WPA2) cipheres
-  the wire so the token doesn't leak; the token layer authenticates
-  the device. Public IPs would break the first invariant — that's why
-  the bind validator refuses them.
+  Defense in depth: a private `ws://` route relies on Tailscale / WPA2 to
+  encrypt the wire; a public route must use certificate-validated `wss://`.
+  The token layer authenticates the device in both cases. Public plaintext WS
+  addresses and hostname-based plaintext routes are rejected from endpoint
+  configuration. Automatic fallback routes pass through the same validator.
 
   **Connections carry a role.** Each connection has an `admin` or `member`
   role and an optional profile scope shared by its devices. The dispatcher
@@ -283,7 +289,7 @@ push` over SSH relies on `~/.ssh`, Apple Silicon Homebrew lives in
 Layer 1 denylist is already sufficient.
 
 **Where it really earns its keep: unattended profiles.** The
-alpi daemon (scheduler subsystem),
+alpi daemon (scheduler task),
 `research` / `delegate` sub-agents — these
 run without a human approving each command. A prompt-injected email
 or a hallucinating sub-agent can issue `rm -rf ~/anything` with no

@@ -34,12 +34,14 @@ import {
   TcpPortField,
   WorkgroupsField,
 } from "./fields/alp.jsx";
-import {
-  EmailCell,
-  SubsystemsCell,
-} from "./fields/services.jsx";
+import { EmailCell } from "./fields/services.jsx";
 import { DaemonField } from "./fields/DaemonField.jsx";
-import { NetworkAddressField } from "./fields/network.jsx";
+import {
+  NetworkAddressField,
+  PairingNameField,
+  PrivateRouteField,
+  PublicRouteField,
+} from "./fields/network.jsx";
 import LazyMount from "../../primitives/LazyMount.jsx";
 import {
   DeleteProfileAction,
@@ -341,21 +343,23 @@ export default function ProfileDetail({
           </Section>
         )}
 
-        <Section title="Service" tooltip="always-on subsystems">
-          {(activeConnection?.kind === "local" || activeConnection?.role === "admin") && (
+        {(activeConnection?.kind === "local" || activeConnection?.role === "admin") && (
+          <Section title="Service" tooltip="daemon + network">
             <Row label="daemon">
               <DaemonField />
             </Row>
-          )}
-          {activeConnection?.kind === "local" && (
-            <LazyMount>
-              <NetworkAddressField />
-            </LazyMount>
-          )}
-          <Row label="subsystems">
-            <SubsystemsCell profile={profile} onSaved={onSaved} />
-          </Row>
-        </Section>
+            {profile.name === "default" && activeConnection?.kind === "local" && (
+              <>
+                <LazyMount>
+                  <NetworkAddressField profile={profile} onSaved={onSaved} />
+                </LazyMount>
+                <PairingNameField />
+                <PrivateRouteField />
+                <PublicRouteField />
+              </>
+            )}
+          </Section>
+        )}
 
         <Section title="ALP" tooltip="peers + workgroups">
           {profile.pubkey_b64 && (

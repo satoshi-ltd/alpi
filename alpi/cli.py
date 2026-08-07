@@ -712,7 +712,7 @@ def daemon_restart() -> None:
 
 @daemon.command("status")
 def daemon_status_cmd() -> None:
-    """Print PID, uptime, and per-profile service state."""
+    """Print PID, uptime, and managed profiles."""
     from alpi import service as svc
 
     info = svc.daemon_status(_root())
@@ -726,10 +726,8 @@ def daemon_status_cmd() -> None:
     click.echo(f"installed via {backend}" if backend else "not installed")
     profiles = info["profiles"]
     click.echo(f"profiles: {len(profiles)}")
-    for name, subs in profiles.items():
-        on = [k for k, v in subs.items() if v]
-        line = ", ".join(on) if on else "(none)"
-        click.echo(f"  {name}: {line}")
+    for name in profiles:
+        click.echo(f"  {name}")
 
 
 @daemon.command("install")
@@ -1545,13 +1543,13 @@ def setup_cmd(ctx: click.Context) -> None:
             ("Identity", "identity", _identity_status(cfg)),
             ("Peers", "peers", _peers_status(h)),
             ("Workgroups", "workgroups", _workgroups_status(h)),
+            ("Peer TCP listener", "alp-tcp", _alp_tcp_label(h)),
 
             ui.Heading("Services"),
         ]
         if profile_name == "default" and not runtime.is_docker():
             items.append(("Daemon", "daemon", _daemon_lifecycle_status()))
         items += [
-            ("Subsystems", "subsystems", _subsystems_summary(h)),
             ("Schedules", "schedules", _schedules_status(h)),
         ]
         if profile_name == "default":
@@ -1599,8 +1597,8 @@ def setup_cmd(ctx: click.Context) -> None:
             _voice_setup(h)
         elif choice == "cleanup":
             _cleanup_setup(h)
-        elif choice == "subsystems":
-            _subsystems_wizard(h, profile_name)
+        elif choice == "alp-tcp":
+            _alp_tcp_port_setup(h)
         elif choice == "schedules":
             _schedules_setup(h)
         elif choice == "daemon":
@@ -1695,17 +1693,6 @@ def _email_account_actions(h: Path, account_id: str) -> None:
     ui.ok_and_wait(
         f"removed {account_id} — restart the service for the change to take effect",
     )
-
-
-def _subsystems_summary(h: Path) -> str:
-    """Compact roll-up of enabled subsystems for this profile."""
-    from alpi import service as svc
-
-    on = svc.enabled_subsystems(h)
-    enabled = [k for k, v in on.items() if v]
-    if not enabled:
-        return "all off"
-    return ", ".join(enabled)
 
 
 def _daemon_lifecycle_status() -> str:
@@ -1875,124 +1862,6 @@ def _ensure_daemon_installed(root: Path) -> None:
         click.echo(f"alpi: service install skipped — {e}", err=True)
 
 
-def _service_status(h: Path, profile: str) -> str:
-    """Status line for the daemon entry in the setup menu."""
-    from alpi import service as svc
-
-    root = home._ROOT
-    pid = svc.daemon_running_pid(root)
-    if runtime.is_docker():
-        label = "Docker"
-        return f"managed by {label} · pid {pid}" if pid is not None else f"managed by {label}"
-    installed = svc.daemon_installed()
-    running = f"running (pid {pid})" if pid is not None else "stopped"
-    return (
-        f"{running} · installed" if installed
-        else f"{running} · not installed"
-    )
-
-
-_SERVICES_WIZARD_COPY = (
-    "Which services the alpi daemon runs for THIS profile. The daemon\n"
-    "itself is global (one per machine, see Setup → Daemon on default);\n"
-    "these flags only decide what it activates here. A daemon restart\n"
-    "picks up changes: `alpi daemon restart`."
-)
-
-_SERVICES_WIZARD_COPY_MANAGED = (
-    "Which services the Alpi daemon runs for THIS profile.\n"
-    "In a container the entrypoint manages the daemon itself;\n"
-    "these flags only decide what it activates here."
-)
-
-
-def _subsystems_wizard(h: Path, profile: str) -> None:
-    """Per-profile subsystem toggles; daemon lifecycle lives in ``alpi daemon``."""
-    from alpi import config as cfg_mod
-    from alpi import service as svc
-    from alpi import ui
-
-    while True:
-        on_subsystems = svc.enabled_subsystems(h)
-        running_pid = svc.daemon_running_pid(home._ROOT)
-        if runtime.is_docker():
-            label = "Docker"
-            head = (
-                f"daemon: managed by {label} · pid {running_pid}" if running_pid
-                else f"daemon: managed by {label}"
-            )
-            copy = _SERVICES_WIZARD_COPY_MANAGED
-        else:
-            head = (
-                f"daemon: running · pid {running_pid}" if running_pid
-                else "daemon: stopped"
-            )
-            copy = _SERVICES_WIZARD_COPY
-
-        ui.banner(ui.crumb("setup", "services"), subtitle=head, home=h)
-        ui.dim(copy)
-        ui._console.print("")
-
-        items: list = [
-            ui.Heading(f"Services · profile: {profile}"),
-            (("Scheduler · " + _on_off(on_subsystems["schedule"])),
-             "toggle-schedule", "cron jobs"),
-            (("ALP listener · " + _on_off(on_subsystems["alp"])),
-             "toggle-alp", _alp_subsystem_status(h)),
-            (("Workgroups · " + _on_off(on_subsystems["workgroups"])),
-             "toggle-workgroups", "ALP.3 outbound poller"),
-        ]
-        if profile == "default":
-            items.append((
-                ("Host API · " + _on_off(on_subsystems["host"])),
-                "toggle-host",
-                "control plane for desktop / mobile clients",
-            ))
-        items.append(ui.Heading("Network"))
-        items.append(("Accessible address", "network", _network_host_label(h)))
-        items.append(ui.Heading("ALP"))
-        items.append(("Peer TCP listener", "tcp",
-                      _alp_tcp_label(h)))
-
-        choice = ui.menu("", items, home=h, close="Back")
-        if choice is None:
-            return
-        try:
-            if choice in (
-                "toggle-schedule", "toggle-alp",
-                "toggle-host", "toggle-workgroups",
-            ):
-                key = choice.split("-", 1)[1]
-                cfg = cfg_mod.load(h)
-                svc_cfg = dict(cfg.service or {})
-                svc_cfg[key] = not on_subsystems[key]
-                cfg.service = svc_cfg
-                cfg_mod.save(cfg)
-                msg = _restart_daemon_for_apply(home._ROOT)
-                ui.ok_and_wait(f"{key}: {_on_off(svc_cfg[key])}{msg}")
-            elif choice == "network":
-                _network_host_setup(h)
-            elif choice == "tcp":
-                _alp_tcp_port_setup(h)
-        except Exception as e:  # noqa: BLE001
-            ui.fail_and_wait(str(e))
-
-
-_service_wizard = _subsystems_wizard
-
-
-def _on_off(b: bool) -> str:
-    return "on" if b else "off"
-
-
-def _alp_subsystem_status(h: Path) -> str:
-    from alpi import config as cfg_mod
-    from alpi.service import DEFAULT_ALP_TCP_PORT
-    cfg = cfg_mod.load(h)
-    port = (cfg.alp or {}).get("tcp_port") or DEFAULT_ALP_TCP_PORT
-    return f"unix + tcp :{port}"
-
-
 def _alp_tcp_label(h: Path) -> str:
     from alpi import config as cfg_mod
     from alpi.service import DEFAULT_ALP_TCP_PORT
@@ -2002,17 +1871,8 @@ def _alp_tcp_label(h: Path) -> str:
     return f"{host}:{port} (Noise_XK)"
 
 
-def _network_host_label(h: Path) -> str:
-    from alpi import config as cfg_mod
-    cfg = cfg_mod.load(h)
-    host = str((cfg.network or {}).get("host") or "").strip()
-    return host or "auto-detect (Tailscale → LAN)"
-
-
 def _alp_tcp_port_setup(h: Path) -> None:
-    """Set the ALP peer TCP port. ALP TCP is always-on (default 7423) whenever a
-    safe address resolves; the address is the shared accessible address
-    (Network). To turn ALP off entirely, disable it in Services."""
+    """Set the ALP peer TCP port."""
     from alpi import config as cfg_mod
     from alpi import ui
     from alpi.service import DEFAULT_ALP_TCP_PORT
@@ -2030,8 +1890,8 @@ def _alp_tcp_port_setup(h: Path) -> None:
         "Remote Alpi peers reach this profile over Noise_XK TCP\n"
         "(peers.yaml-pinned only). The address is the shared accessible\n"
         f"address (Network · {net_host}); here you set only the port.\n"
-        f"Empty = default {DEFAULT_ALP_TCP_PORT}. ALP TCP is always on when an\n"
-        "address resolves — to turn ALP off, disable it in Services."
+        f"Empty = default {DEFAULT_ALP_TCP_PORT}. The listener is available when\n"
+        "a safe address resolves."
     )
     ui._console.print("")
 
@@ -2069,50 +1929,11 @@ def _alp_tcp_port_setup(h: Path) -> None:
     ui.ok_and_wait(f"ALP TCP on {net_host}:{port}{msg}")
 
 
-def _network_host_setup(h: Path) -> None:
-    """Set the shared accessible address (network.host) — the address other
-    machines/devices reach this profile at, for both device pairing and ALP."""
-    from alpi import config as cfg_mod
-    from alpi import ui
-
-    cfg = cfg_mod.load(h)
-    current = str((cfg.network or {}).get("host") or "").strip()
-
-    ui.banner(ui.crumb("setup", "network"), subtitle="accessible address", home=h)
-    ui.dim(
-        "The address other machines and your devices use to reach this\n"
-        "profile — shared by device pairing and ALP peers. Empty = auto-detect\n"
-        "(Tailscale, then LAN). Any reachable host works: Tailscale / LAN IP,\n"
-        "private hostname, VPN address, or 0.0.0.0. A public IP also needs\n"
-        "host.allow_public_bind: true, set by hand in config.yaml (not here) —\n"
-        "without it neither plane binds TCP. Ports stay per-plane."
-    )
-    ui._console.print("")
-
-    host = ui.text(
-        f"Accessible address (empty = auto-detect) [{current or 'auto'}]:",
-        default=current,
-    )
-    if host is None:
-        return ui.cancelled()
-    host = (host or "").strip()
-
-    net_cfg = dict(cfg.network or {})
-    if host:
-        net_cfg["host"] = host
-    else:
-        net_cfg.pop("host", None)
-    cfg.network = net_cfg
-    cfg_mod.save(cfg)
-    msg = _restart_daemon_for_apply(home._ROOT)
-    ui.ok_and_wait(f"accessible address: {host or 'auto-detect'}{msg}")
-
-
 def _devices_status(h: Path) -> str:
     from alpi.host import connections as connections_mod
-    from alpi.host.network import resolve_host_endpoint
+    from alpi.host.network import resolve_host_endpoints
 
-    if resolve_host_endpoint(h) is None:
+    if not resolve_host_endpoints(h):
         return "no network"
     n = len(connections_mod.list_connections())
     return f"{n} paired" if n else "ready"
@@ -2121,12 +1942,12 @@ def _devices_status(h: Path) -> str:
 def _devices_setup(h: Path) -> None:
     from alpi import ui
     from alpi.host import connections as connections_mod
-    from alpi.host.network import resolve_host_endpoint
+    from alpi.host.network import resolve_host_endpoints
     from alpi.host.usage import connections_summary
 
     query = ""
     while True:
-        endpoint = resolve_host_endpoint(h)
+        endpoints = resolve_host_endpoints(h)
         items: list = [
             ui.Heading("Connections"),
         ]
@@ -2182,12 +2003,12 @@ def _devices_setup(h: Path) -> None:
         items.append(None)
         items.append(("+ New connection", "add", "label, access and first device"))
         items.append(("Network", "network",
-                      _network_row_status(h, endpoint)))
+                      _network_row_status(h, endpoints)))
 
         choice = ui.menu(
             ui.crumb("setup", "connections"),
             items,
-            subtitle=_devices_subtitle(h, endpoint),
+            subtitle=_devices_subtitle(h, endpoints),
             home=h,
             close="Done",
         )
@@ -2201,7 +2022,7 @@ def _devices_setup(h: Path) -> None:
                 query = value.strip()
             continue
         if choice == "add":
-            _device_add(h, endpoint)
+            _device_add(h, endpoints)
             continue
         if choice == "network":
             _devices_network_setup(h)
@@ -2211,26 +2032,22 @@ def _devices_setup(h: Path) -> None:
             continue
 
 
-def _devices_subtitle(h: Path, endpoint) -> str:
-    from alpi.host.network import resolve_host_tcp_port
-
-    if endpoint is None:
+def _devices_subtitle(h: Path, endpoints: list[dict[str, str]]) -> str:
+    if not endpoints:
         if runtime.is_docker():
             return "remote access not configured — set ALPI_NETWORK_HOST"
-        return "no network — install Tailscale or connect to a LAN"
-    host, scope = endpoint
-    return f"{scope} · {host}:{resolve_host_tcp_port(h)}"
+        return "no private network address detected"
+    primary = endpoints[0]
+    extra = f" · +{len(endpoints) - 1} more" if len(endpoints) > 1 else ""
+    return f"{primary['url']}{extra}"
 
 
-def _network_row_status(h: Path, endpoint) -> str:
-    from alpi.host.network import resolve_host_tcp_port
-
-    if endpoint is None:
+def _network_row_status(h: Path, endpoints: list[dict[str, str]]) -> str:
+    if not endpoints:
         if runtime.is_docker():
             return "set ALPI_NETWORK_HOST"
-        return "auto-detect Tailscale or LAN"
-    host, _scope = endpoint
-    return f"{host}:{resolve_host_tcp_port(h)}"
+        return "auto-detect private address"
+    return f"{endpoints[0]['url']} · {len(endpoints)} route{'s' if len(endpoints) != 1 else ''}"
 
 
 def _format_last_seen(epoch) -> str:
@@ -2272,12 +2089,48 @@ def _connection_profile_scope(h: Path, current: list[str] | None = None) -> list
         return list(dict.fromkeys(candidates))
 
 
-def _device_add(h: Path, endpoint) -> None:
+def _choose_pairing_endpoint(h: Path, endpoints: list[dict[str, str]]) -> dict[str, str] | None:
+    from alpi import ui
+
+    if len(endpoints) == 1:
+        return endpoints[0]
+    choice = ui.menu(
+        ui.crumb("setup", "connections", "route"),
+        [(row["url"], row["url"], "default" if index == 0 else "")
+         for index, row in enumerate(endpoints)],
+        subtitle="choose the route encoded in this pairing code",
+        home=h,
+        close="Cancel",
+    )
+    return next((row for row in endpoints if row["url"] == choice), None)
+
+
+def _pairing_code_data(
+    endpoint_url: str, pairing_name: str, token: str, connection_id: str,
+) -> tuple[dict[str, str], str]:
+    from urllib.parse import urlencode
+
+    payload = {
+        "u": endpoint_url,
+        "n": pairing_name,
+        "t": token,
+        "c": connection_id,
+    }
+    link = "alpi://device?" + urlencode({
+        "url": endpoint_url,
+        "name": pairing_name,
+        "token": token,
+        "connection_id": connection_id,
+    })
+    return payload, link
+
+
+def _device_add(h: Path, endpoints: list[dict[str, str]]) -> None:
     from alpi import ui
     from alpi.host import connections as connections_mod
-    from alpi.host.network import resolve_host_pairing_name, resolve_host_tcp_port
+    from alpi.host.network import resolve_host_pairing_name
 
-    if endpoint is None:
+    if not endpoints:
         ui.banner(
             ui.crumb("setup", "connections", "new"),
             subtitle="cannot pair — no network",
@@ -2286,23 +2139,25 @@ def _device_add(h: Path, endpoint) -> None:
         if runtime.is_docker():
             ui.fail(
                 "Set the advertised host first.\n"
-                "Set ALPI_NETWORK_HOST to the host's Tailscale IP /\n"
-                "MagicDNS name (or a LAN hostname) so clients can reach the container."
+                "Set ALPI_NETWORK_HOST to a reachable private IP for direct WS,\n"
+                "or configure a certificate-validated WSS route for a hostname."
             )
         else:
             ui.fail(
-                "Neither Tailscale nor a LAN address detected.\n"
-                "Install Tailscale (https://tailscale.com/download) or connect to Wi-Fi."
+                "No private network address was detected.\n"
+                "Connect the machine to a reachable private network or configure one."
             )
         ui.press_enter()
         return
 
-    host, scope = endpoint
-    port = resolve_host_tcp_port(h)
+    endpoint = _choose_pairing_endpoint(h, endpoints)
+    if endpoint is None:
+        return ui.cancelled()
+    endpoint_url = endpoint["url"]
 
     ui.banner(
         ui.crumb("setup", "connections", "new"),
-        subtitle=f"create connection · {scope} · {host}:{port}",
+        subtitle=f"create connection · {endpoint_url}",
         home=h,
     )
     ui._console.print("")
@@ -2329,28 +2184,17 @@ def _device_add(h: Path, endpoint) -> None:
 
     import io
     import json
-    from urllib.parse import urlencode
 
     import qrcode
 
     pairing_name = resolve_host_pairing_name(h)
-
-    payload = {
-        "i": host,
-        "p": port,
-        "n": pairing_name,
-        "t": device["token"],
-    }
-    link = "alpi://device?" + urlencode({
-        "host": payload["i"],
-        "port": payload["p"],
-        "name": payload["n"],
-        "token": payload["t"],
-    })
+    payload, link = _pairing_code_data(
+        endpoint_url, pairing_name, device["token"], connection["id"],
+    )
 
     ui.banner(
         ui.crumb("setup", "connections", "new", connection["label"]),
-        subtitle=f"scan once · {scope} · {host}:{port}",
+        subtitle=f"scan once · {endpoint['label']} · {endpoint_url}",
         home=h,
     )
     ui._console.print("")
@@ -2381,29 +2225,28 @@ def _devices_network_setup(h: Path) -> None:
     from alpi import config as cfg_mod
     from alpi import ui
     from alpi.host.network import (
-        _advertise_host_hint,
-        detect_bind_ip,
+        normalize_host_endpoints,
+        resolve_host_endpoint,
         resolve_host_tcp_port,
     )
 
     cfg = cfg_mod.load(h)
     host_cfg = dict(cfg.host or {})
-    net_cfg = dict(cfg.network or {})
-    current = str(net_cfg.get("host") or "").strip()
     current_name = str(host_cfg.get("device_name") or "").strip()
-    detected = detect_bind_ip()
-    managed = runtime.is_docker()
-    auto_host = (
-        (_advertise_host_hint() or "")
-        if managed
-        else (detected[0] if detected else "")
-    )
-    default = current or auto_host
-    port = resolve_host_tcp_port(h)
+    current_endpoints = host_cfg.get("endpoints") or []
+    endpoint = resolve_host_endpoint(h)
+    address = endpoint[0] if endpoint else ""
+    current_port = resolve_host_tcp_port(h)
+    environment_port = str(os.environ.get("ALPI_HOST_TCP_PORT") or "").strip()
+    try:
+        parsed_environment_port = int(environment_port)
+    except ValueError:
+        parsed_environment_port = 0
+    port_managed_by_environment = 1 <= parsed_environment_port <= 65535
 
     subtitle = (
         "how mobile and desktop clients reach this container"
-        if managed
+        if runtime.is_docker()
         else "how mobile and desktop clients reach this machine"
     )
     ui.banner(
@@ -2411,62 +2254,123 @@ def _devices_network_setup(h: Path) -> None:
         subtitle=subtitle,
         home=h,
     )
-    if managed:
+    ui.dim(f"Address: {address or 'unavailable'}")
+    if not address and runtime.is_docker():
         ui.dim(
-            "Clients talk to the host API on TCP/WS.\n"
-            "Inside a container, Alpi cannot see the host's Tailscale interface\n"
-            "directly, so set the address clients should dial here (a 100.x\n"
-            f"Tailscale IP / MagicDNS name, or a LAN hostname). Port {port} is\n"
-            "published by the container."
+            "Set ALPI_NETWORK_HOST in the container environment so clients can\n"
+            "reach this instance."
         )
-    else:
+    elif not address:
         ui.dim(
-            "Clients talk to the host API on TCP/WS.\n"
-            "Leave this blank to auto-detect Tailscale first, then LAN.\n"
-            "Set a specific host only if you want to advertise a stable hostname,\n"
-            "MagicDNS name, VPN IP, or other explicit endpoint."
+            "Connect this machine to a reachable private network before pairing."
         )
     ui._console.print("")
 
-    host = ui.text(
-        "Advertised host [blank = auto]:",
-        default=default,
-    )
-    if host is None:
-        return ui.cancelled()
-    host = (host or "").strip()
-
-    if host:
-        net_cfg["host"] = host  # shared accessible address (network.host)
+    port_changed = False
+    if port_managed_by_environment:
+        ui.dim(
+            f"Port: {current_port}\n"
+            "Source: ALPI_HOST_TCP_PORT. Change the environment variable and\n"
+            "the matching Docker port mapping, then recreate the container."
+        )
+        ui._console.print("")
     else:
-        net_cfg.pop("host", None)
+        port_raw = ui.text("Port:", default=str(current_port))
+        if port_raw is None:
+            return ui.cancelled()
+        try:
+            listen_port = int(port_raw)
+        except ValueError:
+            listen_port = 0
+        if not 1 <= listen_port <= 65535:
+            ui.fail("Listen port must be between 1 and 65535.")
+            ui.press_enter()
+            return
+        port_changed = listen_port != current_port
+        if listen_port == 49200:
+            host_cfg.pop("tcp_port", None)
+        else:
+            host_cfg["tcp_port"] = listen_port
 
-    pairing_name = ui.text(
-        "Pairing name [blank = auto]:",
+    effective_port = current_port if port_managed_by_environment else listen_port
+
+    instance_name = ui.text(
+        "Instance name [blank = machine hostname]:",
         default=current_name,
     )
-    if pairing_name is None:
+    if instance_name is None:
         return ui.cancelled()
-    pairing_name = pairing_name.strip()
+    instance_name = instance_name.strip()
 
-    if pairing_name:
-        host_cfg["device_name"] = pairing_name
+    if instance_name:
+        host_cfg["device_name"] = instance_name
     else:
         host_cfg.pop("device_name", None)
 
+    private_route = "unavailable"
+    if address:
+        host_text = f"[{address}]" if ":" in address else address
+        try:
+            private_rows = normalize_host_endpoints([{
+                "label": "Private",
+                "url": f"ws://{host_text}:{effective_port}",
+            }])
+        except ValueError:
+            private_rows = []
+        if private_rows:
+            private_route = private_rows[0]["url"]
+    ui.dim(f"Private route: {private_route}")
+    ui._console.print("")
+
+    current_public = next(
+        (
+            str(row.get("url") or "")
+            for row in current_endpoints
+            if str(row.get("url") or "").startswith("wss://")
+        ),
+        "",
+    )
+    public_raw = ui.text(
+        "Public WSS route [blank = off]:",
+        default=current_public,
+    )
+    if public_raw is None:
+        return ui.cancelled()
+    public_raw = public_raw.strip()
+    if public_raw and not public_raw.startswith("wss://"):
+        ui.fail("Public route must use wss://.")
+        ui.press_enter()
+        return
+    try:
+        public_rows = normalize_host_endpoints(
+            [{"label": "Public", "url": public_raw}] if public_raw else []
+        )
+    except ValueError as exc:
+        ui.fail(str(exc))
+        ui.press_enter()
+        return
+    if public_rows:
+        host_cfg["endpoints"] = public_rows
+    else:
+        host_cfg.pop("endpoints", None)
+
     cfg.host = host_cfg
-    cfg.network = net_cfg
     cfg_mod.save(cfg)
-    msg = _restart_daemon_for_apply(home._ROOT)
-    target = host or auto_host or "auto-detect"
-    name_target = pairing_name or "auto"
-    ui.ok_and_wait(f"remote access target: {target}:{port}, pairing name: {name_target}{msg}")
+    restart_message = _restart_daemon_for_apply(home._ROOT) if port_changed else ""
+    name_target = instance_name or "machine hostname"
+    public_target = public_rows[0]["url"] if public_rows else "off"
+    address_target = f"{address}:{effective_port}" if address else "unavailable"
+    ui.ok_and_wait(
+        f"address: {address_target}, "
+        f"name: {name_target}, private route: {private_route}, "
+        f"public route: {public_target}{restart_message}"
+    )
 
 
 def _device_detail(h: Path, connection_id: str) -> None:
     from alpi import ui
     from alpi.host import connections as connections_mod
-    from alpi.host.network import resolve_host_endpoint
+    from alpi.host.network import resolve_host_endpoints
     from alpi.host.usage import connections_summary
 
     while True:
@@ -2538,10 +2442,13 @@ def _device_detail(h: Path, connection_id: str) -> None:
             if label:
                 connections_mod.update_connection(connection_id, label=label)
         elif choice == "add_device":
-            endpoint = resolve_host_endpoint(h)
-            if endpoint is None:
+            endpoints = resolve_host_endpoints(h)
+            if not endpoints:
                 ui.fail("No advertised host is available.")
                 ui.press_enter()
+                continue
+            endpoint = _choose_pairing_endpoint(h, endpoints)
+            if endpoint is None:
                 continue
             connection, device = connections_mod.add_device(connection_id)
             _show_connection_pairing(h, endpoint, connection, device)
@@ -2587,22 +2494,19 @@ def _device_detail(h: Path, connection_id: str) -> None:
 
 def _show_connection_pairing(h: Path, endpoint, connection, device) -> None:
     from alpi import ui
-    from alpi.host.network import resolve_host_pairing_name, resolve_host_tcp_port
+    from alpi.host.network import resolve_host_pairing_name
     import io
     import json
-    from urllib.parse import urlencode
     import qrcode
 
-    host, scope = endpoint
-    port = resolve_host_tcp_port(h)
+    endpoint_url = endpoint["url"]
     name = resolve_host_pairing_name(h)
-    payload = {"i": host, "p": port, "n": name, "t": device["token"]}
-    link = "alpi://device?" + urlencode({
-        "host": host, "port": port, "name": name, "token": device["token"],
-    })
+    payload, link = _pairing_code_data(
+        endpoint_url, name, device["token"], connection["id"],
+    )
     ui.banner(
         ui.crumb("setup", "connections", connection["label"], "add device"),
-        subtitle=f"scan once · {scope} · {host}:{port}",
+        subtitle=f"scan once · {endpoint['label']} · {endpoint_url}",
         home=h,
     )
     qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_L, border=1)

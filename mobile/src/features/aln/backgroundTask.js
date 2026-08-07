@@ -2,6 +2,7 @@ import * as BackgroundTask from 'expo-background-task';
 import * as TaskManager from 'expo-task-manager';
 
 import { loadConnections } from '../../lib/store';
+import { endpointUrl } from '../../lib/endpoint.js';
 import { fireForEvent, getPermissionStatus } from './notify';
 import { commitDelivered, pollConnection, WAKE_BUDGET_MS } from './poll';
 import { alnStateKey } from './state';
@@ -12,7 +13,7 @@ export function groupConnectionsByDaemon(connections) {
   if (!Array.isArray(connections)) return [];
   const groups = new Map();
   for (const c of connections) {
-    if (!c?.id || !c?.ip || !c?.port || !c?.deviceId) continue;
+    if (!c?.id || !endpointUrl(c) || !c?.deviceId) continue;
     // A member route to a daemon returns empty history (the inbox is admin-only); left in, and sorted first by recency, it would shadow that daemon's admin route.
     if (c.role === 'member') continue;
     const list = groups.get(c.deviceId) ?? [];

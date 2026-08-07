@@ -3,13 +3,14 @@
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { AUTH_FAILED, RpcError, call } from './rpc';
+import { endpointUrl } from './endpoint.js';
 
 const PROBE_TIMEOUT_MS = 3500;
 const VERSION_TIMEOUT_MS = 2000;
 const registeredMetadata = new Set();
 
 function registerMetadata(endpoint) {
-  const key = `${endpoint.ip}:${endpoint.port}:${endpoint.token}`;
+  const key = `${endpointUrl(endpoint)}:${endpoint.token}`;
   if (registeredMetadata.has(key)) return;
   registeredMetadata.add(key);
   call(endpoint, 'host.connections.register_device', {

@@ -25,6 +25,12 @@ def test_prefetch_mode_defaults_off_in_docker(tmp_path, monkeypatch) -> None:
 
 def test_prefetch_mode_explicit_config_beats_docker_default(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("ALPI_PLATFORM", "docker")
+    root = _root(tmp_path, "model: x\nruntime:\n  prefetch: all\n")
+    assert service._prefetch_mode(root) == "all"
+
+
+def test_prefetch_mode_accepts_legacy_service_config(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("ALPI_PLATFORM", "docker")
     root = _root(tmp_path, "model: x\nservice:\n  prefetch: all\n")
     assert service._prefetch_mode(root) == "all"
 

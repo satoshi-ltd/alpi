@@ -221,6 +221,7 @@ async def test_device_profile_summaries_are_served_by_host(
     assert "peers" not in profile
     assert "models" not in profile
     assert "mcps" not in profile
+    assert "subsystems" not in profile
 
     detail = await srv._dispatch({
         "id": "d",
@@ -371,6 +372,66 @@ async def test_device_config_field_mutations_go_through_host(
     # No half-written tmp left behind by the atomic writer.
     cfg_path = home / "config.yaml"
     assert not cfg_path.with_suffix(cfg_path.suffix + ".tmp").exists()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("method", "key"),
+    [
+        ("host.config.set_field", "service.schedule"),
+        ("host.config.unset_field", "service"),
+    ],
+)
+async def test_config_verbs_reject_removed_service_switches(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, method: str, key: str,
+) -> None:
+    home = _bootstrap(tmp_path / "h")
+    monkeypatch.setattr(host_handlers, "_resolve_home", lambda profile: home)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+
+    response = await srv._dispatch({
+        "id": "removed",
+        "method": method,
+        "params": {"profile": "default", "key": key, "value": "false"},
+    })
+
+    assert response["error"]["code"] == -32602
+    assert "always available" in response["error"]["data"]["detail"]
+    assert "service" not in cfg_mod.load(home).raw
+
+
+@pytest.mark.asyncio
+async def test_config_set_rejects_host_endpoints_but_unset_can_repair_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = _bootstrap(tmp_path / "h")
+    cfg = cfg_mod.load(home)
+    cfg.host = {"endpoints": "wss://client.example.com"}
+    cfg_mod.save(cfg)
+    monkeypatch.setattr(host_handlers, "_resolve_home", lambda profile: home)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+
+    rejected = await srv._dispatch({
+        "id": "set",
+        "method": "host.config.set_field",
+        "params": {
+            "profile": "default",
+            "key": "host.endpoints",
+            "value": "[]",
+        },
+    })
+    assert rejected["error"]["code"] == -32602
+    assert "host.network.set_advertised" in rejected["error"]["data"]["detail"]
+
+    repaired = await srv._dispatch({
+        "id": "unset",
+        "method": "host.config.unset_field",
+        "params": {"profile": "default", "key": "host.endpoints"},
+    })
+    assert repaired["result"]["ok"] is True
+    assert "endpoints" not in cfg_mod.load(home).host
 
 
 @pytest.mark.asyncio

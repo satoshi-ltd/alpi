@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { radii, space , fontSizes} from '../../../src/theme/tokens';
 
@@ -33,9 +33,6 @@ import {
 import { accentForProfile } from '../../../src/theme/accents';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { voiceLabel } from '../../../src/lib/voices';
-
-const SUBSYSTEMS = ['schedule', 'alp', 'workgroups'];
-const SUBSYSTEMS_DEFAULT = { schedule: true, alp: true, workgroups: true };
 
 function formatBytes(n) {
   if (n < 1024) return `${n} B`;
@@ -96,7 +93,6 @@ export default function ProfileSettings() {
   const storage = useProfileStorage(id, { skipWhen: !needsFallback(snap, 'storage') });
   const [sheet, setSheet] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [busySubsystem, setBusySubsystem] = useState(null);
   const [restartBusy, setRestartBusy] = useState(false);
   const [confirmRestart, setConfirmRestart] = useState(false);
 
@@ -166,30 +162,6 @@ export default function ProfileSettings() {
     call('host.voice.set_voice', { profile: id, voice_id: voiceId }).then(() => refreshSettings());
   const toggleAutoRead = () =>
     call('host.voice.set_auto_read', { profile: id, enabled: !profile.voice_auto_read }).then(() => refreshSettings());
-
-  const subs = profile?.subsystems ?? SUBSYSTEMS_DEFAULT;
-  const toggleSubsystem = async (name) => {
-    if (busySubsystem) return;
-    setBusySubsystem(name);
-    const next = !subs[name];
-    try {
-      await call('host.config.set_field', {
-        profile: id,
-        key: `service.${name}`,
-        value: String(next),
-      });
-      await refreshSettings();
-      toast({
-        title: `${name} ${next ? 'enabled' : 'disabled'}`,
-        message: 'applying — takes a few seconds',
-        duration: 2400,
-      });
-    } catch (e) {
-      toast({ title: `${name} failed`, message: String(e) });
-    } finally {
-      setBusySubsystem(null);
-    }
-  };
 
   // host.sandbox.network requires sandbox on (daemon returns -32008 otherwise).
   const toggleSandbox = async () => {
@@ -376,29 +348,6 @@ export default function ProfileSettings() {
           helper="exits the daemon · supervisor relaunches · reconnects automatically"
           value={restartBusy ? null : 'Restart'}
           onPress={restartBusy ? undefined : () => setConfirmRestart(true)}
-          chevron={false}
-        />
-        <RowSeparator />
-        <Row
-          label="Subsystems"
-          helper="tap to enable / disable · applies in seconds"
-          value={
-            <View style={{ flexDirection: 'row', gap: space.s1, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: 220 }}>
-              {SUBSYSTEMS.map((s) => {
-                const on = subs[s] !== false;
-                return (
-                  <Pressable
-                    key={s}
-                    onPress={() => toggleSubsystem(s)}
-                    disabled={busySubsystem === s}
-                    hitSlop={4}
-                  >
-                    <Pill tone={on ? 'on' : undefined} off={!on}>{s}</Pill>
-                  </Pressable>
-                );
-              })}
-            </View>
-          }
           chevron={false}
         />
         <RowSeparator />

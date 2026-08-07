@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useEndpoint } from '../lib/EndpointContext';
+import { endpointUrl } from '../lib/endpoint.js';
 import { call as rpcCall } from '../lib/rpc';
 import { useDebouncedCallback } from './useDebouncedCallback';
 import { useEventEffect } from './useEvents';
@@ -25,7 +26,7 @@ export function isMemberOnly(endpoint, connections, roleState) {
 }
 
 export async function fetchConnectionOutputs(connection, status, rpc = rpcCall) {
-  if (!connection?.ip || !connection?.port) return [];
+  if (!endpointUrl(connection)) return [];
   let profiles;
   try {
     const res = await rpc(connection, 'host.profile.summaries', {}, { timeoutMs: PER_CALL_TIMEOUT_MS });
@@ -62,7 +63,7 @@ export function connectionsSignature(connections, probeState) {
   const statusOf = (id) =>
     (probeState && typeof probeState.get === 'function' ? probeState.get(id) : undefined) ?? '';
   return (connections ?? [])
-    .map((c) => `${c.id}:${c.name}:${c.ip}:${c.port}:${statusOf(c.id)}`)
+    .map((c) => `${c.id}:${c.name}:${endpointUrl(c)}:${statusOf(c.id)}`)
     .join('|');
 }
 

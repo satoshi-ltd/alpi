@@ -1,7 +1,27 @@
 import { describe, it, expect, vi } from "vitest";
 import { renderHook } from "@testing-library/react";
 
-import { useFireOnce } from "./ConnectionSwitcher.jsx";
+import { connectionEndpoint, useFireOnce } from "./ConnectionSwitcher.jsx";
+
+describe("connectionEndpoint", () => {
+  it("shows the complete URL returned for current remote connections", () => {
+    expect(connectionEndpoint({ kind: "remote", url: "wss://client.example.com" })).toBe(
+      "wss://client.example.com",
+    );
+  });
+
+  it("keeps legacy host and port connections readable", () => {
+    expect(connectionEndpoint({ kind: "remote", host: "casa", port: 49200 })).toBe(
+      "casa:49200",
+    );
+  });
+
+  it("never renders undefined fields for incomplete saved connections", () => {
+    expect(connectionEndpoint({ kind: "remote", host: "casa" })).toBe("casa");
+    expect(connectionEndpoint({ kind: "remote" })).toBe("endpoint unavailable");
+    expect(connectionEndpoint({ kind: "local" })).toBe("host.sock");
+  });
+});
 
 describe("useFireOnce", () => {
   it("fires the callback the first time signal becomes truthy", () => {

@@ -19,17 +19,21 @@ function parsePairingPayload(payload) {
   const text = payload.trim();
   if (text.startsWith("alpi://device?")) {
     const url = new URL(text);
+    const endpointUrl = url.searchParams.get("url");
+    const legacyHost = url.searchParams.get("host");
+    const legacyPort = Number(url.searchParams.get("port"));
     return {
-      host: url.searchParams.get("host"),
-      port: Number(url.searchParams.get("port")),
+      url: endpointUrl || (legacyHost && legacyPort ? `ws://${legacyHost}:${legacyPort}` : ""),
       name: url.searchParams.get("name"),
       token: url.searchParams.get("token"),
     };
   }
   const parsed = JSON.parse(text);
+  const endpointUrl = parsed.u ?? parsed.url;
+  const legacyHost = parsed.i ?? parsed.ip;
+  const legacyPort = Number(parsed.p ?? parsed.port);
   return {
-    host: parsed.i ?? parsed.ip,
-    port: Number(parsed.p ?? parsed.port),
+    url: endpointUrl || (legacyHost && legacyPort ? `ws://${legacyHost}:${legacyPort}` : ""),
     name: parsed.n ?? parsed.name,
     token: parsed.t ?? parsed.token,
   };
@@ -377,15 +381,14 @@ export function useHostConnections({
 
   const onAddHostConnection = useCallback(
     async (payload) => {
-      const { host, port, name, token } = parsePairingPayload(payload);
-      if (!host || !port || !token) {
-        throw new Error("pairing payload needs host, port, and token");
+      const { url, name, token } = parsePairingPayload(payload);
+      if (!url || !token) {
+        throw new Error("pairing payload needs url and token");
       }
-      const resolvedName = name ?? host;
+      const resolvedName = name ?? new URL(url).hostname;
       await invoke("host_connection_add_remote", {
         name: resolvedName,
-        host,
-        port,
+        url,
         token,
       });
       await reloadConnections();
