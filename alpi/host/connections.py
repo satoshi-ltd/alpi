@@ -34,9 +34,9 @@ _SAFE_PROFILE = re.compile(r"^[A-Za-z0-9_-]+$")
 _CORRUPT_SCOPE = "<corrupt>"
 _cache_lock = threading.Lock()
 _cached: dict[str, Any] | None = None
-_cached_at = 0.0
 _cached_path: str | None = None
-_CACHE_TTL_S = 5.0
+_cached_identity: tuple[str, int, int, int] | None = None
+_failed_identity: tuple[str, int, int, int] | None = None
 
 
 class StoreUnavailable(Exception):
@@ -319,31 +319,60 @@ def save_store(data: dict[str, Any]) -> None:
 
 
 def invalidate_cache() -> None:
-    global _cached, _cached_at, _cached_path
+    global _cached, _cached_path, _cached_identity, _failed_identity
     with _cache_lock:
         _cached = None
-        _cached_at = 0.0
         _cached_path = None
+        _cached_identity = None
+        _failed_identity = None
+
+
+def _store_identity() -> tuple[str, int, int, int] | None:
+    for path in (store_path(), legacy_store_path()):
+        try:
+            stat = path.stat()
+        except FileNotFoundError:
+            continue
+        except OSError:
+            return (str(path), -1, -1, -1)
+        return (str(path), stat.st_ino, stat.st_size, stat.st_mtime_ns)
+    return None
 
 
 def _cached_store() -> dict[str, Any]:
-    global _cached, _cached_at, _cached_path
+    global _cached, _cached_path, _cached_identity, _failed_identity
     path = str(store_path())
+    identity = _store_identity()
     with _cache_lock:
-        if _cached is not None and _cached_path == path and time.time() - _cached_at < _CACHE_TTL_S:
+        if (
+            _cached is not None
+            and _cached_path == path
+            and identity in {_cached_identity, _failed_identity}
+        ):
             return _cached
     try:
         fresh = load_store()
     except StoreUnavailable:
         with _cache_lock:
-            if _cached is not None and _cached_path == path:
+            if _cached_path == path and _cached is not None:
+                _failed_identity = identity
                 return _cached
-        return {"version": SCHEMA_VERSION, "connections": []}
+            _cached = {"version": SCHEMA_VERSION, "connections": []}
+            _cached_path = path
+            _cached_identity = None
+            _failed_identity = identity
+            return _cached
+    identity = _store_identity()
     with _cache_lock:
         _cached = fresh
-        _cached_at = time.time()
         _cached_path = path
+        _cached_identity = identity
+        _failed_identity = None
     return fresh
+
+
+def load_auth_store() -> dict[str, Any]:
+    return _cached_store()
 
 
 def list_connections(*, include_deleted: bool = False) -> list[dict[str, Any]]:

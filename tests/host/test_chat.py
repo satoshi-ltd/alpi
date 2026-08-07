@@ -752,6 +752,67 @@ async def test_data_chat_send_releases_claim_when_setup_raises(
     assert dc._active == {}, dc._active
     assert dc._session_active == {}, dc._session_active
 
+
+@pytest.mark.asyncio
+async def test_data_chat_send_cleans_session_after_repeated_cancellation(
+    monkeypatch, short_tmp: Path,
+) -> None:
+    import threading
+    from alpi import config as cfg_mod
+    from alpi.host import chat as dc
+
+    home = short_tmp / "h"
+    home.mkdir()
+    load_or_generate(home)
+    started = threading.Event()
+    release = threading.Event()
+    interrupted = threading.Event()
+
+    class _BlockingEngine:
+        def __init__(self, *, home: Path, cfg) -> None:  # noqa: ANN001
+            self.session = SimpleNamespace(id="cancelled-session", subdir="sessions")
+
+        def run_turn(self, text, emit, **kwargs) -> None:  # noqa: ANN001
+            started.set()
+            release.wait(timeout=2)
+
+        def request_interrupt(self, reason: str = "unknown") -> None:
+            interrupted.set()
+
+        def save_session(self) -> None:
+            return None
+
+    monkeypatch.setattr(cfg_mod, "load", lambda h: SimpleNamespace(model="x"))
+    import alpi.engine
+    monkeypatch.setattr(alpi.engine, "Engine", _BlockingEngine)
+    monkeypatch.setattr(dc, "_resolve_home", lambda profile: home)
+    dc._active.clear()
+    dc._session_active.clear()
+    frames: list[dict] = []
+
+    async def send_frame(frame: dict) -> None:
+        frames.append(frame)
+
+    task = asyncio.create_task(dc._data_chat_send({
+        "profile": "default",
+        "text": "wait",
+        "request_id": "cancel-twice",
+    }, host_server.Server(home=home), send_frame))
+    assert await asyncio.to_thread(started.wait, 1)
+
+    task.cancel()
+    await asyncio.sleep(0)
+    task.cancel()
+    assert interrupted.wait(timeout=1)
+    release.set()
+
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert dc._active == {}
+    assert dc._session_active == {}
+    assert not dc._get_session_lock(("default", "cancelled-session")).locked()
+
+
 @pytest.mark.asyncio
 async def test_chat_send_builds_engine_off_the_event_loop(
     monkeypatch, short_tmp: Path,

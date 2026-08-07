@@ -594,3 +594,535 @@ def test_max_message_bytes_covers_the_attachment_cap() -> None:
     import base64
     encoded = len(base64.b64encode(b"x" * MAX_FILE_BYTES))
     assert host_server._max_message_bytes() > encoded
+
+
+def test_websocket_limits_read_daemon_environment(short_tmp: Path, monkeypatch) -> None:
+    monkeypatch.setenv("ALPI_HOST_WS_AUTH_TIMEOUT", "12.5")
+    monkeypatch.setenv("ALPI_HOST_WS_AUTH_RECHECK", "2.5")
+    monkeypatch.setenv("ALPI_HOST_WS_CLOSE_TIMEOUT", "0.5")
+    monkeypatch.setenv("ALPI_HOST_WS_REVOCATION_RETRY", "7.5")
+    monkeypatch.setenv("ALPI_HOST_WS_MAX_CONNECTIONS", "64")
+    monkeypatch.setenv("ALPI_HOST_WS_MAX_CONNECTIONS_PER_DEVICE", "6")
+    monkeypatch.setenv("ALPI_HOST_WS_MAX_RPCS_PER_DEVICE", "5")
+
+    server = host_server.Server(home=short_tmp)
+    status = server.websocket_status()
+
+    assert status["auth_timeout_seconds"] == 12.5
+    assert status["auth_recheck_seconds"] == 2.5
+    assert status["close_timeout_seconds"] == 0.5
+    assert status["revocation_retry_seconds"] == 7.5
+    assert status["connection_limit"] == 64
+    assert status["connections_per_device_limit"] == 6
+    assert status["rpcs_per_device_limit"] == 5
+
+
+async def _start_security_test_server(short_tmp: Path, monkeypatch):
+    from alpi import home as home_mod
+
+    home = short_tmp / "h"
+    home.mkdir(exist_ok=True)
+    monkeypatch.setattr(home_mod, "_ROOT", short_tmp)
+    with patch.object(
+        host_server.Server, "_validate_tcp_bind",
+        staticmethod(lambda bind, allow_public_bind=False: bind),
+    ):
+        server = host_server.Server(home=home, tcp_bind=("127.0.0.1", 0))
+
+    async def ping(params, _server):
+        return {"pong": params.get("value", True)}
+
+    server.register("host.ping", ping)
+    await server.start()
+    port = server._ws_server.sockets[0].getsockname()[1]
+    return server, f"ws://127.0.0.1:{port}"
+
+
+def _ws_request(token: str, request_id: str = "1", **params) -> str:
+    return json.dumps({
+        "id": request_id,
+        "method": "host.ping",
+        "params": {"auth_token": token, **params},
+    })
+
+
+@pytest.mark.asyncio
+async def test_websocket_requires_authentication_before_deadline(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    server, url = await _start_security_test_server(short_tmp, monkeypatch)
+    server._ws_auth_timeout = 0.05
+    try:
+        async with websockets.connect(url) as ws:
+            with pytest.raises(websockets.ConnectionClosedError):
+                await ws.recv()
+            assert ws.close_code == 1008
+        assert server.websocket_status()["auth_timeouts"] == 1
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_websocket_closes_after_invalid_authentication(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    server, url = await _start_security_test_server(short_tmp, monkeypatch)
+    try:
+        async with websockets.connect(url) as ws:
+            await ws.send(_ws_request("invalid-token"))
+            response = json.loads(await ws.recv())
+            assert response["error"]["message"] == "auth-failed"
+            with pytest.raises(websockets.ConnectionClosedError):
+                await ws.recv()
+            assert ws.close_code == 1008
+        assert server.websocket_status()["auth_failures"] == 1
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_plain_http_requests_do_not_block_websocket_handshakes(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    server, url = await _start_security_test_server(short_tmp, monkeypatch)
+
+    class PlainRequest:
+        class Headers:
+            @staticmethod
+            def get_all(_name):
+                return []
+
+        headers = Headers()
+
+    try:
+        for _ in range(260):
+            assert server._process_ws_handshake(None, PlainRequest()) is None
+
+        async with websockets.connect(url) as ws:
+            assert server.websocket_status()["handshakes"] == 1
+            await ws.close()
+    finally:
+        await server.stop()
+
+
+def test_handshake_hook_handles_duplicate_and_malformed_upgrade_headers(short_tmp: Path) -> None:
+    class Headers:
+        def __init__(self, values=None, error: Exception | None = None):
+            self.values = values or []
+            self.error = error
+
+        def get_all(self, _name):
+            if self.error is not None:
+                raise self.error
+            return self.values
+
+    class Connection:
+        def respond(self, status, body):
+            return status, body
+
+    server = host_server.Server(home=short_tmp)
+    duplicate = type("Request", (), {"headers": Headers(["websocket", "websocket"])})()
+    malformed = type("Request", (), {"headers": Headers(error=ValueError("bad header"))})()
+
+    assert server._process_ws_handshake(Connection(), duplicate) is None
+    status, _body = server._process_ws_handshake(Connection(), malformed)
+    assert status == 400
+    assert server.websocket_status()["protocol_failures"] == 1
+
+
+@pytest.mark.asyncio
+async def test_websocket_limits_global_active_connections(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    server, url = await _start_security_test_server(short_tmp, monkeypatch)
+    server._ws_max_connections = 1
+    try:
+        first = await websockets.connect(url)
+        try:
+            with pytest.raises(websockets.InvalidStatus) as rejected:
+                await websockets.connect(url)
+            assert rejected.value.response.status_code == 503
+        finally:
+            await first.close()
+        assert server.websocket_status()["handshakes_rejected"] == 1
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_websocket_limits_connections_per_device(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    from alpi.host import connections
+
+    server, url = await _start_security_test_server(short_tmp, monkeypatch)
+    _connection, device = connections.create_connection("Phone")
+    server._ws_max_connections_per_device = 1
+    try:
+        async with websockets.connect(url) as first:
+            await first.send(_ws_request(device["token"]))
+            assert "result" in json.loads(await first.recv())
+            async with websockets.connect(url) as second:
+                await second.send(_ws_request(device["token"], "2"))
+                rejected = json.loads(await second.recv())
+                assert rejected["error"]["message"] == "too-many-connections"
+                with pytest.raises(websockets.ConnectionClosedError):
+                    await second.recv()
+            await first.send(_ws_request(device["token"], "3"))
+            assert "result" in json.loads(await first.recv())
+        assert server.websocket_status()["device_connections_rejected"] == 1
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_websocket_cannot_change_device_identity(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    from alpi.host import connections
+
+    server, url = await _start_security_test_server(short_tmp, monkeypatch)
+    connection, first_device = connections.create_connection("Team")
+    _connection, second_device = connections.add_device(connection["id"])
+    try:
+        async with websockets.connect(url) as ws:
+            await ws.send(_ws_request(first_device["token"], "first"))
+            assert "result" in json.loads(await ws.recv())
+
+            await ws.send(_ws_request(second_device["token"], "second"))
+            rejected = json.loads(await ws.recv())
+            assert rejected["error"]["data"]["reason"] == "socket-identity-changed"
+            with pytest.raises(websockets.ConnectionClosedError):
+                await ws.recv()
+            assert ws.close_code == 1008
+        assert server.websocket_status()["auth_failures"] == 1
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_rpc_limit_is_per_device_and_keeps_other_device_working(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    import asyncio
+    from alpi.host import connections
+
+    server, url = await _start_security_test_server(short_tmp, monkeypatch)
+    connection, first_device = connections.create_connection("Team")
+    _connection, second_device = connections.add_device(connection["id"])
+    server._ws_max_rpcs_per_device = 1
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def wait_stream(_params, _server, send):
+        started.set()
+        await release.wait()
+        await send({"done": True})
+
+    server.register_stream("host.wait", wait_stream)
+    first_stream = await websockets.connect(url)
+    same_device = await websockets.connect(url)
+    other_device = await websockets.connect(url)
+    try:
+        await first_stream.send(json.dumps({
+            "id": "stream", "method": "host.wait",
+            "params": {"auth_token": first_device["token"]},
+        }))
+        await asyncio.wait_for(started.wait(), timeout=1)
+
+        await same_device.send(_ws_request(first_device["token"], "same"))
+        rejected = json.loads(await same_device.recv())
+        assert rejected["error"]["message"] == "too-many-requests"
+
+        await other_device.send(_ws_request(second_device["token"], "other"))
+        assert json.loads(await other_device.recv())["result"]["pong"] is True
+        assert server.websocket_status()["device_rpcs_rejected"] == 1
+
+        release.set()
+        assert json.loads(await first_stream.recv()) == {"id": "stream", "done": True}
+        await asyncio.sleep(0)
+        assert server._ws_rpc_counts == {}
+    finally:
+        release.set()
+        await first_stream.close()
+        await same_device.close()
+        await other_device.close()
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_revoking_one_device_closes_only_its_websockets(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    import asyncio
+    from alpi.host import connections
+
+    server, url = await _start_security_test_server(short_tmp, monkeypatch)
+    connection, revoked_device = connections.create_connection("Team")
+    _connection, remaining_device = connections.add_device(connection["id"])
+    server._ws_auth_recheck = 0.05
+    stream_started = asyncio.Event()
+    stream_cancelled = asyncio.Event()
+
+    async def wait_stream(_params, _server, _send):
+        stream_started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            stream_cancelled.set()
+            raise
+
+    server.register_stream("host.wait", wait_stream)
+    revoked_ws = await websockets.connect(url)
+    remaining_ws = await websockets.connect(url)
+    try:
+        await revoked_ws.send(json.dumps({
+            "id": "revoked", "method": "host.wait",
+            "params": {"auth_token": revoked_device["token"]},
+        }))
+        await remaining_ws.send(_ws_request(remaining_device["token"], "remaining"))
+        await asyncio.wait_for(stream_started.wait(), timeout=1)
+        assert "result" in json.loads(await remaining_ws.recv())
+
+        assert connections.revoke_device(connection["id"], revoked_device["id"])
+        with pytest.raises(websockets.ConnectionClosedError):
+            await asyncio.wait_for(revoked_ws.recv(), timeout=1)
+        assert revoked_ws.close_code == 1008
+        await asyncio.wait_for(stream_cancelled.wait(), timeout=1)
+
+        await remaining_ws.send(_ws_request(remaining_device["token"], "still-active"))
+        assert "result" in json.loads(await remaining_ws.recv())
+        assert server.websocket_status()["revoked_connections"] == 1
+    finally:
+        await revoked_ws.close()
+        await remaining_ws.close()
+        await server.stop()
+
+
+@pytest.mark.parametrize("mutation", ["disable", "delete"])
+@pytest.mark.asyncio
+async def test_disabling_or_deleting_connection_closes_all_its_websockets(
+    short_tmp: Path, monkeypatch, mutation: str,
+) -> None:
+    import asyncio
+    from alpi.host import connections
+
+    server, url = await _start_security_test_server(short_tmp, monkeypatch)
+    connection, first_device = connections.create_connection("Team")
+    _connection, second_device = connections.add_device(connection["id"])
+    server._ws_auth_recheck = 0.05
+    first_ws = await websockets.connect(url)
+    second_ws = await websockets.connect(url)
+    try:
+        await first_ws.send(_ws_request(first_device["token"], "first"))
+        await second_ws.send(_ws_request(second_device["token"], "second"))
+        assert "result" in json.loads(await first_ws.recv())
+        assert "result" in json.loads(await second_ws.recv())
+
+        if mutation == "disable":
+            assert connections.update_connection(connection["id"], status="disabled")
+        else:
+            assert connections.delete_connection(connection["id"])
+
+        for ws in (first_ws, second_ws):
+            with pytest.raises(websockets.ConnectionClosedError):
+                await asyncio.wait_for(ws.recv(), timeout=1)
+            assert ws.close_code == 1008
+        assert server.websocket_status()["revoked_connections"] == 2
+    finally:
+        await first_ws.close()
+        await second_ws.close()
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_authorization_store_failure_closes_authenticated_websockets(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    import asyncio
+    from alpi.host import connections
+
+    server, url = await _start_security_test_server(short_tmp, monkeypatch)
+    _connection, device = connections.create_connection("Phone")
+    server._ws_auth_recheck = 0.05
+
+    def fail_authorization_check():
+        raise RuntimeError("store unavailable")
+
+    monkeypatch.setattr(host_server, "_active_authorizations", fail_authorization_check)
+    try:
+        async with websockets.connect(url) as ws:
+            await ws.send(_ws_request(device["token"]))
+            assert "result" in json.loads(await ws.recv())
+            with pytest.raises(websockets.ConnectionClosedError):
+                await asyncio.wait_for(ws.recv(), timeout=1)
+            assert ws.close_code == 1008
+        assert server.websocket_status()["revoked_connections"] == 1
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_authentication_reads_external_revocation_without_cached_window(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    import yaml
+    from alpi.host import connections
+
+    server, url = await _start_security_test_server(short_tmp, monkeypatch)
+    server._ws_auth_recheck = 60
+    _connection, device = connections.create_connection("Phone")
+    assert connections.authenticate(device["token"]).valid
+
+    path = connections.store_path()
+    data = yaml.safe_load(path.read_text())
+    data["connections"][0]["status"] = "disabled"
+    path.write_text(yaml.safe_dump(data, sort_keys=False))
+    try:
+        async with websockets.connect(url) as ws:
+            await ws.send(_ws_request(device["token"]))
+            rejected = json.loads(await ws.recv())
+            assert rejected["error"]["data"]["reason"] == "connection-disabled"
+            with pytest.raises(websockets.ConnectionClosedError):
+                await ws.recv()
+            assert ws.close_code == 1008
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_revocation_repeats_cancellation_until_stream_exits(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    import asyncio
+    from alpi.host import connections
+
+    server, url = await _start_security_test_server(short_tmp, monkeypatch)
+    connection, device = connections.create_connection("Phone")
+    server._ws_auth_recheck = 0.05
+    server._ws_revocation_retry = 0.05
+    started = asyncio.Event()
+    cancelled_twice = asyncio.Event()
+    cancellations = 0
+
+    async def stubborn_stream(_params, _server, _send):
+        nonlocal cancellations
+        started.set()
+        while True:
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                cancellations += 1
+                if cancellations == 1:
+                    continue
+                cancelled_twice.set()
+                raise
+
+    server.register_stream("host.wait", stubborn_stream)
+    ws = await websockets.connect(url)
+    try:
+        await ws.send(json.dumps({
+            "id": "wait", "method": "host.wait",
+            "params": {"auth_token": device["token"]},
+        }))
+        await asyncio.wait_for(started.wait(), timeout=1)
+        assert connections.revoke_device(connection["id"], device["id"])
+        await asyncio.wait_for(cancelled_twice.wait(), timeout=1)
+        await asyncio.sleep(0)
+        assert server._ws_by_device == {}
+        assert server._ws_rpc_counts == {}
+        assert server.websocket_status()["revoked_connections"] == 1
+    finally:
+        await ws.close()
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_stop_cancels_live_websocket_streams(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    import asyncio
+    from alpi.host import connections
+
+    server, url = await _start_security_test_server(short_tmp, monkeypatch)
+    _connection, device = connections.create_connection("Phone")
+    started = 0
+    all_started = asyncio.Event()
+    cancelled = 0
+
+    async def live_stream(_params, _server, _send):
+        nonlocal started, cancelled
+        started += 1
+        if started == 8:
+            all_started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            cancelled += 1
+            raise
+
+    server.register_stream("host.wait", live_stream)
+    sockets = [await websockets.connect(url) for _ in range(8)]
+    server_connections = list(server._ws_connections)
+    try:
+        for index, ws in enumerate(sockets):
+            await ws.send(json.dumps({
+                "id": str(index), "method": "host.wait",
+                "params": {"auth_token": device["token"]},
+            }))
+        await asyncio.wait_for(all_started.wait(), timeout=1)
+
+        await asyncio.wait_for(server.stop(), timeout=2)
+
+        assert cancelled == 8
+        assert server._ws_connections == set()
+        assert server._ws_by_device == {}
+        assert server._ws_rpc_counts == {}
+        assert all(connection.transport.is_closing() for connection in server_connections)
+        assert all(ws.close_code == 1001 for ws in sockets)
+    finally:
+        for ws in sockets:
+            await ws.close()
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_connection_revocation_closes_devices_concurrently(short_tmp: Path) -> None:
+    import asyncio
+
+    class SlowSocket:
+        async def close(self, **_kwargs):
+            await asyncio.sleep(0.1)
+
+    server = host_server.Server(home=short_tmp)
+    first = SlowSocket()
+    second = SlowSocket()
+    server._ws_by_device[("connection", "first")].add(first)
+    server._ws_by_device[("connection", "second")].add(second)
+
+    started = asyncio.get_running_loop().time()
+    closed = await server.close_connection_websockets("connection")
+    elapsed = asyncio.get_running_loop().time() - started
+
+    assert closed == 2
+    assert elapsed < 0.18
+
+
+@pytest.mark.asyncio
+async def test_connection_revocation_does_not_cancel_calling_handler(short_tmp: Path) -> None:
+    import asyncio
+
+    class Socket:
+        async def close(self, **_kwargs):
+            return None
+
+    server = host_server.Server(home=short_tmp)
+    socket = Socket()
+
+    async def revoke_self():
+        task = asyncio.current_task()
+        server._ws_by_device[("connection", "device")].add(socket)
+        server._ws_tasks[socket] = task
+        return await server.close_connection_websockets("connection")
+
+    assert await revoke_self() == 1

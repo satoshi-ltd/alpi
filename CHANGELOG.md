@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.12.9 — 2026-08-07 — a public socket has finite patience
+
+- **Unauthenticated WebSockets no longer get unlimited time or capacity.** The
+  daemon caps global connections, requires a valid first request within ten
+  seconds, uses a bounded receive queue with safe high/low-water hysteresis,
+  closes invalid authentication and protocol attempts, and limits concurrent
+  sockets and RPC streams per device. Plain HTTP requests cannot consume a
+  global handshake budget and lock out paired clients. Message size remains
+  aligned with the attachment contract.
+- **Revocation now cuts active work.** Every authenticated socket is registered
+  to its connection and device. Revoking a device closes its sockets and
+  cancels long streams while sibling devices remain active; disabling or
+  deleting a connection closes every device attached to it. Authorization is
+  rechecked against a file-identity cache on each message and against the
+  connection store once per second by default, so changes made outside the
+  running daemon are also enforced without reparsing YAML for every frame.
+  Revocations close devices concurrently, retry swallowed cancellation with a
+  guarded delay, and daemon shutdown closes transports before cancelling live
+  streams.
+- **Local network diagnostics expose the guardrails.** `host.network.status`
+  reports active and peak sockets, configured limits, rejected handshakes and
+  device requests, authentication/protocol failures, timeouts and revocation
+  closures. The verb remains local-only; remote clients cannot query the
+  daemon's operational counters. Deployment limits and timeouts can be adjusted
+  with `ALPI_HOST_WS_*` environment variables without editing source code.
+
 ## v0.12.8 — 2026-08-06 — one connection, every safe route
 
 - **Pairing now advertises complete, ordered WebSocket routes.** A host can put
@@ -21,10 +47,11 @@
   it as environment-managed instead of saving an ineffective config override.
   URL validation rejects credentials, paths, duplicate routes, non-WebSocket
   schemes and plaintext WS to public IPs.
-- **A Caddy deployment overlay makes public WSS concrete.** The supplied
-  compose overlay obtains and renews a certificate automatically, proxies the
-  WebSocket upgrade to Alpi and resets the inherited `49200/7423` publications,
-  so the effective WSS deployment exposes only `80/443`.
+- **The public WSS topology is explicit.** A reverse proxy terminates the
+  certificate and forwards WebSocket traffic to the private Alpi listener;
+  ports `49200/7423` stay private and only `80/443` are public. The concrete
+  Docker/Caddy deployment remains separate until it has been tested on a real
+  host.
 - **Plaintext routes cannot hide behind hostnames.** `ws://` now requires a
   private IP literal; hostnames (including `localhost` and alternate
   numeric IPv4 forms) require certificate-validated `wss://`. Automatic direct
@@ -51,10 +78,10 @@
   payloads now include the connection id, allowing Mobile to refresh the same
   scoped connection without adding duplicate rows. Different connection scopes
   to the same daemon still remain independent.
-- **The WSS Docker update path preserves its exposure boundary.** Deployment
-  docs require Compose 2.24.4 or newer for `!reset`, call out its silent behavior
-  in older versions, and keep both compose files in WSS update commands so a
-  routine update cannot republish ports `49200` and `7423`.
+- **The WSS deployment review identified its update boundary.** Any future
+  Docker overlay must require Compose 2.24.4 or newer for `!reset`, verify the
+  effective compose output and retain both compose files in update commands so
+  a routine update cannot republish ports `49200` and `7423`.
 
 ## v0.12.7 — 2026-08-06 — an abandoned task stops shouting
 

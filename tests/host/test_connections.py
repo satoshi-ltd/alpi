@@ -532,7 +532,6 @@ def test_authentication_uses_last_valid_cache_during_a_read_failure(
     assert connections.authenticate(device["token"], min_interval=999).valid
     assert connections.authenticate(device["token"], min_interval=999).valid
     connections.store_path().write_text("connections: [")
-    monkeypatch.setattr(connections, "_cached_at", 0.0)
 
     assert connections.authenticate(device["token"], min_interval=999).valid
 
@@ -554,6 +553,25 @@ def test_authentication_reuses_the_normalised_cache(monkeypatch, tmp_path: Path)
 
     assert connections.authenticate(device["token"], min_interval=999).valid
     assert connections.authenticate(device["token"], min_interval=999).valid
+    assert calls == 1
+
+
+def test_invalid_tokens_do_not_reparse_unchanged_store(monkeypatch, tmp_path: Path) -> None:
+    _root(monkeypatch, tmp_path)
+    connections.create_connection("Javi")
+    connections.invalidate_cache()
+    calls = 0
+    real_normalise = connections._normalise_store
+
+    def counted_normalise(raw):
+        nonlocal calls
+        calls += 1
+        return real_normalise(raw)
+
+    monkeypatch.setattr(connections, "_normalise_store", counted_normalise)
+
+    for index in range(100):
+        assert not connections.authenticate(f"invalid-{index}").valid
     assert calls == 1
 
 

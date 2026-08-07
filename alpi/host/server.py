@@ -4,7 +4,11 @@ import asyncio
 import ipaddress
 import json
 import logging
+import os
+import time
+from collections import defaultdict
 from dataclasses import dataclass
+from http import HTTPStatus
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
@@ -17,6 +21,32 @@ from alpi.host.tailscale import is_tailscale_ip
 log = logging.getLogger("alpi.host.server")
 
 DEFAULT_TCP_PORT = 49200
+WS_AUTH_TIMEOUT_SECONDS = 10.0
+WS_AUTH_RECHECK_SECONDS = 1.0
+WS_CLOSE_TIMEOUT_SECONDS = 1.0
+WS_REVOCATION_RETRY_SECONDS = 5.0
+WS_MAX_CONNECTIONS = 128
+WS_MAX_CONNECTIONS_PER_DEVICE = 8
+WS_MAX_RPCS_PER_DEVICE = 8
+WS_MAX_QUEUE = (16, 4)
+
+
+def _env_number(
+    name: str, default: int | float, *, minimum: float, maximum: float,
+) -> int | float:
+    raw = str(os.environ.get(name) or "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw) if isinstance(default, int) else float(raw)
+    except ValueError:
+        log.warning("ignoring invalid %s=%r", name, raw)
+        return default
+    if not minimum <= value <= maximum:
+        log.warning("ignoring out-of-range %s=%r", name, raw)
+        return default
+    return value
+
 
 def _max_message_bytes() -> int:
     # Sized to the attachment contract: staging inlines a whole file as base64 in one JSON-RPC message.
@@ -179,6 +209,19 @@ class HandlerError(Exception):
         self.data = data
 
 
+@dataclass
+class WebSocketMetrics:
+    handshakes: int = 0
+    handshakes_rejected: int = 0
+    auth_failures: int = 0
+    auth_timeouts: int = 0
+    protocol_failures: int = 0
+    device_connections_rejected: int = 0
+    device_rpcs_rejected: int = 0
+    peak_connections: int = 0
+    revoked_connections: int = 0
+
+
 class Server:
     def __init__(
         self,
@@ -191,10 +234,46 @@ class Server:
         self.stream_handlers: dict[str, StreamHandler] = {}
         self._server: asyncio.AbstractServer | None = None
         self._ws_server: Any | None = None
+        self._ws_auth_watch_task: asyncio.Task[None] | None = None
         self._allow_public_bind = allow_public_bind
         self._tcp_bind: tuple[str, int] | None = (
             self._validate_tcp_bind(tcp_bind, allow_public_bind) if tcp_bind else None
         )
+        self._ws_connections: set[ServerConnection] = set()
+        self._ws_tasks: dict[ServerConnection, asyncio.Task[Any]] = {}
+        self._ws_identities: dict[ServerConnection, tuple[str, str]] = {}
+        self._ws_by_device: dict[tuple[str, str], set[ServerConnection]] = defaultdict(set)
+        self._ws_revoking: dict[ServerConnection, tuple[float, int]] = {}
+        self._ws_rpc_counts: dict[tuple[str, str], int] = {}
+        self._ws_metrics = WebSocketMetrics()
+        self._ws_auth_timeout = float(_env_number(
+            "ALPI_HOST_WS_AUTH_TIMEOUT", WS_AUTH_TIMEOUT_SECONDS,
+            minimum=1.0, maximum=120.0,
+        ))
+        self._ws_auth_recheck = float(_env_number(
+            "ALPI_HOST_WS_AUTH_RECHECK", WS_AUTH_RECHECK_SECONDS,
+            minimum=0.1, maximum=60.0,
+        ))
+        self._ws_close_timeout = float(_env_number(
+            "ALPI_HOST_WS_CLOSE_TIMEOUT", WS_CLOSE_TIMEOUT_SECONDS,
+            minimum=0.1, maximum=10.0,
+        ))
+        self._ws_revocation_retry = float(_env_number(
+            "ALPI_HOST_WS_REVOCATION_RETRY", WS_REVOCATION_RETRY_SECONDS,
+            minimum=1.0, maximum=60.0,
+        ))
+        self._ws_max_connections = int(_env_number(
+            "ALPI_HOST_WS_MAX_CONNECTIONS", WS_MAX_CONNECTIONS,
+            minimum=1, maximum=10_000,
+        ))
+        self._ws_max_connections_per_device = int(_env_number(
+            "ALPI_HOST_WS_MAX_CONNECTIONS_PER_DEVICE", WS_MAX_CONNECTIONS_PER_DEVICE,
+            minimum=1, maximum=1_000,
+        ))
+        self._ws_max_rpcs_per_device = int(_env_number(
+            "ALPI_HOST_WS_MAX_RPCS_PER_DEVICE", WS_MAX_RPCS_PER_DEVICE,
+            minimum=1, maximum=1_000,
+        ))
 
     @staticmethod
     def _validate_tcp_bind(
@@ -252,6 +331,12 @@ class Server:
         self._ws_server = await ws_serve(
             self._handle_websocket, host=host, port=port,
             compression="deflate", max_size=_max_message_bytes(),
+            process_request=self._process_ws_handshake,
+            close_timeout=self._ws_close_timeout,
+            max_queue=WS_MAX_QUEUE,
+        )
+        self._ws_auth_watch_task = asyncio.create_task(
+            self._watch_websocket_authorizations(),
         )
         log.info("host server listening on ws://%s:%d", host, port)
 
@@ -264,8 +349,43 @@ class Server:
         await self._start_ws(host, port)
 
     async def stop(self) -> None:
+        if self._ws_auth_watch_task is not None:
+            self._ws_auth_watch_task.cancel()
+            try:
+                await self._ws_auth_watch_task
+            except asyncio.CancelledError:
+                pass
+            self._ws_auth_watch_task = None
         if self._ws_server is not None:
-            self._ws_server.close()
+            self._ws_server.close(close_connections=False)
+            connections = list(self._ws_connections)
+            close_tasks = [
+                asyncio.create_task(ws.close(code=1001, reason="Server shutting down"))
+                for ws in connections
+            ]
+            if close_tasks:
+                _done, pending_close = await asyncio.wait(
+                    close_tasks, timeout=self._ws_close_timeout * 2,
+                )
+                for task in pending_close:
+                    task.cancel()
+            current = asyncio.current_task()
+            tasks = [task for task in self._ws_tasks.values() if task is not current]
+            for task in tasks:
+                task.cancel("server-stop")
+            if tasks:
+                _done, pending_handlers = await asyncio.wait(
+                    tasks, timeout=self._ws_close_timeout,
+                )
+            else:
+                pending_handlers = set()
+            for ws in connections:
+                if not ws.transport.is_closing():
+                    ws.transport.abort()
+            if close_tasks:
+                await asyncio.gather(*close_tasks, return_exceptions=True)
+            for task in pending_handlers:
+                task.cancel("server-stop")
             await self._ws_server.wait_closed()
             self._ws_server = None
         if self._server is not None:
@@ -278,6 +398,44 @@ class Server:
                 sock.unlink()
             except OSError:
                 pass
+
+    def _process_ws_handshake(self, connection: ServerConnection, request):
+        try:
+            upgrades = request.headers.get_all("Upgrade")
+        except Exception:  # noqa: BLE001
+            self._ws_metrics.protocol_failures += 1
+            return connection.respond(HTTPStatus.BAD_REQUEST, "Invalid WebSocket handshake\n")
+        if not any(str(value).lower() == "websocket" for value in upgrades):
+            return None
+        self._ws_metrics.handshakes += 1
+        if len(self._ws_connections) >= self._ws_max_connections:
+            self._ws_metrics.handshakes_rejected += 1
+            return connection.respond(HTTPStatus.SERVICE_UNAVAILABLE, "WebSocket capacity reached\n")
+        return None
+
+    def websocket_status(self) -> dict[str, int | float]:
+        metrics = self._ws_metrics
+        return {
+            "active_connections": len(self._ws_connections),
+            "authenticated_connections": len(self._ws_identities),
+            "active_devices": len(self._ws_by_device),
+            "connection_limit": self._ws_max_connections,
+            "connections_per_device_limit": self._ws_max_connections_per_device,
+            "rpcs_per_device_limit": self._ws_max_rpcs_per_device,
+            "auth_timeout_seconds": self._ws_auth_timeout,
+            "auth_recheck_seconds": self._ws_auth_recheck,
+            "close_timeout_seconds": self._ws_close_timeout,
+            "revocation_retry_seconds": self._ws_revocation_retry,
+            "peak_connections": metrics.peak_connections,
+            "handshakes": metrics.handshakes,
+            "handshakes_rejected": metrics.handshakes_rejected,
+            "auth_failures": metrics.auth_failures,
+            "auth_timeouts": metrics.auth_timeouts,
+            "protocol_failures": metrics.protocol_failures,
+            "device_connections_rejected": metrics.device_connections_rejected,
+            "device_rpcs_rejected": metrics.device_rpcs_rejected,
+            "revoked_connections": metrics.revoked_connections,
+        }
 
     async def serve_forever(self) -> None:
         assert self._server is not None, "call start() first"
@@ -322,18 +480,206 @@ class Server:
                 json.dumps(payload, separators=(",", ":"), ensure_ascii=False),
             )
 
+        if len(self._ws_connections) >= self._ws_max_connections:
+            self._ws_metrics.handshakes_rejected += 1
+            await ws.close(code=1013, reason="WebSocket capacity reached")
+            return
+        self._ws_connections.add(ws)
+        task = asyncio.current_task()
+        if task is not None:
+            self._ws_tasks[ws] = task
+        self._ws_metrics.peak_connections = max(
+            self._ws_metrics.peak_connections,
+            len(self._ws_connections),
+        )
         try:
+            try:
+                message = await asyncio.wait_for(ws.recv(), timeout=self._ws_auth_timeout)
+            except asyncio.TimeoutError:
+                self._ws_metrics.auth_timeouts += 1
+                await ws.close(code=1008, reason="Authentication timeout")
+                return
+            authenticated = await self._authenticate_websocket_message(message, send)
+            if authenticated is None:
+                await ws.close(code=1008, reason="Authentication failed")
+                return
+            line, body, meta = authenticated
+            if not self._register_websocket_identity(ws, meta):
+                self._ws_metrics.device_connections_rejected += 1
+                await send({
+                    "id": body.get("id"),
+                    "error": {
+                        "code": -32029,
+                        "message": "too-many-connections",
+                        "data": {"detail": "device WebSocket limit reached"},
+                    },
+                })
+                await ws.close(code=1013, reason="Device connection limit reached")
+                return
+            await self._handle_request(
+                line, send, require_token=True, authenticated=meta,
+            )
             async for message in ws:
-                line = message if isinstance(message, str) else message.decode("utf-8")
-                # Remote (TCP/WS) = require a paired-device token.
-                await self._handle_request(line, send, require_token=True)
+                authenticated = await self._authenticate_websocket_message(message, send)
+                if authenticated is None:
+                    await ws.close(code=1008, reason="Authentication failed")
+                    return
+                line, body, meta = authenticated
+                if (meta.connection_id, meta.device_id) != self._ws_identities.get(ws):
+                    self._ws_metrics.auth_failures += 1
+                    await send({
+                        "id": body.get("id"),
+                        "error": {
+                            "code": -32000,
+                            "message": "auth-failed",
+                            "data": {"reason": "socket-identity-changed"},
+                        },
+                    })
+                    await ws.close(code=1008, reason="Socket identity changed")
+                    return
+                await self._handle_request(
+                    line, send, require_token=True, authenticated=meta,
+                )
         except websockets.ConnectionClosed:
             return
         except Exception:  # noqa: BLE001
             log.exception("host websocket connection crashed")
+        finally:
+            self._unregister_websocket(ws)
+
+    async def _authenticate_websocket_message(
+        self, message: str | bytes, send: SendCoro,
+    ) -> tuple[str, dict[str, Any], "AuthMeta"] | None:
+        try:
+            line = message if isinstance(message, str) else message.decode("utf-8")
+            body = json.loads(line)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            self._ws_metrics.protocol_failures += 1
+            await send({
+                "id": None,
+                "error": {"code": -32700, "message": "parse-error"},
+            })
+            return None
+        if not isinstance(body, dict):
+            self._ws_metrics.protocol_failures += 1
+            await send({
+                "id": None,
+                "error": {"code": -32600, "message": "invalid-request"},
+            })
+            return None
+        meta = await asyncio.to_thread(_check_token_meta, body)
+        if not meta.valid:
+            self._ws_metrics.auth_failures += 1
+            error: dict[str, Any] = {"code": -32000, "message": "auth-failed"}
+            if meta.reason:
+                error["data"] = {"reason": meta.reason}
+            await send({"id": body.get("id"), "error": error})
+            return None
+        return line, body, meta
+
+    def _register_websocket_identity(self, ws: ServerConnection, meta: "AuthMeta") -> bool:
+        key = (meta.connection_id, meta.device_id)
+        sockets = self._ws_by_device[key]
+        if len(sockets) >= self._ws_max_connections_per_device:
+            if not sockets:
+                self._ws_by_device.pop(key, None)
+            return False
+        sockets.add(ws)
+        self._ws_identities[ws] = key
+        return True
+
+    def _unregister_websocket(self, ws: ServerConnection) -> None:
+        self._ws_connections.discard(ws)
+        self._ws_revoking.pop(ws, None)
+        self._ws_tasks.pop(ws, None)
+        key = self._ws_identities.pop(ws, None)
+        if key is None:
+            return
+        sockets = self._ws_by_device.get(key)
+        if sockets is not None:
+            sockets.discard(ws)
+            if not sockets:
+                self._ws_by_device.pop(key, None)
+
+    def _begin_device_rpc(self, meta: "AuthMeta") -> bool:
+        key = (meta.connection_id, meta.device_id)
+        active = self._ws_rpc_counts.get(key, 0)
+        if active >= self._ws_max_rpcs_per_device:
+            self._ws_metrics.device_rpcs_rejected += 1
+            return False
+        self._ws_rpc_counts[key] = active + 1
+        return True
+
+    def _end_device_rpc(self, meta: "AuthMeta") -> None:
+        key = (meta.connection_id, meta.device_id)
+        active = self._ws_rpc_counts.get(key, 0)
+        if active <= 1:
+            self._ws_rpc_counts.pop(key, None)
+        else:
+            self._ws_rpc_counts[key] = active - 1
+
+    async def close_device_websockets(
+        self, connection_id: str, device_id: str, *,
+        exclude_task: asyncio.Task[Any] | None = None,
+    ) -> int:
+        sockets = list(self._ws_by_device.get((connection_id, device_id), ()))
+        if not sockets:
+            return 0
+        now = time.monotonic()
+        cancel: list[ServerConnection] = []
+        for ws in sockets:
+            state = self._ws_revoking.get(ws)
+            if state is None:
+                state = (now, 0)
+                self._ws_metrics.revoked_connections += 1
+            first_seen, attempts = state
+            if attempts == 0 or now >= first_seen + attempts * self._ws_revocation_retry:
+                cancel.append(ws)
+                attempts += 1
+            self._ws_revoking[ws] = (first_seen, attempts)
+        await asyncio.gather(*(
+            ws.close(code=1008, reason="Device authorization revoked")
+            for ws in sockets
+        ), return_exceptions=True)
+        caller = exclude_task or asyncio.current_task()
+        for ws in cancel:
+            task = self._ws_tasks.get(ws)
+            if task is not None and task is not caller:
+                task.cancel()
+        return len(sockets)
+
+    async def close_connection_websockets(self, connection_id: str) -> int:
+        identities = [key for key in self._ws_by_device if key[0] == connection_id]
+        if not identities:
+            return 0
+        caller = asyncio.current_task()
+        closed = await asyncio.gather(*(
+            self.close_device_websockets(*key, exclude_task=caller)
+            for key in identities
+        ))
+        return sum(closed)
+
+    async def _watch_websocket_authorizations(self) -> None:
+        while True:
+            await asyncio.sleep(self._ws_auth_recheck)
+            if not self._ws_identities:
+                continue
+            try:
+                active = await asyncio.to_thread(_active_authorizations)
+            except Exception:  # noqa: BLE001
+                log.exception("cannot verify active WebSocket authorizations")
+                active = set()
+            stale = [key for key in self._ws_by_device if key not in active]
+            if stale:
+                caller = asyncio.current_task()
+                await asyncio.gather(*(
+                    self.close_device_websockets(*key, exclude_task=caller)
+                    for key in stale
+                ))
 
     async def _handle_request(
         self, line: str, send: SendCoro, require_token: bool = False,
+        authenticated: "AuthMeta | None" = None,
     ) -> None:
         try:
             body = json.loads(line)
@@ -345,8 +691,9 @@ class Server:
         profile_scope: list[str] = []
         from alpi.host.connection_context import ConnectionContext, use as use_connection
         request_context = ConnectionContext(source="local")
+        remote_meta: AuthMeta | None = None
         if require_token:
-            meta = await asyncio.to_thread(_check_token_meta, body)
+            meta = authenticated or await asyncio.to_thread(_check_token_meta, body)
             valid, role, profile_scope = meta
             if not valid:
                 error: dict[str, Any] = {"code": -32000, "message": "auth-failed"}
@@ -364,6 +711,7 @@ class Server:
                     source="remote",
                     role=meta.role or "member",
                 )
+                remote_meta = meta
         method = str(body.get("method") or "")
         if require_token and method in _LOCAL_ONLY_METHODS:
             log.warning("host forbidden: %s blocked over remote transport", method)
@@ -470,12 +818,26 @@ class Server:
         else:
             delivery = send
         with use_connection(request_context):
-            if method in self.stream_handlers:
-                await self._dispatch_stream(body, delivery)
+            if remote_meta is not None and not self._begin_device_rpc(remote_meta):
+                await delivery({
+                    "id": body.get("id"),
+                    "error": {
+                        "code": -32029,
+                        "message": "too-many-requests",
+                        "data": {"detail": "device RPC concurrency limit reached"},
+                    },
+                })
                 return
-            response = await self._dispatch(body)
-            if response is not None:
-                await delivery(response)
+            try:
+                if method in self.stream_handlers:
+                    await self._dispatch_stream(body, delivery)
+                    return
+                response = await self._dispatch(body)
+                if response is not None:
+                    await delivery(response)
+            finally:
+                if remote_meta is not None:
+                    self._end_device_rpc(remote_meta)
 
     async def _dispatch(self, body: dict[str, Any]) -> dict[str, Any] | None:
         request_id = body.get("id")
@@ -676,6 +1038,27 @@ def _check_token(body: dict[str, Any]) -> bool:
 def _check_token_role(body: dict[str, Any]) -> tuple[bool, str]:
     valid, role, _ = _check_token_meta(body)
     return valid, role
+
+
+def _active_authorizations() -> set[tuple[str, str]]:
+    from alpi.host import connections as connections_mod
+
+    if connections_mod.store_path().exists():
+        data = connections_mod.load_auth_store()
+        return {
+            (connection["id"], device["id"])
+            for connection in data["connections"]
+            if connection["status"] == "active"
+            for device in connection["devices"]
+            if device["status"] == "active" and device.get("token")
+        }
+    from alpi.host import devices as devices_mod
+
+    return {
+        (f"legacy_{row['token'][-8:]}", f"legacy_{row['token'][-8:]}")
+        for row in devices_mod.load()
+        if row.get("token")
+    }
 
 
 @dataclass(frozen=True)

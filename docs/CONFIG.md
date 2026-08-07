@@ -692,6 +692,26 @@ Plaintext hostname routes are rejected because DNS may resolve them to a public
 address (including alternate numeric IPv4 forms). Use a private IP literal for
 direct WS or a certificate-validated hostname with WSS.
 
+WebSocket safety limits are daemon-wide environment settings. Defaults should
+fit Desktop and Mobile; changing them requires a daemon restart.
+
+| Environment | Default | Effect |
+|---|---:|---|
+| `ALPI_HOST_WS_MAX_CONNECTIONS` | `128` | Maximum simultaneous WebSockets. |
+| `ALPI_HOST_WS_MAX_CONNECTIONS_PER_DEVICE` | `8` | Maximum sockets sharing one device credential. |
+| `ALPI_HOST_WS_MAX_RPCS_PER_DEVICE` | `8` | Maximum concurrent RPC handlers or streams for one device. |
+| `ALPI_HOST_WS_AUTH_TIMEOUT` | `10` | Seconds allowed for the first authenticated request. |
+| `ALPI_HOST_WS_AUTH_RECHECK` | `1` | Seconds between active-socket authorization checks. |
+| `ALPI_HOST_WS_CLOSE_TIMEOUT` | `1` | Maximum graceful WebSocket close wait in seconds. |
+| `ALPI_HOST_WS_REVOCATION_RETRY` | `5` | Minimum seconds before retrying cancellation of a revoked stream. |
+
+These can be set in the daemon process environment or the root `~/.alpi/.env`.
+There is intentionally no global handshake-per-minute setting: before
+authentication, Alpi cannot distinguish a paired client from an attacker, and
+a shared budget would let cheap HTTP requests lock out legitimate devices.
+Per-IP limits belong in the public reverse proxy, firewall or WAF where the
+original client address is trustworthy.
+
 The host plane lives with the `default` profile and its single socket serves
 every sibling profile. **Admin** connections plus direct local socket access
 reach any profile. To limit which profiles a paired **member** connection may

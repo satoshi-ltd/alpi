@@ -141,6 +141,7 @@ async def _data_chat_send(
     heartbeat_task: asyncio.Task | None = None
     pre_hb_task: asyncio.Task | None = None
     lock_acquired = False
+    server_stopping = False
     try:
         async def _pre_heartbeat() -> None:
             try:
@@ -314,6 +315,11 @@ async def _data_chat_send(
             **({"attachments": produced} if produced else {}),
         })
         await emit({"event": "done", "session_id": engine.session.id})
+    except asyncio.CancelledError as exc:
+        server_stopping = "server-stop" in exc.args
+        if engine is not None:
+            engine.request_interrupt("server-stop" if server_stopping else "connection-closed")
+        raise
     finally:
         if pre_hb_task is not None:
             pre_hb_task.cancel()
@@ -327,7 +333,12 @@ async def _data_chat_send(
                 await heartbeat_task
             except (asyncio.CancelledError, Exception):  # noqa: BLE001
                 pass
-        if task is not None:
+        if task is not None and not server_stopping:
+            while not task.done():
+                try:
+                    await asyncio.shield(task)
+                except asyncio.CancelledError:
+                    pass
             await task
         with _active_lock:
             _active.pop(request_id, None)

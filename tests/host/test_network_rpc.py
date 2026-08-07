@@ -109,6 +109,10 @@ async def test_status_reports_in_use_host_and_port(
     assert result["port"] == 49200
     assert result["port_source"] == "default"
     assert result["configured_endpoints"] == []
+    assert result["websocket"]["active_connections"] == 0
+    assert result["websocket"]["auth_failures"] == 0
+    assert result["websocket"]["connection_limit"] == 128
+    assert result["websocket"]["auth_timeout_seconds"] == 10.0
     assert result["candidates"]["tailscale"] is None
     assert result["candidates"]["lan"] is None
     assert result["candidates"]["configured"] is None

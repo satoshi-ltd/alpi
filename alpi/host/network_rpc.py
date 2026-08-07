@@ -125,6 +125,7 @@ async def _status(_params: dict[str, Any], server: host_server.Server) -> dict[s
         "endpoints": endpoints,
         "configured_endpoints": configured_endpoints,
         "is_endpoints_override": bool((cfg.host or {}).get("endpoints")),
+        "websocket": server.websocket_status(),
         "candidates": {
             "tailscale": probes["tailscale"],
             "lan": probes["lan"],

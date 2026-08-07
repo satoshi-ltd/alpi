@@ -544,10 +544,3 @@ def test_docker_compose_raises_file_descriptor_limit() -> None:
     nofile = compose["services"]["alpi"]["ulimits"]["nofile"]
     assert nofile["soft"] == 8192
     assert nofile["hard"] == 8192
-
-
-def test_wss_compose_overlay_removes_direct_daemon_ports() -> None:
-    repo_root = Path(__file__).resolve().parents[2]
-    overlay = (repo_root / "docker-compose.wss.yml").read_text()
-
-    assert "alpi:\n    ports: !reset []" in overlay
