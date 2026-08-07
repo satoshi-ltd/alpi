@@ -11,6 +11,26 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.5.4 — 2026-08-07 — a crash that tells you what happened
+
+- **The window no longer goes blank when the interface crashes.** You get a
+  designed screen with the error, a note that your daemon and agents are a
+  separate process and may still be working, a Reload button, and **Copy
+  details** that puts the full report on the clipboard. Unsaved interface input
+  is not claimed as recovered. The stack sits behind a collapsed Technical
+  details disclosure instead of filling the screen.
+- **The crash survives a reload and remains accessible.** A recovery screen
+  keeps the previous report available to copy until you continue into the
+  healthy interface.
+- **Failures while the application modules load are caught too.** React, App,
+  styles, providers, theme and zoom setup now load behind a guarded dynamic
+  bootstrap instead of failing before the recovery path exists.
+- **Render crashes, window errors and unhandled promise rejections are all
+  recorded.** The render boundary includes the component stack while the
+  startup fallback remains independent of the application's CSS and components.
+
+Client-side only — no daemon contract changes. Requires alpi ≥ 0.12.0.
+
 ## v0.5.3 — 2026-08-06 — the secure route is a real route
 
 - **Remote connections now dial complete `ws://` or `wss://` URLs.** WSS uses
