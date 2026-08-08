@@ -141,6 +141,8 @@ _ADMIN_METHODS = frozenset({
     "host.connections.list",
     "host.connections.create",
     "host.connections.add_device",
+    "host.connections.pairing_status",
+    "host.connections.cancel_pairing",
     "host.connections.update",
     "host.connections.set_status",
     "host.connections.delete",
@@ -220,6 +222,7 @@ class WebSocketMetrics:
     device_rpcs_rejected: int = 0
     peak_connections: int = 0
     revoked_connections: int = 0
+    pairing_exchange_attempts: int = 0
 
 
 class Server:
@@ -435,6 +438,7 @@ class Server:
             "device_connections_rejected": metrics.device_connections_rejected,
             "device_rpcs_rejected": metrics.device_rpcs_rejected,
             "revoked_connections": metrics.revoked_connections,
+            "pairing_exchange_attempts": metrics.pairing_exchange_attempts,
         }
 
     async def serve_forever(self) -> None:
@@ -498,6 +502,12 @@ class Server:
             except asyncio.TimeoutError:
                 self._ws_metrics.auth_timeouts += 1
                 await ws.close(code=1008, reason="Authentication timeout")
+                return
+            pairing_request = _preauth_pairing_request(message)
+            if pairing_request is not None:
+                self._ws_metrics.pairing_exchange_attempts += 1
+                await self._handle_request(pairing_request, send, bootstrap=True)
+                await ws.close(code=1000, reason="Pairing exchange complete")
                 return
             authenticated = await self._authenticate_websocket_message(message, send)
             if authenticated is None:
@@ -680,6 +690,7 @@ class Server:
     async def _handle_request(
         self, line: str, send: SendCoro, require_token: bool = False,
         authenticated: "AuthMeta | None" = None,
+        bootstrap: bool = False,
     ) -> None:
         try:
             body = json.loads(line)
@@ -690,7 +701,11 @@ class Server:
         role = "admin"
         profile_scope: list[str] = []
         from alpi.host.connection_context import ConnectionContext, use as use_connection
-        request_context = ConnectionContext(source="local")
+        request_context = ConnectionContext(
+            connection_id="bootstrap" if bootstrap else "host",
+            source="bootstrap" if bootstrap else "local",
+            role="member" if bootstrap else "admin",
+        )
         remote_meta: AuthMeta | None = None
         if require_token:
             meta = authenticated or await asyncio.to_thread(_check_token_meta, body)
@@ -713,6 +728,22 @@ class Server:
                 )
                 remote_meta = meta
         method = str(body.get("method") or "")
+        if bootstrap and method != "host.connections.exchange_pairing":
+            await send({
+                "id": body.get("id"),
+                "error": {"code": -32001, "message": "forbidden"},
+            })
+            return
+        if require_token and method == "host.connections.exchange_pairing":
+            await send({
+                "id": body.get("id"),
+                "error": {
+                    "code": -32001,
+                    "message": "forbidden",
+                    "data": {"detail": "pairing exchange is pre-authentication only"},
+                },
+            })
+            return
         if require_token and method in _LOCAL_ONLY_METHODS:
             log.warning("host forbidden: %s blocked over remote transport", method)
             await send({
@@ -832,14 +863,16 @@ class Server:
                 if method in self.stream_handlers:
                     await self._dispatch_stream(body, delivery)
                     return
-                response = await self._dispatch(body)
+                response = await self._dispatch(body, expose_internal_errors=not bootstrap)
                 if response is not None:
                     await delivery(response)
             finally:
                 if remote_meta is not None:
                     self._end_device_rpc(remote_meta)
 
-    async def _dispatch(self, body: dict[str, Any]) -> dict[str, Any] | None:
+    async def _dispatch(
+        self, body: dict[str, Any], *, expose_internal_errors: bool = True,
+    ) -> dict[str, Any] | None:
         request_id = body.get("id")
         method = str(body.get("method") or "")
         params = body.get("params") or {}
@@ -860,13 +893,15 @@ class Server:
             }
         except Exception as e:  # noqa: BLE001
             log.exception("handler %s crashed", method)
+            error: dict[str, Any] = {
+                "code": -32603,
+                "message": "internal-error",
+            }
+            if expose_internal_errors:
+                error["data"] = {"detail": str(e)}
             return {
                 "id": request_id,
-                "error": {
-                    "code": -32603,
-                    "message": "internal-error",
-                    "data": {"detail": str(e)},
-                },
+                "error": error,
             }
         return {"id": request_id, "result": out or {}}
 
@@ -1074,6 +1109,17 @@ class AuthMeta:
         yield self.valid
         yield self.role
         yield self.scope
+
+
+def _preauth_pairing_request(message: str | bytes) -> str | None:
+    try:
+        line = message if isinstance(message, str) else message.decode("utf-8")
+        body = json.loads(line)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(body, dict) or body.get("method") != "host.connections.exchange_pairing":
+        return None
+    return line
 
 
 def _check_token_meta(body: dict[str, Any]) -> AuthMeta:

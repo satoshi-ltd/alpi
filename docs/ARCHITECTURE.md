@@ -536,9 +536,9 @@ Two transports, one dispatcher:
    public IP → `0.0.0.0` (all interfaces); a public IP without
    `host.allow_public_bind` → refused (no TCP); Docker → `0.0.0.0`.
    Loopback is never a bind target. A `0.0.0.0` bind leans on the
-   pairing token (and a firewall/NAT) for access control, so `alpi
-   doctor` warns whenever the listener binds `0.0.0.0`. **Per-device pairing
-   token required** in every request's `params.auth_token`.
+   device token (and a firewall/NAT) for access control, so `alpi
+   doctor` warns whenever the listener binds `0.0.0.0`. **Per-device token
+   required** in every authenticated request's `params.auth_token`.
    `permessage-deflate` is negotiated by default
    (`ws_serve(compression="deflate")`); JSON-RPC payloads drop
    50–80% on the wire. Clients that don't negotiate fall back to
@@ -568,10 +568,12 @@ Wire shape (both transports):
 ```
 
 Unix socket payload omits `auth_token` — the local transport is
-sovereign and bypasses token validation entirely. WS **always**
-requires a valid token; an empty or missing `connections.yaml` rejects
-every WS request (fail-closed). The first device is minted locally
-over the Unix socket; there is no remote bootstrap path.
+sovereign and bypasses token validation entirely. WS requires a valid token
+except for one exact bootstrap verb: `host.connections.exchange_pairing` may
+redeem a locally-created, high-entropy grant once and then the daemon closes
+that socket. An empty or missing `connections.yaml` rejects every ordinary WS
+request (fail-closed). The connection, role, profile scope and grant are
+created locally over the Unix socket; remote bootstrap cannot choose them.
 
 The daemon writes either a single response line or, for streaming
 verbs (`host.chat.send`, `host.events.subscribe`), multiple frames
@@ -589,6 +591,11 @@ is the operational identity: `{id, label, role, profile_scope, status}`. Its
 `devices[]` each hold a separate opaque token plus self-reported client/name/
 version metadata and `last_seen`. Desktop and mobile may therefore share one
 connection, its sessions and accounting, without sharing a credential.
+`pairings[]` holds only hashed temporary grants and lifecycle metadata. A
+pending grant expires after ten minutes; the first exchange marks it consumed
+and appends exactly one device under the same file lock. Terminal metadata is
+kept for seven days, capped at 50 entries per connection, and omitted from
+`host.connections.list`.
 
 The daemon resolves each token to `{connection_id, device_id, role,
 profile_scope}` and binds that identity to the request context. A hit bumps
@@ -615,13 +622,18 @@ those over WS).
 Lifecycle:
 
 - **Create connection**: `host.connections.create(label, role, profiles)`
-  creates the parent identity and its first credential. The token is embedded
-  in the QR/link shown by `alpi setup → Connections → New connection`. The
-  default role is `member`.
-- **Add device**: `host.connections.add_device(connection_id)` creates a new
-  credential under the same parent identity. The client calls
-  `host.connections.register_device` after pairing to record its type, name
-  and app version.
+  creates the parent identity and a ten-minute one-time grant. The grant is
+  embedded in the QR/link shown by `alpi setup → Connections → New connection`.
+  The default role is `member`.
+- **Add device**: `host.connections.add_device(connection_id)` creates another
+  one-time grant under the same parent identity.
+- **Exchange**: the client sends `host.connections.exchange_pairing` as its
+  first unauthenticated WS message. The daemon atomically consumes the grant,
+  creates the permanent device credential with its client/name/version
+  metadata, returns it once and closes the bootstrap socket. Reuse returns
+  `-32011 pairing-used`; expiry returns `-32011 pairing-expired`.
+- **Observe / cancel**: local/admin callers use
+  `host.connections.pairing_status` and `host.connections.cancel_pairing`.
 - **Update / disable**: `host.connections.update` changes label, role or
   profile scope. `host.connections.set_status` disables or enables every
   linked credential without deleting sessions or usage.
@@ -640,8 +652,10 @@ roles and profile scopes are preserved; the source becomes
 reliable grouping key. Sessions written before this contract lack an owner
 and remain under the synthetic `host` connection.
 
-`host.devices.*` remains as a compatibility RPC alias for older clients; all
-new management uses `host.connections.*`.
+`host.devices.*` remains as a compatibility RPC alias for older management
+clients; generated payloads use the new one-time grant contract. Desktop and
+Mobile continue to consume old QR/link payloads that contain a final `token`.
+All new management uses `host.connections.*`.
 
 Verb namespaces in current shape:
 
@@ -710,7 +724,7 @@ Verb namespaces in current shape:
   Tauri layer used to shell out to `alpi workgroup …` for these;
   v0.5 routes them through the host plane so mobile reuses the same
   contract.
-- **`host.connections.{list,create,add_device,update,set_status,delete,revoke_device,register_device,summary,usage_daily}`**
+- **`host.connections.{list,create,add_device,exchange_pairing,pairing_status,cancel_pairing,update,set_status,delete,revoke_device,register_device,summary,usage_daily}`**
   — connection/device management and 14-day aggregate usage for the
   WebSocket transport. The server requires
   scoped members to pass `params.profile` explicitly on every

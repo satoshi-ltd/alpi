@@ -26,6 +26,7 @@ function parsePairingPayload(payload) {
       url: endpointUrl || (legacyHost && legacyPort ? `ws://${legacyHost}:${legacyPort}` : ""),
       name: url.searchParams.get("name"),
       token: url.searchParams.get("token"),
+      pairingToken: url.searchParams.get("pairing_token"),
     };
   }
   const parsed = JSON.parse(text);
@@ -36,6 +37,7 @@ function parsePairingPayload(payload) {
     url: endpointUrl || (legacyHost && legacyPort ? `ws://${legacyHost}:${legacyPort}` : ""),
     name: parsed.n ?? parsed.name,
     token: parsed.t ?? parsed.token,
+    pairingToken: parsed.g ?? parsed.pairing_token,
   };
 }
 
@@ -381,15 +383,16 @@ export function useHostConnections({
 
   const onAddHostConnection = useCallback(
     async (payload) => {
-      const { url, name, token } = parsePairingPayload(payload);
-      if (!url || !token) {
-        throw new Error("pairing payload needs url and token");
+      const { url, name, token, pairingToken } = parsePairingPayload(payload);
+      if (!url || (!token && !pairingToken)) {
+        throw new Error("pairing payload needs a URL and pairing credential");
       }
       const resolvedName = name ?? new URL(url).hostname;
       await invoke("host_connection_add_remote", {
         name: resolvedName,
         url,
-        token,
+        ...(token ? { token } : {}),
+        ...(pairingToken ? { pairingToken } : {}),
       });
       await reloadConnections();
       invoke("host_connections_probe_active").catch(() => {});

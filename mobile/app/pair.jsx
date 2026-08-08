@@ -10,7 +10,7 @@ import { radii, space , fontSizes, lineHeights} from '../src/theme/tokens';
 import { Button } from '../src/components/Button';
 import { useToast } from '../src/components/Toast';
 import { useEndpoint } from '../src/lib/EndpointContext';
-import { parsePairing, PairingError } from '../src/lib/pairing';
+import { exchangePairing, parsePairing, PairingError } from '../src/lib/pairing';
 import { probe } from '../src/lib/probe';
 import { call } from '../src/lib/rpc';
 import { useTheme } from '../src/theme/ThemeContext';
@@ -30,8 +30,19 @@ export default function Pair() {
   const tryPair = async (input) => {
     setBusy(true);
     setError(null);
+    let exchangedCredentialSaved = false;
     try {
-      const endpoint = parsePairing(input);
+      let endpoint = parsePairing(input);
+      const usesOneTimeGrant = Boolean(endpoint.pairingToken);
+      const clientName = Platform.constants?.Model || Platform.OS;
+      const appVersion = Constants.expoConfig?.version || '';
+      endpoint = await exchangePairing(endpoint, {
+        name: clientName,
+        appVersion,
+      }, call, addConnection);
+      if (usesOneTimeGrant) {
+        exchangedCredentialSaved = true;
+      }
       const { status, deviceName, deviceId } = await probe(endpoint);
       if (status === 'auth-failed') {
         throw new PairingError('Token rejected by daemon. Generate a fresh pairing link on the daemon and try again.');
@@ -47,15 +58,18 @@ export default function Pair() {
       }
       await call(endpoint, 'host.connections.register_device', {
         client: 'mobile',
-        name: Platform.constants?.Model || Platform.OS,
-        app_version: Constants.expoConfig?.version || '',
+        name: clientName,
+        app_version: appVersion,
       }).catch(() => {});
       const finalEndpoint = { ...endpoint, deviceId, ...(deviceName ? { name: deviceName } : {}) };
       await addConnection(finalEndpoint);
       toast({ title: 'Paired', message: `Connected to ${finalEndpoint.name}`, duration: 2200 });
       router.replace('/paired');
     } catch (e) {
-      setError(e?.message ?? 'Pairing failed');
+      const message = e?.message ?? 'Pairing failed';
+      setError(exchangedCredentialSaved
+        ? `Pairing credential saved. ${message}`
+        : message);
     } finally {
       setBusy(false);
     }
@@ -191,7 +205,7 @@ export default function Pair() {
             <TextInput
               value={text}
               onChangeText={setText}
-              placeholder="alpi://device?url=wss://…&name=…&token=…"
+              placeholder="alpi://device?url=wss://…&name=…&pairing_token=…"
               placeholderTextColor={colors.ink4}
               multiline
               numberOfLines={3}

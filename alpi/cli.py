@@ -2106,20 +2106,20 @@ def _choose_pairing_endpoint(h: Path, endpoints: list[dict[str, str]]) -> dict[s
 
 
 def _pairing_code_data(
-    endpoint_url: str, pairing_name: str, token: str, connection_id: str,
+    endpoint_url: str, pairing_name: str, pairing_token: str, connection_id: str,
 ) -> tuple[dict[str, str], str]:
     from urllib.parse import urlencode
 
     payload = {
         "u": endpoint_url,
         "n": pairing_name,
-        "t": token,
+        "g": pairing_token,
         "c": connection_id,
     }
     link = "alpi://device?" + urlencode({
         "url": endpoint_url,
         "name": pairing_name,
-        "token": token,
+        "pairing_token": pairing_token,
         "connection_id": connection_id,
     })
     return payload, link
@@ -2178,7 +2178,7 @@ def _device_add(h: Path, endpoints: list[dict[str, str]]) -> None:
             return ui.cancelled()
         profile_scope = selected
 
-    connection, device = connections_mod.create_connection(
+    connection, pairing = connections_mod.create_pairing_connection(
         label=label or "connection", role=role, profile_scope=profile_scope,
     )
 
@@ -2189,7 +2189,7 @@ def _device_add(h: Path, endpoints: list[dict[str, str]]) -> None:
 
     pairing_name = resolve_host_pairing_name(h)
     payload, link = _pairing_code_data(
-        endpoint_url, pairing_name, device["token"], connection["id"],
+        endpoint_url, pairing_name, pairing["token"], connection["id"],
     )
 
     ui.banner(
@@ -2210,15 +2210,23 @@ def _device_add(h: Path, endpoints: list[dict[str, str]]) -> None:
     ui._console.print(buf.getvalue())
     ui._console.print(f"[dim]label:    [/dim] {connection['label']}")
     ui._console.print(f"[dim]role:     [/dim] {connection['role']}")
-    ui._console.print(f"[dim]token id:[/dim] …{device['token'][-8:]}")
+    ui._console.print("[dim]status:   [/dim] pending · expires in 10 minutes")
     ui._console.print(f"[dim]desktop:  [/dim] {link}")
     ui._console.print("")
     ui.dim(
         "Scan the QR from mobile or paste the desktop link into the desktop app.\n"
-        "This pairing link adds the first device to the connection.\n"
-        "If the QR or link is exposed to anyone else, revoke and generate a new one."
+        "This one-time link adds the first device to the connection.\n"
+        "It becomes invalid after the first successful exchange or after 10 minutes."
     )
     ui.press_enter()
+    status = connections_mod.pairing_status(connection["id"], pairing["id"])
+    if status and status["status"] == "consumed":
+        ui.ok("pairing code used — generate a new code if the client did not save it")
+    elif status and status["status"] == "expired":
+        ui.warn("pairing expired")
+    elif status and status["status"] == "pending":
+        connections_mod.cancel_pairing(connection["id"], pairing["id"])
+        ui.dim("pairing cancelled")
 
 
 def _devices_network_setup(h: Path) -> None:
@@ -2450,8 +2458,8 @@ def _device_detail(h: Path, connection_id: str) -> None:
             endpoint = _choose_pairing_endpoint(h, endpoints)
             if endpoint is None:
                 continue
-            connection, device = connections_mod.add_device(connection_id)
-            _show_connection_pairing(h, endpoint, connection, device)
+            connection, pairing = connections_mod.create_device_pairing(connection_id)
+            _show_connection_pairing(h, endpoint, connection, pairing)
         elif isinstance(choice, tuple) and choice[0] == "revoke_device":
             device = next(
                 (row for row in public["devices"] if row["id"] == choice[1]),
@@ -2492,7 +2500,7 @@ def _device_detail(h: Path, connection_id: str) -> None:
                 ui.cancelled()
 
 
-def _show_connection_pairing(h: Path, endpoint, connection, device) -> None:
+def _show_connection_pairing(h: Path, endpoint, connection, pairing) -> None:
     from alpi import ui
     from alpi.host.network import resolve_host_pairing_name
     import io
@@ -2502,7 +2510,7 @@ def _show_connection_pairing(h: Path, endpoint, connection, device) -> None:
     endpoint_url = endpoint["url"]
     name = resolve_host_pairing_name(h)
     payload, link = _pairing_code_data(
-        endpoint_url, name, device["token"], connection["id"],
+        endpoint_url, name, pairing["token"], connection["id"],
     )
     ui.banner(
         ui.crumb("setup", "connections", connection["label"], "add device"),
@@ -2516,7 +2524,17 @@ def _show_connection_pairing(h: Path, endpoint, connection, device) -> None:
     qr.print_ascii(out=buf, invert=True)
     ui._console.print(buf.getvalue())
     ui._console.print(f"[dim]desktop:[/dim] {link}")
+    ui._console.print("[dim]status: [/dim] pending · expires in 10 minutes")
     ui.press_enter()
+    from alpi.host import connections as connections_mod
+    status = connections_mod.pairing_status(connection["id"], pairing["id"])
+    if status and status["status"] == "consumed":
+        ui.ok("pairing code used — generate a new code if the client did not save it")
+    elif status and status["status"] == "expired":
+        ui.warn("pairing expired")
+    elif status and status["status"] == "pending":
+        connections_mod.cancel_pairing(connection["id"], pairing["id"])
+        ui.dim("pairing cancelled")
 
 
 def _workgroups_status(h: Path) -> str:

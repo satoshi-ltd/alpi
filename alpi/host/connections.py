@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import hmac
 import os
 import re
@@ -26,7 +27,10 @@ else:
     msvcrt = None
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+PAIRING_TTL_SECONDS = 10 * 60
+PAIRING_HISTORY_RETENTION_SECONDS = 7 * 24 * 60 * 60
+PAIRING_HISTORY_LIMIT = 50
 _VALID_ROLES = frozenset({"member", "admin"})
 _VALID_STATUSES = frozenset({"active", "disabled", "deleted"})
 _VALID_CLIENTS = frozenset({"desktop", "mobile", "unknown"})
@@ -41,6 +45,12 @@ _failed_identity: tuple[str, int, int, int] | None = None
 
 class StoreUnavailable(Exception):
     pass
+
+
+class PairingExchangeError(Exception):
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
 
 
 @dataclass(frozen=True)
@@ -177,6 +187,43 @@ def _normalise_device(row: Any, fallback_label: str = "") -> dict[str, Any] | No
     }
 
 
+def _normalise_pairing(row: Any) -> dict[str, Any] | None:
+    if not isinstance(row, dict):
+        return None
+    secret_hash = str(row.get("secret_hash") or "")
+    if not secret_hash:
+        return None
+    status = str(row.get("status") or "pending")
+    if status not in {"pending", "consumed", "expired", "cancelled"}:
+        status = "cancelled"
+    return {
+        "id": str(row.get("id") or _new_id("pair")),
+        "secret_hash": secret_hash,
+        "created": int(row.get("created") or time.time()),
+        "expires_at": int(row.get("expires_at") or 0),
+        "status": status,
+        "consumed_at": int(row["consumed_at"]) if row.get("consumed_at") else None,
+        "device_id": str(row.get("device_id") or ""),
+    }
+
+
+def _prune_pairings(pairings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    now = int(time.time())
+    pending: list[dict[str, Any]] = []
+    history: list[dict[str, Any]] = []
+    for pairing in pairings:
+        if pairing["status"] == "pending" and pairing["expires_at"] > now:
+            pending.append(pairing)
+            continue
+        if pairing["status"] == "pending":
+            pairing["status"] = "expired"
+        terminal_at = int(pairing.get("consumed_at") or pairing.get("created") or 0)
+        if terminal_at >= now - PAIRING_HISTORY_RETENTION_SECONDS:
+            history.append(pairing)
+    history.sort(key=lambda pairing: int(pairing.get("created") or 0), reverse=True)
+    return pending + history[:PAIRING_HISTORY_LIMIT]
+
+
 def _normalise_connection(row: Any) -> dict[str, Any] | None:
     if not isinstance(row, dict):
         return None
@@ -185,6 +232,10 @@ def _normalise_connection(row: Any) -> dict[str, Any] | None:
         device for raw in (row.get("devices") or [])
         if (device := _normalise_device(raw, label)) is not None
     ]
+    pairings = _prune_pairings([
+        pairing for raw in (row.get("pairings") or [])
+        if (pairing := _normalise_pairing(raw)) is not None
+    ])
     return {
         "id": str(row.get("id") or _new_id("conn")),
         "label": label,
@@ -193,6 +244,7 @@ def _normalise_connection(row: Any) -> dict[str, Any] | None:
         "role": _role(row.get("role")),
         "profile_scope": _scope(row.get("profile_scope")),
         "devices": devices,
+        "pairings": pairings,
         "deleted_at": int(row["deleted_at"]) if row.get("deleted_at") else None,
     }
 
@@ -410,6 +462,174 @@ def public_connection(row: dict[str, Any]) -> dict[str, Any]:
         "profile_scope": list(row.get("profile_scope") or []),
         "devices": devices,
     }
+
+
+def _public_pairing(pairing: dict[str, Any]) -> dict[str, Any]:
+    status = pairing.get("status") or "cancelled"
+    if status == "pending" and int(pairing.get("expires_at") or 0) <= int(time.time()):
+        status = "expired"
+    return {
+        "id": pairing["id"],
+        "created": pairing.get("created") or 0,
+        "expires_at": pairing.get("expires_at") or 0,
+        "status": status,
+        "consumed_at": pairing.get("consumed_at"),
+        "device_id": pairing.get("device_id") or "",
+    }
+
+
+def _new_pairing(now: int) -> tuple[dict[str, Any], dict[str, Any]]:
+    secret = secrets.token_urlsafe(32)
+    stored = {
+        "id": _new_id("pair"),
+        "secret_hash": hashlib.sha256(secret.encode()).hexdigest(),
+        "created": now,
+        "expires_at": now + PAIRING_TTL_SECONDS,
+        "status": "pending",
+        "consumed_at": None,
+        "device_id": "",
+    }
+    return stored, {**_public_pairing(stored), "token": secret}
+
+
+def create_pairing_connection(
+    label: str, *, role: str = "member", profile_scope: list[str] | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    with _locked():
+        data = _load_inside_lock()
+        now = int(time.time())
+        stored_pairing, pairing = _new_pairing(now)
+        connection = _normalise_connection({
+            "id": _new_id("conn"),
+            "label": (label or "").strip() or "pending",
+            "created": now,
+            "status": "active",
+            "role": role,
+            "profile_scope": [] if _role(role) == "admin" else list(profile_scope or []),
+            "devices": [],
+            "pairings": [stored_pairing],
+        })
+        data["connections"].append(connection)
+        _atomic_write(data)
+        return connection, pairing
+
+
+def create_device_pairing(connection_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    with _locked():
+        data = _load_inside_lock()
+        connection = next(
+            (c for c in data["connections"] if c["id"] == connection_id and c["status"] != "deleted"),
+            None,
+        )
+        if connection is None:
+            raise KeyError(connection_id)
+        stored_pairing, pairing = _new_pairing(int(time.time()))
+        connection["pairings"].append(stored_pairing)
+        _atomic_write(data)
+        return connection, pairing
+
+
+def exchange_pairing(
+    pairing_token: str, *, client: str, name: str, app_version: str,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    if not pairing_token:
+        raise PairingExchangeError("pairing-invalid")
+    presented_hash = hashlib.sha256(pairing_token.encode()).hexdigest()
+    if not any(
+        _tokens_match(pairing.get("secret_hash", ""), presented_hash)
+        for connection in _cached_store()["connections"]
+        for pairing in connection.get("pairings") or []
+    ):
+        raise PairingExchangeError("pairing-invalid")
+    now = int(time.time())
+    with _locked():
+        data = _load_inside_lock()
+        for connection in data["connections"]:
+            for pairing in connection.get("pairings") or []:
+                if not _tokens_match(pairing.get("secret_hash", ""), presented_hash):
+                    continue
+                status = pairing.get("status") or "cancelled"
+                if status == "pending" and int(pairing.get("expires_at") or 0) <= now:
+                    pairing["status"] = "expired"
+                    if not connection["devices"] and not any(
+                        candidate["status"] == "pending"
+                        for candidate in connection.get("pairings") or []
+                    ):
+                        _mark_connection_deleted(connection)
+                    _atomic_write(data)
+                    raise PairingExchangeError("pairing-expired")
+                if status == "expired":
+                    if connection["status"] != "deleted" and not connection["devices"] and not any(
+                        candidate["status"] == "pending"
+                        for candidate in connection.get("pairings") or []
+                    ):
+                        _mark_connection_deleted(connection)
+                        _atomic_write(data)
+                    raise PairingExchangeError("pairing-expired")
+                if status == "consumed":
+                    raise PairingExchangeError("pairing-used")
+                if status != "pending" or connection.get("status") != "active":
+                    raise PairingExchangeError("pairing-invalid")
+                clean_client = client if client in _VALID_CLIENTS else "unknown"
+                device = _normalise_device({
+                    "id": _new_id("dev"),
+                    "token": secrets.token_urlsafe(32),
+                    "name": name.strip()[:128],
+                    "client": clean_client,
+                    "app_version": app_version.strip()[:64],
+                    "created": now,
+                    "status": "active",
+                }, connection.get("label") or "")
+                connection["devices"].append(device)
+                pairing["status"] = "consumed"
+                pairing["consumed_at"] = now
+                pairing["device_id"] = device["id"]
+                _atomic_write(data)
+                return connection, device
+    raise PairingExchangeError("pairing-invalid")
+
+
+def pairing_status(connection_id: str, pairing_id: str) -> dict[str, Any] | None:
+    with _locked():
+        data = _load_inside_lock()
+        connection = next((c for c in data["connections"] if c["id"] == connection_id), None)
+        if connection is None:
+            return None
+        pairing = next((p for p in connection.get("pairings") or [] if p["id"] == pairing_id), None)
+        if pairing is None:
+            return None
+        changed = False
+        if pairing["status"] == "pending" and pairing["expires_at"] <= int(time.time()):
+            pairing["status"] = "expired"
+            changed = True
+        if pairing["status"] == "expired" and connection["status"] != "deleted" \
+                and not connection["devices"] and not any(
+                    candidate["status"] == "pending"
+                    for candidate in connection.get("pairings") or []
+                ):
+            _mark_connection_deleted(connection)
+            changed = True
+        if changed:
+            _atomic_write(data)
+        return _public_pairing(pairing)
+
+
+def cancel_pairing(connection_id: str, pairing_id: str) -> bool:
+    with _locked():
+        data = _load_inside_lock()
+        connection = next((c for c in data["connections"] if c["id"] == connection_id), None)
+        if connection is None:
+            return False
+        pairing = next((p for p in connection.get("pairings") or [] if p["id"] == pairing_id), None)
+        if pairing is None or pairing["status"] != "pending":
+            return False
+        pairing["status"] = "cancelled"
+        if not connection["devices"] and not any(
+            p["status"] == "pending" for p in connection.get("pairings") or []
+        ):
+            _mark_connection_deleted(connection)
+        _atomic_write(data)
+        return True
 
 
 def create_connection(
@@ -652,12 +872,14 @@ def _pairing_network() -> dict[str, Any]:
 
 
 def _pairing_payload(
-    connection: dict[str, Any], device: dict[str, Any], network: dict[str, Any],
+    connection: dict[str, Any], pairing: dict[str, Any], network: dict[str, Any],
 ) -> dict[str, Any]:
     return {
         "connection_id": connection["id"],
-        "device_id": device["id"],
-        "token": device["token"],
+        "pairing_id": pairing["id"],
+        "pairing_token": pairing["token"],
+        "pairing_status": pairing["status"],
+        "expires_at": pairing["expires_at"],
         "label": connection["label"],
         "role": connection["role"],
         "profile_scope": connection["profile_scope"],
@@ -669,6 +891,9 @@ def register(server: host_server.Server) -> None:
     server.register("host.connections.list", _list)
     server.register("host.connections.create", _create)
     server.register("host.connections.add_device", _add_device)
+    server.register("host.connections.exchange_pairing", _exchange_pairing)
+    server.register("host.connections.pairing_status", _pairing_status)
+    server.register("host.connections.cancel_pairing", _cancel_pairing)
     server.register("host.connections.update", _update)
     server.register("host.connections.set_status", _set_status)
     server.register("host.connections.delete", _delete)
@@ -696,8 +921,8 @@ async def _create(params: dict[str, Any], _server: host_server.Server) -> dict[s
         raise host_server.HandlerError(-32602, "invalid-params", data={"detail": "invalid role"})
     profiles = validate_profiles((params or {}).get("profiles") or [])
     network = _pairing_network()
-    connection, device = create_connection(label, role=role, profile_scope=profiles)
-    return _pairing_payload(connection, device, network)
+    connection, pairing = create_pairing_connection(label, role=role, profile_scope=profiles)
+    return _pairing_payload(connection, pairing, network)
 
 
 async def _add_device(params: dict[str, Any], _server: host_server.Server) -> dict[str, Any]:
@@ -706,10 +931,61 @@ async def _add_device(params: dict[str, Any], _server: host_server.Server) -> di
         raise host_server.HandlerError(-32004, "not-found", data={"detail": "connection not found"})
     network = _pairing_network()
     try:
-        connection, device = add_device(connection_id)
+        connection, pairing = create_device_pairing(connection_id)
     except KeyError:
         raise host_server.HandlerError(-32004, "not-found", data={"detail": "connection not found"})
-    return _pairing_payload(connection, device, network)
+    return _pairing_payload(connection, pairing, network)
+
+
+async def _exchange_pairing(params: dict[str, Any], _server: host_server.Server) -> dict[str, Any]:
+    from alpi.host.connection_context import current
+
+    if current().source != "bootstrap":
+        raise host_server.HandlerError(
+            -32001, "forbidden", data={"detail": "pairing exchange is pre-authentication only"},
+        )
+    try:
+        connection, device = exchange_pairing(
+            str((params or {}).get("pairing_token") or ""),
+            client=str((params or {}).get("client") or "unknown"),
+            name=str((params or {}).get("name") or ""),
+            app_version=str((params or {}).get("app_version") or ""),
+        )
+    except PairingExchangeError as exc:
+        messages = {
+            "pairing-expired": "pairing code expired",
+            "pairing-used": "pairing code already used",
+            "pairing-invalid": "pairing code invalid",
+        }
+        raise host_server.HandlerError(
+            -32011, exc.reason, data={"detail": messages[exc.reason]},
+        ) from exc
+    return {
+        "connection_id": connection["id"],
+        "device_id": device["id"],
+        "token": device["token"],
+        "label": connection["label"],
+        "role": connection["role"],
+        "profile_scope": connection["profile_scope"],
+    }
+
+
+async def _pairing_status(params: dict[str, Any], _server: host_server.Server) -> dict[str, Any]:
+    status = pairing_status(
+        str((params or {}).get("connection_id") or ""),
+        str((params or {}).get("pairing_id") or ""),
+    )
+    if status is None:
+        raise host_server.HandlerError(-32004, "not-found", data={"detail": "pairing not found"})
+    return status
+
+
+async def _cancel_pairing(params: dict[str, Any], _server: host_server.Server) -> dict[str, Any]:
+    existed = cancel_pairing(
+        str((params or {}).get("connection_id") or ""),
+        str((params or {}).get("pairing_id") or ""),
+    )
+    return {"ok": True, "existed": existed}
 
 
 async def _update(params: dict[str, Any], _server: host_server.Server) -> dict[str, Any]:

@@ -196,8 +196,16 @@ describe("useHostConnections.onAddHostConnection", () => {
     [
       "alpi://device?host=100.64.0.1&port=49200&name=Legacy&token=secret",
       "ws://100.64.0.1:49200",
+      { token: "secret" },
     ],
-  ])("stores a complete endpoint URL from new and legacy pairings", async (payload, url) => {
+    [
+      "alpi://device?url=wss%3A%2F%2Fclient.example.com&name=Client&pairing_token=grant",
+      "wss://client.example.com",
+      { pairingToken: "grant" },
+    ],
+  ].map((row) => row.length === 2 ? [...row, { token: "secret" }] : row))(
+    "stores a complete endpoint URL from new and legacy pairings",
+    async (payload, url, credential) => {
     invoke.mockImplementation(async (cmd) => {
       if (cmd === "host_connections") return makeConnections("local");
       if (cmd === "profile_summaries" || cmd === "workgroups") return [];
@@ -212,9 +220,10 @@ describe("useHostConnections.onAddHostConnection", () => {
     expect(invoke).toHaveBeenCalledWith("host_connection_add_remote", {
       name: expect.any(String),
       url,
-      token: "secret",
+      ...credential,
     });
-  });
+    },
+  );
 });
 
 describe("useHostConnections.touchWorkgroup", () => {

@@ -73,6 +73,16 @@ Desktop/mobile WebSocket transport uses per-device tokens grouped in
 `~/.alpi/host/connections.yaml`. A connection carries the shared `label`,
 `role` (`admin`/`member`) and optional `profile_scope`; each linked device has
 its own revocable token, client metadata and `last_seen`.
+New QR/links carry a high-entropy one-time grant instead of that token. The
+store keeps only the grant hash. `host.connections.exchange_pairing` consumes
+it atomically, creates one permanent device credential and records the client
+metadata; unused grants expire after ten minutes. Setup/Desktop can query or
+cancel pending grants. The exchange is restricted to a dedicated bootstrap
+context, and terminal metadata is kept for seven days with a 50-row cap per
+connection. Desktop and Mobile still read legacy `token=` links. Older clients
+cannot consume new grants; upgrade them before generating a new QR. Older QRs
+already contain permanent device tokens, remain valid after a daemon upgrade
+and must be revoked through their device row if they were exposed.
 
 `network.host` is the shared *advertised* address; the listener *binds* a
 local-safe address derived from it — a private/Tailscale IP binds itself, a
@@ -84,7 +94,7 @@ address); `alpi doctor` warns whenever the listener binds `0.0.0.0`
 
 Three trust tiers:
 
-- **Unix socket (local)** — sovereign. Mints the first device, recovers a
+- **Unix socket (local)** — sovereign. Mints connections and pairing grants, recovers a
   lost admin token, bypasses all role checks.
 - **WS admin** — manages profiles, email, providers, MCP, workgroups,
   peers, sandbox, schedules, daemon restart, connections and devices. Always
@@ -112,7 +122,8 @@ Per-connection profile scope:
 - `host.connections.create` sets the initial scope and
   `host.connections.update` retunes it without re-pairing. Promoting to
   `admin` clears scope. `host.connections.add_device` adds a separate
-  credential to the same identity.
+  one-time grant to the same identity. The exact pre-authentication exchange
+  verb can only redeem an existing grant; it cannot choose role or scope.
 
 When `connections.yaml` is absent, startup migrates every `devices.yaml` row
 to its own connection, preserving token and access, then renames the source

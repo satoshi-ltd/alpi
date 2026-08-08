@@ -11,6 +11,25 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.5.5 — 2026-08-07 — scan once means once
+
+- **New QR codes are temporary grants, not stored credentials.** Desktop
+  exchanges a grant over the selected WS/WSS route, persists only the returned
+  device token and keeps the stable connection identity. The bootstrap socket
+  is never reused as an authenticated connection.
+- **Pairing dialogs tell the truth in real time.** They show pending, consumed
+  or expired state, count down from the daemon's actual expiry and cancel an
+  unused grant when closed. A consumed code is reported as used, not as proof that the other
+  client persisted its credential. Both New connection and Add device use the
+  same lifecycle.
+- **Older daemons remain pairable.** Desktop continues to accept and generate
+  legacy `token=` payloads when talking to a daemon that predates the exchange
+  contract.
+
+Requires alpi ≥ 0.12.11 for one-time pairing. Existing connections and legacy
+pairing payloads remain compatible. Desktop releases before 0.5.5 cannot pair
+from a new grant emitted by alpi 0.12.11; update Desktop first.
+
 ## v0.5.4 — 2026-08-07 — a crash that tells you what happened
 
 - **The window no longer goes blank when the interface crashes.** You get a

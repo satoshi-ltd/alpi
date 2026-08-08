@@ -26,6 +26,7 @@ import Usage from "./Usage.jsx";
 import { PairDeviceModal } from "./fields/devices.jsx";
 import { toUsageDays } from "../../hooks/useUsage.js";
 import { copyText } from "../../lib/clipboard.js";
+import { pairingDisplayStatus, pairingExpiryText } from "../../lib/pairing-expiry.js";
 import { profileLabel } from "../../lib/profile-display.js";
 import styles from "./ConnectionsPage.module.css";
 
@@ -44,11 +45,13 @@ function usd(value) {
 }
 
 function pairingLink(payload, endpointUrl = payload?.url) {
-  if (!endpointUrl || !payload?.token) return "";
+  const credential = payload?.pairing_token || payload?.token;
+  if (!endpointUrl || !credential) return "";
   const query = new URLSearchParams({
     url: endpointUrl,
     name: payload.pairing_name || payload.label || "Alpi",
-    token: payload.token,
+    ...(payload.pairing_token ? { pairing_token: credential } : { token: credential }),
+    ...(payload.connection_id ? { connection_id: payload.connection_id } : {}),
   });
   return `alpi://device?${query.toString()}`;
 }
@@ -287,7 +290,13 @@ export default function ConnectionsPage({
           }}
         />
       )}
-      {pairing && <PairingModal payload={pairing} onClose={() => { setPairing(null); reload(); }} />}
+      {pairing && (
+        <PairingModal
+          payload={pairing}
+          connectionArg={connectionArg}
+          onClose={() => { setPairing(null); reload(); }}
+        />
+      )}
       {editTarget && (
         <EditConnectionModal
           row={editTarget}
@@ -455,9 +464,13 @@ function EditConnectionModal({ row, profiles, connectionArg, onClose, onSaved })
 }
 
 
-function PairingModal({ payload, onClose }) {
+function PairingModal({ payload, connectionArg, onClose }) {
   const notify = useNotify();
   const [qr, setQr] = useState("");
+  const [status, setStatus] = useState(
+    payload.pairing_token ? (payload.pairing_status || "pending") : "consumed",
+  );
+  const [clock, setClock] = useState(Date.now());
   const endpoints = payload.endpoints?.length
     ? payload.endpoints
     : [{ url: payload.url || `ws://${payload.host}:${payload.port}`, label: "Direct" }];
@@ -472,13 +485,44 @@ function PairingModal({ payload, onClose }) {
     return () => { cancelled = true; };
   }, [link]);
 
+  useEffect(() => {
+    if (status !== "pending" || !payload.pairing_id) return undefined;
+    const timer = setInterval(() => {
+      invoke("connections_pairing_status", {
+        targetId: payload.connection_id,
+        pairingId: payload.pairing_id,
+        ...connectionArg,
+      }).then((next) => setStatus(next?.status || "pending")).catch(() => {});
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [connectionArg, payload.connection_id, payload.pairing_id, status]);
+
+  useEffect(() => {
+    if (!payload.expires_at) return undefined;
+    const timer = setInterval(() => setClock(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [payload.expires_at]);
+
+  const displayStatus = pairingDisplayStatus(status, payload.expires_at, clock);
+
+  async function close() {
+    if (status === "pending" && payload.pairing_id) {
+      await invoke("connections_cancel_pairing", {
+        targetId: payload.connection_id,
+        pairingId: payload.pairing_id,
+        ...connectionArg,
+      }).catch(() => {});
+    }
+    onClose();
+  }
+
   async function copy() {
     const ok = await copyText(link);
     notify({ message: ok ? "Pairing link copied" : "Copy failed", variant: ok ? "success" : "error" });
   }
 
   return (
-    <Modal title={`Pair a device with ${payload.label}`} onClose={onClose} width="var(--modal-md)">
+    <Modal title={`Pair a device with ${payload.label}`} onClose={close} width="var(--modal-md)">
       <div className={styles.pairing}>
         <div className={styles.qr} dangerouslySetInnerHTML={{ __html: qr }} />
         <div>
@@ -487,11 +531,12 @@ function PairingModal({ payload, onClose }) {
               {endpoints.map((endpoint) => <option key={endpoint.url} value={endpoint.url}>{endpoint.url}</option>)}
             </select>
           )}
-          <Mono>{endpointUrl}</Mono><p>Scan from desktop or mobile. This device receives its own credential under the same connection.</p>
+          <Mono>{endpointUrl}</Mono><p>Scan from desktop or mobile. Pairing: {pairingExpiryText(payload.expires_at, status, clock)}.</p>
+          <Chip state={displayStatus === "consumed" ? "on" : displayStatus === "pending" ? "warn" : "off"}>{displayStatus}</Chip>
         </div>
       </div>
       <div className={styles.link}><Mono>{link}</Mono><Button icon={<CopyIcon />} onClick={copy} title="Copy pairing link" /></div>
-      <div className={styles.modalActions}><Button onClick={onClose}>Done</Button></div>
+      <div className={styles.modalActions}><Button onClick={close}>Done</Button></div>
     </Modal>
   );
 }

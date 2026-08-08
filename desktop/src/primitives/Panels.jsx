@@ -168,7 +168,7 @@ export function ConnectionPanel({
               className={`field field-mono ${styles.pairInput}`}
               value={pairing}
               onChange={(e) => setPairing(e.target.value)}
-              placeholder="alpi://device?url=wss%3A%2F%2Fclient.example.com&name=home&token=…"
+              placeholder="alpi://device?url=wss%3A%2F%2Fclient.example.com&name=home&pairing_token=…"
             />
             <button
               type="button"

@@ -14,6 +14,24 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.3.1 — 2026-08-07 — keep the key off the camera roll
+
+- **Mobile exchanges a scanned one-time grant before saving anything.** The
+  daemon returns a separate permanent device token; only that final token
+  reaches SecureStore, while the QR credential becomes unusable immediately.
+  Mobile writes that returned credential before probing or registering client
+  metadata, so a transient post-exchange failure cannot burn the QR and lose
+  the permanent token.
+- **Expired, reused and invalid grants fail explicitly.** The user can generate
+  a fresh Add device code without deleting the parent connection or affecting
+  its other devices.
+- **Legacy QR codes still work.** Payloads from older daemons containing a
+  final `token` follow the existing probe and registration path.
+
+Requires alpi ≥ 0.12.11 for one-time pairing. Existing connections remain
+compatible. Mobile releases before 0.3.1 cannot pair from a new grant emitted
+by alpi 0.12.11; update Mobile first.
+
 ## v0.3.0 — 2026-07-31 — the recipe declares, the chat runs
 
 - **Workgroup settings now list every declared pipeline**, with the launch chain

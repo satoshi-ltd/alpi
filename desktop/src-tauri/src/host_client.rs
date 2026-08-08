@@ -780,6 +780,53 @@ pub fn add_remote_connection(
     Ok(id)
 }
 
+pub fn exchange_and_add_remote_connection(
+    name: String,
+    url: String,
+    pairing_token: String,
+    device_name: String,
+    app_version: String,
+) -> Result<String, String> {
+    let endpoint = parse_remote_endpoint(url.trim(), 0)?;
+    if pairing_token.trim().is_empty() {
+        return Err("pairing token is required".to_string());
+    }
+    let mut ws = WsClient::connect(
+        &endpoint.url,
+        0,
+        Duration::from_secs(WS_CONNECT_TIMEOUT_SECS),
+        Duration::from_secs(READ_TIMEOUT_REMOTE_SECS),
+    )?;
+    let id = next_request_id();
+    let result = ws.request(
+        &id,
+        &json!({
+            "id": id,
+            "method": "host.connections.exchange_pairing",
+            "params": {
+                "pairing_token": pairing_token,
+                "client": "desktop",
+                "name": device_name,
+                "app_version": app_version,
+            },
+        }),
+    )?;
+    let token = result
+        .get("token")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "pairing exchange returned no device token".to_string())?;
+    let connection_id = add_remote_connection(name, endpoint.url, token.to_string())?;
+    if let Some(device_id) = result.get("device_id").and_then(Value::as_str) {
+        persist_device_id(&connection_id, device_id);
+    }
+    persist_role(
+        &connection_id,
+        result.get("role").and_then(Value::as_str).map(str::to_string),
+    );
+    Ok(connection_id)
+}
+
 pub fn mark_connection_revoked(id: &str) {
     mutate_connections(|state| {
         let mut changed = false;

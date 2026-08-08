@@ -85,11 +85,17 @@ Run `alpi setup` → **Connections** → **New connection** on machine B:
 3. Restrict it to the profile(s) it may reach (e.g. `abby`). Blank means
    all profiles — avoid that for an integration.
 
-You get a QR code, an `alpi://device?url=…&name=…&token=…` link,
-and the token for its first device. Copy the **token** and the **URL**
-to machine A. Add another device from the connection detail when another
-client should share the same sessions and accounting; it receives a separate
-token so either device can be revoked without affecting the other.
+You get a QR code and an
+`alpi://device?url=…&name=…&pairing_token=…` link. The pairing grant expires
+after ten minutes and can be exchanged once. A normal Desktop/Mobile client
+does that automatically. A headless integration sends
+`host.connections.exchange_pairing` as its first unauthenticated WebSocket
+message with `pairing_token`, `client`, `name` and `app_version`, then stores
+the returned **device token before any probe or other fallible setup**, then
+uses it as `params.auth_token`. Add another
+device from the connection detail when another client should share the same
+sessions and accounting; each exchange returns a separate token so either
+device can be revoked without affecting the other.
 
 A `member` token restricted to `abby` can only reach `abby`, is blocked
 from every admin method, and gets profile-scoped filtering on responses

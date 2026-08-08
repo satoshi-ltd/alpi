@@ -28,8 +28,11 @@ Prerequisites on the alpi side:
 - A pairing QR (or `alpi://` URL) generated on the desktop / TUI.
 
 The QR / URL encodes the complete WS/WSS route, instance name, stable connection
-identity, and device token. The mobile app persists pairings via
-`expo-secure-store` and can hold multiple paired daemons.
+identity, and a one-time grant that expires after ten minutes. Mobile exchanges
+it once for a separate permanent device token, stores only that final token in
+`expo-secure-store` before probing the daemon, and can hold multiple paired
+daemons. Legacy QR/URLs from
+older daemons that contain a final `token` remain readable.
 
 ## What works today
 

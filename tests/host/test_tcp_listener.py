@@ -647,6 +647,135 @@ def _ws_request(token: str, request_id: str = "1", **params) -> str:
 
 
 @pytest.mark.asyncio
+async def test_websocket_exchanges_pairing_before_authentication(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    from alpi.host import connections
+
+    server, url = await _start_security_test_server(short_tmp, monkeypatch)
+    connections.register(server)
+    row, pairing = connections.create_pairing_connection("Phone")
+    try:
+        async with websockets.connect(url) as ws:
+            await ws.send(json.dumps({
+                "id": "pair",
+                "method": "host.connections.exchange_pairing",
+                "params": {
+                    "pairing_token": pairing["token"],
+                    "client": "desktop",
+                    "name": "MacBook",
+                    "app_version": "1.0",
+                },
+            }))
+            result = json.loads(await ws.recv())["result"]
+            assert result["connection_id"] == row["id"]
+            assert result["device_id"]
+            assert connections.authenticate(result["token"]).valid
+            with pytest.raises(websockets.ConnectionClosedOK):
+                await ws.recv()
+
+        async with websockets.connect(url) as replay:
+            await replay.send(json.dumps({
+                "id": "replay",
+                "method": "host.connections.exchange_pairing",
+                "params": {"pairing_token": pairing["token"]},
+            }))
+            error = json.loads(await replay.recv())["error"]
+            assert error["code"] == -32011
+            assert error["message"] == "pairing-used"
+        assert server.websocket_status()["pairing_exchange_attempts"] == 2
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_authenticated_socket_cannot_call_pairing_exchange(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    from alpi.host import connections
+
+    server, url = await _start_security_test_server(short_tmp, monkeypatch)
+    connections.register(server)
+    _connection, device = connections.create_connection("Member")
+    _pending_connection, pairing = connections.create_pairing_connection("Phone")
+    try:
+        async with websockets.connect(url) as ws:
+            await ws.send(_ws_request(device["token"], "auth"))
+            assert json.loads(await ws.recv())["result"]["pong"] is True
+            await ws.send(json.dumps({
+                "id": "pair",
+                "method": "host.connections.exchange_pairing",
+                "params": {
+                    "auth_token": device["token"],
+                    "pairing_token": pairing["token"],
+                },
+            }))
+            error = json.loads(await ws.recv())["error"]
+            assert error["code"] == -32001
+            assert error["message"] == "forbidden"
+        assert connections.pairing_status(
+            _pending_connection["id"], pairing["id"],
+        )["status"] == "pending"
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_preauth_pairing_hides_unexpected_exception_details(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    server, url = await _start_security_test_server(short_tmp, monkeypatch)
+
+    async def crash(_params, _server):
+        raise RuntimeError("sensitive filesystem detail")
+
+    server.register("host.connections.exchange_pairing", crash)
+    try:
+        async with websockets.connect(url) as ws:
+            await ws.send(json.dumps({
+                "id": "pair",
+                "method": "host.connections.exchange_pairing",
+                "params": {"pairing_token": "invalid"},
+            }))
+            error = json.loads(await ws.recv())["error"]
+            assert error == {"code": -32603, "message": "internal-error"}
+        assert server.websocket_status()["pairing_exchange_attempts"] == 1
+    finally:
+        await server.stop()
+
+
+@pytest.mark.parametrize("method,params", [
+    ("host.connections.list", {}),
+    ("host.connections.create", {"label": "Unauthorized"}),
+    ("host.connections.pairing_status", {
+        "connection_id": "conn_unknown", "pairing_id": "pair_unknown",
+    }),
+    ("host.connections.cancel_pairing", {
+        "connection_id": "conn_unknown", "pairing_id": "pair_unknown",
+    }),
+])
+@pytest.mark.asyncio
+async def test_first_frame_allows_only_pairing_exchange_without_authentication(
+    short_tmp: Path, monkeypatch, method: str, params: dict,
+) -> None:
+    from alpi.host import connections
+
+    server, url = await _start_security_test_server(short_tmp, monkeypatch)
+    connections.register(server)
+    try:
+        async with websockets.connect(url) as ws:
+            await ws.send(json.dumps({"id": "unauth", "method": method, "params": params}))
+            error = json.loads(await ws.recv())["error"]
+            assert error == {"code": -32000, "message": "auth-failed"}
+            with pytest.raises(websockets.ConnectionClosedError):
+                await ws.recv()
+            assert ws.close_code == 1008
+        assert connections.list_connections() == []
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
 async def test_websocket_requires_authentication_before_deadline(
     short_tmp: Path, monkeypatch,
 ) -> None:

@@ -20,6 +20,7 @@ import { ConfirmDelete, DialogFooter } from "../../../primitives/index.js";
 import { formatLastSeen } from "../util.js";
 import styles from "../Settings.module.css";
 import { copyText } from "../../../lib/clipboard.js";
+import { pairingDisplayStatus, pairingExpiryText } from "../../../lib/pairing-expiry.js";
 
 function cacheKey(connectionId) {
   return connectionId || "local";
@@ -350,8 +351,10 @@ export function PairDeviceModal({ connectionId, onClose, onPaired }) {
   const [scopeMode, setScopeMode] = useState("all");
   const [scopeQuery, setScopeQuery] = useState("");
   const generatedRef = useRef(false);
-  const pendingTokenIdRef = useRef(null);
+  const pendingPairingRef = useRef(null);
   const pairedRef = useRef(false);
+  const [pairingStatus, setPairingStatus] = useState("pending");
+  const [pairingClock, setPairingClock] = useState(Date.now());
 
   useEffect(() => {
     invoke("profile_summaries", connectionArg)
@@ -397,11 +400,37 @@ export function PairDeviceModal({ connectionId, onClose, onPaired }) {
   }, [grantAdmin]);
 
   useEffect(() => () => {
-    const tokenId = pendingTokenIdRef.current;
-    if (tokenId && !pairedRef.current) {
-      invoke("devices_revoke", { tokenId, ...connectionArg }).catch(() => {});
+    const pending = pendingPairingRef.current;
+    if (pending && !pairedRef.current) {
+      if (pending.tokenId) {
+        invoke("devices_revoke", { tokenId: pending.tokenId, ...connectionArg }).catch(() => {});
+      } else {
+        invoke("connections_cancel_pairing", {
+          targetId: pending.connectionId,
+          pairingId: pending.pairingId,
+          ...connectionArg,
+        }).catch(() => {});
+      }
     }
   }, [connectionArg]);
+
+  useEffect(() => {
+    if (!payload || pairingStatus !== "pending") return undefined;
+    const timer = setInterval(() => {
+      invoke("connections_pairing_status", {
+        targetId: payload.connection_id,
+        pairingId: payload.pairing_id,
+        ...connectionArg,
+      }).then((next) => setPairingStatus(next?.status || "pending")).catch(() => {});
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [connectionArg, pairingStatus, payload]);
+
+  useEffect(() => {
+    if (!payload?.expires_at) return undefined;
+    const timer = setInterval(() => setPairingClock(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [payload?.expires_at]);
 
   const scopeValid = grantAdmin || scopeMode === "all" || scope.length > 0;
   const canGenerate = (
@@ -422,10 +451,12 @@ export function PairDeviceModal({ connectionId, onClose, onPaired }) {
         profiles: grantAdmin ? [] : (scopeMode === "restrict" ? scope : []),
         ...connectionArg,
       });
-      const token = p?.token || "";
-      const tokenId = token.slice(-8);
-      pendingTokenIdRef.current = tokenId;
-      setPayload({ ...p, token_id: tokenId });
+      pendingPairingRef.current = p.pairing_id
+        ? { connectionId: p.connection_id, pairingId: p.pairing_id }
+        : p.token ? { tokenId: p.token.slice(-8) } : null;
+      setPairingStatus(p.pairing_token ? (p.pairing_status || "pending") : "consumed");
+      setPairingClock(Date.now());
+      setPayload(p);
       setEndpointUrl(p?.url || p?.endpoints?.[0]?.url || (p?.host && p?.port ? `ws://${p.host}:${p.port}` : ""));
     } catch (e) {
       generatedRef.current = false;
@@ -449,13 +480,18 @@ export function PairDeviceModal({ connectionId, onClose, onPaired }) {
 
   const trimmed = label.trim();
   const ready = Boolean(endpointUrl);
+  const displayPairingStatus = pairingDisplayStatus(
+    pairingStatus, payload?.expires_at, pairingClock,
+  );
 
   const desktopLink = useMemo(() => {
     if (!ready) return "";
     const params = new URLSearchParams({
       url: endpointUrl,
       name: trimmed || "device",
-      token: payload.token,
+      ...(payload.pairing_token
+        ? { pairing_token: payload.pairing_token }
+        : { token: payload.token }),
       ...(payload.connection_id ? { connection_id: payload.connection_id } : {}),
     });
     return `alpi://device?${params.toString()}`;
@@ -467,7 +503,7 @@ export function PairDeviceModal({ connectionId, onClose, onPaired }) {
     const qrPayload = JSON.stringify({
       u: endpointUrl,
       n: trimmed,
-      t: payload.token,
+      ...(payload.pairing_token ? { g: payload.pairing_token } : { t: payload.token }),
       ...(payload.connection_id ? { c: payload.connection_id } : {}),
     });
     import("qrcode").then(({ default: QRCode }) =>
@@ -483,38 +519,58 @@ export function PairDeviceModal({ connectionId, onClose, onPaired }) {
   }
 
   async function pair() {
-    if (!payload || busy) return;
+    if (!payload || busy || pairingStatus !== "consumed") return;
     pairedRef.current = true;
-    const roleSuffix = grantAdmin ? " (admin)" : "";
-    notify({ message: `Device "${trimmed}"${roleSuffix} paired`, variant: "success" });
+    notify({
+      message: "Pairing code used. Verify the client connected; otherwise generate a new code.",
+      variant: "success",
+    });
     onPaired?.();
   }
 
   async function cancel() {
-    if (payload?.token_id) {
+    if (payload?.token && !payload?.pairing_id) {
+      const tokenId = payload.token.slice(-8);
       try {
         const list = await invoke("devices_list", connectionArg);
         const row = (Array.isArray(list) ? list : [])
-          .find((d) => d && d.token_id === payload.token_id);
-        if (row && row.last_seen) {
+          .find((device) => device?.token_id === tokenId);
+        if (row?.last_seen) {
           pairedRef.current = true;
-          notify({
-            message: `Device "${row.label || trimmed}" paired`,
-            variant: "success",
-          });
+          notify({ message: `Device "${row.label || trimmed}" paired`, variant: "success" });
           onPaired?.();
           return;
         }
-      } catch {
-        // list rpc failed — fall through to revoke; on revoke failure unmount cleanup retries.
-      }
-      try {
-        await invoke("devices_revoke", { tokenId: payload.token_id, ...connectionArg });
+        await invoke("devices_revoke", { tokenId, ...connectionArg });
         pairedRef.current = true;
       } catch {
-        // leave pairedRef false so unmount cleanup retries the revoke.
+        // leave cleanup to the older daemon's normal token revocation path
+      }
+      onClose?.();
+      return;
+    }
+    if (payload?.pairing_id && pairingStatus === "consumed") {
+      pairedRef.current = true;
+      notify({
+        message: "Pairing code used. Verify the client connected; otherwise generate a new code.",
+        variant: "success",
+      });
+      onPaired?.();
+      return;
+    }
+    if (payload?.pairing_id && pairingStatus === "pending") {
+      try {
+        await invoke("connections_cancel_pairing", {
+          targetId: payload.connection_id,
+          pairingId: payload.pairing_id,
+          ...connectionArg,
+        });
+        pairedRef.current = true;
+      } catch {
+        // unmount cleanup retries cancellation
       }
     }
+    if (pairingStatus !== "pending") pairedRef.current = true;
     onClose?.();
   }
 
@@ -669,10 +725,12 @@ export function PairDeviceModal({ connectionId, onClose, onPaired }) {
                 {ready ? endpointUrl : "…"}
               </div>
               <Eyebrow as="div" className={styles.devicePairMetaSpacer}>
-                Token
+                Pairing
               </Eyebrow>
               <div className={styles.mono}>
-                {payload.token ? `…${payload.token.slice(-8)}` : "…"}
+                {displayPairingStatus === "consumed"
+                  ? "code used · verify the client connected"
+                  : pairingExpiryText(payload.expires_at, pairingStatus, pairingClock)}
               </div>
               <div className={`${styles.muted} ${styles.devicePairMetaSpacer}`}>
                 Scan with the Alpi app on the other device, or copy the link below.
@@ -701,8 +759,10 @@ export function PairDeviceModal({ connectionId, onClose, onPaired }) {
       {payload ? (
         <DialogFooter
           onCancel={cancel}
-          primaryLabel="Pair"
-          primaryDisabled={!ready}
+          primaryLabel={displayPairingStatus === "consumed"
+            ? "Done"
+            : displayPairingStatus === "expired" ? "Code expired" : "Waiting for device…"}
+          primaryDisabled={!ready || displayPairingStatus !== "consumed"}
           primaryLoading={busy}
           onPrimary={pair}
         />

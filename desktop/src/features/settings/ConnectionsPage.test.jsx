@@ -63,8 +63,11 @@ describe("ConnectionsPage", () => {
     invoke.mockImplementation((command) => {
       if (command === "connections_summary") return Promise.resolve(summary);
       if (command === "connections_add_device") return Promise.resolve({
-        label: "Javi", pairing_name: "Atlas daemon", url: "wss://client.example.com", token: "token",
+        connection_id: "conn_javi", pairing_id: "pair_1", pairing_status: "pending",
+        pairing_token: "grant", expires_at: 1_800_000_000,
+        label: "Javi", pairing_name: "Atlas daemon", url: "wss://client.example.com",
       });
+      if (command === "connections_pairing_status") return Promise.resolve({ status: "pending" });
       return Promise.resolve({ ok: true });
     });
     render(<ConnectionsPage profiles={[]} activeConnection={{ id: "local" }} />);
@@ -77,6 +80,12 @@ describe("ConnectionsPage", () => {
     expect(await screen.findByText("Pair a device with Javi")).toBeInTheDocument();
     expect(screen.getByText(/alpi:\/\/device/).textContent).toContain("name=Atlas+daemon");
     expect(screen.getByText(/alpi:\/\/device/).textContent).toContain("url=wss%3A%2F%2Fclient.example.com");
+    expect(screen.getByText(/alpi:\/\/device/).textContent).toContain("pairing_token=grant");
+    expect(screen.getByText("pending")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("connections_cancel_pairing", {
+      targetId: "conn_javi", pairingId: "pair_1", connectionId: "local",
+    }));
   });
 
   it("confirms before revoking one device", async () => {

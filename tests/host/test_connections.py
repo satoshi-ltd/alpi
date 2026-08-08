@@ -444,10 +444,129 @@ def test_console_pairing_data_keeps_connection_identity() -> None:
     assert payload == {
         "u": "wss://client.example.com",
         "n": "Client",
-        "t": "secret-token",
+        "g": "secret-token",
         "c": "conn_123",
     }
     assert "connection_id=conn_123" in link
+    assert "pairing_token=secret-token" in link
+
+
+def test_pairing_grant_is_hashed_and_exchanged_once(monkeypatch, tmp_path: Path) -> None:
+    _root(monkeypatch, tmp_path)
+    row, pairing = connections.create_pairing_connection("Javi", profile_scope=["atlas"])
+
+    stored = yaml.safe_load(connections.store_path().read_text())
+    raw_pairing = stored["connections"][0]["pairings"][0]
+    assert pairing["token"] not in connections.store_path().read_text()
+    assert len(raw_pairing["secret_hash"]) == 64
+    assert stored["connections"][0]["devices"] == []
+
+    exchanged, device = connections.exchange_pairing(
+        pairing["token"], client="mobile", name="iPhone", app_version="1.2.3",
+    )
+
+    assert exchanged["id"] == row["id"]
+    assert connections.authenticate(device["token"]).connection_id == row["id"]
+    assert connections.pairing_status(row["id"], pairing["id"])["status"] == "consumed"
+    with pytest.raises(connections.PairingExchangeError) as replay:
+        connections.exchange_pairing(
+            pairing["token"], client="desktop", name="Copy", app_version="1.0",
+        )
+    assert replay.value.reason == "pairing-used"
+
+
+def test_pairing_history_is_bounded_and_not_returned_in_connection_list(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    _root(monkeypatch, tmp_path)
+    row, _device = connections.create_connection("Javi")
+    for _index in range(connections.PAIRING_HISTORY_LIMIT + 10):
+        _connection, pairing = connections.create_device_pairing(row["id"])
+        assert connections.cancel_pairing(row["id"], pairing["id"])
+
+    stored = connections.list_connections()[0]
+    assert len(stored["pairings"]) == connections.PAIRING_HISTORY_LIMIT
+    assert "pairings" not in connections.public_connection(stored)
+
+
+@pytest.mark.asyncio
+async def test_pairing_exchange_handler_requires_bootstrap_context(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    _root(monkeypatch, tmp_path)
+    _row, pairing = connections.create_pairing_connection("Phone")
+
+    with pytest.raises(HandlerError) as blocked:
+        await connections._exchange_pairing(
+            {"pairing_token": pairing["token"]}, Server(tmp_path),
+        )
+
+    assert blocked.value.code == -32001
+    assert connections.authenticate(pairing["token"]).valid is False
+
+
+def test_concurrent_pairing_exchange_has_exactly_one_winner(monkeypatch, tmp_path: Path) -> None:
+    _root(monkeypatch, tmp_path)
+    row, pairing = connections.create_pairing_connection("Javi")
+
+    def exchange(index):
+        try:
+            return connections.exchange_pairing(
+                pairing["token"], client="desktop", name=f"Desktop {index}", app_version="1",
+            )[1]["token"]
+        except connections.PairingExchangeError as exc:
+            return exc.reason
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(exchange, range(8)))
+
+    assert results.count("pairing-used") == 7
+    assert len([value for value in results if value != "pairing-used"]) == 1
+    stored = next(item for item in connections.list_connections() if item["id"] == row["id"])
+    assert len(stored["devices"]) == 1
+
+
+def test_invalid_pairing_attempts_reuse_the_store_cache(monkeypatch, tmp_path: Path) -> None:
+    _root(monkeypatch, tmp_path)
+    connections.create_pairing_connection("Javi")
+    connections.load_auth_store()
+    parses = 0
+    normalise = connections._normalise_store
+
+    def counted(raw):
+        nonlocal parses
+        parses += 1
+        return normalise(raw)
+
+    monkeypatch.setattr(connections, "_normalise_store", counted)
+    for index in range(100):
+        with pytest.raises(connections.PairingExchangeError):
+            connections.exchange_pairing(
+                f"invalid-{index}", client="unknown", name="", app_version="",
+            )
+
+    assert parses == 0
+
+
+def test_pairing_expiry_and_cancellation(monkeypatch, tmp_path: Path) -> None:
+    _root(monkeypatch, tmp_path)
+    now = 1_700_000_000
+    monkeypatch.setattr(connections.time, "time", lambda: now)
+    row, pairing = connections.create_pairing_connection("Expired")
+    monkeypatch.setattr(connections.time, "time", lambda: now + connections.PAIRING_TTL_SECONDS)
+
+    with pytest.raises(connections.PairingExchangeError) as expired:
+        connections.exchange_pairing(
+            pairing["token"], client="mobile", name="Phone", app_version="1",
+        )
+    assert expired.value.reason == "pairing-expired"
+    assert connections.pairing_status(row["id"], pairing["id"])["status"] == "expired"
+    assert not any(item["id"] == row["id"] for item in connections.list_connections())
+
+    active, pending = connections.create_pairing_connection("Cancelled")
+    assert connections.cancel_pairing(active["id"], pending["id"])
+    assert connections.pairing_status(active["id"], pending["id"])["status"] == "cancelled"
+    assert not any(item["id"] == active["id"] for item in connections.list_connections())
 
 
 @pytest.mark.asyncio

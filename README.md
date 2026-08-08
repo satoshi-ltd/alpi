@@ -82,8 +82,8 @@ The current release ships the full local-to-network shape:
 - ALP.3: hub-anchored shared workgroups for multiple alpis and optional
   human participants.
 - Host-plane access for paired desktop / mobile clients over Unix
-  socket locally and WebSocket remotely, with per-device pairing
-  tokens.
+  socket locally and WebSocket remotely, with ten-minute one-time pairing
+  grants and independently revocable per-device tokens.
 - `alpi doctor`, `alpi logs`, one launchd / systemd user unit per
   machine, backup-friendly file layout, and security audit logs.
 

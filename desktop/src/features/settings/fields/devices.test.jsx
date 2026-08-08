@@ -97,7 +97,10 @@ describe("PairDeviceModal", () => {
       if (command === "devices_generate") {
         return Promise.resolve({
           connection_id: "conn-1",
-          token: "secret",
+          pairing_id: "pair-1",
+          pairing_token: "grant",
+          pairing_status: "pending",
+          expires_at: 1_800_000_000,
           url: "wss://client.example.com",
           endpoints: [{ label: "Public", url: "wss://client.example.com" }],
         });
@@ -111,6 +114,38 @@ describe("PairDeviceModal", () => {
     fireEvent.click(screen.getByRole("button", { name: "Generate pairing code" }));
 
     expect(await screen.findByText(/connection_id=conn-1/)).toBeInTheDocument();
+    expect(screen.getByText(/pairing_token=grant/)).toBeInTheDocument();
+  });
+
+  it("describes a consumed grant without claiming the client saved it", async () => {
+    invoke.mockImplementation((command) => {
+      if (command === "profile_summaries") return Promise.resolve([]);
+      if (command === "devices_generate") {
+        return Promise.resolve({
+          connection_id: "conn-1",
+          pairing_id: "pair-1",
+          pairing_token: "grant",
+          pairing_status: "consumed",
+          expires_at: 1_800_000_000,
+          url: "wss://client.example.com",
+          endpoints: [{ label: "Public", url: "wss://client.example.com" }],
+        });
+      }
+      return Promise.resolve(null);
+    });
+
+    render(<PairDeviceModal onClose={() => {}} onPaired={() => {}} />);
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Phone" } });
+    fireEvent.click(screen.getByRole("button", { name: "Generate pairing code" }));
+
+    expect(await screen.findByText("code used · verify the client connected"))
+      .toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(notifyMock).toHaveBeenCalledWith(expect.objectContaining({
+      message: expect.stringContaining("Pairing code used"),
+    }));
+    const messages = notifyMock.mock.calls.map(([value]) => value?.message || "");
+    expect(messages).not.toContain('Device "Phone" paired');
   });
 
   it("shows the WSS requirement when the configured address is a hostname", async () => {

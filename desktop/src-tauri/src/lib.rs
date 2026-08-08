@@ -351,20 +351,34 @@ async fn host_connection_forget(id: String) -> Result<(), String> {
 async fn host_connection_add_remote(
     name: String,
     url: String,
-    token: String,
+    token: Option<String>,
+    pairing_token: Option<String>,
 ) -> Result<String, String> {
     off_main(move || {
-        let id = host_client::add_remote_connection(name, url, token)?;
         let device_name = std::env::var("HOSTNAME").unwrap_or_else(|_| "Desktop".into());
-        let _ = host_client::call_for(
-            &id,
-            "host.connections.register_device",
-            serde_json::json!({
-                "client": "desktop",
-                "name": device_name,
-                "app_version": env!("CARGO_PKG_VERSION"),
-            }),
-        );
+        let id = if let Some(grant) = pairing_token.filter(|value| !value.trim().is_empty()) {
+            host_client::exchange_and_add_remote_connection(
+                name,
+                url,
+                grant,
+                device_name,
+                env!("CARGO_PKG_VERSION").to_string(),
+            )?
+        } else {
+            let token = token.filter(|value| !value.trim().is_empty())
+                .ok_or_else(|| "pairing payload needs a token".to_string())?;
+            let id = host_client::add_remote_connection(name, url, token)?;
+            let _ = host_client::call_for(
+                &id,
+                "host.connections.register_device",
+                serde_json::json!({
+                    "client": "desktop",
+                    "name": device_name,
+                    "app_version": env!("CARGO_PKG_VERSION"),
+                }),
+            );
+            id
+        };
         Ok(id)
     }).await?
 }
@@ -981,6 +995,28 @@ async fn connections_add_device(
         connection_id.as_deref(),
         "host.connections.add_device",
         serde_json::json!({"connection_id": target_id}),
+    )).await.map_err(|e| format!("join: {e}"))?
+}
+
+#[tauri::command]
+async fn connections_pairing_status(
+    target_id: String, pairing_id: String, connection_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    tauri::async_runtime::spawn_blocking(move || connections_call(
+        connection_id.as_deref(),
+        "host.connections.pairing_status",
+        serde_json::json!({"connection_id": target_id, "pairing_id": pairing_id}),
+    )).await.map_err(|e| format!("join: {e}"))?
+}
+
+#[tauri::command]
+async fn connections_cancel_pairing(
+    target_id: String, pairing_id: String, connection_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    tauri::async_runtime::spawn_blocking(move || connections_call(
+        connection_id.as_deref(),
+        "host.connections.cancel_pairing",
+        serde_json::json!({"connection_id": target_id, "pairing_id": pairing_id}),
     )).await.map_err(|e| format!("join: {e}"))?
 }
 
@@ -3651,6 +3687,8 @@ pub fn run() {
             connections_summary,
             connections_create,
             connections_add_device,
+            connections_pairing_status,
+            connections_cancel_pairing,
             connections_update,
             connections_set_status,
             connections_delete,

@@ -35,13 +35,19 @@ daemon's plaintext listener private behind the reverse proxy.
    (e.g. `tailscale · 100.64.50.234:49200`).
 2. **Connection (machine B).** `alpi setup` → Connections → New connection. Choose
    **member** (not admin) and restrict `profile_scope` to the profile(s)
-   it may reach. The full token is shown once (QR + `alpi://device?…`
-   link). A member token scoped to one profile is blocked from every
-   `_ADMIN_METHODS` method and gets scope-filtered responses/events.
-3. **Dial (machine A).** Open `ws://<private-ip>:<port>` or
-   `wss://your.domain.com`. Every request carries
-   `params.auth_token`. One WebSocket message = one JSON object.
-4. **Revoke.** `alpi setup` → Connections → select the device, or `host.connections.revoke_device`
+   it may reach. The QR / `alpi://device?…` link contains a one-time grant,
+   not the permanent token.
+3. **Exchange (machine A).** Open `ws://<private-ip>:<port>` or
+   `wss://your.domain.com` and send `host.connections.exchange_pairing` as the
+   first unauthenticated message with `pairing_token`, `client`, `name` and
+   `app_version`. Store the returned device token before probing or doing any
+   other fallible setup; the grant expires after ten minutes and the first
+   successful exchange consumes it atomically.
+4. **Use.** Reconnect and put the device token in `params.auth_token` on every
+   request. A member token scoped to one profile is blocked from every
+   `_ADMIN_METHODS` method and gets scope-filtered responses/events. One
+   WebSocket message = one JSON object.
+5. **Revoke.** `alpi setup` → Connections → select the device, or `host.connections.revoke_device`
    (**admin-only** — a member token cannot revoke).
 
 ## host.chat.send (streaming; no non-streaming variant exists)
