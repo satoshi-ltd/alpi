@@ -358,6 +358,7 @@ class _OrderedGroup(click.Group):
         "setup",
         "doctor",
         "audit",
+        "audit-log",
         "update",
         "diff",
         "logs",
@@ -1455,6 +1456,75 @@ def audit_cmd(ctx: click.Context, offline: bool) -> None:
     checks = audit.run_all(root, offline=offline)
     audit.render(ui._console, checks, __version__)
     ctx.exit(audit.exit_code(checks))
+
+
+@main.command("audit-log")
+@click.option("--connection", default="", help="Show actions by or affecting one connection id.")
+@click.option("--device", default="", help="Show actions by or affecting one device id.")
+@click.option(
+    "--result",
+    type=click.Choice(["success", "error", "denied"]),
+    default=None,
+    help="Restrict by outcome.",
+)
+@click.option("-n", "--limit", default=100, type=click.IntRange(1, 500), show_default=True)
+@click.option("--json", "as_json", is_flag=True, help="Print machine-readable JSON.")
+def audit_log_cmd(
+    connection: str, device: str, result: str | None, limit: int, as_json: bool,
+) -> None:
+    """Show the bounded administrative security trail."""
+    import json
+
+    from rich.table import Table
+
+    from alpi import ui
+    from alpi.host import admin_audit
+
+    data = admin_audit.list_entries(
+        home.alpi_root(),
+        limit=limit,
+        connection_id=connection.strip(),
+        device_id=device.strip(),
+        result=result or "",
+    )
+    entries = data["entries"]
+    if as_json:
+        click.echo(json.dumps(entries, ensure_ascii=False))
+        return
+    if not entries:
+        ui._console.print("[dim]no administrative activity yet.[/dim]")
+        return
+    table = Table(show_header=True, header_style="dim", box=None, pad_edge=False)
+    table.add_column("When", no_wrap=True)
+    table.add_column("Actor")
+    table.add_column("Trust", no_wrap=True)
+    table.add_column("Action")
+    table.add_column("Target")
+    table.add_column("Result", no_wrap=True)
+    for entry in entries:
+        connection_id = str(entry.get("connection_id") or "")
+        if connection_id == "host":
+            actor = "Local host"
+        else:
+            actor = entry.get("device_name") or entry.get("connection_label") or entry.get("device_id") or connection_id or "unauthenticated"
+            if str(actor).strip().casefold() == "local host":
+                actor = entry.get("device_id") or connection_id or "remote device"
+        trust = f"{entry.get('source') or 'unknown'}/{entry.get('role') or 'unauthenticated'}"
+        target = entry.get("target") if isinstance(entry.get("target"), dict) else {}
+        target_parts = [
+            entry.get("target_device_name") or entry.get("target_connection_label") or target.get("device_id") or target.get("connection_id"),
+            f"@{target['profile']}" if target.get("profile") else "",
+            target.get("key"),
+        ]
+        table.add_row(
+            str(entry.get("timestamp") or "").replace("T", " ").replace("Z", ""),
+            str(actor),
+            trust,
+            str(entry.get("method") or ""),
+            " · ".join(str(part) for part in target_parts if part) or "—",
+            str(entry.get("result") or ""),
+        )
+    ui._console.print(table)
 
 
 @main.command("logs")

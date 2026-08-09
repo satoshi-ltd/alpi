@@ -70,6 +70,7 @@ export default function ConnectionsPage({
   const [editTarget, setEditTarget] = useState(null);
   const [disableTarget, setDisableTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [showActivity, setShowActivity] = useState(false);
   const [query, setQuery] = useState("");
 
   const reload = useCallback(async () => {
@@ -112,7 +113,7 @@ export default function ConnectionsPage({
           || String(left.label || "").localeCompare(String(right.label || ""));
       });
   }, [query, rows]);
-  const heroMeta = (
+  const connectionsHeroMeta = (
     <>
       <span>{totals.paired || 0} paired · {totals.connected || 0} connected</span>
       <span className="sep" aria-hidden />
@@ -151,12 +152,19 @@ export default function ConnectionsPage({
     <main className={styles.page}>
       <SettingsHero
         kind="connections"
-        id={heroTitle}
+        id={showActivity ? "Activity" : heroTitle}
         accent={heroAccent}
-        meta={heroMeta}
+        meta={showActivity ? <span>Administrative changes only · messages are never recorded here</span> : connectionsHeroMeta}
         actions={(
           <>
-            <Button icon={<Icon name="plus" />} onClick={() => setCreating(true)}>New connection</Button>
+            {showActivity ? (
+              <Button icon={<ArrowLeftIcon />} onClick={() => setShowActivity(false)}>Connections</Button>
+            ) : (
+              <>
+                <Button icon={<Icon name="history" />} onClick={() => setShowActivity(true)}>Activity</Button>
+                <Button icon={<Icon name="plus" />} onClick={() => setCreating(true)}>New connection</Button>
+              </>
+            )}
             <Tip text="Back to settings" side="r">
               <IconBtn onClick={onBack} aria-label="Back to settings"><ArrowLeftIcon /></IconBtn>
             </Tip>
@@ -165,7 +173,13 @@ export default function ConnectionsPage({
       />
 
       <div className={styles.body}>
-        <div className={styles.table}>
+        {showActivity ? (
+          <AuditActivity
+            sourceConnectionId={activeConnection?.id || null}
+            connections={rows}
+          />
+        ) : (
+          <div className={styles.table}>
           {data && rows.length > 0 && (
             <div className={styles.tableToolbar}>
               <label className={styles.search}>
@@ -277,7 +291,8 @@ export default function ConnectionsPage({
           {data && rows.length > 0 && visibleRows.length === 0 && (
             <div className={styles.empty}>No connections match this search.</div>
           )}
-        </div>
+          </div>
+        )}
       </div>
 
       {creating && (
@@ -321,6 +336,229 @@ export default function ConnectionsPage({
         />
       )}
     </main>
+  );
+}
+
+
+const AUDIT_ACTIONS = {
+  "host.connections.create": "Created connection",
+  "host.connections.add_device": "Created device pairing",
+  "host.connections.exchange_pairing": "Paired device",
+  "host.connections.cancel_pairing": "Cancelled pairing",
+  "host.connections.update": "Updated connection",
+  "host.connections.set_status": "Changed connection status",
+  "host.connections.delete": "Deleted connection",
+  "host.connections.revoke_device": "Revoked device",
+  "host.config.set_field": "Changed profile setting",
+  "host.config.unset_field": "Removed profile setting",
+  "host.profile.create": "Created profile",
+  "host.profile.delete": "Deleted profile",
+  "host.providers.set_key": "Changed provider credential",
+  "host.providers.unset_key": "Removed provider credential",
+  "host.network.set_advertised": "Changed client access",
+  "host.network.restart_host_server": "Restarted host listener",
+  "host.daemon.restart": "Restarted daemon",
+  "host.daemon.update": "Updated Alpi",
+};
+
+function auditAction(method) {
+  if (AUDIT_ACTIONS[method]) return AUDIT_ACTIONS[method];
+  return String(method || "Administrative action")
+    .replace(/^host\./, "")
+    .replaceAll("_", " ")
+    .replaceAll(".", " · ");
+}
+
+function auditActor(entry) {
+  if (entry.connection_id === "host") return "Local host";
+  const label = entry.device_name
+    || entry.connection_label
+    || entry.device_id
+    || entry.connection_id
+    || "Unauthenticated";
+  if (String(label).trim().toLowerCase() === "local host") {
+    return entry.device_id || entry.connection_id || "Remote device";
+  }
+  return label;
+}
+
+function auditActorMeta(entry) {
+  const trust = [entry.source || "unknown", entry.role || "unauthenticated"].join(" · ");
+  const identity = [entry.connection_id, entry.device_id].filter(Boolean).join(" / ");
+  return [trust, identity].filter(Boolean).join(" · ");
+}
+
+function auditTarget(entry) {
+  const target = entry.target && typeof entry.target === "object" ? entry.target : {};
+  const parts = [
+    entry.target_device_name || target.device_id,
+    entry.target_connection_label || target.connection_id,
+    target.profile ? `@${profileLabel(target.profile)}` : "",
+    target.name,
+    target.id,
+    target.key,
+    target.peer_id,
+    target.wg_id,
+    target.job_id,
+    target.request_id,
+    target.pipeline,
+    target.choice,
+    target.status,
+  ];
+  return [...new Set(parts.filter(Boolean))].join(" · ") || "—";
+}
+
+function auditTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value || "");
+  return date.toLocaleString([], {
+    year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+  });
+}
+
+function AuditActivity({ sourceConnectionId, connections }) {
+  const notify = useNotify();
+  const [entries, setEntries] = useState([]);
+  const [cursor, setCursor] = useState("");
+  const [connectionFilter, setConnectionFilter] = useState("");
+  const [deviceFilter, setDeviceFilter] = useState("");
+  const [resultFilter, setResultFilter] = useState("");
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  const devices = useMemo(() => connections.flatMap((connection) => (
+    (connection.devices || []).map((device) => ({
+      id: device.id,
+      label: device.name || device.id,
+      connectionId: connection.id,
+      connectionLabel: connection.label || connection.id,
+    }))
+  )), [connections]);
+
+  const load = useCallback(async (nextCursor = "", append = false) => {
+    setLoading(true);
+    try {
+      const data = await invoke("audit_list", {
+        sourceConnectionId,
+        targetConnectionId: connectionFilter || null,
+        deviceId: deviceFilter || null,
+        result: resultFilter || null,
+        cursor: nextCursor || null,
+        limit: 100,
+      });
+      const nextEntries = data?.entries || [];
+      setEntries((current) => append ? [...current, ...nextEntries] : nextEntries);
+      setCursor(data?.next_cursor || "");
+    } catch (error) {
+      notify({ message: `activity: ${String(error)}`, variant: "error" });
+    } finally {
+      setLoading(false);
+    }
+  }, [connectionFilter, deviceFilter, notify, resultFilter, sourceConnectionId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const visibleEntries = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return entries;
+    return entries.filter((entry) => [
+      auditActor(entry), auditAction(entry.method), auditTarget(entry), entry.method, entry.result,
+    ].join(" ").toLowerCase().includes(needle));
+  }, [entries, query]);
+
+  return (
+    <div className={styles.audit}>
+      <div className={styles.auditToolbar}>
+        <label className={styles.search}>
+          <SearchIcon />
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search activity…"
+            aria-label="Search activity"
+          />
+        </label>
+        <select
+          className={styles.auditSelect}
+          value={connectionFilter}
+          onChange={(event) => setConnectionFilter(event.target.value)}
+          aria-label="Filter activity by connection"
+        >
+          <option value="">All connections</option>
+          {connections.filter((row) => row.id !== "host").map((row) => (
+            <option key={row.id} value={row.id}>{row.label || row.id}</option>
+          ))}
+        </select>
+        <select
+          className={styles.auditSelect}
+          value={deviceFilter}
+          onChange={(event) => setDeviceFilter(event.target.value)}
+          aria-label="Filter activity by device"
+        >
+          <option value="">All devices</option>
+          {devices.map((device) => (
+            <option key={device.id} value={device.id}>{device.label} · {device.connectionLabel}</option>
+          ))}
+        </select>
+        <select
+          className={styles.auditSelect}
+          value={resultFilter}
+          onChange={(event) => setResultFilter(event.target.value)}
+          aria-label="Filter activity by result"
+        >
+          <option value="">Every result</option>
+          <option value="success">Success</option>
+          <option value="denied">Denied</option>
+          <option value="error">Error</option>
+        </select>
+        <IconBtn tip="Refresh activity" tipSide="up" onClick={() => load()}>
+          <Icon name="refresh" />
+        </IconBtn>
+      </div>
+
+      {visibleEntries.length > 0 && (
+        <>
+          <div className={styles.auditHead} aria-hidden>
+            <span>When</span><span>Actor</span><span>Action</span><span>Target</span><span>Result</span>
+          </div>
+          <div className={styles.auditRows}>
+            {visibleEntries.map((entry) => (
+              <div key={entry.id} className={styles.auditRow}>
+                <Mono>{auditTime(entry.timestamp)}</Mono>
+                <span className={styles.auditIdentity}>
+                  <strong>{auditActor(entry)}</strong>
+                  <small>{auditActorMeta(entry)}</small>
+                </span>
+                <span className={styles.auditIdentity}>
+                  <strong>{auditAction(entry.method)}</strong>
+                  <small>{entry.method}</small>
+                </span>
+                <span className={styles.auditTarget}>{auditTarget(entry)}</span>
+                <Chip
+                  size="sm"
+                  state={entry.result === "success" ? "on" : entry.result === "denied" ? "warn" : "error"}
+                >
+                  {entry.result}
+                </Chip>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+      {!loading && entries.length === 0 && (
+        <div className={styles.empty}>No administrative activity matches these filters.</div>
+      )}
+      {!loading && entries.length > 0 && visibleEntries.length === 0 && (
+        <div className={styles.empty}>No loaded activity matches this search.</div>
+      )}
+      {loading && entries.length === 0 && <div className={styles.empty}>Loading activity…</div>}
+      {cursor && (
+        <div className={styles.auditMore}>
+          <Button loading={loading} onClick={() => load(cursor, true)}>Load older</Button>
+        </div>
+      )}
+    </div>
   );
 }
 

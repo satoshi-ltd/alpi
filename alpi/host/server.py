@@ -149,6 +149,7 @@ _ADMIN_METHODS = frozenset({
     "host.connections.revoke_device",
     "host.connections.summary",
     "host.connections.usage_daily",
+    "host.audit.list",
     "host.usage.daily",
     "host.usage.workgroup.daily",
 })
@@ -706,11 +707,26 @@ class Server:
             source="bootstrap" if bootstrap else "local",
             role="member" if bootstrap else "admin",
         )
+        method = str(body.get("method") or "")
+        audit_params = body.get("params") if isinstance(body.get("params"), dict) else {}
         remote_meta: AuthMeta | None = None
         if require_token:
             meta = authenticated or await asyncio.to_thread(_check_token_meta, body)
             valid, role, profile_scope = meta
             if not valid:
+                from alpi.host import admin_audit
+                denied_context = ConnectionContext(
+                    connection_id=meta.connection_id or "unauthenticated",
+                    device_id=meta.device_id or None,
+                    source="remote",
+                    role=meta.role or "",
+                )
+                await asyncio.to_thread(
+                    admin_audit.record_auth_failed,
+                    self.home,
+                    method,
+                    denied_context,
+                )
                 error: dict[str, Any] = {"code": -32000, "message": "auth-failed"}
                 if meta.reason:
                     error["data"] = {"reason": meta.reason}
@@ -727,7 +743,6 @@ class Server:
                     role=meta.role or "member",
                 )
                 remote_meta = meta
-        method = str(body.get("method") or "")
         if bootstrap and method != "host.connections.exchange_pairing":
             await send({
                 "id": body.get("id"),
@@ -735,6 +750,14 @@ class Server:
             })
             return
         if require_token and method == "host.connections.exchange_pairing":
+            from alpi.host import admin_audit
+            await asyncio.to_thread(
+                admin_audit.record_denied,
+                self.home,
+                method,
+                audit_params,
+                request_context,
+            )
             await send({
                 "id": body.get("id"),
                 "error": {
@@ -746,6 +769,14 @@ class Server:
             return
         if require_token and method in _LOCAL_ONLY_METHODS:
             log.warning("host forbidden: %s blocked over remote transport", method)
+            from alpi.host import admin_audit
+            await asyncio.to_thread(
+                admin_audit.record_denied,
+                self.home,
+                method,
+                audit_params,
+                request_context,
+            )
             await send({
                 "id": body.get("id"),
                 "error": {
@@ -759,6 +790,14 @@ class Server:
             params = body.get("params") if isinstance(body.get("params"), dict) else {}
             if str(params.get("key") or "") in _LOCAL_ONLY_CONFIG_KEYS:
                 log.warning("host forbidden: config key %r is local-only", params.get("key"))
+                from alpi.host import admin_audit
+                await asyncio.to_thread(
+                    admin_audit.record_denied,
+                    self.home,
+                    method,
+                    audit_params,
+                    request_context,
+                )
                 await send({
                     "id": body.get("id"),
                     "error": {
@@ -770,6 +809,14 @@ class Server:
                 return
         if require_token and method in _ADMIN_METHODS and role != "admin":
             log.warning("host forbidden: %s blocked for role=%s", method, role)
+            from alpi.host import admin_audit
+            await asyncio.to_thread(
+                admin_audit.record_denied,
+                self.home,
+                method,
+                audit_params,
+                request_context,
+            )
             await send({
                 "id": body.get("id"),
                 "error": {
@@ -864,6 +911,15 @@ class Server:
                     await self._dispatch_stream(body, delivery)
                     return
                 response = await self._dispatch(body, expose_internal_errors=not bootstrap)
+                from alpi.host import admin_audit
+                if admin_audit.is_audited(method):
+                    await asyncio.to_thread(
+                        admin_audit.record_request,
+                        self.home,
+                        method,
+                        raw_params or {},
+                        response,
+                    )
                 if response is not None:
                     await delivery(response)
             finally:

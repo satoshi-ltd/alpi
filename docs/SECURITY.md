@@ -531,9 +531,10 @@ transcript or an output manifest; not implemented today.
 ## Audit trail & accountability
 
 alpi records what the agent and its operators do across several local
-surfaces. The posture is **personal-grade**: rich per-session detail and
-useful operational logs, but no single tamper-evident audit log and no
-actor attribution on the local control plane. What exists today:
+surfaces. The posture is **local-grade**: administrative host-plane actions
+are attributable to a connection and device, but the files remain locally
+mutable and are not a tamper-evident or external compliance trail. What exists
+today:
 
 - **Session transcripts** (`~/.alpi/profiles/<name>/sessions/<id>.json`).
   The richest record: per turn it stores the user message, assistant
@@ -556,6 +557,20 @@ actor attribution on the local control plane. What exists today:
   `email_changed`, `peers_changed`, `session_changed`, approvals, etc.
   Explicitly **transport, not durable history** — a bounded rolling
   buffer for client reconnect, not an audit source.
+- **Host-RPC administrative audit** (`~/.alpi/logs/admin-audit.jsonl`). Successful,
+  failed and authenticated-denied sensitive mutations carry timestamp,
+  connection/device identity, source, role, method, an allowlisted target and
+  result. Pairing exchange is included once the final device identity exists.
+  The writer never copies `auth_token`, pairing grants, configuration values,
+  RPC payloads/results, chat content or error details. Target fields are
+  allowed per method and every row has a hard 4 KB byte ceiling. Failed
+  bootstrap/authentication traffic has a separate one-row-per-minute budget,
+  preventing unauthenticated eviction. The current 5 MB file
+  plus three rotated generations cap storage at approximately 20 MB; repeated
+  authorization denials are limited to one row per device/method/minute,
+  deliberately excluding the target so unique-target scans cannot fill it. Read it
+  with `alpi audit-log` or the Desktop Connections → Activity view.
+  `host.audit.list` is paginated and restricted to local/admin callers.
 - **Daemon logs** (`logs/<subsystem>.log`). Per-subsystem, human-readable,
   rotating (1 MB × 3). Includes a per-turn agent summary and the approval
   decisions above.
@@ -567,16 +582,20 @@ actor attribution on the local control plane. What exists today:
 **What is NOT covered today** (and why it matters for a fleet, not a
 single user):
 
-- **Host-plane RPC has no actor in the record.** A device pairing token is
-  validated per request and gated by role (admin/member), but the token
-  is *not* propagated to the handler or written to any log — a privileged
-  mutation (rotate a provider key, change email credentials, restart the daemon)
-  cannot be attributed to a specific device or human after the fact. The
-  Unix socket is treated as sovereign admin with no per-action trail.
+- **The local actor is not a human identity.** Unix-socket actions are recorded
+  as synthetic `Local host`; a local OS account is still the trust boundary.
+  Remote actions identify the connection/device credential, not a verified
+  human or SSO principal.
+- **Direct CLI/setup mutations are not yet in this trail.** The audit boundary
+  is the host RPC dispatcher used by Desktop/Mobile. Commands that write
+  configuration or connections directly remain visible only in their existing
+  operational/configuration evidence; AUDIT.2 stays partial until those local
+  mutation paths emit equivalent rows.
 - **Records are local and mutable.** Sessions, ledgers, and logs can be
   edited or deleted by any process running as the daemon user. Nothing is
   append-only at the filesystem level, signed, or mirrored to an external
-  sink — there is no WORM guarantee and no tamper detection.
+  sink — there is no WORM guarantee and no tamper detection. Rotation also
+  bounds history rather than preserving it forever.
 - **No at-rest encryption** of sessions, memory, or logs. Only `alpi
   backup` is encrypted (ChaCha20-Poly1305 + Scrypt). A disk image or VM
   snapshot exposes transcripts and any non-redacted secret in the clear.

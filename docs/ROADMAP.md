@@ -113,17 +113,14 @@ AUDIT.2 is the orthogonal axis a CTO asks about — "can I prove who did
 what, and can the trail be trusted?". alpi already records a lot (session
 transcripts, the run ledger, the approval log, the cost ledger, ALP
 peer-attributed calls — see
-[SECURITY.md → Audit trail & accountability](SECURITY.md)), but it is
-personal-grade: local, mutable, and unattributed on the host plane.
-AUDIT.2 is the set of changes that make it fleet-grade, in rough
+[SECURITY.md → Audit trail & accountability](SECURITY.md)). v0.12.12 adds a
+bounded device-attributed trail at the host-RPC boundary, but direct CLI/setup
+mutations are not yet covered and the files remain local and mutable. AUDIT.2
+is therefore partial. Remaining work, in rough
 priority order:
 
-1. **Actor attribution on the host plane.** Propagate the validated
-   device `token_id` (and its role) into every host RPC handler and stamp
-   it onto the run ledger, approval log, and config-mutation events. Today
-   the token is checked at dispatch and then dropped — a privileged change
-   cannot be tied to a device or human. Highest value, smallest change; no
-   redesign needed.
+1. **Complete local mutation coverage.** Emit equivalent rows for direct CLI
+   and `alpi setup` changes without double-recording the host-RPC paths.
 2. **Append-only / external audit sink.** Mirror sessions, runs,
    approvals, and config mutations to a tamper-evident destination
    (syslog/SIEM, or S3 with object-lock / a WORM path), optionally with
@@ -146,9 +143,9 @@ object store the user already runs).
 
 **Promotion condition.** A concrete fleet/enterprise deployment asks for
 attributable, tamper-evident audit — or a compliance regime (SOC 2,
-HIPAA, PCI) is in scope for a real operator. Start with item 1 (actor
-attribution): it is cheap, useful even for a single power user, and a
-prerequisite for everything else.
+HIPAA, PCI) is in scope for a real operator. Finish direct local mutation
+coverage before claiming complete attribution; promote the external sink and
+human-bound identity work only when a real operator requires them.
 
 ### Listening-first notes
 

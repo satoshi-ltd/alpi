@@ -43,6 +43,7 @@ describe("ConnectionsPage", () => {
 
     expect(await screen.findByText("iPhone")).toBeInTheDocument();
     expect(screen.getByText("14-day total $0.42 · 100 in / 20 out")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Activity" })).toHaveLength(1);
   });
 
   it("keeps host network setup out of connection administration", async () => {
@@ -236,5 +237,77 @@ describe("ConnectionsPage", () => {
     expect(screen.getByText("Grant admin access")).toBeInTheDocument();
     expect(screen.getByText("Generate pairing code")).toBeInTheDocument();
     expect(screen.queryByText("Create connection")).toBeNull();
+  });
+
+  it("shows bounded administrative activity without chat content", async () => {
+    invoke.mockImplementation((command) => {
+      if (command === "connections_summary") return Promise.resolve(summary);
+      if (command === "audit_list") return Promise.resolve({
+        entries: [{
+          id: "audit_1",
+          timestamp: "2026-08-08T10:00:00.000Z",
+          connection_id: "conn_owner",
+          connection_label: "Owner",
+          device_id: "dev_mac",
+          device_name: "MacBook Pro",
+          method: "host.connections.revoke_device",
+          target: { connection_id: "conn_javi", device_id: "dev_phone" },
+          target_connection_label: "Javi",
+          target_device_name: "iPhone",
+          result: "success",
+        }],
+        next_cursor: "",
+      });
+      return Promise.resolve({ ok: true });
+    });
+    render(<ConnectionsPage profiles={[]} activeConnection={{ id: "local" }} />);
+
+    const activityButton = await screen.findByRole("button", { name: "Activity" });
+    expect(activityButton.querySelector('path[d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"]')).not.toBeNull();
+    fireEvent.click(activityButton);
+
+    expect(await screen.findByRole("heading", { name: "Activity" })).toBeInTheDocument();
+    expect(screen.getByText("Administrative changes only · messages are never recorded here")).toBeInTheDocument();
+    expect(await screen.findByText("Revoked device")).toBeInTheDocument();
+    expect(screen.getByText("MacBook Pro")).toBeInTheDocument();
+    expect(screen.getByText(/iPhone/, { selector: "span" })).toBeInTheDocument();
+    expect(invoke).toHaveBeenCalledWith("audit_list", {
+      sourceConnectionId: "local",
+      targetConnectionId: null,
+      deviceId: null,
+      result: null,
+      cursor: null,
+      limit: 100,
+    });
+  });
+
+  it("does not present a remote self-label as the local host", async () => {
+    invoke.mockImplementation((command) => {
+      if (command === "connections_summary") return Promise.resolve(summary);
+      if (command === "audit_list") return Promise.resolve({
+        entries: [{
+          id: "audit_spoof",
+          timestamp: "2026-08-08T10:00:00.000Z",
+          connection_id: "conn_remote",
+          connection_label: "Local host",
+          device_id: "dev_remote",
+          device_name: "Local host",
+          source: "remote",
+          role: "member",
+          method: "host.connections.register_device",
+          target: {},
+          result: "success",
+        }],
+        next_cursor: "",
+      });
+      return Promise.resolve({ ok: true });
+    });
+    render(<ConnectionsPage profiles={[]} activeConnection={{ id: "local" }} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Activity" }));
+
+    expect(await screen.findByText("dev_remote")).toBeInTheDocument();
+    expect(screen.getByText("remote · member · conn_remote / dev_remote")).toBeInTheDocument();
+    expect(screen.queryByText("Local host", { selector: "strong" })).toBeNull();
   });
 });

@@ -15,6 +15,7 @@ alpi                 # interactive TUI
 alpi -p work         # named profile
 alpi doctor          # live health checks
 alpi audit           # whole-install security posture scan
+alpi audit-log       # bounded device-attributed administrative activity
 alpi daemon status | restart
 alpi update --check
 alpi --version
@@ -65,7 +66,8 @@ LLM is treated as powerful, fallible, next to user credentials. Layered local gu
 - `alpi audit` scans every profile for loose secret permissions, public binds,
   disabled hardening, uncapped budgets, and installed-package CVEs; `--offline`
   skips the OSV lookup;
-- audit via `approval.log` and `agent.log`. see security
+- agent/tool audit via `approval.log` and `agent.log`; administrative changes
+  via `admin-audit.jsonl` / `alpi audit-log`. see security
 
 ## Related topics
 

@@ -93,6 +93,7 @@ Contracts:
 - `host.outputs.{list,read,mark_read,mark_all_read,delete}` = persistent inbox (proactive messages + schedule results). Backed by `<home>/outputs/outputs.jsonl`, capped 500 rows, no archive (cap handles retention → two-state inbox). Row: `{id, profile, created_at, title?, body, type (info|warning|error), status (unread|read), session_id, delivered_to}` (`title` set by `notify` callers and on scheduler failure rows — the job's title; omitted otherwise). `notify` sets `type`; scheduler failures are `error`. Producers: `notify` (owner push) and scheduler on `schedule.failed` (always) + `schedule.done` when the job notified the owner (`notify: true` → `delivered_to="alpi"`). Jobs whose agent notified itself (`delivered_to="external"`) don't duplicate; silent jobs (`notify: false`) and stdout-only summaries file nothing. Daemon emits `output.created` (`{profile, id, type}`) for poll-free refresh.
 - `host.sessions.delete` bulk-deletes chat sessions by id; admin-only, refuses active/busy sessions, removes `sessions/<id>.json` + `_events_<id>.jsonl`.
 - `~/.alpi/host/connections.yaml` groups a connection identity (`label`, `role`, `profile_scope`) with independently revocable device credentials and hashed one-time pairing grants. Grants expire after ten minutes and `host.connections.exchange_pairing` consumes one atomically before returning the permanent device token once. Terminal grant metadata is kept for seven days, capped at 50 rows per connection and omitted from connection-list responses. Dispatcher resolves each permanent token to connection/device IDs and gates scoped members on `params.profile in connection.profile_scope`, else `-32001 forbidden`. Sessions and daily ledger usage are attributed to the connection; local Unix/TUI/CLI activity uses synthetic `host`. `host.connections.*` is canonical and `host.devices.*` remains a management compatibility alias. See `security` for the bootstrap exception, scope-free allowlist and migration behavior.
+- `host.audit.list` (admin-only) pages the bounded host-RPC administrative trail and filters by actor/target connection, device, and result. The dispatcher records successful/failed sensitive mutations plus rate-limited authentication/authorization denials in `~/.alpi/logs/admin-audit.jsonl` (5 MB + 3 rotations, 4 KB/row, mode `0600`). Rows contain only method-specific safe action/target metadata: never auth tokens, configuration values, prompts, replies, or chat messages. Local host-socket activity uses synthetic `host`; direct CLI/setup mutations do not cross this boundary yet (remaining AUDIT.2 work).
 
 ## Doctor and cleanup
 
@@ -100,6 +101,8 @@ Contracts:
 - `alpi audit` — read-only security posture for the whole install; scans every
   profile, checks permissions/network/hardening offline, and optionally queries
   OSV for installed-package CVEs unless `--offline` is set.
+- `alpi audit-log` — reads the administrative activity trail without requiring
+  Desktop; supports connection/device/result filters and JSON output.
 - `alpi setup -> Cleanup` — manual cleanup for caches, logs, mentions, schedule output, workgroup files, knowledge index freelist vacuum.
 - Desktop Manage Sessions — richer chat-session pruning UI.
 

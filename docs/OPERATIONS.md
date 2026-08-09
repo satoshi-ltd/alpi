@@ -29,6 +29,7 @@ and rolling.
 | `service.log` | **daemon-wide; ONE file at `~/.alpi/logs/service.log`, never duplicated per profile** | rotated text | Did the daemon start? Which services came up for which profile? Did a peer hit an ALP listener? Did a cron job fire? | the daemon supervisor + every per-profile service that logs through the root logger |
 | `agent.log` | per profile | rotated text | What has the agent *been doing*? One line per **engine turn on every surface** (TUI, schedule, workgroup post, inbound ALP, research / delegate sub-agents): session id, elapsed, tools called, reply length, cost, user prompt preview. Cross-session grep index. | the engine (every turn on every surface) |
 | `approval.log` | per profile | rotated text | Security audit of every non-safe shell command the LLM tried to run: caution (pending / once / session / always / deny) or dangerous (always denied). | the approval system |
+| `admin-audit.jsonl` | **daemon-wide; ONE bounded trail at `~/.alpi/logs/admin-audit.jsonl`** | rotated JSONL, 5 MB + 3 backups, 4 KB/row | Which connection/device attempted a sensitive host-RPC mutation, what safe target it affected, and whether it succeeded, failed, or was denied. It never stores credentials, config values, prompts, replies, or chat messages. Direct CLI/setup mutations do not enter this trail yet. | the host RPC dispatcher |
 | `compaction.jsonl` | per profile | append-only JSONL | Did auto-compact run this turn? Tokens before/after, summarized-message count, tool-truncation count, manual vs auto, `fired` (true when the LLM summarized; false when only oversized tool outputs were truncated). Use it as the evidence source before changing compaction/memory constants. | the engine (one line whenever compaction *or* tool truncation ran) |
 | `runs.jsonl` | per profile | capped rolling JSONL | What ran and where it stopped: one record per long-running turn (agent, schedule, workgroup, terminal) — outcome, exit code, timeout reason, pid, backend, last tool, and a secret-redacted output tail. Surfaced by `alpi digest`. | the engine, scheduler, and terminal tool (one line per finished run) |
 | `ledger.json` | per profile | JSON | Daily USD spend ledger; live counters for the daily cap + 30-day per-day history. Not a log; never cleaned by `Subsystem logs`. | every turn that records cost |
@@ -57,10 +58,10 @@ Per-record fields: `ts`, `trigger` (`auto`|`manual`), `session_id`,
 `model`, `ctx_window`, `fired`, `tokens_before`, `tokens_after`,
 `summarized_messages`, `tool_truncated`.
 
-The `agent.log` + `approval.log` pair is your **audit trail**.
-Anyone who needs to answer "what did alpi do this week?" or "did
-the agent run anything risky?" should be grepping those two
-files. `compaction.jsonl` answers "did the context window pressure
+The `agent.log` + `approval.log` pair answers what the agent did and which
+shell decisions were made. `alpi audit-log` answers which connection/device
+performed an administrative mutation; Desktop exposes the same bounded trail
+under Connections → Activity. `compaction.jsonl` answers "did the context window pressure
 get tight this week?" and "are my trigger ratios right for this
 model?".
 

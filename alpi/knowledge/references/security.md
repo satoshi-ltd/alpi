@@ -205,8 +205,8 @@ is deliberately not marked that way.
 
 ## Audit and accountability
 
-Personal-grade: rich local records, but no tamper-evident audit log and no
-actor attribution on the host plane. What is recorded:
+Local-grade: rich records plus device-attributed administrative actions, but
+no tamper-evident or external compliance sink. What is recorded:
 
 - **Session transcripts** (`sessions/<id>.json`) — per turn: messages, every
   tool call with args + result (capped), reasoning, model, tokens, cost,
@@ -219,6 +219,15 @@ actor attribution on the host plane. What is recorded:
 - **Cost ledger** (`logs/ledger.json`) — tokens/USD per profile and per peer,
   30-day history. **Event bus** (`host/events.jsonl`) is a rolling reconnect
   buffer, not durable audit.
+- **Host-RPC administrative audit** (`~/.alpi/logs/admin-audit.jsonl`) — successful,
+  failed and authenticated-denied sensitive mutations with connection/device,
+  method, allowlisted target and result. It never copies credentials, config
+  values, RPC payloads/results, chats or error details. Five MB plus three
+  rotations caps it near 20 MB; rows are capped at 4 KB and untrusted
+  bootstrap/auth failures share a separate one-row/minute budget. Authorization
+  denials collapse per device/method regardless of target to resist scans. Query with
+  `alpi audit-log` or Desktop Connections →
+  Activity; `host.audit.list` is local/admin-only and paginated.
 - **ALP peer calls are attributed** — dispatch logs the calling `peer.id` on
   signed, replay-checked, identity-pinned envelopes. The one plane with a
   cryptographic actor.
@@ -230,11 +239,10 @@ terminal sandbox, LLM stale-call watchdog, and daily USD budget. Online check:
 installed Python package CVEs via OSV; `alpi audit --offline` skips it. Exit
 code is `1` only for `fail` findings; warnings are visible review items.
 
-Gaps for a fleet: request context and run ledgers carry connection/device IDs,
-and sessions/usage are attributed to a connection, but privileged mutations
-do not yet have a dedicated append-only audit log; records are local and
-mutable (no WORM, no signing, no
-external sink); sessions/memory/logs are plaintext at rest (only `alpi
+Gaps for a fleet: direct CLI/setup mutations bypass the host-RPC trail; the
+local Unix actor is synthetic `host`, remote credentials identify devices
+rather than verified humans, and records are locally mutable
+(no WORM, signing or external sink); sessions/memory/logs are plaintext at rest (only `alpi
 backup` is encrypted); LLM egress is not logged and there's no
 approved/on-prem provider policy (Ollama is the on-prem option); access
 control stops at admin/member with no RBAC/SSO. Closing these is roadmap
@@ -247,8 +255,8 @@ fleet pulls for it.
 - Compromised provider or local OS account.
 - Every prompt-injection variant.
 - Bugs or behavior changes in third-party integrations.
-- Enterprise audit: attributable, tamper-evident trail across the host plane
-  (roadmap AUDIT.2).
+- Enterprise audit: human-bound, tamper-evident trail with an external sink
+  (remaining roadmap AUDIT.2 work).
 
 ## Related topics
 

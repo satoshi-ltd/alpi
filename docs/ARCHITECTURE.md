@@ -71,6 +71,9 @@ alpi doctor                    live health check (IMAP login,
                                Gmail token refresh, MCP handshake, service PID);
                                exits 1 on any failure, 0 otherwise
 
+alpi audit                     whole-install security posture scan
+alpi audit-log                 bounded administrative activity by device
+
 alpi logs                      tail every subsystem log merged by timestamp
   --source {service|schedule|agent|approval}  restrict to one subsystem
   -n N                                         last N lines (default 100)
@@ -166,6 +169,7 @@ alpi/
 │   ├── config.py          mutation verbs (host.providers.*, host.peers.*, host.profile.*, host.mcp.*, host.email.*, host.sandbox.*, host.voice.*)
 │   ├── connections.py     host.connections.* identities, device credentials and devices.yaml migration
 │   ├── connection_context.py request-scoped connection/device attribution
+│   ├── admin_audit.py     bounded JSONL trail for attributable administrative mutations + host.audit.list
 │   ├── attachments_rpc.py host.attachments.{stage,fetch} — stage uploads in, fetch serves a tool-produced output attachment's bytes out (scoped to the profile's workspace/home/temp) so rich clients render images inline + other files as a metadata chip; text surfaces get a shared listing
 │   ├── network_rpc.py     host.network.{status,set_advertised,restart_host_server} — bind status plus ordered WS/WSS pairing-route configuration (parity with `alpi setup → Connections → Network`)
 │   ├── probes.py          host.email.probe, host.peers.ping, host.model.ctx_window
@@ -605,6 +609,21 @@ delete reject sessions owned by another connection. The daily ledger records
 input/output tokens and USD under `by_connection`; the run ledger records both
 IDs. Local Unix/TUI/CLI activity uses the synthetic `host` connection.
 
+Sensitive mutations pass through one dispatcher audit boundary after their
+handler returns. `admin_audit.py` writes only allowlisted identifiers and the
+stable error envelope; it never serializes request params or handler results.
+The bootstrap pairing exchange replaces its temporary context with the newly
+created connection/device identity before writing. Authenticated admin denials
+are recorded at most once per device/method/minute; invalid unauthenticated
+traffic stays in operational metrics/logging so it cannot churn durable audit
+history. `host.audit.list` is local/admin-only, cursor-paginated and filters an
+identity whether it acted or was the target.
+
+This boundary covers calls through `host.sock` and authenticated WebSockets.
+Direct CLI/setup code paths still mutate their stores without crossing the
+dispatcher and are explicitly tracked as remaining AUDIT.2 coverage rather
+than being represented as synthetic host-RPC events.
+
 Three trust tiers gate every WS call:
 
 - **Unix socket** — sovereign. Used by the local CLI and the
@@ -660,6 +679,8 @@ All new management uses `host.connections.*`.
 Verb namespaces in current shape:
 
 - **`host.sessions.list`**, **`host.session.read`** — read-only.
+- **`host.audit.list`** — local/admin-only paginated administrative activity;
+  never returns credentials, values, payloads or chat content.
 - **`host.workgroup.transcript`** — read-only,
   `{after_seq?, limit?, tail?}` → `{posts, next_seq, limit}`.
   Without `after_seq` the default is `tail=true` so first-paint of a
@@ -971,6 +992,16 @@ Three sources today (file on disk + the writer that produces it):
   through the root logger.
 - **`agent`** — one line per TUI/schedule-triggered turn: session id, elapsed, tool names, reply size, cumulative cost, truncated user prompt. Written by `engine.py::run_turn` via `get_subsystem_logger(home, "agent")`. This is the **cross-session grep index** — `sessions/<id>.json` carry the full detail; `agent.log` lets you answer "what has alpi been doing this week?" without iterating JSONs.
 - **`approval`** — one line per non-SAFE terminal command classification (ALLOW / DENY with severity, pattern, reason). Written by `tools/_approval.py`. **Security audit trail**; complements the per-turn detail in `sessions/`.
+
+The machine-wide structured administrative trail is separate:
+`~/.alpi/logs/admin-audit.jsonl`, 5 MB plus three rotated generations, mode
+0600. Each row is capped at 4 KB, bootstrap/auth failures have their own
+one-row-per-minute budget, and target fields are allowlisted per method. It is
+JSONL because Desktop and `host.audit.list` filter by actor,
+target and result. `alpi audit-log` renders it for the console. It is not
+included in `alpi logs`: those commands merge human-readable `.log` streams,
+while this trail has its own bounded query contract. Chat turns are not copied
+into it; sessions already carry their owning `connection_id`.
 
 The `alpi logs --source` CLI choice list also accepts `schedule`. Inside the unified daemon, scheduler events route through the root logger and land in `service.log` — the filter value is kept so that any standalone or legacy `schedule.log` (e.g. from an older `scheduler.run.ensure_running()` invocation that ran out-of-process) stays selectable.
 

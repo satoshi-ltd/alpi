@@ -84,8 +84,9 @@ The current release ships the full local-to-network shape:
 - Host-plane access for paired desktop / mobile clients over Unix
   socket locally and WebSocket remotely, with ten-minute one-time pairing
   grants and independently revocable per-device tokens.
-- `alpi doctor`, `alpi logs`, one launchd / systemd user unit per
-  machine, backup-friendly file layout, and security audit logs.
+- `alpi doctor`, `alpi logs`, a device-attributed host-RPC `alpi audit-log`, one launchd /
+  systemd user unit per machine, backup-friendly file layout, and security audit
+  logs.
 
 ## Quickstart
 
@@ -115,6 +116,7 @@ alpi setup                   # model, email, MCPs, sandbox, daemon
 alpi doctor                  # live health checks
 alpi update                  # check PyPI and upgrade alpi-agent
 alpi logs                    # merged profile logs
+alpi audit-log               # administrative activity, never chat content
 
 alpi profile list
 alpi profile create work

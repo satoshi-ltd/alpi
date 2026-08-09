@@ -2530,6 +2530,7 @@ async def _run_host(home: Path, profile: str) -> None:
         return
 
     from alpi.host import approval as host_approval
+    from alpi.host import admin_audit as host_admin_audit
     from alpi.host import attachments_rpc as host_attachments
     from alpi.host import chat as host_chat
     from alpi.host import clarification as host_clarification
@@ -2581,6 +2582,7 @@ async def _run_host(home: Path, profile: str) -> None:
     host_tools.register(server)
     host_usage.register(server)
     host_attachments.register(server)
+    host_admin_audit.register(server)
     await server.start()  # host.sock up immediately — never blocked on network detection
     try:
         # TCP bind needs network detection (slow under launchd); resolve off-loop, and a bind failure must NOT take down host.sock.

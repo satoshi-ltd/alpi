@@ -1,5 +1,36 @@
 # Changelog
 
+## v0.12.12 — 2026-08-08 — the change has an actor
+
+- **Sensitive host-plane mutations now leave a device-attributed trail.** The
+  dispatcher records the authenticated connection/device, source, role,
+  method, allowlisted target and stable success/error result after each
+  administrative change. Pairing exchange adopts the identity it creates;
+  local host-socket RPCs remain honestly labelled as the synthetic Local host.
+- **The audit boundary copies identifiers, never requests.** Device and
+  pairing tokens, provider/config values, RPC payloads/results, chat content
+  and error details never enter the file. Authenticated administrative denials
+  are included but repeated attempts are limited to one row per
+  device/method/minute; unauthenticated noise remains in operational counters.
+- **Untrusted traffic cannot evict useful history.** Target fields are allowed
+  per method, text is capped by UTF-8 bytes and each JSONL row has a hard 4 KB
+  ceiling. Failed bootstrap exchanges ignore caller-controlled params and
+  share a one-row-per-minute budget; invalid credentials leave the same
+  bounded `auth-failed` evidence regardless of the attempted method. Device
+  metadata registration is audited with a per-device budget, while the CLI
+  and Desktop render source, role and immutable IDs so a self-chosen “Local
+  host” label cannot impersonate the local trust boundary.
+- **History is useful and physically bounded.** `admin-audit.jsonl` is mode
+  0600 and rotates at 5 MB with three backups (about 20 MB maximum).
+  `host.audit.list` gives local/admin clients cursor pagination and actor/target
+  filters, while `alpi audit-log` provides the same evidence from the console.
+  Normal chat messages are not duplicated because sessions already retain
+  their owning connection.
+- **Damage stays local to one row.** The reader skips malformed or non-UTF-8
+  JSONL lines instead of making the complete trail unavailable, and actor
+  label lookup reuses the connection store's file-identity cache rather than
+  reparsing `connections.yaml` after every audited RPC.
+
 ## v0.12.11 — 2026-08-07 — the QR is not the key
 
 - **Pairing links no longer contain the permanent device credential.** New

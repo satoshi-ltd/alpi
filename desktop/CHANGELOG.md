@@ -11,6 +11,26 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.5.6 — 2026-08-08 — who changed what
+
+- **Connections now includes Activity.** Local and remote admins can
+  inspect the daemon's bounded administrative trail without opening log files,
+  filter by connection, device or outcome, search the loaded page and fetch
+  older records through cursor pagination.
+- **One entry point, all identities.** Activity lives once in the Connections
+  header; connection and device filters handle focused investigation without
+  duplicating actions inside every expanded row. Records resolve stored labels
+  while keeping the underlying method visible for diagnosis.
+- **The view cannot become a second transcript.** Its header states that
+  messages are excluded, and the daemon contract exposes only sanitized actor,
+  target and result fields — never credentials, config values or RPC payloads.
+- **Actor labels do not define trust.** Every row shows transport source, role
+  and immutable connection/device IDs; only the synthetic `host` identity is
+  presented as Local host, even if a remote device chooses that name.
+
+Requires alpi ≥ 0.12.12 for `host.audit.list`. Older daemons continue to work
+with the rest of Desktop, but Activity reports the missing host verb.
+
 ## v0.5.5 — 2026-08-07 — scan once means once
 
 - **New QR codes are temporary grants, not stored credentials.** Desktop

@@ -15,6 +15,7 @@
 alpi doctor
 alpi audit --offline
 alpi audit
+alpi audit-log
 alpi digest
 alpi digest --since 24h
 alpi digest --json
@@ -26,6 +27,10 @@ alpi -p <profile> digest --since 7d
   secret-file permissions, public/all-interface binds, terminal sandbox,
   LLM watchdog, and daily spend cap. Online check: OSV CVEs for installed
   Python packages. Exit code is non-zero only for `fail`, not warnings.
+- `audit-log`: machine-wide, bounded host-RPC administrative trail attributed
+  to the acting connection/device. Supports connection, device, result, limit
+  and JSON filters; it contains no chat messages or credential/config values.
+  Direct CLI/setup writes are not covered yet.
 - `digest`: read-only evidence — tool availability, skill telemetry, memory promotion backlog/pressure, compaction rate.
 
 ## Daemon
@@ -50,6 +55,7 @@ Rotated text caps at **1 MB** (`.log.1` = previous gen); `compaction.jsonl` does
 | `service.log` | root | daemon supervisor + per-profile services. `alpi logs --source service` always reads the root file regardless of `-p`. |
 | `agent.log` | per profile | one line per engine turn on every surface (TUI, schedule, workgroup, inbound ALP, sub-agents). |
 | `approval.log` | per profile | terminal approval decisions (audit trail with `agent.log`). |
+| `admin-audit.jsonl` | root | administrative mutations, max ~20 MB across current + 3 rotations; query with `alpi audit-log`. |
 | `compaction.jsonl` | per profile | compaction/truncation records. |
 | `runs.jsonl` | per profile | run ledger: one line per long-running turn (agent/schedule/workgroup/terminal); surfaced by `alpi digest`. |
 | `ledger.json` | per profile | daily budget gate (live counters, UTC reset) + 30-day per-day spend history (usd + input/output tokens, ALL spend incl. non-token costs like image generation); served by `host.usage.daily`. |
@@ -58,6 +64,7 @@ Rotated text caps at **1 MB** (`.log.1` = previous gen); `compaction.jsonl` does
 alpi logs --source agent -n 100              # active profile's agent.log
 alpi -p mira logs --source agent             # mira's agent.log (note: -p before subcommand)
 alpi logs --source service -f                # always reads ~/.alpi/logs/service.log
+alpi audit-log --connection conn_customer -n 100
 jq -r '[.ts, .session_id[0:8], .trigger, .tokens_before, .tokens_after] | @tsv' \
   ~/.alpi/logs/compaction.jsonl
 ```

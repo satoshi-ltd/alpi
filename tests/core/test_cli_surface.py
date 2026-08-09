@@ -21,7 +21,7 @@ def test_top_level_help_shows_only_canonical_commands() -> None:
 
     for name in ("chat", "setup", "doctor", "logs", "profile", "daemon",
                  "schedule", "peers", "workgroup", "release", "email",
-                 "mcp", "providers", "sandbox", "voice", "outputs"):
+                 "mcp", "providers", "sandbox", "voice", "outputs", "audit-log"):
         assert name in out, f"{name!r} missing from top-level --help"
 
     assert "\n  alp " not in out, "alp group should be gone"

@@ -1069,6 +1069,25 @@ async fn connections_revoke_device(
 }
 
 #[tauri::command]
+async fn audit_list(
+    source_connection_id: Option<String>, target_connection_id: Option<String>,
+    device_id: Option<String>, result: Option<String>, cursor: Option<String>,
+    limit: Option<u64>,
+) -> Result<serde_json::Value, String> {
+    tauri::async_runtime::spawn_blocking(move || connections_call(
+        source_connection_id.as_deref(),
+        "host.audit.list",
+        serde_json::json!({
+            "connection_id": target_connection_id.unwrap_or_default(),
+            "device_id": device_id.unwrap_or_default(),
+            "result": result.unwrap_or_default(),
+            "cursor": cursor.unwrap_or_default(),
+            "limit": limit.unwrap_or(100),
+        }),
+    )).await.map_err(|e| format!("join: {e}"))?
+}
+
+#[tauri::command]
 async fn network_status() -> Result<serde_json::Value, String> {
     let value = tauri::async_runtime::spawn_blocking(|| {
         host_client::call("host.network.status", serde_json::json!({}))
@@ -3693,6 +3712,7 @@ pub fn run() {
             connections_set_status,
             connections_delete,
             connections_revoke_device,
+            audit_list,
             network_status,
             network_set_advertised,
             network_restart_host_server,
