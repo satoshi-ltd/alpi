@@ -60,6 +60,13 @@ class RunRecord:
     connection_id: str = "host"
     device_id: str | None = None
     source: str = "host"
+    tokens_in: int | None = None
+    tokens_out: int | None = None
+    # Raw counts, tri-state: None = no completion in the run reported cache info. Derive pct at render time; never store percentages.
+    tokens_cached: int | None = None
+    tokens_measured: int | None = None
+    # Comma-joined prefix_diag reasons for measured turns; "none" = bytes were stable locally, look at TTL/routing instead.
+    cache_diag: str | None = None
 
 
 def store_path(home: Path) -> Path:
@@ -101,6 +108,11 @@ def record(
     output_tail: str | None = None,
     model: str | None = None,
     routing: str | None = None,
+    tokens_in: int | None = None,
+    tokens_out: int | None = None,
+    tokens_cached: int | None = None,
+    tokens_measured: int | None = None,
+    cache_diag: str | None = None,
 ) -> None:
     # Best-effort: coercions are inside the try so a malformed caller value can't escape.
     try:
@@ -128,6 +140,11 @@ def record(
             connection_id=connection.connection_id,
             device_id=connection.device_id,
             source=connection.source,
+            tokens_in=int(tokens_in) if tokens_in is not None else None,
+            tokens_out=int(tokens_out) if tokens_out is not None else None,
+            tokens_cached=int(tokens_cached) if tokens_cached is not None else None,
+            tokens_measured=int(tokens_measured) if tokens_measured is not None else None,
+            cache_diag=(str(cache_diag)[:200] or None) if cache_diag else None,
         )
         path = store_path(home)
         with _lock, _interproc_lock(path):

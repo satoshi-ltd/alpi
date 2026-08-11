@@ -12,8 +12,8 @@ Alpi never mutates provider payloads itself.
 ``build_parts(home, cfg)`` is the single source of truth for the
 cacheable system-prompt content. ``Engine._build_system_prompt`` calls
 it and joins the values in canonical ``PART_ORDER``. Per-turn volatile
-additions (``# NOW``, workgroup ctx, skill keyword hint) are appended
-as separate system messages by the engine and are NOT parts.
+additions (``# NOW``, workgroup ctx, skill keyword hint, relay) ride the
+user turn's host-context suffix (CL.4) and are NOT parts.
 """
 
 from __future__ import annotations
@@ -127,11 +127,8 @@ def build_parts(home: Path, cfg) -> dict[str, str]:
     skills_block = skills_index_block(home, cfg_raw=cfg.raw)
     parts["skills_index"] = skills_block or ""
 
+    # Read-only by contract: pruning lives in memory.run_maintenance (post-turn), so building a prompt can never mutate its own input mid-build.
     mem = memory.MemoryStore(home=home)
-    try:
-        mem.prune_low_confidence(max_age_days=memory.LOW_CONFIDENCE_MAX_AGE_DAYS)
-    except Exception:  # noqa: BLE001
-        pass
     snap = mem.snapshot()
     user_md = snap["USER.md"].strip()
     memory_md = snap["MEMORY.md"].strip()
@@ -147,7 +144,7 @@ def render_cacheable(parts: dict[str, str]) -> str:
 
 
 def cache_kwargs_for_model(model: str) -> dict:
-    """Ask LiteLLM to inject a ``cache_control`` marker on ``messages[0]`` for models known to support prompt caching. Target index 0 (not role=system) because the engine appends several volatile system messages per turn — ``# NOW``, workgroup ctx, skill keyword hint — and only ``messages[0]`` is the stable prefix. Returns ``{}`` on any failure: a missing helper, a raise, or an unsupported model. Caching never breaks a call."""
+    """Ask LiteLLM to inject a ``cache_control`` marker on ``messages[0]`` for models known to support prompt caching. Target index 0 (not role=system) because later system messages still appear mid-history (tool footer, compaction summary) — only ``messages[0]`` is the stable prefix. Returns ``{}`` on any failure: a missing helper, a raise, or an unsupported model. Caching never breaks a call."""
     if not model:
         return {}
     try:

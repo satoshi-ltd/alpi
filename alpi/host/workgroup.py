@@ -362,4 +362,5 @@ def _envelope(
         "body": body,
         "key_version": int(post.get("key_version", 1)),
         "cost": post.get("cost") or {},
+        "turn_id": str(post.get("turn_id") or ""),
     }

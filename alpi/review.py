@@ -114,7 +114,9 @@ def _apply_calls(tool_calls: list[dict]) -> int:
     return saved
 
 
-def _run_review(home: Path, cfg: cfg_mod.Config, snapshot: list[dict]) -> int:
+def _run_review(
+    home: Path, cfg: cfg_mod.Config, snapshot: list[dict], session_id: str = "",
+) -> int:
     from alpi import ledger
 
     history = _filter_messages(snapshot)
@@ -134,6 +136,13 @@ def _run_review(home: Path, cfg: cfg_mod.Config, snapshot: list[dict]) -> int:
         {"role": "user", "content": "Run the review now."},
     ]
     call_kwargs = cfg_mod.resolve_model(cfg, tier="fast")
+    if session_id and str(call_kwargs.get("model", "")).startswith("openrouter/"):
+        from alpi import prefix_diag
+        from alpi.home import profile_name
+        from alpi.providers.reasoning import merge_into_kwargs
+        call_kwargs = merge_into_kwargs(call_kwargs, {"extra_body": {"session_id": prefix_diag.affinity_id(
+            profile_name(home), session_id=session_id, purpose="review",
+        )}})
     try:
         out = llm.complete(
             messages=messages, tools=[schema], **call_kwargs
@@ -144,7 +153,9 @@ def _run_review(home: Path, cfg: cfg_mod.Config, snapshot: list[dict]) -> int:
     return _apply_calls(out.tool_calls or [])
 
 
-def spawn_review(home: Path, cfg: cfg_mod.Config, messages: list[dict]) -> threading.Thread:
+def spawn_review(
+    home: Path, cfg: cfg_mod.Config, messages: list[dict], session_id: str = "",
+) -> threading.Thread:
     """Fire a daemon thread that runs the post-turn review and returns immediately.
 
     The caller need not (and should not) join the returned thread. It is
@@ -158,7 +169,7 @@ def spawn_review(home: Path, cfg: cfg_mod.Config, messages: list[dict]) -> threa
         try:
             from alpi.host.connection_context import use
             with use(parent_connection):
-                _run_review(home, cfg, snapshot)
+                _run_review(home, cfg, snapshot, session_id=session_id)
         finally:
             reset_active_home(token)
 

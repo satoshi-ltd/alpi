@@ -152,12 +152,15 @@ def _hydrate_from_path(engine: Engine, path: Path, console=None) -> bool:
         }
     )
     from alpi import attachments as _att
+    from alpi.session import with_host_context as _with_hc
     for t in turns:
         if not turn_replayable(t):
             continue
         if t.user or t.attachments:
             marker = _att.describe_meta(t.attachments)
             text = f"{t.user}\n{marker}".strip() if marker else t.user
+            # Byte-stable replay: the persisted host-context suffix re-enters exactly as the provider saw it live.
+            text = _with_hc(text, getattr(t, "host_context", "") or "")
             engine.session.messages.append({"role": "user", "content": text})
         if t.assistant or t.output_attachments:
             produced = _att.describe_produced(t.output_attachments)
@@ -168,6 +171,14 @@ def _hydrate_from_path(engine: Engine, path: Path, console=None) -> bool:
 
     if data.get("id"):
         engine.session.id = data["id"]
+    if hasattr(engine, "_expected_rewrite"):
+        engine._expected_rewrite = "resume"
+        engine._prefix_shape_loaded = False
+    if turns and hasattr(engine, "_last_relay_peer"):
+        from alpi.session import relay_peer_from_host_context
+        engine._last_relay_peer = relay_peer_from_host_context(
+            getattr(turns[-1], "host_context", "") or "",
+        )
     engine.session.connection_id = str(data.get("connection_id") or "host")
     engine.session.input_tokens = int(data.get("input_tokens", 0))
     engine.session.cached_input_tokens = int(data.get("cached_input_tokens", 0))
@@ -4573,6 +4584,23 @@ def _render_digest(report, console) -> None:
                 f"{float(sl.get('elapsed_s') or 0.0):.0f}s"
                 f"{(' — ' + tail) if tail else ''}"
             )
+
+    ch = report.cache
+    console.print("")
+    console.print("[dim]Prompt cache[/dim]")
+    if ch.tokens_measured > 0:
+        console.print(
+            f"  hit {ch.hit_pct:.1f}% · "
+            f"{ch.tokens_cached:,} of {ch.tokens_measured:,} measured input tokens · "
+            f"{ch.days_with_data} day(s)"
+        )
+    else:
+        console.print("  [dim]no provider cache data in window[/dim]")
+    if ch.cache_discount_usd:
+        console.print(f"  provider-reported discount: ${ch.cache_discount_usd:.4f}")
+    if ch.cost_sources:
+        srcs = ", ".join(f"{k}={v}" for k, v in sorted(ch.cost_sources.items()))
+        console.print(f"  [dim]cost source of recorded spend: {srcs}[/dim]")
 
 
 if __name__ == "__main__":

@@ -29,12 +29,13 @@ _POST_PREVIEW_CHARS = 220
 _DIRECTED_POST_CHARS = pipeline_gates.GATE_FINDINGS_POST_CHARS + 200
 _BRIEFING_INJECT_CHARS = 4096
 _MAX_BLOCKS = 10             # ceiling — protects token budget
+_OMITTED_NAMES = 12
 
 
-def build(home: Path) -> str | None:
-    """Return a system-prompt block describing every workgroup this
-    profile participates in, or None if there are none. Safe to call
-    on every turn — read-only against on-disk caches."""
+def build(
+    home: Path, wg_id: str | None = None, max_chars: int | None = None,
+) -> str | None:
+    """Render all visible workgroups, or only the exact dispatch target."""
     own_id = _profile_id(home)
     own_pubkey = load_or_generate(home).pubkey_b64()
     subs = sub_mod.load(home)
@@ -43,31 +44,126 @@ def build(home: Path) -> str | None:
         return None
 
     aliases = _build_aliases(home, own_id, own_pubkey)
-    blocks: list[str] = []
-
-    for sub in subs[:_MAX_BLOCKS]:
-        block = _format_subscription_block(sub, own_id, aliases)
-        if block:
-            blocks.append(block)
-
-    for wg in hubs[: _MAX_BLOCKS - len(blocks)]:
-        block = _format_hub_block(home, wg, own_id, own_pubkey, aliases)
-        if block:
-            blocks.append(block)
-
-    if not blocks:
-        return None
-
-    header = (
-        f"=== Workgroups (you are @{own_id} · "
-        f"{len(subs)} joined, {len(hubs)} hosting) ==="
-    )
     zone = _budget_zone(home)
-    # Stable-first for provider prefix caching: volatile bytes (roster liveness, recent posts, budget %) sink to the tail.
-    out = header + "\n\n" + WORKGROUP_GUARDRAILS + "\n\n" + "\n\n".join(blocks)
-    if zone:
-        out += f"\n\n{zone}"
+    candidates = _context_candidates(home, subs, hubs, directed=bool(wg_id))
+    if wg_id:
+        candidates = [candidate for candidate in candidates if candidate[1] == wg_id]
+        if not candidates:
+            return None
+    blocks: list[str] = []
+    selected = 0
+    limit = len(candidates) if wg_id else min(len(candidates), _MAX_BLOCKS)
+    for kind, _candidate_id, item in candidates[:limit]:
+        block = (
+            _format_subscription_block(item, own_id, aliases)
+            if kind == "subscription"
+            else _format_hub_block(home, item, own_id, own_pubkey, aliases)
+        )
+        if not block:
+            continue
+        trial = _render_context(
+            own_id, len(subs), len(hubs), blocks + [block],
+            [] if wg_id else [_candidate_name(c) for c in candidates[selected + 1:]],
+            zone,
+        )
+        if max_chars is not None and len(trial) > max_chars:
+            break
+        blocks.append(block)
+        selected += 1
+
+    if wg_id:
+        if not blocks:
+            return None
+        return _render_context(own_id, len(subs), len(hubs), blocks, [], zone)
+
+    omitted = [_candidate_name(c) for c in candidates[selected:]]
+    out = _render_context(own_id, len(subs), len(hubs), blocks, omitted, zone)
+    if max_chars is not None and len(out) > max_chars:
+        return None
     return out
+
+
+def _context_candidates(home: Path, subs, hubs, directed: bool):
+    candidates = [
+        ("subscription", sub.wg_id, sub)
+        for sub in subs
+    ] + [
+        ("hub", wg.meta.id, wg)
+        for wg in hubs
+    ]
+    if directed:
+        return candidates
+    return _rank_undirected(
+        candidates,
+        lambda c: c[2].paused if c[0] == "subscription" else c[2].meta.paused,
+        lambda c: (
+            _subscription_last_activity(c[2])
+            if c[0] == "subscription"
+            else _hub_last_activity(home, c[2].meta.id, c[2].meta.created_at)
+        ),
+    )
+
+
+def _candidate_name(candidate) -> str:
+    kind, candidate_id, item = candidate
+    if kind == "subscription":
+        return item.name or candidate_id
+    return item.meta.name or candidate_id
+
+
+def _render_context(
+    own_id: str, joined: int, hosting: int, blocks: list[str],
+    omitted: list[str], zone: str,
+) -> str:
+    header = f"=== Workgroups (you are @{own_id} · {joined} joined, {hosting} hosting) ==="
+    if omitted:
+        names = ", ".join(omitted[:_OMITTED_NAMES])
+        if len(omitted) > _OMITTED_NAMES:
+            names += f", +{len(omitted) - _OMITTED_NAMES} more"
+        header += (
+            f"\nShowing {len(blocks)} of {joined + hosting} workgroups "
+            f"(most recently active first).\nOmitted: {names}"
+        )
+    parts = [header, WORKGROUP_GUARDRAILS]
+    parts.extend(blocks)
+    if zone:
+        parts.append(zone)
+    return "\n\n".join(parts)
+
+
+def _rank_undirected(items, paused_of, activity_of):
+    # Two passes: stable sort keeps the recency order inside each paused group.
+    ranked = sorted(items, key=activity_of, reverse=True)
+    ranked.sort(key=lambda x: bool(paused_of(x)))
+    return ranked
+
+
+def _subscription_last_activity(sub: sub_mod.Subscription) -> str:
+    for post in reversed(sub.recent_posts):
+        ts = str(post.get("ts") or "")
+        if ts:
+            return ts
+    return sub.joined_at
+
+
+def _hub_last_activity(home: Path, wg_id: str, fallback: str = "") -> str:
+    p = home / "alp" / "workgroups" / wg_id / "transcript.jsonl"
+    try:
+        with p.open("rb") as fh:
+            fh.seek(0, 2)
+            fh.seek(max(0, fh.tell() - 4096))
+            tail = fh.read().decode("utf-8", errors="replace")
+    except OSError:
+        return fallback
+    for line in reversed(tail.splitlines()):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            return str(json.loads(line).get("ts") or fallback)
+        except json.JSONDecodeError:
+            continue
+    return fallback
 
 
 def _budget_zone(home: Path) -> str:

@@ -3,8 +3,8 @@
 What we care about: the rendered prefix stays byte-identical across
 calls so providers that auto-cache (OpenAI, Gemini, OpenRouter) keep
 hitting; per-turn volatile content (``# NOW``, workgroup ctx, skill
-keyword hint) is appended by the engine OUTSIDE the prefix builder and
-never enters ``render_cacheable``.
+keyword hint, relay) rides the user turn's host-context suffix OUTSIDE
+the prefix builder and never enters ``render_cacheable``.
 """
 
 from __future__ import annotations
@@ -78,7 +78,7 @@ def test_two_consecutive_builds_produce_identical_text(tmp_path: Path) -> None:
 
 
 def test_now_block_is_not_in_the_prefix(tmp_path: Path) -> None:
-    """The per-turn ``# NOW`` block (timestamp body) lives outside the cacheable prefix — the engine appends it as a separate system message every turn. The prefix may *mention* ``# NOW`` in instructions but must not embed the actual ``Local: <date>`` body."""
+    """The per-turn ``# NOW`` block (timestamp body) lives outside the cacheable prefix — it rides the user turn's host-context suffix. The prefix may *mention* ``# NOW`` in instructions but must not embed the actual ``Local: <date>`` body."""
     from alpi import clock
     cfg = _make_cfg(tmp_path)
     rendered = pc.render_cacheable(pc.build_parts(tmp_path, cfg))
@@ -239,3 +239,39 @@ def test_cache_kwargs_targets_index_zero_not_role(monkeypatch) -> None:
     assert "role" not in point
     assert point["index"] == 0
     assert point["location"] == "message"
+
+
+def test_build_parts_never_writes(tmp_path: Path) -> None:
+    """CL.1 — the prompt builder is read-only even when a prunable entry is on disk; pruning moved to memory.run_maintenance."""
+    from datetime import date, timedelta
+
+    from alpi import memory
+
+    cfg = _make_cfg(tmp_path)
+    stale = (date.today() - timedelta(days=memory.LOW_CONFIDENCE_MAX_AGE_DAYS + 10)).isoformat()
+    _write_memory(
+        tmp_path, "MEMORY.md",
+        f"- flaky guess\n<!-- alpi-meta conf=low captured={stale} reinforced=0 -->\n",
+    )
+    pc.build_parts(tmp_path, cfg)
+
+    before = {p: p.stat().st_mtime_ns for p in tmp_path.rglob("*") if p.is_file()}
+    pc.build_parts(tmp_path, cfg)
+    after = {p: p.stat().st_mtime_ns for p in tmp_path.rglob("*") if p.is_file()}
+    assert before == after
+    assert "flaky guess" in (tmp_path / "memories" / "MEMORY.md").read_text()
+
+
+def test_run_maintenance_prunes_what_the_builder_no_longer_does(tmp_path: Path) -> None:
+    from datetime import date, timedelta
+
+    from alpi import memory
+
+    stale = (date.today() - timedelta(days=memory.LOW_CONFIDENCE_MAX_AGE_DAYS + 10)).isoformat()
+    _write_memory(
+        tmp_path, "MEMORY.md",
+        f"- flaky guess\n<!-- alpi-meta conf=low captured={stale} reinforced=0 -->\n",
+    )
+    removed = memory.run_maintenance(tmp_path)
+    assert removed == 1
+    assert "flaky guess" not in (tmp_path / "memories" / "MEMORY.md").read_text()

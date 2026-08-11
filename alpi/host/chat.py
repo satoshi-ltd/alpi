@@ -509,16 +509,21 @@ def _truncate_hydrated_session(engine, keep_turns: Any) -> None:  # noqa: ANN401
     kept = turns[:keep]
     engine.session.turns = kept
 
-    messages: list[dict[str, Any]] = [{
+    # The rebuilt list must keep the REAL system prompt at index 0 — the cache marker targets it, and dropping it would run the turn without persona/memory/guidance.
+    head = getattr(engine, "_system_prompt", "") or ""
+    messages: list[dict[str, Any]] = (
+        [{"role": "system", "content": head}] if head else []
+    )
+    messages.append({
         "role": "system",
         "content": (
             "NOTE: the conversation below is a previous session that was "
             "resumed. You already have this context — do not call "
             "`session_search` to recover it. Refer to the messages directly."
         ),
-    }]
+    })
     from alpi import attachments as _att
-    from alpi.session import turn_replayable
+    from alpi.session import turn_replayable, with_host_context
     for turn in kept:
         if not turn_replayable(turn):
             continue
@@ -527,6 +532,7 @@ def _truncate_hydrated_session(engine, keep_turns: Any) -> None:  # noqa: ANN401
         if user or atts:
             marker = _att.describe_meta(atts)
             text = f"{user}\n{marker}".strip() if marker else user
+            text = with_host_context(text, getattr(turn, "host_context", "") or "")
             messages.append({"role": "user", "content": text})
         produced = _att.describe_produced(getattr(turn, "output_attachments", None))
         if getattr(turn, "assistant", "") or produced:
@@ -534,9 +540,18 @@ def _truncate_hydrated_session(engine, keep_turns: Any) -> None:  # noqa: ANN401
             if atext:
                 messages.append({"role": "assistant", "content": atext})
     engine.session.messages = messages
+    engine._expected_rewrite = "rewrite_from_turn"
+    if hasattr(engine, "_last_relay_peer"):
+        from alpi.session import relay_peer_from_host_context
+        engine._last_relay_peer = relay_peer_from_host_context(
+            getattr(kept[-1], "host_context", "") if kept else "",
+        )
     engine.session.input_tokens = 0
     engine.session.output_tokens = 0
     engine.session.cost_usd = 0.0
+    # The discarded branch's cache share must not pollute the surviving conversation's hit rate.
+    engine.session.cached_input_tokens = 0
+    engine.session.cache_measured_input_tokens = 0
     engine.session.last_ctx_tokens = 0
 
 

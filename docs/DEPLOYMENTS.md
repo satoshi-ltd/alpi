@@ -146,6 +146,21 @@ The operator must still complete four independent steps:
    `alpi setup -> Connections -> Network`;
 4. create a scoped connection and test its pairing from an external network.
 
+### Customer isolation boundary
+
+Use one independent Alpi runtime per mutually untrusted customer: a dedicated
+container, VM, or OS account with its own Alpi home/volume and credentials.
+Route one hostname to each runtime through the shared TLS proxy; keep every
+runtime's host and ALP ports private.
+
+A connection role and `profile_scope` restrict the host RPC surface. They do
+not make profiles inside one daemon separate tenants: an authenticated member
+can still send turns, and those turns may use every tool granted to the target
+profile. Multiple profiles in one daemon are appropriate only when they share
+the same underlying trust owner. Runtime isolation lets a customer profile keep
+the terminal, skills, and network access it genuinely needs without granting
+that runtime access to another customer's volume or credentials.
+
 Existing clients keep the URL selected at their original pairing. A device
 stored as `ws://HOST_IP:PORT` does not automatically adopt the new Public
 route and goes offline when the overlay removes that mapping. Re-pair each
@@ -203,6 +218,8 @@ starter kit on a single host.
 - **Best for:** family on one home server, individual with
   specialised-role agents, prototyping an enterprise rollout on
   one box before distributing.
+- **Not for:** mutually untrusted customers. Use one runtime boundary per
+  customer instead of treating profiles as tenants.
 
 ## 4. Multi-device personal
 

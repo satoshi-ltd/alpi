@@ -87,13 +87,24 @@ def get(name: str) -> type[Tool] | None:
 
 def schemas(deny: frozenset[str] | set[str] | None = None) -> list[dict]:
     deny = deny or frozenset()
-    schemas = [
-        cls.schema() for cls in _current_tools().values()
-        if is_available(cls)[0] and cls.name not in deny
-    ]
+    # Wire order is part of the provider's cache prefix — sort so registry/MCP insertion order can never invalidate it.
+    schemas = sorted(
+        (
+            cls.schema() for cls in _current_tools().values()
+            if is_available(cls)[0] and cls.name not in deny
+        ),
+        key=_schema_sort_key,
+    )
     if current().role != "member":
         return schemas
     return [_member_schema(schema) for schema in schemas]
+
+
+def _schema_sort_key(schema: dict) -> str:
+    try:
+        return str(schema.get("function", {}).get("name") or "")
+    except AttributeError:
+        return ""
 
 
 def availability_report() -> list[tuple[str, bool, str]]:

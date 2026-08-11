@@ -36,12 +36,21 @@ def test_status_rows_cover_every_field() -> None:
     assert rows["session cost"] == "$0.0042"
 
 
+def test_status_rows_cache_row_reads_the_session_counters() -> None:
+    s = _fake_session(
+        input_tokens=1000, output_tokens=50,
+        cached_input_tokens=800, cache_measured_input_tokens=1000,
+    )
+    rows = dict(_status_rows(s))
+    assert rows["cache"] == "hit 80.0%  (800 of 1,000 measured in)"
+
+
 def test_status_rows_order_matches_telegram_shortcut() -> None:
     """Order of rows should mirror the Telegram ``/status`` shortcut output
     so both surfaces look identical at a glance."""
     s = _fake_session()
     labels = [label for label, _ in _status_rows(s)]
-    assert labels == ["model", "turns", "elapsed", "tokens", "session cost"]
+    assert labels == ["model", "turns", "elapsed", "tokens", "cache", "session cost"]
 
 
 def test_status_rows_appends_budget_when_home_provided(tmp_path) -> None:

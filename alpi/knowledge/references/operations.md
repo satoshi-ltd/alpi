@@ -31,7 +31,7 @@ alpi -p <profile> digest --since 7d
   to the acting connection/device. Supports connection, device, result, limit
   and JSON filters; it contains no chat messages or credential/config values.
   Direct CLI/setup writes are not covered yet.
-- `digest`: read-only evidence — tool availability, skill telemetry, memory promotion backlog/pressure, compaction rate.
+- `digest`: read-only evidence — tool availability, skill telemetry, memory promotion backlog/pressure, compaction rate, run outcomes, and prompt-cache hit/discount/cost-source evidence for the selected calendar-day window. Cache rates use raw provider-reported `cached / measured input`; no provider data is unknown, not a miss.
 
 ## Daemon
 
@@ -57,8 +57,11 @@ Rotated text caps at **1 MB** (`.log.1` = previous gen); `compaction.jsonl` does
 | `approval.log` | per profile | terminal approval decisions (audit trail with `agent.log`). |
 | `admin-audit.jsonl` | root | administrative mutations, max ~20 MB across current + 3 rotations; query with `alpi audit-log`. |
 | `compaction.jsonl` | per profile | compaction/truncation records. |
-| `runs.jsonl` | per profile | run ledger: one line per long-running turn (agent/schedule/workgroup/terminal); surfaced by `alpi digest`. |
-| `ledger.json` | per profile | daily budget gate (live counters, UTC reset) + 30-day per-day spend history (usd + input/output tokens, ALL spend incl. non-token costs like image generation); served by `host.usage.daily`. |
+| `runs.jsonl` | per profile | run ledger: one line per long-running turn (agent/schedule/workgroup/terminal), including raw cache counts and a bounded request-shape diagnosis; surfaced by `alpi digest`. |
+| `ledger.json` | per profile | daily budget gate (live counters, UTC reset) + 30-day per-day spend history (USD, input/output/cache tokens, provider-reported cache discount, and cost-source counts; ALL spend incl. non-token costs like image generation); served by `host.usage.daily`. |
+| `prefix_shapes.json` | per profile | best-effort hash-only request-shape history for up to 20 recent conversation affinities; stores no prompt text and is safe to delete. |
+
+Cache interpretation: `provider` cost is the endpoint's own figure; `litellm` and `table` are cache-blind list-price arithmetic; `none` means unavailable. Reconcile billing against the provider dashboard. `cache_diag` reasons such as `first_contact`, model/tools changes, compaction, resume, reset, or rewrite-from-turn explain expected cold prefixes.
 
 ```bash
 alpi logs --source agent -n 100              # active profile's agent.log
@@ -107,6 +110,9 @@ alpi restore ~/vault/alpi.alpi-backup --force
 - One passphrase-encrypted archive of the whole `~/.alpi/` tree: all profiles, memories, sessions, skills, state, secrets, config, `.env`, ALP identity, peers, host state.
 - Excluded recursively: `cache/`, `logs/`, `.trash/`, `*.sock`, `*.pid`.
 - Stop daemon before restore; run `alpi doctor` and restart afterward.
+- A normal restore from a trusted encrypted archive preserves existing device credentials; re-pairing is not required solely because the host moved.
+- Lost client device: revoke that device from a trusted admin/local host, then add its replacement on the same connection.
+- Exposed Alpi home, `connections.yaml`, snapshot, or backup: remove public reachability, rebuild on a trusted host, revoke every restored device before reopening WSS, re-pair clients, and rotate provider/email/skill secrets plus the ALP identity if its private key was included. Uncertain backup custody counts as exposure.
 
 ## Common failure modes
 

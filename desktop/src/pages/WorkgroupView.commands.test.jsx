@@ -1,4 +1,4 @@
-import { act, render, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const invokeMock = vi.fn();
@@ -110,5 +110,30 @@ describe("WorkgroupView command ticks", () => {
         connectionId: "local",
       }),
     );
+  });
+
+  it("uses structured workgroup data without rereading raw files", async () => {
+    fetchWorkgroupTranscriptMock.mockResolvedValue([{
+      seq: 1,
+      from_pubkey: "hub-pubkey",
+      body: "done",
+      cost: { tokens: 42, usd: 0.0042 },
+    }]);
+    render(
+      <WorkgroupView
+        workgroup={workgroup}
+        profiles={profiles}
+        connectionId="local"
+      />,
+    );
+
+    await waitFor(() => expect(fetchWorkgroupTranscriptMock).toHaveBeenCalledTimes(1));
+    expect(invokeMock).toHaveBeenCalledWith("workgroup_members", {
+      profile: "hub",
+      wgId: "launch",
+      connectionId: "local",
+    });
+    expect(invokeMock.mock.calls.some(([command]) => command === "read_file")).toBe(false);
+    expect(screen.getByText("42 · $0.0042")).toBeInTheDocument();
   });
 });

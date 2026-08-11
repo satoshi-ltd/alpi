@@ -121,6 +121,29 @@ latency and one less layer to break.
 | OpenAI | `openai/gpt-5.6-terra` | `gpt-5.6-terra` |
 | OpenAI | `openai/gpt-5.6-luna` | `gpt-5.6-luna` |
 
+## Prompt caching
+
+Prompt caching is transparent and best-effort. Every supported provider and
+model still runs when caching is unavailable: alpi asks LiteLLM for an explicit
+cache marker only when that model reports support, and otherwise sends the
+normal request. OpenRouter routes additionally receive a hashed, stable
+conversation `session_id` to improve routing affinity; raw profile, session,
+peer, schedule, and workgroup identifiers are never sent.
+
+Telemetry varies by provider and model. A reported zero is a measured cache
+miss; missing cache fields are `no provider cache data`, not a fabricated zero.
+OpenRouter, native Anthropic, DeepSeek, and other LiteLLM routes therefore share
+the same execution path but may expose different cache counts, discounts, or
+cost precision. This affects observability, never whether the response is
+accepted.
+
+The cacheable prefix is the stable system prompt. Fresh clock/workgroup/skill/
+relay context rides the user turn so normal conversation growth stays
+append-only. First contact, switching model, changing tools or system content,
+compaction, resume, reset, and edit-and-resend can legitimately produce a cold
+or rewritten prefix. Inspect `/status` for the current session and `alpi digest`
+for a calendar-day aggregate; use the provider dashboard as billing authority.
+
 ## Not recommended as the primary skill router
 
 These can still be useful as workers, but they should not be the main

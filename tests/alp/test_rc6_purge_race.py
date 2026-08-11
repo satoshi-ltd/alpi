@@ -118,6 +118,59 @@ def _mp_writeback_worker(home_str: str, barrier) -> None:
         sub_mod.save(home, snapshot)
 
 
+def _mp_upsert_worker(home_str: str, index: int, barrier) -> None:
+    barrier.wait()
+    sub_mod.upsert(Path(home_str), _sub(f"wg_{index:02d}", f"site-{index}"))
+
+
+def _mp_compact_worker(home_str: str, barrier) -> None:
+    barrier.wait()
+    for _ in range(50):
+        sub_mod.compact(Path(home_str))
+
+
+def test_multiprocess_upserts_do_not_lose_subscriptions(tmp_path: Path) -> None:
+    home = tmp_path / "scout"
+    count = 16
+    ctx = mp.get_context("spawn")
+    barrier = ctx.Barrier(count)
+    procs = [
+        ctx.Process(target=_mp_upsert_worker, args=(str(home), i, barrier))
+        for i in range(count)
+    ]
+    for proc in procs:
+        proc.start()
+    for proc in procs:
+        proc.join(timeout=120)
+        assert proc.exitcode == 0
+
+    assert {sub.wg_id for sub in sub_mod.load(home)} == {
+        f"wg_{i:02d}" for i in range(count)
+    }
+
+
+def test_compaction_does_not_erase_concurrent_upserts(tmp_path: Path) -> None:
+    home = tmp_path / "scout"
+    sub_mod.upsert(home, _sub("wg_existing"))
+    count = 12
+    ctx = mp.get_context("spawn")
+    barrier = ctx.Barrier(count + 1)
+    procs = [
+        ctx.Process(target=_mp_upsert_worker, args=(str(home), i, barrier))
+        for i in range(count)
+    ]
+    procs.append(ctx.Process(target=_mp_compact_worker, args=(str(home), barrier)))
+    for proc in procs:
+        proc.start()
+    for proc in procs:
+        proc.join(timeout=120)
+        assert proc.exitcode == 0
+
+    assert {sub.wg_id for sub in sub_mod.load(home)} == {
+        "wg_existing", *(f"wg_{i:02d}" for i in range(count)),
+    }
+
+
 def test_multiprocess_writeback_cannot_resurrect_a_tombstoned_id(tmp_path: Path) -> None:
     home = tmp_path / "quill"
     sub_mod.save(home, [_sub("wg_dead"), _sub("wg_live", "other")])

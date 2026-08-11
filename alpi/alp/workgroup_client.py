@@ -772,10 +772,11 @@ def _absorb_roster(sub: sub_mod.Subscription, raw) -> None:
 async def post(
     home: Path, wg_id: str, text: bytes,
     cost: dict[str, Any] | None = None,
-    *, operator_abandon: bool = False,
+    *, operator_abandon: bool = False, turn_id: str = "",
 ) -> dict[str, Any]:
     """Encrypt `text` under the latest key and send it to the hub."""
     kp = load_or_generate(home)
+    turn_id = wg_mod.validate_turn_id(turn_id)
 
     try:
         _plaintext = text.decode("utf-8", errors="replace")
@@ -787,7 +788,10 @@ async def post(
     wg = wg_mod.load(home, wg_id)
     if wg is not None and wg.meta.hub_pubkey == kp.pubkey_b64():
         _check_hub_single_marker(_plaintext)
-        result = _post_as_hub(home, wg, kp, text, cost, operator_abandon=operator_abandon)
+        result = _post_as_hub(
+            home, wg, kp, text, cost,
+            operator_abandon=operator_abandon, turn_id=turn_id,
+        )
         _emit_wg_post(home, wg_id, result)
         if tasks_mod.is_done(_plaintext):
             try:
@@ -859,6 +863,8 @@ async def post(
     }
     if cost:
         params["cost"] = cost
+    if turn_id:
+        params["turn_id"] = turn_id
     result = await _call(home, kp, sub.hub_id, "workgroup.post", params)
     _emit_wg_post(home, wg_id, result)
     return result
@@ -1157,7 +1163,7 @@ def _baselines_after_post(wg, d: Path, events, active_phase) -> None:
 def _post_as_hub(
     home: Path, wg, kp: Keypair, text: bytes,
     cost: dict[str, Any] | None,
-    *, operator_abandon: bool = False,
+    *, operator_abandon: bool = False, turn_id: str = "",
 ) -> dict[str, Any]:
     """Write a hub post directly into the local transcript."""
     from alpi.alp.workgroup import _transcript_write_lock, _wg_dir
@@ -1173,14 +1179,14 @@ def _post_as_hub(
     with _transcript_write_lock(d):
         return _post_as_hub_locked(
             home, wg, own, kp, text, dict(cost) if cost else {}, d,
-            operator_abandon=operator_abandon,
+            operator_abandon=operator_abandon, turn_id=turn_id,
         )
 
 
 def _post_as_hub_locked(
     home: Path, wg, own, kp: Keypair, text: bytes,
     cost_dict: dict[str, Any], d: Path,
-    *, operator_abandon: bool,
+    *, operator_abandon: bool, turn_id: str = "",
 ) -> dict[str, Any]:
     import datetime as _dt
     from alpi.alp import pipeline_gates as gates
@@ -1288,6 +1294,8 @@ def _post_as_hub_locked(
             "seq": 0, "ts": ts, "from": kp.pubkey_b64(),
             "key_version": own.key_version, "nonce": nonce, "ciphertext": ct,
         }
+        if turn_id:
+            entry["turn_id"] = turn_id
         if declared_usd or declared_tokens:
             entry["cost"] = {"usd": declared_usd, "tokens": declared_tokens}
             if declared_in or declared_out:

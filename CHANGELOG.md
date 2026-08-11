@@ -1,5 +1,88 @@
 # Changelog
 
+## v0.12.13 — 2026-08-09 — every surface knows what the cache saved
+
+- **Workgroup cost accounting no longer counts early posts twice.** Each
+  accepted post declares only the usage accrued since the preceding post in
+  that turn; a rejected post keeps its delta for retry. Workgroup transcript
+  posts and daemon turn events now share a `turn_id`, so operational runs and
+  their exact declared spend can be joined without timestamp heuristics.
+  Background dispatches stop after an accepted substantive post instead of
+  paying for a final model reply that no workgroup consumer reads; `#working`
+  remains a continuation signal.
+- **Cache telemetry now covers every LLM call, not just the main loop.** The
+  tool-side usage sink carries cached tokens, provider discount and cost
+  source, so `web_extract`, `read_image`, `research`, `delegate` and knowledge
+  maintenance land the same accounting as the main turn. Research/delegate
+  parallel workers adopt the parent's turn tally (lock-guarded), so their
+  spend reaches per-run rows and workgroup cost declarations instead of
+  vanishing across threads. The max-steps wrap-up records its usage even when
+  the model returns empty text; the voice path records through the same
+  completion-shaped entry as everything else.
+- **The daily ledger and run ledger keep raw cache counts, tri-state.**
+  `tokens_cached`/`tokens_measured` accumulate in profile, peer, connection
+  and per-day history buckets — a completion whose provider reports nothing
+  stays out of the hit-rate denominator instead of counting as a miss.
+  Per-run rows store raw counts (never percentages); day rollover carries the
+  counters; corrupt persisted values degrade to zero instead of killing the
+  recording turn.
+- **Recorded dollars now say which arithmetic produced them.** Every
+  completion is tagged `provider` (the endpoint's own figure), `litellm` or
+  `table` (both cache-blind list-price math) or `none`, and the tag is only
+  `provider` when the usage payload actually carried a provider cost —
+  LiteLLM's self-stamped estimate no longer masquerades as a bill. Day
+  buckets also sum the provider-reported cache discount (signed: a negative
+  discount is a real cache-write premium). This is the instrument for
+  reconciling recorded spend against the real invoice.
+- **Cache reads surface where the operator already looks.** `/status` gains a
+  cache row (`hit 84.0% (11,760 of 14,000 measured in)`); `alpi digest` gains
+  a Prompt cache section with the window's hit rate, discount and cost-source
+  histogram — sourced from a ledger summary that covers exactly N calendar
+  days and counts cost sources even on days with no cache data. The host
+  usage window plots the same day columns from ledger history.
+- **Cache writes are captured but never counted.** `cache_write_tokens` and
+  `cache_discount` ride the completion for reporting only — writes are a
+  subset of uncached input and never enter a denominator.
+- **History is append-only now — the volatile context rides the user turn.**
+  The per-turn `# NOW` clock, workgroup context, skill hint and relay
+  directive no longer arrive as strippable system messages that rewrote
+  mid-history every turn (splitting the provider prefix and perturbing
+  OpenRouter's derived sticky key); they compose one host-context suffix on
+  the user message, persisted per turn and replayed byte-stable for textual
+  turns by every rehydrator — session resume, mention threads, and the
+  desktop's edit-and-resend, which also stopped dropping the entire system
+  prompt when rewriting from a turn. Multimodal turns replay as text markers
+  (attachments persist bytes-free by design) and secret-shaped content is
+  redacted at save; both surface as the expected `resume` rewrite in
+  diagnostics, never as corruption. The relay guardrail survives an oversized workgroup
+  block, and turning relay off plants an explicit revocation instead of
+  silently leaving stale directives as the last word. A background workgroup
+  turn injects only its exact workgroup, so older subscriptions cannot crowd
+  its briefing and active task out of the persisted context. Undirected chat
+  ranks joined and hosted workgroups together by real activity, includes only
+  complete blocks that fit the context budget and names every omitted group.
+  TUI `/clear` resets to a fresh session instead of filtering messages in place.
+- **Every OpenRouter conversation carries a sticky routing key.** A hashed
+  `session_id` per logical conversation — workgroup, peer thread, schedule
+  job, or interactive session — rides `extra_body` on every call in the
+  chain: main loop, model fallback, effort/deep escalation, wrap-up, and the
+  compaction side-calls under their own side key. No raw identifier ever
+  reaches the provider.
+- **A low-hit turn now names its cause.** Before each call the engine hashes
+  the request shape (model, params, tools, system, a bounded window of
+  message hashes) and compares against the previous call on the same
+  conversation — across processes for resumed sessions. Run rows carry
+  `cache_diag`: `tools`/`system`/`history_rewrite`/`first_contact`, with
+  engine-initiated rewrites labelled as what they are (`compaction`,
+  `resume`, `reset`, `rewrite_from_turn`) instead of masquerading as
+  corruption. Hashes only — no prompt text or secrets persist.
+- **The tool list can no longer invalidate the prefix by accident.** Wire
+  order is sorted by tool name, so registry or MCP insertion order never
+  reaches the provider; membership changes remain deliberate invalidations.
+- **Prompt building is read-only.** The low-confidence memory prune moved out
+  of the system-prompt builder into post-turn maintenance — building a
+  prompt can never again mutate its own input mid-build.
+
 ## v0.12.12 — 2026-08-08 — the change has an actor
 
 - **Sensitive host-plane mutations now leave a device-attributed trail.** The

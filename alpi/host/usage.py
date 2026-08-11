@@ -65,6 +65,11 @@ def bucket_history(
             "tokOut": int(h.get("tokens_out") or 0),
             "cost": float(h.get("usd") or 0.0),
         }
+        cached = int(h.get("tokens_cached") or 0)
+        measured = int(h.get("tokens_measured") or 0)
+        if cached > 0 or measured > 0:
+            by_day[iso]["cachedIn"] = cached
+            by_day[iso]["measuredIn"] = measured
     return _window(by_day, today, span)
 
 

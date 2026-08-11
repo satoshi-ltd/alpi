@@ -35,7 +35,10 @@ class Completion:
     cost_usd: float
     raw: Any
     cached_tokens: int | None = None
-
+    # Reporting-only pair: writes are a subset of uncached input and the discount is provider USD — neither ever enters a hit-rate denominator.
+    cache_write_tokens: int | None = None
+    cache_discount: float | None = None
+    cost_source: str = ""
 
 
 def _cached_tokens(usage: Any) -> int | None:
@@ -57,8 +60,48 @@ def _cached_tokens(usage: Any) -> int | None:
     try:
         prompt = int(getattr(usage, "prompt_tokens", 0) or 0)
     except (TypeError, ValueError):
-        prompt = 0
+        # An unparseable denominator makes the report unusable — unreported, not a fabricated miss.
+        return None
     return max(0, min(hit, max(0, prompt)))
+
+
+def _cache_write_tokens(usage: Any) -> int | None:
+    """Same tri-state contract as ``_cached_tokens``. PTD is pydantic extra=allow: absent extras raise on bare attr access, so every read below needs the 3-arg getattr."""
+    if not usage:
+        return None
+    details = getattr(usage, "prompt_tokens_details", None)
+    raw = None
+    if details is not None:
+        raw = getattr(details, "cache_write_tokens", None)
+        if raw is None:
+            raw = getattr(details, "cache_creation_tokens", None)
+    if raw is None:
+        # LiteLLM defaults the private alias to 0; only a positive value proves the provider reported.
+        private = getattr(usage, "_cache_creation_input_tokens", None)
+        raw = private if isinstance(private, int) and private > 0 else None
+    if raw is None:
+        return None
+    try:
+        return max(0, int(raw))
+    except (TypeError, ValueError):
+        return None
+
+
+def _cache_discount(usage: Any) -> float | None:
+    """OpenRouter has shipped this both nested in PTD and at the usage top level; LiteLLM's extra=allow preserves either. May be negative (cache-write premium)."""
+    if not usage:
+        return None
+    details = getattr(usage, "prompt_tokens_details", None)
+    raw = getattr(details, "cache_discount", None) if details is not None else None
+    if raw is None:
+        raw = getattr(usage, "cache_discount", None)
+    if raw is None:
+        return None
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return None
+
 
 def _silence_litellm() -> None:
     import logging
@@ -104,25 +147,6 @@ _silence_litellm()
 
 
 DEBUG = bool(__import__("os").environ.get("ALPI_DEBUG"))
-
-
-# Prefer the provider-reported cost. litellm.completion_cost() raises for models
-# not in its pricing map (every new OpenRouter model), so without this alpi logs
-# $0 for them. OpenRouter returns the real cost in usage.cost when usage.include
-# is requested; litellm surfaces it as _hidden_params.response_cost.
-def _reported_cost(resp) -> float | None:
-    hp = getattr(resp, "_hidden_params", None) or {}
-    rc = hp.get("response_cost")
-    if rc is not None:
-        return float(rc)
-    u = getattr(resp, "usage", None)
-    if u is not None:
-        c = getattr(u, "cost", None)
-        if c is None and hasattr(u, "model_dump"):
-            c = (u.model_dump() or {}).get("cost")
-        if c is not None:
-            return float(c)
-    return None
 
 
 def _with_openrouter_extras(kwargs: dict[str, Any], model: str) -> dict[str, Any]:
@@ -180,15 +204,39 @@ def _openrouter_pricing() -> "dict[str, tuple[float, float]]":
 # models it already knows) — that path works in streaming and is why older
 # OpenRouter models reported cost. Brand-new OpenRouter models aren't mapped yet,
 # so fall back to OpenRouter's own published per-token pricing.
-def _compute_cost(resp, model: str) -> float:
-    c = _reported_cost(resp)
+def _usage_cost(resp) -> float | None:
+    u = getattr(resp, "usage", None)
+    if u is None:
+        return None
+    c = getattr(u, "cost", None)
+    if c is None and hasattr(u, "model_dump"):
+        try:
+            c = (u.model_dump() or {}).get("cost")
+        except Exception:  # noqa: BLE001
+            return None
+    try:
+        return float(c) if c is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _compute_cost_detail(resp, model: str) -> tuple[float, str]:
+    """Source tags feed the billing reconciliation: only "provider" is the endpoint's own figure; "litellm" and "table" are cache-blind list-price arithmetic. The value and the label must come from the SAME field — usage.cost is the provider evidence and wins; _hidden_params.response_cost alone is litellm's own stamp for any mapped model."""
+    c = _usage_cost(resp)
     if c is not None:
-        return c
+        return c, "provider"
+    hp = getattr(resp, "_hidden_params", None) or {}
+    rc = hp.get("response_cost")
+    if rc is not None:
+        try:
+            return float(rc), "litellm"
+        except (TypeError, ValueError):
+            pass
     import litellm
     try:
         c = litellm.completion_cost(completion_response=resp)
         if c is not None:
-            return float(c or 0.0)
+            return float(c or 0.0), "litellm"
     except Exception:  # noqa: BLE001
         pass
     if str(model).startswith("openrouter/"):
@@ -197,8 +245,12 @@ def _compute_cost(resp, model: str) -> float:
         if price and u is not None:
             pin = getattr(u, "prompt_tokens", 0) or 0
             pout = getattr(u, "completion_tokens", 0) or 0
-            return pin * price[0] + pout * price[1]
-    return 0.0
+            return pin * price[0] + pout * price[1], "table"
+    return 0.0, "none"
+
+
+def _compute_cost(resp, model: str) -> float:
+    return _compute_cost_detail(resp, model)[0]
 
 
 def is_free_model(model: str) -> bool:
@@ -332,7 +384,7 @@ def _normalize_chunk(chunk, tool_calls_accum: dict) -> dict | None:
 
 def _final_chunk(last_chunk, tool_calls_accum: dict, model: str) -> dict:
     usage = getattr(last_chunk, "usage", None) if last_chunk else None
-    cost = _compute_cost(last_chunk, model)
+    cost, cost_source = _compute_cost_detail(last_chunk, model)
     final_tool_calls = [
         {"id": v["id"], "name": v["name"], "arguments": v["arguments"]}
         for _, v in sorted(tool_calls_accum.items())
@@ -344,6 +396,9 @@ def _final_chunk(last_chunk, tool_calls_accum: dict, model: str) -> dict:
         "output_tokens": getattr(usage, "completion_tokens", 0) if usage else 0,
         "cost_usd": float(cost),
         "cached_tokens": _cached_tokens(usage),
+        "cache_write_tokens": _cache_write_tokens(usage),
+        "cache_discount": _cache_discount(usage),
+        "cost_source": cost_source,
     }
 
 
@@ -460,7 +515,7 @@ def complete(
     choice = response.choices[0].message
     usage = getattr(response, "usage", None)
 
-    cost = _compute_cost(response, model)
+    cost, cost_source = _compute_cost_detail(response, model)
 
     raw_calls = getattr(choice, "tool_calls", None) or []
     tool_calls = [
@@ -480,4 +535,7 @@ def complete(
         cost_usd=float(cost),
         raw=response,
         cached_tokens=_cached_tokens(usage),
+        cache_write_tokens=_cache_write_tokens(usage),
+        cache_discount=_cache_discount(usage),
+        cost_source=cost_source,
     )

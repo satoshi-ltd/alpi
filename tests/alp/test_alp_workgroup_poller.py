@@ -431,7 +431,9 @@ async def test_dispatch_records_start_and_end_events(short_tmp: Path) -> None:
     assert events[0]["wg_name"] == "design"
     assert events[0]["reason"] == "test trigger"
     assert events[0]["pid"] > 0
+    assert len(events[0]["turn_id"]) == 32
     assert events[1]["event"] == "end"
+    assert events[1]["turn_id"] == events[0]["turn_id"]
     assert events[1]["rc"] == 0
     assert "duration_s" in events[1]
     assert events[1]["posts_added"] == 0
@@ -468,6 +470,7 @@ async def test_dispatch_env_carries_alpi_workspace(short_tmp: Path) -> None:
 
     assert captured["env"].get("ALPI_WORKSPACE") == str(ws.resolve())
     assert captured["env"].get("ALPI_WORKGROUP_DISPATCH") == "wg_x"
+    assert len(captured["env"].get("ALPI_WORKGROUP_TURN_ID", "")) == 32
 
 
 @pytest.mark.asyncio
@@ -1410,7 +1413,7 @@ async def test_removed_subscription_cancels_held_pull(monkeypatch) -> None:
             cancelled.set()
 
     monkeypatch.setattr(service, "_poller_start_offset", lambda _p: 0.0)
-    monkeypatch.setattr(service, "_WG_HOT_TICK_SECONDS", 0.01)
+    monkeypatch.setattr(service, "WORKGROUP_TICK_SECONDS", 0.01)
     monkeypatch.setattr(sub_mod, "load", lambda home: list(subs))
     monkeypatch.setattr(sub_mod, "get", lambda home, wid: subs[0] if subs else None)
     monkeypatch.setattr(wc, "pull", fake_pull)
@@ -1426,6 +1429,73 @@ async def test_removed_subscription_cancels_held_pull(monkeypatch) -> None:
     finally:
         poller.cancel()
         await asyncio.gather(poller, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_hub_scan_does_not_block_the_host_loop(monkeypatch) -> None:
+    wg = types.SimpleNamespace(meta=types.SimpleNamespace(id="wg1"))
+
+    def slow_posts(_home, _wg):
+        time.sleep(0.25)
+        return []
+
+    monkeypatch.setattr(service, "_poller_start_offset", lambda _p: 0.0)
+    monkeypatch.setattr(sub_mod, "load", lambda _home: [])
+    monkeypatch.setattr(wg_mod, "list_workgroups", lambda _home: [wg])
+    monkeypatch.setattr(service, "_all_hub_posts_decrypted", slow_posts)
+
+    started = time.monotonic()
+    poller = asyncio.create_task(
+        service._run_workgroup_poller(Path("/tmp/none"), "alice")
+    )
+    try:
+        await asyncio.sleep(0.05)
+        assert time.monotonic() - started < 0.15
+    finally:
+        poller.cancel()
+        await asyncio.gather(poller, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_post_wake_rescans_only_the_changed_hub(monkeypatch) -> None:
+    from alpi.alp import wakes
+
+    home = Path("/tmp/targeted-wake")
+    workgroups = [
+        types.SimpleNamespace(meta=types.SimpleNamespace(id="wg1")),
+        types.SimpleNamespace(meta=types.SimpleNamespace(id="wg2")),
+    ]
+    scans: list[str] = []
+    initial = asyncio.Event()
+    targeted = asyncio.Event()
+
+    def posts(_home, wg):
+        scans.append(wg.meta.id)
+        return [{"seq": 1}]
+
+    async def dispatch(*_args, **_kwargs):
+        if len(scans) == 2:
+            initial.set()
+        elif len(scans) == 3:
+            targeted.set()
+
+    monkeypatch.setattr(service, "_poller_start_offset", lambda _p: 0.0)
+    monkeypatch.setattr(sub_mod, "load", lambda _home: [])
+    monkeypatch.setattr(wg_mod, "list_workgroups", lambda _home: workgroups)
+    monkeypatch.setattr(service, "_all_hub_posts_decrypted", posts)
+    monkeypatch.setattr(service, "_hub_stays_hot", lambda *_args: False)
+    monkeypatch.setattr(service, "_maybe_dispatch_for_hub", dispatch)
+
+    poller = asyncio.create_task(service._run_workgroup_poller(home, "alice"))
+    try:
+        await asyncio.wait_for(initial.wait(), timeout=1)
+        wakes.fire(home, "wg2")
+        await asyncio.wait_for(targeted.wait(), timeout=1)
+    finally:
+        poller.cancel()
+        await asyncio.gather(poller, return_exceptions=True)
+
+    assert scans == ["wg1", "wg2", "wg2"]
 
 
 def test_wg_backoff_schedule() -> None:

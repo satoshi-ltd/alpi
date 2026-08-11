@@ -79,17 +79,21 @@ def test_is_interrupted_inherits_from_parent() -> None:
 
 
 def test_record_usage_fans_out_to_sink() -> None:
-    total = {"input": 0, "output": 0, "cost": 0.0}
+    total = {"input": 0, "output": 0, "cost": 0.0, "cached": 0, "unmeasured": 0}
 
-    def _sink(i: int, o: int, c: float) -> None:
+    def _sink(i: int, o: int, c: float, cached: int | None = None, *_rest) -> None:
         total["input"] += i
         total["output"] += o
         total["cost"] += c
+        if cached is None:
+            total["unmeasured"] += 1
+        else:
+            total["cached"] += cached
 
     S.set_usage_sink(_sink)
     try:
         S.record_usage(10, 20, 0.5)
-        S.record_usage(5, 2, 0.1)
+        S.record_usage(5, 2, 0.1, 4)
     finally:
         S.set_usage_sink(None)
-    assert total == {"input": 15, "output": 22, "cost": 0.6}
+    assert total == {"input": 15, "output": 22, "cost": 0.6, "cached": 4, "unmeasured": 1}

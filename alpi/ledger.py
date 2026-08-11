@@ -56,6 +56,20 @@ def _today_utc() -> str:
     return datetime.now(timezone.utc).date().isoformat()
 
 
+def _int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def _path(home: Path) -> Path:
     return home / "logs" / "ledger.json"
 
@@ -93,10 +107,13 @@ def _rollover(data: dict[str, Any], today: str) -> dict[str, Any]:
         prof.get("usd") or prof.get("tokens")
     ):
         history[old_day] = {
-            "usd": float(prof.get("usd", 0.0)),
-            "tokens": int(prof.get("tokens", 0)),
+            "usd": _float(prof.get("usd", 0.0)),
+            "tokens": _int(prof.get("tokens", 0)),
             "tokens_in": 0,
             "tokens_out": 0,
+            "tokens_cached": _int(prof.get("tokens_cached", 0)),
+            "tokens_measured": _int(prof.get("tokens_measured", 0)),
+            "cache_discount_usd": _float(prof.get("cache_discount_usd", 0.0)),
         }
     fresh = _blank(today)
     if old_day and old_day != today and old_day in history:
@@ -248,7 +265,11 @@ def record_completion(
     usd = float(getattr(completion, "cost_usd", 0.0) or 0.0)
     record(
         home, usd=usd, tokens=tokens_in + tokens_out,
-        tokens_in=tokens_in, tokens_out=tokens_out, cfg_budget=cfg_budget,
+        tokens_in=tokens_in, tokens_out=tokens_out,
+        tokens_cached=getattr(completion, "cached_tokens", None),
+        cache_discount_usd=getattr(completion, "cache_discount", None),
+        cost_source=getattr(completion, "cost_source", None),
+        cfg_budget=cfg_budget,
     )
 
 
@@ -269,24 +290,48 @@ def record(
     tokens: int,
     tokens_in: int = 0,
     tokens_out: int = 0,
+    tokens_cached: int | None = None,
+    cache_discount_usd: float | None = None,
+    cost_source: str | None = None,
     cfg_budget: dict[str, Any] | None = None,
 ) -> None:
-    """Add today's spend; emits ``budget.threshold`` once per crossing (highest threshold wins if a single record vaults past both). ``tokens_in``/``tokens_out`` feed the per-day ``history`` split (best-effort: non-token spend like image generation passes ``tokens=0`` and contributes ``usd`` only)."""
+    """Add today's spend; emits ``budget.threshold`` once per crossing (highest threshold wins if a single record vaults past both). ``tokens_in``/``tokens_out`` feed the per-day ``history`` split (best-effort: non-token spend like image generation passes ``tokens=0`` and contributes ``usd`` only). ``tokens_cached=None`` = provider reported nothing (NOT a miss); a non-None value marks this completion's ``tokens_in`` as measured, mirroring Session.record."""
     if usd <= 0 and tokens <= 0:
         return
+    try:
+        cached_add = max(0, int(tokens_cached)) if tokens_cached is not None else 0
+    except (TypeError, ValueError):
+        tokens_cached, cached_add = None, 0
+    measured_add = max(0, int(tokens_in)) if tokens_cached is not None else 0
+    try:
+        # Signed on purpose: a negative discount is a real cache-write premium and the sum must stay net-accurate for billing reconciliation.
+        discount_add = float(cache_discount_usd) if cache_discount_usd is not None else 0.0
+    except (TypeError, ValueError):
+        discount_add = 0.0
     peer_id = _peer_ctx.get() or INTERACTIVE_BUCKET
     from alpi.host.connection_context import current
     connection_id = current().connection_id
+
+    def _bump_cache(entry: dict[str, Any]) -> None:
+        entry["tokens_cached"] = _int(entry.get("tokens_cached")) + cached_add
+        entry["tokens_measured"] = _int(entry.get("tokens_measured")) + measured_add
+        if discount_add:
+            entry["cache_discount_usd"] = round(
+                _float(entry.get("cache_discount_usd")) + discount_add, 6,
+            )
+
     with _lock:
         data = load(home)
         profile = data.setdefault("profile", {"usd": 0.0, "tokens": 0})
         before_usd = float(profile.get("usd", 0))
         profile["usd"] = before_usd + max(0.0, float(usd))
         profile["tokens"] = int(profile.get("tokens", 0)) + max(0, int(tokens))
+        _bump_cache(profile)
         buckets = data.setdefault("by_peer", {})
         bucket = buckets.setdefault(peer_id, {"usd": 0.0, "tokens": 0})
         bucket["usd"] = float(bucket.get("usd", 0)) + max(0.0, float(usd))
         bucket["tokens"] = int(bucket.get("tokens", 0)) + max(0, int(tokens))
+        _bump_cache(bucket)
         connections = data.setdefault("by_connection", {})
         connection = connections.setdefault(
             connection_id,
@@ -296,6 +341,7 @@ def record(
         connection["tokens"] = int(connection.get("tokens", 0)) + max(0, int(tokens))
         connection["tokens_in"] = int(connection.get("tokens_in", 0)) + max(0, int(tokens_in))
         connection["tokens_out"] = int(connection.get("tokens_out", 0)) + max(0, int(tokens_out))
+        _bump_cache(connection)
         today = str(data.get("day"))
         history = data.setdefault("history", {})
         hentry = history.setdefault(
@@ -305,6 +351,10 @@ def record(
         hentry["tokens"] = int(profile["tokens"])
         hentry["tokens_in"] = int(hentry.get("tokens_in", 0)) + max(0, int(tokens_in))
         hentry["tokens_out"] = int(hentry.get("tokens_out", 0)) + max(0, int(tokens_out))
+        _bump_cache(hentry)
+        if cost_source:
+            sources = hentry.setdefault("cost_sources", {})
+            sources[str(cost_source)] = int(sources.get(str(cost_source), 0)) + 1
         daily_connections = hentry.setdefault("by_connection", {})
         daily_connections[connection_id] = dict(connection)
         data["history"] = _prune_history(history, today)
@@ -337,6 +387,52 @@ def record(
 
 def snapshot(home: Path) -> dict[str, Any]:
     return load(home)
+
+
+def cache_summary(
+    home: Path, *, days: int = 7, today: str | None = None,
+) -> dict[str, Any]:
+    """Raw cache counts summed over ``history`` day entries in a window of exactly ``days`` calendar dates ending today (live entry included). Read-only; sums raw counts so callers derive percentages — never average per-day rates."""
+    today = today or _today_utc()
+    with _lock:
+        data = load(home)
+    out: dict[str, Any] = {
+        "days": 0, "tokens_cached": 0, "tokens_measured": 0,
+        "cache_discount_usd": 0.0, "cost_sources": {},
+    }
+    try:
+        cutoff = date.fromisoformat(today) - timedelta(days=max(0, _int(days) - 1))
+    except (ValueError, TypeError):
+        return out
+    sources: dict[str, int] = {}
+    try:
+        end = date.fromisoformat(today)
+    except (ValueError, TypeError):
+        return out
+    for d, entry in (data.get("history") or {}).items():
+        if not isinstance(entry, dict):
+            continue
+        try:
+            parsed = date.fromisoformat(str(d))
+            # Future-dated entries (clock skew) would otherwise sit inside every window forever.
+            if parsed < cutoff or parsed > end:
+                continue
+        except (ValueError, TypeError):
+            continue
+        # Cost-source counts describe ALL recorded spend, so they aggregate even for days with no cache data — skipping them would bias the histogram toward measured (provider-priced) days.
+        for src, n in (entry.get("cost_sources") or {}).items():
+            sources[str(src)] = sources.get(str(src), 0) + _int(n)
+        measured = _int(entry.get("tokens_measured"))
+        cached = _int(entry.get("tokens_cached"))
+        discount = _float(entry.get("cache_discount_usd"))
+        if measured <= 0 and cached <= 0 and discount == 0.0:
+            continue
+        out["days"] += 1
+        out["tokens_cached"] += max(0, cached)
+        out["tokens_measured"] += max(0, measured)
+        out["cache_discount_usd"] = round(out["cache_discount_usd"] + discount, 6)
+    out["cost_sources"] = sources
+    return out
 
 
 def status_line(home: Path, cfg_budget: dict[str, Any] | None) -> str:

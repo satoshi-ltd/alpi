@@ -612,21 +612,25 @@ async fn sessions_delete(
 }
 
 #[tauri::command]
-async fn workgroups(profile: Option<String>, connection_id: Option<String>) -> serde_json::Value {
+async fn workgroups(
+    profile: Option<String>,
+    connection_id: Option<String>,
+) -> Result<serde_json::Value, String> {
     off_main(move || {
         let params = match profile {
             Some(p) => serde_json::json!({"profile": p}),
             None => serde_json::json!({}),
         };
-        host_array_value_for(
-            connection_id.as_deref(),
-            "host.workgroups.list",
-            params,
-            "workgroups",
-        )
+        let result = match connection_id.as_deref() {
+            Some(cid) => host_client::call_for(cid, "host.workgroups.list", params),
+            None => host_client::call("host.workgroups.list", params),
+        }?;
+        Ok(result
+            .get("workgroups")
+            .cloned()
+            .unwrap_or_else(|| serde_json::Value::Array(vec![])))
     })
-    .await
-    .unwrap_or(serde_json::Value::Array(vec![]))
+    .await?
 }
 
 #[tauri::command]
@@ -3146,12 +3150,17 @@ fn workgroup_transcript_blocking(
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
+        let cost = post
+            .get("cost")
+            .cloned()
+            .unwrap_or_else(|| serde_json::json!({}));
         out.push(DecryptedMessage {
             seq,
             from,
             from_pubkey,
             body,
             at,
+            cost,
         });
     }
     let next_seq = result.get("next_seq").and_then(|v| v.as_u64()).unwrap_or(0) as u32;

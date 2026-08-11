@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import os
+import threading
+import uuid
 from contextvars import ContextVar
 from typing import Callable, Optional
 
 EmitFn = Callable[[str, bool], None]
 InterruptFn = Callable[[], bool]
-UsageFn = Callable[[int, int, float], None]
+# (input, output, cost_usd, cached, cache_discount, cost_source)
+UsageFn = Callable[[int, int, float, "int | None", "float | None", "str | None"], None]
 
 _emit: ContextVar[Optional[EmitFn]] = ContextVar("alpi_emit", default=None)
 _interrupt_getter: ContextVar[Optional[InterruptFn]] = ContextVar(
@@ -16,6 +20,10 @@ _interrupt_getter: ContextVar[Optional[InterruptFn]] = ContextVar(
 _usage_sink: ContextVar[Optional[UsageFn]] = ContextVar("alpi_usage", default=None)
 # Per-turn running tally for tools that need live spend.
 _turn_usage: ContextVar[Optional[dict]] = ContextVar("alpi_turn_usage", default=None)
+_declared_turn_usage: ContextVar[Optional[dict]] = ContextVar(
+    "alpi_declared_turn_usage", default=None,
+)
+_turn_id: ContextVar[str] = ContextVar("alpi_turn_id", default="")
 _active_skills_env: ContextVar[Optional[set]] = ContextVar(
     "alpi_active_skills_env", default=None,
 )
@@ -62,11 +70,16 @@ def set_usage_sink(sink: Optional[UsageFn]) -> None:
 def record_usage(
     input_tokens: int, output_tokens: int, cost_usd: float,
     cached_input_tokens: int | None = None,
+    cache_discount: float | None = None,
+    cost_source: str | None = None,
 ) -> None:
     sink = _usage_sink.get()
     if sink is not None:
         try:
-            sink(int(input_tokens), int(output_tokens), float(cost_usd))
+            sink(
+                int(input_tokens), int(output_tokens), float(cost_usd),
+                cached_input_tokens, cache_discount, cost_source,
+            )
         except Exception:
             pass
     try:
@@ -75,18 +88,93 @@ def record_usage(
         pass
 
 
+_tally_lock = threading.Lock()
+
+
 def reset_turn_usage() -> None:
     """Start a fresh per-turn usage tally."""
     _turn_usage.set({
         "tokens_in": 0, "tokens_out": 0, "usd": 0.0,
         "cached_in": 0, "measured_in": 0,
     })
+    _declared_turn_usage.set({
+        "tokens_in": 0, "tokens_out": 0, "usd": 0.0,
+        "cached_in": 0, "measured_in": 0,
+    })
+    _turn_id.set(os.environ.get("ALPI_WORKGROUP_TURN_ID") or uuid.uuid4().hex)
 
 
 def get_turn_usage() -> Optional[dict]:
     """Snapshot of the current turn's tokens + USD cost."""
     tally = _turn_usage.get()
-    return dict(tally) if tally is not None else None
+    if tally is None:
+        return None
+    with _tally_lock:
+        return dict(tally)
+
+
+def get_undeclared_turn_usage() -> tuple[Optional[dict], Optional[dict]]:
+    """Return the pending usage delta and the absolute snapshot it came from."""
+    tally = _turn_usage.get()
+    declared = _declared_turn_usage.get()
+    if tally is None or declared is None:
+        return None, None
+    with _tally_lock:
+        snapshot = dict(tally)
+        delta = {
+            "tokens_in": max(
+                0,
+                int(snapshot.get("tokens_in", 0))
+                - int(declared.get("tokens_in", 0)),
+            ),
+            "tokens_out": max(
+                0,
+                int(snapshot.get("tokens_out", 0))
+                - int(declared.get("tokens_out", 0)),
+            ),
+            "usd": max(
+                0.0,
+                float(snapshot.get("usd", 0.0))
+                - float(declared.get("usd", 0.0)),
+            ),
+            "cached_in": max(
+                0,
+                int(snapshot.get("cached_in", 0))
+                - int(declared.get("cached_in", 0)),
+            ),
+            "measured_in": max(
+                0,
+                int(snapshot.get("measured_in", 0))
+                - int(declared.get("measured_in", 0)),
+            ),
+        }
+    return delta, snapshot
+
+
+def mark_turn_usage_declared(snapshot: Optional[dict]) -> None:
+    """Advance the declaration baseline to an accepted post's snapshot."""
+    declared = _declared_turn_usage.get()
+    if declared is None or snapshot is None:
+        return
+    with _tally_lock:
+        for key in ("tokens_in", "tokens_out", "cached_in", "measured_in"):
+            declared[key] = max(int(declared.get(key, 0)), int(snapshot.get(key, 0)))
+        declared["usd"] = max(
+            float(declared.get("usd", 0.0)), float(snapshot.get("usd", 0.0)),
+        )
+
+
+def get_turn_id() -> str:
+    return _turn_id.get()
+
+
+def get_turn_usage_ref() -> Optional[dict]:
+    """Live tally dict for cross-thread adoption — worker threads get a fresh ContextVar copy, so research/delegate must re-bind the parent's dict or their spend never reaches the turn tally."""
+    return _turn_usage.get()
+
+
+def adopt_turn_usage(tally: Optional[dict]) -> None:
+    _turn_usage.set(tally)
 
 
 def bump_turn_usage(
@@ -97,12 +185,13 @@ def bump_turn_usage(
     tally = _turn_usage.get()
     if tally is None:
         return
-    tally["tokens_in"] = int(tally.get("tokens_in", 0)) + int(input_tokens)
-    tally["tokens_out"] = int(tally.get("tokens_out", 0)) + int(output_tokens)
-    tally["usd"] = float(tally.get("usd", 0.0)) + float(cost_usd)
-    if cached_input_tokens is not None:
-        tally["cached_in"] = int(tally.get("cached_in", 0)) + int(cached_input_tokens)
-        tally["measured_in"] = int(tally.get("measured_in", 0)) + int(input_tokens)
+    with _tally_lock:
+        tally["tokens_in"] = int(tally.get("tokens_in", 0)) + int(input_tokens)
+        tally["tokens_out"] = int(tally.get("tokens_out", 0)) + int(output_tokens)
+        tally["usd"] = float(tally.get("usd", 0.0)) + float(cost_usd)
+        if cached_input_tokens is not None:
+            tally["cached_in"] = int(tally.get("cached_in", 0)) + int(cached_input_tokens)
+            tally["measured_in"] = int(tally.get("measured_in", 0)) + int(input_tokens)
 
 
 def reset_skill_env() -> None:

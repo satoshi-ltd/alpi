@@ -26,6 +26,7 @@ def test_status_rows_basic_shape() -> None:
         ("turns", "2"),
         ("elapsed", "02:05"),
         ("tokens", "in=1,234  out=567"),
+        ("cache", "no provider cache data"),
         ("session cost", "$0.0042"),
     ]
 
@@ -45,3 +46,12 @@ def test_status_rows_adds_budget_when_home_present(tmp_path: Path) -> None:
         )
     )
     assert rows["daily budget"] == "$0.0000 / $5.00"
+
+
+def test_status_rows_show_hit_rate_when_measured() -> None:
+    rows = dict(status.status_rows(
+        session_id="abc123", model="m", turns=1, elapsed_seconds=None,
+        input_tokens=14_000, output_tokens=100, cost_usd=0.01,
+        cached_input_tokens=11_760, cache_measured_input_tokens=14_000,
+    ))
+    assert rows["cache"] == "hit 84.0%  (11,760 of 14,000 measured in)"

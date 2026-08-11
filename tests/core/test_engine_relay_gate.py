@@ -220,13 +220,19 @@ def test_relay_removes_alternative_info_tools_from_the_offer(tmp_path, monkeypat
 
 
 def _relay_blocks(eng: Engine) -> list[str]:
+    # CL.4 — the relay instruction rides each turn's host-context suffix on the user message; system-message relay blocks no longer exist.
     return [
         str(m.get("content")) for m in eng.session.messages
-        if m.get("role") == "system" and str(m.get("content")).startswith("[relay] ")
+        if m.get("role") == "user" and "[relay] " in str(m.get("content"))
     ]
 
 
-def test_relay_block_not_duplicated_across_turns(tmp_path, monkeypatch) -> None:
+def _latest_relay(eng: Engine) -> str:
+    blocks = _relay_blocks(eng)
+    return blocks[-1] if blocks else ""
+
+
+def test_relay_directive_rides_each_turn_suffix_once(tmp_path, monkeypatch) -> None:
     home = tmp_path / "h"
     home.mkdir()
     eng = _engine(home, monkeypatch, "agora")
@@ -234,10 +240,12 @@ def test_relay_block_not_duplicated_across_turns(tmp_path, monkeypatch) -> None:
     for q in ("q1", "q2", "q3"):
         _stub_stream(monkeypatch, [_final_chunk("", tool_calls=_peer_call())])
         eng.run_turn(q, emit=lambda e: None)
-    assert len(_relay_blocks(eng)) == 1
+    blocks = _relay_blocks(eng)
+    assert len(blocks) == 3, "one per turn, riding each user suffix"
+    assert all(b.count("[relay] ") == 1 for b in blocks)
 
 
-def test_disabling_relay_removes_the_block(tmp_path, monkeypatch) -> None:
+def test_disabling_relay_stops_new_directives_and_keeps_history(tmp_path, monkeypatch) -> None:
     home = tmp_path / "h"
     home.mkdir()
     eng = _engine(home, monkeypatch, "agora")
@@ -249,10 +257,17 @@ def test_disabling_relay_removes_the_block(tmp_path, monkeypatch) -> None:
     _stub_stream(monkeypatch, [_final_chunk("Direct answer now.")])
     eng.run_turn("q2", emit=lambda e: None)
 
-    assert _relay_blocks(eng) == []
+    latest_user = [m for m in eng.session.messages if m.get("role") == "user"][-1]
+    content = str(latest_user.get("content"))
+    assert "read-only relay" not in content, (
+        "disabling relay stops the directive from entering new turns; old turns stay history"
+    )
+    assert "Relay mode is OFF" in content, (
+        "an explicit revocation supersedes the stale directives still in history"
+    )
 
 
-def test_changing_relay_peer_keeps_only_the_new_block(tmp_path, monkeypatch) -> None:
+def test_changing_relay_peer_targets_new_peer_in_latest_suffix(tmp_path, monkeypatch) -> None:
     home = tmp_path / "h"
     home.mkdir()
     eng = _engine(home, monkeypatch, "agora")
@@ -264,10 +279,9 @@ def test_changing_relay_peer_keeps_only_the_new_block(tmp_path, monkeypatch) -> 
     _stub_stream(monkeypatch, [_final_chunk("", tool_calls=_peer_call("beta"))])
     eng.run_turn("q2", emit=lambda e: None)
 
-    blocks = _relay_blocks(eng)
-    assert len(blocks) == 1
-    assert "'beta'" in blocks[0]
-    assert "'agora'" not in blocks[0]
+    latest = _latest_relay(eng)
+    assert "'beta'" in latest
+    assert "'agora'" not in latest, "the newest turn instructs for the new peer only"
 
 
 def test_valid_peer_reply_records_run_as_completed(tmp_path, monkeypatch) -> None:
@@ -312,3 +326,27 @@ def test_no_relay_means_no_gate(tmp_path, monkeypatch) -> None:
     eng.run_turn("q", emit=events.append)
 
     assert _finals(events) == ["Direct answer, no peer."]
+
+
+def test_relay_revocation_survives_the_engine_boundary(tmp_path, monkeypatch) -> None:
+    """The host builds a fresh Engine per message — the revocation must come from persisted history, not from in-memory state."""
+    from alpi.cli import _hydrate_from_path
+
+    home = tmp_path / "h"
+    home.mkdir()
+    eng = _engine(home, monkeypatch, "agora")
+    _mock_peer(monkeypatch)
+    _stub_stream(monkeypatch, [_final_chunk("", tool_calls=_peer_call())])
+    eng.run_turn("q1", emit=lambda e: None)
+    path = eng.session.save()
+    assert path is not None
+
+    (home / "config.yaml").write_text("model: gpt-5.4-mini\n")
+    fresh = _engine(home, monkeypatch, None)
+    assert _hydrate_from_path(fresh, path) is True
+    assert fresh._last_relay_peer == "agora", "relay state recovered from history"
+
+    _stub_stream(monkeypatch, [_final_chunk("Direct answer now.")])
+    fresh.run_turn("q2", emit=lambda e: None)
+    latest = [m for m in fresh.session.messages if m.get("role") == "user"][-1]
+    assert "Relay mode is OFF" in str(latest.get("content"))

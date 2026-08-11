@@ -39,3 +39,34 @@ def test_schedule_schema_contains_no_timestamp() -> None:
     desc = Schedule.schema()["function"]["description"]
     assert "Current time:" not in desc
     assert "Now:" not in desc
+
+
+def test_wire_order_is_sorted_and_stable_across_mcp_map_order() -> None:
+    """The outer list IS the provider cache prefix — sort_keys in the hash above cannot see reordering, so pin the wire order itself."""
+    from alpi.tools.base import Tool
+
+    class _ZTool(Tool):
+        name = "zzz_fake"
+        description = "fake"
+        parameters = {"type": "object", "properties": {}}
+
+        def run(self, **kw):  # noqa: ANN003
+            raise NotImplementedError
+
+    class _ATool(Tool):
+        name = "aaa_fake"
+        description = "fake"
+        parameters = {"type": "object", "properties": {}}
+
+        def run(self, **kw):  # noqa: ANN003
+            raise NotImplementedError
+
+    def _names(mapping):
+        with tools_mod.use_mcp_tools(mapping):
+            return [s["function"]["name"] for s in tools_mod.schemas()]
+
+    forward = _names({"zzz_fake": _ZTool, "aaa_fake": _ATool})
+    backward = _names({"aaa_fake": _ATool, "zzz_fake": _ZTool})
+    assert forward == backward, "MCP insertion order must never reach the wire"
+    assert forward == sorted(forward)
+    assert "aaa_fake" in forward and "zzz_fake" in forward

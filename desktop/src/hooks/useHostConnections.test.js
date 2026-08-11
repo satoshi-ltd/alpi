@@ -385,6 +385,26 @@ describe("useHostConnections connection-status", () => {
     expect(invoke.mock.calls.some(([cmd]) => cmd === "profiles")).toBe(false);
   });
 
+  it("keeps cached profiles and workgroups when workgroups rejects", async () => {
+    setProfileCache(
+      "local",
+      [{ name: "cached-doc", model: "a/b" }],
+      [{ id: "wg-cached", profile: "cached-doc" }],
+    );
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "host_connections") return makeConnections("local");
+      if (cmd === "profile_summaries") return [{ name: "fresh-doc", model: "a/b" }];
+      if (cmd === "workgroups") throw new Error("read timeout");
+      return null;
+    });
+
+    const { result } = renderHostConnections();
+    await waitFor(() => {
+      expect(result.current.profiles.map((p) => p.name)).toEqual(["cached-doc"]);
+      expect(result.current.workgroups.map((w) => w.id)).toEqual(["wg-cached"]);
+    });
+  });
+
   it("does not fall back to local profiles when an online remote returns no summaries", async () => {
     invoke.mockImplementation(async (cmd) => {
       if (cmd === "host_connections") return makeConnections("remote");

@@ -274,6 +274,9 @@ class ReadImage(Tool):
 def _finalize(out) -> ToolResult:  # noqa: ANN001
     tool_state_mod.record_usage(
         out.input_tokens, out.output_tokens, out.cost_usd,
+        getattr(out, "cached_tokens", None),
+        getattr(out, "cache_discount", None),
+        getattr(out, "cost_source", None),
     )
     answer = (out.content or "").strip() or "(empty answer)"
     return ToolResult(ok=True, output=answer)

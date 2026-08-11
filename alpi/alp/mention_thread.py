@@ -19,6 +19,7 @@ class ThreadTurn:
     at: float
     user: str
     assistant: str
+    host_context: str = ""
 
 
 @dataclass
@@ -46,25 +47,35 @@ def load(home: Path, sender: str) -> Thread:
             at=float(t.get("at", 0.0)),
             user=str(t.get("user", "")),
             assistant=str(t.get("assistant", "")),
+            host_context=str(t.get("host_context", "") or ""),
         )
         for t in (data.get("turns") or [])
     ]
     return Thread(sender=sender, turns=turns)
 
 
-def append(home: Path, sender: str, user: str, assistant: str) -> None:
+def append(
+    home: Path, sender: str, user: str, assistant: str, host_context: str = "",
+) -> None:
     p = _path(home, sender)
     if p is None:
         return
+    from alpi.session import HOST_CONTEXT_CAP
     thread = load(home, sender)
-    thread.turns.append(ThreadTurn(at=time.time(), user=user, assistant=assistant))
+    thread.turns.append(ThreadTurn(
+        at=time.time(), user=user, assistant=assistant,
+        host_context=host_context[:HOST_CONTEXT_CAP],
+    ))
     if len(thread.turns) > CAP:
         thread.turns = thread.turns[-CAP:]
     p.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "sender": sender,
         "turns": [
-            {"at": t.at, "user": t.user, "assistant": t.assistant}
+            {
+                "at": t.at, "user": t.user, "assistant": t.assistant,
+                **({"host_context": t.host_context} if t.host_context else {}),
+            }
             for t in thread.turns
         ],
     }
@@ -83,8 +94,13 @@ def hydrate(messages: list[dict], thread: Thread) -> None:
             "conflict."
         ),
     })
+    from alpi.session import with_host_context
     for t in thread.turns:
         if t.user:
-            messages.append({"role": "user", "content": t.user})
+            # Byte-stable replay of the provider-visible user content, suffix included.
+            messages.append({
+                "role": "user",
+                "content": with_host_context(t.user, t.host_context),
+            })
         if t.assistant:
             messages.append({"role": "assistant", "content": t.assistant})

@@ -903,6 +903,8 @@ def maintain_knowledge(
     tool_state_mod.record_usage(
         completion.input_tokens, completion.output_tokens, completion.cost_usd,
         getattr(completion, "cached_tokens", None),
+        getattr(completion, "cache_discount", None),
+        getattr(completion, "cost_source", None),
     )
     proposal = _parse_llm_json(completion.content)
     if not apply:

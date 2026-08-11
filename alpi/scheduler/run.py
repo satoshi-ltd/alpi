@@ -361,6 +361,8 @@ def run_job(job: dict, home: Path) -> JobOutcome:
         "ALPI_HOME": str(home),
         "ALPI_PLATFORM": "cron",
         "ALPI_SCHEDULE_CHILD": "1",
+        # Stable cache-affinity scope: repeated runs of one job share a provider sticky key instead of minting one per run.
+        "ALPI_SCHEDULE_ID": str(job.get("id") or ""),
         "ALPI_PARENT_EMITS_AGENT_MESSAGE": "1",
         **workspace_env(home),
     }

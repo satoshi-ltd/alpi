@@ -108,7 +108,6 @@ export default function WorkgroupView({
     loadMySeqs(connectionId, workgroup.profile, workgroup.id),
   );
   const [error, setError] = useState(null);
-  const [costs, setCosts] = useState({});
   const [taskState, setTaskState] = useState(null);
   const [taskStateStale, setTaskStateStale] = useState(false);
   const scrollRef = useStickyScroll([messages]);
@@ -126,6 +125,9 @@ export default function WorkgroupView({
   useEffect(() => {
     setImageRoots([wgDetail?.workspace]);
   }, [wgDetail?.workspace]);
+  useEffect(() => {
+    setPeers(Array.isArray(wgDetail?.peers) ? wgDetail.peers : []);
+  }, [wgDetail?.peers]);
 
   const hubName = workgroup.hub_id ?? workgroup.profile;
   const hubPubkey = useMemo(
@@ -295,41 +297,12 @@ export default function WorkgroupView({
     let cancelled = false;
     setError(null);
 
-    invoke("read_file", {
+    invoke("workgroup_members", {
       profile: workgroup.profile,
-      relPath: `alp/workgroups/${workgroup.id}/transcript.jsonl`,
+      wgId: workgroup.id,
       ...(connectionId ? { connectionId } : {}),
     })
-      .then((text) => {
-        if (cancelled) return;
-        const map = {};
-        for (const line of text.split("\n")) {
-          const trimmed = line.trim();
-          if (!trimmed) continue;
-          try {
-            const entry = JSON.parse(trimmed);
-            if (entry?.cost && typeof entry.seq === "number") {
-              map[entry.seq] = entry.cost;
-            }
-          } catch {}
-        }
-        setCosts(map);
-      })
-      .catch(() => {});
-
-    invoke("read_file", {
-      profile: workgroup.profile,
-      relPath: `alp/workgroups/${workgroup.id}/members.yaml`,
-      ...(connectionId ? { connectionId } : {}),
-    })
-      .then((mem) => !cancelled && setMembers(parseMembers(mem)))
-      .catch(() => {});
-    invoke("read_file", {
-      profile: workgroup.profile,
-      relPath: "alp/peers.yaml",
-      ...(connectionId ? { connectionId } : {}),
-    })
-      .then((p) => !cancelled && setPeers(parsePeers(p)))
+      .then((rows) => !cancelled && setMembers(Array.isArray(rows) ? rows : []))
       .catch(() => {});
 
     invoke("workgroup_tasks", {
@@ -364,7 +337,7 @@ export default function WorkgroupView({
     let unlistenFs = null;
     let unlistenDaemon = null;
     let bumpTimer = null;
-    // The refresh effect re-reads costs + members + peers + transcript; coalesce post bursts (and reconnect replay) so it runs once per beat, not once per post.
+    // Coalesce post bursts so the task fold and transcript refresh once per beat.
     const bump = () => {
       if (bumpTimer) return;
       bumpTimer = setTimeout(() => {
@@ -569,7 +542,7 @@ export default function WorkgroupView({
               <div className={styles.timeline}>
                 {messages.map((m) => {
                   const speaker = speakerFromIndex(speakerIndex, m);
-                  const cost = costs[m.seq];
+                  const cost = m.cost;
                   const ttsKey = `wg:${workgroup.id}:${m.seq}`;
                   return (
                     <WgMessage
@@ -954,56 +927,4 @@ function WorkgroupComposer({ paused, offline, mentions, onSend, hubName, hubAcce
       hint={hint}
     />
   );
-}
-
-function parseMembers(text) {
-  if (!text) return [];
-  const out = [];
-  let cur = null;
-  for (const raw of text.split("\n")) {
-    if (raw.startsWith("- pubkey:")) {
-      if (cur) out.push(cur);
-      cur = { pubkey: raw.slice("- pubkey:".length).trim() };
-    } else if (cur && raw.startsWith("  ")) {
-      const trimmed = raw.trim();
-      const i = trimmed.indexOf(":");
-      if (i > 0) {
-        const k = trimmed.slice(0, i).trim();
-        const v = trimmed
-          .slice(i + 1)
-          .trim()
-          .replace(/^['"]|['"]$/g, "");
-        if (k === "bio") cur.bio = v;
-        else if (k === "voice") cur.voice = v;
-      }
-    }
-  }
-  if (cur) out.push(cur);
-  return out;
-}
-
-function parsePeers(text) {
-  if (!text) return [];
-  const out = [];
-  let cur = null;
-  for (const raw of text.split("\n")) {
-    if (raw.startsWith("- id:")) {
-      if (cur) out.push(cur);
-      cur = { id: raw.slice("- id:".length).trim() };
-    } else if (cur && raw.startsWith("  ")) {
-      const trimmed = raw.trim();
-      const i = trimmed.indexOf(":");
-      if (i > 0) {
-        const k = trimmed.slice(0, i).trim();
-        const v = trimmed
-          .slice(i + 1)
-          .trim()
-          .replace(/^['"]|['"]$/g, "");
-        if (k === "pubkey") cur.pubkey = v;
-        if (k === "alias") cur.alias = v;
-      }
-    }
-  }
-  if (cur) out.push(cur);
-  return out;
 }

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import tempfile
 import time
 import uuid
@@ -48,6 +49,32 @@ class Turn:
     output_attachments: list[dict[str, Any]] = field(default_factory=list)  # bytes-free; carries a best-effort local path (may be unfetchable cross-client / post-TTL)
     interrupted: bool = False
     model: str = ""  # may differ from Session.model after escalation/fallback routing
+    # CL.4 — volatile per-turn context (# NOW, workgroup, skill hint, relay) rides the user turn instead of strippable system messages, so history stays append-only for the provider cache. UIs render `user`; only rehydration reads this.
+    host_context: str = ""
+
+
+HOST_CONTEXT_CAP = 24_000
+_HOST_CONTEXT_HEADER = (
+    "# HOST CONTEXT (state when this message was sent — "
+    "the newest turn's block supersedes older ones)"
+)
+
+
+def with_host_context(text: str, host_context: str) -> str:
+    """Single composition point for live engine AND every rehydrator — same inputs must produce the same provider-visible bytes."""
+    if not host_context:
+        return text
+    block = f"{_HOST_CONTEXT_HEADER}\n\n{host_context}"
+    return f"{text}\n\n{block}" if text else block
+
+
+_RELAY_DIRECTIVE_RE = re.compile(r"\[relay\] You are a read-only relay for peer '([^']+)'")
+
+
+def relay_peer_from_host_context(host_context: str) -> str:
+    """Recover the persisted relay state so a fresh Engine (host builds one per message) can emit the revocation when relay was just disabled — the in-memory ``_last_relay_peer`` never survives that boundary."""
+    m = _RELAY_DIRECTIVE_RE.search(host_context or "")
+    return m.group(1) if m else ""
 
 
 @dataclass
@@ -98,6 +125,7 @@ class Session:
         attachments: list[dict[str, Any]] | None = None,
         interrupted: bool = False,
         ended_at: float | None = None,
+        host_context: str = "",
     ) -> None:
         """Append a completed user turn to the persistent log."""
         self.turns.append(Turn(
@@ -108,6 +136,7 @@ class Session:
             assistant=assistant,
             attachments=list(attachments or []),
             interrupted=interrupted,
+            host_context=host_context[:HOST_CONTEXT_CAP],
         ))
 
     def status_line(self) -> str:
@@ -179,6 +208,9 @@ def _serialize_turn_v2(t: Turn, *, redact) -> dict[str, Any]:  # noqa: ANN001
         row["interrupted"] = True
     if t.model:
         row["model"] = t.model
+    if t.host_context:
+        # Verbatim (already char-capped at compose): _put's byte-clip would alter multibyte suffixes and break byte-stable replay.
+        row["host_context"] = redact(t.host_context)
     return row
 
 
@@ -330,6 +362,7 @@ def load_turns(data: dict[str, Any]) -> list[Turn]:
             output_attachments=list(t.get("output_attachments") or []),
             interrupted=bool(t.get("interrupted")),
             model=str(t.get("model", "") or ""),
+            host_context=str(t.get("host_context", "") or ""),
         ))
     return out
 

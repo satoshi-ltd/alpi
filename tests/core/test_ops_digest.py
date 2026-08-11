@@ -311,12 +311,13 @@ def test_cli_digest_json_emits_stable_schema(tmp_path: Path, monkeypatch) -> Non
     payload = json.loads(result.output)
     assert payload["window_days"] == 7.0
     assert "generated_at" in payload
-    for section in ("tools", "skills", "memory", "compaction", "runs"):
+    for section in ("tools", "skills", "memory", "compaction", "runs", "cache"):
         assert section in payload, f"missing section: {section}"
     assert "unavailable" in payload["tools"]
     assert "promotion_pending" in payload["memory"]
     assert "events_in_window" in payload["compaction"]
     assert "by_kind" in payload["runs"] and "recent_failures" in payload["runs"]
+    assert "tokens_measured" in payload["cache"]
 
 
 def test_cli_digest_human_render_includes_each_section(
@@ -336,7 +337,7 @@ def test_cli_digest_human_render_includes_each_section(
     out = result.output
     assert "digest" in out
     assert "window:" in out
-    for heading in ("Tools", "Skills", "Memory", "Compaction", "Runs"):
+    for heading in ("Tools", "Skills", "Memory", "Compaction", "Runs", "Prompt cache"):
         assert heading in out, f"missing section heading: {heading}"
 
 
@@ -370,3 +371,23 @@ def test_cli_digest_rejects_invalid_since(tmp_path: Path, monkeypatch) -> None:
     result = CliRunner().invoke(cli.main, ["digest", "--since", "wibble"])
     assert result.exit_code != 0
     assert "invalid window" in result.output.lower()
+
+
+def test_cache_section_reads_the_ledger_window(tmp_path: Path) -> None:
+    from alpi import ledger
+
+    ledger.record(tmp_path, usd=0.01, tokens=1000, tokens_in=900, tokens_out=100,
+                  tokens_cached=600, cache_discount_usd=0.003, cost_source="provider")
+    report = ops_digest.run_digest(tmp_path, window_days=7.0)
+    assert report.cache.tokens_cached == 600
+    assert report.cache.tokens_measured == 900
+    assert report.cache.hit_pct == pytest.approx(100.0 * 600 / 900)
+    assert report.cache.cache_discount_usd == pytest.approx(0.003)
+    assert report.cache.cost_sources == {"provider": 1}
+
+
+def test_cache_section_is_empty_without_provider_data(tmp_path: Path) -> None:
+    report = ops_digest.run_digest(tmp_path, window_days=7.0)
+    assert report.cache.tokens_measured == 0
+    assert report.cache.hit_pct is None
+    json.loads(json.dumps(__import__("dataclasses").asdict(report), default=str))

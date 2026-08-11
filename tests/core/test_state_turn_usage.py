@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from alpi.tools import _state
 
 
@@ -62,3 +64,29 @@ def test_get_turn_usage_returns_none_outside_a_turn() -> None:
     """Outside a turn, the tally is unset."""
     _state._turn_usage.set(None)
     assert _state.get_turn_usage() is None
+
+
+def test_undeclared_usage_advances_only_when_marked() -> None:
+    _state.reset_turn_usage()
+    _state.bump_turn_usage(100, 10, 0.01, 80)
+
+    first, snapshot = _state.get_undeclared_turn_usage()
+    assert first == {
+        "tokens_in": 100, "tokens_out": 10, "usd": 0.01,
+        "cached_in": 80, "measured_in": 100,
+    }
+    assert _state.get_undeclared_turn_usage()[0] == first
+
+    _state.mark_turn_usage_declared(snapshot)
+    _state.bump_turn_usage(25, 3, 0.002, 20)
+    delta, _ = _state.get_undeclared_turn_usage()
+    assert delta == {
+        "tokens_in": 25, "tokens_out": 3, "usd": pytest.approx(0.002),
+        "cached_in": 20, "measured_in": 25,
+    }
+
+
+def test_turn_id_uses_dispatch_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ALPI_WORKGROUP_TURN_ID", "a" * 32)
+    _state.reset_turn_usage()
+    assert _state.get_turn_id() == "a" * 32

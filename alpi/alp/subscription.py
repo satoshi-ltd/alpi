@@ -21,10 +21,13 @@ transcript history past a rotation stays decryptable.
 
 from __future__ import annotations
 
+import contextlib
 import logging as _logging
 import os
 import re
+import sys
 import threading
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Any
@@ -34,6 +37,13 @@ import yaml
 from alpi import yamlfast
 from alpi.alp.keys import Keypair
 from alpi.alp import workgroup as wg_mod
+
+if sys.platform == "win32":
+    import msvcrt
+    _fcntl = None
+else:
+    import fcntl as _fcntl
+    msvcrt = None
 
 
 _SECRETS_DIR = "alp/secrets"
@@ -157,6 +167,28 @@ class Subscription:
 
 def path(home: Path) -> Path:
     return home / _SECRETS_DIR / _FILENAME
+
+
+@contextlib.contextmanager
+def _locked(home: Path) -> Iterator[None]:
+    lock_path = path(home).with_suffix(".lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    f = open(lock_path, "w")
+    try:
+        if sys.platform == "win32":
+            msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
+        else:
+            _fcntl.flock(f.fileno(), _fcntl.LOCK_EX)
+        yield
+    finally:
+        try:
+            if sys.platform == "win32":
+                f.seek(0)
+                msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                _fcntl.flock(f.fileno(), _fcntl.LOCK_UN)
+        finally:
+            f.close()
 
 
 def _tombstones_dir(home: Path) -> Path:
@@ -290,9 +322,10 @@ def load(home: Path) -> list[Subscription]:
     return out
 
 
-def save(home: Path, subs: list[Subscription]) -> None:
+def _save_unsafe(home: Path, subs: list[Subscription]) -> None:
+    from alpi.config import atomic_write_yaml
+
     p = path(home)
-    p.parent.mkdir(parents=True, exist_ok=True)
     dead = tombstones(home)
     data: list[dict[str, Any]] = []
     for s in subs:
@@ -333,12 +366,31 @@ def save(home: Path, subs: list[Subscription]) -> None:
         if s.recent_posts:
             entry["recent_posts"] = s.recent_posts
         data.append(entry)
-    p.write_text(yamlfast.safe_dump(data, sort_keys=False, allow_unicode=True))
+    atomic_write_yaml(p, data)
     _invalidate_cache(p)
-    try:
-        os.chmod(p, 0o600)
-    except OSError:
-        pass
+
+
+def save(home: Path, subs: list[Subscription]) -> None:
+    with _locked(home):
+        _save_unsafe(home, subs)
+
+
+def compact(home: Path) -> None:
+    with _locked(home):
+        _save_unsafe(home, load(home))
+
+
+def update(
+    home: Path,
+    mutator: Callable[[list[Subscription]], list[Subscription] | None],
+) -> list[Subscription]:
+    with _locked(home):
+        subs = load(home)
+        result = mutator(subs)
+        if result is None:
+            return subs
+        _save_unsafe(home, result)
+        return result
 
 
 def get(home: Path, wg_id: str) -> Subscription | None:
@@ -349,23 +401,31 @@ def get(home: Path, wg_id: str) -> Subscription | None:
 
 
 def upsert(home: Path, sub: Subscription) -> None:
-    subs = load(home)
-    for i, s in enumerate(subs):
-        if s.wg_id == sub.wg_id:
-            subs[i] = sub
-            save(home, subs)
-            return
-    subs.append(sub)
-    save(home, subs)
+    def _mutate(subs: list[Subscription]) -> list[Subscription] | None:
+        for i, existing in enumerate(subs):
+            if existing.wg_id == sub.wg_id:
+                if existing == sub:
+                    return None
+                subs[i] = sub
+                return subs
+        subs.append(sub)
+        return subs
+
+    update(home, _mutate)
 
 
 def remove(home: Path, wg_id: str) -> bool:
-    subs = load(home)
-    keep = [s for s in subs if s.wg_id != wg_id]
-    if len(keep) == len(subs):
-        return False
-    save(home, keep)
-    return True
+    removed = [False]
+
+    def _mutate(subs: list[Subscription]) -> list[Subscription] | None:
+        keep = [s for s in subs if s.wg_id != wg_id]
+        if len(keep) == len(subs):
+            return None
+        removed[0] = True
+        return keep
+
+    update(home, _mutate)
+    return removed[0]
 
 
 def decrypt_post(

@@ -12,6 +12,28 @@ Legend: ✅ shipped · 🔵 backlog · 🟡 next up · ⏸ blocked · 🔴 gate.
 
 ---
 
+## v0.13 — production client exposure
+
+The public host channel already ships: WSS routes, one-time pairing,
+per-device revocation, role/profile scope, abuse bounds, Docker/Caddy topology,
+and attributed administrative activity. v0.13 does not add another security
+layer to that protocol. It proves the supplied design on the first definitive
+customer deployment.
+
+| ID | Item | Status |
+|---|---|---|
+| ONLINE.1 | Deploy one isolated Alpi runtime and volume per mutually untrusted customer; profiles/connections remain an identity and RPC boundary, not tenant isolation. | 🔴 |
+| ONLINE.2 | Put the definitive hostname behind Caddy with a valid public certificate; publish only TCP 80/443 and verify the effective Compose config exposes neither 49200 nor 7423. | 🔴 |
+| ONLINE.3 | Run external Desktop/Mobile acceptance: authenticated WSS RPC succeeds, invalid certificates fail closed, live-stream revocation disconnects only the target device, and direct public probes to 49200/7423 fail. | 🔴 |
+| ONLINE.4 | Establish the operating checks: certificate-expiry monitoring, WebSocket capacity/rejection alerts, and an explicit decision on an edge per-IP limit where the real client IP is available. | 🔴 |
+
+The cycle is complete only after those checks pass against the real domain and
+firewall, not another local tunnel. Credential-loss and backup-exposure
+response is already defined in [OPERATIONS.md](OPERATIONS.md);
+enterprise-grade external audit remains demand-gated as `AUDIT.2` below.
+
+---
+
 ## Backlog — demand-gated
 
 Items worth keeping, but not committed to a numbered cycle. Some are

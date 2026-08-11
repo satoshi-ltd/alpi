@@ -104,6 +104,21 @@ class RunsSection:
 
 
 @dataclass
+class CacheSection:
+    days_with_data: int
+    tokens_cached: int = 0
+    tokens_measured: int = 0
+    cache_discount_usd: float = 0.0
+    cost_sources: dict[str, int] = field(default_factory=dict)
+
+    @property
+    def hit_pct(self) -> float | None:
+        if self.tokens_measured <= 0:
+            return None
+        return 100.0 * self.tokens_cached / self.tokens_measured
+
+
+@dataclass
 class DigestReport:
     window_days: float
     generated_at: float
@@ -112,6 +127,7 @@ class DigestReport:
     memory: MemorySection
     compaction: CompactionSection
     runs: RunsSection
+    cache: CacheSection
 
 
 # ---------- entry point ----------
@@ -133,6 +149,30 @@ def run_digest(
         memory=_memory_section(home, nowt),
         compaction=_compaction_section(home, nowt, window_days),
         runs=_runs_section(home),
+        cache=_cache_section(home, nowt, window_days),
+    )
+
+
+def _cache_section(home: Path, now_ts: float, window_days: float) -> CacheSection:
+    """Day-grained on purpose: the ledger history is per-UTC-day, so sub-day windows round up to one day."""
+    try:
+        from datetime import datetime, timezone
+        from math import ceil
+
+        from alpi import ledger
+        s = ledger.cache_summary(
+            home,
+            days=max(1, int(ceil(window_days))),
+            today=datetime.fromtimestamp(now_ts, tz=timezone.utc).date().isoformat(),
+        )
+    except Exception:  # noqa: BLE001
+        return CacheSection(days_with_data=0)
+    return CacheSection(
+        days_with_data=int(s.get("days") or 0),
+        tokens_cached=int(s.get("tokens_cached") or 0),
+        tokens_measured=int(s.get("tokens_measured") or 0),
+        cache_discount_usd=float(s.get("cache_discount_usd") or 0.0),
+        cost_sources=dict(s.get("cost_sources") or {}),
     )
 
 
@@ -321,6 +361,7 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
 
 
 __all__ = [
+    "CacheSection",
     "CompactionSection",
     "DEFAULT_WINDOW_DAYS",
     "DigestReport",

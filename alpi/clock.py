@@ -1,4 +1,4 @@
-"""Date/time grounding for the LLM: cache-stable timezone in the system prompt, fresh `# NOW` block injected per turn by `alpi.engine`."""
+"""Date/time grounding for the LLM: cache-stable timezone in the system prompt, fresh `# NOW` block riding each user turn's host-context suffix (CL.4)."""
 
 from __future__ import annotations
 
@@ -54,7 +54,7 @@ def now_block(
     *,
     now: Optional[datetime] = None,
 ) -> str:
-    """Per-turn ``role: system`` payload — fresh weekday/date/time/UTC. Inject as a transient system message before the user turn so prompt caches stay valid."""
+    """Fresh weekday/date/time/UTC block; the engine appends it to the user turn's host-context suffix so history stays append-only and prompt caches stay valid."""
     zi, tz = _resolve_zone(tz_name)
     if now is None:
         local = datetime.now(zi)

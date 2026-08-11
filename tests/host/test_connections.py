@@ -966,7 +966,10 @@ def test_session_and_usage_keep_connection_identity(monkeypatch, tmp_path: Path)
 
     assert json.loads(path.read_text())["connection_id"] == "conn_javi"
     bucket = ledger.snapshot(profile)["by_connection"]["conn_javi"]
-    assert bucket == {"usd": 0.25, "tokens": 30, "tokens_in": 20, "tokens_out": 10}
+    assert bucket == {
+        "usd": 0.25, "tokens": 30, "tokens_in": 20, "tokens_out": 10,
+        "tokens_cached": 0, "tokens_measured": 0,
+    }
 
 
 def test_connection_summary_aggregates_profiles_in_one_ledger_pass(
@@ -1138,3 +1141,24 @@ async def test_inflight_replay_sidecar_is_partitioned_by_connection(
             }, Server(root))
 
     assert error.value.message == "not-found"
+
+
+def test_rewrite_from_turn_resets_the_cache_counters(monkeypatch, tmp_path: Path) -> None:
+    from types import SimpleNamespace
+
+    from alpi.host.chat import _truncate_hydrated_session
+
+    session = Session(tmp_path, "model")
+    session.input_tokens = 1000
+    session.output_tokens = 50
+    session.cost_usd = 0.5
+    session.cached_input_tokens = 800
+    session.cache_measured_input_tokens = 1000
+    session.turns = [Turn(1, "hola", [], "hi")]
+    engine = SimpleNamespace(session=session, _system_prompt="sys", _last_relay_peer="")
+    _truncate_hydrated_session(engine, 1)
+    assert engine.session.cached_input_tokens == 0
+    assert engine.session.cache_measured_input_tokens == 0, (
+        "the discarded branch's share must not pollute the surviving hit rate"
+    )
+    assert engine.session.messages[0]["content"] == "sys"

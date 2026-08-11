@@ -72,6 +72,29 @@ def test_upsert_replaces_existing_subscription(short_tmp: Path) -> None:
     assert loaded[0].name == "b"
 
 
+def test_upsert_skips_unchanged_subscription_write(
+    short_tmp: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = short_tmp / "alice"
+    home.mkdir()
+    sub = sub_mod.Subscription(wg_id="wg1", name="a", hub_id="h", hub_pubkey="x")
+    sub_mod.upsert(home, sub)
+    writes = 0
+    real_save = sub_mod._save_unsafe
+
+    def counting_save(target_home, subscriptions):
+        nonlocal writes
+        writes += 1
+        return real_save(target_home, subscriptions)
+
+    monkeypatch.setattr(sub_mod, "_save_unsafe", counting_save)
+    loaded = sub_mod.get(home, "wg1")
+    assert loaded is not None
+    sub_mod.upsert(home, loaded)
+
+    assert writes == 0
+
+
 def test_recent_posts_cache_dedupes_and_trims(short_tmp: Path) -> None:
     sub = sub_mod.Subscription(wg_id="wg_x", name="x", hub_id="h", hub_pubkey="k")
     posts = [{"seq": i, "text": f"msg {i}", "from": "x"} for i in range(1, 26)]
@@ -161,12 +184,15 @@ async def test_join_persists_subscription_and_pull_decrypts(
         assert sub.joined_at
         assert sub_mod.path(bob_home).exists()
 
-        await wc.post(bob_home, wg.meta.id, b"hi via wc")
+        await wc.post(
+            bob_home, wg.meta.id, b"hi via wc", turn_id="a" * 32,
+        )
 
         posts, head = await wc.pull(bob_home, wg.meta.id)
         assert head == 1
         assert len(posts) == 1
         assert posts[0]["text"] == "hi via wc"
+        assert posts[0]["turn_id"] == "a" * 32
         sub_after = sub_mod.get(bob_home, wg.meta.id)
         assert sub_after.last_seq == 1
 
@@ -974,6 +1000,29 @@ async def test_post_as_hub_emits_wg_post_event(
     assert isinstance(posts[0][1].get("seq"), int)
     # Plain message without a #done marker → no wg.done.
     assert dones == []
+
+
+@pytest.mark.asyncio
+async def test_post_as_hub_persists_turn_id(short_tmp: Path) -> None:
+    hub_home = short_tmp / "alice"; hub_home.mkdir()
+    hub_kp = load_or_generate(hub_home)
+    wg = wg_mod.create(
+        hub_home, name="design", hub_kp=hub_kp, member_pubkeys=[],
+    )
+
+    await wc.post(
+        hub_home, wg.meta.id, b"hello team", turn_id="b" * 32,
+    )
+
+    raw = wg_mod._read_transcript(wg_mod._wg_dir(hub_home, wg.meta.id))
+    assert raw[0]["turn_id"] == "b" * 32
+
+
+@pytest.mark.asyncio
+async def test_post_rejects_invalid_turn_id(short_tmp: Path) -> None:
+    home = short_tmp / "alice"; home.mkdir()
+    with pytest.raises(ValueError, match="turn_id"):
+        await wc.post(home, "wg_x", b"hello", turn_id="not-a-turn-id")
 
 
 @pytest.mark.asyncio

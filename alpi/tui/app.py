@@ -635,9 +635,8 @@ class AlpiApp(App):
     def _cmd_clear(self) -> None:
         chat = self.query_one("#chat", VerticalScroll)
         chat.remove_children()
-        self.engine.session.messages = [
-            m for m in self.engine.session.messages if m.get("role") == "system"
-        ]
+        # reset_session (fresh id, stable prompt only) instead of filtering system messages in place — keeping tool footers/compaction summaries while dropping turns was a mid-history rewrite the prefix cache pays for.
+        self.engine.reset_session()
         chat.mount(DimLine("(chat cleared)"))
 
     def _cmd_attach(self, arg: str) -> None:

@@ -104,8 +104,10 @@ Three trust tiers:
   mutations reject `-32001 forbidden / admin role required`. The role does
   NOT sandbox the agent's own tools — `host.chat.send` is open to members,
   so anything the agent can do (workspace writes, memory edits, network
-  calls) stays reachable. Use the OS sandbox flag or separate profiles for
-  that boundary, not the device role.
+  calls) stays reachable. Use the OS sandbox flag and a dedicated profile for
+  capability confinement, not the device role. Profiles share one daemon/OS
+  trust boundary; mutually untrusted customers need separate containers, VMs,
+  or OS accounts with independent Alpi homes and credentials.
 
 Per-connection profile scope:
 
@@ -210,14 +212,21 @@ no tamper-evident or external compliance sink. What is recorded:
 
 - **Session transcripts** (`sessions/<id>.json`) — per turn: messages, every
   tool call with args + result (capped), reasoning, model, tokens, cost,
-  timestamps; secret-shape redaction runs before write.
+  timestamps, and the bounded provider-visible host-context suffix (`# NOW`,
+  workgroup, skill hint, relay); secret-shape redaction runs before write.
 - **Run ledger** (`logs/runs.jsonl`) — append-only, rolling ~1000 runs:
-  outcome, elapsed, exit code, backend, last tool, and `peer_id` for
-  workgroup runs.
+  outcome, elapsed, exit code, backend, last tool, raw cache counts, bounded
+  request-shape diagnosis, and `peer_id` for workgroup runs.
 - **Approval log** (`logs/approval.log`) — allow/deny verdicts on
   caution/dangerous terminal gates, with severity and reason.
 - **Cost ledger** (`logs/ledger.json`) — tokens/USD per profile and per peer,
-  30-day history. **Event bus** (`host/events.jsonl`) is a rolling reconnect
+  30-day history, raw cache counts, provider-reported cache discount, and
+  cost-source counts. **Prefix shapes** (`logs/prefix_shapes.json`) retain only
+  bounded model/params/tools/system/message hashes for 20 recent affinities;
+  the local lookup key includes a session id, but no prompt text, paths, or
+  secrets are stored or sent to the provider, and the file is safe to delete.
+  **Event bus**
+  (`host/events.jsonl`) is a rolling reconnect
   buffer, not durable audit.
 - **Host-RPC administrative audit** (`~/.alpi/logs/admin-audit.jsonl`) — successful,
   failed and authenticated-denied sensitive mutations with connection/device,

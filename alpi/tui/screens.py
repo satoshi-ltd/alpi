@@ -392,6 +392,8 @@ def _status_rows(
         input_tokens=session.input_tokens,
         output_tokens=session.output_tokens,
         cost_usd=session.cost_usd,
+        cached_input_tokens=int(getattr(session, "cached_input_tokens", 0) or 0),
+        cache_measured_input_tokens=int(getattr(session, "cache_measured_input_tokens", 0) or 0),
         home=home,
         cfg_budget=cfg_budget,
     )

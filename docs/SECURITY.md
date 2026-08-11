@@ -226,8 +226,10 @@ doesn't reach:
   `host.chat.send`, which means anything the agent's tools can do —
   write to the workspace, edit memories, hit external HTTP — is
   reachable. If you need a sandbox boundary on agent capabilities,
-  use the OS sandbox flag and / or a separate profile, not the
-  device role.
+  use the OS sandbox flag and a dedicated profile, not the device
+  role. Profiles still share one daemon and OS trust boundary; mutually
+  untrusted customers require separate containers, VMs, or OS accounts with
+  independent Alpi homes and credentials.
 
   Three host.network.* verbs (`status`, `set_advertised`,
   `restart_host_server`) stay in `_LOCAL_ONLY_METHODS` — no remote
@@ -539,20 +541,28 @@ today:
 - **Session transcripts** (`~/.alpi/profiles/<name>/sessions/<id>.json`).
   The richest record: per turn it stores the user message, assistant
   reply, **every tool call with its arguments and result** (result capped
-  at 400 chars), the inter-tool reasoning, model, token counts, cost, and
-  timestamps. Secret-shape redaction (see Layer 1) runs before write.
+  at 400 chars), the inter-tool reasoning, model, token counts, cost,
+  timestamps, and the bounded host-context suffix that reached the model
+  (`# NOW`, workgroup context, skill hint, relay state). Secret-shape
+  redaction (see Layer 1) runs before write.
   Persistent — pruned only by explicit `host.sessions.delete`.
 - **Run ledger** (`logs/runs.jsonl`, v0.8.1). Append-only, rolling ~1000
   records. One line per run (agent / scheduled / workgroup / terminal)
-  with outcome, elapsed, exit code, backend, last tool, tool count, and —
-  for workgroup runs — the `peer_id`. The closest thing to an execution
-  audit log.
+  with outcome, elapsed, exit code, backend, last tool, tool count, raw cache
+  counts, a bounded request-shape diagnosis, and — for workgroup runs — the
+  `peer_id`. The closest thing to an execution audit log.
 - **Approval log** (`logs/approval.log`). Every caution/dangerous
   `terminal` gate writes the allow/deny verdict, severity, the matched
   pattern, the reason (once / session / config-allowlist / denied), and a
   truncated command preview.
 - **Cost ledger** (`logs/ledger.json`). Tokens and USD per profile and
-  per peer, with a rolling 30-day history.
+  per peer, with a rolling 30-day history, raw cache counts,
+  provider-reported cache discount, and cost-source counts.
+- **Prefix-shape diagnostics** (`logs/prefix_shapes.json`). Bounded to 20
+  recent affinities and stores only hashes of model/params/tools/system and a
+  64-message window. Its local lookup key includes the session id, but it
+  stores no prompt text, paths, or secrets and never sends that key to the
+  provider. It is best-effort and safe to delete.
 - **Event bus** (`host/events.jsonl`). `config_changed`,
   `email_changed`, `peers_changed`, `session_changed`, approvals, etc.
   Explicitly **transport, not durable history** — a bounded rolling

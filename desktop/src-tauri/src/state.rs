@@ -25,4 +25,5 @@ pub struct DecryptedMessage {
     pub from_pubkey: String,
     pub body: String,
     pub at: String,
+    pub cost: serde_json::Value,
 }

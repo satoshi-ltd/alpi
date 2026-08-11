@@ -167,11 +167,76 @@ class Engine:
         self._turn_lock = threading.Lock()
         # Post-turn memory reviewer: counter resets when the daemon fires.
         self._turns_since_review: int = 0
+        self._prefix_shape = None
+        self._prefix_shape_loaded = False
+        self._turn_prefix_reasons: set[str] = set()
+        self._expected_rewrite: str = ""
+        self._last_relay_peer: str = ""
+        self.last_host_context: str = ""
 
     @property
     def _mcp_clients(self) -> list:
         from alpi.mcp import registry as mcp_registry
         return mcp_registry.cached_clients(self.cfg)
+
+    def _cache_affinity(self, purpose: str = "") -> str:
+        import os as _os
+
+        from alpi import prefix_diag
+        from alpi.home import profile_name
+        peer_id = None
+        conn = getattr(self.connection_context, "connection_id", "") or ""
+        if conn.startswith("peer:"):
+            peer_id = conn[len("peer:"):]
+        return prefix_diag.affinity_id(
+            profile_name(self.home),
+            workgroup_id=_os.environ.get("ALPI_WORKGROUP_DISPATCH") or None,
+            peer_id=peer_id,
+            schedule_id=_os.environ.get("ALPI_SCHEDULE_ID") or None,
+            session_id=self.session.id,
+            purpose=purpose,
+        )
+
+    def _with_affinity(self, kwargs: dict, purpose: str = "") -> dict:
+        if not str(kwargs.get("model", "")).startswith("openrouter/"):
+            return kwargs
+        from alpi.providers.reasoning import merge_into_kwargs
+        return merge_into_kwargs(
+            kwargs, {"extra_body": {"session_id": self._cache_affinity(purpose)}},
+        )
+
+    def _diagnose_prefix(self, call_kwargs: dict, schemas: list) -> None:
+        try:
+            from alpi import prefix_diag
+            # Session-scoped diag key: cross-process comparison only makes sense for the SAME resumed conversation; the affinity alone would compare unrelated workgroup dispatches and report false rewrites.
+            diag_key = f"{self._cache_affinity()}:{self.session.id}"
+            if not self._prefix_shape_loaded:
+                self._prefix_shape = prefix_diag.load_shape(self.home, diag_key)
+                self._prefix_shape_loaded = True
+            shape = prefix_diag.capture(call_kwargs, schemas, self.session.messages)
+            reasons = prefix_diag.compare(self._prefix_shape, shape)
+            if "history_rewrite" in reasons and self._expected_rewrite:
+                reasons = [
+                    self._expected_rewrite if r == "history_rewrite" else r
+                    for r in reasons
+                ]
+            self._expected_rewrite = ""
+            self._turn_prefix_reasons.update(
+                r for r in reasons if r != prefix_diag.REASON_NONE
+            )
+            if reasons and reasons != [prefix_diag.REASON_NONE]:
+                import logging
+                idx = (
+                    prefix_diag.first_divergence(self._prefix_shape, shape)
+                    if self._prefix_shape else None
+                )
+                logging.getLogger("alpi.engine").debug(
+                    "prefix changed (%s) first_divergent_msg=%s", ",".join(reasons), idx,
+                )
+            self._prefix_shape = shape
+            prefix_diag.save_shape(self.home, diag_key, shape)
+        except Exception:  # noqa: BLE001
+            pass
 
     def request_interrupt(self, reason: str = "unknown") -> None:
         """Ask the current turn to stop at the next checkpoint."""
@@ -191,6 +256,11 @@ class Engine:
         )
         self.session.messages.append({"role": "system", "content": self._system_prompt})
         self.interrupt_requested = False
+        self._prefix_shape = None
+        self._prefix_shape_loaded = False
+        self._turn_prefix_reasons = set()
+        self._expected_rewrite = "reset"
+        self.last_host_context = ""
 
     def run_turn(
         self, user_text: str, emit: EventSink, *, source: str = "user",
@@ -260,23 +330,45 @@ class Engine:
         # reviewer never fires on partial / abandoned context.
         turn_completed = False
 
-        # Strip prior `# NOW` blocks so multi-day sessions don't accumulate stale timestamps and confuse the agent about which one is current.
-        self.session.messages[:] = [
-            m for m in self.session.messages
-            if not (m.get("role") == "system"
-                    and isinstance(m.get("content"), str)
-                    and m["content"].startswith("# NOW\n"))
-        ]
-        self.session.messages.append({"role": "system", "content": clock.now_block()})
-
-        # Inject transient workgroup context before user input.
+        # CL.4 — volatile turn context becomes a suffix on the user message (never strippable system messages), so history stays append-only and the provider prefix survives across turns.
+        clock_part = clock.now_block()
+        host_parts: list[str] = [clock_part]
+        relay_peer = str((self.cfg.relay or {}).get("peer") or "").strip()
+        relay_consulted = False
+        relay_retry_done = False
+        relay_part = ""
+        if relay_peer:
+            relay_part = (
+                f"[relay] You are a read-only relay for peer '{relay_peer}' and hold no knowledge "
+                f"of your own. Before any final answer you MUST consult '{relay_peer}' via "
+                f"peer(peer_id='{relay_peer}', prompt=...) and answer only from its reply — never "
+                "from your own or general knowledge."
+            )
+        elif self._last_relay_peer:
+            relay_part = (
+                "[relay] Relay mode is OFF — any earlier relay directive in this "
+                "conversation is revoked; answer normally from your own knowledge and tools."
+            )
+        self._last_relay_peer = relay_peer
+        dispatch_wg_id = os.environ.get("ALPI_WORKGROUP_DISPATCH") or None
+        wg_budget = session.HOST_CONTEXT_CAP - len(clock_part) - 2
+        if relay_part:
+            wg_budget -= len(relay_part) + 2
         try:
             from alpi.alp import agent_context as _wg_ctx
-            wg_block = _wg_ctx.build(self.home)
+            wg_block = _wg_ctx.build(
+                self.home, wg_id=dispatch_wg_id, max_chars=max(0, wg_budget),
+            )
         except Exception:  # noqa: BLE001
+            if dispatch_wg_id:
+                raise
             wg_block = None
+        if dispatch_wg_id and not wg_block:
+            raise RuntimeError(
+                f"workgroup dispatch context unavailable: {dispatch_wg_id}"
+            )
         if wg_block:
-            self.session.messages.append({"role": "system", "content": wg_block})
+            host_parts.append(wg_block)
 
         # Per-turn skill boost; only fires when ``user_text`` matches a declared keyword.
         try:
@@ -285,28 +377,21 @@ class Engine:
         except Exception:  # noqa: BLE001
             hint = ""
         if hint:
-            self.session.messages.append({"role": "system", "content": hint})
+            host_parts.append(hint)
 
-        relay_peer = str((self.cfg.relay or {}).get("peer") or "").strip()
-        relay_consulted = False
-        relay_retry_done = False
-        self.session.messages[:] = [
-            m for m in self.session.messages
-            if not (m.get("role") == "system"
-                    and isinstance(m.get("content"), str)
-                    and m["content"].startswith("[relay] "))
-        ]
-        if relay_peer:
-            self.session.messages.append({"role": "system", "content": (
-                f"[relay] You are a read-only relay for peer '{relay_peer}' and hold no knowledge "
-                f"of your own. Before any final answer you MUST consult '{relay_peer}' via "
-                f"peer(peer_id='{relay_peer}', prompt=...) and answer only from its reply — never "
-                "from your own or general knowledge."
-            )})
+        # The relay guardrail must survive an oversized workgroup block: cap only the elastic head, then append it.
+        elastic = "\n\n".join(host_parts)
+        if relay_part:
+            elastic = elastic[: max(0, session.HOST_CONTEXT_CAP - len(relay_part) - 2)]
+            host_context = f"{elastic}\n\n{relay_part}" if elastic else relay_part
+        else:
+            host_context = elastic[: session.HOST_CONTEXT_CAP]
+        self.last_host_context = host_context
 
         # Reset per-turn workgroup usage tracking.
         from alpi.tools import _state as _wg_state
         _wg_state.reset_turn_usage()
+        self._turn_prefix_reasons = set()
         _wg_state.reset_skill_env()
         _wg_state.reset_turn_attachments()
 
@@ -344,6 +429,13 @@ class Engine:
                     model_name,
                 )
 
+        if host_context:
+            if isinstance(user_content, str):
+                user_content = session.with_host_context(user_content, host_context)
+            else:
+                user_content = list(user_content) + [
+                    {"type": "text", "text": session.with_host_context("", host_context)},
+                ]
         self.session.messages.append({"role": "user", "content": user_content})
         emit(AgentEvent(kind="user", text=user_text))
 
@@ -352,6 +444,7 @@ class Engine:
             user=user_text, assistant="", tools=[],
             started_at=turn_started, attachments=att_meta,
             ended_at=0.0,  # the stub has not ended: a reply stamp here would read as "finished at turn start".
+            host_context=host_context,
         )
         if persist_inflight:
             try:
@@ -379,6 +472,7 @@ class Engine:
         fallback_queue = list(self.cfg.fallback_models)
         from alpi import prompt_cache as _pc
         call_kwargs.update(_pc.cache_kwargs_for_model(call_kwargs.get("model", "")))
+        call_kwargs = self._with_affinity(call_kwargs)
         max_steps = self.cfg.tools.max_steps_per_turn
         _explicit_cap = (self.cfg.raw.get("tools") or {}).get("max_steps_per_turn") is not None
         if max_steps == cfg_mod.DEFAULT_CONFIG["tools"]["max_steps_per_turn"] and not _explicit_cap:
@@ -424,6 +518,7 @@ class Engine:
                     accumulated_text = []
                     reasoning_text = []
                     final = {}
+                    self._diagnose_prefix(call_kwargs, schemas)
                     try:
                         for chunk in llm.stream(
                             messages=self.session.messages, tools=schemas,
@@ -464,6 +559,7 @@ class Engine:
                                 except Exception:  # noqa: BLE001
                                     continue
                                 fb_kwargs.update(_pc.cache_kwargs_for_model(fb_kwargs.get("model", "")))
+                                fb_kwargs = self._with_affinity(fb_kwargs)
                                 import logging
                                 logging.getLogger("alpi.engine").warning(
                                     "model %s failed (%s); falling back to %s",
@@ -534,6 +630,9 @@ class Engine:
                           + int(final.get("output_tokens", 0)),
                     tokens_in=int(final.get("input_tokens", 0)),
                     tokens_out=int(final.get("output_tokens", 0)),
+                    tokens_cached=final.get("cached_tokens"),
+                    cache_discount_usd=final.get("cache_discount"),
+                    cost_source=final.get("cost_source"),
                     cfg_budget=self.cfg.budget,
                 )
                 self.session.last_ctx_tokens = int(final.get("input_tokens", 0))
@@ -638,26 +737,36 @@ class Engine:
                 from alpi.tools import _state as tool_state_mod
                 tool_state_mod.set_interrupt_getter(lambda: self.interrupt_requested)
 
-                def _absorb_usage(in_tok: int, out_tok: int, cost: float) -> None:
+                def _absorb_usage(
+                    in_tok: int, out_tok: int, cost: float,
+                    cached: int | None = None,
+                    discount: float | None = None,
+                    source: str | None = None,
+                ) -> None:
                     self.session.record(
                         input_tokens=in_tok, output_tokens=out_tok, cost=cost,
+                        cached_input_tokens=cached,
                     )
                     from alpi import ledger as _ledger
                     _ledger.record(
                         self.home, usd=float(cost),
                         tokens=int(in_tok) + int(out_tok),
                         tokens_in=int(in_tok), tokens_out=int(out_tok),
+                        tokens_cached=cached,
+                        cache_discount_usd=discount,
+                        cost_source=source,
                         cfg_budget=self.cfg.budget,
                     )
                     emit(AgentEvent(
                         kind="usage", tokens_in=in_tok, tokens_out=out_tok,
-                        cost=cost,
+                        cached_in=int(cached or 0), cost=cost,
                     ))
                 tool_state_mod.set_usage_sink(_absorb_usage)
 
                 from alpi.tools import _mutations
                 _mut_token = _mutations.begin_batch()
                 batch_reasoning = content
+                dispatch_delivered = False
                 for i, tc in enumerate(tool_calls):
                     reasoning_for_this_tool = batch_reasoning if i == 0 else ""
                     if self.interrupt_requested:
@@ -739,6 +848,17 @@ class Engine:
                     consecutive_tool_failures = (
                         0 if result.ok else consecutive_tool_failures + 1
                     )
+                    if (
+                        result.ok
+                        and dispatch_wg_id
+                        and name == "workgroup_post"
+                        and str(args.get("wg_id") or "") == dispatch_wg_id
+                    ):
+                        from alpi.alp import tasks as _wg_tasks
+                        dispatch_delivered = (
+                            dispatch_delivered
+                            or not _wg_tasks.is_working(str(args.get("text") or ""))
+                        )
                     if result.ok and name in ("skill", "attach_file"):
                         import tempfile as _tempfile
                         from alpi import attachments as _att
@@ -778,6 +898,11 @@ class Engine:
 
                 if self.interrupt_requested:
                     self._finalize_interrupt(emit)
+                    return
+
+                if dispatch_delivered:
+                    turn_completed = True
+                    emit(AgentEvent(kind="done"))
                     return
 
                 peer_reply = _last_peer_reply(turn_tools)
@@ -822,6 +947,7 @@ class Engine:
                 }]
                 wrap_text: list[str] = []
                 wrap_final: dict = {}
+                self._turn_prefix_reasons.add("wrap_up")
                 try:
                     for chunk in llm.stream(
                         messages=wrap_msgs, tools=[], rt=self.cfg.runtime, **call_kwargs,
@@ -839,10 +965,8 @@ class Engine:
                         self._finalize_interrupt(emit)
                         return
                     wrap_content = _strip_cache_noise("".join(wrap_text))
-                    if wrap_content:
-                        self.session.messages.append({"role": "assistant", "content": wrap_content})
-                        final_assistant = wrap_content
-                        turn_completed = True
+                    # Accounting is unconditional (mirrors the main path at the stream end): an empty wrap reply still consumed a full context of input.
+                    if wrap_final:
                         self.session.record(
                             input_tokens=wrap_final.get("input_tokens", 0),
                             output_tokens=wrap_final.get("output_tokens", 0),
@@ -862,6 +986,9 @@ class Engine:
                             tokens=int(wrap_final.get("input_tokens", 0)) + int(wrap_final.get("output_tokens", 0)),
                             tokens_in=int(wrap_final.get("input_tokens", 0)),
                             tokens_out=int(wrap_final.get("output_tokens", 0)),
+                            tokens_cached=wrap_final.get("cached_tokens"),
+                            cache_discount_usd=wrap_final.get("cache_discount"),
+                            cost_source=wrap_final.get("cost_source"),
                             cfg_budget=self.cfg.budget,
                         )
                         self.session.last_ctx_tokens = int(wrap_final.get("input_tokens", 0))
@@ -869,9 +996,14 @@ class Engine:
                             kind="usage",
                             tokens_in=wrap_final.get("input_tokens", 0),
                             tokens_out=wrap_final.get("output_tokens", 0),
+                            cached_in=int(wrap_final.get("cached_tokens") or 0),
                             cost=wrap_final.get("cost_usd", 0.0),
                             model=turn_model,
                         ))
+                    if wrap_content:
+                        self.session.messages.append({"role": "assistant", "content": wrap_content})
+                        final_assistant = wrap_content
+                        turn_completed = True
                         emit(AgentEvent(kind="assistant_done", text=wrap_content, final=True))
                         emit(AgentEvent(kind="done"))
                         return
@@ -901,6 +1033,7 @@ class Engine:
                 attachments=att_meta, output_attachments=turn_produced,
                 interrupted=self._interrupted_this_turn,
                 model=turn_model,
+                host_context=host_context,
             )
             if self.session.turns and self.session.turns[-1].at == turn_started:
                 self.session.turns[-1] = final_turn
@@ -924,6 +1057,11 @@ class Engine:
                     assistant=final_assistant,
                 )
                 self._maybe_spawn_review()
+            try:
+                from alpi import memory as _memory_mod
+                _memory_mod.run_maintenance(self.home)
+            except Exception:  # noqa: BLE001
+                pass
 
     def _maybe_emit_chat_turn_done(
         self, *, source: str, elapsed: float, tools_count: int, assistant: str,
@@ -964,7 +1102,7 @@ class Engine:
         self._turns_since_review = 0
         try:
             from alpi.review import spawn_review
-            spawn_review(self.home, self.cfg, self.session.messages)
+            spawn_review(self.home, self.cfg, self.session.messages, session_id=self.session.id)
         except Exception:  # noqa: BLE001
             pass
 
@@ -1014,12 +1152,12 @@ class Engine:
             )
             kwargs = merge_into_kwargs(kwargs, reasoning_kwargs(current_model, "high"))
             kwargs.update(_pc.cache_kwargs_for_model(kwargs.get("model", "")))
-            return kwargs, current_model, "high", f"escalated effort to high ({reason})"
+            return self._with_affinity(kwargs), current_model, "high", f"escalated effort to high ({reason})"
         deep = self.cfg.tiers.deep
         if deep.model and deep.model != current_model:
             kwargs = cfg_mod.resolve_model(self.cfg, tier="deep")
             kwargs.update(_pc.cache_kwargs_for_model(kwargs.get("model", "")))
-            return kwargs, deep.model, deep.effort, f"escalated to {deep.model} ({reason})"
+            return self._with_affinity(kwargs), deep.model, deep.effort, f"escalated to {deep.model} ({reason})"
         return None
 
     def _record_run(
@@ -1045,6 +1183,9 @@ class Engine:
                 kind, backend = "agent", "scheduled-child"
             else:
                 kind, backend = "agent", None
+            from alpi.tools import _state as _tally_mod
+            tally = _tally_mod.get_turn_usage() or {}
+            measured = int(tally.get("measured_in", 0) or 0)
             run_ledger.record(
                 self.home,
                 kind=kind,
@@ -1058,6 +1199,14 @@ class Engine:
                 tool_count=len(turn_tools),
                 output_tail=assistant,
                 model=model, routing=routing,
+                tokens_in=int(tally.get("tokens_in", 0) or 0),
+                tokens_out=int(tally.get("tokens_out", 0) or 0),
+                tokens_cached=(int(tally.get("cached_in", 0) or 0) if measured > 0 else None),
+                tokens_measured=(measured if measured > 0 else None),
+                cache_diag=(
+                    ",".join(sorted(getattr(self, "_turn_prefix_reasons", None) or ()))
+                    if measured > 0 else None
+                ) or None,
             )
         except Exception:  # noqa: BLE001
             pass
@@ -1113,6 +1262,7 @@ class Engine:
             return True
 
         def _record_side_usage(out) -> None:  # noqa: ANN001
+            self._turn_prefix_reasons.add("side_call")
             tokens_in = int(getattr(out, "input_tokens", 0) or 0)
             tokens_out = int(getattr(out, "output_tokens", 0) or 0)
             cost = float(getattr(out, "cost_usd", 0.0) or 0.0)
@@ -1126,6 +1276,7 @@ class Engine:
             _ledger.record_completion(self.home, out, cfg_budget=self.cfg.budget)
             emit(AgentEvent(
                 kind="usage", tokens_in=tokens_in, tokens_out=tokens_out,
+                cached_in=int(cached or 0),
                 cost=cost, model=call_kwargs.get("model", ""),
             ))
 
@@ -1158,7 +1309,7 @@ class Engine:
                     ),
                 },
             ]
-            summarize_kwargs = dict(call_kwargs)
+            summarize_kwargs = self._with_affinity(dict(call_kwargs), purpose="side")
             summarize_kwargs["max_tokens"] = max_tokens
             try:
                 out = llm.complete(messages=prompt_messages, **summarize_kwargs)
@@ -1179,6 +1330,7 @@ class Engine:
             return
 
         self.session.messages = new_messages
+        self._expected_rewrite = "compaction"
         self.session.last_ctx_tokens = result.tokens_after
         emit(AgentEvent(
             kind="auto_compact",
@@ -1212,7 +1364,7 @@ class Engine:
             def _candidate_call(messages: list[dict], max_tokens: int) -> str:
                 if not _side_budget_ok():
                     return ""
-                kwargs = dict(call_kwargs)
+                kwargs = self._with_affinity(dict(call_kwargs), purpose="side")
                 kwargs["max_tokens"] = int(max_tokens)
                 try:
                     out = llm.complete(messages=messages, **kwargs)

@@ -2,28 +2,28 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from alpi.llm import _reported_cost, _with_openrouter_extras
+from alpi.llm import _compute_cost_detail, _usage_cost, _with_openrouter_extras
 
 
-def test_reported_cost_prefers_hidden_response_cost() -> None:
+def test_hidden_response_cost_alone_is_litellm_not_provider() -> None:
     r = SimpleNamespace(_hidden_params={"response_cost": 3.906e-05}, usage=None)
-    assert _reported_cost(r) == 3.906e-05
+    assert _compute_cost_detail(r, "openrouter/x/y") == (3.906e-05, "litellm")
 
 
-def test_reported_cost_reads_usage_cost_attr() -> None:
-    r = SimpleNamespace(_hidden_params={}, usage=SimpleNamespace(cost=0.0123))
-    assert _reported_cost(r) == 0.0123
-
-
-def test_reported_cost_reads_usage_cost_via_model_dump() -> None:
+def test_usage_cost_reads_attr_and_model_dump() -> None:
+    assert _usage_cost(SimpleNamespace(usage=SimpleNamespace(cost=0.0123))) == 0.0123
     usage = SimpleNamespace(model_dump=lambda: {"cost": 0.05})
-    r = SimpleNamespace(_hidden_params={}, usage=usage)
-    assert _reported_cost(r) == 0.05
+    assert _usage_cost(SimpleNamespace(usage=usage)) == 0.05
+    assert _usage_cost(SimpleNamespace(usage=SimpleNamespace())) is None
 
 
-def test_reported_cost_none_when_absent() -> None:
-    r = SimpleNamespace(_hidden_params={}, usage=SimpleNamespace())
-    assert _reported_cost(r) is None
+def test_cost_value_and_label_come_from_the_same_field() -> None:
+    """litellm can stamp a DIFFERENT response_cost than the provider's usage.cost — billing must report the provider's number, never litellm's value under a provider label."""
+    r = SimpleNamespace(
+        _hidden_params={"response_cost": 0.01},
+        usage=SimpleNamespace(cost=0.002),
+    )
+    assert _compute_cost_detail(r, "openrouter/x/y") == (0.002, "provider")
 
 
 def test_openrouter_gets_usage_include_flag() -> None:

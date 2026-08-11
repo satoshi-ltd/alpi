@@ -234,6 +234,7 @@ class Delegate(Tool):
         parent_emit = tool_state_mod.get_emit()
         parent_interrupt = tool_state_mod.get_interrupt_getter()
         parent_usage = tool_state_mod.get_usage_sink()
+        parent_tally = tool_state_mod.get_turn_usage_ref()
         from alpi.host.connection_context import current
         parent_connection = current()
         total = len(tasks)
@@ -241,6 +242,7 @@ class Delegate(Tool):
         def _worker(idx: int, task: dict) -> ToolResult:
             tool_state_mod.set_interrupt_getter(parent_interrupt)
             tool_state_mod.set_usage_sink(parent_usage)
+            tool_state_mod.adopt_turn_usage(parent_tally)
             label = f"[{idx + 1}/{total}]"
             tag = task.get("goal", "")[:30]
 
@@ -344,6 +346,8 @@ class Delegate(Tool):
             tool_state_mod.record_usage(
                 out.input_tokens, out.output_tokens, out.cost_usd,
                 getattr(out, "cached_tokens", None),
+                getattr(out, "cache_discount", None),
+                getattr(out, "cost_source", None),
             )
 
             content = out.content or ""
@@ -420,6 +424,8 @@ class Delegate(Tool):
             tool_state_mod.record_usage(
                 out.input_tokens, out.output_tokens, out.cost_usd,
                 getattr(out, "cached_tokens", None),
+                getattr(out, "cache_discount", None),
+                getattr(out, "cost_source", None),
             )
             if not final_text:
                 final_text = f"[delegate: {step_cap}-step budget exhausted, no summary]"

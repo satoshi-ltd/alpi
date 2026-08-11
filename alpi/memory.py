@@ -491,3 +491,13 @@ def _parse_date(value: str | None) -> date | None:
         return date.fromisoformat(value)
     except (TypeError, ValueError):
         return None
+
+
+def run_maintenance(home: Path) -> int:
+    """Post-turn maintenance entry point — the ONLY sanctioned caller of the low-confidence prune since prompt building became read-only (CL.1)."""
+    try:
+        return MemoryStore(home=home).prune_low_confidence(
+            max_age_days=LOW_CONFIDENCE_MAX_AGE_DAYS,
+        )
+    except Exception:  # noqa: BLE001
+        return 0

@@ -23,7 +23,7 @@ const LOCAL_UNSUPPORTED: &str =
     "local daemon connections aren't supported on Windows yet — pair a remote daemon over Tailscale";
 
 // RPC timeouts stay generous — a busy daemon or slow Tailscale hop must not fail falsely (calls run off the main thread, so nothing freezes); dead-daemon detection belongs to the probes (2.5s local / 8s remote — a just-restarted daemon's warmup must not read as offline) and the stream keepalives (events ping 25s, chat heartbeat 5s → 75s = three missed pings).
-const READ_TIMEOUT_LOCAL_SECS: u64 = 8;
+const READ_TIMEOUT_LOCAL_SECS: u64 = 20;
 const READ_TIMEOUT_REMOTE_SECS: u64 = 20;
 // attachments.fetch ships up to 20 MiB as base64 JSON — a slow hop needs far more than the default RPC window.
 const READ_TIMEOUT_FETCH_SECS: u64 = 60;
@@ -36,6 +36,8 @@ const PROBE_REMOTE_TIMEOUT_MS: u64 = 8000;
 const PROBE_RETRY_DELAY_MS: u64 = 350;
 // Sticky offline: tolerate transient blips on noisy Tailscale links.
 const STICKY_OFFLINE_THRESHOLD: u32 = 2;
+// Recent stream traffic vetoes probe-only offline transitions.
+const STREAM_LIVENESS_WINDOW_SECS: u64 = 30;
 // Bound concurrent request/response RPCs per remote connection so a Settings fan-out (or 10 remotes) can't open a burst of sockets at once. Local socket and streams are uncapped.
 const MAX_INFLIGHT_PER_REMOTE: usize = 4;
 // Window: ≥ the 25s inactive poll (so each pass reuses its socket) and < the daemon's ~40s ping deadline (20s idle ping + 20s pong timeout; reuse answers the queued ping on first read).
@@ -71,6 +73,7 @@ struct StatusEntry {
     status: ConnectionStatus,
     error: Option<String>,
     consecutive_failures: u32,
+    last_stream_frame: Option<Instant>,
     alpi_version: Option<String>,
     update_available: Option<String>,
     role: Option<String>,
@@ -82,6 +85,7 @@ impl Default for StatusEntry {
             status: ConnectionStatus::Unknown,
             error: None,
             consecutive_failures: 0,
+            last_stream_frame: None,
             alpi_version: None,
             update_available: None,
             role: None,
@@ -208,16 +212,43 @@ fn set_role(id: &str, role: Option<String>) {
     }
 }
 
-// Online → Offline only flips after STICKY_OFFLINE_THRESHOLD consecutive failures.
-fn set_status(id: &str, status: ConnectionStatus, error: Option<String>) {
+#[derive(Clone, Copy)]
+enum StatusSource {
+    General,
+    Probe,
+    Stream,
+}
+
+fn stream_is_live(entry: &StatusEntry) -> bool {
+    entry
+        .last_stream_frame
+        .is_some_and(|at| at.elapsed() < Duration::from_secs(STREAM_LIVENESS_WINDOW_SECS))
+}
+
+fn update_status(
+    id: &str,
+    status: ConnectionStatus,
+    error: Option<String>,
+    source: StatusSource,
+) -> bool {
     let mut transitioned = false;
     if let Ok(mut map) = status_map().lock() {
         let entry = map.entry(id.to_string()).or_default();
+        if matches!(source, StatusSource::Stream) {
+            entry.last_stream_frame = Some(Instant::now());
+            entry.consecutive_failures = 0;
+            if matches!(entry.status, ConnectionStatus::AuthFailed | ConnectionStatus::Disabled) {
+                return true;
+            }
+        }
         match status {
             ConnectionStatus::Offline if entry.status == ConnectionStatus::Online => {
+                if matches!(source, StatusSource::Probe) && stream_is_live(entry) {
+                    return false;
+                }
                 entry.consecutive_failures = entry.consecutive_failures.saturating_add(1);
                 if entry.consecutive_failures < STICKY_OFFLINE_THRESHOLD {
-                    return;
+                    return true;
                 }
             }
             ConnectionStatus::Online => {
@@ -232,12 +263,28 @@ fn set_status(id: &str, status: ConnectionStatus, error: Option<String>) {
         }
     }
     if !transitioned {
-        return;
+        return true;
     }
     if let Ok(guard) = listeners().lock() {
         for listener in guard.iter() {
             listener(id, status, error.as_deref());
         }
+    }
+    true
+}
+
+// Online → Offline only flips after STICKY_OFFLINE_THRESHOLD consecutive failures.
+fn set_status(id: &str, status: ConnectionStatus, error: Option<String>) {
+    update_status(id, status, error, StatusSource::General);
+}
+
+fn note_stream_frame(id: &str) {
+    update_status(id, ConnectionStatus::Online, None, StatusSource::Stream);
+}
+
+fn record_probe_failure(id: &str, status: ConnectionStatus, error: String) {
+    if update_status(id, status, Some(error), StatusSource::Probe) {
+        set_version(id, None);
     }
 }
 
@@ -1240,7 +1287,6 @@ where
     stream.flush().ok();
 
     let reader = BufReader::new(stream);
-    let mut online = false;
     for line in reader.lines() {
         let line = match line {
             Ok(l) => l,
@@ -1253,11 +1299,7 @@ where
             Ok(v) => v,
             Err(_) => continue,
         };
-        if !online {
-            // Online only once the daemon actually replies — connecting to a still-booting daemon must not flap Online→Offline.
-            set_status(id, ConnectionStatus::Online, None);
-            online = true;
-        }
+        note_stream_frame(id);
         if !on_frame(frame) {
             break;
         }
@@ -1390,7 +1432,6 @@ where
         "method": method,
         "params": with_auth(params, token),
     }))?;
-    let mut online = false;
     loop {
         let text = ws.read_text()?;
         if !frame_matches_id(&text, id) {
@@ -1425,11 +1466,7 @@ where
             mark_connection_revoked(connection_id);
             return Err("alp -32000: auth-failed".to_string());
         }
-        if !online {
-            // Online only once the daemon actually replies — mirrors the local stream.
-            set_status(connection_id, ConnectionStatus::Online, None);
-            online = true;
-        }
+        note_stream_frame(connection_id);
         let keep_going = on_frame(frame);
         if done || !keep_going {
             break;
@@ -2058,8 +2095,7 @@ pub fn probe_connection(conn: &HostConnection) {
                     cls
                 }
             };
-            set_status(&id, next, Some(e));
-            set_version(&id, None);
+            record_probe_failure(&id, next, e);
         }
     }
 }
@@ -2596,6 +2632,110 @@ mod tests {
         // Second Offline crosses the threshold and flips publicly.
         set_status(id, ConnectionStatus::Offline, Some("real".into()));
         assert_eq!(status_for(id).0, ConnectionStatus::Offline);
+    }
+
+    #[test]
+    fn a_live_stream_outranks_a_slow_probe() {
+        let id = "stream-live-1";
+        set_status(id, ConnectionStatus::Online, None);
+        note_stream_frame(id);
+
+        record_probe_failure(id, ConnectionStatus::Offline, "probe timeout".into());
+        record_probe_failure(id, ConnectionStatus::Offline, "probe timeout".into());
+        assert_eq!(
+            status_for(id).0,
+            ConnectionStatus::Online,
+            "frames are still arriving, so a slow probe measures load, not death",
+        );
+
+        if let Ok(map) = status_map().lock() {
+            assert_eq!(map.get(id).unwrap().consecutive_failures, 0);
+        }
+    }
+
+    #[test]
+    fn a_stale_stream_lets_the_probe_through() {
+        let id = "stream-stale-1";
+        set_status(id, ConnectionStatus::Online, None);
+        if let Ok(mut map) = status_map().lock() {
+            let entry = map.get_mut(id).unwrap();
+            entry.last_stream_frame = Instant::now()
+                .checked_sub(Duration::from_secs(STREAM_LIVENESS_WINDOW_SECS + 5));
+        }
+
+        record_probe_failure(id, ConnectionStatus::Offline, "first".into());
+        assert_eq!(status_for(id).0, ConnectionStatus::Online);
+        record_probe_failure(id, ConnectionStatus::Offline, "second".into());
+        assert_eq!(
+            status_for(id).0,
+            ConnectionStatus::Offline,
+            "with no recent frames the probe is the only evidence and must win",
+        );
+    }
+
+    #[test]
+    fn a_recent_stream_does_not_mask_transport_failures() {
+        let id = "stream-transport-failure";
+        set_status(id, ConnectionStatus::Online, None);
+        note_stream_frame(id);
+
+        set_status(id, ConnectionStatus::Offline, Some("stream closed".into()));
+        assert_eq!(status_for(id).0, ConnectionStatus::Online);
+        set_status(id, ConnectionStatus::Offline, Some("reconnect failed".into()));
+        assert_eq!(status_for(id).0, ConnectionStatus::Offline);
+    }
+
+    #[test]
+    fn a_stream_frame_resets_probe_failures_and_recovers_online() {
+        let id = "stream-recovers";
+        set_status(id, ConnectionStatus::Online, None);
+        if let Ok(mut map) = status_map().lock() {
+            map.get_mut(id).unwrap().last_stream_frame = None;
+        }
+        record_probe_failure(id, ConnectionStatus::Offline, "first".into());
+
+        note_stream_frame(id);
+        if let Ok(mut map) = status_map().lock() {
+            let entry = map.get_mut(id).unwrap();
+            assert_eq!(entry.consecutive_failures, 0);
+            entry.last_stream_frame = None;
+        }
+        record_probe_failure(id, ConnectionStatus::Offline, "second".into());
+        assert_eq!(status_for(id).0, ConnectionStatus::Online);
+
+        set_status(id, ConnectionStatus::Offline, Some("stream closed".into()));
+        assert_eq!(status_for(id).0, ConnectionStatus::Offline);
+        note_stream_frame(id);
+        assert_eq!(status_for(id).0, ConnectionStatus::Online);
+    }
+
+    #[test]
+    fn an_ignored_probe_preserves_version_metadata() {
+        let id = "stream-version";
+        set_status(id, ConnectionStatus::Online, None);
+        set_version(id, Some("0.11.0".into()));
+        note_stream_frame(id);
+
+        record_probe_failure(id, ConnectionStatus::Offline, "timeout".into());
+
+        assert_eq!(version_for(id), Some("0.11.0".into()));
+    }
+
+    #[test]
+    fn stream_frames_do_not_clear_terminal_connection_states() {
+        let auth_id = "stream-auth-failed";
+        set_status(auth_id, ConnectionStatus::AuthFailed, Some("revoked".into()));
+        note_stream_frame(auth_id);
+        assert_eq!(status_for(auth_id).0, ConnectionStatus::AuthFailed);
+
+        let disabled_id = "stream-disabled";
+        set_status(
+            disabled_id,
+            ConnectionStatus::Disabled,
+            Some("disabled".into()),
+        );
+        note_stream_frame(disabled_id);
+        assert_eq!(status_for(disabled_id).0, ConnectionStatus::Disabled);
     }
 
     #[test]

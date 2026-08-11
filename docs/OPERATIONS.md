@@ -31,8 +31,9 @@ and rolling.
 | `approval.log` | per profile | rotated text | Security audit of every non-safe shell command the LLM tried to run: caution (pending / once / session / always / deny) or dangerous (always denied). | the approval system |
 | `admin-audit.jsonl` | **daemon-wide; ONE bounded trail at `~/.alpi/logs/admin-audit.jsonl`** | rotated JSONL, 5 MB + 3 backups, 4 KB/row | Which connection/device attempted a sensitive host-RPC mutation, what safe target it affected, and whether it succeeded, failed, or was denied. It never stores credentials, config values, prompts, replies, or chat messages. Direct CLI/setup mutations do not enter this trail yet. | the host RPC dispatcher |
 | `compaction.jsonl` | per profile | append-only JSONL | Did auto-compact run this turn? Tokens before/after, summarized-message count, tool-truncation count, manual vs auto, `fired` (true when the LLM summarized; false when only oversized tool outputs were truncated). Use it as the evidence source before changing compaction/memory constants. | the engine (one line whenever compaction *or* tool truncation ran) |
-| `runs.jsonl` | per profile | capped rolling JSONL | What ran and where it stopped: one record per long-running turn (agent, schedule, workgroup, terminal) — outcome, exit code, timeout reason, pid, backend, last tool, and a secret-redacted output tail. Surfaced by `alpi digest`. | the engine, scheduler, and terminal tool (one line per finished run) |
-| `ledger.json` | per profile | JSON | Daily USD spend ledger; live counters for the daily cap + 30-day per-day history. Not a log; never cleaned by `Subsystem logs`. | every turn that records cost |
+| `runs.jsonl` | per profile | capped rolling JSONL | What ran and where it stopped: one record per long-running turn (agent, schedule, workgroup, terminal) — outcome, exit code, timeout reason, pid, backend, last tool, secret-redacted output tail, raw cache counts, and request-shape diagnosis. Surfaced by `alpi digest`. | the engine, scheduler, and terminal tool (one line per finished run) |
+| `ledger.json` | per profile | JSON | Daily USD spend ledger; live counters for the daily cap + 30-day per-day history, including raw cache counts, provider-reported cache discount, and the source of recorded cost. Not a log; never cleaned by `Subsystem logs`. | every turn that records cost |
+| `prefix_shapes.json` | per profile | bounded JSON | Hash-only request-shape history for up to 20 recently used conversation affinities. It diagnoses model, params, tools, system, or history changes without storing prompt text. Best-effort and safe to delete. | the engine before provider calls |
 
 **Tail one or all:**
 
@@ -64,6 +65,25 @@ performed an administrative mutation; Desktop exposes the same bounded trail
 under Connections → Activity. `compaction.jsonl` answers "did the context window pressure
 get tight this week?" and "are my trigger ratios right for this
 model?".
+
+### Prompt-cache evidence
+
+`/status` reports the current session's cache hit rate, while `alpi digest`
+aggregates the selected calendar-day window. Both use raw provider-reported
+counts: `cached / measured input`. A completion whose provider reports no cache
+fields is excluded from both sides of that ratio, so `no provider cache data`
+means unknown, not a measured miss.
+
+The digest also shows provider-reported cache discount and a `cost_source`
+histogram. Only `provider` is the endpoint's own number. `litellm` and `table`
+are cache-blind list-price calculations; `none` means no price was available.
+Use the provider invoice or dashboard for billing reconciliation.
+
+Low-hit runs carry `cache_diag` in `runs.jsonl`. `first_contact`, model or tool
+changes, compaction, resume, reset, and edit-and-resend are expected reasons for
+a cold or rewritten prefix. `prefix_shapes.json` stores only bounded hashes and
+may be removed when resetting diagnostics; deleting it does not affect chats or
+provider caching.
 
 ## Daemon — one process per machine, every profile inside
 
@@ -225,6 +245,37 @@ After restoring on a new machine, run `alpi doctor` — it surfaces
 peers whose counterpart rotated their key since the backup, and
 any missing optional dependency the restored skills declare.
 
+### Credential incident and restore policy
+
+A normal restore from a trusted, encrypted backup intentionally restores the
+existing host connections and device credentials. It does not require
+re-pairing by itself. Keep the archive and passphrase in separate controlled
+locations; raw copies of `~/.alpi`, VM snapshots, and support bundles contain
+active secrets and must receive the same protection.
+
+Use the smallest response that matches the incident:
+
+- **Lost or stolen client device:** from a still-trusted admin device or the
+  local host, revoke that device immediately. Add and verify a replacement on
+  the same connection; its role, profile scope, sessions, and usage remain on
+  the connection while it receives a new credential.
+- **Suspected device-token disclosure:** revoke only the affected device. The
+  daemon closes its active WebSockets; other devices on the connection remain
+  valid.
+- **Exposed `connections.yaml`, Alpi home, server snapshot, or backup:** remove
+  public reachability to the affected runtime, rebuild on a trusted host,
+  revoke every restored device credential before reopening WSS, and re-pair
+  each client. Rotate every other secret present in the exposed material:
+  provider/API keys, email credentials or OAuth tokens, skill secrets, and the
+  ALP identity when its private key was included.
+- **Uncertain backup custody:** treat it as exposure, not as a normal restore.
+  Changing only the backup passphrase cannot revoke credentials already copied
+  from an older archive.
+
+After any response, run `alpi doctor`, verify WSS from an external network, and
+inspect Connections → Activity or `alpi audit-log` for rejected use of the old
+device identities.
+
 Backups are operational snapshots. They are not a review workflow for
 profile changes. For Git-based profile source, promotion, and secrets
 boundaries, see [Profiles → Versioning](PROFILES.md#versioning).
@@ -275,7 +326,8 @@ observability, the signals to watch:
   every interactive turn, scheduled job, sub-agent
   spawn, and inbound ALP call admits against it before running and
   records its actual spend after. The same file keeps a 30-day
-  `history` map of per-day totals (usd + input/output tokens) — the
+  `history` map of per-day totals (USD, input/output tokens, raw cache counts,
+  provider-reported cache discount, and cost-source counts) — the
   authoritative spend record, including non-token costs like image
   generation that session files never see; `host.usage.daily`
   (admin-only) serves the last 14 days of it to clients, plus a `total30`

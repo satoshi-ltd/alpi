@@ -57,13 +57,17 @@ class WorkgroupPostTool(Tool):
         if not wg_id or not text:
             return ToolResult(ok=False, output="", error="wg_id and text required")
 
-        # Auto-declare the current turn's spend for the hub ledger.
         from alpi.tools import _state as _wg_state
-        cost = _declared_cost(_wg_state.get_turn_usage())
+        pending, snapshot = _wg_state.get_undeclared_turn_usage()
+        cost = _declared_cost(pending)
+        turn_id = _wg_state.get_turn_id()
 
         try:
             result = asyncio.run(
-                wc.post(get_home(), wg_id, text.encode("utf-8"), cost=cost),
+                wc.post(
+                    get_home(), wg_id, text.encode("utf-8"),
+                    cost=cost, turn_id=turn_id,
+                ),
             )
         except alp_client.RemoteError as e:
             err = f"hub rejected: {e.code} {e.message}"
@@ -73,6 +77,7 @@ class WorkgroupPostTool(Tool):
             err = str(e)
             _record_post_failure(wg_id, err, text)
             return ToolResult(ok=False, output="", error=err)
+        _wg_state.mark_turn_usage_declared(snapshot)
         cost_hint = ""
         if cost:
             cost_hint = (

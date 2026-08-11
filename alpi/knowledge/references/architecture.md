@@ -24,6 +24,7 @@ Local agent runtime, per turn:
 | `alpi/engine.py` | Turn loop, tool loop, event emission, interrupt flag. |
 | `alpi/llm.py` | LiteLLM transport. |
 | `alpi/prompt_cache.py` | Stable cacheable system-prompt prefix assembly and platform/env hints. |
+| `alpi/prefix_diag.py` | Hashed logical-conversation affinity and bounded request-shape diagnostics. |
 | `alpi/config.py` | Config load/save, defaults, model resolution. |
 | `alpi/attachments.py` | Input/output attachment validation, mime/magic checks, text rendering for non-rich surfaces. |
 | `alpi/tools/` | Tool registry + implementations (registered via `__init__.py`). |
@@ -61,6 +62,7 @@ live at `{home}/skills/<category>/<name>/`.
 - Session listings are bounded: large files are summarized from stat/head data, while `host.profile.summaries` uses `count_sessions()` / `latest_chat_summary()` so sidebar and Settings do not parse huge histories.
 - Live reconnect replay uses `sessions/_events_<id>.jsonl`; incremental deltas are preserved exactly, while oversized text frames are clipped. The sidecar is reconnect/backfill, not the full durable archive, so do not treat it as the canonical session log.
 - Each turn runs on a fresh Engine that rehydrates the session from disk (`_hydrate_from_path`). Cross-turn context = a resume note + each **replayable** prior turn — one that ended in a final reply or produced a file; aborted/tool-only turns (no reply, no output files) are dropped so a resume never re-answers a dangling request. Each replayed turn contributes its user text (with an input marker `[attached: name (mime)]`) + assistant text (with a produced-file marker `[produced this turn … name → /abs/path]`). Tool calls and tool results are NOT replayed (context budget): an agent does not see its prior search/read/analyze output across turns — only its final text and the absolute paths of files it produced. A follow-up edit reuses the produced path from the marker, not a remembered tool result.
+- Prompt-cache contract: `messages[0]` is the stable system prefix, tool schemas have canonical name order, and volatile clock/workgroup/skill/relay state rides each persisted user turn's `host_context` suffix so ordinary growth is append-only in every rehydrator. OpenRouter alone receives a hashed logical-conversation affinity; request-shape diagnostics persist bounded hashes only. Unsupported cache paths remain normal provider calls.
 - A final assistant message with pending/in-progress todos is rejected; the model is re-prompted inside the same turn. The one exception is the max-steps wrap-up (below): it finalizes regardless of open todos, because no steps remain to re-prompt.
 - Tool calls per turn are capped at `tools.max_steps_per_turn` (default 100). When left at the default, a free model (zero per-token OpenRouter pricing) or a local/ollama one raises the ceiling to 1000; an explicitly configured value is always respected (it also bounds loops / refusals / the TODO guard, not just cost). Hitting the cap doesn't fail the turn — the engine makes one tools-off wrap-up call so a best-effort final reply is still produced.
 

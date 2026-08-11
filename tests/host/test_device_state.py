@@ -825,6 +825,24 @@ async def test_profile_storage_serves_cached_rows_within_ttl(
     assert first["result"] == second["result"]
 
 
+def test_subscription_activity_is_scoped_to_its_own_posts() -> None:
+    import types
+
+    first_sub = types.SimpleNamespace(
+        recent_posts=[{"ts": "2026-08-10T10:00:00Z"}],
+        joined_at="2026-01-01T00:00:00Z",
+    )
+    second_sub = types.SimpleNamespace(
+        recent_posts=[{"ts": "2026-08-09T10:00:00Z"}],
+        joined_at="2026-01-01T00:00:00Z",
+    )
+
+    first_mtime = host_device_state._subscription_mtime(first_sub, 0)
+    second_mtime = host_device_state._subscription_mtime(second_sub, 0)
+
+    assert first_mtime - second_mtime == 24 * 60 * 60
+
+
 @pytest.mark.asyncio
 async def test_cleanup_apply_invalidates_storage_cache(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,

@@ -588,19 +588,26 @@ async def _run_workgroup_poller(home: Path, profile: str) -> None:
     sub_workers: dict[str, asyncio.Task] = {}
     hot_until: dict[str, float] = {}
     hub_seen: dict[str, int] = {}
+    hot_hubs: set[str] = set()
+    dirty_hubs: set[str] = set()
+    scan_all = True
+    next_full_scan = time.monotonic() + WORKGROUP_TICK_SECONDS
 
     from alpi.alp import wakes
     wake = asyncio.Event()
 
     def _on_post(wid: str) -> None:
         hot_until[wid] = time.monotonic() + _WG_HOT_WINDOW_SECONDS
+        dirty_hubs.add(wid)
         wake.set()
 
     wakes.register(home, _on_post)
     try:
         while True:
             try:
-                subscriptions = {sub.wg_id for sub in sub_mod.load(home)}
+                subscriptions = {
+                    sub.wg_id for sub in await asyncio.to_thread(sub_mod.load, home)
+                }
                 removed = [wid for wid in sub_workers if wid not in subscriptions]
                 for wid in removed:
                     sub_workers[wid].cancel()
@@ -624,23 +631,34 @@ async def _run_workgroup_poller(home: Path, profile: str) -> None:
                             name=f"wg-pull-{profile}-{wid}",
                         )
 
-                workgroups = wg_mod.list_workgroups(home)
+                workgroups = await asyncio.to_thread(wg_mod.list_workgroups, home)
                 active_hubs = {wg.meta.id for wg in workgroups}
                 for state in (hot_until, hub_seen):
                     for wid in list(state):
                         if wid not in active_hubs:
                             state.pop(wid, None)
+                hot_hubs.intersection_update(active_hubs)
 
+                requested = None if scan_all else set(dirty_hubs)
+                if requested is not None:
+                    dirty_hubs.difference_update(requested)
+                selected = workgroups if requested is None else [
+                    wg for wg in workgroups if wg.meta.id in requested
+                ]
+                scan_all = False
                 now = time.monotonic()
-                for wg in workgroups:
+                for wg in selected:
                     await asyncio.sleep(0)
                     wid = wg.meta.id
                     try:
-                        recent = _all_hub_posts_decrypted(home, wg)
+                        recent = await asyncio.to_thread(
+                            _all_hub_posts_decrypted, home, wg,
+                        )
                     except Exception as e:  # noqa: BLE001
                         log.debug("wg poller hub scan(%s) failed: %s", wid, e)
                         continue
                     if not recent:
+                        hot_hubs.discard(wid)
                         continue
                     head = int(recent[-1].get("seq", 0))
                     fresh = head > hub_seen.get(wid, 0)
@@ -651,14 +669,31 @@ async def _run_workgroup_poller(home: Path, profile: str) -> None:
                         _wg_is_hot(wid, hot_until, now)
                         or _hub_stays_hot(fresh, wg, recent)
                     )
+                    if hot:
+                        hot_hubs.add(wid)
+                    else:
+                        hot_hubs.discard(wid)
                     await _maybe_dispatch_for_hub(home, profile, wg, recent, hot=hot)
             except Exception:  # noqa: BLE001
                 log.exception("workgroup poller tick crashed")
-            try:
-                await asyncio.wait_for(wake.wait(), timeout=_WG_HOT_TICK_SECONDS)
-            except asyncio.TimeoutError:
-                pass
             wake.clear()
+            if dirty_hubs:
+                continue
+            now = time.monotonic()
+            full_scan_in = max(0.0, next_full_scan - now)
+            timeout = min(
+                full_scan_in,
+                _WG_HOT_TICK_SECONDS if hot_hubs else full_scan_in,
+            )
+            try:
+                await asyncio.wait_for(wake.wait(), timeout=timeout)
+            except asyncio.TimeoutError:
+                now = time.monotonic()
+                if now >= next_full_scan:
+                    scan_all = True
+                    next_full_scan = now + WORKGROUP_TICK_SECONDS
+                else:
+                    dirty_hubs.update(hot_hubs)
     finally:
         wakes.unregister(home)
         for worker in sub_workers.values():
@@ -2128,6 +2163,7 @@ async def _dispatch_workgroup_turn(
     turn_budget_s: int = 0,
 ) -> None:
     """Spawn a background ``chat --once`` turn for a workgroup."""
+    turn_id = os.urandom(16).hex()
     turn_timeout = turn_budget_s or _turn_timeout_for(pipeline)
     if continuation and not next_phase:
         prompt = (
@@ -2277,6 +2313,7 @@ async def _dispatch_workgroup_turn(
     env = _effective_profile_env(home, extra={
         "ALPI_HOME": str(home),
         "ALPI_WORKGROUP_DISPATCH": wg_id,
+        "ALPI_WORKGROUP_TURN_ID": turn_id,
         **workspace_env(home),
         **({"ALPI_WORKGROUP_ROUND_HUB_SEQ": str(round_hub_seq)} if (round_hub_seq is not None and round_hub_seq > 0) else {}),
         **env_extra,
@@ -2300,7 +2337,7 @@ async def _dispatch_workgroup_turn(
         _append_turn_event(home, {
             "ts": _utcnow_iso(), "event": "spawn-failed",
             "profile": profile, "wg_id": wg_id, "wg_name": wg_name,
-            "reason": reason, "error": str(e),
+            "reason": reason, "error": str(e), "turn_id": turn_id,
         })
         return
     last_activity = [started_at]
@@ -2315,7 +2352,7 @@ async def _dispatch_workgroup_turn(
     _append_turn_event(home, {
         "ts": _utcnow_iso(), "event": "start",
         "profile": profile, "wg_id": wg_id, "wg_name": wg_name,
-        "reason": reason, "pid": proc.pid,
+        "reason": reason, "pid": proc.pid, "turn_id": turn_id,
     })
 
     # Register in-flight state so the preempt watcher can SIGTERM us.
@@ -2386,7 +2423,7 @@ async def _dispatch_workgroup_turn(
         "event": event,
         "profile": profile, "wg_id": wg_id, "wg_name": wg_name,
         "duration_s": duration_s, "rc": rc,
-        "posts_added": posts_added,
+        "posts_added": posts_added, "turn_id": turn_id,
         **extra,
     })
     if member_responded_seq is not None and _should_advance_cursor(
@@ -2443,7 +2480,9 @@ async def _run_preempt_watcher(home: Path, profile: str) -> None:
                     continue
                 wg_id = key[0] if isinstance(key, tuple) else key
                 started_against = int(info.get("started_against_task_seq", 0))
-                latest = _latest_hub_task_seq_for(home, wg_id, hub_pubkey)
+                latest = await asyncio.to_thread(
+                    _latest_hub_task_seq_for, home, wg_id, hub_pubkey,
+                )
                 if latest <= started_against:
                     continue
                 # ALP.md: only fresh `#task` preempts; `#done` is caught by

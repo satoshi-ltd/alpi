@@ -80,6 +80,12 @@ When the user has ANTHROPIC_API_KEY or OPENAI_API_KEY, native routes work and us
 | OpenAI | `openai/gpt-5.6-terra` | `gpt-5.6-terra` |
 | OpenAI | `openai/gpt-5.6-luna` | `gpt-5.6-luna` |
 
+## Prompt caching
+
+Caching is transparent and fail-safe: unsupported providers/models receive the normal request. LiteLLM adds an explicit marker only where supported; OpenRouter also receives a hashed stable conversation `session_id` (never raw profile/session/peer/workgroup/job identifiers). Provider telemetry differs: zero is a measured miss, missing fields mean unknown (`no provider cache data`), not zero. Native Anthropic, OpenRouter/DeepSeek, and other routes therefore execute the same way but may expose different counts, discount, or cost precision.
+
+The stable system prompt is the cacheable prefix; fresh clock/workgroup/skill/relay context rides each user turn so ordinary growth is append-only. First contact, model/tools/system changes, compaction, resume, reset, or edit-and-resend can legitimately cool/rewrite the prefix. Inspect `/status` and `alpi digest`; only provider-reported cost is invoice-grade, so reconcile against the provider dashboard.
+
 ## Avoid as primary skill router
 
 Usable as workers, not the main model for a skill-dependent profile:

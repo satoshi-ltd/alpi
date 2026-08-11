@@ -858,17 +858,36 @@ async def _workgroup_members(
     from alpi.host.handlers import _check_id
 
     _check_id(wg_id, "wg_id")
-    members_path = home / "alp" / "workgroups" / wg_id / "members.yaml"
-    if members_path.exists():
-        return {"members": _members_yaml(members_path.read_text(encoding="utf-8"))}
-    subs_path = home / "alp" / "secrets" / "subscriptions.yaml"
-    if subs_path.exists():
-        return {
-            "members": _subscription_roster(
-                subs_path.read_text(encoding="utf-8"), wg_id,
-            ),
+    return {"members": await asyncio.to_thread(_workgroup_members_payload, home, wg_id)}
+
+
+def _workgroup_members_payload(home: Path, wg_id: str) -> list[dict[str, Any]]:
+    from alpi.alp import subscription as sub_mod
+    from alpi.alp import workgroup as wg_mod
+
+    wg = wg_mod.load(home, wg_id)
+    if wg is not None:
+        return [
+            {
+                "pubkey": member.pubkey,
+                "bio": member.bio or None,
+                "voice": member.voice or None,
+                "joined": member.joined,
+            }
+            for member in wg.members
+        ]
+    sub = sub_mod.get(home, wg_id)
+    if sub is None:
+        return []
+    return [
+        {
+            "pubkey": str(pubkey),
+            "bio": sub.roster_bios.get(pubkey),
+            "voice": sub.roster_voices.get(pubkey),
+            "joined": True,
         }
-    return {"members": []}
+        for pubkey in sub.roster
+    ]
 
 
 async def _ollama_models(
@@ -1357,75 +1376,58 @@ def _hub_workgroups(home: Path, profile: str) -> list[dict[str, Any]]:
 
 
 def _subscribed_workgroups(home: Path, profile: str) -> list[dict[str, Any]]:
-    path = home / "alp" / "secrets" / "subscriptions.yaml"
-    data = _load_yaml(path)
-    if not isinstance(data, list):
-        return []
+    from alpi.alp import subscription as sub_mod
+
+    path = sub_mod.path(home)
+    data = sub_mod.load(home)
     try:
         mtime = int(path.stat().st_mtime)
     except OSError:
         mtime = 0
     out = []
     for sub in data:
-        if not isinstance(sub, dict):
-            continue
-        roster = sub.get("roster") or {}
+        roster = sub.roster or {}
         out.append({
-            "id": sub.get("wg_id", ""),
+            "id": sub.wg_id,
             "profile": profile,
-            "name": sub.get("name"),
-            "briefing": sub.get("briefing"),
-            **_pipeline_row(sub),
-            "paused": False,
+            "name": sub.name,
+            "briefing": sub.briefing,
+            "pipelines": {k: list(v) for k, v in sub.pipelines.items()},
+            "launch_pipeline": sub.launch_pipeline,
+            "pipeline_mode": sub.pipeline_mode,
+            "phase_map": {
+                slug: {
+                    key: value
+                    for key, value in spec.items()
+                    if key in {"owner", "task"}
+                }
+                for slug, spec in sub.phase_map.items()
+            },
+            "needs_relaunch": False,
+            "paused": sub.paused,
             "members": len(roster) if isinstance(roster, dict) else 0,
-            "mtime": mtime,
+            "mtime": _subscription_mtime(sub, mtime),
             "path": str(path),
             "budget_usd": None,
             "spent_usd": 0.0,
             "is_hub": False,
-            "hub_id": sub.get("hub_id"),
+            "hub_id": sub.hub_id,
         })
     return out
 
 
-def _members_yaml(text: str) -> list[dict[str, Any]]:
-    data = yaml.safe_load(text) or []
-    if not isinstance(data, list):
-        return []
-    return [
-        {
-            "pubkey": str(row.get("pubkey") or ""),
-            "bio": row.get("bio"),
-            "voice": row.get("voice"),
-            "joined": bool(row.get("joined", False)),
-        }
-        for row in data
-        if isinstance(row, dict)
+def _subscription_mtime(sub: Any, fallback: int) -> int:
+    stamps = [
+        str(post.get("ts") or post.get("at") or "")
+        for post in sub.recent_posts or []
+        if isinstance(post, dict)
     ]
-
-
-def _subscription_roster(text: str, wg_id: str) -> list[dict[str, Any]]:
-    data = yaml.safe_load(text) or []
-    for row in data if isinstance(data, list) else []:
-        if not isinstance(row, dict) or row.get("wg_id") != wg_id:
+    for stamp in [*reversed(stamps), str(sub.joined_at or "")]:
+        try:
+            return int(datetime.fromisoformat(stamp.replace("Z", "+00:00")).timestamp())
+        except (TypeError, ValueError):
             continue
-        roster = row.get("roster") or {}
-        if not isinstance(roster, dict):
-            return []
-        voices_raw = row.get("roster_voices") or {}
-        voices = voices_raw if isinstance(voices_raw, dict) else {}
-        bios_raw = row.get("roster_bios") or {}
-        bios = bios_raw if isinstance(bios_raw, dict) else {}
-        return [
-            {
-                "pubkey": str(pubkey),
-                "bio": bios.get(pubkey),
-                "voice": voices.get(pubkey),
-                "joined": True,
-            }
-            for pubkey in roster.keys()
-        ]
-    return []
+    return fallback
 
 
 def _load_yaml(path: Path) -> Any:

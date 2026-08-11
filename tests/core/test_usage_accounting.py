@@ -13,15 +13,19 @@ from alpi.tools import _state as tool_state_mod
 
 
 def _completion(content: str = "done", tokens_in: int = 100, tokens_out: int = 50):
+    # cached_tokens deliberately non-None: a None default would make forwarding regressions invisible (expected value == regression value).
     return SimpleNamespace(
         content=content, tool_calls=[], input_tokens=tokens_in,
         output_tokens=tokens_out, cost_usd=0.01, raw=None,
+        cached_tokens=40, cache_discount=0.002, cost_source="provider",
     )
 
 
 def _sink_capture():
-    calls: list[tuple[int, int, float]] = []
-    tool_state_mod.set_usage_sink(lambda i, o, c: calls.append((i, o, c)))
+    calls: list[tuple] = []
+    tool_state_mod.set_usage_sink(
+        lambda i, o, c, cached=None, disc=None, src=None: calls.append((i, o, c, cached, disc, src)),
+    )
     return calls
 
 
@@ -47,11 +51,11 @@ def test_web_extract_records_usage_main_and_override(monkeypatch, tmp_path: Path
     calls = _sink_capture()
     try:
         assert WebExtract().run(url="https://example.com").ok
-        assert calls == [(100, 50, 0.01)]
+        assert calls == [(100, 50, 0.01, 40, 0.002, "provider")]
 
         cfg.tools.web_extract.model = ""
         assert WebExtract().run(url="https://example.com").ok
-        assert calls == [(100, 50, 0.01)] * 2
+        assert calls == [(100, 50, 0.01, 40, 0.002, "provider")] * 2
     finally:
         tool_state_mod.set_usage_sink(None)
 
@@ -68,7 +72,7 @@ def test_knowledge_maintain_records_usage(monkeypatch, tmp_path: Path) -> None:
     calls = _sink_capture()
     try:
         maintain_knowledge(home, root, topic="pricing", apply=False)
-        assert calls == [(100, 50, 0.01)]
+        assert calls == [(100, 50, 0.01, 40, 0.002, "provider")]
     finally:
         tool_state_mod.set_usage_sink(None)
 
@@ -352,3 +356,14 @@ def test_identity_draft_blocked_when_budget_exhausted(
     with pytest.raises(ledger.BudgetExceeded):
         identity.draft_bio_from_agent(home, cfg)
     assert llm_calls == []
+
+
+def test_read_image_finalize_forwards_cache_fields() -> None:
+    from alpi.tools.read_image import _finalize
+
+    calls = _sink_capture()
+    try:
+        assert _finalize(_completion("a cat")).ok
+        assert calls == [(100, 50, 0.01, 40, 0.002, "provider")]
+    finally:
+        tool_state_mod.set_usage_sink(None)

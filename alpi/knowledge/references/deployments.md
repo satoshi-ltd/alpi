@@ -11,7 +11,7 @@ Deployment shape follows trust boundary + availability needs. Profiles separate 
 | Laptop only | Interactive personal use. | Run `alpi`; daemon optional. |
 | Laptop + daemon | Schedules/host plane on same machine. | `alpi daemon start`. |
 | Home server | Always-on scheduler/host plane. | Pair desktop/mobile over host-plane WebSocket. |
-| One machine, many profiles | Work/personal/client separation. | One daemon supervises all profiles. |
+| One machine, many profiles | Different identities under one trust owner. | One daemon supervises all profiles; not a tenant boundary. |
 | Multi-device personal | Laptop + trusted server/peer. | ALP for alpi-to-alpi links. |
 | Small team/family | Multiple identities, explicit trust. | Separate profiles + ALP peers. |
 | Docker home server | Packaged always-on daemon on a Linux host. | See Docker shape below. |
@@ -44,6 +44,7 @@ alpi daemon restart
 - Updates must retain both `-f` arguments for `pull` and `up -d`; using the base file alone republishes its direct ports.
 - Several Alpis on one public host share one Caddy: one hostname and private upstream port per Alpi, all public WSS URLs on 443. Do not start one Caddy per instance because they would compete for 80/443.
 - `!reset` affects only the named `alpi` service. Every added `alpi-2`-style service must reset/remove its own ports and get its own Caddy route.
+- Give every mutually untrusted customer a separate container, VM, or OS account with its own Alpi home/volume and credentials. `member` and `profile_scope` restrict host RPC; they do not sandbox agent tools or turn profiles in one daemon into tenants. A shared Caddy may route one hostname to each isolated runtime while all internal ports remain private.
 
 Caddy obtaining a certificate and Alpi advertising a route are separate. The
 proxy never creates a connection or credential, and `host.endpoints` never
@@ -54,6 +55,7 @@ opens a listener.
 - **Desktop/mobile clients** talk to the daemon through `host.*`. Desktop supports a local socket plus paired remote host-plane endpoints; mobile starts from one paired endpoint. They never read profile files directly and never spawn `alpi`.
 - **Schedules and the host plane** need a running daemon. If one doesn't respond, check: profile, daemon status, config, logs. Email is an on-demand tool (no listener); failures show as `email` tool errors, not daemon downtime.
 - **ALP** is for trusted alpi-to-alpi communication across machines — not the local desktop host API.
+- **Profiles** separate identities and capabilities inside one trust owner. Use a separate runtime boundary when customers do not trust each other.
 
 ## What not to promise
 

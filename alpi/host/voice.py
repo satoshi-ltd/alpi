@@ -116,15 +116,7 @@ def script_for(home: Path, text: str) -> tuple[str, str]:
             {"role": "user", "content": text},
         ]
         result = llm.complete(messages=messages, **cfg_mod.resolve_model(cfg))
-        ledger.record(
-            home,
-            usd=float(getattr(result, "cost_usd", 0.0) or 0.0),
-            tokens=int(getattr(result, "input_tokens", 0) or 0)
-                  + int(getattr(result, "output_tokens", 0) or 0),
-            tokens_in=int(getattr(result, "input_tokens", 0) or 0),
-            tokens_out=int(getattr(result, "output_tokens", 0) or 0),
-            cfg_budget=cfg.budget,
-        )
+        ledger.record_completion(home, result, cfg_budget=cfg.budget)
         script = speakable_fallback(result.content or "")
         if not script:
             raise ValueError("empty script")

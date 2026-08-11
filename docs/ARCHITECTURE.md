@@ -120,6 +120,7 @@ alpi/
 ├── engine.py               turn runner, interrupt flag, tool loop
 ├── llm.py                  litellm stream() / complete() wrappers
 ├── session.py              Turn / ToolLog dataclasses, save/load
+├── prefix_diag.py          hashed conversation affinity + request-shape diagnostics
 ├── memory.py               MemoryStore (3 files, two-tier dedup, .bak)
 ├── home.py                 profile path resolution
 ├── config.py               YAML load/save, defaults, deep merge
@@ -402,6 +403,15 @@ Sibling to `research`, but can mutate: spawn a focused sub-agent with a chosen t
 **Budget**: hardcoded `MAX_STEPS = 30`. No config knob — it's a ceiling, not a target (sub-agent stops when done). If a real case needs more, bump the constant.
 
 **System prompt** is built from a single template plus the workspace root (when set): relative paths resolve under workspace, absolute paths go where the goal says, and the sub-agent is explicitly warned not to invent `/workspace/...` style roots.
+
+**Prompt-cache contract.** `messages[0]` is the stable system prefix and tool
+schemas are sorted by name. Volatile `# NOW`, workgroup, skill-hint, and relay
+state is composed once into the user turn's persisted `host_context` suffix,
+so normal history growth is append-only across live calls and every rehydrator.
+OpenRouter calls carry a hashed affinity for the logical conversation; other
+providers receive no OpenRouter-only fields. `prefix_diag.py` compares bounded
+request-shape hashes per conversation and records causes, never prompt text.
+Caching and diagnostics are best-effort and cannot fail a provider call.
 
 **Batch parallel mode** (v0.2.18). Both `research` and `delegate` accept `tasks: [...]` (up to 3) and run them concurrently via `ThreadPoolExecutor(max_workers=3)`. Isolation is provided by `_state.py`: `_emit`, `_interrupt_getter`, `_usage_sink` are `contextvars.ContextVar`, so each worker thread sees its own values without racing on module globals. Workers re-seed `interrupt_getter` + `usage_sink` from the parent context (Python's `ThreadPoolExecutor` doesn't propagate ContextVars automatically) and install a per-task prefixed `emit` so TUI progress lines read `[i/N] <tag> · <msg>`. Results aggregate into one markdown report with per-task sections; per-task failures are captured inline as `[failed: <error>]` instead of aborting the batch. Cap is hardcoded at 3 — bumping would need a config knob *and* would multiply LLM cost linearly; not a default worth moving.
 

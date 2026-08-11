@@ -28,7 +28,7 @@ def _rt(**over):
 
 @pytest.fixture(autouse=True)
 def _fast(monkeypatch):
-    monkeypatch.setattr(llm, "_compute_cost", lambda *a, **k: 0.0)
+    monkeypatch.setattr(llm, "_compute_cost_detail", lambda *a, **k: (0.0, "none"))
     monkeypatch.setattr(llm, "_backoff_sleep", lambda *a, **k: None)
 
 

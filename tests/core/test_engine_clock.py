@@ -47,9 +47,10 @@ def _fake_stream_final(text: str = "ok"):
     return _stream
 
 
-def test_run_turn_injects_fresh_now_block_before_user_message(
+def test_run_turn_carries_fresh_now_block_in_the_user_suffix(
     bootstrapped_home: Path, monkeypatch
 ) -> None:
+    """CL.4 — the NOW block rides the user turn (host-context suffix), never a strippable system message that would rewrite history."""
     monkeypatch.setenv("TZ", "Europe/Madrid")
 
     from alpi import engine as engine_mod
@@ -62,25 +63,26 @@ def test_run_turn_injects_fresh_now_block_before_user_message(
     engine.run_turn("hola, qué día es hoy?", lambda _ev: None)
 
     new_msgs = engine.session.messages[baseline:]
-    now_msgs = [
+    assert not [
         m for m in new_msgs
-        if m["role"] == "system" and m["content"].startswith("# NOW\n")
-    ]
-    assert len(now_msgs) == 1
+        if m["role"] == "system" and str(m["content"]).startswith("# NOW")
+    ], "no system NOW messages anymore"
 
     user_msgs = [m for m in new_msgs if m["role"] == "user"]
     assert user_msgs
-    assert new_msgs.index(now_msgs[0]) < new_msgs.index(user_msgs[0])
-
-    block = now_msgs[0]["content"]
+    block = user_msgs[0]["content"]
+    assert block.startswith("hola, qué día es hoy?")
+    assert "# HOST CONTEXT" in block
+    assert "# NOW" in block
     assert "Local:" in block
     assert "(Europe/Madrid)" in block
     assert "UTC:" in block
 
 
-def test_multi_turn_keeps_only_the_latest_now_block(
+def test_multi_turn_history_is_append_only_with_per_turn_now(
     bootstrapped_home: Path, monkeypatch
 ) -> None:
+    """Each turn carries its own dated suffix; prior turns are never rewritten (the header says the newest supersedes)."""
     monkeypatch.setenv("TZ", "UTC")
 
     from alpi import engine as engine_mod
@@ -90,20 +92,22 @@ def test_multi_turn_keeps_only_the_latest_now_block(
     engine = Engine(home=bootstrapped_home, cfg=cfg)
 
     engine.run_turn("first", lambda _ev: None)
+    snapshot = [dict(m) for m in engine.session.messages]
     engine.run_turn("second", lambda _ev: None)
     engine.run_turn("third", lambda _ev: None)
 
-    now_msgs = [
-        m for m in engine.session.messages
-        if m["role"] == "system" and m["content"].startswith("# NOW\n")
-    ]
-    assert len(now_msgs) == 1, "stale NOW blocks must be stripped each turn"
-    assert "(UTC)" in now_msgs[0]["content"]
+    assert engine.session.messages[: len(snapshot)] == snapshot, (
+        "a new turn must never rewrite prior provider-visible messages"
+    )
+    user_msgs = [m for m in engine.session.messages if m["role"] == "user"]
+    assert len(user_msgs) == 3
+    assert all("# NOW" in m["content"] for m in user_msgs)
 
 
-def test_stale_now_blocks_from_prior_run_are_replaced(
+def test_stale_now_blocks_from_prior_run_survive_untouched(
     bootstrapped_home: Path, monkeypatch
 ) -> None:
+    """Legacy system NOW blocks (pre-CL.4 sessions) are historical bytes now — deleting them would split the provider prefix."""
     monkeypatch.setenv("TZ", "UTC")
 
     from alpi import engine as engine_mod
@@ -117,10 +121,12 @@ def test_stale_now_blocks_from_prior_run_are_replaced(
 
     engine.run_turn("what time is it?", lambda _ev: None)
 
-    now_msgs = [
+    legacy = [
         m for m in engine.session.messages
         if m["role"] == "system" and m["content"].startswith("# NOW\n")
     ]
-    assert len(now_msgs) == 1
-    assert "stale-1" not in now_msgs[0]["content"]
-    assert "stale-2" not in now_msgs[0]["content"]
+    assert len(legacy) == 2, "legacy blocks stay as immutable history"
+    user_msgs = [m for m in engine.session.messages if m["role"] == "user"]
+    assert user_msgs and "# NOW" in user_msgs[-1]["content"], (
+        "the fresh clock arrives in the new turn's suffix instead"
+    )

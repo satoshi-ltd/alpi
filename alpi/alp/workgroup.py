@@ -267,6 +267,7 @@ def _root(home: Path) -> Path:
 
 
 _WG_ID_RE = _re.compile(r"^[A-Za-z0-9_-]+$")
+_TURN_ID_RE = _re.compile(r"^[0-9a-f]{32}$")
 
 
 def _wg_dir(home: Path, wg_id: str) -> Path:
@@ -274,6 +275,15 @@ def _wg_dir(home: Path, wg_id: str) -> Path:
     if not _WG_ID_RE.match(wg_id or ""):
         raise ValueError(f"invalid workgroup id: {wg_id!r}")
     return _root(home) / wg_id
+
+
+def validate_turn_id(value: Any) -> str:
+    """Validate the optional daemon-to-transcript correlation id."""
+    if value in (None, ""):
+        return ""
+    if not isinstance(value, str) or not _TURN_ID_RE.fullmatch(value):
+        raise ValueError("turn_id must be 32 lowercase hexadecimal characters")
+    return value
 
 
 def _utcnow() -> str:
@@ -567,7 +577,7 @@ def _purge_after_delete(home: Path, wg_id: str) -> list[str]:
             # Unconditional: a write-back in flight resurrects a plain remove.
             sub_mod.tombstone(prof_dir, wg_id)
             if had:
-                sub_mod.save(prof_dir, sub_mod.load(prof_dir))
+                sub_mod.compact(prof_dir)
                 purged.append(prof_dir.name)
         except Exception:  # noqa: BLE001
             continue
@@ -575,7 +585,7 @@ def _purge_after_delete(home: Path, wg_id: str) -> list[str]:
         had = sub_mod.get(_ROOT, wg_id) is not None
         sub_mod.tombstone(_ROOT, wg_id)
         if had:
-            sub_mod.save(_ROOT, sub_mod.load(_ROOT))
+            sub_mod.compact(_ROOT)
             purged.append("default")
     except Exception:  # noqa: BLE001
         pass
@@ -1397,6 +1407,12 @@ def register(server: alp_server.Server, home: Path) -> None:
         cost = (params or {}).get("cost") or {}
         if not isinstance(cost, dict):
             cost = {}
+        try:
+            turn_id = validate_turn_id((params or {}).get("turn_id"))
+        except ValueError as e:
+            raise alp_server.HandlerError(
+                -32602, "invalid-params", data={"detail": str(e)},
+            ) from e
 
         wg = load(home, wg_id)
         if wg is None:
@@ -1444,6 +1460,8 @@ def register(server: alp_server.Server, home: Path) -> None:
             "nonce": nonce,
             "ciphertext": ciphertext,
         }
+        if turn_id:
+            entry["turn_id"] = turn_id
         if declared_usd or declared_tokens:
             entry["cost"] = {"usd": declared_usd, "tokens": declared_tokens}
             if declared_in or declared_out:

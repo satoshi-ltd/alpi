@@ -51,3 +51,31 @@ def test_hydrate_injects_prior_turns(tmp_path: Path) -> None:
     assert roles == ["system", "system", "user", "assistant", "user", "assistant"]
     assert msgs[2]["content"] == "hello"
     assert msgs[3]["content"] == "hi back"
+
+
+def test_host_context_round_trips_byte_stable(tmp_path) -> None:
+    from alpi.alp import mention_thread
+    from alpi.session import with_host_context
+
+    mention_thread.append(
+        tmp_path, "quill", "hola", "respuesta", host_context="# NOW\nLocal: x",
+    )
+    thread = mention_thread.load(tmp_path, "quill")
+    assert thread.turns[-1].host_context == "# NOW\nLocal: x"
+
+    msgs: list[dict] = []
+    mention_thread.hydrate(msgs, thread)
+    user = next(m for m in msgs if m["role"] == "user")
+    assert user["content"] == with_host_context("hola", "# NOW\nLocal: x")
+
+
+def test_host_context_absent_for_legacy_entries(tmp_path) -> None:
+    from alpi.alp import mention_thread
+
+    mention_thread.append(tmp_path, "quill", "hola", "respuesta")
+    p = tmp_path / "mentions" / "quill.json"
+    assert "host_context" not in p.read_text(), "legacy shape preserved when empty"
+    msgs: list[dict] = []
+    mention_thread.hydrate(msgs, mention_thread.load(tmp_path, "quill"))
+    user = next(m for m in msgs if m["role"] == "user")
+    assert user["content"] == "hola"

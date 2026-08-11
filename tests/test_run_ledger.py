@@ -319,3 +319,69 @@ def test_record_persists_model_and_routing(home: Path) -> None:
     assert rows[1]["model"] == "openrouter/deep"
     assert "escalated" in rows[1]["routing"]
     assert rows[0]["model"] is None and rows[0]["routing"] is None
+
+
+def test_record_persists_token_and_cache_counts(home: Path) -> None:
+    run_ledger.record(
+        home, kind="agent", outcome="ok", elapsed_s=1.0,
+        tokens_in=1000, tokens_out=50, tokens_cached=800, tokens_measured=1000,
+    )
+    run_ledger.record(home, kind="agent", outcome="ok", elapsed_s=1.0)
+    rows = run_ledger.read(home)
+    measured, legacy = rows[1], rows[0]
+    assert measured["tokens_in"] == 1000
+    assert measured["tokens_cached"] == 800
+    assert measured["tokens_measured"] == 1000
+    assert legacy["tokens_cached"] is None, "absence of provider data is not a miss"
+
+
+def test_engine_record_run_reads_the_turn_tally(home: Path, monkeypatch) -> None:
+    from alpi.engine import Engine
+    from alpi.tools import _state
+
+    monkeypatch.delenv("ALPI_WORKGROUP_DISPATCH", raising=False)
+    monkeypatch.delenv("ALPI_SCHEDULE_CHILD", raising=False)
+    _state.reset_turn_usage()
+    _state.bump_turn_usage(1000, 50, 0.01, 800)
+    _state.bump_turn_usage(500, 20, 0.01, None)
+    fake = _fake_engine(home)
+    fake._turn_prefix_reasons = {"tools", "system"}
+    try:
+        Engine._record_run(
+            fake, elapsed=1.0, turn_completed=True,
+            turn_tools=[], assistant="done",
+        )
+    finally:
+        _state.reset_turn_usage()
+    row = run_ledger.read(home, kind="agent")[0]
+    assert row["tokens_in"] == 1500
+    assert row["tokens_out"] == 70
+    assert row["tokens_cached"] == 800
+    assert row["tokens_measured"] == 1000, (
+        "the unreported completion stays out of the denominator"
+    )
+    assert row["cache_diag"] == "system,tools"
+
+
+def test_engine_record_run_without_measured_turns_stays_tristate(
+    home: Path, monkeypatch,
+) -> None:
+    from alpi.engine import Engine
+    from alpi.tools import _state
+
+    monkeypatch.delenv("ALPI_WORKGROUP_DISPATCH", raising=False)
+    monkeypatch.delenv("ALPI_SCHEDULE_CHILD", raising=False)
+    _state.reset_turn_usage()
+    _state.bump_turn_usage(500, 20, 0.01, None)
+    try:
+        Engine._record_run(
+            _fake_engine(home), elapsed=1.0, turn_completed=True,
+            turn_tools=[], assistant="done",
+        )
+    finally:
+        _state.reset_turn_usage()
+    row = run_ledger.read(home, kind="agent")[0]
+    assert row["tokens_in"] == 500
+    assert row["tokens_cached"] is None
+    assert row["tokens_measured"] is None
+    assert row["cache_diag"] is None, "diagnosis only accompanies measured turns"

@@ -114,6 +114,12 @@ async def _run_turn_stream(
         )
         thread = mention_thread.load(home, peer_id)
         mention_thread.hydrate(engine.session.messages, thread)
+        _prior = getattr(thread, "turns", None)
+        if _prior:
+            from alpi.session import relay_peer_from_host_context
+            engine._last_relay_peer = relay_peer_from_host_context(
+                getattr(_prior[-1], "host_context", "") or "",
+            )
         active.engine = engine
         active.session_id = engine.session.id
 
@@ -176,7 +182,10 @@ async def _run_turn_stream(
             if listing:
                 full = "\n\n".join(x for x in (full, listing) if x)
         if full and not state["interrupted"]:
-            mention_thread.append(home, peer_id, prompt, full)
+            mention_thread.append(
+                home, peer_id, prompt, full,
+                host_context=getattr(engine, "last_host_context", ""),
+            )
         yield {
             "kind": "final",
             "text": full,
@@ -204,6 +213,12 @@ def _run_turn(
 
     thread = mention_thread.load(home, peer_id)
     mention_thread.hydrate(engine.session.messages, thread)
+    _prior = getattr(thread, "turns", None)
+    if _prior:
+        from alpi.session import relay_peer_from_host_context
+        engine._last_relay_peer = relay_peer_from_host_context(
+            getattr(_prior[-1], "host_context", "") or "",
+        )
 
     # Expose the live engine so ``link.cancel`` can reach in and flip
     # the interrupt flag. Cleared on exit regardless of success/failure.
@@ -255,7 +270,10 @@ def _run_turn(
         text = "[cancelled]"
     # Mention threads live in ``mentions/<sender>.json``, not ``sessions/``.
     if text and not interrupted:
-        mention_thread.append(home, peer_id, prompt, text)
+        mention_thread.append(
+            home, peer_id, prompt, text,
+            host_context=getattr(engine, "last_host_context", ""),
+        )
 
     return {
         "text": text,

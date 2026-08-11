@@ -196,7 +196,7 @@ def test_spawn_keeps_connection_context(
     monkeypatch.setattr(
         review,
         "_run_review",
-        lambda *_args: seen.append((current().connection_id, current().device_id)),
+        lambda *_args, **_kw: seen.append((current().connection_id, current().device_id)),
     )
 
     with use(ConnectionContext("conn_javi", "dev_phone", "remote")):
