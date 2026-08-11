@@ -43,25 +43,30 @@ pipeline_steps:
     task: "research the hotel's public footprint into work/enrichment.md, or hand off skipped when the web is unavailable"
     turn_budget_s: 1800
     gate: { argv: [npm, run, "check:enrichment"], cwd: "projects/{slug}" }
+    paths: ["work/**"]
   intake:
     owner: scout
     task: "produce work/intake.md and src/config/site.json from brief.md and work/enrichment.md"
     turn_budget_s: 1800
     gate: { argv: [npm, run, "check:intake"], cwd: "projects/{slug}" }
+    paths: ["work/**", "src/config/site.json"]
   assets:
     owner: muse
     task: "produce assets/manifest.yaml from the supplied media and the intake, then optimize"
     gate: { argv: [npm, run, "check:assets"], cwd: "projects/{slug}" }
+    paths: ["assets/**", "work/status.yaml"]
   content:
     owner: quill
     task: "author the source-locale content in src/content/**"
     turn_budget_s: 1800
     gate: { argv: [npm, run, check:content], cwd: "projects/{slug}" }
+    paths: ["src/content/**", "work/status.yaml", "assets/manifest.yaml"]
   translation:
     owner: lingua
     task: "bring every declared locale to parity with the source content"
     turn_budget_s: 1800
     gate: { argv: [npm, run, "check:locales"], cwd: "projects/{slug}" }
+    paths: ["src/content/**", "work/status.yaml"]
   build:
     owner: pixel
     task: "build the selected tier and validate the generated dist"
@@ -73,14 +78,19 @@ pipeline_steps:
   media-update:
     owner: muse
     task: "map the client media now in assets/source/ to manifest slots"
+    turn_budget_s: 1800
     gate: { argv: [npm, run, "check:assets"], cwd: "projects/{slug}" }
+    paths: ["assets/**", "work/status.yaml"]
   media-config:
     owner: scout
     task: "point brand.logo and the gallery page at the slots the manifest now supplies"
+    turn_budget_s: 1800
     gate: { argv: [npm, run, "check:intake"], cwd: "projects/{slug}" }
+    paths: ["work/**", "src/config/site.json"]
   media-build:
     owner: pixel
     task: "rebuild the selected tier with the optimized client media"
+    turn_budget_s: 1800
     gate: { argv: [npm, run, "check:build"], cwd: "projects/{slug}" }
   media-qa:
     owner: lens
@@ -88,16 +98,21 @@ pipeline_steps:
 
   content-update:
     owner: scout
-    task: "fold the verified update material staged in work/ into site.json and work/intake.md"
+    task: "fold first-party work/update-*.md into site.json and work/intake.md as canonical client facts"
     gate: { argv: [npm, run, "check:intake"], cwd: "projects/{slug}" }
+    paths: ["work/**", "src/config/site.json"]
   content-copy:
     owner: quill
     task: "apply the folded facts to the source-locale content in src/content/**"
+    turn_budget_s: 1800
     gate: { argv: [npm, run, check:content], cwd: "projects/{slug}" }
+    paths: ["src/content/**", "work/status.yaml", "assets/manifest.yaml"]
   content-locales:
     owner: lingua
     task: "bring every declared locale back to parity with the updated source content"
+    turn_budget_s: 1800
     gate: { argv: [npm, run, "check:locales"], cwd: "projects/{slug}" }
+    paths: ["src/content/**", "work/status.yaml"]
   content-build:
     owner: pixel
     task: "rebuild the selected tier with the updated content"
@@ -113,18 +128,25 @@ pipeline_steps:
     owner: scout
     task: "apply the approved appearance configuration and the config-level notes"
     gate: { argv: [npm, run, "check:intake"], cwd: "projects/{slug}" }
+    paths: ["work/**", "src/config/site.json"]
   review-content:
     owner: quill
     task: "apply the source-locale content notes of the open review order"
+    turn_budget_s: 1800
     gate: { argv: [npm, run, check:content], cwd: "projects/{slug}" }
+    paths: ["src/content/**", "work/status.yaml", "assets/manifest.yaml"]
   review-translation:
     owner: lingua
     task: "apply the locale-specific notes and restore parity for the changed content"
+    turn_budget_s: 1800
     gate: { argv: [npm, run, "check:locales"], cwd: "projects/{slug}" }
+    paths: ["src/content/**", "work/status.yaml"]
   review-media:
     owner: muse
     task: "apply the manifest and media notes of the open review order"
+    turn_budget_s: 1800
     gate: { argv: [npm, run, "check:assets"], cwd: "projects/{slug}" }
+    paths: ["assets/**", "work/status.yaml"]
   review-build:
     owner: pixel
     task: "rebuild the selected tier with the applied review fixes"

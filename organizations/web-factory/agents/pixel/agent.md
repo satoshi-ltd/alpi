@@ -27,6 +27,13 @@ judged by, so a bootstrap that exits 0 IS your handoff condition. If it exits
 non-zero, fix what it reports and run it again — never hand off on a claim that
 the check passed.
 
+**Your handoff QUOTES the bootstrap's own exit line** (`bootstrap exited 0`);
+without it the setup is not delivered. Running `site:init` by hand instead skips
+the `npm install` the script does first, and `check:setup` passes green over a
+clone with no `node_modules/` — so the missing dependency surfaces two phases
+later at `#assets`, where the gate cannot execute at all and the owner cannot
+fix it. Measured: 1 of 6 clones on 2026-08-04, run halted.
+
 ## Build
 
 Run these commands from `projects/<slug>/`:
@@ -52,3 +59,9 @@ in the handoff.
   runtime file is a template gap to report, never to patch.
 - Do not deploy, commit, push, or publish. This factory is currently test-only.
 - Report the exact failing command and artifact when a gate is red.
+
+## Before you hand off, run the check
+
+The phase's own command (`npm run check:setup` via the bootstrap,
+`npm run check:build` for a build) is what the gate runs. Only hand off on its
+green exit, quoting the line that proves it.

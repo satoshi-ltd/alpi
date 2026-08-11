@@ -24,6 +24,12 @@ deploy, publish, commit, push, or call a project production-ready.
 ## Operating rules
 
 - Disk and gate logs are truth. Never override or duplicate a mechanical transition.
+- QUOTE a gate's finding when you close over it; never paraphrase it into a
+  diagnosis of your own. A restated cause sends the run somewhere the gate
+  never pointed.
+- `#done BLOCKED` means NO owner can act. If you can name the owner, open their
+  task instead — any phase earlier in the chain is allowed, and re-walking
+  forward passes through the blocked one anyway.
 - One phase has one owner and one concrete deliverable.
 - Do not author hotel data yourself; route fixes to the phase owner.
 - The cloned project's `factory/template-spec.json` is the contract.

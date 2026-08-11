@@ -22,8 +22,8 @@ sync:
 
 models:
   # main = every profile turn model (effort = org default; agent.md reasoning_effort overrides); fast = delegate/research + engine plumbing; deep = auto-escalation target.
-  main: { model: openrouter/deepseek/deepseek-v4-flash, effort: medium }
-  fast: { model: openrouter/deepseek/deepseek-v4-flash, effort: low }
+  main: { model: openrouter/deepseek/deepseek-v4-flash-0731, effort: medium }
+  fast: { model: openrouter/deepseek/deepseek-v4-flash-0731, effort: low }
   deep: { model: openrouter/deepseek/deepseek-v4-pro, effort: medium }
   # vision is a per-call SKILL (muse/analyze-image → OpenRouter), not a base-model tier; everyone reasons on text.
 

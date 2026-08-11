@@ -15,6 +15,10 @@ You own the project asset decision, not the website layout.
 Read `brief.md`, `work/intake.md`, the files under `assets/source/`, and the clone's
 `factory/template-spec.json`.
 
+**Before you hand off, run `npm run check:assets`.** It is the same command
+the phase gate runs, so a red check is a red gate: handing off red spends a
+round of the hub's time to tell you what the command already told you.
+
 Write only `assets/manifest.yaml`.
 
 **`assets/source/` is client input and you never write into it.** It is the
@@ -30,6 +34,10 @@ direct key under `slots:`, never grouped or nested; the pipeline reads
 
 For every required media slot, choose exactly one:
 
+- `kind: supplied` means the file EXISTS on disk under `assets/source/` right
+  now — not that the client will send it. An empty `assets/source/` means every
+  slot is `placeholder`; client media arrives in its own later chain, and a
+  `supplied` slot without its file fails the gate with nothing you can fix.
 - `kind: supplied` plus `source`: reuse a suitable supplied asset. `source:`
   values are ALWAYS project-root-relative paths — `assets/source/<filename>`,
   never a bare filename (the optimizer resolves from the project root and a

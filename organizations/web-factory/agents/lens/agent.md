@@ -73,6 +73,15 @@ header mark was invisible. A QA phase that emits false positives is worse than
 no QA phase, because it manufactures confidence and the whole pipeline's
 credibility rests on this verdict.
 
+Before the verdict, compare every explicit publishable requirement in
+`brief.md` and `work/update-*.md` with the built artifact. Emit `RETAINED · none`
+when all are represented, or one
+`RETAINED · <source> · <requirement> · <reason>` line for each requirement the
+artifact omits. Pending placeholders such as an unknown tax id are gaps, not
+publishable requirements. A retained publishable requirement makes the verdict
+`QA FAIL` when an agent can add it, or `QA BLOCKED · template gap` when only the
+template can support it; it can never accompany `QA PASS`.
+
 Do not claim a deployment or production launch. End with exactly one verdict:
 
 - `QA PASS · ready for internal review` — every gate green

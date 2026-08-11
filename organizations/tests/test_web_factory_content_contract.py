@@ -96,6 +96,12 @@ def test_slug_contract_prevents_route_collisions():
     assert "flat `slots:` mapping at the root" in muse
 
 
+def test_slug_contract_keeps_media_prefix_out_of_canonical_slug():
+    scout = " ".join((AGENTS / "scout" / "agent.md").read_text().split())
+    assert "The canonical slug NEVER carries that media prefix itself" in scout
+    assert "write `deluxe`, not `room-deluxe`" in scout
+
+
 def test_lens_never_penalizes_brevity():
     lens = (AGENTS / "lens" / "agent.md").read_text()
     assert "brevity alone is NEVER a defect" in lens
@@ -438,3 +444,61 @@ def test_lens_must_back_every_claim_or_label_it():
     assert "write `opinion:` in front of the sentence" in lens
     assert "manufactures confidence" in lens
 
+
+def test_client_updates_are_canonical_and_retained_requirements_block_qa_pass():
+    scout = " ".join((AGENTS / "scout" / "agent.md").read_text().split())
+    lens = " ".join((AGENTS / "lens" / "agent.md").read_text().split())
+    recipe = RECIPE.read_text()
+    assert "`work/update-*.md` are first-party canonical sources" in scout
+    assert "same provenance as `brief.md`" in scout
+    assert "RETAINED · none" in lens
+    assert "it can never accompany `QA PASS`" in lens
+    assert "first-party work/update-*.md" in recipe
+
+
+def test_site_json_is_scouts_alone():
+    lingua = " ".join((AGENTS / "lingua" / "agent.md").read_text().split())
+    quill = " ".join((AGENTS / "quill" / "agent.md").read_text().split())
+    assert "`src/config/site.json` is READ-ONLY for you" in lingua
+    assert "NAME it in your handoff" in lingua
+    assert "**`site.json` is not yours either.**" in quill
+    assert "never under your own edit" in quill
+
+
+def test_pixel_handoff_quotes_the_bootstrap_exit():
+    pixel = " ".join((AGENTS / "pixel" / "agent.md").read_text().split())
+    assert "**Your handoff QUOTES the bootstrap's own exit line**" in pixel
+    assert "skips the `npm install` the script does first" in pixel
+    assert "never a hand-rolled `npm install` + `site:init`" in pixel
+
+
+def test_the_five_rules_the_fleet_run_proved_are_stated():
+    A = {n: " ".join((AGENTS / n / "agent.md").read_text().split())
+         for n in ("muse", "lingua", "scout", "mira", "pixel")}
+    assert "`kind: supplied` means the file EXISTS on disk" in A["muse"]
+    assert "An empty `assets/source/` means every slot is `placeholder`" in A["muse"]
+    assert "A translation changes VALUES, never SHAPE" in A["lingua"]
+    assert "**The `name` column is written in the SOURCE locale**" in A["scout"]
+    assert "QUOTE a gate's finding when you close over it" in A["mira"]
+    assert "`#done BLOCKED` means NO owner can act" in A["mira"]
+    for owner, cmd in (("muse", "check:assets"), ("lingua", "check:locales"), ("pixel", "check:build")):
+        assert cmd in A[owner], owner
+        assert "hand off" in A[owner], owner
+
+
+def test_every_phase_owner_names_the_gate_it_must_run():
+    import yaml
+    recipe = yaml.safe_load(RECIPE.read_text())
+    owed: dict[str, set[str]] = {}
+    for phase, spec in (recipe.get("pipeline_steps") or {}).items():
+        argv = (spec.get("gate") or {}).get("argv") or []
+        if argv and argv[-1].startswith("check:"):
+            owed.setdefault(spec["owner"], set()).add(argv[-1])
+    assert owed, "recipe declares no npm gates"
+    missing = [
+        f"{owner} never names {cmd}"
+        for owner, cmds in owed.items()
+        for cmd in cmds
+        if cmd not in " ".join((AGENTS / owner / "agent.md").read_text().split())
+    ]
+    assert not missing, missing

@@ -68,8 +68,8 @@ and a separate logo, which is exactly what the media flow needs.
 
 | Case | Brief | Media | Notes |
 |---|---:|---:|---|
-| `jaime-primero/` | 885 w | 13 files | Family resort, content-rich: pools, splash park, show cooking. Engine id `100033800`. The widest amenity inventory of any case. |
-| `kivir/` | 971 w | 11 files | City hotel with supplied photography and per-room images. Engine id `100376355`. |
+| `jaime-primero/` | 885 w | 13 files | Family resort, content-rich: pools, splash park, show cooking. Engine id `100033800`. The widest amenity inventory of any case. Deliberately NOT in the reference format: with `kivir` it is the fixture that still makes `#enrich` explore, so rewriting it to the maestranza sheet would delete the only coverage of that path. |
+| `kivir/` | 971 w | 11 files | City hotel with supplied photography and per-room images. Engine id `100376355`. Deliberately NOT in the reference format — see `jaime-primero`; the pair stays as the enrichment-exercising fixtures. |
 
 Use their metadata block as the shape to ask clients for — see
 `../BRIEFING.md`. `hotel-abad/` reaches the same shape from the other

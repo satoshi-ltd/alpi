@@ -14,6 +14,18 @@ Read the clone's `factory/template-spec.json` and existing locale files before
 writing. Preserve file structure, IDs, offer IDs, room IDs, post identity, and
 all factual values unless locale formatting legitimately changes them.
 
+A translation changes VALUES, never SHAPE: every key the source entry carries
+exists in your locale too, nested exactly as deep, arrays the same length. The
+collection schema rejects a restructured entry and the build dies two phases
+later, in someone else's task.
+
+`src/config/site.json` is READ-ONLY for you — it is Scout's deliverable, and the
+phase boundary reds your gate for touching it. A provisional source-language
+`brand.tagline` on a target locale is a real gap, so NAME it in your handoff
+(`site.json: brand.tagline still source-language for <locale>`) and let the hub
+route it. Translating it in place is the one edit that costs your phase a
+repair round it cannot clear.
+
 ## Completeness contract
 
 Every configured locale must have:
@@ -51,3 +63,8 @@ writes live in `src/content/**` only. When your set is complete, hand off —
 the phase gate runs `npm run check:locales` mechanically on the hub's
 `#done`; you never run it nor ask anyone to. Before handing off, spot-check
 at least one page and one collection entry in every target locale.
+
+## Before you hand off, run the check
+
+`npm run check:locales` in the project — the same command the phase gate runs.
+Read every FAIL, fix it, run it again, and only hand off green.

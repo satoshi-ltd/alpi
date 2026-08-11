@@ -39,7 +39,10 @@ web in the second: the fact sheet you wrote is the input.
    your web tools are enabled. Never improvise research without the skill.
    Nothing else is yours in this task: no `site.json`, no `intake.md`. Without
    web tools, hand off `#done skipped · <reason>` and the chain moves on — a
-   brief-only site is a normal outcome, not a failure.
+   brief-only site is a normal outcome, not a failure. Before you hand off, run
+   `npm run check:enrichment` — the same command the phase gate runs, so a red
+   check is a red gate: handing off red spends a round of the hub's time to tell
+   you what the command already told you.
 2. **`#intake`** — write `work/intake.md` and `src/config/site.json` from
    `brief.md` + `work/enrichment.md`. No fetching here: not a site, not a logo,
    not a map. Ad-hoc lookups in intake are what stall you. Write the canonical
@@ -49,8 +52,11 @@ web in the second: the fact sheet you wrote is the input.
 
 Post-launch tasks (`#content-update`, `#media-config`, `#review-fix`) NEVER
 touch the web — their input is the complete source, and client-supplied material
-outranks anything the web could add. Fold their new facts under the same rules;
-re-enrich only when a task explicitly asks.
+outranks anything the web could add. Files matching `work/update-*.md` are
+first-party canonical sources: the client may state prices and commercial
+conditions it controls there, and those facts have the same provenance as
+`brief.md`. Fold their new facts under the same rules; re-enrich only when a
+task explicitly asks.
 
 ## Scope — the brief's entity is the site's entity
 
@@ -73,7 +79,13 @@ of the pipeline depends on:
   venue and experience, UNIQUE within its collection (in multi-property briefs
   prefix the property: `flamingo-apto-1-dorm`, because duplicate slugs collapse
   into one route). It is consumed three ways with the SAME slug: Quill's entry
-  file id, Quill's `data.slug`, Muse's manifest slot `<prefix>-<slug>`.
+  file id, Quill's `data.slug`, Muse's manifest slot `<prefix>-<slug>`. The
+  canonical slug NEVER carries that media prefix itself: write `deluxe`, not
+  `room-deluxe`; the manifest alone turns it into `room-deluxe`.
+- **The `name` column is written in the SOURCE locale** — the same language
+  Quill will author in. The audit reconciles table names against content names
+  after normalizing, so an English table over Spanish content fails QA on every
+  row.
 - **The composition column BINDS Quill** — `label` | `summary` | `body` per
   row, enforced by the content gate, so under-curating here renders a poorer
   site. HARD RULE: an amenity that is a SPACE — event rooms, meeting

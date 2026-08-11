@@ -105,6 +105,11 @@ entries sharing a shortened slug collapse into one route. When `check:content`
 reports "no conventional manifest slot", align the slug with the table; NEVER
 add an `image` field.
 
+**`site.json` is not yours either.** You READ it; Scout owns it. A config gap you
+notice (a tagline in the wrong language, a missing `seo` seed) goes in your
+handoff by name, never under your own edit — the phase boundary reds your gate
+for touching it and restoring the file does not undo the round.
+
 **Media is not yours.** NEVER write `image`, `gallery`, `cover` or any media
 field — leave them absent, always. The template resolves every image by slug
 convention from the manifest, so any path you write is a defect. Describe
