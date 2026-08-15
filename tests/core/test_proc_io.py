@@ -55,6 +55,17 @@ async def test_drain_tail_handles_none_stream() -> None:
 
 
 @pytest.mark.asyncio
+async def test_drain_tail_observes_every_line() -> None:
+    reader = asyncio.StreamReader()
+    reader.feed_data(b"one\ntwo\n")
+    reader.feed_eof()
+    seen: list[str] = []
+
+    assert await drain_tail(reader, on_line=seen.append) == "one\ntwo"
+    assert seen == ["one", "two"]
+
+
+@pytest.mark.asyncio
 async def test_drain_tail_finishes_when_child_killed() -> None:
     proc = await asyncio.create_subprocess_exec(
         sys.executable, "-c",

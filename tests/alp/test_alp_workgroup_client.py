@@ -149,6 +149,38 @@ def test_remove_returns_false_for_unknown(short_tmp: Path) -> None:
     assert sub_mod.load(home) == []
 
 
+@pytest.mark.asyncio
+async def test_pull_does_not_overwrite_cursor_advanced_during_long_poll(
+    short_tmp: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from alpi import service
+
+    home = short_tmp / "member"
+    home.mkdir()
+    sub_mod.upsert(home, sub_mod.Subscription(
+        wg_id="wg_race", name="race", hub_id="hub", hub_pubkey="h" * 44,
+    ))
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def delayed_call(*args, **kwargs):
+        entered.set()
+        await release.wait()
+        return {"posts": [], "head": 3, "paused": False, "members": []}
+
+    monkeypatch.setattr(wc, "_call", delayed_call)
+    pending = asyncio.create_task(wc.pull(home, "wg_race", wait_s=25))
+    await entered.wait()
+    service._advance_member_cursor(home, "wg_race", 9)
+    release.set()
+    await pending
+
+    stored = sub_mod.get(home, "wg_race")
+    assert stored is not None
+    assert stored.last_seq == 3
+    assert stored.last_responded_seq == 9
+
+
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_join_persists_subscription_and_pull_decrypts(
@@ -1829,6 +1861,41 @@ async def test_post_allows_blocked_override_on_a_dormant_chain_phase(
 
 
 @pytest.mark.asyncio
+async def test_automatic_hub_cannot_block_before_final_repair(
+    short_tmp: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = short_tmp / "hubauto"
+    home.mkdir()
+    wg = _dormant_chain_hub(home)
+    await wc.post(home, wg.meta.id, b"@muse #task #media-update map the client media")
+    monkeypatch.setenv("ALPI_WORKGROUP_DISPATCH", wg.meta.id)
+
+    with pytest.raises(ValueError, match="pipeline-blocked-premature"):
+        await wc.post(
+            home, wg.meta.id,
+            b"#done BLOCKED \xc2\xb7 media-update \xc2\xb7 owner stayed silent",
+        )
+
+
+@pytest.mark.asyncio
+async def test_final_repair_may_block_a_pipeline(
+    short_tmp: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = short_tmp / "hubfinal"
+    home.mkdir()
+    wg = _dormant_chain_hub(home)
+    await wc.post(home, wg.meta.id, b"@muse #task #media-update map the client media")
+    monkeypatch.setenv("ALPI_WORKGROUP_DISPATCH", wg.meta.id)
+    monkeypatch.setenv("ALPI_WORKGROUP_FINAL_REPAIR", "1")
+
+    out = await wc.post(
+        home, wg.meta.id,
+        b"#done BLOCKED \xc2\xb7 media-update \xc2\xb7 owner stayed silent",
+    )
+    assert isinstance(out.get("seq"), int)
+
+
+@pytest.mark.asyncio
 async def test_post_allows_skipped_override_on_a_dormant_chain_phase(
     short_tmp: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2283,6 +2350,13 @@ async def test_a_completed_pipeline_can_be_triggered_again(
     assert _transcript_texts(home, wg)[-1] == (
         "@muse #task #media-update · install client media"
     )
+    raw = wg_mod._read_transcript(wg_mod._wg_dir(home, wg.meta.id))
+    marked = [int(post["seq"]) for post in raw if post.get("pipeline_trigger") is True]
+    assert marked == [first["seq"], second["seq"]]
+
+    from alpi.host import workgroup as host_wg
+    run = host_wg.fold_task_state(home, wg.meta.id)["pipeline_run"]
+    assert run["started_seq"] == second["seq"]
 
 
 @pytest.mark.asyncio
@@ -2335,8 +2409,20 @@ def test_qa_verdict_mismatch_is_rejected(short_tmp: Path, monkeypatch) -> None:
         wc._check_qa_verdict_respected(
             home, wg, posts, "#done qa PASS · all gates green", "HUB",
         )
+    with pytest.raises(ValueError, match="qa-verdict-mismatch"):
+        wc._check_qa_verdict_respected(
+            home, wg, posts,
+            "#done review-qa · No QA FAIL finding to route", "HUB",
+        )
     wc._check_qa_verdict_respected(
         home, wg, posts, "#done BLOCKED · lens found real defects", "HUB",
+    )
+    with pytest.raises(ValueError, match="qa-verdict-mismatch"):
+        wc._check_qa_verdict_respected(
+            home, wg, posts, "#done BLOCKED·lens found real defects", "HUB",
+        )
+    wc._check_qa_verdict_respected(
+        home, wg, posts, "#done review-qa · QA FAIL · broken alt text", "HUB",
     )
     posts[1]["text"] = "Verdict: **QA PASS** · clean"
     wc._check_qa_verdict_respected(

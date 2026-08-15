@@ -56,6 +56,33 @@ def test_targeted_task_does_not_wake_unmentioned_peer() -> None:
     assert reason is None
 
 
+def test_old_mention_does_not_cross_into_a_new_active_task() -> None:
+    posts = [
+        {"seq": 102, "from": "HUB", "text": "@muse gate red on #review-media"},
+        {"seq": 103, "from": "HUB", "text": "@mira #task #review triage notes"},
+        {"seq": 104, "from": "HUB", "text": "Triage complete"},
+    ]
+    reason, new_seq = service._should_dispatch(
+        "muse", "MUSE", posts, 101, hub_pubkey="HUB", pipeline=True,
+    )
+    assert reason is None
+    assert new_seq == 104
+
+
+def test_deliberation_old_mention_does_not_cross_into_a_new_active_task() -> None:
+    posts = [
+        {"seq": 1, "from": "bob_pk", "text": "@alice review the old proposal"},
+        {"seq": 2, "from": "hub_pk", "text": "@carol #task #new discuss a new proposal"},
+    ]
+
+    reason, new_seq = service._should_dispatch(
+        "alice", "alice_pk", posts, 0, hub_pubkey="hub_pk", pipeline=False,
+    )
+
+    assert reason is None
+    assert new_seq == 2
+
+
 def test_pipeline_sideways_mention_does_not_wake_peer() -> None:
     posts = [
         {"seq": 1, "from": "HUB", "text": "@pixel #task #build ship it"},
@@ -67,6 +94,31 @@ def test_pipeline_sideways_mention_does_not_wake_peer() -> None:
     assert trigger is None
 
 
+def test_pipeline_hub_prose_does_not_wake_member_outside_active_task() -> None:
+    posts = [
+        {"seq": 1, "from": "HUB", "text": "@quill #task #content write"},
+        {"seq": 2, "from": "QUILL", "text": "content complete; Lingua follows later"},
+        {"seq": 3, "from": "HUB", "text": "Quill delivered; @lingua remains downstream"},
+    ]
+    trigger, new_seq = service._should_dispatch(
+        "lingua", "LINGUA", posts, 0, hub_pubkey="HUB", pipeline=True,
+    )
+    assert trigger is None
+    assert new_seq == 3
+
+
+def test_pipeline_hub_repair_mention_wakes_active_owner() -> None:
+    posts = [
+        {"seq": 1, "from": "HUB", "text": "@quill #task #content write"},
+        {"seq": 2, "from": "QUILL", "text": "content complete"},
+        {"seq": 3, "from": "HUB", "text": "@quill gate red: remove duplicate entry"},
+    ]
+    trigger, _ = service._should_dispatch(
+        "quill", "QUILL", posts, 1, hub_pubkey="HUB", pipeline=True,
+    )
+    assert trigger == "@quill mentioned (seq #3)"
+
+
 def test_pipeline_member_mention_of_hub_still_wakes_hub() -> None:
     posts = [
         {"seq": 1, "from": "HUB", "text": "@pixel #task #build ship it"},
@@ -76,6 +128,64 @@ def test_pipeline_member_mention_of_hub_still_wakes_hub() -> None:
         "mira", "HUB", posts, 0, hub_pubkey="HUB", pipeline=True,
     )
     assert trigger is not None
+
+
+def test_hub_owned_pipeline_task_wakes_the_hub_immediately() -> None:
+    posts = [
+        {"seq": 1, "from": "HUB", "text": "@mira #task #review triage notes"},
+    ]
+    trigger, new_seq = service._should_dispatch(
+        "mira", "HUB", posts, 0, hub_pubkey="HUB", pipeline=True,
+        hub_owned_phases=frozenset({"review"}),
+    )
+    assert trigger == "hub-owned #task opened (seq #1)"
+    assert new_seq == 1
+
+
+def test_hub_owned_recovery_task_wakes_the_hub_immediately() -> None:
+    meta = _types.SimpleNamespace(
+        pipelines={"review": ("review", "review-close")},
+        pipeline_steps={"review-close": {"owner": "mira"}},
+    )
+    posts = [
+        {
+            "seq": 1,
+            "from": "HUB",
+            "text": "@mira #task #review-close-recheck close dispositions",
+        },
+    ]
+    trigger, new_seq = service._should_dispatch(
+        "mira", "HUB", posts, 0, hub_pubkey="HUB", pipeline=True,
+        hub_owned_phases=frozenset({"review-close"}), pipeline_meta=meta,
+    )
+    assert trigger == "hub-owned #task opened (seq #1)"
+    assert new_seq == 1
+
+
+def test_self_addressed_task_without_declared_hub_ownership_stays_silent() -> None:
+    posts = [
+        {"seq": 1, "from": "HUB", "text": "@mira #task #content write copy"},
+    ]
+    trigger, new_seq = service._should_dispatch(
+        "mira", "HUB", posts, 0, hub_pubkey="HUB", pipeline=True,
+        hub_owned_phases=frozenset(),
+    )
+    assert trigger is None
+    assert new_seq == 1
+
+
+def test_closed_hub_owned_pipeline_task_does_not_wake_the_hub() -> None:
+    posts = [
+        {"seq": 1, "from": "HUB", "text": "@mira #task #review triage notes"},
+        {"seq": 2, "from": "HUB", "text": "review delivered"},
+        {"seq": 3, "from": "HUB", "text": "#done review triaged"},
+    ]
+    trigger, new_seq = service._should_dispatch(
+        "mira", "HUB", posts, 0, hub_pubkey="HUB", pipeline=True,
+        hub_owned_phases=frozenset({"review"}),
+    )
+    assert trigger is None
+    assert new_seq == 3
 
 
 @pytest.mark.asyncio
@@ -115,6 +225,41 @@ async def test_gate_opened_task_bypasses_member_cooldown(
     monkeypatch.setattr(service, "_spawn_dispatch", fake_spawn)
     await service._maybe_dispatch_for_sub(home, "lingua", sub, hot=True)
     assert spawned == ["wg_fast"]
+
+
+@pytest.mark.asyncio
+async def test_member_dispatch_uses_its_decision_snapshot_for_preemption(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    home = short_tmp / "muse"
+    home.mkdir()
+    posts = [
+        {"seq": 98, "from": "HUB", "text": "@muse #task #review-media apply notes"},
+        {"seq": 102, "from": "HUB", "text": "@muse gate red on #review-media"},
+    ]
+    sub = types.SimpleNamespace(
+        wg_id="wg_stale", name="project", hub_pubkey="HUB",
+        pipeline_mode=True, phase_map={}, recent_posts=posts,
+        last_responded_seq=101, last_dispatch_at="", paused=False,
+    )
+    kp = types.SimpleNamespace(pubkey_b64=lambda: "MUSE")
+    monkeypatch.setattr("alpi.alp.keys.load_or_generate", lambda home: kp)
+    monkeypatch.setattr(sub_mod, "upsert", lambda *args: None)
+    monkeypatch.setattr(service, "_budget_blocks_dispatch", lambda *args: False)
+    monkeypatch.setattr(service, "_latest_hub_task_seq_for", lambda *args: 103)
+    captured: dict = {}
+
+    def fake_turn(*args, **kwargs):
+        captured.update(kwargs)
+        return asyncio.sleep(0)
+
+    def fake_spawn(wg_id, coro):
+        coro.close()
+
+    monkeypatch.setattr(service, "_dispatch_workgroup_turn", fake_turn)
+    monkeypatch.setattr(service, "_spawn_dispatch", fake_spawn)
+    await service._maybe_dispatch_for_sub(home, "muse", sub, hot=True)
+    assert captured["started_against_task_seq"] == 98
 
 
 def test_non_pipeline_sideways_mention_still_wakes() -> None:
@@ -441,6 +586,82 @@ async def test_dispatch_records_start_and_end_events(short_tmp: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_dispatch_counts_only_accepted_posts_for_its_workgroup(
+    short_tmp: Path,
+) -> None:
+    import json
+    import sys as _sys
+
+    home = short_tmp / "alice"
+    home.mkdir()
+    (home / "alp").mkdir()
+    lines = [
+        {"kind": "tool_end", "name": "workgroup_post", "ok": True, "wg_id": "wg_x"},
+        {"kind": "tool_end", "name": "workgroup_post", "ok": False, "wg_id": "wg_x"},
+        {"kind": "tool_end", "name": "workgroup_post", "ok": True, "wg_id": "wg_other"},
+        {"kind": "tool_end", "name": "workgroup_post", "ok": True, "wg_id": "wg_x"},
+    ]
+    script = "import json\nfor row in " + repr(lines) + ": print(json.dumps(row), flush=True)"
+    real_create = service.asyncio.create_subprocess_exec
+
+    async def fake_create(*argv, **kw):
+        return await real_create(
+            _sys.executable, "-c", script,
+            stdout=service.asyncio.subprocess.PIPE,
+            stderr=service.asyncio.subprocess.PIPE,
+        )
+
+    service.asyncio.create_subprocess_exec = fake_create
+    try:
+        await service._dispatch_workgroup_turn(
+            home, profile="alice", wg_id="wg_x", wg_name="design",
+            reason="count exact deliveries",
+        )
+    finally:
+        service.asyncio.create_subprocess_exec = real_create
+
+    events = [json.loads(line) for line in service.turn_log_path(home).read_text().splitlines()]
+    assert events[-1]["posts_added"] == 2
+
+
+@pytest.mark.asyncio
+async def test_pipeline_silent_success_keeps_its_dispatch_cursor(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    import sys as _sys
+
+    home = short_tmp / "alice"
+    home.mkdir()
+    (home / "alp").mkdir()
+    advanced = []
+    real_create = service.asyncio.create_subprocess_exec
+
+    async def fake_create(*argv, **kw):
+        return await real_create(
+            _sys.executable, "-c", "pass",
+            stdout=service.asyncio.subprocess.PIPE,
+            stderr=service.asyncio.subprocess.PIPE,
+        )
+
+    monkeypatch.setattr(service.asyncio, "create_subprocess_exec", fake_create)
+    monkeypatch.setattr(
+        service, "_advance_member_cursor",
+        lambda _home, _wg_id, seq: advanced.append(seq),
+    )
+
+    await service._dispatch_workgroup_turn(
+        home, profile="alice", wg_id="wg_x", wg_name="design",
+        reason="pipeline task", pipeline=True, member_responded_seq=7,
+    )
+    await service._dispatch_workgroup_turn(
+        home, profile="alice", wg_id="wg_y", wg_name="discussion",
+        reason="deliberation task", pipeline=False, member_responded_seq=8,
+    )
+
+    assert advanced == [8]
+
+
+@pytest.mark.asyncio
 async def test_dispatch_env_carries_alpi_workspace(short_tmp: Path) -> None:
     import sys as _sys
     home = short_tmp / "alice"; home.mkdir()
@@ -471,6 +692,7 @@ async def test_dispatch_env_carries_alpi_workspace(short_tmp: Path) -> None:
     assert captured["env"].get("ALPI_WORKSPACE") == str(ws.resolve())
     assert captured["env"].get("ALPI_WORKGROUP_DISPATCH") == "wg_x"
     assert len(captured["env"].get("ALPI_WORKGROUP_TURN_ID", "")) == 32
+    assert captured["env"].get("ALPI_TURN_BUDGET_S") == "240"
 
 
 @pytest.mark.asyncio
@@ -764,6 +986,73 @@ async def test_closure_prompt_sets_closure_only_env(
 
 
 @pytest.mark.asyncio
+async def test_final_repair_sets_its_dispatch_capability(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    home = short_tmp / "mirafinal"
+    home.mkdir()
+    captured: dict = {}
+
+    async def fake_exec(*argv, env=None, **kw):
+        captured["env"] = env or {}
+        raise OSError("blocked in test")
+
+    monkeypatch.setattr(service.asyncio, "create_subprocess_exec", fake_exec)
+    await service._dispatch_workgroup_turn(
+        home, "mira", "wg1", "proj", "final repair", final_repair=True,
+    )
+    assert captured["env"].get("ALPI_WORKGROUP_FINAL_REPAIR") == "1"
+
+
+@pytest.mark.asyncio
+async def test_transient_provider_failure_restores_watchdog_attempt(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    import json
+    import sys as _sys
+
+    home = short_tmp / "miratransient"
+    home.mkdir()
+    (home / "alp").mkdir()
+    attempt = service._bump_hub_watchdog_count(home, "wg1", 9)
+    real_create = service.asyncio.create_subprocess_exec
+
+    async def fake_create(*argv, **kw):
+        return await real_create(
+            _sys.executable, "-c",
+            "print('{\"kind\":\"error\",\"text\":\"provider 500\",\"transient\":true}')",
+            stdout=service.asyncio.subprocess.PIPE,
+            stderr=service.asyncio.subprocess.PIPE,
+        )
+
+    monkeypatch.setattr(service.asyncio, "create_subprocess_exec", fake_create)
+    await service._dispatch_workgroup_turn(
+        home, "mira", "wg1", "proj", "watchdog",
+        recovery_kind="watchdog", recovery_seq=9, recovery_attempt=attempt,
+    )
+
+    assert service._peek_hub_watchdog_count(home, "wg1", 9) == 0
+    events = [
+        json.loads(line)
+        for line in service.turn_log_path(home).read_text().splitlines()
+    ]
+    assert events[-1]["transient_failure"] is True
+
+
+def test_recovery_restore_does_not_rollback_a_newer_attempt(short_tmp: Path) -> None:
+    home = short_tmp / "mirarace"
+    home.mkdir()
+    assert service._bump_hub_watchdog_count(home, "wg1", 9) == 1
+    assert service._bump_hub_watchdog_count(home, "wg1", 9) == 2
+
+    service._restore_recovery_attempt(
+        home, "hub_watchdog_fire_count", "wg1", 9, 1,
+    )
+
+    assert service._peek_hub_watchdog_count(home, "wg1", 9) == 2
+
+
+@pytest.mark.asyncio
 async def test_watchdog_repair_mode_on_second_nudge_for_pipeline(
     short_tmp: Path, monkeypatch,
 ) -> None:
@@ -825,6 +1114,7 @@ async def test_watchdog_repair_mode_on_second_nudge_for_pipeline(
     await service._maybe_watchdog_close(home, "mira", wg, recent)
     assert len(calls) == 3
     assert calls[2].get("closure_only") is False
+    assert calls[2].get("final_repair") is True
 
     # Fourth nudge on the same seq → capped: both recovery wakes spent, no
     # further dispatch (wg.blocked stays the visible state until the transcript
@@ -891,6 +1181,9 @@ def test_turn_timeout_longer_for_pipeline() -> None:
     assert service._turn_timeout_for(True) == 900
     assert service._turn_timeout_for(False) == service._TURN_TIMEOUT_SECONDS
     assert service._turn_timeout_for(False) == 300
+    assert service._soft_turn_budget(1800) == 1620
+    assert service._soft_turn_budget(300) == 240
+    assert service._soft_turn_budget(60) == 0
 
 
 @pytest.mark.asyncio
@@ -1076,6 +1369,16 @@ def test_next_pipeline_phase_blocked_halts_mid_pipeline() -> None:
     assert service._next_pipeline_phase(wg, recent) == (None, "translation", True)
 
 
+def test_malformed_blocked_close_does_not_halt_mid_pipeline() -> None:
+    wg = _pipe_wg(["intake", "content", "translation", "build", "qa"])
+    recent = [
+        {"seq": 1, "from": "HUB", "text": "@lingua #task #translation translate all"},
+        {"seq": 2, "from": "LINGUA", "text": "locales delivered"},
+        {"seq": 3, "from": "HUB", "text": "#done BLOCKED·not-the-contract"},
+    ]
+    assert service._next_pipeline_phase(wg, recent) == ("build", "translation", True)
+
+
 def test_next_pipeline_phase_blocked_on_variant_halts_over_fixloop() -> None:
     """`#done BLOCKED` lands on an off-pipeline variant (`#qa-recheck`) and still
     halts — overriding the terminal-fail reopen guardrail. An explicit block
@@ -1193,7 +1496,7 @@ async def test_kill_proc_escalates_to_sigkill(monkeypatch: pytest.MonkeyPatch) -
 
 
 @pytest.mark.asyncio
-async def test_stdout_activity_keeps_turn_alive_via_drain() -> None:
+async def test_model_progress_keeps_turn_alive_via_drain() -> None:
     from alpi._proc_io import drain_tail
 
     reader = asyncio.StreamReader()
@@ -1207,7 +1510,7 @@ async def test_stdout_activity_keeps_turn_alive_via_drain() -> None:
     async def feeder() -> None:
         for i in range(8):  # a line every 50ms < idle(0.3) for ~0.4s
             await asyncio.sleep(0.05)
-            reader.feed_data(f"{{\"kind\": \"tool_state\", \"name\": \"terminal\"}} {i}\n".encode())
+            reader.feed_data(f"{{\"kind\": \"model_state\"}} {i}\n".encode())
         reader.feed_eof()
         proc.exit(0)
 
@@ -1911,6 +2214,44 @@ async def test_preempt_watcher_ignores_a_hub_done(
 
 
 @pytest.mark.asyncio
+async def test_preempt_watcher_stops_a_paused_workgroup(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    home = short_tmp / "alice"; home.mkdir()
+    info = _inflight_member(home, "wg_pause", "hub_pk", [])
+    sub = sub_mod.get(home, "wg_pause")
+    sub.paused = True
+    sub_mod.upsert(home, sub)
+    service._INFLIGHT[("wg_pause", "alice")] = info
+    monkeypatch.setattr(service, "_PREEMPT_TICK_SECONDS", 0.01)
+    try:
+        await _watch_ticks(home, 0.1)
+        assert info["proc"].terminated is True
+        assert info["cancelled"] is True
+        assert info["cancel_reason"] == "workgroup-paused"
+    finally:
+        service._INFLIGHT.pop(("wg_pause", "alice"), None)
+
+
+@pytest.mark.asyncio
+async def test_preempt_watcher_stops_a_removed_workgroup(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    home = short_tmp / "alice"; home.mkdir()
+    info = _inflight_member(home, "wg_removed", "hub_pk", [])
+    sub_mod.tombstone(home, "wg_removed")
+    service._INFLIGHT[("wg_removed", "alice")] = info
+    monkeypatch.setattr(service, "_PREEMPT_TICK_SECONDS", 0.01)
+    try:
+        await _watch_ticks(home, 0.1)
+        assert info["proc"].terminated is True
+        assert info["cancelled"] is True
+        assert info["cancel_reason"] == "workgroup-removed"
+    finally:
+        service._INFLIGHT.pop(("wg_removed", "alice"), None)
+
+
+@pytest.mark.asyncio
 async def test_watchdog_stall_path_defers_to_an_inflight_member_turn(
     short_tmp: Path, monkeypatch,
 ) -> None:
@@ -1960,6 +2301,30 @@ def test_phase_turn_budget_reads_the_active_phase_spec() -> None:
     assert service._phase_turn_budget(phase_map, [], "HUB") == 0
 
 
+def test_phase_write_scope_is_owner_only_and_canonicalizes_recovery_slug() -> None:
+    phase_map = {
+        "content": {
+            "owner": "quill", "cwd": "projects/hotel",
+            "paths": ["src/content/**"],
+        },
+    }
+    posts = [{"seq": 1, "from": "HUB", "text": "@quill #task #content-recheck fix"}]
+
+    assert service._phase_write_scope(phase_map, posts, "HUB", "quill") == {
+        "root": "projects/hotel", "paths": ["src/content/**"],
+    }
+    assert service._phase_write_scope(phase_map, posts, "HUB", "mira") == {
+        "root": "", "paths": [],
+    }
+
+
+def test_phase_write_scope_does_not_restrict_deliberation_workgroups() -> None:
+    posts = [{"seq": 1, "from": "HUB", "text": "@quill #task #content write"}]
+
+    assert service._phase_write_scope({}, posts, "HUB", "quill") is None
+    assert service._phase_write_scope({}, posts, "HUB", "mira") is None
+
+
 def test_a_green_repair_of_the_terminal_phase_completes_the_pipeline() -> None:
     """A chain-local suffix allowlist reopened build after a verified `#qa-repair`."""
     wg = _pipe_wg(LAUNCH, dormant=MEDIA_CHAIN)
@@ -1972,3 +2337,66 @@ def test_a_green_repair_of_the_terminal_phase_completes_the_pipeline() -> None:
     ]
     assert wg_mod.canonical_pipeline_phase(wg.meta, "qa-repair")[1] == "qa"
     assert service._next_pipeline_phase(wg, recent) == (None, "qa", True)
+
+
+def test_working_heartbeat_does_not_wake_the_hub() -> None:
+    posts = [
+        {"seq": 1, "from": "HUB", "text": "@scout #task #intake produce site.json"},
+        {"seq": 2, "from": "SCOUT", "text": "#working authoring intake from brief (write_file)"},
+    ]
+    trigger, _ = service._should_dispatch(
+        "mira", "HUB", posts, 1, hub_pubkey="HUB", pipeline=True,
+    )
+    assert trigger is None
+
+
+def test_working_heartbeat_mentioning_the_hub_still_wakes_it() -> None:
+    posts = [
+        {"seq": 1, "from": "HUB", "text": "@scout #task #intake produce site.json"},
+        {"seq": 2, "from": "SCOUT", "text": "#working @mira the brief lacks a tax id — confirm placeholder?"},
+    ]
+    trigger, _ = service._should_dispatch(
+        "mira", "HUB", posts, 1, hub_pubkey="HUB", pipeline=True,
+    )
+    assert trigger and "mentioned" in trigger
+
+
+def test_working_heartbeat_with_a_blocker_wakes_the_hub() -> None:
+    posts = [
+        {"seq": 1, "from": "HUB", "text": "@scout #task #intake produce site.json"},
+        {
+            "seq": 2,
+            "from": "SCOUT",
+            "text": "#working checking the brief\nBLOCKER missing canonical room rows",
+        },
+    ]
+    trigger, _ = service._should_dispatch(
+        "mira", "HUB", posts, 1, hub_pubkey="HUB", pipeline=True,
+    )
+    assert trigger and "blocker in active task" in trigger
+
+
+def test_working_marker_with_a_delivery_wakes_the_hub() -> None:
+    posts = [
+        {"seq": 1, "from": "HUB", "text": "@scout #task #intake produce site.json"},
+        {
+            "seq": 2,
+            "from": "SCOUT",
+            "text": "#working writing intake\ndelivered site.json and work/intake.md",
+        },
+    ]
+    trigger, _ = service._should_dispatch(
+        "mira", "HUB", posts, 1, hub_pubkey="HUB", pipeline=True,
+    )
+    assert trigger and "active task we opened" in trigger
+
+
+def test_substantive_delivery_still_wakes_the_hub() -> None:
+    posts = [
+        {"seq": 1, "from": "HUB", "text": "@scout #task #intake produce site.json"},
+        {"seq": 2, "from": "SCOUT", "text": "intake complete · site.json + work/intake.md written, check green. Handing off."},
+    ]
+    trigger, _ = service._should_dispatch(
+        "mira", "HUB", posts, 1, hub_pubkey="HUB", pipeline=True,
+    )
+    assert trigger and "active task we opened" in trigger

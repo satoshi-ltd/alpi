@@ -37,6 +37,7 @@
 | `tools.browser.allow_local` | Let the `browser` tool navigate **loopback** only (`127.0.0.1`, `::1`, `localhost`). RFC1918 / CGNAT / Tailscale stay blocked; the exemption is loopback-only (`_guards._is_loopback`). |
 | `tools.max_steps_per_turn` | Per-turn tool-call ceiling (default 100) — a runaway-loop backstop, **not** the cost guard (`budget.daily_usd` is). Hitting it triggers one tools-off wrap-up call so the turn still returns a best-effort reply instead of failing. Left at the default, a free/ollama model lifts the ceiling to 1000; an explicit value is always respected. |
 | `tools.attachments.max_text_tokens` | Per-attachment extracted-text cap (text files, digital-PDF text, scanned-PDF OCR), in tokens; engine converts to chars at ~4/token. **Default `0` = auto**: half the active model's context window (`litellm.get_model_info`), falling back to 100k when the model is unmapped. A positive value is a fixed override (bound cost, or force more text on a mis-sized model). Per-file byte caps (2 MiB text, 20 MiB PDF/image) only gate acceptance. Not the scan page cap (`SCAN_MAX_PAGES`). |
+| `runtime.{first_byte_timeout_s,stream_idle_timeout_s,stream_max_duration_s}` | Provider-stream watchdogs in seconds (`0` disables one): first output, silence between meaningful deltas, and absolute duration of one request. |
 
 Removed `service.{schedule,alp,workgroups,host}` keys are ignored because these
 daemon capabilities always start. Startup logs and `alpi doctor` warn while the

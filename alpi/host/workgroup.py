@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import json
-import re
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from alpi.alp import subscription as sub_mod
+from alpi.alp import tasks as wg_tasks
 from alpi.alp import workgroup as wg_mod
 from alpi.alp.keys import load_or_generate
 
@@ -88,26 +88,28 @@ def pipeline_defs(home: Path, wg_id: str) -> _Defs:
     return _Defs()
 
 
-_SKIPPED_RE = re.compile(r"^skipped\s*·\s*\S", re.IGNORECASE)
-
-
 def _attempt_state(task) -> str:
     if task.is_open:
         return "current"
     result = (task.result or "").strip()
-    if result.upper().startswith("BLOCKED"):
+    override = wg_tasks.close_override_kind(result)
+    if override == "blocked":
         return "blocked"
     if result.lower().startswith("preempted"):
         return "preempted"
-    if _SKIPPED_RE.match(result):
+    if override == "skipped":
         return "skipped"
     return "completed"
 
 
-def _fold_pipeline_run(defs: _Defs, ordered) -> dict[str, Any] | None:
-    """Boundaries, not first-slug occurrences: a same-slug reopen (first phase included) is another attempt in the current run; a first-phase opener that finds the run elsewhere restarts."""
+def _fold_pipeline_run(
+    defs: _Defs, ordered, trigger_seqs: set[int] | None = None,
+) -> dict[str, Any] | None:
+    """Fold pipeline attempts, using explicit operator triggers as run boundaries."""
     if not defs.pipelines or not ordered:
         return None
+    trigger_seqs = trigger_seqs or set()
+    has_trigger_metadata = bool(trigger_seqs)
     run: dict[str, Any] | None = None
     for task in ordered:
         mapped = wg_mod.canonical_pipeline_phase(defs, task.slug)
@@ -115,11 +117,14 @@ def _fold_pipeline_run(defs: _Defs, ordered) -> dict[str, Any] | None:
             continue
         key, phase = mapped
         chain = defs.pipelines[key]
-        restart = (
-            run is None
-            or run["pipeline"] != key
-            or (phase == chain[0] and run["current_phase"] != chain[0])
+        explicit_trigger = int(task.opened_seq or 0) in trigger_seqs
+        legacy_restart = (
+            not has_trigger_metadata
+            and run is not None
+            and phase == chain[0]
+            and run["current_phase"] != chain[0]
         )
+        restart = run is None or run["pipeline"] != key or explicit_trigger or legacy_restart
         if restart:
             run = {
                 "pipeline": key,
@@ -196,8 +201,6 @@ def _fold_stamp(home: Path, wg_id: str, defs: _Defs) -> tuple:
 
 def fold_task_state(home: Path, wg_id: str) -> dict[str, Any]:
     # Canonical host-side fold (active/closed/blocked/pipeline_run); the apps consume it, they do not re-derive which pipeline is active.
-    from alpi.alp import tasks as wg_tasks
-
     defs = pipeline_defs(home, wg_id)
     stamp = _fold_stamp(home, wg_id, defs)
     cache_key = str(home / "alp" / "workgroups" / wg_id)
@@ -230,7 +233,7 @@ def fold_task_state(home: Path, wg_id: str) -> dict[str, Any]:
                 "slug": t.slug,
                 "result": t.result or "",
                 "closed_seq": t.closed_seq,
-                "blocked": (t.result or "").strip().upper().startswith("BLOCKED"),
+                "blocked": wg_tasks.close_override_kind(t.result or "") == "blocked",
             })
     # Only blocked when nothing was re-tasked after the BLOCKED close — a later
     # #task (active) means a human moved it on (matches mobile findBlocked).
@@ -244,7 +247,10 @@ def fold_task_state(home: Path, wg_id: str) -> dict[str, Any]:
         "active": active,
         "closed": closed[-20:],
         "blocked": blocked,
-        "pipeline_run": _fold_pipeline_run(defs, ordered),
+        "pipeline_run": _fold_pipeline_run(
+            defs, ordered,
+            {int(p.get("seq", 0)) for p in posts if p.get("pipeline_trigger") is True},
+        ),
     }
     return _cache_fold(cache_key, stamp, out)
 
@@ -363,4 +369,5 @@ def _envelope(
         "key_version": int(post.get("key_version", 1)),
         "cost": post.get("cost") or {},
         "turn_id": str(post.get("turn_id") or ""),
+        "pipeline_trigger": post.get("pipeline_trigger") is True,
     }

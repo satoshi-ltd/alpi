@@ -40,6 +40,7 @@ export default function CreateWorkgroupModal({
   const [importing, setImporting] = useState(false);
   const [recipeYaml, setRecipeYaml] = useState(null);
   const [recipeMeta, setRecipeMeta] = useState(null);
+  const [savedRecipes, setSavedRecipes] = useState([]);
   const [paramValues, setParamValues] = useState({});
   const [inputValues, setInputValues] = useState({});
   const notify = useNotify();
@@ -54,6 +55,7 @@ export default function CreateWorkgroupModal({
     setImporting(false);
     setRecipeYaml(null);
     setRecipeMeta(null);
+    setSavedRecipes([]);
     setParamValues({});
     setInputValues({});
   }, [open]);
@@ -66,6 +68,25 @@ export default function CreateWorkgroupModal({
   useEffect(() => {
     setMemberIds([]);
   }, [hubProfile]);
+
+  useEffect(() => {
+    if (!open || !hubProfile || recipeMeta) return undefined;
+    let cancelled = false;
+    setSavedRecipes([]);
+    invoke("workgroup_saved_recipes", {
+      profile: hubProfile,
+      ...(connectionId ? { connectionId } : {}),
+    })
+      .then((res) => {
+        if (!cancelled) setSavedRecipes(res?.recipes || []);
+      })
+      .catch(() => {
+        if (!cancelled) setSavedRecipes([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, hubProfile, recipeMeta, connectionId]);
 
   const hub = useMemo(
     () => eligibleHubs.find((p) => p.name === hubProfile) ?? null,
@@ -94,6 +115,19 @@ export default function CreateWorkgroupModal({
     ? !busy && !importing && !!recipeHub && paramsFilled && inputsFilled
     : !busy && !importing && hubProfile && name.trim().length > 0 && memberIds.length > 0;
 
+  function selectRecipe(meta, yaml = null) {
+    setRecipeYaml(yaml);
+    setRecipeMeta(meta);
+    setHubProfile(meta?.hub || hubProfile);
+    setBriefing(meta?.briefing || "");
+    setParamValues(
+      Object.fromEntries(Object.keys(meta?.params || {}).map((k) => [k, ""])),
+    );
+    setInputValues(
+      Object.fromEntries(Object.keys(meta?.inputs || {}).map((k) => [k, ""])),
+    );
+  }
+
   async function pickRecipe() {
     if (importing) return;
     setImporting(true);
@@ -102,15 +136,7 @@ export default function CreateWorkgroupModal({
         ...(connectionId ? { connectionId } : {}),
       });
       if (!res) return;
-      setRecipeYaml(res.yaml);
-      setRecipeMeta(res.meta);
-      setBriefing(res.meta?.briefing || "");
-      setParamValues(
-        Object.fromEntries(Object.keys(res.meta?.params || {}).map((k) => [k, ""])),
-      );
-      setInputValues(
-        Object.fromEntries(Object.keys(res.meta?.inputs || {}).map((k) => [k, ""])),
-      );
+      selectRecipe(res.meta, res.yaml);
     } catch (e) {
       notify({ message: `import failed: ${String(e)}`, variant: "error", duration: 4000 });
     } finally {
@@ -215,16 +241,17 @@ export default function CreateWorkgroupModal({
         <div className={styles.field}>
           <div className={styles.recipeHead}>
             <Eyebrow>HUB</Eyebrow>
-            {isRecipe ? (
-              <Chip
-                size="sm"
-                onClick={busy ? undefined : clearRecipe}
-                tooltip="Clear recipe"
-              >
-                {recipeMeta?.id || "recipe"}
-                <XIcon style={{ width: 10, height: 10, strokeWidth: 2 }} />
-              </Chip>
-            ) : (
+            <div className={styles.recipeActions}>
+              {isRecipe && (
+                <Chip
+                  size="sm"
+                  onClick={busy ? undefined : clearRecipe}
+                  tooltip="Clear recipe"
+                >
+                  {recipeMeta?.id || "recipe"}
+                  <XIcon className={styles.recipeClearIcon} />
+                </Chip>
+              )}
               <Button
                 variant="ghost"
                 size="sm"
@@ -233,7 +260,7 @@ export default function CreateWorkgroupModal({
               >
                 Import recipe…
               </Button>
-            )}
+            </div>
           </div>
           {isRecipe ? (
             <div className={styles.recipeHub}>
@@ -241,35 +268,53 @@ export default function CreateWorkgroupModal({
               <span className={styles.recipeName}>· {recipeMeta?.name}</span>
             </div>
           ) : (
-            <Dropdown
-              trigger={{
-                leading: hub && <Diamond color={hub.accent} />,
-                label: hub ? `@${profileLabel(hub.name)}` : "Pick profile…",
-                trailing: hub?.model || undefined,
-              }}
-              direction="down"
-              align="left"
-              width="var(--pop-sm)"
-              variant="field"
-              fullWidth
-            >
-              {({ close }) =>
-                eligibleHubs.map((p) => (
-                  <Dropdown.Row
-                    key={p.name}
-                    active={p.name === hubProfile}
-                    leading={<Diamond color={p.accent} />}
-                    caption={p.model || undefined}
-                    onClick={() => {
-                      setHubProfile(p.name);
-                      close();
-                    }}
-                  >
-                    @{profileLabel(p.name)}
-                  </Dropdown.Row>
-                ))
-              }
-            </Dropdown>
+            <>
+              <Dropdown
+                trigger={{
+                  leading: hub && <Diamond color={hub.accent} />,
+                  label: hub ? `@${profileLabel(hub.name)}` : "Pick profile…",
+                  trailing: hub?.model || undefined,
+                }}
+                direction="down"
+                align="left"
+                width="var(--pop-sm)"
+                variant="field"
+                fullWidth
+              >
+                {({ close }) =>
+                  eligibleHubs.map((p) => (
+                    <Dropdown.Row
+                      key={p.name}
+                      active={p.name === hubProfile}
+                      leading={<Diamond color={p.accent} />}
+                      caption={p.model || undefined}
+                      onClick={() => {
+                        setHubProfile(p.name);
+                        close();
+                      }}
+                    >
+                      @{profileLabel(p.name)}
+                    </Dropdown.Row>
+                  ))
+                }
+              </Dropdown>
+              {savedRecipes.length > 0 && (
+                <div className={styles.savedRecipes}>
+                  <Eyebrow>SAVED RECIPES</Eyebrow>
+                  <div className={styles.chips}>
+                    {savedRecipes.map((recipe) => (
+                      <Chip
+                        key={recipe.id}
+                        onClick={() => selectRecipe(recipe)}
+                        tooltip={recipe.name}
+                      >
+                        {recipe.id}
+                      </Chip>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
 

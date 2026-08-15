@@ -1,5 +1,56 @@
 # Changelog
 
+## v0.14.0 — 2026-08-15 — profiles own the work they launch
+
+- **Recipes belong to the hub profile, without an organization layer.** A hub
+  stores reusable YAML recipes under its own home, and the console, host API
+  and desktop app list, describe and launch the same definitions. Dynamic
+  parameters and file inputs seed each isolated project before its kickoff;
+  invalid recipes no longer hide valid siblings. The versioned
+  `organizations/` bootstrap and its duplicated agents, skills, briefings and
+  workgroup scripts are removed: profiles and recipes are now the complete
+  runtime model.
+
+- **Concurrent workgroup pulls preserve completed dispatch cursors.** A delayed
+  long-poll now merges only fresh remote state instead of replacing the whole
+  subscription, preventing duplicate member turns. Delivery accounting counts
+  accepted posts from the exact workgroup, and hub prose cannot wake a
+  downstream member outside the active task.
+- **Pipeline authorship is enforced while work runs.** Declared phase paths
+  constrain native file writes; non-owners cannot use those mutation tools
+  during the phase, while shell availability remains a profile policy. Owners
+  can remove an invalid file with the new workspace-only `delete_file` tool,
+  and missing boundary baselines fail closed.
+- **A `#working` heartbeat no longer wakes the hub into an empty turn.** Direct
+  mentions and substantive deliveries still wake it immediately, while member
+  recovery and the stall watchdog preserve repair behavior when work stops.
+- **Pipeline workers receive pipeline-sized engagement rules.** Declared
+  production lines keep the same enforced marker, rotation and handoff
+  contracts without carrying discussion-only convergence guidance on every
+  turn; mixed workgroup contexts retain the complete rules.
+- **Provider stalls recover without discarding the turn.** Empty transport
+  keepalives no longer hide a silent stream: after the configured idle window,
+  Alpi retries the same model and step. A ten-minute per-request limit also
+  stops a model that keeps streaming without completing, and its expiry is
+  retried within the same turn instead of losing the workgroup delivery.
+  Pipeline turn budgets are enforced while deltas are still arriving, and a
+  successful owner turn without a delivery remains pending for immediate
+  retry. Detached workers
+  send a content-free progress heartbeat so their supervisor does not mistake
+  a healthy long tool call for a dead process, and pausing or removing a
+  workgroup cancels its running worker. Per-profile `llm.log` records the
+  correlated provider lifecycle without raw exception text.
+- **Pipeline recovery preserves honest phase outcomes.** A heartbeat carrying a
+  delivery counts as work, delivered phases cannot be relabeled as skipped
+  within the same pipeline run, unresolved owners fail closed, QA failures must
+  remain visible in the close, and mechanically opened hub-owned recovery
+  phases wake immediately. Automatic hub turns may halt with `BLOCKED` only on
+  the final repair wake, while transient provider failures without a delivery
+  return that wake to the recovery budget. Recovery rewinds remain in the same
+  run even at the first phase; only an explicit operator trigger starts a new
+  run. Completed provider calls are accounted before a turn deadline suppresses
+  their pending tool calls.
+
 ## v0.12.13 — 2026-08-09 — every surface knows what the cache saved
 
 - **Workgroup cost accounting no longer counts early posts twice.** Each

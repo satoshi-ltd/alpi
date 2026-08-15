@@ -47,7 +47,6 @@ v0.x feature that depends on it. Nothing graduates because it is interesting.
 | BROWSER.1 | Optional lightweight browser backend — evaluate Obscura or a similar CDP backend only when Chromium's measured disk or RAM footprint blocks a real target host. | 🔵 |
 | TERM.2 | Docker / SSH terminal backends — isolated or remote command execution for unattended profiles once local sandboxing is no longer enough. | 🔵 |
 | AUDIT.2 | Enterprise audit & accountability — actor attribution on the host plane, append-only / external audit sink, LLM-egress logging + provider policy, at-rest encryption, and RBAC/SSO. | 🔵 |
-| ORG.2.B/C | Workspace overlay (`cfg.workspace_path` as list) + first-class runtime org entity (`~/.alpi/orgs/<id>/`) with roles, event fan-out, and shared knowledge index. | ⏸ |
 | ALP.7 | Pinned shared memory per workgroup (hub-anchored `wiki.md`). | 🔵 |
 | ALP.8 | Workgroup capacity scheduling — optional profile capacity, queue/defer telemetry, or worker-pool assignment for high-throughput orgs. | 🔵 |
 | ALP.3+ | Multi-task workgroups — opt-in `multitask`, letter-prefixed task IDs, per-task roster/dispatch/budget. | 🔵 |
@@ -97,36 +96,6 @@ automatic migration of local files.
 **Promotion condition.** A real profile needs isolation or a remote machine
 that the local terminal + OS sandbox cannot provide. Until then, TERM.2 stays
 backlog; hardening the existing runtime comes first.
-
-### ORG.2.B/C. Workspace overlay + first-class runtime org entity
-
-ORG.2 is a three-layer plan. **Layer A — convention** — shipped as the
-`organizations/` source tree with per-org `org.yaml`, default workspace
-at `~/alpi/organizations/<name>/`, and a unified `organizations/setup.py`
-that bootstraps any org from its YAML. Each profile carries
-`cfg.org = <name>` after bootstrap so it knows which org it belongs
-to. See [`organizations/README.md`](../organizations/README.md) and
-[`docs/ORGANIZATION.md`](ORGANIZATION.md).
-
-Layers B and C remain deferred. They're only worth building if the
-convention proves insufficient — uncontrolled cross-profile writes in
-web-factory, concurrent scans on the hot path, or enforced access roles
-across humans.
-
-1. **Layer B · Workspace overlay.** `cfg.workspace` (a single string
-   today) becomes a list: `[profile_workspace, org_workspace]`. File
-   tools read both and write to the profile root by default, with an
-   explicit shared scope when the agent intends to touch org-shared
-   files. Adds a real ownership model without inventing a new runtime
-   primitive.
-2. **Layer C · First-class runtime org entity.**
-   `~/.alpi/orgs/<id>/workspace/` with member profiles, per-member
-   roles, event fan-out across the org, and a shared knowledge index.
-   Heaviest option — only land if the overlay also proves insufficient.
-
-Promotion condition for B: a user reports that the convention forces
-awkward duplication or coordination between two profiles in the same
-org. Promotion condition for C: B itself proves insufficient.
 
 ### AUDIT.2. Enterprise audit & accountability
 

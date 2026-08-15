@@ -304,7 +304,7 @@ def test_fold_task_state_blocked(short_tmp: Path) -> None:
     home = short_tmp / "hub"
     wg_id = _seed_workgroup_with_posts(home, [
         b"@pixel #task #build wire it",
-        b"#done BLOCKED build \xc2\xb7 deps missing",
+        b"#done BLOCKED \xc2\xb7 build dependencies missing",
     ])
     state = data_workgroup.fold_task_state(home, wg_id)
     assert state["active"] is None
@@ -312,14 +312,14 @@ def test_fold_task_state_blocked(short_tmp: Path) -> None:
     assert state["closed"][0]["slug"] == "build"
     assert state["closed"][0]["blocked"] is True
     assert state["blocked"]["slug"] == "build"
-    assert state["blocked"]["reason"].startswith("BLOCKED build")
+    assert state["blocked"]["reason"].startswith("BLOCKED \u00b7 build")
 
 
 def test_fold_task_state_retask_clears_blocked(short_tmp: Path) -> None:
     home = short_tmp / "hub"
     wg_id = _seed_workgroup_with_posts(home, [
         b"@pixel #task #build wire it",
-        b"#done BLOCKED build",
+        b"#done BLOCKED \xc2\xb7 build dependencies missing",
         b"@pixel #task #build-recheck retry",
     ])
     state = data_workgroup.fold_task_state(home, wg_id)

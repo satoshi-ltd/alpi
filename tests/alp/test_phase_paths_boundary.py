@@ -107,11 +107,13 @@ def test_deletion_outside_paths_is_a_violation(tmp_path: Path):
     assert "deleted" in out and "assets/manifest.yaml" in out
 
 
-def test_missing_baseline_fails_open(tmp_path: Path):
+def test_missing_baseline_fails_closed(tmp_path: Path):
     workspace = tmp_path / "ws"
     _project(workspace)
     step = _step(_wg())
-    assert gates.paths_violations(tmp_path / "nowhere", step, workspace) == ""
+    assert "baseline is missing" in gates.paths_violations(
+        tmp_path / "nowhere", step, workspace,
+    )
 
 
 def _escaping_step(cwd: str):

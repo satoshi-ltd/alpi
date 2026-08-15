@@ -1279,9 +1279,23 @@ async fn workgroup_pick_recipe(
 }
 
 #[tauri::command]
+async fn workgroup_saved_recipes(
+    profile: String,
+    connection_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let params = serde_json::json!({ "profile": profile });
+    tauri::async_runtime::spawn_blocking(move || match connection_id.as_deref() {
+        Some(cid) => host_client::call_for(cid, "host.workgroup.recipes.list", params),
+        None => host_client::call("host.workgroup.recipes.list", params),
+    })
+    .await
+    .map_err(|e| format!("join: {e}"))?
+}
+
+#[tauri::command]
 async fn workgroup_launch_recipe(
     profile: String,
-    yaml: String,
+    yaml: Option<String>,
     recipe_id: Option<String>,
     params: serde_json::Value,
     briefing: Option<String>,
@@ -1290,10 +1304,12 @@ async fn workgroup_launch_recipe(
 ) -> Result<serde_json::Value, String> {
     let mut p = serde_json::json!({
         "profile": profile,
-        "yaml": yaml,
         "recipe_id": recipe_id.unwrap_or_else(|| "recipe".to_string()),
         "params": params,
     });
+    if let Some(y) = yaml {
+        p["yaml"] = serde_json::Value::String(y);
+    }
     if let Some(b) = briefing {
         p["briefing"] = serde_json::Value::String(b);
     }
@@ -3734,6 +3750,7 @@ pub fn run() {
             workgroup_tasks,
             workgroup_create,
             workgroup_pick_recipe,
+            workgroup_saved_recipes,
             workgroup_launch_recipe,
             workgroup_add_member,
             tray_announce_update,

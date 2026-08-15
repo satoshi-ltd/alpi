@@ -1,4 +1,4 @@
-"""Stateless recipe launch: client sends recipe content, daemon stores no catalogue."""
+"""Recipe launch from supplied YAML or a profile-local saved recipe."""
 
 from __future__ import annotations
 
@@ -22,6 +22,7 @@ _CLONE_TIMEOUT = 120
 
 
 def register(server: host_server.Server) -> None:
+    server.register("host.workgroup.recipes.list", _list)
     server.register("host.workgroup.recipes.describe", _describe)
     server.register("host.workgroup.launch_recipe", _launch)
 
@@ -241,6 +242,10 @@ async def _describe(params: dict[str, Any], _server: host_server.Server) -> dict
         r = recipes_mod.parse_recipe(yaml_text, recipe_id)
     except recipes_mod.RecipeError as e:
         raise host_server.HandlerError(-32602, "invalid-params", data={"detail": str(e)})
+    return _recipe_meta(r)
+
+
+def _recipe_meta(r: Any) -> dict[str, Any]:
     return {
         "id": r.recipe_id, "digest": r.digest, "hub": r.hub,
         "members": list(r.members), "name": r.name, "briefing": r.briefing,
@@ -252,12 +257,41 @@ async def _describe(params: dict[str, Any], _server: host_server.Server) -> dict
     }
 
 
+async def _list(params: dict[str, Any], _server: host_server.Server) -> dict[str, Any]:
+    from alpi import recipes as recipes_mod
+
+    home = _resolve_home(str((params or {}).get("profile") or ""))
+    profile = str((params or {}).get("profile") or "default")
+    try:
+        recipes, invalid = recipes_mod.scan_saved_recipes(home)
+    except (OSError, UnicodeError, recipes_mod.RecipeError) as e:
+        raise host_server.HandlerError(-32602, "invalid-recipe", data={"detail": str(e)})
+    valid = []
+    for recipe in recipes:
+        if recipe.hub != profile:
+            invalid.append({
+                "id": recipe.recipe_id,
+                "detail": f"recipe declares hub {recipe.hub!r}, expected {profile!r}",
+            })
+        else:
+            valid.append(recipe)
+    return {
+        "recipes": [_recipe_meta(r) for r in valid],
+        "invalid_recipes": invalid,
+    }
+
+
 async def _launch(params: dict[str, Any], _server: host_server.Server) -> dict[str, Any]:
+    from alpi import recipes as recipes_mod
+
     home = _resolve_home(str((params or {}).get("profile") or ""))
     yaml_text = str((params or {}).get("yaml") or "")
     recipe_id = str((params or {}).get("recipe_id") or "recipe")
     if not yaml_text.strip():
-        raise host_server.HandlerError(-32602, "invalid-params", data={"detail": "empty recipe yaml"})
+        try:
+            _, yaml_text = recipes_mod.load_saved_recipe(home, recipe_id)
+        except (OSError, UnicodeError, recipes_mod.RecipeError) as e:
+            raise host_server.HandlerError(-32602, "invalid-recipe", data={"detail": str(e)})
     supplied = (params or {}).get("params") or {}
     if not isinstance(supplied, dict):
         raise host_server.HandlerError(-32602, "invalid-params", data={"detail": "params must be a mapping"})

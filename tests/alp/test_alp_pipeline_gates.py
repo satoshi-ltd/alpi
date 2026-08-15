@@ -3,8 +3,6 @@ import signal
 import stat
 import sys
 import types
-from pathlib import Path
-
 import pytest
 
 from alpi.alp import pipeline_gates as gates
@@ -250,13 +248,60 @@ async def test_gate_advance_failure_returns_reason(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(
         "alpi.alp.pipeline_gates.run_gate",
-        lambda step, ws: (False, "content thin: deluxe 49w < 50"),
+        lambda step, ws: (False, "\n".join([
+            "Checking artifact: content",
+            "PASS  config is valid",
+            "INFO  optional collection is empty",
+            "content thin: deluxe 49w < 50",
+        ])),
     )
     service._GATE_ATTEMPTED.clear()
 
     out = await service._maybe_gate_advance(home, wg, recent, "HUB")
     assert isinstance(out, str) and "GATE content FAILED" in out and "49w" in out
     assert await service._maybe_gate_advance(home, wg, recent, "HUB") is None
+
+
+def test_gate_findings_excerpt_drops_noise_and_keeps_complete_lines():
+    from alpi.alp.pipeline_gates import findings_excerpt
+
+    output = "\n".join([
+        "Checking artifact: content",
+        "PASS  config is valid",
+        "INFO  optional collection is empty",
+        "CHECK content FAILED — fix these before handoff:",
+        "  src/content/offers/direct.es.json:2  NAME DIFFERS FROM INTAKE",
+        "content check failed with 1 blocking finding.",
+    ])
+
+    excerpt = findings_excerpt(output, 120)
+
+    assert "PASS" not in excerpt
+    assert "INFO" not in excerpt
+    assert not excerpt.startswith("ffers/")
+    assert "NAME DIFFERS FROM INTAKE" in excerpt
+    assert "1 blocking finding" in excerpt
+
+
+def test_gate_findings_excerpt_keeps_the_tail_of_an_oversized_final_error():
+    from alpi.alp.pipeline_gates import findings_excerpt
+
+    output = "\n".join([
+        *(f"WARN  stale diagnostic {i}" for i in range(20)),
+        "CHECK content FAILED — " + ("x" * 180) + " FINAL ROOT CAUSE",
+    ])
+
+    excerpt = findings_excerpt(output, 96)
+
+    assert len(excerpt) <= 96
+    assert excerpt.startswith("…")
+    assert "FINAL ROOT CAUSE" in excerpt
+    assert "stale diagnostic" not in excerpt
+
+
+def test_gate_findings_excerpt_honors_degenerate_limits():
+    assert gates.findings_excerpt("long failure", 0) == ""
+    assert gates.findings_excerpt("long failure", 1) == "…"
 
 
 @pytest.mark.asyncio
@@ -296,6 +341,62 @@ async def test_gate_advance_uses_owner_handoff_before_a_later_peer_post(
     service._GATE_ATTEMPTED.clear()
     assert await service._maybe_gate_advance(home, wg, recent, "HUB") is True
     assert posted[0].startswith("#done content verified")
+
+
+@pytest.mark.asyncio
+async def test_gate_success_leaves_a_hub_owned_successor_actionable(
+    tmp_path, monkeypatch,
+):
+    from alpi import service
+
+    home = tmp_path / "hub"
+    home.mkdir()
+    steps = {
+        "content": STEPS["content"],
+        "review": {"owner": "mira", "task": "triage the review"},
+    }
+    wg = types.SimpleNamespace(meta=types.SimpleNamespace(
+        id="wg_hub_next", hub_pubkey="HUB",
+        pipelines={"content": ("content", "review")},
+        launch_pipeline="content", pipeline_steps=steps, paused=False,
+    ))
+    recent = [
+        {"seq": 1, "from": "HUB", "text": "@quill #task #content write it"},
+        {"seq": 2, "from": "QUILLPK", "text": "content complete"},
+    ]
+    monkeypatch.setattr(
+        "alpi.alp.peers.load",
+        lambda h: [types.SimpleNamespace(id="quill", pubkey="QUILLPK")],
+    )
+    monkeypatch.setattr(
+        "alpi.alp.pipeline_gates.run_gate", lambda step, ws: (True, "ok"),
+    )
+    monkeypatch.setattr(
+        "alpi.alp.workgroup_client._hub_owns_phase",
+        lambda h, candidate, slug: slug == "review",
+    )
+    posted: list[dict] = []
+
+    async def fake_post(h, wid, text, cost=None):
+        row = {"seq": 3 + len(posted), "from": "HUB", "text": text.decode()}
+        posted.append(row)
+        return {"seq": row["seq"]}
+
+    cursor: list[int] = []
+    monkeypatch.setattr("alpi.alp.workgroup_client.post", fake_post)
+    monkeypatch.setattr(
+        service, "_set_hub_responded_seq", lambda h, wid, seq: cursor.append(seq),
+    )
+    service._GATE_ATTEMPTED.clear()
+
+    assert await service._maybe_gate_advance(home, wg, recent, "HUB") is True
+    assert cursor == [posted[0]["seq"]]
+    trigger, _ = service._should_dispatch(
+        "mira", "HUB", [*recent, *posted], cursor[0],
+        hub_pubkey="HUB", pipeline=True,
+        hub_owned_phases=frozenset({"review"}),
+    )
+    assert trigger == f"hub-owned #task opened (seq #{posted[1]['seq']})"
 
 
 @pytest.mark.asyncio
@@ -541,7 +642,12 @@ async def test_gate_failure_posts_repair_note_to_the_owner(tmp_path, monkeypatch
     )
     monkeypatch.setattr(
         "alpi.alp.pipeline_gates.run_gate",
-        lambda step, ws: (False, "content thin: deluxe 49w < 50"),
+        lambda step, ws: (False, "\n".join([
+            "Checking artifact: content",
+            "PASS  config is valid",
+            "INFO  optional collection is empty",
+            "content thin: deluxe 49w < 50",
+        ])),
     )
     posted: list[str] = []
 
@@ -560,6 +666,8 @@ async def test_gate_failure_posts_repair_note_to_the_owner(tmp_path, monkeypatch
     assert len(posted) == 1
     assert posted[0].startswith("@quill gate red on #content (repair round 1/3)")
     assert "49w" in posted[0]
+    assert "PASS" not in posted[0]
+    assert "INFO" not in posted[0]
     assert cursor and cursor[-1] == 4
 
 
@@ -606,6 +714,8 @@ async def test_gate_failure_past_the_repair_cap_wakes_the_hub(tmp_path, monkeypa
     assert isinstance(out, str)
     assert "GATE content FAILED after 4 repair rounds" in out
     assert "#done BLOCKED" in out
+    assert "then re-open" in out
+    assert "skipped" not in out.lower()
 
 
 @pytest.mark.asyncio

@@ -45,12 +45,29 @@ _FREE_MODEL_MAX_STEPS = 1000
 _PEER_USAGE_MARKER = "\n\n---\ntokens:"
 _ESCALATE_AFTER_FAILURES = 3
 _BUDGET_ESCALATION_GUARD = 0.8
+_DISPATCH_FILE_MUTATION_TOOLS = frozenset({
+    "delete_file", "edit_file", "write_file",
+})
 
 
 def _route_tier_from_env() -> str | None:
     import os
     tier = os.environ.get("ALPI_TIER", "").strip().lower()
     return tier if tier in cfg_mod.TIER_NAMES else None
+
+
+def _dispatch_tool_denies() -> frozenset[str]:
+    raw = os.environ.get("ALPI_WORKGROUP_WRITE_SCOPE")
+    if raw is None:
+        return frozenset()
+    try:
+        scope = json.loads(raw)
+        paths = scope.get("paths")
+    except (AttributeError, TypeError, json.JSONDecodeError):
+        return _DISPATCH_FILE_MUTATION_TOOLS
+    if paths == []:
+        return _DISPATCH_FILE_MUTATION_TOOLS
+    return frozenset() if isinstance(paths, list) else _DISPATCH_FILE_MUTATION_TOOLS
 
 
 def _peer_reply_from_payload(payload: str) -> str:
@@ -109,7 +126,7 @@ def _profile_name(home: Path) -> str:
 
 @dataclass
 class AgentEvent:
-    kind: str                      # 'user' | 'reasoning_delta' | 'assistant_delta' | 'assistant_done' | 'tool_start' | 'tool_state' | 'tool_end' | 'usage' | 'routing' | 'error' | 'done' | 'interrupted' | 'auto_compact'
+    kind: str                      # 'user' | 'reasoning_delta' | 'assistant_delta' | 'model_state' | 'assistant_done' | 'tool_start' | 'tool_state' | 'tool_end' | 'usage' | 'routing' | 'error' | 'done' | 'interrupted' | 'auto_compact'
     text: str = ""
     name: str = ""                 # tool name for tool_* events
     args: dict = field(default_factory=dict)
@@ -120,6 +137,7 @@ class AgentEvent:
     cached_in: int = 0
     cost: float = 0.0
     tool_id: str = ""
+    transient: bool = False
     # True only on the turn's terminal `assistant_done`; preamble emissions stay False. Contract in AGENTS.md.
     final: bool = False
     attachments: list[dict] = field(default_factory=list)
@@ -452,7 +470,7 @@ class Engine:
             except Exception:  # noqa: BLE001
                 pass
 
-        deny_tools = frozenset(self.cfg.tools.deny)
+        deny_tools = frozenset(self.cfg.tools.deny) | _dispatch_tool_denies()
         schemas = tools.schemas(deny=deny_tools)
         if relay_peer:
             schemas = [s for s in schemas if _schema_name(s) == "peer"]
@@ -522,18 +540,20 @@ class Engine:
                     try:
                         for chunk in llm.stream(
                             messages=self.session.messages, tools=schemas,
-                            rt=self.cfg.runtime, **call_kwargs,
+                            rt=self.cfg.runtime,
+                            replay_visible=bool(dispatch_wg_id), **call_kwargs,
                         ):
                             if self.interrupt_requested:
                                 break
-                            if chunk.get("retry_reset"):
-                                reasoning_text = []
-                                if turn_deadline is not None and time.time() >= turn_deadline:
-                                    deadline_hit = True
-                                    break
-                                continue
                             if chunk.get("final"):
                                 final = chunk
+                                continue
+                            if turn_deadline is not None and time.time() >= turn_deadline:
+                                deadline_hit = True
+                                break
+                            if chunk.get("retry_reset"):
+                                accumulated_text = []
+                                reasoning_text = []
                                 continue
                             reasoning_delta = chunk.get("reasoning_delta") or ""
                             if reasoning_delta:
@@ -545,10 +565,14 @@ class Engine:
                                     first_text_delta_at = time.time()
                                 accumulated_text.append(text_delta)
                                 emit(AgentEvent(kind="assistant_delta", text=text_delta))
+                            if chunk.get("tool_calls_delta"):
+                                emit(AgentEvent(kind="model_state"))
                         call_done = True
                     except Exception as e:  # noqa: BLE001
-                        # Same-model transient retries live in llm.stream; here only the fallback chain, and only while no VISIBLE text reached the client (reasoning deltas are ephemeral and replayable).
+                        # Visible partials block fallback only when a client could have observed them.
                         fb_applied = False
+                        if dispatch_wg_id:
+                            accumulated_text = []
                         if not accumulated_text:
                             while fallback_queue:
                                 fb_model = fallback_queue.pop(0)
@@ -580,7 +604,10 @@ class Engine:
                         if fb_applied:
                             continue
                         turn_error = str(e)
-                        emit(AgentEvent(kind="error", text=turn_error))
+                        emit(AgentEvent(
+                            kind="error", text=turn_error,
+                            transient=llm.is_transient(e),
+                        ))
                         return
                 if deadline_hit:
                     break
@@ -645,6 +672,14 @@ class Engine:
                     cost=final.get("cost_usd", 0.0),
                     model=turn_model,
                 ))
+
+                if (
+                    tool_calls
+                    and turn_deadline is not None
+                    and time.time() >= turn_deadline
+                ):
+                    deadline_hit = True
+                    break
 
                 assistant_msg: dict = {"role": "assistant", "content": content}
                 if tool_calls:
@@ -857,7 +892,7 @@ class Engine:
                         from alpi.alp import tasks as _wg_tasks
                         dispatch_delivered = (
                             dispatch_delivered
-                            or not _wg_tasks.is_working(str(args.get("text") or ""))
+                            or not _wg_tasks.is_working_only(str(args.get("text") or ""))
                         )
                     if result.ok and name in ("skill", "attach_file"):
                         import tempfile as _tempfile
@@ -950,10 +985,14 @@ class Engine:
                 self._turn_prefix_reasons.add("wrap_up")
                 try:
                     for chunk in llm.stream(
-                        messages=wrap_msgs, tools=[], rt=self.cfg.runtime, **call_kwargs,
+                        messages=wrap_msgs, tools=[], rt=self.cfg.runtime,
+                        replay_visible=bool(dispatch_wg_id), **call_kwargs,
                     ):
                         if self.interrupt_requested:
                             break
+                        if chunk.get("retry_reset"):
+                            wrap_text = []
+                            continue
                         if chunk.get("final"):
                             wrap_final = chunk
                             continue
@@ -1008,7 +1047,10 @@ class Engine:
                         emit(AgentEvent(kind="done"))
                         return
                 except Exception as e:  # noqa: BLE001
-                    emit(AgentEvent(kind="error", text=str(e)))
+                    emit(AgentEvent(
+                        kind="error", text=str(e),
+                        transient=llm.is_transient(e),
+                    ))
                     return
 
             if not turn_error:

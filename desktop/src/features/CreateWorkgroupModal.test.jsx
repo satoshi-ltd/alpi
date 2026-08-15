@@ -71,6 +71,55 @@ describe("CreateWorkgroupModal", () => {
     expect(screen.queryByPlaceholderText("intake, content, build, qa")).toBeNull();
   });
 
+  it("offers saved hub recipes and launches one by id without YAML", async () => {
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "workgroup_saved_recipes") {
+        return {
+          recipes: [{
+            id: "hotel",
+            hub: "mira",
+            name: "proj-{slug}",
+            briefing: "Saved briefing",
+            params: { slug: { pattern: "^[a-z-]+$" } },
+            inputs: {},
+            pipelines: {},
+          }],
+        };
+      }
+      if (cmd === "workgroup_launch_recipe") return { workgroup_id: "wg-saved" };
+      return null;
+    });
+    const onCreated = vi.fn();
+    render(
+      <CreateWorkgroupModal
+        open
+        profiles={[{ name: "mira", counts: { peers: 1 } }]}
+        connectionId="casa"
+        onCreated={onCreated}
+      />,
+    );
+
+    fireEvent.click(await screen.findByText("hotel"));
+    fireEvent.change(screen.getByPlaceholderText("^[a-z-]+$"), {
+      target: { value: "casa-bahia" },
+    });
+    expect(screen.getByRole("button", { name: "Import recipe…" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Launch" }));
+
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith("workgroup_launch_recipe", {
+        profile: "mira",
+        yaml: null,
+        recipeId: "hotel",
+        params: { slug: "casa-bahia" },
+        briefing: "Saved briefing",
+        inputs: {},
+        connectionId: "casa",
+      });
+    });
+    expect(onCreated).toHaveBeenCalledWith("wg-saved", "mira");
+  });
+
   const HOTEL_RECIPE = {
     yaml: "hub: mira\nname: proj-{slug}\n",
     recipe_id: "hotel",
@@ -113,7 +162,7 @@ describe("CreateWorkgroupModal", () => {
 
     const slug = await screen.findByPlaceholderText("^[a-z-]+$");
     fireEvent.change(slug, { target: { value: "casa-bahia" } });
-    expect(screen.queryByRole("button", { name: "Import recipe…" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Import recipe…" })).toBeInTheDocument();
     expect(screen.getByDisplayValue("Hotel draft briefing")).toBeTruthy();
 
     expect(screen.getByRole("button", { name: "Launch" }).disabled).toBe(true);
@@ -227,7 +276,7 @@ describe("CreateWorkgroupModal", () => {
     );
 
     expect(screen.getByRole("button", { name: "Launch" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Import recipe…" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Import recipe…" })).toBeInTheDocument();
   });
 
   it("sends recipe input values verbatim (no trimming)", async () => {

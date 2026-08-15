@@ -2,7 +2,7 @@
 # PyPI distribution name. The CLI binary, the import path, and
 # ``~/.alpi/`` all remain ``alpi`` (see ``[project.scripts]`` below).
 name = "alpi-agent"
-version = "0.12.13"
+version = "0.14.0"
 description = "A profile-based personal AI agent for terminal, desktop & mobile apps, and private ALP networks"
 readme = "README.md"
 requires-python = ">=3.10,<3.14"
@@ -88,7 +88,7 @@ line-length = 100
 target-version = "py310"
 
 [tool.pytest.ini_options]
-testpaths = ["tests", "organizations"]
+testpaths = ["tests"]
 # Manual integration scripts under ``tests/manual/`` are runnable
 # Python files but NOT collected by pytest — they need live profiles,
 # real LLM calls, and explicit setup. Documented in

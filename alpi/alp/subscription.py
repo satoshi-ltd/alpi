@@ -67,7 +67,7 @@ DISPATCH_COOLDOWN_SECONDS = 60  # min gap between auto-dispatches per workgroup
 
 
 def coerce_phase_map(value: Any) -> dict[str, dict[str, Any]]:
-    """Owner/task/turn budget only — a hub that ever sends more (gate argv, cwd) gets it dropped here."""
+    """Keep only member-safe phase routing and write-boundary metadata."""
     if not isinstance(value, dict):
         return {}
     out: dict[str, dict[str, Any]] = {}
@@ -87,6 +87,11 @@ def coerce_phase_map(value: Any) -> dict[str, dict[str, Any]]:
             budget = 0
         if budget > 0:
             entry["turn_budget_s"] = budget
+        paths = spec.get("paths")
+        cwd = str(spec.get("cwd") or "").strip()
+        if isinstance(paths, list) and all(isinstance(item, str) for item in paths):
+            entry["paths"] = [item for item in paths if item.strip()]
+            entry["cwd"] = cwd
         out[str(phase)] = entry
     return out
 
@@ -108,8 +113,8 @@ class Subscription:
     launch_pipeline: str | None = None
     # Explicit so member behavior never depends on a launch pipeline existing; `pipeline_mode` → longer production turn budget.
     pipeline_mode: bool = False
-    # Safe projection of the hub's phase specs: owner + declared task only.
-    phase_map: dict[str, dict[str, str]] = field(default_factory=dict)
+    # Safe projection of the hub's phase routing and write boundaries.
+    phase_map: dict[str, dict[str, Any]] = field(default_factory=dict)
     # Mirror of hub's `meta.paused` (join/pull); True → the member poller skips dispatch (no wasted turns on a paused wg).
     paused: bool = False
     # Decoupled from ``last_seq`` so a tick that pulls a new post but skips on cooldown doesn't lose the trigger — next tick re-evaluates against the cache.
@@ -412,6 +417,25 @@ def upsert(home: Path, sub: Subscription) -> None:
         return subs
 
     update(home, _mutate)
+
+
+def mutate(
+    home: Path,
+    wg_id: str,
+    mutator: Callable[[Subscription], bool],
+) -> Subscription | None:
+    current: list[Subscription | None] = [None]
+
+    def _mutate(subs: list[Subscription]) -> list[Subscription] | None:
+        for sub in subs:
+            if sub.wg_id != wg_id:
+                continue
+            current[0] = sub
+            return subs if mutator(sub) else None
+        return None
+
+    update(home, _mutate)
+    return current[0]
 
 
 def remove(home: Path, wg_id: str) -> bool:

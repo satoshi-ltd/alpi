@@ -9,6 +9,7 @@ import pytest
 
 from alpi.tools import _mutations
 from alpi.tools.edit_file import EditFile
+from alpi.tools.delete_file import DeleteFile
 from alpi.tools.write_file import WriteFile
 
 
@@ -76,6 +77,23 @@ def test_edit_file_records_with_op_edit(tmp_home_no_env: Path) -> None:
     assert r.sha_before == _sha("foo bar baz")
     assert r.sha_after == _sha("foo qux baz")
     assert "bar" in r.diff_preview or "qux" in r.diff_preview
+
+
+def test_delete_file_records_deleted_content(tmp_home_no_env: Path) -> None:
+    target = tmp_home_no_env / "obsolete.txt"
+    target.write_text("remove me\n")
+    token = _mutations.begin_batch()
+    try:
+        result = DeleteFile().run(path=str(target))
+        assert result.ok
+    finally:
+        records = _mutations.end_batch(token)
+
+    assert len(records) == 1
+    assert records[0].op == "delete"
+    assert records[0].sha_before == _sha("remove me\n")
+    assert records[0].sha_after is None
+    assert records[0].bytes_after == 0
 
 
 def test_failed_write_records_nothing(tmp_home_no_env: Path) -> None:

@@ -9,8 +9,6 @@ server.
 
 from __future__ import annotations
 
-import pytest
-
 from alpi.alp import tasks
 
 
@@ -460,6 +458,21 @@ def test_is_working_recognizes_with_or_without_payload() -> None:
 
 def test_is_working_ignores_inline() -> None:
     assert tasks.is_working("I'm currently #working on this") is False
+
+
+def test_marker_only_helpers_reject_mixed_deliveries() -> None:
+    assert tasks.is_working_only("#working writing files") is True
+    assert tasks.is_skip_only("#skip no applicable work") is True
+    assert tasks.is_working_only("#working writing files\ndelivered src/content/**") is False
+    assert tasks.is_skip_only("#skip no media\nupdated assets/manifest.yaml") is False
+
+
+def test_close_override_kind_uses_one_exact_syntax() -> None:
+    assert tasks.close_override_kind("BLOCKED · gate cannot pass") == "blocked"
+    assert tasks.close_override_kind("skipped · no matching work") == "skipped"
+    assert tasks.close_override_kind("BLOCKED·gate cannot pass") == ""
+    assert tasks.close_override_kind("BLOCKED gate cannot pass") == ""
+    assert tasks.close_override_kind("skipped ·   ") == ""
 
 
 # ---------------------------------------------------------------------------

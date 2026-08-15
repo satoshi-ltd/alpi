@@ -130,11 +130,46 @@ def _bodies(home: Path, wg_id: str) -> list[str]:
 
 def test_recipe_verb_gating_invariants():
     from alpi.host import server as host_server
+    assert "host.workgroup.recipes.list" in host_server._ADMIN_METHODS
     assert "host.workgroup.launch_recipe" in host_server._ADMIN_METHODS
     assert "host.workgroup.trigger" in host_server._ADMIN_METHODS
     assert "host.workgroup.recipes.describe" in host_server._SCOPE_FREE_METHODS
+    assert "host.workgroup.recipes.list" not in host_server._SCOPE_FREE_METHODS
     assert "host.workgroup.launch_recipe" not in host_server._SCOPE_FREE_METHODS
     assert "host.workgroup.trigger" not in host_server._SCOPE_FREE_METHODS
+
+
+@pytest.mark.asyncio
+async def test_list_saved_recipes_for_profile(tmp_path, monkeypatch):
+    home = _hub_home(tmp_path)
+    recipes = home / "recipes"
+    recipes.mkdir()
+    (recipes / "hotel.yaml").write_text(_IDLE_RECIPE)
+    monkeypatch.setattr(host_recipes, "_resolve_home", lambda profile: home)
+
+    result = await host_recipes._list({"profile": "mira"}, None)
+
+    assert [r["id"] for r in result["recipes"]] == ["hotel"]
+    assert result["recipes"][0]["hub"] == "mira"
+    assert result["recipes"][0]["pipelines"] == {
+        "media-update": ["media-update", "media-recheck"],
+    }
+
+
+@pytest.mark.asyncio
+async def test_list_skips_invalid_and_foreign_hub_recipes(tmp_path, monkeypatch):
+    home = _hub_home(tmp_path)
+    recipes = home / "recipes"
+    recipes.mkdir()
+    (recipes / "hotel.yaml").write_text(_IDLE_RECIPE)
+    (recipes / "foreign.yaml").write_text(_IDLE_RECIPE.replace("hub: mira", "hub: scout"))
+    (recipes / "broken.yaml").write_text("hub: mira\n")
+    monkeypatch.setattr(host_recipes, "_resolve_home", lambda profile: home)
+
+    result = await host_recipes._list({"profile": "mira"}, None)
+
+    assert [r["id"] for r in result["recipes"]] == ["hotel"]
+    assert [r["id"] for r in result["invalid_recipes"]] == ["broken", "foreign"]
 
 
 @pytest.mark.asyncio
@@ -531,6 +566,46 @@ async def test_launch_verb_rejects_non_string_input(tmp_path, monkeypatch):
             {"profile": "mira", "yaml": "hub: mira\nname: n\n", "inputs": {"brief": 123}}, None,
         )
     assert "must be a string" in str(ei.value.data)
+
+
+@pytest.mark.asyncio
+async def test_launch_verb_loads_saved_recipe_by_id(tmp_path, monkeypatch):
+    home = _hub_home(tmp_path)
+    _pin_member(home, "scout")
+    recipes = home / "recipes"
+    recipes.mkdir()
+    (recipes / "chat.yaml").write_text(_CHAT_RECIPE)
+    monkeypatch.setattr(host_recipes, "_resolve_home", lambda p: home)
+
+    result = await host_recipes._launch(
+        {"profile": "mira", "recipe_id": "chat", "params": {"topic": "pricing"}}, None,
+    )
+
+    wg = wg_mod.load(home, result["workgroup_id"])
+    assert wg.meta.name == "debate-pricing"
+
+
+@pytest.mark.asyncio
+async def test_launch_verb_keeps_supplied_yaml_import_path(tmp_path, monkeypatch):
+    home = _hub_home(tmp_path)
+    _pin_member(home, "scout")
+    recipes = home / "recipes"
+    recipes.mkdir()
+    (recipes / "chat.yaml").write_text(_CHAT_RECIPE.replace("debate-", "saved-"))
+    monkeypatch.setattr(host_recipes, "_resolve_home", lambda p: home)
+
+    result = await host_recipes._launch(
+        {
+            "profile": "mira",
+            "yaml": _CHAT_RECIPE,
+            "recipe_id": "chat",
+            "params": {"topic": "pricing"},
+        },
+        None,
+    )
+
+    wg = wg_mod.load(home, result["workgroup_id"])
+    assert wg.meta.name == "debate-pricing"
 
 
 @pytest.mark.asyncio

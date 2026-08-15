@@ -57,9 +57,10 @@ def test_parse_rejects(text, needle):
         recipes.parse_recipe(text, "r")
 
 
-def test_parse_rejects_bad_recipe_id():
+@pytest.mark.parametrize("recipe_id", ["Bad Id!", "hotel!"])
+def test_parse_rejects_bad_recipe_id(recipe_id):
     with pytest.raises(recipes.RecipeError, match="recipe id"):
-        recipes.parse_recipe("hub: m\nname: n", "Bad Id!")
+        recipes.parse_recipe("hub: m\nname: n", recipe_id)
 
 
 def test_resolve_interpolates_all_string_fields():
@@ -437,3 +438,68 @@ def test_chain_phase_slug_must_be_valid() -> None:
     )
     with pytest.raises(recipes.RecipeError, match="invalid pipeline phase slug"):
         recipes.parse_recipe(bad, "hotel")
+
+
+def test_saved_recipes_load_and_list_by_id(tmp_path) -> None:
+    root = tmp_path / "recipes"
+    root.mkdir()
+    (root / "zeta.yaml").write_text(VALID)
+    (root / "alpha.yml").write_text(VALID)
+
+    recipe, text = recipes.load_saved_recipe(tmp_path, "zeta")
+
+    assert recipe.recipe_id == "zeta"
+    assert text == VALID
+    assert [r.recipe_id for r in recipes.list_saved_recipes(tmp_path)] == ["alpha", "zeta"]
+
+
+@pytest.mark.parametrize("recipe_id", ["../hotel", "Hotel", "", "a/b"])
+def test_saved_recipe_id_rejects_unsafe_names(tmp_path, recipe_id) -> None:
+    with pytest.raises(recipes.RecipeError, match="recipe id"):
+        recipes.load_saved_recipe(tmp_path, recipe_id)
+
+
+def test_saved_recipe_rejects_symlinked_store(tmp_path) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "hotel.yaml").write_text(VALID)
+    (tmp_path / "recipes").symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(recipes.RecipeError, match="must not be a symlink"):
+        recipes.load_saved_recipe(tmp_path, "hotel")
+    with pytest.raises(recipes.RecipeError, match="must not be a symlink"):
+        recipes.list_saved_recipes(tmp_path)
+
+
+def test_saved_recipe_ignores_symlinked_files(tmp_path) -> None:
+    root = tmp_path / "recipes"
+    root.mkdir()
+    source = tmp_path / "hotel.yaml"
+    source.write_text(VALID)
+    (root / "hotel.yaml").symlink_to(source)
+
+    with pytest.raises(recipes.RecipeError, match="not found"):
+        recipes.load_saved_recipe(tmp_path, "hotel")
+    assert recipes.list_saved_recipes(tmp_path) == []
+
+
+def test_saved_recipe_list_rejects_duplicate_ids(tmp_path) -> None:
+    root = tmp_path / "recipes"
+    root.mkdir()
+    (root / "hotel.yaml").write_text(VALID)
+    (root / "hotel.yml").write_text(VALID)
+
+    with pytest.raises(recipes.RecipeError, match="duplicate saved recipe id"):
+        recipes.list_saved_recipes(tmp_path)
+
+
+def test_saved_recipe_scan_keeps_valid_entries_when_one_is_invalid(tmp_path) -> None:
+    root = tmp_path / "recipes"
+    root.mkdir()
+    (root / "hotel.yaml").write_text(VALID)
+    (root / "broken.yaml").write_text("hub: mira\n")
+
+    valid, invalid = recipes.scan_saved_recipes(tmp_path)
+
+    assert [r.recipe_id for r in valid] == ["hotel"]
+    assert invalid == [{"id": "broken", "detail": "recipe 'broken' missing 'name'"}]

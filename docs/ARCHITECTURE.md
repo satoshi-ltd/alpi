@@ -147,7 +147,7 @@ alpi/
 │   ├── research.py         read-only sub-agent (depth: fast/normal/deep)
 │   ├── terminal.py         run/background/status/output/kill
 │   ├── notify.py           native push to the owner's apps
-│   └── … (read_file, write_file, edit_file, todo, web_*, schedule,
+│   └── … (read_file, write_file, edit_file, delete_file, todo, web_*, schedule,
 │         memory, session_search, email, config)
 ├── tui/                    Textual app, widgets, screens, theme
 ├── scheduler/              cron + once jobs, hosted by the alpi daemon
@@ -203,6 +203,7 @@ that live at `{home}/skills/<category>/<name>/`.
 ├── skills/<category>/<name>/    SKILL.md + scripts/ + references/ +
 │                                 assets/ + secrets/ (0700) + state/ +
 │                                 .gitignore
+├── recipes/<id>.yaml        saved workgroup recipes owned by this hub profile
 ├── sessions/<id>.json      compact turn-based session log (TUI / desktop / `--once`)
 ├── knowledge.sqlite        sqlite-vec derived indexes for knowledge,
 │                            session recall, and workgroup recall

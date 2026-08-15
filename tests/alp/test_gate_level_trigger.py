@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import types
 from pathlib import Path
 
@@ -81,6 +80,32 @@ def _mock_workspace(monkeypatch, tmp_path):
     return project, touch
 
 
+def _real_recent(home: Path, wg) -> list[dict]:
+    keys = wg_mod.hub_group_keys(home, wg, load_or_generate(home))
+    recent: list[dict] = []
+    for entry in wg_mod._read_transcript(wg_mod._wg_dir(home, wg.meta.id)):
+        text = wg_mod.decrypt_post(
+            keys[int(entry.get("key_version", 1))],
+            entry["nonce"],
+            entry["ciphertext"],
+        ).decode()
+        recent.append({**entry, "text": text})
+    return recent
+
+
+def _append_member_post(home: Path, wg, pubkey: str, text: str) -> None:
+    keys = wg_mod.hub_group_keys(home, wg, load_or_generate(home))
+    version = max(keys)
+    nonce, ciphertext = wg_mod.encrypt_post(keys[version], text.encode())
+    wg_mod.append_with_seq(wg_mod._wg_dir(home, wg.meta.id), {
+        "ts": "2026-08-13T00:00:00Z",
+        "from": pubkey,
+        "key_version": version,
+        "nonce": nonce,
+        "ciphertext": ciphertext,
+    })
+
+
 @pytest.mark.asyncio
 async def test_a_silent_fixer_is_recovered_without_a_wake(tmp_path, monkeypatch):
     home = tmp_path / "hub"
@@ -113,6 +138,53 @@ async def test_a_silent_fixer_is_recovered_without_a_wake(tmp_path, monkeypatch)
     assert out is True
     assert posted[0].startswith("#done content verified")
     assert posted[1].startswith("@lingua #task #translation")
+
+
+@pytest.mark.asyncio
+async def test_green_gate_advances_through_the_real_workgroup_sdk(tmp_path, monkeypatch):
+    from alpi import home as home_mod
+
+    root = tmp_path / "root"
+    monkeypatch.setattr(home_mod, "_ROOT", root)
+    home = root / "profiles" / "mira"
+    home.mkdir(parents=True)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    quill_home = root / "profiles" / "quill"
+    lingua_home = root / "profiles" / "lingua"
+    quill_home.mkdir(parents=True)
+    lingua_home.mkdir(parents=True)
+    quill_pk = load_or_generate(quill_home).pubkey_b64()
+    lingua_pk = load_or_generate(lingua_home).pubkey_b64()
+    peers_mod.add(home, Peer(id="quill", pubkey=quill_pk, allow=["workgroup.post"]))
+    peers_mod.add(home, Peer(id="lingua", pubkey=lingua_pk, allow=["workgroup.post"]))
+    wg = wg_mod.create(
+        home,
+        name="site",
+        hub_kp=load_or_generate(home),
+        member_pubkeys=[quill_pk, lingua_pk],
+        pipelines={"content": ["content", "translation"]},
+        launch_pipeline="content",
+        pipeline_steps=_STEPS,
+    )
+    monkeypatch.setattr(
+        "alpi.config.load",
+        lambda h: types.SimpleNamespace(workspace_path=workspace),
+    )
+    monkeypatch.setattr(
+        "alpi.alp.pipeline_gates.run_gate",
+        lambda step, ws: (True, "clean"),
+    )
+
+    await wc.post(home, wg.meta.id, b"@quill #task #content write it")
+    _append_member_post(home, wg, quill_pk, "content complete")
+
+    assert await service._maybe_gate_advance(
+        home, wg, _real_recent(home, wg), wg.meta.hub_pubkey,
+    ) is True
+    texts = [post["text"] for post in _real_recent(home, wg)]
+    assert texts[-2].startswith("#done content verified")
+    assert texts[-1].startswith("@lingua #task #translation")
 
 
 @pytest.mark.asyncio
@@ -636,6 +708,14 @@ def test_resume_level_triggers_the_gate(tmp_path):
 ])
 def test_terminal_close_needs_routing(result, needs):
     assert service._terminal_close_needs_routing(result) is needs
+
+
+def test_malformed_close_overrides_have_no_special_routing_semantics() -> None:
+    assert service._terminal_close_needs_routing("BLOCKED·template incomplete") is False
+    assert service._terminal_close_needs_routing("skipped·nothing to audit") is False
+    assert service._blocked_close_names_owner(
+        "BLOCKED·broken in @quill", {"quill"},
+    ) == ""
 
 
 @pytest.mark.asyncio

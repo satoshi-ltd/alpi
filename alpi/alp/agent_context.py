@@ -50,6 +50,7 @@ def build(
         candidates = [candidate for candidate in candidates if candidate[1] == wg_id]
         if not candidates:
             return None
+    pipeline_only = bool(candidates) and all(_candidate_pipelines(c) for c in candidates)
     blocks: list[str] = []
     selected = 0
     limit = len(candidates) if wg_id else min(len(candidates), _MAX_BLOCKS)
@@ -64,7 +65,7 @@ def build(
         trial = _render_context(
             own_id, len(subs), len(hubs), blocks + [block],
             [] if wg_id else [_candidate_name(c) for c in candidates[selected + 1:]],
-            zone,
+            zone, pipeline_only,
         )
         if max_chars is not None and len(trial) > max_chars:
             break
@@ -74,10 +75,10 @@ def build(
     if wg_id:
         if not blocks:
             return None
-        return _render_context(own_id, len(subs), len(hubs), blocks, [], zone)
+        return _render_context(own_id, len(subs), len(hubs), blocks, [], zone, pipeline_only)
 
     omitted = [_candidate_name(c) for c in candidates[selected:]]
-    out = _render_context(own_id, len(subs), len(hubs), blocks, omitted, zone)
+    out = _render_context(own_id, len(subs), len(hubs), blocks, omitted, zone, pipeline_only)
     if max_chars is not None and len(out) > max_chars:
         return None
     return out
@@ -104,6 +105,13 @@ def _context_candidates(home: Path, subs, hubs, directed: bool):
     )
 
 
+def _candidate_pipelines(candidate) -> dict:
+    kind, _candidate_id, item = candidate
+    if kind == "subscription":
+        return getattr(item, "pipelines", None) or {}
+    return getattr(item.meta, "pipelines", None) or {}
+
+
 def _candidate_name(candidate) -> str:
     kind, candidate_id, item = candidate
     if kind == "subscription":
@@ -113,7 +121,7 @@ def _candidate_name(candidate) -> str:
 
 def _render_context(
     own_id: str, joined: int, hosting: int, blocks: list[str],
-    omitted: list[str], zone: str,
+    omitted: list[str], zone: str, pipeline_only: bool = False,
 ) -> str:
     header = f"=== Workgroups (you are @{own_id} · {joined} joined, {hosting} hosting) ==="
     if omitted:
@@ -124,7 +132,8 @@ def _render_context(
             f"\nShowing {len(blocks)} of {joined + hosting} workgroups "
             f"(most recently active first).\nOmitted: {names}"
         )
-    parts = [header, WORKGROUP_GUARDRAILS]
+    guardrails = WORKGROUP_GUARDRAILS_PIPELINE if pipeline_only else WORKGROUP_GUARDRAILS
+    parts = [header, guardrails]
     parts.extend(blocks)
     if zone:
         parts.append(zone)
@@ -425,6 +434,60 @@ rejects it as `turn-rotation`.
 COSTS ARE REAL. Every `workgroup_post` auto-declares this
 turn's USD cost. The hub gates against the workgroup's lifetime
 budget; your profile's daily cap applies on top.
+"""
+
+
+WORKGROUP_GUARDRAILS_PIPELINE = """\
+=== Workgroup engagement rules (pipeline) ===
+
+This workgroup runs declared pipelines: the daemon sequences the
+phases shown in your context block, posts each phase's task, and
+runs each phase's gate mechanically. Your job is your phase, done
+with tools, handed off cleanly.
+
+THE PROTOCOL (SDK-enforced; a violating post is rejected):
+  1. ONLY THE HUB OPENS a task, as `#task #<slug> <problem>`, and
+     ONLY THE HUB CLOSES it with `#done <result>` — member `#task`
+     and `#done` markers are rejected. You deliver with a normal
+     substantive post.
+  2. ONE CONTRIBUTING POST PER ROUND (hub post to hub post).
+     `#working` heartbeats are exempt and capped at one per round.
+  3. `#WORKING` (member-only) buys time, nothing else. Post it
+     BEFORE any pass of work longer than ~30s, naming the concrete
+     action and tool: `#working writing src/content/** (write_file)`.
+     It must be the only non-empty line in that post; put no plan or
+     delivery prose beside it.
+     It does not consume your round slot and does not count as a
+     contribution — you must still deliver.
+  4. `#SKIP` (member-only) means "tasked, but nothing to do here":
+     post `#skip <one-line reason>` and nothing else. Never a prose
+     paraphrase of it.
+  5. A NEW `#task` PREEMPTS the active one; stale reactions are
+     rejected. ONE lifecycle marker per post — never `#done` +
+     `#task` together.
+
+WHEN TASKED (`@you` in the `#task`): post the one-line `#working`
+heartbeat described above,
+do the work with your tools, then hand off ONE substantive post in
+the task's language: what you produced, where it lives on disk, what
+you verified, and any blocker (state a blocker explicitly — the hub
+routes on it). Do not narrate tool-by-tool progress across posts.
+
+WHEN NOT TASKED: stay silent. A post that mentions another peer is
+not your turn. Do not post acknowledgements ("ok", "on it"), do not
+paraphrase other posts, and never fabricate — "I don't know" beats
+an invented fact.
+
+HUB: verify a delivery against the disk and gate log — never the prose —
+then close `#done <result>`. A green gate opens its successor; after a
+gate-less close, open the declared successor yourself when one exists.
+Use `skipped` only before any substantive owner delivery; `BLOCKED`
+halts the chain. Follow each watchdog wake's explicit repair instruction:
+an early closure wake permits silence, while REPAIR requires resolution.
+
+COSTS ARE REAL. Every `workgroup_post` auto-declares this turn's USD
+cost against the workgroup budget; your profile's daily cap applies
+on top.
 """
 
 

@@ -17,6 +17,18 @@
   gap: var(--space-3);
 }
 
+.recipeActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.recipeClearIcon {
+  width: 10px;
+  height: 10px;
+  stroke-width: 2;
+}
+
 .recipeHub {
   display: flex;
   align-items: center;
@@ -27,6 +39,13 @@
 
 .recipeName {
   color: var(--ink-2);
+}
+
+.savedRecipes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-top: var(--space-1);
 }
 
 .recipePipelines {

@@ -51,10 +51,10 @@ def _check_member_rotation(
         p for p in round_posts
         if str(p.get("from") or "") == own_pubkey
     ]
-    new_is_working = tasks_mod.is_working(plaintext)
+    new_is_working = tasks_mod.is_working_only(plaintext)
     prior_working = sum(
         1 for p in own_in_round
-        if tasks_mod.is_working(str(p.get("text") or ""))
+        if tasks_mod.is_working_only(str(p.get("text") or ""))
     )
     prior_consuming = len(own_in_round) - prior_working
 
@@ -253,9 +253,10 @@ def _hub_owns_phase(home: Path, wg, slug: str) -> bool:
 
 
 def _workflow_phase_owner(wg, slug: str) -> str:
-    if wg_mod.pipeline_for_phase(wg.meta, slug) is None:
+    canonical = wg_mod.canonical_pipeline_phase(wg.meta, slug)
+    if canonical is None:
         return ""
-    raw = (getattr(wg.meta, "pipeline_steps", None) or {}).get(slug)
+    raw = (getattr(wg.meta, "pipeline_steps", None) or {}).get(canonical[1])
     return str((raw or {}).get("owner") or "").strip() if isinstance(raw, dict) else ""
 
 
@@ -321,9 +322,7 @@ def _validate_task_participants(home: Path, wg, plaintext: str) -> None:
 def _check_pipeline_close_owner(
     home: Path, wg, posts: list[dict], plaintext: str, own_pubkey: str,
 ) -> bool:
-    """Reject a hub `#done` on a pipeline phase whose owner never posted.
-    Returns True only when this close is an explicit `skipped ·`/`blocked ·`
-    override of the ACTIVE pipeline phase (the caller then waives quorum)."""
+    """Validate an active pipeline close and return whether it waives quorum."""
     if not tasks_mod.is_done(plaintext):
         return False
     active = tasks_mod.active_task(posts, hub_pubkey=own_pubkey)
@@ -332,7 +331,8 @@ def _check_pipeline_close_owner(
     declared_owner = _workflow_phase_owner(wg, active.slug)
     if wg_mod.pipeline_for_phase(wg.meta, active.slug) is None:
         return False
-    if _explicit_close_override(plaintext, own_pubkey):
+    override = _close_override_kind(plaintext, own_pubkey)
+    if override == "blocked":
         return True
     id_to_pubkey: dict[str, str] = {}
     for m in wg.members:
@@ -353,8 +353,8 @@ def _check_pipeline_close_owner(
             "phase-owner-unresolved: closing `#" + active.slug + "` but "
             + ", ".join(f"@{pid}" for pid in unresolved)
             + " no longer resolves to a pinned member — owner participation "
-            "cannot be verified. Re-pin the peer, or close loudly with "
-            "`#done skipped · <reason>` / `#done BLOCKED · <reason>`."
+            "cannot be verified. Re-pin the peer, or halt loudly with "
+            "`#done BLOCKED · <reason>`."
         )
     from alpi.alp import pipeline_gates as gates_mod
 
@@ -362,6 +362,22 @@ def _check_pipeline_close_owner(
     delivered_seq = gates_mod.owner_post_under_gate(
         posts, owner_pubkeys, own_pubkey, int(active.opened_seq),
     )
+    if override == "skipped":
+        if delivered_seq is not None or _phase_delivered_in_current_run(
+            wg.meta, posts, active.slug, owner_pubkeys, own_pubkey,
+        ):
+            remedy = (
+                "Pass the declared gate or repair the same phase"
+                if gates_mod.step_for(wg.meta, active.slug) is not None
+                else "Close the delivered phase normally with `#done <result>`"
+            )
+            raise ValueError(
+                f"phase-skip-after-delivery: `#{active.slug}` already has a "
+                "substantive owner delivery in this pipeline run, so it cannot be recorded as "
+                f"skipped. {remedy}, or "
+                "close `#done BLOCKED · <reason>`."
+            )
+        return True
     if delivered_seq is not None:
         _require_passing_gate(home, wg, active, delivered_seq, own_pubkey)
         return False
@@ -376,6 +392,61 @@ def _check_pipeline_close_owner(
         "`#done skipped · <reason>` or `#done BLOCKED · <reason>` — the "
         "`· <reason>` part is required."
     )
+
+
+def _phase_delivered_in_current_run(
+    meta, posts: list[dict], phase: str, owner_pubkeys: set[str], hub_pubkey: str,
+) -> bool:
+    events = []
+    for post in posts:
+        events.extend(tasks_mod.parse_post(
+            str(post.get("text") or ""), int(post.get("seq", 0)),
+            str(post.get("from") or ""), hub_pubkey=hub_pubkey,
+        ))
+    attempts = tasks_mod.fold_tasks(events)
+    trigger_seqs = {
+        int(post.get("seq", 0)) for post in posts if post.get("pipeline_trigger") is True
+    }
+    has_trigger_metadata = bool(trigger_seqs)
+    run_key = ""
+    run_start = 0
+    current_phase = ""
+    for attempt in attempts:
+        mapped = wg_mod.canonical_pipeline_phase(meta, attempt.slug)
+        if mapped is None:
+            continue
+        key, mapped_phase = mapped
+        chain = tuple((getattr(meta, "pipelines", None) or {}).get(key) or ())
+        if not chain:
+            continue
+        explicit_trigger = int(attempt.opened_seq or 0) in trigger_seqs
+        legacy_restart = (
+            not has_trigger_metadata
+            and mapped_phase == chain[0]
+            and current_phase != chain[0]
+        )
+        if not run_key or key != run_key or explicit_trigger or legacy_restart:
+            run_key = key
+            run_start = int(attempt.opened_seq or 0)
+        current_phase = mapped_phase
+    target = wg_mod.canonical_pipeline_phase(meta, phase)
+    if target is None or target[0] != run_key:
+        return False
+    for attempt in attempts:
+        mapped = wg_mod.canonical_pipeline_phase(meta, attempt.slug)
+        if mapped != target or int(attempt.opened_seq or 0) < run_start:
+            continue
+        upper = int(attempt.closed_seq or 0) or None
+        for post in posts:
+            seq = int(post.get("seq", 0))
+            if seq <= int(attempt.opened_seq or 0) or (upper is not None and seq >= upper):
+                continue
+            if str(post.get("from") or "") not in owner_pubkeys:
+                continue
+            text = str(post.get("text") or "")
+            if not tasks_mod.is_working_only(text) and not tasks_mod.is_skip_only(text):
+                return True
+    return False
 
 
 def _check_gated_phase_not_abandoned(
@@ -401,8 +472,7 @@ def _check_gated_phase_not_abandoned(
         f"never advance past it. To repair a failed check, RE-TASK THE SAME "
         f"PHASE — `@<owner> #task #{active.slug} <what to fix>` is allowed even "
         "though you spoke last, and the check re-runs on the owner's next post. "
-        f"To move on without it, close it first with `#done BLOCKED · <reason>` "
-        "or `#done skipped · <reason>`."
+        "To halt the chain, close it with `#done BLOCKED · <reason>`."
     )
 
 
@@ -424,7 +494,7 @@ def _check_blocked_phase_not_skipped(
     if not closed:
         return
     latest = max(closed, key=lambda t: t.closed_seq or 0)
-    if not (latest.result or "").strip().upper().startswith("BLOCKED"):
+    if _close_result_override_kind(latest.result or "") != "blocked":
         return
     blocked_owner = wg_mod.canonical_pipeline_phase(wg.meta, latest.slug)
     if blocked_owner is None:
@@ -454,6 +524,16 @@ def _check_blocked_phase_not_skipped(
 _QA_VERDICTS = ("QA BLOCKED", "QA FAIL", "QA PASS")
 
 
+def _done_carries_failed_qa(plaintext: str) -> bool:
+    events = tasks_mod.parse_post(plaintext, 0, "hub", hub_pubkey="hub")
+    result = next((event.text for event in events if event.kind == "done"), "")
+    normalized = result.strip().upper()
+    segments = [segment.strip() for segment in normalized.split("·")]
+    return _close_override_kind(plaintext, "hub") == "blocked" or any(
+        segment.startswith(("QA BLOCKED", "QA FAIL")) for segment in segments
+    )
+
+
 def _check_qa_verdict_respected(
     home: Path, wg, posts: list[dict], plaintext: str, own_pubkey: str,
 ) -> None:
@@ -481,9 +561,7 @@ def _check_qa_verdict_respected(
         for token in _QA_VERDICTS:
             if token in text:
                 verdict = token
-    if verdict in ("QA FAIL", "QA BLOCKED") and not (
-        "FAIL" in plaintext or "BLOCKED" in plaintext
-    ):
+    if verdict in ("QA FAIL", "QA BLOCKED") and not _done_carries_failed_qa(plaintext):
         raise ValueError(
             f"qa-verdict-mismatch: the phase owner's verdict was `{verdict}` and "
             "this close does not carry it — quote the verdict, re-task the "
@@ -506,10 +584,11 @@ def _require_passing_gate(
         return
     if record is not None:
         output = str(record.get("output") or "gate returned no findings").strip()
+        findings = gates_mod.findings_excerpt(output)
         raise ValueError(
             f"phase-gate-failed: `#{active.slug}` ran `{' '.join(step.argv)}` "
             f"on the owner's latest post (seq #{latest}) and failed:\n"
-            f"{output[-gates_mod.GATE_FINDINGS_POST_CHARS:]}\n"
+            f"{findings}\n"
             "Have the owner fix these findings and post a new "
             "delivery so the gate runs against that new post, or close loudly "
             "with `#done BLOCKED · <reason>` if the gate cannot pass."
@@ -523,16 +602,35 @@ def _require_passing_gate(
     )
 
 
-_OVERRIDE_RE = re.compile(r"^(?:skipped|blocked)\s*·\s*\S", re.IGNORECASE)
+def _close_result_override_kind(result: str) -> str:
+    return tasks_mod.close_override_kind(result)
 
 
-def _explicit_close_override(plaintext: str, own_pubkey: str) -> bool:
-    """`#done skipped · <reason>` / `#done blocked · <reason>` — exact form, non-empty reason."""
+def _close_override_kind(plaintext: str, own_pubkey: str) -> str:
+    """Return the exact loud close kind, or an empty string."""
     if not tasks_mod.is_done(plaintext):
-        return False
+        return ""
     evs = tasks_mod.parse_post(plaintext, 0, own_pubkey, hub_pubkey=own_pubkey)
     result = next((e.text for e in evs if e.kind == "done"), "")
-    return bool(_OVERRIDE_RE.match(result.strip()))
+    return _close_result_override_kind(result)
+
+
+def _check_automatic_blocked_close(
+    is_pipeline: bool, plaintext: str, own_pubkey: str,
+    *, operator_abandon: bool,
+) -> None:
+    if (
+        not is_pipeline
+        or operator_abandon
+        or _close_override_kind(plaintext, own_pubkey) != "blocked"
+        or not os.environ.get("ALPI_WORKGROUP_DISPATCH")
+        or os.environ.get("ALPI_WORKGROUP_FINAL_REPAIR") == "1"
+    ):
+        return
+    raise ValueError(
+        "pipeline-blocked-premature: automatic hub turns may halt a pipeline "
+        "only during FINAL REPAIR; re-task the owner or leave the task open"
+    )
 
 
 def _check_hub_rotation(
@@ -548,7 +646,7 @@ def _check_hub_rotation(
         return
     last_contributing = None
     for p in reversed(posts):
-        if not tasks_mod.is_working(str(p.get("text") or "")):
+        if not tasks_mod.is_working_only(str(p.get("text") or "")):
             last_contributing = p
             break
     is_back_to_back = (
@@ -566,7 +664,7 @@ def _check_hub_rotation(
                 stalled = allow_stalled_retask and not any(
                     int(p.get("seq", 0)) > int(active.opened_seq)
                     and str(p.get("from") or "") != own_pubkey
-                    and not tasks_mod.is_working(str(p.get("text") or ""))
+                    and not tasks_mod.is_working_only(str(p.get("text") or ""))
                     for p in posts
                 )
                 if not stalled:
@@ -599,7 +697,7 @@ def _check_hub_rotation(
         ]
 
         def _is_marker_only(text: str) -> bool:
-            return tasks_mod.is_skip(text) or tasks_mod.is_working(text)
+            return tasks_mod.is_skip_only(text) or tasks_mod.is_working_only(text)
 
         non_hub_substantive = any(
             str(p.get("from") or "") != own_pubkey
@@ -625,7 +723,7 @@ def _check_hub_rotation(
             spoken = {
                 str(p.get("from") or "")
                 for p in in_task
-                if not tasks_mod.is_working(
+                if not tasks_mod.is_working_only(
                     str(p.get("text") or "")
                 )
             }
@@ -1245,11 +1343,14 @@ def _post_as_hub_locked(
     member_pubkeys = [m.pubkey for m in wg.members]
     quorum_roster = _quorum_roster(home, wg, existing, member_pubkeys)
     is_pipeline = wg_mod.is_pipeline_workgroup(wg.meta)
+    _check_automatic_blocked_close(
+        is_pipeline, plaintext, kp.pubkey_b64(),
+        operator_abandon=operator_abandon,
+    )
     close_override = _check_pipeline_close_owner(
         home, wg, existing, plaintext, kp.pubkey_b64(),
     )
     if not operator_abandon:
-        # The guard stops the HUB renaming its way past a red gate, not an operator.
         _check_gated_phase_not_abandoned(wg, existing, plaintext, kp.pubkey_b64())
         _check_blocked_phase_not_skipped(wg, existing, plaintext, kp.pubkey_b64())
         _check_task_slug_is_routable(wg, plaintext)
@@ -1294,6 +1395,8 @@ def _post_as_hub_locked(
             "seq": 0, "ts": ts, "from": kp.pubkey_b64(),
             "key_version": own.key_version, "nonce": nonce, "ciphertext": ct,
         }
+        if operator_abandon:
+            entry["pipeline_trigger"] = True
         if turn_id:
             entry["turn_id"] = turn_id
         if declared_usd or declared_tokens:
@@ -1344,15 +1447,20 @@ async def pull(
         decrypted.append({**p, "text": text})
 
     head = int(raw.get("head", cursor))
-    if head > sub.last_seq:
-        sub.last_seq = head
-    # Refresh definitions on every pull so a hub-side edit reaches subscribers without a rejoin.
-    if any(k in raw for k in ("pipelines", "launch_pipeline", "pipeline_mode")):
-        sub.absorb_pipeline_state(raw)
-    sub.paused = bool(raw.get("paused", sub.paused))
-    sub.append_recent(decrypted)
-    _absorb_roster(sub, raw.get("members"))
-    sub_mod.upsert(home, sub)
+    def _merge_pull(current: sub_mod.Subscription) -> bool:
+        if new_sealed and current.sealed_for(server_version) != new_sealed:
+            current.upsert_key(server_version, new_sealed)
+        if head > current.last_seq:
+            current.last_seq = head
+        if any(k in raw for k in ("pipelines", "launch_pipeline", "pipeline_mode")):
+            current.absorb_pipeline_state(raw)
+        current.paused = bool(raw.get("paused", current.paused))
+        current.append_recent(decrypted)
+        _absorb_roster(current, raw.get("members"))
+        return True
+
+    if sub_mod.mutate(home, wg_id, _merge_pull) is None:
+        return [], head
 
     _emit_wg_mentions(
         home, wg_id, decrypted,

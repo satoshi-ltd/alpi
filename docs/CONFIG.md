@@ -273,15 +273,21 @@ any output reaches the consumer. A timeout of `0` disables that watchdog.
 |---|---|---|---|
 | `runtime.first_byte_timeout_s` | `300` | seconds (`0` = off) | next turn |
 | `runtime.stream_idle_timeout_s` | `120` | seconds (`0` = off) | next turn |
+| `runtime.stream_max_duration_s` | `600` | seconds (`0` = off) | next turn |
 | `runtime.max_retries` | `2` | int | next turn |
 | `runtime.retry_backoff_s` | `1.5` | seconds (base; exponential + jitter) | next turn |
 | `runtime.prefetch` | `""` | `"" \| auto \| all \| off` | next daemon start |
 
 `first_byte_timeout_s` is generous so slow reasoning models aren't killed before
 their first token; bump it for very slow local Ollama or long-thinking models.
+`stream_max_duration_s` bounds one provider request even while it keeps emitting
+deltas. The ten-minute default leaves room for long reasoning while preventing
+one request from consuming an entire workgroup phase; set `0` to disable it.
 Retries fire only for transient failures (timeouts, connection drops, 429/5xx)
-and only before any token has streamed — a partially-streamed turn is surfaced,
-not silently replayed.
+and only before visible text reaches an interactive client. Detached workgroup
+turns may replay a partial attempt because their streamed text is not exposed;
+an enabled request-duration limit is treated as transient and can retry the same
+model within the turn.
 
 An empty `runtime.prefetch` selects `auto` outside Docker and `off` in Docker.
 `all` forces Chromium and embedding weights to warm after daemon startup; `off`

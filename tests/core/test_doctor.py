@@ -54,6 +54,37 @@ def test_missing_model_fails(tmp_path: Path) -> None:
     assert doctor.exit_code(checks) == 1
 
 
+def test_unknown_tools_deny_name_fails(tmp_path: Path) -> None:
+    _write_cfg(tmp_path, workspace=str(tmp_path))
+    (tmp_path / "config.yaml").write_text(
+        "model: openrouter/foo/bar\n"
+        f"workspace: {tmp_path}\n"
+        "tools:\n  deny: [termnal]\n"
+    )
+
+    checks = doctor.run_all(tmp_path, "default")
+
+    row = next(c for c in checks if c.group == "Tools" and c.name == "denylist")
+    assert row.status == "fail"
+    assert "termnal" in row.detail
+
+
+def test_invalid_skill_frontmatter_fails(tmp_path: Path) -> None:
+    _write_cfg(tmp_path, workspace=str(tmp_path))
+    skill = tmp_path / "skills" / "meta" / "bad-skill"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text(
+        "---\nname: bad-skill\ndescription: Bad skill\ncategory: made-up\n"
+        "version: 1.0.0\norigin: user\n---\nBody\n"
+    )
+
+    checks = doctor.run_all(tmp_path, "default")
+
+    row = next(c for c in checks if c.group == "Skills" and c.name == "meta/bad-skill")
+    assert row.status == "fail"
+    assert "category" in row.detail
+
+
 def test_missing_api_key_fails(tmp_path: Path) -> None:
     _write_cfg(tmp_path)
     _write_env(tmp_path)  # no key set

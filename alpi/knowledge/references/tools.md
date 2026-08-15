@@ -20,7 +20,7 @@
 | Knowledge wiki | `knowledge` | OKF-style synthesized Markdown knowledge; SQLite is only the derived search index. |
 | Session recall | `session_search`, `session_read`, `recall_sessions`, `index_sessions` | Lexical then semantic search over past local chat sessions; `session_read` lists recent sessions and opens a windowed turn slice (around a phrase or index) with no LLM call. |
 | Workgroup recall | `workgroup_search`, `index_workgroups` | Semantic search over hub-owned workgroup transcripts. |
-| Files | `read_file`, `write_file`, `edit_file`, `search` | Direct filesystem work. |
+| Files | `read_file`, `write_file`, `edit_file`, `delete_file`, `search` | Direct filesystem work; deletion is workspace-only. |
 | Terminal | `terminal` | Shell commands when no native tool fits. Approval + guards apply. |
 | Web/browser | `web_search`, `web_fetch`, `web_extract`, `browser`, `research` | Web information; `research` is read-only sub-agent work. |
 | Memory | `memory`, `todo` | Durable profile memory and per-turn task tracking. |

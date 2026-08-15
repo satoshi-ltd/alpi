@@ -234,6 +234,91 @@ def test_wall_clock_deadline_triggers_wrap_up(
     assert not any(e.kind == "error" for e in events)
 
 
+def test_deadline_reached_during_stream_skips_returned_tool_calls(
+    patched_engine: Engine, monkeypatch,
+) -> None:
+    import time
+
+    ledger_calls: list[dict] = []
+    monkeypatch.setattr(
+        "alpi.ledger.record", lambda *args, **kwargs: ledger_calls.append(kwargs),
+    )
+    monkeypatch.setattr(
+        "alpi.engine._turn_deadline_from_env", lambda started: time.time() + 0.01,
+    )
+    calls = {"loop": 0, "wrap": 0}
+
+    def fake_stream(messages, tools, **kwargs):
+        if not tools:
+            calls["wrap"] += 1
+            yield {"text_delta": "Time-boxed answer."}
+            yield _final_chunk("")
+            return
+        calls["loop"] += 1
+        time.sleep(0.03)
+        final = _final_chunk("", tool_calls=[{
+            "id": "tc", "name": "todo", "arguments": '{"action": "list"}',
+        }])
+        final["input_tokens"] = 123
+        final["output_tokens"] = 7
+        yield final
+
+    monkeypatch.setattr("alpi.llm.stream", fake_stream)
+
+    events = []
+    patched_engine.run_turn("do work", emit=events.append)
+
+    assert calls == {"loop": 1, "wrap": 1}
+    assert not any(event.kind == "tool_start" for event in events)
+    assert any(call.get("tokens_in") == 123 for call in ledger_calls)
+    assert any(event.kind == "usage" and event.tokens_in == 123 for event in events)
+    assert any(
+        event.kind == "assistant_done" and event.final and "Time-boxed" in event.text
+        for event in events
+    )
+
+
+def test_deadline_stops_a_stream_that_keeps_emitting_reasoning(
+    patched_engine: Engine, monkeypatch,
+) -> None:
+    now = [100.0]
+    calls = {"loop": 0, "wrap": 0, "deltas": 0}
+    monkeypatch.setattr("alpi.engine.time.time", lambda: now[0])
+    monkeypatch.setattr(
+        "alpi.engine._turn_deadline_from_env", lambda started: 105.0,
+    )
+
+    def fake_stream(messages, tools, **kwargs):
+        if not tools:
+            calls["wrap"] += 1
+            yield {"text_delta": "Time-boxed answer."}
+            yield _final_chunk("")
+            return
+        calls["loop"] += 1
+        calls["deltas"] += 1
+        yield {"reasoning_delta": "first"}
+        now[0] = 106.0
+        calls["deltas"] += 1
+        yield {"reasoning_delta": "late"}
+        calls["deltas"] += 1
+        yield _final_chunk("should not be consumed")
+
+    monkeypatch.setattr("alpi.llm.stream", fake_stream)
+
+    events = []
+    patched_engine.run_turn("do work", emit=events.append)
+
+    assert calls == {"loop": 1, "wrap": 1, "deltas": 2}
+    assert not any(
+        event.kind == "assistant_done" and "should not be consumed" in event.text
+        for event in events
+    )
+    assert any(
+        event.kind == "assistant_done" and event.final and "Time-boxed" in event.text
+        for event in events
+    )
+
+
 def test_generous_budget_does_not_trip(
     patched_engine: Engine, monkeypatch,
 ) -> None:

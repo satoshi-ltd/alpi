@@ -1160,9 +1160,9 @@ def pipeline_successor(meta: Any, phase: str) -> str:
     return chain[idx + 1] if idx + 1 < len(chain) else ""
 
 
-def safe_phase_map(meta: Any) -> dict[str, dict[str, str]]:
-    """Owner, declared task and turn budget only — gate argv/cwd, gate output and provenance never leave the hub."""
-    out: dict[str, dict[str, str]] = {}
+def safe_phase_map(meta: Any) -> dict[str, dict[str, Any]]:
+    """Expose routing and write boundaries, never gate commands or output."""
+    out: dict[str, dict[str, Any]] = {}
     for phase, raw in (getattr(meta, "pipeline_steps", None) or {}).items():
         if not isinstance(raw, dict):
             continue
@@ -1179,12 +1179,17 @@ def safe_phase_map(meta: Any) -> dict[str, dict[str, str]]:
             budget = 0
         if budget > 0:
             entry["turn_budget_s"] = budget
+        paths = raw.get("paths")
+        gate = raw.get("gate")
+        if isinstance(paths, list) and isinstance(gate, dict):
+            entry["paths"] = list(paths)
+            entry["cwd"] = str(gate.get("cwd") or "")
         out[str(phase)] = entry
     return out
 
 
 def _wire_pipeline_state(meta: Any) -> dict[str, Any]:
-    """What a member is allowed to learn: chains, selector, mode and safe owners/tasks — never gates."""
+    """Expose chains, routing and write boundaries without gate commands or output."""
     return {
         "pipelines": {k: list(v) for k, v in (meta.pipelines or {}).items()},
         "launch_pipeline": meta.launch_pipeline,

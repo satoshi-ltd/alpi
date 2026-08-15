@@ -21,6 +21,31 @@ GATE_FINDINGS_POST_CHARS = 900
 _GATE_ENV_KEYS = ("PATH", "HOME", "LANG", "LC_ALL", "TMPDIR")
 
 
+def findings_excerpt(output: str, limit: int = GATE_FINDINGS_POST_CHARS) -> str:
+    if limit <= 0:
+        return ""
+    lines = [
+        line.rstrip() for line in output.splitlines()
+        if not line.lstrip().startswith(("PASS  ", "INFO  ", "Checking artifact:"))
+    ]
+    text = "\n".join(lines).strip() or output.strip()
+    if len(text) <= limit:
+        return text
+    kept: list[str] = []
+    used = 0
+    for line in reversed(text.splitlines()):
+        size = len(line) + (1 if kept else 0)
+        if used + size > limit:
+            if not kept:
+                return "…" if limit == 1 else f"…{line[-(limit - 1):]}"
+            break
+        kept.append(line)
+        used += size
+    if kept:
+        return "\n".join(reversed(kept))
+    return ""
+
+
 @dataclass(frozen=True)
 class GateStep:
     phase: str
@@ -200,7 +225,7 @@ def clear_baseline(wg_dir: Path, phase: str) -> None:
 
 
 def paths_violations(wg_dir: Path, step: GateStep, workspace: Path) -> str:
-    """Out-of-paths changes as a re-taskable red; "" = clean, and a missing baseline fails open."""
+    """Return out-of-path changes; a missing baseline is a hard failure."""
     if not step.paths:
         return ""
     root = _project_root(step, workspace)
@@ -210,7 +235,10 @@ def paths_violations(wg_dir: Path, step: GateStep, workspace: Path) -> str:
     try:
         baseline = json.loads(bp.read_text())
     except (OSError, ValueError):
-        return ""
+        return (
+            f"BOUNDARY {step.phase}: phase baseline is missing or unreadable; "
+            "refusing to verify this phase"
+        )
     current = _scan_project(root)
     allowed = tuple(step.paths)
 
@@ -333,10 +361,26 @@ def owner_post_under_gate(
         if int(p.get("seq", 0)) > opened_seq
         and (str(p.get("from") or "") in owner_pubkeys if owner_pubkeys
              else str(p.get("from") or "") != hub_pubkey)
-        and not tasks_mod.is_working(str(p.get("text") or ""))
-        and not tasks_mod.is_skip(str(p.get("text") or ""))
+        and not tasks_mod.is_working_only(str(p.get("text") or ""))
+        and not tasks_mod.is_skip_only(str(p.get("text") or ""))
     ]
     return max(seqs) if seqs else None
+
+
+def owner_delivery(
+    posts: list[dict], owner_pubkeys: set[str], opened_seq: int,
+) -> tuple[int, str] | None:
+    """Return the owner's latest non-heartbeat post for the active phase."""
+    from alpi.alp import tasks as tasks_mod
+
+    deliveries = [
+        (int(p.get("seq", 0)), str(p.get("text") or ""))
+        for p in posts
+        if int(p.get("seq", 0)) > opened_seq
+        and str(p.get("from") or "") in owner_pubkeys
+        and not tasks_mod.is_working_only(str(p.get("text") or ""))
+    ]
+    return max(deliveries, default=None, key=lambda item: item[0])
 
 
 def write_gate_log(wg_dir: Path, step: GateStep, seq: int, passed: bool, output: str) -> None:

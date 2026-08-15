@@ -599,3 +599,35 @@ def test_undirected_block_omits_whole_blocks_that_exceed_char_budget(
     assert "wg_id=wg_2" in block
     assert "wg_id=wg_1" not in block
     assert "Omitted: site-1, site-0" in block
+
+
+def test_pipeline_only_context_uses_the_short_guardrails(short_tmp: Path) -> None:
+    home = short_tmp / "member-pl"; home.mkdir()
+    load_or_generate(home)
+    sub_mod.upsert(home, sub_mod.Subscription(
+        wg_id="wg_pl", name="site-x", hub_id="mira",
+        hub_pubkey="hub-key", briefing="factory briefing",
+        pipelines={"setup": ["setup", "build"]},
+    ))
+    block = agent_context.build(home)
+    assert "engagement rules (pipeline)" in block
+    assert "DETECT YOUR OWN LOOP" not in block, "discussion-only guidance must not ship to pipeline members"
+    assert "ONLY THE HUB OPENS" in block and "#working" in block
+    assert "only non-empty line in that post" in block
+
+
+def test_mixed_membership_keeps_the_full_guardrails(short_tmp: Path) -> None:
+    home = short_tmp / "member-mix"; home.mkdir()
+    load_or_generate(home)
+    sub_mod.upsert(home, sub_mod.Subscription(
+        wg_id="wg_pl", name="site-x", hub_id="mira",
+        hub_pubkey="hub-key", briefing="factory",
+        pipelines={"setup": ["setup"]},
+    ))
+    sub_mod.upsert(home, sub_mod.Subscription(
+        wg_id="wg_chat", name="brainstorm", hub_id="mira",
+        hub_pubkey="hub-key", briefing="open discussion",
+    ))
+    block = agent_context.build(home)
+    assert "engagement rules (pipeline)" not in block
+    assert "DETECT YOUR OWN LOOP" in block

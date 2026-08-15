@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import fnmatch
+import json
+import os
 import re
 from pathlib import Path
 
@@ -132,6 +135,41 @@ def resolve_path(path: str, *, for_write: bool = False) -> Path:
                 f"members cannot {verb} the profile {area}/ area; "
                 f"this requires an admin device: {path}"
             )
+    if for_write:
+        _enforce_dispatch_write_scope(resolved, path)
+    return resolved
+
+
+def _enforce_dispatch_write_scope(resolved: Path, original: str) -> None:
+    raw = os.environ.get("ALPI_WORKGROUP_WRITE_SCOPE")
+    if raw is None:
+        return
+    try:
+        scope = json.loads(raw)
+        workspace = _workspace_root().resolve()
+        root = (workspace / str(scope.get("root") or "")).resolve()
+        root.relative_to(workspace)
+        patterns = tuple(str(item) for item in scope.get("paths") or ())
+        rel = resolved.relative_to(root).as_posix()
+    except (AttributeError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise ValueError(f"path is outside the active phase boundary: {original}") from exc
+    if not any(fnmatch.fnmatchcase(rel, pattern) for pattern in patterns):
+        raise ValueError(f"path is outside the active phase boundary: {original}")
+
+
+def resolve_workspace_path(path: str, *, for_write: bool = False) -> Path:
+    """Resolve a path that must remain inside the active workspace."""
+    typed = Path(path).expanduser()
+    root = _workspace_root().resolve()
+    if not typed.is_absolute():
+        typed = root / typed
+    if typed.is_symlink():
+        raise ValueError(f"refusing workspace symlink: {path}")
+    resolved = resolve_path(str(typed), for_write=for_write)
+    try:
+        resolved.relative_to(root)
+    except ValueError as exc:
+        raise ValueError(f"path must stay inside the active workspace: {path}") from exc
     return resolved
 
 

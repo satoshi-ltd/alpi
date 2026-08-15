@@ -89,7 +89,7 @@ doesn't reach:
   prepended to the body before the LLM sees it.
 
 - **Sensitive-path denylist** on file tools (`read_file`, `write_file`,
-  `edit_file`, `search`, email attachment download). Matches terminal's
+  `edit_file`, `delete_file`, `search`, email attachment download). Matches terminal's
   posture: paths under `/etc`, `/boot`, `/sys`, `/proc`,
   `/usr/lib/systemd`, `/System`, `/private/etc`, the docker sockets,
   SSH private keys (`~/.ssh/id_*`, `*_key`, `*_ed25519`), `*.pem /
@@ -103,6 +103,12 @@ doesn't reach:
   `/tmp`, project `.env` files in the workspace, and outside-workspace
   project dirs — is allowed, same as terminal. Workspace-only isolation
   lives in Layer 2 (OS sandbox).
+
+- **Pipeline phase write boundary.** A dispatched phase owner can mutate only
+  the paths declared by that phase through native file tools. Other actors do
+  not receive `write_file`, `edit_file`, `delete_file`, or `terminal` while the
+  phase is active. `delete_file` is always confined to regular files inside
+  the active workspace.
 
 - **Profile-secret patterns on `terminal`** complement the path denylist
   by catching shell-side bypasses: `cat`/`head`/`grep`/etc. against

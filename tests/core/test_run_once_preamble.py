@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 from alpi import cli as _cli_mod
-from alpi.config import Config, ToolsConfig
+from alpi.config import Config
 from alpi.engine import AgentEvent
 
 
@@ -129,6 +129,83 @@ def test_emit_events_serializes_tool_state(tmp_home: Path, monkeypatch) -> None:
     ]
     assert "tool_state" in kinds
     assert kinds.index("tool_state") > kinds.index("tool_start")
+
+
+def test_emit_events_identifies_accepted_workgroup_post(
+    tmp_home: Path, monkeypatch,
+) -> None:
+    import json
+
+    monkeypatch.setattr(_cli_mod, "_bootstrap", lambda _h: None)
+    monkeypatch.setattr(
+        "alpi.config.load",
+        lambda _h: Config(home=tmp_home, model="stub", raw={}),
+    )
+    monkeypatch.setattr("alpi.engine.Engine.save_session", lambda self: None)
+    monkeypatch.setattr("alpi.engine._maybe_load_mcps", lambda _cfg: [])
+    monkeypatch.setattr("alpi.engine.Engine._build_system_prompt", lambda self: "stub")
+    monkeypatch.setattr("alpi.ctx_window.resolve", lambda _h, _c, _m: 200_000)
+    monkeypatch.setattr("alpi.ledger.check", lambda *a, **kw: None)
+    monkeypatch.setattr("alpi.ledger.record", lambda *a, **kw: None)
+    monkeypatch.setattr(
+        "alpi.engine.Engine.run_turn",
+        _make_run_turn([
+            AgentEvent(
+                kind="tool_end", name="workgroup_post", ok=True,
+                args={"wg_id": "wg_target", "text": "delivery"},
+            ),
+            AgentEvent(kind="assistant_done", text="done", final=True),
+        ]),
+    )
+
+    buf = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", buf)
+    _cli_mod._run_once(tmp_home, "deliver", emit_events=True, persist=False)
+
+    events = [
+        json.loads(line) for line in buf.getvalue().splitlines()
+        if line.strip().startswith("{")
+    ]
+    post = next(event for event in events if event.get("name") == "workgroup_post")
+    assert post == {
+        "kind": "tool_end", "name": "workgroup_post", "ok": True,
+        "wg_id": "wg_target",
+    }
+
+
+def test_emit_events_coalesces_model_progress_without_content(tmp_home: Path, monkeypatch) -> None:
+    import json
+
+    monkeypatch.setattr(_cli_mod, "_bootstrap", lambda _h: None)
+    monkeypatch.setattr(
+        "alpi.config.load",
+        lambda _h: Config(home=tmp_home, model="stub", raw={}),
+    )
+    monkeypatch.setattr("alpi.engine.Engine.save_session", lambda self: None)
+    monkeypatch.setattr("alpi.engine._maybe_load_mcps", lambda _cfg: [])
+    monkeypatch.setattr("alpi.engine.Engine._build_system_prompt", lambda self: "stub")
+    monkeypatch.setattr("alpi.ctx_window.resolve", lambda _h, _c, _m: 200_000)
+    monkeypatch.setattr("alpi.ledger.check", lambda *a, **kw: None)
+    monkeypatch.setattr("alpi.ledger.record", lambda *a, **kw: None)
+
+    events = [
+        AgentEvent(kind="reasoning_delta", text="private reasoning"),
+        AgentEvent(kind="assistant_delta", text="partial answer"),
+        AgentEvent(kind="model_state"),
+        AgentEvent(kind="assistant_done", text="done", final=True),
+    ]
+    monkeypatch.setattr("alpi.engine.Engine.run_turn", _make_run_turn(events))
+
+    buf = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", buf)
+    _cli_mod._run_once(tmp_home, "work", emit_events=True, persist=False)
+
+    payloads = [json.loads(line) for line in buf.getvalue().splitlines()]
+    assert [p for p in payloads if p["kind"] == "model_state"] == [
+        {"kind": "model_state"},
+    ]
+    assert "private reasoning" not in buf.getvalue()
+    assert "partial answer" not in buf.getvalue()
 
 
 def test_run_once_prints_attachment_listing_without_text(tmp_home: Path, monkeypatch) -> None:

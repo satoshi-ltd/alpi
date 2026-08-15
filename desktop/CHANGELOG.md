@@ -11,6 +11,21 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.5.7 — 2026-08-15 — launch from the profile
+
+- **Saved recipes are available when creating a workgroup.** Desktop lists the
+  recipes owned by the selected hub profile and renders their parameters and
+  file inputs directly in the launch dialog.
+- **Manual recipe import remains available.** A saved recipe or an imported
+  YAML file follows the same preview and launch flow, including required input
+  validation before the request reaches the daemon.
+- **Local and remote hubs use the same host contract.** Recipe discovery and
+  launch run through the active connection; Desktop does not read profile files
+  directly.
+
+Requires alpi ≥ 0.14.0 for profile-owned recipe discovery and launch. Older
+daemons can still use the rest of Desktop, but cannot expose saved recipes.
+
 ## v0.5.6 — 2026-08-08 — who changed what
 
 - **Connections now includes Activity.** Local and remote admins can

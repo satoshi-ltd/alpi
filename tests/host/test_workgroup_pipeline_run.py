@@ -156,7 +156,7 @@ def test_pipeline_run_blocked_keeps_the_phase_current(short_tmp: Path) -> None:
     wg = _hub(home, pipelines=_CHAIN, launch="intake", steps=_STEPS)
     _transcript(home, wg.meta.id, [
         "@scout #task #intake gather the brief",
-        "#done BLOCKED intake · the hotel never answered",
+        "#done BLOCKED · intake · the hotel never answered",
     ])
 
     state = data_workgroup.fold_task_state(home, wg.meta.id)
@@ -166,6 +166,20 @@ def test_pipeline_run_blocked_keeps_the_phase_current(short_tmp: Path) -> None:
     assert run["current_phase"] == "intake"
     assert _states(run)["intake"] == "current"
     assert _states(run)["content"] == "pending"
+
+
+def test_malformed_blocked_result_is_not_a_pipeline_halt(short_tmp: Path) -> None:
+    home = short_tmp / "hub"
+    wg = _hub(home, pipelines=_CHAIN, launch="intake", steps=_STEPS)
+    _transcript(home, wg.meta.id, [
+        "@scout #task #intake gather the brief",
+        "#done BLOCKED·not-the-contract",
+    ])
+
+    state = data_workgroup.fold_task_state(home, wg.meta.id)
+    assert state["blocked"] is None
+    assert state["pipeline_run"]["status"] == "between"
+    assert _states(state["pipeline_run"])["intake"] == "completed"
 
 
 def test_pipeline_run_completed_when_terminal_phase_closed(short_tmp: Path) -> None:

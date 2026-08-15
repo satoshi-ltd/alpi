@@ -232,6 +232,7 @@ _PRIVATE_SUBDIRS = (
     "secrets",
     "sessions",
     "skills",
+    "recipes",
     "schedule/output",
     "logs",
     "host",

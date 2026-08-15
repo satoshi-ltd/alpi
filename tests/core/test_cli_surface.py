@@ -130,6 +130,36 @@ def test_workgroup_launch_is_text_only() -> None:
     assert "--assets" not in result.output
 
 
+def test_workgroup_recipes_lists_saved_recipes(tmp_path, monkeypatch) -> None:
+    recipes = tmp_path / "recipes"
+    recipes.mkdir()
+    (recipes / "hotel.yaml").write_text("hub: mira\nname: Hotel factory\n")
+    monkeypatch.setenv("ALPI_HOME", str(tmp_path))
+    monkeypatch.setattr(cli, "_bootstrap", lambda _home: None)
+
+    result = CliRunner().invoke(cli.main, ["workgroup", "recipes"])
+
+    assert result.exit_code == 0
+    assert result.output == "hotel  Hotel factory\n"
+
+
+def test_workgroup_recipes_lists_valid_entries_and_warns_for_invalid(
+    tmp_path, monkeypatch,
+) -> None:
+    recipes = tmp_path / "recipes"
+    recipes.mkdir()
+    (recipes / "hotel.yaml").write_text("hub: mira\nname: Hotel factory\n")
+    (recipes / "broken.yaml").write_text("hub: mira\n")
+    monkeypatch.setenv("ALPI_HOME", str(tmp_path))
+    monkeypatch.setattr(cli, "_bootstrap", lambda _home: None)
+
+    result = CliRunner().invoke(cli.main, ["workgroup", "recipes"])
+
+    assert result.exit_code == 0
+    assert "hotel  Hotel factory" in result.output
+    assert "saved recipe 'broken' ignored" in result.output
+
+
 def test_workgroup_launch_rejects_binary_input(tmp_path) -> None:
     recipe = tmp_path / "r.yaml"
     recipe.write_text("hub: mira\nmembers: [scout]\ninputs:\n  brief: {dest: brief.md}\n")
@@ -141,3 +171,35 @@ def test_workgroup_launch_rejects_binary_input(tmp_path) -> None:
     assert result.exit_code != 0
     assert "text-only" in result.output
     assert "Traceback" not in result.output
+
+
+def test_workgroup_launch_resolves_saved_recipe_id(tmp_path, monkeypatch) -> None:
+    profile_home = tmp_path
+    recipes = profile_home / "recipes"
+    recipes.mkdir(parents=True)
+    (recipes / "hotel.yaml").write_text("hub: mira\nname: hotel\n")
+    captured = {}
+
+    async def launch(home, yaml, params, **kwargs):
+        captured.update(home=home, yaml=yaml, params=params, kwargs=kwargs)
+        return {"workgroup_id": "wg-hotel", "project_path": None}
+
+    monkeypatch.setenv("ALPI_HOME", str(tmp_path))
+    monkeypatch.setattr(cli, "_bootstrap", lambda _home: None)
+    from alpi.host import recipes as host_recipes
+    monkeypatch.setattr(host_recipes, "launch", launch)
+
+    result = CliRunner().invoke(cli.main, ["workgroup", "launch", "--recipe", "hotel"])
+
+    assert result.exit_code == 0
+    assert result.output == "launched wg-hotel\n"
+    assert captured == {
+        "home": profile_home,
+        "yaml": "hub: mira\nname: hotel\n",
+        "params": {},
+        "kwargs": {
+            "briefing_override": None,
+            "recipe_id": "hotel",
+            "inputs": {},
+        },
+    }

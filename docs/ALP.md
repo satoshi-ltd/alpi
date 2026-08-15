@@ -884,26 +884,31 @@ line), that shape is *constant*; only a parameter or two and the
 brief change. A **recipe** captures the constant shape as data, so
 a launch is "load this file, fill the blanks."
 
-A recipe is a plain YAML file — a git artifact, not owned by any
-profile and never stored in `~/.alpi`. There is no catalogue and
-no install step: the client reads the `.yaml` and hands its
-*contents* to the daemon. Recipes stay reviewable in version
-control and shareable across machines without a per-daemon
-registry.
+A recipe is a plain YAML file. A hub keeps reusable recipes in
+`<profile-home>/recipes/<id>.yaml`; the filename stem is the recipe id.
+Clients list those recipes through the host plane and launch them by id.
+One-off or externally versioned recipes remain supported: the desktop file
+picker and CLI can read any `.yaml` / `.yml` file and hand its contents to the
+daemon. Both routes use the same parser and launcher.
 
 Recipes are a **host-plane** convenience, not part of the ALP wire
 protocol — ALP gains no recipe or project verbs. A launch just
 assembles the existing `workgroup.create` primitive (plus, when
-asked, a project clone) from the resolved file. Two host methods:
+asked, a project clone) from the resolved recipe. Three host methods:
 
+- `host.workgroup.recipes.list(profile)` — list and describe the saved
+  recipes owned by that hub profile. A saved recipe declaring another hub is
+  rejected.
 - `host.workgroup.recipes.describe(yaml)` — parse a recipe and
   return its shape (hub, declared params + patterns, briefing
   draft, whether it clones a project). Scope-free; the desktop
   uses it to render the launch form.
-- `host.workgroup.launch_recipe(profile, yaml, params, briefing?, inputs?)`
-  — admin verb; `profile` must be the recipe's hub and own the
-  launch. `inputs` is a `{name: value}` map for the recipe's
-  declared inputs (below).
+- `host.workgroup.launch_recipe(profile, recipe_id, yaml?, params,
+  briefing?, inputs?)` — admin verb. Without `yaml`, the daemon loads
+  `<profile-home>/recipes/<recipe_id>.yaml`; with `yaml`, it launches the
+  supplied content. In both cases `profile` must be the recipe's hub and own
+  the launch. `inputs` is a `{name: value}` map for the recipe's declared
+  inputs (below).
 
 **Three shapes from one format.** A recipe declares only what it
 needs:
@@ -1062,20 +1067,20 @@ audit can tie a running workgroup back to the exact recipe that
 produced it. Editing the source recipe never mutates a live
 workgroup.
 
-**Surfaces.** Launch from the CLI —
+**Surfaces.** Launch a saved hub recipe from the CLI —
 
 ```
-alpi workgroup launch --recipe hotel.yaml \
+alpi -p mira workgroup launch --recipe hotel \
   --param slug=casa-bahia --input brief=./brief.md
 ```
 
-`--input NAME=FILE` seeds the declared input `NAME` with FILE's
-contents (repeatable). Or launch from the desktop New Workgroup
-modal ("Import recipe…"), which describes the file, groups the
-standard workgroup fields (hub, name, briefing) and then a **recipe
-inputs** section — a field per declared param and a textarea per
-declared input — and lets the operator edit the briefing draft
-before launching.
+`--recipe` accepts either a saved id or a YAML path. `--input NAME=FILE`
+seeds the declared input `NAME` with FILE's contents (repeatable). The desktop
+New Workgroup modal lists recipes saved by the selected hub and keeps
+"Import recipe…" as a separate file-picker path. After either selection it
+renders the same fields: hub, name, briefing, a field per declared param and a
+textarea per declared input. The operator can edit the briefing draft before
+launching.
 
 A worked recipe (only `{slug}` varies per launch):
 
@@ -1593,9 +1598,16 @@ needs judgment — intake signals, QA) stay LLM-owned, and so does a
 step that declares `{owner, task}` but omits `gate`: it is
 still dispatched and owner-typed, it just closes on quorum instead of
 on a check. Omitting the gate is the right call for a phase that may
-legitimately produce nothing — one whose owner can answer `#done
-skipped · <reason>` — because a gate there would fail a correct
-outcome.
+legitimately produce nothing — its owner posts `#skip`, then the hub
+closes `#done skipped · <reason>` before any substantive delivery —
+because a gate there would fail a correct outcome.
+
+`skipped` remains valid only while the resolved owner has made no
+substantive delivery for that phase in the current pipeline run. Reopening
+the same or an earlier phase, including the first, does not erase an earlier
+delivery. Only an explicit operator pipeline trigger starts a fresh run.
+Unresolved ownership fails closed and requires re-pinning or an explicit
+`BLOCKED` close.
 
 **Per-phase authorship (`pipeline_steps.*.paths`, hub-local).** A gated
 phase may declare the path globs its owner is allowed to touch. When the
@@ -1604,10 +1616,13 @@ task opens the daemon snapshots the project's file state (derived trees
 the gate would run, changes outside the declared globs red the phase
 *before the command executes*, naming each file and its owner — gate
 pressure is precisely what causes cross-phase edits, so the edit is
-surfaced instead of graded. A missing baseline (daemon restarted
-mid-phase) fails open: the boundary is a net, not a wall. `paths`
-requires a `gate` — its `cwd` anchors the project root and its run is
-the check moment.
+surfaced instead of graded. The dispatched owner receives the same globs as
+its native file-tool write boundary; non-owners cannot use native file
+mutation tools during that phase. `terminal` follows the profile's tool
+policy, while the gate remains authoritative over the workspace diff. A
+missing or unreadable baseline fails closed because the daemon cannot prove
+lane ownership. `paths` requires a `gate` — its `cwd` anchors the project root
+and its run is the check moment.
 
 **The gate is level-triggered where the transcript alone would strand a
 run.** Four behaviours close the measured stall family: a red verdict is
@@ -1631,9 +1646,8 @@ findings or leave the run halted, loudly. And the targeted phase owner
 is exempt from the one-post-per-round rotation cap: a repair delivery
 may arrive in pieces (a fix note, then the re-delivery the gate re-runs
 on) without muting the owner. A `#done BLOCKED` still halts its chain,
-but a hub `#task` on any phase EARLIER in the chain is now allowed — a
-rewind re-walks forward through the blocked phase, so nothing is
-skipped.
+but a hub `#task` on any phase EARLIER in the chain is now allowed. A
+rewind re-walks the same run, including when it returns to the first phase.
 
 **One authority decides the successor.** Both the continuation path (a
 phase closed by quorum, gate-less or LLM-owned) and the gate path call
@@ -1690,16 +1704,18 @@ ledger and adds `pipeline_run`:
 non-terminal phase closed and its successor is not open yet),
 `blocked`, or `completed` (the terminal phase closed). A
 `#done skipped · <reason>` advances the chain but records `skipped` —
-never collapsed into `completed`. A blocked phase stays `current` and
-the run-level status carries the failure.
+never collapsed into `completed` — and is rejected once the owner has
+posted a substantive delivery. Delivered work must pass its gate,
+repair the same phase, or close `BLOCKED`. A blocked phase stays
+`current` and the run-level status carries the failure.
 
 The LATEST task overall selects the visible run, so an ad-hoc task
 opened after a chain makes `pipeline_run` null rather than leaving a
 finished chain on screen. Runs are cut at boundaries, not at every
 occurrence of a first slug: a same-slug reopen — the first phase
 included — is another attempt inside the current run and the latest
-attempt owns the phase's visible state, while a first-phase opener
-that finds the run sitting elsewhere is an explicit restart. A
+attempt owns the phase's visible state. Only an opener written by the
+explicit operator trigger starts a fresh run. A
 preempted attempt is never `completed`. The fold is cached by
 transcript identity plus a fingerprint of the definitions, so a
 metadata edit can't serve a stale mapping and repeated reads don't

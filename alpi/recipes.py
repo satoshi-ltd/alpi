@@ -13,6 +13,7 @@ import yaml
 
 _PARAM_TOKEN = re.compile(r"\{([a-z0-9_]+)\}")
 _RECIPE_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
+_RECIPE_SUFFIXES = (".yaml", ".yml")
 
 
 class RecipeError(ValueError):
@@ -159,7 +160,7 @@ def _coerce_inputs(raw: Any, has_project: bool) -> dict:
 
 
 def parse_recipe(text: str, recipe_id: str) -> Recipe:
-    if not _RECIPE_ID_RE.match(recipe_id):
+    if not _RECIPE_ID_RE.fullmatch(recipe_id):
         raise RecipeError(f"recipe id {recipe_id!r} must match [a-z0-9][a-z0-9_-]*")
     try:
         data = yaml.safe_load(text) or {}
@@ -234,6 +235,59 @@ def parse_recipe(text: str, recipe_id: str) -> Recipe:
 
 def load_recipe(path: Path) -> Recipe:
     return parse_recipe(path.read_text(), path.stem)
+
+
+def saved_recipe_path(home: Path, recipe_id: str) -> Path:
+    if not _RECIPE_ID_RE.fullmatch(recipe_id):
+        raise RecipeError(f"recipe id {recipe_id!r} must match [a-z0-9][a-z0-9_-]*")
+    root = home / "recipes"
+    if root.is_symlink():
+        raise RecipeError(f"saved recipe directory must not be a symlink: {root}")
+    for suffix in _RECIPE_SUFFIXES:
+        path = root / f"{recipe_id}{suffix}"
+        if path.is_file() and not path.is_symlink():
+            return path
+    raise RecipeError(f"saved recipe {recipe_id!r} not found in {root}")
+
+
+def load_saved_recipe(home: Path, recipe_id: str) -> tuple[Recipe, str]:
+    path = saved_recipe_path(home, recipe_id)
+    text = path.read_text(encoding="utf-8")
+    return parse_recipe(text, recipe_id), text
+
+
+def list_saved_recipes(home: Path) -> list[Recipe]:
+    recipes, invalid = scan_saved_recipes(home)
+    if invalid:
+        raise RecipeError(invalid[0]["detail"])
+    return recipes
+
+
+def scan_saved_recipes(home: Path) -> tuple[list[Recipe], list[dict[str, str]]]:
+    root = home / "recipes"
+    if root.is_symlink():
+        raise RecipeError(f"saved recipe directory must not be a symlink: {root}")
+    if not root.is_dir():
+        return [], []
+    out: list[Recipe] = []
+    invalid: list[dict[str, str]] = []
+    candidates: dict[str, list[Path]] = {}
+    for path in sorted(root.iterdir(), key=lambda p: p.name):
+        if path.suffix not in _RECIPE_SUFFIXES or path.is_symlink() or not path.is_file():
+            continue
+        candidates.setdefault(path.stem, []).append(path)
+    for recipe_id, paths in candidates.items():
+        if len(paths) > 1:
+            invalid.append({
+                "id": recipe_id,
+                "detail": f"duplicate saved recipe id {recipe_id!r} in {root}",
+            })
+            continue
+        try:
+            out.append(parse_recipe(paths[0].read_text(encoding="utf-8"), recipe_id))
+        except (OSError, UnicodeError, RecipeError) as e:
+            invalid.append({"id": recipe_id, "detail": str(e)})
+    return out, invalid
 
 
 def _placeholders(value: Any) -> set[str]:

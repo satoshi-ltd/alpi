@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import inspect
 import shutil
 import tempfile
 import types
@@ -126,6 +125,83 @@ def test_done_skipped_and_blocked_overrides_pass(monkeypatch) -> None:
     )
 
 
+def test_done_skipped_rejects_a_substantive_owner_delivery(monkeypatch) -> None:
+    _patch_peer_ids(monkeypatch)
+    posts = [
+        _post(1, "HUB", "@scout #task #intake produce work/intake.md"),
+        _post(2, "SCOUT_PK", "delivered work/intake.md"),
+    ]
+    with pytest.raises(ValueError, match="phase-skip-after-delivery"):
+        wc._check_pipeline_close_owner(
+            Path("/nonexistent"), _pipeline_wg(), posts,
+            "#done skipped · gate remains red", "HUB",
+        )
+
+
+def test_done_skipped_rejects_delivery_before_same_phase_reopen(monkeypatch) -> None:
+    _patch_peer_ids(monkeypatch)
+    posts = [
+        _post(1, "HUB", "@scout #task #intake produce work/intake.md"),
+        _post(2, "SCOUT_PK", "delivered work/intake.md"),
+        _post(3, "HUB", "#done BLOCKED · intake · gate red"),
+        _post(4, "HUB", "@scout #task #intake repair the canonical rows"),
+    ]
+    with pytest.raises(ValueError, match="phase-skip-after-delivery"):
+        wc._check_pipeline_close_owner(
+            Path("/nonexistent"), _pipeline_wg(), posts,
+            "#done skipped · no second delivery", "HUB",
+        )
+
+
+def test_done_skipped_ignores_delivery_before_a_first_phase_restart(monkeypatch) -> None:
+    _patch_peer_ids(monkeypatch)
+    posts = [
+        _post(1, "HUB", "@scout #task #intake produce work/intake.md"),
+        _post(2, "SCOUT_PK", "delivered work/intake.md"),
+        _post(3, "HUB", "#done intake complete"),
+        _post(4, "HUB", "@scout #task #assets map media"),
+        _post(5, "SCOUT_PK", "delivered assets/manifest.yaml"),
+        _post(6, "HUB", "#done BLOCKED · assets failed irrecoverably"),
+        _post(7, "HUB", "@scout #task #intake start a fresh run"),
+    ]
+    assert wc._check_pipeline_close_owner(
+        Path("/nonexistent"), _pipeline_wg(), posts,
+        "#done skipped · no intake changes requested", "HUB",
+    ) is True
+
+
+def test_done_skipped_rejects_delivery_after_a_rewind_to_first_phase(monkeypatch) -> None:
+    _patch_peer_ids(monkeypatch)
+    posts = [
+        {**_post(1, "HUB", "@scout #task #intake produce work/intake.md"),
+         "pipeline_trigger": True},
+        _post(2, "SCOUT_PK", "delivered work/intake.md"),
+        _post(3, "HUB", "#done intake complete"),
+        _post(4, "HUB", "@scout #task #assets map media"),
+        _post(5, "SCOUT_PK", "delivered assets/manifest.yaml"),
+        _post(6, "HUB", "#done BLOCKED · assets need intake repair"),
+        _post(7, "HUB", "@scout #task #intake repair canonical rows"),
+    ]
+    with pytest.raises(ValueError, match="phase-skip-after-delivery"):
+        wc._check_pipeline_close_owner(
+            Path("/nonexistent"), _pipeline_wg(), posts,
+            "#done skipped · no second intake delivery", "HUB",
+        )
+
+
+def test_done_skipped_allows_only_working_and_skip_signals(monkeypatch) -> None:
+    _patch_peer_ids(monkeypatch)
+    posts = [
+        _post(1, "HUB", "@scout #task #intake produce work/intake.md"),
+        _post(2, "SCOUT_PK", "#working checking sources"),
+        _post(3, "SCOUT_PK", "#skip no verified source is available"),
+    ]
+    assert wc._check_pipeline_close_owner(
+        Path("/nonexistent"), _pipeline_wg(), posts,
+        "#done skipped · no verified source is available", "HUB",
+    ) is True
+
+
 def test_done_passes_once_the_owner_posted(monkeypatch) -> None:
     _patch_peer_ids(monkeypatch)
     posts = [
@@ -178,13 +254,6 @@ def test_duplicate_slug_still_rejected_once_members_responded() -> None:
         )
 
 
-def test_repair_trigger_text_teaches_the_retask_move() -> None:
-    src = inspect.getsource(service)
-    assert "RE-TASK the owner: post a NEW" in src
-    assert "#task #<same-phase>" in src
-    assert "owner never delivered is forbidden" in src
-
-
 def test_override_syntax_is_strict(monkeypatch) -> None:
     _patch_peer_ids(monkeypatch)
     posts = [_post(1, "HUB", "@scout #task #intake produce work/intake.md")]
@@ -193,12 +262,24 @@ def test_override_syntax_is_strict(monkeypatch) -> None:
         "#done blocked routes fixed",
         "#done skipped",
         "#done BLOCKED",
+        "#done BLOCKED·reason",
         "#done skipped ·   ",
     ):
         with pytest.raises(ValueError, match="phase-owner-missing"):
             wc._check_pipeline_close_owner(
                 Path("/nonexistent"), _pipeline_wg(), posts, bad, "HUB",
             )
+
+
+def test_malformed_blocked_close_does_not_halt_the_chain() -> None:
+    posts = [
+        _post(1, "HUB", "@scout #task #intake produce work/intake.md"),
+        _post(2, "SCOUT_PK", "delivered work/intake.md"),
+        _post(3, "HUB", "#done BLOCKED·reason"),
+    ]
+    wc._check_blocked_phase_not_skipped(
+        _pipeline_wg(), posts, "@scout #task #assets map media", "HUB",
+    )
 
 
 def test_unresolvable_owner_fails_closed(monkeypatch) -> None:
@@ -211,10 +292,11 @@ def test_unresolvable_owner_fails_closed(monkeypatch) -> None:
         wc._check_pipeline_close_owner(
             Path("/nonexistent"), _pipeline_wg(), posts, "#done stalled", "HUB",
         )
-    wc._check_pipeline_close_owner(
-        Path("/nonexistent"), _pipeline_wg(), posts,
-        "#done skipped · owner unpinned, waiving phase", "HUB",
-    )
+    with pytest.raises(ValueError, match="phase-owner-unresolved"):
+        wc._check_pipeline_close_owner(
+            Path("/nonexistent"), _pipeline_wg(), posts,
+            "#done skipped · owner unpinned, waiving phase", "HUB",
+        )
 
 
 def test_cursor_advance_matrix() -> None:
@@ -227,6 +309,17 @@ def test_cursor_advance_matrix() -> None:
     assert not ok(rc=-15, posts_added=0, preempted=False, timed_out=True)
     assert ok(rc=-15, posts_added=1, preempted=False, timed_out=True), "timeout after delivery advances"
     assert not ok(rc=0, posts_added=1, preempted=True, timed_out=False), "preempted never advances"
+    assert not ok(
+        rc=0, posts_added=1, preempted=False, timed_out=False, cancelled=True,
+    ), "paused or removed dispatches never advance"
+    assert not ok(
+        rc=0, posts_added=0, preempted=False, timed_out=False,
+        require_delivery=True,
+    ), "a pipeline owner must deliver before its cursor advances"
+    assert ok(
+        rc=0, posts_added=1, preempted=False, timed_out=False,
+        require_delivery=True,
+    )
 
 
 def test_working_heartbeat_does_not_block_the_stalled_retask() -> None:
@@ -481,7 +574,8 @@ def test_a_green_gate_goes_stale_when_the_owner_posts_again(
     short_tmp: Path, monkeypatch,
 ) -> None:
     _patch_peer_ids(monkeypatch)
-    home = short_tmp / "h"; home.mkdir(parents=True)
+    home = short_tmp / "h"
+    home.mkdir(parents=True)
     _write_gate(home, "intake", 2, passed=True)
     posts = [*_delivered(), _post(3, "SCOUT_PK", "amended site.json after review")]
     with pytest.raises(ValueError, match="phase-gate-unverified"):
@@ -500,6 +594,19 @@ def test_blocked_override_still_closes_a_red_gated_phase(
         home, _gated_wg(), _delivered(),
         "#done BLOCKED · check:config cannot pass without the engine id", "HUB",
     )
+
+
+def test_skipped_override_cannot_hide_a_red_gated_delivery(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    _patch_peer_ids(monkeypatch)
+    home = short_tmp / "h"; home.mkdir(parents=True)
+    _write_gate(home, "intake", 2, passed=False)
+    with pytest.raises(ValueError, match="phase-skip-after-delivery"):
+        wc._check_pipeline_close_owner(
+            home, _gated_wg(), _delivered(),
+            "#done skipped · work looks complete despite the gate", "HUB",
+        )
 
 
 def test_working_heartbeat_is_not_the_judged_post(short_tmp: Path, monkeypatch) -> None:
@@ -528,6 +635,16 @@ def test_delivery_survives_a_daemon_restart_for_the_gate() -> None:
         _post(4, "SCOUT_PK", "#working re-reading the brief"),
     ]
     service._GATE_ATTEMPTED.clear()
+    assert gates.owner_post_under_gate(posts, {"SCOUT_PK"}, "HUB", 1) == 2
+
+
+def test_working_line_does_not_hide_a_delivery_from_the_gate() -> None:
+    from alpi.alp import pipeline_gates as gates
+
+    posts = [
+        _post(1, "HUB", "@scout #task #intake produce site.json"),
+        _post(2, "SCOUT_PK", "#working final check\nwrote src/config/site.json"),
+    ]
     assert gates.owner_post_under_gate(posts, {"SCOUT_PK"}, "HUB", 1) == 2
 
 

@@ -12,6 +12,7 @@ from typing import Any
 # RT.1 provider stale-call hardening — defaults, overridable via cfg.runtime.
 DEFAULT_FIRST_BYTE_TIMEOUT_S = 300.0
 DEFAULT_STREAM_IDLE_TIMEOUT_S = 120.0
+DEFAULT_STREAM_MAX_DURATION_S = 600.0
 DEFAULT_MAX_RETRIES = 2
 DEFAULT_RETRY_BACKOFF_S = 1.5
 
@@ -23,6 +24,10 @@ _TRANSIENT_EXC_NAMES = frozenset({
 
 
 class ProviderStalled(RuntimeError):
+    pass
+
+
+class ProviderStreamDeadline(RuntimeError):
     pass
 
 
@@ -262,7 +267,7 @@ def is_free_model(model: str) -> bool:
 
 
 def _is_transient_single(exc: Exception) -> bool:
-    if isinstance(exc, ProviderStalled):
+    if isinstance(exc, (ProviderStalled, ProviderStreamDeadline)):
         return True
     name = type(exc).__name__
     code = getattr(exc, "status_code", None)
@@ -311,39 +316,104 @@ def _completion_silenced(kwargs: dict[str, Any]):
             os.close(fd)
 
 
-def _iter_with_watchdog(stream_iter, first_byte_timeout: float, idle_timeout: float):
-    # Pump the blocking provider iterator on a worker thread; the main thread reads
-    # with per-chunk deadlines so a provider that accepts then goes silent can't hang the turn.
-    q: queue.Queue = queue.Queue()
+def _chunk_has_activity(chunk: Any) -> bool:
+    choices = getattr(chunk, "choices", None) or []
+    if not choices:
+        return False
+    choice = choices[0]
+    if getattr(choice, "finish_reason", None):
+        return True
+    delta = getattr(choice, "delta", None)
+    if delta is None:
+        return False
+    if (
+        getattr(delta, "content", None)
+        or getattr(delta, "reasoning_content", None)
+        or getattr(delta, "reasoning", None)
+    ):
+        return True
+    for tool_call in getattr(delta, "tool_calls", None) or []:
+        function = getattr(tool_call, "function", None)
+        if (
+            getattr(tool_call, "id", None)
+            or (function is not None and getattr(function, "name", None))
+            or (function is not None and getattr(function, "arguments", None))
+        ):
+            return True
+    return False
+
+
+def _iter_with_watchdog(
+    stream_iter, first_byte_timeout: float, idle_timeout: float,
+    max_duration: float = 0,
+):
+    # Empty transport keepalives do not prove that the provider is making progress.
+    q: queue.Queue = queue.Queue(maxsize=1)
+    cancelled = threading.Event()
+
+    def _put(item) -> bool:
+        while not cancelled.is_set():
+            try:
+                q.put(item, timeout=0.05)
+                return True
+            except queue.Full:
+                continue
+        return False
 
     def _pump():
         try:
             for chunk in stream_iter:
-                q.put(("chunk", chunk))
-            q.put(("done", None))
+                if not _put(("chunk", chunk)):
+                    return
+            _put(("done", None))
         except Exception as exc:  # noqa: BLE001
-            q.put(("error", exc))
+            _put(("error", exc))
 
     threading.Thread(target=_pump, daemon=True).start()
     first = True
-    while True:
-        timeout = first_byte_timeout if first else idle_timeout
-        try:
-            if timeout and timeout > 0:
-                kind, payload = q.get(timeout=timeout)
-            else:
-                kind, payload = q.get()
-        except queue.Empty:
-            raise ProviderStalled(
-                f"provider sent no {'first token' if first else 'further output'} "
-                f"within {timeout:.0f}s"
-            ) from None
-        first = False
-        if kind == "done":
-            return
-        if kind == "error":
-            raise payload
-        yield payload
+    deadline: float | None = None
+    absolute_deadline = time.monotonic() + max_duration if max_duration > 0 else None
+    try:
+        while True:
+            timeout = first_byte_timeout if first else idle_timeout
+            try:
+                if timeout and timeout > 0:
+                    if deadline is None:
+                        deadline = time.monotonic() + timeout
+                    next_deadline = min(deadline, absolute_deadline) if absolute_deadline else deadline
+                    kind, payload = q.get(timeout=max(0.0, next_deadline - time.monotonic()))
+                elif absolute_deadline is not None:
+                    kind, payload = q.get(timeout=max(0.0, absolute_deadline - time.monotonic()))
+                else:
+                    kind, payload = q.get()
+            except queue.Empty:
+                if absolute_deadline is not None and time.monotonic() >= absolute_deadline:
+                    raise ProviderStreamDeadline(
+                        f"provider stream exceeded {max_duration:.0f}s"
+                    ) from None
+                raise ProviderStalled(
+                    f"provider sent no {'first token' if first else 'further output'} "
+                    f"within {timeout:.0f}s"
+                ) from None
+            if kind == "done":
+                return
+            if kind == "error":
+                raise payload
+            if absolute_deadline is not None and time.monotonic() >= absolute_deadline:
+                raise ProviderStreamDeadline(
+                    f"provider stream exceeded {max_duration:.0f}s"
+                ) from None
+            if _chunk_has_activity(payload):
+                first = False
+                deadline = None
+            elif deadline is not None and time.monotonic() >= deadline:
+                raise ProviderStalled(
+                    f"provider sent no {'first token' if first else 'further output'} "
+                    f"within {timeout:.0f}s"
+                ) from None
+            yield payload
+    finally:
+        cancelled.set()
 
 
 def _normalize_chunk(chunk, tool_calls_accum: dict) -> dict | None:
@@ -402,6 +472,31 @@ def _final_chunk(last_chunk, tool_calls_accum: dict, model: str) -> dict:
     }
 
 
+def _dt(started: float) -> str:
+    import time as _time
+    return f"{_time.monotonic() - started:.1f}s"
+
+
+def _breadcrumb(event: str, detail: str) -> float:
+    """Write one correlated provider-lifecycle record without affecting the call."""
+    import os
+    import time as _time
+    try:
+        from alpi._log import get_subsystem_logger
+        from alpi.home import get_home
+        scope = (
+            f"wg={os.environ.get('ALPI_WORKGROUP_DISPATCH') or '-'} "
+            f"turn={os.environ.get('ALPI_WORKGROUP_TURN_ID') or '-'} "
+            f"pid={os.getpid()}"
+        )
+        get_subsystem_logger(get_home(), "llm").info(
+            "%s · %s · %s", event, scope, detail,
+        )
+    except Exception:  # noqa: BLE001
+        pass
+    return _time.monotonic()
+
+
 def stream(
     model: str,
     messages: list[dict[str, Any]],
@@ -409,6 +504,7 @@ def stream(
     api_base: str | None = None,
     api_key: str | None = None,
     rt: Any = None,
+    replay_visible: bool = False,
     **extra: Any,
 ):
     """Yield streaming chunks, with first-byte / idle watchdogs and jittered retries (RT.1)."""
@@ -441,6 +537,7 @@ def stream(
 
     first_byte = float(getattr(rt, "first_byte_timeout_s", DEFAULT_FIRST_BYTE_TIMEOUT_S))
     idle = float(getattr(rt, "stream_idle_timeout_s", DEFAULT_STREAM_IDLE_TIMEOUT_S))
+    max_duration = float(getattr(rt, "stream_max_duration_s", DEFAULT_STREAM_MAX_DURATION_S))
     max_retries = int(getattr(rt, "max_retries", DEFAULT_MAX_RETRIES))
     backoff = float(getattr(rt, "retry_backoff_s", DEFAULT_RETRY_BACKOFF_S))
     if first_byte > 0:
@@ -451,21 +548,41 @@ def stream(
         visible = False
         tool_calls_accum: dict[int, dict[str, str]] = {}
         last_chunk = None
+        started = _breadcrumb("request start", f"model={model} attempt={attempt}")
+        first_delta_at: float | None = None
         try:
             stream_iter = _completion_silenced(kwargs)
-            for chunk in _iter_with_watchdog(stream_iter, first_byte, idle):
+            for chunk in _iter_with_watchdog(
+                stream_iter, first_byte, idle, max_duration,
+            ):
                 last_chunk = chunk
                 norm = _normalize_chunk(chunk, tool_calls_accum)
                 if norm is None:
                     continue
+                if first_delta_at is None and (
+                    norm.get("text_delta") or norm.get("reasoning_delta")
+                    or norm.get("tool_calls_delta")
+                ):
+                    first_delta_at = _breadcrumb(
+                        "first delta", f"model={model} after={_dt(started)}",
+                    )
                 if norm.get("text_delta"):
                     visible = True
                 yield norm
+            _breadcrumb("stream end", f"model={model} total={_dt(started)}")
             yield _final_chunk(last_chunk, tool_calls_accum, model)
             return
         except Exception as exc:  # noqa: BLE001
-            # Retry until VISIBLE text reached the consumer — reasoning/tool deltas are ephemeral and safe to replay; streamed text is not.
-            if not visible and _is_transient(exc) and attempt < max_retries:
+            _breadcrumb(
+                "stream error",
+                f"model={model} after={_dt(started)} "
+                f"first_delta={'yes' if first_delta_at else 'NO'} "
+                f"visible={'yes' if visible else 'no'} "
+                f"error={type(exc).__name__} "
+                f"status={getattr(exc, 'status_code', None) or '-'}",
+            )
+            # Detached workgroup turns can replay partial text because no client observes it.
+            if (not visible or replay_visible) and _is_transient(exc) and attempt < max_retries:
                 attempt += 1
                 _backoff_sleep(backoff, attempt)
                 # Engine signal, yielded AFTER the backoff: a consumer that stops here (interrupt/deadline) prevents the next provider call entirely.

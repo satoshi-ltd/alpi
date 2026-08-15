@@ -78,6 +78,53 @@ def test_tools_deny_refreshes_from_disk_each_turn(
     assert "write_file" in schema_names[1]
 
 
+def test_non_owner_pipeline_turn_hides_mutating_tools(
+    engine: Engine, monkeypatch,
+) -> None:
+    schema_names: list[set[str]] = []
+
+    def capturing_stream(messages, tools, **kwargs):
+        schema_names.append({s["function"]["name"] for s in tools})
+        yield from _stream_one("ok")
+
+    monkeypatch.setenv(
+        "ALPI_WORKGROUP_WRITE_SCOPE", '{"root":"","paths":[]}',
+    )
+    monkeypatch.setattr("alpi.llm.stream", capturing_stream)
+
+    engine.run_turn("observe", emit=lambda _e: None)
+
+    assert {"delete_file", "edit_file", "write_file"}.isdisjoint(
+        schema_names[0],
+    )
+    assert "terminal" in schema_names[0]
+
+
+def test_owner_pipeline_turn_uses_path_checked_write_tools(
+    engine: Engine, monkeypatch,
+) -> None:
+    schema_names: list[set[str]] = []
+
+    def capturing_stream(messages, tools, **kwargs):
+        schema_names.append({s["function"]["name"] for s in tools})
+        yield from _stream_one("ok")
+
+    monkeypatch.setenv(
+        "ALPI_WORKGROUP_WRITE_SCOPE",
+        '{"root":"projects/demo","paths":["src/content/**"]}',
+    )
+    (engine.home / "config.yaml").write_text(yaml.safe_dump({
+        "model": "gpt-5.4-mini",
+        "tools": {"deny": []},
+    }))
+    monkeypatch.setattr("alpi.llm.stream", capturing_stream)
+
+    engine.run_turn("author", emit=lambda _e: None)
+
+    assert {"delete_file", "edit_file", "write_file"} <= schema_names[0]
+    assert "terminal" in schema_names[0]
+
+
 def test_budget_exceeded_mid_turn_aborts(engine: Engine, monkeypatch) -> None:
     """A turn that crosses the daily cap mid-flight aborts instead of
     spending all the way to max_steps (the gate is re-checked per step)."""

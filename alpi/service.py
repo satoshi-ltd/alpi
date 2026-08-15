@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import logging
 import os
 import platform
@@ -479,6 +480,13 @@ def _wg_is_pipeline(wg) -> bool:
     return wg_mod.is_pipeline_workgroup(wg.meta)
 
 
+def _hub_owned_phases(home: Path, wg) -> frozenset[str]:
+    from alpi.alp import workgroup_client as wc
+
+    steps = getattr(wg.meta, "pipeline_steps", None) or {}
+    return frozenset(phase for phase in steps if wc._hub_owns_phase(home, wg, phase))
+
+
 def _hub_phase_turn_budget(wg, recent: list) -> int:
     from alpi.alp import workgroup as wg_mod
 
@@ -501,6 +509,29 @@ def _phase_turn_budget(phase_map: dict, posts: list, hub_pubkey: str) -> int:
         return int(spec.get("turn_budget_s") or 0)
     except (TypeError, ValueError):
         return 0
+
+
+def _phase_write_scope(
+    phase_map: dict, posts: list, hub_pubkey: str, profile: str,
+) -> dict | None:
+    from alpi.alp import tasks as wg_tasks
+
+    if not phase_map:
+        return None
+    active = wg_tasks.active_task(posts or [], hub_pubkey=hub_pubkey or None)
+    if active is None or not active.slug:
+        return None
+    matches = [
+        phase for phase in (phase_map or {})
+        if active.slug == phase or active.slug.startswith(f"{phase}-")
+    ]
+    phase = max(matches, key=len) if matches else active.slug
+    spec = (phase_map or {}).get(phase) or {}
+    if str(spec.get("owner") or "").lower() != profile.lower():
+        return {"root": "", "paths": []}
+    if "paths" not in spec:
+        return None
+    return {"root": str(spec.get("cwd") or ""), "paths": list(spec.get("paths") or [])}
 
 
 def _gate_opened_active_task(posts: list[dict], hub_pubkey: str) -> bool:
@@ -727,8 +758,10 @@ async def _maybe_dispatch_for_sub(
     # Advance the pointer when the latest post is ours.
     if not trigger:
         if new_responded > sub.last_responded_seq:
-            sub.last_responded_seq = new_responded
-            sub_mod.upsert(home, sub)
+            sub_mod.mutate(
+                home, sub.wg_id,
+                lambda current: _raise_member_cursor(current, new_responded),
+            )
         return
     gate_opened = _gate_opened_active_task(
         sub.recent_posts or [], sub.hub_pubkey,
@@ -766,10 +799,15 @@ async def _maybe_dispatch_for_sub(
     )
     if _budget_blocks_dispatch(home, profile, sub.wg_id, sub.name):
         return
-    started_against = _latest_hub_task_seq_for(home, sub.wg_id, sub.hub_pubkey)
+    started_against = _latest_hub_task_seq(
+        sub.recent_posts or [], sub.hub_pubkey,
+    )
     # Cooldown stamp only; last_responded_seq advances on completion so a crash re-dispatches.
-    sub.last_dispatch_at = _utcnow_iso()
-    sub_mod.upsert(home, sub)
+    dispatched_at = _utcnow_iso()
+    sub_mod.mutate(
+        home, sub.wg_id,
+        lambda current: _set_member_dispatch_at(current, dispatched_at),
+    )
     # Spawn dispatch in the background so polling and preemption keep moving.
     _spawn_dispatch(
         sub.wg_id,
@@ -782,6 +820,10 @@ async def _maybe_dispatch_for_sub(
             turn_budget_s=_phase_turn_budget(
                 getattr(sub, "phase_map", None) or {},
                 sub.recent_posts or [], sub.hub_pubkey,
+            ),
+            write_scope=_phase_write_scope(
+                getattr(sub, "phase_map", None) or {},
+                sub.recent_posts or [], sub.hub_pubkey, profile,
             ),
             member_responded_seq=new_responded,
         ),
@@ -812,7 +854,6 @@ def _latest_hub_task_seq_for(
 ) -> int:
     """Highest task seq seen for the hub pubkey."""
     from alpi.alp import subscription as sub_mod
-    from alpi.alp import tasks as wg_tasks
     from alpi.alp import workgroup as wg_mod
 
     posts: list[dict] = []
@@ -826,6 +867,12 @@ def _latest_hub_task_seq_for(
         sub = sub_mod.get(home, wg_id)
         if sub is not None:
             posts = list(sub.recent_posts or [])
+
+    return _latest_hub_task_seq(posts, hub_pubkey)
+
+
+def _latest_hub_task_seq(posts: list[dict], hub_pubkey: str) -> int:
+    from alpi.alp import tasks as wg_tasks
 
     best = 0
     for p in posts:
@@ -988,11 +1035,12 @@ async def _maybe_gate_advance(
             _GATE_REPAIRS.pop(next(iter(_GATE_REPAIRS)))
         _GATE_REPAIRS[rkey] = rounds
         if rounds <= _GATE_REPAIR_ROUNDS:
+            findings = gates.findings_excerpt(output)
             note = (
                 f"@{step.owner} gate red on #{step.phase} "
                 f"(repair round {rounds}/{_GATE_REPAIR_ROUNDS}) — fix these and "
                 f"re-deliver on this same task:\n"
-                f"{output[-gates.GATE_FINDINGS_POST_CHARS:]}"
+                f"{findings}"
             )
             try:
                 res = await wc.post(home, wg.meta.id, note.encode())
@@ -1005,17 +1053,20 @@ async def _maybe_gate_advance(
                 return True
             except Exception as e:  # noqa: BLE001
                 log.error("wg gate %s/%s repair note failed: %s", wg.meta.id, step.phase, e)
+        findings = gates.findings_excerpt(output, 300)
         return (
-            f"GATE {step.phase} FAILED after {rounds} repair rounds: {output[-300:]} — "
-            f"RE-TASK @{step.owner} with #{step.phase} so the check re-runs on their "
-            f"next post, close `#done skipped · <reason>` if the phase is judged "
-            f"complete without it, or halt with `#done BLOCKED · <reason>`."
+            f"GATE {step.phase} FAILED after {rounds} repair rounds: {findings} — "
+            "halt with `#done BLOCKED · <reason>`, then re-open "
+            f"`@{step.owner} #task #{step.phase}` (or an earlier phase in the same "
+            "chain) so the gate can run on a new delivery."
         )
     last_posted = latest_seq
+    done_seq = latest_seq
     try:
         res = await wc.post(home, wg.meta.id, gates.done_text(step, output).encode())
         if isinstance(res, dict):
             last_posted = int(res.get("seq", last_posted))
+            done_seq = last_posted
         nxt = gates.next_task_text(step)
         if nxt:
             res = await wc.post(home, wg.meta.id, nxt.encode())
@@ -1024,8 +1075,12 @@ async def _maybe_gate_advance(
     except Exception as e:  # noqa: BLE001
         log.error("wg gate %s/%s advance post failed: %s", wg.meta.id, step.phase, e)
         return f"GATE {step.phase} passed but the advance post failed: {e}"
-    # Cursor past our own advance posts, or the poller wakes the hub over them and it may duplicate the opener.
-    _set_hub_responded_seq(home, wg.meta.id, last_posted)
+    cursor_seq = (
+        done_seq
+        if step.next_phase and wc._hub_owns_phase(home, wg, step.next_phase)
+        else last_posted
+    )
+    _set_hub_responded_seq(home, wg.meta.id, cursor_seq)
     log.info("wg gate %s/%s PASSED → %s (seq %s)", wg.meta.id, step.phase, step.next_phase or "end", latest_seq)
     return True
 
@@ -1035,6 +1090,7 @@ async def _maybe_dispatch_for_hub(
 ) -> None:
     """Decide whether a hub-side workgroup should dispatch."""
     from alpi.alp import keys as _keys
+    from alpi.alp import workgroup as wg_mod
 
     if getattr(wg.meta, "paused", False):  # paused → no activity dispatch, no watchdog, no burn
         return
@@ -1050,6 +1106,8 @@ async def _maybe_dispatch_for_hub(
         profile, own_pubkey, recent, last_responded,
         hub_pubkey=wg.meta.hub_pubkey,
         pipeline=_wg_is_pipeline(wg),
+        hub_owned_phases=_hub_owned_phases(home, wg),
+        pipeline_meta=wg.meta,
     )
     if trigger and isinstance(gate_fail, str):
         trigger = f"{trigger} · {gate_fail}"
@@ -1091,6 +1149,10 @@ async def _maybe_dispatch_for_hub(
             hub_pubkey=wg.meta.hub_pubkey,
             started_against_task_seq=started_against,
             turn_budget_s=_hub_phase_turn_budget(wg, recent),
+            write_scope=_phase_write_scope(
+                wg_mod.safe_phase_map(wg.meta), recent,
+                wg.meta.hub_pubkey, profile,
+            ),
         ),
     )
 
@@ -1181,7 +1243,9 @@ def _blocked_close_names_owner(
 ) -> str:
     """Only ANOTHER owner is a pending hand-off; the blocked phase's own owner naming itself is just the halt."""
     text = (result or "").strip()
-    if not text.upper().startswith("BLOCKED"):
+    from alpi.alp import tasks as wg_tasks
+
+    if wg_tasks.close_override_kind(text) != "blocked":
         return ""
     for mention in _re_findall_mentions(text):
         if mention in owners and mention != (blocked_owner or "").lower():
@@ -1200,11 +1264,14 @@ def _terminal_close_needs_routing(
     text = (result or "").strip()
     if not text:
         return False
-    if text.upper().startswith("BLOCKED"):
+    from alpi.alp import tasks as wg_tasks
+
+    override = wg_tasks.close_override_kind(text)
+    if override == "blocked":
         return bool(_blocked_close_names_owner(text, owners or set(), blocked_owner))
     if text.lower().startswith("preempted"):
         return False
-    if re.match(r"^skipped\s*·", text, re.IGNORECASE):
+    if override == "skipped":
         return False
     return bool(_FAILURE_RE.search(_NEGATED_FAILURE_RE.sub(" ", text)))
 
@@ -1241,7 +1308,7 @@ def _next_pipeline_phase(wg, recent: list[dict]) -> tuple[str | None, str, bool]
         return None, latest_overall.slug, False
     pipeline = list(wg.meta.pipelines[canonical[0]])
     # BLOCKED halts a DECLARED chain; an unknown slug stays unknown (checked above).
-    if (latest_overall.result or "").strip().upper().startswith("BLOCKED"):
+    if wg_tasks.close_override_kind(latest_overall.result or "") == "blocked":
         return None, latest_overall.slug, True
     in_pipeline = [t for t in closed if t.slug in pipeline]
     if not in_pipeline:
@@ -1366,6 +1433,7 @@ async def _maybe_watchdog_close(
       (empty `pipeline`), where a `#done` is terminal.
     """
     from alpi.alp import tasks as wg_tasks
+    from alpi.alp import workgroup as wg_mod
 
     if getattr(wg.meta, "paused", False):  # paused workgroups run no watchdog/repair/continuation
         return
@@ -1511,6 +1579,10 @@ async def _maybe_watchdog_close(
                 pipeline=_wg_is_pipeline(wg),
                 hub_pubkey=wg.meta.hub_pubkey,
                 started_against_task_seq=started_against,
+                write_scope={"root": "", "paths": []},
+                recovery_kind="continuation",
+                recovery_seq=last_seq,
+                recovery_attempt=cnt,
             ),
         )
         return
@@ -1568,19 +1640,14 @@ async def _maybe_watchdog_close(
             "woken again."
         )
     elif repair:
-        # A pipeline hub that nudged twice with no progress is likely
-        # stuck on its own bad task (wrong path/spec/order). Wake it in
-        # NORMAL mode so it can re-verify on-disk state and re-task or
-        # preempt — not just `#done`-or-silence.
         reason = (
             f"watchdog: task open (seq #{last_seq}), {count} nudges no "
             f"progress for {int(age)}s — REPAIR: re-verify the on-disk "
-            "state, then RE-TASK the owner: post a NEW "
-            "`@<owner> #task #<same-phase> <correct path/spec>` — opening "
-            "a `#task` is always allowed even though you (hub) spoke "
-            "last, so never fall back to a plain reply. Close with "
-            "`#done` ONLY if the deliverable is actually done; a `#done` "
-            "on a phase whose owner never delivered is forbidden"
+            "state. Close with `#done` only if the deliverable is done. "
+            "Otherwise re-open `@<owner> #task #<same-phase> "
+            "<correct path/spec>` or an earlier phase in the same chain. "
+            "Only FINAL REPAIR may halt the pipeline with `#done BLOCKED`; "
+            "never leave a plain reply."
         )
     else:
         stall_kind = (
@@ -1608,6 +1675,14 @@ async def _maybe_watchdog_close(
             pipeline=_wg_is_pipeline(wg),
             hub_pubkey=wg.meta.hub_pubkey,
             started_against_task_seq=started_against,
+            write_scope=_phase_write_scope(
+                wg_mod.safe_phase_map(wg.meta), recent,
+                wg.meta.hub_pubkey, profile,
+            ),
+            final_repair=final_repair,
+            recovery_kind="watchdog",
+            recovery_seq=last_seq,
+            recovery_attempt=count,
         ),
     )
 
@@ -1827,6 +1902,21 @@ def _bump_hub_continuation_count(home: Path, wg_id: str, seq: int) -> int:
     return int(table[wg_id][1])
 
 
+def _restore_recovery_attempt(
+    home: Path, table_name: str, wg_id: str, seq: int, attempt: int,
+) -> None:
+    state = _load_poller_state(home)
+    table = state.get(table_name, {})
+    entry = table.get(wg_id)
+    if not entry or [int(entry[0]), int(entry[1])] != [int(seq), int(attempt)]:
+        return
+    if attempt <= 1:
+        table.pop(wg_id, None)
+    else:
+        table[wg_id] = [int(seq), int(attempt) - 1]
+    _save_poller_state(home, state)
+
+
 def _bump_hub_watchdog_count(home: Path, wg_id: str, seq: int) -> int:
     """Increment and return how many times the closure watchdog has fired
     on this stalled `seq`. Resets to 1 when the stalled seq changes."""
@@ -1872,13 +1962,13 @@ def _mark_sub_dispatched(home: Path, wg_id: str) -> None:
     """Persist the subscription dispatch timestamp."""
     import datetime as _dt
     from alpi.alp import subscription as sub_mod
-    sub = sub_mod.get(home, wg_id)
-    if sub is None:
-        return
-    sub.last_dispatch_at = _dt.datetime.now(tz=_dt.timezone.utc).strftime(
+    dispatched_at = _dt.datetime.now(tz=_dt.timezone.utc).strftime(
         "%Y-%m-%dT%H:%M:%SZ",
     )
-    sub_mod.upsert(home, sub)
+    sub_mod.mutate(
+        home, wg_id,
+        lambda current: _set_member_dispatch_at(current, dispatched_at),
+    )
 
 
 def _in_cooldown_str(stamp: str, window: float | None = None) -> bool:
@@ -1902,6 +1992,8 @@ def _should_dispatch(
     last_responded_seq: int,
     hub_pubkey: str = "",
     pipeline: bool = False,
+    hub_owned_phases: frozenset[str] = frozenset(),
+    pipeline_meta=None,
 ) -> tuple[str | None, int]:
     """Decide whether the poller should wake the local agent."""
     from alpi.alp import tasks as wg_tasks
@@ -1935,12 +2027,32 @@ def _should_dispatch(
 
     for post in actionable:
         seq = int(post.get("seq", 0))
+        if active is not None and seq < active.opened_seq:
+            continue
         text = str(post.get("text") or "")
         mentions = wg_tasks.mentions_in(text)
         is_self = str(post.get("from") or "") == own_pubkey
         events = wg_tasks.parse_post(text, seq, str(post.get("from") or ""))
-        has_task = any(e.kind == "task" for e in events)
+        task_event = next((e for e in events if e.kind == "task"), None)
+        has_task = task_event is not None
+        task_phase = task_event.slug if task_event is not None else ""
+        if task_phase and pipeline_meta is not None:
+            from alpi.alp import workgroup as wg_mod
 
+            canonical = wg_mod.canonical_pipeline_phase(pipeline_meta, task_phase)
+            if canonical is not None:
+                task_phase = canonical[1]
+
+        if (
+            pipeline
+            and is_self
+            and has_task
+            and own_pubkey == hub_pubkey
+            and task_phase in hub_owned_phases
+            and active is not None
+            and active.opened_seq == seq
+        ):
+            return f"hub-owned #task opened (seq #{seq})", high_seq
         if is_self and not has_task:
             continue
         if not is_self and profile in mentions:
@@ -1951,6 +2063,11 @@ def _should_dispatch(
             author = str(post.get("from") or "")
             if pipeline and hub_pubkey and author != hub_pubkey and own_pubkey != hub_pubkey:
                 continue
+            if (
+                pipeline and own_pubkey != hub_pubkey and active is not None
+                and active.participants and profile not in active.participants
+            ):
+                continue
             return f"@{profile} mentioned (seq #{seq})", high_seq
         if has_task and not mentions:
             if active is None or active.opened_seq != seq:
@@ -1959,6 +2076,10 @@ def _should_dispatch(
         if not is_self and active is not None:
             # The hub of the active task always stays in the loop.
             if active.opened_by == own_pubkey:
+                if re.search(r"(?im)^(?:BLOCKED|BLOCKER)\b", text):
+                    return f"blocker in active task (seq #{seq})", high_seq
+                if wg_tasks.is_working_only(text) and profile not in mentions:
+                    continue
                 return (
                     f"new content in active task we opened (seq #{seq})",
                     high_seq,
@@ -2001,7 +2122,7 @@ def _working_redispatch_reason(
         return None
     latest_own = max(own_posts, key=lambda p: int(p.get("seq", 0)))
     text = str(latest_own.get("text") or "")
-    if not wg_tasks.is_working(text):
+    if not wg_tasks.is_working_only(text):
         return None
     working_ts = str(latest_own.get("ts") or "")
     # >= not > : timestamps are second-granular, so a turn that posts #working in
@@ -2032,14 +2153,18 @@ _TURN_TIMEOUT_SECONDS = 300
 # Absolute wall-clock backstop (pipeline phases run longer than deliberation); idle kills sooner.
 _PIPELINE_TURN_TIMEOUT_SECONDS = 900
 _TURN_SIGTERM_GRACE_SECONDS = 5
-# Idle (no-progress) kill. Activity = child's `--emit-events` stdout (tool start/end + mid-tool
-# `tool_state`, incl. terminal's foreground heartbeat) + stderr; a lone LLM generation > idle trips it.
+# Idle kill observes coalesced model progress, tool events, mid-tool state and stderr from `--emit-events`.
 _TURN_IDLE_TIMEOUT_SECONDS = 180
 _PIPELINE_TURN_IDLE_TIMEOUT_SECONDS = 300
 
 
 def _turn_timeout_for(pipeline: bool) -> int:
     return _PIPELINE_TURN_TIMEOUT_SECONDS if pipeline else _TURN_TIMEOUT_SECONDS
+
+
+def _soft_turn_budget(turn_timeout: int) -> int:
+    budget = turn_timeout - max(60, turn_timeout // 10)
+    return budget if budget >= 60 else 0
 
 
 def _turn_idle_timeout_for(pipeline: bool) -> int:
@@ -2118,37 +2243,6 @@ def _append_turn_event(home: Path, event: dict[str, Any]) -> None:
         log.warning("turn-log append failed: %s", e)
 
 
-def _hub_post_count(home: Path, wg_id: str) -> int:
-    try:
-        from alpi.alp import workgroup as wg_mod
-        wg = wg_mod.load(home, wg_id)
-        if wg is None:
-            return 0
-        d = home / "alp" / "workgroups" / wg_id
-        from alpi.alp.workgroup import _read_transcript
-        return len(_read_transcript(d))
-    except Exception:
-        return 0
-
-
-def _sub_post_count(home: Path, wg_id: str) -> int:
-    try:
-        from alpi.alp import subscription as sub_mod
-        sub = sub_mod.get(home, wg_id)
-        if sub is None:
-            return 0
-        return int(sub.last_seq or 0)
-    except Exception:
-        return 0
-
-
-def _post_count_for_role(home: Path, wg_id: str) -> int:
-    n = _hub_post_count(home, wg_id)
-    if n > 0:
-        return n
-    return _sub_post_count(home, wg_id)
-
-
 # Previous role-aware addendum removed; rotation checks enforce it now.
 
 
@@ -2161,6 +2255,11 @@ async def _dispatch_workgroup_turn(
     hub_pubkey: str = "", started_against_task_seq: int = 0,
     member_responded_seq: int | None = None,
     turn_budget_s: int = 0,
+    write_scope: dict | None = None,
+    final_repair: bool = False,
+    recovery_kind: str = "",
+    recovery_seq: int = 0,
+    recovery_attempt: int = 0,
 ) -> None:
     """Spawn a background ``chat --once`` turn for a workgroup."""
     turn_id = os.urandom(16).hex()
@@ -2310,12 +2409,16 @@ async def _dispatch_workgroup_turn(
         )
         env_extra = {}
     from alpi.home import effective_profile_env as _effective_profile_env, workspace_env
+    soft_budget = _soft_turn_budget(turn_timeout)
     env = _effective_profile_env(home, extra={
         "ALPI_HOME": str(home),
         "ALPI_WORKGROUP_DISPATCH": wg_id,
         "ALPI_WORKGROUP_TURN_ID": turn_id,
+        **({"ALPI_TURN_BUDGET_S": str(soft_budget)} if soft_budget else {}),
+        **({"ALPI_WORKGROUP_WRITE_SCOPE": json.dumps(write_scope)} if write_scope is not None else {}),
         **workspace_env(home),
         **({"ALPI_WORKGROUP_ROUND_HUB_SEQ": str(round_hub_seq)} if (round_hub_seq is not None and round_hub_seq > 0) else {}),
+        **({"ALPI_WORKGROUP_FINAL_REPAIR": "1"} if final_repair else {}),
         **env_extra,
     })
     # `--emit-events`: child prints JSON event lines to stdout = the idle-timeout's sign-of-life (tail discarded).
@@ -2323,7 +2426,6 @@ async def _dispatch_workgroup_turn(
         sys.executable, "-m", "alpi", "-p", profile,
         "chat", "--emit-events", "--once", prompt,
     ]
-    posts_before = _post_count_for_role(home, wg_id)
     started_at = time.monotonic()
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -2345,8 +2447,28 @@ async def _dispatch_workgroup_turn(
     def _bump() -> None:
         last_activity[0] = time.monotonic()
 
+    posts_added = [0]
+    transient_failure = [False]
+
+    def _observe_event(line: str) -> None:
+        try:
+            event = json.loads(line)
+        except (TypeError, ValueError):
+            return
+        if event.get("kind") == "error" and event.get("transient") is True:
+            transient_failure[0] = True
+        if (
+            event.get("kind") == "tool_end"
+            and event.get("name") == "workgroup_post"
+            and event.get("ok") is True
+            and event.get("wg_id") == wg_id
+        ):
+            posts_added[0] += 1
+
     # Bounded drain (full pipe + memory cap); every line bumps last_activity.
-    stdout_task = asyncio.create_task(drain_tail(proc.stdout, on_activity=_bump))
+    stdout_task = asyncio.create_task(
+        drain_tail(proc.stdout, on_activity=_bump, on_line=_observe_event),
+    )
     stderr_task = asyncio.create_task(drain_tail(proc.stderr, on_activity=_bump))
 
     _append_turn_event(home, {
@@ -2384,10 +2506,10 @@ async def _dispatch_workgroup_turn(
         info = _INFLIGHT.pop((wg_id, profile), {})
     preempted = bool(info.get("preempted"))
     preempted_by_seq = int(info.get("preempted_by_seq", 0))
+    cancelled = bool(info.get("cancelled"))
+    cancel_reason = str(info.get("cancel_reason") or "")
 
     duration_s = round(time.monotonic() - started_at, 2)
-    posts_after = _post_count_for_role(home, wg_id)
-    posts_added = max(0, posts_after - posts_before)
     err_preview = ""
     event_tail = ""
     try:
@@ -2400,13 +2522,16 @@ async def _dispatch_workgroup_turn(
         pass
     if rc != 0:
         err_preview = stderr_tail[-300:]
-        if not (timed_out or preempted):
+        if not (timed_out or preempted or cancelled):
             log.warning(
                 "wg poller: turn for %s exited rc=%s: %s",
                 wg_id, rc, err_preview,
             )
 
-    if preempted:
+    if cancelled:
+        event = "cancelled"
+        extra = {"cancel_reason": cancel_reason, "killed": True}
+    elif preempted:
         event = "preempted"
         extra = {"preempted_by_seq": preempted_by_seq, "killed": True}
     elif timed_out:
@@ -2418,27 +2543,40 @@ async def _dispatch_workgroup_turn(
     if event_tail:
         # Cap bytes too (drain caps lines): keep turns.jsonl small + avoid stashing a huge/sensitive payload.
         extra["event_tail"] = event_tail[-2000:]
+    if transient_failure[0]:
+        extra["transient_failure"] = True
     _append_turn_event(home, {
         "ts": _utcnow_iso(),
         "event": event,
         "profile": profile, "wg_id": wg_id, "wg_name": wg_name,
         "duration_s": duration_s, "rc": rc,
-        "posts_added": posts_added, "turn_id": turn_id,
+        "posts_added": posts_added[0], "turn_id": turn_id,
         **extra,
     })
+    if transient_failure[0] and posts_added[0] == 0 and recovery_kind:
+        table_name = (
+            "hub_watchdog_fire_count"
+            if recovery_kind == "watchdog"
+            else "hub_continuation_fire_count"
+        )
+        _restore_recovery_attempt(
+            home, table_name, wg_id, recovery_seq, recovery_attempt,
+        )
     if member_responded_seq is not None and _should_advance_cursor(
-        rc, posts_added, preempted, timed_out,
+        rc, posts_added[0], preempted, timed_out, cancelled,
+        require_delivery=pipeline,
     ):
         _advance_member_cursor(home, wg_id, int(member_responded_seq))
 
 
 def _should_advance_cursor(
     rc: int, posts_added: int, preempted: bool, timed_out: bool,
+    cancelled: bool = False, *, require_delivery: bool = False,
 ) -> bool:
-    """Deliberate silence (rc 0) or a delivered post counts as responded; crash/timeout/preempt re-dispatches. A killed turn can exit rc 0 via a SIGTERM handler, so timed_out gates on delivery, not rc."""
-    if preempted:
+    """Advance after deliberate silence or delivery, unless the pipeline phase requires a handoff."""
+    if preempted or cancelled:
         return False
-    if timed_out:
+    if timed_out or require_delivery:
         return posts_added > 0
     return rc == 0 or posts_added > 0
 
@@ -2446,18 +2584,45 @@ def _should_advance_cursor(
 def _advance_member_cursor(home: Path, wg_id: str, responded_seq: int) -> None:
     from alpi.alp import subscription as sub_mod
     try:
-        sub = sub_mod.get(home, wg_id)
-        if sub is None:
-            return
-        if responded_seq > int(sub.last_responded_seq or 0):
-            sub.last_responded_seq = responded_seq
-            sub_mod.upsert(home, sub)
+        sub_mod.mutate(
+            home, wg_id,
+            lambda current: _raise_member_cursor(current, responded_seq),
+        )
     except Exception as e:  # noqa: BLE001
         log.warning("wg poller: cursor advance failed for %s: %s", wg_id, e)
 
 
+def _raise_member_cursor(sub, responded_seq: int) -> bool:
+    if responded_seq <= int(sub.last_responded_seq or 0):
+        return False
+    sub.last_responded_seq = responded_seq
+    return True
+
+
+def _set_member_dispatch_at(sub, dispatched_at: str) -> bool:
+    if dispatched_at <= str(sub.last_dispatch_at or ""):
+        return False
+    sub.last_dispatch_at = dispatched_at
+    return True
+
+
 WORKGROUP_TICK_SECONDS = 30
 _PREEMPT_TICK_SECONDS = 5
+
+
+def _dispatch_cancel_reason(home: Path, wg_id: str) -> str:
+    from alpi.alp import subscription as sub_mod
+    from alpi.alp import workgroup as wg_mod
+
+    wg = wg_mod.load(home, wg_id)
+    if wg is not None:
+        return "workgroup-paused" if wg.meta.paused else ""
+    sub = sub_mod.get(home, wg_id)
+    if sub is not None:
+        return "workgroup-paused" if sub.paused else ""
+    if wg_id in sub_mod.tombstones(home):
+        return "workgroup-removed"
+    return ""
 
 
 async def _run_preempt_watcher(home: Path, profile: str) -> None:
@@ -2467,7 +2632,7 @@ async def _run_preempt_watcher(home: Path, profile: str) -> None:
         try:
             for key in list(_INFLIGHT.keys()):
                 info = _INFLIGHT.get(key)
-                if info is None or info.get("preempted"):
+                if info is None or info.get("preempted") or info.get("cancelled"):
                     continue
                 # Cross-profile reads use the wrong home → false closure.
                 if info.get("profile") != profile:
@@ -2475,10 +2640,22 @@ async def _run_preempt_watcher(home: Path, profile: str) -> None:
                 proc = info.get("proc")
                 if proc is None or proc.returncode is not None:
                     continue
+                wg_id = key[0] if isinstance(key, tuple) else key
+                cancel_reason = await asyncio.to_thread(
+                    _dispatch_cancel_reason, home, wg_id,
+                )
+                if cancel_reason:
+                    info["cancelled"] = True
+                    info["cancel_reason"] = cancel_reason
+                    try:
+                        proc.terminate()
+                    except ProcessLookupError:
+                        pass
+                    log.info("wg dispatch: %s SIGTERM (%s)", wg_id, cancel_reason)
+                    continue
                 hub_pubkey = str(info.get("hub_pubkey") or "")
                 if not hub_pubkey:
                     continue
-                wg_id = key[0] if isinstance(key, tuple) else key
                 started_against = int(info.get("started_against_task_seq", 0))
                 latest = await asyncio.to_thread(
                     _latest_hub_task_seq_for, home, wg_id, hub_pubkey,

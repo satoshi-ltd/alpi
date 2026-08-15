@@ -18,7 +18,7 @@ from alpi.host import server as host_server
 # name-based map is plenty without burdening every Tool class with
 # metadata that only the UI consumes.
 _CATEGORIES: list[tuple[str, tuple[str, ...]]] = [
-    ("Filesystem", ("read_file", "write_file", "edit_file", "read_image", "search", "attach_file")),
+    ("Filesystem", ("read_file", "write_file", "edit_file", "delete_file", "read_image", "search", "attach_file")),
     ("Knowledge", ("knowledge",)),
     ("Web", ("web_search", "web_fetch", "web_extract", "browser")),
     ("Memory", ("memory", "session_search", "session_read", "recall_sessions", "index_sessions")),

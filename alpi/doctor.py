@@ -61,7 +61,7 @@ def run_all(home: Path, profile: str) -> list[Check]:
             "version": _check_version(),
             "model": _check_model(cfg, env),
             "workspace": _check_workspace(cfg),
-            "tools": _check_tools(),
+            "tools": _check_tools(cfg),
             "skills": _check_skills(home),
             "services": _check_services(home, profile),
             "alp": _check_alp_integrity(home, cfg),
@@ -208,9 +208,23 @@ def _check_skills(home: Path) -> list[Check]:
     """SK.1 — surface skill telemetry. One summary row + warns for pinned skills that have gone cold (most likely curation candidates). Stale/archived counts inform but don't warn — pruning is AC.1's job in v0.7."""
     from alpi import skills_usage as _su
 
+    from alpi.tools import _skill_schema as schema
+    from alpi.tools import skill as skill_mod
+
+    out: list[Check] = []
+    for skill_dir in skill_mod.all_skills(home):
+        meta = skill_mod._frontmatter(skill_dir / "SKILL.md")
+        issues = schema.errors(
+            schema.validate_frontmatter(meta, categories=skill_mod.CATEGORIES)
+        )
+        if issues:
+            name = f"{skill_dir.parent.name}/{skill_dir.name}"
+            out.append(Check(
+                "Skills", name, "fail", "; ".join(i.render() for i in issues),
+            ))
+
     stats = _su.summary(home)
     total = stats["total"]
-    out: list[Check] = []
     if total == 0:
         out.append(Check("Skills", "telemetry", "info", "no usage recorded yet"))
         return out
@@ -229,13 +243,24 @@ def _check_skills(home: Path) -> list[Check]:
     return out
 
 
-def _check_tools() -> list[Check]:
+def _check_tools(cfg=None) -> list[Check]:
     """TL.1 — flag tools whose optional runtime deps are missing. Available tools share a single summary line; only unavailable ones get their own row so doctor stays scannable."""
     from alpi import tools as tools_mod
 
     report = tools_mod.availability_report()
     unavailable = [(name, reason) for name, ok, reason in report if not ok]
     out: list[Check] = []
+    if cfg is not None:
+        registered = {name for name, _, _ in report}
+        unknown = [
+            name for name in cfg.tools.deny
+            if name not in registered and "__" not in name
+        ]
+        if unknown:
+            out.append(Check(
+                "Tools", "denylist", "fail",
+                f"unknown tool name(s): {', '.join(unknown)}",
+            ))
     if unavailable:
         for name, reason in unavailable:
             out.append(Check("Tools", name, "warn", reason or "unavailable"))
@@ -322,6 +347,8 @@ def run_and_render(console, home: Path, profile: str, version: str) -> list[Chec
     _add_sync(_check_version())
     _add_sync(_check_model(cfg, env))
     _add_sync(_check_workspace(cfg))
+    _add_sync(_check_tools(cfg))
+    _add_sync(_check_skills(home))
 
     from alpi.mail import accounts as accounts_mod
     email_rows = accounts_mod.list_accounts(home)

@@ -127,6 +127,7 @@ _ADMIN_METHODS = frozenset({
     "host.workgroup.remove",
     "host.workgroup.action",
     "host.workgroup.trigger",
+    "host.workgroup.recipes.list",
     "host.workgroup.launch_recipe",
     "host.approval.respond",
     "host.daemon.restart",

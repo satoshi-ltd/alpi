@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -10,6 +11,7 @@ import pytest
 from alpi import llm
 from alpi.config import Config, RuntimeConfig, ToolsConfig
 from alpi.engine import Engine
+from alpi.tools.base import ToolResult
 
 
 class Timeout(Exception):
@@ -106,7 +108,69 @@ def test_visible_text_partial_still_surfaces_the_error(tmp_path, monkeypatch) ->
     eng.run_turn("q", emit=events.append)
 
     assert calls["n"] == 1, "no fallback once visible text streamed"
-    assert any(e.kind == "error" for e in events)
+    errors = [e for e in events if e.kind == "error"]
+    assert errors and errors[0].transient is True
+
+
+def test_workgroup_visible_partial_falls_back_in_same_turn(tmp_path, monkeypatch) -> None:
+    eng = _mk_engine(tmp_path, monkeypatch, max_steps=1, fallbacks=["gpt-5.4-pro"])
+    monkeypatch.setenv("ALPI_WORKGROUP_DISPATCH", "wg_1")
+    monkeypatch.setattr("alpi.alp.agent_context.build", lambda *_a, **_kw: "[workgroup]")
+    calls: list[tuple[str, bool]] = []
+
+    def fake_stream(messages, tools, replay_visible=False, **kwargs):
+        calls.append((kwargs.get("model"), replay_visible))
+        if len(calls) == 1:
+            yield {"text_delta": "partial invisible preamble"}
+            raise _wrapped_timeout()
+        yield from _ok_stream()
+
+    monkeypatch.setattr("alpi.llm.stream", fake_stream)
+    events = []
+    eng.run_turn("q", emit=events.append)
+
+    assert calls == [("gpt-5.4-mini", True), ("gpt-5.4-pro", True)]
+    assert not any(e.kind == "error" for e in events)
+    finals = [e for e in events if e.kind == "assistant_done" and e.final]
+    assert finals[-1].text == "all good"
+
+
+def test_workgroup_retry_reset_discards_partial_text(tmp_path, monkeypatch) -> None:
+    eng = _mk_engine(tmp_path, monkeypatch, max_steps=1)
+    monkeypatch.setenv("ALPI_WORKGROUP_DISPATCH", "wg_1")
+    monkeypatch.setattr("alpi.alp.agent_context.build", lambda *_a, **_kw: "[workgroup]")
+
+    def fake_stream(messages, tools, **kwargs):
+        yield {"text_delta": "discard me"}
+        yield {"retry_reset": True}
+        yield from _ok_stream()
+
+    monkeypatch.setattr("alpi.llm.stream", fake_stream)
+    events = []
+    eng.run_turn("q", emit=events.append)
+
+    finals = [e for e in events if e.kind == "assistant_done" and e.final]
+    assert finals[-1].text == "all good"
+
+
+def test_tool_call_stream_emits_model_progress(tmp_path, monkeypatch) -> None:
+    eng = _mk_engine(tmp_path, monkeypatch, max_steps=1)
+
+    def fake_stream(messages, tools, **kwargs):
+        yield {"tool_calls_delta": [{"name": "write_file", "arguments": "{\"path\":"}]}
+        yield {
+            "final": True,
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "cost_usd": 0.0,
+            "tool_calls": [],
+        }
+
+    monkeypatch.setattr("alpi.llm.stream", fake_stream)
+    events = []
+    eng.run_turn("q", emit=events.append)
+
+    assert any(e.kind == "model_state" for e in events)
 
 
 def test_error_without_fallbacks_surfaces_after_one_call(tmp_path, monkeypatch) -> None:
@@ -149,6 +213,18 @@ def _chunk(text: str = "", reasoning: str = "") -> SimpleNamespace:
     return SimpleNamespace(choices=[SimpleNamespace(
         delta=SimpleNamespace(content=text, reasoning_content=reasoning, tool_calls=None),
         finish_reason=None,
+    )], usage=None)
+
+
+def _tool_chunk(name: str, arguments: str) -> SimpleNamespace:
+    tool_call = SimpleNamespace(
+        index=0,
+        id="call-1",
+        function=SimpleNamespace(name=name, arguments=arguments),
+    )
+    return SimpleNamespace(choices=[SimpleNamespace(
+        delta=SimpleNamespace(content="", reasoning_content="", tool_calls=[tool_call]),
+        finish_reason="tool_calls",
     )], usage=None)
 
 
@@ -217,6 +293,72 @@ def test_llm_stream_never_retries_after_visible_text(monkeypatch) -> None:
         list(llm.stream("m", [{"role": "user", "content": "q"}], rt=_rt()))
 
     assert provider_calls["n"] == 1
+
+
+def test_llm_stream_retries_visible_text_for_detached_workgroup(monkeypatch) -> None:
+    monkeypatch.setattr("alpi.llm._backoff_sleep", lambda *_a: None)
+    provider_calls = {"n": 0}
+
+    def fake_completion(kwargs):
+        provider_calls["n"] += 1
+
+        def gen():
+            if provider_calls["n"] == 1:
+                yield _chunk(text="partial")
+                raise Timeout("upstream idle")
+            yield _chunk(text="recovered")
+        return gen()
+
+    monkeypatch.setattr("alpi.llm._completion_silenced", fake_completion)
+    chunks = list(llm.stream(
+        "m", [{"role": "user", "content": "q"}],
+        rt=_rt(max_retries=1), replay_visible=True,
+    ))
+
+    assert provider_calls["n"] == 2
+    assert sum(bool(c.get("retry_reset")) for c in chunks) == 1
+    assert any(c.get("text_delta") == "recovered" for c in chunks)
+
+
+def test_workgroup_deadline_retries_and_executes_delivery_once(tmp_path, monkeypatch) -> None:
+    eng = _mk_engine(tmp_path, monkeypatch, max_steps=2)
+    eng.cfg.runtime.stream_max_duration_s = 0.03
+    eng.cfg.runtime.max_retries = 1
+    monkeypatch.setenv("ALPI_WORKGROUP_DISPATCH", "wg_1")
+    monkeypatch.setattr("alpi.alp.agent_context.build", lambda *_a, **_kw: "[workgroup]")
+    monkeypatch.setattr("alpi.llm._backoff_sleep", lambda *_a: None)
+    provider_calls = {"n": 0}
+    deliveries = []
+
+    def fake_completion(_kwargs):
+        provider_calls["n"] += 1
+        if provider_calls["n"] == 1:
+            def stalled():
+                yield _chunk(text="I will deliver now")
+                while True:
+                    yield _chunk(reasoning="still working")
+                    time.sleep(0.005)
+            return stalled()
+        if provider_calls["n"] == 2:
+            return iter([_tool_chunk(
+                "workgroup_post",
+                '{"wg_id":"wg_1","text":"media manifest delivered"}',
+            )])
+        return iter([_chunk(text="done")])
+
+    def fake_execute(name, args, **_kwargs):
+        if name == "workgroup_post":
+            deliveries.append(dict(args))
+        return ToolResult(ok=True, output="ok")
+
+    monkeypatch.setattr("alpi.llm._completion_silenced", fake_completion)
+    monkeypatch.setattr("alpi.engine.tools.execute", fake_execute)
+    events = []
+    eng.run_turn("q", emit=events.append)
+
+    assert provider_calls["n"] == 2
+    assert deliveries == [{"wg_id": "wg_1", "text": "media manifest delivered"}]
+    assert not any(event.kind == "error" for event in events)
 
 
 def test_is_transient_unwraps_the_cause_chain() -> None:

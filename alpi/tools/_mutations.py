@@ -16,9 +16,9 @@ DIFF_PREVIEW_MAX_CHARS = 400
 @dataclass(frozen=True)
 class MutationRecord:
     path: str
-    op: str  # "create" | "write" | "edit"
+    op: str  # "create" | "write" | "edit" | "delete"
     sha_before: str | None
-    sha_after: str
+    sha_after: str | None
     bytes_before: int
     bytes_after: int
     lines_before: int
@@ -63,9 +63,9 @@ def _line_count(text: str) -> int:
     return text.count("\n") + (0 if text.endswith("\n") else 1)
 
 
-def _diff_preview(path: Path, before: str | None, after: str) -> str:
+def _diff_preview(path: Path, before: str | None, after: str | None) -> str:
     before_lines = (before or "").splitlines(keepends=True)
-    after_lines = after.splitlines(keepends=True)
+    after_lines = (after or "").splitlines(keepends=True)
     diff = difflib.unified_diff(
         before_lines, after_lines,
         fromfile=str(path), tofile=str(path),
@@ -78,7 +78,7 @@ def _diff_preview(path: Path, before: str | None, after: str) -> str:
 
 
 def build_record(
-    path: Path, before: str | None, after: str, *, op_hint: str | None = None,
+    path: Path, before: str | None, after: str | None, *, op_hint: str | None = None,
 ) -> MutationRecord:
     if op_hint is not None:
         op = op_hint
@@ -87,16 +87,16 @@ def build_record(
     else:
         op = "write"
     sha_before = _sha256(before) if before is not None else None
-    sha_after = _sha256(after)
+    sha_after = _sha256(after) if after is not None else None
     return MutationRecord(
         path=str(path),
         op=op,
         sha_before=sha_before,
         sha_after=sha_after,
         bytes_before=len((before or "").encode("utf-8")),
-        bytes_after=len(after.encode("utf-8")),
+        bytes_after=len((after or "").encode("utf-8")),
         lines_before=_line_count(before or ""),
-        lines_after=_line_count(after),
+        lines_after=_line_count(after or ""),
         diff_preview=_diff_preview(path, before, after),
     )
 
@@ -106,7 +106,7 @@ def format_footer(records: list[MutationRecord]) -> str:
         return ""
     lines = ["[file_mutations] (committed by the last tool batch)"]
     for i, r in enumerate(records, 1):
-        sha_short = r.sha_after[:8]
+        sha_short = r.sha_after[:8] if r.sha_after else "deleted"
         lines.append(
             f"  {i}. {r.op:<6} {r.path}  sha={sha_short}  "
             f"bytes {r.bytes_before}→{r.bytes_after}  "

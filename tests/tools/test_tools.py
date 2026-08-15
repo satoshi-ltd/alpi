@@ -9,6 +9,7 @@ import pytest
 from alpi import tools
 from alpi.tools.terminal import Terminal
 from alpi.tools.edit_file import EditFile
+from alpi.tools.delete_file import DeleteFile
 from alpi.tools.read_file import ReadFile
 from alpi.tools.search import Search
 from alpi.tools.todo import Todo, bind_store, reset_store
@@ -16,7 +17,7 @@ from alpi.tools.write_file import WriteFile
 
 
 EXPECTED_TOOLS = {
-    "read_file", "read_image", "write_file", "edit_file", "terminal", "search",
+    "read_file", "read_image", "write_file", "edit_file", "delete_file", "terminal", "search",
     "todo", "web_search", "web_fetch", "web_extract", "schedule",
     "memory", "skill", "research", "delegate",
     "session_search", "email",
@@ -53,6 +54,73 @@ def test_edit_file_rejects_multi_match(tmp_home_no_env: Path) -> None:
     target = tmp_home_no_env / "f.txt"
     WriteFile().run(path=str(target), content="a a a")
     assert not EditFile().run(path=str(target), old_string="a", new_string="b").ok
+
+
+def test_delete_file_removes_workspace_file(tmp_home_no_env: Path) -> None:
+    target = tmp_home_no_env / "obsolete.txt"
+    target.write_text("obsolete")
+
+    result = DeleteFile().run(path=str(target))
+
+    assert result.ok
+    assert not target.exists()
+
+
+def test_delete_file_rejects_outside_workspace(
+    tmp_home_no_env: Path, tmp_path_factory,
+) -> None:
+    outside = tmp_path_factory.mktemp("outside") / "baseline.json"
+    outside.write_text("protected")
+
+    result = DeleteFile().run(path=str(outside))
+
+    assert not result.ok
+    assert outside.read_text() == "protected"
+
+
+def test_delete_file_rejects_workspace_symlink(tmp_home_no_env: Path) -> None:
+    target = tmp_home_no_env / "target.txt"
+    target.write_text("protected")
+    link = tmp_home_no_env / "link.txt"
+    link.symlink_to(target)
+
+    result = DeleteFile().run(path=str(link))
+
+    assert not result.ok
+    assert target.exists()
+
+
+def test_file_writes_follow_active_workgroup_phase_paths(
+    tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import json
+
+    allowed = tmp_home_no_env / "projects" / "hotel" / "src" / "content" / "page.json"
+    denied = tmp_home_no_env / "projects" / "hotel" / "phase_baselines" / "content.json"
+    monkeypatch.setenv("ALPI_WORKGROUP_WRITE_SCOPE", json.dumps({
+        "root": "projects/hotel", "paths": ["src/content/**"],
+    }))
+
+    assert WriteFile().run(path=str(allowed), content="{}\n").ok
+    result = WriteFile().run(path=str(denied), content="{}\n")
+    assert not result.ok
+    assert not denied.exists()
+
+
+def test_phase_scope_root_cannot_escape_workspace(
+    tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import json
+
+    target = tmp_home_no_env.parent / "outside.txt"
+    monkeypatch.setenv("ALPI_WORKGROUP_WRITE_SCOPE", json.dumps({
+        "root": "..", "paths": ["**"],
+    }))
+
+    result = WriteFile().run(path=str(target), content="blocked\n")
+
+    assert not result.ok
+    assert not target.exists()
 
 
 def test_terminal_success() -> None:

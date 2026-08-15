@@ -55,6 +55,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "runtime": {
         "first_byte_timeout_s": 300,
         "stream_idle_timeout_s": 120,
+        "stream_max_duration_s": 600,
         "max_retries": 2,
         "retry_backoff_s": 1.5,
         "prefetch": "",
@@ -166,6 +167,7 @@ class RuntimeConfig:
     # first_byte is generous so slow reasoning models aren't killed before their first token.
     first_byte_timeout_s: float = 300.0
     stream_idle_timeout_s: float = 120.0
+    stream_max_duration_s: float = 600.0
     max_retries: int = 2
     retry_backoff_s: float = 1.5
     prefetch: str = ""
@@ -388,6 +390,7 @@ def load(home: Path) -> Config:
     runtime_cfg = RuntimeConfig(
         first_byte_timeout_s=_non_negative_float(rt_raw.get("first_byte_timeout_s"), rt_defaults["first_byte_timeout_s"]),
         stream_idle_timeout_s=_non_negative_float(rt_raw.get("stream_idle_timeout_s"), rt_defaults["stream_idle_timeout_s"]),
+        stream_max_duration_s=_non_negative_float(rt_raw.get("stream_max_duration_s"), rt_defaults["stream_max_duration_s"]),
         max_retries=_non_negative_int(rt_raw.get("max_retries"), rt_defaults["max_retries"]),
         retry_backoff_s=_non_negative_float(rt_raw.get("retry_backoff_s"), rt_defaults["retry_backoff_s"]),
         prefetch=str(
@@ -476,7 +479,7 @@ def save(cfg: Config) -> None:
     runtime_delta = {
         k: getattr(cfg.runtime, k)
         for k in (
-            "first_byte_timeout_s", "stream_idle_timeout_s", "max_retries",
+            "first_byte_timeout_s", "stream_idle_timeout_s", "stream_max_duration_s", "max_retries",
             "retry_backoff_s", "prefetch",
         )
         if getattr(cfg.runtime, k) != getattr(rt_defaults, k)

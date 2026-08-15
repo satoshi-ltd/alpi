@@ -122,7 +122,10 @@ def _audit_hardening(cfg: cfg_mod.Config) -> list[Check]:
         out.append(Check("Hardening", "terminal sandbox", "warn",
                          "off — shell commands run unconfined on this host"))
 
-    if cfg.runtime.first_byte_timeout_s == 0 or cfg.runtime.stream_idle_timeout_s == 0:
+    if (
+        cfg.runtime.first_byte_timeout_s == 0
+        or cfg.runtime.stream_idle_timeout_s == 0
+    ):
         out.append(Check("Hardening", "LLM watchdog", "warn",
                          "stale-call timeout disabled (0) — a hung provider can stall a turn"))
     else:

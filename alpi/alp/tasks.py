@@ -65,6 +65,9 @@ _SKIP_RE = re.compile(
 _WORKING_RE = re.compile(
     r"^(?:@\S+\s+)*#working(?:\s+(.+?))?\s*$", re.MULTILINE,
 )
+_CLOSE_OVERRIDE_RE = re.compile(
+    r"^(skipped|blocked)\s+·\s+\S", re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -166,6 +169,23 @@ def is_working(text: str) -> bool:
       contributed and is still pending in the quorum check.
     """
     return _WORKING_RE.search(text or "") is not None
+
+
+def is_working_only(text: str) -> bool:
+    """Return True when every non-empty line is a working heartbeat."""
+    lines = [line for line in (text or "").splitlines() if line.strip()]
+    return bool(lines) and all(_WORKING_RE.fullmatch(line) for line in lines)
+
+
+def is_skip_only(text: str) -> bool:
+    """Return True when every non-empty line is a skip marker."""
+    lines = [line for line in (text or "").splitlines() if line.strip()]
+    return bool(lines) and all(_SKIP_RE.fullmatch(line) for line in lines)
+
+
+def close_override_kind(result: str) -> str:
+    match = _CLOSE_OVERRIDE_RE.match((result or "").strip())
+    return match.group(1).lower() if match else ""
 
 
 def parse_post(

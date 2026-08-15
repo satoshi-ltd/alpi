@@ -23,7 +23,6 @@ _TOPIC_SUMMARIES: dict[str, str] = {
     "security": "Approval system, SSRF, prompt-injection, sensitive-path denylist, sandbox.",
     "deployments": "launchd on macOS, systemd on Linux, scheduler daemon shape, keep-alive, log paths.",
     "operations": "Day-2 ops — doctor, diagnostics, log rotation, backup, recovery, upgrade workflow.",
-    "organization": "Multi-profile orgs — org.yaml schema, agent.md / workgroup.md frontmatter, peer graph, setup.py modes, persistent workgroups.",
     "integrations": "Programmatic access — external code talking to a profile/workgroup as a host-plane client (scoped device token over the host WebSocket), host.chat.send frames, workgroup methods, vs the ALP peer route.",
     "notifications": "Writing report-grade notify() messages — allowed markdown subset, section labels, 🔴🟡🟢 status, what gets auto-simplified; the daemon normalizes content so author for quality not validity.",
 }
@@ -35,7 +34,7 @@ class AlpiKnowledge(Tool):
         "Read packaged documentation about alpi itself. CALL THIS "
         "BEFORE answering any question about alpi — install, profiles, "
         "ALP protocol, tools, skills, models, config, security, "
-        "deployment, day-2 ops, multi-profile organizations. The packaged references are "
+        "deployment and day-2 ops. The packaged references are "
         "authoritative; your training predates alpi and will be wrong "
         "about flags, paths, and behaviours.\n"
         "\n"
@@ -106,7 +105,7 @@ PROMPT_RULE = (
     "# ALPI SELF-KNOWLEDGE\n"
     "When the user asks about alpi itself (install, profiles, ALP "
     "protocol, tools, skills, config, security, deployment, day-2 ops, "
-    "multi-profile organizations / org.yaml / agent.md), "
+    "multi-profile setups / agent.md), "
     "CALL ``alpi_knowledge`` BEFORE answering. The packaged "
     "references are authoritative; your training predates alpi."
 )

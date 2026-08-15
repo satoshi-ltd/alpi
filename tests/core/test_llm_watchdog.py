@@ -20,6 +20,31 @@ def _chunk(text: str = ""):
     )
 
 
+def _reasoning_chunk(text: str):
+    return NS(
+        choices=[NS(
+            delta=NS(content=None, reasoning_content=text, reasoning=None, tool_calls=None),
+            finish_reason=None,
+        )],
+        usage=None,
+    )
+
+
+def _usage_keepalive():
+    return NS(choices=[], usage=NS(prompt_tokens=0, completion_tokens=0))
+
+
+def _empty_tool_call_keepalive():
+    tool_call = NS(id=None, function=NS(name=None, arguments=None))
+    return NS(
+        choices=[NS(
+            delta=NS(content=None, reasoning_content=None, reasoning=None, tool_calls=[tool_call]),
+            finish_reason=None,
+        )],
+        usage=None,
+    )
+
+
 def _rt(**over):
     base = dict(first_byte_timeout_s=0.1, stream_idle_timeout_s=0.1, max_retries=2, retry_backoff_s=0.0)
     base.update(over)
@@ -47,6 +72,7 @@ def test_is_transient_classification():
         pass
 
     assert llm._is_transient(llm.ProviderStalled("x"))
+    assert llm._is_transient(llm.ProviderStreamDeadline("x"))
     assert llm._is_transient(Timeout())
     assert llm._is_transient(NS_exc(503))
     assert llm._is_transient(NS_exc(429))
@@ -113,6 +139,152 @@ def test_retries_exhausted_raises_stalled(monkeypatch):
     with pytest.raises(llm.ProviderStalled):
         list(llm.stream(model="x", messages=[], rt=_rt(max_retries=2)))
     assert calls["n"] == 3  # initial + 2 retries
+
+
+def test_empty_keepalives_do_not_hide_idle_stall(monkeypatch):
+    def fake(kw):
+        def gen():
+            yield _reasoning_chunk("started")
+            for _ in range(25):
+                yield _usage_keepalive()
+                threading.Event().wait(0.01)
+
+        return gen()
+
+    monkeypatch.setattr(llm, "_completion_silenced", fake)
+    with pytest.raises(llm.ProviderStalled, match="no further output"):
+        list(llm.stream(
+            model="x", messages=[],
+            rt=_rt(stream_idle_timeout_s=0.05, max_retries=0),
+        ))
+
+
+def test_continuous_empty_keepalives_cannot_outrun_deadline(monkeypatch):
+    def fake(kw):
+        def gen():
+            while True:
+                yield _usage_keepalive()
+
+        return gen()
+
+    monkeypatch.setattr(llm, "_completion_silenced", fake)
+    with pytest.raises(llm.ProviderStalled, match="no first token"):
+        list(llm.stream(
+            model="x", messages=[],
+            rt=_rt(first_byte_timeout_s=0.02, max_retries=0),
+        ))
+
+
+def test_empty_tool_call_chunks_do_not_hide_idle_stall(monkeypatch):
+    def fake(kw):
+        def gen():
+            yield _reasoning_chunk("started")
+            while True:
+                yield _empty_tool_call_keepalive()
+
+        return gen()
+
+    monkeypatch.setattr(llm, "_completion_silenced", fake)
+    with pytest.raises(llm.ProviderStalled, match="no further output"):
+        list(llm.stream(
+            model="x", messages=[],
+            rt=_rt(stream_idle_timeout_s=0.02, max_retries=0),
+        ))
+
+
+def test_empty_keepalive_stall_retries_same_model(monkeypatch):
+    calls = {"n": 0}
+
+    def fake(kw):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            return iter([_chunk("recovered")])
+
+        def gen():
+            yield _reasoning_chunk("abandoned")
+            for _ in range(25):
+                yield _usage_keepalive()
+                threading.Event().wait(0.01)
+
+        return gen()
+
+    monkeypatch.setattr(llm, "_completion_silenced", fake)
+    out = list(llm.stream(
+        model="x", messages=[],
+        rt=_rt(stream_idle_timeout_s=0.05, max_retries=1),
+    ))
+    assert calls["n"] == 2
+    assert sum(bool(c.get("retry_reset")) for c in out) == 1
+    assert "".join(c.get("text_delta", "") for c in out) == "recovered"
+
+
+def test_active_stream_deadline_retries_within_the_same_turn(monkeypatch):
+    calls = {"n": 0}
+
+    def fake(kw):
+        calls["n"] += 1
+
+        def gen():
+            while True:
+                yield _reasoning_chunk("still working")
+                threading.Event().wait(0.005)
+
+        return gen()
+
+    monkeypatch.setattr(llm, "_completion_silenced", fake)
+    with pytest.raises(llm.ProviderStreamDeadline, match="exceeded"):
+        list(llm.stream(
+            model="x", messages=[],
+            rt=_rt(stream_max_duration_s=0.03, max_retries=2),
+        ))
+    assert calls["n"] == 3
+
+
+def test_active_stream_deadline_can_recover_within_the_same_turn(monkeypatch):
+    calls = {"n": 0}
+
+    def fake(kw):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            return iter([_chunk("recovered")])
+
+        def gen():
+            while True:
+                yield _reasoning_chunk("still working")
+                threading.Event().wait(0.005)
+
+        return gen()
+
+    monkeypatch.setattr(llm, "_completion_silenced", fake)
+    out = list(llm.stream(
+        model="x", messages=[],
+        rt=_rt(stream_max_duration_s=0.03, max_retries=1),
+    ))
+    assert calls["n"] == 2
+    assert sum(bool(c.get("retry_reset")) for c in out) == 1
+    assert "".join(c.get("text_delta", "") for c in out) == "recovered"
+
+
+def test_abandoned_watchdog_stream_releases_its_pump_thread(monkeypatch):
+    threads: list[threading.Thread] = []
+    real_thread = threading.Thread
+
+    def tracked_thread(*args, **kwargs):
+        thread = real_thread(*args, **kwargs)
+        threads.append(thread)
+        return thread
+
+    monkeypatch.setattr(llm.threading, "Thread", tracked_thread)
+
+    def endless():
+        while True:
+            yield _chunk("data")
+
+    stream = llm._iter_with_watchdog(endless(), 1.0, 1.0)
+    next(stream)
+    stream.close()
+    threads[0].join(timeout=0.5)
+    assert not threads[0].is_alive()
 
 
 # ---------- no retry once committed / on permanent errors ----------
@@ -185,14 +357,18 @@ def test_runtime_config_defaults_override_and_roundtrip(tmp_path):
     c = cfg_mod.load(tmp_path)
     assert c.runtime.first_byte_timeout_s == 300.0
     assert c.runtime.stream_idle_timeout_s == 120.0
+    assert c.runtime.stream_max_duration_s == 600.0
+    assert llm.DEFAULT_STREAM_MAX_DURATION_S == 600.0
     assert c.runtime.max_retries == 2
 
     (tmp_path / "config.yaml").write_text(
-        "runtime:\n  first_byte_timeout_s: 30\n  stream_idle_timeout_s: 0\n  max_retries: 0\n"
+        "runtime:\n  first_byte_timeout_s: 30\n  stream_idle_timeout_s: 0\n"
+        "  stream_max_duration_s: 90\n  max_retries: 0\n"
     )
     c2 = cfg_mod.load(tmp_path)
     assert c2.runtime.first_byte_timeout_s == 30.0
     assert c2.runtime.stream_idle_timeout_s == 0.0  # 0 disables the watchdog
+    assert c2.runtime.stream_max_duration_s == 90.0
     assert c2.runtime.max_retries == 0
     assert c2.runtime.retry_backoff_s == 1.5  # untouched default
 
@@ -200,4 +376,70 @@ def test_runtime_config_defaults_override_and_roundtrip(tmp_path):
     c3 = cfg_mod.load(tmp_path)
     assert c3.runtime.first_byte_timeout_s == 30.0
     assert c3.runtime.stream_idle_timeout_s == 0.0
+    assert c3.runtime.stream_max_duration_s == 90.0
     assert c3.runtime.max_retries == 0
+
+
+def test_stream_emits_provider_lifecycle_breadcrumbs(monkeypatch, tmp_path) -> None:
+    crumbs: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        llm, "_breadcrumb",
+        lambda event, detail: crumbs.append((event, detail)) or 0.0,
+    )
+
+    def fake_completion(kwargs):
+        yield NS(choices=[NS(delta=NS(content="hola", tool_calls=None), finish_reason=None)], usage=None)
+        yield NS(choices=[NS(delta=NS(content=None, tool_calls=None), finish_reason="stop")],
+                 usage=NS(prompt_tokens=1, completion_tokens=1))
+
+    monkeypatch.setattr(llm, "_completion_silenced", fake_completion)
+    list(llm.stream(model="openrouter/x/y", messages=[{"role": "user", "content": "q"}]))
+
+    events = [e for e, _ in crumbs]
+    assert events[0] == "request start"
+    assert "first delta" in events
+    assert events[-1] == "stream end"
+
+
+def test_breadcrumb_correlates_concurrent_workgroup_turns(monkeypatch, tmp_path) -> None:
+    calls = []
+
+    class Logger:
+        def info(self, *args):
+            calls.append(args)
+
+    monkeypatch.setenv("ALPI_WORKGROUP_DISPATCH", "wg_regio")
+    monkeypatch.setenv("ALPI_WORKGROUP_TURN_ID", "turn_42")
+    monkeypatch.setattr("alpi._log.get_subsystem_logger", lambda *_: Logger())
+    monkeypatch.setattr("alpi.home.get_home", lambda: tmp_path)
+
+    llm._breadcrumb("request start", "model=x attempt=0")
+
+    assert calls
+    rendered = " ".join(str(part) for part in calls[0])
+    assert "wg=wg_regio" in rendered
+    assert "turn=turn_42" in rendered
+    assert "pid=" in rendered
+
+
+def test_stream_error_breadcrumb_says_whether_the_provider_ever_answered(
+    monkeypatch,
+) -> None:
+    crumbs: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        llm, "_breadcrumb",
+        lambda event, detail: crumbs.append((event, detail)) or 0.0,
+    )
+
+    def fake_completion(kwargs):
+        raise RuntimeError("connection reset")
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(llm, "_completion_silenced", fake_completion)
+    monkeypatch.setattr(llm, "_is_transient", lambda exc: False)
+    import pytest as _pytest
+    with _pytest.raises(RuntimeError):
+        list(llm.stream(model="openrouter/x/y", messages=[{"role": "user", "content": "q"}]))
+
+    err = next(d for e, d in crumbs if e == "stream error")
+    assert "first_delta=NO" in err, "the attribution bit: provider never sent a byte"

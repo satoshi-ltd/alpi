@@ -95,15 +95,11 @@ contributed, and forward secrecy when a member leaves. It is a documented,
 versioned framework for autonomous collaboration — not a prompt that asks three
 agents to be nice to each other.
 
-## A company you can read
+## A system you can read
 
-The distribution ships a reference scaffold of a 17-agent organization —
-strategy and architecture council, execution roles across engineering, QA,
-design, content, sales and operations, plus on-demand specialists — with dozens
-of skills, standing workgroups, and a full peer graph, deployable in one
-command. It is not a snippet to study. It is a working corporate skeleton you
-adapt to your own business, and it exists precisely because the gap between "an
-agent demo" and "an operating department" is the part nobody hands you.
+Profiles, skills, recipes, workgroups, and peer relationships remain plain
+files under the operator's control. Teams compose those primitives around their
+own workflows instead of inheriting a prescribed organizational scaffold.
 
 ## Constraints on purpose
 

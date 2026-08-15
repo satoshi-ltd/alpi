@@ -6,6 +6,7 @@ import asyncio
 import os
 import re
 import sys
+import time
 from importlib import resources
 from pathlib import Path
 from typing import Any
@@ -284,6 +285,8 @@ def _run_once(
 
     from alpi.tui.formatting import arg_hint
 
+    last_model_state_at = [0.0]
+
     def _emit_event_line(ev: AgentEvent) -> None:
         if ev.kind == "tool_start":
             payload = {
@@ -300,11 +303,22 @@ def _run_once(
                 }
         elif ev.kind == "tool_end":
             payload = {"kind": "tool_end", "name": ev.name, "ok": ev.ok}
+            if ev.name == "workgroup_post":
+                payload["wg_id"] = str((ev.args or {}).get("wg_id") or "")
         elif ev.kind == "tool_state":
             # Mid-tool progress = sign-of-life for the daemon idle-turn timeout (a long tool ≠ a hung one).
             payload = {"kind": "tool_state", "name": ev.name}
+        elif ev.kind in ("reasoning_delta", "assistant_delta", "model_state"):
+            now = time.monotonic()
+            if now - last_model_state_at[0] < 10.0:
+                return
+            last_model_state_at[0] = now
+            payload = {"kind": "model_state"}
         elif ev.kind == "error":
-            payload = {"kind": "error", "text": ev.text}
+            payload = {
+                "kind": "error", "text": ev.text,
+                "transient": ev.transient,
+            }
         elif ev.kind == "interrupted":
             payload = {"kind": "interrupted"}
         else:
@@ -3723,6 +3737,30 @@ def workgroup_list(ctx: click.Context) -> None:
             )
 
 
+@workgroup.command("recipes")
+@click.pass_context
+def workgroup_recipes(ctx: click.Context) -> None:
+    """List recipes saved by this hub profile."""
+    from alpi import recipes as recipes_mod
+
+    h: Path = ctx.obj["home"]
+    try:
+        saved, invalid = recipes_mod.scan_saved_recipes(h)
+    except (OSError, UnicodeError, recipes_mod.RecipeError) as e:
+        raise click.ClickException(str(e))
+    for item in invalid:
+        click.echo(
+            f"warning: saved recipe {item['id']!r} ignored: {item['detail']}",
+            err=True,
+        )
+    if not saved:
+        click.echo("no saved recipes")
+        return
+    for recipe in saved:
+        pipelines = f" · {len(recipe.pipelines)} pipelines" if recipe.pipelines else ""
+        click.echo(f"{recipe.recipe_id}  {recipe.name}{pipelines}")
+
+
 @workgroup.command("show")
 @click.argument("wg_id")
 @click.pass_context
@@ -3847,8 +3885,8 @@ def workgroup_create(
 
 
 @workgroup.command("launch")
-@click.option("--recipe", "recipe_path", required=True, type=click.Path(exists=True, dir_okay=False, path_type=Path),
-              help="Path to a recipe .yaml file (git-tracked; read and sent by content).")
+@click.option("--recipe", "recipe_ref", required=True, metavar="PATH|ID",
+              help="Recipe YAML path, or an id saved under this profile's recipes/ directory.")
 @click.option("--param", "param_pairs", multiple=True, metavar="KEY=VALUE",
               help="Recipe parameter. Repeat for each declared param, e.g. --param slug=casa-bahia.")
 @click.option("--briefing", default=None, help="Override the recipe's briefing draft (the workgroup's meta briefing).")
@@ -3856,16 +3894,30 @@ def workgroup_create(
               help="Recipe input; FILE's contents seed the declared input (e.g. --input brief=./brief.md). Repeat per input.")
 @click.pass_context
 def workgroup_launch(
-    ctx: click.Context, recipe_path: Path,
+    ctx: click.Context, recipe_ref: str,
     param_pairs: tuple[str, ...], briefing: str | None,
     input_pairs: tuple[str, ...],
 ) -> None:
-    """Launch a workgroup from a recipe file (clone+seed+create+kickoff, one operation)."""
+    """Launch a workgroup from a saved recipe id or YAML file."""
     import asyncio
 
+    from alpi import recipes as recipes_mod
     from alpi.host import recipes as host_recipes
 
     h: Path = ctx.obj["home"]
+    recipe_path = Path(recipe_ref).expanduser()
+    if recipe_path.is_file():
+        recipe_id = recipe_path.stem
+        try:
+            recipe_yaml = recipe_path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError) as e:
+            raise click.ClickException(f"recipe is not readable as UTF-8 text: {e}")
+    else:
+        try:
+            _recipe, recipe_yaml = recipes_mod.load_saved_recipe(h, recipe_ref)
+        except (OSError, UnicodeError, recipes_mod.RecipeError) as e:
+            raise click.ClickException(str(e))
+        recipe_id = recipe_ref
     params: dict[str, str] = {}
     for pair in param_pairs:
         if "=" not in pair:
@@ -3890,8 +3942,8 @@ def workgroup_launch(
             )
     try:
         result = asyncio.run(host_recipes.launch(
-            h, recipe_path.read_text(), params,
-            briefing_override=briefing, recipe_id=recipe_path.stem,
+            h, recipe_yaml, params,
+            briefing_override=briefing, recipe_id=recipe_id,
             inputs=inputs,
         ))
     except ValueError as e:
