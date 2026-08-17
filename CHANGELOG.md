@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.14.1 — 2026-08-17 — the bind address follows the network
+
+- **The advertised bind address follows the network instead of the first
+  probe.** `detect_bind_ip` cached its first result for the daemon's entire
+  lifetime, so a daemon started before Tailscale was up — or during an outage
+  — advertised a stale LAN address, or none at all, until restart. The probe
+  now expires after thirty seconds while still absorbing the launchd startup
+  burst with a single blocking call.
+
 ## v0.14.0 — 2026-08-15 — profiles own the work they launch
 
 - **Recipes belong to the hub profile, without an organization layer.** A hub

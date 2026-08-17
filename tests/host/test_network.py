@@ -49,6 +49,20 @@ def test_detect_bind_ip_is_cached_per_process() -> None:
     assert calls["n"] == 1  # the (blocking) probe is reused across calls, not re-run on every one
 
 
+def test_detect_bind_ip_reprobes_after_the_ttl(monkeypatch) -> None:
+    network.detect_bind_ip.cache_clear()
+    clock = {"t": 1000.0}
+    monkeypatch.setattr(network.time, "monotonic", lambda: clock["t"])
+
+    with patch("alpi.host.network.detect_tailscale_ip", return_value="100.64.0.9"):
+        assert network.detect_bind_ip() == ("100.64.0.9", "tailscale")
+
+    clock["t"] += network._BIND_TTL_S + 1
+    with patch("alpi.host.network.detect_tailscale_ip", return_value=None), \
+         patch("alpi.host.network._detect_lan_ip", return_value="192.168.1.199"):
+        assert network.detect_bind_ip() == ("192.168.1.199", "lan")
+
+
 def test_resolve_bind_host_docker_is_all_interfaces() -> None:
     assert network.resolve_bind_host("home.example.com", is_docker=True, allow_public=False) == "0.0.0.0"
 

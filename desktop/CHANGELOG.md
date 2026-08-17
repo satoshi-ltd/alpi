@@ -11,6 +11,13 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.5.8 — 2026-08-17 — one host, shown once
+
+- **The pairing modal shows the host exactly once.** With several reachable
+  routes it renders only the picker; with a single route, only the plain
+  address. Both used to render together, so the host appeared twice whenever
+  more than one endpoint existed.
+
 ## v0.5.7 — 2026-08-15 — launch from the profile
 
 - **Saved recipes are available when creating a workgroup.** Desktop lists the

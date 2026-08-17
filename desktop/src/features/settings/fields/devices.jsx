@@ -709,7 +709,7 @@ export function PairDeviceModal({ connectionId, onClose, onPaired }) {
             </div>
             <div className={styles.devicePairMeta}>
               <Eyebrow as="div">Host</Eyebrow>
-              {(payload.endpoints?.length || 0) > 1 && (
+              {(payload.endpoints?.length || 0) > 1 ? (
                 <select
                   className={styles.input}
                   value={endpointUrl}
@@ -720,10 +720,11 @@ export function PairDeviceModal({ connectionId, onClose, onPaired }) {
                     <option key={endpoint.url} value={endpoint.url}>{endpoint.url}</option>
                   ))}
                 </select>
+              ) : (
+                <div className={styles.mono}>
+                  {ready ? endpointUrl : "…"}
+                </div>
               )}
-              <div className={styles.mono}>
-                {ready ? endpointUrl : "…"}
-              </div>
               <Eyebrow as="div" className={styles.devicePairMetaSpacer}>
                 Pairing
               </Eyebrow>

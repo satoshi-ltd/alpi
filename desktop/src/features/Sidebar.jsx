@@ -463,7 +463,7 @@ function Sidebar({
 
         <nav ref={navRef} className={styles.nav}>
           {showLoadingRows && (
-            <Section label="Alpis">
+            <Section label="Profiles">
               <SidebarLoadingRows />
             </Section>
           )}
@@ -479,7 +479,7 @@ function Sidebar({
 
           {filteredProfiles.length > 0 && (
             <Section
-              label={inSettings ? "Profiles" : "Alpis"}
+              label="Profiles"
               labelRef={alpisLabelRef}
               right={
                 onNewProfile ? (

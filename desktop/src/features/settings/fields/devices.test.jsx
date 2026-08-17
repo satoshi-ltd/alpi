@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -115,6 +115,46 @@ describe("PairDeviceModal", () => {
 
     expect(await screen.findByText(/connection_id=conn-1/)).toBeInTheDocument();
     expect(screen.getByText(/pairing_token=grant/)).toBeInTheDocument();
+  });
+
+  it("shows the host once — as a picker when routes differ, as text when there is only one", async () => {
+    const generate = (endpoints) => (command) => {
+      if (command === "profile_summaries") return Promise.resolve([]);
+      if (command === "devices_generate") {
+        return Promise.resolve({
+          connection_id: "conn-1",
+          pairing_id: "pair-1",
+          pairing_token: "grant",
+          pairing_status: "pending",
+          expires_at: 1_800_000_000,
+          url: endpoints[0].url,
+          endpoints,
+        });
+      }
+      return Promise.resolve(null);
+    };
+    const openModal = async () => {
+      render(<PairDeviceModal onClose={() => {}} onPaired={() => {}} />);
+      fireEvent.change(screen.getByRole("textbox"), { target: { value: "Phone" } });
+      fireEvent.click(screen.getByRole("button", { name: "Generate pairing code" }));
+      await screen.findByText(/connection_id=conn-1/);
+    };
+
+    invoke.mockImplementation(generate([
+      { label: "Tailscale", url: "ws://100.114.140.25:49200" },
+      { label: "LAN", url: "ws://192.168.1.199:49200" },
+    ]));
+    await openModal();
+    const picker = screen.getByRole("combobox", { name: "Pairing route" });
+    expect(picker.value).toBe("ws://100.114.140.25:49200");
+    const shown = screen.getAllByText("ws://100.114.140.25:49200");
+    expect(shown.map((node) => node.tagName)).toEqual(["OPTION"]);
+
+    cleanup();
+    invoke.mockImplementation(generate([{ label: "LAN", url: "ws://192.168.1.199:49200" }]));
+    await openModal();
+    expect(screen.queryByRole("combobox", { name: "Pairing route" })).not.toBeInTheDocument();
+    expect(screen.getByText("ws://192.168.1.199:49200")).toBeInTheDocument();
   });
 
   it("describes a consumed grant without claiming the client saved it", async () => {

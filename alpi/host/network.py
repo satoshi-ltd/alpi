@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import functools
+import time
 import ipaddress
 import os
 import shutil
@@ -22,17 +22,32 @@ _PRIVATE_RANGES = (
 )
 
 
+_BIND_TTL_S = 30.0
+_bind_probe: tuple[float, tuple[str, str] | None] | None = None
+
+
 # Tailscale first, LAN fallback. Never 0.0.0.0/public — pairing token would leak in plaintext.
-# Cached per process: re-running per profile blocks the loop (Tailscale CLI hits its 2s timeout under launchd).
-@functools.lru_cache(maxsize=1)
 def detect_bind_ip() -> tuple[str, str] | None:
+    global _bind_probe
+    now = time.monotonic()
+    if _bind_probe is not None and now - _bind_probe[0] < _BIND_TTL_S:
+        return _bind_probe[1]
     ts = detect_tailscale_ip()
     if ts:
-        return (ts, "tailscale")
-    lan = _detect_lan_ip()
-    if lan:
-        return (lan, "lan")
-    return None
+        found: tuple[str, str] | None = (ts, "tailscale")
+    else:
+        lan = _detect_lan_ip()
+        found = (lan, "lan") if lan else None
+    _bind_probe = (now, found)
+    return found
+
+
+def _clear_bind_probe() -> None:
+    global _bind_probe
+    _bind_probe = None
+
+
+detect_bind_ip.cache_clear = _clear_bind_probe
 
 
 # What did detection actually see? Used to surface a diagnostic error
