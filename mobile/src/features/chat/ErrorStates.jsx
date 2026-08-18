@@ -1,5 +1,5 @@
 import { Pressable, Text, View } from 'react-native';
-import { radii, space , fontSizes} from '../../theme/tokens';
+import { radii, space } from '../../theme/tokens';
 
 import { Banner } from '../../components/Banner';
 import { Icon } from '../../components/Icon';
@@ -10,7 +10,7 @@ export function FailedSend({ onRetry }) {
   return (
     <View style={{ paddingHorizontal: space.s7, flexDirection: 'row', justifyContent: 'flex-end' }}>
       <Pressable onPress={onRetry} hitSlop={6} style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2 }}>
-        <Icon name="back" size={14} color={colors.danger} strokeWidth={2} />
+        <Icon name="refresh" size="xs" color={colors.danger} />
         <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.danger }}>
           failed to send · Retry
         </Text>
@@ -46,7 +46,7 @@ export function FailedVoice({ duration, onRetry }) {
           backgroundColor: `${colors.danger}1c`,
         }}
       >
-        <Icon name="mic" size={18} color={colors.danger} />
+        <Icon name="mic" size="sm" color={colors.danger} />
         <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.danger }}>
           {duration}s · voice upload failed
         </Text>

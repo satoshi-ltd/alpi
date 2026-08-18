@@ -1,5 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { space , fontSizes} from '../theme/tokens';
+import { space } from '../theme/tokens';
 
 import { useTheme } from '../theme/ThemeContext';
 import { Dot } from './Dot';

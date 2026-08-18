@@ -88,7 +88,7 @@ export default function EmailList() {
           {
             id: 'imap',
             label: 'IMAP / SMTP',
-            icon: <Icon name="server" size={20} color={colors.ink} />,
+            icon: <Icon name="server" size="lg" color={colors.ink} />,
             onPress: () => {
               setChooser(false);
               router.push(`/profile/${id}/email/new`);

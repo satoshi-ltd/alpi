@@ -2,10 +2,17 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 const store = new Map();
 
+function secureStoreKey(key) {
+  if (typeof key !== 'string' || !/^[\w.-]+$/.test(key)) {
+    throw new Error('Invalid key provided to SecureStore. Keys must not be empty and contain only alphanumeric characters, ".", "-", and "_".');
+  }
+  return key;
+}
+
 vi.mock('expo-secure-store', () => ({
-  getItemAsync: vi.fn(async (k) => (store.has(k) ? store.get(k) : null)),
-  setItemAsync: vi.fn(async (k, v) => { store.set(k, v); }),
-  deleteItemAsync: vi.fn(async (k) => { store.delete(k); }),
+  getItemAsync: vi.fn(async (k) => (store.has(secureStoreKey(k)) ? store.get(k) : null)),
+  setItemAsync: vi.fn(async (k, v) => { store.set(secureStoreKey(k), v); }),
+  deleteItemAsync: vi.fn(async (k) => { store.delete(secureStoreKey(k)); }),
 }));
 
 import {
@@ -22,6 +29,17 @@ describe('stateKey', () => {
     expect(stateKey('a')).toBe('aln.state.a');
     expect(stateKey('b')).toBe('aln.state.b');
     expect(stateKey('a')).not.toBe(stateKey('b'));
+  });
+
+  it('composes a key SecureStore accepts', () => {
+    const key = stateKey(alnStateKey({ deviceId: 'a3f9c2e14b7d48a19f0c5e6b2d8a1f34' }));
+    expect(key).toMatch(/^[\w.-]+$/);
+  });
+
+  it('keeps two daemons independent after sanitizing', () => {
+    const a = stateKey(alnStateKey({ deviceId: 'mac-uuid-a' }));
+    const b = stateKey(alnStateKey({ deviceId: 'mac-uuid-b' }));
+    expect(a).not.toBe(b);
   });
 });
 
@@ -60,6 +78,14 @@ describe('loadState', () => {
     expect(s.afterSeq).toBe(42);
     expect(s.seenIds).toEqual(['wg.done:7']);
     expect(s.lastError).toBe('x');
+  });
+
+  it('round-trips under the key the background poll actually uses', async () => {
+    const key = alnStateKey({ deviceId: 'a3f9c2e14b7d48a19f0c5e6b2d8a1f34' });
+    await saveState(key, { afterSeq: 12, seenIds: ['wg.done:3'] });
+    const s = await loadState(key);
+    expect(s.afterSeq).toBe(12);
+    expect(s.seenIds).toEqual(['wg.done:3']);
   });
 
   it('coerces malformed persisted data to defaults', async () => {

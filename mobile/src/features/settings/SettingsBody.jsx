@@ -1,12 +1,12 @@
 import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ScrollView, Text, View } from 'react-native';
-import { space , fontSizes} from '../../theme/tokens';
+import { Pressable, ScrollView, Text, View } from 'react-native';
+import { alpha, mobile, radii, space } from '../../theme/tokens';
 
+import { Eyebrow } from '../../components/Eyebrow';
 import { OnOff } from '../../components/OnOff';
 import { Row, RowSeparator, SectionHeader } from '../../components/Row';
-import { Sheet } from '../../components/Sheet';
 import { useToast } from '../../components/Toast';
 import { Bold, Code, TypedConfirm } from '../../components/TypedConfirm';
 import {
@@ -19,6 +19,13 @@ import { useEndpoint } from '../../lib/EndpointContext';
 import { signOut } from '../../lib/signOut';
 import { getPermissionStatus, requestPermission } from '../aln/notify';
 import { useTheme } from '../../theme/ThemeContext';
+import {
+  DEFAULT_TEXT_SCALE,
+  MAX_TEXT_SCALE,
+  MIN_TEXT_SCALE,
+  stepTextScale,
+  textScaleLabel,
+} from '../../theme/textScale';
 
 const APP_VERSION = Constants.expoConfig?.version ?? '0.0.0';
 
@@ -26,8 +33,40 @@ function StatusValue({ active, label = 'on', mutedLabel = 'off', disabled = fals
   return <OnOff on={!disabled && !!active} onLabel={label} offLabel={mutedLabel} />;
 }
 
-export function SettingsSheet({ open, onClose }) {
-  const { pref, setMode, mode, colors, fonts , fontSizes} = useTheme();
+function StepButton({ glyph, label, disabled, onPress }) {
+  const { colors, fonts, fontSizes } = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityLabel={label}
+      style={({ pressed }) => ({
+        width: mobile.tap,
+        height: mobile.tap,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: radii.sm,
+        backgroundColor: pressed && !disabled ? colors.selected : colors.bgInput,
+        opacity: disabled ? alpha.disabled : 1,
+      })}
+    >
+      <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.xl, color: colors.ink2 }}>
+        {glyph}
+      </Text>
+    </Pressable>
+  );
+}
+
+export function SettingsBody({ active = true, onDismiss }) {
+  const {
+    pref,
+    setMode,
+    colors,
+    fonts,
+    fontSizes,
+    textScale = DEFAULT_TEXT_SCALE,
+    setTextScale,
+  } = useTheme();
   const router = useRouter();
   const toast = useToast();
   const { unpair } = useEndpoint();
@@ -38,11 +77,11 @@ export function SettingsSheet({ open, onClose }) {
   const [notifPerm, setNotifPerm] = useState('undetermined');
 
   useEffect(() => {
-    if (!open) return;
+    if (!active) return;
     biometricCapabilities().then(setBioCaps);
     getBiometricPref().then(setBioOn);
     getPermissionStatus().then(setNotifPerm);
-  }, [open]);
+  }, [active]);
 
   const onPermissionPress = async () => {
     if (notifPerm === 'granted') {
@@ -58,7 +97,7 @@ export function SettingsSheet({ open, onClose }) {
   };
 
   const navigate = (path) => {
-    onClose?.();
+    onDismiss?.();
     router.push(path);
   };
 
@@ -68,11 +107,11 @@ export function SettingsSheet({ open, onClose }) {
   };
 
   const appearanceLabel =
-    pref === 'system' ? `System (${mode})` : pref === 'light' ? 'Light' : 'Dark';
+    pref === 'system' ? 'System' : pref === 'light' ? 'Light' : 'Dark';
 
   const handleSignOut = async () => {
     setConfirmSignOut(false);
-    onClose?.();
+    onDismiss?.();
     await signOut();
     try { await unpair?.(); } catch {}
     toast({ title: 'Signed out', message: 'All local data cleared', duration: 1800 });
@@ -101,7 +140,7 @@ export function SettingsSheet({ open, onClose }) {
   };
 
   return (
-    <Sheet open={open} onClose={onClose} title="Settings" subtitle="THIS PHONE">
+    <>
       <ScrollView contentContainerStyle={{ paddingBottom: space.s9 }}>
         <SectionHeader>This phone</SectionHeader>
         <Row label="Re-pair this phone" helper="opens QR scanner" onPress={() => navigate('/pair')} />
@@ -119,7 +158,6 @@ export function SettingsSheet({ open, onClose }) {
           onPress={toggleBiometric}
           chevron={false}
         />
-
 
         <SectionHeader>Notifications</SectionHeader>
         <Row
@@ -142,6 +180,30 @@ export function SettingsSheet({ open, onClose }) {
 
         <SectionHeader>Appearance</SectionHeader>
         <Row label="Theme" value={appearanceLabel} onPress={cycleAppearance} />
+        <RowSeparator />
+        <Row
+          label="Text size"
+          helper="multiplies your OS text size · long-press to reset"
+          value={textScaleLabel(textScale)}
+          onLongPress={() => setTextScale?.(DEFAULT_TEXT_SCALE)}
+          chevron={false}
+          trailing={
+            <View style={{ flexDirection: 'row', gap: space.s3 }}>
+              <StepButton
+                glyph="−"
+                label="Smaller text"
+                disabled={textScale <= MIN_TEXT_SCALE}
+                onPress={() => setTextScale?.(stepTextScale(textScale, -1))}
+              />
+              <StepButton
+                glyph="+"
+                label="Larger text"
+                disabled={textScale >= MAX_TEXT_SCALE}
+                onPress={() => setTextScale?.(stepTextScale(textScale, 1))}
+              />
+            </View>
+          }
+        />
 
         <SectionHeader>Danger zone</SectionHeader>
         <Row
@@ -162,9 +224,7 @@ export function SettingsSheet({ open, onClose }) {
             alignItems: 'baseline',
           }}
         >
-          <Text style={{ fontFamily: fonts.monoMedium, fontSize: fontSizes.xs, letterSpacing: 0.84, textTransform: 'uppercase', color: colors.ink3 }}>
-            About
-          </Text>
+          <Eyebrow>About</Eyebrow>
           <Text style={{ fontFamily: fonts.monoMedium, fontSize: fontSizes.xs, color: colors.ink4 }}>
             Alpi mobile · v{APP_VERSION}
           </Text>
@@ -178,7 +238,7 @@ export function SettingsSheet({ open, onClose }) {
         body={
           <>
             Forgets every paired daemon and wipes <Code>pins</Code>,{' '}
-            <Code>biometric</Code> and the local theme from this device. Your daemons and alpis stay untouched on their hosts —
+            <Code>biometric</Code> and the local theme and text size from this device. Your daemons and alpis stay untouched on their hosts —
             you&apos;ll just need to re-pair. <Bold>This action cannot be undone.</Bold>
           </>
         }
@@ -186,6 +246,6 @@ export function SettingsSheet({ open, onClose }) {
         confirmLabel="Sign out"
         onConfirm={handleSignOut}
       />
-    </Sheet>
+    </>
   );
 }

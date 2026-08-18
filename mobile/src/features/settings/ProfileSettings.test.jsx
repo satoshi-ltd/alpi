@@ -85,7 +85,8 @@ vi.mock('../../components/Diamond', () => ({
 vi.mock('../../components/TypedConfirm', () => ({
   Bold: ({ children }) => <strong>{children}</strong>,
   Code: ({ children }) => <code>{children}</code>,
-  TypedConfirm: () => null,
+  TypedConfirm: ({ open, title, expected }) =>
+    open ? <div data-confirm={title} data-expected={String(expected)} /> : null,
 }));
 
 vi.mock('../../features/sheets/AccentSheet', () => ({
@@ -275,5 +276,77 @@ describe('ProfileSettings routing tiers', () => {
     await waitFor(() => expect(scope.getByText('Model')).toBeTruthy());
     expect(scope.queryByText('Fast model')).toBeNull();
     expect(scope.queryByText('Deep model')).toBeNull();
+  });
+});
+
+describe('ProfileSettings delete intent', () => {
+  function daemon() {
+    return vi.fn(async (method) => {
+      if (method === 'host.profile.summaries') return { profiles: [{ name: 'doc', counts: {} }] };
+      if (method === 'host.settings.profile_snapshot') {
+        return {
+          detail: { name: 'doc', model: 'openrouter/example' },
+          usage: { days: [] },
+          schedules: { jobs: [] },
+          workgroups: { workgroups: [] },
+          email: { accounts: [] },
+          storage: { storage: [] },
+        };
+      }
+      throw new Error(`unexpected ${method}`);
+    });
+  }
+
+  function confirmNode(container) {
+    return container.querySelector('[data-confirm]');
+  }
+
+  it('opens the delete confirmation once the profile the row menu named has loaded', async () => {
+    h.params = { id: 'doc', intent: 'delete' };
+    const call = daemon();
+
+    const { container } = render(<ProfileSettings />, { wrapper: wrapper(call) });
+
+    await waitFor(() => expect(confirmNode(container)).toBeTruthy());
+    expect(confirmNode(container).getAttribute('data-confirm')).toBe('Delete profile @doc');
+    expect(confirmNode(container).getAttribute('data-expected')).toBe('doc');
+    expect(call.mock.calls.map(([m]) => m)).not.toContain('host.profile.delete');
+  });
+
+  it('stays closed when the screen is opened without the intent', async () => {
+    const call = daemon();
+
+    const { container } = render(<ProfileSettings />, { wrapper: wrapper(call) });
+
+    await waitFor(() => expect(within(container).getByText('Delete profile')).toBeTruthy());
+    expect(confirmNode(container)).toBeNull();
+  });
+});
+
+describe('ProfileSettings vocabulary', () => {
+  it('calls the entity a profile in the pause helper', async () => {
+    const call = vi.fn(async (method) => {
+      if (method === 'host.profile.summaries') {
+        return { profiles: [{ name: 'doc', counts: {} }] };
+      }
+      if (method === 'host.settings.profile_snapshot') {
+        return {
+          detail: { name: 'doc', model: 'openrouter/example' },
+          usage: { days: [] },
+          schedules: { jobs: [] },
+          workgroups: { workgroups: [] },
+          email: { accounts: [] },
+          storage: { storage: [] },
+        };
+      }
+      throw new Error(`unexpected ${method}`);
+    });
+
+    const { container } = render(<ProfileSettings />, { wrapper: wrapper(call) });
+
+    const scope = within(container);
+    await waitFor(() => expect(scope.getByText('Pause profile')).toBeTruthy());
+    expect(scope.getByText("paused profiles can't be chatted and sort last in new-chat")).toBeTruthy();
+    expect(container.textContent).not.toMatch(/alpis/i);
   });
 });

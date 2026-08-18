@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 
 const h = vi.hoisted(() => ({
+  fontOf: (style) => [style].flat(Infinity).filter(Boolean).reduce((f, s) => s.fontFamily ?? f, null),
   call: vi.fn(),
   writeAsStringAsync: vi.fn(async () => {}),
   isAvailableAsync: vi.fn(async () => true),
@@ -12,7 +13,8 @@ const h = vi.hoisted(() => ({
 
 vi.mock('react-native', () => {
   const View = ({ children, ...props }) => React.createElement('div', props, children);
-  const Text = ({ children, ...props }) => React.createElement('span', props, children);
+  const Text = ({ children, style, ...props }) =>
+    React.createElement('span', { ...props, 'data-font': h.fontOf(style) }, children);
   const Pressable = ({ children, onPress, accessibilityLabel, ...props }) =>
     React.createElement('button', { type: 'button', onClick: onPress, 'aria-label': accessibilityLabel, ...props },
       children instanceof Function ? children({ pressed: false }) : children);
@@ -84,6 +86,12 @@ describe('AttachmentCards document share flow', () => {
       'file:///cache/report.pdf', { mimeType: 'application/pdf', dialogTitle: 'report.pdf' },
     );
     expect(h.alert).not.toHaveBeenCalled();
+  });
+
+  it('the image placeholder names the file in a theme font', () => {
+    const img = { name: 'shot.png', mime: 'image/png', size: 2048, path: '/data/.alpi/profiles/agora/out/shot.png' };
+    render(<AttachmentCards items={[img]} variant="message" profile="agora" />);
+    expect(screen.getByText('shot.png').getAttribute('data-font')).toBe('sans');
   });
 
   it('a failed fetch surfaces the alert instead of sharing', async () => {

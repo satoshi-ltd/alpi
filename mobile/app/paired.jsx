@@ -1,7 +1,7 @@
 import { useRouter } from 'expo-router';
 import { Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { space , fontSizes} from '../src/theme/tokens';
+import { space, tracking } from '../src/theme/tokens';
 
 import { Button } from '../src/components/Button';
 import { Icon } from '../src/components/Icon';
@@ -24,7 +24,7 @@ export default function PairSuccess() {
             justifyContent: 'center',
           }}
         >
-          <Icon name="forward" size={44} color={colors.success} strokeWidth={2.5} />
+          <Icon name="check" size="hero" color={colors.success} />
         </View>
         <Text
           style={{
@@ -32,7 +32,7 @@ export default function PairSuccess() {
             fontSize: fontSizes.display,
             color: colors.ink,
             textAlign: 'center',
-            letterSpacing: -0.018 * 28,
+            letterSpacing: fontSizes.display * tracking.tight,
           }}
         >
           Paired
@@ -47,7 +47,7 @@ export default function PairSuccess() {
             maxWidth: 320,
           }}
         >
-          Your daemon is reachable and your alpis are available.
+          Your daemon is reachable and your profiles are available.
         </Text>
       </View>
       <Button title="Open Inbox" size="hero" onPress={() => router.replace('/')} fullWidth />

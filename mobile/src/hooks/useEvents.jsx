@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef } fr
 import { AppState } from 'react-native';
 
 import { useEndpoint } from '../lib/EndpointContext';
+import { endpointHost } from '../lib/endpoint';
 
 const EventsContext = createContext(null);
 
@@ -14,6 +15,12 @@ const RESUME_STALE_MS = 30000;
 
 export function EventsProvider({ children }) {
   const { endpoint, call, callStream } = useEndpoint();
+  // Refs, not deps: EndpointProvider rebuilds call/callStream on every probe and depending on them would tear down the live stream.
+  const callRef = useRef(call);
+  callRef.current = call;
+  const callStreamRef = useRef(callStream);
+  callStreamRef.current = callStream;
+  const endpointKey = endpoint ? `${endpoint.id}|${endpointHost(endpoint)}|${endpoint.token}` : null;
   const listenersRef = useRef(new Set());
   // seq is the canonical backfill pivot; wall-clock `at` is informational only (NTP skew, suspend/resume).
   const lastSeqRef = useRef(0);
@@ -37,7 +44,7 @@ export function EventsProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    if (!endpoint) return undefined;
+    if (!endpointKey) return undefined;
     // seq is per-daemon — endpoint swap invalidates the cursor.
     lastSeqRef.current = 0;
     seenSeqsRef.current = new Set();
@@ -56,7 +63,7 @@ export function EventsProvider({ children }) {
     const backfill = async () => {
       if (lastSeqRef.current <= 0) return;
       try {
-        const res = await call('host.events.history', {
+        const res = await callRef.current('host.events.history', {
           after_seq: lastSeqRef.current,
           limit: 200,
         });
@@ -82,7 +89,7 @@ export function EventsProvider({ children }) {
 
     const connect = () => {
       if (cancelled) return;
-      handle = callStream(
+      handle = callStreamRef.current(
         'host.events.subscribe',
         {},
         {
@@ -156,7 +163,7 @@ export function EventsProvider({ children }) {
       if (retryTimer) clearTimeout(retryTimer);
       handle?.cancel?.();
     };
-  }, [endpoint, call, callStream, fanOut]);
+  }, [endpointKey, fanOut]);
 
   const subscribe = useCallback((fn) => {
     listenersRef.current.add(fn);

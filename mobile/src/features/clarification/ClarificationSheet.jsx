@@ -3,7 +3,7 @@ import { Pressable, Text, TextInput, View } from 'react-native';
 
 import { Icon } from '../../components/Icon';
 import { Sheet } from '../../components/Sheet';
-import { fontSizes, lineHeights, radii, space } from '../../theme/tokens';
+import { lineHeights, radii, space } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeContext';
 import { useClarificationQueue } from './useClarificationQueue';
 
@@ -23,7 +23,7 @@ function formatRemaining(deadline, now) {
 }
 
 export function ClarificationSheet() {
-  const { colors, fonts } = useTheme();
+  const { colors, fonts, fontSizes } = useTheme();
   const { current, busy, error, respond, cancel } = useClarificationQueue();
   const mode = modeFor(current);
 
@@ -69,7 +69,7 @@ export function ClarificationSheet() {
       hideHeader
     >
       {current ? (
-        <View style={{ paddingHorizontal: space.s8, paddingTop: space.s5, paddingBottom: space.s8, gap: space.s6 }}>
+        <View style={{ paddingHorizontal: space.s8, paddingTop: space.s1, paddingBottom: space.s8, gap: space.s6 }}>
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space.s5 }}>
             <View style={{ flex: 1, gap: space.s2 }}>
               <Text
@@ -93,11 +93,6 @@ export function ClarificationSheet() {
                 {current.question}
               </Text>
             </View>
-            <Pressable disabled={busy} onPress={cancel} hitSlop={10} style={{ paddingTop: 2 }}>
-              <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.md, color: colors.ink3 }}>
-                Cancel
-              </Text>
-            </Pressable>
           </View>
 
           {mode === 'multi' ? (
@@ -192,7 +187,8 @@ function Radio({ filled, color }) {
   );
 }
 
-function Checkbox({ checked, color }) {
+function Checkbox({ checked, color, fonts }) {
+  const { fontSizes } = useTheme();
   return (
     <View
       style={{
@@ -207,13 +203,14 @@ function Checkbox({ checked, color }) {
       }}
     >
       {checked ? (
-        <Text style={{ color: '#fff', fontSize: fontSizes.md, lineHeight: fontSizes.md }}>✓</Text>
+        <Text style={{ fontFamily: fonts.sans.regular, color: '#fff', fontSize: fontSizes.md, lineHeight: fontSizes.md }}>✓</Text>
       ) : null}
     </View>
   );
 }
 
 function OtherInline({ otherText, setOtherText, onSend, onCancel, busy, colors, fonts }) {
+  const { fontSizes } = useTheme();
   const canSend = !busy && otherText.trim().length > 0;
   return (
     <View
@@ -276,6 +273,7 @@ function SingleChoices({
   choices, allowOther, otherMode, setOtherMode, otherText, setOtherText,
   onPick, busy, colors, fonts,
 }) {
+  const { fontSizes } = useTheme();
   return (
     <View>
       {choices.map((c) => (
@@ -321,6 +319,7 @@ function SingleChoices({
 }
 
 function MultiChoices({ choices, picked, onToggle, busy, colors, fonts }) {
+  const { fontSizes } = useTheme();
   return (
     <View>
       {choices.map((c) => {
@@ -328,7 +327,7 @@ function MultiChoices({ choices, picked, onToggle, busy, colors, fonts }) {
         return (
           <ChoiceRow key={c.label} disabled={busy} onPress={() => onToggle(c.label)}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s5 }}>
-              <Checkbox checked={checked} color={checked ? colors.ink : colors.ink3} />
+              <Checkbox checked={checked} color={checked ? colors.ink : colors.ink3} fonts={fonts} />
               <View style={{ flex: 1 }}>
                 <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.lg, lineHeight: fontSizes.lg * lineHeights.normal, color: colors.ink }}>
                   {c.label}
@@ -348,6 +347,7 @@ function MultiChoices({ choices, picked, onToggle, busy, colors, fonts }) {
 }
 
 function ConfirmChoices({ choices, onPick, busy, colors, fonts }) {
+  const { fontSizes } = useTheme();
   const [primary, secondary] = choices;
   return (
     <View style={{ gap: space.s4 }}>
@@ -384,6 +384,7 @@ function ConfirmChoices({ choices, onPick, busy, colors, fonts }) {
 }
 
 function Footer({ picked, busy, onContinue, colors, fonts }) {
+  const { fontSizes } = useTheme();
   const canContinue = picked.length > 0 && !busy;
   return (
     <View style={{ flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginTop: space.s3 }}>

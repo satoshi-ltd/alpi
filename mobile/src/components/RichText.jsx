@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Image, Modal, Pressable, ScrollView, Text, View } from 'react-native';
-import { space, fontSizes, lineHeights, radii } from '../theme/tokens';
+import { space, lineHeights, radii } from '../theme/tokens';
 
+import { SheetClose } from './SheetClose';
 import { segmentBlocks } from '../lib/markdownBlocks';
 import { useCachedImage } from '../hooks/useCachedImage';
 import { useEndpoint } from '../lib/EndpointContext';
 import { useTheme } from '../theme/ThemeContext';
 
 function MarkdownImage({ path, alt, note, profile, theme }) {
-  const { colors, fonts } = theme;
+  const { colors, fonts, fontSizes } = theme;
   const { call, endpoint } = useEndpoint();
   const { uri } = useCachedImage(call, endpoint, profile, path);
   const [aspect, setAspect] = useState(16 / 9);
@@ -39,11 +40,23 @@ function MarkdownImage({ path, alt, note, profile, theme }) {
       <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3, marginTop: space.s2 }}>
         {caption}
       </Text>
-      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+      <Modal
+        visible={open}
+        transparent
+        animationType="fade"
+        supportedOrientations={['portrait', 'landscape-left', 'landscape-right']}
+        onRequestClose={() => setOpen(false)}
+      >
         <Pressable
           onPress={() => setOpen(false)}
           style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', alignItems: 'center', justifyContent: 'center', padding: space.s5 }}
         >
+          <SheetClose
+            onPress={() => setOpen(false)}
+            color="rgba(255,255,255,0.82)"
+            hint="Dismisses the image — you can also tap the backdrop"
+            style={{ position: 'absolute', top: space.s11, right: space.s7 }}
+          />
           {uri ? <Image source={{ uri }} style={{ width: '100%', height: '80%' }} resizeMode="contain" /> : null}
           {caption ? (
             <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: 'rgba(255,255,255,0.82)', marginTop: space.s4 }}>
@@ -82,7 +95,7 @@ function parseInline(text, key, theme, opts = {}) {
         key={seg.key}
         style={{
           fontFamily: theme.fonts.mono,
-          fontSize: fontSizes.md,
+          fontSize: theme.fontSizes.md,
           backgroundColor: codeBackground,
           color: codeColor,
         }}
@@ -97,7 +110,7 @@ function parseInline(text, key, theme, opts = {}) {
 }
 
 function CodeBlock({ lang, code, theme }) {
-  const { colors, fonts } = theme;
+  const { colors, fonts, fontSizes } = theme;
   return (
     <View
       style={{
@@ -122,7 +135,7 @@ function CodeBlock({ lang, code, theme }) {
         </Text>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ padding: space.s5 }}>
-        <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.md, color: colors.ink, lineHeight: fontSizes.md * 1.5 }}>
+        <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.md, color: colors.ink, lineHeight: fontSizes.md * lineHeights.normal }}>
           {code}
         </Text>
       </ScrollView>
@@ -131,7 +144,7 @@ function CodeBlock({ lang, code, theme }) {
 }
 
 function MdTable({ header, rows, theme, inlineOpts }) {
-  const { colors, fonts } = theme;
+  const { colors, fonts, fontSizes } = theme;
   const cols = header.length;
   // RN has no table auto-layout: fix each column's width from its widest cell so
   // header/rows align, then scroll horizontally instead of compressing.
@@ -178,7 +191,7 @@ function MdTable({ header, rows, theme, inlineOpts }) {
               {Array.from({ length: cols }).map((_, j) => (
                 <Text
                   key={j}
-                  style={[cellBase, { width: colWidths[j], fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink, lineHeight: fontSizes.sm * 1.5 }]}
+                  style={[cellBase, { width: colWidths[j], fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink, lineHeight: fontSizes.sm * lineHeights.normal }]}
                 >
                   {parseInline(row[j] ?? '', `td-${r}-${j}`, theme, inlineOpts)}
                 </Text>
@@ -193,9 +206,9 @@ function MdTable({ header, rows, theme, inlineOpts }) {
 
 export function RichText({ children, color, size, imageProfile, codeColor, codeBackground }) {
   const theme = useTheme();
-  const { colors, fonts } = theme;
+  const { colors, fonts, fontSizes } = theme;
   const fg = color ?? colors.ink;
-  const fz = size ?? 16;
+  const fz = size ?? fontSizes.lg;
   const lh = fz * 1.55;
   const blocks = useMemo(() => segmentBlocks(children), [children]);
   const inlineOpts = { color: fg, codeColor, codeBackground };
@@ -248,7 +261,7 @@ export function RichText({ children, color, size, imageProfile, codeColor, codeB
             <View key={`l-${i}`} style={{ marginVertical: space.s2, paddingLeft: space.s8, gap: space.s1 }}>
               {b.items.map((item, j) => (
                 <View key={j} style={{ flexDirection: 'row', gap: space.s3 }}>
-                  <Text style={{ color: fg, fontSize: fz, lineHeight: lh }}>•</Text>
+                  <Text style={{ color: fg, fontSize: fz, lineHeight: lh, fontFamily: fonts.sans.regular }}>•</Text>
                   <Text style={{ flex: 1, color: fg, fontSize: fz, lineHeight: lh, fontFamily: fonts.sans.regular }}>
                     {parseInline(item, `l${i}-${j}`, theme, inlineOpts)}
                   </Text>

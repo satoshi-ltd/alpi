@@ -98,6 +98,27 @@ describe('useOutputs', () => {
     );
     await waitFor(() => expect(result.current.rows.length).toBe(2));
     expect(result.current.rows.map((r) => r.profile).sort()).toEqual(['abby', 'vera']);
+    expect(result.current.unreachable).toBe(true);
+  });
+
+  it('flags unreachable when the daemon answers nothing, so no rows never reads as an empty inbox', async () => {
+    const call = vi.fn(async () => { throw new Error('timeout'); });
+    const { Wrapper } = makeProvider({ call });
+    const { result } = renderHook(() => useOutputs({ profiles: ['abby'] }), { wrapper: Wrapper });
+
+    await waitFor(() => expect(result.current.unreachable).toBe(true));
+    expect(result.current.rows).toEqual([]);
+  });
+
+  it('leaves unreachable false when the daemon answers with an empty list', async () => {
+    const call = vi.fn(async () => ({ outputs: [] }));
+    const { Wrapper } = makeProvider({ call });
+    const { result } = renderHook(() => useOutputs({ profiles: ['abby'] }), { wrapper: Wrapper });
+
+    await waitFor(() => expect(call).toHaveBeenCalled());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.rows).toEqual([]);
+    expect(result.current.unreachable).toBe(false);
   });
 });
 

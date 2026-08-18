@@ -4,14 +4,14 @@
     "slug": "alpi-mobile",
     "owner": "satoshi-ltd",
     "scheme": "alpi",
-    "version": "0.3.1",
+    "version": "0.4.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "supportsTablet": false,
+      "supportsTablet": true,
       "bundleIdentifier": "com.satoshilimited.alpi",
-      "buildNumber": "23",
+      "buildNumber": "24",
       "icon": {
         "light": "./assets/ios-light.png",
         "dark": "./assets/ios-dark.png",
@@ -31,7 +31,7 @@
     },
     "android": {
       "package": "com.satoshilimited.alpi",
-      "versionCode": 23,
+      "versionCode": 24,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#eef0f2"

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from 'react-native';
-import { radii, space , fontSizes} from '../../theme/tokens';
+import { radii, space } from '../../theme/tokens';
 
 import { Field } from '../../components/Field';
 import { PickerRow } from '../../components/PickerRow';

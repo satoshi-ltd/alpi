@@ -1,5 +1,5 @@
 import { Pressable, ScrollView, Text, View } from 'react-native';
-import { fonts, radii, space , fontSizes} from '../../theme/tokens';
+import { fonts, lineHeights, radii, space } from '../../theme/tokens';
 
 import { Sheet } from '../../components/Sheet';
 import { Dot } from '../../components/Dot';
@@ -21,13 +21,13 @@ function mix(hex, pct, base) {
 
 const CLOSED = new Set(['done', 'skipped', 'blocked', 'preempted']);
 
-function StatusIcon({ status, accent, colors }) {
+function StatusIcon({ status, accent, colors, fontSizes }) {
   if (status === 'done') {
-    return <Text style={{ color: accent, fontSize: fontSizes.xl, lineHeight: 18, fontFamily: fonts.sans.bold }}>✓</Text>;
+    return <Text style={{ color: accent, fontSize: fontSizes.xl, lineHeight: fontSizes.xl * lineHeights.tight, fontFamily: fonts.sans.bold }}>✓</Text>;
   }
   if (status === 'blocked') {
     return (
-      <Text style={{ color: colors.danger, fontSize: fontSizes.xl, lineHeight: 18, fontFamily: fonts.sans.bold }}>
+      <Text style={{ color: colors.danger, fontSize: fontSizes.xl, lineHeight: fontSizes.xl * lineHeights.tight, fontFamily: fonts.sans.bold }}>
         ⨯
       </Text>
     );
@@ -120,7 +120,7 @@ export function TasksSheet({ open, onClose, tasks = [], workgroupId, accent, onP
                 })}
               >
                 <View style={{ width: 24, height: fontSizes.md * 1.3, alignItems: 'center', justifyContent: 'center' }}>
-                  <StatusIcon status={t.status} accent={accent} colors={colors} />
+                  <StatusIcon status={t.status} accent={accent} colors={colors} fontSizes={fontSizes} />
                 </View>
                 <View style={{ flex: 1, gap: space.s1 }}>
                   <Text

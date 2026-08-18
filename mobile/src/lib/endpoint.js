@@ -24,3 +24,11 @@ export function endpointUrl(endpoint) {
   }
   return '';
 }
+
+export function endpointHost(endpoint) {
+  try {
+    return endpointUrl(endpoint);
+  } catch {
+    return '';
+  }
+}

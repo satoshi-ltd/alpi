@@ -1,8 +1,9 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
+import { KeyboardPane } from '../../../src/components/KeyboardPane';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { space , fontSizes} from '../../../src/theme/tokens';
+import { space } from '../../../src/theme/tokens';
 
 import { Button } from '../../../src/components/Button';
 import { Field } from '../../../src/components/Field';
@@ -72,7 +73,7 @@ export default function EditIdentity() {
         onBack={askBack}
         right={<Button title="Save" size="md" onPress={save} />}
       />
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+      <KeyboardPane>
         <ScrollView contentContainerStyle={{ padding: space.s8, gap: space.s6 }} keyboardShouldPersistTaps="handled">
           <Field
             value={text}
@@ -91,7 +92,7 @@ export default function EditIdentity() {
             <Button title="Draft" size="md" variant="ghost" onPress={draft} loading={drafting} disabled={drafting} />
           </View>
         </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardPane>
     </SafeAreaView>
   );
 }

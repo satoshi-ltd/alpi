@@ -2,7 +2,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { space , fontSizes} from '../../../../src/theme/tokens';
+import { space } from '../../../../src/theme/tokens';
 
 import { Button } from '../../../../src/components/Button';
 import { Pill } from '../../../../src/components/Pill';
@@ -153,11 +153,12 @@ export default function McpList() {
               }}
             >
               <ActivityIndicator color={colors.ink3} />
-              <Text style={{ color: colors.ink3, fontSize: fontSizes.sm }}>handshaking with server…</Text>
+              <Text style={{ fontFamily: fonts.sans.regular, color: colors.ink3, fontSize: fontSizes.sm }}>handshaking with server…</Text>
             </View>
           ) : toolsError ? (
             <Text
               style={{
+                fontFamily: fonts.sans.regular,
                 color: colors.danger,
                 fontSize: fontSizes.sm,
                 paddingHorizontal: space.s8,
@@ -169,6 +170,7 @@ export default function McpList() {
           ) : tools.length === 0 ? (
             <Text
               style={{
+                fontFamily: fonts.sans.regular,
                 color: colors.ink3,
                 fontSize: fontSizes.sm,
                 paddingHorizontal: space.s8,
@@ -182,7 +184,7 @@ export default function McpList() {
               <View key={t.name} style={{ paddingHorizontal: space.s8, paddingVertical: space.s3, gap: 2 }}>
                 <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink }}>{t.name}</Text>
                 {t.description ? (
-                  <Text style={{ fontSize: fontSizes.xs, color: colors.ink3, lineHeight: fontSizes.xs * 1.4 }}>
+                  <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3, lineHeight: fontSizes.xs * 1.4 }}>
                     {t.description}
                   </Text>
                 ) : null}

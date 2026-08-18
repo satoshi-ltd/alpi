@@ -1,6 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
+import { KeyboardPane } from '../../../../src/components/KeyboardPane';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '../../../../src/components/Button';
@@ -46,7 +47,7 @@ export default function NewEmail() {
         onBack={() => router.back()}
         right={<Button title="Add" size="md" disabled={!ready} loading={busy} onPress={save} />}
       />
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+      <KeyboardPane>
         <ScrollView contentContainerStyle={{ padding: space.s8, gap: space.s7 }} keyboardShouldPersistTaps="handled">
           <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3, lineHeight: fontSizes.sm * 1.5 }}>
             Connect a mailbox over IMAP / SMTP. Use an app password if the provider
@@ -67,7 +68,7 @@ export default function NewEmail() {
             />
           ))}
         </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardPane>
     </SafeAreaView>
   );
 }

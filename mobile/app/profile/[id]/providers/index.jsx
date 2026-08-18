@@ -2,7 +2,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo } from 'react';
 import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { space , fontSizes} from '../../../../src/theme/tokens';
+import { space } from '../../../../src/theme/tokens';
 
 import { Pill } from '../../../../src/components/Pill';
 import { Row, RowSeparator, SectionHeader } from '../../../../src/components/Row';

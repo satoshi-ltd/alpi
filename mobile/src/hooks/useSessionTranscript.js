@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { isUnfinishedStub } from '../features/chat/chatTurns';
 import { useEndpoint } from '../lib/EndpointContext';
 
 const TAIL_TURNS = 60;
@@ -18,6 +19,7 @@ const EMPTY_SNAP = {
   inFlight: false,
   loading: false,
   loadingOlder: false,
+  settled: true,
   error: null,
 };
 
@@ -31,6 +33,7 @@ function entryFor(key) {
       inFlight: false,
       loading: false,
       loadingOlder: false,
+      settled: false,
       error: null,
       refreshing: null,
       refreshAgain: false,
@@ -50,6 +53,7 @@ function snapshotOf(entry) {
     inFlight: entry.inFlight,
     loading: entry.loading,
     loadingOlder: entry.loadingOlder,
+    settled: entry.settled,
     error: entry.error,
   };
 }
@@ -65,6 +69,12 @@ function isAuthFailure(error) {
     (message === 'auth-failed' && error?.data?.reason !== 'connection-disabled') ||
     message === 'forbidden'
   );
+}
+
+const NOT_FOUND = -32004;
+
+export function isMissingSession(error) {
+  return !!error && (error.code === NOT_FOUND || String(error.message || '') === 'not-found');
 }
 
 // totalTurns null ⇒ the daemon predates slicing and shipped the full transcript.
@@ -135,17 +145,29 @@ function applyState(entry, next) {
   entry.inFlight = next.inFlight === true;
 }
 
+function keyFor(endpointId, profile, sessionId) {
+  return endpointId && profile && sessionId ? `${endpointId}|${profile}|${sessionId}` : null;
+}
+
+function joinRefresh(entry) {
+  const current = entry.refreshing;
+  if (!current) return Promise.resolve(null);
+  return current.then(() => joinRefresh(entry));
+}
+
 function startRefresh(entry, call, profile, sessionId) {
   // A refresh requested mid-flight must run again after: the in-flight read may predate the change that triggered it.
   if (entry.refreshing) {
     entry.refreshAgain = true;
-    return entry.refreshing;
+    return joinRefresh(entry);
   }
   entry.loading = entry.session == null;
   entry.error = null;
   notify(entry);
   const knownEnd = entry.turnsOffset + (entry.session?.turns?.length ?? 0);
-  const useDelta = entry.session != null && entry.totalTurns != null && knownEnd > 0;
+  // The daemon overwrites the stub in place, so after_turn=knownEnd would skip the finished turn forever.
+  const useDelta = entry.session != null && entry.totalTurns != null && knownEnd > 0
+    && !isUnfinishedStub(entry.session.turns?.[entry.session.turns.length - 1]);
   const params = useDelta
     ? { profile, id: sessionId, after_turn: knownEnd }
     : { profile, id: sessionId, tail_turns: TAIL_TURNS };
@@ -177,6 +199,7 @@ function startRefresh(entry, call, profile, sessionId) {
     .finally(() => {
       entry.refreshing = null;
       entry.loading = false;
+      entry.settled = true;
       notify(entry);
       if (entry.refreshAgain) {
         entry.refreshAgain = false;
@@ -213,7 +236,7 @@ function startOlder(entry, call, profile, sessionId) {
 
 export function useSessionTranscript(profile, sessionId) {
   const { endpoint, call } = useEndpoint();
-  const key = endpoint && profile && sessionId ? `${endpoint.id}|${profile}|${sessionId}` : null;
+  const key = keyFor(endpoint?.id, profile, sessionId);
 
   const [snap, setSnap] = useState(() => (key ? snapshotOf(entryFor(key)) : EMPTY_SNAP));
   // reset snap synchronously on key flip — else one render bleeds the previous session's data
@@ -240,9 +263,14 @@ export function useSessionTranscript(profile, sessionId) {
     };
   }, [key, call]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const refresh = useCallback(() => {
-    if (!key) return Promise.resolve(null);
-    return startRefresh(entryFor(key), call, profile, sessionId).catch(() => null);
+  const refresh = useCallback((targetSessionId) => {
+    const sid = targetSessionId || sessionId;
+    const target = keyFor(endpoint?.id, profile, sid);
+    if (!target) return Promise.resolve(null);
+    const entry = entryFor(target);
+    return startRefresh(entry, call, profile, sid)
+      .then(() => snapshotOf(entry))
+      .catch(() => null);
   }, [key, call]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadOlder = useCallback(() => {

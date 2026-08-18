@@ -2,12 +2,14 @@
 
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
+import { KeyboardPane } from '../../../../src/components/KeyboardPane';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { space , fontSizes} from '../../../../src/theme/tokens';
+import { space } from '../../../../src/theme/tokens';
 
 import { Button } from '../../../../src/components/Button';
 import { Field } from '../../../../src/components/Field';
+import { Eyebrow } from '../../../../src/components/Eyebrow';
 import { Pill } from '../../../../src/components/Pill';
 import { ScreenHeader } from '../../../../src/components/ScreenHeader';
 import { useToast } from '../../../../src/components/Toast';
@@ -70,7 +72,7 @@ export default function AddPeer() {
         onBack={() => router.back()}
         right={<Button title="Add" size="md" disabled={!ready} loading={busy} onPress={save} />}
       />
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+      <KeyboardPane>
         <ScrollView contentContainerStyle={{ padding: space.s8, gap: space.s8 }} keyboardShouldPersistTaps="handled">
           <Field
             label="Handle"
@@ -105,17 +107,7 @@ export default function AddPeer() {
           />
 
           <View style={{ gap: space.s3 }}>
-            <Text
-              style={{
-                fontFamily: fonts.mono,
-                fontSize: fontSizes.xs,
-                color: colors.ink3,
-                letterSpacing: 0.6,
-                textTransform: 'uppercase',
-              }}
-            >
-              Allow scopes
-            </Text>
+            <Eyebrow>Allow scopes</Eyebrow>
             <View style={{ gap: space.s3 }}>
               {ALP_SCOPES.map((s) => {
                 const on = scopes.has(s.id);
@@ -137,7 +129,7 @@ export default function AddPeer() {
             </View>
           </View>
         </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardPane>
     </SafeAreaView>
   );
 }

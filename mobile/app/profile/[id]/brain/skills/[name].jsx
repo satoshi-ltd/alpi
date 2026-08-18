@@ -2,7 +2,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { space , fontSizes} from '../../../../../src/theme/tokens';
+import { space } from '../../../../../src/theme/tokens';
 
 import { ScreenHeader } from '../../../../../src/components/ScreenHeader';
 import { useEndpoint } from '../../../../../src/lib/EndpointContext';

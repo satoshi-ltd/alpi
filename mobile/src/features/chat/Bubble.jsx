@@ -1,9 +1,11 @@
 import { useCallback } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { fontSizes, radii, space } from '../../theme/tokens';
+import { radii, space } from '../../theme/tokens';
 
 import { Diamond } from '../../components/Diamond';
 import { RichText } from '../../components/RichText';
+import { BUBBLE_MAX_PANE } from '../../lib/panes';
+import { usePane } from '../../nav/PaneContext';
 import { useTheme } from '../../theme/ThemeContext';
 import { AttachmentCards } from './AttachmentCards';
 import { stripProducedImageMarkdown } from '../../lib/producedAttachments';
@@ -38,20 +40,22 @@ const S = StyleSheet.create({
     paddingHorizontal: space.s7,
     paddingVertical: space.s6,
   },
-  meta: { fontSize: fontSizes.xs, lineHeight: fontSizes.xs },
   speakerRow: { flexDirection: 'row', alignItems: 'center', gap: space.s2 },
   wgRowLeft: { alignItems: 'flex-start', paddingHorizontal: space.s7, gap: space.s1 },
   wgRowRight: { alignItems: 'flex-end', paddingHorizontal: space.s7, gap: space.s1 },
+  paneCap: { maxWidth: BUBBLE_MAX_PANE },
 });
 
 export function ProfileUserMessage({ text, ts, accent, attachments, onLongPress, profile }) {
-  const { colors, fonts } = useTheme();
+  const { colors, fonts, fontSizes } = useTheme();
+  const { twoPane } = usePane();
   const bubbleStyle = useCallback(
     ({ pressed }) => [
       S.bubble,
+      twoPane ? S.paneCap : null,
       { backgroundColor: accent ?? colors.ink, opacity: pressed ? 0.85 : 1 },
     ],
-    [accent, colors.ink],
+    [accent, colors.ink, twoPane],
   );
   return (
     <View style={S.userWrap}>
@@ -72,14 +76,14 @@ export function ProfileUserMessage({ text, ts, accent, attachments, onLongPress,
         </Pressable>
       ) : null}
       {ts ? (
-        <Text style={[S.meta, { fontFamily: fonts.monoMedium, color: colors.ink3 }]}>{ts}</Text>
+        <Text style={[S.meta, { fontFamily: fonts.monoMedium, fontSize: fontSizes.xs, lineHeight: fontSizes.xs, color: colors.ink3 }]}>{ts}</Text>
       ) : null}
     </View>
   );
 }
 
 export function ProfileAssistantMessage({ text, attachments, onLongPress, profile }) {
-  const { colors } = useTheme();
+  const { colors, fontSizes } = useTheme();
   const wrapStyle = useCallback(
     ({ pressed }) => [S.agentWrap, pressed && { opacity: 0.85 }],
     [],
@@ -88,7 +92,7 @@ export function ProfileAssistantMessage({ text, attachments, onLongPress, profil
   return (
     <Pressable onLongPress={onLongPress} delayLongPress={350} style={wrapStyle}>
       {body ? (
-        <RichText size={16} color={colors.ink} imageProfile={profile}>
+        <RichText size={fontSizes.lg} color={colors.ink} imageProfile={profile}>
           {body}
         </RichText>
       ) : null}
@@ -100,7 +104,8 @@ export function ProfileAssistantMessage({ text, attachments, onLongPress, profil
 }
 
 export function WorkgroupMessage({ body, speakerName, speakerAccent, isFromHub, seq, cost, onLongPress, profile }) {
-  const { colors, fonts } = useTheme();
+  const { colors, fonts, fontSizes } = useTheme();
+  const { twoPane } = usePane();
   const bg = mixHex(speakerAccent ?? colors.ink3, 0.11, colors.bgPane);
   const right = isFromHub;
 
@@ -114,7 +119,7 @@ export function WorkgroupMessage({ body, speakerName, speakerAccent, isFromHub, 
     costStr = `${tokFmt} · ${usdFmt}`;
   }
 
-  const metaStyle = [S.meta, { fontFamily: fonts.monoMedium, color: colors.ink3 }];
+  const metaStyle = [S.meta, { fontFamily: fonts.monoMedium, fontSize: fontSizes.xs, lineHeight: fontSizes.xs, color: colors.ink3 }];
   const SpeakerEl = (
     <View style={S.speakerRow}>
       {!isFromHub ? <Diamond color={speakerAccent} /> : null}
@@ -128,12 +133,13 @@ export function WorkgroupMessage({ body, speakerName, speakerAccent, isFromHub, 
   const bubbleStyle = useCallback(
     ({ pressed }) => [
       S.wgBubble,
+      twoPane ? S.paneCap : null,
       right
         ? { borderTopLeftRadius: 18, borderTopRightRadius: radii.xs, borderBottomRightRadius: 18, borderBottomLeftRadius: 18 }
         : { borderTopLeftRadius: radii.xs, borderTopRightRadius: 18, borderBottomRightRadius: 18, borderBottomLeftRadius: 18 },
       { backgroundColor: bg, opacity: pressed ? 0.85 : 1 },
     ],
-    [bg, right],
+    [bg, right, twoPane],
   );
 
   return (
@@ -154,7 +160,7 @@ export function WorkgroupMessage({ body, speakerName, speakerAccent, isFromHub, 
         )}
       </View>
       <Pressable onLongPress={onLongPress} delayLongPress={350} style={bubbleStyle}>
-        <RichText size={fontSizes.md} color={colors.ink} imageProfile={profile}>
+        <RichText size={fontSizes.lg} color={colors.ink} imageProfile={profile}>
           {body}
         </RichText>
       </Pressable>

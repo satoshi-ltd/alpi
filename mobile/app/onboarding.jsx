@@ -1,7 +1,7 @@
 import { useRouter } from 'expo-router';
 import { Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { space , fontSizes} from '../src/theme/tokens';
+import { space, tracking } from '../src/theme/tokens';
 
 import { Button } from '../src/components/Button';
 import { AlpiMark } from '../src/components/AlpiMark';
@@ -21,7 +21,7 @@ export default function Onboarding() {
             fontSize: fontSizes.display,
             color: colors.ink,
             textAlign: 'center',
-            letterSpacing: -0.018 * 32,
+            letterSpacing: fontSizes.display * tracking.tight,
           }}
         >
           Connect to Alpi
@@ -36,7 +36,7 @@ export default function Onboarding() {
             maxWidth: 320,
           }}
         >
-          Alpi runs as a daemon on your computer or Umbrel. This phone is a client — pair it once and you can talk to your alpis from anywhere.
+          Alpi runs as a daemon on your computer or Umbrel. This phone is a client — pair it once and you can talk to your profiles from anywhere.
         </Text>
       </View>
       <View style={{ gap: space.s4 }}>

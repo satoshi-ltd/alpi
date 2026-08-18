@@ -1,9 +1,12 @@
 import { StyleSheet, Text, View } from 'react-native';
-import { radii, space , fontSizes, lineHeights} from '../../theme/tokens';
+import { radii, space, lineHeights, tracking } from '../../theme/tokens';
 
 import { Diamond } from '../../components/Diamond';
+import { Icon } from '../../components/Icon';
 import { Dot } from '../../components/Dot';
 import { RichText } from '../../components/RichText';
+import { BUBBLE_MAX_PANE } from '../../lib/panes';
+import { usePane } from '../../nav/PaneContext';
 import { useTheme } from '../../theme/ThemeContext';
 
 const TINTS = { task: 0.18, working: 0.14, done: 0.18, skip: 0.12 };
@@ -19,13 +22,10 @@ const S = StyleSheet.create({
     paddingVertical: space.s6,
   },
   cardCompact: { paddingVertical: space.s4 },
+  paneCap: { maxWidth: BUBBLE_MAX_PANE },
   eyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: space.s2, marginBottom: space.s2 },
   iconSlot: { width: 14, alignItems: 'center', justifyContent: 'center' },
-  eyebrowText: { fontSize: fontSizes.xxs, lineHeight: 10, letterSpacing: 1 },
-  title: { fontSize: fontSizes.lg, lineHeight: fontSizes.lg * lineHeights.cozy, letterSpacing: -0.16, marginBottom: space.s2 },
-  body: { fontSize: fontSizes.md, lineHeight: fontSizes.md * 1.5 },
-  meta: { fontSize: fontSizes.xs, lineHeight: fontSizes.xs * lineHeights.tight },
-  doneTick: { fontSize: fontSizes.sm, lineHeight: 12 },
+  title: { marginBottom: space.s2 },
   skipDot: { width: 10, height: 10, borderRadius: 5, borderWidth: 1.5, overflow: 'hidden' },
   skipBar: { position: 'absolute', width: 14, height: 1.5, top: 3.5, left: -2.5, transform: [{ rotate: '45deg' }] },
   taskDot: { width: 6, height: 6, borderRadius: 3 },
@@ -51,7 +51,7 @@ function MarkerIcon({ variant, color, stale }) {
       : <Dot color={color} pulse />;
   }
   if (variant === 'done') {
-    return <Text style={[S.doneTick, { color }]}>✓</Text>;
+    return <Icon name="check" size="xs" strokeWidth={2.2} color={color} />;
   }
   if (variant === 'skip') {
     return (
@@ -64,7 +64,8 @@ function MarkerIcon({ variant, color, stale }) {
 }
 
 export function MarkerCard({ variant = 'task', side = 'left', hubColor, speakerName, isFromHub, seq, cost, title, children, label, stale = false }) {
-  const { colors, fonts, shadow , fontSizes} = useTheme();
+  const { colors, fonts, fontSizes } = useTheme();
+  const { twoPane } = usePane();
   const pct = TINTS[variant] ?? 0.11;
   const baseAccent = variant === 'skip' ? colors.warning : hubColor ?? colors.ink3;
   const tint = mixHex(baseAccent, pct, colors.bgPane);
@@ -84,7 +85,7 @@ export function MarkerCard({ variant = 'task', side = 'left', hubColor, speakerN
     costStr = `${tokFmt} · ${usdFmt}`;
   }
 
-  const metaStyle = [S.meta, { fontFamily: fonts.monoMedium, color: colors.ink3 }];
+  const metaStyle = { fontFamily: fonts.monoMedium, fontSize: fontSizes.xs, lineHeight: fontSizes.xs * lineHeights.cozy, color: colors.ink3 };
 
   const SpeakerEl = speakerName ? (
     <View style={S.row}>
@@ -113,17 +114,17 @@ export function MarkerCard({ variant = 'task', side = 'left', hubColor, speakerN
           )}
         </View>
       ) : null}
-      <View style={[S.card, compact && S.cardCompact, corner, { backgroundColor: tint }, shadow.sm]}>
+      <View style={[S.card, twoPane && S.paneCap, compact && S.cardCompact, corner, { backgroundColor: tint }]}>
         <View style={[S.eyebrowRow, compact && { marginBottom: 0 }]}>
           <View style={S.iconSlot}>
             <MarkerIcon variant={variant} color={baseAccent} stale={stale} />
           </View>
-          <Text style={[S.eyebrowText, { fontFamily: fonts.monoSemibold, color: baseAccent }]}>
+          <Text style={{ fontFamily: fonts.monoSemibold, fontSize: fontSizes.xs, lineHeight: fontSizes.xs * lineHeights.cozy, letterSpacing: fontSizes.xs * tracking.wider, color: baseAccent }}>
             {label || LABELS[variant]}
           </Text>
         </View>
         {title ? (
-          <Text style={[S.title, { fontFamily: fonts.sans.semibold, color: colors.ink }]}>
+          <Text style={[S.title, { fontFamily: fonts.sans.semibold, fontSize: fontSizes.lg, lineHeight: fontSizes.lg * lineHeights.cozy, letterSpacing: fontSizes.lg * tracking.snug, color: colors.ink }]}>
             {title}
           </Text>
         ) : null}

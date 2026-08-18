@@ -1,7 +1,7 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
-import { radii, space , fontSizes} from '../../theme/tokens';
+import { radii, space } from '../../theme/tokens';
 
 import { ActionSheet } from '../../components/ActionSheet';
 import { Dot } from '../../components/Dot';
@@ -35,7 +35,7 @@ function Tag({ label, tone }) {
 }
 
 export function ConnectionSheet({ open, onClose }) {
-  const { colors } = useTheme();
+  const { colors, fonts } = useTheme();
   const router = useRouter();
   const toast = useToast();
   const { connections, activeId, probeState, versionState, updateState, roleState, setActive, forget, probeAll } = useEndpoint();
@@ -82,7 +82,7 @@ export function ConnectionSheet({ open, onClose }) {
       <ScrollView>
         {connections.length === 0 ? (
           <View style={{ padding: space.s9, alignItems: 'center' }}>
-            <Text style={{ color: colors.ink3 }}>Not paired yet — tap below to scan a QR.</Text>
+            <Text style={{ fontFamily: fonts.sans.regular, color: colors.ink3 }}>Not paired yet — tap below to scan a QR.</Text>
           </View>
         ) : (
           sortConnectionsByRecency(connections).map((c, i) => {

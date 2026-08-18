@@ -65,4 +65,15 @@ describe('usePins · per-connection scoping', () => {
     act(() => result.current.toggleProfile('default'));
     expect([...store.keys()]).toEqual([]);
   });
+
+  it('returns a stable object across unrelated re-renders and a new one per toggle', async () => {
+    const { result, rerender } = renderHook(() => usePins('c-A'));
+    await waitFor(() => expect(result.current.ready).toBe(true));
+    const first = result.current;
+    rerender();
+    expect(result.current).toBe(first);
+    act(() => result.current.toggleProfile('vera'));
+    expect(result.current).not.toBe(first);
+    expect(result.current.isProfilePinned('vera')).toBe(true);
+  });
 });

@@ -1,5 +1,5 @@
 import { Text, View } from 'react-native';
-import { radii, space , fontSizes} from '../theme/tokens';
+import { lineHeights, radii, space } from '../theme/tokens';
 
 import { useTheme } from '../theme/ThemeContext';
 
@@ -45,7 +45,7 @@ export function Pill({ tone, children, off = false }) {
         flexDirection: 'row',
         alignItems: 'center',
         gap: space.s2,
-        height: 22,
+        minHeight: 22,
         paddingHorizontal: space.s3,
         borderRadius: radii.pill,
         backgroundColor: bg,
@@ -56,7 +56,7 @@ export function Pill({ tone, children, off = false }) {
         style={{
           fontFamily: fonts.monoMedium,
           fontSize: fontSizes.sm,
-          lineHeight: 22,
+          lineHeight: fontSizes.sm * lineHeights.cozy,
           color: fg,
         }}
       >

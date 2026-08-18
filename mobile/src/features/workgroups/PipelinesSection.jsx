@@ -1,5 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
-import { fontSizes, radii, space } from '../../theme/tokens';
+import { lineHeights, radii, space } from '../../theme/tokens';
 
 import { Pill } from '../../components/Pill';
 import { RowSeparator, SectionHeader } from '../../components/Row';
@@ -16,7 +16,6 @@ const STYLES = StyleSheet.create({
   },
   key: {
     flex: 1,
-    fontSize: fontSizes.md,
   },
   chips: {
     flexDirection: 'row',
@@ -34,27 +33,17 @@ const STYLES = StyleSheet.create({
     borderWidth: 0.5,
     borderRadius: radii.md,
   },
-  chipIndex: {
-    fontSize: fontSizes.xs,
-  },
-  chipSlug: {
-    fontSize: fontSizes.sm,
-  },
   note: {
     paddingHorizontal: space.s8,
     paddingVertical: space.s4,
   },
-  noteText: {
-    fontSize: fontSizes.sm,
-    lineHeight: fontSizes.sm * 1.5,
-  },
 });
 
 function Note({ children }) {
-  const { colors, fonts } = useTheme();
+  const { colors, fonts, fontSizes } = useTheme();
   return (
     <View style={STYLES.note}>
-      <Text style={[STYLES.noteText, { fontFamily: fonts.sans.regular, color: colors.ink3 }]}>
+      <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, lineHeight: fontSizes.sm * lineHeights.normal, color: colors.ink3 }}>
         {children}
       </Text>
     </View>
@@ -62,13 +51,13 @@ function Note({ children }) {
 }
 
 function Phases({ phases }) {
-  const { colors, fonts } = useTheme();
+  const { colors, fonts, fontSizes } = useTheme();
   return (
     <View style={STYLES.chips}>
       {phases.map((slug, i) => (
         <View key={slug} style={[STYLES.chip, { borderColor: colors.line2, backgroundColor: colors.bgInput }]}>
-          <Text style={[STYLES.chipIndex, { fontFamily: fonts.mono, color: colors.ink4 }]}>{i + 1}</Text>
-          <Text style={[STYLES.chipSlug, { fontFamily: fonts.mono, color: colors.ink }]}>#{slug}</Text>
+          <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4 }}>{i + 1}</Text>
+          <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink }}>#{slug}</Text>
         </View>
       ))}
     </View>
@@ -76,7 +65,7 @@ function Phases({ phases }) {
 }
 
 export function PipelinesSection({ workgroup }) {
-  const { colors, fonts } = useTheme();
+  const { colors, fonts, fontSizes } = useTheme();
   const chains = namedPipelines(workgroup);
 
   return (
@@ -89,7 +78,7 @@ export function PipelinesSection({ workgroup }) {
           <View key={chain.key}>
             {i > 0 ? <RowSeparator indent={0} /> : null}
             <View style={STYLES.head}>
-              <Text style={[STYLES.key, { fontFamily: fonts.monoSemibold, color: colors.ink }]}>
+              <Text style={[STYLES.key, { fontFamily: fonts.monoSemibold, fontSize: fontSizes.md, color: colors.ink }]}>
                 #{chain.key}
               </Text>
               {chain.isLaunch ? <Pill tone="on">launch</Pill> : <Pill off>on demand</Pill>}

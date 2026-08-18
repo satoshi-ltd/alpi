@@ -27,7 +27,7 @@ export function Reasoning({ text, seconds, streaming = false, flat = false }) {
 
 function Trace({ flat, children }) {
   const { colors } = useTheme();
-  if (flat) return <View>{children}</View>;
+  if (flat) return <View style={{ paddingHorizontal: space.s7 }}>{children}</View>;
   return (
     <View style={{ borderLeftWidth: 2, borderLeftColor: colors.line2, paddingLeft: space.s6 }}>
       {children}
@@ -78,7 +78,7 @@ function Thinking({ text, flat }) {
         accessibilityLabel={open ? 'Collapse reasoning' : 'Expand reasoning'}
       >
         <View style={{ transform: [{ rotate: open ? '0deg' : '-90deg' }] }}>
-          <Icon name="chevron-down" size={12} color={colors.ink3} />
+          <Icon name="chevron-down" size="xs" color={colors.ink3} />
         </View>
         <Text style={{ color: flat ? colors.ink3 : colors.ink4, fontFamily: fonts.mono, fontSize: flat ? fontSizes.sm : fontSizes.xs }}>
           {`thinking · ${elapsed}s`}
@@ -141,7 +141,7 @@ function Finished({ text, seconds, flat }) {
         accessibilityLabel={open ? 'Collapse reasoning' : 'Expand reasoning'}
       >
         <View style={{ transform: [{ rotate: open ? '0deg' : '-90deg' }] }}>
-          <Icon name="chevron-down" size={12} color={colors.ink3} />
+          <Icon name="chevron-down" size="xs" color={colors.ink3} />
         </View>
         <Text style={{ color: colors.ink3, fontFamily: fonts.mono, fontSize: fontSizes.sm }}>
           {label}

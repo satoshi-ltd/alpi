@@ -1,7 +1,12 @@
 import { Text, TextInput, View } from 'react-native';
-import { radii, space , fontSizes} from '../theme/tokens';
+import { radii, space } from '../theme/tokens';
 
+import { Eyebrow } from './Eyebrow';
 import { useTheme } from '../theme/ThemeContext';
+
+export function FieldLabel({ children }) {
+  return <Eyebrow>{children}</Eyebrow>;
+}
 
 export function Field({
   label,
@@ -21,19 +26,7 @@ export function Field({
   const { colors, fonts, fontSizes, mobile } = useTheme();
   return (
     <View style={{ gap: space.s2 }}>
-      {label ? (
-        <Text
-          style={{
-            fontFamily: fonts.mono,
-            fontSize: fontSizes.xs,
-            color: colors.ink3,
-            letterSpacing: 0.6,
-            textTransform: 'uppercase',
-          }}
-        >
-          {label}
-        </Text>
-      ) : null}
+      {label ? <FieldLabel>{label}</FieldLabel> : null}
       <View
         style={{
           backgroundColor: editable ? colors.bgInput : colors.bgPane,

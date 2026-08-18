@@ -2,9 +2,10 @@
 
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
+import { KeyboardPane } from '../../../../src/components/KeyboardPane';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { space , fontSizes} from '../../../../src/theme/tokens';
+import { space } from '../../../../src/theme/tokens';
 
 import { Button } from '../../../../src/components/Button';
 import { Field } from '../../../../src/components/Field';
@@ -82,7 +83,7 @@ export default function NewMcp() {
         onBack={() => router.back()}
         right={<Button title="Add" size="md" disabled={!ready} loading={busy} onPress={save} />}
       />
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+      <KeyboardPane>
         <ScrollView contentContainerStyle={{ padding: space.s8, gap: space.s8 }} keyboardShouldPersistTaps="handled">
           <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3, lineHeight: fontSizes.sm * 1.5 }}>
             Example — GitHub MCP: command <Text style={{ fontFamily: fonts.mono }}>npx</Text>, args{' '}
@@ -135,7 +136,7 @@ export default function NewMcp() {
             helper="env values are stored encrypted on the daemon and never read back"
           />
         </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardPane>
     </SafeAreaView>
   );
 }

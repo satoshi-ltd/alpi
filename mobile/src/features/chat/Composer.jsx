@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { radii, space } from '../../theme/tokens';
+import { lineHeights, radii, space } from '../../theme/tokens';
 
 import { Icon } from '../../components/Icon';
+import { CHROME_BTN, COMPOSER_CTRL, COMPOSER_PAD_Y, PANE_PAD_X, tapSlop } from '../../lib/panes';
+import { useKeyboardVisible } from '../../lib/useKeyboardVisible';
 import { useTheme } from '../../theme/ThemeContext';
 import { AttachmentCards } from './AttachmentCards';
 import { canComposerSend } from './composerSend';
@@ -14,8 +16,6 @@ export function Composer({
   placeholder = 'Message…',
   accent,
   onSend,
-  onMicPress,
-  onMicLongPress,
   mentionSource,
   seedText,
   seedKey,
@@ -23,9 +23,12 @@ export function Composer({
   onPickAttachment,
   onRemoveAttachment,
   disabled = false,
+  busy = false,
+  onStop,
 }) {
   const { colors, fonts , fontSizes} = useTheme();
   const insets = useSafeAreaInsets();
+  const keyboardUp = useKeyboardVisible();
   const [text, setText] = useState('');
   const lastSeedKeyRef = useRef(seedKey);
   useEffect(() => {
@@ -37,7 +40,8 @@ export function Composer({
   const hasText = text.trim().length > 0;
   const taskShape = validateTaskShape(text);
   const hasAttachments = attachments.length > 0;
-  const canSend = canComposerSend({ hasText, hasAttachments, taskOk: taskShape.ok, disabled });
+  const canSend = canComposerSend({ hasText, hasAttachments, taskOk: taskShape.ok, disabled, busy });
+  const stoppable = busy && !!onStop;
 
   const mentionMatch = mentionSource && text.length > 0
     ? /(^|\s)@([a-zA-Z0-9_-]*)$/.exec(text)
@@ -70,7 +74,7 @@ export function Composer({
       {hasText && !taskShape.ok ? (
         <View
           style={{
-            paddingHorizontal: space.s7,
+            paddingHorizontal: PANE_PAD_X,
             paddingTop: space.s2,
             paddingBottom: space.s2,
           }}
@@ -87,7 +91,7 @@ export function Composer({
         </View>
       ) : null}
       {hasAttachments ? (
-        <View style={{ paddingHorizontal: space.s7, paddingTop: space.s3 }}>
+        <View style={{ paddingHorizontal: PANE_PAD_X, paddingTop: space.s3 }}>
           <AttachmentCards items={attachments} onRemove={onRemoveAttachment} variant="composer" />
         </View>
       ) : null}
@@ -95,9 +99,9 @@ export function Composer({
         style={{
           flexDirection: 'row',
           alignItems: 'flex-end',
-          paddingHorizontal: space.s5,
-          paddingTop: space.s3,
-          paddingBottom: Math.max(10, insets.bottom),
+          paddingHorizontal: PANE_PAD_X,
+          paddingTop: COMPOSER_PAD_Y,
+          paddingBottom: COMPOSER_PAD_Y + (keyboardUp ? 0 : insets.bottom),
           gap: space.s3,
           opacity: disabled ? 0.55 : 1,
         }}
@@ -105,17 +109,28 @@ export function Composer({
         {onPickAttachment ? (
           <Pressable
             onPress={disabled ? undefined : onPickAttachment}
-            hitSlop={8}
+            hitSlop={{
+              top: tapSlop(COMPOSER_CTRL),
+              bottom: tapSlop(COMPOSER_CTRL),
+              left: tapSlop(CHROME_BTN),
+              right: tapSlop(CHROME_BTN),
+            }}
             accessibilityLabel="Attach file"
-            style={({ pressed }) => ({ width: 36, height: 44, alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.5 : 1 })}
+            style={({ pressed }) => ({
+              width: CHROME_BTN,
+              height: COMPOSER_CTRL,
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: pressed ? 0.5 : 1,
+            })}
           >
-            <Icon name="paperclip" size={20} color={colors.ink3} />
+            <Icon name="paperclip" size="md" color={colors.ink3} />
           </Pressable>
         ) : null}
         <View
           style={{
             flex: 1,
-            minHeight: 44,
+            minHeight: COMPOSER_CTRL,
             backgroundColor: colors.bgInput,
             borderRadius: radii["2xl"],
             flexDirection: 'row',
@@ -132,55 +147,40 @@ export function Composer({
             autoCapitalize="sentences"
             autoCorrect
             includeFontPadding={false}
+            returnKeyType="send"
+            submitBehavior="submit"
+            onSubmitEditing={submit}
             style={{
               flex: 1,
               fontFamily: fonts.sans.regular,
               fontSize: fontSizes.lg,
-              lineHeight: 21,
+              lineHeight: fontSizes.lg * lineHeights.normal,
               color: colors.ink,
               maxHeight: 120,
-              paddingHorizontal: space.s7,
+              paddingHorizontal: space.s5,
               // iOS multiline TextInput adds ~2px top textContainerInset that ignores includeFontPadding.
-              paddingTop: Platform.OS === 'ios' ? 10 : 12,
-              paddingBottom: space.s5,
+              paddingTop: Platform.OS === 'ios' ? space.s1 : space.s2,
+              paddingBottom: space.s2,
             }}
           />
         </View>
-        {hasText || hasAttachments ? (
-          <Pressable
-            onPress={submit}
-            disabled={!canSend}
-            style={({ pressed }) => ({
-              width: 44,
-              height: 44,
-              borderRadius: radii["2xl"],
-              backgroundColor: !canSend ? colors.ink3 : pressed ? colors.ink2 : actionBg,
-              alignItems: 'center',
-              justifyContent: 'center',
-              opacity: canSend ? 1 : 0.6,
-            })}
-            accessibilityLabel="Send"
-          >
-            <Icon name="send" size={18} color="#ffffff" strokeWidth={2.2} />
-          </Pressable>
-        ) : (
-          <Pressable
-            onPress={disabled ? undefined : onMicPress}
-            onLongPress={disabled ? undefined : onMicLongPress}
-            delayLongPress={250}
-            style={({ pressed }) => ({
-              width: 44,
-              height: 44,
-              borderRadius: radii["2xl"],
-              backgroundColor: pressed ? `${actionBg}cc` : actionBg,
-              alignItems: 'center',
-              justifyContent: 'center',
-            })}
-            accessibilityLabel="Voice message"
-          >
-            <Icon name="mic" size={18} color="#ffffff" strokeWidth={2.2} />
-          </Pressable>
-        )}
+        <Pressable
+          onPress={stoppable ? onStop : submit}
+          disabled={!stoppable && !canSend}
+          hitSlop={tapSlop(COMPOSER_CTRL)}
+          style={({ pressed }) => ({
+            width: COMPOSER_CTRL,
+            height: COMPOSER_CTRL,
+            borderRadius: radii['2xl'],
+            backgroundColor: !stoppable && !canSend ? colors.ink3 : pressed ? colors.ink2 : actionBg,
+            alignItems: 'center',
+            justifyContent: 'center',
+            opacity: stoppable || canSend ? 1 : 0.6,
+          })}
+          accessibilityLabel={stoppable ? 'Stop' : 'Send'}
+        >
+          <Icon name={stoppable ? 'square' : 'send'} size="lg" color="#ffffff" />
+        </Pressable>
       </View>
     </View>
   );

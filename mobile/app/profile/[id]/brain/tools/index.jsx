@@ -1,9 +1,10 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { space , fontSizes} from '../../../../../src/theme/tokens';
+import { space } from '../../../../../src/theme/tokens';
 
 import { Row, RowSeparator, SectionHeader } from '../../../../../src/components/Row';
+import { Eyebrow } from '../../../../../src/components/Eyebrow';
 import { ScreenHeader } from '../../../../../src/components/ScreenHeader';
 import { useTools } from '../../../../../src/hooks/useDaemonData';
 import { useTheme } from '../../../../../src/theme/ThemeContext';
@@ -87,17 +88,7 @@ export default function ToolsList() {
                         {t.name}
                       </Text>
                       {t.denied ? (
-                        <Text
-                          style={{
-                            fontFamily: fonts.monoMedium,
-                            fontSize: fontSizes.xs,
-                            color: colors.warning,
-                            textTransform: 'uppercase',
-                            letterSpacing: 0.6,
-                          }}
-                        >
-                          denied
-                        </Text>
+                        <Eyebrow color={colors.warning}>denied</Eyebrow>
                       ) : null}
                     </View>
                     {t.description ? (

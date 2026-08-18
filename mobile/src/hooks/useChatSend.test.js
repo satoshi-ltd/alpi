@@ -111,12 +111,210 @@ describe("useChatSend.send", () => {
     expect(result.current.pendingTurn).toBeNull();
   });
 
-  it("cancel cancels the stream handle and clears pendingTurn", () => {
+  it("onDone hands onCompleted the turn's user text so the caller can find the persisted turn", async () => {
+    const onCompleted = vi.fn();
+    const { result } = renderHook(() => useChatSend({ profile: "doc", onCompleted }));
+    act(() => result.current.send("  hola  "));
+    act(() => lastStreamHandlers.onFrame({ event: "session_start", session_id: "sess-1" }));
+    await act(async () => {
+      await lastStreamHandlers.onDone();
+    });
+    expect(onCompleted).toHaveBeenCalledWith(
+      expect.objectContaining({ ok: true, sessionId: "sess-1", userText: "hola" }),
+    );
+  });
+
+  it("the finished turn holds its slot while onCompleted runs, then settles", async () => {
+    let release;
+    const onCompleted = vi.fn(() => new Promise((r) => { release = r; }));
+    const { result } = renderHook(() => useChatSend({ profile: "doc", onCompleted }));
+    act(() => result.current.send("hola"));
+    act(() => lastStreamHandlers.onFrame({ event: "reply", text: "the answer" }));
+    let done;
+    act(() => { done = lastStreamHandlers.onDone(); });
+    expect(result.current.pendingTurn.assistant).toBe("the answer");
+    expect(result.current.pendingTurn.pending).toBe(false);
+    expect(result.current.isStreaming).toBe(false);
+    await act(async () => {
+      release(true);
+      await done;
+    });
+    expect(result.current.pendingTurn).toBeNull();
+  });
+
+  it("settles the finished turn even when the confirming read cannot prove it landed", async () => {
+    const onCompleted = vi.fn(async () => false);
+    const { result } = renderHook(() => useChatSend({ profile: "doc", onCompleted }));
+    act(() => result.current.send("hola"));
+    act(() => lastStreamHandlers.onFrame({ event: "session_start", session_id: "sess-1" }));
+    act(() => lastStreamHandlers.onFrame({ event: "reply", text: "the answer" }));
+    await act(async () => {
+      await lastStreamHandlers.onDone();
+    });
+    expect(result.current.pendingTurn).toBeNull();
+    expect(result.current.isStreaming).toBe(false);
+  });
+
+  it("settles the finished turn when onCompleted throws", async () => {
+    const onCompleted = vi.fn(async () => { throw new Error("offline"); });
+    const { result } = renderHook(() => useChatSend({ profile: "doc", onCompleted }));
+    act(() => result.current.send("hola"));
+    act(() => lastStreamHandlers.onFrame({ event: "reply", text: "the answer" }));
+    await act(async () => {
+      await lastStreamHandlers.onDone();
+    });
+    expect(result.current.pendingTurn).toBeNull();
+  });
+
+  it("hands onCompleted the frontier the turn was sent against", async () => {
+    const onCompleted = vi.fn(async () => true);
+    const { result } = renderHook(() => useChatSend({ profile: "doc", onCompleted }));
+    act(() => result.current.send("hola", { baseline: { count: 4, endedAt: 99 } }));
+    expect(result.current.pendingTurn.baseline).toEqual({ count: 4, endedAt: 99 });
+    await act(async () => {
+      await lastStreamHandlers.onDone();
+    });
+    expect(onCompleted).toHaveBeenCalledWith(
+      expect.objectContaining({ ok: true, baseline: { count: 4, endedAt: 99 } }),
+    );
+    expect(result.current.pendingTurn).toBeNull();
+  });
+
+  it("isSending flips synchronously inside send, before any re-render", () => {
+    const { result } = renderHook(() => useChatSend({ profile: "doc" }));
+    expect(result.current.isSending()).toBe(false);
+    act(() => {
+      result.current.send("hola");
+      expect(result.current.isSending()).toBe(true);
+      expect(result.current.isStreaming).toBe(false);
+    });
+    expect(result.current.isSending()).toBe(true);
+    expect(result.current.isStreaming).toBe(true);
+  });
+
+  it("isSending goes false the moment the turn stops streaming", async () => {
+    const onCompleted = vi.fn(async () => true);
+    const { result } = renderHook(() => useChatSend({ profile: "doc", onCompleted }));
+    act(() => result.current.send("hola"));
+    await act(async () => {
+      await lastStreamHandlers.onDone();
+    });
+    expect(result.current.isSending()).toBe(false);
+  });
+
+  it("a late delta flush lands on the turn that owns the slot instead of being swallowed", async () => {
+    mockCall.mockResolvedValueOnce({
+      events: [
+        { frame: { event: "session_start", session_id: "sess-1" } },
+        { frame: { event: "assistant_delta", text: "recovered" } },
+        { frame: { event: "reply", text: "the answer", session_id: "sess-1" } },
+        { frame: { event: "done", session_id: "sess-1" } },
+      ],
+    });
+    const onCompleted = vi.fn(async () => true);
+    const { result } = renderHook(() => useChatSend({ profile: "doc", onCompleted }));
+    act(() => result.current.send("hola"));
+    act(() => lastStreamHandlers.onFrame({ event: "session_start", session_id: "sess-1" }));
+    await act(async () => {
+      await lastStreamHandlers.onError(new Error("ws died"));
+    });
+    expect(result.current.pendingTurn).toBeNull();
+
+    act(() => result.current.send("otra"));
+    act(() => lastStreamHandlers.onFrame({ event: "assistant_delta", text: "second answer" }));
+    await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+    expect(result.current.pendingTurn.user).toBe("otra");
+    expect(result.current.pendingTurn.assistant).toBe("second answer");
+  });
+
+  it("cancel cancels the stream handle and clears pendingTurn", async () => {
     const { result } = renderHook(() => useChatSend({ profile: "doc" }));
     act(() => result.current.send("hi"));
-    act(() => result.current.cancel());
+    await act(async () => { result.current.cancel(); });
     expect(lastStreamHandle.cancel).toHaveBeenCalled();
     expect(result.current.pendingTurn).toBeNull();
+  });
+
+  it("cancel keeps the partial turn on screen until the read it triggers settles", async () => {
+    let release;
+    const onCompleted = vi.fn(() => new Promise((r) => { release = r; }));
+    const { result } = renderHook(() => useChatSend({ profile: "doc", onCompleted }));
+    act(() => result.current.send("hola"));
+    act(() => lastStreamHandlers.onFrame({ event: "reply", text: "partial answer" }));
+    await act(async () => { result.current.cancel(); });
+    expect(result.current.pendingTurn.assistant).toBe("partial answer");
+    expect(result.current.pendingTurn.pending).toBe(false);
+    await act(async () => { release(false); });
+    expect(result.current.pendingTurn).toBeNull();
+  });
+
+  it("a second cancel while the first is still settling does not wipe the partial", async () => {
+    let release;
+    const onCompleted = vi.fn(() => new Promise((r) => { release = r; }));
+    const { result } = renderHook(() => useChatSend({ profile: "doc", onCompleted }));
+    act(() => result.current.send("hola"));
+    act(() => lastStreamHandlers.onFrame({ event: "reply", text: "partial answer" }));
+    await act(async () => { result.current.cancel(); });
+    await act(async () => { result.current.cancel(); });
+    expect(result.current.pendingTurn).not.toBeNull();
+    expect(result.current.pendingTurn.assistant).toBe("partial answer");
+    await act(async () => { release(true); });
+    expect(result.current.pendingTurn).toBeNull();
+  });
+
+  it("cancel settles the partial turn even when the read it triggers fails", async () => {
+    const onCompleted = vi.fn(async () => { throw new Error("offline"); });
+    const { result } = renderHook(() => useChatSend({ profile: "doc", onCompleted }));
+    act(() => result.current.send("hola"));
+    act(() => lastStreamHandlers.onFrame({ event: "reply", text: "partial answer" }));
+    await act(async () => { result.current.cancel(); });
+    expect(result.current.pendingTurn).toBeNull();
+  });
+
+  it("cancel reports the abandoned turn so the caller can pull the interrupted turn the daemon kept", () => {
+    const onCompleted = vi.fn();
+    const { result } = renderHook(() => useChatSend({ profile: "doc", onCompleted }));
+    act(() => result.current.send("hi", { baseline: { count: 2, endedAt: 7 } }));
+    act(() => lastStreamHandlers.onFrame({ event: "session_start", session_id: "sess-9" }));
+    act(() => result.current.cancel());
+    expect(onCompleted).toHaveBeenCalledWith({
+      ok: false,
+      cancelled: true,
+      sessionId: "sess-9",
+      userText: "hi",
+      baseline: { count: 2, endedAt: 7 },
+    });
+  });
+
+  it("cancel with nothing in flight reports nothing", async () => {
+    const onCompleted = vi.fn(async () => true);
+    const { result } = renderHook(() => useChatSend({ profile: "doc", onCompleted }));
+    act(() => result.current.send("hi"));
+    await act(async () => {
+      await lastStreamHandlers.onDone();
+    });
+    onCompleted.mockClear();
+    act(() => result.current.cancel());
+    expect(onCompleted).not.toHaveBeenCalled();
+  });
+
+  it("onError reports the minted session id so a dead stream does not orphan the new thread", async () => {
+    mockCall.mockResolvedValueOnce({ events: [] });
+    const onCompleted = vi.fn();
+    const { result } = renderHook(() => useChatSend({ profile: "doc", onCompleted }));
+    act(() => result.current.send("hi", { baseline: { count: 0, endedAt: 0 } }));
+    act(() => lastStreamHandlers.onFrame({ event: "session_start", session_id: "sess-9" }));
+    await act(async () => {
+      await lastStreamHandlers.onError(new Error("ws died"));
+    });
+    expect(onCompleted).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ok: false,
+        sessionId: "sess-9",
+        userText: "hi",
+        baseline: { count: 0, endedAt: 0 },
+      }),
+    );
   });
 
   it("unmount detaches but does NOT cancel — daemon work survives screen exit", () => {

@@ -1,3 +1,5 @@
+import { profileAccents } from './accents';
+
 // In RN each weight is a separate font family — never use fontWeight on custom fonts; reference fonts.sans.medium / fonts.monoSemibold etc.
 export const fonts = {
   sans: {
@@ -12,7 +14,7 @@ export const fonts = {
   monoSemibold: 'JetBrainsMono_600SemiBold',
 };
 
-// Clothing-size scale aligned with desktop --fs-* (with one extra `2xl` for the 22px display heading mobile uses on Locked / empty chat).
+// 1:1 with desktop --fs-* (`2xl` is desktop's --fs-xxl); only --fs-hero has no mobile counterpart. Runtime consumers must read useTheme().fontSizes — these raw values ignore the user's text-size setting.
 export const fontSizes = {
   xxs: 9,
   xs: 11,
@@ -34,6 +36,26 @@ export const lineHeights = {
   normal: 1.5,
   relaxed: 1.65,
 };
+
+// Desktop's letter-spacings in em — apply as fontSize * tracking.<tier>
+export const tracking = {
+  tight: -0.018,
+  snug: -0.005,
+  wide: 0.06,
+  wider: 0.1,
+};
+
+// Desktop's Icon SIZES keys, one notch up for 14–15px body and the 44pt tap target
+export const iconSizes = {
+  xs: 12,
+  sm: 14,
+  md: 16,
+  lg: 20,
+  xl: 24,
+  hero: 44,
+};
+
+export const iconStroke = 2;
 
 export const space = {
   s1: 4,
@@ -117,9 +139,15 @@ const darkColors = {
   selected: 'rgba(230,237,243,0.08)',
 };
 
+// Never collapse these to one constant: the raw brand gold is 2.44:1 on the SyncBar track over white.
+const accents = {
+  light: { accent: '#9c7a33' },
+  dark: { accent: profileAccents.alpi },
+};
+
 export const palettes = {
-  light: { ...lightColors, ...status },
-  dark: { ...darkColors, ...status },
+  light: { ...lightColors, ...status, ...accents.light },
+  dark: { ...darkColors, ...status, ...accents.dark },
 };
 
 export const shadows = {

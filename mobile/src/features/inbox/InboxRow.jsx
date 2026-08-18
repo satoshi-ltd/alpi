@@ -1,11 +1,15 @@
 import { memo, useCallback, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { space , fontSizes, lineHeights} from '../../theme/tokens';
+import { lineHeights, mobile, radii, space } from '../../theme/tokens';
 
-import { Dot } from '../../components/Dot';
 import { Glyph } from '../../components/Glyph';
+import { usePane } from '../../nav/PaneContext';
 import { accentForProfile } from '../../theme/accents';
 import { useTheme } from '../../theme/ThemeContext';
+import { Pip } from './Pip';
+
+export const GLYPH_SLOT = space.s9;
+export const SEPARATOR_INSET = space.s7 + GLYPH_SLOT + space.s5;
 
 const STATIC = StyleSheet.create({
   row: {
@@ -16,61 +20,86 @@ const STATIC = StyleSheet.create({
     alignItems: 'center',
     gap: space.s5,
   },
+  compactRow: {
+    minHeight: mobile.tap,
+    marginHorizontal: space.s5,
+    paddingHorizontal: space.s4,
+    paddingVertical: space.s3,
+    borderRadius: radii.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.s5,
+  },
+  glyph: { width: GLYPH_SLOT, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   body: { flex: 1, minWidth: 0, flexDirection: 'column', gap: space.s1 },
-  header: { flexDirection: 'row', alignItems: 'center', gap: space.s2 },
   meta: { alignItems: 'flex-end', justifyContent: 'center', gap: space.s1, flexShrink: 0 },
-  name: { fontSize: fontSizes.lg, lineHeight: fontSizes.lg * lineHeights.cozy },
-  preview: { fontSize: fontSizes.md, lineHeight: fontSizes.md * lineHeights.cozy },
-  ts: { fontSize: fontSizes.xs, lineHeight: fontSizes.xs * lineHeights.tight },
+  pip: { width: 16, height: 16 },
 });
 
 // onPress/onLongPress receive `item` so parents can pass stable refs and keep memo() effective.
-export const InboxRow = memo(function InboxRow({ item, onPress, onLongPress }) {
-  const { colors, fonts, alpha , fontSizes} = useTheme();
+export const InboxRow = memo(function InboxRow({ item, onPress, onLongPress, selected = false, showState = false }) {
+  const { colors, fonts, fontSizes, alpha } = useTheme();
+  const { twoPane } = usePane();
   // item.accent is computed upstream (useInbox); wg items already use the hub profile's accent.
   const accent = item.accent ?? accentForProfile(item.id);
 
   const unread = !!item.unread && !item.needsProvider;
   const needsProvider = !!item.needsProvider;
-  const label = item.kind === 'workgroup'
-    ? `#${item.label ?? item.name ?? item.id}`
-    : (item.label ?? item.name ?? item.id);
+  const working = showState && item.state === 'working';
+  const label = item.label ?? item.name ?? item.id;
 
   const handlePress = useCallback(() => onPress?.(item), [onPress, item]);
   const handleLongPress = useCallback(() => onLongPress?.(item), [onLongPress, item]);
 
   const rowStyle = useCallback(
     ({ pressed }) => [
-      STATIC.row,
+      twoPane ? STATIC.compactRow : STATIC.row,
       {
-        backgroundColor: pressed ? colors.selected : 'transparent',
+        backgroundColor: pressed || selected ? colors.selected : 'transparent',
         opacity: needsProvider || item.paused ? alpha.muted : 1,
       },
     ],
-    [colors.selected, alpha.muted, needsProvider, item.paused],
+    [twoPane, colors.selected, alpha.muted, needsProvider, item.paused, selected],
   );
 
-  const nameVariant = useMemo(
-    () => ({
-      fontFamily: unread ? fonts.sans.bold : fonts.sans.semibold,
-      color: needsProvider ? colors.ink3 : colors.ink,
-    }),
-    [unread, needsProvider, fonts, colors],
-  );
+  const nameVariant = useMemo(() => {
+    if (!twoPane) {
+      return {
+        fontFamily: unread ? fonts.sans.bold : fonts.sans.semibold,
+        fontSize: fontSizes.lg,
+        lineHeight: fontSizes.lg * lineHeights.cozy,
+        color: needsProvider ? colors.ink3 : colors.ink,
+      };
+    }
+    return {
+      fontFamily: unread
+        ? fonts.sans.semibold
+        : selected
+          ? fonts.sans.medium
+          : fonts.sans.regular,
+      fontSize: fontSizes.lg,
+      lineHeight: fontSizes.lg * lineHeights.cozy,
+      color: needsProvider ? colors.ink3 : unread || selected ? colors.ink : colors.ink2,
+    };
+  }, [twoPane, unread, selected, needsProvider, fonts, fontSizes, colors]);
   const previewVariant = useMemo(
     () => ({
       fontFamily: needsProvider ? fonts.mono : fonts.sans.regular,
+      fontSize: fontSizes.md,
+      lineHeight: fontSizes.md * lineHeights.cozy,
       fontStyle: needsProvider ? 'italic' : 'normal',
-      color: unread ? colors.ink2 : colors.ink3,
+      color: colors.ink3,
     }),
-    [needsProvider, unread, fonts, colors],
+    [needsProvider, fonts, fontSizes, colors],
   );
   const tsVariant = useMemo(
     () => ({
       fontFamily: unread ? fonts.monoSemibold : fonts.monoMedium,
+      fontSize: fontSizes.xs,
+      lineHeight: fontSizes.xs * lineHeights.tight,
       color: unread ? colors.ink : colors.ink3,
     }),
-    [unread, fonts, colors],
+    [unread, fonts, fontSizes, colors],
   );
 
   return (
@@ -78,25 +107,29 @@ export const InboxRow = memo(function InboxRow({ item, onPress, onLongPress }) {
       onPress={handlePress}
       onLongPress={handleLongPress}
       android_ripple={{ color: colors.hover }}
+      accessibilityLabel={unread ? `${label} unread` : undefined}
       style={rowStyle}
     >
-      <Glyph kind={item.kind} color={accent} size={36} needsProvider={needsProvider} />
+      <View style={STATIC.glyph}>
+        <Glyph kind={item.kind} color={accent} needsProvider={needsProvider} />
+      </View>
       <View style={STATIC.body}>
-        <View style={STATIC.header}>
-          <Text numberOfLines={1} style={[STATIC.name, nameVariant]}>
-            {label}
-          </Text>
-          {item.pinned ? (
-            <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4 }}>·</Text>
-          ) : null}
-        </View>
-        <Text numberOfLines={1} style={[STATIC.preview, previewVariant]}>
-          {item.preview}
+        <Text numberOfLines={1} style={nameVariant}>
+          {label}
         </Text>
+        {twoPane ? null : (
+          <Text numberOfLines={1} style={previewVariant}>
+            {item.preview}
+          </Text>
+        )}
       </View>
       <View style={STATIC.meta}>
-        {item.ts ? <Text style={[STATIC.ts, tsVariant]}>{item.ts}</Text> : null}
-        {unread ? <Dot color={colors.accent} /> : null}
+        {item.ts ? <Text style={tsVariant}>{item.ts}</Text> : null}
+        {working ? (
+          <View style={STATIC.pip} accessibilityLabel={`${label} working`}>
+            <Pip kind="working" color={accent} bg={colors.bg} />
+          </View>
+        ) : null}
       </View>
     </Pressable>
   );

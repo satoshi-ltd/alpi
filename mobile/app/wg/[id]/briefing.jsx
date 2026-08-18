@@ -1,6 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { ScrollView } from 'react-native';
+import { KeyboardPane } from '../../../src/components/KeyboardPane';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { space } from '../../../src/theme/tokens';
 
@@ -62,7 +63,7 @@ function EditBriefing() {
         onBack={askBack}
         right={<Button title="Save" size="md" onPress={save} />}
       />
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+      <KeyboardPane>
         <ScrollView contentContainerStyle={{ padding: space.s8 }}>
           <Field
             value={text}
@@ -72,7 +73,7 @@ function EditBriefing() {
             placeholder="What kind of decisions does this workgroup own…"
           />
         </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardPane>
     </SafeAreaView>
   );
 }

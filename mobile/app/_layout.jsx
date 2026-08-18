@@ -19,8 +19,8 @@ import { useFonts } from 'expo-font';
 import { Stack, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useRef } from 'react';
-import { ActivityIndicator, Text, View } from 'react-native';
+import { useEffect, useMemo, useRef } from 'react';
+import { ActivityIndicator, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -28,16 +28,16 @@ import { ToastProvider, useToast } from '../src/components/Toast';
 import { ApprovalSheet } from '../src/features/approval/ApprovalSheet';
 import { ClarificationSheet } from '../src/features/clarification/ClarificationSheet';
 import { useNotificationTapRouter } from '../src/features/aln/deeplink';
+import { PaneShell } from '../src/features/shell/PaneShell';
 import { EventsProvider } from '../src/hooks/useEvents';
 import { useScheduleToast } from '../src/hooks/useScheduleToast';
+import { useTwoPane } from '../src/hooks/useTwoPane';
 import { AppBootstrap } from '../src/lib/AppBootstrap';
 import { useEndpoint } from '../src/lib/EndpointContext';
 import { EndpointProvider } from '../src/lib/EndpointProvider';
+import { stackAnimation } from '../src/lib/panes';
 import { setAuthFailedHandler } from '../src/lib/rpc';
 import { ThemeProvider, useTheme } from '../src/theme/ThemeContext';
-
-Text.defaultProps = Text.defaultProps || {};
-Text.defaultProps.style = [{ fontFamily: 'Inter_400Regular' }, Text.defaultProps.style];
 
 // Hold native splash until fonts load so first frame isn't unstyled text.
 SplashScreen.preventAutoHideAsync().catch(() => { /* */ });
@@ -92,20 +92,24 @@ function AuthFailedBridge() {
 
 function Routes() {
   const { mode, colors } = useTheme();
+  const twoPane = useTwoPane();
   useScheduleToast();
   useNotificationTapRouter();
+  // Never key or wrap <Stack> — a remount drops navigation state.
+  const screenOptions = useMemo(() => ({
+    headerShown: false,
+    contentStyle: { backgroundColor: colors.bg },
+    animation: stackAnimation(twoPane),
+    freezeOnBlur: true,
+  }), [colors.bg, twoPane]);
   return (
     <>
       <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
       <AuthFailedBridge />
       <AppBootstrap>
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            contentStyle: { backgroundColor: colors.bg },
-            animation: 'slide_from_right',
-          }}
-        />
+        <PaneShell>
+          <Stack screenOptions={screenOptions} />
+        </PaneShell>
       </AppBootstrap>
       <ApprovalSheet />
       <ClarificationSheet />

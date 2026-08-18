@@ -1,12 +1,12 @@
 import { ActivityIndicator, Pressable, Text } from 'react-native';
-import { fontSizes } from '../theme/tokens';
 
+import { space } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeContext';
 
 const SIZES = {
-  md: { h: 40, padX: 14, radius: 10, fontSize: fontSizes.md, ghostFontSize: 14, weightFilled: 'semibold', weightGhost: 'medium' },
-  lg: { h: 48, padX: 18, radius: 14, fontSize: fontSizes.lg, ghostFontSize: 15, weightFilled: 'semibold', weightGhost: 'medium' },
-  hero: { h: 56, padX: 22, radius: 14, fontSize: fontSizes.xl, ghostFontSize: 16, weightFilled: 'semibold', weightGhost: 'medium' },
+  md: { h: 40, padX: 14, radius: 10, token: 'md', weightFilled: 'semibold', weightGhost: 'medium' },
+  lg: { h: 48, padX: 18, radius: 14, token: 'lg', weightFilled: 'semibold', weightGhost: 'medium' },
+  hero: { h: 56, padX: 22, radius: 14, token: 'xl', weightFilled: 'semibold', weightGhost: 'medium' },
 };
 
 export function Button({
@@ -19,7 +19,7 @@ export function Button({
   disabled = false,
   accent,
 }) {
-  const { colors, fonts , fontSizes} = useTheme();
+  const { colors, fonts, fontSizes } = useTheme();
   const dims = SIZES[size] ?? SIZES.lg;
 
   const isPrimary = variant === 'primary';
@@ -49,14 +49,15 @@ export function Button({
   const family = isGhost
     ? fonts.sans[dims.weightGhost]
     : fonts.sans[dims.weightFilled];
-  const fontSize = isGhost ? dims.ghostFontSize : dims.fontSize;
+  const fontSize = fontSizes[dims.token];
 
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled || loading}
       style={({ pressed }) => ({
-        height: dims.h,
+        minHeight: dims.h,
+        paddingVertical: space.s2,
         paddingHorizontal: dims.padX,
         borderRadius: dims.radius,
         backgroundColor:

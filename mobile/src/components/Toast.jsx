@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Modal, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { radii, space , fontSizes} from '../theme/tokens';
+import { radii, space } from '../theme/tokens';
 
 import { useTheme } from '../theme/ThemeContext';
 
@@ -89,6 +89,7 @@ function ToastView({ toast, slide, fade }) {
       transparent
       animationType="none"
       statusBarTranslucent
+      supportedOrientations={['portrait', 'landscape-left', 'landscape-right']}
       onRequestClose={() => {}}
     >
       <View pointerEvents="box-none" style={{ flex: 1 }}>

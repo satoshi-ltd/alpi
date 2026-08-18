@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { ScrollView, Text, View } from 'react-native';
-import { space , fontSizes} from '../../theme/tokens';
+import { space } from '../../theme/tokens';
 
 import { PickerRow } from '../../components/PickerRow';
 import { Row, RowSeparator, SectionHeader } from '../../components/Row';
@@ -64,9 +64,9 @@ export function SessionsSheet({ open, onClose, profile, accent, activeSessionId,
       open={open}
       onClose={onClose}
       title="Sessions"
-      subtitle={`@${profile ?? ''} · ${rows.length} chats`}
+      subtitle={`@${profile ?? ''} · ${rows.length} sessions`}
       primaryAction={{
-        label: '+ New chat',
+        label: '+ New session',
         onPress: () => {
           onNew?.();
           onClose?.();
@@ -77,7 +77,7 @@ export function SessionsSheet({ open, onClose, profile, accent, activeSessionId,
         {sessions.loading && rows.length === 0 ? (
           <SessionsSkeleton />
         ) : rows.length === 0 ? (
-          <Row label="No previous chats" helper="start one to fill the list" chevron={false} />
+          <Row label="No previous sessions" helper="start one to fill the list" chevron={false} />
         ) : (
           buckets.map((b) => (
             <View key={b}>

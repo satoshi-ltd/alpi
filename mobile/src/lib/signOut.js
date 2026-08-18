@@ -9,6 +9,7 @@ const KEYS = [
   'alpi.pinned',
   'alpi.biometric',
   'alpi.themePref',
+  'alpi.textScale',
   'alpi.read-state.v1',
 ];
 

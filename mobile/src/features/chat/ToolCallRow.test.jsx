@@ -23,12 +23,16 @@ vi.mock('react-native', () => {
   return { View, Text, Pressable, Animated };
 });
 
-vi.mock('../../theme/ThemeContext', () => ({
-  useTheme: () => ({
-    colors: { ink: '#000', ink2: '#333', ink3: '#666', ink4: '#999', danger: '#f00' },
-    fonts: { mono: 'm', monoMedium: 'mm' },
-  }),
-}));
+vi.mock('../../theme/ThemeContext', async () => {
+  const tokens = await import('../../theme/tokens');
+  return {
+    useTheme: () => ({
+      colors: { ink: '#000', ink2: '#333', ink3: '#666', ink4: '#999', danger: '#f00' },
+      fonts: { mono: 'm', monoMedium: 'mm' },
+      fontSizes: tokens.fontSizes,
+    }),
+  };
+});
 
 vi.mock('../../components/Icon', () => ({
   Icon: ({ name }) => React.createElement('span', { 'data-icon': name }),

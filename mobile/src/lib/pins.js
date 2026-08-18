@@ -1,6 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
+const EMPTY = [];
 const KEY_PREFIX = 'alpi.pinned.';
 const LEGACY_KEY = 'alpi.pinned';
 
@@ -83,12 +84,12 @@ export function usePins(connectionId) {
     [toggle],
   );
 
-  return {
-    pinned: pinned ?? [],
+  return useMemo(() => ({
+    pinned: pinned ?? EMPTY,
     ready: pinned !== null,
     isProfilePinned,
     isWorkgroupPinned,
     toggleProfile,
     toggleWorkgroup,
-  };
+  }), [pinned, isProfilePinned, isWorkgroupPinned, toggleProfile, toggleWorkgroup]);
 }

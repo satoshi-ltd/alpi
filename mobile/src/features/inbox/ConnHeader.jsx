@@ -1,20 +1,22 @@
 import { Pressable, Text, View } from 'react-native';
 import { lineHeights, radii, space } from '../../theme/tokens';
 
+import { Eyebrow } from '../../components/Eyebrow';
 import { Icon } from '../../components/Icon';
+import { CHROME_BTN, tapSlop } from '../../lib/panes';
+import { usePane } from '../../nav/PaneContext';
 import { useTheme } from '../../theme/ThemeContext';
-
 
 export function ConnHeader({
   name = 'Local',
   host = 'host.sock',
   status = 'online',
-  unread = 0,
+  searchOpen = false,
+  onToggleSearch,
   onConnPress,
-  onBellPress,
-  onGearPress,
 }) {
   const { colors, fonts, fontSizes } = useTheme();
+  const { twoPane } = usePane();
   const statusColor =
     status === 'online' || status === 'connected'
       ? colors.success
@@ -24,117 +26,90 @@ export function ConnHeader({
           ? colors.ink3
         : colors.warning;
 
+  const searchToggle = onToggleSearch ? (
+    <Pressable
+      onPress={onToggleSearch}
+      hitSlop={tapSlop(CHROME_BTN)}
+      style={({ pressed }) => ({
+        width: CHROME_BTN,
+        height: CHROME_BTN,
+        borderRadius: radii.md,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: pressed || searchOpen ? colors.selected : 'transparent',
+      })}
+      accessibilityLabel={searchOpen ? 'Close filter' : 'Filter profiles and workgroups'}
+    >
+      <Icon name={searchOpen ? 'x' : 'search'} size="md" color={colors.ink2} />
+    </Pressable>
+  ) : null;
+
+  const trigger = ({ pressed }) => ({
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.s4,
+    paddingHorizontal: space.s5,
+    paddingVertical: space.s2,
+    borderWidth: 0.5,
+    borderColor: colors.line,
+    borderRadius: radii.lg,
+    backgroundColor: pressed ? colors.selected : colors.bgElev,
+  });
+
+  const identity = (
+    <>
+      <View style={{ position: 'relative' }}>
+        <Icon name="cpu" size="md" color={colors.ink2} />
+        <View
+          style={{
+            position: 'absolute',
+            right: -2,
+            bottom: -2,
+            width: 8,
+            height: 8,
+            borderRadius: radii.xs,
+            backgroundColor: statusColor,
+            borderWidth: 2,
+            borderColor: colors.bgElev,
+          }}
+        />
+      </View>
+      <View style={{ flexDirection: 'column', minWidth: 0, flex: 1 }}>
+        <Text
+          numberOfLines={1}
+          style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.md, lineHeight: fontSizes.md * lineHeights.cozy, color: colors.ink }}
+        >
+          {name}
+        </Text>
+        <Text
+          numberOfLines={1}
+          style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, lineHeight: fontSizes.xs * lineHeights.cozy, color: colors.ink3 }}
+        >
+          {host}
+        </Text>
+      </View>
+      <Icon name="chevron-down" size="xs" color={colors.ink3} />
+    </>
+  );
+
   return (
     <View
       style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: space.s3,
+        gap: space.s1,
         paddingHorizontal: space.s5,
-        paddingTop: space.s3,
-        paddingBottom: space.s4,
-        backgroundColor: colors.bg,
+        paddingTop: space.s2,
+        paddingBottom: space.s3,
+        backgroundColor: twoPane ? colors.bgSide : colors.bg,
+        borderBottomWidth: twoPane ? 0 : 0.5,
+        borderBottomColor: colors.line,
       }}
     >
-      <Pressable
-        onPress={onConnPress}
-        style={({ pressed }) => ({
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: space.s3,
-          paddingLeft: space.s3,
-          paddingRight: space.s4,
-          paddingVertical: space.s2,
-          backgroundColor: pressed ? colors.selected : colors.bgInput,
-          borderRadius: radii.pill,
-          maxWidth: 200,
-          minWidth: 0,
-        })}
-      >
-        <View style={{ position: 'relative' }}>
-          <Icon name="cpu" size={16} color={colors.ink2} strokeWidth={1.7} />
-          <View
-            style={{
-              position: 'absolute',
-              right: -2,
-              bottom: -2,
-              width: 8,
-              height: 8,
-              borderRadius: radii.xs,
-              backgroundColor: statusColor,
-              borderWidth: 2,
-              borderColor: colors.bgInput,
-            }}
-          />
-        </View>
-        <View style={{ flexDirection: 'column', minWidth: 0 }}>
-          <Text
-            numberOfLines={1}
-            style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.base, lineHeight: fontSizes.base * lineHeights.cozy, color: colors.ink }}
-          >
-            {name}
-          </Text>
-          <Text
-            numberOfLines={1}
-            style={{ fontFamily: fonts.mono, fontSize: fontSizes.xxs, lineHeight: fontSizes.xxs * lineHeights.cozy, color: colors.ink3 }}
-          >
-            {host}
-          </Text>
-        </View>
-        <Icon name="chevright" size={11} color={colors.ink3} strokeWidth={2} />
-      </Pressable>
-
-      <View style={{ flex: 1 }} />
-
-      {onBellPress ? (
-        <Pressable
-          onPress={onBellPress}
-          style={({ pressed }) => ({
-            width: 38,
-            height: 38,
-            borderRadius: radii.md,
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: pressed ? colors.selected : 'transparent',
-            position: 'relative',
-          })}
-        >
-          <Icon name="bell" size={22} color={colors.ink2} strokeWidth={1.7} />
-          {unread > 0 ? (
-            <View
-              style={{
-                position: 'absolute',
-                top: 2,
-                right: 2,
-                minWidth: space.s6,
-                height: space.s6,
-                paddingHorizontal: space.s1,
-                borderRadius: radii.pill,
-                backgroundColor: colors.danger,
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.xxs, lineHeight: space.s6, color: '#fff' }}>
-                {unread}
-              </Text>
-            </View>
-          ) : null}
-        </Pressable>
-      ) : null}
-
-      <Pressable
-        onPress={onGearPress}
-        style={({ pressed }) => ({
-          width: 38,
-          height: 38,
-          borderRadius: radii.md,
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: pressed ? colors.selected : 'transparent',
-        })}
-      >
-        <Icon name="gear" size={22} color={colors.ink2} strokeWidth={1.7} />
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <Eyebrow style={{ flex: 1 }}>Connection</Eyebrow>
+        {searchToggle}
+      </View>
+      <Pressable onPress={onConnPress} style={trigger}>
+        {identity}
       </Pressable>
     </View>
   );

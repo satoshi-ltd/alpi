@@ -1,21 +1,27 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { KeyboardPane } from '../../src/components/KeyboardPane';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { radii, space , fontSizes} from '../../src/theme/tokens';
+import { radii, space } from '../../src/theme/tokens';
 
+import { ActionSheet } from '../../src/components/ActionSheet';
+import { Banner } from '../../src/components/Banner';
 import { Diamond } from '../../src/components/Diamond';
 import { Dot } from '../../src/components/Dot';
+import { Meter } from '../../src/components/Meter';
 import { useToast } from '../../src/components/Toast';
 import { WorkgroupMessage } from '../../src/features/chat/Bubble';
-import { ChatHeader } from '../../src/features/chat/ChatHeader';
+import { ChatHeader, headerMenuActions } from '../../src/features/chat/ChatHeader';
 import { SoundWave } from '../../src/features/chat/SoundWave';
 import { enqueueReadAloud } from '../../src/lib/readAloud';
 import { useCanAdminEarly } from '../../src/hooks/useActiveRole';
 import { ChatSkeleton } from '../../src/features/chat/ChatSkeleton';
 import { Composer } from '../../src/features/chat/Composer';
+import { EmptyThread } from '../../src/features/chat/EmptyThread';
 import { MarkerCard } from '../../src/features/chat/MarkerCard';
 import { MessageActionsSheet } from '../../src/features/chat/MessageActionsSheet';
+import { postsOf, unlandedPosts } from '../../src/features/chat/optimisticPosts';
 import { buildTasks, classifyMessage } from '../../src/features/chat/parseMarkers';
 import { PipelineLauncher, PipelineStrip } from '../../src/features/chat/PipelineStrip';
 import { TasksSheet } from '../../src/features/sheets/TasksSheet';
@@ -30,7 +36,9 @@ import { useDebouncedCallback } from '../../src/hooks/useDebouncedCallback';
 import { useEventEffect } from '../../src/hooks/useEvents';
 import { useEndpoint } from '../../src/lib/EndpointContext';
 import { isForeignConnection } from '../../src/features/aln/deeplink';
+import { CONTENT_MAX_W, PANE_PAD_X } from '../../src/lib/panes';
 import { markWorkgroupRead } from '../../src/lib/readState';
+import { usePane } from '../../src/nav/PaneContext';
 import { resolveMembers } from '../../src/lib/workgroupMembers';
 import { runPipelineTrigger } from '../../src/lib/workgroupPipelines';
 import { accentForProfile } from '../../src/theme/accents';
@@ -42,11 +50,11 @@ const PAGE_STEP = 30;
 const WG_STYLES = StyleSheet.create({
   pending: { opacity: 0.6 },
   ready: { opacity: 1 },
+  listContent: { paddingTop: space.s5, paddingBottom: space.s5 },
+  contentColumn: { alignSelf: 'center', width: '100%', maxWidth: CONTENT_MAX_W },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: space.s2 },
-  error: { paddingHorizontal: space.s7, marginTop: space.s1 },
+  error: { paddingHorizontal: PANE_PAD_X, marginTop: space.s1 },
   rowPad: { paddingTop: space.s6 },
-  emptyHero: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  emptyText: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.s9 },
   banner: {
     paddingHorizontal: space.s7,
     paddingVertical: space.s4,
@@ -56,10 +64,13 @@ const WG_STYLES = StyleSheet.create({
   },
   bannerText: {
     flex: 1,
-    fontSize: fontSizes.sm,
-    lineHeight: fontSizes.sm * 1.4,
   },
 });
+
+function PaneColumn({ children }) {
+  const { twoPane } = usePane();
+  return twoPane ? <View style={WG_STYLES.contentColumn}>{children}</View> : children;
+}
 
 const WgItem = memo(function WgItem({ m, hubPubkey, ownPubkey, workingStale, accent, accentFor, setActionTarget, colors, fonts, fontSizes, imageProfile }) {
   const speakerName = m.from?.startsWith('@') ? m.from.slice(1) : m.from || '';
@@ -126,10 +137,11 @@ const WgItem = memo(function WgItem({ m, hubPubkey, ownPubkey, workingStale, acc
 });
 
 const WgList = forwardRef(function WgList(
-  { messages, hubPubkey, ownPubkey, workingStale, accent, accentFor, setActionTarget, hubLabel, colors, fonts, fontSizes, loading, imageProfile },
+  { messages, hubPubkey, ownPubkey, workingStale, accent, accentFor, setActionTarget, hubLabel, colors, fonts, fontSizes, hydrating, imageProfile },
   ref,
 ) {
   const [pageSize, setPageSize] = useState(INITIAL_PAGE);
+  const { twoPane } = usePane();
   const visible = useMemo(() => messages.slice(-pageSize).slice().reverse(), [messages, pageSize]);
   const hasMore = messages.length > pageSize;
   const listRef = useRef(null);
@@ -171,16 +183,16 @@ const WgList = forwardRef(function WgList(
     [hubPubkey, ownPubkey, workingStale, accent, accentFor, setActionTarget, colors, fonts, fontSizes, imageProfile],
   );
 
-  if (loading && messages.length === 0) {
+  if (hydrating && messages.length === 0) {
     return <ChatSkeleton kind="workgroup" accent={accent} />;
   }
-  if (!loading && messages.length === 0) {
+  if (messages.length === 0) {
     return (
-      <View style={WG_STYLES.emptyText}>
-        <Text style={{ color: colors.ink3, fontFamily: fonts.sans.regular, fontSize: fontSizes.md }}>
-          No messages yet. Direct @{hubLabel} to open a #task.
-        </Text>
-      </View>
+      <EmptyThread
+        heading="no posts yet"
+        detail={`direct @${hubLabel} to open a #task`}
+        accent={accent}
+      />
     );
   }
 
@@ -191,7 +203,7 @@ const WgList = forwardRef(function WgList(
       data={visible}
       keyExtractor={(m, idx) => String(m.seq ?? `i-${idx}`)}
       renderItem={renderItem}
-      contentContainerStyle={{ paddingTop: space.s5, paddingBottom: space.s5 }}
+      contentContainerStyle={twoPane ? [WG_STYLES.listContent, WG_STYLES.contentColumn] : WG_STYLES.listContent}
       onEndReached={hasMore ? () => setPageSize((n) => n + PAGE_STEP) : undefined}
       onEndReachedThreshold={0.5}
       initialNumToRender={12}
@@ -248,14 +260,14 @@ function TasksHeaderButton({ tasks, accent, onPress }) {
 export default function WorkgroupChat() {
   const { id, connectionId } = useLocalSearchParams();
   const router = useRouter();
-  const { colors } = useTheme();
+  const { colors, fonts } = useTheme();
   const { activeId } = useEndpoint();
   if (isForeignConnection(activeId, connectionId)) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
         <ChatHeader kind="workgroup" accent={colors.ink3} title={`#${id}`} meta="other connection" onBack={() => router.back()} />
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.s10 }}>
-          <Text style={{ color: colors.ink3, textAlign: 'center' }}>
+          <Text style={{ fontFamily: fonts.sans.regular, color: colors.ink3, textAlign: 'center' }}>
             This notification came from a connection that isn't active. Switch to it to open this workgroup.
           </Text>
         </View>
@@ -270,9 +282,13 @@ function WorkgroupChatInner() {
   const router = useRouter();
   const { colors, fonts, fontSizes } = useTheme();
   const canAdmin = useCanAdminEarly();
-  const { endpoint, call } = useEndpoint();
+  const { endpoint, call, probeState } = useEndpoint();
   const summaries = useProfileSummaries();
   const wgs = useWorkgroups();
+
+  const daemonStatus = endpoint ? probeState?.get(endpoint.id) ?? 'unknown' : 'offline';
+  const daemonDown =
+    !!endpoint && (daemonStatus === 'offline' || daemonStatus === 'disabled' || daemonStatus === 'auth-failed');
 
   const wg = useMemo(
     () => wgs.data?.workgroups?.find((w) => w.id === id) ?? null,
@@ -299,8 +315,7 @@ function WorkgroupChatInner() {
     ? summaries.data?.profiles?.find((p) => p.name === profile)?.pubkey_b64 ?? `local:${profile}`
     : 'local';
 
-  const persistedRaw = transcript.data?.posts ?? transcript.data?.messages ?? [];
-  const persisted = Array.isArray(persistedRaw) ? persistedRaw : [];
+  const persisted = postsOf(transcript.data);
   const members = resolveMembers(memberList.data);
 
   const toast = useToast();
@@ -309,18 +324,20 @@ function WorkgroupChatInner() {
   const [sending, setSending] = useState(false);
   const [optimistic, setOptimistic] = useState([]);
 
-  const persistedBodies = useMemo(() => new Set(persisted.map((m) => `${m.from_pubkey}|${m.body}`)), [persisted]);
-  const messages = useMemo(() => {
-    const visibleOptimistic = optimistic.filter((m) => !persistedBodies.has(`${m.from_pubkey}|${m.body}`));
-    return [...persisted, ...visibleOptimistic];
-  }, [persisted, optimistic, persistedBodies]);
+  const messages = useMemo(
+    () => [...persisted, ...unlandedPosts(optimistic, transcript.data)],
+    [persisted, optimistic, transcript.data],
+  );
+
+  const pruneOptimistic = useCallback((fetched) => {
+    setOptimistic((cur) => unlandedPosts(cur, fetched));
+  }, []);
 
   // session_changed excluded — fires on every profile chat turn, would cause wasted wg transcript fetch+decrypt over Tailscale.
   // Coalesced: each refresh re-fetches and decrypts the 200-post tail, so post bursts must collapse into one.
   const refreshTranscript = useDebouncedCallback(() => {
-    transcript.refresh();
+    transcript.refresh().then(pruneOptimistic);
     taskState.refresh();
-    setOptimistic([]);
   }, 400);
   useEventEffect(['wg.post', 'wg.done', 'workgroup_members'], (ev) => {
     if (ev.data?.wg_id !== id) return;
@@ -409,11 +426,20 @@ function WorkgroupChatInner() {
   const accent = hub?.accent ?? accentForProfile(wg?.hub_id) ?? colors.ink3;
   const paused = wg?.paused;
   const [tasksOpen, setTasksOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const listApiRef = useRef(null);
+
+  const accentFor = useCallback(
+    (name, fallback) => {
+      const p = summaries.data?.profiles?.find((x) => x.name === name);
+      return p?.accent ?? fallback;
+    },
+    [summaries.data],
+  );
 
   const sendMessage = async (text) => {
     const trimmed = text.trim();
-    if (!trimmed || sending) return;
+    if (!trimmed || sending || paused || daemonDown) return;
     const tempSeq = -Date.now();
     const optimisticMsg = {
       seq: tempSeq,
@@ -426,9 +452,9 @@ function WorkgroupChatInner() {
     setSending(true);
     try {
       await call('host.workgroup.post', { profile, wg_id: id, text: trimmed });
-      await transcript.refresh();
+      const fetched = await transcript.refresh();
       taskState.refresh();
-      setOptimistic((cur) => cur.filter((m) => m.seq !== tempSeq));
+      pruneOptimistic(fetched);
     } catch (e) {
       setOptimistic((cur) =>
         cur.map((m) => (m.seq === tempSeq ? { ...m, pending: false, error: String(e) } : m)),
@@ -454,7 +480,7 @@ function WorkgroupChatInner() {
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
         <ChatHeader kind="workgroup" accent={colors.ink3} title={`#${id}`} meta="not paired" onBack={() => router.back()} />
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <Text style={{ color: colors.ink3 }}>Pair this phone to a daemon first.</Text>
+          <Text style={{ fontFamily: fonts.sans.regular, color: colors.ink3 }}>Pair this phone to a daemon first.</Text>
         </View>
       </SafeAreaView>
     );
@@ -480,6 +506,8 @@ function WorkgroupChatInner() {
   }
 
   const memberCount = members.length || wg.members || 0;
+  const budgetCap = Number(wg.budget_usd ?? 0);
+  const budgetUsed = Number(wg.spent_usd ?? 0);
   const metaTextStyle = {
     fontFamily: fonts.mono,
     fontSize: fontSizes.xs,
@@ -492,8 +520,40 @@ function WorkgroupChatInner() {
       <Text style={metaTextStyle}>
         {`@${wg.hub_id} · ${memberCount} members`}
       </Text>
+      {budgetCap > 0 ? (
+        <Meter
+          label="Workgroup budget"
+          value={`$${budgetUsed.toFixed(2)}`}
+          tail={`/$${budgetCap.toFixed(2)}`}
+          pct={budgetUsed / budgetCap}
+          color={accent}
+        />
+      ) : null}
     </>
   );
+
+  const menuActions = headerMenuActions({
+    noun: 'workgroup',
+    paused: !!paused,
+    autoRead,
+    onOpenSettings: canAdmin ? () => router.push(`/wg/${wg.id}/settings`) : null,
+    onTogglePause: canAdmin && wg.is_hub
+      ? () =>
+          call('host.workgroup.action', { profile: wg.profile, wg_id: wg.id, action: paused ? 'resume' : 'pause' })
+            .then(() => wgs.refresh())
+            .catch((e) => toast({ title: paused ? 'resume failed' : 'pause failed', message: String(e) }))
+      : null,
+    onToggleAutoRead: canAdmin
+      ? () =>
+          call('host.workgroup.update', { profile: wg.profile, wg_id: wg.id, auto_read: !autoRead })
+            .then(() => wgs.refresh())
+            .catch((e) => toast({ title: 'auto-read failed', message: String(e) }))
+      : null,
+    onRefresh: () => {
+      transcript.refresh();
+      taskState.refresh();
+    },
+  });
 
   const mentionSource = (needle) => {
     const n = needle.toLowerCase();
@@ -503,14 +563,6 @@ function WorkgroupChatInner() {
       .map((m) => ({ id: m, role: m === wg.hub_id ? 'hub' : 'member' }));
   };
 
-  const accentFor = useCallback(
-    (name, fallback) => {
-      const p = summaries.data?.profiles?.find((x) => x.name === name);
-      return p?.accent ?? fallback;
-    },
-    [summaries.data],
-  );
-
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
       <ChatHeader
@@ -519,7 +571,7 @@ function WorkgroupChatInner() {
         title={wg.name || wg.id}
         meta={meta}
         onBack={() => router.back()}
-        onMore={canAdmin ? () => router.push(`/wg/${wg.id}/settings`) : null}
+        onMore={() => setMenuOpen(true)}
         right={(
           <View style={WG_STYLES.headerRight}>
             <SoundWave accent={accent} />
@@ -527,10 +579,23 @@ function WorkgroupChatInner() {
           </View>
         )}
       />
+      {daemonStatus === 'offline' ? (
+        <Banner kind="danger" action="Retry" onAction={() => transcript.refresh()}>
+          Daemon unreachable. Reconnecting…
+        </Banner>
+      ) : daemonStatus === 'disabled' ? (
+        <Banner kind="warning">
+          Connection disabled by host. Ask an admin to enable it in Settings → Connections.
+        </Banner>
+      ) : daemonStatus === 'auth-failed' ? (
+        <Banner kind="danger">
+          Token rejected by daemon. Re-pair this phone to continue.
+        </Banner>
+      ) : null}
       {blocked ? (
         <View style={[WG_STYLES.banner, { backgroundColor: `${colors.danger}1f` }]}>
           <Dot color={colors.danger} pulse />
-          <Text numberOfLines={2} style={[WG_STYLES.bannerText, { fontFamily: fonts.sans.medium, color: colors.ink2 }]}>
+          <Text numberOfLines={2} style={[WG_STYLES.bannerText, { fontFamily: fonts.sans.medium, fontSize: fontSizes.sm, lineHeight: fontSizes.sm * 1.4, color: colors.ink2 }]}>
             <Text style={{ fontFamily: fonts.sans.semibold ?? fonts.sans.medium, color: colors.ink }}>Blocked at #{blocked.slug}.</Text>
             {blockedReason ? ` ${blockedReason}` : ''}
           </Text>
@@ -539,7 +604,7 @@ function WorkgroupChatInner() {
       {paused ? (
         <View style={[WG_STYLES.banner, { backgroundColor: `${colors.warning}22` }]}>
           <Dot color={colors.warning} pulse />
-          <Text numberOfLines={2} style={[WG_STYLES.bannerText, { fontFamily: fonts.sans.medium, color: colors.ink2 }]}>
+          <Text numberOfLines={2} style={[WG_STYLES.bannerText, { fontFamily: fonts.sans.medium, fontSize: fontSizes.sm, lineHeight: fontSizes.sm * 1.4, color: colors.ink2 }]}>
             <Text style={{ fontFamily: fonts.sans.semibold ?? fonts.sans.medium, color: colors.ink }}>This workgroup is paused.</Text>
             {' '}New messages won't fire. Resume from the header.
           </Text>
@@ -557,7 +622,7 @@ function WorkgroupChatInner() {
         onRun={runPipeline}
       />
 
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+      <KeyboardPane>
         <WgList
           ref={listApiRef}
           messages={messages}
@@ -571,20 +636,28 @@ function WorkgroupChatInner() {
           colors={colors}
           fonts={fonts}
           fontSizes={fontSizes}
-          loading={transcript.loading}
+          hydrating={transcript.loading && !transcript.data}
           imageProfile={profile}
         />
-        <Composer
-          placeholder={`Direct @${wg.hub_id} — your input becomes a #task`}
-          accent={accent}
-          onSend={sendMessage}
-          onMicPress={() => toast({ title: 'Voice messages coming soon', kind: 'info', duration: 1800 })}
-          onMicLongPress={() => toast({ title: 'Voice messages coming soon', kind: 'info', duration: 1800 })}
-          mentionSource={mentionSource}
-          seedText={composerSeed?.text}
-          seedKey={composerSeed?.key}
-        />
-      </KeyboardAvoidingView>
+        <PaneColumn>
+          <Composer
+            placeholder={`Direct @${wg.hub_id} — your input becomes a #task`}
+            accent={accent}
+            disabled={!!paused || daemonDown}
+            onSend={sendMessage}
+            mentionSource={mentionSource}
+            seedText={composerSeed?.text}
+            seedKey={composerSeed?.key}
+          />
+        </PaneColumn>
+      </KeyboardPane>
+      <ActionSheet
+        open={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        title={`#${wg.name || wg.id}`}
+        subtitle="WORKGROUP"
+        actions={menuActions}
+      />
       <MessageActionsSheet
         target={actionTarget}
         onClose={() => setActionTarget(null)}

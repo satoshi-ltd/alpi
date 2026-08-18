@@ -7,7 +7,7 @@ import { Button } from '../src/components/Button';
 import { Diamond } from '../src/components/Diamond';
 import { ScreenHeader } from '../src/components/ScreenHeader';
 import { useToast } from '../src/components/Toast';
-import { adminConnectionsOf, isMemberOnly, markAllUnifiedRead, useUnifiedOutputs } from '../src/hooks/useUnifiedOutputs';
+import { adminConnectionsOf, isMemberOnly, markAllUnifiedRead, outputsEmptyState, outputsSubtitle, useUnifiedOutputs } from '../src/hooks/useUnifiedOutputs';
 import { useEndpoint } from '../src/lib/EndpointContext';
 import { rowTitle } from '../src/lib/outputsFormat';
 import { accentForProfile } from '../src/theme/accents';
@@ -34,7 +34,7 @@ export default function OutputsScreen() {
 
   const [refreshing, setRefreshing] = useState(false);
 
-  const { rows, loading, refresh, hasAdmin } = useUnifiedOutputs();
+  const { rows, loading, refresh, hasAdmin, unreachable, unreachableCount } = useUnifiedOutputs();
   const adminConnections = useMemo(
     () => adminConnectionsOf(connections, roleState),
     [connections, roleState],
@@ -131,12 +131,27 @@ export default function OutputsScreen() {
   const showEmpty = !loading && rows.length === 0;
   const showSkeleton = loading && rows.length === 0;
   const memberOnly = isMemberOnly(endpoint, connections, roleState);
+  const empty = outputsEmptyState({
+    memberOnly,
+    hasAdmin,
+    paired: !!endpoint,
+    unreachable,
+    unreachableCount,
+    connectionCount: adminConnections.length,
+  });
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
       <ScreenHeader
         title="Notifications"
-        subtitle={memberOnly ? 'MEMBER' : unreadCount > 0 ? `${unreadCount} UNREAD` : 'INBOX ZERO'}
+        subtitle={outputsSubtitle({
+          memberOnly,
+          unreachable,
+          unreachableCount,
+          connectionCount: adminConnections.length,
+          unreadCount,
+          hasRows: rows.length > 0,
+        })}
         onBack={() => router.back()}
         right={unreadCount > 0 ? (
           <Button title="Mark all read" size="md" variant="ghost" onPress={onMarkAll} />
@@ -170,7 +185,7 @@ export default function OutputsScreen() {
               }}
             >
               <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.lg, color: colors.ink2 }}>
-                Nothing here yet
+                {empty.title}
               </Text>
               <Text
                 style={{
@@ -180,13 +195,7 @@ export default function OutputsScreen() {
                   textAlign: 'center',
                 }}
               >
-                {memberOnly
-                  ? 'The notifications inbox is available to admin connections. This device is paired as a member.'
-                  : hasAdmin
-                    ? 'Notifications land here when your agent notifies you or a scheduled job fails.'
-                    : endpoint
-                      ? 'Connecting… notifications appear once your daemons respond.'
-                      : 'Pair this phone to a daemon to see your notifications.'}
+                {empty.detail}
               </Text>
             </View>
           ) : null

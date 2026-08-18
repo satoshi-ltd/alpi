@@ -2,7 +2,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { radii, space , fontSizes} from '../../../../src/theme/tokens';
+import { radii, space } from '../../../../src/theme/tokens';
 
 import { Button } from '../../../../src/components/Button';
 import { Diamond } from '../../../../src/components/Diamond';

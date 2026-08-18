@@ -247,6 +247,143 @@ describe("useEvents endpoint swap", () => {
   });
 });
 
+describe("useEvents probe identity churn", () => {
+  // Mirrors a probeAll pass: endpoint, call and callStream all arrive as new identities though the coordinates are unchanged.
+  function Harness({ url, token, sink = [] }) {
+    mockEndpoint = { id: "alpha", url, token };
+    mockCall = vi.fn(async () => ({ events: [] }));
+    mockCallStream = vi.fn((_method, _params, handlers) => {
+      streamCallCount += 1;
+      lastStreamHandlers = handlers;
+      return freshStream();
+    });
+    return (
+      <EventsProvider>
+        <Recorder kinds="wg.post" sink={sink} />
+      </EventsProvider>
+    );
+  }
+
+  it("a value-identical re-probe keeps the stream open and the cursor intact", async () => {
+    const sink = [];
+    const { rerender } = render(
+      <Harness url="ws://10.0.0.1:49200" token="t1" sink={sink} />,
+    );
+    await waitFor(() => expect(streamCallCount).toBe(1));
+    const firstHandle = lastStreamHandle;
+
+    await act(async () => {
+      lastStreamHandlers.onFrame({ event: "subscribed", next_seq: 10 });
+      lastStreamHandlers.onFrame({ event: "wg.post", seq: 11, data: {} });
+    });
+    expect(sink).toHaveLength(1);
+
+    rerender(<Harness url="ws://10.0.0.1:49200" token="t1" sink={sink} />);
+    rerender(<Harness url="ws://10.0.0.1:49200" token="t1" sink={sink} />);
+
+    expect(streamCallCount).toBe(1);
+    expect(firstHandle.cancel).not.toHaveBeenCalled();
+
+    await act(async () => {
+      lastStreamHandlers.onFrame({ event: "wg.post", seq: 11, data: {} });
+      lastStreamHandlers.onFrame({ event: "wg.post", seq: 12, data: {} });
+    });
+    expect(sink.map((e) => e.seq)).toEqual([11, 12]);
+  });
+
+  it("a rotated token reconnects and resets the cursor", async () => {
+    const sink = [];
+    const { rerender } = render(
+      <Harness url="ws://10.0.0.1:49200" token="t1" sink={sink} />,
+    );
+    await waitFor(() => expect(streamCallCount).toBe(1));
+
+    await act(async () => {
+      lastStreamHandlers.onFrame({ event: "subscribed", next_seq: 10 });
+      lastStreamHandlers.onFrame({ event: "wg.post", seq: 11, data: {} });
+    });
+
+    rerender(<Harness url="ws://10.0.0.1:49200" token="t2" sink={sink} />);
+    await waitFor(() => expect(streamCallCount).toBe(2));
+
+    await act(async () => {
+      lastStreamHandlers.onFrame({ event: "subscribed", next_seq: 50 });
+    });
+    expect(mockCall).not.toHaveBeenCalled();
+  });
+
+  function LegacyHarness({ ip, port, token, sink = [] }) {
+    mockEndpoint = { id: "alpha", ip, port, token };
+    mockCall = vi.fn(async () => ({ events: [] }));
+    mockCallStream = vi.fn((_method, _params, handlers) => {
+      streamCallCount += 1;
+      lastStreamHandlers = handlers;
+      return freshStream();
+    });
+    return (
+      <EventsProvider>
+        <Recorder kinds="wg.post" sink={sink} />
+      </EventsProvider>
+    );
+  }
+
+  it("a moved daemon stored as ip/port reconnects and resets the cursor too", async () => {
+    const sink = [];
+    const { rerender } = render(
+      <LegacyHarness ip="10.0.0.1" port={49200} token="t1" sink={sink} />,
+    );
+    await waitFor(() => expect(streamCallCount).toBe(1));
+
+    await act(async () => {
+      lastStreamHandlers.onFrame({ event: "subscribed", next_seq: 10 });
+      lastStreamHandlers.onFrame({ event: "wg.post", seq: 11, data: {} });
+    });
+
+    rerender(<LegacyHarness ip="100.99.29.84" port={49200} token="t1" sink={sink} />);
+    await waitFor(() => expect(streamCallCount).toBe(2));
+
+    await act(async () => {
+      lastStreamHandlers.onFrame({ event: "subscribed", next_seq: 50 });
+    });
+    expect(mockCall).not.toHaveBeenCalled();
+  });
+
+  it("a value-identical re-probe of an ip/port daemon keeps the stream open", async () => {
+    const sink = [];
+    const { rerender } = render(
+      <LegacyHarness ip="10.0.0.1" port={49200} token="t1" sink={sink} />,
+    );
+    await waitFor(() => expect(streamCallCount).toBe(1));
+    const firstHandle = lastStreamHandle;
+
+    rerender(<LegacyHarness ip="10.0.0.1" port={49200} token="t1" sink={sink} />);
+
+    expect(streamCallCount).toBe(1);
+    expect(firstHandle.cancel).not.toHaveBeenCalled();
+  });
+
+  it("a moved daemon url reconnects and resets the cursor", async () => {
+    const sink = [];
+    const { rerender } = render(
+      <Harness url="ws://10.0.0.1:49200" token="t1" sink={sink} />,
+    );
+    await waitFor(() => expect(streamCallCount).toBe(1));
+
+    await act(async () => {
+      lastStreamHandlers.onFrame({ event: "subscribed", next_seq: 10 });
+      lastStreamHandlers.onFrame({ event: "wg.post", seq: 11, data: {} });
+    });
+
+    rerender(<Harness url="ws://100.99.29.84:49200" token="t1" sink={sink} />);
+    await waitFor(() => expect(streamCallCount).toBe(2));
+
+    await act(async () => {
+      lastStreamHandlers.onFrame({ event: "subscribed", next_seq: 50 });
+    });
+    expect(mockCall).not.toHaveBeenCalled();
+  });
+});
+
 describe("useEvents keepalive", () => {
   it("never fans out 'ping' frames, even to a ping subscriber", async () => {
     const sink = [];

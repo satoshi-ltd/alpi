@@ -4,7 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { space , fontSizes} from '../../../src/theme/tokens';
+import { space } from '../../../src/theme/tokens';
 
 import { Diamond } from '../../../src/components/Diamond';
 import { ScreenHeader } from '../../../src/components/ScreenHeader';

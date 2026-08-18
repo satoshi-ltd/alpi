@@ -1,16 +1,20 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
+import { KeyboardPane } from '../../src/components/KeyboardPane';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { radii, space , fontSizes} from '../../src/theme/tokens';
+import { radii, space } from '../../src/theme/tokens';
 
+import { ActionSheet } from '../../src/components/ActionSheet';
 import { AlpiMark } from '../../src/components/AlpiMark';
+import { Banner } from '../../src/components/Banner';
 import { Button } from '../../src/components/Button';
+import { Meter } from '../../src/components/Meter';
 import { useToast } from '../../src/components/Toast';
 import { ProfileAssistantMessage, ProfileUserMessage } from '../../src/features/chat/Bubble';
 import { Reasoning } from '../../src/features/chat/Reasoning';
 import { turnParts } from '../../src/features/chat/reasoningSteps';
-import { ChatHeader } from '../../src/features/chat/ChatHeader';
+import { ChatHeader, headerMenuActions } from '../../src/features/chat/ChatHeader';
 import { SoundWave } from '../../src/features/chat/SoundWave';
 import { enqueueReadAloud } from '../../src/lib/readAloud';
 import { Composer } from '../../src/features/chat/Composer';
@@ -18,9 +22,11 @@ import { MessageActionsSheet } from '../../src/features/chat/MessageActionsSheet
 import { retryTextFor } from '../../src/features/chat/messageActions';
 import { visibleWindow } from '../../src/lib/chatWindow';
 import { compactProducedTool } from '../../src/lib/producedAttachments';
+import { modelLabel } from '../../src/lib/modelLabel';
 import { profileLabel } from '../../src/lib/profileLabel';
-import { mergeStreamingTurn, isInterruptedTurn, isLastTurnInFlight, consumeAutoRead, routedModelFor, baselineModelFor } from '../../src/features/chat/chatTurns';
+import { mergeStreamingTurn, isInterruptedTurn, isLastTurnInFlight, consumeAutoRead, routedModelFor, baselineModelFor, turnFrontier, turnLandedSince } from '../../src/features/chat/chatTurns';
 import { ChatSkeleton } from '../../src/features/chat/ChatSkeleton';
+import { EmptyThread } from '../../src/features/chat/EmptyThread';
 import { ToolModule } from '../../src/features/chat/ToolCallRow';
 import { askUserNoAnswerTag } from '../../src/features/chat/askUserAnswer';
 import { Diamond } from '../../src/components/Diamond';
@@ -28,13 +34,15 @@ import { SessionsSheet } from '../../src/features/sheets/SessionsSheet';
 import { useChatSend } from '../../src/hooks/useChatSend';
 import { oversizeError, resolveAttachmentMime, stageAttachment } from '../../src/lib/attachments';
 import { useProfileSummaries, useSessionsList } from '../../src/hooks/useDaemonData';
-import { useSessionTranscript } from '../../src/hooks/useSessionTranscript';
+import { isMissingSession, useSessionTranscript } from '../../src/hooks/useSessionTranscript';
 import { useDebouncedCallback } from '../../src/hooks/useDebouncedCallback';
 import { useEventEffect } from '../../src/hooks/useEvents';
 import { useEndpoint } from '../../src/lib/EndpointContext';
 import { isForeignConnection } from '../../src/features/aln/deeplink';
+import { CONTENT_MAX_W, PANE_PAD_X } from '../../src/lib/panes';
 import { profileEmptyState } from '../../src/lib/profileReady';
 import { markProfileRead } from '../../src/lib/readState';
+import { usePane } from '../../src/nav/PaneContext';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { useCanAdminEarly } from '../../src/hooks/useActiveRole';
 
@@ -52,16 +60,19 @@ const PAGE_STEP = 30;
 
 const TURN_STYLES = StyleSheet.create({
   block: { gap: space.s4, paddingTop: space.s8 },
+  listContent: { paddingTop: space.s5, paddingBottom: space.s5 },
+  contentColumn: { alignSelf: 'center', width: '100%', maxWidth: CONTENT_MAX_W },
   steps: { gap: space.s2 },
   tools: { gap: space.s1 },
-  error: { paddingHorizontal: space.s7 },
-  unfinished: { paddingHorizontal: space.s7 },
-  routedModel: { paddingHorizontal: space.s7 },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: space.s10, gap: space.s10 },
-  emptyTextWrap: { gap: space.s4, alignItems: 'center' },
-  emptyHeading: { fontSize: fontSizes["2xl"], lineHeight: 26, letterSpacing: -0.018 * 22, textAlign: 'center' },
-  emptyModel: { fontSize: fontSizes.sm, textAlign: 'center' },
+  error: { paddingHorizontal: PANE_PAD_X },
+  unfinished: { paddingHorizontal: PANE_PAD_X },
+  routedModel: { paddingHorizontal: PANE_PAD_X },
 });
+
+function PaneColumn({ children }) {
+  const { twoPane } = usePane();
+  return twoPane ? <View style={TURN_STYLES.contentColumn}>{children}</View> : children;
+}
 
 const TurnBlock = memo(function TurnBlock({ turn, turnIndex, profileName, profileModel, accent, colors, fonts, fontSizes, onActionTarget, inFlight = false }) {
   const ts = turn.at ? relativeTime(turn.at * 1000) : '';
@@ -154,7 +165,7 @@ function AskUserAnswer({ result, question, accent, colors, fonts, fontSizes }) {
   const noAnswerTag = askUserNoAnswerTag(result);
   if (noAnswerTag) {
     return (
-      <View style={{ paddingHorizontal: space.s7 }}>
+      <View style={{ paddingHorizontal: PANE_PAD_X }}>
         <View
           style={{
             borderRadius: radii.md,
@@ -179,7 +190,7 @@ function AskUserAnswer({ result, question, accent, colors, fonts, fontSizes }) {
     );
   }
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3, paddingHorizontal: space.s7 }}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3, paddingHorizontal: PANE_PAD_X }}>
       <Diamond color={accent ?? colors.ink3} size="md" />
       <Text
         style={{
@@ -195,31 +206,14 @@ function AskUserAnswer({ result, question, accent, colors, fonts, fontSizes }) {
   );
 }
 
-function EmptyThread({ profileName, model, accent, colors, fonts }) {
-  return (
-    <View style={TURN_STYLES.empty}>
-      <AlpiMark size={96} color={accent} />
-      <View style={TURN_STYLES.emptyTextWrap}>
-        <Text style={[TURN_STYLES.emptyHeading, { fontFamily: fonts.sans.semibold, color: colors.ink }]}>
-          start a thread with @{profileLabel(profileName)}
-        </Text>
-        {model ? (
-          <Text
-            style={[TURN_STYLES.emptyModel, { fontFamily: fonts.monoMedium, color: colors.ink3 }]}
-            numberOfLines={1}
-          >
-            {model}
-          </Text>
-        ) : null}
-      </View>
-    </View>
-  );
-}
-
-function ChatList({ turns, pendingTurn, loading, hydrating, profileName, model, accent, onActionTarget, colors, fonts, fontSizes, turnsBase = 0, hasMoreRemote = false, onLoadOlder, sessionInFlight = false }) {
+function ChatList({ turns, pendingTurn, hydrating, profileName, model, accent, onActionTarget, colors, fonts, fontSizes, turnsBase = 0, hasMoreRemote = false, onLoadOlder, sessionInFlight = false }) {
   const [pageSize, setPageSize] = useState(INITIAL_PAGE);
+  const { twoPane } = usePane();
 
-  const full = useMemo(() => mergeStreamingTurn(turns, pendingTurn), [turns, pendingTurn]);
+  const full = useMemo(
+    () => mergeStreamingTurn(turns, pendingTurn),
+    [turns, pendingTurn],
+  );
   const lastTurnInFlight = useMemo(
     () => isLastTurnInFlight(full, sessionInFlight),
     [full, sessionInFlight],
@@ -250,11 +244,17 @@ function ChatList({ turns, pendingTurn, loading, hydrating, profileName, model, 
     [profileName, model, accent, colors, fonts, fontSizes, onActionTarget, lastTurnInFlight, lastTurnIndex],
   );
 
-  if ((loading || hydrating) && full.length === 0) {
+  if (hydrating && full.length === 0) {
     return <ChatSkeleton kind="profile" accent={accent} />;
   }
   if (full.length === 0) {
-    return <EmptyThread profileName={profileName} model={model} accent={accent} colors={colors} fonts={fonts} />;
+    return (
+      <EmptyThread
+        heading={`start a thread with ${profileLabel(profileName)}`}
+        detail={modelLabel(model)}
+        accent={accent}
+      />
+    );
   }
 
   return (
@@ -263,7 +263,7 @@ function ChatList({ turns, pendingTurn, loading, hydrating, profileName, model, 
       data={visible}
       keyExtractor={(item) => String(item.turnIndex)}
       renderItem={renderItem}
-      contentContainerStyle={{ paddingTop: space.s5, paddingBottom: space.s5 }}
+      contentContainerStyle={twoPane ? [TURN_STYLES.listContent, TURN_STYLES.contentColumn] : TURN_STYLES.listContent}
       onEndReached={hasMore ? () => {
         if (full.length <= pageSize && hasMoreRemote) onLoadOlder?.();
         setPageSize((n) => n + PAGE_STEP);
@@ -325,14 +325,14 @@ function NeedsSetup({ name, accent, state, onSetupProvider, onPickModel }) {
 export default function ProfileChat() {
   const { id, connectionId, sid } = useLocalSearchParams();
   const router = useRouter();
-  const { colors } = useTheme();
+  const { colors, fonts } = useTheme();
   const { activeId } = useEndpoint();
   if (isForeignConnection(activeId, connectionId)) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
         <ChatHeader kind="profile" accent={colors.ink3} title={`@${profileLabel(id)}`} meta="other connection" onBack={() => router.back()} />
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.s10 }}>
-          <Text style={{ color: colors.ink3, textAlign: 'center' }}>
+          <Text style={{ fontFamily: fonts.sans.regular, color: colors.ink3, textAlign: 'center' }}>
             This notification came from a connection that isn't active. Switch to it to open this chat.
           </Text>
         </View>
@@ -347,9 +347,13 @@ function ProfileChatInner() {
   const router = useRouter();
   const { colors, fonts, fontSizes } = useTheme();
   const canAdmin = useCanAdminEarly();
-  const { endpoint, call } = useEndpoint();
+  const { endpoint, call, probeState } = useEndpoint();
   const summaries = useProfileSummaries();
   const sessionsList = useSessionsList(id);
+
+  const daemonStatus = endpoint ? probeState?.get(endpoint.id) ?? 'unknown' : 'offline';
+  const daemonDown =
+    !!endpoint && (daemonStatus === 'offline' || daemonStatus === 'disabled' || daemonStatus === 'auth-failed');
 
   const profile = useMemo(
     () => summaries.data?.profiles?.find((p) => p.name === id) ?? null,
@@ -358,22 +362,29 @@ function ProfileChatInner() {
 
   const latestChatId =
     profile?.latest_session?.kind === 'chat' ? profile.latest_session.id : null;
+  const seedSessionId = useMemo(() => {
+    if (latestChatId) return latestChatId;
+    const sessions = sessionsList.data?.sessions ?? [];
+    return sessions.find((s) => (s.kind ?? 'chat') === 'chat')?.id ?? null;
+  }, [latestChatId, sessionsList.data]);
+
   const [sessionId, setSessionId] = useState(sid || latestChatId);
   const [sessionPicked, setSessionPicked] = useState(false);
   // Seed-only — once sessionId is set we stop watching latestChatId so a later session_changed can't yank the user into a different chat mid-conversation.
   useEffect(() => {
-    if (sessionPicked || sessionId) return;
-    if (latestChatId) {
-      setSessionId(latestChatId);
-      return;
-    }
-    const sessions = sessionsList.data?.sessions ?? [];
-    const chat = sessions.find((s) => (s.kind ?? 'chat') === 'chat');
-    if (chat?.id) setSessionId(chat.id);
-  }, [sessionPicked, sessionId, latestChatId, sessionsList.data]);
+    if (sessionPicked || sessionId || !seedSessionId) return;
+    setSessionId(seedSessionId);
+  }, [sessionPicked, sessionId, seedSessionId]);
   const session = useSessionTranscript(id, sessionId);
+  // latest_session in host.profile.summaries is connection-agnostic, so it can seed a session this connection may neither read nor post to.
+  useEffect(() => {
+    if (!sessionId || !isMissingSession(session.error)) return;
+    setSessionPicked(true);
+    setSessionId(null);
+  }, [sessionId, session.error]);
   const sessionData = session.data;
   const turnsBase = session.turnsOffset;
+  const totalTurns = session.totalTurns;
   const sessionInFlight = session.inFlight;
   const hasMoreRemote = session.hasMore;
   const loadOlder = session.loadOlder;
@@ -408,26 +419,30 @@ function ProfileChatInner() {
     };
   }, [endpoint, profile?.name, profile?.model, call]);
 
-  const hydrating =
-    (sessionId && (session.loading || sessionData === null)) ||
-    (!sessionId && sessionsList.loading && sessionsList.data === null);
+  const hydrating = sessionId
+    ? !session.settled
+    : !sessionPicked && (!!seedSessionId || (sessionsList.loading && !sessionsList.data));
 
   const toast = useToast();
   const [actionTarget, setActionTarget] = useState(null);
   const [sessionsOpen, setSessionsOpen] = useState(false);
-  const micUnavailable = () => toast({ title: 'Voice messages coming soon', kind: 'info', duration: 1800 });
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const accent = profile?.accent ?? colors.ink3;
 
-  const { send: streamSend, pendingTurn, isStreaming } = useChatSend({
+  const { send: streamSend, cancel: streamCancel, isSending, pendingTurn, isStreaming } = useChatSend({
     profile: id,
     sessionId,
-    onCompleted: ({ sessionId: streamSid } = {}) => {
+    onCompleted: async ({ sessionId: streamSid, baseline } = {}) => {
       if (streamSid && streamSid !== sessionId) {
         setSessionPicked(true);
         setSessionId(streamSid);
       }
-      return Promise.all([sessionsList.refresh(), session.refresh()]);
+      sessionsList.refresh();
+      const snap = await session.refresh(streamSid || sessionId);
+      if (turnLandedSince(snap, baseline)) return true;
+      toast({ title: 'Answer saved, not shown', message: 'The transcript did not load — pull to refresh.', duration: 2600 });
+      return false;
     },
   });
 
@@ -478,8 +493,11 @@ function ProfileChatInner() {
   }, [pendingTurn, voiceCfg, sessionData, turnsBase, call, id, accent]);
 
   const sendMessage = (text, options) => {
-    if (profile?.paused) return;
-    streamSend(text, options);
+    if (profile?.paused || daemonDown || isSending()) return;
+    streamSend(text, {
+      ...options,
+      baseline: turnFrontier({ data: sessionData, turnsOffset: turnsBase, totalTurns }),
+    });
   };
   const [composerSeed, setComposerSeed] = useState(null);
   const [pendingRewriteIndex, setPendingRewriteIndex] = useState(null);
@@ -536,7 +554,7 @@ function ProfileChatInner() {
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
         <ChatHeader kind="profile" accent={colors.ink3} title={`@${profileLabel(id)}`} meta="not paired" onBack={() => router.back()} />
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <Text style={{ color: colors.ink3 }}>Pair this phone to a daemon first.</Text>
+          <Text style={{ fontFamily: fonts.sans.regular, color: colors.ink3 }}>Pair this phone to a daemon first.</Text>
         </View>
       </SafeAreaView>
     );
@@ -571,25 +589,74 @@ function ProfileChatInner() {
     return `${(n / 1_000_000).toFixed(1)}M`;
   };
   const ctxUsed = sessionData?.last_ctx_tokens ?? 0;
+  const budgetCap = Number(profile.budget_daily_usd ?? 0);
+  const budgetUsed = Number(profile.budget_used_usd ?? 0);
+  const shownModel = modelLabel(profile.model);
   const headerMeta =
     emptyState === 'needs-provider'
       ? 'profile · no provider'
       : emptyState === 'needs-model'
         ? 'profile · pick a model'
-        : [
-            profile.model && profile.model.split('/').slice(1).join('/'),
-            ctxWindow && ctxWindow > 0
-              ? `${fmtTokens(ctxUsed)}/${fmtTokens(ctxWindow)} ctx`
-              : null,
-            profile.budget_daily_usd != null
-              ? `$${(profile.budget_used_usd ?? 0).toFixed(2)}/$${Number(profile.budget_daily_usd).toFixed(2)}`
-              : null,
-          ]
-            .filter(Boolean)
-            .join(' · ');
+        : (
+            <>
+              {shownModel ? (
+                <Text
+                  numberOfLines={1}
+                  style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink2 }}
+                >
+                  {shownModel}
+                </Text>
+              ) : null}
+              {ctxWindow && ctxWindow > 0 ? (
+                <Meter
+                  label="Context window"
+                  value={fmtTokens(ctxUsed)}
+                  tail={`/${fmtTokens(ctxWindow)}`}
+                  pct={ctxUsed / ctxWindow}
+                  color={accent}
+                />
+              ) : null}
+              {budgetCap > 0 ? (
+                <Meter
+                  label="Daily budget"
+                  value={`$${budgetUsed.toFixed(2)}`}
+                  tail={`/$${budgetCap.toFixed(2)}`}
+                  pct={budgetUsed / budgetCap}
+                  color={accent}
+                />
+              ) : null}
+            </>
+          );
 
   const turns = sessionData?.turns ?? [];
   const paused = !!profile.paused;
+
+  const menuActions = headerMenuActions({
+    noun: 'profile',
+    paused,
+    autoRead: voiceCfg.autoRead,
+    onOpenSettings: canAdmin ? () => router.push(`/profile/${profile.name}/settings`) : null,
+    onTogglePause: canAdmin
+      ? () =>
+          call('host.config.set_field', { profile: id, key: 'paused', value: paused ? 'false' : 'true' })
+            .then(() => summaries.refresh())
+            .catch((e) => toast({ title: paused ? 'Resume failed' : 'Pause failed', message: String(e) }))
+      : null,
+    onToggleAutoRead: canAdmin
+      ? () =>
+          call('host.voice.set_auto_read', { profile: id, enabled: !voiceCfg.autoRead })
+            .then(loadVoiceCfg)
+            .catch((e) => toast({ title: 'auto-read failed', message: String(e) }))
+      : null,
+    onOpenSkills: canAdmin ? () => router.push(`/profile/${profile.name}/brain/skills`) : null,
+    onOpenMemory: canAdmin ? () => router.push(`/profile/${profile.name}/brain/memory`) : null,
+    onOpenTools: canAdmin ? () => router.push(`/profile/${profile.name}/brain/tools`) : null,
+    onOpenSchedule: canAdmin ? () => router.push(`/profile/${profile.name}/schedule`) : null,
+    onRefresh: () => {
+      sessionsList.refresh();
+      session.refresh();
+    },
+  });
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -599,10 +666,23 @@ function ProfileChatInner() {
         title={profileLabel(profile.name)}
         meta={headerMeta}
         onBack={() => router.back()}
-        onMore={canAdmin ? () => router.push(`/profile/${profile.name}/settings`) : null}
+        onMore={() => setMenuOpen(true)}
         onPickSession={() => setSessionsOpen(true)}
         right={<SoundWave accent={accent} />}
       />
+      {daemonStatus === 'offline' ? (
+        <Banner kind="danger" action="Retry" onAction={() => session.refresh()}>
+          Daemon unreachable. Reconnecting…
+        </Banner>
+      ) : daemonStatus === 'disabled' ? (
+        <Banner kind="warning">
+          Connection disabled by host. Ask an admin to enable it in Settings → Connections.
+        </Banner>
+      ) : daemonStatus === 'auth-failed' ? (
+        <Banner kind="danger">
+          Token rejected by daemon. Re-pair this phone to continue.
+        </Banner>
+      ) : null}
       {paused ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3, paddingHorizontal: space.s7, paddingVertical: space.s4, backgroundColor: `${colors.warning}22` }}>
           <Text numberOfLines={2} style={{ flex: 1, fontFamily: fonts.sans.medium, fontSize: fontSizes.sm, color: colors.ink2 }}>
@@ -620,11 +700,10 @@ function ProfileChatInner() {
           onPickModel={canAdmin ? () => router.push(`/profile/${profile.name}/settings`) : null}
         />
       ) : (
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+        <KeyboardPane>
           <ChatList
             turns={turns}
             pendingTurn={pendingTurn}
-            loading={session.loading}
             hydrating={hydrating}
             profileName={profile.name}
             model={baselineModelFor(sessionData, profile.model)}
@@ -638,21 +717,30 @@ function ProfileChatInner() {
             onLoadOlder={loadOlder}
             sessionInFlight={sessionInFlight}
           />
-          <Composer
-            placeholder={`Message @${profileLabel(profile.name)}…`}
-            accent={accent}
-            disabled={paused}
-            onSend={onComposerSend}
-            onMicPress={micUnavailable}
-            onMicLongPress={micUnavailable}
-            seedText={composerSeed?.text}
-            seedKey={composerSeed?.key}
-            attachments={attachments}
-            onPickAttachment={pickAttachment}
-            onRemoveAttachment={(i) => setAttachments((p) => p.filter((_, j) => j !== i))}
-          />
-        </KeyboardAvoidingView>
+          <PaneColumn>
+            <Composer
+              placeholder={`Message @${profileLabel(profile.name)}…`}
+              accent={accent}
+              disabled={paused || daemonDown}
+              busy={isStreaming}
+              onStop={streamCancel}
+              onSend={onComposerSend}
+              seedText={composerSeed?.text}
+              seedKey={composerSeed?.key}
+              attachments={attachments}
+              onPickAttachment={pickAttachment}
+              onRemoveAttachment={(i) => setAttachments((p) => p.filter((_, j) => j !== i))}
+            />
+          </PaneColumn>
+        </KeyboardPane>
       )}
+      <ActionSheet
+        open={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        title={`@${profileLabel(profile.name)}`}
+        subtitle="PROFILE"
+        actions={menuActions}
+      />
       <MessageActionsSheet
         target={actionTarget}
         onClose={() => setActionTarget(null)}

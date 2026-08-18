@@ -5,6 +5,7 @@ import { EndpointContext } from "../lib/EndpointContext";
 import {
   _resetSessionTranscriptStore,
   fromTail,
+  isMissingSession,
   mergeDelta,
   mergeOlder,
   normalizeSessionRead,
@@ -160,6 +161,34 @@ describe("useSessionTranscript", () => {
     expect(result.current.totalTurns).toBe(50);
   });
 
+  it("refetches a full tail while the tail is the daemon's in-flight stub, which it overwrites in place", async () => {
+    const stub = { at: 5, user: "u5", assistant: "", tools: [] };
+    const finished = { at: 5, ended_at: 6, user: "u5", assistant: "a5", tools: [] };
+    let all = [turn(0), stub];
+    const calls = [];
+    const call = vi.fn(async (_m, params) => {
+      calls.push(params);
+      if (params.tail_turns) return envelope(all, Math.max(0, all.length - params.tail_turns), all.length);
+      if (params.after_turn != null) {
+        return envelope(all, Math.min(params.after_turn, all.length), all.length);
+      }
+      throw new Error("unexpected");
+    });
+    const { result } = renderHook(() => useSessionTranscript("doc", "s1"), {
+      wrapper: wrapperWith(call),
+    });
+    await waitFor(() => expect(result.current.data?.turns).toHaveLength(2));
+
+    all = [turn(0), finished];
+    await act(() => result.current.refresh());
+    expect(calls[1]).toEqual({ profile: "doc", id: "s1", tail_turns: 60 });
+    expect(result.current.data.turns).toHaveLength(2);
+    expect(result.current.data.turns[1].assistant).toBe("a5");
+
+    await act(() => result.current.refresh());
+    expect(calls[2]).toEqual({ profile: "doc", id: "s1", after_turn: 2 });
+  });
+
   it("ancient daemons without the envelope keep working with full refetches", async () => {
     const call = vi.fn(async () => ({ id: "s1", turns: turns(0, 5), model: "m" }));
     const { result } = renderHook(() => useSessionTranscript("doc", "s1"), {
@@ -219,6 +248,38 @@ describe("useSessionTranscript", () => {
       wrapper: wrapperWith(call),
     });
     await waitFor(() => expect(result.current.inFlight).toBe(true));
+  });
+
+  it("settles a read that comes back empty-handed instead of staying unsettled", async () => {
+    const missing = new Error("not-found");
+    missing.code = -32004;
+    const call = vi.fn(async () => { throw missing; });
+    const { result } = renderHook(() => useSessionTranscript("doc", "s1"), {
+      wrapper: wrapperWith(call),
+    });
+    expect(result.current.settled).toBe(false);
+
+    await waitFor(() => expect(result.current.settled).toBe(true));
+    expect(result.current.data).toBeNull();
+    expect(result.current.loading).toBe(false);
+    expect(isMissingSession(result.current.error)).toBe(true);
+  });
+
+  it("reports nothing to read as settled when there is no session id", () => {
+    const call = vi.fn();
+    const { result } = renderHook(() => useSessionTranscript("doc", null), {
+      wrapper: wrapperWith(call),
+    });
+    expect(result.current.settled).toBe(true);
+    expect(call).not.toHaveBeenCalled();
+  });
+
+  it("tells a missing session apart from every other failure", () => {
+    expect(isMissingSession(Object.assign(new Error("nope"), { code: -32004 }))).toBe(true);
+    expect(isMissingSession(new Error("not-found"))).toBe(true);
+    expect(isMissingSession(Object.assign(new Error("auth-failed"), { code: -32000 }))).toBe(false);
+    expect(isMissingSession(new Error("connection closed before response"))).toBe(false);
+    expect(isMissingSession(null)).toBe(false);
   });
 
   it("auth failure clears the session", async () => {
@@ -288,6 +349,58 @@ describe("useSessionTranscript", () => {
     expect(call).toHaveBeenLastCalledWith("host.session.read", {
       profile: "doc", id: "s1", after_turn: 100,
     });
+  });
+
+  it("refresh() resolves with the transcript the follow-up read produced, never the stale in-flight one", async () => {
+    const all = turns(0, 100);
+    const grown = [...all, turn(100)];
+    let resolveTail;
+    const call = vi.fn((_m, params) => {
+      if (params.tail_turns) {
+        return new Promise((resolve) => {
+          resolveTail = () => resolve(envelope(all, 40, 100));
+        });
+      }
+      if (params.after_turn != null) {
+        return Promise.resolve(envelope(grown, params.after_turn, grown.length));
+      }
+      throw new Error("unexpected");
+    });
+    const { result } = renderHook(() => useSessionTranscript("doc", "s1"), {
+      wrapper: wrapperWith(call),
+    });
+    await waitFor(() => expect(call).toHaveBeenCalledTimes(1));
+
+    let settled;
+    act(() => {
+      result.current.refresh().then((snap) => { settled = snap; });
+    });
+    await act(async () => { resolveTail(); });
+    await waitFor(() => expect(settled).toBeDefined());
+
+    expect(settled?.data?.turns ?? []).toHaveLength(61);
+    expect(settled?.turnsOffset).toBe(40);
+    expect(settled?.data?.turns?.at(-1)?.user).toBe("u100");
+  });
+
+  it("refresh(sessionId) reads that session and primes it for the key flip that follows", async () => {
+    const all = turns(0, 3);
+    const call = vi.fn(async (_m, params) => envelope(all, 0, params.id === "s2" ? 3 : 0));
+    const { result } = renderHook(() => useSessionTranscript("doc", null), {
+      wrapper: wrapperWith(call),
+    });
+
+    let snap;
+    await act(async () => { snap = await result.current.refresh("s2"); });
+    expect(call).toHaveBeenCalledWith("host.session.read", {
+      profile: "doc", id: "s2", tail_turns: 60,
+    });
+    expect(snap?.data?.turns ?? []).toHaveLength(3);
+
+    const flipped = renderHook(() => useSessionTranscript("doc", "s2"), {
+      wrapper: wrapperWith(call),
+    });
+    expect(flipped.result.current.data?.turns).toHaveLength(3);
   });
 
   it("concurrent loadOlder calls collapse into one request", async () => {

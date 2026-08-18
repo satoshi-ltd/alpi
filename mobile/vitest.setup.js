@@ -7,6 +7,25 @@ vi.mock("react-native", () => ({
   Linking: { openURL: vi.fn(async () => true) },
 }));
 
+// react-native-svg ships untranspiled — importing Icon is a parse error without this
+vi.mock("react-native-svg", async () => {
+  const React = await import("react");
+  const el = (tag) => ({ children, ...props }) => React.createElement(tag, props, children);
+  return {
+    default: el("svg"),
+    Svg: el("svg"),
+    Circle: el("circle"),
+    Defs: el("defs"),
+    G: el("g"),
+    Line: el("line"),
+    LinearGradient: el("linearGradient"),
+    Path: el("path"),
+    Polyline: el("polyline"),
+    Rect: el("rect"),
+    Stop: el("stop"),
+  };
+});
+
 vi.mock("expo-router", () => ({
   useRouter: () => ({ push: vi.fn(), back: vi.fn(), replace: vi.fn() }),
   useLocalSearchParams: () => ({}),

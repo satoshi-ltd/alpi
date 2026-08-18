@@ -15,8 +15,10 @@ const STALL_POLL_INTERVAL_MS = 2500;
 export function useChatSend({ profile, sessionId, onCompleted }) {
   const { call, callStream } = useEndpoint();
   const [pendingTurn, setPendingTurn] = useState(null);
+  const turnRef = useRef(null);
   const handleRef = useRef(null);
   const requestIdRef = useRef(null);
+  const activeRef = useRef(null);
   // assistant_delta arrives ~30-80/s; rAF buffer caps re-renders at ≤60Hz.
   const deltaBufRef = useRef('');
   const reasoningBufRef = useRef('');
@@ -41,26 +43,47 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
     [],
   );
 
+  // turnRef leads the state: a continuation resumed after an await must read who owns the slot NOW, which a React updater argument cannot tell it.
+  const writeTurn = useCallback((next) => {
+    const value = typeof next === 'function' ? next(turnRef.current) : next;
+    turnRef.current = value;
+    setPendingTurn(value);
+  }, []);
+
+  const ownedTurn = useCallback((requestId) => {
+    const cur = turnRef.current;
+    return cur && cur.req === requestId ? cur : null;
+  }, []);
+
+  const settleTurn = useCallback(
+    (requestId) => {
+      if (ownedTurn(requestId)) writeTurn(null);
+    },
+    [ownedTurn, writeTurn],
+  );
+
   const flushDeltas = useCallback(() => {
     rafRef.current = null;
+    if (!turnRef.current) return;
     const chunk = deltaBufRef.current;
     const rchunk = reasoningBufRef.current;
     if (!chunk && !rchunk) return;
     deltaBufRef.current = '';
     reasoningBufRef.current = '';
-    setPendingTurn((cur) => {
-      if (!cur) return cur;
+    writeTurn((cur) => {
       const next = { ...cur };
       if (chunk) next.assistant = (cur.assistant ?? '') + chunk;
       if (rchunk) next.reasoning = (cur.reasoning ?? '') + rchunk;
       return next;
     });
-  }, []);
+  }, [writeTurn]);
 
   const cancel = useCallback(() => {
+    const active = activeRef.current;
     handleRef.current?.cancel?.();
     handleRef.current = null;
     requestIdRef.current = null;
+    activeRef.current = null;
     deltaBufRef.current = '';
     reasoningBufRef.current = '';
     if (rafRef.current) {
@@ -71,8 +94,20 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
       clearInterval(watchdogTimerRef.current);
       watchdogTimerRef.current = null;
     }
-    setPendingTurn(null);
-  }, []);
+    if (!active) return;
+    writeTurn((cur) => (cur ? { ...cur, pending: false } : cur));
+    let ret;
+    try {
+      ret = onCompletedRef.current?.({
+        ok: false,
+        cancelled: true,
+        sessionId: active.sessionId,
+        userText: active.userText,
+        baseline: active.baseline,
+      });
+    } catch { /* */ }
+    Promise.resolve(ret).catch(() => {}).then(() => settleTurn(active.req));
+  }, [settleTurn, writeTurn]);
 
   const send = useCallback(
     (text, options = {}) => {
@@ -87,10 +122,14 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
         rafRef.current = null;
       }
       const requestId = nextRequestId();
+      const baseline = options.baseline ?? null;
       requestIdRef.current = requestId;
+      activeRef.current = { req: requestId, sessionId: sessionId ?? null, userText: trimmed, baseline };
       lastFrameAtRef.current = Date.now();
       if (watchdogTimerRef.current) clearInterval(watchdogTimerRef.current);
-      setPendingTurn({
+      writeTurn({
+        req: requestId,
+        baseline,
         at: Math.floor(Date.now() / 1000),
         user: trimmed,
         assistant: '',
@@ -120,11 +159,12 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
         const event = frame?.event;
         if (!event) return;
         lastFrameAtRef.current = Date.now();
-        if (frame.session_id) streamSessionId = frame.session_id;
+        if (frame.session_id) {
+          streamSessionId = frame.session_id;
+          if (activeRef.current?.req === requestId) activeRef.current.sessionId = streamSessionId;
+        }
         if (event === 'session_start') {
-          setPendingTurn((cur) =>
-            cur ? { ...cur, sessionId: streamSessionId } : cur,
-          );
+          writeTurn((cur) => ({ ...cur, sessionId: streamSessionId }));
           return;
         }
         if (event === 'assistant_delta') {
@@ -143,8 +183,7 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
           const pendingReasoning = reasoningBufRef.current;
           deltaBufRef.current = '';
           reasoningBufRef.current = '';
-          setPendingTurn((cur) => {
-            if (!cur) return cur;
+          writeTurn((cur) => {
             const tools = [...(cur.tools ?? [])];
             const existing = tools.findIndex((t) => t.tool_id === frame.tool_id);
             const segment = [cur.reasoning, pendingReasoning, `${cur.assistant ?? ''}${pendingProse}`]
@@ -164,8 +203,7 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
             return { ...cur, tools, reasoning: '', assistant: '' };
           });
         } else if (event === 'tool_state') {
-          setPendingTurn((cur) => {
-            if (!cur) return cur;
+          writeTurn((cur) => {
             const tools = (cur.tools ?? []).map((t) =>
               t.tool_id === frame.tool_id
                 ? { ...t, ok: frame.ok ?? t.ok, text: frame.text }
@@ -175,8 +213,7 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
           });
         } else if (event === 'tool_end') {
           const endTs = Number.isFinite(ts) ? ts : Date.now() / 1000;
-          setPendingTurn((cur) => {
-            if (!cur) return cur;
+          writeTurn((cur) => {
             const tools = (cur.tools ?? []).map((t) =>
               t.tool_id === frame.tool_id
                 ? { ...t, ok: frame.ok ?? true, output: frame.output, duration_s: Math.max(0, endTs - (t.at ?? endTs)) }
@@ -187,9 +224,7 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
         } else if (event === 'reply') {
           deltaBufRef.current = '';
           reasoningBufRef.current = '';
-          setPendingTurn((cur) =>
-            cur ? { ...cur, assistant: frame.text ?? cur.assistant ?? '' } : cur,
-          );
+          writeTurn((cur) => ({ ...cur, assistant: frame.text ?? cur.assistant ?? '' }));
         }
       };
 
@@ -203,6 +238,7 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
             after_seq: 0,
             limit: 1000,
           });
+          if (requestIdRef.current !== requestId) return false;
           const records = Array.isArray(replay?.events) ? replay.events : [];
           // Empty sidecar → bail, keep partial preview (don't wipe what live stream already showed).
           if (records.length === 0) return false;
@@ -211,9 +247,7 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
             cancelAnimationFrame(rafRef.current);
             rafRef.current = null;
           }
-          setPendingTurn((cur) =>
-            cur ? { ...cur, assistant: '', reasoning: '', tools: [], error: null } : cur,
-          );
+          writeTurn((cur) => ({ ...cur, assistant: '', reasoning: '', tools: [], error: null }));
           let sawDone = false;
           for (const rec of records) {
             const f = rec?.frame ?? rec;
@@ -228,15 +262,19 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
           }
           handleRef.current?.cancel?.();
           requestIdRef.current = null;
+          if (activeRef.current?.req === requestId) activeRef.current = null;
           handleRef.current = null;
+          writeTurn((cur) => ({ ...cur, pending: false }));
           try {
             await onCompletedRef.current?.({
               ok: true,
               sessionId: streamSessionId,
               recovered: true,
+              userText: trimmed,
+              baseline,
             });
           } catch { /* */ }
-          setPendingTurn(null);
+          settleTurn(requestId);
           return true;
         } catch {
           return false;
@@ -258,7 +296,7 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
           })
           .finally(() => {
             replayInFlightRef.current = false;
-            lastFrameAtRef.current = Date.now();  // back off the watchdog after one attempt
+            if (requestIdRef.current === requestId) lastFrameAtRef.current = Date.now();  // back off the watchdog after one attempt
           });
       }, STALL_POLL_INTERVAL_MS);
 
@@ -281,16 +319,23 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
             watchdogTimerRef.current = null;
           }
           requestIdRef.current = null;
+          if (activeRef.current?.req === requestId) activeRef.current = null;
           handleRef.current = null;
+          writeTurn((cur) => ({ ...cur, pending: false }));
           try {
-            await onCompletedRef.current?.({ ok: true, sessionId: streamSessionId });
+            await onCompletedRef.current?.({
+              ok: true,
+              sessionId: streamSessionId,
+              userText: trimmed,
+              baseline,
+            });
           } catch { /* */ }
-          setPendingTurn(null);
+          settleTurn(requestId);
         },
         onError: async (err) => {
           if (requestIdRef.current !== requestId) return;
           const recovered = await tryRecoverFromSidecar();
-          if (recovered) return;
+          if (recovered || requestIdRef.current !== requestId) return;
           if (rafRef.current) {
             cancelAnimationFrame(rafRef.current);
             rafRef.current = null;
@@ -301,10 +346,17 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
           }
           flushDeltas();
           requestIdRef.current = null;
+          if (activeRef.current?.req === requestId) activeRef.current = null;
           handleRef.current = null;
-          setPendingTurn((cur) => (cur ? { ...cur, error: String(err?.message ?? err), pending: false } : null));
+          writeTurn((cur) => ({ ...cur, error: String(err?.message ?? err), pending: false }));
           try {
-            const ret = onCompletedRef.current?.({ ok: false, error: err });
+            const ret = onCompletedRef.current?.({
+              ok: false,
+              error: err,
+              sessionId: streamSessionId,
+              userText: trimmed,
+              baseline,
+            });
             if (ret && typeof ret.then === 'function') ret.catch(() => {});
           } catch { /* */ }
         },
@@ -312,8 +364,16 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
       handleRef.current = handle;
       return requestId;
     },
-    [call, callStream, profile, sessionId, flushDeltas],
+    [call, callStream, profile, sessionId, flushDeltas, settleTurn, writeTurn],
   );
 
-  return { send, cancel, pendingTurn, isStreaming: !!pendingTurn?.pending };
+  const isSending = useCallback(() => !!turnRef.current?.pending, []);
+
+  return {
+    send,
+    cancel,
+    isSending,
+    pendingTurn,
+    isStreaming: !!pendingTurn?.pending,
+  };
 }

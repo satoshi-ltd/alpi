@@ -2,20 +2,24 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { useColorScheme } from 'react-native';
 
 import { loadThemePref, saveThemePref } from '../lib/themePref';
-import { palettes, shadows, fonts, fontSizes, lineHeights, mobile, alpha, motion } from './tokens';
+import { clampTextScale, DEFAULT_TEXT_SCALE, scaleFontSizes } from './textScale';
+import { loadTextScale, saveTextScale } from './textScalePref';
+import { palettes, shadows, fonts, lineHeights, mobile, alpha, motion } from './tokens';
 
 const ThemeContext = createContext(null);
 
 export function ThemeProvider({ children }) {
   const osScheme = useColorScheme();
   const [pref, setPref] = useState('system');
+  const [textScale, setTextScaleState] = useState(DEFAULT_TEXT_SCALE);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    loadThemePref().then((value) => {
+    Promise.all([loadThemePref(), loadTextScale()]).then(([theme, scale]) => {
       if (cancelled) return;
-      setPref(value ?? 'system');
+      setPref(theme ?? 'system');
+      setTextScaleState(clampTextScale(scale));
       setHydrated(true);
     });
     return () => {
@@ -32,6 +36,14 @@ export function ThemeProvider({ children }) {
     saveThemePref(next);
   }, []);
 
+  const setTextScale = useCallback((next) => {
+    const value = clampTextScale(next);
+    setTextScaleState(value);
+    saveTextScale(value);
+  }, []);
+
+  const fontSizes = useMemo(() => scaleFontSizes(textScale), [textScale]);
+
   const value = useMemo(
     () => ({
       mode,
@@ -41,13 +53,15 @@ export function ThemeProvider({ children }) {
       shadow,
       fonts,
       fontSizes,
+      textScale,
+      setTextScale,
       lineHeights,
       mobile,
       alpha,
       motion,
       hydrated,
     }),
-    [mode, pref, setMode, colors, shadow, hydrated],
+    [mode, pref, setMode, colors, shadow, fontSizes, textScale, setTextScale, hydrated],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

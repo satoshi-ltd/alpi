@@ -22,4 +22,9 @@ describe('canComposerSend', () => {
   it('blocks every send when disabled, even with valid text + attachment (paused profile)', () => {
     expect(canComposerSend({ hasText: true, hasAttachments: true, taskOk: true, disabled: true })).toBe(false);
   });
+
+  it('blocks a second send while the current turn is still streaming', () => {
+    expect(canComposerSend({ hasText: true, hasAttachments: false, taskOk: true, disabled: false, busy: true })).toBe(false);
+    expect(canComposerSend({ hasText: true, hasAttachments: false, taskOk: true, disabled: false, busy: false })).toBe(true);
+  });
 });

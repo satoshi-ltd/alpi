@@ -25,6 +25,8 @@ function maybeAuthFailed(err, endpoint, method) {
 }
 
 const REQUEST_TIMEOUT_MS = 10000;
+// Only inbound frames refresh lastSeen — a send succeeds on a silently broken path (NAT/DERP drop) and would mask the death.
+const STALE_SOCKET_MS = 30000;
 
 function buildParams(endpoint, params) {
   const out = { ...(params || {}) };
@@ -43,10 +45,8 @@ function nextId() {
 // Persistent WS pool per (ip, port, token), multiplexed by request id — saves the ~2 RTT handshake on every Tailscale RPC. Stream calls open their own socket.
 const _pool = new Map();  // key -> Entry
 
-function dropEntry(key, reason) {
-  const entry = _pool.get(key);
-  if (!entry) return;
-  _pool.delete(key);
+function settleEntry(entry, reason) {
+  if (entry.closed) return;
   entry.closed = true;
   for (const p of entry.pending.values()) {
     clearTimeout(p.timer);
@@ -56,10 +56,26 @@ function dropEntry(key, reason) {
   try { entry.ws.close(); } catch { /* */ }
 }
 
+function dropEntry(key, reason) {
+  const entry = _pool.get(key);
+  if (!entry) return;
+  _pool.delete(key);
+  settleEntry(entry, reason);
+}
+
+function closeIfDrained(entry) {
+  if (entry.retired && entry.pending.size === 0) settleEntry(entry, null);
+}
+
 function ensureEntry(endpoint) {
   const key = endpointKey(endpoint);
   let entry = _pool.get(key);
-  if (entry && !entry.closed) return entry;
+  if (entry && !entry.closed) {
+    if (Date.now() - entry.lastSeen < STALE_SOCKET_MS) return entry;
+    _pool.delete(key);
+    if (entry.pending.size > 0) entry.retired = true;
+    else settleEntry(entry, new RpcError(-32002, `connection to ${entry.url} went stale`));
+  }
 
   const url = endpointUrl(endpoint);
   const ws = new WebSocket(url);
@@ -69,13 +85,22 @@ function ensureEntry(endpoint) {
     url,
     opened: false,
     closed: false,
+    retired: false,
+    lastSeen: Date.now(),
     pending: new Map(),  // id -> { resolve, reject, timer, method, endpoint }
     sendQueue: [],
   };
   _pool.set(key, entry);
 
+  // A discarded entry's late events must never evict its replacement under the same key.
+  const dropSocket = (reason) => {
+    if (_pool.get(key) === entry) _pool.delete(key);
+    settleEntry(entry, reason);
+  };
+
   ws.onopen = () => {
     entry.opened = true;
+    entry.lastSeen = Date.now();
     for (const { id, payload } of entry.sendQueue) {
       // Skip queued payloads whose call already gave up (timeout/drop) — prevents late LATE-fire mutations.
       if (!entry.pending.has(id)) continue;
@@ -86,12 +111,13 @@ function ensureEntry(endpoint) {
 
   ws.onmessage = (event) => {
     if (entry.closed) return;
+    entry.lastSeen = Date.now();
     let body;
     try {
       body = JSON.parse(typeof event.data === 'string' ? event.data : '');
     } catch {
       // Malformed frame = server bug; drop the whole entry so callers reconnect cleanly.
-      dropEntry(key, new RpcError(-32700, 'invalid JSON in response'));
+      dropSocket(new RpcError(-32700, 'invalid JSON in response'));
       return;
     }
     const id = body.id;
@@ -102,25 +128,27 @@ function ensureEntry(endpoint) {
       const err = new RpcError(body.error.code, body.error.message, body.error.data);
       maybeAuthFailed(err, slot.endpoint, slot.method);
       if (err.code === AUTH_FAILED) {
-        dropEntry(key, err);
+        dropSocket(err);
         return;
       }
       entry.pending.delete(id);
       clearTimeout(slot.timer);
       slot.reject(err);
+      closeIfDrained(entry);
       return;
     }
     entry.pending.delete(id);
     clearTimeout(slot.timer);
     slot.resolve(body.result);
+    closeIfDrained(entry);
   };
 
   ws.onerror = () => {
-    dropEntry(key, new RpcError(-32001, `connection failed to ${url}`));
+    dropSocket(new RpcError(-32001, `connection failed to ${url}`));
   };
 
   ws.onclose = () => {
-    dropEntry(key, new RpcError(-32002, 'connection closed before response'));
+    dropSocket(new RpcError(-32002, 'connection closed before response'));
   };
 
   return entry;
@@ -139,6 +167,7 @@ export async function call(endpoint, method, params = {}, options = {}) {
       const slot = entry.pending.get(id);
       if (!slot) return;
       entry.pending.delete(id);
+      closeIfDrained(entry);
       // A single timeout doesn't condemn the socket — only the call.
       reject(new RpcError(-32000, `request timed out after ${timeoutMs}ms`));
     }, timeoutMs);

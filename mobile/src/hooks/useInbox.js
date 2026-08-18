@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useEndpoint } from '../lib/EndpointContext';
 import { profileEmptyState } from '../lib/profileReady';
@@ -6,6 +6,16 @@ import { profileLabel } from '../lib/profileLabel';
 import { useReadState } from '../lib/readState';
 import { accentForProfile } from '../theme/accents';
 import { useProfileSummaries, useWorkgroups } from './useDaemonData';
+import { useEventEffect } from './useEvents';
+
+const ACTIVITY_EVENTS = ['wg.post', 'wg.done', 'wg.mention'];
+const ACTIVITY_TTL_MS = 10000;
+const ACTIVITY_SWEEP_MS = 3000;
+
+function sweepActivity(prev, cutoff) {
+  const live = Object.entries(prev).filter(([, at]) => at > cutoff);
+  return live.length === Object.keys(prev).length ? prev : Object.fromEntries(live);
+}
 
 function previewFromSession(latest) {
   if (!latest) return '';
@@ -36,6 +46,23 @@ export function useInbox() {
   const { endpoint } = useEndpoint();
   // connId-partitioned so switching paired daemons doesn't bleed unreads.
   const { checkProfile, checkWorkgroup } = useReadState(endpoint?.id);
+  const [activity, setActivity] = useState({});
+
+  // Keyed by wg_id alone — the event names the emitting profile, which needn't be the deduped row's.
+  useEventEffect(ACTIVITY_EVENTS, (ev) => {
+    const wgId = ev?.data?.wg_id;
+    if (!wgId) return;
+    setActivity((prev) => ({ ...prev, [wgId]: Date.now() }));
+  });
+
+  useEffect(() => {
+    setActivity({});
+    const timer = setInterval(
+      () => setActivity((prev) => sweepActivity(prev, Date.now() - ACTIVITY_TTL_MS)),
+      ACTIVITY_SWEEP_MS,
+    );
+    return () => clearInterval(timer);
+  }, [endpoint?.id]);
 
   const items = useMemo(() => {
     const profileItems = (profilesQ.data?.profiles ?? []).map((p) => {
@@ -82,19 +109,18 @@ export function useInbox() {
         paused: w.paused,
         preview: w.last_body || w.briefing || '',
         unread,
+        state: activity[w.id] ? 'working' : undefined,
         ts: fmtRelative(wgTs),
         sortKey: wgTs,
         raw: w,
       };
     });
-    // Filter sessionless items — reachable via Compose FAB instead.
-    const active = [...profileItems, ...wgItems].filter((it) => it.sortKey > 0);
-    return active.sort((a, b) => {
+    return [...profileItems, ...wgItems].sort((a, b) => {
       if (!!a.paused !== !!b.paused) return a.paused ? 1 : -1;
-      if (!!a.unread !== !!b.unread) return a.unread ? -1 : 1;
+      if (!!a.needsProvider !== !!b.needsProvider) return a.needsProvider ? 1 : -1;
       return b.sortKey - a.sortKey;
     });
-  }, [profilesQ.data, wgsQ.data, checkProfile, checkWorkgroup]);
+  }, [profilesQ.data, wgsQ.data, activity, checkProfile, checkWorkgroup]);
 
   // Stable ref so useFocusEffect(useCallback(refresh, [refresh])) doesn't infinite-loop.
   const refresh = useCallback(

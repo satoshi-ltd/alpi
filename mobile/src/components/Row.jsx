@@ -1,23 +1,14 @@
 import { Pressable, Text, View } from 'react-native';
-import { space , fontSizes} from '../theme/tokens';
+import { space } from '../theme/tokens';
 
+import { Eyebrow } from './Eyebrow';
+import { Icon } from './Icon';
 import { useTheme } from '../theme/ThemeContext';
 
 export function SectionHeader({ children }) {
-  const { colors, fonts, fontSizes } = useTheme();
   return (
     <View style={{ paddingHorizontal: space.s8, paddingTop: space.s9, paddingBottom: space.s3 }}>
-      <Text
-        style={{
-          fontFamily: fonts.mono,
-          fontSize: fontSizes.xs,
-          letterSpacing: 0.6,
-          textTransform: 'uppercase',
-          color: colors.ink3,
-        }}
-      >
-        {children}
-      </Text>
+      <Eyebrow>{children}</Eyebrow>
     </View>
   );
 }
@@ -87,7 +78,7 @@ export function Row({ label, helper, value, leading, trailing, onPress, onLongPr
       ) : null}
       {trailing}
       {chevron && onPress && !disabled && !danger ? (
-        <Text style={{ color: colors.ink4, fontSize: fontSizes.xl }}>›</Text>
+        <Icon name="chevron-right" size="md" color={colors.ink4} />
       ) : null}
     </View>
   );

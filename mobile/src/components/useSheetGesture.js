@@ -1,5 +1,3 @@
-// `mounted` lags `open` by DURATION_OUT so the exit animation plays before <Modal> tears down.
-
 import { useEffect, useState } from 'react';
 import { Gesture } from 'react-native-gesture-handler';
 import Animated, {
@@ -10,32 +8,33 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-const EASE = Easing.bezier(0.2, 0.7, 0.2, 1);
-const DURATION_IN = 220;
-const DURATION_OUT = 200;
-const UNMOUNT_BUFFER = 40; // small slack so the last frame of the timing animation still renders
+export const EASE_IN = Easing.bezier(0.2, 0.7, 0.2, 1);
+// Time-reverse of EASE_IN. Reusing EASE_IN for the exit covered 70% of a viewport-tall travel in the first 16ms, so the sheet was gone in one frame.
+export const EASE_OUT = Easing.bezier(0.8, 0, 0.8, 0.3);
+export const DURATION_IN = 220;
+export const DURATION_OUT = 220;
+export const UNMOUNT_BUFFER = 40;
 const DISMISS_PX = 80;
 const DISMISS_VELOCITY = 800;
 const OFF_SCREEN = 900;
 
-export function useSheetGesture(open, onClose) {
-  const tx = useSharedValue(OFF_SCREEN);
+export function useSheetGesture(open, onClose, offScreen = OFF_SCREEN) {
+  const tx = useSharedValue(offScreen);
   const backdrop = useSharedValue(0);
-  // `mounted` keeps the Modal+children alive long enough for the exit animation to complete. It flips true synchronously when `open` becomes true (so the IN animation has a target to animate into) and false on a timer after `open` becomes false.
   const [mounted, setMounted] = useState(open);
 
   useEffect(() => {
     if (open) {
       setMounted(true);
-      tx.value = withTiming(0, { duration: DURATION_IN, easing: EASE });
-      backdrop.value = withTiming(1, { duration: DURATION_IN, easing: EASE });
+      tx.value = withTiming(0, { duration: DURATION_IN, easing: EASE_IN });
+      backdrop.value = withTiming(1, { duration: DURATION_IN, easing: EASE_IN });
       return undefined;
     }
-    tx.value = withTiming(OFF_SCREEN, { duration: DURATION_OUT, easing: EASE });
-    backdrop.value = withTiming(0, { duration: DURATION_OUT, easing: EASE });
+    tx.value = withTiming(offScreen, { duration: DURATION_OUT, easing: EASE_OUT });
+    backdrop.value = withTiming(0, { duration: DURATION_OUT, easing: EASE_OUT });
     const t = setTimeout(() => setMounted(false), DURATION_OUT + UNMOUNT_BUFFER);
     return () => clearTimeout(t);
-  }, [open, tx, backdrop]);
+  }, [open, offScreen, tx, backdrop]);
 
   const close = () => {
     onClose?.();
@@ -50,10 +49,10 @@ export function useSheetGesture(open, onClose) {
     })
     .onEnd((e) => {
       if (e.translationY > DISMISS_PX || e.velocityY > DISMISS_VELOCITY) {
-        tx.value = withTiming(OFF_SCREEN, { duration: DURATION_OUT, easing: EASE }, () => runOnJS(close)());
-        backdrop.value = withTiming(0, { duration: DURATION_OUT, easing: EASE });
+        tx.value = withTiming(offScreen, { duration: DURATION_OUT, easing: EASE_OUT }, () => runOnJS(close)());
+        backdrop.value = withTiming(0, { duration: DURATION_OUT, easing: EASE_OUT });
       } else {
-        tx.value = withTiming(0, { duration: DURATION_IN, easing: EASE });
+        tx.value = withTiming(0, { duration: DURATION_IN, easing: EASE_IN });
       }
     });
 

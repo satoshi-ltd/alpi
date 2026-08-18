@@ -43,7 +43,7 @@ export default function MemoryDetail() {
   const mono = { fontFamily: fonts.mono, fontSize: fontSizes.sm, lineHeight: fontSizes.sm * 1.55, color: colors.ink };
   const iconBtn = (icon, onPress) => (
     <Pressable onPress={onPress} hitSlop={space.s3} style={styles.iconBtn}>
-      <Icon name={icon} size={20} color={colors.ink2} strokeWidth={2} />
+      <Icon name={icon} size="lg" color={colors.ink2} />
     </Pressable>
   );
 

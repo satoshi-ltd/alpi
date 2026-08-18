@@ -2,6 +2,19 @@ import { normalizeEndpointUrl } from './endpoint.js';
 
 export class PairingError extends Error {}
 
+const LINK_PARAMS = ['url', 'host', 'port', 'token', 'pairing_token', 'name', 'connection_id'];
+
+export function pairingLinkFromParams(params) {
+  const query = new URLSearchParams();
+  for (const key of LINK_PARAMS) {
+    const value = params?.[key];
+    if (typeof value === 'string' && value) query.set(key, value);
+  }
+  if (!query.get('url') && !(query.get('host') && query.get('port'))) return '';
+  if (!query.get('token') && !query.get('pairing_token')) return '';
+  return `alpi://device?${query.toString()}`;
+}
+
 export function parsePairing(text) {
   const raw = (text ?? '').trim();
   if (!raw) throw new PairingError('Empty pairing input');

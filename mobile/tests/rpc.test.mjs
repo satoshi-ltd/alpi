@@ -172,6 +172,129 @@ await test('auth-failed drops pool so next call reconnects', async () => {
   assert.deepStrictEqual(await p2, { ok: true });
 });
 
+await test('a socket unseen past the staleness window is replaced for new calls', async () => {
+  _resetPoolForTests();
+  nextWs = null;
+  const realNow = Date.now;
+  try {
+    const first = call(endpoint, 'host.echo', {});
+    const ws = nextWs;
+    ws.open();
+    ws.message({ id: JSON.parse(ws.sent[0]).id, result: { ok: true } });
+    assert.deepStrictEqual(await first, { ok: true });
+    Date.now = () => realNow() + 31000;
+    const fresh = call(endpoint, 'host.list', {});
+    assert.notStrictEqual(nextWs, ws, 'stale ws must be replaced, not reused');
+    assert.strictEqual(ws.readyState, 3, 'a stale socket with nothing in flight must be closed');
+    nextWs.open();
+    nextWs.message({ id: JSON.parse(nextWs.sent[0]).id, result: { ok: true } });
+    assert.deepStrictEqual(await fresh, { ok: true });
+  } finally {
+    Date.now = realNow;
+  }
+});
+
+await test('the staleness sweep does not kill a request that is still in flight', async () => {
+  _resetPoolForTests();
+  nextWs = null;
+  const realNow = Date.now;
+  try {
+    const upload = call(endpoint, 'host.upload', { photo: 'x' }, { timeoutMs: 60000 });
+    const wsBefore = nextWs;
+    wsBefore.open();
+    const uploadId = JSON.parse(wsBefore.sent[0]).id;
+    Date.now = () => realNow() + 31000;
+    const other = call(endpoint, 'host.list', {});
+    assert.notStrictEqual(nextWs, wsBefore, 'the new call still gets a fresh socket');
+    nextWs.open();
+    nextWs.message({ id: JSON.parse(nextWs.sent[0]).id, result: { listed: true } });
+    assert.deepStrictEqual(await other, { listed: true });
+    wsBefore.message({ id: uploadId, result: { uploaded: true } });
+    assert.deepStrictEqual(await upload, { uploaded: true });
+  } finally {
+    Date.now = realNow;
+  }
+});
+
+await test('a retired socket closes once its last in-flight call settles', async () => {
+  _resetPoolForTests();
+  nextWs = null;
+  const realNow = Date.now;
+  try {
+    const upload = call(endpoint, 'host.upload', {}, { timeoutMs: 60000 });
+    const wsBefore = nextWs;
+    wsBefore.open();
+    const uploadId = JSON.parse(wsBefore.sent[0]).id;
+    Date.now = () => realNow() + 31000;
+    call(endpoint, 'host.list', {}).catch(() => {});
+    assert.strictEqual(wsBefore.readyState, 1, 'retired socket stays open while it owes a response');
+    wsBefore.message({ id: uploadId, result: { uploaded: true } });
+    await upload;
+    assert.strictEqual(wsBefore.readyState, 3, 'retired socket must not leak past its last call');
+  } finally {
+    Date.now = realNow;
+  }
+});
+
+await test('a retired socket that really is dead still rejects the call it was carrying', async () => {
+  _resetPoolForTests();
+  nextWs = null;
+  const realNow = Date.now;
+  try {
+    const upload = call(endpoint, 'host.upload', {}, { timeoutMs: 60000 });
+    const wsBefore = nextWs;
+    wsBefore.open();
+    Date.now = () => realNow() + 31000;
+    const other = call(endpoint, 'host.list', {});
+    const wsAfter = nextWs;
+    wsBefore.close();
+    await assert.rejects(upload, /closed before response/);
+    wsAfter.open();
+    wsAfter.message({ id: JSON.parse(wsAfter.sent[0]).id, result: { listed: true } });
+    assert.deepStrictEqual(await other, { listed: true });
+  } finally {
+    Date.now = realNow;
+  }
+});
+
+await test('a retired socket that never answers rejects on its own budget, not the sweep', async () => {
+  _resetPoolForTests();
+  nextWs = null;
+  const realNow = Date.now;
+  try {
+    const upload = call(endpoint, 'host.upload', {}, { timeoutMs: 40 });
+    const wsBefore = nextWs;
+    wsBefore.open();
+    Date.now = () => realNow() + 31000;
+    call(endpoint, 'host.list', {}).catch(() => {});
+    await assert.rejects(upload, /timed out/);
+    assert.strictEqual(wsBefore.readyState, 3, 'a timed-out retired socket must still be closed');
+  } finally {
+    Date.now = realNow;
+  }
+});
+
+await test('inbound frames keep a live socket out of the staleness sweep', async () => {
+  _resetPoolForTests();
+  nextWs = null;
+  const realNow = Date.now;
+  try {
+    const first = call(endpoint, 'host.echo', {});
+    const ws = nextWs;
+    ws.open();
+    Date.now = () => realNow() + 25000;
+    ws.message({ id: JSON.parse(ws.sent[0]).id, result: { ok: true } });
+    assert.deepStrictEqual(await first, { ok: true });
+    Date.now = () => realNow() + 50000;
+    const second = call(endpoint, 'host.echo', {});
+    assert.strictEqual(nextWs, ws, 'a socket seen alive inside the window must be reused');
+    ws.message({ id: JSON.parse(ws.sent[1]).id, result: { again: true } });
+    assert.deepStrictEqual(await second, { again: true });
+  } finally {
+    Date.now = realNow;
+  }
+});
+
 await test('connection-disabled reports its reason without masquerading as rejection', async () => {
   _resetPoolForTests();
   nextWs = null;

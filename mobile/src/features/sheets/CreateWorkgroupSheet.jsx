@@ -1,44 +1,38 @@
-// Daemon: host.workgroup.create({profile, name, members, briefing}).
-// `members` = peer ids resolved via the hub's peers.yaml; hubs need counts.peers > 0.
-// A manually created workgroup deliberates — only a recipe declares pipelines.
-
-import { useRouter } from 'expo-router';
+import { usePathname, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { radii, space , fontSizes} from '../../src/theme/tokens';
+import { Pressable, ScrollView, Text, View } from 'react-native';
+import { mobile, radii, space } from '../../theme/tokens';
 
-import { ActionSheet } from '../../src/components/ActionSheet';
-import { Button } from '../../src/components/Button';
-import { Diamond } from '../../src/components/Diamond';
-import { Field } from '../../src/components/Field';
-import { Icon } from '../../src/components/Icon';
-import { ScreenHeader } from '../../src/components/ScreenHeader';
-import { useToast } from '../../src/components/Toast';
-import { useProfileSummaries } from '../../src/hooks/useDaemonData';
-import { useProfile } from '../../src/hooks/useSubject';
-import { useEndpoint } from '../../src/lib/EndpointContext';
-import { accentForProfile } from '../../src/theme/accents';
-import { useTheme } from '../../src/theme/ThemeContext';
-import { AdminGuard } from '../../src/components/AdminGuard';
+import { ActionSheet } from '../../components/ActionSheet';
+import { Diamond } from '../../components/Diamond';
+import { Field, FieldLabel } from '../../components/Field';
+import { Icon } from '../../components/Icon';
+import { Sheet } from '../../components/Sheet';
+import { useToast } from '../../components/Toast';
+import { useProfileSummaries, useWorkgroups } from '../../hooks/useDaemonData';
+import { useProfile } from '../../hooks/useSubject';
+import { useEndpoint } from '../../lib/EndpointContext';
+import { openVerb } from '../../lib/panes';
+import { usePane } from '../../nav/PaneContext';
+import { accentForProfile } from '../../theme/accents';
+import { useTheme } from '../../theme/ThemeContext';
 
-export default function NewWorkgroupRoute() {
-  return (
-    <AdminGuard>
-      <NewWorkgroup />
-    </AdminGuard>
-  );
-}
+const CHIP_H = 32;
+const CHIP_SLOP = (mobile.tap - CHIP_H) / 2;
 
-function NewWorkgroup() {
+export function CreateWorkgroupSheet({ open, onClose }) {
+  const { colors, fonts, fontSizes } = useTheme();
   const router = useRouter();
+  const pathname = usePathname();
+  const { twoPane } = usePane();
   const toast = useToast();
   const { call } = useEndpoint();
   const summaries = useProfileSummaries();
-  const { colors, fonts, fontSizes } = useTheme();
+  const wgs = useWorkgroups();
+
   const [hub, setHub] = useState(null);
   const [name, setName] = useState('');
-  const [members, setMembers] = useState(new Set());
+  const [members, setMembers] = useState(() => new Set());
   const [briefing, setBriefing] = useState('');
   const [busy, setBusy] = useState(false);
   const [hubPickerOpen, setHubPickerOpen] = useState(false);
@@ -49,8 +43,17 @@ function NewWorkgroup() {
   );
 
   useEffect(() => {
-    if (!hub && eligibleHubs.length > 0) setHub(eligibleHubs[0].name);
-  }, [eligibleHubs, hub]);
+    setHub(null);
+    setName('');
+    setBriefing('');
+    setBusy(false);
+    setHubPickerOpen(false);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || hub || eligibleHubs.length === 0) return;
+    setHub(eligibleHubs[0].name);
+  }, [open, hub, eligibleHubs]);
 
   useEffect(() => { setMembers(new Set()); }, [hub]);
 
@@ -61,7 +64,8 @@ function NewWorkgroup() {
   );
   const peers = hubDetail?.peers ?? [];
 
-  const ready = !!hub && name.trim().length > 0 && members.size > 0;
+  const noHubs = !summaries.loading && eligibleHubs.length === 0;
+  const ready = !!hub && name.trim().length > 0 && members.size > 0 && !busy;
 
   const toggleMember = (mid) => {
     const next = new Set(members);
@@ -71,7 +75,7 @@ function NewWorkgroup() {
   };
 
   const create = async () => {
-    if (!ready || busy) return;
+    if (!ready) return;
     setBusy(true);
     try {
       const result = await call('host.workgroup.create', {
@@ -81,9 +85,11 @@ function NewWorkgroup() {
         briefing: briefing.trim() || undefined,
       });
       const wgId = result?.wg_id ?? result?.id;
+      // Refresh before navigating: /wg/<id> renders "not found" against a list that predates the create.
+      await wgs.refresh?.();
       toast({ title: 'Workgroup created', message: `#${name.trim()}` });
-      if (wgId) router.replace(`/wg/${wgId}`);
-      else router.replace('/');
+      onClose?.();
+      router[openVerb({ twoPane, pathname })](wgId ? `/wg/${wgId}` : '/');
     } catch (e) {
       toast({ title: 'Create failed', message: String(e) });
     } finally {
@@ -91,25 +97,18 @@ function NewWorkgroup() {
     }
   };
 
-  const Eyebrow = ({ children }) => (
-    <Text
-      style={{
-        fontFamily: fonts.mono,
-        fontSize: fontSizes.xs,
-        color: colors.ink3,
-        letterSpacing: 0.6,
-        textTransform: 'uppercase',
-      }}
+  return (
+    <Sheet
+      open={open}
+      onClose={onClose}
+      title="New workgroup"
+      subtitle={noHubs ? undefined : 'HUB · NAME · MEMBERS'}
+      primaryAction={
+        noHubs ? undefined : { label: 'Create', onPress: create, disabled: !ready, loading: busy }
+      }
     >
-      {children}
-    </Text>
-  );
-
-  if (!summaries.loading && eligibleHubs.length === 0) {
-    return (
-      <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-        <ScreenHeader title="New workgroup" onBack={() => router.back()} />
-        <View style={{ padding: space.s9, gap: space.s5 }}>
+      {noHubs ? (
+        <View style={{ padding: space.s8, gap: space.s5 }}>
           <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.md, color: colors.ink2 }}>
             No profile has any ALP peers yet. A workgroup needs at least one peer to invite.
           </Text>
@@ -117,22 +116,15 @@ function NewWorkgroup() {
             Open a profile and add a peer from Settings · ALP, then come back here.
           </Text>
         </View>
-      </SafeAreaView>
-    );
-  }
-
-  return (
-    <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-      <ScreenHeader
-        title="New workgroup"
-        onBack={() => router.back()}
-        right={<Button title="Create" size="md" onPress={create} disabled={!ready || busy} loading={busy} />}
-      />
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={{ padding: space.s8, gap: space.s9 }} keyboardShouldPersistTaps="handled">
+      ) : (
+        <ScrollView
+          contentContainerStyle={{ padding: space.s8, gap: space.s9 }}
+          keyboardShouldPersistTaps="handled"
+        >
           <View style={{ gap: space.s3 }}>
-            <Eyebrow>Hub</Eyebrow>
+            <FieldLabel>Hub</FieldLabel>
             <Pressable
+              accessibilityLabel="Pick hub profile"
               onPress={() => setHubPickerOpen(true)}
               style={({ pressed }) => ({
                 flexDirection: 'row',
@@ -143,12 +135,12 @@ function NewWorkgroup() {
                 borderColor: colors.line2,
                 borderRadius: radii.lg,
                 paddingHorizontal: space.s6,
-                minHeight: 44,
+                minHeight: mobile.tap,
               })}
             >
               {hubSummary ? (
                 <>
-                  <Diamond color={hubSummary.accent ?? accentForProfile(hubSummary.name)}  />
+                  <Diamond color={hubSummary.accent ?? accentForProfile(hubSummary.name)} />
                   <Text style={{ flex: 1, fontFamily: fonts.mono, fontSize: fontSizes.md, color: colors.ink }}>
                     @{hubSummary.name}
                   </Text>
@@ -178,7 +170,7 @@ function NewWorkgroup() {
           />
 
           <View style={{ gap: space.s4 }}>
-            <Eyebrow>Members — peers of @{hub ?? '…'}</Eyebrow>
+            <FieldLabel>Members — peers of @{hub ?? '…'}</FieldLabel>
             {peers.length === 0 ? (
               <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink4 }}>
                 @{hub} has no peers yet — add some from Profile · ALP first
@@ -192,13 +184,15 @@ function NewWorkgroup() {
                   return (
                     <Pressable
                       key={peer.id}
+                      accessibilityLabel={`@${peer.alias || peer.id}`}
                       onPress={() => toggleMember(peer.id)}
+                      hitSlop={CHIP_SLOP}
                       style={{
                         flexDirection: 'row',
                         alignItems: 'center',
                         gap: space.s2,
                         paddingHorizontal: space.s5,
-                        height: 32,
+                        height: CHIP_H,
                         borderRadius: radii.pill,
                         backgroundColor: on ? `${peerAccent}33` : colors.hover,
                         borderWidth: on ? 1 : 0,
@@ -231,7 +225,7 @@ function NewWorkgroup() {
             placeholder="what is this workgroup about? who does what?"
           />
         </ScrollView>
-      </KeyboardAvoidingView>
+      )}
 
       <ActionSheet
         open={hubPickerOpen}
@@ -246,6 +240,6 @@ function NewWorkgroup() {
           onPress: () => setHub(p.name),
         }))}
       />
-    </SafeAreaView>
+    </Sheet>
   );
 }

@@ -6,15 +6,17 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
-import { radii, space , fontSizes} from '../theme/tokens';
+import { radii, space } from '../theme/tokens';
 
 import { useTheme } from '../theme/ThemeContext';
 import { Button } from './Button';
+import { useExitSnapshot } from './useExitSnapshot';
 
-// Same cubic-bezier as bottom sheets — one motion vocabulary across modals.
-const EASE = Easing.bezier(0.2, 0.7, 0.2, 1);
+// EASE_OUT is the time-reverse of EASE_IN, not EASE_IN replayed backwards — that front-loads the exit and the dialog is gone in one frame.
+const EASE_IN = Easing.bezier(0.2, 0.7, 0.2, 1);
+const EASE_OUT = Easing.bezier(0.8, 0, 0.8, 0.3);
 const DURATION_IN = 200;
-const DURATION_OUT = 160;
+const DURATION_OUT = 200;
 const UNMOUNT_BUFFER = 40;
 
 // Inline code chip — use inside `body` for paths/handles. Renders as a tinted mono span that flows with surrounding text.
@@ -55,6 +57,7 @@ export function TypedConfirm({
   const { colors, fonts, fontSizes } = useTheme();
   const [value, setValue] = useState('');
   const ready = value.trim() === String(expected ?? '').trim();
+  const view = useExitSnapshot(open, { title, body, expected, confirmLabel });
 
   // mounted lags `open` by DURATION_OUT so the exit animation can play before <Modal> unmounts.
   const [mounted, setMounted] = useState(open);
@@ -65,12 +68,12 @@ export function TypedConfirm({
     if (!open) setValue('');
     if (open) {
       setMounted(true);
-      opacity.value = withTiming(1, { duration: DURATION_IN, easing: EASE });
-      scale.value = withTiming(1, { duration: DURATION_IN, easing: EASE });
+      opacity.value = withTiming(1, { duration: DURATION_IN, easing: EASE_IN });
+      scale.value = withTiming(1, { duration: DURATION_IN, easing: EASE_IN });
       return undefined;
     }
-    opacity.value = withTiming(0, { duration: DURATION_OUT, easing: EASE });
-    scale.value = withTiming(0.96, { duration: DURATION_OUT, easing: EASE });
+    opacity.value = withTiming(0, { duration: DURATION_OUT, easing: EASE_OUT });
+    scale.value = withTiming(0.96, { duration: DURATION_OUT, easing: EASE_OUT });
     const t = setTimeout(() => setMounted(false), DURATION_OUT + UNMOUNT_BUFFER);
     return () => clearTimeout(t);
   }, [open, opacity, scale]);
@@ -83,7 +86,14 @@ export function TypedConfirm({
   }));
 
   return (
-    <Modal visible={mounted} transparent animationType="none" statusBarTranslucent onRequestClose={onClose}>
+    <Modal
+      visible={mounted}
+      transparent
+      animationType="none"
+      statusBarTranslucent
+      supportedOrientations={['portrait', 'landscape-left', 'landscape-right']}
+      onRequestClose={onClose}
+    >
       <Animated.View style={[{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' }, backdropStyle]}>
         <Pressable
           onPress={onClose}
@@ -95,6 +105,7 @@ export function TypedConfirm({
           }}
         >
           <Animated.View
+            pointerEvents={open ? 'auto' : 'none'}
             style={[
               {
                 width: '100%',
@@ -125,7 +136,7 @@ export function TypedConfirm({
               letterSpacing: -0.01 * fontSizes.xl,
             }}
           >
-            {title}
+            {view.title}
           </Text>
           <Text
             style={{
@@ -135,7 +146,7 @@ export function TypedConfirm({
               lineHeight: fontSizes.md * 1.55,
             }}
           >
-            {body}
+            {view.body}
           </Text>
           <View style={{ gap: space.s3 }}>
             <Text
@@ -146,12 +157,12 @@ export function TypedConfirm({
                 letterSpacing: 0.6,
               }}
             >
-              TYPE <Code>{expected}</Code> TO CONFIRM
+              TYPE <Code>{view.expected}</Code> TO CONFIRM
             </Text>
             <TextInput
               value={value}
               onChangeText={setValue}
-              placeholder={String(expected ?? '')}
+              placeholder={String(view.expected ?? '')}
               placeholderTextColor={colors.ink4}
               autoCapitalize="none"
               autoCorrect={false}
@@ -171,7 +182,7 @@ export function TypedConfirm({
           </View>
           <View style={{ gap: space.s3, marginTop: space.s1 }}>
             <Button
-              title={confirmLabel}
+              title={view.confirmLabel}
               variant="danger"
               onPress={() => {
                 setValue('');

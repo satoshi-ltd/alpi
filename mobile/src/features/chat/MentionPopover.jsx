@@ -1,10 +1,11 @@
 import { Pressable, Text, View } from 'react-native';
-import { radii, space , fontSizes} from '../../theme/tokens';
+import { radii, space } from '../../theme/tokens';
 
 import { Diamond } from '../../components/Diamond';
 import { Pill } from '../../components/Pill';
 import { useProfileSummaries } from '../../hooks/useDaemonData';
 import { accentForProfile } from '../../theme/accents';
+import { modelLabel } from '../../lib/modelLabel';
 import { profileLabel } from '../../lib/profileLabel';
 import { useTheme } from '../../theme/ThemeContext';
 
@@ -55,7 +56,7 @@ export function MentionPopover({ candidates = [], onPick }) {
             {isHub ? <Pill tone="on">hub</Pill> : null}
             {profile?.model ? (
               <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4 }}>
-                {profile.model.split('/').slice(1).join('/')}
+                {modelLabel(profile.model)}
               </Text>
             ) : null}
           </Pressable>

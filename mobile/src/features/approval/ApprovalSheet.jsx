@@ -3,7 +3,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 
 import { Diamond } from '../../components/Diamond';
 import { Sheet } from '../../components/Sheet';
-import { fontSizes, lineHeights, radii, space } from '../../theme/tokens';
+import { lineHeights, radii, space } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeContext';
 import { useApprovalQueue } from './useApprovalQueue';
 
@@ -14,7 +14,7 @@ const ALLOW_CHOICES = [
 ];
 
 export function ApprovalSheet() {
-  const { colors, fonts } = useTheme();
+  const { colors, fonts, fontSizes } = useTheme();
   const { current, busy, error, respond } = useApprovalQueue();
   const [now, setNow] = useState(() => Date.now());
 
@@ -48,7 +48,7 @@ export function ApprovalSheet() {
   return (
     <Sheet open={!!current} onClose={deny} maxHeight="78%" hideHeader>
       {current ? (
-        <View style={{ paddingHorizontal: space.s8, paddingTop: space.s5, paddingBottom: space.s8, gap: space.s6 }}>
+        <View style={{ paddingHorizontal: space.s8, paddingTop: space.s1, paddingBottom: space.s8, gap: space.s6 }}>
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space.s5 }}>
             <View style={{ flex: 1, gap: space.s2 }}>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -94,11 +94,6 @@ export function ApprovalSheet() {
                 Allow this command?
               </Text>
             </View>
-            <Pressable disabled={busy} onPress={deny} hitSlop={10} style={{ paddingTop: 2 }}>
-              <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.md, color: colors.ink3 }}>
-                Cancel
-              </Text>
-            </Pressable>
           </View>
 
           <View style={{ gap: space.s1 }}>

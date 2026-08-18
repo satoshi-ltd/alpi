@@ -1,3 +1,3 @@
-export function canComposerSend({ hasText, hasAttachments, taskOk, disabled }) {
-  return !disabled && (hasText || hasAttachments) && Boolean(taskOk);
+export function canComposerSend({ hasText, hasAttachments, taskOk, disabled, busy }) {
+  return !disabled && !busy && (hasText || hasAttachments) && Boolean(taskOk);
 }

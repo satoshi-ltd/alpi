@@ -1,11 +1,13 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
+import { KeyboardPane } from '../../../../src/components/KeyboardPane';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { radii, space , fontSizes} from '../../../../src/theme/tokens';
+import { radii, space } from '../../../../src/theme/tokens';
 
 import { Button } from '../../../../src/components/Button';
 import { Field } from '../../../../src/components/Field';
+import { Eyebrow } from '../../../../src/components/Eyebrow';
 import { Icon } from '../../../../src/components/Icon';
 import { Pill } from '../../../../src/components/Pill';
 import { Row, RowSeparator, SectionHeader } from '../../../../src/components/Row';
@@ -135,7 +137,7 @@ export default function ProviderKey() {
         subtitle={`@${id} · ${info.env}${isExisting ? ' · set' : ''}`}
         onBack={() => router.back()}
       />
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+      <KeyboardPane>
         <ScrollView contentContainerStyle={{ padding: space.s8, gap: space.s8 }} keyboardShouldPersistTaps="handled">
           <Field
             label={isExisting ? 'New API key' : 'API key'}
@@ -148,7 +150,7 @@ export default function ProviderKey() {
             helper={isExisting ? 'leaving this blank keeps the current key' : undefined}
             rightSlot={
               <Pressable onPress={() => setShow((v) => !v)} hitSlop={6}>
-                <Icon name="search" size={18} color={colors.ink3} />
+                <Icon name="eye" size="md" color={colors.ink3} />
               </Pressable>
             }
           />
@@ -178,7 +180,7 @@ export default function ProviderKey() {
             <Button title="Remove key" variant="ghost" size="md" fullWidth onPress={() => setConfirmRemove(true)} />
           ) : null}
         </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardPane>
       <TypedConfirm
         open={confirmRemove}
         onClose={() => setConfirmRemove(false)}
@@ -252,7 +254,7 @@ function OllamaScreen({
         subtitle={`@${id} · ${isNew ? 'NEW INSTANCE' : 'LOCAL MODELS'}`}
         onBack={() => onSaved()}
       />
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+      <KeyboardPane>
         <ScrollView contentContainerStyle={{ paddingBottom: space.s10 }} keyboardShouldPersistTaps="handled">
           <View style={{ padding: space.s8, gap: space.s8 }}>
             <Field
@@ -284,17 +286,7 @@ function OllamaScreen({
           {!isNew ? (
             <>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: space.s8, paddingBottom: space.s3 }}>
-                <Text
-                  style={{
-                    fontFamily: fonts.mono,
-                    fontSize: fontSizes.xs,
-                    letterSpacing: 0.6,
-                    textTransform: 'uppercase',
-                    color: colors.ink3,
-                  }}
-                >
-                  Live models
-                </Text>
+                <Eyebrow>Live models</Eyebrow>
                 {ollamaModels.loading ? (
                   <ActivityIndicator color={colors.ink3} size="small" />
                 ) : (
@@ -345,7 +337,7 @@ function OllamaScreen({
             </>
           ) : null}
         </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardPane>
       <TypedConfirm
         open={confirmRemove}
         onClose={() => setConfirmRemove(false)}

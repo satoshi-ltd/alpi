@@ -2,7 +2,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { space , fontSizes} from '../../../../src/theme/tokens';
+import { space } from '../../../../src/theme/tokens';
 
 import { ActionSheet } from '../../../../src/components/ActionSheet';
 import { Icon } from '../../../../src/components/Icon';
@@ -152,15 +152,15 @@ export default function ScheduleList() {
         actions={
           target
             ? [
-                { id: 'fire', label: 'Fire now', icon: <Icon name="play" size={20} color={colors.ink2} />, onPress: () => fire(target.id) },
+                { id: 'fire', label: 'Fire now', icon: <Icon name="play" size="lg" color={colors.ink2} />, onPress: () => fire(target.id) },
                 {
                   id: 'toggle',
                   label: target.paused ? 'Resume' : 'Pause',
-                  icon: <Icon name={target.paused ? 'power' : 'pause'} size={20} color={colors.ink2} />,
+                  icon: <Icon name={target.paused ? 'power' : 'pause'} size="lg" color={colors.ink2} />,
                   onPress: () => togglePaused(target),
                 },
                 { divider: true },
-                { id: 'delete', label: 'Delete', danger: true, icon: <Icon name="trash" size={20} color={colors.danger} />, onPress: () => {
+                { id: 'delete', label: 'Delete', danger: true, icon: <Icon name="trash" size="lg" color={colors.danger} />, onPress: () => {
                   const job = target;
                   setTarget(null);
                   setConfirmDelete(job);

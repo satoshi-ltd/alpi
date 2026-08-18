@@ -4,10 +4,15 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 
 afterEach(cleanup);
 
+const { fontOf } = vi.hoisted(() => ({
+  fontOf: (style) => [style].flat(Infinity).filter(Boolean).reduce((f, s) => s.fontFamily ?? f, null),
+}));
+
 vi.mock('react-native', () => {
   const plain = ({ style, contentContainerStyle, onLayout, accessibilityLabel, ...rest }) => ({
     ...rest,
     ...(accessibilityLabel ? { 'aria-label': accessibilityLabel } : {}),
+    'data-font': fontOf(style),
   });
   const View = ({ children, ...p }) => React.createElement('div', plain(p), children);
   const Text = ({ children, ...p }) => React.createElement('span', plain(p), children);
@@ -18,16 +23,20 @@ vi.mock('react-native', () => {
   return { View, Text, Pressable, ScrollView, StyleSheet: { create: (s) => s } };
 });
 
-vi.mock('../../theme/ThemeContext', () => ({
-  useTheme: () => ({
-    colors: {
-      ink: '#000', ink2: '#333', ink3: '#666', ink4: '#999',
-      success: '#0a0', warning: '#c80', danger: '#c00',
-      line2: '#eee', bgInput: '#fafafa',
-    },
-    fonts: { mono: 'm', monoMedium: 'mm' },
-  }),
-}));
+vi.mock('../../theme/ThemeContext', async () => {
+  const tokens = await import('../../theme/tokens');
+  return {
+    useTheme: () => ({
+      colors: {
+        ink: '#000', ink2: '#333', ink3: '#666', ink4: '#999',
+        success: '#0a0', warning: '#c80', danger: '#c00',
+        line2: '#eee', bgInput: '#fafafa',
+      },
+      fonts: { sans: { regular: 'Inter_400Regular' }, mono: 'm', monoMedium: 'mm' },
+      fontSizes: tokens.fontSizes,
+    }),
+  };
+});
 
 vi.mock('../../components/Icon', () => ({
   Icon: ({ name }) => React.createElement('span', { 'data-icon': name }),
@@ -114,6 +123,13 @@ describe('PipelineStrip', () => {
     fireEvent.click(screen.getByLabelText('#media-update completed'));
     expect(onPickSeq).toHaveBeenCalledWith(40);
     expect(screen.getByLabelText('#media-qa pending').tagName).toBe('DIV');
+  });
+
+  it('draws the phase separators as desktop PipelineStages does — an arrow in a theme font', () => {
+    render(<PipelineStrip run={RUN} accent="#f00" />);
+    const separators = screen.getAllByText('→');
+    expect(separators).toHaveLength(3);
+    for (const s of separators) expect(s.getAttribute('data-font')).toBe('Inter_400Regular');
   });
 
   it('hides the strip when an ad-hoc task nulls a run that was already on screen', () => {

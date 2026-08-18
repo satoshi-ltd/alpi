@@ -2,7 +2,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { radii, space , fontSizes} from '../src/theme/tokens';
+import { radii, space } from '../src/theme/tokens';
 
 import { Pill } from '../src/components/Pill';
 import { Row, RowSeparator, SectionHeader } from '../src/components/Row';

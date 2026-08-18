@@ -11,6 +11,7 @@ export function useOutputs({ profile, status, profiles } = {}) {
   const { endpoint, call } = useEndpoint();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [unreachable, setUnreachable] = useState(false);
   const reqRef = useRef(0);
 
   const profileList = profile
@@ -23,6 +24,7 @@ export function useOutputs({ profile, status, profiles } = {}) {
   const refresh = useCallback(async () => {
     if (!endpoint) {
       setRows([]);
+      setUnreachable(false);
       return;
     }
     const reqId = ++reqRef.current;
@@ -36,14 +38,15 @@ export function useOutputs({ profile, status, profiles } = {}) {
             limit: DEFAULT_LIMIT,
           })
             .then((res) => (res?.outputs ?? []).map((o) => ({ ...o, profile: o.profile || p })))
-            .catch(() => []),
+            .catch(() => null),
         ),
       );
       if (reqId !== reqRef.current) return;
-      const merged = results.flat().sort(
+      const merged = results.filter(Boolean).flat().sort(
         (a, b) => (b.created_at ?? 0) - (a.created_at ?? 0),
       );
       setRows(merged);
+      setUnreachable(results.some((r) => !r));
     } finally {
       if (reqId === reqRef.current) setLoading(false);
     }
@@ -56,7 +59,7 @@ export function useOutputs({ profile, status, profiles } = {}) {
   const debouncedRefresh = useDebouncedCallback(refresh, 500);
   useEventEffect(['output.created', 'output.updated'], debouncedRefresh);
 
-  return { rows, loading, refresh };
+  return { rows, loading, refresh, unreachable };
 }
 
 

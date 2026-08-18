@@ -1,8 +1,8 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { radii, space , fontSizes} from '../../../src/theme/tokens';
+import { radii, space } from '../../../src/theme/tokens';
 
 import { Diamond } from '../../../src/components/Diamond';
 import { OnOff } from '../../../src/components/OnOff';
@@ -10,6 +10,7 @@ import { Pill } from '../../../src/components/Pill';
 import { Row, RowSeparator, SectionHeader } from '../../../src/components/Row';
 import { ScreenHeader } from '../../../src/components/ScreenHeader';
 import { SyncBar } from '../../../src/components/SyncBar';
+import { modelLabel } from '../../../src/lib/modelLabel';
 import { profileLabel } from '../../../src/lib/profileLabel';
 import { useToast } from '../../../src/components/Toast';
 import { Bold, Code, TypedConfirm } from '../../../src/components/TypedConfirm';
@@ -54,7 +55,7 @@ function formatTokens(n) {
 
 function tierValue(tier) {
   if (!tier?.model) return 'main model';
-  return tier.model.includes('/') ? tier.model.split('/').slice(1).join('/') : tier.model;
+  return modelLabel(tier.model);
 }
 
 function sectionData(section) {
@@ -79,7 +80,7 @@ function usageTotals(days) {
 }
 
 export default function ProfileSettings() {
-  const { id } = useLocalSearchParams();
+  const { id, intent } = useLocalSearchParams();
   const router = useRouter();
   const toast = useToast();
   const { call } = useEndpoint();
@@ -95,6 +96,8 @@ export default function ProfileSettings() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [restartBusy, setRestartBusy] = useState(false);
   const [confirmRestart, setConfirmRestart] = useState(false);
+
+  useEffect(() => { if (intent === 'delete') setConfirmDelete(true); }, [intent]);
 
   const refreshSettings = async () => {
     await refresh();
@@ -210,7 +213,7 @@ export default function ProfileSettings() {
         <SectionHeader>Overview</SectionHeader>
         <Row
           label={profile.paused ? 'Resume profile' : 'Pause profile'}
-          helper="paused alpis can't be chatted and sort last in new-chat"
+          helper="paused profiles can't be chatted and sort last in new-chat"
           value={<Pill tone={profile.paused ? 'warn' : 'on'}>{profile.paused ? 'paused' : 'active'}</Pill>}
           onPress={() => saveField('paused', profile.paused ? 'false' : 'true')}
           chevron={false}
@@ -225,7 +228,7 @@ export default function ProfileSettings() {
         <RowSeparator />
         <Row
           label="Model"
-          value={profile.model ? profile.model.split('/').slice(1).join('/') : '—'}
+          value={profile.model ? modelLabel(profile.model) : '—'}
           onPress={() => setSheet('model')}
         />
         {profile.model_reasoning_supported && (

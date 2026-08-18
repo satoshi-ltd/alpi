@@ -30,7 +30,7 @@ async function shareAttachment(call, profile, a) {
   }
 }
 
-function FetchedImage({ path, profile, name, colors }) {
+function FetchedImage({ path, profile, name, colors, fonts }) {
   const { call, endpoint } = useEndpoint();
   const { uri, err } = useCachedImage(call, endpoint, profile, path);
   const [aspect, setAspect] = useState(16 / 9);
@@ -38,8 +38,8 @@ function FetchedImage({ path, profile, name, colors }) {
   if (!uri) {
     return (
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3, padding: space.s3, borderRadius: radii.md, backgroundColor: colors.hover }}>
-        {err ? <Icon name="file" size={16} color={colors.ink3} /> : <ActivityIndicator color={colors.ink3} />}
-        <Text numberOfLines={2} style={{ flexShrink: 1, color: colors.ink3 }}>
+        {err ? <Icon name="file" size="md" color={colors.ink3} /> : <ActivityIndicator color={colors.ink3} />}
+        <Text numberOfLines={2} style={{ flexShrink: 1, fontFamily: fonts.sans.regular, color: colors.ink3 }}>
           {name}{err ? `  ·  ${err}` : ''}
         </Text>
       </View>
@@ -61,7 +61,7 @@ function Glyph({ kind, localUri, name, colors }) {
   }
   return (
     <View style={{ width: BOX, height: BOX, borderRadius: radii.sm, backgroundColor: colors.hover, alignItems: 'center', justifyContent: 'center' }}>
-      <Icon name={ICON[kind] || 'file'} size={16} color={colors.ink3} />
+      <Icon name={ICON[kind] || 'file'} size="md" color={colors.ink3} />
     </View>
   );
 }
@@ -85,7 +85,7 @@ export function AttachmentCards({ items, onRemove, variant = 'composer', profile
         const kind = fileKind(a.name, a.mime);
         if (shouldFetchPreview(a, { message, profile })) {
           return (
-            <FetchedImage key={a.path || a.name || i} path={a.path} profile={profile} name={a.name} colors={colors} />
+            <FetchedImage key={a.path || a.name || i} path={a.path} profile={profile} name={a.name} colors={colors} fonts={fonts} />
           );
         }
         const subtitle = message
@@ -118,7 +118,7 @@ export function AttachmentCards({ items, onRemove, variant = 'composer', profile
             </View>
             {!message && onRemove ? (
               <Pressable onPress={() => onRemove(i)} hitSlop={8} accessibilityLabel={`Remove ${a.name}`}>
-                <Icon name="x" size={14} color={colors.ink3} />
+                <Icon name="x" size="sm" color={colors.ink3} />
               </Pressable>
             ) : null}
           </CardComp>

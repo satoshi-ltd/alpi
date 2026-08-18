@@ -1,11 +1,13 @@
 import { Pressable, Text, View } from 'react-native';
-import { space } from '../theme/tokens';
+import { lineHeights, space } from '../theme/tokens';
 
 import { Icon } from './Icon';
+import { useShowBack } from '../hooks/useShowBack';
 import { useTheme } from '../theme/ThemeContext';
 
 export function ScreenHeader({ title, subtitle, onBack, right, leadingGlyph }) {
   const { colors, fonts, fontSizes } = useTheme();
+  const showBack = useShowBack(onBack);
   return (
     <View
       style={{
@@ -20,13 +22,13 @@ export function ScreenHeader({ title, subtitle, onBack, right, leadingGlyph }) {
         borderBottomColor: colors.line,
       }}
     >
-      {onBack ? (
+      {showBack ? (
         <Pressable
           onPress={onBack}
           hitSlop={space.s3}
           style={{ width: 28, height: 36, alignItems: 'center', justifyContent: 'center', marginLeft: -space.s2 }}
         >
-          <Icon name="back" size={22} color={colors.ink2} strokeWidth={2} />
+          <Icon name="back" size="lg" color={colors.ink2} />
         </Pressable>
       ) : null}
       <View style={{ flex: 1, minWidth: 0, flexDirection: 'column' }}>
@@ -36,8 +38,8 @@ export function ScreenHeader({ title, subtitle, onBack, right, leadingGlyph }) {
             numberOfLines={1}
             style={{
               fontFamily: fonts.sans.semibold,
-              fontSize: fontSizes.lg,
-              lineHeight: space.s8,
+              fontSize: fontSizes.xl,
+              lineHeight: fontSizes.xl * lineHeights.cozy,
               color: colors.ink,
             }}
           >
@@ -51,7 +53,7 @@ export function ScreenHeader({ title, subtitle, onBack, right, leadingGlyph }) {
               style={{
                 fontFamily: fonts.mono,
                 fontSize: fontSizes.xs,
-                lineHeight: space.s6,
+                lineHeight: fontSizes.xs * lineHeights.cozy,
                 color: colors.ink3,
               }}
             >

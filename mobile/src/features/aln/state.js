@@ -18,7 +18,7 @@ function secureOpts() {
 }
 
 export function stateKey(connectionId) {
-  return `${KEY_PREFIX}${connectionId}`;
+  return `${KEY_PREFIX}${String(connectionId).replace(/[^\w.-]/g, '_')}`;
 }
 
 export async function loadState(connectionId) {

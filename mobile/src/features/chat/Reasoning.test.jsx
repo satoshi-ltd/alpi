@@ -5,7 +5,8 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 afterEach(cleanup);
 
 vi.mock('react-native', () => {
-  const View = ({ children, ...p }) => React.createElement('div', p, children);
+  const View = ({ children, style, ...p }) =>
+    React.createElement('div', { ...p, 'data-pad': style?.paddingHorizontal ?? '' }, children);
   const Text = ({ children, ...p }) => React.createElement('span', p, children);
   const Pressable = ({ children, onPress, accessibilityLabel, ...p }) =>
     React.createElement('button', { type: 'button', onClick: onPress, 'aria-label': accessibilityLabel, ...p }, children);
@@ -44,5 +45,13 @@ describe('Reasoning flat', () => {
   it('renders nothing when finished with no text', () => {
     const { container } = render(<Reasoning text="" seconds={0} flat />);
     expect(container.textContent).toBe('');
+  });
+
+  it('indents to the same gutter as its sibling turn rows', () => {
+    const { container } = render(<Reasoning text={'line one'} seconds={3} flat />);
+    const pads = [...container.querySelectorAll('div')]
+      .map((node) => node.getAttribute('data-pad'))
+      .filter((pad) => pad !== '');
+    expect(pads).toContain('16');
   });
 });

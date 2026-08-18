@@ -2,9 +2,10 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo } from 'react';
 import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { radii, space , fontSizes} from '../../../../../src/theme/tokens';
+import { radii, space } from '../../../../../src/theme/tokens';
 
 import { Pill } from '../../../../../src/components/Pill';
+import { Eyebrow } from '../../../../../src/components/Eyebrow';
 import { ScreenHeader } from '../../../../../src/components/ScreenHeader';
 import { useTools } from '../../../../../src/hooks/useDaemonData';
 import { useTheme } from '../../../../../src/theme/ThemeContext';
@@ -85,18 +86,7 @@ export default function ToolDetail() {
             {tool.description}
           </Text>
         ) : null}
-        <Text
-          style={{
-            fontFamily: fonts.mono,
-            fontSize: fontSizes.xs,
-            color: colors.ink3,
-            letterSpacing: 0.5,
-            textTransform: 'uppercase',
-            marginTop: space.s3,
-          }}
-        >
-          Parameters
-        </Text>
+        <Eyebrow style={{ marginTop: space.s3 }}>Parameters</Eyebrow>
         {params.length === 0 ? (
           <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }}>
             No parameters

@@ -86,8 +86,7 @@ older daemons that contain a final `token` remain readable.
   provider tree (Theme → Endpoint → Events → Toast). Routes:
   - `index.jsx` (Inbox)
   - `chat/[id].jsx` (profile chat)
-  - `wg/[id].jsx`, `wg/[id]/{settings,briefing,budget,member}.jsx`,
-    `wg/new.jsx`
+  - `wg/[id].jsx`, `wg/[id]/{settings,briefing,budget,member}.jsx`
   - `profile/[id]/{settings,identity}.jsx`,
     `profile/[id]/{providers,peers,schedule,mcp,brain/*,email}/…`
   - `pair.jsx`, `paired.jsx`, `onboarding.jsx`, `biometric.jsx`

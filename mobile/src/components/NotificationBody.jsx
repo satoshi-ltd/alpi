@@ -1,8 +1,9 @@
 import { ScrollView, Text, View } from 'react-native';
 
+import { Eyebrow } from './Eyebrow';
 import { inlineSegments, parseNotificationBody } from '../lib/notificationBody';
 import { useTheme } from '../theme/ThemeContext';
-import { fontSizes, lineHeights, radii, space } from '../theme/tokens';
+import { lineHeights, radii, space } from '../theme/tokens';
 
 function topMargin(block, prev) {
   if (!prev) return 0;
@@ -13,7 +14,7 @@ function topMargin(block, prev) {
 
 function Lead({ text, theme }) {
   return (
-    <Text style={{ fontFamily: theme.fonts.sans.semibold, fontSize: fontSizes.xl, lineHeight: fontSizes.xl * lineHeights.cozy, color: theme.colors.ink }}>
+    <Text style={{ fontFamily: theme.fonts.sans.semibold, fontSize: theme.fontSizes.xl, lineHeight: theme.fontSizes.xl * lineHeights.cozy, color: theme.colors.ink }}>
       <Inline text={text} theme={theme} />
     </Text>
   );
@@ -21,23 +22,15 @@ function Lead({ text, theme }) {
 
 function Heading({ text, theme }) {
   return (
-    <Text style={{ fontFamily: theme.fonts.sans.semibold, fontSize: fontSizes.lg, lineHeight: fontSizes.lg * lineHeights.cozy, color: theme.colors.ink }}>
+    <Text style={{ fontFamily: theme.fonts.sans.semibold, fontSize: theme.fontSizes.lg, lineHeight: theme.fontSizes.lg * lineHeights.cozy, color: theme.colors.ink }}>
       <Inline text={text} theme={theme} />
-    </Text>
-  );
-}
-
-function Eyebrow({ text, theme }) {
-  return (
-    <Text style={{ fontFamily: theme.fonts.mono, fontSize: fontSizes.xs, lineHeight: fontSizes.xs * lineHeights.tight, color: theme.colors.ink3, textTransform: 'uppercase' }}>
-      {text}
     </Text>
   );
 }
 
 function Para({ text, theme }) {
   return (
-    <Text style={{ fontFamily: theme.fonts.sans.regular, fontSize: fontSizes.md, lineHeight: fontSizes.md * lineHeights.relaxed, color: theme.colors.ink2 }}>
+    <Text style={{ fontFamily: theme.fonts.sans.regular, fontSize: theme.fontSizes.md, lineHeight: theme.fontSizes.md * lineHeights.relaxed, color: theme.colors.ink2 }}>
       <Inline text={text} theme={theme} />
     </Text>
   );
@@ -46,7 +39,7 @@ function Para({ text, theme }) {
 function Quote({ text, theme }) {
   return (
     <View style={{ paddingLeft: space.s4, borderLeftWidth: 2, borderLeftColor: theme.colors.line2 }}>
-      <Text style={{ fontFamily: theme.fonts.sans.regular, fontSize: fontSizes.md, lineHeight: fontSizes.md * lineHeights.relaxed, color: theme.colors.ink2, fontStyle: 'italic' }}>
+      <Text style={{ fontFamily: theme.fonts.sans.regular, fontSize: theme.fontSizes.md, lineHeight: theme.fontSizes.md * lineHeights.relaxed, color: theme.colors.ink2, fontStyle: 'italic' }}>
         <Inline text={text} theme={theme} />
       </Text>
     </View>
@@ -75,7 +68,7 @@ function Inline({ text, theme }) {
           key={i}
           style={{
             fontFamily: theme.fonts.mono,
-            fontSize: fontSizes.md,
+            fontSize: theme.fontSizes.md,
             backgroundColor: theme.colors.hover,
             color: theme.colors.ink,
           }}
@@ -95,10 +88,10 @@ function List({ block, theme }) {
     <View style={{ paddingLeft: space.s4, gap: space.s2 }}>
       {block.items.map((it, j) => (
         <View key={j} style={{ flexDirection: 'row', gap: space.s3 }}>
-          <Text style={{ fontFamily: block.ordered ? theme.fonts.mono : theme.fonts.sans.regular, fontSize: fontSizes.md, lineHeight: fontSizes.md * lineHeights.normal, color: theme.colors.ink3, minWidth: block.ordered ? 18 : undefined }}>
+          <Text style={{ fontFamily: block.ordered ? theme.fonts.mono : theme.fonts.sans.regular, fontSize: theme.fontSizes.md, lineHeight: theme.fontSizes.md * lineHeights.normal, color: theme.colors.ink3, minWidth: block.ordered ? 18 : undefined }}>
             {it.marker}
           </Text>
-          <Text style={{ flex: 1, fontFamily: theme.fonts.sans.regular, fontSize: fontSizes.md, lineHeight: fontSizes.md * lineHeights.normal, color: theme.colors.ink2 }}>
+          <Text style={{ flex: 1, fontFamily: theme.fonts.sans.regular, fontSize: theme.fontSizes.md, lineHeight: theme.fontSizes.md * lineHeights.normal, color: theme.colors.ink2 }}>
             <Inline text={it.text} theme={theme} />
           </Text>
         </View>
@@ -119,7 +112,7 @@ function CodeBlock({ text, theme }) {
       }}
     >
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ padding: space.s5 }}>
-        <Text style={{ fontFamily: theme.fonts.mono, fontSize: fontSizes.md, lineHeight: fontSizes.md * lineHeights.normal, color: theme.colors.ink }}>
+        <Text style={{ fontFamily: theme.fonts.mono, fontSize: theme.fontSizes.md, lineHeight: theme.fontSizes.md * lineHeights.normal, color: theme.colors.ink }}>
           {text}
         </Text>
       </ScrollView>
@@ -152,8 +145,8 @@ function ReportTable({ block, theme }) {
                   borderLeftWidth: j === 0 ? 0 : 0.5,
                   borderLeftColor: theme.colors.line,
                   fontFamily: i === 0 ? theme.fonts.sans.semibold : theme.fonts.sans.regular,
-                  fontSize: fontSizes.sm,
-                  lineHeight: fontSizes.sm * lineHeights.normal,
+                  fontSize: theme.fontSizes.sm,
+                  lineHeight: theme.fontSizes.sm * lineHeights.normal,
                   color: i === 0 ? theme.colors.ink : theme.colors.ink2,
                 }}
               >
@@ -170,11 +163,11 @@ function ReportTable({ block, theme }) {
 function renderBlock(block, theme) {
   switch (block.kind) {
     case 'heading': return <Heading text={block.text} theme={theme} />;
-    case 'label': return <Eyebrow text={block.label} theme={theme} />;
+    case 'label': return <Eyebrow>{block.label}</Eyebrow>;
     case 'labelBody':
       return (
         <View style={{ gap: space.s1 }}>
-          <Eyebrow text={block.label} theme={theme} />
+          <Eyebrow>{block.label}</Eyebrow>
           <Para text={block.body} theme={theme} />
         </View>
       );

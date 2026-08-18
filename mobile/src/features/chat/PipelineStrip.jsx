@@ -1,9 +1,10 @@
 import { useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { fontSizes, radii, space } from '../../theme/tokens';
+import { radii, space } from '../../theme/tokens';
 
 import { ActionSheet } from '../../components/ActionSheet';
 import { Dot } from '../../components/Dot';
+import { Eyebrow } from '../../components/Eyebrow';
 import { Icon } from '../../components/Icon';
 import {
   activePhaseIndex,
@@ -30,13 +31,7 @@ const STYLES = StyleSheet.create({
     paddingHorizontal: space.s7,
     paddingVertical: space.s4,
   },
-  label: {
-    fontSize: fontSizes.xs,
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-  },
   separator: {
-    fontSize: fontSizes.sm,
     marginRight: space.s3,
   },
   phaseWrap: {
@@ -52,9 +47,6 @@ const STYLES = StyleSheet.create({
     borderRadius: radii.pill,
     paddingHorizontal: space.s3,
     paddingVertical: 2,
-  },
-  slug: {
-    fontSize: fontSizes.sm,
   },
   slugSkipped: {
     textDecorationLine: 'line-through',
@@ -76,22 +68,18 @@ const STYLES = StyleSheet.create({
     borderWidth: 0.5,
     borderRadius: radii.pill,
   },
-  launchLabel: {
-    fontSize: fontSizes.xs,
-  },
   launchNote: {
     flex: 1,
-    fontSize: fontSizes.xs,
   },
 });
 
 function Phase({ phase, accent, onPress }) {
-  const { colors, fonts } = useTheme();
+  const { colors, fonts, fontSizes } = useTheme();
   const { slug, state } = phase;
   const icon =
-    state === 'completed' ? <Icon name="check" size={12} color={colors.success} />
-    : state === 'skipped' ? <Icon name="x" size={12} color={colors.warning} />
-    : state === 'blocked' ? <Icon name="ban" size={12} color={colors.danger} />
+    state === 'completed' ? <Icon name="check" size="xs" color={colors.success} />
+    : state === 'skipped' ? <Icon name="x" size="xs" color={colors.warning} />
+    : state === 'blocked' ? <Icon name="ban" size="xs" color={colors.danger} />
     : state === 'current' ? <Dot color={accent ?? colors.ink} pulse />
     : null;
   const textColor =
@@ -114,9 +102,8 @@ function Phase({ phase, accent, onPress }) {
       {icon}
       <Text
         style={[
-          STYLES.slug,
           state === 'skipped' && STYLES.slugSkipped,
-          { fontFamily: fonts.mono, color: textColor },
+          { fontFamily: fonts.mono, fontSize: fontSizes.sm, color: textColor },
         ]}
       >
         #{slug}
@@ -126,7 +113,7 @@ function Phase({ phase, accent, onPress }) {
 }
 
 export function PipelineStrip({ run, accent, onPickSeq }) {
-  const { colors, fonts } = useTheme();
+  const { colors, fonts, fontSizes } = useTheme();
   const scrollRef = useRef(null);
   const phases = useMemo(() => runPhases(run), [run]);
   const active = useMemo(() => activePhaseIndex(phases), [phases]);
@@ -141,9 +128,7 @@ export function PipelineStrip({ run, accent, onPickSeq }) {
       style={STYLES.strip}
       contentContainerStyle={STYLES.content}
     >
-      <Text style={[STYLES.label, { fontFamily: fonts.mono, color: colors.ink3 }]}>
-        {run.pipeline}
-      </Text>
+      <Eyebrow>{run.pipeline}</Eyebrow>
       {phases.map((p, i) => (
         <View
           key={p.slug}
@@ -154,7 +139,9 @@ export function PipelineStrip({ run, accent, onPickSeq }) {
             scrollRef.current?.scrollTo?.({ x, animated: false });
           }}
         >
-          {i > 0 ? <Text style={[STYLES.separator, { color: colors.ink4 ?? colors.ink3 }]}>›</Text> : null}
+          {i > 0 ? (
+            <Text style={[STYLES.separator, { fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3 }]}>→</Text>
+          ) : null}
           <Phase
             phase={p}
             accent={accent}
@@ -167,7 +154,7 @@ export function PipelineStrip({ run, accent, onPickSeq }) {
 }
 
 export function PipelineLauncher({ workgroup, tasks, accent, onRun }) {
-  const { colors, fonts } = useTheme();
+  const { colors, fonts, fontSizes } = useTheme();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [target, setTarget] = useState(null);
   const chains = useMemo(() => triggerableChains(workgroup), [workgroup]);
@@ -187,12 +174,12 @@ export function PipelineLauncher({ workgroup, tasks, accent, onRun }) {
           { borderColor: colors.line2, backgroundColor: colors.bgInput, opacity: block ? 0.5 : 1 },
         ]}
       >
-        <Icon name="play" size={11} color={block ? colors.ink4 ?? colors.ink3 : accent ?? colors.ink} />
-        <Text style={[STYLES.launchLabel, { fontFamily: fonts.monoMedium, color: colors.ink }]}>
+        <Icon name="play" size="xs" color={block ? colors.ink4 ?? colors.ink3 : accent ?? colors.ink} />
+        <Text style={{ fontFamily: fonts.monoMedium, fontSize: fontSizes.xs, color: colors.ink }}>
           Run pipeline
         </Text>
       </Pressable>
-      <Text numberOfLines={1} style={[STYLES.launchNote, { fontFamily: fonts.mono, color: colors.ink3 }]}>
+      <Text numberOfLines={1} style={[STYLES.launchNote, { fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }]}>
         {block
           ? block.message
           : `${chains.length} ${chains.length === 1 ? 'chain' : 'chains'} declared by the recipe`}
@@ -209,7 +196,7 @@ export function PipelineLauncher({ workgroup, tasks, accent, onRun }) {
           detail:
             runStateLabel(chain.key, run) ??
             `${chain.phases.length} ${chain.phases.length === 1 ? 'phase' : 'phases'}`,
-          icon: <Icon name="play" size={20} color={colors.ink} />,
+          icon: <Icon name="play" size="lg" color={colors.ink} />,
           onPress: () => setTarget(chain),
         }))}
       />
@@ -225,7 +212,7 @@ export function PipelineLauncher({ workgroup, tasks, accent, onRun }) {
                 {
                   id: 'run',
                   label: `${runActionLabel(target.key, run)} #${target.key}`,
-                  icon: <Icon name="play" size={20} color={colors.ink} />,
+                  icon: <Icon name="play" size="lg" color={colors.ink} />,
                   onPress: () => onRun?.(target),
                 },
               ]

@@ -1,13 +1,14 @@
 // wg.members is a count; roster from host.workgroup.members → [{pubkey, bio, voice, joined}]. pubkey → @name via hub.peers + local profiles, else truncated.
 
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { radii, space } from '../../../src/theme/tokens';
+import { radii, space, tracking } from '../../../src/theme/tokens';
 
 import { ActionSheet } from '../../../src/components/ActionSheet';
 import { Diamond } from '../../../src/components/Diamond';
+import { Eyebrow } from '../../../src/components/Eyebrow';
 import { Icon } from '../../../src/components/Icon';
 import { OnOff } from '../../../src/components/OnOff';
 import { Pill } from '../../../src/components/Pill';
@@ -38,7 +39,7 @@ export default function WorkgroupSettingsRoute() {
 }
 
 function WorkgroupSettings() {
-  const { id } = useLocalSearchParams();
+  const { id, intent } = useLocalSearchParams();
   const router = useRouter();
   const toast = useToast();
   const { call } = useEndpoint();
@@ -52,6 +53,21 @@ function WorkgroupSettings() {
   const [memberTarget, setMemberTarget] = useState(null);
   const [confirmKick, setConfirmKick] = useState(null);
   const [budgetOpen, setBudgetOpen] = useState(false);
+
+  const peerByPubkey = useMemo(() => {
+    const m = new Map();
+    for (const p of (summaries.data?.profiles ?? [])) {
+      if (p.pubkey_b64) m.set(p.pubkey_b64, { name: p.name, accent: p.accent, bio: p.bio });
+    }
+    for (const peer of (hub?.peers ?? [])) {
+      if (peer.pubkey && !m.has(peer.pubkey)) {
+        m.set(peer.pubkey, { name: peer.alias || peer.id, accent: undefined, bio: undefined });
+      }
+    }
+    return m;
+  }, [summaries.data, hub]);
+
+  useEffect(() => { if (intent === 'delete' && wg?.is_hub) setConfirmDelete(true); }, [intent, wg?.is_hub]);
 
   if (loading && !wg) {
     return (
@@ -80,19 +96,6 @@ function WorkgroupSettings() {
   const isHub = !!wg.is_hub;
 
   const memberRows = memberQuery.data?.members ?? [];
-
-  const peerByPubkey = useMemo(() => {
-    const m = new Map();
-    for (const p of (summaries.data?.profiles ?? [])) {
-      if (p.pubkey_b64) m.set(p.pubkey_b64, { name: p.name, accent: p.accent, bio: p.bio });
-    }
-    for (const peer of (hub?.peers ?? [])) {
-      if (peer.pubkey && !m.has(peer.pubkey)) {
-        m.set(peer.pubkey, { name: peer.alias || peer.id, accent: undefined, bio: undefined });
-      }
-    }
-    return m;
-  }, [summaries.data, hub]);
 
   const resolveMember = (pk) => {
     const hit = peerByPubkey.get(pk);
@@ -207,7 +210,7 @@ function WorkgroupSettings() {
                     fontFamily: fonts.sans.semibold,
                     fontSize: fontSizes.display,
                     color: colors.ink,
-                    letterSpacing: -0.018 * 26,
+                    letterSpacing: fontSizes.display * tracking.tight,
                   }}
                 >
                   ${used.toFixed(2)}
@@ -258,9 +261,7 @@ function WorkgroupSettings() {
                 value={
                   <View style={{ flexDirection: 'row', gap: space.s2, alignItems: 'center' }}>
                     {isHubMember ? (
-                      <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3, letterSpacing: 0.6, textTransform: 'uppercase' }}>
-                        hub
-                      </Text>
+                      <Eyebrow>hub</Eyebrow>
                     ) : null}
                     {!isHubMember ? (m.joined ? <Pill tone="on">joined</Pill> : <Pill off>invited</Pill>) : null}
                   </View>
@@ -359,7 +360,7 @@ function WorkgroupSettings() {
                   id: 'kick',
                   label: 'Kick from workgroup',
                   danger: true,
-                  icon: <Icon name="x" size={20} color={colors.danger} />,
+                  icon: <Icon name="x" size="lg" color={colors.danger} />,
                   onPress: () => {
                     const m = memberTarget;
                     setMemberTarget(null);

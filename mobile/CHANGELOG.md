@@ -14,6 +14,77 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.4.0 — 2026-08-18 — the roster stays on screen
+
+- **Tablets and folds run a two-pane shell.** The app now installs as a real iPad
+  app: your daemon, the list of profiles and workgroups, and the Settings /
+  Notifications entries live in a sidebar that never goes away, while the
+  conversation fills the pane beside it — tapping a row swaps that pane instead
+  of pushing a screen over the list, and the back chevron only appears when
+  there is somewhere to go back to. The threshold for the second pane holds a
+  little slack, so a fold sitting near the boundary doesn't flap between layouts
+  as you nudge it. On a tablet, launching the app also opens your most recent
+  conversation so the second pane is never empty; a phone stays on the roster.
+  Settings and Notifications are now full screens rather than sheets, and the
+  connection block, its heading and the chat header now read the same on both.
+- **The list is a roster of sections.** PINNED, PROFILES and WORKGROUPS replace
+  the All / Alpis / Workgroups chips; the filter field is behind a button
+  instead of eating a row of space; and the **+** on a section heading creates a
+  profile or a workgroup in a sheet, without leaving the list — the floating
+  compose button and the swipe-to-pin gesture are gone (long-press still pins
+  and opens settings). Inside a section rows run most-recent-first, with
+  profiles still waiting for a provider at the bottom, and an unread row is
+  marked by its weight instead of a dot; in the sidebar a workgroup that is
+  working right now says so in its row. Everything the app used to call an
+  "alpi" it now calls a profile.
+- **Opening a profile lands you in the conversation.** You arrive at its most
+  recent session; profiles with no history at all are finally listed (they were
+  filtered out and only reachable through compose) and open on a composer with
+  the model named, not on rows of history that never fill in. If the newest
+  session belongs to a connection this device can't read, the app opens a fresh
+  thread instead of a permanent loading state. The header names the model
+  without its provider prefix, shows context and daily budget as meters you can
+  scroll sideways, and its **⋯** now offers pause / resume, auto-read, skills,
+  memory, tools, schedule and a manual refresh instead of jumping straight to
+  settings.
+- **Text size is yours, and it moves the whole app.** Appearance → Text size
+  steps through four sizes on top of your OS setting, long-press to reset. Most
+  of the type scale used to be fixed when the app launched, so the chat
+  transcript, the roster and the marker cards would have ignored the control
+  entirely; they follow it now, letter-spacing included. Icons come from one
+  size scale at one stroke weight, and the glyphs are the desktop client's own,
+  so the two apps read as one family.
+- **The keyboard no longer covers what you are typing.** Every text-entry
+  screen — chat, pairing, identity, providers, MCP, peers, email, briefings —
+  sat behind the on-screen keyboard on Android, and the field moved back into
+  place only after you dismissed it. Pressing enter now sends the message
+  instead of inserting a line break, the composer's own controls take less room
+  than the text does, and the placeholder voice-message button is gone.
+- **An answer that finished no longer disappears.** Opening a fresh thread could
+  show the reply and then blank it, because the app cleared its own copy as soon
+  as a refresh call returned rather than when the saved answer was actually
+  there. It now waits for the right conversation to load, recovers a workgroup
+  post the same way, and if the transcript truly cannot be read it says so
+  instead of leaving an empty turn behind. Sending while a turn is still running
+  is refused rather than silently replacing it, and stopping one keeps whatever
+  had already arrived.
+- **Every sheet closes the same way.** A close icon in the corner plus swipe-down
+  — no more hunting for the word "Cancel" — and the sheet slides out over its
+  full animation instead of vanishing in a single frame, keeping its contents
+  until it's gone. On a tablet, sheets settle as centred dialogs.
+- **A daemon you can't reach says so.** Chat and workgroup screens raise a banner
+  with a retry, and the composer stays disabled while it's down rather than
+  accepting a message that has nowhere to go. Notifications no longer claim
+  inbox zero when nobody answered: it reports UNREACHABLE, or PARTIAL with how
+  many daemons went missing. A connection that has stopped answering — a
+  silently dropped Tailscale path — is retired instead of hanging the next call.
+  Pairing links (``alpi://device…``) open the pairing screen with the link
+  already filled in.
+
+Requires alpi ≥ 0.12.11 for one-time pairing, unchanged from 0.3.1 — this
+release calls no new daemon verb, and the two-pane shell, text size and roster
+sections are all client-side. Existing connections and pairings keep working.
+
 ## v0.3.1 — 2026-08-07 — keep the key off the camera roll
 
 - **Mobile exchanges a scanned one-time grant before saving anything.** The
