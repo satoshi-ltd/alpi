@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { useChatStream } from "./useChatStream.js";
 
 // `chat-event` is the only Tauri event the hook listens for. Capture the
@@ -20,10 +22,10 @@ function mount(extras = {}) {
   const setRewriteDraft = vi.fn();
   const reload = vi.fn();
   const reloadRef = { current: reload };
-  const { result } = renderHook(() => useChatStream({
+  const { result, unmount } = renderHook(() => useChatStream({
     setSessionData, setView, setRewriteDraft, reloadRef, notify, ...extras,
   }));
-  return { result, notify, setSessionData, setView, setRewriteDraft, reload, reloadRef };
+  return { result, unmount, notify, setSessionData, setView, setRewriteDraft, reload, reloadRef };
 }
 
 function seedTurn(result, partial = {}) {
@@ -67,6 +69,10 @@ async function waitForListen() {
   await vi.waitFor(() => expect(chatEventCb).toBeTruthy());
 }
 
+async function settle(ms = 0) {
+  await act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+}
+
 describe("useChatStream live frames", () => {
   it("session_start pins sessionId onto the turn", async () => {
     const { result } = mount();
@@ -90,6 +96,7 @@ describe("useChatStream live frames", () => {
     await waitForListen();
     seedTurn(result, { sessionId: "sess-1" });
     emit({ kind: "done" });
+    await settle();
     expect(turnOf(result)).toBeNull();
   });
 
@@ -101,6 +108,7 @@ describe("useChatStream live frames", () => {
     setSessionData.mockClear();
     emit({ kind: "done", session_id: "sess-1" });
     expect(invoke.mock.calls.some(([cmd]) => cmd === "session_detail")).toBe(true);
+    await settle();
     expect(turnOf(result)).toBeNull();
   });
 
@@ -111,6 +119,7 @@ describe("useChatStream live frames", () => {
     invoke.mockClear();
     emit({ kind: "reply", session_id: "sess-1" });
     emit({ kind: "done", session_id: "sess-1" });
+    await settle();
     const detailCalls = invoke.mock.calls.filter(([cmd]) => cmd === "session_detail").length;
     expect(detailCalls).toBe(1);
     expect(turnOf(result)).toBeNull();
@@ -152,6 +161,7 @@ describe("useChatStream concurrent turns", () => {
     seedTurn(result, { requestId: "req-1", sessionId: "s1" });
     seedTurn(result, { requestId: "req-2", sessionId: "s2" });
     emit({ kind: "done", request_id: "req-1" });
+    await settle();
     expect(turnOf(result, "req-1")).toBeNull();
     expect(turnOf(result, "req-2")).not.toBeNull();
   });
@@ -205,6 +215,304 @@ describe("useChatStream concurrent turns", () => {
     seedTurn(result, { requestId: "req-2", connectionId: "B", sessionId: "s1", launchSessionId: "s1" });
     expect(turnOf(result, "req-1")).not.toBeNull();
     expect(turnOf(result, "req-2")).not.toBeNull();
+  });
+});
+
+describe("useChatStream completed-turn seam", () => {
+  function deferredDetail() {
+    let settle;
+    invoke.mockImplementation((cmd) => {
+      if (cmd === "session_detail") return new Promise((res, rej) => { settle = { res, rej }; });
+      return Promise.resolve(null);
+    });
+    return () => settle;
+  }
+
+  it("keeps the completed turn on screen until the reply's fetch has been applied", async () => {
+    const pending = deferredDetail();
+    const { result, reload } = mount({ activeConnectionIdRef: { current: "A" } });
+    await waitForListen();
+    seedTurn(result, { connectionId: "A", sessionId: "sess-1", launchSessionId: "sess-1" });
+    emit({ kind: "reply", session_id: "sess-1" });
+    emit({ kind: "done", session_id: "sess-1" });
+    await settle();
+
+    expect(turnOf(result)).not.toBeNull();
+    expect(reload).not.toHaveBeenCalled();
+    expect(invoke.mock.calls.filter(([cmd]) => cmd === "session_detail")).toHaveLength(1);
+
+    await act(async () => {
+      pending().res({ id: "sess-1", turns: [] });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(turnOf(result)).toBeNull();
+    expect(reload).toHaveBeenCalled();
+  });
+
+  it("drops the turn when the transcript fetch fails, degrading to the pre-wait behaviour", async () => {
+    const pending = deferredDetail();
+    const { result, notify } = mount({ activeConnectionIdRef: { current: "A" } });
+    await waitForListen();
+    seedTurn(result, { connectionId: "A", sessionId: "sess-1", launchSessionId: "sess-1" });
+    emit({ kind: "reply", session_id: "sess-1" });
+    emit({ kind: "done", session_id: "sess-1" });
+    await act(async () => {
+      pending().rej(new Error("connection-disabled"));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(turnOf(result)).toBeNull();
+    expect(notify).toHaveBeenCalledWith(expect.objectContaining({ variant: "error" }));
+  });
+
+  it("drops the turn when done's own fetch fails, never stranding it with a fabricated error", async () => {
+    const pending = deferredDetail();
+    const { result } = mount({ activeConnectionIdRef: { current: "A" } });
+    await waitForListen();
+    seedTurn(result, { connectionId: "A", sessionId: "sess-1", launchSessionId: "sess-1" });
+    emit({ kind: "done", session_id: "sess-1" });
+    await act(async () => {
+      pending().rej(new Error("-32004 session-not-found"));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(turnOf(result)).toBeNull();
+  });
+
+  it("degrades to a plain drop when the transport answers nothing inside the bound", async () => {
+    deferredDetail();
+    const { result } = mount({ activeConnectionIdRef: { current: "A" } });
+    await waitForListen();
+    seedTurn(result, { connectionId: "A", sessionId: "sess-1", launchSessionId: "sess-1" });
+    emit({ kind: "reply", session_id: "sess-1" });
+    emit({ kind: "done", session_id: "sess-1" });
+
+    await settle(29_000);
+    expect(turnOf(result)).not.toBeNull();
+    expect(turnOf(result).error).toBeFalsy();
+
+    await settle(2_000);
+    expect(turnOf(result)).toBeNull();
+    expect(vi.getTimerCount()).toBe(0);
+    expect(invoke.mock.calls.filter(([cmd]) => cmd === "session_detail")).toHaveLength(1);
+  });
+
+  it("a transcript that lands after the bound is still applied, and strands nothing", async () => {
+    const pending = deferredDetail();
+    const { result, reload } = mount({ activeConnectionIdRef: { current: "A" } });
+    await waitForListen();
+    seedTurn(result, { connectionId: "A", sessionId: "sess-1", launchSessionId: "sess-1" });
+    emit({ kind: "reply", session_id: "sess-1" });
+    emit({ kind: "done", session_id: "sess-1" });
+    await settle(31_000);
+    expect(turnOf(result)).toBeNull();
+
+    await act(async () => {
+      pending().res({ id: "sess-1", turns: [{ user: "hi", assistant: "there" }] });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(turnOf(result)).toBeNull();
+    expect(reload).toHaveBeenCalled();
+  });
+
+  it("a rejection after the bound leaves no stranded turn either", async () => {
+    const pending = deferredDetail();
+    const { result } = mount({ activeConnectionIdRef: { current: "A" } });
+    await waitForListen();
+    seedTurn(result, { connectionId: "A", sessionId: "sess-1", launchSessionId: "sess-1" });
+    emit({ kind: "done", session_id: "sess-1" });
+    await settle(31_000);
+
+    await act(async () => {
+      pending().rej(new Error("connection-disabled"));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(turnOf(result)).toBeNull();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("marks the turn settling while its transcript read is outstanding", async () => {
+    const pending = deferredDetail();
+    const { result } = mount({ activeConnectionIdRef: { current: "A" } });
+    await waitForListen();
+    seedTurn(result, { connectionId: "A", sessionId: "sess-1", launchSessionId: "sess-1" });
+    emit({ kind: "done", session_id: "sess-1" });
+    await settle();
+    expect(turnOf(result).settling).toBe(true);
+
+    await act(async () => {
+      pending().res({ id: "sess-1", turns: [] });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(turnOf(result)).toBeNull();
+  });
+
+  it("marks the turn settling only while the read is outstanding, then drops it on failure", async () => {
+    const pending = deferredDetail();
+    const { result } = mount({ activeConnectionIdRef: { current: "A" } });
+    await waitForListen();
+    seedTurn(result, { connectionId: "A", sessionId: "sess-1", launchSessionId: "sess-1" });
+    emit({ kind: "done", session_id: "sess-1" });
+    await act(async () => {
+      pending().rej(new Error("connection-disabled"));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(turnOf(result)).toBeNull();
+  });
+
+  it("never invents a turn state the pre-wait code could not produce", () => {
+    const src = readFileSync(join(import.meta.dirname, "useChatStream.js"), "utf8");
+    expect(src).not.toMatch(/TRANSCRIPT_LOAD_FAILED|flagLoadFailure/);
+    expect(src).not.toMatch(/did not load/);
+    const settle = src.slice(src.indexOf("const settleTurn"), src.indexOf("const settleTurn") + 1200);
+    expect(settle.match(/dropSettledTurn\(requestId\)/g)).toHaveLength(3);
+    expect(settle).not.toMatch(/error:/);
+  });
+
+  it("a duplicate done inside the settle window neither refetches nor re-arms the wait", async () => {
+    const pending = deferredDetail();
+    const { result } = mount({ activeConnectionIdRef: { current: "A" } });
+    await waitForListen();
+    seedTurn(result, { connectionId: "A", sessionId: "sess-1", launchSessionId: "sess-1" });
+    emit({ kind: "done", session_id: "sess-1" });
+    await settle();
+    emit({ kind: "done", session_id: "sess-1" });
+    await settle();
+
+    expect(invoke.mock.calls.filter(([cmd]) => cmd === "session_detail")).toHaveLength(1);
+
+    await act(async () => {
+      pending().res({ id: "sess-1", turns: [] });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(turnOf(result)).toBeNull();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("an error frame arriving inside the settle window does not pin the finished turn", async () => {
+    const pending = deferredDetail();
+    const { result } = mount({ activeConnectionIdRef: { current: "A" } });
+    await waitForListen();
+    seedTurn(result, { connectionId: "A", sessionId: "sess-1", launchSessionId: "sess-1" });
+    emit({ kind: "done", session_id: "sess-1" });
+    await settle();
+    emit({ kind: "error", text: "model timeout" });
+    expect(turnOf(result).error).toBeFalsy();
+
+    await act(async () => {
+      pending().res({ id: "sess-1", turns: [] });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(turnOf(result)).toBeNull();
+  });
+
+  it("a settle that resolves after its request id was reused leaves the new turn alone", async () => {
+    const pending = deferredDetail();
+    const { result } = mount({ activeConnectionIdRef: { current: "A" } });
+    await waitForListen();
+    seedTurn(result, { requestId: "req-1", connectionId: "A", profile: "doc", sessionId: "sess-1", launchSessionId: "sess-1" });
+    emit({ kind: "done", session_id: "sess-1" });
+    await settle();
+    seedTurn(result, { requestId: "req-1", connectionId: "A", profile: "lens", sessionId: "sess-9", launchSessionId: "sess-9" });
+
+    await act(async () => {
+      pending().res({ id: "sess-1", turns: [] });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(turnOf(result, "req-1")).not.toBeNull();
+    expect(turnOf(result, "req-1").profile).toBe("lens");
+    expect(turnOf(result, "req-1").error).toBeFalsy();
+    expect(turnOf(result, "req-1").settling).toBeFalsy();
+
+    await settle(40_000);
+    expect(turnOf(result, "req-1")).not.toBeNull();
+  });
+
+  it("does not flag a turn whose fetch resolves inside the bound", async () => {
+    const pending = deferredDetail();
+    const { result } = mount({ activeConnectionIdRef: { current: "A" } });
+    await waitForListen();
+    seedTurn(result, { connectionId: "A", sessionId: "sess-1", launchSessionId: "sess-1" });
+    emit({ kind: "reply", session_id: "sess-1" });
+    emit({ kind: "done", session_id: "sess-1" });
+    await act(async () => {
+      pending().res({ id: "sess-1", turns: [] });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(turnOf(result)).toBeNull();
+
+    await settle(40_000);
+    expect(turnOf(result)).toBeNull();
+  });
+
+  it("an error frame before done keeps the turn and skips the transcript load", async () => {
+    const { result } = mount({ activeConnectionIdRef: { current: "A" } });
+    await waitForListen();
+    seedTurn(result, { connectionId: "A", sessionId: "sess-1", launchSessionId: "sess-1" });
+    invoke.mockClear();
+    emit({ kind: "error", text: "model timeout" });
+    emit({ kind: "done", session_id: "sess-1" });
+    await settle();
+
+    expect(invoke.mock.calls.some(([cmd]) => cmd === "session_detail")).toBe(false);
+    expect(turnOf(result).error).toBe("model timeout");
+  });
+
+  it("a fetch that lands after an error frame leaves the error text intact", async () => {
+    const pending = deferredDetail();
+    const { result } = mount({ activeConnectionIdRef: { current: "A" } });
+    await waitForListen();
+    seedTurn(result, { connectionId: "A", sessionId: "sess-1", launchSessionId: "sess-1" });
+    emit({ kind: "reply", session_id: "sess-1" });
+    emit({ kind: "error", text: "model timeout" });
+    emit({ kind: "done", session_id: "sess-1" });
+    await act(async () => {
+      pending().res({ id: "sess-1", turns: [] });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(turnOf(result).error).toBe("model timeout");
+    expect(turnOf(result).settling).toBe(false);
+  });
+
+  it("removes a completed turn from another connection at once — there is nothing to await", async () => {
+    const { result } = mount({ activeConnectionIdRef: { current: "B" } });
+    await waitForListen();
+    seedTurn(result, { connectionId: "A", sessionId: "sess-A", launchSessionId: "sess-A" });
+    invoke.mockClear();
+    emit({ kind: "done", session_id: "sess-A" });
+
+    expect(turnOf(result)).toBeNull();
+    expect(invoke.mock.calls.some(([cmd]) => cmd === "session_detail")).toBe(false);
+  });
+
+  it("a settle wait pending on unmount leaves no live timer behind", async () => {
+    deferredDetail();
+    const { result, unmount } = mount({ activeConnectionIdRef: { current: "A" } });
+    await waitForListen();
+    seedTurn(result, { connectionId: "A", sessionId: "sess-1", launchSessionId: "sess-1" });
+    emit({ kind: "reply", session_id: "sess-1" });
+    emit({ kind: "done", session_id: "sess-1" });
+    await settle();
+    act(() => unmount());
+
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("a superseding send cancels the prior turn's settle wait", async () => {
+    deferredDetail();
+    const { result } = mount({ activeConnectionIdRef: { current: "A" } });
+    await waitForListen();
+    seedTurn(result, { requestId: "req-1", connectionId: "A", sessionId: "sess-1", launchSessionId: "sess-1" });
+    emit({ kind: "reply", session_id: "sess-1" });
+    emit({ kind: "done", session_id: "sess-1" });
+    await settle();
+    seedTurn(result, { requestId: "req-2", connectionId: "A", sessionId: "sess-1", launchSessionId: "sess-1" });
+
+    await settle(40_000);
+    expect(turnOf(result, "req-1")).toBeNull();
+    expect(turnOf(result, "req-2").error).toBeFalsy();
   });
 });
 
@@ -324,6 +632,68 @@ describe("useChatStream stall watchdog", () => {
       expect.objectContaining({ variant: "info" }),
     );
     expect(turnOf(result)).toBeNull();
+  });
+
+  it("a recovered turn is dropped when its transcript fetch fails, with the failure surfaced", async () => {
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "chat_events_since") {
+        return {
+          exists: true,
+          events: [
+            { frame: { event: "session_start", session_id: "sess-1" } },
+            { frame: { event: "assistant_delta", text: "ok" } },
+            { frame: { event: "done", session_id: "sess-1" } },
+          ],
+        };
+      }
+      if (cmd === "session_detail") throw new Error("connection-disabled");
+      return null;
+    });
+    const { result, notify } = mount();
+    await waitForListen();
+    seedTurn(result, { sessionId: "sess-1" });
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(12_000); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+
+    expect(turnOf(result)).toBeNull();
+    expect(notify).toHaveBeenCalledWith(expect.objectContaining({ variant: "error" }));
+  });
+
+  it("a live done during a recovered turn's settle wait does not start a second transcript read", async () => {
+    let detail = null;
+    invoke.mockImplementation((cmd) => {
+      if (cmd === "chat_events_since") {
+        return Promise.resolve({
+          exists: true,
+          events: [
+            { frame: { event: "session_start", session_id: "sess-1" } },
+            { frame: { event: "assistant_delta", text: "ok" } },
+            { frame: { event: "done", session_id: "sess-1" } },
+          ],
+        });
+      }
+      if (cmd === "session_detail") return new Promise((res, rej) => { detail = { res, rej }; });
+      return Promise.resolve(null);
+    });
+    const { result } = mount();
+    await waitForListen();
+    seedTurn(result, { sessionId: "sess-1" });
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(12_000); });
+    expect(invoke.mock.calls.filter(([cmd]) => cmd === "session_detail")).toHaveLength(1);
+    expect(turnOf(result).settling).toBe(true);
+
+    emit({ kind: "done", session_id: "sess-1" });
+    await settle();
+    expect(invoke.mock.calls.filter(([cmd]) => cmd === "session_detail")).toHaveLength(1);
+
+    await act(async () => {
+      detail.res({ id: "sess-1", turns: [] });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(turnOf(result)).toBeNull();
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("if sidecar has no done frame, watchdog does NOT clear the turn", async () => {

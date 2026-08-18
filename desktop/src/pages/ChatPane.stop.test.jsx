@@ -6,7 +6,7 @@ import ChatPane from "./ChatPane.jsx";
 globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} };
 globalThis.Element.prototype.scrollTo ??= () => {};
 
-function renderPending(onCancel) {
+function renderPending(onCancel, pendingExtra = {}) {
   const profile = { name: "lens", model: "x/y" };
   return render(
     <ChatPane
@@ -14,7 +14,7 @@ function renderPending(onCancel) {
       profiles={[profile]}
       activeProfile={profile}
       sessionData={{ turns: [], last_ctx_tokens: 0 }}
-      pendingTurn={{ requestId: "r1", user: "hola", tools: [], at: 0 }}
+      pendingTurn={{ requestId: "r1", user: "hola", tools: [], at: 0, ...pendingExtra }}
       onSend={vi.fn()}
       onCancel={onCancel}
       onRewriteMessage={vi.fn()}
@@ -44,5 +44,12 @@ describe("ChatPane — stop button optimistic feedback", () => {
     fireEvent.click(screen.getByLabelText("Stopping"));
 
     expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows Send, not Stop, while a finished turn waits on its transcript", () => {
+    renderPending(vi.fn(), { settling: true });
+
+    expect(screen.getByLabelText("Send")).toBeTruthy();
+    expect(screen.queryByLabelText("Stop")).toBeNull();
   });
 });

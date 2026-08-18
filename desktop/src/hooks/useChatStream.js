@@ -12,6 +12,7 @@ const MIN_TOOL_RUNNING_MS = 280;
 // If no chat-event arrives for this long while a turn is in flight, assume the host-plane stream socket died and replay the sidecar.
 const STALL_THRESHOLD_MS = 10_000;
 const STALL_POLL_INTERVAL_MS = 2_000;
+const TURN_SETTLE_TIMEOUT_MS = 30_000;
 
 export function useChatStream({
   setSessionData,
@@ -33,6 +34,7 @@ export function useChatStream({
   const deltaFlushTimerRef = useRef(null);
   // { requestId, timer } entries — cleared per-turn so one turn's done/cancel can't drop another's deferred tool_end.
   const toolEndTimersRef = useRef(new Set());
+  const settlementsRef = useRef(new Map());
 
   useEffect(() => {
     pendingTurnsRef.current = pendingTurns;
@@ -75,6 +77,11 @@ export function useChatStream({
         toolEndTimersRef.current.delete(entry);
       }
     }
+    const settlement = settlementsRef.current.get(requestId);
+    if (settlement !== undefined) {
+      clearTimeout(settlement.timer);
+      settlementsRef.current.delete(requestId);
+    }
   }, []);
 
   const markActivity = useCallback((requestId) => {
@@ -85,6 +92,7 @@ export function useChatStream({
   // Add a turn, superseding any prior turn for the SAME chat — an existing session, or the single blank-composer slot (launchSessionId null); other chats keep streaming.
   const startTurn = useCallback((turn) => {
     const rid = turn.requestId;
+    dropTurnTimers(rid);
     turnMetaRef.current[rid] = { lastEventAt: Date.now(), replaying: false };
     deltaBufferRef.current[rid] = { assistant: "", reasoning: "" };
     const slot = turn.launchSessionId ?? null;
@@ -192,6 +200,8 @@ export function useChatStream({
       if (deltaFlushTimerRef.current) clearTimeout(deltaFlushTimerRef.current);
       for (const entry of toolEndTimersRef.current) clearTimeout(entry.timer);
       toolEndTimersRef.current.clear();
+      for (const settlement of settlementsRef.current.values()) clearTimeout(settlement.timer);
+      settlementsRef.current.clear();
     };
   }, []);
 
@@ -212,6 +222,54 @@ export function useChatStream({
     });
     reloadRef.current?.();
   }, [setView, setRewriteDraft, setSessionData, reloadRef, isActiveConnection]);
+
+  const loadFinishedTurn = useCallback((turn, sid) =>
+    fetchFinishedSession(turn, sid)
+      .then((newData) => {
+        finishTurnView(turn, sid, newData);
+        return true;
+      })
+      .catch((e) => {
+        notify({ message: String(e), variant: "error" });
+        return false;
+      }), [fetchFinishedSession, finishTurnView, notify]);
+
+  const dropSettledTurn = useCallback((requestId) => {
+    setPendingTurns((prev) => {
+      const cur = prev[requestId];
+      if (cur === undefined) return prev;
+      if (cur.error) {
+        // keep an errored turn on screen
+        return cur.settling ? { ...prev, [requestId]: { ...cur, settling: false } } : prev;
+      }
+      const { [requestId]: _omit, ...rest } = prev;
+      return rest;
+    });
+  }, []);
+
+  const settleTurn = useCallback((requestId, load) => {
+    if (settlementsRef.current.has(requestId)) return;
+    const settlement = { timer: null };
+    const close = () => {
+      if (settlementsRef.current.get(requestId) !== settlement) return false;
+      clearTimeout(settlement.timer);
+      settlementsRef.current.delete(requestId);
+      return true;
+    };
+    settlement.timer = setTimeout(() => {
+      if (close()) dropSettledTurn(requestId);
+    }, TURN_SETTLE_TIMEOUT_MS);
+    settlementsRef.current.set(requestId, settlement);
+    updateTurn(requestId, (cur) => (cur.settling ? cur : { ...cur, settling: true }));
+    load.then(
+      () => {
+        if (close()) dropSettledTurn(requestId);
+      },
+      () => {
+        if (close()) dropSettledTurn(requestId);
+      },
+    );
+  }, [dropSettledTurn, updateTurn]);
 
   // Rebuild a turn's state from the persisted sidecar — used when its live stream goes silent.
   const applyReplayedEvents = useCallback((requestId, events) => {
@@ -246,22 +304,18 @@ export function useChatStream({
         afterSeq: 0,
       });
       if (!result?.exists) return;
+      if (settlementsRef.current.has(requestId)) return;
       const events = Array.isArray(result.events) ? result.events : [];
       deltaBufferRef.current[requestId] = { assistant: "", reasoning: "" };
       const { sawDone, finalSessionId } = applyReplayedEvents(requestId, events);
       if (sawDone) {
         notify({ message: "Reconnected — turn recovered from disk", variant: "success" });
         const sid = finalSessionId ?? turn.sessionId;
-        try {
-          const newData = await fetchFinishedSession(turn, sid);
-          finishTurnView(turn, sid, newData);
-        } catch (e) {
-          notify({ message: String(e), variant: "error" });
-        }
+        const load = loadFinishedTurn(turn, sid);
         delete turnMetaRef.current[requestId];
         delete deltaBufferRef.current[requestId];
         dropTurnTimers(requestId);
-        updateTurn(requestId, (prev) => (prev?.error ? prev : null));
+        settleTurn(requestId, load);
       } else {
         meta.lastEventAt = Date.now();
       }
@@ -271,7 +325,7 @@ export function useChatStream({
       const m = turnMetaRef.current[requestId];
       if (m) m.replaying = false;
     }
-  }, [applyReplayedEvents, dropTurnTimers, fetchFinishedSession, finishTurnView, notify, updateTurn]);
+  }, [applyReplayedEvents, dropTurnTimers, loadFinishedTurn, notify, settleTurn, updateTurn]);
 
   useEffect(() => {
     if (Object.keys(pendingTurns).length === 0) return undefined;
@@ -297,6 +351,7 @@ export function useChatStream({
       const p = event.payload;
       const rid = p.request_id;
       if (!rid || pendingTurnsRef.current[rid] === undefined) return;
+      if (settlementsRef.current.has(rid)) return;
       markActivity(rid);
       if (p.kind === "heartbeat") {
         return; // keepalive only — daemon proving the loop is alive
@@ -434,31 +489,23 @@ export function useChatStream({
         const turn = pendingTurnsRef.current[rid];
         if (!turn) return;
         if (!isActiveConnection(turn)) return;
-        const meta = turnMetaRef.current[rid];
-        if (meta) meta.loaded = true;
         const sid = p.session_id;
-        fetchFinishedSession(turn, sid)
-          .then((newData) => finishTurnView(turn, sid, newData))
-          .catch((e) => notify({ message: String(e), variant: "error" }));
+        const load = loadFinishedTurn(turn, sid);
+        const meta = turnMetaRef.current[rid];
+        if (meta) meta.load = load;
       } else if (p.kind === "done") {
         const turn = pendingTurnsRef.current[rid];
-        const alreadyLoaded = turnMetaRef.current[rid]?.loaded === true;
+        const started = turnMetaRef.current[rid]?.load ?? null;
         const sid = p.session_id || turn?.sessionId || null;
-        if (turn && sid && !alreadyLoaded && !turn.error && isActiveConnection(turn)) {
-          fetchFinishedSession(turn, sid)
-            .then((newData) => finishTurnView(turn, sid, newData))
-            .catch((e) => notify({ message: String(e), variant: "error" }));
-        }
+        const load = started
+          ?? (turn && sid && !turn.error && isActiveConnection(turn)
+            ? loadFinishedTurn(turn, sid)
+            : null);
         delete turnMetaRef.current[rid];
         delete deltaBufferRef.current[rid];
         dropTurnTimers(rid);
-        setPendingTurns((prev) => {
-          const cur = prev[rid];
-          if (cur === undefined) return prev;
-          if (cur.error) return prev; // keep an errored turn on screen
-          const { [rid]: _omit, ...rest } = prev;
-          return rest;
-        });
+        if (load) settleTurn(rid, load);
+        else dropSettledTurn(rid);
       }
     })
       .then((fn) => {
@@ -470,7 +517,7 @@ export function useChatStream({
       cancelled = true;
       safeUnlisten(unlisten);
     };
-  }, [markActivity, scheduleDeltaFlush, updateTurn, dropTurnTimers, fetchFinishedSession, finishTurnView, notify, isActiveConnection]);
+  }, [markActivity, scheduleDeltaFlush, updateTurn, dropTurnTimers, loadFinishedTurn, settleTurn, dropSettledTurn, isActiveConnection]);
 
   return { pendingTurns, pendingTurnsRef, startTurn, removeTurn, clearTurnsForConnection, detachNewChatTurns };
 }

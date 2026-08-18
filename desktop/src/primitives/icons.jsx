@@ -8,43 +8,43 @@ export { default as Icon } from "./Icon.jsx";
 // Canonical API: <Icon name="copy" size="lg" />.
 // Named exports below are backward-compat wrappers; new code should use <Icon name=...>.
 
-export const Search = (p) => <Icon name="search" {...p} />;
-export const Plus = (p) => <Icon name="plus" {...p} />;
-export const Arrow = (p) => <Icon name="arrow" {...p} />;
-export const ArrowLeft = (p) => <Icon name="arrow-left" {...p} />;
-export const Refresh = (p) => <Icon name="refresh" {...p} />;
-export const Gear = (p) => <Icon name="gear" {...p} />;
-export const Check = (p) => <Icon name="check" {...p} />;
-export const X = (p) => <Icon name="x" {...p} />;
-export const Pause = (p) => <Icon name="pause" {...p} />;
-export const Play = (p) => <Icon name="play" {...p} />;
+const Search = (p) => <Icon name="search" {...p} />;
+const Plus = (p) => <Icon name="plus" {...p} />;
+const Arrow = (p) => <Icon name="arrow" {...p} />;
+const ArrowLeft = (p) => <Icon name="arrow-left" {...p} />;
+const Refresh = (p) => <Icon name="refresh" {...p} />;
+const Gear = (p) => <Icon name="gear" {...p} />;
+const Check = (p) => <Icon name="check" {...p} />;
+const X = (p) => <Icon name="x" {...p} />;
+const Pause = (p) => <Icon name="pause" {...p} />;
+const Play = (p) => <Icon name="play" {...p} />;
 export const Power = (p) => <Icon name="power" {...p} />;
-export const Copy = (p) => <Icon name="copy" {...p} />;
-export const Cpu = (p) => <Icon name="cpu" {...p} />;
-export const Server = (p) => <Icon name="server" {...p} />;
-export const Globe = (p) => <Icon name="globe" {...p} />;
-export const Sun = (p) => <Icon name="sun" {...p} />;
-export const Moon = (p) => <Icon name="moon" {...p} />;
-export const Auto = (p) => <Icon name="sun-moon" {...p} />;
-export const Trash = (p) => <Icon name="trash" {...p} />;
-export const ChevDown = (p) => <Icon name="chev-down" {...p} />;
-export const ChevRight = (p) => <Icon name="chev-right" {...p} />;
-export const Send = (p) => <Icon name="send" {...p} />;
-export const SendToChat = (p) => <Icon name="arrow-right-to-line" {...p} />;
-export const Blocks = (p) => <Icon name="blocks" {...p} />;
-export const Sparkle = (p) => <Icon name="sparkle" {...p} />;
-export const Wrench = (p) => <Icon name="wrench" {...p} />;
-export const Eye = (p) => <Icon name="eye" {...p} />;
-export const Lock = (p) => <Icon name="lock" {...p} />;
+const Copy = (p) => <Icon name="copy" {...p} />;
+const Cpu = (p) => <Icon name="cpu" {...p} />;
+const Server = (p) => <Icon name="server" {...p} />;
+const Globe = (p) => <Icon name="globe" {...p} />;
+const Sun = (p) => <Icon name="sun" {...p} />;
+const Moon = (p) => <Icon name="moon" {...p} />;
+const Auto = (p) => <Icon name="sun-moon" {...p} />;
+const Trash = (p) => <Icon name="trash" {...p} />;
+const ChevDown = (p) => <Icon name="chev-down" {...p} />;
+const ChevRight = (p) => <Icon name="chev-right" {...p} />;
+const Send = (p) => <Icon name="send" {...p} />;
+const SendToChat = (p) => <Icon name="arrow-right-to-line" {...p} />;
+const Blocks = (p) => <Icon name="blocks" {...p} />;
+const Sparkle = (p) => <Icon name="sparkle" {...p} />;
+const Wrench = (p) => <Icon name="wrench" {...p} />;
+const Eye = (p) => <Icon name="eye" {...p} />;
+const Lock = (p) => <Icon name="lock" {...p} />;
 export const PaperclipIcon = (p) => <Icon name="paperclip" {...p} />;
 export const LinkIcon = (p) => <Icon name="link" {...p} />;
 export const FileIcon = (p) => <Icon name="file" {...p} />;
 export const FileTextIcon = (p) => <Icon name="file-text" {...p} />;
 export const FileCodeIcon = (p) => <Icon name="file-code" {...p} />;
-export const Mute = (p) => <Icon name="mute" {...p} />;
-export const Volume = (p) => <Icon name="volume" {...p} />;
-export const Archive = (p) => <Icon name="archive" {...p} />;
-export const Bell = (p) => <Icon name="bell" {...p} />;
+const Mute = (p) => <Icon name="mute" {...p} />;
+const Volume = (p) => <Icon name="volume" {...p} />;
+const Archive = (p) => <Icon name="archive" {...p} />;
+const Bell = (p) => <Icon name="bell" {...p} />;
 
 export const SearchIcon = Search;
 export const PlusIcon = Plus;
@@ -54,7 +54,7 @@ export const RefreshIcon = Refresh;
 export const GearIcon = Gear;
 export const CheckIcon = Check;
 export const XIcon = X;
-export const Download = (p) => <Icon name="download" {...p} />;
+const Download = (p) => <Icon name="download" {...p} />;
 export const DownloadIcon = Download;
 export const PauseIcon = Pause;
 export const PlayIcon = Play;
@@ -161,7 +161,7 @@ export function StatusIcon({ kind, className = "", style }) {
   );
 }
 
-export const Alpaca = (p) => (
+const Alpaca = (p) => (
   <svg viewBox="0 0 40 40" {...p}>
     <circle cx="20" cy="22" r="11" fill="currentColor" />
     <rect x="10" y="6" width="6" height="11" rx="3" fill="currentColor" />

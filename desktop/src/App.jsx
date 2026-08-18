@@ -113,6 +113,10 @@ export function profileSurfaceKey(surface, connectionId, profile) {
   return `${surface}:${connectionId ?? ""}:${profile ?? ""}`;
 }
 
+export function turnBlocksSend(turn) {
+  return !!turn && !turn.error && !turn.settling;
+}
+
 export function settingsTargetForChatView(view, selectedProfile = null) {
   if (view?.kind === "profile") return { kind: "profile", id: view.profile };
   if (view?.kind === "workgroup") return { kind: "workgroup", id: view.id };
@@ -924,7 +928,7 @@ export default function App() {
             ? (t.sessionId ?? t.launchSessionId) === startSessionId
             : (t.launchSessionId ?? null) === null),
         );
-        if (prior && !prior.error) {
+        if (turnBlocksSend(prior)) {
           notify({ message: "A turn is already running in this session — wait for it or press Stop.", variant: "info" });
           return;
         }

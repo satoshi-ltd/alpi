@@ -114,6 +114,7 @@ export default function ChatPane({
     setStopping(true);
     onCancel?.();
   }, [onCancel]);
+  const cancellableTurn = !!pendingTurn && !pendingTurn.settling;
 
   // Lazy heavy fields — voice_id / models / mcps. Scoped per connection so two daemons with the same profile name never share state.
   const { detail: activeDetail, refresh: refreshActiveDetail } = useProfileDetail(connectionId ?? null, activeProfile?.name ?? null);
@@ -282,7 +283,7 @@ export default function ChatPane({
           onSelectProfile={onSelectProfile}
           onConfigureProfile={onConfigureProfile}
           onSend={onSend}
-          onCancel={pendingTurn ? handleCancel : null}
+          onCancel={cancellableTurn ? handleCancel : null}
           stopping={stopping}
           disabled={daemonOffline || paused}
           daemonOffline={daemonOffline}
@@ -380,7 +381,7 @@ export default function ChatPane({
         onSelectProfile={onSelectProfile}
         onConfigureProfile={onConfigureProfile}
         onSend={onSend}
-        onCancel={pendingTurn ? handleCancel : null}
+        onCancel={cancellableTurn ? handleCancel : null}
         stopping={stopping}
         disabled={daemonOffline || paused}
         daemonOffline={daemonOffline}

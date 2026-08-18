@@ -5,6 +5,7 @@ import { canRefreshProfileThread, profileManagementAllowed,
   profileSurfaceKey,
   settingsTargetAfterExit,
   settingsTargetForChatView,
+  turnBlocksSend,
 } from "./App.jsx";
 
 describe("connectionFailureMessage", () => {
@@ -98,6 +99,19 @@ describe("profileManagementAllowed", () => {
     expect(profileManagementAllowed("admin")).toBe(true);
     expect(profileManagementAllowed(null)).toBe(true);
     expect(profileManagementAllowed(undefined)).toBe(true);
+  });
+});
+
+describe("turnBlocksSend", () => {
+  it("blocks only a turn that is still generating", () => {
+    expect(turnBlocksSend(null)).toBe(false);
+    expect(turnBlocksSend(undefined)).toBe(false);
+    expect(turnBlocksSend({ requestId: "r1" })).toBe(true);
+  });
+
+  it("frees the composer once the answer is in — errored or awaiting its transcript", () => {
+    expect(turnBlocksSend({ requestId: "r1", error: "model timeout" })).toBe(false);
+    expect(turnBlocksSend({ requestId: "r1", settling: true })).toBe(false);
   });
 });
 

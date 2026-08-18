@@ -11,6 +11,22 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.5.10 — 2026-08-18 — the answer outlives the fetch
+
+- **A finished answer is no longer briefly missing.** The turn you were watching
+  was removed from the view the moment the daemon said "done", while the request
+  that loads the saved transcript was still on the wire — so on a slow link the
+  answer vanished for as long as that read took, and disappeared for good
+  whenever the read failed. The turn now stays until the transcript has actually
+  been applied, and if the read cannot complete it is dropped exactly as before
+  rather than left behind in a state you cannot clear.
+- **The composer frees up as soon as the answer lands**, instead of waiting on
+  the transcript read behind it, and Stop turns back into Send at the same
+  moment. A repeated "done" no longer asks the daemon for the same transcript
+  twice.
+
+Client-side only — no daemon contract changes. Requires alpi ≥ 0.14.0.
+
 ## v0.5.9 — 2026-08-18 — call it what it is
 
 - **The app says "profiles", not "alpis".** The sidebar filter and its empty

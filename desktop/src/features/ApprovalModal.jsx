@@ -3,7 +3,7 @@ import { profileLabel } from "../lib/profile-display.js";
 import { invoke } from "@tauri-apps/api/core";
 
 import { Button, Diamond, IconBtn, Modal, Tip } from "../primitives/index.js";
-import { X } from "../primitives/icons.jsx";
+import { XIcon } from "../primitives/icons.jsx";
 import styles from "./ApprovalModal.module.css";
 
 const ALLOW_CHOICES = [
@@ -90,7 +90,7 @@ export default function ApprovalModal({ requests, onResolved }) {
         </div>
         <Tip text="Close" side="down">
           <IconBtn aria-label="Close" onClick={deny} disabled={busy}>
-            <X />
+            <XIcon />
           </IconBtn>
         </Tip>
       </div>

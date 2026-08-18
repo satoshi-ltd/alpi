@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { BrowseModal, Eyebrow, Icon, Lock, StatusPill as DSStatusPill } from "../primitives/index.js";
+import { BrowseModal, Eyebrow, Icon, LockIcon, StatusPill as DSStatusPill } from "../primitives/index.js";
 import Markdown from "../primitives/Markdown.jsx";
 import CodeView from "../primitives/CodeView.jsx";
 import shell from "../primitives/BrowseModal.module.css";
@@ -411,7 +411,7 @@ function SkillTree({ tree, selectedPath, openDirs, onToggle, onSelectFile }) {
         if (node.locked) {
           return (
             <div key={node.name} className={`${styles.treeRow} ${styles.treeSecrets}`}>
-              <Lock className={styles.treeIcon} size="sm" />
+              <LockIcon className={styles.treeIcon} size="sm" />
               <span className={styles.treeName}>{node.name}/</span>
               <span className={styles.treeMeta}>{node.count ? `${node.count} · ${node.mode}` : "empty"}</span>
             </div>

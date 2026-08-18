@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
 import { Button, Eyebrow, IconBtn, Modal, Textarea, Tip } from "../primitives/index.js";
-import { Check, EditIcon, X } from "../primitives/icons.jsx";
+import { CheckIcon, EditIcon, XIcon } from "../primitives/icons.jsx";
 import styles from "./ClarificationModal.module.css";
 
 function modeFor(current) {
@@ -93,7 +93,7 @@ export default function ClarificationModal({ requests, onResolved }) {
         </div>
         <Tip text="Close" side="down">
           <IconBtn aria-label="Close" onClick={cancel} disabled={busy}>
-            <X />
+            <XIcon />
           </IconBtn>
         </Tip>
       </div>
@@ -234,7 +234,7 @@ function MultiBody({ choices, picked, onToggle, busy }) {
             disabled={busy}
           >
             <span className={`${styles.checkbox} ${checked ? styles.checkboxChecked : ""}`}>
-              {checked ? <Check size={14} /> : null}
+              {checked ? <CheckIcon size={14} /> : null}
             </span>
             <span className={styles.rowLabel}>{c.label}</span>
           </button>
