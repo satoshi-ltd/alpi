@@ -64,12 +64,12 @@ export default function AlpiPicker({ profiles, activeAlpi, onChange, variant = "
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Find alpi…"
+            placeholder="Find profile…"
             className={styles.search}
           />
           <div className={`scroll ${styles.list}`}>
             {filtered.length === 0 ? (
-              <div className={styles.empty}>No alpis match</div>
+              <div className={styles.empty}>No profiles match</div>
             ) : (
               filtered.map((p) => {
                 const sel = p.name === activeAlpi;

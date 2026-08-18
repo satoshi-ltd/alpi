@@ -604,7 +604,7 @@ export default function App() {
               ? { ...v, sessionId: null }
               : v,
           ),
-        onError: (e) => notify({ message: `chat load failed: ${e}`, variant: "error" }),
+        onError: (e) => notify({ message: `session load failed: ${e}`, variant: "error" }),
       }),
     [],
   );
@@ -925,7 +925,7 @@ export default function App() {
             : (t.launchSessionId ?? null) === null),
         );
         if (prior && !prior.error) {
-          notify({ message: "A turn is already running in this chat — wait for it or press Stop.", variant: "info" });
+          notify({ message: "A turn is already running in this session — wait for it or press Stop.", variant: "info" });
           return;
         }
         if (prior) {

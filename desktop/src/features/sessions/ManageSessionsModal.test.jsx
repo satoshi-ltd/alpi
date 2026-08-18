@@ -41,7 +41,7 @@ describe("ManageSessionsModal", () => {
     await screen.findByText("active chat");
 
     expect(screen.getByRole("button", { name: "Activity" })).toBeInTheDocument();
-    const previews = screen.getAllByText(/active chat|stub|old chat/).map((node) => node.textContent);
+    const previews = screen.getAllByText(/^(active chat|stub|old chat)$/).map((node) => node.textContent);
     expect(previews).toEqual(["active chat", "stub", "old chat"]);
 
     fireEvent.click(screen.getByRole("button", { name: "Activity" }));
@@ -49,6 +49,24 @@ describe("ManageSessionsModal", () => {
       .getAllByText(/^(Activity|Size|Turns|Created)$/)
       .map((node) => node.textContent);
     expect(labels).toEqual(["Activity", "Activity", "Size", "Turns", "Created"]);
+  });
+
+  it("names the thread a session in the dialog, heading and count", async () => {
+    render(
+      <ManageSessionsModal
+        open
+        profile="doc"
+        currentSessionId="live"
+        onClose={() => {}}
+      />,
+    );
+
+    await screen.findByText("active chat");
+
+    expect(screen.getByRole("dialog", { name: "Manage sessions" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Sessions" })).toBeInTheDocument();
+    expect(screen.getByText(/3 sessions/)).toBeInTheDocument();
+    expect(screen.getByText("SESSION")).toBeInTheDocument();
   });
 
   it("clears selection when the filter changes so Delete-N matches what will be deleted", async () => {

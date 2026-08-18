@@ -519,6 +519,52 @@ def test_latest_chat_summary_handles_large_session_without_full_json_parse(
     assert row["last_ctx_tokens"] == 789
 
 
+def test_latest_chat_summary_without_a_scope_sees_every_connection(tmp_path: Path) -> None:
+    _seed_session(tmp_path, "mine", "mine", started_at=1.0, connection_id="conn_a")
+    _seed_session(tmp_path, "theirs", "theirs", started_at=2.0, connection_id="conn_b")
+
+    row = data_sessions.latest_chat_summary(tmp_path)
+
+    assert row is not None and row["id"] == "theirs"
+
+
+@pytest.mark.parametrize("role", ["member", "admin"])
+def test_latest_chat_summary_skips_past_a_newer_foreign_session(tmp_path: Path, role: str) -> None:
+    from alpi.host.connection_context import ConnectionContext, owns_connection, use
+
+    _seed_session(tmp_path, "mine", "mine", started_at=1.0, connection_id="conn_a")
+    _seed_session(tmp_path, "theirs", "theirs", started_at=2.0, connection_id="conn_b")
+
+    with use(ConnectionContext("conn_a", "dev_a", "remote", role)):
+        row = data_sessions.latest_chat_summary(tmp_path, can_read=owns_connection)
+
+    assert row is not None and row["id"] == "mine"
+
+
+def test_latest_chat_summary_is_none_when_every_session_is_foreign(tmp_path: Path) -> None:
+    from alpi.host.connection_context import ConnectionContext, owns_connection, use
+
+    _seed_session(tmp_path, "theirs", "theirs", connection_id="conn_b")
+
+    with use(ConnectionContext("conn_a", "dev_a", "remote", "member")):
+        assert data_sessions.latest_chat_summary(tmp_path, can_read=owns_connection) is None
+
+
+def test_latest_chat_summary_gives_the_local_socket_host_and_legacy_sessions(tmp_path: Path) -> None:
+    from alpi.host.connection_context import owns_connection
+
+    (tmp_path / "sessions").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "sessions" / "legacy.json").write_text(json.dumps({
+        "id": "legacy", "started_at": 1.0,
+        "turns": [{"at": 1.0, "user": "before connections existed", "assistant": "ok"}],
+    }), encoding="utf-8")
+    _seed_session(tmp_path, "paired", "from a phone", started_at=3.0, connection_id="conn_b")
+
+    row = data_sessions.latest_chat_summary(tmp_path, can_read=owns_connection)
+
+    assert row is not None and row["id"] == "legacy"
+
+
 def test_delete_session_removes_main_and_sidecar(tmp_path: Path) -> None:
     p = _seed_session(tmp_path, "doomed", "hi")
     sidecar = tmp_path / "sessions" / "_events_doomed.jsonl"
@@ -546,8 +592,8 @@ async def test_sessions_delete_rpc_deletes_each_id(
     srv = host_server.Server(home=home)
     data_handlers.register(srv)
     monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
-    # An omitted profile arrives as "", while the cache is keyed by name — assert the effect, not the argument.
-    device_state._summary_cache["default"] = (float("inf"), {"latest_session": "a"})
+    # An omitted profile arrives as "", while the cache is keyed by (connection, name) — assert the effect, not the argument.
+    device_state._summary_cache[("host", "default")] = (float("inf"), {"latest_session": "a"})
 
     response = await srv._dispatch({
         "id": "r", "method": "host.sessions.delete",
@@ -556,7 +602,7 @@ async def test_sessions_delete_rpc_deletes_each_id(
     assert response["result"] == {"deleted": ["a", "b"], "errors": []}
     assert not (home / "sessions" / "a.json").exists()
     assert not (home / "sessions" / "b.json").exists()
-    assert "default" not in device_state._summary_cache
+    assert not [key for key in device_state._summary_cache if key[1] == "default"]
 
 
 @pytest.mark.asyncio

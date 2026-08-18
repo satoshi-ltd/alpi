@@ -11,6 +11,32 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.5.9 — 2026-08-18 — call it what it is
+
+- **The app says "profiles", not "alpis".** The sidebar filter and its empty
+  state, the profile picker's search and its empty state, the command palette's
+  filter entry and a workgroup's member count all use the same noun. `alpi`
+  remains the display name of the default profile — it names that one agent, not
+  the category.
+- **A conversation is a session, not a chat or a thread.** The sidebar and the
+  command palette offer New session, the Sessions dialog counts and describes
+  sessions, and the load-failure and turn-already-running notices name the
+  session too.
+- **An unread row keeps its timestamp.** Unread now shows as weight on both ends
+  of the row — the name and the time turn bold — instead of an accent dot that
+  took the timestamp's place. The rows you most want to triage no longer hide
+  when they last moved.
+- **Unread is announced, now that no dot carries the label.** A profile or
+  workgroup row reads as its name followed by "unread" to a screen reader; a
+  profile still waiting for a provider keeps its setup hint, since such a row is
+  never unread.
+- **The New session row no longer advertises ⌘N.** With a profile open that key
+  starts a new session in it, which is what the Sessions dropdown offers; the
+  sidebar row opens the picker instead, so it stopped pointing at a shortcut it
+  does not run.
+
+Client-side only — no daemon contract changes. Requires alpi ≥ 0.14.0.
+
 ## v0.5.8 — 2026-08-17 — one host, shown once
 
 - **The pairing modal shows the host exactly once.** With several reachable

@@ -25,16 +25,23 @@ const BASE = {
   hostConnections: { active_id: "remote", connections: [] },
 };
 
-const filterInput = () => screen.getByPlaceholderText(/Filter alpis/);
+const filterInput = () => screen.getByPlaceholderText(/Filter profiles/);
 
 describe("Sidebar filter", () => {
-  it("swaps New chat for the filter input when search is open", () => {
+  it("swaps New session for the filter input when search is open", () => {
     const { rerender } = render(<Sidebar {...BASE} onNewChat={() => {}} />);
-    expect(screen.getByText("New chat")).toBeInTheDocument();
+    expect(screen.getByText("New session")).toBeInTheDocument();
 
     rerender(<Sidebar {...BASE} onNewChat={() => {}} searchOpen />);
-    expect(screen.queryByText("New chat")).not.toBeInTheDocument();
+    expect(screen.queryByText("New session")).not.toBeInTheDocument();
     expect(filterInput()).toBeInTheDocument();
+  });
+
+  it("leaves ⌘N unclaimed on the recipient-picker row — the sessions dropdown owns that key", () => {
+    render(<Sidebar {...BASE} onNewChat={() => {}} />);
+    const row = screen.getByText("New session").closest("button");
+
+    expect(row.textContent).toBe("New session");
   });
 
   it("narrows the list to matches as you type", () => {
@@ -51,7 +58,7 @@ describe("Sidebar filter", () => {
   it("shows an empty state when nothing matches", () => {
     render(<Sidebar {...BASE} searchOpen />);
     fireEvent.change(filterInput(), { target: { value: "zzz" } });
-    expect(screen.getByText("No alpis or workgroups match")).toBeInTheDocument();
+    expect(screen.getByText("No profiles or workgroups match")).toBeInTheDocument();
   });
 
   it("closes via the clear button", () => {

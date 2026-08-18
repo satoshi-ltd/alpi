@@ -96,4 +96,17 @@ describe("SessionsButton — profile switch", () => {
     expect(screen.queryByText("hello from A")).toBeNull();
   });
 
+  it("owns the ⌘N advertisement as New session, the noun the sidebar uses", async () => {
+    invokeMock.mockResolvedValue([]);
+    const { rerender } = render(<SessionsButton profile="A" openTick={0} />);
+    await waitFor(() => expect(screen.getByText("Sessions")).toBeTruthy());
+    rerender(<SessionsButton profile="A" openTick={1} />);
+
+    await waitFor(() => expect(screen.getByText("New session")).toBeTruthy());
+    expect(screen.getByText("No sessions yet")).toBeTruthy();
+    expect(screen.getByText("⌘")).toBeTruthy();
+    expect(screen.getByText("N")).toBeTruthy();
+    expect(screen.queryByText("New chat")).toBeNull();
+  });
+
 });

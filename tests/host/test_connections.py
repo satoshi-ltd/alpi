@@ -13,6 +13,7 @@ from alpi.host import (
     _chat_events,
     chat,
     connections,
+    device_state,
     handlers,
     sessions as host_sessions,
     usage as host_usage,
@@ -1060,6 +1061,70 @@ async def test_session_explorer_is_partitioned_by_connection(monkeypatch, tmp_pa
         with pytest.raises(HandlerError) as error:
             await handlers._session_read({"profile": "default", "id": foreign_id}, server)
         assert error.value.message == "not-found"
+
+
+def _seed_chat(home: Path, connection_id: str, text: str) -> str:
+    session = Session(home, "model", connection_id=connection_id)
+    session.turns.append(Turn(1, text, [], "reply"))
+    session.save()
+    return session.id
+
+
+async def _latest_session(server: Server) -> dict | None:
+    response = await server._dispatch({
+        "id": "s", "method": "host.profile.summaries", "params": {},
+    })
+    assert "error" not in response
+    return response["result"]["profiles"][0]["latest_session"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["member", "admin"])
+async def test_latest_session_preview_never_crosses_connections(
+    monkeypatch, tmp_path: Path, role: str,
+) -> None:
+    root = _root(monkeypatch, tmp_path)
+    _seed_chat(root, "conn_fold", "typed on the fold")
+    server = Server(root)
+    device_state.register(server)
+
+    with use(ConnectionContext("conn_fold", "dev_fold", "remote", role)):
+        assert (await _latest_session(server))["first_user"] == "typed on the fold"
+    # Second poll lands inside the summary TTL: a profile-only cache key would replay the fold preview here.
+    with use(ConnectionContext("conn_phone", "dev_phone", "remote", role)):
+        assert await _latest_session(server) is None
+
+
+@pytest.mark.asyncio
+async def test_latest_session_preview_stays_visible_to_the_local_socket(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    root = _root(monkeypatch, tmp_path)
+    _seed_chat(root, "host", "typed in the cli")
+    _seed_chat(root, "conn_phone", "typed on the phone")
+    server = Server(root)
+    device_state.register(server)
+
+    assert (await _latest_session(server))["first_user"] == "typed in the cli"
+
+
+@pytest.mark.asyncio
+async def test_summarised_latest_session_is_readable_by_its_owner(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    root = _root(monkeypatch, tmp_path)
+    _seed_chat(root, "conn_a", "mine")
+    _seed_chat(root, "conn_b", "theirs")
+    server = Server(root)
+    device_state.register(server)
+    handlers.register(server)
+    monkeypatch.setattr(handlers, "_resolve_home", lambda _profile: root)
+
+    with use(ConnectionContext("conn_a", "dev_a", "remote", "member")):
+        latest = await _latest_session(server)
+        read = await handlers._session_read({"profile": "default", "id": latest["id"]}, server)
+
+    assert read["session"]["turns"][0]["user"] == "mine"
 
 
 @pytest.mark.asyncio

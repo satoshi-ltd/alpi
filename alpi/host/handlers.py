@@ -84,10 +84,9 @@ async def _sessions_list(
     limit_raw = (params or {}).get("limit")
     limit = int(limit_raw) if limit_raw is not None else None
     home = _resolve_home(profile)
-    from alpi.host.connection_context import current
-    connection_id = current().connection_id
+    from alpi.host.connection_context import owns_connection
     sessions = await asyncio.to_thread(host_sessions.list_sessions, home, None)
-    sessions = [row for row in sessions if row.get("connection_id") == connection_id]
+    sessions = [row for row in sessions if owns_connection(row.get("connection_id"))]
     if limit is not None and limit > 0:
         sessions = sessions[:limit]
     return {"sessions": sessions}
@@ -106,12 +105,12 @@ async def _session_read(
     session_id = str((params or {}).get("id") or "").strip()
     _check_id(session_id, "id")
     home = _resolve_home(profile)
-    from alpi.host.connection_context import current
+    from alpi.host.connection_context import owns_connection
     try:
         owner = await asyncio.to_thread(host_sessions.session_connection_id, home, session_id)
     except FileNotFoundError as e:
         raise host_server.HandlerError(-32004, "not-found", data={"detail": str(e)})
-    if owner != current().connection_id:
+    if not owns_connection(owner):
         raise host_server.HandlerError(-32004, "not-found", data={"detail": "session not found"})
     after_turn = _coerce_count((params or {}).get("after_turn"))
     tail_turns = _coerce_count((params or {}).get("tail_turns"))

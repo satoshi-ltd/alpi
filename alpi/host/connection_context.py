@@ -36,6 +36,11 @@ def can_read_connection(owner_connection_id: str | None) -> bool:
     return (owner_connection_id or HOST_CONNECTION_ID) == ctx.connection_id
 
 
+def owns_connection(owner_connection_id: str | None) -> bool:
+    """Host-plane session ownership: no admin bypass, unlike can_read_connection."""
+    return (owner_connection_id or HOST_CONNECTION_ID) == current().connection_id
+
+
 @contextmanager
 def use(context: ConnectionContext) -> Iterator[None]:
     token = _current.set(context)

@@ -50,7 +50,7 @@ describe("useCommands", () => {
 
     expect(command).toMatchObject({
       group: "General",
-      label: "Filter alpis & workgroups",
+      label: "Filter profiles & workgroups",
       hint: "⌘S",
     });
     command.action();
@@ -83,6 +83,17 @@ describe("useCommands", () => {
     });
     command.action();
     expect(onOpenHistory).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers the recipient picker as New session without claiming ⌘N, which blanks the open profile instead", () => {
+    const onNewChat = vi.fn();
+    const commands = renderCommands({ view: { kind: "profile" }, onNewChat });
+    const command = commands.find((cmd) => cmd.id === "create:chat");
+
+    expect(command).toMatchObject({ group: "Chat", label: "New session" });
+    expect(command).not.toHaveProperty("hint");
+    command.action();
+    expect(onNewChat).toHaveBeenCalledTimes(1);
   });
 
   it("shows profile pause and refresh when available", () => {

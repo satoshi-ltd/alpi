@@ -5,6 +5,7 @@ import os
 import re
 import threading
 from collections import OrderedDict
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -56,7 +57,11 @@ def count_sessions(home: Path) -> int:
     return sum(1 for _ in _session_files(d))
 
 
-def latest_chat_summary(home: Path) -> dict[str, Any] | None:
+def latest_chat_summary(
+    home: Path,
+    *,
+    can_read: Callable[[str | None], bool] | None = None,
+) -> dict[str, Any] | None:
     d = home / "sessions"
     if not d.exists():
         return None
@@ -66,6 +71,8 @@ def latest_chat_summary(home: Path) -> dict[str, Any] | None:
     for p in files:
         row = _session_row(p, large_default_kind="chat", disk=disk)
         if row.get("kind") != "chat":
+            continue
+        if can_read is not None and not can_read(row.get("connection_id")):
             continue
         if best is None or float(row.get("updated_at") or 0) > float(best.get("updated_at") or 0):
             best = row

@@ -272,11 +272,11 @@ export default function ManageSessionsModal({
             <div className={styles.titleRow}>
               <h1 className={styles.title}>Sessions</h1>
               <span className={styles.meta}>
-                @{profileLabel(profile)} · {rows.length} threads · {formatKB(totalBytes)}
+                @{profileLabel(profile)} · {rows.length} sessions · {formatKB(totalBytes)}
               </span>
             </div>
             <p className={styles.subtitle}>
-              Delete old or empty threads to free disk space. The active session is locked.
+              Delete old or empty sessions to free disk space. The active session is locked.
             </p>
           </div>
           <div className={styles.headerActions}>

@@ -427,11 +427,11 @@ function Sidebar({
                       onCloseSearch?.();
                     }
                   }}
-                  placeholder="Filter alpis & workgroups…"
+                  placeholder="Filter profiles & workgroups…"
                   spellCheck={false}
                   autoCapitalize="off"
                   autoCorrect="off"
-                  aria-label="Filter alpis and workgroups"
+                  aria-label="Filter profiles and workgroups"
                 />
                 <button
                   type="button"
@@ -451,11 +451,7 @@ function Sidebar({
                 style={inEmpty ? { background: "var(--selected)" } : undefined}
               >
                 <PlusIcon />
-                <span className={styles.rowLabel}>New chat</span>
-                <span className={styles.kbdGroup} aria-hidden>
-                  <Kbd>⌘</Kbd>
-                  <Kbd>N</Kbd>
-                </span>
+                <span className={styles.rowLabel}>New session</span>
               </button>
             )
           )}
@@ -530,7 +526,7 @@ function Sidebar({
             </Section>
           )}
           {noMatches && (
-            <div className={styles.searchEmpty}>No alpis or workgroups match</div>
+            <div className={styles.searchEmpty}>No profiles or workgroups match</div>
           )}
         </nav>
       </div>
@@ -718,11 +714,13 @@ const ProfileRow = memo(function ProfileRow({
   }, [active, connId, profile.name, sessionRecency]);
   const unread =
     !incomplete && !paused && !active && checkUnread?.(profile.name, sessionRecency);
-  const trailing = unread
-    ? <span className="sb-unread-dot" aria-label="unread" />
-    : sessionRecency > 0
-      ? <span className="tnum sb-ts"><RelativeTime ts={sessionRecency} /></span>
-      : null;
+  const trailing = sessionRecency > 0
+    ? (
+      <span className={`tnum sb-ts${unread ? " is-unr" : ""}`}>
+        <RelativeTime ts={sessionRecency} />
+      </span>
+    )
+    : null;
   const label = profileLabel(profile.name);
   const incompleteHint = `@${label}, needs provider — tap to set up`;
   const leadingDiamond = <Diamond color={profile.accent || undefined} pulse={pending} />;
@@ -737,7 +735,7 @@ const ProfileRow = memo(function ProfileRow({
         sel={active}
         unread={unread}
         state={paused ? "paused" : incomplete ? "needs-provider" : undefined}
-        ariaLabel={incomplete ? incompleteHint : undefined}
+        ariaLabel={incomplete ? incompleteHint : unread ? `${label} unread` : undefined}
         title={incomplete ? incompleteHint : undefined}
         leading={
           pending
@@ -807,11 +805,13 @@ const WorkgroupRow = memo(function WorkgroupRow({
   const unread =
     !paused && !active && checkUnread?.(workgroup.profile, workgroup.id, mtime);
   const working = stateKind === "working";
-  const trailing = unread
-    ? <span className="sb-unread-dot" aria-label="unread" />
-    : mtime > 0
-      ? <span className="tnum sb-ts"><RelativeTime ts={mtime} /></span>
-      : null;
+  const trailing = mtime > 0
+    ? (
+      <span className={`tnum sb-ts${unread ? " is-unr" : ""}`}>
+        <RelativeTime ts={mtime} />
+      </span>
+    )
+    : null;
 
   return (
     <div className={styles.rowWrap}>
@@ -822,6 +822,7 @@ const WorkgroupRow = memo(function WorkgroupRow({
         sel={active}
         unread={unread}
         state={paused ? "paused" : undefined}
+        ariaLabel={unread ? `${label} unread` : undefined}
         leading={
           <span className={styles.workgroupLeading} style={{ color: hubAccent || "var(--ink-4)" }}>
             {working ? (

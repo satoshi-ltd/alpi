@@ -495,7 +495,7 @@ export default function WorkgroupDetail({
           )}
         </Section>
 
-        <Section title="Members" kicker={members ? `${members.filter((m) => m.joined).length} alpis` : null} alignTop>
+        <Section title="Members" kicker={members ? `${members.filter((m) => m.joined).length} profiles` : null} alignTop>
           {members === null ? (
             <>
               <Skeleton width="220px" />

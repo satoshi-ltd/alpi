@@ -64,13 +64,13 @@ async def _data_chat_send(
     home = _resolve_home(profile)
 
     if isinstance(session_id, str) and session_id:
-        from alpi.host.connection_context import current
+        from alpi.host.connection_context import owns_connection
         from alpi.host.sessions import session_connection_id
         try:
             owner = await asyncio.to_thread(session_connection_id, home, session_id)
         except FileNotFoundError:
             owner = None
-        if owner is not None and owner != current().connection_id:
+        if owner is not None and not owns_connection(owner):
             await send_frame({"event": "error", "text": f"session not found: {session_id}"})
             return
 

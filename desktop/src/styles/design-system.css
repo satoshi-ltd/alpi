@@ -785,7 +785,7 @@ a:focus-visible,
 
 
 /* Brand-accent only — identity color lives on the row's diamond/hash; per-row tinting here is noise. */
-/* Trailing slot (unread dot or timestamp) — right-aligned, never squished,
+/* Trailing slot (timestamp) — right-aligned, never squished,
    and animates out on row hover like the time/tag do (see Sidebar.module.css). */
 .sb-row-trailing {
   flex-shrink: 0;
@@ -795,14 +795,6 @@ a:focus-visible,
   transition:
     opacity 160ms var(--ease),
     transform 160ms var(--ease);
-}
-
-.sb-unread-dot {
-  display: inline-block;
-  width: var(--dot-size);
-  height: var(--dot-size);
-  border-radius: 50%;
-  background: var(--accent);
 }
 
 /* Workgroup paused: pause glyph already signals it via leading icon, so just dim the row. */

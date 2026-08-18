@@ -49,7 +49,7 @@ export function useCommands({
       cmds.push({
         id: "view:find",
         group: "General",
-        label: sidebarSearchOpen ? "Close filter" : "Filter alpis & workgroups",
+        label: sidebarSearchOpen ? "Close filter" : "Filter profiles & workgroups",
         hint: "⌘S",
         action: () => onToggleSidebarSearch(),
       });
@@ -69,8 +69,7 @@ export function useCommands({
       cmds.push({
         id: "create:chat",
         group: "Chat",
-        label: "New chat",
-        hint: "⌘N",
+        label: "New session",
         action: () => onNewChat?.(),
       });
     }

@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.14.2 — 2026-08-18 — the preview belongs to its connection
+
+- **A host-plane client is no longer allowed to see another connection's chat
+  content.** `host.profile.summaries` built its `latest_session` preview from
+  the newest chat session on disk regardless of who opened it, so a paired
+  phone's first and last messages could appear in another device's profile
+  row — text that device was never allowed to open, since session read and
+  session list were already partitioned by connection. The lookup now skips
+  sessions the asking connection does not own, and the three-second summary
+  cache is keyed by connection and profile instead of profile alone, so one
+  poller's preview is no longer replayed to whoever polls next inside that
+  window; invalidating a profile clears every connection's copy. This
+  ownership check deliberately has no admin bypass: an admin connection is
+  scoped to its own sessions, because otherwise it would still leak previews
+  into its sibling devices. The local socket keeps host-created and
+  pre-connection sessions, so the console and the Desktop profile view are
+  unchanged.
+
 ## v0.14.1 — 2026-08-17 — the bind address follows the network
 
 - **The advertised bind address follows the network instead of the first
