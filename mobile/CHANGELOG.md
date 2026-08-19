@@ -14,6 +14,41 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.4.1 — 2026-08-19 — the header stops offering what it cannot finish
+
+- **Pipelines are read from the workgroup, not driven from it.** The launcher in
+  the conversation header is gone: as on the desktop client, the phase strip
+  reports the run and nothing more. A phase you can reach still jumps to its
+  message, and one you cannot now says why — before, any phase looked tappable
+  and the jump quietly did nothing when that message was not loaded. The strip
+  also names the pipeline, shows whether the run is between phases, blocked or
+  completed, and fades its edge where a long chain continues past it, on
+  whichever side is actually hiding something.
+- **The composer is the desktop composer.** One white card ruled off from the
+  transcript, with the attachment and send controls inside its border instead of
+  crowding it from either side, so the text runs the full width. Send is a
+  rounded square of the same size desktop uses, the border brightens while you
+  type, and a tappable **@ mention** sits where desktop puts its hint — the
+  keyboard shortcut does not come along, since a phone has no modifier key.
+- **The composer no longer double-counts the space above the gesture bar.** It
+  was adding its own padding on top of the inset the system already reserves.
+- **The workgroup says when its own state is out of date.** If the daemon does
+  not answer, a warning now sits above the phase strip and the blocked banner
+  rather than leaving both quietly stale, and it stays up while the retry is in
+  flight instead of blinking off on every attempt. That last part fixes every
+  warning in the app, not only this one.
+- **Settings stop pointing at a control that no longer exists.** A hub with no
+  launch pipeline explains that nothing starts on its own, and a workgroup whose
+  pipeline shape the daemon has retired says so instead of passing for an
+  ordinary deliberation group.
+- **Corners, sizes and spacing now mean the same thing they mean on desktop.**
+  The radius scale had drifted a step out of line, so a component ported from
+  the desktop client came out visibly rounder than its twin. Every shared step
+  now carries the desktop value, the mobile-only steps say what they are for,
+  and a test reads the desktop tokens directly so the two cannot drift again.
+
+Requires alpi >= 0.12.11, unchanged from 0.3.1.
+
 ## v0.4.0 — 2026-08-18 — the roster stays on screen
 
 - **Tablets and folds run a two-pane shell.** The app now installs as a real iPad

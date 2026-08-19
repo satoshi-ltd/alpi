@@ -159,7 +159,7 @@ export default function ProviderKey() {
               style={{
                 padding: space.s5,
                 backgroundColor: colors.bgInput,
-                borderRadius: radii.md,
+                borderRadius: radii.lg,
               }}
             >
               <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink }}>{value || '—'}</Text>

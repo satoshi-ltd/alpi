@@ -168,7 +168,7 @@ function AskUserAnswer({ result, question, accent, colors, fonts, fontSizes }) {
       <View style={{ paddingHorizontal: PANE_PAD_X }}>
         <View
           style={{
-            borderRadius: radii.md,
+            borderRadius: radii.lg,
             borderWidth: 0.5,
             borderColor: colors.line,
             paddingHorizontal: space.s5,

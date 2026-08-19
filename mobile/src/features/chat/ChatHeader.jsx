@@ -70,7 +70,7 @@ function HeaderButton({ label, onPress, children }) {
       style={({ pressed }) => ({
         width: CHROME_BTN,
         height: CHROME_BTN,
-        borderRadius: radii.sm,
+        borderRadius: radii.md,
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: pressed ? colors.selected : 'transparent',

@@ -42,7 +42,7 @@ describe('EmptyThread', () => {
 
   it('draws the heading at the display token and tints the silhouette with the accent', () => {
     render(<EmptyThread heading="start a thread with doc" detail="anthropic/claude-opus-5" accent="#abc123" />);
-    expect(styles().some((s) => s.includes(`"fontSize":${fontSizes['2xl']}`))).toBe(true);
+    expect(styles().some((s) => s.includes(`"fontSize":${fontSizes.xxl}`))).toBe(true);
     expect(document.querySelector('[data-mark]').getAttribute('data-mark')).toBe('#abc123');
   });
 

@@ -38,7 +38,7 @@ function PillButton({ label, trailing, onPress }) {
         gap: space.s2,
         paddingHorizontal: space.s4,
         paddingVertical: space.s3,
-        borderRadius: radii.md,
+        borderRadius: radii.lg,
         backgroundColor: pressed ? colors.selected : colors.hover,
       })}
     >

@@ -37,7 +37,7 @@ function FetchedImage({ path, profile, name, colors, fonts }) {
   useEffect(() => { if (uri) Image.getSize(uri, (w, h) => h && setAspect(w / h), () => {}); }, [uri]);
   if (!uri) {
     return (
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3, padding: space.s3, borderRadius: radii.md, backgroundColor: colors.hover }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3, padding: space.s3, borderRadius: radii.lg, backgroundColor: colors.hover }}>
         {err ? <Icon name="file" size="md" color={colors.ink3} /> : <ActivityIndicator color={colors.ink3} />}
         <Text numberOfLines={2} style={{ flexShrink: 1, fontFamily: fonts.sans.regular, color: colors.ink3 }}>
           {name}{err ? `  ·  ${err}` : ''}
@@ -48,7 +48,7 @@ function FetchedImage({ path, profile, name, colors, fonts }) {
   return (
     <Image
       source={{ uri }}
-      style={{ width: '100%', aspectRatio: aspect, borderRadius: radii.md, borderWidth: 0.5, borderColor: colors.line, backgroundColor: colors.hover }}
+      style={{ width: '100%', aspectRatio: aspect, borderRadius: radii.lg, borderWidth: 0.5, borderColor: colors.line, backgroundColor: colors.hover }}
       resizeMode="cover"
       accessibilityLabel={name}
     />
@@ -57,10 +57,10 @@ function FetchedImage({ path, profile, name, colors, fonts }) {
 
 function Glyph({ kind, localUri, name, colors }) {
   if (kind === 'image' && localUri) {
-    return <Image source={{ uri: localUri }} style={{ width: BOX, height: BOX, borderRadius: radii.sm }} accessibilityLabel={name} />;
+    return <Image source={{ uri: localUri }} style={{ width: BOX, height: BOX, borderRadius: radii.md }} accessibilityLabel={name} />;
   }
   return (
-    <View style={{ width: BOX, height: BOX, borderRadius: radii.sm, backgroundColor: colors.hover, alignItems: 'center', justifyContent: 'center' }}>
+    <View style={{ width: BOX, height: BOX, borderRadius: radii.md, backgroundColor: colors.hover, alignItems: 'center', justifyContent: 'center' }}>
       <Icon name={ICON[kind] || 'file'} size="md" color={colors.ink3} />
     </View>
   );
@@ -103,7 +103,7 @@ export function AttachmentCards({ items, onRemove, variant = 'composer', profile
             style={{
               flexDirection: 'row', alignItems: 'center', gap: space.s3,
               paddingVertical: space.s2, paddingHorizontal: space.s4,
-              borderRadius: radii.md,
+              borderRadius: radii.lg,
               backgroundColor: message ? colors.hover : colors.bgPane,
               borderWidth: message ? 0 : 0.5,
               borderColor: colors.line2,

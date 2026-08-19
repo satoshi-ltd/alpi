@@ -104,7 +104,7 @@ function CodeBlock({ text, theme }) {
   return (
     <View
       style={{
-        borderRadius: radii.md,
+        borderRadius: radii.lg,
         borderWidth: 0.5,
         borderColor: theme.colors.line,
         backgroundColor: theme.colors.hover,
@@ -124,7 +124,7 @@ function ReportTable({ block, theme }) {
   const rows = [block.headers, ...block.rows];
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-      <View style={{ borderWidth: 0.5, borderColor: theme.colors.line, borderRadius: radii.md, overflow: 'hidden' }}>
+      <View style={{ borderWidth: 0.5, borderColor: theme.colors.line, borderRadius: radii.lg, overflow: 'hidden' }}>
         {rows.map((row, i) => (
           <View
             key={i}

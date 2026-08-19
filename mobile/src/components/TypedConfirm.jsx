@@ -111,7 +111,7 @@ export function TypedConfirm({
                 width: '100%',
                 maxWidth: 420,
                 backgroundColor: colors.bgPane,
-                borderRadius: radii['3xl'],
+                borderRadius: radii.sheet,
                 shadowColor: '#000',
                 shadowOffset: { width: 0, height: 20 },
                 shadowOpacity: 0.3,
@@ -169,7 +169,7 @@ export function TypedConfirm({
               spellCheck={false}
               style={{
                 backgroundColor: colors.bgInput,
-                borderRadius: radii.lg,
+                borderRadius: radii.xl,
                 borderWidth: 0.5,
                 borderColor: colors.line2,
                 paddingHorizontal: space.s5,

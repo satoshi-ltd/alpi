@@ -111,7 +111,8 @@ const SURFACES = [
   [
     'composer',
     () => <Composer placeholder="Message @doc…" />,
-    (container) => container.querySelector('[data-input]'),
+    (container) => [...container.querySelectorAll('div')]
+      .find((el) => JSON.parse(el.getAttribute('data-style') || '{}').borderRadius !== undefined),
   ],
 ];
 

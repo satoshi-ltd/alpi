@@ -32,7 +32,7 @@ export function ChatSkeleton({ kind = 'profile', accent }) {
           style={{
             width: '60%',
             backgroundColor: accent ? `${accent}22` : colors.bgInput,
-            borderRadius: radii['2xl'],
+            borderRadius: radii.bubble,
             padding: space.s5,
             gap: space.s2,
           }}

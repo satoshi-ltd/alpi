@@ -63,7 +63,7 @@ export default function ToolDetail() {
             style={{
               padding: space.s5,
               backgroundColor: `${colors.warning}1f`,
-              borderRadius: radii.md,
+              borderRadius: radii.lg,
               borderWidth: 0.5,
               borderColor: `${colors.warning}66`,
             }}
@@ -99,7 +99,7 @@ export default function ToolDetail() {
                 padding: space.s5,
                 gap: space.s2,
                 backgroundColor: colors.bgInput,
-                borderRadius: radii.md,
+                borderRadius: radii.lg,
               }}
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3 }}>

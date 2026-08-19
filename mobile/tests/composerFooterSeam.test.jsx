@@ -69,6 +69,7 @@ vi.mock('../src/features/chat/AttachmentCards', () => ({ AttachmentCards: () => 
 vi.mock('../src/features/chat/MentionPopover', () => ({ MentionPopover: () => null }));
 
 import { CHROME_BTN, CHROME_H, COMPOSER_CTRL, COMPOSER_PAD_Y, PANE_PAD_X, tapSlop } from '../src/lib/panes';
+import * as tokens from '../src/theme/tokens';
 import { mobile, space } from '../src/theme/tokens';
 import { Composer } from '../src/features/chat/Composer';
 import { ShellFooter } from '../src/features/shell/ShellFooter';
@@ -83,13 +84,16 @@ function composerRow() {
   return [...container.querySelectorAll('div')].find((el) => styleOf(el).paddingTop === COMPOSER_PAD_Y);
 }
 
+function card(container) {
+  return [...container.querySelectorAll('div')].find((el) => styleOf(el).borderRadius !== undefined);
+}
+
 function restingHeight(row) {
-  const style = styleOf(row);
-  const tallest = Math.max(...[...row.children].map((el) => {
-    const child = styleOf(el);
-    return child.height ?? child.minHeight ?? 0;
-  }));
-  return style.paddingTop + tallest + style.paddingBottom;
+  const outer = styleOf(row);
+  const c = styleOf(card(row.ownerDocument.body));
+  const ctrl = Math.max(...[...row.querySelectorAll('button')].map((b) => styleOf(b).height ?? 0), 0);
+  const line = Math.round(15 * 1.5);
+  return outer.paddingTop + c.paddingTop + line + c.gap + ctrl + c.paddingBottom + outer.paddingBottom;
 }
 
 function footerHeight() {
@@ -102,14 +106,20 @@ describe('composer and sidebar footer seam', () => {
     h.bottom = bottom;
     const composer = restingHeight(composerRow());
     cleanup();
-    expect(composer).toBe(COMPOSER_PAD_Y * 2 + COMPOSER_CTRL + bottom);
     expect(composer).toBeGreaterThan(footerHeight() + bottom);
+    expect(composer).toBeGreaterThan(COMPOSER_PAD_Y * 2 + COMPOSER_CTRL + bottom);
     h.bottom = 0;
   });
 
-  it('keeps the composer field a full tap target instead of squeezing it to match the footer', () => {
-    expect(COMPOSER_CTRL).toBe(44);
-    expect(COMPOSER_CTRL).toBeGreaterThan(CHROME_H - COMPOSER_PAD_Y * 2);
+  it('stacks the controls under the text like desktop, so the field owns the full card width', () => {
+    const { container } = render(<Composer placeholder="Message @doc…" onPickAttachment={() => {}} />);
+    const c = card(container);
+    expect(styleOf(c).flexDirection).toBeUndefined();
+    const input = container.querySelector('[data-input]');
+    expect(styleOf(input).flex).toBeUndefined();
+    const row = [...c.querySelectorAll('div')].find((el) => styleOf(el).flexDirection === 'row');
+    expect(row.contains(screen.getByLabelText('Attach file'))).toBe(true);
+    expect(row.contains(screen.getByLabelText('Send'))).toBe(true);
   });
 
   it('drops the footer rule in two-pane, so nothing invites the eye to compare the two heights', () => {
@@ -129,7 +139,7 @@ describe('composer and sidebar footer seam', () => {
 
   it('reads one constant instead of two hand-tuned numbers', () => {
     const composer = source('src/features/chat/Composer.jsx');
-    expect(composer).toMatch(/COMPOSER_PAD_Y \+ \(keyboardUp \? 0 : insets\.bottom\)/);
+    expect(composer).toMatch(/Math\.max\(COMPOSER_PAD_Y, insets\.bottom\)/);
     expect(composer).not.toMatch(/Math\.max\(10/);
     expect(composer).not.toMatch(/: 44,/);
     expect(source('src/features/shell/ShellFooter.jsx')).toMatch(/height: CHROME_H/);
@@ -148,13 +158,14 @@ describe('composer controls', () => {
     const attach = screen.getByLabelText('Attach file');
     const slop = JSON.parse(attach.getAttribute('data-hitslop'));
     const box = styleOf(attach);
-    expect(box.width + slop.left + slop.right).toBeGreaterThanOrEqual(mobile.tap);
-    expect(box.height + slop.top + slop.bottom).toBeGreaterThanOrEqual(mobile.tap);
+    const pad = typeof slop === 'number' ? { left: slop, right: slop, top: slop, bottom: slop } : slop;
+    expect(box.width + pad.left + pad.right).toBeGreaterThanOrEqual(mobile.tap);
+    expect(box.height + pad.top + pad.bottom).toBeGreaterThanOrEqual(mobile.tap);
 
     const send = screen.getByLabelText('Send');
     const sendSlop = Number(JSON.parse(send.getAttribute('data-hitslop')));
     expect(styleOf(send).height + sendSlop * 2).toBeGreaterThanOrEqual(mobile.tap);
-    expect(sendSlop).toBe(tapSlop(COMPOSER_CTRL));
+    expect(sendSlop).toBe(tapSlop(styleOf(send).height));
     expect(screen.queryByLabelText('Voice message')).toBeNull();
   });
 
@@ -181,17 +192,65 @@ describe('composer controls', () => {
     const attach = screen.getByLabelText('Attach file');
     expect(styleOf(attach).width).toBe(CHROME_BTN);
     expect(styleOf(attach).width).toBeLessThan(mobile.tap);
-    expect(attach.querySelector('[data-icon="paperclip"]').getAttribute('data-size')).toBe('md');
+    expect(attach.querySelector('[data-icon="paperclip"]').getAttribute('data-size')).toBe('lg');
   });
 
   it('spends less room between the pane gutter and the placeholder', () => {
     const { container } = render(<Composer placeholder="Message @doc…" onPickAttachment={() => {}} />);
     const row = [...container.querySelectorAll('div')].find((el) => styleOf(el).paddingTop === COMPOSER_PAD_Y);
-    const input = styleOf(container.querySelector('[data-input]'));
-    const attach = styleOf(screen.getByLabelText('Attach file'));
-    const textStart = styleOf(row).paddingHorizontal + attach.width + styleOf(row).gap + input.paddingHorizontal;
+    const textStart = styleOf(row).paddingHorizontal + styleOf(card(container)).paddingHorizontal;
     expect(styleOf(row).paddingHorizontal).toBe(PANE_PAD_X);
-    expect(input.paddingHorizontal).toBeLessThan(PANE_PAD_X);
-    expect(textStart).toBeLessThan(PANE_PAD_X + mobile.tap + space.s3 + PANE_PAD_X);
+    expect(textStart).toBeLessThan(PANE_PAD_X + mobile.tap + space.s3);
+  });
+});
+
+describe('composer matches the desktop card', () => {
+  it('fills the card white and rules it off from the transcript, as desktop does', () => {
+    const { container } = render(<Composer placeholder="Message @doc…" onPickAttachment={() => {}} />);
+    const c = styleOf(card(container));
+    expect(c.backgroundColor).toBe(tokens.palettes.light.bgElev);
+    expect(c.backgroundColor).not.toBe(tokens.palettes.light.bgInput);
+    expect(styleOf(container.firstChild).borderTopWidth).toBeGreaterThan(0);
+  });
+
+  it('draws send as a rounded square of desktop\'s size, not a circle', () => {
+    render(<Composer placeholder="Message @doc…" onPickAttachment={() => {}} />);
+    const send = styleOf(screen.getByLabelText('Send'));
+    expect(send.width).toBe(30);
+    expect(send.height).toBe(30);
+    expect(send.borderRadius).toBe(tokens.radii.lg);
+    expect(send.borderRadius).not.toBe(tokens.radii.pill);
+  });
+
+  it('gives send more weight than attach, since only one is the primary action', () => {
+    render(<Composer placeholder="Message @doc…" onPickAttachment={() => {}} />);
+    const send = styleOf(screen.getByLabelText('Send'));
+    const attach = styleOf(screen.getByLabelText('Attach file'));
+    expect(send.backgroundColor).toBeTruthy();
+    expect(attach.backgroundColor).toBeUndefined();
+  });
+
+  it('offers a tappable mention affordance only where mentions exist', () => {
+    const plain = render(<Composer placeholder="Message @doc…" onPickAttachment={() => {}} />);
+    expect(plain.container.textContent).not.toMatch(/mention/i);
+    cleanup();
+    render(<Composer placeholder="Message @doc…" onPickAttachment={() => {}} mentionSource={() => []} />);
+    expect(screen.getByLabelText('Mention a peer').textContent).toMatch(/mention/i);
+  });
+
+  it('shows no keyboard shortcut — there is no modifier key on a phone', () => {
+    const { container } = render(<Composer placeholder="Message @doc…" mentionSource={() => []} />);
+    expect(container.textContent).not.toMatch(/⌘|↵/);
+  });
+});
+
+describe('composer bottom clearance', () => {
+  it('rides the system inset instead of stacking its own padding on top of it', () => {
+    h.bottom = 34;
+    const row = composerRow();
+    expect(styleOf(row).paddingBottom).toBe(34);
+    cleanup();
+    h.bottom = 0;
+    expect(styleOf(composerRow()).paddingBottom).toBe(COMPOSER_PAD_Y);
   });
 });

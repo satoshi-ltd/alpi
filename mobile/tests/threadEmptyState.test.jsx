@@ -126,7 +126,7 @@ vi.mock('../src/features/chat/Composer', () => ({
 }));
 vi.mock('../src/features/chat/MarkerCard', () => ({ MarkerCard: () => null }));
 vi.mock('../src/features/chat/MessageActionsSheet', () => ({ MessageActionsSheet: () => null }));
-vi.mock('../src/features/chat/PipelineStrip', () => ({ PipelineLauncher: () => null, PipelineStrip: () => null }));
+vi.mock('../src/features/chat/PipelineStrip', () => ({ PipelineStrip: () => null }));
 vi.mock('../src/features/chat/Reasoning', () => ({ Reasoning: () => null }));
 vi.mock('../src/features/chat/SoundWave', () => ({ SoundWave: () => null }));
 vi.mock('../src/features/chat/ToolCallRow', () => ({ ToolModule: () => null }));

@@ -12,6 +12,9 @@ import { canComposerSend } from './composerSend';
 import { MentionPopover } from './MentionPopover';
 import { validateTaskShape } from './parseMarkers';
 
+const HAIRLINE = 0.5;
+const SEND_D = 30;
+
 export function Composer({
   placeholder = 'Message…',
   accent,
@@ -30,6 +33,7 @@ export function Composer({
   const insets = useSafeAreaInsets();
   const keyboardUp = useKeyboardVisible();
   const [text, setText] = useState('');
+  const [focused, setFocused] = useState(false);
   const lastSeedKeyRef = useRef(seedKey);
   useEffect(() => {
     if (seedKey != null && seedKey !== lastSeedKeyRef.current) {
@@ -66,7 +70,7 @@ export function Composer({
     <View
       style={{
         backgroundColor: colors.bgPane,
-        borderTopWidth: 0.5,
+        borderTopWidth: HAIRLINE,
         borderTopColor: colors.line,
       }}
     >
@@ -97,44 +101,22 @@ export function Composer({
       ) : null}
       <View
         style={{
-          flexDirection: 'row',
-          alignItems: 'flex-end',
           paddingHorizontal: PANE_PAD_X,
           paddingTop: COMPOSER_PAD_Y,
-          paddingBottom: COMPOSER_PAD_Y + (keyboardUp ? 0 : insets.bottom),
-          gap: space.s3,
+          paddingBottom: keyboardUp ? COMPOSER_PAD_Y : Math.max(COMPOSER_PAD_Y, insets.bottom),
           opacity: disabled ? 0.55 : 1,
         }}
       >
-        {onPickAttachment ? (
-          <Pressable
-            onPress={disabled ? undefined : onPickAttachment}
-            hitSlop={{
-              top: tapSlop(COMPOSER_CTRL),
-              bottom: tapSlop(COMPOSER_CTRL),
-              left: tapSlop(CHROME_BTN),
-              right: tapSlop(CHROME_BTN),
-            }}
-            accessibilityLabel="Attach file"
-            style={({ pressed }) => ({
-              width: CHROME_BTN,
-              height: COMPOSER_CTRL,
-              alignItems: 'center',
-              justifyContent: 'center',
-              opacity: pressed ? 0.5 : 1,
-            })}
-          >
-            <Icon name="paperclip" size="md" color={colors.ink3} />
-          </Pressable>
-        ) : null}
         <View
           style={{
-            flex: 1,
-            minHeight: COMPOSER_CTRL,
-            backgroundColor: colors.bgInput,
-            borderRadius: radii["2xl"],
-            flexDirection: 'row',
-            alignItems: 'center',
+            backgroundColor: colors.bgElev,
+            borderWidth: HAIRLINE,
+            borderColor: focused ? colors.ink3 : colors.line2,
+            borderRadius: radii['3xl'],
+            paddingTop: space.s6,
+            paddingHorizontal: space.s7,
+            paddingBottom: space.s4,
+            gap: space.s3,
           }}
         >
           <TextInput
@@ -150,37 +132,68 @@ export function Composer({
             returnKeyType="send"
             submitBehavior="submit"
             onSubmitEditing={submit}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
             style={{
-              flex: 1,
               fontFamily: fonts.sans.regular,
               fontSize: fontSizes.lg,
               lineHeight: fontSizes.lg * lineHeights.normal,
               color: colors.ink,
               maxHeight: 120,
-              paddingHorizontal: space.s5,
-              // iOS multiline TextInput adds ~2px top textContainerInset that ignores includeFontPadding.
-              paddingTop: Platform.OS === 'ios' ? space.s1 : space.s2,
-              paddingBottom: space.s2,
+              padding: 0,
             }}
           />
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3 }}>
+            {mentionSource ? (
+              <Pressable
+                onPress={disabled ? undefined : () => setText((cur) => (cur.endsWith('@') ? cur : `${cur}${cur && !cur.endsWith(' ') ? ' ' : ''}@`))}
+                hitSlop={space.s3}
+                accessibilityLabel="Mention a peer"
+                style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: space.s1, opacity: pressed ? 0.5 : 1 })}
+              >
+                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>@</Text>
+                <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3 }}>mention</Text>
+              </Pressable>
+            ) : null}
+            <View style={{ flex: 1 }} />
+            {onPickAttachment ? (
+              <Pressable
+                onPress={disabled ? undefined : onPickAttachment}
+                hitSlop={tapSlop(CHROME_BTN)}
+                accessibilityLabel="Attach file"
+                style={({ pressed }) => ({
+                  width: CHROME_BTN,
+                  height: SEND_D,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  opacity: pressed ? 0.5 : 1,
+                })}
+              >
+                <Icon name="paperclip" size="lg" color={colors.ink3} />
+              </Pressable>
+            ) : null}
+            <Pressable
+              onPress={stoppable ? onStop : submit}
+              disabled={!stoppable && !canSend}
+              hitSlop={tapSlop(SEND_D)}
+              style={({ pressed }) => ({
+                width: SEND_D,
+                height: SEND_D,
+                borderRadius: radii.lg,
+                backgroundColor: !stoppable && !canSend ? colors.line : pressed ? colors.ink2 : actionBg,
+                alignItems: 'center',
+                justifyContent: 'center',
+              })}
+              accessibilityLabel={stoppable ? 'Stop' : 'Send'}
+            >
+              <Icon
+                name={stoppable ? 'square' : 'send'}
+                size="sm"
+                color={!stoppable && !canSend ? colors.ink3 : '#ffffff'}
+              />
+            </Pressable>
+          </View>
         </View>
-        <Pressable
-          onPress={stoppable ? onStop : submit}
-          disabled={!stoppable && !canSend}
-          hitSlop={tapSlop(COMPOSER_CTRL)}
-          style={({ pressed }) => ({
-            width: COMPOSER_CTRL,
-            height: COMPOSER_CTRL,
-            borderRadius: radii['2xl'],
-            backgroundColor: !stoppable && !canSend ? colors.ink3 : pressed ? colors.ink2 : actionBg,
-            alignItems: 'center',
-            justifyContent: 'center',
-            opacity: stoppable || canSend ? 1 : 0.6,
-          })}
-          accessibilityLabel={stoppable ? 'Stop' : 'Send'}
-        >
-          <Icon name={stoppable ? 'square' : 'send'} size="lg" color="#ffffff" />
-        </Pressable>
       </View>
     </View>
   );

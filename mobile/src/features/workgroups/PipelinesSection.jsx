@@ -31,7 +31,7 @@ const STYLES = StyleSheet.create({
     paddingHorizontal: space.s4,
     paddingVertical: space.s2,
     borderWidth: 0.5,
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
   },
   note: {
     paddingHorizontal: space.s8,
@@ -72,7 +72,11 @@ export function PipelinesSection({ workgroup }) {
     <>
       <SectionHeader>Pipelines · declared by the recipe</SectionHeader>
       {chains.length === 0 ? (
-        <Note>No pipelines · deliberation workgroup</Note>
+        <Note>
+          {workgroup?.needs_relaunch
+            ? 'Retired pipeline shape — the daemon skips this workgroup; relaunch it from its recipe.'
+            : 'No pipelines · deliberation workgroup'}
+        </Note>
       ) : (
         chains.map((chain, i) => (
           <View key={chain.key}>
@@ -88,10 +92,10 @@ export function PipelinesSection({ workgroup }) {
         ))
       )}
       {isLaunchless(workgroup) ? (
-        <Note>No launch pipeline — the hub stays idle until a chain is started from the chat.</Note>
+        <Note>No launch pipeline — nothing starts on its own; every chain awaits a trigger.</Note>
       ) : null}
       {chains.length > 0 ? (
-        <Note>Read-only — a recipe declares these chains. Run one from the chat.</Note>
+        <Note>Read-only — a recipe declares these chains.</Note>
       ) : null}
     </>
   );

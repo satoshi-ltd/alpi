@@ -16,8 +16,8 @@ const CENTRED_DIALOG = {
   alignSelf: 'center',
   width: '100%',
   maxWidth: 560,
-  borderBottomLeftRadius: radii['3xl'],
-  borderBottomRightRadius: radii['3xl'],
+  borderBottomLeftRadius: radii.sheet,
+  borderBottomRightRadius: radii.sheet,
 };
 
 export function Sheet({
@@ -78,8 +78,8 @@ export function Sheet({
             {
               maxHeight: view.maxHeight,
               backgroundColor: colors.bgPane,
-              borderTopLeftRadius: radii['3xl'],
-              borderTopRightRadius: radii['3xl'],
+              borderTopLeftRadius: radii.sheet,
+              borderTopRightRadius: radii.sheet,
               overflow: 'hidden',
               ...shadow.base,
               ...dialog,

@@ -104,7 +104,7 @@ function ToastView({ toast, slide, fade }) {
               margin: space.s7,
               padding: space.s6,
               backgroundColor: colors.bgPane,
-              borderRadius: radii.lg,
+              borderRadius: radii.xl,
               shadowColor: '#000',
               shadowOffset: { width: 0, height: 8 },
               shadowOpacity: 0.18,

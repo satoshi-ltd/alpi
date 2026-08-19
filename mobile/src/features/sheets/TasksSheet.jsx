@@ -38,7 +38,7 @@ function StatusIcon({ status, accent, colors, fontSizes }) {
         style={{
           width: 14,
           height: 14,
-          borderRadius: radii.sm,
+          borderRadius: radii.md,
           borderWidth: 1.6,
           borderColor: colors.warning,
           overflow: 'hidden',

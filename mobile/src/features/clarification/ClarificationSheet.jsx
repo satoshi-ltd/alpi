@@ -216,7 +216,7 @@ function OtherInline({ otherText, setOtherText, onSend, onCancel, busy, colors, 
     <View
       style={{
         marginTop: space.s2,
-        borderRadius: radii.lg,
+        borderRadius: radii.xl,
         borderWidth: 0.5,
         borderColor: colors.line,
         backgroundColor: colors.bgInput,
@@ -255,7 +255,7 @@ function OtherInline({ otherText, setOtherText, onSend, onCancel, busy, colors, 
           style={{
             paddingVertical: space.s3,
             paddingHorizontal: space.s6,
-            borderRadius: radii.md,
+            borderRadius: radii.lg,
             backgroundColor: colors.ink,
             opacity: canSend ? 1 : 0.35,
           }}
@@ -356,7 +356,7 @@ function ConfirmChoices({ choices, onPick, busy, colors, fonts }) {
         onPress={() => onPick(primary.label)}
         style={({ pressed }) => ({
           paddingVertical: space.s6,
-          borderRadius: radii.md,
+          borderRadius: radii.lg,
           backgroundColor: colors.ink,
           alignItems: 'center',
           opacity: busy ? 0.5 : pressed ? 0.85 : 1,
@@ -394,7 +394,7 @@ function Footer({ picked, busy, onContinue, colors, fonts }) {
         style={{
           paddingVertical: space.s4,
           paddingHorizontal: space.s7,
-          borderRadius: radii.md,
+          borderRadius: radii.lg,
           backgroundColor: colors.ink,
           opacity: canContinue ? 1 : 0.4,
         }}

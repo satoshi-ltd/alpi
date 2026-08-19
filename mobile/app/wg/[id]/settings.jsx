@@ -191,7 +191,7 @@ function WorkgroupSettings() {
           label="Accent"
           value={
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2 }}>
-              <View style={{ width: 14, height: 14, borderRadius: radii.sm, backgroundColor: accent }} />
+              <View style={{ width: 14, height: 14, borderRadius: radii.md, backgroundColor: accent }} />
               <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink3 }}>
                 {accent}
               </Text>

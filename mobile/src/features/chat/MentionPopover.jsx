@@ -20,7 +20,7 @@ export function MentionPopover({ candidates = [], onPick }) {
         marginHorizontal: space.s5,
         marginBottom: space.s3,
         backgroundColor: colors.bgElev,
-        borderRadius: radii['2xl'],
+        borderRadius: radii.bubble,
         overflow: 'hidden',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 8 },

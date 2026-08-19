@@ -23,7 +23,7 @@ import { MarkerCard } from '../../src/features/chat/MarkerCard';
 import { MessageActionsSheet } from '../../src/features/chat/MessageActionsSheet';
 import { postsOf, unlandedPosts } from '../../src/features/chat/optimisticPosts';
 import { buildTasks, classifyMessage } from '../../src/features/chat/parseMarkers';
-import { PipelineLauncher, PipelineStrip } from '../../src/features/chat/PipelineStrip';
+import { PipelineStrip } from '../../src/features/chat/PipelineStrip';
 import { TasksSheet } from '../../src/features/sheets/TasksSheet';
 import {
   useProfileSummaries,
@@ -40,7 +40,6 @@ import { CONTENT_MAX_W, PANE_PAD_X } from '../../src/lib/panes';
 import { markWorkgroupRead } from '../../src/lib/readState';
 import { usePane } from '../../src/nav/PaneContext';
 import { resolveMembers } from '../../src/lib/workgroupMembers';
-import { runPipelineTrigger } from '../../src/lib/workgroupPipelines';
 import { accentForProfile } from '../../src/theme/accents';
 import { useTheme } from '../../src/theme/ThemeContext';
 
@@ -246,7 +245,7 @@ function TasksHeaderButton({ tasks, accent, onPress }) {
         paddingHorizontal: space.s4,
         height: 30,
         backgroundColor: pressed ? colors.selected : colors.bgInput,
-        borderRadius: radii.md,
+        borderRadius: radii.lg,
       })}
     >
       <Dot color={dotColor} pulse={last?.status === 'working'} />
@@ -368,6 +367,7 @@ function WorkgroupChatInner() {
   }, [messages]);
 
   const tasks = useMemo(() => buildTasks(messages, hubPubkey), [messages, hubPubkey]);
+  const loadedSeqs = useMemo(() => new Set(messages.map((m) => m.seq)), [messages]);
   const pipelineRun = taskState.data?.pipeline_run ?? null;
   const blocked = taskState.data?.blocked ?? null;
 
@@ -462,17 +462,6 @@ function WorkgroupChatInner() {
     } finally {
       setSending(false);
     }
-  };
-
-  const runPipeline = async (chain) => {
-    const outcome = await runPipelineTrigger(call, { workgroup: wg, chain });
-    if (!outcome.ok) {
-      toast({ title: 'Trigger rejected', message: outcome.message, duration: 3200 });
-      return;
-    }
-    toast({ title: `#${outcome.pipeline} started`, message: `opened #${outcome.phase}` });
-    taskState.refresh();
-    transcript.refresh();
   };
 
   if (!endpoint) {
@@ -592,6 +581,14 @@ function WorkgroupChatInner() {
           Token rejected by daemon. Re-pair this phone to continue.
         </Banner>
       ) : null}
+      {taskState.error ? (
+        <Banner kind="warning">
+          <Text style={{ fontFamily: fonts.sans.semibold ?? fonts.sans.medium, color: colors.ink }}>
+            Workgroup state unavailable.
+          </Text>
+          {' '}The daemon did not answer, so the phase strip and the blocked banner may be out of date.
+        </Banner>
+      ) : null}
       {blocked ? (
         <View style={[WG_STYLES.banner, { backgroundColor: `${colors.danger}1f` }]}>
           <Dot color={colors.danger} pulse />
@@ -613,15 +610,9 @@ function WorkgroupChatInner() {
       <PipelineStrip
         run={pipelineRun}
         accent={accent}
+        loadedSeqs={loadedSeqs}
         onPickSeq={(seq) => listApiRef.current?.scrollToSeq?.(seq)}
       />
-      <PipelineLauncher
-        workgroup={wg}
-        tasks={taskState.data}
-        accent={accent}
-        onRun={runPipeline}
-      />
-
       <KeyboardPane>
         <WgList
           ref={listApiRef}

@@ -84,7 +84,7 @@ vi.mock('../src/features/chat/ChatSkeleton', () => ({ ChatSkeleton: () => React.
 vi.mock('../src/features/chat/Composer', () => ({ Composer: () => React.createElement('span', { 'data-composer': 'true' }) }));
 vi.mock('../src/features/chat/MarkerCard', () => ({ MarkerCard: ({ children }) => React.createElement('span', {}, children) }));
 vi.mock('../src/features/chat/MessageActionsSheet', () => ({ MessageActionsSheet: () => null }));
-vi.mock('../src/features/chat/PipelineStrip', () => ({ PipelineLauncher: () => null, PipelineStrip: () => null }));
+vi.mock('../src/features/chat/PipelineStrip', () => ({ PipelineStrip: () => null }));
 vi.mock('../src/features/chat/Reasoning', () => ({ Reasoning: () => null }));
 vi.mock('../src/features/chat/SoundWave', () => ({ SoundWave: () => null }));
 vi.mock('../src/features/chat/ToolCallRow', () => ({ ToolModule: () => null }));

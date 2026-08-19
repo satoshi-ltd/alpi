@@ -1,19 +1,12 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import {
-  activePhaseIndex,
-  daemonMessage,
   isLaunchless,
   namedPipelines,
-  runActionLabel,
+  phaseJumpable,
+  phaseUnavailable,
   runPhases,
-  runPipelineTrigger,
-  runRestartsChain,
-  runStateLabel,
-  triggerBlock,
-  triggerPipeline,
-  triggerSummary,
-  triggerableChains,
+  runStatus,
 } from './workgroupPipelines';
 
 const WG = {
@@ -184,57 +177,51 @@ describe('runPhases', () => {
   });
 });
 
-describe('activePhaseIndex', () => {
-  it('targets the current phase', () => {
-    expect(activePhaseIndex(runPhases(LAUNCH_RUN.pipeline_run))).toBe(2);
+describe('runStatus', () => {
+  it('names the states desktop labels, tone included', () => {
+    expect(runStatus(BETWEEN_RUN.pipeline_run)).toEqual({ tone: 'off', text: 'between phases' });
+    expect(runStatus(BLOCKED_RUN.pipeline_run)).toEqual({ tone: 'err', text: 'blocked' });
+    expect(runStatus(COMPLETED_RUN.pipeline_run)).toEqual({ tone: 'on', text: 'completed' });
   });
 
-  it('targets the blocked phase', () => {
-    expect(activePhaseIndex(runPhases(BLOCKED_RUN.pipeline_run))).toBe(2);
+  it('stays silent while a phase is running — the phase chain already says it', () => {
+    expect(runStatus(LAUNCH_RUN.pipeline_run)).toBeNull();
+    expect(runStatus(MAINTENANCE_RUN.pipeline_run)).toBeNull();
   });
 
-  it('targets the last closed phase between phases', () => {
-    expect(activePhaseIndex(runPhases(BETWEEN_RUN.pipeline_run))).toBe(1);
-  });
-
-  it('targets the last phase of a completed run', () => {
-    expect(activePhaseIndex(runPhases(COMPLETED_RUN.pipeline_run))).toBe(3);
-  });
-
-  it('resets to the first phase when the chain restarts', () => {
-    expect(activePhaseIndex(runPhases(REPEAT_RUN.pipeline_run))).toBe(0);
-  });
-
-  it('is 0 for an empty strip', () => {
-    expect(activePhaseIndex([])).toBe(0);
+  it('stays silent for a status it does not know and for no run at all', () => {
+    expect(runStatus({ status: 'reticulating' })).toBeNull();
+    expect(runStatus(null)).toBeNull();
   });
 });
 
-describe('runActionLabel', () => {
-  it('says Run again only once the visible run completed', () => {
-    expect(runActionLabel('setup', LAUNCH_RUN.pipeline_run)).toBe('Run');
-    expect(runActionLabel('setup', { pipeline: 'setup', status: 'between' })).toBe('Run');
-    expect(runActionLabel('setup', { pipeline: 'setup', status: 'blocked' })).toBe('Run');
-    expect(runActionLabel('setup', { pipeline: 'setup', status: 'completed' })).toBe('Run again');
-    expect(runActionLabel('media-update', { pipeline: 'setup', status: 'completed' })).toBe('Run');
-    expect(runActionLabel('setup', null)).toBe('Run');
+describe('phaseJumpable', () => {
+  it('jumps only to a phase whose post the thread already loaded', () => {
+    const phases = runPhases(MAINTENANCE_RUN.pipeline_run);
+    const loaded = new Set([42, 43]);
+    expect(phases.filter((p) => phaseJumpable(p, loaded)).map((p) => p.slug))
+      .toEqual(['media-config', 'media-build']);
   });
 
-  it('surfaces the run state instead of leaving an unfinished chain looking idle', () => {
-    expect(runStateLabel('setup', { pipeline: 'setup', status: 'running', current_phase: 'build' }))
-      .toBe('running · #build');
-    expect(runStateLabel('setup', { pipeline: 'setup', status: 'blocked', current_phase: 'qa' }))
-      .toBe('blocked · #qa');
-    expect(runStateLabel('setup', { pipeline: 'setup', status: 'completed', current_phase: 'qa' }))
-      .toBe('completed');
-    expect(runStateLabel('media-update', { pipeline: 'setup', status: 'running' })).toBeNull();
-    expect(runStateLabel('setup', null)).toBeNull();
+  it('never jumps to a phase that never opened', () => {
+    expect(phaseJumpable({ slug: 'qa', seq: null }, new Set([null]))).toBe(false);
   });
 
-  it('warns that an unfinished chain restarts rather than resumes', () => {
-    expect(runRestartsChain('setup', { pipeline: 'setup', status: 'blocked' })).toBe(true);
-    expect(runRestartsChain('setup', { pipeline: 'setup', status: 'completed' })).toBe(false);
-    expect(runRestartsChain('media-update', { pipeline: 'setup', status: 'blocked' })).toBe(false);
+  it('never jumps when the thread reports no loaded history', () => {
+    expect(phaseJumpable({ slug: 'build', seq: 12 }, undefined)).toBe(false);
+    expect(phaseJumpable({ slug: 'build', seq: 12 }, new Set())).toBe(false);
+  });
+});
+
+describe('phaseUnavailable', () => {
+  it('says a pending phase has nothing to jump to', () => {
+    expect(phaseUnavailable({ slug: 'qa', seq: null }))
+      .toBe('#qa has not opened yet — nothing to jump to');
+  });
+
+  it('says where an unloaded phase opened', () => {
+    expect(phaseUnavailable({ slug: 'setup', seq: 5 }))
+      .toBe('#setup opened at post #5, outside the loaded history');
   });
 });
 
@@ -247,13 +234,8 @@ describe('namedPipelines', () => {
     expect(chains[1].phases).toEqual(['media-update', 'media-config', 'media-build', 'media-qa']);
   });
 
-  it('marks a chain triggerable only when its first phase declares owner and task', () => {
-    const chains = namedPipelines({
-      ...WG,
-      phase_map: { setup: { owner: 'scout', task: 'collect' }, 'media-update': { owner: 'pixel' } },
-    });
-    expect(chains.find((c) => c.key === 'setup').triggerable).toBe(true);
-    expect(chains.find((c) => c.key === 'media-update').triggerable).toBe(false);
+  it('carries no launch contract — mobile cannot start a chain', () => {
+    expect(Object.keys(namedPipelines(WG)[0])).toEqual(['key', 'phases', 'isLaunch']);
   });
 
   it('is empty for a manual deliberation workgroup', () => {
@@ -263,41 +245,6 @@ describe('namedPipelines', () => {
 
   it('never reads a retired pipeline list', () => {
     expect(namedPipelines({ id: 'w', pipeline: ['intake', 'build'], pipelines: {} })).toEqual([]);
-  });
-});
-
-describe('triggerableChains', () => {
-  it('keeps only the chains whose first phase declares owner and task', () => {
-    expect(triggerableChains(WG).map((c) => c.key)).toEqual(['setup', 'media-update']);
-    const partial = { ...WG, phase_map: { setup: { owner: 'scout', task: 'collect' }, 'media-update': {} } };
-    expect(triggerableChains(partial).map((c) => c.key)).toEqual(['setup']);
-  });
-
-  it('is empty for a deliberation workgroup', () => {
-    expect(triggerableChains({ pipelines: {}, launch_pipeline: null })).toEqual([]);
-  });
-});
-
-describe('triggerSummary', () => {
-  const chain = namedPipelines(WG)[1];
-
-  it('names the owner, the first phase and the task the recipe declares', () => {
-    const summary = triggerSummary(chain, null);
-    expect(summary).toContain('@pixel');
-    expect(summary).toContain('#media-update');
-    expect(summary).toContain('refresh the photos');
-    expect(summary).toContain('4 phases run in order');
-    expect(summary).not.toContain('resume');
-  });
-
-  it('says an unfinished chain restarts instead of resuming', () => {
-    const summary = triggerSummary(chain, { pipeline: 'media-update', status: 'blocked' });
-    expect(summary).toContain('restarts it from #media-update');
-    expect(summary).toContain('does not resume');
-  });
-
-  it('says nothing about restarting once the chain completed', () => {
-    expect(triggerSummary(chain, { pipeline: 'media-update', status: 'completed' })).not.toContain('restarts');
   });
 });
 
@@ -311,116 +258,5 @@ describe('isLaunchless', () => {
   it('is false with a launch chain and false without any chain', () => {
     expect(isLaunchless(WG)).toBe(false);
     expect(isLaunchless({ pipelines: {}, pipeline_mode: false })).toBe(false);
-  });
-});
-
-describe('triggerBlock', () => {
-  it('passes when the hub is active and idle', () => {
-    expect(triggerBlock(WG, BETWEEN_RUN)).toBeNull();
-  });
-
-  it('blocks a subscriber', () => {
-    expect(triggerBlock({ ...WG, is_hub: false }, BETWEEN_RUN).reason).toBe('not-hub');
-  });
-
-  it('blocks a paused workgroup', () => {
-    expect(triggerBlock({ ...WG, paused: true }, BETWEEN_RUN).reason).toBe('paused');
-  });
-
-  it('blocks while a task is open', () => {
-    const block = triggerBlock(WG, LAUNCH_RUN);
-    expect(block.reason).toBe('busy');
-    expect(block.message).toContain('#build');
-  });
-
-  it('blocks while an ad-hoc task is open', () => {
-    expect(triggerBlock(WG, ADHOC).reason).toBe('busy');
-  });
-});
-
-describe('triggerPipeline', () => {
-  it('sends only the pipeline key — never an authored task post', async () => {
-    const call = vi.fn(async () => ({ ok: true, pipeline: 'media-update', phase: 'media-update', seq: 61 }));
-    const result = await triggerPipeline(call, { profile: 'mira', wgId: 'wg1', pipeline: 'media-update' });
-    expect(call).toHaveBeenCalledTimes(1);
-    const [method, params] = call.mock.calls[0];
-    expect(method).toBe('host.workgroup.trigger');
-    expect(params).toEqual({ profile: 'mira', wg_id: 'wg1', pipeline: 'media-update' });
-    expect(Object.keys(params)).not.toContain('text');
-    expect(JSON.stringify(params)).not.toContain('#task');
-    expect(result.phase).toBe('media-update');
-  });
-
-  it('never falls back to host.workgroup.post', async () => {
-    const call = vi.fn(async () => ({ ok: true }));
-    await triggerPipeline(call, { profile: 'mira', wgId: 'wg1', pipeline: 'setup' });
-    expect(call.mock.calls.map(([m]) => m)).not.toContain('host.workgroup.post');
-  });
-});
-
-describe('runPipelineTrigger', () => {
-  const chain = namedPipelines(WG)[1];
-
-  it('reports the phase the daemon opened', async () => {
-    const call = vi.fn(async () => ({ ok: true, pipeline: 'media-update', phase: 'media-update', seq: 61 }));
-    const outcome = await runPipelineTrigger(call, { workgroup: WG, chain });
-    expect(outcome).toEqual({ ok: true, pipeline: 'media-update', phase: 'media-update', seq: 61 });
-    expect(call).toHaveBeenCalledWith('host.workgroup.trigger', {
-      profile: 'mira',
-      wg_id: 'wg1',
-      pipeline: 'media-update',
-    });
-  });
-
-  it('carries the daemon code and message for every rejection', async () => {
-    const rejections = [
-      ['pipeline-unknown', "'media-update' is not a declared pipeline"],
-      ['workgroup-paused', 'resume the workgroup before starting a pipeline'],
-      ['workgroup-busy', '`#build` is still open; a trigger never preempts work'],
-      ['pipeline-trigger-not-hub', 'only the hub may start a pipeline in this workgroup'],
-      ['pipeline-trigger-contract-missing', 'declares no owner/task for its first phase'],
-      ['pipeline-trigger-rejected', 'workgroup budget exhausted'],
-    ];
-    for (const [code, detail] of rejections) {
-      const call = vi.fn(async () => {
-        throw Object.assign(new Error(code), { code: -32602, data: { detail } });
-      });
-      const outcome = await runPipelineTrigger(call, { workgroup: WG, chain });
-      expect(outcome.ok).toBe(false);
-      expect(outcome.code).toBe(code);
-      expect(outcome.message).toBe(detail);
-    }
-  });
-
-  it('never authors a post, even on rejection', async () => {
-    const call = vi.fn(async () => {
-      throw Object.assign(new Error('workgroup-busy'), { data: { detail: 'busy' } });
-    });
-    await runPipelineTrigger(call, { workgroup: WG, chain });
-    expect(call).toHaveBeenCalledTimes(1);
-    expect(call.mock.calls[0][0]).toBe('host.workgroup.trigger');
-    expect(JSON.stringify(call.mock.calls[0][1])).not.toContain('#task');
-  });
-});
-
-describe('daemonMessage', () => {
-  it('surfaces the daemon detail for every stable rejection code', () => {
-    const codes = {
-      'pipeline-unknown': "'nope' is not a declared pipeline",
-      'workgroup-paused': 'resume the workgroup before starting a pipeline',
-      'workgroup-busy': '`#build` is still open; a trigger never preempts work',
-      'pipeline-trigger-not-hub': 'only the hub may start a pipeline in this workgroup',
-      'pipeline-trigger-contract-missing': 'pipeline declares no owner/task for its first phase',
-      'pipeline-trigger-rejected': 'post rejected',
-    };
-    for (const [code, detail] of Object.entries(codes)) {
-      const err = Object.assign(new Error(code), { code: -32602, data: { detail } });
-      expect(daemonMessage(err)).toBe(detail);
-    }
-  });
-
-  it('falls back to the error message when the daemon sent no detail', () => {
-    expect(daemonMessage(new Error('workgroup-busy'))).toBe('workgroup-busy');
-    expect(daemonMessage(null)).toBe('trigger rejected');
   });
 });

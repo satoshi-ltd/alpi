@@ -25,7 +25,7 @@ const STATIC = StyleSheet.create({
     marginHorizontal: space.s5,
     paddingHorizontal: space.s4,
     paddingVertical: space.s3,
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.s5,

@@ -128,8 +128,8 @@ describe('ActionSheet wide form', () => {
     const { container } = renderSheet();
     expect(sheetStyleOf(container)).toEqual({
       backgroundColor: '#fff',
-      borderTopLeftRadius: radii['3xl'],
-      borderTopRightRadius: radii['3xl'],
+      borderTopLeftRadius: radii.sheet,
+      borderTopRightRadius: radii.sheet,
       overflow: 'hidden',
     });
   });
@@ -138,10 +138,10 @@ describe('ActionSheet wide form', () => {
     const { container } = renderInTwoPane();
     expect(sheetStyleOf(container)).toEqual({
       backgroundColor: '#fff',
-      borderTopLeftRadius: radii['3xl'],
-      borderTopRightRadius: radii['3xl'],
-      borderBottomLeftRadius: radii['3xl'],
-      borderBottomRightRadius: radii['3xl'],
+      borderTopLeftRadius: radii.sheet,
+      borderTopRightRadius: radii.sheet,
+      borderBottomLeftRadius: radii.sheet,
+      borderBottomRightRadius: radii.sheet,
       overflow: 'hidden',
       alignSelf: 'center',
       width: '100%',

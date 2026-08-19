@@ -28,7 +28,7 @@ function Tag({ label, tone }) {
   const bg = tone === 'danger' ? `${colors.danger}22` : tone === 'warn' ? `${colors.warning}22` : colors.hover;
   const fg = tone === 'danger' ? colors.danger : tone === 'warn' ? colors.warning : colors.ink2;
   return (
-    <View style={{ paddingHorizontal: space.s3, paddingVertical: space.s1, borderRadius: radii.sm, backgroundColor: bg }}>
+    <View style={{ paddingHorizontal: space.s3, paddingVertical: space.s1, borderRadius: radii.md, backgroundColor: bg }}>
       <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: fg }}>{label}</Text>
     </View>
   );

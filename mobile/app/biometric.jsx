@@ -92,7 +92,7 @@ export default function BiometricSettings() {
               justifyContent: 'center',
             }}
           >
-            <View style={{ width: 20, height: 20, borderRadius: radii.md, backgroundColor: colors.bgPane }} />
+            <View style={{ width: 20, height: 20, borderRadius: radii.lg, backgroundColor: colors.bgPane }} />
           </View>
         </Pressable>
       </ScrollView>

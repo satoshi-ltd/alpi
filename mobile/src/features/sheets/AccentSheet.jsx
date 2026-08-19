@@ -61,7 +61,7 @@ export function AccentSheet({ open, onClose, profileName, initialValue, onSave }
                 style={{
                   width: 44,
                   height: 44,
-                  borderRadius: radii.sm,
+                  borderRadius: radii.md,
                   transform: [{ rotate: '45deg' }],
                   backgroundColor: hex,
                   borderWidth: sel ? 2 : 0.5,

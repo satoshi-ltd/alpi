@@ -74,8 +74,15 @@ describe('PipelinesSection', () => {
 
   it('says the chains come from the recipe and are read-only', () => {
     render(<PipelinesSection workgroup={WG} />);
-    expect(screen.getByText(/Read-only — a recipe declares these chains/)).toBeTruthy();
-    expect(screen.getByText(/Run one from the chat/)).toBeTruthy();
+    expect(screen.getByText('Read-only — a recipe declares these chains.')).toBeTruthy();
+  });
+
+  it('instructs no control this build has — nothing points at running a chain from the chat', () => {
+    const withLaunch = render(<PipelinesSection workgroup={WG} />);
+    expect(withLaunch.container.textContent).not.toMatch(/from the chat/i);
+    withLaunch.unmount();
+    const launchless = render(<PipelinesSection workgroup={{ ...WG, launch_pipeline: null }} />);
+    expect(launchless.container.textContent).not.toMatch(/from the chat/i);
   });
 
   it('offers no action at all — no Run, no editor', () => {
@@ -95,7 +102,7 @@ describe('PipelinesSection', () => {
   it('explains the launchless case instead of looking empty', () => {
     render(<PipelinesSection workgroup={{ ...WG, launch_pipeline: null }} />);
     expect(screen.queryByText('launch')).toBeNull();
-    expect(screen.getByText(/hub stays idle until a chain is started from the chat/)).toBeTruthy();
+    expect(screen.getByText(/nothing starts on its own; every chain awaits a trigger\./)).toBeTruthy();
     expect(screen.getAllByText('on demand')).toHaveLength(2);
   });
 
@@ -112,5 +119,17 @@ describe('PipelinesSection', () => {
     render(<PipelinesSection workgroup={{ id: 'w3', is_hub: true, pipeline: ['legacy'], pipelines: {} }} />);
     expect(screen.queryByText('#legacy')).toBeNull();
     expect(screen.getByText(/deliberation workgroup/)).toBeTruthy();
+  });
+
+  it('names the retired shape the daemon refuses to load instead of reading as deliberation', () => {
+    render(
+      <PipelinesSection
+        workgroup={{ id: 'w4', is_hub: true, pipeline: ['legacy'], pipelines: {}, needs_relaunch: true }}
+      />,
+    );
+    expect(screen.getByText(/Retired pipeline shape — the daemon skips this workgroup/)).toBeTruthy();
+    expect(screen.getByText(/relaunch it from its recipe/)).toBeTruthy();
+    expect(screen.queryByText(/deliberation workgroup/)).toBeNull();
+    expect(screen.queryByText('#legacy')).toBeNull();
   });
 });

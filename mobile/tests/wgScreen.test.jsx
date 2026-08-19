@@ -14,6 +14,8 @@ const h = vi.hoisted(() => ({
   canAdmin: true,
   status: 'online',
   wg: null,
+  tasks: null,
+  tasksError: null,
   foreign: false,
   endpoint: { id: 'c1', name: 'casa', url: 'http://casa' },
   flat: (style) => {
@@ -125,7 +127,7 @@ vi.mock('../src/features/chat/Composer', () => ({
 }));
 vi.mock('../src/features/chat/MarkerCard', () => ({ MarkerCard: () => null }));
 vi.mock('../src/features/chat/MessageActionsSheet', () => ({ MessageActionsSheet: () => null }));
-vi.mock('../src/features/chat/PipelineStrip', () => ({ PipelineLauncher: () => null, PipelineStrip: () => null }));
+vi.mock('../src/features/chat/PipelineStrip', () => ({ PipelineStrip: () => null }));
 vi.mock('../src/features/chat/SoundWave', () => ({ SoundWave: () => null }));
 vi.mock('../src/features/sheets/TasksSheet', () => ({ TasksSheet: () => null }));
 vi.mock('../src/features/aln/deeplink', () => ({ isForeignConnection: () => h.foreign }));
@@ -139,7 +141,7 @@ vi.mock('../src/hooks/useDaemonData', () => ({
     refresh: h.refreshWgs,
   }),
   useWorkgroupMembers: () => ({ data: { members: [] }, loading: false, refresh: vi.fn() }),
-  useWorkgroupTasks: () => ({ data: null, loading: false, refresh: h.refreshTasks }),
+  useWorkgroupTasks: () => ({ data: h.tasks, loading: false, error: h.tasksError, refresh: h.refreshTasks }),
   useWorkgroupTranscript: () => ({ data: { posts: [] }, loading: false, refresh: h.refreshTranscript }),
 }));
 vi.mock('../src/hooks/useDebouncedCallback', () => ({ useDebouncedCallback: (fn) => fn }));
@@ -194,6 +196,8 @@ beforeEach(() => {
   h.canAdmin = true;
   h.status = 'online';
   h.wg = { ...WG };
+  h.tasks = null;
+  h.tasksError = null;
   h.foreign = false;
   h.endpoint = { id: 'c1', name: 'casa', url: 'http://casa' };
 });
@@ -362,6 +366,43 @@ describe('Workgroup daemon health', () => {
     render(<WorkgroupChat />);
     expect(document.querySelector('[data-banner]')).toBeNull();
     expect(document.querySelector('[data-composer]').getAttribute('data-disabled')).toBe('false');
+  });
+});
+
+describe('Workgroup task-state staleness', () => {
+  it('warns that the phase strip and the blocked banner may be out of date', () => {
+    h.tasksError = new Error('timeout');
+    render(<WorkgroupChat />);
+    const banner = document.querySelector('[data-banner="warning"]');
+    expect(banner.textContent).toMatch(/Workgroup state unavailable\./);
+    expect(banner.textContent).toMatch(/The daemon did not answer, so the phase strip and the blocked banner may be out of date\./);
+  });
+
+  it('keeps a stale blocked banner on screen rather than dropping it', () => {
+    h.tasksError = new Error('timeout');
+    h.tasks = { blocked: { slug: 'qa', reason: 'blocked qa · red gate' }, pipeline_run: null };
+    render(<WorkgroupChat />);
+    expect(screen.getByText(/Workgroup state unavailable\./)).toBeTruthy();
+    expect(screen.getByText(/red gate/)).toBeTruthy();
+  });
+
+  it('orders the warning above the blocked and paused banners, as desktop orders them', () => {
+    h.tasksError = new Error('timeout');
+    h.tasks = { blocked: { slug: 'qa', reason: 'blocked qa · red gate' }, pipeline_run: null };
+    h.wg = { ...WG, paused: true };
+    render(<WorkgroupChat />);
+    const stale = screen.getByText(/Workgroup state unavailable\./);
+    const blocked = screen.getByText(/red gate/);
+    const paused = screen.getByText(/Resume from the header\./);
+    expect(stale.compareDocumentPosition(blocked) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(blocked.compareDocumentPosition(paused) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('stays silent once the task state answers', () => {
+    h.tasks = { blocked: null, pipeline_run: null };
+    render(<WorkgroupChat />);
+    expect(document.querySelector('[data-banner="warning"]')).toBeNull();
+    expect(screen.queryByText(/Workgroup state unavailable/)).toBeNull();
   });
 });
 

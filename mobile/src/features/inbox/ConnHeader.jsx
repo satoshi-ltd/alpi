@@ -33,7 +33,7 @@ export function ConnHeader({
       style={({ pressed }) => ({
         width: CHROME_BTN,
         height: CHROME_BTN,
-        borderRadius: radii.md,
+        borderRadius: radii.lg,
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: pressed || searchOpen ? colors.selected : 'transparent',
@@ -52,7 +52,7 @@ export function ConnHeader({
     paddingVertical: space.s2,
     borderWidth: 0.5,
     borderColor: colors.line,
-    borderRadius: radii.lg,
+    borderRadius: radii.xl,
     backgroundColor: pressed ? colors.selected : colors.bgElev,
   });
 

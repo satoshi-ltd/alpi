@@ -23,7 +23,7 @@ export const fontSizes = {
   md: 14,
   lg: 15,
   xl: 18,
-  '2xl': 22,
+  xxl: 22,
   display: 28,
 };
 
@@ -78,12 +78,14 @@ export const pulseDuration = 1600;
 
 export const radii = {
   xs: 4,
-  sm: 8,
-  md: 10,
-  lg: 12,
-  xl: 16,
-  '2xl': 22,
-  '3xl': 28,
+  sm: 6,
+  md: 8,
+  lg: 10,
+  xl: 12,
+  '2xl': 14,
+  '3xl': 16,
+  bubble: 22,
+  sheet: 28,
   pill: 999,
 };
 

@@ -45,7 +45,7 @@ function StepButton({ glyph, label, disabled, onPress }) {
         height: mobile.tap,
         alignItems: 'center',
         justifyContent: 'center',
-        borderRadius: radii.sm,
+        borderRadius: radii.md,
         backgroundColor: pressed && !disabled ? colors.selected : colors.bgInput,
         opacity: disabled ? alpha.disabled : 1,
       })}

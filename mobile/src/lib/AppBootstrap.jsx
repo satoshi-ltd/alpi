@@ -92,7 +92,7 @@ export function AppBootstrap({ children }) {
         }}
       >
         <AlpiMark color={colors.ink} size={72} />
-        <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes["2xl"], color: colors.ink }}>Locked</Text>
+        <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.xxl, color: colors.ink }}>Locked</Text>
         <Text
           style={{
             fontFamily: fonts.sans.regular,
@@ -113,7 +113,7 @@ export function AppBootstrap({ children }) {
             paddingHorizontal: space.s9,
             paddingVertical: space.s6,
             backgroundColor: colors.ink,
-            borderRadius: radii.md,
+            borderRadius: radii.lg,
           }}
         >
           <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.md, color: colors.bgPane }}>

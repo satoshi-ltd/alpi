@@ -31,7 +31,7 @@ function SearchField({ query, onQueryChange, gutter }) {
         paddingHorizontal: space.s5,
         height: mobile.inputH,
         backgroundColor: colors.bgElev,
-        borderRadius: radii.lg,
+        borderRadius: radii.xl,
         borderWidth: HAIRLINE,
         borderColor: colors.line,
       }}

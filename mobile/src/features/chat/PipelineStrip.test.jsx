@@ -1,25 +1,50 @@
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 afterEach(cleanup);
 
-const { fontOf } = vi.hoisted(() => ({
+const { fontOf, h } = vi.hoisted(() => ({
   fontOf: (style) => [style].flat(Infinity).filter(Boolean).reduce((f, s) => s.fontFamily ?? f, null),
+  h: { onScroll: null },
 }));
 
+vi.mock('react-native-svg', () => {
+  const El = (tag) => ({ children, ...p }) => React.createElement(tag, {}, children);
+  const Svg = El('svg');
+  return { default: Svg, Svg, Defs: El('defs'), LinearGradient: El('lineargradient'), Rect: El('rect'), Stop: El('stop') };
+});
+
 vi.mock('react-native', () => {
-  const plain = ({ style, contentContainerStyle, onLayout, accessibilityLabel, ...rest }) => ({
+  const plain = ({
+    style,
+    contentContainerStyle,
+    onLayout,
+    accessibilityLabel,
+    accessibilityHint,
+    accessibilityState,
+    accessibilityElementsHidden,
+    importantForAccessibility,
+    ...rest
+  }) => ({
     ...rest,
     ...(accessibilityLabel ? { 'aria-label': accessibilityLabel } : {}),
+    ...(accessibilityHint ? { title: accessibilityHint } : {}),
+    ...(accessibilityState?.disabled ? { 'aria-disabled': 'true' } : {}),
+    ...(accessibilityElementsHidden ? { 'data-a11y-hidden-ios': 'true' } : {}),
+    ...(importantForAccessibility ? { 'data-a11y-android': importantForAccessibility } : {}),
     'data-font': fontOf(style),
+    ...(rest.testID ? { 'data-testid': rest.testID } : {}),
+    'data-style': JSON.stringify(Object.assign({}, ...[style].flat(Infinity).filter(Boolean))),
   });
   const View = ({ children, ...p }) => React.createElement('div', plain(p), children);
   const Text = ({ children, ...p }) => React.createElement('span', plain(p), children);
   const Pressable = ({ children, onPress, ...p }) =>
     React.createElement('button', { type: 'button', onClick: onPress, ...plain(p) }, children);
-  const ScrollView = React.forwardRef(({ children, ...p }, ref) =>
-    React.createElement('div', { ...plain(p), ref, 'data-testid': 'strip' }, children));
+  const ScrollView = React.forwardRef(({ children, onScroll, ...p }, ref) =>
+    React.createElement('div', {
+      ...plain(p), ref, 'data-scroll': 'horizontal',
+    }, (h.onScroll = onScroll, children)));
   return { View, Text, Pressable, ScrollView, StyleSheet: { create: (s) => s } };
 });
 
@@ -46,34 +71,12 @@ vi.mock('../../components/Dot', () => ({
   Dot: () => React.createElement('span', { 'data-dot': 'true' }),
 }));
 
-vi.mock('../../components/ActionSheet', () => ({
-  ActionSheet: ({ open, title, subtitle, description, actions = [], onClose }) =>
-    open
-      ? React.createElement(
-          'div',
-          { 'data-sheet': subtitle ?? title },
-          React.createElement('h3', null, title),
-          description ? React.createElement('p', null, description) : null,
-          ...actions.map((a) =>
-            React.createElement(
-              'button',
-              {
-                key: a.id,
-                type: 'button',
-                'data-detail': a.detail ?? '',
-                onClick: () => {
-                  onClose?.();
-                  a.onPress?.();
-                },
-              },
-              a.label,
-            ),
-          ),
-        )
-      : null,
+vi.mock('../../components/Pill', () => ({
+  Pill: ({ tone, off, children }) =>
+    React.createElement('span', { 'data-pill': tone ?? (off ? 'off' : '') }, children),
 }));
 
-import { PipelineLauncher, PipelineStrip } from './PipelineStrip';
+import { PipelineStrip } from './PipelineStrip';
 
 const RUN = {
   pipeline: 'media-update',
@@ -88,20 +91,31 @@ const RUN = {
   ],
 };
 
+const LOADED = new Set([40, 42, 43]);
+
+function strip(run = RUN, props = {}) {
+  return render(<PipelineStrip run={run} accent="#f00" loadedSeqs={LOADED} {...props} />);
+}
+
 describe('PipelineStrip', () => {
   it('renders nothing without a run', () => {
-    const { container } = render(<PipelineStrip run={null} accent="#f00" />);
+    const { container } = strip(null);
     expect(container.textContent).toBe('');
   });
 
-  it("labels the strip with the run's pipeline key, not the launch chain", () => {
-    render(<PipelineStrip run={RUN} accent="#f00" />);
-    expect(screen.getByText('media-update')).toBeTruthy();
+  it('renders nothing for a run the daemon sent without phases', () => {
+    expect(strip({ pipeline: 'setup', status: 'running' }).container.textContent).toBe('');
+    expect(strip({ pipeline: 'setup', status: 'running', phases: [] }).container.textContent).toBe('');
+  });
+
+  it("labels the strip as desktop does — pipeline · the run's key, not the launch chain", () => {
+    strip();
+    expect(screen.getByText('pipeline · media-update')).toBeTruthy();
     expect(screen.getByLabelText('#media-build current')).toBeTruthy();
   });
 
   it('renders every phase state, skipped distinct from completed', () => {
-    render(<PipelineStrip run={RUN} accent="#f00" />);
+    strip();
     expect(screen.getByLabelText('#media-update completed')).toBeTruthy();
     expect(screen.getByLabelText('#media-config skipped')).toBeTruthy();
     expect(screen.getByLabelText('#media-qa pending')).toBeTruthy();
@@ -112,176 +126,117 @@ describe('PipelineStrip', () => {
   });
 
   it('renders a blocked run with the current phase blocked', () => {
-    render(<PipelineStrip run={{ ...RUN, status: 'blocked' }} accent="#f00" />);
+    strip({ ...RUN, status: 'blocked' });
     expect(screen.getByLabelText('#media-build blocked')).toBeTruthy();
     expect(screen.getByLabelText('#media-build blocked').querySelector('[data-icon="ban"]')).toBeTruthy();
   });
 
-  it('jumps to a phase seq and never offers a jump without one', () => {
-    const onPickSeq = vi.fn();
-    render(<PipelineStrip run={RUN} accent="#f00" onPickSeq={onPickSeq} />);
-    fireEvent.click(screen.getByLabelText('#media-update completed'));
-    expect(onPickSeq).toHaveBeenCalledWith(40);
-    expect(screen.getByLabelText('#media-qa pending').tagName).toBe('DIV');
-  });
-
-  it('draws the phase separators as desktop PipelineStages does — an arrow in a theme font', () => {
-    render(<PipelineStrip run={RUN} accent="#f00" />);
-    const separators = screen.getAllByText('→');
+  it('separates the phase chain as desktop WorkgroupView does — a chevron in a theme font', () => {
+    strip();
+    const separators = screen.getAllByText('›');
     expect(separators).toHaveLength(3);
     for (const s of separators) expect(s.getAttribute('data-font')).toBe('Inter_400Regular');
   });
 
+  it('keeps the separator out of the accessibility tree on both platforms, as desktop aria-hides it', () => {
+    strip();
+    const separators = screen.getAllByText('›');
+    expect(separators).toHaveLength(3);
+    for (const s of separators) {
+      expect(s.getAttribute('data-a11y-hidden-ios')).toBe('true');
+      expect(s.getAttribute('data-a11y-android')).toBe('no-hide-descendants');
+    }
+    const phase = screen.getByLabelText('#media-build current');
+    expect(phase.getAttribute('data-a11y-hidden-ios')).toBeNull();
+    expect(phase.getAttribute('data-a11y-android')).toBeNull();
+  });
+
+  it('jumps to a loaded phase seq and says so', () => {
+    const onPickSeq = vi.fn();
+    strip(RUN, { onPickSeq });
+    const phase = screen.getByLabelText('#media-update completed');
+    expect(phase.getAttribute('title')).toBe('Jump to #media-update');
+    fireEvent.click(phase);
+    expect(onPickSeq).toHaveBeenCalledWith(40);
+  });
+
+  it('never offers a jump to a phase that has not opened, and says why', () => {
+    strip(RUN, { onPickSeq: vi.fn() });
+    const pending = screen.getByLabelText('#media-qa pending');
+    expect(pending.tagName).toBe('DIV');
+    expect(pending.getAttribute('aria-disabled')).toBe('true');
+    expect(pending.getAttribute('title')).toBe('#media-qa has not opened yet — nothing to jump to');
+  });
+
+  it('never offers a jump to a seq outside the loaded history, and says where it is', () => {
+    strip(RUN, { onPickSeq: vi.fn(), loadedSeqs: new Set([43]) });
+    const outside = screen.getByLabelText('#media-update completed');
+    expect(outside.tagName).toBe('DIV');
+    expect(outside.getAttribute('aria-disabled')).toBe('true');
+    expect(outside.getAttribute('title')).toBe('#media-update opened at post #40, outside the loaded history');
+    expect(screen.getByLabelText('#media-build current').tagName).toBe('BUTTON');
+  });
+
+  it('offers no jump at all when the thread reports no loaded history', () => {
+    strip(RUN, { onPickSeq: vi.fn(), loadedSeqs: undefined });
+    for (const label of ['#media-update completed', '#media-config skipped', '#media-build current']) {
+      expect(screen.getByLabelText(label).tagName).toBe('DIV');
+    }
+  });
+
+  it('shows the run status desktop shows, and stays silent while a phase is running', () => {
+    const pill = (container) => container.querySelector('[data-pill]');
+    expect(pill(strip().container)).toBeNull();
+    expect(pill(strip({ ...RUN, status: 'between' }).container).textContent).toBe('between phases');
+    expect(pill(strip({ ...RUN, status: 'between' }).container).getAttribute('data-pill')).toBe('off');
+    expect(pill(strip({ ...RUN, status: 'blocked' }).container).textContent).toBe('blocked');
+    expect(pill(strip({ ...RUN, status: 'blocked' }).container).getAttribute('data-pill')).toBe('err');
+    expect(pill(strip({ ...RUN, status: 'completed' }).container).textContent).toBe('completed');
+    expect(pill(strip({ ...RUN, status: 'completed' }).container).getAttribute('data-pill')).toBe('on');
+  });
+
   it('hides the strip when an ad-hoc task nulls a run that was already on screen', () => {
-    const { container, rerender } = render(<PipelineStrip run={RUN} accent="#f00" />);
+    const { container, rerender } = strip();
     expect(container.querySelector('[data-testid="strip"]')).toBeTruthy();
-    rerender(<PipelineStrip run={null} accent="#f00" />);
+    rerender(<PipelineStrip run={null} accent="#f00" loadedSeqs={LOADED} />);
     expect(container.querySelector('[data-testid="strip"]')).toBeNull();
     expect(screen.queryByText('#media-update')).toBeNull();
   });
-});
 
-const WG = {
-  id: 'wg1',
-  profile: 'mira',
-  is_hub: true,
-  paused: false,
-  pipelines: {
-    setup: ['setup', 'enrich', 'build', 'qa'],
-    'media-update': ['media-update', 'media-config', 'media-build', 'media-qa'],
-  },
-  launch_pipeline: 'setup',
-  phase_map: {
-    setup: { owner: 'scout', task: 'collect the brief' },
-    'media-update': { owner: 'pixel', task: 'refresh the photos' },
-  },
-};
-
-const IDLE = { active: null, closed: [], blocked: null, pipeline_run: null };
-const BUSY = { active: { slug: 'build', title: 'wire it', opened_seq: 12 }, closed: [], blocked: null, pipeline_run: null };
-const UNFINISHED = {
-  active: null,
-  closed: [],
-  blocked: null,
-  pipeline_run: {
-    pipeline: 'media-update',
-    status: 'between',
-    started_seq: 37,
-    current_phase: 'media-config',
-    phases: [
-      { slug: 'media-update', state: 'completed', seq: 40 },
-      { slug: 'media-config', state: 'completed', seq: 42 },
-      { slug: 'media-build', state: 'pending', seq: null },
-      { slug: 'media-qa', state: 'pending', seq: null },
-    ],
-  },
-};
-
-function launchButton() {
-  return screen.getByLabelText('run a pipeline');
-}
-
-function openPicker() {
-  fireEvent.click(launchButton());
-}
-
-function sheet(container, subtitle) {
-  return container.querySelector(`[data-sheet="${subtitle}"]`);
-}
-
-describe('PipelineLauncher', () => {
-  it('is hidden for a subscriber', () => {
-    const { container } = render(
-      <PipelineLauncher workgroup={{ ...WG, is_hub: false }} tasks={IDLE} accent="#f00" onRun={() => {}} />,
-    );
-    expect(container.textContent).toBe('');
+  it('scrolls the chain sideways rather than wrapping the header onto extra lines', () => {
+    const { container } = strip();
+    expect(container.querySelector('[data-scroll="horizontal"]')).toBeTruthy();
+    const row = JSON.parse(container.querySelector('[data-scroll]').getAttribute('data-style') || '{}');
+    expect(row.flexWrap).toBeUndefined();
   });
 
-  it('is hidden when no declared chain can be triggered', () => {
-    const wg = { ...WG, phase_map: { setup: { owner: 'scout' }, 'media-update': {} } };
-    const { container } = render(<PipelineLauncher workgroup={wg} tasks={IDLE} accent="#f00" onRun={() => {}} />);
-    expect(container.textContent).toBe('');
+  it('fades the edge only on the side that actually hides phases', () => {
+    const { container } = strip();
+    expect(container.querySelectorAll('svg')).toHaveLength(0);
+
+    const frame = (x, content, view) => ({
+      nativeEvent: { contentOffset: { x }, contentSize: { width: content }, layoutMeasurement: { width: view } },
+    });
+    act(() => { h.onScroll(frame(0, 900, 400)); });
+    expect(container.querySelectorAll('svg')).toHaveLength(1);
+
+    act(() => { h.onScroll(frame(200, 900, 400)); });
+    expect(container.querySelectorAll('svg')).toHaveLength(2);
+
+    act(() => { h.onScroll(frame(500, 900, 400)); });
+    expect(container.querySelectorAll('svg')).toHaveLength(1);
+
+    act(() => { h.onScroll(frame(0, 300, 400)); });
+    expect(container.querySelectorAll('svg')).toHaveLength(0);
   });
 
-  it('is hidden for a deliberation workgroup', () => {
-    const { container } = render(
-      <PipelineLauncher workgroup={{ id: 'w2', is_hub: true, pipelines: {} }} tasks={IDLE} accent="#f00" onRun={() => {}} />,
-    );
-    expect(container.textContent).toBe('');
-  });
-
-  it('lists only the triggerable chains declared by the recipe', () => {
-    const wg = {
-      ...WG,
-      phase_map: { setup: { owner: 'scout', task: 'collect the brief' }, 'media-update': { owner: 'pixel' } },
-    };
-    const { container } = render(<PipelineLauncher workgroup={wg} tasks={IDLE} accent="#f00" onRun={() => {}} />);
-    expect(screen.getByText('1 chain declared by the recipe')).toBeTruthy();
-    openPicker();
-    const picker = sheet(container, 'DECLARED BY THE RECIPE');
-    expect(within(picker).getByText('#setup')).toBeTruthy();
-    expect(within(picker).queryByText('#media-update')).toBeNull();
-  });
-
-  it('shows every triggerable chain with its phase count', () => {
-    const { container } = render(<PipelineLauncher workgroup={WG} tasks={IDLE} accent="#f00" onRun={() => {}} />);
-    expect(screen.getByText('2 chains declared by the recipe')).toBeTruthy();
-    openPicker();
-    const picker = sheet(container, 'DECLARED BY THE RECIPE');
-    expect(within(picker).getByText('#setup').getAttribute('data-detail')).toBe('4 phases');
-    expect(within(picker).getByText('#media-update').getAttribute('data-detail')).toBe('4 phases');
-  });
-
-  it('is unavailable while a task is open and says which', () => {
-    render(<PipelineLauncher workgroup={WG} tasks={BUSY} accent="#f00" onRun={() => {}} />);
-    expect(launchButton().disabled).toBe(true);
-    expect(screen.getByText(/#build is still open/)).toBeTruthy();
-    openPicker();
-    expect(screen.queryByText('#setup')).toBeNull();
-  });
-
-  it('is unavailable while the workgroup is paused and says so', () => {
-    render(<PipelineLauncher workgroup={{ ...WG, paused: true }} tasks={IDLE} accent="#f00" onRun={() => {}} />);
-    expect(launchButton().disabled).toBe(true);
-    expect(screen.getByText(/resume the workgroup/)).toBeTruthy();
-  });
-
-  it('confirms with the pipeline key and its declared first task, then runs it', () => {
-    const onRun = vi.fn();
-    const { container } = render(<PipelineLauncher workgroup={WG} tasks={IDLE} accent="#f00" onRun={onRun} />);
-    openPicker();
-    fireEvent.click(within(sheet(container, 'DECLARED BY THE RECIPE')).getByText('#media-update'));
-    const confirm = sheet(container, 'PIPELINE TRIGGER');
-    expect(confirm.textContent).toContain('Run #media-update');
-    expect(confirm.textContent).toContain('@pixel opens #media-update');
-    expect(confirm.textContent).toContain('refresh the photos');
-    fireEvent.click(within(confirm).getByRole('button', { name: 'Run #media-update' }));
-    expect(onRun).toHaveBeenCalledTimes(1);
-    expect(onRun.mock.calls[0][0].key).toBe('media-update');
-  });
-
-  it('an unfinished run restarts the chain instead of resuming it', () => {
-    const { container } = render(<PipelineLauncher workgroup={WG} tasks={UNFINISHED} accent="#f00" onRun={() => {}} />);
-    openPicker();
-    const picker = sheet(container, 'DECLARED BY THE RECIPE');
-    expect(within(picker).getByText('#media-update').getAttribute('data-detail')).toBe('between · #media-config');
-    fireEvent.click(within(picker).getByText('#media-update'));
-    const confirm = sheet(container, 'PIPELINE TRIGGER');
-    expect(within(confirm).getByRole('button', { name: 'Run #media-update' })).toBeTruthy();
-    expect(confirm.textContent).toContain('restarts it from #media-update');
-    expect(confirm.textContent).toContain('does not resume');
-    expect(confirm.textContent).not.toContain('Resume');
-  });
-
-  it('offers Run again only once that chain completed', () => {
-    const done = { ...UNFINISHED, pipeline_run: { ...UNFINISHED.pipeline_run, status: 'completed' } };
-    const { container } = render(<PipelineLauncher workgroup={WG} tasks={done} accent="#f00" onRun={() => {}} />);
-    openPicker();
-    const picker = sheet(container, 'DECLARED BY THE RECIPE');
-    expect(within(picker).getByText('#media-update').getAttribute('data-detail')).toBe('completed');
-    fireEvent.click(within(picker).getByText('#media-update'));
-    const confirm = sheet(container, 'PIPELINE TRIGGER');
-    expect(within(confirm).getByRole('button', { name: 'Run again #media-update' })).toBeTruthy();
-    expect(confirm.textContent).not.toContain('restarts');
+  it('carries no way to start a pipeline — every pressable is a phase jump', () => {
+    const { container } = strip(RUN, { onPickSeq: vi.fn() });
+    expect([...container.querySelectorAll('button')].map((b) => b.getAttribute('aria-label'))).toEqual([
+      '#media-update completed',
+      '#media-config skipped',
+      '#media-build current',
+    ]);
+    expect(container.textContent).not.toMatch(/run/i);
   });
 });

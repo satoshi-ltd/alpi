@@ -13,7 +13,7 @@ export function Pip({ kind, color, bg }) {
         right: -1,
         width: 16,
         height: 16,
-        borderRadius: radii.sm,
+        borderRadius: radii.md,
         backgroundColor: bg,
         alignItems: 'center',
         justifyContent: 'center',

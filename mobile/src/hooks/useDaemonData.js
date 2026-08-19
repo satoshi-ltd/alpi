@@ -48,7 +48,6 @@ async function fetchAndStore(key, call, method, params) {
   const entry = entryFor(key);
   if (entry.inflight) return entry.inflight;
   entry.loading = true;
-  entry.error = null;
   notify(entry);
   const promise = call(method, params || {})
     .then((result) => {

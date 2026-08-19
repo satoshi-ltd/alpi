@@ -14,8 +14,8 @@ const CENTRED_DIALOG = {
   alignSelf: 'center',
   width: '100%',
   maxWidth: 560,
-  borderBottomLeftRadius: radii['3xl'],
-  borderBottomRightRadius: radii['3xl'],
+  borderBottomLeftRadius: radii.sheet,
+  borderBottomRightRadius: radii.sheet,
 };
 
 // Action list caps at 60vh, scrolls internally above the cap.
@@ -46,8 +46,8 @@ export function ActionSheet({ open, onClose, title, subtitle, description, actio
           style={[
             {
               backgroundColor: colors.bgPane,
-              borderTopLeftRadius: radii['3xl'],
-              borderTopRightRadius: radii['3xl'],
+              borderTopLeftRadius: radii.sheet,
+              borderTopRightRadius: radii.sheet,
               overflow: 'hidden',
               ...dialog,
             },

@@ -149,7 +149,7 @@ export default function Pair() {
               onPress={() => setMode('paste')}
               style={({ pressed }) => ({
                 padding: space.s6,
-                borderRadius: radii.lg,
+                borderRadius: radii.xl,
                 backgroundColor: pressed ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.12)',
                 alignItems: 'center',
               })}
@@ -193,7 +193,7 @@ export default function Pair() {
           <View
             style={{
               backgroundColor: colors.bgPane,
-              borderRadius: radii.lg,
+              borderRadius: radii.xl,
               borderWidth: 0.5,
               borderColor: colors.line2,
               padding: space.s5,
@@ -228,7 +228,7 @@ export default function Pair() {
           <View
             style={{
               padding: space.s5,
-              borderRadius: radii.md,
+              borderRadius: radii.lg,
               backgroundColor: `${colors.danger}1a`,
             }}
           >

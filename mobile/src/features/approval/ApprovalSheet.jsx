@@ -101,7 +101,7 @@ export function ApprovalSheet() {
               style={{
                 maxHeight: 160,
                 backgroundColor: colors.bgInput,
-                borderRadius: radii.xl,
+                borderRadius: radii['3xl'],
                 borderWidth: 0.5,
                 borderColor: colors.line2,
               }}
@@ -128,7 +128,7 @@ export function ApprovalSheet() {
                 style={({ pressed }) => ({
                   paddingVertical: space.s5,
                   paddingHorizontal: space.s5,
-                  borderRadius: radii.md,
+                  borderRadius: radii.lg,
                   backgroundColor: pressed ? colors.hover : 'transparent',
                   opacity: busy ? 0.5 : 1,
                 })}
@@ -156,7 +156,7 @@ export function ApprovalSheet() {
             style={({ pressed }) => ({
               alignSelf: 'stretch',
               paddingVertical: space.s6,
-              borderRadius: radii.md,
+              borderRadius: radii.lg,
               backgroundColor: colors.danger,
               alignItems: 'center',
               opacity: busy ? 0.4 : pressed ? 0.85 : 1,

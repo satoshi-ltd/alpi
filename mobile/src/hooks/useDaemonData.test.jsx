@@ -433,3 +433,42 @@ describe("useProfileMemory", () => {
     expect(result.current.data).toBe(null);
   });
 });
+
+describe("usePolledCall error latch", () => {
+  it("keeps the error up while a retry is in flight, so a warning never blinks off mid-poll", async () => {
+    _resetDaemonDataCache();
+    let failSecond;
+    const call = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("timeout"))
+      .mockImplementationOnce(() => new Promise((_, rej) => { failSecond = () => rej(new Error("timeout")); }));
+    const endpoint = { id: "latch-1", name: "casa" };
+    const wrapper = ({ children }) => (
+      <EndpointContext.Provider value={{ endpoint, call }}>{children}</EndpointContext.Provider>
+    );
+    const { result } = renderHook(() => useProfileSummaries(), { wrapper });
+
+    await waitFor(() => expect(result.current.error).toBeTruthy());
+    await act(async () => { result.current.refresh(); });
+    expect(result.current.error).toBeTruthy();
+    await act(async () => { failSecond(); await Promise.resolve(); });
+    expect(result.current.error).toBeTruthy();
+  });
+
+  it("clears the error only when a read finally succeeds", async () => {
+    _resetDaemonDataCache();
+    const call = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("timeout"))
+      .mockResolvedValue({ profiles: [] });
+    const endpoint = { id: "latch-2", name: "casa" };
+    const wrapper = ({ children }) => (
+      <EndpointContext.Provider value={{ endpoint, call }}>{children}</EndpointContext.Provider>
+    );
+    const { result } = renderHook(() => useProfileSummaries(), { wrapper });
+
+    await waitFor(() => expect(result.current.error).toBeTruthy());
+    await act(async () => { await result.current.refresh().catch(() => {}); });
+    await waitFor(() => expect(result.current.error).toBeNull());
+  });
+});

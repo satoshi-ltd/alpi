@@ -201,7 +201,7 @@ describe('InboxRow sidebar variant', () => {
   it('rounds the row into an inset pill so the selection reads as a nav item', () => {
     const { container } = sidebarRow({ item: WORKGROUP });
     const style = styleOf(pressable(container));
-    expect(style.borderRadius).toBe(radii.md);
+    expect(style.borderRadius).toBe(radii.lg);
     expect(style.marginHorizontal).toBe(space.s5);
     expect(style.minHeight).toBe(mobile.tap);
   });

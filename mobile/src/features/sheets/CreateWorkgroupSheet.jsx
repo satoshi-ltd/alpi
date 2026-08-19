@@ -133,7 +133,7 @@ export function CreateWorkgroupSheet({ open, onClose }) {
                 backgroundColor: pressed ? colors.selected : colors.bgInput,
                 borderWidth: 0.5,
                 borderColor: colors.line2,
-                borderRadius: radii.lg,
+                borderRadius: radii.xl,
                 paddingHorizontal: space.s6,
                 minHeight: mobile.tap,
               })}

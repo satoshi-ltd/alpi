@@ -23,9 +23,9 @@ export function EmptyThread({ heading, detail, accent }) {
             STYLES.heading,
             {
               fontFamily: fonts.sans.semibold,
-              fontSize: fontSizes['2xl'],
-              lineHeight: fontSizes['2xl'] * lineHeights.cozy,
-              letterSpacing: fontSizes['2xl'] * tracking.tight,
+              fontSize: fontSizes.xxl,
+              lineHeight: fontSizes.xxl * lineHeights.cozy,
+              letterSpacing: fontSizes.xxl * tracking.tight,
               color: colors.ink,
             },
           ]}

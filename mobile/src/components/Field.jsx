@@ -30,7 +30,7 @@ export function Field({
       <View
         style={{
           backgroundColor: editable ? colors.bgInput : colors.bgPane,
-          borderRadius: radii.lg,
+          borderRadius: radii.xl,
           borderWidth: 0.5,
           borderColor: colors.line2,
           paddingHorizontal: space.s5,
