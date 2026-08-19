@@ -1,6 +1,6 @@
 // Peer shape: { id, pubkey, address, alias, allow: [link.ping | link.ask | link.cancel | …] }
 
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -11,6 +11,7 @@ import { Row, RowSeparator, SectionHeader } from '../../../../src/components/Row
 import { ScreenHeader } from '../../../../src/components/ScreenHeader';
 import { useToast } from '../../../../src/components/Toast';
 import { Bold, Code, TypedConfirm } from '../../../../src/components/TypedConfirm';
+import { useBack } from '../../../../src/hooks/useBack';
 import { useProfile } from '../../../../src/hooks/useSubject';
 import { useEndpoint } from '../../../../src/lib/EndpointContext';
 import { accentForProfile } from '../../../../src/theme/accents';
@@ -24,7 +25,7 @@ const KNOWN_SCOPES = [
 
 export default function PeerDetail() {
   const { id, pid } = useLocalSearchParams();
-  const router = useRouter();
+  const goBack = useBack();
   const toast = useToast();
   const { call } = useEndpoint();
   const { colors } = useTheme();
@@ -38,7 +39,7 @@ export default function PeerDetail() {
     try {
       await call('host.peers.remove', { profile: id, id: pid });
       toast({ title: 'Revoked', message: `@${pid}` });
-      router.back();
+      goBack();
     } catch (e) {
       toast({ title: 'Revoke failed', message: String(e) });
     }
@@ -49,7 +50,7 @@ export default function PeerDetail() {
       <ScreenHeader
         title={`@${pid}`}
         subtitle={`@${id} · PEER`}
-        onBack={() => router.back()}
+        onBack={goBack}
         leadingGlyph={<Diamond color={accentForProfile(pid)} size="md" />}
       />
       <ScrollView>

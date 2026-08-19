@@ -34,6 +34,7 @@ const FULL_BLEED = ['/onboarding', '/pair', '/paired', '/biometric'];
 const PANE_ROOT_PATHS = ['/', SETTINGS_PATH, OUTPUTS_PATH];
 const PANE_ROOT_KINDS = ['chat', 'wg'];
 const SELECTION_KINDS = ['chat', 'wg', 'profile'];
+const PROFILE_SECTIONS = ['brain/memory', 'brain/skills', 'brain/tools', 'email', 'mcp', 'peers', 'providers', 'schedule'];
 
 function normalize(pathname) {
   const path = String(pathname || '').split('?')[0].split('#')[0].replace(/\/+$/, '');
@@ -83,6 +84,17 @@ export function resumePath(items) {
 export function openVerb({ twoPane, pathname } = {}) {
   if (!twoPane) return 'push';
   return isPaneRoot(pathname) ? 'replace' : 'push';
+}
+
+export function backFallback(pathname) {
+  const parts = segments(pathname);
+  if (parts.length < 2 || isPaneRoot(pathname)) return '/';
+  const [kind, id, ...rest] = parts;
+  if (kind === 'outputs') return OUTPUTS_PATH;
+  if (kind === 'wg') return `/wg/${id}`;
+  if (kind !== 'profile') return '/';
+  const section = rest.slice(0, -1).join('/');
+  return PROFILE_SECTIONS.includes(section) ? `/profile/${id}/${section}` : `/chat/${id}`;
 }
 
 export function stackAnimation(twoPane) {

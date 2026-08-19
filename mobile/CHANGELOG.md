@@ -14,6 +14,33 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.4.2 — 2026-08-19 — folding no longer strands you
+
+- **Back works after the screen changes shape.** Opening a conversation on an
+  unfolded device and then folding it left you looking at a back chevron that
+  did nothing: the two panes had replaced the list rather than stacking on top
+  of it, so there was no longer anywhere to go back to and no way to reach the
+  roster at all. Back now always moves, and it lands on the place that route
+  belongs to — a workgroup's settings returns to the workgroup, a memory file to
+  the memory list, a conversation to the list of profiles — in either shape and
+  after any number of folds. The edge-swipe back gesture is also switched off
+  where the sidebar already shows what you would swipe back to.
+- **A profile with nothing in it says so.** A profile you have never written to
+  showed a name and an empty line. It now invites you to start, while the
+  profiles that need a provider, a model, or that are paused keep their own more
+  useful message.
+- **A rejected token is explained wherever you land.** When a daemon refused this
+  device's token, the chat and workgroup screens said so but both roster surfaces
+  stayed silent — and they already knew, since they used that same status to pop
+  the connection sheet open. Every surface now draws its wording from one place,
+  so a status cannot be explained on one screen and forgotten on the others.
+- **A selected row no longer reads as strongly as the line under it.** In dark
+  mode the selection fill had exactly the weight of the hairline that separates
+  rows, so highlight and divider competed; hover, selection and line now step
+  apart as they do in light mode.
+
+Requires alpi >= 0.12.11, unchanged from 0.3.1.
+
 ## v0.4.1 — 2026-08-19 — the header stops offering what it cannot finish
 
 - **Pipelines are read from the workgroup, not driven from it.** The launcher in

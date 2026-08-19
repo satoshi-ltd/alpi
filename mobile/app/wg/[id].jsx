@@ -7,6 +7,7 @@ import { radii, space } from '../../src/theme/tokens';
 
 import { ActionSheet } from '../../src/components/ActionSheet';
 import { Banner } from '../../src/components/Banner';
+import { DaemonBanner, isDaemonDown } from '../../src/components/DaemonBanner';
 import { Diamond } from '../../src/components/Diamond';
 import { Dot } from '../../src/components/Dot';
 import { Meter } from '../../src/components/Meter';
@@ -14,6 +15,7 @@ import { useToast } from '../../src/components/Toast';
 import { WorkgroupMessage } from '../../src/features/chat/Bubble';
 import { ChatHeader, headerMenuActions } from '../../src/features/chat/ChatHeader';
 import { SoundWave } from '../../src/features/chat/SoundWave';
+import { useBack } from '../../src/hooks/useBack';
 import { enqueueReadAloud } from '../../src/lib/readAloud';
 import { useCanAdminEarly } from '../../src/hooks/useActiveRole';
 import { ChatSkeleton } from '../../src/features/chat/ChatSkeleton';
@@ -258,13 +260,13 @@ function TasksHeaderButton({ tasks, accent, onPress }) {
 
 export default function WorkgroupChat() {
   const { id, connectionId } = useLocalSearchParams();
-  const router = useRouter();
+  const goBack = useBack();
   const { colors, fonts } = useTheme();
   const { activeId } = useEndpoint();
   if (isForeignConnection(activeId, connectionId)) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-        <ChatHeader kind="workgroup" accent={colors.ink3} title={`#${id}`} meta="other connection" onBack={() => router.back()} />
+        <ChatHeader kind="workgroup" accent={colors.ink3} title={`#${id}`} meta="other connection" onBack={goBack} />
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.s10 }}>
           <Text style={{ fontFamily: fonts.sans.regular, color: colors.ink3, textAlign: 'center' }}>
             This notification came from a connection that isn't active. Switch to it to open this workgroup.
@@ -279,6 +281,7 @@ export default function WorkgroupChat() {
 function WorkgroupChatInner() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
+  const goBack = useBack();
   const { colors, fonts, fontSizes } = useTheme();
   const canAdmin = useCanAdminEarly();
   const { endpoint, call, probeState } = useEndpoint();
@@ -286,8 +289,7 @@ function WorkgroupChatInner() {
   const wgs = useWorkgroups();
 
   const daemonStatus = endpoint ? probeState?.get(endpoint.id) ?? 'unknown' : 'offline';
-  const daemonDown =
-    !!endpoint && (daemonStatus === 'offline' || daemonStatus === 'disabled' || daemonStatus === 'auth-failed');
+  const daemonDown = !!endpoint && isDaemonDown(daemonStatus);
 
   const wg = useMemo(
     () => wgs.data?.workgroups?.find((w) => w.id === id) ?? null,
@@ -467,7 +469,7 @@ function WorkgroupChatInner() {
   if (!endpoint) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-        <ChatHeader kind="workgroup" accent={colors.ink3} title={`#${id}`} meta="not paired" onBack={() => router.back()} />
+        <ChatHeader kind="workgroup" accent={colors.ink3} title={`#${id}`} meta="not paired" onBack={goBack} />
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <Text style={{ fontFamily: fonts.sans.regular, color: colors.ink3 }}>Pair this phone to a daemon first.</Text>
         </View>
@@ -478,7 +480,7 @@ function WorkgroupChatInner() {
   if (wgs.loading && !wg) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-        <ChatHeader kind="workgroup" accent={colors.ink3} title={`#${id}`} meta="loading…" onBack={() => router.back()} />
+        <ChatHeader kind="workgroup" accent={colors.ink3} title={`#${id}`} meta="loading…" onBack={goBack} />
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator color={colors.ink3} />
         </View>
@@ -489,7 +491,7 @@ function WorkgroupChatInner() {
   if (!wg) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-        <ChatHeader kind="workgroup" accent={colors.ink3} title={`#${id}`} meta="workgroup · not found" onBack={() => router.back()} />
+        <ChatHeader kind="workgroup" accent={colors.ink3} title={`#${id}`} meta="workgroup · not found" onBack={goBack} />
       </SafeAreaView>
     );
   }
@@ -559,7 +561,7 @@ function WorkgroupChatInner() {
         accent={accent}
         title={wg.name || wg.id}
         meta={meta}
-        onBack={() => router.back()}
+        onBack={goBack}
         onMore={() => setMenuOpen(true)}
         right={(
           <View style={WG_STYLES.headerRight}>
@@ -568,19 +570,7 @@ function WorkgroupChatInner() {
           </View>
         )}
       />
-      {daemonStatus === 'offline' ? (
-        <Banner kind="danger" action="Retry" onAction={() => transcript.refresh()}>
-          Daemon unreachable. Reconnecting…
-        </Banner>
-      ) : daemonStatus === 'disabled' ? (
-        <Banner kind="warning">
-          Connection disabled by host. Ask an admin to enable it in Settings → Connections.
-        </Banner>
-      ) : daemonStatus === 'auth-failed' ? (
-        <Banner kind="danger">
-          Token rejected by daemon. Re-pair this phone to continue.
-        </Banner>
-      ) : null}
+      <DaemonBanner status={daemonStatus} paired={!!endpoint} onRetry={() => transcript.refresh()} />
       {taskState.error ? (
         <Banner kind="warning">
           <Text style={{ fontFamily: fonts.sans.semibold ?? fonts.sans.medium, color: colors.ink }}>

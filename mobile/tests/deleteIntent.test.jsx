@@ -73,6 +73,7 @@ vi.mock('react-native-safe-area-context', () => ({
 
 vi.mock('expo-router', () => ({
   useLocalSearchParams: () => h.params,
+  usePathname: () => '/profile/doc/settings',
   useRouter: () => ({ push: h.push, back: h.back, replace: h.replace, canGoBack: () => true }),
   useFocusEffect: (fn) => { fn?.(); },
 }));

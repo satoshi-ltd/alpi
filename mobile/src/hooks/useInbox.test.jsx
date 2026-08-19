@@ -46,7 +46,7 @@ vi.mock('../lib/readState', () => ({
   }),
 }));
 vi.mock('../lib/profileReady', () => ({
-  profileEmptyState: (p) => (p?.incomplete ? 'needs-provider' : 'ready'),
+  profileEmptyState: (p) => (p?.incomplete ? 'needs-provider' : p?.modelless ? 'needs-model' : 'ready'),
 }));
 vi.mock('../lib/profileLabel', () => ({ profileLabel: (name) => name }));
 vi.mock('../theme/accents', () => ({ accentForProfile: () => '#000000' }));
@@ -107,6 +107,88 @@ describe('useInbox roster membership', () => {
     h.workgroups = [{ id: 'wg1', name: 'alpha', profile: 'doc' }];
     render(<Probe />);
     expect(seen.items.map((i) => i.id)).toEqual(['doc', 'wg1']);
+  });
+});
+
+describe('useInbox preview line', () => {
+  const previewOf = (id) => seen.items.find((i) => i.id === id)?.preview;
+
+  it('invites a chat on a ready profile that has never held a session', () => {
+    h.profiles = [fresh('brand-new')];
+    render(<Probe />);
+    expect(previewOf('brand-new')).toBe('tap to start a thread');
+  });
+
+  it('leaves no row description empty — every profile row says something', () => {
+    h.profiles = [
+      fresh('brand-new'),
+      halfConfigured('needs-provider', 60),
+      { ...fresh('needs-model'), modelless: true },
+      { ...fresh('resting'), paused: true },
+      withSession('chatty', 60),
+    ];
+    render(<Probe />);
+    for (const item of seen.items) expect(item.preview.length).toBeGreaterThan(0);
+  });
+
+  it('keeps the provider setup line instead of inviting a chat that cannot happen', () => {
+    h.profiles = [{ ...fresh('needs-provider'), incomplete: true }];
+    render(<Probe />);
+    expect(previewOf('needs-provider')).toBe('needs a provider · tap to set up');
+  });
+
+  it('keeps the model setup line on a profile with a provider but no model', () => {
+    h.profiles = [{ ...fresh('needs-model'), modelless: true }];
+    render(<Probe />);
+    expect(previewOf('needs-model')).toBe('pick a model · tap to set up');
+  });
+
+  it('says paused instead of inviting a chat the composer refuses', () => {
+    h.profiles = [{ ...fresh('resting'), paused: true }];
+    render(<Probe />);
+    expect(previewOf('resting')).toBe('paused · resume to chat');
+  });
+
+  it('shows the last exchange, not the invitation, once a session exists', () => {
+    h.profiles = [{ name: 'chatty', latest_session: { updated_at: NOW - 60, last_assistant: 'shipped it' } }];
+    render(<Probe />);
+    expect(previewOf('chatty')).toBe('shipped it');
+  });
+
+  it('keeps the history preview on a paused profile that has one', () => {
+    h.profiles = [{ name: 'resting', paused: true, latest_session: { updated_at: NOW - 60, last_assistant: 'shipped it' } }];
+    render(<Probe />);
+    expect(previewOf('resting')).toBe('shipped it');
+  });
+
+  it('invites a chat when the session summary carries only whitespace', () => {
+    h.profiles = [{ name: 'blank', latest_session: { updated_at: NOW - 60, last_assistant: '\n  \n' } }];
+    render(<Probe />);
+    expect(previewOf('blank')).toBe('tap to start a thread');
+  });
+
+  it('invites a task in a workgroup with no posts and no briefing', () => {
+    h.workgroups = [{ id: 'wg1', name: 'alpha', profile: 'doc' }];
+    render(<Probe />);
+    expect(previewOf('wg1')).toBe('tap to open a #task');
+  });
+
+  it('says paused instead of inviting a task into a paused workgroup', () => {
+    h.workgroups = [{ id: 'wg1', name: 'alpha', profile: 'doc', paused: true }];
+    render(<Probe />);
+    expect(previewOf('wg1')).toBe('paused · resume to post');
+  });
+
+  it('keeps the briefing as the preview of a workgroup that has not posted yet', () => {
+    h.workgroups = [{ id: 'wg1', name: 'alpha', profile: 'doc', briefing: 'audit the fleet' }];
+    render(<Probe />);
+    expect(previewOf('wg1')).toBe('audit the fleet');
+  });
+
+  it('prefers the last post over the briefing', () => {
+    h.workgroups = [{ id: 'wg1', name: 'alpha', profile: 'doc', briefing: 'audit the fleet', last_body: 'done' }];
+    render(<Probe />);
+    expect(previewOf('wg1')).toBe('done');
   });
 });
 

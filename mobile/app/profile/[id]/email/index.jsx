@@ -9,6 +9,7 @@ import { Icon } from '../../../../src/components/Icon';
 import { Pill } from '../../../../src/components/Pill';
 import { Row, RowSeparator } from '../../../../src/components/Row';
 import { ScreenHeader } from '../../../../src/components/ScreenHeader';
+import { useBack } from '../../../../src/hooks/useBack';
 import { useEmailAccounts } from '../../../../src/hooks/useDaemonData';
 import { useEventEffect } from '../../../../src/hooks/useEvents';
 import { EMAIL_TYPE_LABELS } from '../../../../src/lib/emailAccounts';
@@ -18,6 +19,7 @@ import { useTheme } from '../../../../src/theme/ThemeContext';
 export default function EmailList() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
+  const goBack = useBack();
   const { colors, fonts, fontSizes } = useTheme();
   const accounts = useEmailAccounts(id);
   const [chooser, setChooser] = useState(false);
@@ -34,7 +36,7 @@ export default function EmailList() {
       <ScreenHeader
         title="Email"
         subtitle={`@${id} · ${list.length} ACCOUNT${list.length === 1 ? '' : 'S'}`}
-        onBack={() => router.back()}
+        onBack={goBack}
         right={<Button title="+ Add" size="md" variant="ghost" onPress={() => setChooser(true)} />}
       />
       <ScrollView>

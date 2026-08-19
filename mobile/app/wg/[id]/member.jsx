@@ -1,6 +1,6 @@
 // Daemon: host.workgroup.add_member. Candidates = hub.peers (from host.profile.detail) minus current members. Single-tap adds.
 
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,6 +9,7 @@ import { space } from '../../../src/theme/tokens';
 import { Diamond } from '../../../src/components/Diamond';
 import { ScreenHeader } from '../../../src/components/ScreenHeader';
 import { useToast } from '../../../src/components/Toast';
+import { useBack } from '../../../src/hooks/useBack';
 import { useWorkgroupMembers } from '../../../src/hooks/useDaemonData';
 import { useProfile, useWorkgroup } from '../../../src/hooks/useSubject';
 import { useEndpoint } from '../../../src/lib/EndpointContext';
@@ -26,7 +27,7 @@ export default function AddMemberRoute() {
 
 function AddMember() {
   const { id } = useLocalSearchParams();
-  const router = useRouter();
+  const goBack = useBack();
   const toast = useToast();
   const { call } = useEndpoint();
   const { colors, fonts, fontSizes } = useTheme();
@@ -51,7 +52,7 @@ function AddMember() {
         profile: wg.profile, wg_id: wg.id, member: peer.id,
       });
       toast({ title: 'Added', message: `@${peer.alias || peer.id}` });
-      router.back();
+      goBack();
     } catch (e) {
       toast({ title: 'Failed', message: String(e) });
       setBusy(null);
@@ -65,7 +66,7 @@ function AddMember() {
       <ScreenHeader
         title="Add member"
         subtitle={`#${id} · PICK FROM @${wg?.hub_id ?? '…'} PEERS`}
-        onBack={() => router.back()}
+        onBack={goBack}
       />
       {peersLoading ? (
         <View style={{ padding: space.s10, alignItems: 'center' }}>

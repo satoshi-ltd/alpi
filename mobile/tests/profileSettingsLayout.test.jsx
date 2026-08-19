@@ -15,6 +15,7 @@ vi.mock('react-native', () => ({
 
 vi.mock('expo-router', () => ({
   useRouter: () => ({ push: vi.fn(), back: vi.fn(), replace: vi.fn(), canGoBack: () => true }),
+  usePathname: () => '/profile/doc/settings',
   Stack: ({ screenOptions }) => {
     h.options.push(screenOptions);
     React.useEffect(() => {

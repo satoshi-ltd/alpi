@@ -13,6 +13,7 @@ const h = vi.hoisted(() => ({
 
 vi.mock('expo-router', () => ({
   useLocalSearchParams: () => h.params,
+  usePathname: () => '/profile/doc/settings',
   useRouter: () => h.router,
   useFocusEffect: (fn) => { fn?.(); },
 }));

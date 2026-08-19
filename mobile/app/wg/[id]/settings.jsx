@@ -16,6 +16,7 @@ import { Row, RowSeparator, SectionHeader } from '../../../src/components/Row';
 import { ScreenHeader } from '../../../src/components/ScreenHeader';
 import { useToast } from '../../../src/components/Toast';
 import { Bold, Code, TypedConfirm } from '../../../src/components/TypedConfirm';
+import { useBack } from '../../../src/hooks/useBack';
 import { useProfileSummaries, useWorkgroupMembers } from '../../../src/hooks/useDaemonData';
 import { useProfile, useWorkgroup } from '../../../src/hooks/useSubject';
 import { useEndpoint } from '../../../src/lib/EndpointContext';
@@ -41,6 +42,7 @@ export default function WorkgroupSettingsRoute() {
 function WorkgroupSettings() {
   const { id, intent } = useLocalSearchParams();
   const router = useRouter();
+  const goBack = useBack();
   const toast = useToast();
   const { call } = useEndpoint();
   const { colors, fonts, fontSizes } = useTheme();
@@ -72,7 +74,7 @@ function WorkgroupSettings() {
   if (loading && !wg) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-        <ScreenHeader title={`#${id}`} subtitle="WORKGROUP · LOADING" onBack={() => router.back()} />
+        <ScreenHeader title={`#${id}`} subtitle="WORKGROUP · LOADING" onBack={goBack} />
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator color={colors.ink3} />
         </View>
@@ -83,7 +85,7 @@ function WorkgroupSettings() {
   if (!wg) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-        <ScreenHeader title={`#${id}`} subtitle="WORKGROUP · NOT FOUND" onBack={() => router.back()} />
+        <ScreenHeader title={`#${id}`} subtitle="WORKGROUP · NOT FOUND" onBack={goBack} />
       </SafeAreaView>
     );
   }
@@ -150,7 +152,7 @@ function WorkgroupSettings() {
       <ScreenHeader
         title={wg.name ?? wg.id}
         subtitle={`WORKGROUP · ${isHub ? 'HUB' : 'MEMBER'}`}
-        onBack={() => router.back()}
+        onBack={goBack}
         leadingGlyph={<Text style={{ color: colors.ink4, fontFamily: fonts.mono, fontSize: fontSizes.lg }}>#</Text>}
       />
       <ScrollView contentContainerStyle={{ paddingBottom: space.s10 }}>

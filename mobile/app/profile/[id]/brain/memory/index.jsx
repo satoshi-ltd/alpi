@@ -6,6 +6,7 @@ import { space } from '../../../../../src/theme/tokens';
 
 import { Row, RowSeparator } from '../../../../../src/components/Row';
 import { ScreenHeader } from '../../../../../src/components/ScreenHeader';
+import { useBack } from '../../../../../src/hooks/useBack';
 import { useProfileMemory } from '../../../../../src/hooks/useDaemonData';
 import { useTheme } from '../../../../../src/theme/ThemeContext';
 
@@ -25,6 +26,7 @@ function humanBytes(n) {
 export default function MemoryList() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
+  const goBack = useBack();
   const { colors } = useTheme();
   const mem = useProfileMemory(id);
   const refresh = mem.refresh;
@@ -39,7 +41,7 @@ export default function MemoryList() {
       <ScreenHeader
         title="Memories"
         subtitle={`@${id} · LOADED EVERY TURN`}
-        onBack={() => router.back()}
+        onBack={goBack}
       />
       <ScrollView contentContainerStyle={{ paddingBottom: space.s9 }}>
         {mem.loading && !mem.data ? (

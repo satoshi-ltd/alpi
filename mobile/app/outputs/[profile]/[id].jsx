@@ -8,6 +8,7 @@ import { Diamond } from '../../../src/components/Diamond';
 import { NotificationBody } from '../../../src/components/NotificationBody';
 import { ScreenHeader } from '../../../src/components/ScreenHeader';
 import { useToast } from '../../../src/components/Toast';
+import { useBack } from '../../../src/hooks/useBack';
 import { useProfileSummaries } from '../../../src/hooks/useDaemonData';
 import { useOutput } from '../../../src/hooks/useOutputs';
 import { openChatTarget, severityTag } from '../../../src/lib/outputsFormat';
@@ -58,6 +59,7 @@ function PillButton({ label, trailing, onPress }) {
 export default function OutputDetailScreen() {
   const { colors, fonts, fontSizes } = useTheme();
   const router = useRouter();
+  const goBack = useBack();
   const toast = useToast();
   const { profile, id, connectionId } = useLocalSearchParams();
   const { row, loading, error, markRead } = useOutput(profile, id, connectionId);
@@ -110,7 +112,7 @@ export default function OutputDetailScreen() {
       <ScreenHeader
         title={headerTitle}
         subtitle={subtitleNode}
-        onBack={() => router.back()}
+        onBack={goBack}
       />
 
       {loading && !row ? (

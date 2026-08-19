@@ -10,6 +10,7 @@ import { Pill } from '../../../../src/components/Pill';
 import { Row, RowSeparator, SectionHeader } from '../../../../src/components/Row';
 import { ScreenHeader } from '../../../../src/components/ScreenHeader';
 import { useToast } from '../../../../src/components/Toast';
+import { useBack } from '../../../../src/hooks/useBack';
 import { usePeersPending } from '../../../../src/hooks/useDaemonData';
 import { useProfile } from '../../../../src/hooks/useSubject';
 import { useEndpoint } from '../../../../src/lib/EndpointContext';
@@ -24,6 +25,7 @@ function shortPubkey(pk) {
 export default function PeersList() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
+  const goBack = useBack();
   const toast = useToast();
   const { call } = useEndpoint();
   const { colors, fonts, fontSizes } = useTheme();
@@ -55,7 +57,7 @@ export default function PeersList() {
       <ScreenHeader
         title="Peers"
         subtitle={`@${id} · ${peers.length} TRUSTED${pending.length ? ` · ${pending.length} PENDING` : ''}`}
-        onBack={() => router.back()}
+        onBack={goBack}
         right={<Button title="+ Add" size="md" variant="ghost" onPress={() => router.push(`/profile/${id}/peers/new`)} />}
       />
       <ScrollView contentContainerStyle={{ paddingBottom: space.s9 }}>

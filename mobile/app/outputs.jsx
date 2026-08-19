@@ -7,6 +7,7 @@ import { Button } from '../src/components/Button';
 import { Diamond } from '../src/components/Diamond';
 import { ScreenHeader } from '../src/components/ScreenHeader';
 import { useToast } from '../src/components/Toast';
+import { useBack } from '../src/hooks/useBack';
 import { adminConnectionsOf, isMemberOnly, markAllUnifiedRead, outputsEmptyState, outputsSubtitle, useUnifiedOutputs } from '../src/hooks/useUnifiedOutputs';
 import { useEndpoint } from '../src/lib/EndpointContext';
 import { rowTitle } from '../src/lib/outputsFormat';
@@ -29,6 +30,7 @@ function fmtRelative(ts) {
 export default function OutputsScreen() {
   const { colors, fonts, fontSizes } = useTheme();
   const router = useRouter();
+  const goBack = useBack();
   const { endpoint, connections, roleState, setActive } = useEndpoint();
   const toast = useToast();
 
@@ -152,7 +154,7 @@ export default function OutputsScreen() {
           unreadCount,
           hasRows: rows.length > 0,
         })}
-        onBack={() => router.back()}
+        onBack={goBack}
         right={unreadCount > 0 ? (
           <Button title="Mark all read" size="md" variant="ghost" onPress={onMarkAll} />
         ) : null}

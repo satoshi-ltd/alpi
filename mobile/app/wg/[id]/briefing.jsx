@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ScrollView } from 'react-native';
 import { KeyboardPane } from '../../../src/components/KeyboardPane';
@@ -9,6 +9,7 @@ import { Button } from '../../../src/components/Button';
 import { Field } from '../../../src/components/Field';
 import { ScreenHeader } from '../../../src/components/ScreenHeader';
 import { useToast } from '../../../src/components/Toast';
+import { useBack } from '../../../src/hooks/useBack';
 import { useDirtyBack } from '../../../src/hooks/useDirtyBack';
 import { useWorkgroup } from '../../../src/hooks/useSubject';
 import { useEndpoint } from '../../../src/lib/EndpointContext';
@@ -25,7 +26,7 @@ export default function EditBriefingRoute() {
 
 function EditBriefing() {
   const { id } = useLocalSearchParams();
-  const router = useRouter();
+  const goBack = useBack();
   const toast = useToast();
   const { call } = useEndpoint();
   const { colors } = useTheme();
@@ -37,7 +38,7 @@ function EditBriefing() {
   }, [wg?.briefing]);
 
   const dirty = text !== (wg?.briefing ?? '');
-  const askBack = useDirtyBack(dirty, () => router.back());
+  const askBack = useDirtyBack(dirty, goBack);
 
   const save = async () => {
     if (!wg) return;
@@ -49,7 +50,7 @@ function EditBriefing() {
         briefing: text,
       });
       toast({ title: 'Briefing saved', duration: 1400 });
-      router.back();
+      goBack();
     } catch (e) {
       toast({ title: 'Save failed', message: String(e), duration: 2400 });
     }

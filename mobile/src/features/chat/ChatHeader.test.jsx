@@ -123,11 +123,12 @@ describe('ChatHeader back chevron', () => {
     expect(screen.getByText('back')).toBeTruthy();
   });
 
-  it('drops the chevron on a cold deep link with no history', () => {
+  it('keeps the chevron on a cold deep link with no history — useBack replaces its way out', () => {
     h.pathname = '/wg/alpha/settings';
     h.canGoBack.mockReturnValue(false);
     inTwoPane(<ChatHeader kind="workgroup" title="#alpha" onBack={() => {}} />);
-    expect(screen.queryByText('back')).toBeNull();
+    expect(screen.getByText('back')).toBeTruthy();
+    expect(h.canGoBack).not.toHaveBeenCalled();
   });
 
   it('fires onBack when the chevron is pressed on a phone', () => {

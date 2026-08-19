@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { KeyboardPane } from '../../../../src/components/KeyboardPane';
@@ -8,6 +8,7 @@ import { Button } from '../../../../src/components/Button';
 import { Field } from '../../../../src/components/Field';
 import { ScreenHeader } from '../../../../src/components/ScreenHeader';
 import { useToast } from '../../../../src/components/Toast';
+import { useBack } from '../../../../src/hooks/useBack';
 import { useEndpoint } from '../../../../src/lib/EndpointContext';
 import { IMAP_FIELDS, buildAddPayload, isAddReady } from '../../../../src/lib/emailAccounts';
 import { space } from '../../../../src/theme/tokens';
@@ -15,7 +16,7 @@ import { useTheme } from '../../../../src/theme/ThemeContext';
 
 export default function NewEmail() {
   const { id } = useLocalSearchParams();
-  const router = useRouter();
+  const goBack = useBack();
   const toast = useToast();
   const { call } = useEndpoint();
   const { colors, fonts, fontSizes } = useTheme();
@@ -31,7 +32,7 @@ export default function NewEmail() {
     try {
       await call('host.email.add', buildAddPayload(id, draft));
       toast({ title: 'Email added', message: (draft.address || '').trim() });
-      router.back();
+      goBack();
     } catch (e) {
       toast({ title: 'Add failed', message: String(e) });
     } finally {
@@ -44,7 +45,7 @@ export default function NewEmail() {
       <ScreenHeader
         title="Add IMAP account"
         subtitle={`@${id} · IMAP / SMTP`}
-        onBack={() => router.back()}
+        onBack={goBack}
         right={<Button title="Add" size="md" disabled={!ready} loading={busy} onPress={save} />}
       />
       <KeyboardPane>

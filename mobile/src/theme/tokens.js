@@ -137,8 +137,8 @@ const darkColors = {
   ink4: '#484f58',
   line: 'rgba(230,237,243,0.08)',
   line2: 'rgba(230,237,243,0.16)',
-  hover: 'rgba(230,237,243,0.05)',
-  selected: 'rgba(230,237,243,0.08)',
+  hover: 'rgba(230,237,243,0.04)',
+  selected: 'rgba(230,237,243,0.07)',
 };
 
 // Never collapse these to one constant: the raw brand gold is 2.44:1 on the SyncBar track over white.

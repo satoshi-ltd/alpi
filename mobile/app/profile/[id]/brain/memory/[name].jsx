@@ -1,10 +1,11 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { space } from '../../../../../src/theme/tokens';
 
 import { Icon } from '../../../../../src/components/Icon';
 import { ScreenHeader } from '../../../../../src/components/ScreenHeader';
+import { useBack } from '../../../../../src/hooks/useBack';
 import { useDirtyBack } from '../../../../../src/hooks/useDirtyBack';
 import { useMemoryEditor } from '../../../../../src/hooks/useMemoryEditor';
 import { useTheme } from '../../../../../src/theme/ThemeContext';
@@ -15,10 +16,10 @@ function stripMemoryDelimiters(text) {
 
 export default function MemoryDetail() {
   const { id, name, label, helper } = useLocalSearchParams();
-  const router = useRouter();
+  const goBack = useBack();
   const { colors, fonts, fontSizes } = useTheme();
   const mem = useMemoryEditor(id, name);
-  const askLeave = useDirtyBack(mem.dirty, () => router.back());
+  const askLeave = useDirtyBack(mem.dirty, goBack);
 
   async function onSave() {
     const res = await mem.save();

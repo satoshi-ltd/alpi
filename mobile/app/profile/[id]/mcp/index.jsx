@@ -11,6 +11,7 @@ import { Sheet } from '../../../../src/components/Sheet';
 import { ScreenHeader } from '../../../../src/components/ScreenHeader';
 import { useToast } from '../../../../src/components/Toast';
 import { Bold, Code, TypedConfirm } from '../../../../src/components/TypedConfirm';
+import { useBack } from '../../../../src/hooks/useBack';
 import { useProfile } from '../../../../src/hooks/useSubject';
 import { useEndpoint } from '../../../../src/lib/EndpointContext';
 import { useTheme } from '../../../../src/theme/ThemeContext';
@@ -18,6 +19,7 @@ import { useTheme } from '../../../../src/theme/ThemeContext';
 export default function McpList() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
+  const goBack = useBack();
   const toast = useToast();
   const { call } = useEndpoint();
   const { colors, fonts, fontSizes } = useTheme();
@@ -57,7 +59,7 @@ export default function McpList() {
       <ScreenHeader
         title="MCP servers"
         subtitle={`@${id} · ${servers.length} REGISTERED`}
-        onBack={() => router.back()}
+        onBack={goBack}
         right={<Button title="+ Add" size="md" variant="ghost" onPress={() => router.push(`/profile/${id}/mcp/new`)} />}
       />
       <ScrollView>

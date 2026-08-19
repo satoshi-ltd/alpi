@@ -5,6 +5,7 @@ import { space } from '../../../../../src/theme/tokens';
 
 import { Row, RowSeparator, SectionHeader } from '../../../../../src/components/Row';
 import { ScreenHeader } from '../../../../../src/components/ScreenHeader';
+import { useBack } from '../../../../../src/hooks/useBack';
 import { useSkills } from '../../../../../src/hooks/useDaemonData';
 import { useTheme } from '../../../../../src/theme/ThemeContext';
 
@@ -16,6 +17,7 @@ function formatCategory(raw) {
 export default function SkillsList() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
+  const goBack = useBack();
   const { colors, fonts, fontSizes } = useTheme();
   const skills = useSkills(id);
 
@@ -40,7 +42,7 @@ export default function SkillsList() {
       <ScreenHeader
         title="Skills"
         subtitle={`@${id} · ${rows.length} INSTALLED`}
-        onBack={() => router.back()}
+        onBack={goBack}
       />
       <ScrollView contentContainerStyle={{ paddingBottom: space.s9 }}>
         {skills.loading && rows.length === 0 ? (

@@ -12,6 +12,7 @@ import { Button } from '../src/components/Button';
 import { Eyebrow } from '../src/components/Eyebrow';
 import { Icon } from '../src/components/Icon';
 import { useToast } from '../src/components/Toast';
+import { useBack } from '../src/hooks/useBack';
 import { useEndpoint } from '../src/lib/EndpointContext';
 import { exchangePairing, pairingLinkFromParams, parsePairing, PairingError } from '../src/lib/pairing';
 import { probe } from '../src/lib/probe';
@@ -21,6 +22,7 @@ import { useTheme } from '../src/theme/ThemeContext';
 export default function Pair() {
   const { colors, fonts, fontSizes, mobile } = useTheme();
   const router = useRouter();
+  const goBack = useBack();
   const toast = useToast();
   // addConnection keeps SecureStore and the provider's live connection list in sync.
   const { addConnection } = useEndpoint();
@@ -167,7 +169,7 @@ export default function Pair() {
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', padding: space.s7, gap: space.s5 }}>
-        <Pressable onPress={() => router.back()} hitSlop={12}>
+        <Pressable onPress={goBack} hitSlop={12}>
           <Icon name="back" size="lg" color={colors.ink} />
         </Pressable>
         <View style={{ flex: 1 }}>

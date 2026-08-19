@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { KeyboardPane } from '../../../src/components/KeyboardPane';
@@ -9,6 +9,7 @@ import { Button } from '../../../src/components/Button';
 import { Field } from '../../../src/components/Field';
 import { ScreenHeader } from '../../../src/components/ScreenHeader';
 import { useToast } from '../../../src/components/Toast';
+import { useBack } from '../../../src/hooks/useBack';
 import { useDirtyBack } from '../../../src/hooks/useDirtyBack';
 import { useProfile } from '../../../src/hooks/useSubject';
 import { useEndpoint } from '../../../src/lib/EndpointContext';
@@ -16,7 +17,7 @@ import { useTheme } from '../../../src/theme/ThemeContext';
 
 export default function EditIdentity() {
   const { id } = useLocalSearchParams();
-  const router = useRouter();
+  const goBack = useBack();
   const toast = useToast();
   const { colors, fonts, fontSizes } = useTheme();
   const { call } = useEndpoint();
@@ -29,13 +30,13 @@ export default function EditIdentity() {
   }, [profile?.bio]);
 
   const dirty = text !== (profile?.bio ?? '');
-  const askBack = useDirtyBack(dirty, () => router.back());
+  const askBack = useDirtyBack(dirty, goBack);
 
   const save = async () => {
     try {
       await call('host.config.set_field', { profile: id, key: 'public_bio', value: text });
       toast({ title: 'Identity saved', duration: 1400 });
-      router.back();
+      goBack();
     } catch (e) {
       toast({ title: 'Save failed', message: String(e), duration: 2400 });
     }

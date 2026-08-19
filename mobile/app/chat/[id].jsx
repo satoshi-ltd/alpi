@@ -7,8 +7,8 @@ import { radii, space } from '../../src/theme/tokens';
 
 import { ActionSheet } from '../../src/components/ActionSheet';
 import { AlpiMark } from '../../src/components/AlpiMark';
-import { Banner } from '../../src/components/Banner';
 import { Button } from '../../src/components/Button';
+import { DaemonBanner, isDaemonDown } from '../../src/components/DaemonBanner';
 import { Meter } from '../../src/components/Meter';
 import { useToast } from '../../src/components/Toast';
 import { ProfileAssistantMessage, ProfileUserMessage } from '../../src/features/chat/Bubble';
@@ -16,6 +16,7 @@ import { Reasoning } from '../../src/features/chat/Reasoning';
 import { turnParts } from '../../src/features/chat/reasoningSteps';
 import { ChatHeader, headerMenuActions } from '../../src/features/chat/ChatHeader';
 import { SoundWave } from '../../src/features/chat/SoundWave';
+import { useBack } from '../../src/hooks/useBack';
 import { enqueueReadAloud } from '../../src/lib/readAloud';
 import { Composer } from '../../src/features/chat/Composer';
 import { MessageActionsSheet } from '../../src/features/chat/MessageActionsSheet';
@@ -324,13 +325,13 @@ function NeedsSetup({ name, accent, state, onSetupProvider, onPickModel }) {
 
 export default function ProfileChat() {
   const { id, connectionId, sid } = useLocalSearchParams();
-  const router = useRouter();
+  const goBack = useBack();
   const { colors, fonts } = useTheme();
   const { activeId } = useEndpoint();
   if (isForeignConnection(activeId, connectionId)) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-        <ChatHeader kind="profile" accent={colors.ink3} title={`@${profileLabel(id)}`} meta="other connection" onBack={() => router.back()} />
+        <ChatHeader kind="profile" accent={colors.ink3} title={`@${profileLabel(id)}`} meta="other connection" onBack={goBack} />
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.s10 }}>
           <Text style={{ fontFamily: fonts.sans.regular, color: colors.ink3, textAlign: 'center' }}>
             This notification came from a connection that isn't active. Switch to it to open this chat.
@@ -345,6 +346,7 @@ export default function ProfileChat() {
 function ProfileChatInner() {
   const { id, sid } = useLocalSearchParams();
   const router = useRouter();
+  const goBack = useBack();
   const { colors, fonts, fontSizes } = useTheme();
   const canAdmin = useCanAdminEarly();
   const { endpoint, call, probeState } = useEndpoint();
@@ -352,8 +354,7 @@ function ProfileChatInner() {
   const sessionsList = useSessionsList(id);
 
   const daemonStatus = endpoint ? probeState?.get(endpoint.id) ?? 'unknown' : 'offline';
-  const daemonDown =
-    !!endpoint && (daemonStatus === 'offline' || daemonStatus === 'disabled' || daemonStatus === 'auth-failed');
+  const daemonDown = !!endpoint && isDaemonDown(daemonStatus);
 
   const profile = useMemo(
     () => summaries.data?.profiles?.find((p) => p.name === id) ?? null,
@@ -552,7 +553,7 @@ function ProfileChatInner() {
   if (!endpoint) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-        <ChatHeader kind="profile" accent={colors.ink3} title={`@${profileLabel(id)}`} meta="not paired" onBack={() => router.back()} />
+        <ChatHeader kind="profile" accent={colors.ink3} title={`@${profileLabel(id)}`} meta="not paired" onBack={goBack} />
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <Text style={{ fontFamily: fonts.sans.regular, color: colors.ink3 }}>Pair this phone to a daemon first.</Text>
         </View>
@@ -563,7 +564,7 @@ function ProfileChatInner() {
   if (summaries.loading && !profile) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-        <ChatHeader kind="profile" accent={colors.ink3} title={`@${profileLabel(id)}`} meta="loading…" onBack={() => router.back()} />
+        <ChatHeader kind="profile" accent={colors.ink3} title={`@${profileLabel(id)}`} meta="loading…" onBack={goBack} />
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator color={colors.ink3} />
         </View>
@@ -574,7 +575,7 @@ function ProfileChatInner() {
   if (!profile) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-        <ChatHeader kind="profile" accent={colors.ink3} title={`@${profileLabel(id)}`} meta="profile · not found" onBack={() => router.back()} />
+        <ChatHeader kind="profile" accent={colors.ink3} title={`@${profileLabel(id)}`} meta="profile · not found" onBack={goBack} />
       </SafeAreaView>
     );
   }
@@ -665,24 +666,12 @@ function ProfileChatInner() {
         accent={accent}
         title={profileLabel(profile.name)}
         meta={headerMeta}
-        onBack={() => router.back()}
+        onBack={goBack}
         onMore={() => setMenuOpen(true)}
         onPickSession={() => setSessionsOpen(true)}
         right={<SoundWave accent={accent} />}
       />
-      {daemonStatus === 'offline' ? (
-        <Banner kind="danger" action="Retry" onAction={() => session.refresh()}>
-          Daemon unreachable. Reconnecting…
-        </Banner>
-      ) : daemonStatus === 'disabled' ? (
-        <Banner kind="warning">
-          Connection disabled by host. Ask an admin to enable it in Settings → Connections.
-        </Banner>
-      ) : daemonStatus === 'auth-failed' ? (
-        <Banner kind="danger">
-          Token rejected by daemon. Re-pair this phone to continue.
-        </Banner>
-      ) : null}
+      <DaemonBanner status={daemonStatus} paired={!!endpoint} onRetry={() => session.refresh()} />
       {paused ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3, paddingHorizontal: space.s7, paddingVertical: space.s4, backgroundColor: `${colors.warning}22` }}>
           <Text numberOfLines={2} style={{ flex: 1, fontFamily: fonts.sans.medium, fontSize: fontSizes.sm, color: colors.ink2 }}>

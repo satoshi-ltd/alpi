@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useMemo } from 'react';
 import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,6 +7,7 @@ import { radii, space } from '../../../../../src/theme/tokens';
 import { Pill } from '../../../../../src/components/Pill';
 import { Eyebrow } from '../../../../../src/components/Eyebrow';
 import { ScreenHeader } from '../../../../../src/components/ScreenHeader';
+import { useBack } from '../../../../../src/hooks/useBack';
 import { useTools } from '../../../../../src/hooks/useDaemonData';
 import { useTheme } from '../../../../../src/theme/ThemeContext';
 
@@ -19,7 +20,7 @@ function formatType(schema) {
 
 export default function ToolDetail() {
   const { id, name } = useLocalSearchParams();
-  const router = useRouter();
+  const goBack = useBack();
   const { colors, fonts, fontSizes } = useTheme();
   const tools = useTools(id);
   const tool = useMemo(
@@ -30,7 +31,7 @@ export default function ToolDetail() {
   if (tools.loading && !tools.data) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-        <ScreenHeader title={String(name ?? '')} subtitle="TOOL · LOADING" onBack={() => router.back()} />
+        <ScreenHeader title={String(name ?? '')} subtitle="TOOL · LOADING" onBack={goBack} />
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator color={colors.ink3} />
         </View>
@@ -41,7 +42,7 @@ export default function ToolDetail() {
   if (!tool) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-        <ScreenHeader title={String(name ?? '')} subtitle="TOOL · NOT FOUND" onBack={() => router.back()} />
+        <ScreenHeader title={String(name ?? '')} subtitle="TOOL · NOT FOUND" onBack={goBack} />
       </SafeAreaView>
     );
   }
@@ -55,7 +56,7 @@ export default function ToolDetail() {
       <ScreenHeader
         title={tool.name}
         subtitle={`${tool.category ?? 'TOOL'} · @${id}`}
-        onBack={() => router.back()}
+        onBack={goBack}
       />
       <ScrollView contentContainerStyle={{ padding: space.s8, gap: space.s6, paddingBottom: space.s10 }}>
         {tool.denied ? (

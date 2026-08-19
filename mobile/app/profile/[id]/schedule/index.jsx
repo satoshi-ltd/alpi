@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,6 +10,7 @@ import { Row, RowSeparator } from '../../../../src/components/Row';
 import { ScreenHeader } from '../../../../src/components/ScreenHeader';
 import { useToast } from '../../../../src/components/Toast';
 import { Bold, Code, TypedConfirm } from '../../../../src/components/TypedConfirm';
+import { useBack } from '../../../../src/hooks/useBack';
 import { useScheduleList } from '../../../../src/hooks/useDaemonData';
 import { useEventEffect } from '../../../../src/hooks/useEvents';
 import { useEndpoint } from '../../../../src/lib/EndpointContext';
@@ -18,7 +19,7 @@ import { useTheme } from '../../../../src/theme/ThemeContext';
 
 export default function ScheduleList() {
   const { id } = useLocalSearchParams();
-  const router = useRouter();
+  const goBack = useBack();
   const toast = useToast();
   const { call } = useEndpoint();
   const { colors, fonts, fontSizes } = useTheme();
@@ -72,7 +73,7 @@ export default function ScheduleList() {
       <ScreenHeader
         title="Schedule"
         subtitle={`@${id} · CRON JOBS · ${jobs.length}`}
-        onBack={() => router.back()}
+        onBack={goBack}
         // Schedules are created via chat (ask the agent to set one up) — no in-app "New" affordance. List + manage (fire/pause/delete) live here, creation does not.
       />
       <ScrollView contentContainerStyle={{ paddingBottom: space.s9 }}>

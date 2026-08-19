@@ -26,7 +26,8 @@ vi.mock('react-native', () => {
 
 vi.mock('expo-router', () => ({
   useLocalSearchParams: () => ({ id: 'agora' }),
-  useRouter: () => ({ push: vi.fn(), back: vi.fn(), replace: vi.fn() }),
+  usePathname: () => '/profile/agora/mcp',
+  useRouter: () => ({ push: vi.fn(), back: vi.fn(), replace: vi.fn(), canGoBack: () => true }),
 }));
 
 vi.mock('react-native-safe-area-context', () => ({

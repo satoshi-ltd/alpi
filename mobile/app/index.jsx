@@ -2,7 +2,7 @@ import { useFocusEffect, usePathname, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Banner } from '../src/components/Banner';
+import { DaemonBanner, isDaemonDown } from '../src/components/DaemonBanner';
 import { ConnHeader } from '../src/features/inbox/ConnHeader';
 import { InboxRow } from '../src/features/inbox/InboxRow';
 import { Roster } from '../src/features/inbox/Roster';
@@ -56,12 +56,7 @@ function InboxScreen({ items, loading, refresh }) {
 
   const daemonStatus = endpoint ? probeState.get(endpoint.id) ?? 'unknown' : 'offline';
 
-  const activeFailed =
-    !!endpoint && (
-      daemonStatus === 'offline' ||
-      daemonStatus === 'disabled' ||
-      daemonStatus === 'auth-failed'
-    );
+  const activeFailed = !!endpoint && isDaemonDown(daemonStatus);
   useFireOnce(activeFailed, () => setSheet('conn'));
 
   const enriched = useMemo(() => {
@@ -160,15 +155,7 @@ function InboxScreen({ items, loading, refresh }) {
         onToggleSearch={toggleSearch}
         onConnPress={() => setSheet('conn')}
       />
-      {daemonStatus === 'offline' && endpoint ? (
-        <Banner kind="danger" action="Retry" onAction={onRefresh}>
-          Daemon unreachable. Reconnecting…
-        </Banner>
-      ) : daemonStatus === 'disabled' && endpoint ? (
-        <Banner kind="warning">
-          Connection disabled by host. Ask an admin to enable it in Settings → Connections.
-        </Banner>
-      ) : null}
+      <DaemonBanner status={daemonStatus} paired={!!endpoint} onRetry={onRefresh} />
       <Roster
         items={enriched}
         query={query}

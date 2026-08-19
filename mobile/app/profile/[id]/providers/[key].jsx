@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import { KeyboardPane } from '../../../../src/components/KeyboardPane';
@@ -14,6 +14,7 @@ import { Row, RowSeparator, SectionHeader } from '../../../../src/components/Row
 import { ScreenHeader } from '../../../../src/components/ScreenHeader';
 import { useToast } from '../../../../src/components/Toast';
 import { Bold, Code, TypedConfirm } from '../../../../src/components/TypedConfirm';
+import { useBack } from '../../../../src/hooks/useBack';
 import { useOllamaModels } from '../../../../src/hooks/useDaemonData';
 import { useProfile } from '../../../../src/hooks/useSubject';
 import { useEndpoint } from '../../../../src/lib/EndpointContext';
@@ -28,7 +29,7 @@ const KEY_INFO = {
 
 export default function ProviderKey() {
   const { id, key } = useLocalSearchParams();
-  const router = useRouter();
+  const goBack = useBack();
   const toast = useToast();
   const { call } = useEndpoint();
   const { colors, fonts, fontSizes } = useTheme();
@@ -66,7 +67,7 @@ export default function ProviderKey() {
   if (!info) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-        <ScreenHeader title="Unknown provider" onBack={() => router.back()} />
+        <ScreenHeader title="Unknown provider" onBack={goBack} />
       </SafeAreaView>
     );
   }
@@ -84,11 +85,11 @@ export default function ProviderKey() {
         onUrlChange={setUrl}
         onSaved={async () => {
           await refresh();
-          router.back();
+          goBack();
         }}
         onRemoved={async () => {
           await refresh();
-          router.back();
+          goBack();
         }}
         call={call}
         toast={toast}
@@ -113,7 +114,7 @@ export default function ProviderKey() {
       await call('host.providers.set_key', { profile: id, key: info.env, value: trimmed });
       await refresh();
       toast({ title: isExisting ? 'Updated' : 'Saved', message: info.env, duration: 1500 });
-      router.back();
+      goBack();
     } catch (e) {
       toast({ title: 'Save failed', message: String(e) });
     }
@@ -124,7 +125,7 @@ export default function ProviderKey() {
       await call('host.providers.unset_key', { profile: id, key: info.env });
       await refresh();
       toast({ title: 'Removed', message: info.env });
-      router.back();
+      goBack();
     } catch (e) {
       toast({ title: 'Remove failed', message: String(e) });
     }
@@ -135,7 +136,7 @@ export default function ProviderKey() {
       <ScreenHeader
         title={info.label}
         subtitle={`@${id} · ${info.env}${isExisting ? ' · set' : ''}`}
-        onBack={() => router.back()}
+        onBack={goBack}
       />
       <KeyboardPane>
         <ScrollView contentContainerStyle={{ padding: space.s8, gap: space.s8 }} keyboardShouldPersistTaps="handled">

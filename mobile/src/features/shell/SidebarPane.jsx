@@ -4,7 +4,7 @@ import { AppState } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { space } from '../../theme/tokens';
 
-import { Banner } from '../../components/Banner';
+import { DaemonBanner, isDaemonDown } from '../../components/DaemonBanner';
 import { ConnHeader } from '../inbox/ConnHeader';
 import { InboxRow } from '../inbox/InboxRow';
 import { Roster } from '../inbox/Roster';
@@ -63,12 +63,7 @@ export function SidebarPane() {
 
   const daemonStatus = endpoint ? probeState.get(endpoint.id) ?? 'unknown' : 'offline';
 
-  const activeFailed =
-    !!endpoint && (
-      daemonStatus === 'offline' ||
-      daemonStatus === 'disabled' ||
-      daemonStatus === 'auth-failed'
-    );
+  const activeFailed = !!endpoint && isDaemonDown(daemonStatus);
   useFireOnce(activeFailed, () => setSheet('conn'));
 
   const enriched = useMemo(() => {
@@ -197,15 +192,7 @@ export function SidebarPane() {
           onToggleSearch={toggleSearch}
           onConnPress={() => setSheet('conn')}
         />
-        {daemonStatus === 'offline' && endpoint ? (
-          <Banner kind="danger" action="Retry" onAction={onRefresh}>
-            Daemon unreachable. Reconnecting…
-          </Banner>
-        ) : daemonStatus === 'disabled' && endpoint ? (
-          <Banner kind="warning">
-            Connection disabled by host. Ask an admin to enable it in Settings → Connections.
-          </Banner>
-        ) : null}
+        <DaemonBanner status={daemonStatus} paired={!!endpoint} onRetry={onRefresh} />
         <Roster
           items={enriched}
           query={query}

@@ -17,15 +17,38 @@ function sweepActivity(prev, cutoff) {
   return live.length === Object.keys(prev).length ? prev : Object.fromEntries(live);
 }
 
+const PREVIEW_NEEDS_PROVIDER = 'needs a provider · tap to set up';
+const PREVIEW_NEEDS_MODEL = 'pick a model · tap to set up';
+const PREVIEW_NO_HISTORY = 'tap to start a thread';
+const PREVIEW_PAUSED = 'paused · resume to chat';
+const PREVIEW_WG_NO_POSTS = 'tap to open a #task';
+const PREVIEW_WG_PAUSED = 'paused · resume to post';
+
 function previewFromSession(latest) {
   if (!latest) return '';
   // `first_user` is the pre-0.4.49 fallback when only the thread topic was in the summary.
-  return (
+  return String(
     latest.last_assistant
     || latest.last_user
     || latest.first_user
     || latest.title
-    || ''
+    || '',
+  ).trim();
+}
+
+function profilePreview(profile, state) {
+  if (state === 'needs-provider') return PREVIEW_NEEDS_PROVIDER;
+  if (state === 'needs-model') return PREVIEW_NEEDS_MODEL;
+  return (
+    previewFromSession(profile.latest_session)
+    || (profile.paused ? PREVIEW_PAUSED : PREVIEW_NO_HISTORY)
+  );
+}
+
+function workgroupPreview(workgroup) {
+  return (
+    String(workgroup.last_body || workgroup.briefing || '').trim()
+    || (workgroup.paused ? PREVIEW_WG_PAUSED : PREVIEW_WG_NO_POSTS)
   );
 }
 
@@ -68,12 +91,7 @@ export function useInbox() {
     const profileItems = (profilesQ.data?.profiles ?? []).map((p) => {
       const state = profileEmptyState(p);
       const blocked = state !== 'ready';
-      const preview =
-        state === 'needs-provider'
-          ? 'needs a provider · tap to set up'
-          : state === 'needs-model'
-            ? 'pick a model · tap to set up'
-            : previewFromSession(p.latest_session);
+      const preview = profilePreview(p, state);
       const sessionTs =
         p.latest_session?.updated_at ?? p.latest_session?.mtime ?? p.latest_session?.started_at ?? 0;
       const unread = !blocked && sessionTs > 0 && checkProfile(p.name, sessionTs);
@@ -107,7 +125,7 @@ export function useInbox() {
         label: w.name ?? w.id,
         accent: hub?.accent ?? accentForProfile(w.hub_id),
         paused: w.paused,
-        preview: w.last_body || w.briefing || '',
+        preview: workgroupPreview(w),
         unread,
         state: activity[w.id] ? 'working' : undefined,
         ts: fmtRelative(wgTs),

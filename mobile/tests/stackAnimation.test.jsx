@@ -135,6 +135,38 @@ describe('root layout screenOptions', () => {
     expect(lastOptions()).toBe(before);
   });
 
+  it.each([
+    ['a phone subject, where the roster is a real screen underneath', PHONE, '/chat/doc', true],
+    ['a phone shell destination', PHONE, '/settings', true],
+    ['a two-pane subject, where the sidebar is the roster', TABLET, '/chat/doc', false],
+    ['a two-pane shell destination', TABLET, '/settings', false],
+    ['a two-pane drilled screen, which has a real parent', TABLET, '/wg/alpha/settings', true],
+    ['a two-pane profile drill', TABLET, '/profile/doc/settings', true],
+  ])('offers the swipe on %s', (_name, window, pathname, expected) => {
+    h.window = window;
+    h.pathname = pathname;
+    render(<RootLayout />);
+    expect(lastOptions().gestureEnabled).toBe(expected);
+  });
+
+  it('hands the swipe back the moment a two-pane subject folds to one pane', () => {
+    h.window = TABLET;
+    h.pathname = '/chat/doc';
+    const { container, rerender } = render(<RootLayout />);
+    const node = stackNode(container);
+    expect(lastOptions().gestureEnabled).toBe(false);
+
+    h.window = PHONE;
+    rerender(<RootLayout />);
+    expect(lastOptions().gestureEnabled).toBe(true);
+
+    h.window = TABLET;
+    rerender(<RootLayout />);
+    expect(lastOptions().gestureEnabled).toBe(false);
+    expect(stackNode(container)).toBe(node);
+    expect(h.mounts).toBe(1);
+  });
+
   it('flips the animation without remounting the navigator', () => {
     h.window = TABLET;
     const { container, rerender } = render(<RootLayout />);

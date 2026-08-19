@@ -1,4 +1,3 @@
-import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,11 +7,12 @@ import { Pill } from '../src/components/Pill';
 import { Row, RowSeparator, SectionHeader } from '../src/components/Row';
 import { ScreenHeader } from '../src/components/ScreenHeader';
 import { useToast } from '../src/components/Toast';
+import { useBack } from '../src/hooks/useBack';
 import { authenticate, biometricCapabilities, getBiometricPref, setBiometricPref } from '../src/lib/biometric';
 import { useTheme } from '../src/theme/ThemeContext';
 
 export default function BiometricSettings() {
-  const router = useRouter();
+  const goBack = useBack();
   const toast = useToast();
   const { colors, fonts, fontSizes } = useTheme();
   const [caps, setCaps] = useState({ hasHardware: false, enrolled: false, label: 'Biometric' });
@@ -46,7 +46,7 @@ export default function BiometricSettings() {
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-      <ScreenHeader title="Biometric unlock" subtitle="THIS PHONE · LOCK ON COLD START" onBack={() => router.back()} />
+      <ScreenHeader title="Biometric unlock" subtitle="THIS PHONE · LOCK ON COLD START" onBack={goBack} />
       <ScrollView>
         <SectionHeader>Capability</SectionHeader>
         <Row

@@ -1,5 +1,8 @@
+import { readdirSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, it, expect } from "vitest";
 import {
+  backFallback,
   SIDEBAR_W,
   MIN_W,
   MIN_H,
@@ -271,5 +274,82 @@ describe("openVerb", () => {
     [true, "/profile/doc/settings", "push"],
   ])("twoPane=%s at %s → %s", (twoPane, pathname, expected) => {
     expect(openVerb({ twoPane, pathname })).toBe(expected);
+  });
+});
+
+const APP_DIR = resolve(process.cwd(), "app");
+const SAMPLE = { id: "doc", name: "MEMORY.md", profile: "doc", aid: "acct-1", pid: "peer-1", key: "openai" };
+
+function concreteSegment(raw) {
+  const dynamic = raw.match(/^\[(?:\.\.\.)?(.+)\]$/);
+  if (!dynamic) return raw;
+  const value = SAMPLE[dynamic[1]];
+  if (!value) throw new Error(`panes.test needs a sample value for the [${dynamic[1]}] route segment`);
+  return value;
+}
+
+function appRoutes(dir = APP_DIR, prefix = "") {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    if (entry.isDirectory()) return appRoutes(`${dir}/${entry.name}`, `${prefix}/${concreteSegment(entry.name)}`);
+    if (!/\.jsx?$/.test(entry.name)) return [];
+    const base = entry.name.replace(/\.jsx?$/, "");
+    if (base.startsWith("_") || base.startsWith("+")) return [];
+    return [base === "index" ? prefix || "/" : `${prefix}/${concreteSegment(base)}`];
+  });
+}
+
+describe("backFallback", () => {
+  it.each([
+    ["/", "/"],
+    ["/settings", "/"],
+    ["/outputs", "/"],
+    ["/chat/doc", "/"],
+    ["/wg/wg-1", "/"],
+    ["/chat/doc?connectionId=c2", "/"],
+    ["/outputs/doc/out-1", "/outputs"],
+    ["/wg/wg-1/settings", "/wg/wg-1"],
+    ["/wg/wg-1/briefing", "/wg/wg-1"],
+    ["/wg/wg-1/member", "/wg/wg-1"],
+    ["/profile/doc/settings", "/chat/doc"],
+    ["/profile/doc/identity", "/chat/doc"],
+    ["/profile/doc/schedule", "/chat/doc"],
+    ["/profile/doc/brain/memory", "/chat/doc"],
+    ["/profile/doc/brain/memory/MEMORY.md", "/profile/doc/brain/memory"],
+    ["/profile/doc/brain/skills/compose", "/profile/doc/brain/skills"],
+    ["/profile/doc/brain/tools/schedule", "/profile/doc/brain/tools"],
+    ["/profile/doc/email/new", "/profile/doc/email"],
+    ["/profile/doc/mcp/new", "/profile/doc/mcp"],
+    ["/profile/doc/peers/accept", "/profile/doc/peers"],
+    ["/profile/doc/providers/openai", "/profile/doc/providers"],
+    ["/onboarding", "/"],
+    ["/pair", "/"],
+    ["/biometric", "/"],
+    ["/debug/aln", "/"],
+  ])("%s → %s", (pathname, expected) => {
+    expect(backFallback(pathname)).toBe(expected);
+  });
+
+  it("sends every route in app/ somewhere that route tree actually serves", () => {
+    const routes = appRoutes();
+    const served = new Set(routes);
+    expect(routes.length).toBeGreaterThan(25);
+    expect(served.has("/")).toBe(true);
+    for (const route of routes) {
+      const target = backFallback(route);
+      expect(served.has(target), `${route} → ${target}`).toBe(true);
+    }
+  });
+
+  it("walks every route down to the roster, never in a circle", () => {
+    for (const route of appRoutes()) {
+      const seen = new Set();
+      let at = route;
+      while (at !== "/") {
+        expect(seen.has(at), `${route} loops at ${at}`).toBe(false);
+        seen.add(at);
+        at = backFallback(at);
+      }
+      expect(at).toBe("/");
+    }
   });
 });

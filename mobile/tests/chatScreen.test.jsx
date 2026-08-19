@@ -163,6 +163,7 @@ vi.mock('../src/lib/EndpointContext', () => ({
 vi.mock('../src/lib/readAloud', () => ({ enqueueReadAloud: vi.fn() }));
 vi.mock('../src/lib/readState', () => ({ markProfileRead: vi.fn() }));
 
+import { DAEMON_STATUS_BANNERS } from '../src/components/DaemonBanner';
 import ProfileChat from '../app/chat/[id].jsx';
 import { PaneContext } from '../src/nav/PaneContext';
 
@@ -410,5 +411,17 @@ describe('Profile chat daemon health', () => {
     render(<ProfileChat />);
     expect(document.querySelector('[data-banner]')).toBeNull();
     expect(document.querySelector('[data-composer]').getAttribute('data-disabled')).toBe('false');
+  });
+
+  it('explains every down status with the shared mapping copy', () => {
+    for (const [status, entry] of Object.entries(DAEMON_STATUS_BANNERS)) {
+      h.status = status;
+      const view = render(<ProfileChat />);
+      const banner = document.querySelector('[data-banner]');
+      expect(banner.getAttribute('data-banner'), status).toBe(entry.kind);
+      expect(banner.textContent, status).toContain(entry.message);
+      expect(document.querySelector('[data-composer]').getAttribute('data-disabled'), status).toBe('true');
+      view.unmount();
+    }
   });
 });

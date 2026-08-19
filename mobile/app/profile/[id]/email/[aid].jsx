@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,6 +8,7 @@ import { Pill } from '../../../../src/components/Pill';
 import { ScreenHeader } from '../../../../src/components/ScreenHeader';
 import { useToast } from '../../../../src/components/Toast';
 import { Bold, Code, TypedConfirm } from '../../../../src/components/TypedConfirm';
+import { useBack } from '../../../../src/hooks/useBack';
 import { useEmailConfig } from '../../../../src/hooks/useDaemonData';
 import { useEndpoint } from '../../../../src/lib/EndpointContext';
 import { EMAIL_TYPE_LABELS } from '../../../../src/lib/emailAccounts';
@@ -23,7 +24,7 @@ const VIEW_FIELDS = [
 
 export default function EmailConfig() {
   const { id, aid } = useLocalSearchParams();
-  const router = useRouter();
+  const goBack = useBack();
   const toast = useToast();
   const { call } = useEndpoint();
   const { colors, fonts, fontSizes } = useTheme();
@@ -42,7 +43,7 @@ export default function EmailConfig() {
     try {
       await call('host.email.remove', { profile: id, id: aid });
       toast({ title: 'Email removed', message: address });
-      router.back();
+      goBack();
     } catch (e) {
       toast({ title: 'Remove failed', message: String(e) });
     } finally {
@@ -55,7 +56,7 @@ export default function EmailConfig() {
       <ScreenHeader
         title={address}
         subtitle={`@${id} · ${(typeLabel || 'EMAIL').toUpperCase()}`}
-        onBack={() => router.back()}
+        onBack={goBack}
       />
       <ScrollView contentContainerStyle={{ padding: space.s8, gap: space.s7 }}>
         {cfg.loading && !cfg.data ? (

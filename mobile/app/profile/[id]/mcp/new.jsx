@@ -1,6 +1,6 @@
 // Daemon: host.mcp.add({profile, name, command, args:[], env:{}}). stdio transport only — daemon pipes JSON-RPC over subprocess stdin/stdout.
 
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { KeyboardPane } from '../../../../src/components/KeyboardPane';
@@ -11,6 +11,7 @@ import { Button } from '../../../../src/components/Button';
 import { Field } from '../../../../src/components/Field';
 import { ScreenHeader } from '../../../../src/components/ScreenHeader';
 import { useToast } from '../../../../src/components/Toast';
+import { useBack } from '../../../../src/hooks/useBack';
 import { useEndpoint } from '../../../../src/lib/EndpointContext';
 import { useTheme } from '../../../../src/theme/ThemeContext';
 
@@ -40,7 +41,7 @@ function parseEnv(text) {
 
 export default function NewMcp() {
   const { id } = useLocalSearchParams();
-  const router = useRouter();
+  const goBack = useBack();
   const toast = useToast();
   const { call } = useEndpoint();
   const { colors, fonts, fontSizes } = useTheme();
@@ -67,7 +68,7 @@ export default function NewMcp() {
         env: parseEnv(envRaw),
       });
       toast({ title: 'MCP added', message: trimmedName });
-      router.back();
+      goBack();
     } catch (e) {
       toast({ title: 'Add failed', message: String(e) });
     } finally {
@@ -80,7 +81,7 @@ export default function NewMcp() {
       <ScreenHeader
         title="Add MCP server"
         subtitle={`@${id} · CONNECT TOOLSET`}
-        onBack={() => router.back()}
+        onBack={goBack}
         right={<Button title="Add" size="md" disabled={!ready} loading={busy} onPress={save} />}
       />
       <KeyboardPane>

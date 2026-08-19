@@ -1,7 +1,7 @@
 // Daemon: host.peers.pending_accept({profile, id, pubkey, address?, allow}).
 // `id` is the LOCAL handle the current profile assigns the peer.
 
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { KeyboardPane } from '../../../../src/components/KeyboardPane';
@@ -14,6 +14,7 @@ import { Eyebrow } from '../../../../src/components/Eyebrow';
 import { Pill } from '../../../../src/components/Pill';
 import { ScreenHeader } from '../../../../src/components/ScreenHeader';
 import { useToast } from '../../../../src/components/Toast';
+import { useBack } from '../../../../src/hooks/useBack';
 import { useEndpoint } from '../../../../src/lib/EndpointContext';
 import { useTheme } from '../../../../src/theme/ThemeContext';
 
@@ -25,7 +26,7 @@ const SCOPES = [
 
 export default function AcceptPendingPeer() {
   const { id, pubkey, address, suggested } = useLocalSearchParams();
-  const router = useRouter();
+  const goBack = useBack();
   const toast = useToast();
   const { call } = useEndpoint();
   const { colors, fonts, fontSizes } = useTheme();
@@ -58,7 +59,7 @@ export default function AcceptPendingPeer() {
         allow: Array.from(scopes),
       });
       toast({ title: 'Peer added', message: `@${handle}`, duration: 1800 });
-      router.back();
+      goBack();
     } catch (e) {
       toast({ title: 'Accept failed', message: String(e) });
     } finally {
@@ -71,7 +72,7 @@ export default function AcceptPendingPeer() {
       <ScreenHeader
         title="Accept peer"
         subtitle={`@${id} · NAME · SCOPES`}
-        onBack={() => router.back()}
+        onBack={goBack}
         right={<Button title="Accept" size="md" disabled={!ready} loading={busy} onPress={accept} />}
       />
       <KeyboardPane>

@@ -123,14 +123,16 @@ export const InboxRow = memo(function InboxRow({ item, onPress, onLongPress, sel
           </Text>
         )}
       </View>
-      <View style={STATIC.meta}>
-        {item.ts ? <Text style={tsVariant}>{item.ts}</Text> : null}
-        {working ? (
-          <View style={STATIC.pip} accessibilityLabel={`${label} working`}>
-            <Pip kind="working" color={accent} bg={colors.bg} />
-          </View>
-        ) : null}
-      </View>
+      {item.ts || working ? (
+        <View style={STATIC.meta}>
+          {item.ts ? <Text style={tsVariant}>{item.ts}</Text> : null}
+          {working ? (
+            <View style={STATIC.pip} accessibilityLabel={`${label} working`}>
+              <Pip kind="working" color={accent} bg={colors.bg} />
+            </View>
+          ) : null}
+        </View>
+      ) : null}
     </Pressable>
   );
 });

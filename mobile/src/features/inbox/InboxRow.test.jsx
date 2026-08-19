@@ -292,6 +292,35 @@ describe('InboxRow unread mark', () => {
   });
 });
 
+describe('InboxRow row with copy but no timestamp', () => {
+  const metaColumns = (container) =>
+    [...container.querySelectorAll('div')].filter((el) => styleOf(el).alignItems === 'flex-end');
+
+  it('shows the invitation on a sessionless profile', () => {
+    renderRow({ item: { ...PROFILE, preview: 'tap to start a thread', ts: null } });
+    expect(screen.getByText('tap to start a thread')).toBeTruthy();
+  });
+
+  it('leaves out the meta column entirely so no empty gap trails the row', () => {
+    const { container } = renderRow({ item: { ...PROFILE, preview: 'tap to start a thread', ts: null } });
+    expect(metaColumns(container)).toHaveLength(0);
+    expect(pressable(container).children).toHaveLength(2);
+  });
+
+  it('still hangs the timestamp on its own column when there is one', () => {
+    const { container } = renderRow({ item: WORKGROUP });
+    expect(metaColumns(container)).toHaveLength(1);
+    expect(metaColumns(container)[0].textContent).toBe('3m');
+    expect(pressable(container).children).toHaveLength(3);
+  });
+
+  it('keeps the working pip on a workgroup that has no timestamp yet', () => {
+    const { container } = sidebarRow({ item: { ...WORKGROUP, ts: null, state: 'working' }, showState: true });
+    expect(container.querySelector('[data-pip]')).toBeTruthy();
+    expect(metaColumns(container)).toHaveLength(1);
+  });
+});
+
 describe('RowContextSheet title', () => {
   it('keeps the hash so a workgroup reads apart from a same-named profile', () => {
     render(<RowContextSheet target={{ ...WORKGROUP }} />);

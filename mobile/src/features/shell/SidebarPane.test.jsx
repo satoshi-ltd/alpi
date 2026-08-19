@@ -14,6 +14,7 @@ const h = vi.hoisted(() => ({
   pinnedProfiles: [],
   role: 'admin',
   endpoint: { id: 'c1', name: 'casa', url: 'ws://casa:49200' },
+  status: 'online',
   list: null,
   unread: 0,
   bgOf: (style) => [style].flat(Infinity).filter(Boolean).reduce((bg, s) => s.backgroundColor ?? bg, null),
@@ -106,7 +107,17 @@ vi.mock('../../theme/ThemeContext', () => ({
   }),
 }));
 
-vi.mock('../../components/Banner', () => ({ Banner: ({ children }) => React.createElement('div', {}, children) }));
+vi.mock('../../components/Banner', () => ({
+  Banner: ({ kind, children, action, onAction }) =>
+    React.createElement(
+      'div',
+      { 'data-banner': kind },
+      children,
+      action
+        ? React.createElement('button', { type: 'button', 'data-banner-action': action, onClick: onAction })
+        : null,
+    ),
+}));
 vi.mock('../../components/Icon', () => ({ Icon: ({ name }) => React.createElement('span', { 'data-icon': name }) }));
 vi.mock('../../components/Glyph', () => ({ Glyph: () => React.createElement('span', { 'data-glyph': 'true' }) }));
 vi.mock('../../components/Dot', () => ({ Dot: () => React.createElement('span', { 'data-dot': 'true' }) }));
@@ -154,7 +165,7 @@ vi.mock('../../hooks/useUnifiedOutputs', () => ({
   useUnifiedOutputs: () => ({ rows: Array.from({ length: h.unread }, (_, i) => ({ id: `o${i}` })) }),
 }));
 vi.mock('../../lib/EndpointContext', () => ({
-  useEndpoint: () => ({ endpoint: h.endpoint, probeState: new Map([['c1', 'online']]), activeRole: h.role }),
+  useEndpoint: () => ({ endpoint: h.endpoint, probeState: new Map([['c1', h.status]]), activeRole: h.role }),
 }));
 vi.mock('../../lib/pins', () => ({
   usePins: () => ({
@@ -166,6 +177,7 @@ vi.mock('../../lib/pins', () => ({
 }));
 
 
+import { DAEMON_STATUS_BANNERS } from '../../components/DaemonBanner';
 import { InboxRow } from '../inbox/InboxRow';
 import { SidebarPane } from './SidebarPane';
 
@@ -206,6 +218,7 @@ beforeEach(() => {
   h.pinnedProfiles = [];
   h.role = 'admin';
   h.endpoint = { id: 'c1', name: 'casa', url: 'ws://casa:49200' };
+  h.status = 'online';
   h.list = null;
   h.unread = 0;
   h.push.mockClear();
@@ -578,5 +591,44 @@ describe('SidebarPane pane and overlay registers', () => {
     fireEvent.click(settingsEntry());
     expect(document.querySelector('[data-sheet]')).toBeNull();
     expect(h.replace.mock.calls).toEqual([['/outputs'], ['/settings']]);
+  });
+});
+
+describe('Sidebar daemon health', () => {
+  it('explains a rejected token instead of leaving the roster silent', () => {
+    h.status = 'auth-failed';
+    render(<SidebarPane />);
+    const banner = document.querySelector('[data-banner]');
+    expect(banner.getAttribute('data-banner')).toBe('danger');
+    expect(banner.textContent).toContain(DAEMON_STATUS_BANNERS['auth-failed'].message);
+  });
+
+  it('explains every down status with the shared mapping copy', () => {
+    for (const [status, entry] of Object.entries(DAEMON_STATUS_BANNERS)) {
+      h.status = status;
+      const view = render(<SidebarPane />);
+      const banner = document.querySelector('[data-banner]');
+      expect(banner.getAttribute('data-banner'), status).toBe(entry.kind);
+      expect(banner.textContent, status).toContain(entry.message);
+      view.unmount();
+    }
+  });
+
+  it('keeps the offline retry wired to the roster refresh', () => {
+    h.status = 'offline';
+    render(<SidebarPane />);
+    h.refresh.mockClear();
+    fireEvent.click(document.querySelector('[data-banner-action="Retry"]'));
+    expect(h.refresh).toHaveBeenCalled();
+  });
+
+  it('stays silent on a healthy daemon and while unpaired', () => {
+    render(<SidebarPane />);
+    expect(document.querySelector('[data-banner]')).toBeNull();
+    cleanup();
+    h.endpoint = null;
+    h.status = 'offline';
+    render(<SidebarPane />);
+    expect(document.querySelector('[data-banner]')).toBeNull();
   });
 });

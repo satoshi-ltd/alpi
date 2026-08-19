@@ -34,7 +34,8 @@ vi.mock('expo-camera', () => ({
 vi.mock('expo-clipboard', () => ({ getStringAsync: vi.fn(async () => '') }));
 vi.mock('expo-constants', () => ({ default: { expoConfig: { version: '0.3.1' } } }));
 vi.mock('expo-router', () => ({
-  useRouter: () => ({ push: vi.fn(), back: vi.fn(), replace: vi.fn() }),
+  useRouter: () => ({ push: vi.fn(), back: vi.fn(), replace: vi.fn(), canGoBack: () => true }),
+  usePathname: () => '/pair',
   useLocalSearchParams: () => ({}),
 }));
 vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: ({ children }) => React.createElement('div', {}, children) }));

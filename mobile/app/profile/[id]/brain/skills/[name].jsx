@@ -1,17 +1,18 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { space } from '../../../../../src/theme/tokens';
 
 import { ScreenHeader } from '../../../../../src/components/ScreenHeader';
+import { useBack } from '../../../../../src/hooks/useBack';
 import { useEndpoint } from '../../../../../src/lib/EndpointContext';
 import { flattenTree, statusLabel } from '../../../../../src/lib/skillDetail';
 import { useTheme } from '../../../../../src/theme/ThemeContext';
 
 export default function SkillDetail() {
   const { id, name, path, category } = useLocalSearchParams();
-  const router = useRouter();
+  const goBack = useBack();
   const { colors, fonts, fontSizes } = useTheme();
   const { call } = useEndpoint();
   const [detail, setDetail] = useState(null);
@@ -56,7 +57,7 @@ export default function SkillDetail() {
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-      <ScreenHeader title={String(name ?? 'Skill')} subtitle={subtitle} onBack={() => router.back()} />
+      <ScreenHeader title={String(name ?? 'Skill')} subtitle={subtitle} onBack={goBack} />
       {loading ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator color={colors.ink3} />

@@ -10,6 +10,7 @@ import { Pill } from '../../../src/components/Pill';
 import { Row, RowSeparator, SectionHeader } from '../../../src/components/Row';
 import { ScreenHeader } from '../../../src/components/ScreenHeader';
 import { SyncBar } from '../../../src/components/SyncBar';
+import { useBack } from '../../../src/hooks/useBack';
 import { modelLabel } from '../../../src/lib/modelLabel';
 import { profileLabel } from '../../../src/lib/profileLabel';
 import { useToast } from '../../../src/components/Toast';
@@ -82,6 +83,7 @@ function usageTotals(days) {
 export default function ProfileSettings() {
   const { id, intent } = useLocalSearchParams();
   const router = useRouter();
+  const goBack = useBack();
   const toast = useToast();
   const { call } = useEndpoint();
   const { colors, fonts, fontSizes } = useTheme();
@@ -121,7 +123,7 @@ export default function ProfileSettings() {
   if (loading && !profile) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-        <ScreenHeader title={`@${profileLabel(id)}`} subtitle="PROFILE · LOADING" onBack={() => router.back()} />
+        <ScreenHeader title={`@${profileLabel(id)}`} subtitle="PROFILE · LOADING" onBack={goBack} />
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator color={colors.ink3} />
         </View>
@@ -132,7 +134,7 @@ export default function ProfileSettings() {
   if (!profile) {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-        <ScreenHeader title={`@${profileLabel(id)}`} subtitle="PROFILE · NOT FOUND" onBack={() => router.back()} />
+        <ScreenHeader title={`@${profileLabel(id)}`} subtitle="PROFILE · NOT FOUND" onBack={goBack} />
       </SafeAreaView>
     );
   }
@@ -205,7 +207,7 @@ export default function ProfileSettings() {
       <ScreenHeader
         title={profileLabel(profile.name)}
         subtitle="PROFILE · SETTINGS"
-        onBack={() => router.back()}
+        onBack={goBack}
         leadingGlyph={<Diamond color={accent} size="md" />}
       />
       <SyncBar syncing={settingsSyncing} />

@@ -7,6 +7,7 @@ import { space } from '../../../../src/theme/tokens';
 import { Pill } from '../../../../src/components/Pill';
 import { Row, RowSeparator, SectionHeader } from '../../../../src/components/Row';
 import { ScreenHeader } from '../../../../src/components/ScreenHeader';
+import { useBack } from '../../../../src/hooks/useBack';
 import { useOllamaModels } from '../../../../src/hooks/useDaemonData';
 import { useProfile } from '../../../../src/hooks/useSubject';
 import { useTheme } from '../../../../src/theme/ThemeContext';
@@ -21,6 +22,7 @@ const CLOUD = [
 export default function ProvidersList() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
+  const goBack = useBack();
   const { colors, fonts, fontSizes } = useTheme();
   const { profile } = useProfile(id);
   const ollamaModels = useOllamaModels(id);
@@ -52,7 +54,7 @@ export default function ProvidersList() {
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-      <ScreenHeader title="Providers" subtitle={`@${id} · LLM API KEYS + LOCAL`} onBack={() => router.back()} />
+      <ScreenHeader title="Providers" subtitle={`@${id} · LLM API KEYS + LOCAL`} onBack={goBack} />
       <ScrollView>
         <SectionHeader>Ollama · local</SectionHeader>
         {ollamas.length === 0 ? (

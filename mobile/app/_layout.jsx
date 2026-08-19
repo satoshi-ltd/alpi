@@ -16,7 +16,7 @@ import {
   JetBrainsMono_600SemiBold,
 } from '@expo-google-fonts/jetbrains-mono';
 import { useFonts } from 'expo-font';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, usePathname, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useRef } from 'react';
@@ -35,7 +35,7 @@ import { useTwoPane } from '../src/hooks/useTwoPane';
 import { AppBootstrap } from '../src/lib/AppBootstrap';
 import { useEndpoint } from '../src/lib/EndpointContext';
 import { EndpointProvider } from '../src/lib/EndpointProvider';
-import { stackAnimation } from '../src/lib/panes';
+import { isPaneRoot, stackAnimation } from '../src/lib/panes';
 import { setAuthFailedHandler } from '../src/lib/rpc';
 import { ThemeProvider, useTheme } from '../src/theme/ThemeContext';
 
@@ -93,15 +93,18 @@ function AuthFailedBridge() {
 function Routes() {
   const { mode, colors } = useTheme();
   const twoPane = useTwoPane();
+  const pathname = usePathname();
   useScheduleToast();
   useNotificationTapRouter();
+  const paneRoot = twoPane && isPaneRoot(pathname);
   // Never key or wrap <Stack> — a remount drops navigation state.
   const screenOptions = useMemo(() => ({
     headerShown: false,
     contentStyle: { backgroundColor: colors.bg },
     animation: stackAnimation(twoPane),
+    gestureEnabled: !paneRoot,
     freezeOnBlur: true,
-  }), [colors.bg, twoPane]);
+  }), [colors.bg, twoPane, paneRoot]);
   return (
     <>
       <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />

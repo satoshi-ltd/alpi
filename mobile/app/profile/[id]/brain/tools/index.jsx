@@ -6,6 +6,7 @@ import { space } from '../../../../../src/theme/tokens';
 import { Row, RowSeparator, SectionHeader } from '../../../../../src/components/Row';
 import { Eyebrow } from '../../../../../src/components/Eyebrow';
 import { ScreenHeader } from '../../../../../src/components/ScreenHeader';
+import { useBack } from '../../../../../src/hooks/useBack';
 import { useTools } from '../../../../../src/hooks/useDaemonData';
 import { useTheme } from '../../../../../src/theme/ThemeContext';
 
@@ -25,6 +26,7 @@ const CATEGORY_ORDER = [
 export default function ToolsList() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
+  const goBack = useBack();
   const { colors, fonts, fontSizes } = useTheme();
   const tools = useTools(id);
   const rows = tools.data?.tools ?? [];
@@ -45,7 +47,7 @@ export default function ToolsList() {
       <ScreenHeader
         title="Tools"
         subtitle={`@${id} · ${rows.length} CALLABLE`}
-        onBack={() => router.back()}
+        onBack={goBack}
       />
       <ScrollView contentContainerStyle={{ paddingBottom: space.s9 }}>
         {tools.loading && rows.length === 0 ? (
