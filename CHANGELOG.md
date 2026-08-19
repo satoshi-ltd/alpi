@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.14.3 — 2026-08-19 — a gate nobody can run is refused up front
+
+- **A recipe can no longer declare a gate the runtime would silently skip.**
+  Gate owners resolve through the hub's peer registry, and the hub is not its
+  own peer, so a gated phase owned by the hub never ran its check — the phase
+  advanced on the hub's own say-so, with the declared verification quietly
+  ignored. Such a recipe is now rejected when it is parsed, and again at
+  launch after parameter interpolation, since a `{param}` owner only takes
+  its final value there. The error says what to do: assign the phase to a
+  member, or drop the gate. Hub-owned phases without a gate are unaffected.
+
 ## v0.14.2 — 2026-08-18 — the preview belongs to its connection
 
 - **A host-plane client is no longer allowed to see another connection's chat

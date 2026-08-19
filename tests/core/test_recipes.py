@@ -63,6 +63,18 @@ def test_parse_rejects_bad_recipe_id(recipe_id):
         recipes.parse_recipe("hub: m\nname: n", recipe_id)
 
 
+@pytest.mark.parametrize("owner", ["mira", "MIRA"])
+def test_parse_rejects_gate_on_hub_owned_phase(owner):
+    text = VALID.replace("intake: { owner: scout,", f"intake: {{ owner: {owner},")
+    with pytest.raises(recipes.RecipeError, match="hub-owned"):
+        recipes.parse_recipe(text, "r")
+
+
+def test_parse_allows_hub_owned_phase_without_gate():
+    text = VALID.replace("qa: { owner: lens }", "qa: { owner: mira }")
+    assert recipes.parse_recipe(text, "r").pipeline_steps["qa"]["owner"] == "mira"
+
+
 def test_resolve_interpolates_all_string_fields():
     r = recipes.parse_recipe(VALID, "tier-pro")
     spec = recipes.resolve(r, {"slug": "casa-bahia", "tier": "pro"})

@@ -169,6 +169,12 @@ async def launch(
     for phase, st in steps.items():
         if st["owner"] not in roster:
             raise LaunchError(f"pipeline_steps[{phase!r}].owner {st['owner']!r} is not in the roster")
+        # Re-checked after resolve(): a {param} owner only takes its final value here.
+        if st.get("gate") and st["owner"].lower() == profile.lower():
+            raise LaunchError(
+                f"pipeline_steps[{phase!r}] declares a gate on a hub-owned phase; "
+                "a gate verifies a member's delivery — assign a member owner or drop the gate"
+            )
 
     declared_inputs = spec.get("inputs") or {}
     supplied_inputs = {str(k): v for k, v in (inputs or {}).items()}

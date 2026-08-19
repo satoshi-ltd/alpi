@@ -334,6 +334,23 @@ async def test_launch_rejects_step_owner_outside_roster(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_launch_rejects_gate_on_hub_owned_phase_after_interpolation(tmp_path):
+    repo = _fixture_repo(tmp_path)
+    home = _hub_home(tmp_path)
+    _pin_member(home, "scout")
+    recipe = _project_recipe(repo).replace(
+        "intake: { owner: scout,", 'intake: { owner: "{lead}",',
+    ).replace(
+        '  slug: { pattern: "^[a-z0-9-]+$" }',
+        '  slug: { pattern: "^[a-z0-9-]+$" }\n  lead: { pattern: "^[a-z]+$" }',
+    )
+    with pytest.raises(ValueError, match="hub-owned"):
+        await host_recipes.launch(home, recipe, {"slug": "casa-bahia", "lead": "mira"})
+    assert not (tmp_path / "ws" / "projects" / "casa-bahia").exists()
+    assert not (list((home / "alp" / "workgroups").glob("wg_*")) if (home / "alp" / "workgroups").exists() else [])
+
+
+@pytest.mark.asyncio
 async def test_launch_rolls_back_project_on_create_failure(tmp_path):
     repo = _fixture_repo(tmp_path)
     home = _hub_home(tmp_path)

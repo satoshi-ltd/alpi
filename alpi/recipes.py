@@ -63,12 +63,22 @@ def _coerce_pipelines(recipe_id: str, data: dict) -> tuple[dict, str | None]:
 
 def _check_launch_semantics(
     recipe_id: str, pipelines: dict, launch_pipeline: str | None,
-    steps: dict, task: str,
+    steps: dict, task: str, hub: str,
 ) -> None:
     if steps and not pipelines:
         raise RecipeError(
             f"recipe {recipe_id!r} declares pipeline_steps without any pipeline; gate "
             "specs with no chain to order them would run unconstrained"
+        )
+    # Gate owners resolve through peers.load(); the hub is not its own peer, so a hub-owned gate never runs.
+    gated_hub = sorted(
+        phase for phase, spec in steps.items()
+        if spec.get("gate") and spec["owner"].lower() == hub.lower()
+    )
+    if gated_hub:
+        raise RecipeError(
+            f"recipe {recipe_id!r} declares a gate on hub-owned phase(s) {gated_hub}; "
+            "a gate verifies a member's delivery — assign a member owner or drop the gate"
         )
     for key, chain in pipelines.items():
         missing = [slug for slug in chain if not (steps.get(slug) or {}).get("owner")]
@@ -193,7 +203,7 @@ def parse_recipe(text: str, recipe_id: str) -> Recipe:
     except ValueError as e:
         raise RecipeError(f"recipe {recipe_id!r} {e}")
     task = str(data.get("task") or "")
-    _check_launch_semantics(recipe_id, pipelines, launch_pipeline, steps, task.strip())
+    _check_launch_semantics(recipe_id, pipelines, launch_pipeline, steps, task.strip(), hub)
 
     project = data.get("project")
     if project is not None:
