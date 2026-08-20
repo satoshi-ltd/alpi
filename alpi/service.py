@@ -504,7 +504,11 @@ def _phase_turn_budget(phase_map: dict, posts: list, hub_pubkey: str) -> int:
         return 0
     if active is None or not active.slug:
         return 0
-    spec = (phase_map or {}).get(active.slug) or {}
+    matches = [
+        phase for phase in (phase_map or {})
+        if active.slug == phase or active.slug.startswith(f"{phase}-")
+    ]
+    spec = (phase_map or {}).get(max(matches, key=len)) or {} if matches else {}
     try:
         return int(spec.get("turn_budget_s") or 0)
     except (TypeError, ValueError):
@@ -835,6 +839,25 @@ _HUB_FOLLOWUP_STALE_SECONDS = 60
 
 
 _INFLIGHT: dict[tuple[str, str], dict] = {}
+
+_TURN_SETTLE_SECONDS = 120
+_TURN_END_CAP = 512
+# Post-exit pipe EOF is immediate unless a descendant inherited the pipes; an unbounded wait would hold _INFLIGHT forever.
+_POST_EXIT_DRAIN_SECONDS = 5
+_LAST_TURN_END: dict[str, float] = {}
+
+
+def _stamp_turn_end(wg_id: str) -> None:
+    now_mono = time.monotonic()
+    if wg_id not in _LAST_TURN_END and len(_LAST_TURN_END) >= _TURN_END_CAP:
+        for stale_key in [
+            k for k, v in _LAST_TURN_END.items()
+            if now_mono - v >= _TURN_SETTLE_SECONDS
+        ]:
+            del _LAST_TURN_END[stale_key]
+        if len(_LAST_TURN_END) >= _TURN_END_CAP:
+            _LAST_TURN_END.pop(next(iter(_LAST_TURN_END)))
+    _LAST_TURN_END[wg_id] = now_mono
 
 
 # Strong refs for fire-and-forget dispatch tasks.
@@ -1495,11 +1518,17 @@ async def _maybe_watchdog_close(
         str(last_post.get("from") or "") != wg.meta.hub_pubkey
         and "#working" in str(last_post.get("text") or "")
     )
-    stale_threshold = (
-        _turn_timeout_for(_wg_is_pipeline(wg))
-        if last_is_member_working
-        else _HUB_FOLLOWUP_STALE_SECONDS
-    )
+    if last_is_member_working:
+        from alpi.alp import workgroup as wg_mod
+        # Grace below the declared phase budget reads live work as a stall (abad-v22: 900s grace under an 1800s turn).
+        stale_threshold = max(
+            _turn_timeout_for(_wg_is_pipeline(wg)),
+            _phase_turn_budget(
+                wg_mod.safe_phase_map(wg.meta), recent, wg.meta.hub_pubkey,
+            ),
+        )
+    else:
+        stale_threshold = _HUB_FOLLOWUP_STALE_SECONDS
     if age < stale_threshold:
         return
 
@@ -1589,6 +1618,9 @@ async def _maybe_watchdog_close(
 
     # An in-flight turn is progress the transcript cannot show yet; a nudge here re-tasks over live work and the preempt watcher kills it.
     if any(key[0] == wg.meta.id for key in _INFLIGHT):
+        return
+    # The end→redispatch gap is not silence either: the #working re-dispatch spawns on a later poll tick.
+    if time.monotonic() - _LAST_TURN_END.get(wg.meta.id, float("-inf")) < _TURN_SETTLE_SECONDS:
         return
     verified = await _maybe_gate_advance(home, wg, recent, wg.meta.hub_pubkey)
     if verified is True:
@@ -2188,7 +2220,13 @@ async def _kill_proc(proc: Any, wait_task: "asyncio.Future[int]") -> int:
     except ProcessLookupError:
         pass
     try:
-        return await asyncio.shield(wait_task)
+        # A descendant holding the inherited pipes keeps wait_task pending past the real death; the reaped returncode is the truth.
+        return await asyncio.wait_for(
+            asyncio.shield(wait_task), timeout=_TURN_SIGTERM_GRACE_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        wait_task.cancel()
+        return int(proc.returncode) if proc.returncode is not None else -9
     except Exception:  # noqa: BLE001
         return -9
 
@@ -2213,9 +2251,13 @@ async def _supervise_turn(
                 reason = "idle" if idle_deadline <= abs_deadline else "backstop"
                 rc = await _kill_proc(proc, wait_task)
                 return rc, True, reason
-            done, _ = await asyncio.wait({wait_task}, timeout=slice_s)
+            done, _ = await asyncio.wait({wait_task}, timeout=min(slice_s, 1.0))
             if wait_task in done:
                 return wait_task.result(), False, None
+            # The transport wait() stays pending while a descendant holds the inherited pipes; the reaped returncode is the truth.
+            if proc.returncode is not None:
+                wait_task.cancel()
+                return int(proc.returncode), False, None
     except asyncio.CancelledError:
         await _kill_proc(proc, wait_task)
         raise
@@ -2502,24 +2544,29 @@ async def _dispatch_workgroup_turn(
                 "wg poller: turn for %s killed (%s) — idle>%ss or backstop>%ss",
                 wg_id, kill_reason, idle_timeout, turn_timeout,
             )
+        duration_s = round(time.monotonic() - started_at, 2)
+        event_tail = ""
+        try:
+            stderr_tail = await asyncio.wait_for(stderr_task, _POST_EXIT_DRAIN_SECONDS)
+        except Exception:  # noqa: BLE001
+            stderr_tail = ""
+        try:
+            # Child `--emit-events` tail for post-mortem; lines already observed keep counting on timeout.
+            event_tail = await asyncio.wait_for(stdout_task, _POST_EXIT_DRAIN_SECONDS)
+        except Exception:  # noqa: BLE001
+            pass
     finally:
+        # No await between pop and stamp: a yield here is a window where neither watchdog guard holds.
         info = _INFLIGHT.pop((wg_id, profile), {})
+        # Only a delivered turn buys settle time: a silently looping turn must leave the watchdog eligible to escalate.
+        if posts_added[0] > 0:
+            _stamp_turn_end(wg_id)
     preempted = bool(info.get("preempted"))
     preempted_by_seq = int(info.get("preempted_by_seq", 0))
     cancelled = bool(info.get("cancelled"))
     cancel_reason = str(info.get("cancel_reason") or "")
 
-    duration_s = round(time.monotonic() - started_at, 2)
     err_preview = ""
-    event_tail = ""
-    try:
-        stderr_tail = await stderr_task
-    except Exception:  # noqa: BLE001
-        stderr_tail = ""
-    try:
-        event_tail = await stdout_task  # child `--emit-events` tail for post-mortem
-    except Exception:  # noqa: BLE001
-        pass
     if rc != 0:
         err_preview = stderr_tail[-300:]
         if not (timed_out or preempted or cancelled):

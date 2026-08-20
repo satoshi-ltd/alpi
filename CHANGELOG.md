@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.14.5 — 2026-08-20 — a busy member is not a dead member
+
+- **The stall watchdog no longer escalates over legitimate work.** The grace a
+  member's `#working` earns was hardcoded below the phase's declared
+  `turn_budget_s`, so a member legitimately using its 1800-second budget was
+  nudged as stalled at 900, and the repair that followed re-tasked over live
+  work — observed rewinding a healthy pipeline to its first phase. The grace
+  now covers the declared budget, and a turn that just delivered a post buys a
+  short settle window so the follow-up dispatch it earned can spawn before the
+  watchdog reads the gap as silence. A turn that ends without delivering buys
+  nothing: a silently failing member still walks the same
+  nudge → repair → final-repair ladder, so a genuinely dead member is still
+  escalated and closed.
+- **A turn's end is detected even when a descendant holds its pipes.** asyncio
+  resolves a child's wait only after every inherited pipe closes, so a spawned
+  grandchild that outlived the agent kept the turn "running": supervision
+  waited on a process already gone, the kill path could wait forever after the
+  SIGKILL, and the workgroup stayed busy to both the dispatcher and the
+  watchdog. The supervisor now trusts the reaped exit code, the post-exit pipe
+  drain is bounded, and a persistent descendant costs seconds, not the
+  workgroup.
+
 ## v0.14.4 — 2026-08-19 — the phase boundary has no side doors
 
 - **A delegated sub-agent obeys the phase write scope.** During a dispatched

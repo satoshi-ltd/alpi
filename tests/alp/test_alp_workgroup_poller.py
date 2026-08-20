@@ -26,6 +26,13 @@ def short_tmp() -> Path:
         shutil.rmtree(d, ignore_errors=True)
 
 
+@pytest.fixture(autouse=True)
+def _clear_turn_end_stamps():
+    service._LAST_TURN_END.clear()
+    yield
+    service._LAST_TURN_END.clear()
+
+
 # `_should_dispatch` wake decision.
 
 
@@ -1425,6 +1432,10 @@ class _FakeProc:
         if not self._exit.done():
             self._exit.set_result(rc)
 
+    @property
+    def returncode(self) -> int | None:
+        return self._exit.result() if self._exit.done() else None
+
 
 @pytest.mark.asyncio
 async def test_supervise_turn_active_survives_to_natural_exit() -> None:
@@ -2287,6 +2298,243 @@ async def test_watchdog_stall_path_defers_to_an_inflight_member_turn(
     assert spawned == ["wg_ff"]
 
 
+@pytest.mark.asyncio
+async def test_watchdog_working_grace_covers_the_phase_turn_budget(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    """900s of hardwired grace under an 1800s turn_budget_s read live work as a stall (abad-v22)."""
+    import datetime as _dt
+
+    home = short_tmp / "hub"; home.mkdir()
+
+    def _ts(seconds_ago: int) -> str:
+        return (
+            _dt.datetime.now(tz=_dt.timezone.utc) - _dt.timedelta(seconds=seconds_ago)
+        ).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    wg = types.SimpleNamespace(meta=types.SimpleNamespace(
+        id="wg_budget", name="site", hub_pubkey="HUB", paused=False,
+        pipelines={"intake": ("content", "qa")}, launch_pipeline="intake",
+        pipeline_steps={"content": {"owner": "quill", "task": "write", "turn_budget_s": 1800}},
+        quorum_timeout_seconds=0,
+    ))
+    spawned: list[str] = []
+    monkeypatch.setattr(service, "_spawn_dispatch", lambda wid, coro: spawned.append(wid))
+    monkeypatch.setattr(service, "_dispatch_workgroup_turn", lambda *a, **k: None)
+    monkeypatch.setattr(service, "_budget_blocks_dispatch", lambda *a, **k: False)
+
+    recent = [
+        {"seq": 1, "from": "HUB", "text": "@quill #task #content write", "ts": _ts(2000)},
+        {"seq": 2, "from": "QUILLPK", "text": "#working drafting", "ts": _ts(1000)},
+    ]
+    await service._maybe_watchdog_close(home, "mira", wg, recent)
+    assert spawned == []
+
+    recent[1]["ts"] = _ts(1900)
+    await service._maybe_watchdog_close(home, "mira", wg, recent)
+    assert spawned == ["wg_budget"]
+
+
+@pytest.mark.asyncio
+async def test_watchdog_default_working_grace_unchanged_without_budget(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    import datetime as _dt
+
+    home = short_tmp / "hub"; home.mkdir()
+    old = (
+        _dt.datetime.now(tz=_dt.timezone.utc) - _dt.timedelta(seconds=1000)
+    ).strftime("%Y-%m-%dT%H:%M:%SZ")
+    wg = types.SimpleNamespace(meta=types.SimpleNamespace(
+        id="wg_nobudget", name="site", hub_pubkey="HUB", paused=False,
+        pipelines={"intake": ("content", "qa")}, launch_pipeline="intake",
+        pipeline_steps={}, quorum_timeout_seconds=0,
+    ))
+    recent = [
+        {"seq": 1, "from": "HUB", "text": "@quill #task #content write", "ts": old},
+        {"seq": 2, "from": "QUILLPK", "text": "#working drafting", "ts": old},
+    ]
+    spawned: list[str] = []
+    monkeypatch.setattr(service, "_spawn_dispatch", lambda wid, coro: spawned.append(wid))
+    monkeypatch.setattr(service, "_dispatch_workgroup_turn", lambda *a, **k: None)
+    monkeypatch.setattr(service, "_budget_blocks_dispatch", lambda *a, **k: False)
+
+    await service._maybe_watchdog_close(home, "mira", wg, recent)
+    assert spawned == ["wg_nobudget"]
+
+
+@pytest.mark.asyncio
+async def test_only_a_delivered_turn_stamps_the_settle_window(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    """A silently looping turn must not re-arm the settle window, or the escalation ladder starves forever."""
+    import sys as _sys
+
+    home = short_tmp / "mirastamp"; home.mkdir()
+    real_create = service.asyncio.create_subprocess_exec
+
+    def _fake_create_printing(line: str):
+        async def fake_create(*argv, **kw):
+            return await real_create(
+                _sys.executable, "-c", f"print('{line}')" if line else "pass",
+                stdout=service.asyncio.subprocess.PIPE,
+                stderr=service.asyncio.subprocess.PIPE,
+            )
+        return fake_create
+
+    monkeypatch.setattr(
+        service.asyncio, "create_subprocess_exec", _fake_create_printing(""),
+    )
+    await service._dispatch_workgroup_turn(home, "mira", "wg_silent", "proj", "go")
+    assert "wg_silent" not in service._LAST_TURN_END
+
+    post_event = (
+        '{"kind":"tool_end","name":"workgroup_post","ok":true,"wg_id":"wg_loud"}'
+    )
+    monkeypatch.setattr(
+        service.asyncio, "create_subprocess_exec",
+        _fake_create_printing(post_event.replace('"', '\\"')),
+    )
+    await service._dispatch_workgroup_turn(home, "mira", "wg_loud", "proj", "go")
+    assert "wg_loud" in service._LAST_TURN_END
+
+
+@pytest.mark.asyncio
+async def test_turn_stays_inflight_until_the_settle_stamp_lands(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    """A drain delayed past process exit must not open a window where neither watchdog guard holds."""
+    import sys as _sys
+
+    home = short_tmp / "mirarace"; home.mkdir()
+    real_create = service.asyncio.create_subprocess_exec
+    child = (
+        "import subprocess, sys; "
+        "print('{\\\"kind\\\":\\\"tool_end\\\",\\\"name\\\":\\\"workgroup_post\\\","
+        "\\\"ok\\\":true,\\\"wg_id\\\":\\\"wg_race\\\"}'); "
+        "sys.stdout.flush(); subprocess.Popen(['sleep', '2'])"
+    )
+
+    async def fake_create(*argv, **kw):
+        return await real_create(
+            _sys.executable, "-c", child,
+            stdout=service.asyncio.subprocess.PIPE,
+            stderr=service.asyncio.subprocess.PIPE,
+        )
+
+    monkeypatch.setattr(service.asyncio, "create_subprocess_exec", fake_create)
+    turn = asyncio.create_task(
+        service._dispatch_workgroup_turn(home, "mira", "wg_race", "proj", "go"),
+    )
+    await asyncio.sleep(1.0)
+    try:
+        assert ("wg_race", "mira") in service._INFLIGHT
+        assert "wg_race" not in service._LAST_TURN_END
+    finally:
+        await asyncio.wait_for(turn, timeout=15)
+    assert ("wg_race", "mira") not in service._INFLIGHT
+    assert "wg_race" in service._LAST_TURN_END
+
+
+@pytest.mark.asyncio
+async def test_a_pipe_holding_descendant_cannot_hold_the_workgroup_inflight(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    """EOF may never arrive when a descendant inherits the pipes; the drain must be bounded or _INFLIGHT blocks the workgroup forever."""
+    import sys as _sys
+
+    home = short_tmp / "mirahold"; home.mkdir()
+    monkeypatch.setattr(service, "_POST_EXIT_DRAIN_SECONDS", 1)
+    real_create = service.asyncio.create_subprocess_exec
+    child = (
+        "import subprocess, sys; "
+        "print('{\\\"kind\\\":\\\"tool_end\\\",\\\"name\\\":\\\"workgroup_post\\\","
+        "\\\"ok\\\":true,\\\"wg_id\\\":\\\"wg_hold\\\"}'); "
+        "sys.stdout.flush(); subprocess.Popen(['sleep', '6'])"
+    )
+
+    async def fake_create(*argv, **kw):
+        return await real_create(
+            _sys.executable, "-c", child,
+            stdout=service.asyncio.subprocess.PIPE,
+            stderr=service.asyncio.subprocess.PIPE,
+        )
+
+    monkeypatch.setattr(service.asyncio, "create_subprocess_exec", fake_create)
+    await asyncio.wait_for(
+        service._dispatch_workgroup_turn(home, "mira", "wg_hold", "proj", "go"),
+        timeout=5,
+    )
+    assert ("wg_hold", "mira") not in service._INFLIGHT
+    assert "wg_hold" in service._LAST_TURN_END
+    import json as _json
+    events = [
+        _json.loads(line)
+        for line in service.turn_log_path(home).read_text().splitlines()
+    ]
+    assert events[-1]["event"] == "end"
+    assert events[-1]["posts_added"] == 1
+    await asyncio.sleep(4)  # descendant EOF lands in this loop so the transport finalizes cleanly
+
+
+def test_stamp_turn_end_keeps_live_entries_at_the_cap() -> None:
+    import time as _time
+
+    service._LAST_TURN_END.clear()
+    now = _time.monotonic()
+    for i in range(service._TURN_END_CAP):
+        service._LAST_TURN_END[f"wg_{i}"] = now
+    service._stamp_turn_end("wg_5")
+    assert len(service._LAST_TURN_END) == service._TURN_END_CAP
+
+    for i in range(0, 100):
+        service._LAST_TURN_END[f"wg_{i}"] = now - service._TURN_SETTLE_SECONDS - 1
+    service._stamp_turn_end("wg_new")
+    assert "wg_new" in service._LAST_TURN_END
+    assert "wg_200" in service._LAST_TURN_END
+    assert "wg_3" not in service._LAST_TURN_END
+
+
+@pytest.mark.asyncio
+async def test_watchdog_waits_for_a_just_finished_turn_to_settle(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    """A nudge in the end→redispatch gap counts the whole execution as silence and re-tasks over it."""
+    import datetime as _dt
+    import time as _time
+
+    home = short_tmp / "hub"; home.mkdir()
+    old = (
+        _dt.datetime.now(tz=_dt.timezone.utc) - _dt.timedelta(hours=2)
+    ).strftime("%Y-%m-%dT%H:%M:%SZ")
+    wg = types.SimpleNamespace(meta=types.SimpleNamespace(
+        id="wg_settle", name="site", hub_pubkey="HUB", paused=False,
+        pipelines={"intake": ("intake", "qa")}, launch_pipeline="intake",
+        pipeline_steps={}, quorum_timeout_seconds=0,
+    ))
+    recent = [
+        {"seq": 1, "from": "HUB", "text": "@scout #task #intake go", "ts": old},
+        {"seq": 2, "from": "SCOUTPK", "text": "#working reading files", "ts": old},
+    ]
+    spawned: list[str] = []
+    monkeypatch.setattr(service, "_spawn_dispatch", lambda wid, coro: spawned.append(wid))
+    monkeypatch.setattr(service, "_dispatch_workgroup_turn", lambda *a, **k: None)
+    monkeypatch.setattr(service, "_budget_blocks_dispatch", lambda *a, **k: False)
+
+    service._LAST_TURN_END["wg_settle"] = _time.monotonic()
+    try:
+        await service._maybe_watchdog_close(home, "mira", wg, recent)
+        assert spawned == []
+
+        service._LAST_TURN_END["wg_settle"] = (
+            _time.monotonic() - service._TURN_SETTLE_SECONDS - 1
+        )
+        await service._maybe_watchdog_close(home, "mira", wg, recent)
+        assert spawned == ["wg_settle"]
+    finally:
+        service._LAST_TURN_END.pop("wg_settle", None)
+
+
 def test_phase_turn_budget_reads_the_active_phase_spec() -> None:
     phase_map = {"intake": {"owner": "scout", "turn_budget_s": 1800}, "qa": {"owner": "lens"}}
     posts = [
@@ -2299,6 +2547,26 @@ def test_phase_turn_budget_reads_the_active_phase_spec() -> None:
     assert service._phase_turn_budget(phase_map, posts, "HUB") == 0
     assert service._phase_turn_budget({}, posts, "HUB") == 0
     assert service._phase_turn_budget(phase_map, [], "HUB") == 0
+
+
+def test_phase_turn_budget_recovery_slugs_inherit_the_declared_phase() -> None:
+    phase_map = {
+        "intake": {"owner": "scout", "turn_budget_s": 1800},
+        "intake-recheck": {"owner": "scout", "turn_budget_s": 600},
+    }
+    fix = [
+        {"seq": 1, "from": "HUB", "text": "@scout #task #intake-fix redo the intake"},
+        {"seq": 2, "from": "SCOUTPK", "text": "#working"},
+    ]
+    assert service._phase_turn_budget(phase_map, fix, "HUB") == 1800
+    recheck = [
+        {"seq": 1, "from": "HUB", "text": "@scout #task #intake-recheck verify"},
+    ]
+    assert service._phase_turn_budget(phase_map, recheck, "HUB") == 600
+    unrelated = [
+        {"seq": 1, "from": "HUB", "text": "@scout #task #intakeplus other"},
+    ]
+    assert service._phase_turn_budget(phase_map, unrelated, "HUB") == 0
 
 
 def test_phase_write_scope_is_owner_only_and_canonicalizes_recovery_slug() -> None:
