@@ -25,6 +25,11 @@ CATEGORIES = {
 
 ALLOWED_SUBDIRS = {"scripts", "references", "assets", "secrets", "state"}
 
+_SCOPED_WRITE_ACTIONS = frozenset({
+    "create", "edit", "patch", "add_file", "remove_file",
+    "delete", "reset_state", "set_meta",
+})
+
 NO_SCAN_SUBDIRS = {"secrets", "state"}
 
 _NAME_RE = re.compile(r"^[a-z][a-z0-9-]{1,60}$")
@@ -871,6 +876,15 @@ class Skill(Tool):
         content, old_string, new_string, file, confirm_user_skill,
         args,
     ) -> ToolResult:
+        # Skill files never sit inside a phase's declared paths, so scope means no skill writes.
+        if action in _SCOPED_WRITE_ACTIONS and os.environ.get("ALPI_WORKGROUP_WRITE_SCOPE") is not None:
+            return ToolResult(
+                ok=False, output="",
+                error=(
+                    "skill files are outside the active phase boundary; "
+                    "during a pipeline turn only the declared phase paths accept writes"
+                ),
+            )
         if action == "list":
             return _list(home)
         if action == "view":

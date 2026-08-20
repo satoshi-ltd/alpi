@@ -11,6 +11,7 @@ from alpi import config as cfg_mod
 from alpi import llm
 from alpi.home import get_home
 from alpi.tools._budget import apply as _budget_apply
+from alpi.tools._paths import dispatch_tool_denies
 from alpi.tools.base import Tool, ToolResult
 from alpi.tools import _state as tool_state_mod
 
@@ -307,7 +308,8 @@ class Delegate(Tool):
 
         cfg = cfg_mod.load(get_home())
         call_kwargs = cfg_mod.resolve_model(cfg, tier=tier)
-        deny_tools = frozenset(cfg.tools.deny)
+        # The sub-agent runs inside the dispatched turn: phase write denies apply to it too.
+        deny_tools = frozenset(cfg.tools.deny) | dispatch_tool_denies()
 
         tools_schema = [
             s for s in all_schemas(deny=deny_tools)

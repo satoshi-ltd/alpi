@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.14.4 — 2026-08-19 — the phase boundary has no side doors
+
+- **A delegated sub-agent obeys the phase write scope.** During a dispatched
+  pipeline turn, `delegate` rebuilt its sub-agent's toolset from the profile
+  config alone, so a member whose phase scope denied file mutations could
+  spawn a sub-agent that got `write_file`, `edit_file` and `delete_file`
+  back. The sub-agent now inherits the dispatch denies on both layers: the
+  denied tools are not advertised in its schema, and a hallucinated call is
+  refused at execution.
+- **Skill files cannot be modified mid-phase.** The `skill` tool wrote
+  through its own atomic writer without consulting the write scope, so any
+  member — owner included — could create, edit or delete skill files during
+  a scoped pipeline turn. All eight mutating verbs are now refused while a
+  phase scope is active, because skill files never sit inside a phase's
+  declared paths; reading, listing and running skills still work.
+- **The workspace root fails closed instead of drifting to cwd.** A config
+  that failed to load silently anchored every file tool at the process
+  working directory — the daemon's, in dispatched turns — and the phase
+  write boundary was computed against that same accidental root. A broken
+  config now surfaces as an explicit tool error, and an active write scope
+  refuses all writes when no workspace is configured. The documented
+  interactive fallback (workspace unset → cwd as default root) is unchanged.
+
 ## v0.14.3 — 2026-08-19 — a gate nobody can run is refused up front
 
 - **A recipe can no longer declare a gate the runtime would silently skip.**

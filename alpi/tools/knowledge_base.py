@@ -49,10 +49,8 @@ def _now_iso() -> str:
 
 
 def _workspace_root_for(home: Path) -> Path:
-    try:
-        wp = cfg_mod.load(home.resolve()).workspace_path
-    except Exception:  # noqa: BLE001
-        wp = None
+    # A broken config must not silently downgrade the root to cwd.
+    wp = cfg_mod.load(home.resolve()).workspace_path
     return wp if wp is not None else Path.cwd().resolve()
 
 

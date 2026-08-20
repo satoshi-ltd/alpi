@@ -95,6 +95,7 @@ def test_file_writes_follow_active_workgroup_phase_paths(
 ) -> None:
     import json
 
+    (tmp_home_no_env / "config.yaml").write_text(f"workspace: {tmp_home_no_env}\n")
     allowed = tmp_home_no_env / "projects" / "hotel" / "src" / "content" / "page.json"
     denied = tmp_home_no_env / "projects" / "hotel" / "phase_baselines" / "content.json"
     monkeypatch.setenv("ALPI_WORKGROUP_WRITE_SCOPE", json.dumps({
@@ -112,6 +113,7 @@ def test_phase_scope_root_cannot_escape_workspace(
 ) -> None:
     import json
 
+    (tmp_home_no_env / "config.yaml").write_text(f"workspace: {tmp_home_no_env}\n")
     target = tmp_home_no_env.parent / "outside.txt"
     monkeypatch.setenv("ALPI_WORKGROUP_WRITE_SCOPE", json.dumps({
         "root": "..", "paths": ["**"],
@@ -121,6 +123,35 @@ def test_phase_scope_root_cannot_escape_workspace(
 
     assert not result.ok
     assert not target.exists()
+
+
+def test_phase_scope_requires_configured_workspace(
+    tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import json
+
+    target = tmp_home_no_env / "projects" / "hotel" / "src" / "content" / "page.json"
+    monkeypatch.setenv("ALPI_WORKGROUP_WRITE_SCOPE", json.dumps({
+        "root": "projects/hotel", "paths": ["src/content/**"],
+    }))
+
+    result = WriteFile().run(path=str(target), content="{}\n")
+
+    assert not result.ok
+    assert "phase boundary" in (result.error or "")
+    assert not target.exists()
+
+
+def test_workspace_root_fails_closed_on_corrupt_config(
+    tmp_home_no_env: Path,
+) -> None:
+    (tmp_home_no_env / "config.yaml").write_text("workspace: [unclosed\n")
+
+    result = WriteFile().run(path="relative.txt", content="x\n")
+
+    assert not result.ok
+    assert "config failed to load" in (result.error or "")
+    assert not (tmp_home_no_env / "relative.txt").exists()
 
 
 def test_terminal_success() -> None:
@@ -698,6 +729,50 @@ def test_delegate_prefixes_inner_emit_with_step_counter(
     assert any("step 1/" in s and "writing file…" in s for s in captured), (
         f"expected prefixed inner label, got: {captured}"
     )
+
+
+def test_delegate_inherits_dispatch_write_denies(
+    tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import json
+    from alpi import llm
+    from alpi.llm import Completion
+    from alpi.tools.delegate import Delegate
+
+    monkeypatch.setenv("ALPI_WORKGROUP_WRITE_SCOPE", json.dumps({
+        "root": "projects/hotel", "paths": [],
+    }))
+
+    calls = iter([
+        Completion(
+            content="", input_tokens=1, output_tokens=1, cost_usd=0.0, raw=None,
+            tool_calls=[{"id": "c1", "name": "write_file",
+                         "arguments": '{"path": "x", "content": "y"}'}],
+        ),
+        Completion(
+            content="done", input_tokens=1, output_tokens=1,
+            cost_usd=0.0, raw=None, tool_calls=[],
+        ),
+    ])
+    seen_schemas: list[list] = []
+    seen_messages: list[list] = []
+
+    def _fake_complete(messages=None, tools=None, **_kw):
+        seen_schemas.append(tools or [])
+        seen_messages.append(messages or [])
+        return next(calls)
+
+    monkeypatch.setattr(llm, "complete", _fake_complete)
+
+    result = Delegate().run(goal="write y to x", toolsets=["file"])
+
+    assert result.ok
+    advertised = {s["function"]["name"] for s in seen_schemas[0]}
+    assert advertised.isdisjoint({"write_file", "edit_file", "delete_file"})
+    tool_payloads = [
+        m.get("content", "") for m in seen_messages[1] if m.get("role") == "tool"
+    ]
+    assert any("tool denied" in p for p in tool_payloads)
 
 
 def test_research_prefixes_inner_emit_with_step_counter(

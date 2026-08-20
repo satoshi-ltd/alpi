@@ -18,15 +18,12 @@ v0.13 never shipped: its number was skipped when the runtime work landed
 first as v0.14.0, so its production-exposure gates carry over unchanged and
 remain the exit criterion for this cycle. The five-hotel web-factory
 validation that cleared v0.14.0 for release also left a short hardening
-list — security first — targeting v0.14.x patch releases.
+list targeting v0.14.x patch releases.
 
 ### Runtime hardening
 
 | ID | Item | Status |
 |---|---|---|
-| SEC.1 | `delegate` re-acquires `terminal` without re-checking dispatch tool denies; a denied tool must stay denied through delegation. | 🟡 |
-| SEC.2 | The `skill` interpreter writes files without consulting the profile write scope. | 🟡 |
-| SEC.3 | `_workspace_root()` falls back to the process cwd when the workspace is empty; it must fail closed instead. | 🟡 |
 | ALP.10 | The stall watchdog counts a member's time-in-queue as inactivity, so parallel workgroups starve a busy profile into a false-dead escalation. Discount queue time. | 🟡 |
 | COST.1 | Per-pipeline cost telemetry: attribute ledger spend and tokens to a pipeline run, replacing manual checkpoint arithmetic. | 🔵 |
 | BG.1 | `alpi doctor` verifies the installed LiteLLM against the pinned version and hashes, catching a supply-chain swap locally (review cadence stays in [OPERATIONS.md](OPERATIONS.md)). | 🔵 |

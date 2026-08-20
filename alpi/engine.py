@@ -14,6 +14,7 @@ from typing import Any, Callable
 from alpi import clock, config as cfg_mod
 from alpi import llm, session, tools
 from alpi.tools._budget import apply as _budget_apply
+from alpi.tools._paths import dispatch_tool_denies as _dispatch_tool_denies
 from alpi.tools._sanitizer import sanitize_tool_payload
 from alpi.tools.base import ToolResult
 from alpi.session import ASSISTANT_CAP, ToolLog, truncate_result
@@ -45,29 +46,12 @@ _FREE_MODEL_MAX_STEPS = 1000
 _PEER_USAGE_MARKER = "\n\n---\ntokens:"
 _ESCALATE_AFTER_FAILURES = 3
 _BUDGET_ESCALATION_GUARD = 0.8
-_DISPATCH_FILE_MUTATION_TOOLS = frozenset({
-    "delete_file", "edit_file", "write_file",
-})
 
 
 def _route_tier_from_env() -> str | None:
     import os
     tier = os.environ.get("ALPI_TIER", "").strip().lower()
     return tier if tier in cfg_mod.TIER_NAMES else None
-
-
-def _dispatch_tool_denies() -> frozenset[str]:
-    raw = os.environ.get("ALPI_WORKGROUP_WRITE_SCOPE")
-    if raw is None:
-        return frozenset()
-    try:
-        scope = json.loads(raw)
-        paths = scope.get("paths")
-    except (AttributeError, TypeError, json.JSONDecodeError):
-        return _DISPATCH_FILE_MUTATION_TOOLS
-    if paths == []:
-        return _DISPATCH_FILE_MUTATION_TOOLS
-    return frozenset() if isinstance(paths, list) else _DISPATCH_FILE_MUTATION_TOOLS
 
 
 def _peer_reply_from_payload(payload: str) -> str:

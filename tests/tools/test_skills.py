@@ -36,6 +36,24 @@ def test_categories_include_miscellaneous() -> None:
     assert len(CATEGORIES) == 13
 
 
+def test_skill_mutations_refused_during_scoped_phase(
+    isolated_home: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import json
+
+    monkeypatch.setenv("ALPI_WORKGROUP_WRITE_SCOPE", json.dumps({
+        "root": "projects/hotel", "paths": ["src/content/**"],
+    }))
+
+    for action in ("create", "edit", "patch", "add_file", "remove_file",
+                   "delete", "reset_state", "set_meta"):
+        r = Skill().run(action=action, name="anything")
+        assert not r.ok, action
+        assert "phase boundary" in (r.error or ""), action
+    assert not (isolated_home / "skills").exists()
+    assert Skill().run(action="list").ok
+
+
 def test_created_skill_lands_live(isolated_home: Path) -> None:
     r = _create(
         name="test-skill",

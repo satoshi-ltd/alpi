@@ -84,15 +84,40 @@ def _member_denied_area(p: Path | str, resolved: Path, *, for_write: bool) -> st
     return area
 
 
-def _workspace_root() -> Path:
+def _configured_workspace() -> Path | None:
     from alpi.home import get_home
+    from alpi import config as cfg_mod
     try:
-        from alpi import config as cfg_mod
-        cfg = cfg_mod.load(get_home().resolve())
-        wp = cfg.workspace_path
-    except Exception:
-        wp = None
+        return cfg_mod.load(get_home().resolve()).workspace_path
+    except Exception as exc:  # noqa: BLE001
+        # A broken config must not silently downgrade the root to cwd.
+        raise ValueError(
+            f"config failed to load; refusing to resolve the workspace root: {exc}"
+        ) from exc
+
+
+def _workspace_root() -> Path:
+    wp = _configured_workspace()
     return wp if wp is not None else Path.cwd().resolve()
+
+
+DISPATCH_FILE_MUTATION_TOOLS = frozenset({
+    "delete_file", "edit_file", "write_file",
+})
+
+
+def dispatch_tool_denies() -> frozenset[str]:
+    raw = os.environ.get("ALPI_WORKGROUP_WRITE_SCOPE")
+    if raw is None:
+        return frozenset()
+    try:
+        scope = json.loads(raw)
+        paths = scope.get("paths")
+    except (AttributeError, TypeError, json.JSONDecodeError):
+        return DISPATCH_FILE_MUTATION_TOOLS
+    if paths == []:
+        return DISPATCH_FILE_MUTATION_TOOLS
+    return frozenset() if isinstance(paths, list) else DISPATCH_FILE_MUTATION_TOOLS
 
 
 def _is_sensitive(*paths: Path | str) -> str | None:
@@ -144,6 +169,9 @@ def _enforce_dispatch_write_scope(resolved: Path, original: str) -> None:
     raw = os.environ.get("ALPI_WORKGROUP_WRITE_SCOPE")
     if raw is None:
         return
+    # cwd is not a boundary: an unset workspace must never anchor the phase root.
+    if _configured_workspace() is None:
+        raise ValueError(f"path is outside the active phase boundary: {original}")
     try:
         scope = json.loads(raw)
         workspace = _workspace_root().resolve()
