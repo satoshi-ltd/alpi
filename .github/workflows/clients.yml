@@ -1,0 +1,45 @@
+name: clients
+
+# Desktop + mobile test suites. Owns client testing on BOTH triggers:
+# every PR, and pushes to main that touch either client or the shared
+# common/ source. publish.yml only path-filters on alpi/**, and
+# publish-desktop.yml goes straight to build with no test gate — so
+# without the push trigger here a client-only push to main runs no
+# JavaScript tests at all.
+on:
+  pull_request:
+  push:
+    branches: [main]
+    paths:
+      - "desktop/**"
+      - "mobile/**"
+      - "common/**"
+      - ".github/workflows/clients.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: clients-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  clients:
+    name: clients
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: corepack enable
+      # --frozen-lockfile / npm ci fail on lockfile drift, which is what
+      # breaks EAS builds — keep them, never soften to install.
+      - name: desktop
+        working-directory: desktop
+        run: pnpm install --frozen-lockfile && pnpm run test
+      - name: mobile
+        working-directory: mobile
+        run: npm ci && npm test

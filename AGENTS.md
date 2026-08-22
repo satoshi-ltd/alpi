@@ -92,10 +92,17 @@ independent version schemes. Don't conflate them.
   ``common/`` carries no version — a change there releases both clients.
 
 A change to ``common/``, ``desktop/`` or ``mobile/`` runs both JS suites, locally
-via the hook and in ``pull-request.yml``. The cross-client edge that survives is
-``mobile/src/theme/tokenParity.test.js``, which reads desktop's ``tokens.css``:
-CSS custom properties cannot be imported by React Native, so that pair stays two
-files plus a parity test rather than shared source.
+via the hook and in ``clients.yml`` — which owns client testing on every PR *and*
+on pushes to main, because ``publish.yml`` path-filters on ``alpi/**`` and
+``publish-desktop.yml`` goes straight to build with no test gate.
+
+Neither client reads the other's source. ``desktop/src/styles/tokens.css`` stays
+a separate file — CSS custom properties cannot be imported by React Native — so
+each side carries a parity test against ``common/tokens.mjs`` instead
+(``desktop/src/styles/tokenParity.test.js`` reads the CSS beside it). The four
+palette values that deliberately differ are declared in the mobile test
+independently of the override table that implements them, so the table cannot
+vouch for itself.
 
 A desktop release pins a minimum compatible alpi version in its
 changelog entry — clients require a daemon recent enough to serve
@@ -188,9 +195,11 @@ pytest --integration -q  # adds tests that open sockets / use sandbox-exec
 pytest --llm             # adds tests that make real LLM calls
 ```
 
-CI (`.github/workflows/test.yml`) runs `fast` and `integration` jobs on
-every push and PR — backstop only, not a substitute for running the suite
-locally before declaring done.
+CI (`.github/workflows/pull-request.yml`) runs `unit` and `integration` jobs
+on every PR and on manual dispatch — not on push. The push-to-main gate is
+`publish.yml`, and it only fires for `alpi/**`, `tests/**`, `pyproject.toml`,
+`uv.lock` and `CHANGELOG.md`. Backstop only, not a substitute for running the
+suite locally before declaring done.
 
 A repo-versioned `pre-commit` hook (`.githooks/pre-commit`) runs only
 the suites touched by the staged diff — alpi (pytest), desktop
