@@ -24,8 +24,6 @@ list targeting v0.14.x patch releases.
 
 | ID | Item | Status |
 |---|---|---|
-| ALP.11 | Dormant declared chains are trigger-only by contract, but a hub `#task` on a dormant-chain phase dispatches, runs gates and walks the whole chain via continuation (observed: a QA finding misrouted into `review` without any trigger). Reject the open loudly. | 🟡 |
-| ALP.12 | `_done_carries_failed_qa` accepts a carried verdict only when a `·`-segment *starts* with it, so an honest close phrased mid-segment is rejected while the sibling guards (`phase-gate-abandoned`, `task-already-active`, turn rotation) seal every alternative — near-deadlock observed, escaped only on the last automatic wake. Accept the token anywhere in the `#done` text and name the exact expected format in the rejection message. | 🟡 |
 | COST.1 | Per-pipeline cost telemetry: attribute ledger spend and tokens to a pipeline run, replacing manual checkpoint arithmetic. | 🔵 |
 | BG.1 | `alpi doctor` verifies the installed LiteLLM against the pinned version and hashes, catching a supply-chain swap locally (review cadence stays in [OPERATIONS.md](OPERATIONS.md)). | 🔵 |
 

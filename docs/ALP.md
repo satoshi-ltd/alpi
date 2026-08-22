@@ -1640,9 +1640,12 @@ red gate's command on every tick. The wake still fires either way; the
 findings it would re-carry are already in the transcript.
 `workgroup resume` clears the in-memory gate state for the workgroup, so
 a delivery parked behind a pause re-fires its gate on the next tick. A
-terminal close whose verdict carries an explicit failure word (`QA FAIL
-· …`) and routes nothing draws exactly ONE follow-up wake — re-task the
-findings or leave the run halted, loudly. And the targeted phase owner
+terminal close whose verdict carries the owner's exact failure token in
+verdict position (a `·`-segment starting with it: `#done <phase> ·
+QA FAIL · …`; prose mentions, quotes or negations do not count, and a
+FAIL may not stand in for a BLOCKED) and routes nothing draws exactly
+ONE follow-up wake — re-task the findings or leave the run halted,
+loudly. And the targeted phase owner
 is exempt from the one-post-per-round rotation cap: a repair delivery
 may arrive in pieces (a fix note, then the re-delivery the gate re-runs
 on) without muting the owner. A `#done BLOCKED` still halts its chain,
@@ -1757,7 +1760,8 @@ recipe declared (`workflow-task-owner-missing`). On top of that:
 
 | While the open phase is… | A manual `#task <other slug>` |
 |---|---|
-| gate-less | accepted — it preempts, and the chain stops being reported |
+| gate-less, same chain | accepted — it preempts, and the chain stops being reported |
+| gate-less, another declared chain | **rejected** with `chain-jump` — declared chains are trigger-only |
 | gated | **rejected** with `phase-gate-abandoned` |
 
 The refusal is the point. If the hub could open `#build` while

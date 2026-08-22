@@ -1,5 +1,39 @@
 # Changelog
 
+## v0.14.6 — 2026-08-21 — a wedged hub always has a legal move
+
+- **A hub task cannot jump into a dormant chain.** Declared pipelines are
+  trigger-only by contract, but a hub `#task` naming a dormant chain's phase
+  was dispatched, ran its gates, and continuation walked the whole chain —
+  observed misrouting a QA finding into `review` without any work order,
+  burning ~25 posts before the review gates strangled the run honestly. The
+  post is now rejected with the legal moves named: route the work inside the
+  running chain, or have the operator trigger the other one. Only a virgin
+  transcript may open a chain by prose, and only the declared launch chain —
+  administrative opens elsewhere are operator actions. A recipe whose task
+  does not open its own launch phase is rejected at validation, and the
+  kickoff passes the same guard everyone else does.
+- **The owner's verdict is read exactly.** The verdict scan took the last
+  token by list order, so a delivery mentioning "cannot grant QA PASS" after
+  issuing QA FAIL read back as PASS and the close sailed through — while
+  "QA FAILURE" prose, quoted mentions and denials all counted as verdicts.
+  A token now counts only in verdict position (a `·`-segment's start, bare
+  or after a `label:`), the last one wins, word boundaries apply, and the
+  close must carry the owner's exact token: a FAIL may not stand in for a
+  BLOCKED.
+- **A wedged close now teaches its own way out.** A hub carrying a QA FAIL
+  mid-sentence had its close rejected while the sibling guards sealed
+  re-tasking, advancing and re-opening — observed wedging a hub for 858
+  seconds of machine-rejected posts until its final automatic wake guessed
+  the accepted format. The carry check keeps its strict shape — only a
+  `·`-segment starting with the verdict token carries it, because prose can
+  deny or hypothesise the token and no negation list survives "if this were
+  QA FAIL" — but leading emphasis no longer hides an asserted verdict
+  (quotes, parentheses and strikethrough stay mentions), a word boundary
+  keeps "QA FAILURE…" from carrying, and the rejection message now names the
+  exact accepted shape, so the wedge resolves in one corrected retry instead
+  of a repair ladder.
+
 ## v0.14.5 — 2026-08-20 — a busy member is not a dead member
 
 - **The stall watchdog no longer escalates over legitimate work.** The grace a

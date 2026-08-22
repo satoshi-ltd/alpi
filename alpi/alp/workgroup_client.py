@@ -476,6 +476,60 @@ def _check_gated_phase_not_abandoned(
     )
 
 
+def _check_task_stays_in_running_chain(
+    wg, posts: list[dict], plaintext: str, own_pubkey: str,
+) -> None:
+    """Declared chains are trigger-only: hub prose may not jump a task into a dormant chain."""
+    if not tasks_mod.is_task(plaintext):
+        return
+    events = tasks_mod.parse_post(plaintext, 0, own_pubkey)
+    new_slug = next((e.slug for e in events if e.kind == "task"), "")
+    if not new_slug:
+        return
+    new_resolved = wg_mod.canonical_pipeline_phase(wg.meta, new_slug)
+    if new_resolved is None:
+        return
+    prev_chain = None
+    saw_hub_task = False
+    for p in reversed(posts):
+        if str(p.get("from") or "") != own_pubkey:
+            continue
+        text = str(p.get("text") or "")
+        if not tasks_mod.is_task(text):
+            continue
+        saw_hub_task = True
+        prev_events = tasks_mod.parse_post(text, int(p.get("seq", 0)), own_pubkey)
+        prev_slug = next((e.slug for e in prev_events if e.kind == "task"), "")
+        if prev_slug:
+            prev_resolved = wg_mod.canonical_pipeline_phase(wg.meta, prev_slug)
+            if prev_resolved is not None:
+                prev_chain = prev_resolved[0]
+        break
+    if prev_chain is not None and prev_chain == new_resolved[0]:
+        return
+    launch = getattr(wg.meta, "launch_pipeline", None)
+    # Kickoff shape: only a VIRGIN transcript may open, and only the declared launch chain — an ad-hoc history is not virgin.
+    if not saw_hub_task and launch is not None and new_resolved[0] == launch:
+        return
+    running = (
+        f"the running chain is `{prev_chain}`"
+        if prev_chain
+        else "no declared chain is running"
+    )
+    inside = (
+        f"Route the work inside `{prev_chain}` (re-task or rewind one of its "
+        "phases), or ask"
+        if prev_chain
+        else "Ask"
+    )
+    raise ValueError(
+        f"chain-jump: `#{new_slug}` belongs to the declared pipeline "
+        f"`{new_resolved[0]}`, but {running} and declared chains are "
+        f"trigger-only. {inside} the operator to run "
+        f"`workgroup trigger {new_resolved[0]}`."
+    )
+
+
 def _check_blocked_phase_not_skipped(
     wg, posts: list[dict], plaintext: str, own_pubkey: str,
 ) -> None:
@@ -521,16 +575,21 @@ def _check_blocked_phase_not_skipped(
     )
 
 
-_QA_VERDICTS = ("QA BLOCKED", "QA FAIL", "QA PASS")
+# Verdict position only, per ·-segment: segment start (after emphasis) or right after a `label:` — prose can deny or hypothesise a token, and word boundaries keep "QA FAILURE"/"QA PASSED" out.
+_QA_VERDICT_SEGMENT_RE = re.compile(
+    r"^(?:[^·]*:)?\s*[*_\s]*(QA BLOCKED|QA FAIL|QA PASS)(?![\w-])"
+)
 
 
-def _done_carries_failed_qa(plaintext: str) -> bool:
+def _done_carries_failed_qa(plaintext: str, verdict: str) -> bool:
+    # Verdict position only, exact token: prose can deny or hypothesise it, and a FAIL may not stand in for the owner's BLOCKED.
     events = tasks_mod.parse_post(plaintext, 0, "hub", hub_pubkey="hub")
     result = next((event.text for event in events if event.kind == "done"), "")
     normalized = result.strip().upper()
-    segments = [segment.strip() for segment in normalized.split("·")]
+    # Emphasis-only prefix: quotes/parens/strikethrough are mention or deletion, not assertion.
+    carry_re = re.compile(r"^[*_\s]*" + re.escape(verdict) + r"(?![\w-])")
     return _close_override_kind(plaintext, "hub") == "blocked" or any(
-        segment.startswith(("QA BLOCKED", "QA FAIL")) for segment in segments
+        carry_re.match(segment.strip()) for segment in normalized.split("·")
     )
 
 
@@ -557,16 +616,20 @@ def _check_qa_verdict_respected(
             continue
         if str(p.get("from") or "") not in owner_pubkeys:
             continue
-        text = str(p.get("text") or "")
-        for token in _QA_VERDICTS:
-            if token in text:
-                verdict = token
-    if verdict in ("QA FAIL", "QA BLOCKED") and not _done_carries_failed_qa(plaintext):
+        # The LAST verdict-position token wins: "cannot grant QA PASS … VERDICT: QA FAIL" must read FAIL.
+        for segment in str(p.get("text") or "").split("·"):
+            m = _QA_VERDICT_SEGMENT_RE.match(segment.strip())
+            if m:
+                verdict = m.group(1)
+    if verdict in ("QA FAIL", "QA BLOCKED") and not _done_carries_failed_qa(plaintext, verdict):
         raise ValueError(
             f"qa-verdict-mismatch: the phase owner's verdict was `{verdict}` and "
-            "this close does not carry it — quote the verdict, re-task the "
-            "findings to their owner, or close `#done BLOCKED · <reason>`. A "
-            "close may not claim PASS over the owner's FAIL."
+            "this close does not carry it — a `·`-separated segment of the close "
+            f"must START with the verdict token, exactly like "
+            f"`#done <phase> · {verdict} · <finding routing>`. Alternatively "
+            "re-task the findings to their owner, or close "
+            "`#done BLOCKED · <reason>`. A close may not claim PASS over the "
+            "owner's FAIL."
         )
 
 
@@ -1354,6 +1417,7 @@ def _post_as_hub_locked(
         _check_gated_phase_not_abandoned(wg, existing, plaintext, kp.pubkey_b64())
         _check_blocked_phase_not_skipped(wg, existing, plaintext, kp.pubkey_b64())
         _check_task_slug_is_routable(wg, plaintext)
+        _check_task_stays_in_running_chain(wg, existing, plaintext, kp.pubkey_b64())
     _check_qa_verdict_respected(home, wg, existing, plaintext, kp.pubkey_b64())
     active_phase = tasks_mod.active_task(existing, hub_pubkey=kp.pubkey_b64())
     _check_hub_rotation(

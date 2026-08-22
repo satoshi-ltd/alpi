@@ -70,6 +70,15 @@ def test_parse_rejects_gate_on_hub_owned_phase(owner):
         recipes.parse_recipe(text, "r")
 
 
+def test_parse_rejects_task_whose_opener_is_not_the_launch_phase():
+    text = VALID.replace(
+        'task: "@scout #task #intake · start {slug}"',
+        'task: "@scout #task #media-update · start {slug} then #intake"',
+    )
+    with pytest.raises(recipes.RecipeError, match="as its `#task` slug"):
+        recipes.parse_recipe(text, "r")
+
+
 def test_parse_allows_hub_owned_phase_without_gate():
     text = VALID.replace("qa: { owner: lens }", "qa: { owner: mira }")
     assert recipes.parse_recipe(text, "r").pipeline_steps["qa"]["owner"] == "mira"

@@ -1840,7 +1840,7 @@ async def test_post_rejects_closing_a_dormant_chain_phase_with_no_owner_delivery
     home = short_tmp / "hub"; home.mkdir()
     wg = _dormant_chain_hub(home)
 
-    await wc.post(home, wg.meta.id, b"@muse #task #media-update map the client media")
+    await wc.post(home, wg.meta.id, b"@muse #task #media-update map the client media", operator_abandon=True)
     with pytest.raises(ValueError, match="phase-owner-missing"):
         await wc.post(home, wg.meta.id, b"#done media-update complete")
 
@@ -1852,7 +1852,7 @@ async def test_post_allows_blocked_override_on_a_dormant_chain_phase(
     home = short_tmp / "hub"; home.mkdir()
     wg = _dormant_chain_hub(home)
 
-    await wc.post(home, wg.meta.id, b"@muse #task #media-update map the client media")
+    await wc.post(home, wg.meta.id, b"@muse #task #media-update map the client media", operator_abandon=True)
     out = await wc.post(
         home, wg.meta.id,
         "#done BLOCKED · media-update · logo format unsupported".encode(),
@@ -1867,7 +1867,7 @@ async def test_automatic_hub_cannot_block_before_final_repair(
     home = short_tmp / "hubauto"
     home.mkdir()
     wg = _dormant_chain_hub(home)
-    await wc.post(home, wg.meta.id, b"@muse #task #media-update map the client media")
+    await wc.post(home, wg.meta.id, b"@muse #task #media-update map the client media", operator_abandon=True)
     monkeypatch.setenv("ALPI_WORKGROUP_DISPATCH", wg.meta.id)
 
     with pytest.raises(ValueError, match="pipeline-blocked-premature"):
@@ -1884,7 +1884,7 @@ async def test_final_repair_may_block_a_pipeline(
     home = short_tmp / "hubfinal"
     home.mkdir()
     wg = _dormant_chain_hub(home)
-    await wc.post(home, wg.meta.id, b"@muse #task #media-update map the client media")
+    await wc.post(home, wg.meta.id, b"@muse #task #media-update map the client media", operator_abandon=True)
     monkeypatch.setenv("ALPI_WORKGROUP_DISPATCH", wg.meta.id)
     monkeypatch.setenv("ALPI_WORKGROUP_FINAL_REPAIR", "1")
 
@@ -1902,7 +1902,7 @@ async def test_post_allows_skipped_override_on_a_dormant_chain_phase(
     home = short_tmp / "hub"; home.mkdir()
     wg = _dormant_chain_hub(home)
 
-    await wc.post(home, wg.meta.id, b"@muse #task #media-qa audit the rebuild")
+    await wc.post(home, wg.meta.id, b"@muse #task #media-qa audit the rebuild", operator_abandon=True)
     out = await wc.post(home, wg.meta.id, "#done skipped · no media changed".encode())
     assert isinstance(out.get("seq"), int)
 
@@ -2148,8 +2148,13 @@ async def test_launchless_workgroup_rejects_untargeted_task_and_open_closure(
         await wc.post(
             home, wg.meta.id, b"#task #media-update install client media",
         )
+    with pytest.raises(ValueError, match="chain-jump"):
+        await wc.post(
+            home, wg.meta.id, b"@muse #task #media-update install client media",
+        )
     await wc.post(
         home, wg.meta.id, b"@muse #task #media-update install client media",
+        operator_abandon=True,
     )
     with pytest.raises(ValueError, match="phase-owner-missing"):
         await wc.post(home, wg.meta.id, b"#done media update complete")
@@ -2428,3 +2433,190 @@ def test_qa_verdict_mismatch_is_rejected(short_tmp: Path, monkeypatch) -> None:
     wc._check_qa_verdict_respected(
         home, wg, posts, "#done qa PASS · quoting lens", "HUB",
     )
+
+
+def test_hub_task_cannot_jump_into_a_dormant_chain() -> None:
+    """The regio-v24 misroute: a QA finding re-tasked into the dormant review chain without a trigger."""
+    import types
+
+    meta = types.SimpleNamespace(
+        pipelines={
+            "setup": ("content", "qa"),
+            "review": ("review", "review-content", "review-close"),
+        },
+        launch_pipeline="setup",
+        pipeline_steps={},
+    )
+    wg = types.SimpleNamespace(meta=meta, members=[])
+    posts = [
+        {"seq": 1, "from": "HUB", "text": "@quill #task #content · author it"},
+        {"seq": 2, "from": "QUILLPK", "text": "delivered"},
+        {"seq": 3, "from": "HUB", "text": "@lens #task #qa · audit the dist"},
+        {"seq": 4, "from": "LENSPK", "text": "QA audit complete · one unsourced claim"},
+    ]
+    with pytest.raises(ValueError, match="chain-jump"):
+        wc._check_task_stays_in_running_chain(
+            wg, posts, "@quill #task #review-content · prune the unsourced claim", "HUB",
+        )
+    wc._check_task_stays_in_running_chain(
+        wg, posts, "@quill #task #content · prune the unsourced claim", "HUB",
+    )
+    wc._check_task_stays_in_running_chain(
+        wg, posts, "@quill #task #content-fix · prune the unsourced claim", "HUB",
+    )
+    wc._check_task_stays_in_running_chain(
+        wg, posts, "plain prose reply without a task", "HUB",
+    )
+    wc._check_task_stays_in_running_chain(
+        wg, [], "@quill #task #content · launch-chain kickoff shape", "HUB",
+    )
+    with pytest.raises(ValueError, match="trigger-only"):
+        wc._check_task_stays_in_running_chain(
+            wg, [], "@quill #task #review-content · dormant chain on an empty workgroup", "HUB",
+        )
+    adhoc_history = [
+        {"seq": 1, "from": "HUB", "text": "@quill #task #brainstorm · free discussion"},
+    ]
+    with pytest.raises(ValueError, match="trigger-only"):
+        wc._check_task_stays_in_running_chain(
+            wg, adhoc_history, "@quill #task #review-close · sneak a dormant chain open", "HUB",
+        )
+    with pytest.raises(ValueError, match="trigger-only"):
+        wc._check_task_stays_in_running_chain(
+            wg, adhoc_history, "@quill #task #content · reopen launch after legacy ad-hoc", "HUB",
+        )
+    wc._check_task_stays_in_running_chain(
+        wg, posts, "@quill #task #brainstorm · ad-hoc, no declared chain", "HUB",
+    )
+    launchless = types.SimpleNamespace(meta=types.SimpleNamespace(
+        pipelines=meta.pipelines, launch_pipeline=None, pipeline_steps={},
+    ), members=[])
+    with pytest.raises(ValueError, match="trigger-only"):
+        wc._check_task_stays_in_running_chain(
+            launchless, [], "@quill #task #review-content · launchless has no privileged chain", "HUB",
+        )
+
+
+def test_qa_verdict_carry_is_verdict_position_only(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    """Only a segment STARTING with the verdict carries it: prose can deny or hypothesise the token, and the rejection must teach the exact shape (jaime v24 deadlock)."""
+    import types
+
+    home = short_tmp / "qacarry"; home.mkdir()
+    load_or_generate(home)
+    wg = types.SimpleNamespace(
+        meta=types.SimpleNamespace(
+            pipelines={"intake": ("content", "qa")}, launch_pipeline="intake",
+            pipeline_steps={"content": {"owner": "quill"}},
+        ),
+        members=[types.SimpleNamespace(pubkey="QUILLPK")],
+    )
+    monkeypatch.setattr(
+        "alpi.alp.peers.get_by_pubkey",
+        lambda h, pk: types.SimpleNamespace(id="quill") if pk == "QUILLPK" else None,
+    )
+    posts = [
+        {"seq": 1, "from": "HUB", "text": "@quill #task #content · QA FAIL (lens seq #50): fix accents"},
+        {"seq": 2, "from": "QUILLPK", "text": "#working repairing the QA FAIL findings"},
+        {"seq": 3, "from": "QUILLPK", "text": "re-audit of my repair · QA FAIL · homepage still renders stale copy"},
+    ]
+    wc._check_qa_verdict_respected(
+        home, wg, posts,
+        "#done #content · QA FAIL (lens seq #50) findings resolved on disk and gate green — routes to #build",
+        "HUB",
+    )
+    wc._check_qa_verdict_respected(
+        home, wg, posts, "#done content · **QA FAIL** carried verbatim · routing to build", "HUB",
+    )
+    with pytest.raises(ValueError, match="must START with the verdict token"):
+        wc._check_qa_verdict_respected(
+            home, wg, posts,
+            "#done content · carries QA FAIL (lens seq #50) findings resolved — routes to #build",
+            "HUB",
+        )
+    wc._check_qa_verdict_respected(
+        home, wg, posts, "#done content · QA FAIL. routed to build for a rebuild", "HUB",
+    )
+    for denial_or_hypothetical in (
+        "#done content · QA FAIL-SAFE enabled on the build",
+        "#done content · QA FAIL_OVER configured",
+        "#done content · no evidence remains that this is QA FAIL",
+        "#done content · we cannot classify the result as QA FAIL",
+        "#done content · **NO** QA FAIL was found",
+        "#done content · if this were QA FAIL we would route it",
+        "#done content · sin QA FAIL pendiente, todo verde",
+        "#done content · all findings addressed",
+        "#done content · QA FAILURE ANALYSIS PENDING for next sprint",
+        "#done content · QA FAILSAFE enabled on the build",
+        '#done content · "QA FAIL" was not observed on the rebuilt dist',
+        "#done content · (QA FAIL) not applicable here",
+        "#done content · ~~QA FAIL~~ withdrawn by lens",
+    ):
+        with pytest.raises(ValueError, match="qa-verdict-mismatch"):
+            wc._check_qa_verdict_respected(
+                home, wg, posts, denial_or_hypothetical, "HUB",
+            )
+
+
+def test_qa_verdict_is_the_last_token_by_position_and_exact(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    """A final FAIL after a PASS mention must read FAIL, and the close must carry the OWNER'S token."""
+    import types
+
+    home = short_tmp / "qalast"; home.mkdir()
+    load_or_generate(home)
+    wg = types.SimpleNamespace(
+        meta=types.SimpleNamespace(
+            pipelines={"intake": ("content", "qa")}, launch_pipeline="intake",
+            pipeline_steps={"qa": {"owner": "lens"}},
+        ),
+        members=[types.SimpleNamespace(pubkey="LENSPK")],
+    )
+    monkeypatch.setattr(
+        "alpi.alp.peers.get_by_pubkey",
+        lambda h, pk: types.SimpleNamespace(id="lens") if pk == "LENSPK" else None,
+    )
+    posts = [
+        {"seq": 1, "from": "HUB", "text": "@lens #task #qa audit it"},
+        {"seq": 2, "from": "LENSPK",
+         "text": "cannot grant QA PASS yet — final verdict: QA FAIL · stale homepage"},
+    ]
+    with pytest.raises(ValueError, match="`QA FAIL`"):
+        wc._check_qa_verdict_respected(
+            home, wg, posts, "#done qa PASS · all findings met", "HUB",
+        )
+    wc._check_qa_verdict_respected(
+        home, wg, posts, "#done qa · QA FAIL · routed to build", "HUB",
+    )
+
+    posts[1]["text"] = "looked like QA FAIL at first, but the rebuilt dist is clean: QA PASS"
+    wc._check_qa_verdict_respected(
+        home, wg, posts, "#done qa PASS · verified clean", "HUB",
+    )
+
+    posts[1]["text"] = "the build QA PASSED overall"
+    wc._check_qa_verdict_respected(
+        home, wg, posts, "#done qa · closing on prose, no token issued", "HUB",
+    )
+
+    posts[1]["text"] = "verdict: QA BLOCKED · template gap"
+    with pytest.raises(ValueError, match="`QA BLOCKED`"):
+        wc._check_qa_verdict_respected(
+            home, wg, posts, "#done qa · QA FAIL · downgraded to fail", "HUB",
+        )
+    wc._check_qa_verdict_respected(
+        home, wg, posts, "#done qa · QA BLOCKED · template gap carried", "HUB",
+    )
+
+    for negated_mention in (
+        "No QA FAIL was observed anywhere in the dist",
+        "If this were QA FAIL we would route it to build",
+        '"QA FAIL" is not the verdict here',
+        "we cannot classify the result as QA FAIL",
+    ):
+        posts[1]["text"] = negated_mention
+        wc._check_qa_verdict_respected(
+            home, wg, posts, "#done qa PASS · clean close over a prose mention", "HUB",
+        )

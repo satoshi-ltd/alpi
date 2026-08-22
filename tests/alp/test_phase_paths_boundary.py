@@ -291,7 +291,7 @@ async def test_same_phase_retask_preserves_the_run_baseline(
     (workspace / "projects" / "casa" / "assets" / "manifest.yaml").write_text(
         "slots: {logo: whitewash-attempt}\n",
     )
-    await wc.post(home, wg.meta.id, b"@pixel #task #media-build re-deliver the build")
+    await wc.post(home, wg.meta.id, b"@pixel #task #media-build re-deliver the build", operator_abandon=True)
 
     step = gates.step_for(wg.meta, "media-build")
     out = gates.paths_violations(wg_dir, step, workspace)
@@ -336,7 +336,7 @@ async def test_rejected_opener_leaves_no_baseline_and_no_post(
     with pytest.raises(ValueError, match="budget-exceeded"):
         await wc.post(
             home, wg.meta.id,
-            b"@pixel #task #media-build rebuild", cost={"usd": 1.0},
+            b"@pixel #task #media-build rebuild", cost={"usd": 1.0}, operator_abandon=True,
         )
     assert not gates._baseline_path(wg_dir, "media-build").exists()
     assert (wg_dir / "transcript.jsonl").read_text().strip() == ""
@@ -344,7 +344,7 @@ async def test_rejected_opener_leaves_no_baseline_and_no_post(
     (workspace / "projects" / "casa" / "assets" / "manifest.yaml").write_text(
         "slots: {logo: edited-before-the-real-open}\n",
     )
-    await wc.post(home, wg.meta.id, b"@pixel #task #media-build rebuild")
+    await wc.post(home, wg.meta.id, b"@pixel #task #media-build rebuild", operator_abandon=True)
     step = gates.step_for(wg.meta, "media-build")
     assert gates.paths_violations(wg_dir, step, workspace) == "", \
         "the retry's baseline captures the state at the accepted open, not the rejected one"
@@ -363,7 +363,7 @@ async def test_admission_failure_rolls_back_a_fresh_baseline(
 
     monkeypatch.setattr("alpi.alp.workgroup._admit_post_locked", boom)
     with pytest.raises(ValueError, match="simulated append failure"):
-        await wc.post(home, wg.meta.id, b"@pixel #task #media-build rebuild")
+        await wc.post(home, wg.meta.id, b"@pixel #task #media-build rebuild", operator_abandon=True)
     assert not gates._baseline_path(wg_dir, "media-build").exists()
 
 
@@ -382,14 +382,14 @@ async def test_ledger_failure_leaves_transcript_ledger_and_baseline_intact(
     with pytest.MonkeyPatch.context() as mp_ctx:
         mp_ctx.setattr("alpi.alp.workgroup._save_ledger", boom)
         with pytest.raises(ValueError, match="simulated ledger write failure"):
-            await wc.post(home, wg.meta.id, b"@pixel #task #media-build rebuild")
+            await wc.post(home, wg.meta.id, b"@pixel #task #media-build rebuild", operator_abandon=True)
 
     assert (wg_dir / "transcript.jsonl").read_text().strip() == "", \
         "a post whose accounting failed must not stay in the transcript"
     assert wg_mod._load_ledger(wg_dir)["posts"] == 0
     assert not gates._baseline_path(wg_dir, "media-build").exists()
 
-    out = await wc.post(home, wg.meta.id, b"@pixel #task #media-build rebuild")
+    out = await wc.post(home, wg.meta.id, b"@pixel #task #media-build rebuild", operator_abandon=True)
     assert out["seq"] == 1
     assert wg_mod._load_ledger(wg_dir)["posts"] == 1
     assert gates._baseline_path(wg_dir, "media-build").exists()
@@ -408,6 +408,6 @@ async def test_encryption_failure_rolls_back_a_fresh_baseline(
 
     monkeypatch.setattr("alpi.alp.workgroup.encrypt_post", boom)
     with pytest.raises(ValueError, match="simulated encrypt failure"):
-        await wc.post(home, wg.meta.id, b"@pixel #task #media-build rebuild")
+        await wc.post(home, wg.meta.id, b"@pixel #task #media-build rebuild", operator_abandon=True)
     assert not gates._baseline_path(wg_dir, "media-build").exists()
     assert (wg_dir / "transcript.jsonl").read_text().strip() == ""

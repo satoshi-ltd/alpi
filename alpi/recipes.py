@@ -101,11 +101,15 @@ def _check_launch_semantics(
             "an idle pipeline workgroup posts no kickoff — drop the task or select a launch"
         )
     if launch_pipeline is not None:
+        from alpi.alp import tasks as tasks_mod
         first = pipelines[launch_pipeline][0]
-        if first not in set(_TASK_SLUG_RE.findall(task.lower())):
+        # The parsed opener, not a substring: "#media-update … #intake" must not pass for launch=intake.
+        events = tasks_mod.parse_post(task.lower(), 0, "hub", hub_pubkey="hub")
+        opener = next((e.slug for e in events if e.kind == "task"), "")
+        if opener != first:
             raise RecipeError(
                 f"recipe {recipe_id!r} task must open the launch pipeline's first phase "
-                f"`#{first}`"
+                f"`#{first}` as its `#task` slug (parsed `#{opener or 'none'}`)"
             )
 
 

@@ -228,6 +228,7 @@ async def launch(
         created_wg_dir = home / "alp" / "workgroups" / wg.meta.id
         kick = _kickoff_text(spec["task"], wg.meta.launch_chain, steps)
         if kick:
+            # No guard bypass: the kickoff must pass as the virgin launch-chain opener, so a misauthored recipe fails loudly here.
             await wc.post(home, wg.meta.id, kick.encode())
     except BaseException:
         if created_wg_dir is not None:
