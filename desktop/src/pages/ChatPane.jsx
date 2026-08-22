@@ -12,7 +12,8 @@ import { useScrollProgress } from "../lib/useScrollProgress.js";
 import { useScrollAnchor } from "../lib/useScrollAnchor.js";
 import { useDelayedFlag } from "../lib/useDelayedFlag.js";
 import RelativeTime from "../primitives/RelativeTime.jsx";
-import { turnParts } from "../lib/reasoningSteps.js";
+import { turnParts } from "../../../common/reasoningSteps.mjs";
+import { pluralize } from "../../../common/pluralize.mjs";
 import { CaretIcon, Icon } from "../primitives/icons.jsx";
 import { profileLabel } from "../lib/profile-display.js";
 import { ChatLoadSkeleton } from "./ChatSkeletons.jsx";
@@ -22,7 +23,7 @@ import { useContextWindow } from "../hooks/useContextWindow.js";
 import { useNotify } from "../primitives/Notification.jsx";
 import Logo from "../primitives/Logo.jsx";
 import Markdown from "../primitives/Markdown.jsx";
-import { ACCENT_SWATCHES } from "../primitives/SettingsLayout.jsx";
+import { ACCENT_HEXES } from "../../../common/accents.mjs";
 import ProducedImages from "../primitives/ProducedImages.jsx";
 import { setImageRoots } from "../lib/imageRoots.js";
 import { Banner, JumpToLatest, MessageBubble, NewChatHero, ProfileChatHeader } from "../primitives/index.js";
@@ -856,7 +857,7 @@ function accentForPeer(peerId, profiles) {
   let h = 0;
   const s = peerId || "";
   for (let i = 0; i < s.length; i += 1) h = (h * 31 + s.charCodeAt(i)) | 0;
-  return ACCENT_SWATCHES[Math.abs(h) % ACCENT_SWATCHES.length];
+  return ACCENT_HEXES[Math.abs(h) % ACCENT_HEXES.length];
 }
 
 function peerReplyFrom(tools) {
@@ -1005,7 +1006,7 @@ const ToolModule = memo(function ToolModule({ tools, accent }) {
   const primary = active ? tools[runningIdx] : null;
   const bucket = active ? tools.filter((_, i) => i !== runningIdx) : tools;
   const n = bucket.length;
-  const noun = n === 1 ? "tool call" : "tool calls";
+  const noun = pluralize(n, "tool call");
   const failed = bucket.filter((t) => statusOf(t) === "fail").length;
   const collapsedLabel = active ? `+${n} previous ${noun}` : `${n} ${noun}`;
   const expandedLabel = active ? "Hide previous tool calls" : "Hide tool calls";

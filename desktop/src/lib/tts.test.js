@@ -1,10 +1,32 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
-import { enqueueTts, clearTtsQueue, scriptFor, stripMarkdown } from "./tts.js";
+import {
+  enqueueTts,
+  clearTtsQueue,
+  scriptFor,
+  stripMarkdown,
+  voiceForPubkey,
+  VOICE_POOL,
+  VOICE_SHORTLIST,
+} from "./tts.js";
 
 beforeEach(() => {
   clearTtsQueue();
   vi.clearAllMocks();
+});
+
+describe("voice list", () => {
+  it("is one list: the pool is the shortlist ids, in order, labels intact", () => {
+    expect(VOICE_SHORTLIST).toHaveLength(15);
+    expect(VOICE_POOL).toEqual(VOICE_SHORTLIST.map((v) => v.id));
+    expect(VOICE_POOL[0]).toBe("en-US-AriaNeural");
+    expect(VOICE_SHORTLIST.every((v) => v.name && v.desc)).toBe(true);
+  });
+
+  it("assigns a pubkey an id from that one pool", () => {
+    expect(voiceForPubkey(null)).toBe("en-US-AriaNeural");
+    expect(VOICE_POOL).toContain(voiceForPubkey("bob"));
+  });
 });
 
 describe("stripMarkdown", () => {

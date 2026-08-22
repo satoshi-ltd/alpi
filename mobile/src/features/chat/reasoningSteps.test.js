@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { turnParts } from './reasoningSteps';
+import { turnParts } from '../../../../common/reasoningSteps.mjs';
 
 describe('turnParts', () => {
   it('empty turn', () => {

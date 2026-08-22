@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { ACCENTS } from '../../../../common/accents.mjs';
 import { radii, space } from '../../theme/tokens';
 
 import { Field } from '../../components/Field';
 import { Sheet } from '../../components/Sheet';
 import { useToast } from '../../components/Toast';
-import { namedAccents as ACCENTS } from '../../theme/accents';
 import { useTheme } from '../../theme/ThemeContext';
 
 export function AccentSheet({ open, onClose, profileName, initialValue, onSave }) {

@@ -65,14 +65,37 @@ independent version schemes. Don't conflate them.
   [.github/workflows/publish.yml](.github/workflows/publish.yml)
   (PyPI + GitHub release).
 - **Desktop app (Tauri).** Tags ``desktop-vX.Y.Z``. Versioned in
-  ``desktop/package.json`` + ``desktop/src-tauri/tauri.conf.json``
-  (both must agree, or the release workflow aborts). Changelog:
+  ``desktop/package.json`` + ``desktop/src-tauri/tauri.conf.json`` +
+  ``desktop/src-tauri/Cargo.toml`` (all three must agree, or the release
+  workflow aborts; ``cargo check`` refreshes ``Cargo.lock``). Changelog:
   [desktop/CHANGELOG.md](desktop/CHANGELOG.md). Pipeline:
-  [.github/workflows/desktop-release.yml](.github/workflows/desktop-release.yml)
+  [.github/workflows/publish-desktop.yml](.github/workflows/publish-desktop.yml)
   (GitHub release only — no PyPI). The Tauri updater reads
   ``releases/download/desktop-latest/latest.json``; the workflow
   re-points the rolling ``desktop-latest`` tag on every release
   so that URL stays stable.
+
+- **Mobile app (Expo).** Tags ``mobile-vX.Y.Z``. Versioned in
+  ``mobile/package.json`` + ``mobile/app.json`` (``expo.version``), and both
+  build counters must advance: ``ios.buildNumber`` and ``android.versionCode``,
+  or the store upload is rejected. ``mobile/package-lock.json`` carries the
+  version twice — edit those two lines by hand rather than regenerating, and
+  check ``npm ci --dry-run``. Changelog:
+  [mobile/CHANGELOG.md](mobile/CHANGELOG.md). Built by EAS; no GitHub workflow.
+
+- **Shared client source.** ``common/`` is a third source directory, not a
+  package: no ``package.json``, consumed by relative import from both trees.
+  Nothing above it declares a module type, so **logic is ``.mjs``** (bare Node
+  reparses ``.js`` there only by accident) and **shared components are
+  ``.jsx``** (JSX cannot live in ``.mjs``). Metro reaches it through
+  ``mobile/metro.config.js``'s explicit ``watchFolders``; Vite needs nothing.
+  ``common/`` carries no version — a change there releases both clients.
+
+A change to ``common/``, ``desktop/`` or ``mobile/`` runs both JS suites, locally
+via the hook and in ``pull-request.yml``. The cross-client edge that survives is
+``mobile/src/theme/tokenParity.test.js``, which reads desktop's ``tokens.css``:
+CSS custom properties cannot be imported by React Native, so that pair stays two
+files plus a parity test rather than shared source.
 
 A desktop release pins a minimum compatible alpi version in its
 changelog entry — clients require a daemon recent enough to serve

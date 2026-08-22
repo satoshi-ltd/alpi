@@ -12,15 +12,10 @@ import { createProfileWithProvider } from '../../lib/createProfile';
 import { useEndpoint } from '../../lib/EndpointContext';
 import { openVerb } from '../../lib/panes';
 import { profileNameError } from '../../lib/profileName';
+import { CLOUD_PROVIDERS } from '../../lib/providers';
 import { usePane } from '../../nav/PaneContext';
 
-const PROVIDERS = [
-  { id: 'ollama', label: 'Ollama' },
-  { id: 'anthropic', label: 'Anthropic', env: 'ANTHROPIC_API_KEY', placeholder: 'sk-ant-…' },
-  { id: 'openai', label: 'OpenAI', env: 'OPENAI_API_KEY', placeholder: 'sk-…' },
-  { id: 'openrouter', label: 'OpenRouter', env: 'OPENROUTER_API_KEY', placeholder: 'sk-or-…' },
-  { id: 'gemini', label: 'Gemini', env: 'GEMINI_API_KEY', placeholder: 'AIza…' },
-];
+const PROVIDERS = [{ id: 'ollama', label: 'Ollama' }, ...CLOUD_PROVIDERS];
 
 const DEFAULT_OLLAMA_NAME = 'local';
 const DEFAULT_OLLAMA_URL = 'http://localhost:11434';

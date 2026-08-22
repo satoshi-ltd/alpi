@@ -4,6 +4,7 @@ import Tip from "./Tip.jsx";
 import ConfirmDelete from "./ConfirmDelete.jsx";
 import Diamond from "./Diamond.jsx";
 import { useDismissOnOutside } from "../hooks/useDismissOnOutside.js";
+import { ACCENT_HEXES } from "../../../common/accents.mjs";
 import styles from "./SettingsLayout.module.css";
 
 function Anchored({ open, onClose, children, width = 320, align = "left" }) {
@@ -99,21 +100,6 @@ export function Popped({
   );
 }
 
-export const ACCENT_SWATCHES = [
-  "#b8954a",
-  "#d97757",
-  "#c14545",
-  "#c14580",
-  "#9d4dc6",
-  "#6a6dd6",
-  "#3d7ea6",
-  "#2f8e9e",
-  "#2f7d6e",
-  "#3fb37a",
-  "#8a7a4a",
-  "#6c7480",
-];
-
 export function AccentPicker({ value, onChange }) {
   const [open, setOpen] = useState(false);
   const [hex, setHex] = useState(value || "#b8954a");
@@ -145,7 +131,7 @@ export function AccentPicker({ value, onChange }) {
       {open && (
         <div className={`anim-pop ${styles.accentPopover}`}>
           <div className={styles.swatchGrid}>
-            {ACCENT_SWATCHES.map((c) => {
+            {ACCENT_HEXES.map((c) => {
               const sel = value?.toLowerCase() === c.toLowerCase();
               return (
                 <button

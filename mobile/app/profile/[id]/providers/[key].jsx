@@ -18,14 +18,8 @@ import { useBack } from '../../../../src/hooks/useBack';
 import { useOllamaModels } from '../../../../src/hooks/useDaemonData';
 import { useProfile } from '../../../../src/hooks/useSubject';
 import { useEndpoint } from '../../../../src/lib/EndpointContext';
+import { cloudProvider } from '../../../../src/lib/providers';
 import { useTheme } from '../../../../src/theme/ThemeContext';
-
-const KEY_INFO = {
-  anthropic: { label: 'Anthropic', env: 'ANTHROPIC_API_KEY', placeholder: 'sk-ant-…', console: 'console.anthropic.com' },
-  openai: { label: 'OpenAI', env: 'OPENAI_API_KEY', placeholder: 'sk-…', console: 'platform.openai.com' },
-  openrouter: { label: 'OpenRouter', env: 'OPENROUTER_API_KEY', placeholder: 'sk-or-…', console: 'openrouter.ai' },
-  gemini: { label: 'Google Gemini', env: 'GEMINI_API_KEY', placeholder: 'AIza…', console: 'aistudio.google.com' },
-};
 
 export default function ProviderKey() {
   const { id, key } = useLocalSearchParams();
@@ -40,11 +34,10 @@ export default function ProviderKey() {
   const existingOllamaName = isOllama && !isNewOllama ? key.replace('ollama-', '') : null;
 
   const info = useMemo(() => {
-    if (typeof key !== 'string') return null;
     if (isOllama) {
       return { label: isNewOllama ? 'Add Ollama' : `ollama/${existingOllamaName}`, env: null, isOllama: true };
     }
-    return KEY_INFO[key];
+    return cloudProvider(key);
   }, [key, isOllama, isNewOllama, existingOllamaName]);
 
   const [value, setValue] = useState('');

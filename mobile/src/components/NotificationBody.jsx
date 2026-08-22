@@ -1,7 +1,7 @@
 import { ScrollView, Text, View } from 'react-native';
 
 import { Eyebrow } from './Eyebrow';
-import { inlineSegments, parseNotificationBody } from '../lib/notificationBody';
+import { inlineSegments, parseNotificationBody } from '../../../common/notificationBody.mjs';
 import { useTheme } from '../theme/ThemeContext';
 import { lineHeights, radii, space } from '../theme/tokens';
 

@@ -48,7 +48,7 @@ vi.mock('../../components/RichText', () => ({
 }));
 
 import { BUBBLE_MAX_PANE } from '../../lib/panes';
-import { ICONS } from '../../components/iconPaths';
+import { ICONS } from '../../../../common/iconPaths.mjs';
 import { PaneContext } from '../../nav/PaneContext';
 import { iconSizes } from '../../theme/tokens';
 import { MarkerCard } from './MarkerCard';

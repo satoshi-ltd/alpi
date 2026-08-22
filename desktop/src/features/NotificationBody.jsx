@@ -1,6 +1,6 @@
 import { Fragment } from "react";
 import Eyebrow from "../primitives/Eyebrow.jsx";
-import { inlineSegments, parseNotificationBody } from "../lib/notificationBody.js";
+import { inlineSegments, parseNotificationBody } from "../../../common/notificationBody.mjs";
 import styles from "./NotificationBody.module.css";
 
 function Inline({ text }) {

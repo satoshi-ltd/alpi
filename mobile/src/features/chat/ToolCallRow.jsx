@@ -4,6 +4,7 @@ import { lineHeights, space } from '../../theme/tokens';
 
 import { Icon } from '../../components/Icon';
 import { useTheme } from '../../theme/ThemeContext';
+import { pluralize } from '../../../../common/pluralize.mjs';
 
 function formatArgs(value) {
   if (value == null) return '';
@@ -106,7 +107,7 @@ export function ToolModule({ tools, accent }) {
   const primary = active ? tools[runningIdx] : null;
   const bucket = active ? tools.filter((_, i) => i !== runningIdx) : tools;
   const n = bucket.length;
-  const noun = n === 1 ? 'tool call' : 'tool calls';
+  const noun = pluralize(n, 'tool call');
   const failed = bucket.filter((t) => toolStatus(t) === 'error').length;
   const collapsedLabel = active ? `+${n} previous ${noun}` : `${n} ${noun}`;
   const expandedLabel = active ? 'Hide previous tool calls' : 'Hide tool calls';

@@ -12,7 +12,7 @@ import { ScreenHeader } from '../../../src/components/ScreenHeader';
 import { SyncBar } from '../../../src/components/SyncBar';
 import { useBack } from '../../../src/hooks/useBack';
 import { modelLabel } from '../../../src/lib/modelLabel';
-import { profileLabel } from '../../../src/lib/profileLabel';
+import { profileLabel } from '../../../src/lib/profileName';
 import { useToast } from '../../../src/components/Toast';
 import { Bold, Code, TypedConfirm } from '../../../src/components/TypedConfirm';
 import {

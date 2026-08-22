@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { fmtDuration, thoughtLabel } from './reasoningLabel';
+import { fmtDuration, thoughtLabel } from '../../../../common/reasoningLabel.mjs';
 
 describe('thoughtLabel', () => {
   it('omits the duration when reasoned_s is missing or sub-second', () => {

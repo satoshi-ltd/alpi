@@ -1,5 +1,5 @@
 import { createElement } from "react";
-import { ICONS, ICON_ALIASES } from "./iconPaths.js";
+import { ICONS, ICON_ALIASES } from "../../../common/iconPaths.mjs";
 import styles from "./Icon.module.css";
 
 const SIZES = { xs: 9, sm: 12, md: 14, lg: 18, xl: 24 };

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { compactProducedTool, stripProducedImageMarkdown } from './producedAttachments';
+import { compactProducedTool, stripProducedImageMarkdown } from '../../../common/producedAttachments.mjs';
 
 const img = { kind: 'image', name: 'hero.jpg', path: '/p/out/hero.jpg' };
 

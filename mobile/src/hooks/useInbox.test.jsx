@@ -48,7 +48,7 @@ vi.mock('../lib/readState', () => ({
 vi.mock('../lib/profileReady', () => ({
   profileEmptyState: (p) => (p?.incomplete ? 'needs-provider' : p?.modelless ? 'needs-model' : 'ready'),
 }));
-vi.mock('../lib/profileLabel', () => ({ profileLabel: (name) => name }));
+vi.mock('../lib/profileName', () => ({ profileLabel: (name) => name }));
 vi.mock('../theme/accents', () => ({ accentForProfile: () => '#000000' }));
 
 import { useInbox } from './useInbox';

@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  DEFAULT_PROFILE_DISPLAY,
   PROFILE_NAME_RE,
   RESERVED_PROFILE_NAMES,
   isValidProfileName,
+  profileLabel,
   profileNameError,
 } from './profileName';
 
@@ -48,6 +50,16 @@ describe('RESERVED_PROFILE_NAMES', () => {
   it('mirrors the core contract (default + alpi)', () => {
     expect(RESERVED_PROFILE_NAMES).toEqual(['default', 'alpi']);
   });
+
+});
+
+describe('profileLabel', () => {
+  it('renders the default profile as the reserved alias', () => {
+    expect(profileLabel('default')).toBe(DEFAULT_PROFILE_DISPLAY);
+    expect(RESERVED_PROFILE_NAMES).toContain(DEFAULT_PROFILE_DISPLAY);
+  });
+
+  it('passes any other name through untouched', () => expect(profileLabel('work')).toBe('work'));
 });
 
 describe('profileNameError', () => {

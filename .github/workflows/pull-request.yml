@@ -48,3 +48,20 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y bubblewrap
       - run: pip install -e ".[dev]"
       - run: pytest --integration -q
+
+  clients:
+    name: clients
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: corepack enable
+      - name: desktop
+        working-directory: desktop
+        run: pnpm install --frozen-lockfile && pnpm run test
+      - name: mobile
+        working-directory: mobile
+        run: npm ci && npm test

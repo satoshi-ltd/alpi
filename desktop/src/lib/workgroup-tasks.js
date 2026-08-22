@@ -1,77 +1,113 @@
+import {
+  TASK_OPEN_LINE_RE,
+  classifyMessage,
+  closeStatus,
+  parseDone,
+  parseSkip,
+  parseTaskOpen,
+  parseWorking,
+  validateTaskShape,
+} from "../../../common/workgroupMarkers.mjs";
+
+export {
+  classifyMessage,
+  closeStatus,
+  parseDone,
+  parseSkip,
+  parseTaskOpen,
+  parseWorking,
+  validateTaskShape,
+};
+
 const TASK_RE = /^(?:@\S+\s+)*#task\s+#([A-Za-z0-9][A-Za-z0-9_-]{0,63})(?:\s+(.+?))?\s*$/m;
 const DONE_RE = /^(?:@\S+\s+)*#done\s*(.*)$/m;
 
-const TASK_OPEN_LINE_RE = /^(?:@\S+\s+)*#task\s+#([A-Za-z0-9][A-Za-z0-9_-]{0,63})(?:\s+(.+?))?\s*$/im;
-const TASK_INTENT_LINE_RE = /^(?:@\S+\s+)*#task\b.*$/im;
-const DONE_LINE_RE = /^(?:@\S+\s+)*#done[ \t]*/im;
-const WORKING_LINE_RE = /^(?:@\S+\s+)*#working[ \t]*/im;
-const SKIP_LINE_RE = /^(?:@\S+\s+)*#skip[ \t]*/im;
+const DONE_CLOSE_RE = /^(?:@\S+\s+)*#done\s+(.+?)\s*$/i;
+const ROUND_SIGNAL_RE = /^(?:@\S+\s+)*#(?:working|skip)(?:\s+.+?)?\s*$/i;
 
-export function parseTaskOpen(body) {
+// `fold_task_state` returns `closed[-20:]`, so a full window means there is older history.
+export const FOLD_CLOSED_CAP = 20;
+
+function readMarker(body) {
   const lines = String(body || "").split("\n");
-  for (let i = 0; i < lines.length; i += 1) {
-    const m = TASK_OPEN_LINE_RE.exec(lines[i]);
-    if (m) {
-      const slug = m[1].toLowerCase();
-      const title = (m[2] ?? "").trim();
-      const rest = lines.slice(i + 1).join("\n").trim();
-      const headline = title ? `**#${slug}** ${title}` : `**#${slug}**`;
-      return {
-        slug,
-        title,
-        content: rest ? `${headline}\n\n${rest}` : headline,
-      };
+  // Both #task and #done in one post → prose, no lifecycle event (mirrors alpi parse_post ambiguity rule).
+  if (lines.some((l) => TASK_OPEN_LINE_RE.test(l)) && lines.some((l) => DONE_CLOSE_RE.test(l))) {
+    return null;
+  }
+  for (const line of lines) {
+    const open = TASK_OPEN_LINE_RE.exec(line);
+    if (open) {
+      return { kind: "task", slug: open[1].toLowerCase(), text: (open[2] ?? "").trim() };
     }
+    if (ROUND_SIGNAL_RE.test(line)) return { kind: "round" };
+    const close = DONE_CLOSE_RE.exec(line);
+    if (close) return { kind: "done", text: close[1].trim() };
   }
   return null;
 }
 
-export function validateTaskShape(body) {
-  const text = String(body || "");
-  if (!TASK_INTENT_LINE_RE.test(text)) return { ok: true };
-  if (TASK_OPEN_LINE_RE.test(text)) return { ok: true };
-  return {
-    ok: false,
-    error: "`#task` must be followed by `#<slug>` (e.g. `#task #onboarding-friction-top3 …`).",
-  };
+// Reads the outcome off the `#done` line alone — prose above a close must never decide its colour.
+export function doneOutcome(body) {
+  for (const line of String(body || "").split("\n")) {
+    const m = DONE_CLOSE_RE.exec(line);
+    if (m) return closeStatus(m[1]);
+  }
+  return "done";
 }
 
-function stripMarker(body, markerRe) {
-  const text = String(body || "");
-  if (!markerRe.test(text)) return null;
-  // Remove the marker keyword (and any leading @mentions) from its line; keep the rest of the body intact so authors who close with a synthesis above the `#done` line keep that content visible.
-  return text.replace(markerRe, "").trim();
+// Rows straight from `host.workgroup.tasks`: the daemon's `blocked` flag outranks the close text.
+export function tasksFromFold(state) {
+  if (!state || typeof state !== "object") return null;
+  const rows = (Array.isArray(state.closed) ? state.closed : [])
+    .slice()
+    .sort((a, b) => (a.closed_seq ?? 0) - (b.closed_seq ?? 0))
+    .map((row) => ({
+      seq: row.closed_seq ?? null,
+      slug: row.slug ?? "",
+      title: "",
+      status: row.blocked ? "blocked" : closeStatus(row.result),
+      result: row.result ?? "",
+    }));
+  if (state.active) {
+    rows.push({
+      seq: state.active.opened_seq ?? null,
+      slug: state.active.slug ?? "",
+      title: state.active.title ?? "",
+      status: "working",
+    });
+  }
+  return rows;
 }
 
-export const parseDone = (body) => {
-  const content = stripMarker(body, DONE_LINE_RE);
-  return content === null ? null : { content };
-};
-
-export const parseWorking = (body) => {
-  const content = stripMarker(body, WORKING_LINE_RE);
-  return content === null ? null : { content };
-};
-
-export const parseSkip = (body) => {
-  const content = stripMarker(body, SKIP_LINE_RE);
-  return content === null ? null : { content };
-};
-
-// Single resolved classification for a post body. A post with BOTH a #task
-// and a #done at line starts is prose (mirrors alpi parse_post ambiguity) —
-// this is the one place the desktop renderer must agree with the backend.
-export function classifyMessage(body) {
-  const task = parseTaskOpen(body);
-  const done = parseDone(body);
-  if (task && done) return { variant: "message", text: body };
-  if (task) return { variant: "task", task };
-  const working = parseWorking(body);
-  if (working) return { variant: "working", text: working.content };
-  if (done) return { variant: "done", text: done.content };
-  const skip = parseSkip(body);
-  if (skip) return { variant: "skip", text: skip.content };
-  return { variant: "message", text: body };
+// Only the hub opens (`#task`) and closes (`#done`) tasks. A member's `#skip`/`#working` are round signals that never touch task lifecycle. "preempted" means the hub opened a new `#task` before closing this one (alpi/alp/tasks.py fold_tasks).
+export function deriveTasks(thread = [], hubPubkey = null) {
+  const tasks = [];
+  let active = null;
+  for (const msg of thread) {
+    const mk = readMarker(msg.body);
+    const fromHub = !hubPubkey || msg.from_pubkey === hubPubkey;
+    if (mk?.kind === "task" && fromHub) {
+      if (active) active.status = "preempted";
+      active = {
+        seq: msg.seq,
+        slug: mk.slug,
+        title: mk.text,
+        status: "working",
+        contributions: 0,
+      };
+      tasks.push(active);
+      continue;
+    }
+    if (!active) continue;
+    if (mk?.kind === "done" && fromHub) {
+      active.result = mk.text ?? "";
+      active.status = closeStatus(active.result);
+      active = null;
+      continue;
+    }
+    active.contributions++;
+  }
+  return tasks;
 }
 
 export function findLatestTask(messages, hubPubkey = null) {

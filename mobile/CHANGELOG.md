@@ -14,6 +14,28 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.4.3 — 2026-08-22 — one copy of the shared logic
+
+Internal only — nothing in the interface changes.
+
+- The workgroup marker parsers, the notification body parser, the icon paths,
+  the reasoning labels and a dozen small formatters now live once in
+  ``common/``, read by both this app and the desktop client, instead of being
+  maintained twice. Where the two copies had quietly drifted apart, the
+  surviving version is the one the daemon's own vocabulary supports.
+- The cloud-provider table existed in three screens with one field already
+  disagreeing between them; the approval and clarification queues were the same
+  hook written twice. Each is now one.
+- The colour, spacing, type and radius scales are now one shared table rather
+  than a copy per client, so a scale edited on the desktop can no longer drift
+  away from here unnoticed — the four places the two deliberately differ are
+  written down and checked.
+- A change to either client, or to the shared source, now runs both test suites
+  before it can be committed, and for the first time the JavaScript suites run
+  in CI at all.
+
+Requires alpi >= 0.12.11, unchanged from 0.3.1.
+
 ## v0.4.2 — 2026-08-19 — folding no longer strands you
 
 - **Back works after the screen changes shape.** Opening a conversation on an

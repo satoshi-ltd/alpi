@@ -1,11 +1,6 @@
-// Pure helpers for the clarification queue in App.jsx. Mirror of approval-queue.js — same dedupe + deadline math, different payload shape (question/choices instead of command/severity).
+import { deadlineFor } from "./approval-queue.js";
 
-export function deadlineFor(req) {
-  if (!req || typeof req.timeout_s !== "number") return null;
-  const window = Math.max(0, req.timeout_s * 1000);
-  if (typeof req.ts === "number") return req.ts * 1000 + window;
-  return Date.now() + window;
-}
+export { deadlineFor };
 
 export function normalizeRequest(req) {
   if (!req || !req.request_id) return null;

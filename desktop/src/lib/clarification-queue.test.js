@@ -4,8 +4,13 @@ import {
   enqueueRequest,
   normalizeRequest,
 } from "./clarification-queue.js";
+import { deadlineFor as approvalDeadlineFor } from "./approval-queue.js";
 
 describe("clarification-queue", () => {
+  it("shares one deadlineFor with the approval queue", () => {
+    expect(deadlineFor).toBe(approvalDeadlineFor);
+  });
+
   it("normalizes valid request shape", () => {
     const out = normalizeRequest({
       request_id: "abc",

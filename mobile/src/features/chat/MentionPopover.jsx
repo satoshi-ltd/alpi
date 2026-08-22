@@ -6,7 +6,7 @@ import { Pill } from '../../components/Pill';
 import { useProfileSummaries } from '../../hooks/useDaemonData';
 import { accentForProfile } from '../../theme/accents';
 import { modelLabel } from '../../lib/modelLabel';
-import { profileLabel } from '../../lib/profileLabel';
+import { profileLabel } from '../../lib/profileName';
 import { useTheme } from '../../theme/ThemeContext';
 
 export function MentionPopover({ candidates = [], onPick }) {

@@ -11,6 +11,25 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.5.11 — 2026-08-22 — one copy of the shared logic
+
+Internal only — nothing in the interface changes.
+
+- The workgroup marker parsers, the notification body parser, the icon paths,
+  the reasoning labels and a dozen small formatters now live once in
+  ``common/``, read by both this app and the mobile client, instead of being
+  maintained twice. A parser that existed in two copies inside this app — one
+  in a component file, one in the task library — is now one.
+- Duplicate voice and accent tables collapsed, and three accent constants that
+  nothing had imported since they were written are gone.
+- The colour, spacing, type and radius scales are now one shared table rather
+  than a copy per client, so a scale edited here can no longer drift away from
+  the phone unnoticed — the four places the two deliberately differ are written
+  down and checked.
+- A change to either client, or to the shared source, now runs both test suites
+  before it can be committed, and for the first time the JavaScript suites run
+  in CI at all.
+
 ## v0.5.10 — 2026-08-18 — the answer outlives the fetch
 
 - **A finished answer is no longer briefly missing.** The turn you were watching

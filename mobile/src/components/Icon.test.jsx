@@ -2,8 +2,7 @@ import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render } from '@testing-library/react';
 
-import { ICONS as DESKTOP_ICONS, ICON_ALIASES as DESKTOP_ALIASES } from '../../../desktop/src/primitives/iconPaths.js';
-import { ICONS, ICON_ALIASES } from './iconPaths';
+import { ICONS } from '../../../common/iconPaths.mjs';
 import { iconSizes, iconStroke } from '../theme/tokens';
 
 afterEach(cleanup);
@@ -81,21 +80,5 @@ describe('Icon geometry', () => {
     expect(draw({ name: 'back' }).querySelector('path').getAttribute('d')).toBe(ICONS['chevron-left'][0][1].d);
     cleanup();
     expect(draw({ name: 'forward' }).querySelector('path').getAttribute('d')).toBe(ICONS['chevron-right'][0][1].d);
-  });
-});
-
-describe('icon set parity with desktop', () => {
-  it('holds no glyph desktop does not have', () => {
-    expect(Object.keys(ICONS).filter((name) => !(name in DESKTOP_ICONS))).toEqual([]);
-  });
-
-  it('draws every shared glyph from the exact same geometry', () => {
-    for (const [name, def] of Object.entries(ICONS)) {
-      expect(def, name).toEqual(DESKTOP_ICONS[name]);
-    }
-  });
-
-  it('keeps the alias table identical, so a desktop call site ports by name', () => {
-    expect(ICON_ALIASES).toEqual(DESKTOP_ALIASES);
   });
 });

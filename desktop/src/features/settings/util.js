@@ -1,21 +1,3 @@
-export const ACCENT_PALETTE = [
-  "#b8954a", // gold (default · alpi)
-  "#d97757", // terracotta
-  "#c14545", // brick
-  "#c14580", // magenta
-  "#9d4dc6", // purple
-  "#6a6dd6", // indigo
-  "#3d7ea6", // denim
-  "#2f8e9e", // teal
-  "#2f7d6e", // pine
-  "#3fb37a", // forest (workgroup default)
-  "#8a7a4a", // olive
-  "#6c7480", // slate
-];
-
-export const ACCENT_DEFAULT_PROFILE = "#b8954a";
-export const ACCENT_DEFAULT_WORKGROUP = "#3fb37a";
-
 export const HEX_RE = /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/;
 
 export const FIELD_KEYS = {
@@ -61,24 +43,6 @@ export const PAID_PROVIDERS = [
   { id: "openai", env: "OPENAI_API_KEY", label: "OpenAI" },
   { id: "openrouter", env: "OPENROUTER_API_KEY", label: "OpenRouter" },
   { id: "gemini", env: "GEMINI_API_KEY", label: "Gemini" },
-];
-
-export const VOICE_SHORTLIST = [
-  { id: "en-US-AriaNeural", name: "Aria", desc: "English (US) · female" },
-  { id: "en-US-GuyNeural", name: "Guy", desc: "English (US) · male" },
-  { id: "en-US-JennyNeural", name: "Jenny", desc: "English (US) · female" },
-  { id: "en-GB-SoniaNeural", name: "Sonia", desc: "English (UK) · female" },
-  { id: "en-GB-RyanNeural", name: "Ryan", desc: "English (UK) · male" },
-  { id: "en-AU-NatashaNeural", name: "Natasha", desc: "English (AU) · female" },
-  { id: "en-AU-WilliamNeural", name: "William", desc: "English (AU) · male" },
-  { id: "es-ES-ElviraNeural", name: "Elvira", desc: "Spanish (ES) · female" },
-  { id: "es-ES-AlvaroNeural", name: "Alvaro", desc: "Spanish (ES) · male" },
-  { id: "es-MX-DaliaNeural", name: "Dalia", desc: "Spanish (MX) · female" },
-  { id: "fr-FR-DeniseNeural", name: "Denise", desc: "French · female" },
-  { id: "fr-FR-HenriNeural", name: "Henri", desc: "French · male" },
-  { id: "de-DE-KatjaNeural", name: "Katja", desc: "German · female" },
-  { id: "it-IT-ElsaNeural", name: "Elsa", desc: "Italian · female" },
-  { id: "pt-BR-FranciscaNeural", name: "Francisca", desc: "Portuguese (BR) · female" },
 ];
 
 export const ALLOW_METHODS = [

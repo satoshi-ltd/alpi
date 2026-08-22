@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { inlineSegments, parseNotificationBody } from './notificationBody';
+import { inlineSegments, parseNotificationBody } from '../../../common/notificationBody.mjs';
 
 describe('parseNotificationBody labels and paragraphs', () => {
   it('treats a whole-line bold phrase as a standalone label', () => {

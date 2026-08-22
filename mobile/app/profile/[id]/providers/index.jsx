@@ -10,14 +10,8 @@ import { ScreenHeader } from '../../../../src/components/ScreenHeader';
 import { useBack } from '../../../../src/hooks/useBack';
 import { useOllamaModels } from '../../../../src/hooks/useDaemonData';
 import { useProfile } from '../../../../src/hooks/useSubject';
+import { CLOUD_PROVIDERS } from '../../../../src/lib/providers';
 import { useTheme } from '../../../../src/theme/ThemeContext';
-
-const CLOUD = [
-  { id: 'anthropic', label: 'Anthropic', env: 'ANTHROPIC_API_KEY' },
-  { id: 'openai', label: 'OpenAI', env: 'OPENAI_API_KEY' },
-  { id: 'openrouter', label: 'OpenRouter', env: 'OPENROUTER_API_KEY' },
-  { id: 'gemini', label: 'Google Gemini', env: 'GEMINI_API_KEY' },
-];
 
 export default function ProvidersList() {
   const { id } = useLocalSearchParams();
@@ -86,7 +80,7 @@ export default function ProvidersList() {
         <Row label="+ Add Ollama instance" onPress={() => router.push(`/profile/${id}/providers/ollama-new`)} />
 
         <SectionHeader>Cloud providers</SectionHeader>
-        {CLOUD.map((p, i) => {
+        {CLOUD_PROVIDERS.map((p, i) => {
           const set = keySet.has(p.env);
           return (
             <View key={p.id}>

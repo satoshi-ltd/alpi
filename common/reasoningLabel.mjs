@@ -6,7 +6,7 @@ export function fmtDuration(s) {
   return r ? `${m}m ${r}s` : `${m}m`;
 }
 
-// "Thought for Ns" only with a real duration; bare "Thought" when reasoned_s is missing/0 (old sessions) so it never reads "Thought for 0s".
+// Bare "Thought" when reasoned_s is missing/0 (old sessions) so it never reads "Thought for 0s".
 export function thoughtLabel(seconds) {
-  return seconds >= 1 ? `Thought for ${fmtDuration(seconds)}` : 'Thought';
+  return seconds >= 1 ? `Thought for ${fmtDuration(seconds)}` : "Thought";
 }

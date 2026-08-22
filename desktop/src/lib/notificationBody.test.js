@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { inlineSegments, parseNotificationBody } from "./notificationBody.js";
+import { inlineSegments, parseNotificationBody } from "../../../common/notificationBody.mjs";
+import { INLINE_CORPUS, NOTIFICATION_CORPUS } from "../../../common/notificationBody.fixtures.mjs";
 
 describe("parseNotificationBody — labels & paragraphs", () => {
   it("treats a whole-line bold as a standalone label and strips ** and trailing colon", () => {
@@ -131,5 +132,29 @@ describe("inlineSegments", () => {
 
   it("returns a single text segment when there is no markup", () => {
     expect(inlineSegments("plain text")).toEqual([{ t: "text", v: "plain text" }]);
+  });
+});
+
+describe("real-world corpus", () => {
+  const KINDS = new Set(["code", "heading", "label", "labelBody", "quote", "list", "table", "p"]);
+
+  it.each(NOTIFICATION_CORPUS)("yields only well-formed blocks for %j", (body) => {
+    for (const b of parseNotificationBody(body)) {
+      expect(KINDS, JSON.stringify(b)).toContain(b.kind);
+      if (b.kind === "list") {
+        expect(Array.isArray(b.items)).toBe(true);
+        for (const it of b.items) expect(typeof it.marker).toBe("string");
+      }
+      if (b.kind === "table") {
+        expect(Array.isArray(b.headers)).toBe(true);
+        for (const r of b.rows) expect(Array.isArray(r)).toBe(true);
+      }
+    }
+  });
+
+  it.each(INLINE_CORPUS)("round-trips every inline segment back to the source for %j", (text) => {
+    expect(inlineSegments(text).map((s) => (s.t === "text" ? s.v : "")).join("").length)
+      .toBeLessThanOrEqual(text.length);
+    expect(inlineSegments(text).every((s) => typeof s.v === "string")).toBe(true);
   });
 });

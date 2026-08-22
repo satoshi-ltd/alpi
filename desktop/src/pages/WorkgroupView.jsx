@@ -18,11 +18,14 @@ import RelativeTime from "../primitives/RelativeTime.jsx";
 import { useTranscriptSearch } from "../hooks/useTranscriptSearch.js";
 import {
   classifyMessage,
+  doneOutcome,
   findLatestTask,
+  FOLD_CLOSED_CAP,
   parseDone,
   parseSkip,
   parseTaskOpen,
   parseWorking,
+  tasksFromFold,
   validateTaskShape,
 } from "../lib/workgroup-tasks.js";
 import { playTts, subscribeTts, enqueueTts, voiceForPubkey } from "../lib/tts.js";
@@ -35,7 +38,6 @@ import {
 } from "../lib/workgroup-cache.js";
 import { fetchWorkgroupTranscript } from "../lib/workgroup-fetch.js";
 import { WorkgroupChatHeader, TasksButton, Eyebrow, AlpiSilhouette } from "../primitives/index.js";
-import { FOLD_CLOSED_CAP, doneOutcome, tasksFromFold } from "../primitives/TasksButton.jsx";
 import { JumpToLatest, MarkerCard, MessageBubble } from "../primitives/index.js";
 import {
   Banner,

@@ -30,10 +30,8 @@ while IFS= read -r f; do
     alpi/*|tests/*|pyproject.toml|uv.lock|deploy/umbrel/*)
       run_alpi=true
       ;;
-    desktop/*)
+    desktop/*|mobile/*|common/*)
       run_desktop=true
-      ;;
-    mobile/*)
       run_mobile=true
       ;;
   esac
@@ -49,13 +47,13 @@ if $run_alpi; then
 fi
 
 if $run_desktop; then
-  echo "[pre-commit] desktop changes detected → npm test + cargo test"
+  echo "[pre-commit] client or common/ changes detected → desktop suite"
   if ! ( cd desktop && pnpm run test ); then ec=1; fi
   if ! ( cd desktop/src-tauri && cargo test --quiet ); then ec=1; fi
 fi
 
 if $run_mobile; then
-  echo "[pre-commit] mobile changes detected → npm test"
+  echo "[pre-commit] client or common/ changes detected → mobile suite"
   if ! ( cd mobile && npm test ); then ec=1; fi
 fi
 

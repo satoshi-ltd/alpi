@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useEndpoint } from '../lib/EndpointContext';
 import { profileEmptyState } from '../lib/profileReady';
-import { profileLabel } from '../lib/profileLabel';
+import { profileLabel } from '../lib/profileName';
 import { useReadState } from '../lib/readState';
 import { accentForProfile } from '../theme/accents';
 import { useProfileSummaries, useWorkgroups } from './useDaemonData';

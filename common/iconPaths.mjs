@@ -1,7 +1,3 @@
-// Canonical icon geometry — lucide (24×24, stroke 2, currentColor) + a few bespoke
-// glyphs. Renderer-agnostic: each icon is an array of [tag, attrs] elements, or an
-// object { vb?, sw?, fill?, els } for non-default grid/stroke/fill. Desktop renders
-// it with DOM <svg>, mobile with react-native-svg — keep both iconPaths.js in sync.
 
 const p = (d) => ["path", { d }];
 const c = (cx, cy, r) => ["circle", { cx, cy, r }];

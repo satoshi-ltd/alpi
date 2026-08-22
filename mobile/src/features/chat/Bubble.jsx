@@ -8,7 +8,7 @@ import { BUBBLE_MAX_PANE } from '../../lib/panes';
 import { usePane } from '../../nav/PaneContext';
 import { useTheme } from '../../theme/ThemeContext';
 import { AttachmentCards } from './AttachmentCards';
-import { stripProducedImageMarkdown } from '../../lib/producedAttachments';
+import { stripProducedImageMarkdown } from '../../../../common/producedAttachments.mjs';
 
 function mixHex(hex, pct, base) {
   const fromHex = (h) => {

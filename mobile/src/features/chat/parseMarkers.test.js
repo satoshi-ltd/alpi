@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildTasks,
   classifyMessage,
+  closeStatus,
   parseDone,
   parseSkip,
   parseTaskOpen,
@@ -121,6 +122,24 @@ describe('classifyMessage', () => {
   it('treats a post with both #task and #done as prose (ambiguity rule)', () => {
     const c = classifyMessage('#task #combined Wrap\n#done shipped already');
     expect(c.variant).toBe('message');
+  });
+});
+
+describe('closeStatus', () => {
+  it('maps the daemon close vocabulary', () => {
+    expect(closeStatus('BLOCKED · the template cannot build')).toBe('blocked');
+    expect(closeStatus('skipped · no config change needed')).toBe('skipped');
+    expect(closeStatus('qa green')).toBe('done');
+  });
+
+  it('a preempted close from the fold is never green', () => {
+    expect(closeStatus('preempted by #second')).toBe('preempted');
+  });
+
+  it('coerces non-string results instead of throwing', () => {
+    expect(closeStatus(null)).toBe('done');
+    expect(closeStatus(undefined)).toBe('done');
+    expect(closeStatus(7)).toBe('done');
   });
 });
 

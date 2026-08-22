@@ -5,8 +5,7 @@ import Chip from "../../../primitives/Chip.jsx";
 import { useNotify } from "../../../primitives/Notification.jsx";
 import { Row } from "../primitives.jsx";
 import { VoicePicker } from "../../../primitives/index.js";
-import { VOICE_SHORTLIST } from "../util.js";
-import { playTts, previewPhraseFor } from "../../../lib/tts.js";
+import { playTts, previewPhraseFor, VOICE_SHORTLIST } from "../../../lib/tts.js";
 import styles from "../Settings.module.css";
 
 export function VoiceField({ profile, onSaved }) {

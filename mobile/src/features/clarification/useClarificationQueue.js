@@ -1,14 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 
-import { useEndpoint } from '../../lib/EndpointContext';
-import { useEventEffect } from '../../hooks/useEvents';
-
-function deadlineFor(req) {
-  if (typeof req.timeout_s !== 'number') return null;
-  const window = Math.max(0, req.timeout_s * 1000);
-  if (typeof req.ts === 'number') return req.ts * 1000 + window;
-  return Date.now() + window;
-}
+import { deadlineFor, useRequestQueue } from '../../hooks/useRequestQueue';
 
 function enqueueRequest(q, req) {
   if (!req?.request_id) return q;
@@ -29,7 +21,6 @@ function enqueueRequest(q, req) {
       profile: req.profile || null,
       question: req.question || '',
       choices: cleanedChoices,
-      // Backend forces allow_other off for multi; mirror that defensively here.
       allow_other: !!req.allow_other && !multi,
       multi,
       deadline: deadlineFor(req),
@@ -37,39 +28,10 @@ function enqueueRequest(q, req) {
   ];
 }
 
-// Owns the pending clarification queue + host.clarification.respond RPC; state split from rendering for jsdom tests.
 export function useClarificationQueue() {
-  const { call, endpoint } = useEndpoint();
-  const [queue, setQueue] = useState([]);
+  const { call, queue, setQueue } = useRequestQueue('clarification', enqueueRequest);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
-
-  useEventEffect(['clarification.request'], (ev) => {
-    setQueue((q) => enqueueRequest(q, ev?.data ?? {}));
-  });
-
-  useEffect(() => {
-    if (!endpoint) {
-      setQueue([]);
-      return undefined;
-    }
-    setQueue([]);
-    let cancelled = false;
-    call('host.clarification.pending', {})
-      .then((res) => {
-        if (cancelled) return;
-        const items = res?.requests ?? [];
-        setQueue((q) => items.reduce(enqueueRequest, q));
-      })
-      .catch(() => { /* daemon may be offline or older */ });
-    return () => { cancelled = true; };
-  }, [endpoint, call]);
-
-  useEventEffect(['clarification.resolved'], (ev) => {
-    const rid = ev?.data?.request_id;
-    if (!rid) return;
-    setQueue((q) => q.filter((r) => r.request_id !== rid));
-  });
 
   const respond = useCallback(async (choice) => {
     const current = queue[0];
@@ -86,7 +48,6 @@ export function useClarificationQueue() {
         request_id: current.request_id,
         choice: text,
       });
-      // Server-side validation can reject; keep the request and surface the reason so the user can retry.
       if (res && res.ok === false) {
         setError(res.reason || 'request no longer pending');
         return;
@@ -97,7 +58,7 @@ export function useClarificationQueue() {
     } finally {
       setBusy(false);
     }
-  }, [busy, call, queue]);
+  }, [busy, call, queue, setQueue]);
 
   const cancel = useCallback(() => respond('User cancelled clarification.'), [respond]);
 

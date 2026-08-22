@@ -12,123 +12,10 @@ import {
   XIcon,
 } from "./index.js";
 import { Popover } from "./index.js";
+import { deriveTasks } from "../lib/workgroup-tasks.js";
 import styles from "./TasksButton.module.css";
 
-const TASK_OPEN_RE = /^(?:@\S+\s+)*#task\s+#([A-Za-z0-9][A-Za-z0-9_-]{0,63})(?:\s+(.+?))?\s*$/i;
-const DONE_LINE_RE = /^(?:@\S+\s+)*#done\s+(.+?)\s*$/i;
-
-function readMarker(body) {
-  const lines = String(body || "").split("\n");
-  // Both #task and #done in one post → prose, no lifecycle event (mirrors alpi parse_post ambiguity rule).
-  if (lines.some((l) => TASK_OPEN_RE.test(l)) && lines.some((l) => DONE_LINE_RE.test(l))) {
-    return null;
-  }
-  for (const line of lines) {
-    let m = TASK_OPEN_RE.exec(line);
-    if (m) {
-      return {
-        kind: "task",
-        slug: m[1].toLowerCase(),
-        text: (m[2] ?? "").trim(),
-      };
-    }
-    m = /^(?:@\S+\s+)*#working(?:\s+(.+?))?\s*$/i.exec(line);
-    if (m) return { kind: "working", text: (m[1] ?? "").trim() };
-    m = /^(?:@\S+\s+)*#skip(?:\s+(.+?))?\s*$/i.exec(line);
-    if (m) return { kind: "skip", text: (m[1] ?? "").trim() };
-    m = DONE_LINE_RE.exec(line);
-    if (m) return { kind: "done", text: m[1].trim() };
-  }
-  return null;
-}
-
-// `fold_task_state` returns `closed[-20:]`, so a full window means there is older history.
-export const FOLD_CLOSED_CAP = 20;
-
-const SKIPPED_CLOSE_RE = /^skipped\s*·\s*\S/i;
-
-// Outcome vocabulary matches the daemon fold: `#done skipped · <reason>` is skipped, `#done BLOCKED · …` is blocked, neither is done.
-export function closeStatus(result) {
-  const text = (result ?? "").trim();
-  if (/^blocked\b/i.test(text)) return "blocked";
-  if (SKIPPED_CLOSE_RE.test(text)) return "skipped";
-  if (/^preempted\b/i.test(text)) return "preempted";
-  return "done";
-}
-
-// Reads the outcome off the `#done` line alone — prose above a close must never decide its colour.
-export function doneOutcome(body) {
-  for (const line of String(body || "").split("\n")) {
-    const m = DONE_LINE_RE.exec(line);
-    if (m) return closeStatus(m[1]);
-  }
-  return "done";
-}
-
 const CLOSED = ["done", "skipped", "blocked", "preempted"];
-
-// Rows straight from `host.workgroup.tasks`: the daemon's `blocked` flag outranks the close text.
-export function tasksFromFold(state) {
-  if (!state || typeof state !== "object") return null;
-  const rows = (Array.isArray(state.closed) ? state.closed : [])
-    .slice()
-    .sort((a, b) => (a.closed_seq ?? 0) - (b.closed_seq ?? 0))
-    .map((row) => ({
-      seq: row.closed_seq ?? null,
-      slug: row.slug ?? "",
-      title: "",
-      status: row.blocked ? "blocked" : closeStatus(row.result),
-      result: row.result ?? "",
-    }));
-  if (state.active) {
-    rows.push({
-      seq: state.active.opened_seq ?? null,
-      slug: state.active.slug ?? "",
-      title: state.active.title ?? "",
-      status: "working",
-    });
-  }
-  return rows;
-}
-
-// Only the hub opens (`#task`) and closes (`#done`) tasks. A member's `#skip`/`#working` are round signals that never touch task lifecycle. "preempted" means the hub opened a new `#task` before closing this one (alpi/alp/tasks.py fold_tasks).
-export function deriveTasks(thread = [], hubPubkey = null) {
-  const tasks = [];
-  let active = null;
-  for (const msg of thread) {
-    const mk = readMarker(msg.body);
-    const fromHub = !hubPubkey || msg.from_pubkey === hubPubkey;
-    if (mk?.kind === "task" && fromHub) {
-      if (active) active.status = "preempted";
-      active = {
-        seq: msg.seq,
-        slug: mk.slug,
-        title: mk.text,
-        status: "working",
-        contributions: 0,
-      };
-      tasks.push(active);
-      continue;
-    }
-    if (!active) continue;
-    if (mk?.kind === "done" && fromHub) {
-      active.result = mk.text ?? "";
-      active.status = closeStatus(active.result);
-      active = null;
-      continue;
-    }
-    active.contributions++;
-  }
-  return tasks;
-}
-
-const STATE_LABEL = {
-  done: "done",
-  skipped: "skipped",
-  blocked: "blocked",
-  preempted: "preempted",
-  working: "working",
-};
 
 function summarize(tasks) {
   const closed = tasks.filter((t) => CLOSED.includes(t.status));
@@ -301,7 +188,7 @@ export default function TasksButton({
                     </>
                   )}
                   <span className={styles.metaSep}>·</span>
-                  <span>{STATE_LABEL[t.status] || t.status}</span>
+                  <span>{t.status}</span>
                 </div>
               </div>
             </button>

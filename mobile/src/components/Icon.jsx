@@ -2,7 +2,7 @@ import Svg, { Circle, Line, Path, Rect } from 'react-native-svg';
 
 import { iconSizes, iconStroke } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeContext';
-import { ICONS, ICON_ALIASES } from './iconPaths';
+import { ICONS, ICON_ALIASES } from '../../../common/iconPaths.mjs';
 
 const TAG = { path: Path, circle: Circle, rect: Rect, line: Line };
 // Mobile nav uses chevrons for back/forward (desktop's "back" is an arrow-left).

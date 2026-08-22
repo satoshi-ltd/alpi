@@ -6,7 +6,7 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { Icon } from '../../components/Icon';
 import { useTheme } from '../../theme/ThemeContext';
 import { lineHeights, space } from '../../theme/tokens';
-import { fmtDuration, thoughtLabel } from './reasoningLabel';
+import { fmtDuration, thoughtLabel } from '../../../../common/reasoningLabel.mjs';
 
 const STREAM_WINDOW_H = 116;
 const STREAM_FADE_H = 28;
