@@ -418,12 +418,18 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.check-version.outputs.tag }}
+          REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -f desktop-latest "$TAG"
-          git push origin -f desktop-latest
+          # Ref API, never `git push`: GITHUB_TOKEN cannot push a ref whose diff touches .github/workflows/** and no grantable `workflows` permission exists.
+          sha=$(gh api "repos/$REPO/commits/$TAG" --jq .sha)
+          if gh api "repos/$REPO/git/ref/tags/desktop-latest" >/dev/null 2>&1; then
+            gh api -X PATCH "repos/$REPO/git/refs/tags/desktop-latest" \
+              -f sha="$sha" -F force=true
+          else
+            gh api -X POST "repos/$REPO/git/refs" \
+              -f ref="refs/tags/desktop-latest" -f sha="$sha"
+          fi
 
       - name: download assets from version release
         env:
