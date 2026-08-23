@@ -1,5 +1,39 @@
 # Changelog
 
+## v0.14.7 — 2026-08-23 — the daemon stops choking on its own bookkeeping
+
+- **The apps stop reporting the daemon as unreachable.** With a handful of
+  profiles subscribed to a handful of workgroups, the daemon froze in bursts of
+  up to 19 seconds at a time — long enough for the desktop app's requests to
+  time out and for it to declare the daemon gone. Measured on the maintainer's
+  machine over the same 150-second window: a request that should answer in
+  milliseconds took 17 seconds and every single probe was stalled; it now
+  answers in 5ms at the median, with 2% of probes still seeing a pause and the
+  worst one down from 19 seconds to 3.
+- **A poll that finds nothing almost never writes.** Each check for new
+  workgroup messages rewrote the profile's entire subscription file — hundreds
+  of kilobytes — even when the reply was empty, which it almost always is. An
+  unchanged poll now writes nothing at all; the exception is a periodic refresh
+  of who was last seen, at most once every two minutes per workgroup, which
+  keeps the roster from going stale.
+- **A finished workgroup stops costing as much as a live one.** Subscriptions
+  with nothing happening back off their polling instead of holding a permanent
+  open request, and one whose hub no longer recognises it retires locally after
+  a sustained streak of refusals — never on a single one, and its keys are kept
+  so re-joining restores it.
+- **A turn no longer starts without knowing what it was asked to do.** When a
+  burst of more than twenty messages arrived at once, the message that opened
+  the task was trimmed out of the cached window before the turn was launched,
+  so the agent woke up and found no task. The opening message is now kept for
+  as long as its task is open, however much chatter follows it.
+- **Saved settings can no longer silently lose a character.** One rare
+  character was dropped from anything written to a YAML file, and some text
+  could produce a file the reader then refused to load — including on
+  installations without the fast YAML library, where the loss came back.
+- **An interrupted save can no longer make a live workgroup look deleted.** The
+  hub's roster and workgroup files are written atomically, so a crash mid-write
+  leaves the previous version rather than a truncated one.
+
 ## v0.14.6 — 2026-08-21 — a wedged hub always has a legal move
 
 - **A hub task cannot jump into a dormant chain.** Declared pipelines are

@@ -11,6 +11,19 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.5.12 — 2026-08-22 — the update alias moves again
+
+Nothing in the app changes. This release exists because v0.5.11 shipped
+but its rolling `desktop-latest` alias did not move, so the in-app
+updater and the site download kept offering the previous build.
+
+- The updater and the download link point at the current release again.
+- The release pipeline no longer breaks when a change touches a workflow
+  file, which is what stranded v0.5.11 in the first place.
+
+Client-side only — no daemon contract changes. Requires alpi ≥ 0.14.0,
+unchanged from 0.5.7.
+
 ## v0.5.11 — 2026-08-22 — one copy of the shared logic
 
 Internal only — nothing in the interface changes.
@@ -29,6 +42,9 @@ Internal only — nothing in the interface changes.
 - A change to either client, or to the shared source, now runs both test suites
   before it can be committed, and for the first time the JavaScript suites run
   in CI at all.
+
+Client-side only — no daemon contract changes. Requires alpi ≥ 0.14.0,
+unchanged from 0.5.7.
 
 ## v0.5.10 — 2026-08-18 — the answer outlives the fetch
 

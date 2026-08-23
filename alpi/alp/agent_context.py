@@ -553,13 +553,19 @@ def _format_subscription_block(
     return "\n".join(lines)
 
 
+# A cooled member polls every `_WG_COLD_SLEEP_MAX_SECONDS + _WG_LONG_POLL_SECONDS` (115s) and the hub persists presence at most every 30s, so anything tighter renders a healthy idle roster as offline.
+_ONLINE_SECONDS = 180
+
+
 def _format_roster(
     roster: dict[str, str], aliases: dict[str, str],
     bios: dict[str, str] | None = None,
 ) -> str:
     """Render the roster as ``@alice (online, "product engineer") ·
     @bob (last seen 12m ago, "systems engineer")``. "Online" = stamp
-    within last 90s (≈3 poll ticks); otherwise show how long ago.
+    within ``_ONLINE_SECONDS`` — one cooled member poll cycle plus the
+    hub's presence-write interval, so an idle-but-healthy member never
+    renders as absent; otherwise show how long ago.
     Empty stamp = "unknown" (likely never pulled). The bio tag-line is
     self-published by each peer via ``public_bio`` and propagated to
     the hub on ``workgroup.join``; empty bio renders without the
@@ -581,7 +587,7 @@ def _format_roster(
                 status = "unknown"
             else:
                 elapsed = (now - seen).total_seconds()
-                if elapsed < 90:
+                if elapsed < _ONLINE_SECONDS:
                     status = "online"
                 elif elapsed < 1800:
                     status = f"last seen {int(elapsed/60)}m ago"

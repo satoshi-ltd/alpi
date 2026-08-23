@@ -1512,6 +1512,8 @@ async def pull(
 
     head = int(raw.get("head", cursor))
     def _merge_pull(current: sub_mod.Subscription) -> bool:
+        # Most pulls are empty long-poll timeouts; without this the whole file is re-serialized on the event loop every tick.
+        before = sub_mod.persisted_signature(current)
         if new_sealed and current.sealed_for(server_version) != new_sealed:
             current.upsert_key(server_version, new_sealed)
         if head > current.last_seq:
@@ -1521,7 +1523,7 @@ async def pull(
         current.paused = bool(raw.get("paused", current.paused))
         current.append_recent(decrypted)
         _absorb_roster(current, raw.get("members"))
-        return True
+        return sub_mod.persisted_signature(current) != before
 
     if sub_mod.mutate(home, wg_id, _merge_pull) is None:
         return [], head

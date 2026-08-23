@@ -78,13 +78,13 @@ Recipe gates are `argv` run node-free on the daemon (raw commands, never engine 
 
 Roster "online/offline" is **NOT** a reachability probe. It is computed from `last_seen_at`, a traffic-recency stamp the **hub** writes only when it receives a `workgroup.pull` or `workgroup.post` from a member. Three distinct signals, easy to conflate:
 
-- `last_seen_at` — **presence**. Advances solely on inbound workgroup traffic at the hub. Thresholds: `<90s` → online, `<30m` → "last seen Nm ago", `≥30m` → "offline >30m". Remote subscriptions continuously reopen held pulls, so an idle healthy member refreshes presence without launching agent turns.
+- `last_seen_at` — **presence**. Advances solely on inbound workgroup traffic at the hub. Thresholds: `<180s` → online, `<30m` → "last seen Nm ago", `≥30m` → "offline >30m". Remote subscriptions continuously reopen held pulls, so an idle healthy member refreshes presence without launching agent turns. The hub holds the truth; a member's `subscriptions.yaml` mirror of the roster is only rewritten when something else about the subscription changes (an empty pull writes nothing), so a member rendering its own roster after a long idle stretch shows the stamps from its last real change.
 - `link.ping` — **liveness/reachability**. Answers immediately (5s timeout), independent of engine/turn state. Does NOT feed the roster.
 - `#working` — **busy/rotation marker**. The peer is mid-turn and asking the hub for more time; alive and reachable; orthogonal to presence.
 
 So roster "offline" means "no recent workgroup pull/post", not "unreachable". A peer can pass `link.ping` instantly yet show stale because workgroup traffic hit repeated transport failures or the hub event loop stalled. Members dispatch turns as background tasks, and subscriptions poll concurrently, so one long turn or another workgroup's held pull does not stall presence.
 
-Debugging an intra-machine "flap": confirm reachability with `link.ping` before trusting roster status, and check daemon logs for `wg poller pull(...) failed`. No hysteresis today — three consecutive missed pulls cross the 90s window. Tighten (ping-driven presence or a grace tick) only from real timeout logs, not assumption.
+Debugging an intra-machine "flap": confirm reachability with `link.ping` before trusting roster status, and check daemon logs for `wg poller pull(...) failed`. No hysteresis today — a cooled member's poll cycle plus the hub's presence-write interval sets the 180s window. Tighten (ping-driven presence or a grace tick) only from real timeout logs, not assumption.
 
 ## Workgroup concurrency
 

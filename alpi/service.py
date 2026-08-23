@@ -13,7 +13,10 @@ import shutil
 import signal
 import subprocess
 import sys
+import threading
 import time
+import types
+from collections.abc import Callable
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
@@ -441,13 +444,54 @@ def _poller_start_offset(profile: str) -> float:
     return (h % (WORKGROUP_TICK_SECONDS * 1000)) / 1000.0
 
 
-# Failed pulls back off to 15 min; successful empty pulls immediately reopen the held request.
+# Failed pulls back off to 15 min; a hot subscription's empty pull immediately reopens the held request.
 _WG_POLL_STEADY_TICKS = 3
 _WG_POLL_BACKOFF_MAX = 30
 _WG_HOT_WINDOW_SECONDS = 120.0
 _WG_HOT_TICK_SECONDS = 5.0
 _WG_LONG_POLL_SECONDS = 25.0
 _HOT_DISPATCH_COOLDOWN_SECONDS = 10
+# A hub answering an empty long poll faster than this ignores wait_s (pre-long-poll build), so the poller must pace itself instead of spinning.
+_WG_FAST_HUB_SECONDS = 1.0
+# Silence past a settled turn is what `_maybe_watchdog_close` reads as a stall.
+_TURN_SETTLE_SECONDS = 120
+
+# Match on (code, message): -32008 also carries workgroup-not-hub / workgroup-not-joined, which are not definitive for pull.
+_WG_DEFINITIVE_PULL_REJECTIONS = frozenset({
+    (-32009, "workgroup-not-found"),
+    (-32008, "workgroup-not-member"),
+})
+# A hub whose members.yaml/meta.yaml write was interrupted answers the definitive codes while fully alive, so both gates must hold before believing it.
+_WG_RETIRE_AFTER_REJECTIONS = 5
+_WG_RETIRE_MIN_SECONDS = 300.0
+
+_WG_COLD_AFTER_EMPTY_PULLS = 8
+_WG_COLD_SLEEP_BASE_SECONDS = 30.0
+# Bounded by the hub's stall watchdog, not by a savings target: a cooled member must still pull within `_TURN_SETTLE_SECONDS` of a hub post or its silence burns a rung of the bounded recovery ladder.
+_WG_COLD_SLEEP_MAX_SECONDS = (
+    _TURN_SETTLE_SECONDS - _WG_LONG_POLL_SECONDS - _WG_HOT_TICK_SECONDS
+)
+_WG_COLD_SLEEP_MAX_STEPS = 16
+# Past the hub's whole recovery ladder (4 watchdog fires 300s apart) an open task or an unopened successor phase is no longer evidence of live work.
+_WG_HOT_TRANSCRIPT_HORIZON_SECONDS = 3600.0
+
+_sub_io_pool: Any = None
+_sub_io_pool_lock = threading.Lock()
+
+
+# Never asyncio.to_thread these reads: that pool also runs whole engine turns (host/chat.py, alp/handlers.py), so a few hung turns would park every poller forever.
+async def _sub_io(fn: Callable[..., Any], *args: Any) -> Any:
+    global _sub_io_pool
+    if _sub_io_pool is None:
+        with _sub_io_pool_lock:
+            if _sub_io_pool is None:
+                from concurrent.futures import ThreadPoolExecutor
+                _sub_io_pool = ThreadPoolExecutor(
+                    max_workers=4, thread_name_prefix="alpi-sub-io",
+                )
+    return await asyncio.get_running_loop().run_in_executor(
+        _sub_io_pool, fn, *args,
+    )
 
 
 def _wg_backoff_mult(idle_ticks: int) -> int:
@@ -456,22 +500,85 @@ def _wg_backoff_mult(idle_ticks: int) -> int:
     return min(_WG_POLL_BACKOFF_MAX, 1 << (idle_ticks - _WG_POLL_STEADY_TICKS + 1))
 
 
+def _is_definitive_pull_rejection(exc: BaseException) -> bool:
+    from alpi.alp.client import RemoteError
+
+    if not isinstance(exc, RemoteError):
+        return False
+    return (exc.code, exc.message) in _WG_DEFINITIVE_PULL_REJECTIONS
+
+
+def _retire_subscription(home: Path, wg_id: str) -> bool:
+    from alpi import home as home_mod
+    from alpi.alp import subscription as sub_mod
+    from alpi.alp import workgroup as wg_mod
+    from alpi.alp import workgroup_client as wc
+
+    sub = sub_mod.get(home, wg_id)
+    if sub is None:
+        return False
+    hub_home = home_mod.find_home_by_pubkey(str(sub.hub_pubkey or ""))
+    # A local hub's own directory outranks its error code: a truncated roster rejects exactly like a deleted workgroup.
+    if hub_home is not None and wg_mod.load(hub_home, wg_id) is not None:
+        return False
+    # No tombstone: it would make the hub-side `_auto_join_local_members` heal a permanent no-op, and the retirement is an inference, not a local deletion.
+    if not sub_mod.retire(home, wg_id):
+        return False
+    wc._emit_workgroup_changed(home, wg_id, "retired")
+    return True
+
+
+def _wg_cold_sleep(empty_pulls: int) -> float:
+    if empty_pulls < _WG_COLD_AFTER_EMPTY_PULLS:
+        return 0.0
+    steps = min(empty_pulls - _WG_COLD_AFTER_EMPTY_PULLS, _WG_COLD_SLEEP_MAX_STEPS)
+    return min(
+        _WG_COLD_SLEEP_MAX_SECONDS,
+        _WG_COLD_SLEEP_BASE_SECONDS * float(1 << steps),
+    )
+
+
 def _wg_is_hot(wid: str, hot_until: dict[str, float], now: float) -> bool:
     if now < hot_until.get(wid, 0.0):
         return True
     return any(key[0] == wid for key in _INFLIGHT)
 
 
+def _newest_post_age(recent: list) -> float | None:
+    import datetime as _dt
+
+    # Lexicographic max is chronological for this fixed stamp format.
+    newest = max((str(p.get("ts") or "") for p in recent), default="")
+    if not newest:
+        return None
+    try:
+        seen = _dt.datetime.strptime(newest, "%Y-%m-%dT%H:%M:%SZ").replace(
+            tzinfo=_dt.timezone.utc,
+        )
+    except ValueError:
+        return None
+    return (_dt.datetime.now(tz=_dt.timezone.utc) - seen).total_seconds()
+
+
 def _sub_stays_hot(new_posts: list, sub) -> bool:
-    # An open task (in-progress pipeline / awaited peer reply / un-handed-off #working) must keep base cadence — backing it off would delay the peer wakeup and the #working recovery watchdog.
-    if new_posts:
-        return True
-    from alpi.alp import tasks as wg_tasks
-    # hub_pubkey is required: without it a member's own #done text would falsely close the task and let it back off.
-    return wg_tasks.active_task(
-        getattr(sub, "recent_posts", None) or [],
-        hub_pubkey=getattr(sub, "hub_pubkey", None),
-    ) is not None
+    recent = getattr(sub, "recent_posts", None) or []
+    age = _newest_post_age(recent)
+    if (
+        not new_posts
+        and age is not None
+        and age >= _WG_HOT_TRANSCRIPT_HORIZON_SECONDS
+    ):
+        return False
+    # Must stay the hub's own predicate: a narrower one cools between a `#done` and the next `#task` and the phase handoff then waits a whole cold sleep.
+    return _hub_stays_hot(bool(new_posts), _sub_as_hub(sub), recent)
+
+
+def _sub_as_hub(sub):
+    # `hub_pubkey` must stay None when unset: "" makes parse_post reject every author, so no task ever reads as open.
+    return types.SimpleNamespace(meta=types.SimpleNamespace(
+        pipelines=getattr(sub, "pipelines", None) or {},
+        hub_pubkey=getattr(sub, "hub_pubkey", None) or None,
+    ))
 
 
 def _wg_is_pipeline(wg) -> bool:
@@ -574,21 +681,24 @@ def _hub_stays_hot(fresh: bool, wg, recent: list[dict]) -> bool:
 
 
 async def _run_subscription_poller(home: Path, profile: str, wg_id: str) -> None:
-    """Keep one held pull open for a subscription; only transport failures back off."""
+    """Keep one held pull open for a subscription; transport failures back off, an idle one cools, a repeated definitive rejection retires it."""
     from alpi.alp import subscription as sub_mod
     from alpi.alp import workgroup_client as wc
 
     failures = 0
+    rejections = 0
+    rejected_since = 0.0
+    empty_pulls = 0
     hot_until = 0.0
     while True:
-        if sub_mod.get(home, wg_id) is None:
+        if await _sub_io(sub_mod.get, home, wg_id) is None:
             return
         started = time.monotonic()
         try:
             new_posts, _head = await wc.pull(
                 home, wg_id, wait_s=_WG_LONG_POLL_SECONDS,
             )
-            refreshed = sub_mod.get(home, wg_id)
+            refreshed = await _sub_io(sub_mod.get, home, wg_id)
             if refreshed is None:
                 return
             now = time.monotonic()
@@ -599,15 +709,53 @@ async def _run_subscription_poller(home: Path, profile: str, wg_id: str) -> None
                 or _sub_stays_hot(new_posts, refreshed)
                 or _wg_is_hot(wg_id, {}, now)
             )
-            await _maybe_dispatch_for_sub(home, profile, refreshed, hot=hot)
+            pending = await _maybe_dispatch_for_sub(
+                home, profile, refreshed, hot=hot, new_posts=new_posts,
+            )
             failures = 0
-            # A pre-long-poll hub ignores wait_s and answers empty immediately.
-            if not new_posts and time.monotonic() - started < 1.0:
-                await asyncio.sleep(_WG_HOT_TICK_SECONDS)
+            rejections = 0
+            rejected_since = 0.0
+            # `hot` only picks the dispatch cooldown window, so an undispatched trigger has to keep the cadence up on its own.
+            empty_pulls = 0 if (new_posts or hot or pending) else empty_pulls + 1
+            cold = _wg_cold_sleep(empty_pulls)
+            fast_hub = (
+                not new_posts
+                and time.monotonic() - started < _WG_FAST_HUB_SECONDS
+            )
+            delay = max(_WG_HOT_TICK_SECONDS, cold) if fast_hub else cold
+            if delay:
+                await asyncio.sleep(delay)
         except asyncio.CancelledError:
             raise
         except Exception as e:  # noqa: BLE001
             failures += 1
+            # An error is not an observation of silence: a recovered hub restarts the idle ladder at full rate.
+            empty_pulls = 0
+            if not _is_definitive_pull_rejection(e):
+                rejections = 0
+                rejected_since = 0.0
+            else:
+                rejections += 1
+                if rejections == 1:
+                    rejected_since = time.monotonic()
+                if (
+                    rejections >= _WG_RETIRE_AFTER_REJECTIONS
+                    and time.monotonic() - rejected_since >= _WG_RETIRE_MIN_SECONDS
+                ):
+                    rejections = 0
+                    rejected_since = 0.0
+                    if await _sub_io(_retire_subscription, home, wg_id):
+                        log.warning(
+                            "wg %s retired locally after %d consecutive "
+                            "definitive rejections (%s) — sealed keys kept in "
+                            "subscriptions.retired.yaml, re-join to restore it",
+                            wg_id, _WG_RETIRE_AFTER_REJECTIONS, e,
+                        )
+                        return
+                    log.warning(
+                        "wg %s keeps rejecting (%s) but its hub still holds it "
+                        "— kept, retrying", wg_id, e,
+                    )
             delay = WORKGROUP_TICK_SECONDS * _wg_backoff_mult(failures)
             log.debug("wg poller pull(%s) failed; retry in %.0fs: %s", wg_id, delay, e)
             await asyncio.sleep(delay)
@@ -641,7 +789,7 @@ async def _run_workgroup_poller(home: Path, profile: str) -> None:
         while True:
             try:
                 subscriptions = {
-                    sub.wg_id for sub in await asyncio.to_thread(sub_mod.load, home)
+                    sub.wg_id for sub in await _sub_io(sub_mod.load, home)
                 }
                 removed = [wid for wid in sub_workers if wid not in subscriptions]
                 for wid in removed:
@@ -737,24 +885,35 @@ async def _run_workgroup_poller(home: Path, profile: str) -> None:
             await asyncio.gather(*sub_workers.values(), return_exceptions=True)
 
 
+def _merged_posts(recent: list[dict], new_posts: list[dict] | None) -> list[dict]:
+    # `append_recent` trims the cached window to RECENT_POSTS_CACHE, so one pull wider than that would drop its own trigger before it is read.
+    if not new_posts:
+        return recent or []
+    merged = {int(p.get("seq", 0)): p for p in (recent or [])}
+    merged.update({int(p.get("seq", 0)): p for p in new_posts})
+    return sorted(merged.values(), key=lambda p: int(p.get("seq", 0)))
+
+
 async def _maybe_dispatch_for_sub(
     home: Path, profile: str, sub, hot: bool = False,
-) -> None:
-    """Decide whether a member-side workgroup should dispatch."""
+    new_posts: list[dict] | None = None,
+) -> bool:
+    """Decide whether a member-side workgroup should dispatch; True when a trigger is live, dispatched or suppressed."""
     from alpi.alp import keys as _keys
     from alpi.alp import subscription as sub_mod
 
     if getattr(sub, "paused", False):  # paused hub → no automatic member turns
-        return
+        return False
+    posts = _merged_posts(getattr(sub, "recent_posts", None) or [], new_posts)
     own_pubkey = _keys.load_or_generate(home).pubkey_b64()
     trigger, new_responded = _should_dispatch(
-        profile, own_pubkey, sub.recent_posts or [], sub.last_responded_seq,
+        profile, own_pubkey, posts, sub.last_responded_seq,
         hub_pubkey=str(getattr(sub, "hub_pubkey", "") or ""),
         pipeline=bool(getattr(sub, "pipeline_mode", False)),
     )
     if not trigger:
         trigger = _working_redispatch_reason(
-            profile, own_pubkey, sub.recent_posts or [], sub.last_dispatch_at,
+            profile, own_pubkey, posts, sub.last_dispatch_at,
             sub.hub_pubkey,
         )
         if trigger:
@@ -766,10 +925,8 @@ async def _maybe_dispatch_for_sub(
                 home, sub.wg_id,
                 lambda current: _raise_member_cursor(current, new_responded),
             )
-        return
-    gate_opened = _gate_opened_active_task(
-        sub.recent_posts or [], sub.hub_pubkey,
-    )
+        return False
+    gate_opened = _gate_opened_active_task(posts, sub.hub_pubkey)
     if (
         not gate_opened
         and _in_cooldown_str(
@@ -781,13 +938,13 @@ async def _maybe_dispatch_for_sub(
             "wg poller: %s skipped (cooldown, reason=%s)",
             sub.wg_id, trigger,
         )
-        return
+        return True
     if (sub.wg_id, profile) in _INFLIGHT:
         log.info(
             "wg poller: %s skipped (in-flight dispatch, reason=%s)",
             sub.wg_id, trigger,
         )
-        return
+        return True
     log.info(
         "wg poller: %s dispatching turn (reason=%s, member-of)",
         sub.wg_id, trigger,
@@ -796,16 +953,14 @@ async def _maybe_dispatch_for_sub(
     round_seq = max(
         (
             int(p.get("seq", 0))
-            for p in (sub.recent_posts or [])
+            for p in posts
             if str(p.get("from") or "") == sub.hub_pubkey
         ),
         default=0,
     )
     if _budget_blocks_dispatch(home, profile, sub.wg_id, sub.name):
-        return
-    started_against = _latest_hub_task_seq(
-        sub.recent_posts or [], sub.hub_pubkey,
-    )
+        return True
+    started_against = _latest_hub_task_seq(posts, sub.hub_pubkey)
     # Cooldown stamp only; last_responded_seq advances on completion so a crash re-dispatches.
     dispatched_at = _utcnow_iso()
     sub_mod.mutate(
@@ -823,15 +978,16 @@ async def _maybe_dispatch_for_sub(
             started_against_task_seq=started_against,
             turn_budget_s=_phase_turn_budget(
                 getattr(sub, "phase_map", None) or {},
-                sub.recent_posts or [], sub.hub_pubkey,
+                posts, sub.hub_pubkey,
             ),
             write_scope=_phase_write_scope(
                 getattr(sub, "phase_map", None) or {},
-                sub.recent_posts or [], sub.hub_pubkey, profile,
+                posts, sub.hub_pubkey, profile,
             ),
             member_responded_seq=new_responded,
         ),
     )
+    return True
 
 
 # Members stay silent after a hub follow-up; the watchdog re-pokes the hub.
@@ -840,7 +996,6 @@ _HUB_FOLLOWUP_STALE_SECONDS = 60
 
 _INFLIGHT: dict[tuple[str, str], dict] = {}
 
-_TURN_SETTLE_SECONDS = 120
 _TURN_END_CAP = 512
 # Post-exit pipe EOF is immediate unless a descendant inherited the pipes; an unbounded wait would hold _INFLIGHT forever.
 _POST_EXIT_DRAIN_SECONDS = 5
@@ -2672,7 +2827,7 @@ def _dispatch_cancel_reason(home: Path, wg_id: str) -> str:
     sub = sub_mod.get(home, wg_id)
     if sub is not None:
         return "workgroup-paused" if sub.paused else ""
-    if wg_id in sub_mod.tombstones(home):
+    if wg_id in sub_mod.tombstones(home) or wg_id in sub_mod.retired(home):
         return "workgroup-removed"
     return ""
 

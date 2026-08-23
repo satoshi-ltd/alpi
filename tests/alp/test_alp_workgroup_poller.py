@@ -2668,3 +2668,869 @@ def test_substantive_delivery_still_wakes_the_hub() -> None:
         "mira", "HUB", posts, 1, hub_pubkey="HUB", pipeline=True,
     )
     assert trigger and "active task we opened" in trigger
+
+
+@pytest.mark.asyncio
+async def test_subscription_poller_reads_subscriptions_off_the_event_loop(
+    monkeypatch,
+) -> None:
+    import threading
+    from alpi.alp import workgroup_client as wc
+
+    loop_thread = threading.get_ident()
+    threads: list[int] = []
+    second_started = asyncio.Event()
+
+    sub = types.SimpleNamespace(
+        wg_id="wg_hot", recent_posts=[], hub_pubkey="hub",
+        last_responded_seq=0, last_dispatch_at="", paused=False, pipeline_mode=False,
+    )
+
+    def fake_get(home, wid):
+        threads.append(threading.get_ident())
+        return sub
+
+    async def fake_pull(home, wg_id, wait_s=0.0):
+        if threads.count(loop_thread) or len(threads) >= 3:
+            second_started.set()
+            await asyncio.Event().wait()
+        return [], 0
+
+    monkeypatch.setattr(sub_mod, "get", fake_get)
+    monkeypatch.setattr(wc, "pull", fake_pull)
+    monkeypatch.setattr(service, "_WG_HOT_TICK_SECONDS", 0)
+    monkeypatch.setattr(
+        service, "_maybe_dispatch_for_sub", lambda *a, **k: asyncio.sleep(0),
+    )
+
+    worker = asyncio.create_task(
+        service._run_subscription_poller(Path("/tmp/none"), "alice", "wg_hot")
+    )
+    try:
+        await asyncio.wait_for(second_started.wait(), timeout=2)
+    finally:
+        worker.cancel()
+        await asyncio.gather(worker, return_exceptions=True)
+
+    assert len(threads) >= 3
+    assert loop_thread not in threads
+
+
+@pytest.mark.asyncio
+async def test_subscription_poller_keeps_polling_when_engine_turns_saturate_the_default_pool(
+    monkeypatch,
+) -> None:
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    from alpi.alp import workgroup_client as wc
+
+    loop = asyncio.get_running_loop()
+    hog_pool = ThreadPoolExecutor(max_workers=1)
+    loop.set_default_executor(hog_pool)
+    release = threading.Event()
+    occupied = threading.Event()
+
+    def hog() -> None:
+        occupied.set()
+        release.wait(30)
+
+    hog_future = loop.run_in_executor(None, hog)
+    while not occupied.is_set():
+        await asyncio.sleep(0.01)
+
+    iterations = 0
+    third_pull = asyncio.Event()
+    sub = types.SimpleNamespace(
+        wg_id="wg_hot", recent_posts=[], hub_pubkey="hub",
+        last_responded_seq=0, last_dispatch_at="", paused=False, pipeline_mode=False,
+    )
+
+    async def fake_pull(home, wg_id, wait_s=0.0):
+        nonlocal iterations
+        iterations += 1
+        if iterations >= 3:
+            third_pull.set()
+            await asyncio.Event().wait()
+        return [], 0
+
+    monkeypatch.setattr(sub_mod, "get", lambda home, wid: sub)
+    monkeypatch.setattr(wc, "pull", fake_pull)
+    monkeypatch.setattr(service, "_WG_HOT_TICK_SECONDS", 0)
+    monkeypatch.setattr(
+        service, "_maybe_dispatch_for_sub", lambda *a, **k: asyncio.sleep(0),
+    )
+
+    worker = asyncio.create_task(
+        service._run_subscription_poller(Path("/tmp/none"), "alice", "wg_hot")
+    )
+    try:
+        await asyncio.wait_for(third_pull.wait(), timeout=5)
+    finally:
+        worker.cancel()
+        await asyncio.gather(worker, return_exceptions=True)
+        release.set()
+        await hog_future
+        hog_pool.shutdown(wait=True)
+
+    assert iterations >= 3
+
+
+
+
+# A repeated definitive hub rejection retires the subscription; everything else retries forever.
+
+
+_FINISHED_RUN = [
+    {"seq": 1, "from": "hub_pk", "text": "@alice #task #build ship the site"},
+    {"seq": 2, "from": "alice_pk", "text": "#done build · dist/ written"},
+    {"seq": 3, "from": "hub_pk", "text": "#done build · gate: green"},
+    {"seq": 4, "from": "hub_pk", "text": "@alice #task #qa audit it"},
+    {"seq": 5, "from": "alice_pk", "text": "#done qa · 0 findings"},
+    {"seq": 6, "from": "hub_pk", "text": "#done qa · gate: green"},
+]
+_PIPELINE = {"main": ("build", "qa")}
+
+
+def _idle_sub(wg_id: str = "wg_cold", posts: list | None = None, **extra):
+    fields = dict(
+        wg_id=wg_id, name=wg_id, recent_posts=posts or [], hub_pubkey="hub_pk",
+        last_responded_seq=0, last_dispatch_at="", paused=False,
+        pipeline_mode=False, pipelines={}, phase_map={},
+    )
+    fields.update(extra)
+    return types.SimpleNamespace(**fields)
+
+
+async def _no_dispatch(*args, **kwargs) -> bool:
+    return False
+
+
+def _record_sleeps(monkeypatch) -> list[float]:
+    slept: list[float] = []
+    real = asyncio.sleep
+
+    async def fake(delay, *args, **kwargs):
+        slept.append(float(delay))
+        return await real(0, *args, **kwargs)
+
+    monkeypatch.setattr(asyncio, "sleep", fake)
+    return slept
+
+
+def _persisted_sub(home: Path, wg_id: str, hub_pubkey: str = "hub_pk") -> None:
+    sub_mod.upsert(home, sub_mod.Subscription(
+        wg_id=wg_id, name=wg_id, hub_id="hub", hub_pubkey=hub_pubkey,
+        sealed_keys=[sub_mod.SealedKey(version=1, sealed="secret")],
+    ))
+
+
+async def _drive_failing_poller(
+    home: Path, wg_id: str, monkeypatch, errors, *, expect_exit: bool,
+    pause_after: int = 0, pause: float = 0.0,
+) -> int:
+    from alpi.alp import workgroup_client as wc
+
+    _record_sleeps(monkeypatch)
+    attempts = 0
+    parked = asyncio.Event()
+
+    async def fake_pull(h, wid, wait_s=0.0):
+        nonlocal attempts
+        if attempts >= len(errors):
+            parked.set()
+            await asyncio.Event().wait()
+        # Blocking on purpose: the recorded asyncio.sleep no longer advances the clock the time floor is measured against.
+        if pause and attempts == pause_after:
+            time.sleep(pause)
+        err = errors[attempts]
+        attempts += 1
+        if err is None:
+            return [], 0
+        raise err
+
+    monkeypatch.setattr(wc, "pull", fake_pull)
+    monkeypatch.setattr(service, "_maybe_dispatch_for_sub", _no_dispatch)
+    worker = asyncio.create_task(
+        service._run_subscription_poller(home, "alice", wg_id)
+    )
+    try:
+        if expect_exit:
+            await asyncio.wait_for(worker, timeout=5)
+        else:
+            await asyncio.wait_for(parked.wait(), timeout=5)
+    finally:
+        worker.cancel()
+        await asyncio.gather(worker, return_exceptions=True)
+    return attempts
+
+
+def test_definitive_pull_rejection_recognised_only_for_the_two_codes() -> None:
+    from alpi.alp.client import ClientError, RemoteError
+
+    assert service._is_definitive_pull_rejection(
+        RemoteError(-32009, "workgroup-not-found")) is True
+    assert service._is_definitive_pull_rejection(
+        RemoteError(-32008, "workgroup-not-member")) is True
+    # Same code, different reason — the hub still holds the workgroup.
+    assert service._is_definitive_pull_rejection(
+        RemoteError(-32008, "workgroup-not-hub")) is False
+    assert service._is_definitive_pull_rejection(
+        RemoteError(-32008, "workgroup-not-joined")) is False
+    assert service._is_definitive_pull_rejection(
+        RemoteError(-32005, "rate-limited")) is False
+    assert service._is_definitive_pull_rejection(
+        RemoteError(-32005, "budget-exceeded")) is False
+    assert service._is_definitive_pull_rejection(
+        RemoteError(-32603, "internal-error")) is False
+    assert service._is_definitive_pull_rejection(
+        RemoteError(-32001, "capability-denied")) is False
+    assert service._is_definitive_pull_rejection(ClientError("transport failed")) is False
+    assert service._is_definitive_pull_rejection(asyncio.TimeoutError()) is False
+
+
+def test_both_retirement_gates_are_non_degenerate() -> None:
+    # A single rejection must never be able to retire: a hub that restarted and has not loaded its workgroups yet answers definitively for seconds.
+    assert service._WG_RETIRE_AFTER_REJECTIONS >= 2
+    assert service._WG_RETIRE_MIN_SECONDS > 0.0
+
+
+def test_the_shipped_backoff_puts_retirement_well_past_the_time_floor() -> None:
+    elapsed = 0.0
+    at: list[float] = []
+    for failure in range(1, 12):
+        at.append(elapsed)
+        elapsed += service.WORKGROUP_TICK_SECONDS * service._wg_backoff_mult(failure)
+    retire_index = next(
+        i for i, t in enumerate(at, start=1)
+        if i >= service._WG_RETIRE_AFTER_REJECTIONS
+        and t >= service._WG_RETIRE_MIN_SECONDS
+    )
+    # 30/30/60/120/240s of backoff: the 5th rejection lands at 240s, under the floor, so retirement is the 6th at 480s.
+    assert (retire_index, at[retire_index - 1]) == (6, 480.0)
+
+
+@pytest.mark.asyncio
+async def test_one_definitive_rejection_never_retires_at_shipped_constants(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    from alpi.alp.client import RemoteError
+
+    home = short_tmp / "member"
+    _persisted_sub(home, "wg_dead")
+
+    attempts = await _drive_failing_poller(
+        home, "wg_dead", monkeypatch,
+        [RemoteError(-32009, "workgroup-not-found")],
+        expect_exit=False,
+    )
+
+    assert attempts == 1
+    assert sub_mod.get(home, "wg_dead") is not None
+    assert "secret" in sub_mod.path(home).read_text()
+    assert sub_mod.retired(home) == set()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("code,message", [
+    (-32009, "workgroup-not-found"),
+    (-32008, "workgroup-not-member"),
+])
+async def test_repeated_definitive_rejection_retires_and_archives_the_keys(
+    short_tmp: Path, monkeypatch, code: int, message: str,
+) -> None:
+    from alpi.alp.client import RemoteError
+
+    home = short_tmp / "member"
+    _persisted_sub(home, "wg_dead")
+    monkeypatch.setattr(service, "_WG_RETIRE_MIN_SECONDS", 0.0)
+
+    n = service._WG_RETIRE_AFTER_REJECTIONS
+    attempts = await _drive_failing_poller(
+        home, "wg_dead", monkeypatch,
+        [RemoteError(code, message) for _ in range(n + 3)],
+        expect_exit=True,
+    )
+
+    assert attempts == n
+    assert sub_mod.get(home, "wg_dead") is None
+    assert "secret" not in sub_mod.path(home).read_text()
+    # The inference is reversible: the sealed keys survive in the archive, so a wrong call costs a re-join, not the transcript history.
+    assert sub_mod.retired(home) == {"wg_dead"}
+    assert "secret" in sub_mod.retired_path(home).read_text()
+
+
+@pytest.mark.asyncio
+async def test_retirement_never_tombstones_so_the_hub_can_still_heal_it(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    from alpi.alp.client import RemoteError
+
+    home = short_tmp / "member"
+    _persisted_sub(home, "wg_dead")
+    monkeypatch.setattr(service, "_WG_RETIRE_MIN_SECONDS", 0.0)
+
+    n = service._WG_RETIRE_AFTER_REJECTIONS
+    await _drive_failing_poller(
+        home, "wg_dead", monkeypatch,
+        [RemoteError(-32009, "workgroup-not-found") for _ in range(n)],
+        expect_exit=True,
+    )
+
+    assert sub_mod.tombstones(home) == set()
+    # `_auto_join_local_members` heals through upsert; a tombstone would make that a permanent silent no-op.
+    sub_mod.upsert(home, sub_mod.Subscription(
+        wg_id="wg_dead", name="wg_dead", hub_id="hub", hub_pubkey="hub_pk",
+        sealed_keys=[sub_mod.SealedKey(version=1, sealed="resealed")],
+    ))
+    restored = sub_mod.get(home, "wg_dead")
+    assert restored is not None
+    assert restored.sealed_for(1) == "resealed"
+
+
+@pytest.mark.asyncio
+async def test_a_live_local_hub_outranks_its_own_definitive_rejection(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    from alpi.alp import keys as keys_mod
+    from alpi.alp.client import RemoteError
+
+    root = short_tmp / "alpi"
+    monkeypatch.setenv("ALPI_HOME", str(root))
+    hub_home = root / "profiles" / "hub"
+    hub_home.mkdir(parents=True)
+    hub_kp = keys_mod.load_or_generate(hub_home)
+    wg_mod._save_meta(
+        hub_home / "alp" / "workgroups" / "wg_torn",
+        wg_mod.Meta(
+            id="wg_torn", name="torn", hub_pubkey=hub_kp.pubkey_b64(),
+            created_at="2026-08-01T00:00:00Z", current_key_version=1,
+        ),
+    )
+    # An interrupted roster write is indistinguishable from a deletion over the wire: an empty members.yaml answers workgroup-not-member forever.
+    (hub_home / "alp" / "workgroups" / "wg_torn" / "members.yaml").write_text("")
+
+    member = root / "profiles" / "alice"
+    _persisted_sub(member, "wg_torn", hub_pubkey=hub_kp.pubkey_b64())
+    monkeypatch.setattr(service, "_WG_RETIRE_MIN_SECONDS", 0.0)
+
+    n = service._WG_RETIRE_AFTER_REJECTIONS
+    await _drive_failing_poller(
+        member, "wg_torn", monkeypatch,
+        [RemoteError(-32008, "workgroup-not-member") for _ in range(n * 3)],
+        expect_exit=False,
+    )
+
+    assert sub_mod.get(member, "wg_torn") is not None
+    assert sub_mod.retired(member) == set()
+
+
+@pytest.mark.asyncio
+async def test_retirement_waits_for_the_time_floor_then_fires(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    from alpi.alp.client import RemoteError
+
+    home = short_tmp / "member"
+    _persisted_sub(home, "wg_dead")
+    monkeypatch.setattr(service, "_WG_RETIRE_MIN_SECONDS", 0.2)
+
+    n = service._WG_RETIRE_AFTER_REJECTIONS
+    attempts = await _drive_failing_poller(
+        home, "wg_dead", monkeypatch,
+        [RemoteError(-32009, "workgroup-not-found") for _ in range(n + 4)],
+        expect_exit=True, pause_after=n, pause=0.25,
+    )
+
+    # The count gate is met on the Nth, but only the rejection after the floor elapsed may retire.
+    assert attempts == n + 1
+    assert sub_mod.get(home, "wg_dead") is None
+    assert sub_mod.retired(home) == {"wg_dead"}
+
+
+@pytest.mark.asyncio
+async def test_one_short_of_n_definitive_rejections_keeps_the_subscription(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    from alpi.alp.client import RemoteError
+
+    home = short_tmp / "member"
+    _persisted_sub(home, "wg_dead")
+    monkeypatch.setattr(service, "_WG_RETIRE_MIN_SECONDS", 0.0)
+
+    n = service._WG_RETIRE_AFTER_REJECTIONS
+    attempts = await _drive_failing_poller(
+        home, "wg_dead", monkeypatch,
+        [RemoteError(-32009, "workgroup-not-found") for _ in range(n - 1)],
+        expect_exit=False,
+    )
+
+    assert attempts == n - 1
+    assert sub_mod.get(home, "wg_dead") is not None
+    assert sub_mod.retired(home) == set()
+
+
+@pytest.mark.asyncio
+async def test_transport_failures_never_retire_however_many_repeat(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    from alpi.alp.client import ClientError, TargetOffline
+
+    home = short_tmp / "member"
+    _persisted_sub(home, "wg_live")
+    monkeypatch.setattr(service, "_WG_RETIRE_MIN_SECONDS", 0.0)
+
+    errors: list[BaseException] = []
+    for _ in range(10):
+        errors += [
+            TargetOffline("socket gone"),
+            ClientError("transport failed"),
+            asyncio.TimeoutError(),
+            ValueError("[decrypt failed: no sealed key for version 3]"),
+        ]
+    attempts = await _drive_failing_poller(
+        home, "wg_live", monkeypatch, errors, expect_exit=False,
+    )
+
+    assert attempts == 40
+    assert sub_mod.get(home, "wg_live") is not None
+    assert sub_mod.retired(home) == set()
+
+
+@pytest.mark.asyncio
+async def test_a_successful_pull_resets_the_definitive_rejection_run(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    from alpi.alp.client import RemoteError
+
+    home = short_tmp / "member"
+    _persisted_sub(home, "wg_flap")
+    monkeypatch.setattr(service, "_WG_RETIRE_MIN_SECONDS", 0.0)
+    monkeypatch.setattr(sub_mod, "get", lambda h, wid: _idle_sub("wg_flap"))
+
+    n = service._WG_RETIRE_AFTER_REJECTIONS
+    reject = RemoteError(-32009, "workgroup-not-found")
+    errors: list = [reject] * (n - 1) + [None] + [reject] * (n - 1)
+    attempts = await _drive_failing_poller(
+        home, "wg_flap", monkeypatch, errors, expect_exit=False,
+    )
+
+    assert attempts == 2 * n - 1
+    monkeypatch.undo()
+    assert sub_mod.get(home, "wg_flap") is not None
+    assert sub_mod.retired(home) == set()
+
+
+@pytest.mark.asyncio
+async def test_a_transport_error_also_breaks_the_definitive_run(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    from alpi.alp.client import ClientError, RemoteError
+
+    home = short_tmp / "member"
+    _persisted_sub(home, "wg_flap")
+    monkeypatch.setattr(service, "_WG_RETIRE_MIN_SECONDS", 0.0)
+
+    n = service._WG_RETIRE_AFTER_REJECTIONS
+    reject = RemoteError(-32008, "workgroup-not-member")
+    errors: list = [reject] * (n - 1) + [ClientError("hub unreachable")] + [reject] * (n - 1)
+    await _drive_failing_poller(home, "wg_flap", monkeypatch, errors, expect_exit=False)
+
+    assert sub_mod.get(home, "wg_flap") is not None
+    assert sub_mod.retired(home) == set()
+
+
+@pytest.mark.asyncio
+async def test_the_count_alone_cannot_retire_before_the_time_floor(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    from alpi.alp.client import RemoteError
+
+    home = short_tmp / "member"
+    _persisted_sub(home, "wg_dead")
+    # A hub that restarted behind a slow mount rejects fast and often; only elapsed time separates it from a deleted workgroup.
+    monkeypatch.setattr(service, "_WG_RETIRE_AFTER_REJECTIONS", 2)
+    monkeypatch.setattr(service, "_WG_RETIRE_MIN_SECONDS", 3600.0)
+
+    await _drive_failing_poller(
+        home, "wg_dead", monkeypatch,
+        [RemoteError(-32009, "workgroup-not-found") for _ in range(20)],
+        expect_exit=False,
+    )
+
+    assert sub_mod.get(home, "wg_dead") is not None
+    assert sub_mod.retired(home) == set()
+
+
+def test_a_retired_workgroup_cancels_an_in_flight_dispatch(short_tmp: Path) -> None:
+    home = short_tmp / "member"
+    _persisted_sub(home, "wg_dead")
+    assert service._dispatch_cancel_reason(home, "wg_dead") == ""
+    assert sub_mod.retire(home, "wg_dead") is True
+    assert service._dispatch_cancel_reason(home, "wg_dead") == "workgroup-removed"
+
+
+# Idle subscriptions cool their cadence; live ones keep full rate.
+
+
+def test_the_cold_cap_stays_inside_the_hub_stall_window() -> None:
+    # A cooled member must pull, and dispatch, before `_maybe_watchdog_close` reads its silence as a stall and burns a rung of the bounded recovery ladder.
+    assert (
+        service._WG_COLD_SLEEP_MAX_SECONDS + service._WG_LONG_POLL_SECONDS
+        < service._TURN_SETTLE_SECONDS
+    )
+
+
+def test_cold_sleep_ladder_holds_full_rate_then_escalates_to_the_cap() -> None:
+    k = service._WG_COLD_AFTER_EMPTY_PULLS
+    cap = service._WG_COLD_SLEEP_MAX_SECONDS
+    assert [service._wg_cold_sleep(i) for i in range(k)] == [0.0] * k
+    assert service._wg_cold_sleep(k) == 30.0
+    assert service._wg_cold_sleep(k + 1) == 60.0
+    assert service._wg_cold_sleep(k + 2) == cap
+    assert service._wg_cold_sleep(k + 3) == cap
+    # Days of silence must not overflow the shift into an unreachable sleep.
+    assert service._wg_cold_sleep(k + 100_000) == cap
+
+
+async def _drive_polling_poller(
+    monkeypatch, sub, answers: list[list], *, hot_tick: float | None = 0.0,
+    fast_hub: bool = True, dispatch=None,
+) -> tuple[list[float], list[float]]:
+    from alpi.alp import workgroup_client as wc
+
+    slept = _record_sleeps(monkeypatch)
+    waits: list[float] = []
+    parked = asyncio.Event()
+
+    async def fake_pull(h, wid, wait_s=0.0):
+        if len(waits) >= len(answers):
+            parked.set()
+            await asyncio.Event().wait()
+        waits.append(float(wait_s))
+        return answers[len(waits) - 1], 0
+
+    monkeypatch.setattr(sub_mod, "get", lambda h, wid: sub)
+    monkeypatch.setattr(wc, "pull", fake_pull)
+    monkeypatch.setattr(service, "_maybe_dispatch_for_sub", dispatch or _no_dispatch)
+    if hot_tick is not None:
+        monkeypatch.setattr(service, "_WG_HOT_TICK_SECONDS", hot_tick)
+    if not fast_hub:
+        # A hub that honours wait_s returns after ~25s, so the poller must reach the cold sleep on its own.
+        monkeypatch.setattr(service, "_WG_FAST_HUB_SECONDS", 0.0)
+
+    worker = asyncio.create_task(
+        service._run_subscription_poller(Path("/tmp/none"), "alice", sub.wg_id)
+    )
+    try:
+        await asyncio.wait_for(parked.wait(), timeout=5)
+    finally:
+        worker.cancel()
+        await asyncio.gather(worker, return_exceptions=True)
+    return slept, waits
+
+
+@pytest.mark.asyncio
+async def test_a_long_polling_hub_cools_on_the_escalating_ladder(monkeypatch) -> None:
+    k = service._WG_COLD_AFTER_EMPTY_PULLS
+    cap = service._WG_COLD_SLEEP_MAX_SECONDS
+    slept, waits = await _drive_polling_poller(
+        monkeypatch, _idle_sub(), [[] for _ in range(k + 4)],
+        hot_tick=None, fast_hub=False,
+    )
+
+    assert len(waits) == k + 4
+    assert set(waits) == {service._WG_LONG_POLL_SECONDS}
+    # K empty pulls of full rate first, then the ladder — nothing sleeps before that.
+    assert slept == [30.0, 60.0, cap, cap, cap]
+
+
+@pytest.mark.asyncio
+async def test_a_pre_long_poll_hub_paces_at_the_hot_tick_then_cools(
+    monkeypatch,
+) -> None:
+    k = service._WG_COLD_AFTER_EMPTY_PULLS
+    cap = service._WG_COLD_SLEEP_MAX_SECONDS
+    slept, waits = await _drive_polling_poller(
+        monkeypatch, _idle_sub(), [[] for _ in range(k + 3)], hot_tick=None,
+    )
+
+    assert set(waits) == {service._WG_LONG_POLL_SECONDS}
+    assert slept == [service._WG_HOT_TICK_SECONDS] * (k - 1) + [30.0, 60.0, cap, cap]
+
+
+@pytest.mark.asyncio
+async def test_a_finished_pipeline_run_cools(monkeypatch) -> None:
+    k = service._WG_COLD_AFTER_EMPTY_PULLS
+    sub = _idle_sub(
+        "wg_shipped", posts=list(_FINISHED_RUN),
+        pipelines=_PIPELINE, pipeline_mode=True, last_responded_seq=6,
+    )
+    slept, _waits = await _drive_polling_poller(
+        monkeypatch, sub, [[] for _ in range(k + 2)],
+        hot_tick=None, fast_hub=False,
+    )
+
+    assert slept == [30.0, 60.0, service._WG_COLD_SLEEP_MAX_SECONDS]
+
+
+@pytest.mark.asyncio
+async def test_a_closed_phase_awaiting_its_successor_keeps_full_rate(
+    monkeypatch,
+) -> None:
+    k = service._WG_COLD_AFTER_EMPTY_PULLS
+    # The hub closed #build and has not opened #qa yet: cooling here delays the phase handoff by a whole cold sleep.
+    sub = _idle_sub(
+        "wg_handoff", posts=list(_FINISHED_RUN[:3]),
+        pipelines=_PIPELINE, pipeline_mode=True, last_responded_seq=3,
+    )
+    slept, _waits = await _drive_polling_poller(
+        monkeypatch, sub, [[] for _ in range(k * 3)],
+        hot_tick=None, fast_hub=False,
+    )
+
+    assert slept == []
+
+
+@pytest.mark.asyncio
+async def test_a_single_post_returns_a_cooled_subscription_to_full_rate(
+    monkeypatch,
+) -> None:
+    k = service._WG_COLD_AFTER_EMPTY_PULLS
+    answers: list[list] = [[] for _ in range(k + 2)]
+    answers.append([{"seq": 4, "from": "hub_pk", "text": "#done shipped"}])
+    answers += [[] for _ in range(3)]
+
+    slept, _waits = await _drive_polling_poller(
+        monkeypatch, _idle_sub(), answers, hot_tick=None, fast_hub=False,
+    )
+
+    assert slept == [30.0, 60.0, service._WG_COLD_SLEEP_MAX_SECONDS]
+
+
+@pytest.mark.asyncio
+async def test_an_open_task_keeps_full_rate_however_long_the_hub_stays_quiet(
+    monkeypatch,
+) -> None:
+    sub = _idle_sub("wg_open", posts=[
+        {"seq": 1, "from": "hub_pk", "text": "@alice #task #build ship it"},
+    ])
+    k = service._WG_COLD_AFTER_EMPTY_PULLS
+    slept, waits = await _drive_polling_poller(
+        monkeypatch, sub, [[] for _ in range(k * 3)],
+        hot_tick=None, fast_hub=False,
+    )
+
+    assert set(waits) == {service._WG_LONG_POLL_SECONDS}
+    assert slept == []
+
+
+@pytest.mark.asyncio
+async def test_a_transcript_older_than_the_recovery_ladder_cools_anyway(
+    monkeypatch,
+) -> None:
+    stale = (
+        _dt.datetime.now(tz=_dt.timezone.utc)
+        - _dt.timedelta(seconds=service._WG_HOT_TRANSCRIPT_HORIZON_SECONDS + 60)
+    ).strftime("%Y-%m-%dT%H:%M:%SZ")
+    # An abandoned run leaves its #task open forever; past the hub's whole recovery ladder that is not evidence of live work.
+    sub = _idle_sub("wg_abandoned", posts=[
+        {"seq": 1, "from": "hub_pk", "text": "@alice #task #build ship it", "ts": stale},
+    ])
+    k = service._WG_COLD_AFTER_EMPTY_PULLS
+    slept, _waits = await _drive_polling_poller(
+        monkeypatch, sub, [[] for _ in range(k + 2)],
+        hot_tick=None, fast_hub=False,
+    )
+
+    assert slept == [30.0, 60.0, service._WG_COLD_SLEEP_MAX_SECONDS]
+
+
+@pytest.mark.asyncio
+async def test_a_fresh_open_task_still_keeps_full_rate(monkeypatch) -> None:
+    fresh = _dt.datetime.now(tz=_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    sub = _idle_sub("wg_working", posts=[
+        {"seq": 1, "from": "hub_pk", "text": "@alice #task #build ship it", "ts": fresh},
+    ])
+    k = service._WG_COLD_AFTER_EMPTY_PULLS
+    slept, _waits = await _drive_polling_poller(
+        monkeypatch, sub, [[] for _ in range(k + 2)],
+        hot_tick=None, fast_hub=False,
+    )
+
+    assert slept == []
+
+
+@pytest.mark.asyncio
+async def test_an_undispatched_trigger_keeps_full_rate(monkeypatch) -> None:
+    async def _pending(*args, **kwargs) -> bool:
+        return True
+
+    k = service._WG_COLD_AFTER_EMPTY_PULLS
+    slept, _waits = await _drive_polling_poller(
+        monkeypatch, _idle_sub(), [[] for _ in range(k + 2)],
+        hot_tick=None, fast_hub=False, dispatch=_pending,
+    )
+
+    # A trigger blocked on cooldown or budget is work outstanding; `hot` alone does not see it.
+    assert slept == []
+
+
+@pytest.mark.asyncio
+async def test_a_stream_of_posts_never_sleeps_at_all(monkeypatch) -> None:
+    answers = [
+        [{"seq": i, "from": "hub_pk", "text": f"#done step {i}"}]
+        for i in range(1, 13)
+    ]
+    slept, waits = await _drive_polling_poller(
+        monkeypatch, _idle_sub(), answers, hot_tick=None, fast_hub=False,
+    )
+
+    assert set(waits) == {service._WG_LONG_POLL_SECONDS}
+    assert slept == []
+
+
+@pytest.mark.asyncio
+async def test_the_idle_run_restarts_from_zero_after_a_post(monkeypatch) -> None:
+    # Zero hot window isolates the counter reset from the 120s hot hold that would otherwise mask it.
+    monkeypatch.setattr(service, "_WG_HOT_WINDOW_SECONDS", 0.0)
+    k = service._WG_COLD_AFTER_EMPTY_PULLS
+    answers: list[list] = [[] for _ in range(k + 2)]
+    answers.append([{"seq": 9, "from": "hub_pk", "text": "#done shipped"}])
+    answers += [[] for _ in range(k)]
+
+    slept, _waits = await _drive_polling_poller(
+        monkeypatch, _idle_sub(), answers, hot_tick=None, fast_hub=False,
+    )
+
+    assert slept == [30.0, 60.0, service._WG_COLD_SLEEP_MAX_SECONDS, 30.0]
+
+
+@pytest.mark.asyncio
+async def test_an_outage_restarts_the_idle_ladder_at_full_rate(monkeypatch) -> None:
+    from alpi.alp import workgroup_client as wc
+    from alpi.alp.client import ClientError
+
+    monkeypatch.setattr(service, "_WG_HOT_WINDOW_SECONDS", 0.0)
+    monkeypatch.setattr(service, "_WG_FAST_HUB_SECONDS", 0.0)
+    monkeypatch.setattr(service, "_WG_HOT_TICK_SECONDS", 0.0)
+    k = service._WG_COLD_AFTER_EMPTY_PULLS
+    slept = _record_sleeps(monkeypatch)
+    script: list = [[] for _ in range(k + 2)] + [ClientError("hub gone")] \
+        + [[] for _ in range(k)]
+    calls = 0
+    parked = asyncio.Event()
+
+    async def fake_pull(h, wid, wait_s=0.0):
+        nonlocal calls
+        if calls >= len(script):
+            parked.set()
+            await asyncio.Event().wait()
+        step = script[calls]
+        calls += 1
+        if isinstance(step, BaseException):
+            raise step
+        return step, 0
+
+    monkeypatch.setattr(sub_mod, "get", lambda h, wid: _idle_sub())
+    monkeypatch.setattr(wc, "pull", fake_pull)
+    monkeypatch.setattr(service, "_maybe_dispatch_for_sub", _no_dispatch)
+
+    worker = asyncio.create_task(
+        service._run_subscription_poller(Path("/tmp/none"), "alice", "wg_cold")
+    )
+    try:
+        await asyncio.wait_for(parked.wait(), timeout=5)
+    finally:
+        worker.cancel()
+        await asyncio.gather(worker, return_exceptions=True)
+
+    # The ladder, then the transport backoff tick, then the ladder from zero.
+    assert slept == [
+        30.0, 60.0, service._WG_COLD_SLEEP_MAX_SECONDS,
+        float(service.WORKGROUP_TICK_SECONDS), 30.0,
+    ]
+
+
+def test_a_pull_wider_than_the_recent_cache_still_finds_its_own_task() -> None:
+    pulled = [
+        {"seq": 100, "from": "HUB", "text": "@alice #task #phase-2 build it"},
+    ] + [
+        {"seq": s, "from": "BOB", "text": f"#working step {s}"}
+        for s in range(101, 126)
+    ]
+    # `append_recent` keeps only the newest RECENT_POSTS_CACHE, so the cached window has lost the opener.
+    cached = pulled[-sub_mod.RECENT_POSTS_CACHE:]
+    assert all(int(p["seq"]) > 100 for p in cached)
+
+    merged = service._merged_posts(cached, pulled)
+    trigger, responded = service._should_dispatch(
+        "alice", "ALICE", merged, 99, hub_pubkey="HUB", pipeline=True,
+    )
+    assert trigger and "@alice mentioned" in trigger
+    assert responded == 125
+    # Scanning the trimmed cache alone loses the task and advances the cursor past it.
+    blind, blind_responded = service._should_dispatch(
+        "alice", "ALICE", cached, 99, hub_pubkey="HUB", pipeline=True,
+    )
+    assert blind is None
+    assert blind_responded == 125
+
+
+@pytest.mark.asyncio
+async def test_the_poller_hands_the_pulled_window_to_the_dispatch_decision(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    from alpi.alp import workgroup_client as wc
+
+    home = short_tmp / "alice"
+    home.mkdir()
+    pulled = [
+        {"seq": 100, "from": "HUB", "text": "@alice #task #phase-2 build it"},
+    ] + [
+        {"seq": s, "from": "BOB", "text": f"#working step {s}"}
+        for s in range(101, 126)
+    ]
+    sub = _idle_sub(
+        "wg_burst", posts=pulled[-sub_mod.RECENT_POSTS_CACHE:],
+        hub_pubkey="HUB", last_responded_seq=99, pipeline_mode=True,
+    )
+    kp = types.SimpleNamespace(pubkey_b64=lambda: "ALICE")
+    monkeypatch.setattr("alpi.alp.keys.load_or_generate", lambda home: kp)
+    monkeypatch.setattr(sub_mod, "get", lambda h, wid: sub)
+    monkeypatch.setattr(sub_mod, "mutate", lambda *a, **k: None)
+    monkeypatch.setattr(service, "_budget_blocks_dispatch", lambda *a: False)
+    _record_sleeps(monkeypatch)
+    spawned: list[str] = []
+
+    def fake_spawn(wg_id, coro):
+        spawned.append(wg_id)
+        coro.close()
+
+    def fake_turn(*args, **kwargs):
+        return asyncio.sleep(0)
+
+    monkeypatch.setattr(service, "_dispatch_workgroup_turn", fake_turn)
+    monkeypatch.setattr(service, "_spawn_dispatch", fake_spawn)
+
+    pulls = 0
+    parked = asyncio.Event()
+
+    async def fake_pull(h, wid, wait_s=0.0):
+        nonlocal pulls
+        if pulls:
+            parked.set()
+            await asyncio.Event().wait()
+        pulls += 1
+        return pulled, 125
+
+    monkeypatch.setattr(wc, "pull", fake_pull)
+    worker = asyncio.create_task(
+        service._run_subscription_poller(home, "alice", "wg_burst")
+    )
+    try:
+        await asyncio.wait_for(parked.wait(), timeout=5)
+    finally:
+        worker.cancel()
+        await asyncio.gather(worker, return_exceptions=True)
+
+    assert spawned == ["wg_burst"]

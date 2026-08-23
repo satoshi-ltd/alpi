@@ -1731,6 +1731,7 @@ def test_load_parses_once_until_file_changes(short_tmp: Path, monkeypatch) -> No
         return real(text)
 
     monkeypatch.setattr(sub_mod.yamlfast, "safe_load", counting)
+    sub_mod._invalidate_cache(sub_mod.path(home))
 
     first = sub_mod.load(home)
     second = sub_mod.load(home)
@@ -1740,10 +1741,10 @@ def test_load_parses_once_until_file_changes(short_tmp: Path, monkeypatch) -> No
     assert third is not None and third.last_seq == 1
 
     sub.last_seq = 7
-    sub_mod.upsert(home, sub)  # save invalidates the cache
+    sub_mod.upsert(home, sub)  # our own save writes through, so no re-parse
     reloaded = sub_mod.get(home, "wg_cache")
     assert reloaded is not None and reloaded.last_seq == 7
-    assert calls["n"] >= 2
+    assert calls["n"] == 1, calls
 
 
 def test_cached_load_returns_independent_subscriptions(short_tmp: Path) -> None:
@@ -1780,6 +1781,7 @@ def test_external_write_busts_cache_via_mtime(short_tmp: Path, monkeypatch) -> N
         return real(text)
 
     monkeypatch.setattr(sub_mod.yamlfast, "safe_load", counting)
+    sub_mod._invalidate_cache(sub_mod.path(home))
 
     assert sub_mod.get(home, "wg_ext").last_seq == 1
     assert calls["n"] == 1

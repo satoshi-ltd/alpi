@@ -9,6 +9,8 @@ from typing import Any
 
 import yaml
 
+from alpi import yamlfast
+
 DEFAULT_CONFIG: dict[str, Any] = {
     "model": "",
     "fallback_models": [],
@@ -493,7 +495,8 @@ def save(cfg: Config) -> None:
 def atomic_write_yaml(path: Path, data: dict[str, Any] | list[Any]) -> None:
     import tempfile
     path.parent.mkdir(parents=True, exist_ok=True)
-    text = yaml.safe_dump(data, sort_keys=False, allow_unicode=True)
+    # Never yaml.safe_dump here: the pure emitter loses an embedded U+0085 and escapes lone surrogates into files no loader accepts.
+    text = yamlfast.safe_dump(data, sort_keys=False, allow_unicode=True)
     fd, tmp_name = tempfile.mkstemp(
         dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp",
     )
@@ -682,4 +685,6 @@ def seed_defaults(home: Path) -> None:
     """
     cfg_path = home / "config.yaml"
     if not cfg_path.exists():
-        cfg_path.write_text(yaml.safe_dump(SEED_CONFIG, sort_keys=False, allow_unicode=True))
+        cfg_path.write_text(
+            yamlfast.safe_dump(SEED_CONFIG, sort_keys=False, allow_unicode=True),
+        )

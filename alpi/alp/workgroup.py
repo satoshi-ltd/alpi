@@ -341,6 +341,13 @@ def _load_meta(d: Path) -> Meta | None:
         return None
 
 
+# Never plain write_text: a killed hub mid-truncate leaves a 0-byte roster/meta, and a live workgroup then answers workgroup-not-member / workgroup-not-found forever, which every member poller reads as a definitive rejection.
+def _atomic_yaml(p: Path, payload: Any) -> None:
+    from alpi.config import atomic_write_yaml
+
+    atomic_write_yaml(p, payload)
+
+
 def _save_meta(d: Path, meta: Meta) -> None:
     d.mkdir(parents=True, exist_ok=True)
     payload: dict[str, Any] = {
@@ -374,7 +381,7 @@ def _save_meta(d: Path, meta: Meta) -> None:
         payload["quorum_timeout_seconds"] = meta.quorum_timeout_seconds
     if meta.launch:
         payload["launch"] = dict(meta.launch)
-    (d / _META).write_text(yamlfast.safe_dump(payload, sort_keys=False, allow_unicode=True))
+    _atomic_yaml(d / _META, payload)
 
 
 def _load_members(d: Path) -> list[Member]:
@@ -423,7 +430,7 @@ def _save_members(d: Path, members: list[Member]) -> None:
         if m.voice:
             entry["voice"] = m.voice
         data.append(entry)
-    (d / _MEMBERS).write_text(yamlfast.safe_dump(data, sort_keys=False, allow_unicode=True))
+    _atomic_yaml(d / _MEMBERS, data)
 
 
 def load(home: Path, wg_id: str) -> Workgroup | None:
