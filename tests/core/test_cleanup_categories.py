@@ -161,8 +161,119 @@ def test_bootstrap_gitignore_covers_private_dirs(tmp_path: Path) -> None:
     history so users syncing ``~/.alpi`` via git don't leak chats."""
     home_mod.ensure_home(tmp_path)
     gi = (tmp_path / ".gitignore").read_text()
-    for needle in ("sessions/", "mentions/", "secrets/"):
+    for needle in ("sessions/", "mentions/", "runs/", "secrets/"):
         assert needle in gi, f"missing {needle!r} in .gitignore"
+
+
+def test_bootstrap_adds_new_private_entries_to_existing_gitignore(tmp_path: Path) -> None:
+    (tmp_path / ".gitignore").write_text("custom.local\n")
+
+    home_mod.ensure_home(tmp_path)
+
+    entries = (tmp_path / ".gitignore").read_text().splitlines()
+    assert "custom.local" in entries
+    assert "runs/" in entries
+
+
+def test_bootstrap_does_not_follow_gitignore_symlink(tmp_path: Path) -> None:
+    outside = tmp_path / "outside-ignore"
+    outside.write_text("leave-me\n")
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / ".gitignore").symlink_to(outside)
+
+    home_mod.ensure_home(home)
+
+    assert outside.read_text() == "leave-me\n"
+
+
+def test_bootstrap_does_not_chmod_private_directory_symlink(tmp_path: Path) -> None:
+    import os
+
+    outside = tmp_path / "outside-runs"
+    outside.mkdir(mode=0o755)
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / "runs").symlink_to(outside)
+
+    home_mod.ensure_home(home)
+
+    assert os.stat(outside).st_mode & 0o777 == 0o755
+
+
+def test_runs_cleanup_only_offers_old_inactive_journals(tmp_path: Path) -> None:
+    import os
+    import time
+
+    from alpi import cleanup, runs
+    from alpi.core.run_context import RunContext
+
+    old = RunContext("old", tmp_path, tmp_path, "default", "user", "s", "host")
+    active = RunContext("active", tmp_path, tmp_path, "default", "user", "s", "host")
+    fresh = RunContext("fresh", tmp_path, tmp_path, "default", "user", "s", "host")
+    for context in (old, active, fresh):
+        runs.start(context)
+    stale = time.time() - (cleanup.RUNS_KEEP_DAYS + 5) * 86_400
+    os.utime(runs.run_path(tmp_path, old.run_id), (stale, stale))
+    os.utime(runs.run_path(tmp_path, active.run_id), (stale, stale))
+    runs.register_active(active, object())
+    try:
+        cat = next(c for c in cleanup.categories(tmp_path) if c["key"] == "runs")
+        assert [path.name for path in cat["files"]] == ["old.jsonl"]
+        result = cleanup.apply(tmp_path, "runs")
+    finally:
+        runs.unregister_active(active)
+
+    assert result["ok"] and result["removed"] == 1
+    assert not runs.run_path(tmp_path, old.run_id).exists()
+    assert runs.run_path(tmp_path, active.run_id).exists()
+    assert runs.run_path(tmp_path, fresh.run_id).exists()
+
+
+def test_runs_cleanup_fails_closed_when_active_state_is_unknown(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    import os
+    import time
+
+    from alpi import cleanup, runs
+    from alpi.core.run_context import RunContext
+
+    context = RunContext("old", tmp_path, tmp_path, "default", "user", "s", "host")
+    runs.start(context)
+    stale = time.time() - (cleanup.RUNS_KEEP_DAYS + 5) * 86_400
+    os.utime(runs.run_path(tmp_path, context.run_id), (stale, stale))
+
+    def fail_profile_name(_home):
+        raise RuntimeError("profile state unavailable")
+
+    monkeypatch.setattr("alpi.home.profile_name", fail_profile_name)
+
+    cat = next(c for c in cleanup.categories(tmp_path) if c["key"] == "runs")
+
+    assert cat["files"] == []
+
+
+def test_runs_cleanup_does_not_follow_runs_symlink(tmp_path: Path) -> None:
+    import os
+    import time
+
+    from alpi import cleanup
+
+    outside = tmp_path / "outside-runs"
+    outside.mkdir()
+    journal = outside / "run.jsonl"
+    journal.write_text("private")
+    stale = time.time() - (cleanup.RUNS_KEEP_DAYS + 5) * 86_400
+    os.utime(journal, (stale, stale))
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / "runs").symlink_to(outside)
+
+    cat = next(c for c in cleanup.categories(home) if c["key"] == "runs")
+
+    assert cat["files"] == []
+    assert journal.exists()
 
 
 def test_generated_category_lists_only_old_out_files(tmp_path: Path) -> None:

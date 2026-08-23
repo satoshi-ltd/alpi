@@ -14,6 +14,18 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.4.4 — 2026-08-23 — runs travel with the conversation
+
+- **Streaming turns retain their durable run id.** The phone tracks the same
+  execution identity as the daemon instead of treating the transport request
+  or saved session as the run.
+- **Recent runs are inspectable and stoppable.** A Runs sheet in the profile
+  menu shows source, model, status and event count; tapping an active row sends
+  the scoped cancellation request and refreshes its state.
+
+Requires alpi ≥ 0.14.8 for `host.runs.list`, `host.run.cancel`, and run ids on
+chat stream frames. Store builds advance to iOS 28 and Android 28.
+
 ## v0.4.3 — 2026-08-22 — one copy of the shared logic
 
 Internal only — nothing in the interface changes.

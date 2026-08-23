@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 import threading
 import time
+import uuid
 from pathlib import Path
 
 from alpi.home import get_home
@@ -83,7 +84,21 @@ def _sandbox_config() -> tuple[bool, bool]:
         return True, False
 
 
-def _resolve_popen_args(command: str) -> list[str] | str:
+def _resolve_popen_args(
+    command: str,
+    cwd: str | None = None,
+    *,
+    docker_container_name: str | None = None,
+) -> list[str] | str:
+    from alpi.core.execution_world import current as current_world
+
+    world = current_world()
+    if world is not None and world.backend != "local":
+        return world.command(
+            command, Path(cwd or _default_cwd()).resolve(),
+            _SAFE_ENV_KEYS + ("ALPI_HOME", "ALPI_WORKSPACE", "WORKSPACE"),
+            container_name=docker_container_name,
+        )
     sandbox_enabled, allow_network = _sandbox_config()
     if not sandbox_enabled:
         return command
@@ -111,6 +126,27 @@ def _pid_alive(pid: int) -> bool:
         return False
 
 
+def _docker_container_name() -> str | None:
+    from alpi.core.execution_world import current as current_world
+
+    world = current_world()
+    if world is None or world.backend != "docker":
+        return None
+    return f"alpi-{uuid.uuid4().hex}"
+
+
+def _remove_docker_container(container_name: str | None, env: dict[str, str]) -> None:
+    if container_name is None or not re.fullmatch(r"alpi-[a-f0-9]{32}", container_name):
+        return
+    try:
+        subprocess.run(
+            ["docker", "rm", "-f", container_name],
+            capture_output=True, timeout=10, env=env,
+        )
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
 def _record_terminal_run(
     *, outcome: str, at: float, elapsed: float,
     exit_code: int | None = None, timeout_reason: str | None = None,
@@ -119,6 +155,7 @@ def _record_terminal_run(
     # Never persist the command (secrets in args); output_tail is the redacted output.
     try:
         from alpi import run_ledger
+        from alpi.core.execution_world import current as current_world
         from alpi.home import get_home, profile_name
         sandbox_enabled, _ = _sandbox_config()
         home = get_home()
@@ -126,7 +163,10 @@ def _record_terminal_run(
             home, kind="terminal", outcome=outcome, elapsed_s=elapsed, at=at,
             profile=profile_name(home),
             workgroup_id=os.environ.get("ALPI_WORKGROUP_DISPATCH") or None,
-            backend=("sandbox" if sandbox_enabled else "local"),
+            backend=(
+                current_world().backend if current_world() is not None
+                else "sandbox" if sandbox_enabled else "local"
+            ),
             exit_code=exit_code, timeout_reason=timeout_reason, pid=pid,
             output_tail=output_tail,
         )
@@ -198,6 +238,8 @@ class Terminal(Tool):
     def _run_fg(self, command: str, timeout: int, cwd: str | None) -> ToolResult:
         if not command:
             return ToolResult(ok=False, output="", error="command is required")
+        if timeout < 1:
+            return ToolResult(ok=False, output="", error="timeout must be at least 1 second")
         effective_cwd = cwd or _default_cwd()
         decision = approval_check(command, cwd=effective_cwd)
         if not decision.allowed:
@@ -205,9 +247,12 @@ class Terminal(Tool):
                 ok=False, output="",
                 error=f"refused ({decision.severity.value}): {decision.reason}",
             )
+        docker_container_name = _docker_container_name()
         try:
-            popen_args = _resolve_popen_args(command)
-        except SandboxUnavailable as e:
+            popen_args = _resolve_popen_args(
+                command, effective_cwd, docker_container_name=docker_container_name,
+            )
+        except (SandboxUnavailable, RuntimeError) as e:
             return ToolResult(ok=False, output="", error=str(e))
         use_shell = isinstance(popen_args, str)
         # Capture here: _state's ContextVar doesn't propagate to the heartbeat thread, so it calls emit_cb directly.
@@ -226,12 +271,15 @@ class Terminal(Tool):
             beat_thread = threading.Thread(target=_heartbeat, daemon=True)
             beat_thread.start()
         _started = time.time()
+        subprocess_env = _build_subprocess_env()
+        process_completed = False
         try:
             proc = subprocess.run(
                 popen_args, shell=use_shell, capture_output=True, text=True,
                 timeout=timeout, cwd=effective_cwd,
-                env=_build_subprocess_env(),
+                env=subprocess_env,
             )
+            process_completed = True
         except subprocess.TimeoutExpired:
             _record_terminal_run(
                 outcome="timeout", at=_started,
@@ -239,6 +287,9 @@ class Terminal(Tool):
             )
             return ToolResult(ok=False, output="", error=f"Timed out after {timeout}s")
         finally:
+            if docker_container_name is not None:
+                if not process_completed:
+                    _remove_docker_container(docker_container_name, subprocess_env)
             stop_beat.set()
             if beat_thread is not None:
                 beat_thread.join(timeout=1)
@@ -264,6 +315,14 @@ class Terminal(Tool):
     def _run_bg(self, command: str, cwd: str | None) -> ToolResult:
         if not command:
             return ToolResult(ok=False, output="", error="command is required")
+        from alpi.core.execution_world import current as current_world
+
+        world = current_world()
+        if world is not None and world.backend == "docker":
+            return ToolResult(
+                ok=False, output="",
+                error="background commands are unavailable in the ephemeral Docker execution world",
+            )
         effective_cwd = cwd or _default_cwd()
         decision = approval_check(command, cwd=effective_cwd)
         if not decision.allowed:
@@ -272,7 +331,7 @@ class Terminal(Tool):
                 error=f"refused ({decision.severity.value}): {decision.reason}",
             )
         try:
-            popen_args = _resolve_popen_args(command)
+            popen_args = _resolve_popen_args(command, effective_cwd)
         except SandboxUnavailable as e:
             return ToolResult(ok=False, output="", error=str(e))
         use_shell = isinstance(popen_args, str)

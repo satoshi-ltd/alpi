@@ -30,8 +30,9 @@ Three options:
   credentials, MCP servers, sandbox posture, voice, peers,
   workgroups, disk cleanup, and the alpi daemon's lifecycle.
   `alpi setup → Cleanup` inspects the profile's heavy dirs (audio
-  cache, old sessions, schedule output) and the knowledge index SQLite
-  freelist (VACUUM-not-unlink), with one-shot confirmation per
+  cache, old sessions, run journals older than 30 days, schedule
+  output) and the knowledge index SQLite freelist (VACUUM-not-unlink),
+  with one-shot confirmation per
   category. `alpi setup → Services` exposes daemon lifecycle (default
   profile), the shared accessible address, schedules, and client
   connections. The ALP section owns its peer TCP listener. Scheduler,
@@ -72,7 +73,10 @@ Three options:
 | Key | Default | Type | Takes effect |
 |---|---|---|---|
 | `tools.max_steps_per_turn` | `100` | int | next turn |
+| `tools.max_parallel_tool_calls` | `4` | int — maximum concurrent calls in an all-parallel-safe tool batch | next turn |
 | `tools.deny` | `[]` | list of tool names | next turn |
+| `tools.execution.backend` | `"local"` | `local` \| `docker` — terminal shell backend; background jobs are refused in Docker | next turn |
+| `tools.execution.docker_image` | `"python:3.12-slim"` | Docker image used when the execution backend is `docker` | next turn |
 | `tools.web_extract.model` | `""` (use main) | string — a model id, or the literal `fast` / `deep` to reference a tier | next turn |
 | `tools.read_image.model` | `""` (use main) | string — a model id, or the literal `fast` / `deep` to reference a tier | next turn |
 | `tools.terminal.sandbox` | `false` | bool | next turn |
@@ -98,6 +102,21 @@ hit. Prevents a single `read_file` on a 5 MB log from blowing up a turn.
 Per-tool overrides via `tools.<name>.max_result_chars` — set `-1` on
 `read_file` if you want the LLM to get the whole source deliberately,
 or lower a chatty tool's cap.
+
+`tools.max_parallel_tool_calls` only applies when every call in the model's
+batch declares itself parallel-safe. A mutation, terminal call, unknown tool,
+or mixed batch is an exclusive barrier and retains serial ordering. Results
+are appended to the conversation in the model's original call order.
+
+`tools.execution.backend=docker` runs terminal shell processes in an ephemeral
+`docker run --rm` world. The workspace, profile home, and explicit working
+directory are mounted at their existing absolute paths so filesystem tools
+and processes see the same namespace. Network is disabled unless
+`tools.terminal.allow_network=true`. Background terminal jobs are refused in
+this backend so a detached container cannot outlive its run. The `local` backend remains the default
+and continues to compose with `tools.terminal.sandbox` as before. Dedicated
+workers such as skill scripts and speech transcription remain host-side; this
+setting is not a whole-agent filesystem sandbox.
 
 Precedence: `tools.<name>.max_result_chars` (if set) → `tools.budget.per_result_chars` → hardcoded `100_000`.
 

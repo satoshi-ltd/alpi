@@ -387,6 +387,7 @@ class _OrderedGroup(click.Group):
         "update",
         "diff",
         "logs",
+        "runs",
         "profile",
         "peers",
         "alp",
@@ -450,6 +451,90 @@ def cmd_ctx(ctx: click.Context, model: str) -> None:
     h: Path = ctx.obj["home"]
     cfg = config.load(h)
     click.echo(ctx_window.resolve(h, cfg, model))
+
+
+@main.group("runs")
+def runs_group() -> None:
+    """Inspect and cancel durable agent runs."""
+
+
+@runs_group.command("list")
+@click.option("-n", "limit", default=20, show_default=True, type=click.IntRange(1, 200))
+@click.option("--json", "as_json", is_flag=True, help="Emit machine-readable JSON.")
+@click.pass_context
+def runs_list(ctx: click.Context, limit: int, as_json: bool) -> None:
+    """List recent runs."""
+    import json as json_mod
+    from datetime import datetime
+    from alpi import runs as runs_mod
+
+    rows = runs_mod.list_runs(ctx.obj["home"], limit=limit)
+    if as_json:
+        click.echo(json_mod.dumps(rows, indent=2))
+        return
+    if not rows:
+        click.echo("no runs")
+        return
+    for row in rows:
+        ts = datetime.fromtimestamp(float(row.get("started_at") or 0)).strftime("%m-%d %H:%M")
+        click.echo(
+            f"{ts}  {row.get('status', 'running'):<11} {row['id']}  "
+            f"{row.get('source', 'user')} · {row.get('model') or '-'}"
+        )
+
+
+@runs_group.command("show")
+@click.argument("run_id")
+@click.option("--json", "as_json", is_flag=True, help="Emit machine-readable JSON.")
+@click.pass_context
+def runs_show(ctx: click.Context, run_id: str, as_json: bool) -> None:
+    """Show one run journal."""
+    import json as json_mod
+    from alpi import runs as runs_mod
+
+    try:
+        payload = {"run": runs_mod.summary(ctx.obj["home"], run_id), **runs_mod.read(ctx.obj["home"], run_id)}
+    except (FileNotFoundError, ValueError):
+        raise click.ClickException(f"run not found: {run_id}") from None
+    if as_json:
+        click.echo(json_mod.dumps(payload, indent=2))
+        return
+    row = payload["run"]
+    click.echo(f"{row['id']} · {row['status']} · {row.get('model') or '-'}")
+    for event in payload["events"]:
+        click.echo(f"{event['seq']:>4}  {event['kind']}  {json_mod.dumps(event.get('data') or {}, ensure_ascii=False)}")
+
+
+async def _host_run_cancel(profile: str, run_id: str) -> bool:
+    import json as json_mod
+
+    reader, writer = await asyncio.open_unix_connection(str(home.alpi_root() / "host" / "host.sock"))
+    try:
+        request = {
+            "id": "cli-runs-cancel", "method": "host.run.cancel",
+            "params": {"profile": profile, "id": run_id},
+        }
+        writer.write((json_mod.dumps(request) + "\n").encode())
+        await writer.drain()
+        response = json_mod.loads((await reader.readline()).decode())
+        return bool((response.get("result") or {}).get("cancelled"))
+    finally:
+        writer.close()
+        await writer.wait_closed()
+
+
+@runs_group.command("cancel")
+@click.argument("run_id")
+@click.pass_context
+def runs_cancel(ctx: click.Context, run_id: str) -> None:
+    """Request cancellation of an active run."""
+    try:
+        cancelled = asyncio.run(_host_run_cancel(ctx.obj["profile"], run_id))
+    except (OSError, ValueError) as exc:
+        raise click.ClickException(f"host unavailable: {exc}") from None
+    if not cancelled:
+        raise click.ClickException("run is not active or not owned by this connection")
+    click.echo(f"cancellation requested for {run_id}")
 
 
 @main.command()

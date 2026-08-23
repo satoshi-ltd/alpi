@@ -1,5 +1,42 @@
 # Changelog
 
+## v0.14.8 — 2026-08-23 — every turn has a spine
+
+- **Runs are durable and operable.** Every engine turn now has a stable run id
+  and a journal of bounded, redacted events. Runs from chat, schedules,
+  workgroups, research and delegates can be inspected through `alpi runs`,
+  `/runs`, and the host API; an active daemon run can be interrupted by id
+  without guessing its request or session.
+- **Durability does not turn commands into a secret store.** Terminal command
+  text is omitted from run journals, saved turns and reconnect sidecars, even
+  when nested inside a workflow; derived previews are recomputed only after
+  sanitization. Run listings read only journal edges instead of replaying every
+  event, finished runs release their in-memory bookkeeping, and journals older
+  than 30 days are available through Cleanup.
+- **Stopping wins at the dispatch boundary.** An interrupt received after the
+  model returns a parallel-safe batch now skips the entire batch. The local
+  socket can also stop a run started by a paired client, while remote clients
+  remain scoped to their own connection.
+- **Safe work overlaps without changing the transcript.** Read-only tools can
+  execute concurrently when the whole model batch explicitly permits it.
+  Mutations, terminal calls and mixed batches remain serial, while results and
+  progress are replayed in the model's original order.
+- **All tool calls cross one policy boundary.** Direct calls, nested research or
+  delegate work, MCP tools and the new workflow DAG use the same run context,
+  denylist, role checks, availability checks and audit journal. A workflow can
+  no longer gain authority by moving a call into a nested step.
+- **Execution has a replaceable world.** Local execution remains the default.
+  Profiles may opt into an ephemeral Docker terminal backend that preserves the
+  workspace's absolute namespace and disables network unless explicitly
+  enabled. Docker foreground containers are removed on timeout, unsafe image
+  arguments and missing mount roots fail closed, and background terminal jobs
+  are refused instead of becoming orphaned containers. The execution settings
+  and denylist are refreshed before each turn constructs its policy boundary.
+
+Existing profiles need no migration. Local execution and exclusive-by-default
+tool ordering preserve the previous behavior until the new options are used;
+the next home bootstrap adds `runs/` to existing profile `.gitignore` files.
+
 ## v0.14.7 — 2026-08-23 — the daemon stops choking on its own bookkeeping
 
 - **The apps stop reporting the daemon as unreachable.** With a handful of

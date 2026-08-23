@@ -10,6 +10,7 @@ JINA_BASE = "https://r.jina.ai/"
 
 class WebFetch(Tool):
     name = "web_fetch"
+    parallel_safe = True
     description = (
         "Fetch a URL as clean Markdown. Use when you need to SEE the full "
         "page content (the user asked \"show me the page\", \"give me the "

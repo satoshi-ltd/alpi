@@ -9,6 +9,7 @@ import yaml
 
 from alpi.config import Config, ToolsConfig
 from alpi.engine import Engine
+from alpi.tools.base import Tool, ToolResult
 
 
 @pytest.fixture
@@ -76,6 +77,48 @@ def test_tools_deny_refreshes_from_disk_each_turn(
     engine.run_turn("second", emit=lambda _e: None)
     assert "terminal" not in schema_names[1]
     assert "write_file" in schema_names[1]
+
+
+def test_removed_deny_is_also_removed_from_executor(
+    engine: Engine, monkeypatch,
+) -> None:
+    from alpi import tools
+
+    executed = []
+
+    class FakeWrite(Tool):
+        name = "write_file"
+        description = "test"
+
+        def run(self, **kwargs) -> ToolResult:
+            executed.append(kwargs)
+            return ToolResult(True, "written")
+
+    monkeypatch.setitem(tools._TOOLS, FakeWrite.name, FakeWrite)
+    (engine.home / "config.yaml").write_text(yaml.safe_dump({
+        "model": "gpt-5.4-mini",
+        "tools": {"deny": []},
+    }))
+    calls = {"count": 0}
+
+    def stream(messages, tools, **kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            yield {
+                "final": True, "input_tokens": 1, "output_tokens": 1,
+                "cost_usd": 0.0, "tool_calls": [{
+                    "id": "write", "name": "write_file",
+                    "arguments": '{"path":"note.txt","content":"ok"}',
+                }],
+            }
+        else:
+            yield from _stream_one("done")
+
+    monkeypatch.setattr("alpi.llm.stream", stream)
+
+    engine.run_turn("write", emit=lambda _e: None)
+
+    assert executed == [{"path": "note.txt", "content": "ok"}]
 
 
 def test_non_owner_pipeline_turn_hides_mutating_tools(

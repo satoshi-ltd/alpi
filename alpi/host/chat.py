@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,7 @@ from alpi.host import server as host_server
 
 _active_lock = threading.Lock()
 _active: dict[str, Any] = {}  # request_id -> Engine
+_active_runs: dict[tuple[str, str], Any] = {}  # (profile, run_id) -> Engine
 _session_active: dict[tuple[str, str], Any] = {}  # (profile, session_id) -> Engine
 _session_locks: dict[tuple[str, str], asyncio.Lock] = {}
 _HEARTBEAT_PERIOD_S = 5.0
@@ -42,6 +44,22 @@ def _resolve_home(profile: str) -> Path:
     return _r(profile)
 
 
+def _persistable_frame(frame: dict[str, Any]) -> dict[str, Any]:
+    if frame.get("event") != "tool_start":
+        return frame
+    from alpi.runs import persisted_tool_arguments
+    from alpi.tui.formatting import arg_hint
+
+    name = str(frame.get("name") or "")
+    raw_args = frame.get("args")
+    args = persisted_tool_arguments(name, raw_args if isinstance(raw_args, dict) else {})
+    return {
+        **frame,
+        "preview": arg_hint(name, args),
+        "args": args,
+    }
+
+
 async def _data_chat_send(
     params: dict[str, Any],
     server: host_server.Server,
@@ -62,6 +80,8 @@ async def _data_chat_send(
         return
 
     home = _resolve_home(profile)
+    from alpi.home import profile_name as resolved_profile_name
+    run_profile = resolved_profile_name(home)
 
     if isinstance(session_id, str) and session_id:
         from alpi.host.connection_context import owns_connection
@@ -136,6 +156,7 @@ async def _data_chat_send(
     engine = None
     cfg = None
     persisted_sid = ""
+    run_id = uuid.uuid4().hex
     session_lock: asyncio.Lock | None = None
     task = None
     heartbeat_task: asyncio.Task | None = None
@@ -177,7 +198,9 @@ async def _data_chat_send(
             if prev is not None and prev is not _CLAIMING and prev is not engine:
                 busy = True
             else:
+                engine.active_run_id = run_id
                 _active[request_id] = engine
+                _active_runs[(run_profile, run_id)] = engine
                 _session_active[skey] = engine
         if busy:
             await send_frame({"event": "error", "text": "session already has a running turn", "code": "busy"})
@@ -202,7 +225,8 @@ async def _data_chat_send(
             # Persist FIRST: replay depends on the sidecar staying complete even after the wire is gone.
             try:
                 await asyncio.to_thread(
-                    _chat_events.append, home, persisted_sid, request_id, frame,
+                    _chat_events.append, home, persisted_sid, request_id,
+                    _persistable_frame(frame),
                 )
             except Exception:  # noqa: BLE001
                 pass
@@ -213,7 +237,10 @@ async def _data_chat_send(
             except Exception:  # noqa: BLE001
                 stream_alive = False
 
-        await emit({"event": "session_start", "session_id": persisted_sid, "model_used": cfg.model})
+        await emit({
+            "event": "session_start", "session_id": persisted_sid,
+            "model_used": cfg.model, "run_id": run_id,
+        })
 
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue = asyncio.Queue()
@@ -235,7 +262,7 @@ async def _data_chat_send(
 
         def run_engine() -> None:
             try:
-                engine.run_turn(text, emit=sink, attachments=attachments)
+                engine.run_turn(text, emit=sink, attachments=attachments, run_id=run_id)
                 try:
                     engine.save_session()
                 except Exception:  # noqa: BLE001
@@ -312,9 +339,10 @@ async def _data_chat_send(
             "text": final,
             "session_id": engine.session.id,
             "model_used": model_used,
+            "run_id": run_id,
             **({"attachments": produced} if produced else {}),
         })
-        await emit({"event": "done", "session_id": engine.session.id})
+        await emit({"event": "done", "session_id": engine.session.id, "run_id": run_id})
     except asyncio.CancelledError as exc:
         server_stopping = "server-stop" in exc.args
         if engine is not None:
@@ -342,6 +370,7 @@ async def _data_chat_send(
             await task
         with _active_lock:
             _active.pop(request_id, None)
+            _active_runs.pop((run_profile, run_id), None)
             if skey is not None and _session_active.get(skey) in (_CLAIMING, engine):
                 _session_active.pop(skey, None)
         if lock_acquired and session_lock is not None:
@@ -489,6 +518,12 @@ async def _data_chat_cancel(
         return {"cancelled": False}
     engine.request_interrupt("cancel-rpc")
     return {"cancelled": True}
+
+
+def active_run(profile: str, run_id: str):  # noqa: ANN201
+    with _active_lock:
+        engine = _active_runs.get((profile or "default", run_id))
+        return engine if getattr(engine, "active_run_id", "") == run_id else None
 
 
 def _truncate(text: str, cap: int) -> str:

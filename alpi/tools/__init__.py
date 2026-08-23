@@ -43,6 +43,7 @@ from alpi.tools import (
     web_search,
     workgroup as workgroup_tool,
     workgroup_file as workgroup_file_tool,
+    workflow as workflow_tool,
     write_file,
 )
 
@@ -115,6 +116,19 @@ def availability_report() -> list[tuple[str, bool, str]]:
 
 
 def execute(
+    name: str,
+    arguments: dict,
+    deny: frozenset[str] | set[str] | None = None,
+) -> ToolResult:
+    from alpi.core.tool_executor import current
+
+    executor = current()
+    if executor is not None:
+        return executor.execute(name, arguments, deny=deny)
+    return _execute_registered(name, arguments, deny=deny)
+
+
+def _execute_registered(
     name: str,
     arguments: dict,
     deny: frozenset[str] | set[str] | None = None,
@@ -216,6 +230,7 @@ for _mod in (
     peer,
     workgroup_tool,
     workgroup_file_tool,
+    workflow_tool,
     ask_user_tool,
     attach_file_tool,
 ):

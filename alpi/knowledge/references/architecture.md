@@ -87,6 +87,7 @@ Contracts:
 - `host.events.subscribe` streams `{event, data, at, seq}`; `host.events.history` is `seq`-based (don't cursor on wall-clock).
 - `host.events.*` is transport, not durable history. `host/events.jsonl` is a bounded reconnect replay buffer (`HISTORY_MAX = 500`) and may drop rows under load. Browseable history must query durable stores: outputs, sessions, workgroup transcripts.
 - `host.chat.send` has a replay sidecar; recover missed frames via `host.chat.events_since(after_seq)`.
+- `host.chat.send` streams a stable `run_id`. `host.runs.list` and `host.run.read` expose `runs/<run_id>.jsonl` journals made of bounded, redacted events; terminal command text is omitted from journals, saved turns and reconnect sidecars. `host.run.cancel` interrupts an owned active run, and the sovereign local socket may interrupt any active run. CLI/TUI equivalents are `alpi runs ...` and `/runs`.
 - `host.profile.summaries` = lightweight sidebar shape. `host.profile.detail` = heavier settings shape; its payload field is `advertise_host` (not `tcp_host`).
 - `host.skills.list` returns per-skill `status`/`reason`/`size`/`keywords` + metadata; `host.skill.read` returns structured detail (frontmatter, resolved `requires[]`, file `tree`, body ≤32K); `host.skill.file` reads one file ≤256K and refuses `secrets/`/symlinks (`name`/`category` must be `[A-Za-z0-9_-]+`).
 - `host.attachments.{stage,fetch}`: `stage` uploads a file in; `fetch` serves a tool-produced output attachment's bytes (base64) out by path, so rich clients render images inline and other files as a metadata chip; text surfaces (CLI/TUI/ALP) get a shared textual listing instead. `fetch` reads are scoped to the profile's workspace/home/temp (see `security`).
@@ -105,12 +106,14 @@ Contracts:
   OSV for installed-package CVEs unless `--offline` is set.
 - `alpi audit-log` — reads the administrative activity trail without requiring
   Desktop; supports connection/device/result filters and JSON output.
-- `alpi setup -> Cleanup` — manual cleanup for caches, logs, mentions, schedule output, workgroup files, knowledge index freelist vacuum.
+- `alpi setup -> Cleanup` — manual cleanup for caches, logs, run journals older than 30 days, mentions, schedule output, workgroup files, knowledge index freelist vacuum.
 - Desktop Manage Sessions — richer chat-session pruning UI.
 
 ## Tools
 
 Each tool exposes `name`, `description`, JSON schema `parameters`, `run(...) -> ToolResult`.
+
+Every turn binds one `RunContext`, `ToolExecutor`, and `ExecutionWorld`. Tools are exclusive by default; only an all-`parallel_safe` model batch can overlap, with results replayed in original order. `tools.execution.backend` selects `local` or ephemeral `docker` terminal shell execution; Docker foreground containers are force-removed on timeout and background jobs are refused. Dedicated workers remain host-side, so this is not a whole-agent filesystem sandbox. The `workflow` tool runs a bounded dependency graph, shares `tools.max_parallel_tool_calls`, and routes every nested step back through `ToolExecutor`, so deny/member/availability policy cannot be bypassed.
 
 - `write_file` / `edit_file` — syntax-lint before writing supported formats.
 - `safe_write_secret(...)` — canonical path for credential files.

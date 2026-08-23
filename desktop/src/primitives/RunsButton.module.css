@@ -1,0 +1,43 @@
+.root {
+  position: relative;
+}
+
+.scroll {
+  max-height: 360px;
+  overflow: auto;
+  padding: var(--sp-2);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--sp-1) var(--sp-3);
+  width: 100%;
+  padding: var(--sp-3);
+  text-align: left;
+}
+
+.row:disabled {
+  cursor: default;
+  opacity: 0.8;
+}
+
+.label,
+.meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  grid-column: 1 / -1;
+  color: var(--ink-4);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+}
+
+.empty {
+  padding: var(--sp-6);
+  color: var(--ink-4);
+  text-align: center;
+}

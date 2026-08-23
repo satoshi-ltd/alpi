@@ -21,9 +21,14 @@ class Tool(abc.ABC):
     name: ClassVar[str]
     description: ClassVar[str]
     parameters: ClassVar[dict[str, Any]] = {"type": "object", "properties": {}}
+    parallel_safe: ClassVar[bool] = False
 
     @abc.abstractmethod
     def run(self, **kwargs: Any) -> ToolResult: ...
+
+    @classmethod
+    def is_parallel_safe(cls, arguments: dict[str, Any]) -> bool:
+        return cls.parallel_safe
 
     @classmethod
     def schema(cls) -> dict[str, Any]:

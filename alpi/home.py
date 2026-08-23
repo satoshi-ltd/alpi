@@ -238,11 +238,26 @@ _PRIVATE_SUBDIRS = (
     "host",
     "mentions",
     "outputs",
+    "runs",
+)
+
+_GITIGNORE_ENTRIES = (
+    ".env",
+    "secrets/",
+    "sessions/",
+    "mentions/",
+    "schedule/output/",
+    "schedule/runs.json",
+    "logs/",
+    "cache/",
+    "out/",
+    "runs/",
+    "skills/**/secrets/",
 )
 
 
 def _chmod_private(path: Path) -> None:
-    if os.name != "posix":
+    if os.name != "posix" or path.is_symlink():
         return
     try:
         path.chmod(0o700)
@@ -260,19 +275,18 @@ def ensure_home(home: Path) -> None:
         _chmod_private(d)
     _ensure_out_dir(home)
     gi = home / ".gitignore"
-    if not gi.exists():
-        gi.write_text(
-            ".env\n"
-            "secrets/\n"
-            "sessions/\n"
-            "mentions/\n"
-            "schedule/output/\n"
-            "schedule/runs.json\n"
-            "logs/\n"
-            "cache/\n"
-            "out/\n"
-            "skills/**/secrets/\n"
-        )
+    if gi.is_symlink():
+        return
+    try:
+        existing = gi.read_bytes() if gi.exists() else b""
+        present = set(existing.decode("utf-8", errors="ignore").splitlines())
+        missing = [entry for entry in _GITIGNORE_ENTRIES if entry not in present]
+        if missing:
+            separator = b"" if not existing or existing.endswith(b"\n") else b"\n"
+            with gi.open("ab") as handle:
+                handle.write(separator + "".join(f"{entry}\n" for entry in missing).encode())
+    except OSError:
+        pass
 
 
 def _ensure_out_dir(home: Path) -> None:

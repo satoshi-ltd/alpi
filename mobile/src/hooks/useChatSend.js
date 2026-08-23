@@ -164,7 +164,7 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
           if (activeRef.current?.req === requestId) activeRef.current.sessionId = streamSessionId;
         }
         if (event === 'session_start') {
-          writeTurn((cur) => ({ ...cur, sessionId: streamSessionId }));
+          writeTurn((cur) => ({ ...cur, sessionId: streamSessionId, runId: frame.run_id ?? cur.runId ?? null }));
           return;
         }
         if (event === 'assistant_delta') {

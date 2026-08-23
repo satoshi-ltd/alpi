@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import contextvars
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
@@ -165,10 +166,12 @@ class Research(Tool):
                 return self._run_single(task["brief"], task.get("depth", "normal"))
 
         with ThreadPoolExecutor(max_workers=min(MAX_PARALLEL_TASKS, total)) as ex:
-            results = list(ex.map(
-                lambda it: _worker(it[0], it[1]),
-                enumerate(tasks),
-            ))
+            contexts = [contextvars.copy_context() for _task in tasks]
+            futures = [
+                ex.submit(contexts[idx].run, _worker, idx, task)
+                for idx, task in enumerate(tasks)
+            ]
+            results = [future.result() for future in futures]
 
         parts: list[str] = []
         for i, (task, r) in enumerate(zip(tasks, results)):

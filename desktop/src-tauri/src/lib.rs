@@ -445,6 +445,48 @@ async fn sessions(profile: Option<String>, limit: Option<usize>) -> Vec<SessionE
     .unwrap_or_default()
 }
 
+#[tauri::command]
+async fn runs_list(
+    profile: String,
+    limit: Option<usize>,
+    connection_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let params = serde_json::json!({"profile": profile, "limit": limit.unwrap_or(30)});
+    off_main(move || match connection_id {
+        Some(cid) => host_client::call_for(&cid, "host.runs.list", params),
+        None => host_client::call("host.runs.list", params),
+    })
+    .await?
+}
+
+#[tauri::command]
+async fn run_read(
+    profile: String,
+    id: String,
+    connection_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let params = serde_json::json!({"profile": profile, "id": id});
+    off_main(move || match connection_id {
+        Some(cid) => host_client::call_for(&cid, "host.run.read", params),
+        None => host_client::call("host.run.read", params),
+    })
+    .await?
+}
+
+#[tauri::command]
+async fn run_cancel(
+    profile: String,
+    id: String,
+    connection_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let params = serde_json::json!({"profile": profile, "id": id});
+    off_main(move || match connection_id {
+        Some(cid) => host_client::call_for(&cid, "host.run.cancel", params),
+        None => host_client::call("host.run.cancel", params),
+    })
+    .await?
+}
+
 fn host_profile_names() -> Vec<String> {
     let value = host_array_value("host.profiles.list", serde_json::json!({}), "profiles");
     value
@@ -3651,6 +3693,9 @@ pub fn run() {
             host_connections_probe_all,
             host_connection_probe,
             sessions,
+            runs_list,
+            run_read,
+            run_cancel,
             session_detail,
             sessions_delete,
             workgroups,

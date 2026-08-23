@@ -23,7 +23,7 @@ _CATEGORIES: list[tuple[str, tuple[str, ...]]] = [
     ("Web", ("web_search", "web_fetch", "web_extract", "browser")),
     ("Memory", ("memory", "session_search", "session_read", "recall_sessions", "index_sessions")),
     ("Comms", ("email", "peer", "notify", "ask_user")),
-    ("Agent", ("skill", "schedule", "delegate", "research", "todo", "alpi_knowledge")),
+    ("Agent", ("skill", "schedule", "delegate", "research", "todo", "alpi_knowledge", "workflow")),
     ("Media", ("tts", "stt")),
     ("System", ("terminal", "db")),
     ("Collab", ("workgroup_post", "workgroup_file", "workgroup_search", "index_workgroups")),

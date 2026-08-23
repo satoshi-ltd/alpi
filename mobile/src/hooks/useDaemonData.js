@@ -180,6 +180,15 @@ export function useSessionsList(profile, limit = 20, opts = {}) {
   );
 }
 
+export function useRunsList(profile, limit = 30, opts = {}) {
+  return usePolledCall(
+    'host.runs.list',
+    profile ? { profile, limit } : null,
+    [profile, limit],
+    { skipWhen: !profile || !!opts.skipWhen },
+  );
+}
+
 export function useWorkgroupTranscript(profile, wgId) {
   // tail=true + limit=200 keeps first-paint bounded on remote workgroups — a 10k-post hub over Tailscale would otherwise stall the screen for seconds while the full backlog decrypts and ships.
   return usePolledCall(

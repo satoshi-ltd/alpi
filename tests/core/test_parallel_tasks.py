@@ -7,8 +7,8 @@ aggregation, and per-task emit prefixes.
 
 from __future__ import annotations
 
-import threading
 import time
+from pathlib import Path
 
 from alpi.tools import _state as S
 from alpi.tools.base import ToolResult
@@ -158,6 +158,27 @@ def test_parallel_subagents_keep_connection_context(monkeypatch) -> None:
         ("delegate", "conn_javi", "dev_phone"),
         ("delegate", "conn_javi", "dev_phone"),
     ]
+
+
+def test_parallel_subagents_keep_execution_spine_context(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    from alpi.core.run_context import RunContext, current as current_run, use as use_run
+    from alpi.core.tool_executor import ToolExecutor, current as current_executor, use as use_executor
+
+    context = RunContext("run", tmp_path, tmp_path, "default", "user", "s", "host")
+    executor = ToolExecutor(context)
+    seen = []
+
+    def fake_research(self, brief, depth="normal"):
+        seen.append((current_run(), current_executor()))
+        return ToolResult(ok=True, output=brief)
+
+    monkeypatch.setattr(Research, "_run_single", fake_research)
+    with use_run(context), use_executor(executor):
+        Research().run(tasks=[{"brief": "a"}, {"brief": "b"}])
+
+    assert seen == [(context, executor), (context, executor)]
 
 
 def test_delegate_clamp_steps_defaults_and_caps() -> None:

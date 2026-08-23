@@ -165,6 +165,8 @@ class Engine:
         self.session.messages.append({"role": "system", "content": self._system_prompt})
         # UI flips this on new input while a turn is still running.
         self.interrupt_requested: bool = False
+        self.active_run_id: str = ""
+        self.last_run_id: str = ""
         # Serialize turns so concurrent runs do not race on session state.
         self._turn_lock = threading.Lock()
         # Post-turn memory reviewer: counter resets when the daemon fires.
@@ -267,27 +269,127 @@ class Engine:
     def run_turn(
         self, user_text: str, emit: EventSink, *, source: str = "user",
         persist_inflight: bool = True, attachments: list[dict] | None = None,
+        run_id: str | None = None,
+    ) -> None:
+        """Run one serialized turn and bind its execution context."""
+        with self._turn_lock:
+            self._run_turn_serialized(
+                user_text, emit, source=source,
+                persist_inflight=persist_inflight, attachments=attachments,
+                run_id=run_id,
+            )
+
+    def _run_turn_serialized(
+        self, user_text: str, emit: EventSink, *, source: str = "user",
+        persist_inflight: bool = True, attachments: list[dict] | None = None,
+        run_id: str | None = None,
     ) -> None:
         """Run a full turn and bind ``self.home`` for the duration. ``source`` tags the trigger ("user" from desktop/mobile/TUI/CLI, "peer" from ALP link, etc.) and gates the ``chat.turn_done`` ambient-notification emit so peer-driven turns don't notify the local user. ``persist_inflight`` controls the early stub write; CLI ``--no-save`` callers must disable it."""
+        self._refresh_turn_config()
         from alpi.home import (
             reset_active_home, reset_active_session,
             set_active_home, set_active_session,
         )
 
         from alpi.host.connection_context import use as use_connection
+        from alpi.core.run_context import RunContext, use as use_run_context
+        from alpi.core.tool_executor import ToolExecutor, use as use_tool_executor
+        from alpi.core.execution_world import build as build_world, use as use_execution_world
+        from alpi.home import profile_name
+
+        run_context = RunContext.create(
+            home=self.home,
+            workspace=self.cfg.workspace_path or Path.cwd().resolve(),
+            profile=profile_name(self.home),
+            source=source,
+            session_id=self.session.id,
+            connection_id=self.connection_context.connection_id,
+            device_id=self.connection_context.device_id,
+            role=self.connection_context.role,
+            job_id=os.environ.get("ALPI_SCHEDULE_ID") or None,
+            workgroup_id=os.environ.get("ALPI_WORKGROUP_DISPATCH") or None,
+            run_id=run_id,
+        )
+        preserve_interrupt = (
+            self.interrupt_requested and self.active_run_id == run_context.run_id
+        )
+        self.interrupt_requested = bool(preserve_interrupt)
+        self._interrupted_this_turn = False
+        executor = ToolExecutor(
+            run_context,
+            deny=frozenset(self.cfg.tools.deny) | _dispatch_tool_denies(),
+            max_workers=self.cfg.tools.max_parallel_tool_calls,
+        )
+        execution_world = build_world(run_context, self.cfg)
+        from alpi import runs as runs_mod
+
+        self.active_run_id = run_context.run_id
+        self.last_run_id = run_context.run_id
+        try:
+            runs_mod.start(run_context, model=self.cfg.model, input_text=user_text)
+        except OSError:
+            pass
+        runs_mod.register_active(run_context, self)
+
+        saw_error = False
+        saw_final = False
+
+        def recorded_emit(event: AgentEvent) -> None:
+            nonlocal saw_error, saw_final
+            try:
+                runs_mod.record_agent_event(run_context, event)
+            except OSError:
+                pass
+            saw_error = saw_error or event.kind == "error"
+            saw_final = saw_final or (event.kind == "assistant_done" and event.final)
+            emit(event)
         home_token = set_active_home(self.home)
         session_token = set_active_session(self.session.id)
         try:
-            with use_connection(self.connection_context):
-                with tools.use_mcp_tools(self._mcp_tools):
-                    with self._turn_lock:
-                        self._run_turn_locked(
-                            user_text, emit, source=source,
-                            persist_inflight=persist_inflight, attachments=attachments,
-                        )
+            with use_run_context(run_context):
+                with use_execution_world(execution_world), use_tool_executor(executor):
+                    with use_connection(self.connection_context):
+                        with tools.use_mcp_tools(self._mcp_tools):
+                            self._run_turn_locked(
+                                user_text, recorded_emit, source=source,
+                                persist_inflight=persist_inflight, attachments=attachments,
+                            )
+            outcome = (
+                "interrupted" if getattr(self, "_interrupted_this_turn", False)
+                else "failed" if saw_error and not saw_final
+                else "completed"
+            )
+            try:
+                runs_mod.finish(run_context, outcome)
+            except OSError:
+                pass
+        except Exception:
+            try:
+                runs_mod.finish(run_context, "failed")
+            except OSError:
+                pass
+            raise
         finally:
+            self.active_run_id = ""
+            runs_mod.unregister_active(run_context)
             reset_active_session(session_token)
             reset_active_home(home_token)
+
+    def _refresh_turn_config(self) -> None:
+        from alpi import config as config_mod
+
+        try:
+            fresh = config_mod.load(self.home)
+        except Exception:  # noqa: BLE001
+            return
+        self.cfg.budget = fresh.budget
+        self.cfg.tools.deny = fresh.tools.deny
+        self.cfg.tools.max_parallel_tool_calls = fresh.tools.max_parallel_tool_calls
+        self.cfg.tools.execution = fresh.tools.execution
+        self.cfg.tools.terminal.allow_network = fresh.tools.terminal.allow_network
+        self.cfg.tiers = fresh.tiers
+        self.cfg.fallback_models = fresh.fallback_models
+        self.cfg.relay = fresh.relay
 
     def _run_turn_locked(
         self, user_text: str, emit: EventSink, *, source: str = "user",
@@ -295,26 +397,11 @@ class Engine:
     ) -> None:
         from alpi import config as _cfg_mod
         from alpi import ledger
-
-        # Re-read budget + tools.deny + tiers + fallback_models from disk so live YAML edits apply on the next turn without needing a profile restart.
-        try:
-            fresh = _cfg_mod.load(self.home)
-            self.cfg.budget = fresh.budget
-            self.cfg.tools.deny = fresh.tools.deny
-            self.cfg.tiers = fresh.tiers
-            self.cfg.fallback_models = fresh.fallback_models
-            self.cfg.relay = fresh.relay
-        except Exception:  # noqa: BLE001
-            pass
         try:
             ledger.check(self.home, self.cfg.budget)
         except ledger.BudgetExceeded as e:
             emit(AgentEvent(kind="error", text=str(e)))
             return
-
-        # Clear any lingering interrupt request before starting.
-        self.interrupt_requested = False
-        self._interrupted_this_turn = False
 
         # Accumulate this turn's state for the persistent log.
         turn_started = time.time()
@@ -783,12 +870,39 @@ class Engine:
                 tool_state_mod.set_usage_sink(_absorb_usage)
 
                 from alpi.tools import _mutations
+                from alpi.runs import persisted_tool_arguments
                 _mut_token = _mutations.begin_batch()
                 batch_reasoning = content
                 dispatch_delivered = False
+                parallel_outcomes = {}
+                if not relay_peer and not self.interrupt_requested and len(tool_calls) > 1:
+                    from alpi.core.tool_executor import ToolCall, current as current_executor
+
+                    executor = current_executor()
+                    parsed_calls = []
+                    for tc in tool_calls:
+                        try:
+                            call_args = json.loads(tc["arguments"]) if tc.get("arguments") else {}
+                        except json.JSONDecodeError:
+                            call_args = {}
+                        parsed_calls.append(ToolCall(tc["id"], tc["name"], call_args))
+                    if not self.interrupt_requested and executor is not None and all(
+                        executor.is_parallel_safe(call.name, call.arguments)
+                        for call in parsed_calls
+                    ):
+                        for call in parsed_calls:
+                            emit(AgentEvent(
+                                kind="tool_start", name=call.name,
+                                args=call.arguments, tool_id=call.call_id,
+                            ))
+                        if not self.interrupt_requested:
+                            outcomes = executor.execute_parallel(parsed_calls, deny=deny_tools)
+                            parallel_outcomes = {
+                                outcome.call.call_id: outcome for outcome in outcomes
+                            }
                 for i, tc in enumerate(tool_calls):
                     reasoning_for_this_tool = batch_reasoning if i == 0 else ""
-                    if self.interrupt_requested:
+                    if self.interrupt_requested and not parallel_outcomes:
                         skip_msg = "[skipped — user interrupted]"
                         self.session.messages.append({
                             "role": "tool",
@@ -802,7 +916,8 @@ class Engine:
                             args_skipped = {}
                         turn_tools.append(ToolLog(
                             at=time.time(), name=tc["name"],
-                            args=args_skipped, result=skip_msg,
+                            args=persisted_tool_arguments(tc["name"], args_skipped),
+                            result=skip_msg,
                             ok=False, duration_s=0.0,
                             reasoning=reasoning_for_this_tool,
                         ))
@@ -818,7 +933,9 @@ class Engine:
                         args = json.loads(tc["arguments"]) if tc["arguments"] else {}
                     except json.JSONDecodeError:
                         args = {}
-                    emit(AgentEvent(kind="tool_start", name=name, args=args, tool_id=tid))
+                    outcome = parallel_outcomes.get(tid)
+                    if outcome is None:
+                        emit(AgentEvent(kind="tool_start", name=name, args=args, tool_id=tid))
 
                     def _relay(label: str, is_error: bool = False,
                                _name=name, _tid=tid) -> None:
@@ -826,23 +943,29 @@ class Engine:
                             kind="tool_state", name=_name, tool_id=_tid,
                             text=label, ok=not is_error,
                         ))
-                    tool_state_mod.set_emit(_relay)
-
-                    tool_started = time.time()
-                    try:
-                        if relay_peer and (
-                            name != "peer"
-                            or str(args.get("peer_id") or "").strip() != relay_peer
-                        ):
-                            result = ToolResult(
-                                ok=False, output="",
-                                error=f"relay mode: only peer '{relay_peer}' may be consulted",
-                            )
-                        else:
-                            result = tools.execute(name, args, deny=deny_tools)
-                    finally:
-                        tool_state_mod.set_emit(None)
-                    duration = time.time() - tool_started
+                    if outcome is not None:
+                        for label, is_error in outcome.states:
+                            _relay(label, is_error)
+                        tool_started = outcome.started_at
+                        duration = outcome.duration_s
+                        result = outcome.result
+                    else:
+                        tool_state_mod.set_emit(_relay)
+                        tool_started = time.time()
+                        try:
+                            if relay_peer and (
+                                name != "peer"
+                                or str(args.get("peer_id") or "").strip() != relay_peer
+                            ):
+                                result = ToolResult(
+                                    ok=False, output="",
+                                    error=f"relay mode: only peer '{relay_peer}' may be consulted",
+                                )
+                            else:
+                                result = tools.execute(name, args, deny=deny_tools)
+                        finally:
+                            tool_state_mod.set_emit(None)
+                        duration = time.time() - tool_started
 
                     if (relay_peer and result.ok
                             and _peer_reply_from_payload(result.output).strip()):
@@ -859,7 +982,8 @@ class Engine:
                         ),
                     })
                     turn_tools.append(ToolLog(
-                        at=tool_started, name=name, args=args,
+                        at=tool_started, name=name,
+                        args=persisted_tool_arguments(name, args),
                         result=_result_for_log(name, payload),
                         ok=result.ok, duration_s=duration,
                         reasoning=reasoning_for_this_tool,
@@ -1219,6 +1343,7 @@ class Engine:
                 elapsed_s=elapsed,
                 profile=profile_name(self.home),
                 session_id=self.session.id,
+                run_id=(getattr(self, "last_run_id", "") or None),
                 workgroup_id=wg_id,
                 backend=backend,
                 last_tool=(turn_tools[-1].name if turn_tools else None),

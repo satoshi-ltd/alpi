@@ -94,6 +94,131 @@ def test_single_step_reply_is_final(patched_engine: Engine, monkeypatch) -> None
     assert dones[0].final is True
     assert dones[0].text == "hola"
 
+    from alpi import runs
+    journal = runs.read(patched_engine.home, patched_engine.last_run_id)["events"]
+    assert journal[0]["kind"] == "run.started"
+    assert journal[0]["data"]["input"] == "hi"
+    assert journal[-1]["data"]["outcome"] == "completed"
+
+
+def test_targeted_interrupt_before_engine_entry_is_preserved(
+    patched_engine: Engine, monkeypatch,
+) -> None:
+    calls = _stub_stream(monkeypatch, [_final_chunk("must not run")])
+    run_id = "cancel-before-entry"
+    patched_engine.active_run_id = run_id
+    patched_engine.request_interrupt("test-pre-start")
+    events = []
+
+    patched_engine.run_turn("stop before the model", events.append, run_id=run_id)
+
+    assert calls["i"] == 0
+    assert any(event.kind == "interrupted" for event in events)
+    from alpi import runs
+    assert runs.summary(patched_engine.home, run_id)["status"] == "interrupted"
+
+
+def test_engine_parallelizes_safe_batch_and_preserves_result_order(
+    patched_engine: Engine, monkeypatch,
+) -> None:
+    import threading
+    from alpi import tools
+    from alpi.tools.base import Tool
+
+    barrier = threading.Barrier(2)
+
+    class SafeBatchTool(Tool):
+        name = "test_safe_batch"
+        description = "test"
+        parallel_safe = True
+
+        def run(self, value: str) -> ToolResult:
+            barrier.wait(timeout=2)
+            return ToolResult(True, value)
+
+    monkeypatch.setitem(tools._TOOLS, SafeBatchTool.name, SafeBatchTool)
+    _stub_stream(monkeypatch, [
+        _final_chunk("", tool_calls=[
+            {"id": "a", "name": SafeBatchTool.name, "arguments": '{"value":"first"}'},
+            {"id": "b", "name": SafeBatchTool.name, "arguments": '{"value":"second"}'},
+        ]),
+        _final_chunk("done"),
+    ])
+
+    patched_engine.run_turn("parallel", emit=lambda _event: None)
+    logged = patched_engine.session.turns[-1].tools
+    assert [tool.result for tool in logged] == ["first", "second"]
+
+
+@pytest.mark.parametrize("interrupt_event", ["assistant_done", "tool_start"])
+def test_interrupt_before_parallel_dispatch_skips_batch(
+    patched_engine: Engine, monkeypatch, interrupt_event: str,
+) -> None:
+    from alpi import tools
+    from alpi.tools.base import Tool
+
+    executed = []
+
+    class SafeBatchTool(Tool):
+        name = "test_interrupt_safe_batch"
+        description = "test"
+        parallel_safe = True
+
+        def run(self, value: str) -> ToolResult:
+            executed.append(value)
+            return ToolResult(True, value)
+
+    monkeypatch.setitem(tools._TOOLS, SafeBatchTool.name, SafeBatchTool)
+    _stub_stream(monkeypatch, [_final_chunk("checking", tool_calls=[
+        {"id": "a", "name": SafeBatchTool.name, "arguments": '{"value":"first"}'},
+        {"id": "b", "name": SafeBatchTool.name, "arguments": '{"value":"second"}'},
+    ])])
+    events = []
+
+    def emit(event):
+        events.append(event)
+        if event.kind == interrupt_event and not event.final:
+            patched_engine.request_interrupt("test-after-batch")
+
+    patched_engine.run_turn("parallel", emit=emit)
+
+    assert executed == []
+    assert sum(event.kind == "tool_end" for event in events) == 2
+    assert patched_engine.session.turns[-1].interrupted is True
+
+
+def test_terminal_command_is_not_persisted_in_turn_or_run_journal(
+    patched_engine: Engine, monkeypatch,
+) -> None:
+    from alpi import runs, tools
+    from alpi.tools.base import Tool
+
+    secret = "not-shaped-like-a-token"
+
+    class FakeTerminal(Tool):
+        name = "terminal"
+        description = "test"
+
+        def run(self, **kwargs) -> ToolResult:
+            return ToolResult(True, "done")
+
+    monkeypatch.setitem(tools._TOOLS, FakeTerminal.name, FakeTerminal)
+    _stub_stream(monkeypatch, [
+        _final_chunk("", tool_calls=[{
+            "id": "shell", "name": "terminal",
+            "arguments": '{"action":"run","command":"not-shaped-like-a-token"}',
+        }]),
+        _final_chunk("done"),
+    ])
+
+    patched_engine.run_turn("execute it", emit=lambda _event: None)
+
+    assert patched_engine.session.turns[-1].tools[0].args == {"action": "run"}
+    journal = runs.read(patched_engine.home, patched_engine.last_run_id)["events"]
+    assert secret not in str(journal)
+    saved = patched_engine.session.save()
+    assert saved is not None and secret not in saved.read_text()
+
 
 def test_max_steps_cap_triggers_wrap_up_final_reply(
     patched_engine: Engine, monkeypatch,

@@ -6,6 +6,7 @@ from alpi.tools.base import Tool, ToolResult
 
 class ReadFile(Tool):
     name = "read_file"
+    parallel_safe = True
     description = (
         "Read a file from disk. Use this instead of `terminal cat/head/tail`.\n"
         "\n"

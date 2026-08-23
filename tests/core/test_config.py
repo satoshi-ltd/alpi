@@ -127,6 +127,9 @@ def test_tools_section_defaults(tmp_home_no_env: Path) -> None:
     cfg = config.load(tmp_home_no_env)
     assert cfg.tools.web_extract.model == ""
     assert cfg.tools.max_steps_per_turn == 100
+    assert cfg.tools.max_parallel_tool_calls == 4
+    assert cfg.tools.execution.backend == "local"
+    assert cfg.tools.execution.docker_image == "python:3.12-slim"
     assert cfg.tools.deny == []
 
 

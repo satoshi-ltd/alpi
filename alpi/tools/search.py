@@ -39,8 +39,16 @@ def _smart_case(pattern: str, override: bool | None) -> bool:
     return any(c.isupper() for c in pattern)
 
 
+def _can_use_local_rg() -> bool:
+    from alpi.core.execution_world import current
+
+    world = current()
+    return (world is None or world.backend == "local") and shutil.which("rg") is not None
+
+
 class Search(Tool):
     name = "search"
+    parallel_safe = True
     description = (
         "Literal-string / regex / glob search. Use instead of "
         "grep/rg/find/ls in terminal. Ripgrep-backed (content), "
@@ -139,7 +147,7 @@ def _search_filenames(
         return ToolResult(ok=False, output="", error=_not_found_error(root))
     if not root.is_dir():
         return ToolResult(ok=False, output="", error=f"not a directory: {root}")
-    if shutil.which("rg") is not None:
+    if _can_use_local_rg():
         rg_result = _search_filenames_rg(
             pattern, root, case_sensitive, limit, include_noise,
         )
@@ -212,7 +220,7 @@ def _search_content(
     limit: int,
     include_noise: bool,
 ) -> ToolResult:
-    if shutil.which("rg") is not None:
+    if _can_use_local_rg():
         rg_result = _search_content_rg(
             pattern, root, file_glob, case_sensitive, limit, include_noise,
         )

@@ -24,6 +24,8 @@ def test_top_level_help_shows_only_canonical_commands() -> None:
                  "mcp", "providers", "sandbox", "voice", "outputs", "audit-log"):
         assert name in out, f"{name!r} missing from top-level --help"
 
+    assert "runs" in out
+
     assert "\n  alp " not in out, "alp group should be gone"
     assert "\n  service " not in out, "service group should have been renamed to daemon"
 

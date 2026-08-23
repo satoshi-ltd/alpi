@@ -13,6 +13,7 @@ import pytest
 
 from alpi.alp.keys import load_or_generate
 from alpi.host import _chat_events as chat_events
+from alpi.host.chat import _persistable_frame
 from alpi.host import chat as data_chat
 from alpi.host import handlers as data_handlers
 from alpi.host import server as host_server
@@ -349,3 +350,50 @@ async def test_events_since_requires_session_id(short_tmp: Path) -> None:
         await srv.stop()
 
     assert response["error"]["code"] == -32602
+
+
+def test_replay_frame_omits_terminal_command() -> None:
+    secret = "not-shaped-like-a-token"
+    original = {
+        "event": "tool_start", "name": "terminal",
+        "preview": secret[:40],
+        "args": {"action": "run", "command": secret},
+    }
+
+    persisted = _persistable_frame(original)
+
+    assert persisted["args"] == {"action": "run"}
+    assert persisted["preview"] == ""
+    assert secret not in str(persisted)
+    assert original["args"]["command"] == secret
+    assert original["preview"] == secret[:40]
+
+
+def test_replay_frame_recomputes_workflow_preview_after_nested_sanitization() -> None:
+    from alpi.tui.formatting import arg_hint
+
+    secret = "LEAK"
+    args = {"steps": [{
+        "arguments": {"command": secret, "action": "run"},
+        "tool": "terminal", "id": "shell",
+    }]}
+    original = {
+        "event": "tool_start", "name": "workflow",
+        "preview": arg_hint("workflow", args), "args": args,
+    }
+    assert secret in original["preview"]
+
+    persisted = _persistable_frame(original)
+
+    assert secret not in str(persisted)
+    assert persisted["args"]["steps"][0]["arguments"] == {"action": "run"}
+
+
+def test_replay_frame_fails_closed_when_tool_arguments_are_malformed() -> None:
+    persisted = _persistable_frame({
+        "event": "tool_start", "name": "terminal",
+        "preview": "export PRIVATE=secret", "args": None,
+    })
+
+    assert persisted["args"] == {}
+    assert persisted["preview"] == ""

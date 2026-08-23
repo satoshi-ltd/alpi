@@ -2965,6 +2965,7 @@ async def _run_host(home: Path, profile: str) -> None:
     from alpi.host import connections as host_connections
     from alpi.host import network_rpc as host_network
     from alpi.host import outputs as host_outputs
+    from alpi.host import runs as host_runs
     from alpi.host import probes as host_probes
     from alpi.host import schedule as host_schedule
     from alpi.host import tools as host_tools
@@ -3002,6 +3003,7 @@ async def _run_host(home: Path, profile: str) -> None:
     host_connections.register(server)
     host_network.register(server)
     host_outputs.register(server)
+    host_runs.register(server)
     host_tools.register(server)
     host_usage.register(server)
     host_attachments.register(server)

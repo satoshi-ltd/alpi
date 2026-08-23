@@ -131,6 +131,7 @@ vi.mock('../src/features/chat/Reasoning', () => ({ Reasoning: () => null }));
 vi.mock('../src/features/chat/SoundWave', () => ({ SoundWave: () => null }));
 vi.mock('../src/features/chat/ToolCallRow', () => ({ ToolModule: () => null }));
 vi.mock('../src/features/sheets/SessionsSheet', () => ({ SessionsSheet: () => null }));
+vi.mock('../src/features/sheets/RunsSheet', () => ({ RunsSheet: () => null }));
 vi.mock('../src/features/sheets/TasksSheet', () => ({ TasksSheet: () => null }));
 vi.mock('../src/features/aln/deeplink', () => ({ isForeignConnection: () => false }));
 

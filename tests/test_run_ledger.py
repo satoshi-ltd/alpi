@@ -28,7 +28,7 @@ def _ledger_writer(home_str: str, start: int, count: int) -> None:
 def test_record_persists_and_reads_back(home: Path) -> None:
     run_ledger.record(
         home, kind="agent", outcome="ok", elapsed_s=1.234,
-        profile="default", session_id="s1", last_tool="terminal", tool_count=3,
+        profile="default", session_id="s1", run_id="r1", last_tool="terminal", tool_count=3,
         output_tail="all good",
     )
     rows = run_ledger.read(home)
@@ -38,6 +38,7 @@ def test_record_persists_and_reads_back(home: Path) -> None:
     assert r["outcome"] == "ok"
     assert r["elapsed_s"] == 1.234
     assert r["session_id"] == "s1"
+    assert r["run_id"] == "r1"
     assert r["last_tool"] == "terminal"
     assert r["tool_count"] == 3
     assert r["output_tail"] == "all good"

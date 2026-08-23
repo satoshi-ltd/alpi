@@ -12,6 +12,7 @@ _MAX_PER_DOMAIN = 2
 
 class WebSearch(Tool):
     name = "web_search"
+    parallel_safe = True
     description = (
         "Search the web. Returns {title, URL, snippet} per hit. Use when "
         "the user wants to FIND something and you don't have a URL yet.\n"

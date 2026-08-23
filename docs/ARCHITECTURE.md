@@ -146,6 +146,7 @@ alpi/
 │   ├── search.py           content + filename search (rg + stdlib fallback)
 │   ├── research.py         read-only sub-agent (depth: fast/normal/deep)
 │   ├── terminal.py         run/background/status/output/kill
+│   ├── workflow.py         bounded tool DAGs routed through ToolExecutor
 │   ├── notify.py           native push to the owner's apps
 │   └── … (read_file, write_file, edit_file, delete_file, todo, web_*, schedule,
 │         memory, session_search, email, config)
@@ -167,6 +168,7 @@ alpi/
 │   ├── server.py          Unix-socket JSON-RPC server (no envelope, no Noise — fs perms = trust)
 │   ├── handlers.py        read verbs (host.workgroup.transcript, host.sessions.*)
 │   ├── chat.py            host.chat.send (streaming) + host.chat.cancel
+│   ├── runs.py            host.runs.list + host.run.{read,cancel}
 │   ├── config.py          mutation verbs (host.providers.*, host.peers.*, host.profile.*, host.mcp.*, host.email.*, host.sandbox.*, host.voice.*)
 │   ├── connections.py     host.connections.* identities, device credentials and devices.yaml migration
 │   ├── connection_context.py request-scoped connection/device attribution
@@ -183,6 +185,47 @@ alpi/
 │   └── sessions.py        plaintext session list / read
 └── knowledge/              `alpi_knowledge` answer packs — Markdown the tool reads (see docs/SKILLS.md)
 ```
+
+### Execution spine
+
+Every engine turn creates one immutable `RunContext`, one `ToolExecutor`, and
+one `ExecutionWorld`. Context variables bind those objects across nested tool
+calls without adding parameters to every tool. The executor is the only
+registry dispatch seam: direct model calls and `workflow` steps therefore use
+the same denylist, member restrictions, availability checks, execution world,
+and durable journal.
+
+Tools are exclusive by default. Only classes that explicitly declare
+`parallel_safe` can overlap, and the engine parallelizes a model batch only
+when every call is safe. A mixed batch remains serial. Results and emitted
+states are replayed in original call order, preserving provider transcript
+determinism.
+
+Each turn writes `runs/<run_id>.jsonl` with bounded, redacted events. The
+`run_id` is carried by host chat stream frames and the existing run ledger.
+Local operators use `alpi runs list|show|cancel` or `/runs`; paired clients use
+`host.runs.list`, `host.run.read`, and `host.run.cancel`. Reads and cancellation
+are connection-scoped like sessions, while the sovereign local socket can stop
+any active run. Terminal command text is omitted from the journal, saved turn
+metadata, and chat replay sidecar, including terminal steps nested in a
+workflow. Listing reads the first and last journal records rather than replaying
+the event stream; Cleanup offers inactive journals older than 30 days.
+
+`ExecutionWorld` keeps filesystem resolution and terminal shell execution under one
+run-scoped abstraction. `local` preserves the previous behavior. `docker`
+wraps processes in an ephemeral container while bind-mounting the same
+absolute workspace/profile paths, so file tools and subprocesses observe one
+namespace. Foreground containers are force-removed on timeout; background
+terminal jobs are refused so a detached container cannot outlive its run.
+Dedicated workers such as skill scripts and speech transcription remain
+host-side; this backend is not a whole-agent filesystem sandbox.
+
+The `workflow` tool executes a bounded dependency graph of registered tools.
+References such as `${step.output}` feed prior results into later arguments;
+independent safe steps can overlap. Recursion is refused, failures stop the
+graph unless explicitly marked `continue_on_error`, and every nested call
+re-enters `ToolExecutor` rather than bypassing policy. Nested parallelism uses
+the same `tools.max_parallel_tool_calls` limit as direct model batches.
 
 Runtime state (skills, sessions, memories, logs, ALP peers, keys)
 does not ship with the package — it's generated per profile under

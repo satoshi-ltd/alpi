@@ -162,7 +162,9 @@ def resolve_path(path: str, *, for_write: bool = False) -> Path:
             )
     if for_write:
         _enforce_dispatch_write_scope(resolved, path)
-    return resolved
+    from alpi.core.execution_world import current as current_world
+    world = current_world()
+    return world.filesystem_path(resolved) if world is not None else resolved
 
 
 def _enforce_dispatch_write_scope(resolved: Path, original: str) -> None:

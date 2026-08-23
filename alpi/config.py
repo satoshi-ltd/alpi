@@ -22,7 +22,9 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "providers": {"ollama": []},
     "tools": {
         "max_steps_per_turn": 100,
+        "max_parallel_tool_calls": 4,
         "deny": [],
+        "execution": {"backend": "local", "docker_image": "python:3.12-slim"},
         "web_extract": {"model": ""},
         "read_image": {"model": ""},
         "browser": {"vision": False, "allow_local": False},
@@ -89,6 +91,12 @@ class ApprovalConfig:
 
 
 @dataclass
+class ExecutionToolConfig:
+    backend: str = "local"
+    docker_image: str = "python:3.12-slim"
+
+
+@dataclass
 class TerminalToolConfig:
     sandbox: bool = False
     allow_network: bool = False
@@ -123,8 +131,10 @@ class AttachmentsToolConfig:
 @dataclass
 class ToolsConfig:
     max_steps_per_turn: int = 100  # ceiling on tool-calls per user turn
+    max_parallel_tool_calls: int = 4
     # Tool names hidden from the LLM schema AND refused by the executor; unknown names are no-ops so typos are harmless.
     deny: list[str] = field(default_factory=list)
+    execution: ExecutionToolConfig = field(default_factory=ExecutionToolConfig)
     web_extract: WebExtractToolConfig = field(default_factory=WebExtractToolConfig)
     read_image: ReadImageToolConfig = field(default_factory=ReadImageToolConfig)
     terminal: TerminalToolConfig = field(default_factory=TerminalToolConfig)
@@ -318,6 +328,7 @@ def load(home: Path) -> Config:
     web_extract_raw = tools_raw.get("web_extract") or {}
     read_image_raw = tools_raw.get("read_image") or {}
     terminal_raw = tools_raw.get("terminal") or {}
+    execution_raw = tools_raw.get("execution") or {}
     browser_raw = tools_raw.get("browser") or {}
     tts_raw = tools_raw.get("tts") or {}
     stt_raw = tools_raw.get("stt") or {}
@@ -326,7 +337,21 @@ def load(home: Path) -> Config:
         max_steps_per_turn=int(
             tools_raw.get("max_steps_per_turn", DEFAULT_CONFIG["tools"]["max_steps_per_turn"])
         ),
+        max_parallel_tool_calls=max(1, int(
+            tools_raw.get(
+                "max_parallel_tool_calls",
+                DEFAULT_CONFIG["tools"]["max_parallel_tool_calls"],
+            )
+        )),
         deny=_normalize_deny(tools_raw.get("deny")),
+        execution=ExecutionToolConfig(
+            backend=(
+                str(execution_raw.get("backend") or "local").strip().lower()
+                if str(execution_raw.get("backend") or "local").strip().lower() in {"local", "docker"}
+                else "local"
+            ),
+            docker_image=str(execution_raw.get("docker_image") or "python:3.12-slim").strip(),
+        ),
         web_extract=WebExtractToolConfig(
             model=str(web_extract_raw.get("model", "") or ""),
         ),
@@ -548,8 +573,17 @@ def _tools_delta(cfg: Config) -> dict:
     d = DEFAULT_CONFIG["tools"]
     if cfg.tools.max_steps_per_turn != d["max_steps_per_turn"]:
         out["max_steps_per_turn"] = cfg.tools.max_steps_per_turn
+    if cfg.tools.max_parallel_tool_calls != d["max_parallel_tool_calls"]:
+        out["max_parallel_tool_calls"] = cfg.tools.max_parallel_tool_calls
     if cfg.tools.deny:
         out["deny"] = list(cfg.tools.deny)
+    execution_out: dict[str, Any] = {}
+    if cfg.tools.execution.backend != d["execution"]["backend"]:
+        execution_out["backend"] = cfg.tools.execution.backend
+    if cfg.tools.execution.docker_image != d["execution"]["docker_image"]:
+        execution_out["docker_image"] = cfg.tools.execution.docker_image
+    if execution_out:
+        out["execution"] = execution_out
     if cfg.tools.web_extract.model != d["web_extract"]["model"]:
         out["web_extract"] = {"model": cfg.tools.web_extract.model}
     ri_out: dict[str, Any] = {}

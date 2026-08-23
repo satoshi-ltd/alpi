@@ -12,7 +12,7 @@ from textual.containers import VerticalScroll
 from textual.message import Message
 from textual.widgets import Input
 
-from alpi import config, home, memory
+from alpi import config, home
 from alpi.engine import AgentEvent, Engine
 from alpi.tui.screens import (
     StatusPanel,
@@ -24,6 +24,7 @@ from alpi.tui.screens import (
     OutputsPanel,
     PeersPanel,
     SessionsPanel,
+    RunsPanel,
     SkillsPanel,
     ToolsPanel,
 )
@@ -146,7 +147,7 @@ class AlpiApp(App):
         slash_commands = [
             "/help", "/memory", "/tools", "/mcps", "/status", "/clear", "/new",
             "/compact", "/skills", "/model", "/peers", "/diff",
-            "/sessions", "/outputs",
+            "/sessions", "/outputs", "/runs",
             "/attach", "/attachments", "/clear-attachments",
             "/exit", "/quit",
         ]
@@ -619,6 +620,7 @@ class AlpiApp(App):
                 SessionsPanel(self.home, current_id=self.engine.session.id)
             ),
             "outputs": lambda _a: self._show_panel(OutputsPanel(self.home)),
+            "runs": lambda _a: self._show_panel(RunsPanel(self.home)),
             "diff": lambda a: self._show_panel(DiffPanel(self.home, since=a or "24h")),
             "attach": lambda a: self._cmd_attach(a),
             "attachments": lambda _a: self._cmd_attachments(),

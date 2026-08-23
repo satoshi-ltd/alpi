@@ -14,12 +14,15 @@ SESSIONS_KEEP_DAYS = 30
 # chat-delivered artifacts in out/ stay downloadable this long before cleanup offers them.
 GENERATED_KEEP_DAYS = 30
 
+RUNS_KEEP_DAYS = 30
+
 GROUP_OF = {
     "tts": "caches",
     "inbound_media": "caches",
     "sessions": "conversations",
     "mentions": "conversations",
     "logs": "logs",
+    "runs": "logs",
     "schedule": "logs",
     "curator": "logs",
     "workgroups": "conversations",
@@ -127,6 +130,26 @@ def categories(h: Path) -> list[dict[str, Any]]:
         ]
         if logs_root.exists() else []
     )
+    from alpi import runs as runs_mod
+    from alpi.home import profile_name
+
+    runs_root = _dir("runs")
+    runs_cutoff = time.time() - RUNS_KEEP_DAYS * 86_400
+    try:
+        active_run_ids = runs_mod.active_ids(profile_name(h))
+    except Exception:  # noqa: BLE001
+        active_run_ids = None
+    run_files = (
+        [
+            p for p in runs_root.iterdir()
+            if p.is_file() and p.suffix == ".jsonl"
+            and p.stem not in active_run_ids and _mtime(p) < runs_cutoff
+        ]
+        if (
+            runs_root.exists() and not runs_root.is_symlink()
+            and active_run_ids is not None
+        ) else []
+    )
     sched_files = _all(_dir("schedule/output"))
     wg_root = _dir("alp/workgroups")
     wg_files: list[Path] = (
@@ -207,6 +230,14 @@ def categories(h: Path) -> list[dict[str, Any]]:
             "desc": "`logs/*.log` — per-profile agent.log + approval.log (daemon-wide service.log lives at the alpi root)",
             "files": log_files,
             "size": _sum(log_files),
+        },
+        {
+            "key": "runs",
+            "label": "Old run journals",
+            "desc": f"run journals older than {RUNS_KEEP_DAYS} days in `runs/`",
+            "files": run_files,
+            "size": _sum(run_files),
+            "destructive": True,
         },
         {
             "key": "schedule",

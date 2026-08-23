@@ -45,6 +45,7 @@ class RunRecord:
     elapsed_s: float
     profile: str = "default"
     session_id: str | None = None
+    run_id: str | None = None
     job_id: str | None = None
     workgroup_id: str | None = None
     peer_id: str | None = None
@@ -96,6 +97,7 @@ def record(
     at: float | None = None,
     profile: str = "default",
     session_id: str | None = None,
+    run_id: str | None = None,
     job_id: str | None = None,
     workgroup_id: str | None = None,
     peer_id: str | None = None,
@@ -125,6 +127,7 @@ def record(
             elapsed_s=round(float(elapsed_s), 3),
             profile=profile or "default",
             session_id=session_id or None,
+            run_id=run_id or None,
             job_id=job_id or None,
             workgroup_id=workgroup_id or None,
             peer_id=peer_id or None,

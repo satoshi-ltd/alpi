@@ -359,7 +359,7 @@ export function useChatStream({
       if (p.kind === "session_start") {
         // Pin the sessionId BEFORE any tool/delta arrives so the stall watchdog can replay via host.chat.events_since even if the next frame is lost.
         if (p.session_id) {
-          updateTurn(rid, (prev) => ({ ...prev, sessionId: p.session_id }));
+          updateTurn(rid, (prev) => ({ ...prev, sessionId: p.session_id, runId: p.run_id ?? prev.runId ?? null }));
         }
         return;
       }

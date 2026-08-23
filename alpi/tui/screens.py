@@ -7,7 +7,6 @@ from pathlib import Path
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, VerticalScroll
 from textual.widgets import Markdown, OptionList, Static
-from textual.widgets.option_list import Option
 
 
 class FloatingPanel(Container):
@@ -604,6 +603,35 @@ class SessionsPanel(FloatingPanel):
             hint.update(f"deleted {session_id}")
         else:
             hint.update(f"could not delete {session_id}")
+
+
+class RunsPanel(FloatingPanel):
+    """Recent durable agent runs."""
+
+    panel_title = "/runs"
+    DEFAULT_CSS = _LIST_PANEL_CSS
+
+    def __init__(self, home: Path) -> None:
+        super().__init__()
+        self.home = home
+
+    def compose_body(self) -> ComposeResult:
+        from datetime import datetime
+        from alpi import runs
+
+        rows = runs.list_runs(self.home, limit=30)
+        if not rows:
+            yield Static("no runs yet", classes="entry-desc")
+            return
+        lines = []
+        for row in rows:
+            ts = datetime.fromtimestamp(float(row.get("started_at") or 0)).strftime("%m-%d %H:%M")
+            lines.append(
+                f"{ts}  {row.get('status', 'running'):<11} {row['id']}\n"
+                f"  {row.get('source', 'user')} · {row.get('model') or '-'} · {row.get('event_count', 0)} events"
+            )
+        with VerticalScroll():
+            yield Static("\n\n".join(lines))
 
 
 def list_output_rows(home: Path, limit: int = 30) -> list[dict]:

@@ -11,6 +11,19 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.5.13 — 2026-08-23 — see the work while it runs
+
+- **Every active turn has a run id.** The desktop keeps the daemon's durable
+  identifier alongside the pending turn, so reconnects and session hydration
+  no longer define the lifetime of the execution.
+- **Runs are visible from the conversation header.** The new Runs control lists
+  recent executions with source, model, status and journal size. Selecting an
+  active run asks the daemon to stop it; completed runs remain visible for
+  operational review.
+
+Requires alpi ≥ 0.14.8 for `host.runs.list`, `host.run.read`,
+`host.run.cancel`, and run ids on chat stream frames.
+
 ## v0.5.12 — 2026-08-22 — the update alias moves again
 
 Nothing in the app changes. This release exists because v0.5.11 shipped
