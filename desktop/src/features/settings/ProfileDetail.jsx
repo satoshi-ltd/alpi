@@ -346,7 +346,7 @@ export default function ProfileDetail({
         {(activeConnection?.kind === "local" || activeConnection?.role === "admin") && (
           <Section title="Service" tooltip="daemon + network">
             <Row label="daemon">
-              <DaemonField />
+              <DaemonField connectionId={activeConnection.id} />
             </Row>
             {profile.name === "default" && activeConnection?.kind === "local" && (
               <>

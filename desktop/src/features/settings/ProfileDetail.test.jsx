@@ -46,7 +46,9 @@ vi.mock("./fields/services.jsx", () => ({
   EmailCell: () => null,
 }));
 vi.mock("./fields/devices.jsx", () => ({ DevicesField: () => null }));
-vi.mock("./fields/DaemonField.jsx", () => ({ DaemonField: () => null }));
+vi.mock("./fields/DaemonField.jsx", () => ({
+  DaemonField: ({ connectionId }) => <span data-testid="daemon-connection">{connectionId}</span>,
+}));
 vi.mock("./fields/network.jsx", () => ({
   NetworkAddressField: () => <span>client address</span>,
   PairingNameField: () => <span>client name</span>,
@@ -90,6 +92,7 @@ describe("ProfileDetail", () => {
     expect(screen.getByText("client name")).toBeInTheDocument();
     expect(screen.getByText("private route")).toBeInTheDocument();
     expect(screen.getByText("public route")).toBeInTheDocument();
+    expect(screen.getByTestId("daemon-connection")).toHaveTextContent("local");
 
     view.rerender(
       <ProfileDetail
@@ -99,6 +102,7 @@ describe("ProfileDetail", () => {
       />,
     );
     expect(screen.queryByText("private route")).toBeNull();
+    expect(screen.getByTestId("daemon-connection")).toHaveTextContent("remote");
   });
 });
 

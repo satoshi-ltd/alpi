@@ -27,6 +27,8 @@ const READ_TIMEOUT_LOCAL_SECS: u64 = 20;
 const READ_TIMEOUT_REMOTE_SECS: u64 = 20;
 // attachments.fetch ships up to 20 MiB as base64 JSON — a slow hop needs far more than the default RPC window.
 const READ_TIMEOUT_FETCH_SECS: u64 = 60;
+// The daemon updater permits 300s for the package manager, plus index and installer detection time.
+const READ_TIMEOUT_UPDATE_SECS: u64 = 360;
 const STREAM_READ_TIMEOUT_SECS: u64 = 75;
 const WS_CONNECT_TIMEOUT_SECS: u64 = 4;
 const WS_KEEPALIVE_IDLE_SECS: u64 = 30;
@@ -1069,6 +1071,18 @@ pub fn call_for(connection_id: &str, method: &str, params: Value) -> Result<Valu
     call_conn(&conn, method, params, None)
 }
 
+pub fn call_for_update(connection_id: &str, method: &str, params: Value) -> Result<Value, String> {
+    let conn = connection_by_id(connection_id)
+        .ok_or_else(|| format!("unknown connection: {connection_id}"))?;
+    call_conn_with_retry(
+        &conn,
+        method,
+        params,
+        Some(Duration::from_secs(READ_TIMEOUT_UPDATE_SECS)),
+        false,
+    )
+}
+
 pub fn call_fetch(method: &str, params: Value) -> Result<Value, String> {
     call_conn(
         &active_connection(),
@@ -1104,6 +1118,16 @@ fn call_conn(
     params: Value,
     read_timeout: Option<Duration>,
 ) -> Result<Value, String> {
+    call_conn_with_retry(conn, method, params, read_timeout, true)
+}
+
+fn call_conn_with_retry(
+    conn: &HostConnection,
+    method: &str,
+    params: Value,
+    read_timeout: Option<Duration>,
+    retry_remote: bool,
+) -> Result<Value, String> {
     let id = conn.id().to_string();
     let timeout = read_timeout_for(conn, read_timeout);
     let started = Instant::now();
@@ -1113,7 +1137,11 @@ fn call_conn(
             host, port, token, ..
         } => {
             let _slot = acquire_remote_slot(&id);
-            call_remote_inner(&id, host, *port, token, method, params, timeout)
+            if retry_remote {
+                call_remote_inner(&id, host, *port, token, method, params, timeout)
+            } else {
+                call_remote_single(host, *port, token, method, params, timeout)
+            }
         }
     };
     let elapsed = started.elapsed().as_millis();
@@ -1317,6 +1345,31 @@ fn call_remote_inner(
     timeout: Duration,
 ) -> Result<Value, String> {
     retry_remote(|| call_remote_once(connection_id, host, port, token, method, params.clone(), timeout))
+}
+
+fn call_remote_single(
+    host: &str,
+    port: u16,
+    token: &str,
+    method: &str,
+    params: Value,
+    timeout: Duration,
+) -> Result<Value, String> {
+    let mut ws = WsClient::connect(
+        host,
+        port,
+        Duration::from_secs(WS_CONNECT_TIMEOUT_SECS),
+        timeout,
+    )?;
+    let id = next_request_id();
+    ws.request(
+        &id,
+        &json!({
+            "id": id,
+            "method": method,
+            "params": with_auth(params, token),
+        }),
+    )
 }
 
 fn retry_remote<F>(mut attempt: F) -> Result<Value, String>
@@ -2180,7 +2233,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn fetch_timeout_overrides_default_rpc_windows() {
+    fn long_operations_override_default_rpc_windows() {
         let local = HostConnection::Local {
             id: LOCAL_ID.to_string(),
             name: "Local daemon".to_string(),
@@ -2204,6 +2257,9 @@ mod tests {
         let fetch = Duration::from_secs(READ_TIMEOUT_FETCH_SECS);
         assert_eq!(read_timeout_for(&local, Some(fetch)), Duration::from_secs(60));
         assert_eq!(read_timeout_for(&remote, Some(fetch)), Duration::from_secs(60));
+        let update = Duration::from_secs(READ_TIMEOUT_UPDATE_SECS);
+        assert_eq!(read_timeout_for(&local, Some(update)), Duration::from_secs(360));
+        assert_eq!(read_timeout_for(&remote, Some(update)), Duration::from_secs(360));
         assert_eq!(read_timeout_for(&remote, None), Duration::from_secs(20));
     }
 

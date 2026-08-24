@@ -11,6 +11,22 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.5.14 — 2026-08-24 — update the daemon you selected
+
+- **Daemon updates wait for the package manager to finish.** Desktop now uses
+  the updater's real time budget instead of reporting failure after the normal
+  20-second RPC window, and a transport failure cannot start the same upgrade
+  twice.
+- **Service actions stay on their selected connection.** Update and restart pin
+  the daemon shown in Settings before leaving the UI, so switching connections
+  cannot redirect an action already in flight.
+- **Manual-update guidance is complete.** The notice now covers both paths:
+  Docker installs pull and recreate the Compose service, while source installs
+  pull the checkout and restart the daemon.
+
+Client-side only — no daemon contract changes. Requires alpi ≥ 0.14.8,
+unchanged from 0.5.13.
+
 ## v0.5.13 — 2026-08-23 — see the work while it runs
 
 - **Every active turn has a run id.** The desktop keeps the daemon's durable

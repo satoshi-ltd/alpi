@@ -2347,14 +2347,23 @@ async fn schedule_fire(
 }
 
 #[tauri::command]
-async fn daemon_restart() -> Result<(), String> {
-    alp_call_async("host.daemon.restart", serde_json::json!({})).await
+async fn daemon_restart(connection_id: String) -> Result<(), String> {
+    alp_call_async_for(
+        Some(connection_id),
+        "host.daemon.restart",
+        serde_json::json!({}),
+    )
+    .await
 }
 
 #[tauri::command]
-async fn daemon_update() -> Result<serde_json::Value, String> {
+async fn daemon_update(connection_id: String) -> Result<serde_json::Value, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        host_client::call("host.daemon.update", serde_json::json!({}))
+        host_client::call_for_update(
+            &connection_id,
+            "host.daemon.update",
+            serde_json::json!({}),
+        )
     })
     .await
     .map_err(|e| format!("daemon_update: {e}"))?
