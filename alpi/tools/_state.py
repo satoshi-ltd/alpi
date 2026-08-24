@@ -23,6 +23,9 @@ _turn_usage: ContextVar[Optional[dict]] = ContextVar("alpi_turn_usage", default=
 _declared_turn_usage: ContextVar[Optional[dict]] = ContextVar(
     "alpi_declared_turn_usage", default=None,
 )
+_turn_counters: ContextVar[Optional[dict[str, int]]] = ContextVar(
+    "alpi_turn_counters", default=None,
+)
 _turn_id: ContextVar[str] = ContextVar("alpi_turn_id", default="")
 _active_skills_env: ContextVar[Optional[set]] = ContextVar(
     "alpi_active_skills_env", default=None,
@@ -101,6 +104,7 @@ def reset_turn_usage() -> None:
         "tokens_in": 0, "tokens_out": 0, "usd": 0.0,
         "cached_in": 0, "measured_in": 0,
     })
+    _turn_counters.set({})
     _turn_id.set(os.environ.get("ALPI_WORKGROUP_TURN_ID") or uuid.uuid4().hex)
 
 
@@ -166,6 +170,20 @@ def mark_turn_usage_declared(snapshot: Optional[dict]) -> None:
 
 def get_turn_id() -> str:
     return _turn_id.get()
+
+
+def spend_turn_counter(name: str, limit: int) -> int | None:
+    counters = _turn_counters.get()
+    if counters is None:
+        counters = {}
+        _turn_counters.set(counters)
+    with _tally_lock:
+        spent = int(counters.get(name, 0))
+        if spent >= limit:
+            return None
+        spent += 1
+        counters[name] = spent
+        return spent
 
 
 def get_turn_usage_ref() -> Optional[dict]:

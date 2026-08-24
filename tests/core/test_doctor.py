@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-from alpi import cli, doctor
+from alpi import cli, config as cfg_mod, doctor
 
 
 @pytest.fixture(autouse=True)
@@ -543,3 +543,58 @@ def test_services_check_warns_on_runs_json_the_scheduler_rejects(tmp_path: Path,
     hit = [c for c in checks if c.name == "Job runs"]
     assert hit and hit[0].status == "warn"
     assert "runs.json" in hit[0].detail and "no job fires" in hit[0].detail
+
+
+def _rendered(home: Path) -> list:
+    import io
+
+    from rich.console import Console
+
+    return doctor.run_and_render(Console(file=io.StringIO()), home, "default", "0.0.0")
+
+
+# `alpi doctor` renders through run_and_render, not run_all — a check wired into only run_all is invisible to every user. Compare (group, name) pairs, not groups: `_check_services` already opens the ALP group, so a group-level assert passes while `_check_alp_integrity` stays unreachable.
+def test_rendered_doctor_runs_every_check_run_all_runs(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    _write_cfg(tmp_path, workspace=str(tmp_path))
+    from alpi import service
+    monkeypatch.setattr(service, "daemon_installed", lambda: False)
+    monkeypatch.setattr(service, "daemon_running_pid", lambda root: None)
+
+    # Peers present, distinct: several checks stay silent on an empty profile, so the fixture has to make them speak or the guard cannot see an omission.
+    (tmp_path / "alp").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "alp" / "peers.yaml").write_text(
+        "- id: alice\n  pubkey: KEY_A\n  address: 10.0.0.1:7423\n"
+        "- id: bob\n  pubkey: KEY_B\n  address: 10.0.0.2:7423\n"
+    )
+
+    reported = {(c.group, c.name) for c in doctor.run_all(tmp_path, "default")}
+    rendered = {(c.group, c.name) for c in _rendered(tmp_path)}
+    assert not reported - rendered
+    assert ("Assets", "prefetch") in rendered
+    assert ("ALP", "peers") in rendered
+
+
+def test_rendered_doctor_reports_duplicate_peer_pubkey(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    _write_cfg(tmp_path, workspace=str(tmp_path))
+    from alpi import service
+    monkeypatch.setattr(service, "daemon_installed", lambda: False)
+    monkeypatch.setattr(service, "daemon_running_pid", lambda root: None)
+    (tmp_path / "alp").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "alp" / "peers.yaml").write_text(
+        "- id: alice\n  pubkey: SAMEKEY\n  address: 10.0.0.1:7423\n"
+        "- id: bob\n  pubkey: SAMEKEY\n  address: 10.0.0.2:7423\n"
+    )
+
+    integrity = [
+        c for c in doctor._check_alp_integrity(tmp_path, cfg_mod.load(tmp_path))
+        if c.status == "fail"
+    ]
+    assert integrity, "fixture must produce a real integrity failure"
+
+    rendered = _rendered(tmp_path)
+    assert [c for c in rendered if c.status == "fail" and c.group == "ALP"]
+    assert doctor.exit_code(rendered) != 0

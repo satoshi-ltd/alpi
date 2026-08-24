@@ -63,6 +63,11 @@ Tests: `pytest -q`, `pytest --integration -q`, `pytest --llm`.
 - `alpi: command not found`: uv/pipx bin dir not on `PATH`.
 - Provider auth fails: rerun `alpi setup` or inspect the profile `.env`/config.
 - Tools fail in a project: check the configured workspace.
+- `browser` absent from `alpi doctor` on Linux: install Chromium's system
+  libraries with `uvx --from playwright playwright install-deps
+  chromium-headless-shell` (`uv tool install` exposes no `playwright` binary).
+- First `browser` call downloads the Chromium headless shell (~340 MB, once).
+  The full Chromium build is never fetched.
 - Daemon features unresponsive: `alpi doctor` and `alpi daemon status`.
 
 ## Not supported

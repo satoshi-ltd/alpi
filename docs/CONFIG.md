@@ -83,6 +83,7 @@ Three options:
 | `tools.terminal.allow_network` | `false` | bool | next turn |
 | `tools.terminal.approval.allowlist` | `[]` | list of pattern descriptions and/or command globs (see below) | next turn |
 | `tools.browser.vision` | `false` | bool | next turn |
+| `tools.web_search.max_per_turn` | `25` | int | next turn |
 | `tools.browser.allow_local` | `false` | bool — let the `browser` tool navigate **loopback** only (`127.0.0.1`, `::1`, and hostnames that resolve to loopback such as `localhost`). RFC1918 / CGNAT / Tailscale stay blocked even when this is on; the exemption is loopback-only, matching `_guards._is_loopback`. Off blocks every local target; on is for hitting a local dev server you trust. | next turn |
 | `tools.budget.per_result_chars` | `100_000` | int (-1 = unlimited) | next turn |
 | `tools.tts.voice` | `"en-US-AriaNeural"` | Edge TTS voice id | next turn |

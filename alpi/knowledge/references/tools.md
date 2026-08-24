@@ -8,7 +8,9 @@
 - The workspace is the default root for relative paths, not a sandbox.
   Absolute paths can work, but sensitive paths are denied.
 - Tool availability is dynamic: unavailable tools are hidden from the schema;
-  `tools.deny` hides and refuses tools per profile.
+  `tools.deny` hides and refuses tools per profile. A probe tests what fails at
+  call time, not a proxy: `browser` requires Chromium's system libraries, not
+  just an importable `playwright`.
 - Attachments are turn input unless explicitly learned. Output attachments are
   tool-produced files surfaced separately from the final text.
 - Use `alpi_knowledge` first for questions about alpi itself.
@@ -158,6 +160,19 @@ Output attachments (MM.2):
 
 - Tool is missing from schema: check `tools.deny`, skill/tool availability,
   missing bins/env/config, or `alpi doctor`.
+- `browser` missing on Linux: Chromium's system libraries are absent — `alpi
+  doctor` names them, and the repair is `uvx --from playwright playwright
+  install-deps chromium-headless-shell` (via `uvx`, because `uv tool install`
+  puts no `playwright` on `PATH`). The tool is withheld rather than offered
+  and failing at launch, so no browser download starts either. The Docker
+  image installs those libraries at build time.
+- `web_search` refuses with "budget for this turn is spent": the per-turn
+  ceiling (`tools.web_search.max_per_turn`, default 25) was hit. Answer from
+  what you have or read a known URL; do not loop.
+- `web_search` says every backend refused: an IP-wide rate limit, typically
+  minutes long — it already retried once. Do not reformulate and search again;
+  switch to `web_fetch` / `web_extract` on a known URL, `browser`, or say
+  search is unavailable.
 - Model keeps using a denied tool: executor still refuses denied names even if a
   stale context mentions them.
 - Search returns stale/no results: run the matching indexer

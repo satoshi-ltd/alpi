@@ -32,6 +32,11 @@ COPY pyproject.toml README.md LICENSE ./
 COPY alpi ./alpi
 RUN pip install .
 
+# Chromium's system libraries, resolved by the playwright that pip just installed rather than a hand-written list, so the image cannot drift from the browser it ships for. `browser` launches chromium-headless-shell; the browser build itself still downloads on first use.
+RUN apt-get update \
+    && python -m playwright install-deps chromium-headless-shell \
+    && rm -rf /var/lib/apt/lists/*
+
 # --create-home on /data leaves it owned by uid 1000; no chown -R (that would
 # duplicate /app into a second layer). The package lives in site-packages
 # (root-owned, world-readable); /app source isn't needed at runtime.

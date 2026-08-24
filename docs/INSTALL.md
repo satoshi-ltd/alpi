@@ -78,9 +78,10 @@ warning and you'll need to keep the daemon foregrounded under
 `tmux` / `screen`, or fix lingering by hand.
 
 The first time the agent runs the `browser` tool, alpi downloads
-Chromium (~200 MB, one-time, cached at `~/.cache/ms-playwright/`).
-No separate install command. If you never use the browser tool,
-nothing is downloaded.
+the Chromium headless shell (~340 MB, one-time, cached at
+`~/.cache/ms-playwright/`). That shell is what `browser` launches;
+the full Chromium build is never fetched. No separate install
+command. If you never use the browser tool, nothing is downloaded.
 
 ## Alternative — `pipx install`
 
@@ -171,10 +172,15 @@ uv run alpi
   directory isn't on your `PATH`. uv suggests the right line during
   install; re-run the suggested `eval "$(uv tool ...)"` command, or
   add `~/.local/bin` to your shell's `PATH`.
-- The browser tool's first run fails on Linux with a missing
-  shared library (`libgbm`, `libnss3`, etc.) — install the
+- The browser tool is missing from `alpi doctor` on Linux, or
+  `doctor` warns `chromium system libraries missing` — install the
   system libraries Playwright needs:
-  `uvx --from playwright playwright install-deps chromium`.
+  `uvx --from playwright playwright install-deps chromium-headless-shell`.
+  It has to go through `uvx`: `uv tool install` links only
+  alpi-agent's own entry points, so a bare `playwright` is not on
+  `PATH`. Until the libraries are present the tool is withheld from
+  the agent rather than offered and failing at launch. The Docker
+  image installs them at build time from its own playwright.
 - `alpi doctor` red lights — run it; the output names the missing
   piece (model, workspace, email credentials, etc.) and tells you which
   wizard step fixes it.

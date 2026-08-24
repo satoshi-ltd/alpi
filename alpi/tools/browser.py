@@ -13,6 +13,32 @@ from alpi.tools.base import Tool, ToolResult
 _MAX_SNAPSHOT_CHARS = 8000
 _DEFAULT_TIMEOUT_MS = 30_000
 
+# uv tool installs expose only alpi-agent's own entry points, so the `playwright` console script is not on PATH — the repair has to go through uvx (see docs/INSTALL.md).
+CHROMIUM_DEPS_COMMAND = (
+    "uvx --from playwright playwright install-deps chromium-headless-shell"
+)
+
+# Chromium's DT_NEEDED set, one soname per Debian package family — playwright downloads the browser but never these, so a slim Linux image resolves the import and still cannot launch.
+_CHROMIUM_SONAMES = (
+    "libglib-2.0.so.0",
+    "libnss3.so",
+    "libnspr4.so",
+    "libatk-1.0.so.0",
+    "libatk-bridge-2.0.so.0",
+    "libdbus-1.so.3",
+    "libX11.so.6",
+    "libXcomposite.so.1",
+    "libXdamage.so.1",
+    "libXext.so.6",
+    "libXfixes.so.3",
+    "libXrandr.so.2",
+    "libgbm.so.1",
+    "libxcb.so.1",
+    "libxkbcommon.so.0",
+    "libasound.so.2",
+    "libatspi.so.0",
+)
+
 _executor: ThreadPoolExecutor | None = None
 _state: dict[str, Any] = {
     "playwright": None,
@@ -20,6 +46,20 @@ _state: dict[str, Any] = {
     "context": None,
     "page": None,
 }
+
+
+def missing_chromium_libs() -> list[str]:
+    import sys
+    if not sys.platform.startswith("linux"):
+        return []
+    import ctypes
+    missing = []
+    for soname in _CHROMIUM_SONAMES:
+        try:
+            ctypes.CDLL(soname)
+        except OSError:
+            missing.append(soname)
+    return missing
 
 
 def _storage_dir():
@@ -117,7 +157,8 @@ def _launch_chromium(pw):
     from alpi.core._playwright import ensure_chromium
 
     print(
-        "downloading Chromium for the browser tool (one-time, ~200MB)…",
+        "downloading the Chromium headless shell for the browser tool "
+        "(one-time, ~340MB)…",
         file=sys.stderr, flush=True,
     )
     ensure_chromium()
@@ -402,6 +443,12 @@ class Browser(Tool):
         import importlib.util
         if importlib.util.find_spec("playwright") is None:
             return False, "playwright not installed"
+        missing = missing_chromium_libs()
+        if missing:
+            return False, (
+                f"chromium system libraries missing ({', '.join(missing)}) — run: "
+                f"{CHROMIUM_DEPS_COMMAND}"
+            )
         return True, ""
 
     def run(

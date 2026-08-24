@@ -3,6 +3,7 @@ we only exercise dispatch, arg plumbing, and error paths."""
 
 from __future__ import annotations
 
+import re
 from unittest.mock import MagicMock
 
 from alpi.tools import browser as browser_mod
@@ -282,3 +283,78 @@ def test_launch_chromium_propagates_unrelated_errors(monkeypatch) -> None:
     import pytest
     with pytest.raises(RuntimeError, match="some other crash"):
         browser_mod._launch_chromium(fake_pw)
+
+
+def test_check_reports_missing_chromium_libs(monkeypatch) -> None:
+    monkeypatch.setattr(
+        browser_mod, "missing_chromium_libs",
+        lambda: ["libgbm.so.1", "libnss3.so"],
+    )
+    ok, reason = Browser.check()
+    assert ok is False
+    assert "libgbm.so.1" in reason
+    assert "install-deps chromium" in reason
+
+
+def test_check_available_when_libs_resolve(monkeypatch) -> None:
+    monkeypatch.setattr(browser_mod, "missing_chromium_libs", lambda: [])
+    assert Browser.check() == (True, "")
+
+
+def test_check_reports_missing_playwright_before_probing_libs(monkeypatch) -> None:
+    import importlib.util
+    monkeypatch.setattr(importlib.util, "find_spec", lambda _name: None)
+
+    def _boom() -> list[str]:
+        raise AssertionError("libs must not be probed without playwright")
+
+    monkeypatch.setattr(browser_mod, "missing_chromium_libs", _boom)
+    ok, reason = Browser.check()
+    assert ok is False
+    assert reason == "playwright not installed"
+
+
+def test_missing_chromium_libs_is_linux_only(monkeypatch) -> None:
+    import ctypes
+    monkeypatch.setattr("sys.platform", "darwin")
+
+    def _boom(_name):
+        raise AssertionError("dlopen must not run off Linux")
+
+    monkeypatch.setattr(ctypes, "CDLL", _boom)
+    assert browser_mod.missing_chromium_libs() == []
+
+
+def test_missing_chromium_libs_collects_unloadable_sonames(monkeypatch) -> None:
+    import ctypes
+    monkeypatch.setattr("sys.platform", "linux")
+    monkeypatch.setattr(
+        ctypes, "CDLL",
+        lambda name: (_ for _ in ()).throw(OSError(name))
+        if name == "libgbm.so.1" else object(),
+    )
+    assert browser_mod.missing_chromium_libs() == ["libgbm.so.1"]
+
+
+# The bug this guards: the image shipped Chromium's downloader but never its libraries, so `browser` was advertised and could never launch. Assert the mechanism, not a copy of the package list — a second hand-written list would only prove it matches itself, and `pip install .` ignores uv.lock so the image's playwright can outrun the suite's.
+def test_docker_image_derives_chromium_deps_from_playwright() -> None:
+    from pathlib import Path
+
+    dockerfile = (
+        Path(__file__).resolve().parents[2] / "docker" / "Dockerfile"
+    ).read_text(encoding="utf-8")
+
+    assert "playwright install-deps chromium-headless-shell" in dockerfile
+    hand_rolled = [
+        line for line in dockerfile.splitlines()
+        if re.search(r"^\s+lib\S+\s*\\?$", line)
+    ]
+    assert not hand_rolled, f"hand-written chromium libs reintroduced: {hand_rolled}"
+
+
+def test_repair_command_is_reachable_from_a_uv_tool_install(monkeypatch) -> None:
+    monkeypatch.setattr(browser_mod, "missing_chromium_libs", lambda: ["libgbm.so.1"])
+    _ok, reason = Browser.check()
+    # uv tool installs only link alpi-agent's own entry points, so a bare `playwright ...` is command-not-found for the documented install path.
+    assert "uvx --from playwright" in reason
+    assert not re.search(r"run: playwright\b", reason)

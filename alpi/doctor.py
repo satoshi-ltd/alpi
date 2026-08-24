@@ -370,7 +370,10 @@ def run_and_render(console, home: Path, profile: str, version: str) -> list[Chec
         for n in sorted(servers.keys()):
             _add_pending(f"mcp:{n}", "MCPs", n)
 
+    _add_sync(_check_alp_integrity(home, cfg))
     _add_sync(_check_security(cfg))
+    _add_sync(_check_storage(home))
+    _add_sync(_check_assets(home))
 
     # Pre-compute column width from all known names.
     name_w = max(len(name) for _, _, name in plan)

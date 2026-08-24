@@ -325,6 +325,10 @@ Denylist: `/etc/`, `/boot/`, `/sys/`, `/proc/`, `/usr/lib/systemd/`, `/System/`,
 
 `register(cls)` adds a `Tool` subclass to the dict, `schemas()` emits the OpenAI function-calling shape, `execute(name, args)` runs by name with full error capture. The registry is assembled from the sibling tool modules in `alpi/tools/__init__.py`, including the Playwright-backed `browser` tool. `knowledge` registers first so durable user/workspace recall has one canonical surface.
 
+A tool's `check()` is what keeps `schemas()` honest: an unavailable tool is never offered to the model, so the probe has to test the thing that actually fails at call time, not a proxy for it. `browser` is the cautionary case — probing only `import playwright` advertised the tool on every slim Linux image, where playwright downloads the browser on demand and then cannot launch it because the distro never installed Chromium's load-time libraries. It now `dlopen`s one soname per Debian package family (`_CHROMIUM_SONAMES`, Linux-only, ~2 ms when they are absent) and reports the missing set plus `CHROMIUM_DEPS_COMMAND` — a `uvx --from playwright …` invocation, because `uv tool install` links only alpi-agent's own entry points and a bare `playwright` is not on `PATH`.
+
+The image cannot be held to that list by a unit test: `pip install .` ignores `uv.lock`, so the playwright inside the image outruns the one the suite imports (observed: 1.62 vs 1.58). So `docker/Dockerfile` derives the packages from its own playwright (`playwright install-deps chromium-headless-shell`) instead of carrying a hand-written copy, and `publish-docker.yml` launches the real headless shell in the built image before anything is pushed. `ensure_chromium()` installs with `--only-shell` because `chromium.launch(headless=True)` runs `chrome-headless-shell`; the full Chromium build was never used, and `_wanted_chromium_dirs()` now tracks only the shell so an existing profile's stale full build is pruned (~640 MB reclaimed per profile).
+
 ### Knowledge recall (`alpi/core/` + `alpi/tools/knowledge_base.py`)
 
 Per-profile semantic search over synthesized user/workspace knowledge. The

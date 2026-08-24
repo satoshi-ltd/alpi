@@ -99,3 +99,43 @@ def test_ensure_weights_cached_does_not_prime_the_global(monkeypatch) -> None:
     embed.ensure_weights_cached()
     assert len(loaded) == 1
     assert embed._DEFAULT is None
+
+
+def test_wanted_chromium_dirs_tracks_only_the_headless_shell() -> None:
+    wanted = _playwright._wanted_chromium_dirs()
+    assert wanted, "playwright's browsers.json must yield a shell revision"
+    assert all(w.startswith("chromium_headless_shell-") for w in wanted)
+
+
+def test_prune_reclaims_a_full_chromium_build(tmp_path, monkeypatch) -> None:
+    cache = tmp_path / "ms-playwright"
+    for name in ("chromium-1234", "chromium_headless_shell-1234"):
+        (cache / name).mkdir(parents=True)
+    monkeypatch.setattr(
+        _playwright, "_wanted_chromium_dirs",
+        lambda: {"chromium_headless_shell-1234"},
+    )
+    assert _playwright._prune_stale_chromium(cache) == 1
+    assert not (cache / "chromium-1234").exists()
+    assert (cache / "chromium_headless_shell-1234").is_dir()
+
+
+def test_ensure_chromium_installs_only_the_shell(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    _playwright.reset_for_testing()
+    seen: list[list[str]] = []
+
+    def fake_run(args, **_kw):
+        seen.append(list(args))
+        return SimpleNamespace(returncode=0, stderr=b"")
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+    monkeypatch.setattr(_playwright, "_prune_stale_chromium", lambda *a, **kw: 0)
+    try:
+        _playwright.ensure_chromium()
+    finally:
+        # The success latch is module state; leaving it set makes every later ensure_chromium() a silent no-op.
+        _playwright.reset_for_testing()
+    assert seen and "--only-shell" in seen[0]
+    assert seen[0][-1] == "chromium"

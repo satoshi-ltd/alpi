@@ -22,7 +22,7 @@ alpi digest --json
 alpi -p <profile> digest --since 7d
 ```
 
-- `doctor`: live checks for common setup problems.
+- `doctor`: live checks for common setup problems. Groups: Version, Model, Workspace, Tools (unavailable tools listed with the reason), Skills, Email, Services, ALP, MCPs, Security, Storage (silent unless a store is outsized), Assets (prefetch mode, Chromium/embedder cache state, stale builds).
 - `audit`: read-only security posture for the whole install. Offline checks:
   secret-file permissions, public/all-interface binds, terminal sandbox,
   LLM watchdog, and daily spend cap. Online check: OSV CVEs for installed

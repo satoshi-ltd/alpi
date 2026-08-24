@@ -34,7 +34,7 @@ def ensure_chromium(timeout_s: int = 600) -> None:
             return
         started = time.monotonic()
         result = subprocess.run(
-            [sys.executable, "-m", "playwright", "install", "chromium"],
+            [sys.executable, "-m", "playwright", "install", "--only-shell", "chromium"],
             check=False,
             capture_output=True,
             timeout=timeout_s,
@@ -68,12 +68,12 @@ def _wanted_chromium_dirs() -> set[str]:
     data = json.loads(spec.read_text(encoding="utf-8"))
     out: set[str] = set()
     for browser in data.get("browsers", []):
-        name = str(browser.get("name") or "")
-        if name not in ("chromium", "chromium-headless-shell"):
+        # Only the shell: `chromium.launch(headless=True)` runs chrome-headless-shell, so a full chromium build on disk is dead weight and must stay prunable.
+        if str(browser.get("name") or "") != "chromium-headless-shell":
             continue
         revision = str(browser.get("revision") or "")
         if revision:
-            out.add(f"{name.replace('-', '_')}-{revision}")
+            out.add(f"chromium_headless_shell-{revision}")
     return out
 
 

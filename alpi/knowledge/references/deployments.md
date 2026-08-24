@@ -30,6 +30,7 @@ alpi daemon restart
 - Volume mounts at `/data`; `HOME=/data` makes `/data/.alpi` the profile root, surviving restarts.
 - Container binds `0.0.0.0`; set `ALPI_NETWORK_HOST` to the address clients dial (LAN/Tailscale IP for direct WS, or a hostname with an explicit certificate-validated `wss://` entry in `host.endpoints`). It can't see the host's interfaces, so this knob carries the advertised address.
 - Ports: `49200` = host plane for paired desktop/mobile (`host.*`, TCP/WS); `7423` = ALP peer traffic (`link.*`, `workgroup.*`, Noise_XK), only for cross-machine peers.
+- Image installs Chromium's system libraries at build time, derived from its own playwright rather than a hand-written list, and the release pipeline launches the real headless shell in the built image before pushing. The browser build itself is not baked in: `runtime.prefetch` defaults to `off` under Docker, so the first `browser` call downloads the headless shell (~340 MB) into the `/data` volume — set `runtime.prefetch: auto` to move that cost to daemon boot instead of a user's turn. `alpi doctor` → Assets reports what is cached, what will fetch on first use, and stale builds.
 
 ### Docker WSS recipe
 

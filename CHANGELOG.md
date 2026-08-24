@@ -1,5 +1,57 @@
 # Changelog
 
+## v0.14.9 — 2026-08-24 — a tool that cannot run is no longer offered
+
+- **The browser tool works in Docker.** The image never installed the system
+  libraries Chromium loads at startup — not in any version of it since the
+  image was introduced — so the first `browser` call downloaded a browser into
+  the profile volume and then failed to launch, on every container, every time.
+  Measured on the maintainer's server: three containers holding 1.9 GB of a
+  browser that could not start, and the only `browser` call in months of
+  history died on a missing `libglib`. The image now installs those libraries
+  at build time, and it resolves them through its own playwright instead of a
+  hand-written list, because `pip install .` ignores the lock file and the
+  playwright inside the image outruns the one the tests import (observed: 1.62
+  against 1.58). No list to keep in sync, so none to forget. Its package layers
+  grow from 110 MB to 443 MB, which buys the fonts a screenshot needs to render
+  text instead of boxes — including Thai and CJK.
+- **The browser downloads a third of what it used to.** `browser` launches
+  `chrome-headless-shell`; the full Chromium build beside it was never used by
+  anything. Installing only the shell takes a profile's browser cache from
+  984 MB to 344 MB, and an existing profile reclaims the difference — about
+  640 MB — the next time the shell installs, because the stale full build is
+  no longer something alpi wants on disk.
+- **An unavailable tool is withheld, not advertised, and the repair works.**
+  The browser's availability probe only asked whether the Python package
+  imported, which is true on any slim Linux image and says nothing about
+  whether a browser can start — so the agent was offered a tool that could only
+  fail, and spent turns and a download finding out. The probe now tests the
+  libraries themselves and keeps the tool out of the model's list when they are
+  missing. `alpi doctor` names what is absent and gives a command that exists:
+  the previous advice ran a bare `playwright`, which is not on `PATH` for the
+  recommended `uv tool` install, so it could only answer command-not-found.
+- **Three groups of `alpi doctor` checks stop running only in tests.** The
+  command has two check paths and renders through one of them; the section that
+  reports cached downloads and stale browser builds, the outsized-store
+  warnings, and the ALP identity checks were all wired into the other. The last
+  one matters most: duplicate peer pubkeys and a peer carrying this agent's own
+  key — what a cloned `/data` volume looks like — were reported as a hard
+  failure to nobody. All three now render, `doctor` exits non-zero on them, and
+  a test holds the two paths to the same set of checks rather than the same set
+  of section headings, which is what let this hide.
+- **`web_search` stops racing itself into a rate limit.** One search fans out
+  to five or more upstream engines, so a batch of parallel searches multiplies
+  into dozens of requests and trips a block that covers the whole machine's IP
+  — measured at 16 minutes 47 seconds before it lifted. Searches are now
+  serialised and spaced, retried once with a backoff, and bounded per turn
+  (`tools.web_search.max_per_turn`). When they do fail the error carries the
+  real exception instead of "the ddgs backend raised", and tells the agent that
+  reformulating and searching again is the one thing that cannot help — which
+  is exactly what it did four times in a row before giving up.
+
+Nothing to migrate. Profiles that deny `browser` are unaffected, and the fix
+reaches a running container on the next image pull.
+
 ## v0.14.8 — 2026-08-23 — every turn has a spine
 
 - **Runs are durable and operable.** Every engine turn now has a stable run id

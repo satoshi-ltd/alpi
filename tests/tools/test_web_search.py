@@ -16,7 +16,10 @@ manual smoke tests.
 
 from __future__ import annotations
 
+import contextvars
 import sys
+import time
+import threading
 from types import SimpleNamespace
 
 import pytest
@@ -29,6 +32,18 @@ def _quiet_state(monkeypatch):
     """``emit_state`` writes to the global event bus. Silence it so the
     tests don't need to mount a fake event sink."""
     monkeypatch.setattr("alpi.tools._state.emit_state", lambda *_a, **_kw: None)
+
+
+@pytest.fixture(autouse=True)
+def _no_waiting(monkeypatch):
+    """Zero the pacing clock and the retry backoff, and drop the per-turn
+    tally — otherwise every test pays real seconds."""
+    from alpi.tools import _state
+
+    monkeypatch.setattr(ws, "_MIN_INTERVAL_S", 0.0)
+    monkeypatch.setattr(ws, "_RETRY_BACKOFF_S", 0.0)
+    monkeypatch.setattr(ws, "_last_started", 0.0)
+    _state.reset_turn_usage()
 
 
 def _fake_ddgs(results):
@@ -143,3 +158,210 @@ def test_backend_exception_becomes_error(monkeypatch):
 
     assert not result.ok
     assert "search failed" in result.error
+
+
+def test_retry_runs_once_then_reports_the_real_exception(monkeypatch):
+    """The old code swallowed the exception and said "the ddgs backend
+    raised", so the model retried blindly into an IP-wide block and the
+    logs carried nothing to diagnose. One retry, then the exception type
+    and message reach both."""
+    calls = {"n": 0}
+
+    class _Raising:
+        def __enter__(self): return self
+        def __exit__(self, *_a): return False
+        def text(self, *_a, **_kw):
+            calls["n"] += 1
+            raise RuntimeError("Ratelimit 429")
+
+    monkeypatch.setitem(sys.modules, "ddgs", SimpleNamespace(DDGS=_Raising))
+
+    result = ws.WebSearch().run(query="anything")
+
+    assert not result.ok
+    assert calls["n"] == 2
+    assert "RuntimeError: Ratelimit 429" in result.error
+    assert "do NOT reformulate" in result.error
+
+
+def test_retry_recovers_when_the_second_attempt_succeeds(monkeypatch):
+    calls = {"n": 0}
+
+    class _FlakyOnce:
+        def __enter__(self): return self
+        def __exit__(self, *_a): return False
+        def text(self, *_a, **_kw):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise RuntimeError("transient")
+            return [{"title": "T", "href": "https://example.com", "body": "B"}]
+
+    monkeypatch.setitem(sys.modules, "ddgs", SimpleNamespace(DDGS=_FlakyOnce))
+
+    result = ws.WebSearch().run(query="anything")
+
+    assert result.ok
+    assert calls["n"] == 2
+    assert "example.com" in result.output
+
+
+def test_turn_budget_stops_calling_the_backend(monkeypatch):
+    calls = {"n": 0}
+
+    class _Counting:
+        def __enter__(self): return self
+        def __exit__(self, *_a): return False
+        def text(self, *_a, **_kw):
+            calls["n"] += 1
+            return []
+
+    monkeypatch.setitem(sys.modules, "ddgs", SimpleNamespace(DDGS=_Counting))
+    monkeypatch.setattr(ws, "_max_per_turn", lambda: 3)
+
+    outcomes = [ws.WebSearch().run(query=f"q{i}") for i in range(5)]
+
+    assert calls["n"] == 3
+    assert all(r.ok for r in outcomes[:3])
+    assert all(not r.ok for r in outcomes[3:])
+    assert "budget for this turn is spent" in outcomes[4].error
+    assert "web_fetch" in outcomes[4].error
+
+
+def test_budget_is_per_turn_not_per_process(monkeypatch):
+    class _Empty:
+        def __enter__(self): return self
+        def __exit__(self, *_a): return False
+        def text(self, *_a, **_kw): return []
+
+    monkeypatch.setitem(sys.modules, "ddgs", SimpleNamespace(DDGS=_Empty))
+    monkeypatch.setattr(ws, "_max_per_turn", lambda: 1)
+    from alpi.tools import _state
+
+    _state._turn_id.set("turn-one")
+    assert ws.WebSearch().run(query="a").ok
+    assert not ws.WebSearch().run(query="b").ok
+
+    _state.reset_turn_usage()
+    _state._turn_id.set("turn-two")
+    assert ws.WebSearch().run(query="c").ok
+
+
+def test_interleaved_turns_do_not_reset_each_others_budget(monkeypatch):
+    monkeypatch.setattr(ws, "_max_per_turn", lambda: 2)
+    from alpi.tools import _state
+
+    def new_turn(turn_id: str) -> contextvars.Context:
+        context = contextvars.copy_context()
+
+        def initialize() -> None:
+            _state.reset_turn_usage()
+            _state._turn_id.set(turn_id)
+
+        context.run(initialize)
+        return context
+
+    turn_a = new_turn("turn-a")
+    turn_b = new_turn("turn-b")
+
+    assert turn_a.run(ws._spend_turn_budget, 2) == 1
+    assert turn_b.run(ws._spend_turn_budget, 2) == 1
+    assert turn_a.run(ws._spend_turn_budget, 2) == 2
+    assert turn_b.run(ws._spend_turn_budget, 2) == 2
+    assert turn_a.run(ws._spend_turn_budget, 2) is None
+    assert turn_b.run(ws._spend_turn_budget, 2) is None
+
+
+def test_parallel_calls_in_one_turn_share_the_budget() -> None:
+    from alpi.tools import _state
+
+    _state.reset_turn_usage()
+    contexts = [contextvars.copy_context() for _ in range(4)]
+    results: list[int | None] = []
+    result_lock = threading.Lock()
+
+    def spend(context: contextvars.Context) -> None:
+        result = context.run(ws._spend_turn_budget, 2)
+        with result_lock:
+            results.append(result)
+
+    threads = [threading.Thread(target=spend, args=(context,)) for context in contexts]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert sorted(result for result in results if result is not None) == [1, 2]
+    assert results.count(None) == 2
+
+
+def test_searches_never_overlap(monkeypatch):
+    """ddgs fans one query out to several engines, so overlapping calls
+    multiply upstream requests and are what tips the shared IP into a
+    rate limit that lasts minutes."""
+    import threading
+
+    live = {"now": 0, "max": 0}
+    seen = threading.Lock()
+
+    class _Slow:
+        def __enter__(self): return self
+        def __exit__(self, *_a): return False
+        def text(self, *_a, **_kw):
+            with seen:
+                live["now"] += 1
+                live["max"] = max(live["max"], live["now"])
+            time.sleep(0.05)
+            with seen:
+                live["now"] -= 1
+            return []
+
+    monkeypatch.setitem(sys.modules, "ddgs", SimpleNamespace(DDGS=_Slow))
+
+    threads = [
+        threading.Thread(target=lambda i=i: ws.WebSearch().run(query=f"q{i}"))
+        for i in range(4)
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert live["max"] == 1
+
+
+def test_calls_are_spaced_apart(monkeypatch):
+    class _Empty:
+        def __enter__(self): return self
+        def __exit__(self, *_a): return False
+        def text(self, *_a, **_kw): return []
+
+    monkeypatch.setitem(sys.modules, "ddgs", SimpleNamespace(DDGS=_Empty))
+    monkeypatch.setattr(ws, "_MIN_INTERVAL_S", 0.2)
+
+    started = time.monotonic()
+    for i in range(3):
+        ws.WebSearch().run(query=f"q{i}")
+    assert time.monotonic() - started >= 0.4
+
+
+def test_retry_and_following_search_are_each_spaced(monkeypatch):
+    attempts = {"n": 0}
+
+    class _FailsOnce:
+        def __enter__(self): return self
+        def __exit__(self, *_a): return False
+        def text(self, *_a, **_kw):
+            attempts["n"] += 1
+            if attempts["n"] == 1:
+                raise RuntimeError("transient")
+            return []
+
+    monkeypatch.setitem(sys.modules, "ddgs", SimpleNamespace(DDGS=_FailsOnce))
+    monkeypatch.setattr(ws, "_MIN_INTERVAL_S", 0.1)
+
+    started = time.monotonic()
+    assert ws.WebSearch().run(query="first").ok
+    assert ws.WebSearch().run(query="second").ok
+
+    assert attempts["n"] == 3
+    assert time.monotonic() - started >= 0.2
