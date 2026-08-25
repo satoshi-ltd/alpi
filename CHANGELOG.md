@@ -1,5 +1,36 @@
 # Changelog
 
+## v0.14.10 — 2026-08-25 — a failing tool gets to say why
+
+- **A failed tool's own diagnosis reaches the model — on every path.** When a
+  tool failed, the relaying side forwarded only the error label and discarded
+  the tool's output — but that output is where skill runners print their
+  carefully written failure JSON. Observed in the field: an agent staring at
+  `script exited rc=1`, then reading its own runner's source code to guess
+  what went wrong, while the runner had already said `clone failed: could not
+  read Username` into the discarded stream. The engine, `delegate` and
+  `research` — the sub-agent most likely to iterate on failing commands — now
+  build the payload through one shared helper: error followed by output,
+  still capped by each path's budget; failures with no output stay as terse
+  as before. Each of the three paths carries its own regression test.
+- **Delegate's tool payloads arrive fenced as untrusted content.** The engine
+  and `research` already wrapped every relayed tool output in the
+  untrusted-content markers; `delegate` — the write-capable sub-agent that
+  runs terminal commands — inserted them raw, successes included. With failed
+  output now carrying repo-controlled stdout/stderr, that gap became a steering
+  vector: a hostile repository could print instructions into a failing build
+  and address the one sub-agent that can edit files. Delegate now sanitizes
+  after budgeting, exactly like research, and both sub-agent tests require the
+  markers around the diagnosis.
+- **ALP secrets directories are born private and heal themselves.** The
+  keypair bootstrap created `alp/secrets/` with the process umask — 0755 on
+  every deployment checked — leaving the directory around a 0600 private key
+  world-listable. It is now chmod'd to 0700 at creation and re-checked on
+  every daemon start, so directories left open by older versions repair
+  themselves without an operator.
+
+Nothing to migrate.
+
 ## v0.14.9 — 2026-08-24 — a tool that cannot run is no longer offered
 
 - **The browser tool works in Docker.** The image never installed the system

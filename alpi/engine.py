@@ -16,7 +16,7 @@ from alpi import llm, session, tools
 from alpi.tools._budget import apply as _budget_apply
 from alpi.tools._paths import dispatch_tool_denies as _dispatch_tool_denies
 from alpi.tools._sanitizer import sanitize_tool_payload
-from alpi.tools.base import ToolResult
+from alpi.tools.base import ToolResult, failure_payload as _failure_payload
 from alpi.session import ASSISTANT_CAP, ToolLog, truncate_result
 
 
@@ -971,7 +971,7 @@ class Engine:
                             and _peer_reply_from_payload(result.output).strip()):
                         relay_consulted = True
 
-                    payload = result.output if result.ok else f"ERROR: {result.error}"
+                    payload = result.output if result.ok else _failure_payload(result)
                     payload = _budget_apply(name, payload)
                     self.session.messages.append({
                         "role": "tool",

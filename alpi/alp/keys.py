@@ -72,6 +72,7 @@ def generate(home: Path) -> Keypair:
 
     d = _secrets_dir(home)
     d.mkdir(parents=True, exist_ok=True)
+    os.chmod(d, 0o700)  # chmod, not mkdir mode: umask-proof, and heals pre-existing 0755 dirs every daemon start
 
     priv_pem = priv.private_bytes(
         encoding=serialization.Encoding.PEM,
@@ -105,6 +106,8 @@ def load(home: Path) -> Keypair:
 def load_or_generate(home: Path) -> Keypair:
     """Idempotent bootstrap — the daemon calls this at start."""
     if exists(home):
+        # heal dirs born 0755 by older versions; the private key file itself is already 0600
+        os.chmod(private_path(home).parent, 0o700)
         return load(home)
     return generate(home)
 

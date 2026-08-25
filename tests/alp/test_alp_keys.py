@@ -75,3 +75,15 @@ def test_sign_produces_verifiable_signature(tmp_path: Path) -> None:
 def test_load_missing_raises(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
         keys.load(tmp_path)
+
+
+def test_secrets_dir_mode_is_0700_and_heals(tmp_path: Path) -> None:
+    from alpi.alp import keys
+
+    keys.load_or_generate(tmp_path)
+    d = tmp_path / "alp" / "secrets"
+    assert oct(d.stat().st_mode)[-3:] == "700"
+    # a dir left open by an older version is healed on the next load
+    d.chmod(0o755)
+    keys.load_or_generate(tmp_path)
+    assert oct(d.stat().st_mode)[-3:] == "700"

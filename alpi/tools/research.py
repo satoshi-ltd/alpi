@@ -11,7 +11,7 @@ from alpi import config as cfg_mod
 from alpi import llm
 from alpi.home import get_home
 from alpi.tools._budget import apply as _budget_apply
-from alpi.tools.base import Tool, ToolResult
+from alpi.tools.base import Tool, ToolResult, failure_payload
 from alpi.tools import _state as tool_state_mod
 
 MAX_PARALLEL_TASKS = 3
@@ -273,7 +273,7 @@ class Research(Tool):
                         except json.JSONDecodeError:
                             args = {}
                         result = execute(name, args, deny=deny_tools)
-                        payload = result.output if result.ok else f"ERROR: {result.error}"
+                        payload = result.output if result.ok else failure_payload(result)
                         payload = _budget_apply(name, payload)
                         from alpi.tools._sanitizer import sanitize_tool_payload
                         payload = sanitize_tool_payload(name, payload, is_error=not result.ok)

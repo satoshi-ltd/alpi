@@ -17,6 +17,13 @@ class ToolResult:
         return {"ok": self.ok, "output": self.output, "error": self.error}
 
 
+# Every consumer that relays a failed tool to a model must use this: the output often carries the diagnosis (skill runners print their fail() JSON to stdout), and dropping it forces the model to debug blind. Callers cap size afterwards via their budget.
+def failure_payload(result: "ToolResult") -> str:
+    if (result.output or "").strip():
+        return f"ERROR: {result.error}\n{result.output}"
+    return f"ERROR: {result.error}"
+
+
 class Tool(abc.ABC):
     name: ClassVar[str]
     description: ClassVar[str]
