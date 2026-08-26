@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -37,8 +40,8 @@ class _FakeEngine:
         emit(AgentEvent(kind="assistant_done", text=f"echo: {prompt}", final=True))
         emit(AgentEvent(kind="usage", tokens_in=1, tokens_out=2, cost=0.0))
 
-    def request_interrupt(self) -> None:
-        return
+    def request_interrupt(self, reason: str = "") -> None:
+        self.interrupt_reason = reason
 
     def save_session(self) -> Path | None:
         # Mirrors the real engine's save path — record the call so the
@@ -104,10 +107,135 @@ async def test_streaming_link_ask_does_not_persist_inflight_stub(
 
     assert frames[-1]["kind"] == "final"
     assert frames[-1]["text"] == "echo: hello"
+    assert frames[0] == {
+        "kind": "chunk",
+        "event": "started",
+        "session_id": "fake-session-id",
+    }
     assert captured["engines"][0].source == "peer"
     assert captured["engines"][0].persist_inflight is False
     assert captured["engines"][0].session.saved is False
     assert not (home / "sessions").exists()
+
+
+@pytest.mark.asyncio
+async def test_streaming_link_ask_keeps_active_turn_alive_with_progress_frames(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    home = tmp_path / "bob"
+    home.mkdir()
+    captured: dict = {}
+
+    class SlowEngine(_FakeEngine):
+        def run_turn(self, prompt, emit, *, source="user", persist_inflight=True):
+            time.sleep(0.04)
+            super().run_turn(
+                prompt, emit, source=source, persist_inflight=persist_inflight,
+            )
+
+    def factory(*, home: Path, cfg):
+        engine = SlowEngine(home=home, cfg=cfg)
+        captured["engine"] = engine
+        return engine
+
+    monkeypatch.setattr(alp_handlers, "Engine", factory)
+    monkeypatch.setattr("alpi.engine.Engine", factory)
+    monkeypatch.setattr(
+        alp_handlers.cfg_mod, "load", lambda _h: type("C", (), {"model": "x"})(),
+    )
+    monkeypatch.setattr(alp_handlers, "_LINK_PROGRESS_INTERVAL_SECONDS", 0.01)
+
+    frames = [
+        frame async for frame in alp_handlers._run_turn_stream(
+            home, "hello", "alice", alp_handlers._ActiveTurn(), asyncio.Lock(),
+        )
+    ]
+
+    assert any(frame.get("event") == "progress" for frame in frames)
+    assert frames[-1]["kind"] == "final"
+
+
+@pytest.mark.asyncio
+async def test_stream_disconnect_interrupts_the_remote_turn(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    home = tmp_path / "bob"
+    home.mkdir()
+    interrupted = threading.Event()
+
+    class BlockingEngine(_FakeEngine):
+        def run_turn(self, prompt, emit, *, source="user", persist_inflight=True):
+            interrupted.wait(timeout=1)
+
+        def request_interrupt(self, reason: str = "") -> None:
+            self.interrupt_reason = reason
+            interrupted.set()
+
+    engine_box: dict = {}
+
+    def factory(*, home: Path, cfg):
+        engine = BlockingEngine(home=home, cfg=cfg)
+        engine_box["engine"] = engine
+        return engine
+
+    monkeypatch.setattr(alp_handlers, "Engine", factory)
+    monkeypatch.setattr("alpi.engine.Engine", factory)
+    monkeypatch.setattr(
+        alp_handlers.cfg_mod, "load", lambda _h: type("C", (), {"model": "x"})(),
+    )
+
+    active = alp_handlers._ActiveTurn()
+    stream = alp_handlers._run_turn_stream(
+        home, "wait", "alice", active, asyncio.Lock(),
+    )
+    started = await anext(stream)
+    await stream.aclose()
+
+    assert started["event"] == "started"
+    assert engine_box["engine"].interrupt_reason == "alp-disconnect"
+    assert active.engine is None
+
+
+@pytest.mark.asyncio
+async def test_link_cancel_only_interrupts_the_calling_peers_turn(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    from alpi.alp import peers as peers_mod
+    from alpi.alp import server as alp_server
+
+    home = tmp_path / "bob"
+    home.mkdir()
+    interrupted = threading.Event()
+
+    class BlockingEngine(_FakeEngine):
+        def run_turn(self, prompt, emit, *, source="user", persist_inflight=True):
+            interrupted.wait(timeout=1)
+
+        def request_interrupt(self, reason: str = "") -> None:
+            self.interrupt_reason = reason
+            interrupted.set()
+
+    monkeypatch.setattr(alp_handlers, "Engine", BlockingEngine)
+    monkeypatch.setattr("alpi.engine.Engine", BlockingEngine)
+    monkeypatch.setattr(
+        alp_handlers.cfg_mod, "load", lambda _h: type("C", (), {"model": "x"})(),
+    )
+
+    server = alp_server.Server(home)
+    alp_handlers.register_link_ask(server, home)
+    alice = peers_mod.Peer(id="alice", pubkey="alice", allow=["link.ask"])
+    carol = peers_mod.Peer(id="carol", pubkey="carol", allow=["link.ask"])
+    stream = server.handlers["link.ask"](
+        {"prompt": "wait", "stream": True}, alice, server,
+    )
+    await anext(stream)
+
+    wrong = await server.handlers["link.cancel"]({}, carol, server)
+    right = await server.handlers["link.cancel"]({}, alice, server)
+    await stream.aclose()
+
+    assert wrong == {"cancelled": False}
+    assert right["cancelled"] is True
 
 
 def test_link_ask_persists_per_sender_mention_thread(monkeypatch, tmp_path: Path) -> None:

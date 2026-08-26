@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 import pytest
@@ -137,20 +138,26 @@ def test_execute_routes_remote_peer_over_tcp(
 
     captured: dict = {}
 
-    async def fake_call_peer(**kwargs):
+    async def fake_call_tcp_stream(**kwargs):
         captured.update(kwargs)
-        return {"text": "pong from tcp", "tokens_in": 1, "tokens_out": 2, "cost": 0.0}
+        yield {"event": "started", "session_id": "remote-turn"}, "chunk"
+        yield {
+            "text": "pong from tcp", "tokens_in": 1, "tokens_out": 2, "cost": 0.0,
+        }, "final"
 
-    monkeypatch.setattr("alpi.alp.mention.alp_client.call_peer", fake_call_peer)
+    monkeypatch.setattr(
+        "alpi.alp.mention.alp_client.call_tcp_stream", fake_call_tcp_stream,
+    )
 
-    import asyncio
     result = asyncio.run(execute(home, "bob", "ping"))
 
     assert result.ok is True
     assert result.reply == "pong from tcp"
-    assert captured["peer_id"] == "bob"
+    assert captured["host"] == "100.1.2.3"
+    assert captured["port"] == 7425
     assert captured["method"] == "link.ask"
-    assert captured["params"] == {"prompt": "ping"}
+    assert captured["params"] == {"prompt": "ping", "stream": True}
+    assert captured["timeout"] == 60
 
 
 def test_execute_local_peer_resolves_socket_by_pubkey(
@@ -182,13 +189,113 @@ def test_execute_local_peer_resolves_socket_by_pubkey(
 
     captured: dict = {}
 
-    async def fake_call(**kwargs):
+    async def fake_call_stream(**kwargs):
         captured.update(kwargs)
-        return {"text": "pong unix", "tokens_in": 0, "tokens_out": 0, "cost": 0.0}
+        yield {"event": "started", "session_id": "local-turn"}, "chunk"
+        yield {
+            "text": "pong unix", "tokens_in": 0, "tokens_out": 0, "cost": 0.0,
+        }, "final"
 
-    monkeypatch.setattr("alpi.alp.mention.alp_client.call", fake_call)
+    monkeypatch.setattr(
+        "alpi.alp.mention.alp_client.call_stream", fake_call_stream,
+    )
 
-    import asyncio
     result = asyncio.run(execute(me, "arbitrary", "hi"))
     assert result.ok is True
     assert str(captured["socket_path"]) == str(sock)
+
+
+def test_execute_uses_configured_idle_timeout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "me"
+    home.mkdir()
+    peers_mod.add(home, Peer(id="bob", pubkey="BOB_PK", allow=["link.ask"]))
+    (home / "config.yaml").write_text(
+        "alp:\n  link_idle_timeout_s: 12\n  link_max_duration_s: 0\n",
+    )
+    socket_path = tmp_path / "bob.sock"
+    socket_path.touch()
+    monkeypatch.setattr(peers_mod, "local_socket_path", lambda _peer: socket_path)
+    captured: dict = {}
+
+    async def fake_call_stream(**kwargs):
+        captured.update(kwargs)
+        yield {"event": "started", "session_id": "turn"}, "chunk"
+        yield {"text": "done"}, "final"
+
+    monkeypatch.setattr(
+        "alpi.alp.mention.alp_client.call_stream", fake_call_stream,
+    )
+
+    result = asyncio.run(execute(home, "bob", "ping"))
+
+    assert result.ok is True
+    assert captured["timeout"] == 12
+
+
+def test_execute_reports_idle_timeout_and_requests_cancel(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "me"
+    home.mkdir()
+    peers_mod.add(home, Peer(id="bob", pubkey="BOB_PK", allow=["link.ask"]))
+    socket_path = tmp_path / "bob.sock"
+    socket_path.touch()
+    monkeypatch.setattr(peers_mod, "local_socket_path", lambda _peer: socket_path)
+    cancelled: dict = {}
+
+    async def fake_call_stream(**_kwargs):
+        yield {"event": "started", "session_id": "turn-1"}, "chunk"
+        raise asyncio.TimeoutError
+
+    async def fake_cancel(_home, _peer, _sender, session_id):
+        cancelled["session_id"] = session_id
+        return True
+
+    monkeypatch.setattr(
+        "alpi.alp.mention.alp_client.call_stream", fake_call_stream,
+    )
+    monkeypatch.setattr("alpi.alp.mention._cancel", fake_cancel)
+
+    result = asyncio.run(execute(home, "bob", "ping", timeout=0.01))
+
+    assert result.ok is False
+    assert result.error == (
+        "link.ask timed out after 0.01s without remote activity; "
+        "remote turn cancelled"
+    )
+    assert cancelled["session_id"] == "turn-1"
+
+
+def test_execute_enforces_optional_maximum_duration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "me"
+    home.mkdir()
+    peers_mod.add(home, Peer(id="bob", pubkey="BOB_PK", allow=["link.ask"]))
+    socket_path = tmp_path / "bob.sock"
+    socket_path.touch()
+    monkeypatch.setattr(peers_mod, "local_socket_path", lambda _peer: socket_path)
+
+    async def fake_call_stream(**_kwargs):
+        yield {"event": "started", "session_id": "turn-2"}, "chunk"
+        await asyncio.sleep(1)
+        yield {"text": "too late"}, "final"
+
+    async def fake_cancel(*_args):
+        return True
+
+    monkeypatch.setattr(
+        "alpi.alp.mention.alp_client.call_stream", fake_call_stream,
+    )
+    monkeypatch.setattr("alpi.alp.mention._cancel", fake_cancel)
+
+    result = asyncio.run(execute(
+        home, "bob", "ping", timeout=0, max_duration=0.01,
+    ))
+
+    assert result.ok is False
+    assert result.error == (
+        "link.ask exceeded its 0.01s maximum duration; remote turn cancelled"
+    )

@@ -383,18 +383,21 @@ When `stream: true` the response is delivered as a sequence of
 signed response envelopes for the same `id`, each carrying a
 `stream` marker:
 
-- `stream: "chunk"` — intermediate frame, `result: { text: <delta> }`
-  for one streaming token batch from the target's model.
+- `stream: "chunk"` — intermediate frame. Text batches carry
+  `result: { text: <delta> }`; control frames carry
+  `result: { event: "started" | "progress", session_id: <id> }` and no
+  model text. `started` is emitted before the turn runs and `progress` keeps
+  an active tool/model turn from looking stalled.
 - `stream: "final"` — last frame, `result` carries the same shape as
   the non-streaming reply: aggregated `text`, `session_id`,
   `tokens_in`, `tokens_out`, `cost`, `interrupted`.
 
-Caller policy: interactive surfaces (TUI, desktop, mobile companion)
-pass `stream: true` so the user sees the remote agent's reply as it
-generates. Scheduled jobs and the agent-internal `peer` tool keep
-`stream: false` — they need a single atomic message body to forward.
-The protocol supports both modes; the choice lives with the caller,
-not with the user.
+Caller policy: Alpi's interactive surfaces and agent-internal `peer` tool pass
+`stream: true`. Interactive callers render text chunks; `peer` ignores those
+intermediate chunks and gives its model only the final atomic reply. Both use
+the control frames as liveness, so long active turns are bounded by an idle
+watchdog rather than a fixed total duration. The protocol retains
+`stream: false` for compatibility with callers that require one response.
 
 Wire shape unchanged: same envelope, same signature, same Noise
 session if applicable. Each streamed chunk is its own signed envelope
@@ -451,6 +454,9 @@ Maps internally to the same interrupt mechanism the TUI uses
 when the user presses Ctrl-C. `link.cancel` is idempotent: a
 cancel on a session that is not running returns
 `cancelled: false` and makes no other changes.
+Only the peer that started the active turn can cancel it. Alpi clients make a
+best-effort cancel request after their idle or maximum-duration watchdog fires;
+closing a streaming connection also interrupts its still-running target turn.
 
 ### `link.put_blob` / `link.get_blob`
 

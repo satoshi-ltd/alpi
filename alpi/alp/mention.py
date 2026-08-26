@@ -31,13 +31,16 @@ Detection rules (relaxed in v0.2.96 as ALP.3.1):
 
 from __future__ import annotations
 
+import asyncio
 import re
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from alpi import config as cfg_mod
 from alpi.alp import client as alp_client
 from alpi.alp import peers as peers_mod
-from alpi.alp.keys import load_or_generate
+from alpi.alp.keys import Keypair, load_or_generate
 
 
 # Boundary ``(?:^|\s)`` excludes ``email@example.com``; trailing
@@ -59,6 +62,59 @@ class Result:
     tokens_in: int = 0
     tokens_out: int = 0
     cost: float = 0.0
+
+
+def _link_timeouts(
+    home: Path,
+    idle_override: float | None,
+    max_duration_override: float | None,
+) -> tuple[float, float]:
+    defaults = cfg_mod.DEFAULT_CONFIG["alp"]
+    alp = cfg_mod.load(home).alp
+
+    def _value(key: str, override: float | None) -> float:
+        raw = override if override is not None else alp.get(key, defaults[key])
+        try:
+            value = float(raw)
+            return value if value >= 0 else float(defaults[key])
+        except (TypeError, ValueError):
+            return float(defaults[key])
+
+    return (
+        _value("link_idle_timeout_s", idle_override),
+        _value("link_max_duration_s", max_duration_override),
+    )
+
+
+async def _cancel(
+    home: Path,
+    peer: peers_mod.Peer,
+    sender: Keypair,
+    session_id: str,
+) -> bool:
+    params = {"session_id": session_id} if session_id else {}
+    try:
+        if peer.address is not None:
+            result = await alp_client.call_peer(
+                home=home,
+                peer_id=peer.id,
+                sender=sender,
+                method="link.cancel",
+                params=params,
+                timeout=alp_client.PING_TIMEOUT_SECONDS,
+            )
+        else:
+            result = await alp_client.call(
+                socket_path=peers_mod.local_socket_path(peer),
+                sender=sender,
+                recipient_pubkey_b64=peer.pubkey,
+                method="link.cancel",
+                params=params,
+                timeout=alp_client.PING_TIMEOUT_SECONDS,
+            )
+    except Exception:  # noqa: BLE001
+        return False
+    return bool(result.get("cancelled"))
 
 
 def parse(text: str, home: Path | None = None) -> Mention | None:
@@ -92,7 +148,14 @@ def parse(text: str, home: Path | None = None) -> Mention | None:
     return Mention(peer_id=peer_id, prompt=prompt)
 
 
-async def execute(home: Path, peer_id: str, prompt: str, *, timeout: float = 300.0) -> Result:
+async def execute(
+    home: Path,
+    peer_id: str,
+    prompt: str,
+    *,
+    timeout: float | None = None,
+    max_duration: float | None = None,
+) -> Result:
     """Run a single ``link.ask`` against a pinned peer.
 
     Routes to TCP/Noise (ALP.2) when the peer has ``address`` set,
@@ -102,54 +165,36 @@ async def execute(home: Path, peer_id: str, prompt: str, *, timeout: float = 300
     ``ok=False`` + human-readable error text otherwise. Never raises —
     callers render ``error`` directly to the user.
     """
-    peer = peers_mod.get_by_id(home, peer_id)
-    if peer is None:
-        return Result(ok=False, error=f"no peer @{peer_id} pinned")
-
-    sender = load_or_generate(home)
-    try:
-        if peer.address is not None:
-            reply = await alp_client.call_peer(
-                home=home,
-                peer_id=peer_id,
-                sender=sender,
-                method="link.ask",
-                params={"prompt": prompt},
-                timeout=timeout,
-            )
-        else:
-            socket_path = peers_mod.local_socket_path(peer)
-            if not socket_path.exists():
-                return Result(
-                    ok=False,
-                    error=f"listener not running (`alpi -p {peer_id} alp start`)",
-                )
-            reply = await alp_client.call(
-                socket_path=socket_path,
-                sender=sender,
-                recipient_pubkey_b64=peer.pubkey,
-                method="link.ask",
-                params={"prompt": prompt},
-                timeout=timeout,
-            )
-    except alp_client.TargetOffline as e:
-        return Result(ok=False, error=f"target-offline: {e}")
-    except alp_client.RemoteError as e:
-        return Result(ok=False, error=str(e))
-    except Exception as e:  # noqa: BLE001
-        return Result(ok=False, error=str(e))
-
+    final: dict = {}
+    async for frame in execute_stream(
+        home,
+        peer_id,
+        prompt,
+        timeout=timeout,
+        max_duration=max_duration,
+    ):
+        if frame.get("kind") == "error":
+            return Result(ok=False, error=str(frame.get("text") or "unknown error"))
+        if frame.get("kind") == "final":
+            final = frame
+    if not final:
+        return Result(ok=False, error="peer closed link.ask without a final response")
     return Result(
         ok=True,
-        reply=str(reply.get("text") or "").strip(),
-        tokens_in=int(reply.get("tokens_in") or 0),
-        tokens_out=int(reply.get("tokens_out") or 0),
-        cost=float(reply.get("cost") or 0.0),
+        reply=str(final.get("text") or "").strip(),
+        tokens_in=int(final.get("tokens_in") or 0),
+        tokens_out=int(final.get("tokens_out") or 0),
+        cost=float(final.get("cost") or 0.0),
     )
 
 
 async def execute_stream(
-    home: Path, peer_id: str, prompt: str, *, timeout: float = 300.0,
+    home: Path,
+    peer_id: str,
+    prompt: str,
+    *,
+    timeout: float | None = None,
+    max_duration: float | None = None,
 ):
     """Streaming variant of ``execute``. Async generator that yields:
 
@@ -166,7 +211,11 @@ async def execute_stream(
         return
 
     sender = load_or_generate(home)
+    idle_timeout, max_seconds = _link_timeouts(home, timeout, max_duration)
     params = {"prompt": prompt, "stream": True}
+    session_id = ""
+    started = time.monotonic()
+    agen = None
     try:
         if peer.address is not None:
             host, _, port_s = peer.address.rpartition(":")
@@ -180,7 +229,8 @@ async def execute_stream(
                 recipient_pubkey_b64=peer.pubkey,
                 method="link.ask",
                 params=params,
-                timeout=timeout,
+                timeout=idle_timeout,
+                connect_timeout=alp_client.PING_TIMEOUT_SECONDS,
             )
         else:
             socket_path = peers_mod.local_socket_path(peer)
@@ -196,16 +246,49 @@ async def execute_stream(
                 recipient_pubkey_b64=peer.pubkey,
                 method="link.ask",
                 params=params,
-                timeout=timeout,
+                timeout=idle_timeout,
+                connect_timeout=alp_client.PING_TIMEOUT_SECONDS,
             )
-        async for result, stream in agen:
+        while True:
+            try:
+                if max_seconds > 0:
+                    remaining = max_seconds - (time.monotonic() - started)
+                    if remaining <= 0:
+                        raise asyncio.TimeoutError
+                    result, stream = await asyncio.wait_for(anext(agen), timeout=remaining)
+                else:
+                    result, stream = await anext(agen)
+            except StopAsyncIteration:
+                yield {
+                    "kind": "error",
+                    "text": "peer closed link.ask without a final response",
+                }
+                return
+            if result.get("session_id"):
+                session_id = str(result["session_id"])
             kind = "final" if stream != "chunk" else "chunk"
             payload = dict(result or {})
             payload["kind"] = kind
             yield payload
+            if kind == "final":
+                return
     except alp_client.TargetOffline as e:
         yield {"kind": "error", "text": f"target-offline: {e}"}
     except alp_client.RemoteError as e:
         yield {"kind": "error", "text": str(e)}
+    except asyncio.TimeoutError:
+        cancelled = await _cancel(home, peer, sender, session_id)
+        if max_seconds > 0 and time.monotonic() - started >= max_seconds:
+            reason = f"link.ask exceeded its {max_seconds:g}s maximum duration"
+        elif session_id:
+            reason = f"link.ask timed out after {idle_timeout:g}s without remote activity"
+        else:
+            reason = f"link.ask timed out after {idle_timeout:g}s waiting for the peer"
+        suffix = "; remote turn cancelled" if cancelled else ""
+        yield {"kind": "error", "text": reason + suffix}
     except Exception as e:  # noqa: BLE001
-        yield {"kind": "error", "text": str(e)}
+        detail = str(e).strip() or type(e).__name__
+        yield {"kind": "error", "text": detail}
+    finally:
+        if agen is not None:
+            await agen.aclose()

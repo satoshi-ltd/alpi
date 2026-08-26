@@ -39,8 +39,8 @@ Transport internals are implementation detail unless debugging ALP itself.
 | Method | Purpose |
 |---|---|
 | `link.ping` | Check peer reachability/identity. Answers immediately (5s timeout), independent of engine/turn state; does NOT feed the workgroup roster. |
-| `link.ask` | Run a full agent turn on a peer (its memory/skills/tools). Sole read path into a peer. |
-| `link.cancel` | Cancel an in-flight peer task. |
+| `link.ask` | Run a full agent turn on a peer (its memory/skills/tools). Sole read path into a peer. Alpi callers use streaming internally: a start frame plus signed progress heartbeats keep an active turn alive, while only the final frame becomes the `peer` tool result. |
+| `link.cancel` | Cancel an in-flight peer task. Only the peer that started the active turn may cancel it. |
 | `link.put_blob` | Send an explicitly selected file in verified content-addressed chunks. |
 | `link.get_blob` | Retrieve a previously stored blob by SHA-256. |
 | `workgroup.*` | Group coordination and shared context. |
@@ -110,6 +110,7 @@ ALP/workgroup tasks respect profile budget settings (`budget.daily_usd`, CONFIG.
 Client-side diagnostics (SDK Python exceptions, no JSON-RPC code, never on wire):
 
 - `target-offline` → `alpi.alp.client.TargetOffline` (peer socket missing or TCP refused).
+- `link.ask timed out after <n>s without remote activity` → the caller received no signed frame for `alp.link_idle_timeout_s`; it requests cancellation instead of treating an active turn's total duration as failure. The default is 60s of silence, not a 60s turn cap.
 - `task-missing-slug` → `ValueError` raised before `#task` post encryption (hub stays zero-knowledge).
 
 ## Security posture

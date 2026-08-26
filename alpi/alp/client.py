@@ -78,6 +78,12 @@ class _TcpPool:
 _TCP_SESSION_MAX_IDLE_S = 60.0
 
 
+async def _wait_with_timeout(awaitable, timeout: float):
+    if timeout <= 0:
+        return await awaitable
+    return await asyncio.wait_for(awaitable, timeout=timeout)
+
+
 def _tcp_pool() -> _TcpPool:
     loop = asyncio.get_running_loop()
     pool = getattr(loop, "_alpi_tcp_pool", None)
@@ -401,6 +407,7 @@ async def call_stream(
     method: str,
     params: dict[str, Any] | None = None,
     timeout: float = 30.0,
+    connect_timeout: float | None = None,
     replay_cache: env.ReplayCache | None = None,
 ):
     """Async generator over a streaming ALP request via Unix socket.
@@ -413,12 +420,13 @@ async def call_stream(
         params=params or {},
     )
     try:
-        reader, writer = await asyncio.wait_for(
-            asyncio.open_unix_connection(
-                str(socket_path),
-                limit=tcp.MAX_FRAME_BYTES + 1,
-            ),
-            timeout=timeout,
+        connection = asyncio.open_unix_connection(
+            str(socket_path),
+            limit=tcp.MAX_FRAME_BYTES + 1,
+        )
+        reader, writer = await _wait_with_timeout(
+            connection,
+            timeout if connect_timeout is None else connect_timeout,
         )
     except (FileNotFoundError, ConnectionRefusedError) as e:
         raise TargetOffline(f"{socket_path}: {e}") from e
@@ -430,7 +438,7 @@ async def call_stream(
         writer.write(payload)
         await writer.drain()
         while True:
-            line = await asyncio.wait_for(reader.readline(), timeout=timeout)
+            line = await _wait_with_timeout(reader.readline(), timeout)
             if not line:
                 return
             try:
@@ -464,6 +472,7 @@ async def call_tcp_stream(
     method: str,
     params: dict[str, Any] | None = None,
     timeout: float = 30.0,
+    connect_timeout: float | None = None,
     replay_cache: env.ReplayCache | None = None,
 ):
     """Async generator over a reusable streaming Noise/TCP session."""
@@ -479,20 +488,20 @@ async def call_tcp_stream(
         port=port,
         sender=sender,
         recipient_pubkey_b64=recipient_pubkey_b64,
-        timeout=timeout,
+        timeout=timeout if connect_timeout is None else connect_timeout,
         lane=f"stream:{method}",
     )
     complete = False
     try:
         async with session.lock:
-            await asyncio.wait_for(
+            await _wait_with_timeout(
                 tcp.send_envelope(session.writer, session.cs_send, plaintext),
-                timeout=timeout,
+                timeout if connect_timeout is None else connect_timeout,
             )
             while True:
-                response_bytes = await asyncio.wait_for(
+                response_bytes = await _wait_with_timeout(
                     tcp.recv_envelope(session.reader, session.cs_recv),
-                    timeout=timeout,
+                    timeout,
                 )
                 if not response_bytes:
                     raise ClientError("empty response")
@@ -530,6 +539,7 @@ async def call_peer_stream(
     method: str,
     params: dict[str, Any] | None = None,
     timeout: float = 30.0,
+    connect_timeout: float | None = None,
     replay_cache: env.ReplayCache | None = None,
 ):
     """Same as ``call_peer`` but yields ``(result, stream)`` per frame."""
@@ -548,6 +558,7 @@ async def call_peer_stream(
             method=method,
             params=params,
             timeout=timeout,
+            connect_timeout=connect_timeout,
             replay_cache=replay_cache,
         ):
             yield frame

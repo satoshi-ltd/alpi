@@ -205,6 +205,8 @@ class Server:
                 )
                 writer.write(payload)
                 await writer.drain()
+        except (BrokenPipeError, ConnectionResetError):
+            log.info("alp unix client disconnected before the response completed")
         except Exception:  # noqa: BLE001
             log.exception("alp unix connection crashed")
         finally:
@@ -441,6 +443,8 @@ class Server:
             except Exception as e:  # noqa: BLE001
                 log.exception("handler %s stream crashed", method)
                 yield _err(-32603, "internal-error", {"detail": str(e)})
+            finally:
+                await out.aclose()
             return
 
         log.info(

@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 import tempfile
+import time
 from pathlib import Path
 
 import pytest
 
 from alpi.alp import client as alp_client
+from alpi.alp import envelope as alp_envelope
 from alpi.alp import peers as peers_mod
 from alpi.alp import server as alp_server
 from alpi.alp.keys import load_or_generate
@@ -28,6 +31,61 @@ def short_tmp() -> Path:
 
 def _pin(home: Path, peer_id: str, pubkey: str, allow: list[str]) -> None:
     peers_mod.add(home, Peer(id=peer_id, pubkey=pubkey, allow=allow))
+
+
+@pytest.mark.asyncio
+async def test_unix_disconnect_during_stream_is_not_logged_as_a_crash(
+    short_tmp: Path, caplog: pytest.LogCaptureFixture,
+) -> None:
+    alice_home = short_tmp / "alice"
+    bob_home = short_tmp / "bob"
+    alice_home.mkdir()
+    bob_home.mkdir()
+    alice_kp = load_or_generate(alice_home)
+    bob_kp = load_or_generate(bob_home)
+    _pin(bob_home, "alice", alice_kp.pubkey_b64(), ["test.stream"])
+
+    async def stream(_params, _peer, _server):
+        yield {"kind": "chunk", "event": "started"}
+        yield {"kind": "chunk", "event": "progress"}
+
+    server = alp_server.Server(home=bob_home, agent_name="bob")
+    server.register("test.stream", stream)
+    request = alp_envelope.build_request(
+        sender=alice_kp,
+        recipient_pubkey_b64=bob_kp.pubkey_b64(),
+        method="test.stream",
+        params={},
+    )
+
+    class Reader:
+        async def readline(self):
+            return json.dumps(request).encode() + b"\n"
+
+    class Writer:
+        writes = 0
+
+        def write(self, _payload):
+            self.writes += 1
+
+        async def drain(self):
+            if self.writes > 1:
+                raise ConnectionResetError("gone")
+
+        def close(self):
+            return
+
+        async def wait_closed(self):
+            return
+
+    caplog.set_level("INFO", logger="alpi.alp.server")
+    try:
+        await server._handle_unix_connection(Reader(), Writer())
+    finally:
+        server.replay.close()
+
+    assert "alp unix client disconnected before the response completed" in caplog.text
+    assert "alp unix connection crashed" not in caplog.text
 
 
 @pytest.mark.integration
@@ -214,6 +272,58 @@ async def test_link_cancel_noop_when_no_active_turn(short_tmp: Path) -> None:
         await bob_srv.stop()
 
     assert result == {"cancelled": False}
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_link_ask_progress_outlives_the_callers_idle_window(
+    short_tmp: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from alpi import home as home_mod
+    from alpi.alp import handlers as alp_handlers
+    from alpi.alp import mention as alp_mention
+    from alpi.engine import AgentEvent
+
+    monkeypatch.setattr(home_mod, "_ROOT", short_tmp)
+    alice_home = short_tmp / "profiles" / "alice"
+    bob_home = short_tmp / "profiles" / "bob"
+    alice_home.mkdir(parents=True)
+    bob_home.mkdir(parents=True)
+    alice_kp = load_or_generate(alice_home)
+    bob_kp = load_or_generate(bob_home)
+    _pin(alice_home, "bob", bob_kp.pubkey_b64(), ["link.ask", "link.cancel"])
+    _pin(bob_home, "alice", alice_kp.pubkey_b64(), ["link.ask", "link.cancel"])
+
+    class Session:
+        id = "slow-turn"
+        messages: list[dict] = []
+
+    class SlowEngine:
+        def __init__(self, *, home: Path, cfg) -> None:  # noqa: ANN001
+            self.session = Session()
+
+        def run_turn(self, prompt, emit, *, source="user", persist_inflight=True):
+            time.sleep(0.06)
+            emit(AgentEvent(kind="assistant_done", text="review complete", final=True))
+
+        def request_interrupt(self, reason: str = "") -> None:
+            self.interrupt_reason = reason
+
+    monkeypatch.setattr("alpi.engine.Engine", SlowEngine)
+    monkeypatch.setattr(alp_handlers, "_LINK_PROGRESS_INTERVAL_SECONDS", 0.01)
+
+    server = alp_server.Server(home=bob_home, agent_name="bob")
+    alp_handlers.register_link_ask(server, bob_home)
+    await server.start()
+    try:
+        result = await alp_mention.execute(
+            alice_home, "bob", "review", timeout=0.02,
+        )
+    finally:
+        await server.stop()
+
+    assert result.ok is True
+    assert result.reply == "review complete"
 
 
 @pytest.mark.asyncio

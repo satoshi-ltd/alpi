@@ -53,6 +53,10 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "mcp": {
         "servers": {},
     },
+    "alp": {
+        "link_idle_timeout_s": 60,
+        "link_max_duration_s": 0,
+    },
     "email": {
         "accounts": {},
     },

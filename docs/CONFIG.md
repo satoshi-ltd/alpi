@@ -567,11 +567,22 @@ no reachable address (no `network.host`, no Tailscale/LAN, not Docker) even
 | Key | Default | Notes |
 |---|---|---|
 | `alp.tcp_port` | `7423` (default profile only) | The ALP peer TCP port. Auto-exposed for the `default` profile; a named profile binds TCP only if it sets its own unique port here. The address is `network.host`. |
+| `alp.link_idle_timeout_s` | `60` | Cancel `link.ask` after this many seconds without a signed response or progress frame. `0` disables the idle watchdog. |
+| `alp.link_max_duration_s` | `0` | Optional absolute cap for one `link.ask`; `0` allows an active turn to run without a fixed wall-clock limit. |
 
 ```yaml
 alp:
   tcp_port: 7423
+  link_idle_timeout_s: 60
+  link_max_duration_s: 0
 ```
+
+`link.ask` uses streaming internally even when the caller only needs the final
+reply. The target sends a start frame and periodic progress frames, so an active
+review can run longer than `link_idle_timeout_s`; the watchdog measures silence,
+not total duration. Set `link_max_duration_s` only when the operator wants a
+hard cap as well. A timed-out caller requests `link.cancel` and reports the
+reason explicitly instead of returning an empty transport error.
 
 ### Relay
 

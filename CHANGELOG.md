@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.14.12 — 2026-08-26 — active peers no longer expire on the clock
+
+- **`link.ask` measures silence instead of total review time.** The internal
+  `peer` tool now uses ALP streaming just like interactive mentions. Targets
+  send an initial session frame and periodic signed progress frames, so an
+  active multi-tool turn can run past five minutes without the caller closing
+  its socket. The final reply remains atomic from the calling agent's point of
+  view; progress and intermediate text never become tool evidence.
+- **Peer timeouts are policy, not a hard-coded deadline.** Profiles may set
+  `alp.link_idle_timeout_s` (60 seconds by default) and the optional
+  `alp.link_max_duration_s` (disabled by default). A genuine stall now returns
+  a specific error, requests `link.cancel`, and interrupts the remote turn when
+  the streaming caller disconnects. Cancellation is bound to the peer that
+  started the turn, so one pinned peer cannot stop another peer's work.
+- **Late disconnects are ordinary lifecycle events.** A caller leaving before
+  the final frame no longer produces an ALP server traceback; the listener
+  records the disconnect at info level and cleans up the streaming handler.
+
+Nothing to migrate. Existing profiles receive the idle watchdog and unlimited
+active-turn duration automatically; the two `alp.*` keys are optional.
+
 ## v0.14.11 — 2026-08-26 — vision has one explicit route
 
 - **Image inspection can use its own model without changing the agent.**

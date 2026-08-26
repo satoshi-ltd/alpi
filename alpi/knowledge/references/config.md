@@ -43,6 +43,8 @@
 | `tools.read_image.model` | Optional model route used by `read_image` and browser screenshot analysis. Empty means the profile model. It does not reroute chat attachments; those stay in the main turn. Configure it under `alpi setup → Routing models` or the Vision model row in the apps. |
 | `tools.attachments.max_text_tokens` | Per-attachment extracted-text cap (text files, digital-PDF text, scanned-PDF OCR), in tokens; engine converts to chars at ~4/token. **Default `0` = auto**: half the active model's context window (`litellm.get_model_info`), falling back to 100k when the model is unmapped. A positive value is a fixed override (bound cost, or force more text on a mis-sized model). Per-file byte caps (2 MiB text, 20 MiB PDF/image) only gate acceptance. Not the scan page cap (`SCAN_MAX_PAGES`). |
 | `runtime.{first_byte_timeout_s,stream_idle_timeout_s,stream_max_duration_s}` | Provider-stream watchdogs in seconds (`0` disables one): first output, silence between meaningful deltas, and absolute duration of one request. |
+| `alp.link_idle_timeout_s` | Silence watchdog for `link.ask` (default 60s; `0` disables). Start/progress frames reset it, so it is not a total turn limit. Takes effect on the next peer call. |
+| `alp.link_max_duration_s` | Optional absolute `link.ask` duration cap (default `0` = disabled). Takes effect on the next peer call. |
 
 Removed `service.{schedule,alp,workgroups,host}` keys are ignored because these
 daemon capabilities always start. Startup logs and `alpi doctor` warn while the

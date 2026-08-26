@@ -26,6 +26,10 @@ class _ActiveTurn:
     by session_id."""
     engine: Engine | None = None
     session_id: str = ""
+    peer_pubkey: str = ""
+
+
+_LINK_PROGRESS_INTERVAL_SECONDS = 15.0
 
 
 def register_link_ask(server: alp_server.Server, home: Path) -> None:
@@ -56,13 +60,15 @@ def register_link_ask(server: alp_server.Server, home: Path) -> None:
 
         stream = bool((params or {}).get("stream"))
         if stream:
-            return _run_turn_stream(home, prompt, peer.id, active, lock)
+            return _run_turn_stream(
+                home, prompt, peer.id, active, lock, peer.pubkey,
+            )
 
         async def _solo() -> dict[str, Any]:
             async with lock:
                 loop = asyncio.get_running_loop()
                 return await loop.run_in_executor(
-                    None, _run_turn, home, prompt, peer.id, active,
+                    None, _run_turn, home, prompt, peer.id, active, peer.pubkey,
                 )
 
         return _solo()
@@ -77,7 +83,12 @@ def register_link_ask(server: alp_server.Server, home: Path) -> None:
         their cancel "arrived in time"."""
         target_sid = str((params or {}).get("session_id") or "").strip()
         eng = active.engine
-        if eng is not None and (not target_sid or target_sid == active.session_id):
+        same_caller = active.peer_pubkey == peer.pubkey
+        if (
+            eng is not None
+            and same_caller
+            and (not target_sid or target_sid == active.session_id)
+        ):
             eng.request_interrupt("alp-cancel")
             return {"cancelled": True, "session_id": active.session_id}
         return {"cancelled": False}
@@ -92,6 +103,7 @@ async def _run_turn_stream(
     peer_id: str,
     active: _ActiveTurn,
     lock: asyncio.Lock,
+    peer_pubkey: str = "",
 ):
     """Streaming variant: runs the engine in a thread, yields one
     chunk per ``assistant_delta`` event, ends with a ``final`` chunk
@@ -122,6 +134,7 @@ async def _run_turn_stream(
             )
         active.engine = engine
         active.session_id = engine.session.id
+        active.peer_pubkey = peer_pubkey
 
         state = {
             "parts": [],
@@ -161,8 +174,23 @@ async def _run_turn_stream(
 
         worker_task = loop.run_in_executor(None, worker)
         try:
+            yield {
+                "kind": "chunk",
+                "event": "started",
+                "session_id": engine.session.id,
+            }
             while True:
-                item = await queue.get()
+                try:
+                    item = await asyncio.wait_for(
+                        queue.get(), timeout=_LINK_PROGRESS_INTERVAL_SECONDS,
+                    )
+                except asyncio.TimeoutError:
+                    yield {
+                        "kind": "chunk",
+                        "event": "progress",
+                        "session_id": engine.session.id,
+                    }
+                    continue
                 if item is SENTINEL:
                     break
                 tag, payload = item
@@ -170,8 +198,12 @@ async def _run_turn_stream(
                     yield {"kind": "chunk", "text": payload}
             await worker_task
         finally:
+            if not worker_task.done():
+                engine.request_interrupt("alp-disconnect")
+                await worker_task
             active.engine = None
             active.session_id = ""
+            active.peer_pubkey = ""
 
         full = "\n\n".join(state["parts"]).strip()
         if state["interrupted"] and not full:
@@ -198,7 +230,11 @@ async def _run_turn_stream(
 
 
 def _run_turn(
-    home: Path, prompt: str, peer_id: str, active: _ActiveTurn,
+    home: Path,
+    prompt: str,
+    peer_id: str,
+    active: _ActiveTurn,
+    peer_pubkey: str = "",
 ) -> dict[str, Any]:
     """Synchronous turn — runs in a thread so the ALP server event
     loop stays responsive while the engine blocks on LLM calls."""
@@ -224,6 +260,7 @@ def _run_turn(
     # the interrupt flag. Cleared on exit regardless of success/failure.
     active.engine = engine
     active.session_id = engine.session.id
+    active.peer_pubkey = peer_pubkey
 
     parts: list[str] = []
     produced: list[dict] = []
@@ -259,6 +296,7 @@ def _run_turn(
     finally:
         active.engine = None
         active.session_id = ""
+        active.peer_pubkey = ""
 
     text = "\n\n".join(parts).strip()
     if not interrupted:
