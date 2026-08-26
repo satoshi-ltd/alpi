@@ -22,6 +22,7 @@ def test_alpi_profile_secrets_are_refused(path: str) -> None:
     "/Users/user/.ssh/authorized_keys",
     "/Users/user/.netrc",
     "/Users/user/.npmrc",
+    "/Users/user/project/.sentryclirc",
     "/Users/user/.aws/config",
     "/Users/user/.config/gh/hosts.yml",
     "/Users/user/.zshrc",

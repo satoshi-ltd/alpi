@@ -26,7 +26,7 @@ _SENSITIVE_PATH_REGEX: tuple[re.Pattern[str], ...] = (
     re.compile(r"\.(?:pem|p12|pfx)$", re.I),
     re.compile(r"(?:^|/)\.aws/(?:credentials|config)$", re.I),
     re.compile(r"(?:^|/)\.gnupg/", re.I),
-    re.compile(r"(?:^|/)\.(?:netrc|npmrc|pypirc|pgpass)$", re.I),
+    re.compile(r"(?:^|/)\.(?:netrc|npmrc|pypirc|pgpass|sentryclirc)$", re.I),
     re.compile(r"(?:^|/)\.config/(?:gh|gcloud)/", re.I),
     # Shell rc / login files and launchd plists — persistence write vectors.
     re.compile(r"(?:^|/)\.(?:bashrc|zshrc|bash_profile|zprofile|zlogin|profile)$", re.I),
@@ -133,6 +133,16 @@ def _is_sensitive(*paths: Path | str) -> str | None:
             if rx.search(s):
                 return rx.pattern
     return None
+
+
+def is_sensitive_path(path: Path | str) -> bool:
+    """Return whether a typed or resolved path matches the file-tool denylist."""
+    typed = Path(path).expanduser()
+    try:
+        resolved = typed.resolve()
+    except OSError:
+        resolved = typed
+    return _is_sensitive(typed, resolved) is not None
 
 
 def resolve_path(path: str, *, for_write: bool = False) -> Path:

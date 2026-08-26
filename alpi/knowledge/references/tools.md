@@ -7,6 +7,9 @@
   `terminal sed/perl -i`.
 - The workspace is the default root for relative paths, not a sandbox.
   Absolute paths can work, but sensitive paths are denied.
+- Content `search` filters each matched file through the same sensitive-path
+  denylist as `read_file`; credential-store filenames may be discoverable in
+  filename mode, but their contents are never returned.
 - Tool availability is dynamic: unavailable tools are hidden from the schema;
   `tools.deny` hides and refuses tools per profile. A probe tests what fails at
   call time, not a proxy: `browser` requires Chromium's system libraries, not

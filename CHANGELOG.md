@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.14.13 — 2026-08-26 — content search respects secret boundaries
+
+- **Directory searches no longer bypass sensitive-file protection.** `search`
+  used to validate only its root directory, so a content search rooted at a
+  repository could return values from a nested `.env` even though `read_file`
+  refused the same file. Ripgrep and stdlib search results now apply the shared
+  sensitive-path denylist to every matched file before any content reaches the
+  model.
+- **Sentry CLI credentials join the existing denylist.** `.sentryclirc` is now
+  treated like `.npmrc`, `.netrc`, and other credential stores for direct file
+  reads and content search. Filename search may still reveal that the file
+  exists; its contents remain unavailable.
+
+Nothing to migrate. This is a tool-boundary correction, not a new redaction or
+logging subsystem.
+
 ## v0.14.12 — 2026-08-26 — active peers no longer expire on the clock
 
 - **`link.ask` measures silence instead of total review time.** The internal

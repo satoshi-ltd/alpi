@@ -15,7 +15,7 @@
 
 ## Always-on guards
 
-- Sensitive-path checks on file/terminal tools: keys, credential files (`.aws`, `.netrc`, `.npmrc`, `.pgpass`), profile `.env`/`config.yaml`, shell rc/login files, launch agents, and skill `secrets/` are refused.
+- Sensitive-path checks on file/terminal tools: keys, credential files (`.aws`, `.netrc`, `.npmrc`, `.sentryclirc`, `.pgpass`), profile `.env`/`config.yaml`, shell rc/login files, launch agents, and skill `secrets/` are refused. Directory content search applies the same denylist to every matched file; validating only the search root is insufficient.
 - Terminal hard-denies secret-file reads, environment dumps (`env`/`printenv`), and writes to credential/config files; other risky commands need approval (see `config`).
 - Inbound chat messages and fetched web/email/MCP content reach the model behind an untrusted banner + prompt-injection scan — data, not instructions.
 - Outbound web fetches block private/link-local/CGNAT and cloud-metadata IPs (SSRF), re-validating redirects; DNS-resolution failure fails closed.

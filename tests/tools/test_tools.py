@@ -220,6 +220,36 @@ def test_search_content_finds_pattern() -> None:
     assert r.ok and "def run" in r.output
 
 
+def test_search_content_skips_sensitive_descendants(
+    tmp_home_no_env: Path,
+) -> None:
+    secret = "smith-search-must-not-return-this"
+    (tmp_home_no_env / "safe.txt").write_text(f"safe {secret}\n")
+    (tmp_home_no_env / ".env.production").write_text(f"TOKEN={secret}\n")
+    (tmp_home_no_env / ".sentryclirc").write_text(f"token={secret}\n")
+
+    result = Search().run(pattern=secret, path=str(tmp_home_no_env))
+
+    assert result.ok
+    assert "safe.txt" in result.output
+    assert ".env.production" not in result.output
+    assert ".sentryclirc" not in result.output
+
+
+def test_search_stdlib_skips_sensitive_descendants(
+    tmp_home_no_env: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    secret = "smith-search-stdlib-must-not-return-this"
+    (tmp_home_no_env / ".sentryclirc").write_text(f"token={secret}\n")
+    monkeypatch.setattr("alpi.tools.search._can_use_local_rg", lambda: False)
+
+    result = Search().run(pattern=secret, path=str(tmp_home_no_env))
+
+    assert result.ok
+    assert result.output == "(no matches)"
+
+
 def test_search_filename_finds_py_files() -> None:
     repo_root = Path(__file__).resolve().parents[2] / "alpi"
     r = Search().run(pattern="*.py", path=str(repo_root), target="files")

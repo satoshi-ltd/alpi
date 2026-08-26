@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import fnmatch
+import json
 import re
 import shutil
 import subprocess
 from pathlib import Path
 
-from alpi.tools._paths import resolve_path, suggest_similar_paths
+from alpi.tools._paths import is_sensitive_path, resolve_path, suggest_similar_paths
 from alpi.tools.base import Tool, ToolResult
 
 
@@ -239,7 +240,7 @@ def _search_content_rg(
     limit: int,
     include_noise: bool,
 ) -> ToolResult | None:
-    cmd = ["rg", "--line-number", "--no-heading", "-m", str(limit)]
+    cmd = ["rg", "--json", "-m", str(limit)]
     cmd.append("-s" if case_sensitive else "-i")
     if file_glob:
         cmd.extend(["--glob", file_glob])
@@ -252,8 +253,33 @@ def _search_content_rg(
     except FileNotFoundError:
         return None
     if proc.returncode not in (0, 1):
-        return ToolResult(ok=False, output=proc.stdout, error=proc.stderr.strip())
-    return ToolResult(ok=True, output=proc.stdout or "(no matches)")
+        return ToolResult(ok=False, output="", error=proc.stderr.strip())
+    matches: list[str] = []
+    checked: dict[str, bool] = {}
+    for raw in proc.stdout.splitlines():
+        try:
+            event = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if event.get("type") != "match":
+            continue
+        data = event.get("data") or {}
+        path_text = str((data.get("path") or {}).get("text") or "")
+        if not path_text:
+            continue
+        candidate = Path(path_text)
+        if not candidate.is_absolute():
+            candidate = root / candidate
+        key = str(candidate)
+        denied = checked.setdefault(key, is_sensitive_path(candidate))
+        if denied:
+            continue
+        line_text = str((data.get("lines") or {}).get("text") or "").rstrip("\r\n")
+        line_number = int(data.get("line_number") or 0)
+        matches.append(f"{path_text}:{line_number}:{line_text}")
+        if len(matches) >= limit:
+            break
+    return ToolResult(ok=True, output="\n".join(matches) or "(no matches)")
 
 
 def _search_content_stdlib(
@@ -282,6 +308,8 @@ def _search_content_stdlib(
         candidates = [p for p in root.rglob("*") if p.is_file()]
     for p in candidates:
         if not include_noise and _is_excluded(p, root):
+            continue
+        if is_sensitive_path(p):
             continue
         if file_regex and not file_regex.match(p.name):
             continue
