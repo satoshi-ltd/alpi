@@ -1,9 +1,11 @@
 import { ChatHeader, MeterChip, Mono } from "./index.js";
 import { profileLabel } from "../lib/profile-display.js";
+import { modelLabel } from "../lib/modelLabel.js";
 import SessionsButton from "./SessionsButton.jsx";
 import RunsButton from "./RunsButton.jsx";
 import SoundWave from "./SoundWave.jsx";
 import HeaderMenu from "./HeaderMenu.jsx";
+import Tip from "./Tip.jsx";
 import styles from "./ProfileChatHeader.module.css";
 
 function fmtCount(n) {
@@ -64,7 +66,11 @@ export default function ProfileChatHeader({
 
   const meta = (
     <>
-      {shownModel && <Mono className={styles.ink2}>{shownModel}</Mono>}
+      {shownModel && (
+        <Tip text={shownModel} side="down">
+          <Mono className={styles.ink2}>{modelLabel(shownModel)}</Mono>
+        </Tip>
+      )}
       {shownModel && contextWindow > 0 && (
         <span className="sep" aria-hidden />
       )}

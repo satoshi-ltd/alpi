@@ -11,6 +11,20 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.5.16 — 2026-08-26 — one model in every place
+
+- **The conversation header and composer now describe the same next turn.** An
+  older session's saved model no longer replaces the profile's current model
+  in the header or its context-window calculation; a per-message override still
+  updates both surfaces together.
+- **Compact chat surfaces show the model, not its routing path.** Header and
+  composer reduce `openrouter/deepseek/deepseek-v4-flash-latest` to
+  `deepseek-v4-flash-latest`, while the complete identifier remains available
+  in the tooltip, picker and settings.
+
+Client-side only — no daemon contract changes. Requires alpi ≥ 0.14.11,
+unchanged from 0.5.15.
+
 ## v0.5.15 — 2026-08-26 — give image inspection its model
 
 - **Profile Settings has a Vision model row beneath the routing models.** It

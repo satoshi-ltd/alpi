@@ -206,7 +206,7 @@ export default function ChatPane({
   const notify = useNotify();
   const onTogglePause =
     onTogglePauseProfile && activeProfile ? () => onTogglePauseProfile(activeProfile) : null;
-  const effectiveModel = pickEffectiveModel(modelOverride, sessionData?.model, activeProfile?.model);
+  const effectiveModel = pickEffectiveModel(modelOverride, activeProfile?.model);
   const contextWindow = useContextWindow(activeProfile?.name, effectiveModel, connectionId);
 
   if (noModel) {

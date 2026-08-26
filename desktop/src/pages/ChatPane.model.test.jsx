@@ -13,16 +13,12 @@ beforeEach(() => {
 });
 
 describe("pickEffectiveModel", () => {
-  it("prefers a picker override over session and profile", () => {
-    expect(pickEffectiveModel("over/ride", "sess/ion", "prof/ile")).toBe("over/ride");
+  it("prefers a picker override over the profile", () => {
+    expect(pickEffectiveModel("over/ride", "prof/ile")).toBe("over/ride");
   });
 
-  it("uses the session's model when there is no override", () => {
-    expect(pickEffectiveModel(null, "sess/ion", "prof/ile")).toBe("sess/ion");
-  });
-
-  it("falls back to the profile's model when neither is set", () => {
-    expect(pickEffectiveModel(null, undefined, "prof/ile")).toBe("prof/ile");
+  it("falls back to the profile's current model", () => {
+    expect(pickEffectiveModel(null, "prof/ile")).toBe("prof/ile");
   });
 });
 
@@ -40,22 +36,38 @@ function renderPane(profile, sessionData) {
   );
 }
 
-describe("ChatPane — header reflects the effective model", () => {
-  it("resolves and shows the session's model, with its own context denominator", async () => {
-    invoke.mockImplementation(async (cmd) =>
-      cmd === "resolve_ctx_window" ? 480000 : null,
-    );
+describe("ChatPane — header reflects the next turn's model", () => {
+  it("shows the current profile model when an old session records another model", async () => {
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "resolve_ctx_window") return 480000;
+      if (cmd === "ollama_models") return [];
+      return null;
+    });
     renderPane(
-      { name: "a", model: "prof/ile" },
-      { turns: [{ user: "hi", assistant: "yo", at: 0 }], last_ctx_tokens: 0, model: "sess/ion" },
+      {
+        name: "a",
+        model: "openrouter/deepseek/deepseek-v4-flash-latest",
+        models: [
+          "openrouter/deepseek/deepseek-v4-flash-latest",
+          "openrouter/deepseek/deepseek-v4-pro",
+        ],
+      },
+      {
+        turns: [{ user: "hi", assistant: "yo", at: 0 }],
+        last_ctx_tokens: 0,
+        model: "openrouter/deepseek/deepseek-v4-flash-0731",
+      },
     );
     await waitFor(() =>
       expect(invoke).toHaveBeenCalledWith("resolve_ctx_window", {
         profile: "a",
-        model: "sess/ion",
+        model: "openrouter/deepseek/deepseek-v4-flash-latest",
       }),
     );
-    expect(screen.getByText("sess/ion")).toBeTruthy();
+    expect(screen.getAllByText("deepseek-v4-flash-latest")).toHaveLength(2);
+    expect(screen.getAllByText("openrouter/deepseek/deepseek-v4-flash-latest")).toHaveLength(2);
+    expect(screen.queryByTitle("openrouter/deepseek/deepseek-v4-flash-latest")).toBeNull();
+    expect(screen.queryByText(/flash-0731/)).toBeNull();
     await waitFor(() => expect(screen.getAllByText(/480K/).length).toBeGreaterThan(0));
   });
 
@@ -73,7 +85,7 @@ describe("ChatPane — header reflects the effective model", () => {
         model: "prof/ile",
       }),
     );
-    expect(screen.getByText("prof/ile")).toBeTruthy();
+    expect(screen.getByText("ile")).toBeTruthy();
   });
 });
 
@@ -110,15 +122,15 @@ describe("ChatPane — model override is connection-scoped", () => {
       return null;
     });
     const { rerender } = render(paneEl("A"));
-    expect(screen.getByText("prov/base")).toBeTruthy();
+    expect(screen.getAllByText("base").length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByText("base").closest("button"));
+    fireEvent.click(screen.getByRole("button", { name: /base/ }));
     fireEvent.click(screen.getByText("other"));
-    await waitFor(() => expect(screen.getByText("prov/other")).toBeTruthy());
+    await waitFor(() => expect(screen.getAllByText("other").length).toBeGreaterThan(0));
 
     rerender(paneEl("B"));
-    await waitFor(() => expect(screen.getByText("prov/base")).toBeTruthy());
-    expect(screen.queryByText("prov/other")).toBeNull();
+    await waitFor(() => expect(screen.getAllByText("base").length).toBeGreaterThan(0));
+    expect(screen.queryByText("other")).toBeNull();
   });
 });
 

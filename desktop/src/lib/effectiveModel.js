@@ -1,3 +1,3 @@
-export function pickEffectiveModel(modelOverride, sessionModel, profileModel) {
-  return modelOverride ?? sessionModel ?? profileModel;
+export function pickEffectiveModel(modelOverride, profileModel) {
+  return modelOverride ?? profileModel;
 }

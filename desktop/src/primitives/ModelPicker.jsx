@@ -4,6 +4,7 @@ import { useDismissOnOutside } from "../hooks/useDismissOnOutside.js";
 import { I } from "./icons.jsx";
 import Tip from "./Tip.jsx";
 import { fmtTok } from "../lib/format.js";
+import { modelLabel } from "../lib/modelLabel.js";
 import styles from "./ModelPicker.module.css";
 
 export default function ModelPicker({
@@ -26,19 +27,12 @@ export default function ModelPicker({
     setPicked(currentModel);
   }, [currentModel]);
 
-  const slash = picked?.indexOf("/") ?? -1;
-  const label = slash >= 0 ? picked.slice(slash + 1) : (picked || "");
+  const label = modelLabel(picked);
 
   return (
     <span ref={ref} className={styles.modelPickerWrap}>
       <Tip
-        text={
-          mode === "default"
-            ? "Model — default for this profile"
-            : override
-              ? "Model — override active (not this profile's configured model)"
-              : "Model — overrides for this message"
-        }
+        text={picked}
         side="up"
       >
         <button
