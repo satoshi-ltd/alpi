@@ -35,6 +35,7 @@ vi.mock("./fields/agent.jsx", () => ({
   ModelField: () => null,
   ReasoningEffortField: () => null,
   TierField: () => null,
+  VisionModelField: () => <span>vision field</span>,
   VoiceField: () => null,
 }));
 vi.mock("./fields/alp.jsx", () => ({
@@ -138,5 +139,50 @@ describe("ProfileDetail — routing tiers gating", () => {
     );
     expect(screen.queryByText("fast model")).toBeNull();
     delete stableDetail.models;
+  });
+});
+
+describe("ProfileDetail — vision model gating", () => {
+  it("shows the row only when the daemon reports the read_image setting", () => {
+    Object.assign(stableDetail, { models: ["openrouter/main"], vision_model: "" });
+    const first = render(
+      <ProfileDetail
+        profile={{ name: "pulse" }}
+        profiles={[]}
+        activeConnection={{ id: "remote" }}
+      />,
+    );
+    expect(screen.getByText("vision model")).toBeInTheDocument();
+    expect(screen.getByText("vision field")).toBeInTheDocument();
+    first.unmount();
+
+    delete stableDetail.vision_model;
+    render(
+      <ProfileDetail
+        profile={{ name: "pulse" }}
+        profiles={[]}
+        activeConnection={{ id: "remote" }}
+      />,
+    );
+    expect(screen.queryByText("vision model")).toBeNull();
+    delete stableDetail.models;
+  });
+
+  it("keeps a configured override clearable after its provider disappears", () => {
+    Object.assign(stableDetail, {
+      models: [],
+      vision_model: "openrouter/deepseek/deepseek-v4-flash-vision-exp",
+    });
+    render(
+      <ProfileDetail
+        profile={{ name: "pulse" }}
+        profiles={[]}
+        activeConnection={{ id: "remote" }}
+      />,
+    );
+    expect(screen.getByText("vision model")).toBeInTheDocument();
+    expect(screen.getByText("vision field")).toBeInTheDocument();
+    delete stableDetail.models;
+    delete stableDetail.vision_model;
   });
 });

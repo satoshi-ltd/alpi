@@ -22,8 +22,11 @@ anthropic:
     note: cheap · fast
     reasoning: true
 openrouter:
-  - id: deepseek/deepseek-v4-flash-0731
-    note: cheap · fast · 1M
+  - id: deepseek/deepseek-v4-flash-vision-exp
+    note: vision · experimental · 1M
+    reasoning: true
+  - id: ~deepseek/deepseek-v4-flash-latest
+    note: cheap · fast · latest · 1M
     reasoning: true
   - id: minimax/minimax-m3
     note: 512K ctx

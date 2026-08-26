@@ -60,11 +60,18 @@ def test_openrouter_list_models_reads_config(monkeypatch, tmp_path: Path) -> Non
     })()
     monkeypatch.setattr(openrouter.cfg_mod, "load", lambda home: cfg)
     monkeypatch.setattr(openrouter, "get_home", lambda: tmp_path)
+    monkeypatch.setattr(openrouter, "load_curated", lambda provider: [
+        {"id": "baz", "note": "duplicate"},
+        {"id": "deepseek/vision", "note": "vision"},
+    ])
 
     models = openrouter.OpenRouter().list_models()
 
-    assert [m.id for m in models] == ["openrouter/foo/bar", "openrouter/baz"]
-    assert [m.display for m in models] == ["foo/bar", "baz"]
+    assert [m.id for m in models] == [
+        "openrouter/foo/bar", "openrouter/baz", "openrouter/deepseek/vision",
+    ]
+    assert [m.display for m in models] == ["foo/bar", "baz", "deepseek/vision"]
+    assert models[-1].note == "vision"
 
 
 def test_curated_load_curated_returns_copy(monkeypatch) -> None:
@@ -76,6 +83,12 @@ def test_curated_load_curated_returns_copy(monkeypatch) -> None:
     assert models == [{"id": "gemini/flash"}]
     models.append({"id": "mutated"})
     assert curated.load_curated("google") == [{"id": "gemini/flash"}]
+
+
+def test_openrouter_curated_uses_current_deepseek_flash_alias() -> None:
+    ids = {row["id"] for row in curated.load_curated("openrouter")}
+    assert "~deepseek/deepseek-v4-flash-latest" in ids
+    assert "deepseek/deepseek-v4-flash-0731" not in ids
 
 
 def test_ollama_helpers_cover_root_and_size() -> None:

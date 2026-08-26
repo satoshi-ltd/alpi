@@ -282,6 +282,17 @@ export default function ProfileSettings() {
             )}
           </>
         ) : null}
+        {profile.vision_model !== undefined ? (
+          <>
+            <RowSeparator />
+            <Row
+              label="Vision model"
+              helper="image inspection via read_image"
+              value={profile.vision_model ? modelLabel(profile.vision_model) : 'main model'}
+              onPress={() => setSheet('vision')}
+            />
+          </>
+        ) : null}
         <RowSeparator />
         <Row
           label="Budget"
@@ -557,6 +568,22 @@ export default function ProfileSettings() {
         onClose={() => setSheet(null)}
         initialValue={profile.tiers?.deep?.effort ?? ''}
         onSave={(value) => saveField('tiers.deep.effort', value)}
+      />
+      <ModelSheet
+        open={sheet === 'vision'}
+        onClose={() => setSheet(null)}
+        profileName={profile.name}
+        accent={accent}
+        title="Vision model"
+        subtitle={`@${profile.name} · read_image and browser screenshots`}
+        allowClear
+        clearHelper="read_image falls back to the profile model"
+        initialValue={profile.vision_model ?? ''}
+        profileModels={profile.models ?? []}
+        providerKeys={profile.provider_keys ?? []}
+        openrouterModels={(profile.providers?.openrouter?.models) ?? []}
+        ollamaNames={(profile.provider_ollama ?? []).map((o) => o.name)}
+        onSave={(value) => saveField('tools.read_image.model', value)}
       />
       <CleanupSheet
         open={sheet === 'cleanup'}

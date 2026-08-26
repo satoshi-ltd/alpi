@@ -54,30 +54,67 @@ def tier_status(tier: cfg_mod.TierConfig) -> str:
 
 
 def tiers_status(cfg: cfg_mod.Config) -> str:
-    if not cfg.tiers.fast.model and not cfg.tiers.deep.model:
+    vision = cfg.tools.read_image.model
+    if not cfg.tiers.fast.model and not cfg.tiers.deep.model and not vision:
         return "(not set — everything runs on the main model)"
-    return f"fast: {cfg.tiers.fast.model or '—'} · deep: {cfg.tiers.deep.model or '—'}"
+    return (
+        f"fast: {cfg.tiers.fast.model or '—'} · "
+        f"deep: {cfg.tiers.deep.model or '—'} · vision: {vision or '—'}"
+    )
 
 
 def run_tiers(cfg: cfg_mod.Config) -> None:
-    """Configure the fast/deep routing tiers (side-tasks, delegation, escalation)."""
+    """Configure models used for routing and image inspection."""
     while True:
         items = [
             ("Fast model", "fast",
              f"{tier_status(cfg.tiers.fast)} — side-tasks, research(fast), delegate(fast), cron tier:fast"),
             ("Deep model", "deep",
              f"{tier_status(cfg.tiers.deep)} — escalation, research(deep), delegate(deep)"),
+            ("Vision model", "vision",
+             f"{cfg.tools.read_image.model or '(main model)'} — read_image and browser screenshots"),
         ]
         choice = ui.menu(
-            "Routing tiers",
+            "Routing models",
             items,
-            subtitle="unconfigured tiers always fall back to the main model",
+            subtitle="unconfigured routes always fall back to the main model",
             home=cfg.home,
             close="Back",
         )
         if choice is None:
             return
-        _configure_tier(cfg, choice)
+        if choice == "vision":
+            _configure_vision(cfg)
+        else:
+            _configure_tier(cfg, choice)
+
+
+def _configure_vision(cfg: cfg_mod.Config) -> None:
+    current = cfg.tools.read_image.model
+    items: list[tuple[str, str, str]] = [("Pick model", "pick", current or "(not set)")]
+    if current:
+        items.append(("Clear", "clear", "read_image falls back to the main model"))
+    choice = ui.menu("Vision model", items, home=cfg.home, close="Back")
+    if choice == "clear":
+        cfg.tools.read_image.model = ""
+        cfg_mod.save(cfg)
+        ui.ok_and_wait("vision model cleared — falls back to the main model")
+        return
+    if choice != "pick":
+        return
+    provider = _pick_provider(cfg)
+    if provider is None:
+        ui.dim("No change.")
+        return
+    _ensure_key(cfg, provider)
+    model_id = _pick_model(provider, cfg)
+    if model_id is None:
+        ui.dim("No change.")
+        return
+    cfg.tools.read_image.model = model_id
+    _remember_openrouter_model(cfg, model_id)
+    cfg_mod.save(cfg)
+    ui.ok_and_wait(f"vision model set to [b]{model_id}[/b]")
 
 
 def _configure_tier(cfg: cfg_mod.Config, tier_name: str) -> None:

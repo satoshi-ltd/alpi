@@ -11,6 +11,18 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.5.15 — 2026-08-26 — give image inspection its model
+
+- **Profile Settings has a Vision model row beneath the routing models.** It
+  configures the daemon's `read_image` route without replacing the model used
+  for ordinary chat, and Clear restores the main-model fallback.
+- **Older daemons stay honest.** The row appears only when profile detail
+  carries the new field, so a client cannot offer a setting that its selected
+  connection cannot read back.
+
+Requires alpi ≥ 0.14.11 for `vision_model` in `host.profile.detail` and the
+`tools.read_image.model` write contract.
+
 ## v0.5.14 — 2026-08-24 — update the daemon you selected
 
 - **Daemon updates wait for the package manager to finish.** Desktop now uses

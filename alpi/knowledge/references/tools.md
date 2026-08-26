@@ -98,6 +98,11 @@ Inbound per-turn attachments:
 - Remote clients stage files through `host.attachments.stage`; the daemon then
   owns a temporary local path for the turn.
 
+`read_image` is the explicit tool path for inspecting an image by file path or
+URL. Its optional `tools.read_image.model` override also powers browser
+screenshot analysis; empty means the profile model. The override never reroutes
+the inline image attachments above, which remain inputs to the main turn.
+
 Output attachments (MM.2):
 
 - A scripted tool/skill can return JSON with an absolute `out` path. The engine

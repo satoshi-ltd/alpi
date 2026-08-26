@@ -166,6 +166,7 @@ export function ModelSheet({
   title = 'Model',
   subtitle = null,
   allowClear = false,
+  clearHelper = 'tier unset — everything falls back to the profile model',
 }) {
   const { colors, fonts, fontSizes } = useTheme();
   const toast = useToast();
@@ -253,7 +254,7 @@ export function ModelSheet({
               selected={!picked}
               accent={accent}
               label="Use main model"
-              helper="tier unset — everything falls back to the profile model"
+              helper={clearHelper}
               onPress={() => setPicked('')}
             />
             <RowSeparator />

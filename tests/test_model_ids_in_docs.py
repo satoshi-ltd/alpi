@@ -32,8 +32,8 @@ def _or_vendors(catalog: set[str]) -> set[str]:
 
 
 def _candidate_ids(text: str) -> list[str]:
-    backticked = re.findall(r"`([a-z][a-z0-9./\-]+)`", text)
-    yaml_model = re.findall(r"(?m)^\s*model:\s*([a-z0-9][a-z0-9./\-]+)\s*$", text)
+    backticked = re.findall(r"`([~a-z][~a-z0-9./\-]+)`", text)
+    yaml_model = re.findall(r"(?m)^\s*model:\s*([~a-z0-9][~a-z0-9./\-]+)\s*$", text)
     return backticked + yaml_model
 
 

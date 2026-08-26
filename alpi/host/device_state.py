@@ -267,6 +267,7 @@ def _profile_detail_payload(home: Path) -> dict[str, Any]:
         "mcps": _mcp_servers(cfg),
         "peers": _profile_peers(home),
         "models": _models(cfg, home),
+        "vision_model": cfg.tools.read_image.model,
         "model_reasoning_effort": cfg.model_reasoning.effort,
         "model_reasoning_supported": supports_reasoning(cfg.model),
         "tiers": {
@@ -602,6 +603,13 @@ async def _config_set_field(
         else:
             _unset_dotted(data, key)
         _prune_empty_tiers(data)
+    elif key == "tools.read_image.model":
+        model_val = str(coerced or "").strip()
+        if model_val:
+            _set_dotted(data, key, model_val)
+        else:
+            _unset_dotted(data, key)
+            _prune_empty_read_image(data)
     else:
         _set_dotted(data, key, coerced)
     _write_user_yaml(home, data)
@@ -618,6 +626,8 @@ async def _config_unset_field(
     data = _load_user_yaml(home)
     _unset_dotted(data, key)
     _prune_empty_tiers(data)
+    if key == "tools.read_image.model":
+        _prune_empty_read_image(data)
     _write_user_yaml(home, data)
     _emit_config_changed(home, scope=key.split(".", 1)[0] or "field")
     return {"ok": True}
@@ -959,6 +969,16 @@ def _prune_empty_tiers(data: dict[str, Any]) -> None:
         data.pop("tiers", None)
 
 
+def _prune_empty_read_image(data: dict[str, Any]) -> None:
+    tools = data.get("tools")
+    if not isinstance(tools, dict):
+        return
+    if isinstance(tools.get("read_image"), dict) and not tools["read_image"]:
+        tools.pop("read_image", None)
+    if not tools:
+        data.pop("tools", None)
+
+
 def _set_dotted(data: dict[str, Any], key: str, value: Any) -> None:
     parts = [p for p in key.split(".") if p]
     if not parts:
@@ -1162,6 +1182,7 @@ def _models(cfg: cfg_mod.Config, home: Path) -> list[str]:
     if env.get("OPENROUTER_API_KEY"):
         for model in ((cfg.providers.get("openrouter") or {}).get("models") or []):
             out.append(f"openrouter/{model}")
+        out.extend(_curated_ids_for("openrouter"))
     seen = set()
     return [m for m in out if not (m in seen or seen.add(m))]
 

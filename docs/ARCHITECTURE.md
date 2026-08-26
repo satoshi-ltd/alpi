@@ -433,7 +433,13 @@ Magic-bytes sniff accepts PNG / JPEG / GIF / WebP / BMP plus SVG (text-sniff for
 
 No pre-flight vision-capability check — LiteLLM's `supports_vision()` is wrong for `openrouter/...` prefixes and would bounce real vision models. If the call fails we surface the error with a hint pointing at `/model` when the message mentions image / vision / multimodal.
 
-**Model override** via `tools.read_image.model` in config (same pattern as `web_extract`). When set, the tool tries the override first; on failure it retries with the main model and prefixes the answer with `[fallback: <override> unavailable, used main model]`. Useful for "main agent on a cheap text model, keep an expensive vision model just for images".
+**Model override** via `tools.read_image.model` in config (surfaced as Vision
+model by `alpi setup`, desktop and mobile). When set, `read_image` and browser's
+opt-in screenshot analysis try the override first; on failure the tool retries
+with the main model and prefixes the answer with `[fallback: <override>
+unavailable, used main model]`. Clearing it restores main-model fallback. This
+route is deliberately tool-scoped: chat image attachments are multimodal parts
+of the main turn and are not silently moved to the override.
 
 Same usage / cost plumbing as research and delegate (`record_usage`). Auto-resize to cut tokens is tracked in [ROADMAP §S](ROADMAP.md) for v0.3.
 

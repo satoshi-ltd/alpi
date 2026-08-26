@@ -70,6 +70,8 @@ def test_tier_status_and_tiers_status(tmp_path: Path) -> None:
     assert model_selector.tier_status(cfg.tiers.fast) == "openrouter/flash · effort low"
     assert "fast: openrouter/flash" in model_selector.tiers_status(cfg)
     assert "deep: —" in model_selector.tiers_status(cfg)
+    cfg.tools.read_image.model = "openrouter/vision"
+    assert "vision: openrouter/vision" in model_selector.tiers_status(cfg)
 
 
 def test_configure_tier_clear_resets_and_saves(tmp_path: Path, monkeypatch) -> None:
@@ -107,3 +109,26 @@ def test_configure_tier_pick_sets_model_and_effort(tmp_path: Path, monkeypatch) 
     reloaded = config.load(home)
     assert reloaded.tiers.fast.model == "openrouter/flash"
     assert reloaded.tiers.fast.effort == "low"
+
+
+def test_configure_vision_pick_and_clear(tmp_path: Path, monkeypatch) -> None:
+    home = tmp_path / "h"
+    home.mkdir()
+    cfg = config.load(home)
+
+    choices = iter(["pick", "clear"])
+    monkeypatch.setattr("alpi.ui.menu", lambda *a, **kw: next(choices))
+    monkeypatch.setattr("alpi.ui.ok_and_wait", lambda *a, **kw: None)
+    monkeypatch.setattr(model_selector, "_pick_provider", lambda cfg: object())
+    monkeypatch.setattr(model_selector, "_ensure_key", lambda cfg, p: None)
+    monkeypatch.setattr(
+        model_selector, "_pick_model", lambda p, cfg: "openrouter/deepseek/vision",
+    )
+
+    model_selector._configure_vision(cfg)
+    reloaded = config.load(home)
+    assert reloaded.tools.read_image.model == "openrouter/deepseek/vision"
+    assert reloaded.providers["openrouter"]["models"][0] == "deepseek/vision"
+
+    model_selector._configure_vision(reloaded)
+    assert config.load(home).tools.read_image.model == ""

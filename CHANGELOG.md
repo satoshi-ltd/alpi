@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.14.11 — 2026-08-26 — vision has one explicit route
+
+- **Image inspection can use its own model without changing the agent.**
+  `alpi setup → Routing models` now exposes a Vision model that writes the
+  existing `tools.read_image.model` contract. It powers `read_image` and
+  opt-in browser screenshot analysis; clearing it returns both to the main
+  model. Chat attachments deliberately stay on the main turn.
+- **Clients receive the vision route and a model they can actually select.**
+  `host.profile.detail` now returns `vision_model`, and profiles with an
+  OpenRouter key receive the curated OpenRouter choices alongside models they
+  saved manually. The catalog includes DeepSeek's experimental V4 Flash Vision
+  route and the context-window guard knows its 1M-class limit. New profiles see
+  the current `~deepseek/deepseek-v4-flash-latest` alias instead of the obsolete
+  `-0731` snapshot; historical configs remain resolvable.
+- **Empty overrides leave no dead configuration behind.** Clearing Vision model
+  through a client prunes the empty `tools.read_image` block instead of
+  persisting a meaningless empty mapping.
+
+Nothing to migrate. Existing profiles continue to use their main model until a
+Vision model is selected.
+
 ## v0.14.10 — 2026-08-25 — a failing tool gets to say why
 
 - **A failed tool's own diagnosis reaches the model — on every path.** When a

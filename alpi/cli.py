@@ -1709,7 +1709,7 @@ def setup_cmd(ctx: click.Context) -> None:
         items: list = [
             ui.Heading("Agent"),
             ("Model / Provider", "model", cfg.model or "(not set)"),
-            ("Routing tiers", "tiers", _tiers_status(cfg)),
+            ("Routing models", "tiers", _tiers_status(cfg)),
             ("Voice", "voice", _voice_status(cfg)),
             ("MCPs", "mcps", _mcp_status(h)),
             ("Emails", "email", _email_accounts_status(h)),

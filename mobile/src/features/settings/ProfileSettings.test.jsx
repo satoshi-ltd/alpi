@@ -9,6 +9,7 @@ import { _resetDaemonDataCache } from '../../hooks/useDaemonData';
 const h = vi.hoisted(() => ({
   params: { id: 'doc' },
   router: { push: vi.fn(), back: vi.fn(), replace: vi.fn() },
+  visionSheetProps: null,
 }));
 
 vi.mock('expo-router', () => ({
@@ -97,7 +98,10 @@ vi.mock('../../features/sheets/AccentSheet', () => ({
 vi.mock('../../features/sheets/ProfileFieldSheets', () => ({
   BudgetSheet: () => null,
   CleanupSheet: () => null,
-  ModelSheet: () => null,
+  ModelSheet: (props) => {
+    if (props.title === 'Vision model') h.visionSheetProps = props;
+    return null;
+  },
   ReasoningEffortSheet: () => null,
   VoiceSheet: () => null,
   WorkspaceSheet: () => null,
@@ -117,6 +121,7 @@ beforeEach(() => {
   _resetDaemonDataCache();
   h.params = { id: 'doc' };
   h.router = { push: vi.fn(), back: vi.fn(), replace: vi.fn() };
+  h.visionSheetProps = null;
 });
 
 describe('ProfileSettings snapshot first paint', () => {
@@ -277,6 +282,45 @@ describe('ProfileSettings routing tiers', () => {
     await waitFor(() => expect(scope.getByText('Model')).toBeTruthy());
     expect(scope.queryByText('Fast model')).toBeNull();
     expect(scope.queryByText('Deep model')).toBeNull();
+    expect(scope.queryByText('Vision model')).toBeNull();
+  });
+});
+
+describe('ProfileSettings vision model', () => {
+  it('renders and saves the read_image override only on supporting daemons', async () => {
+    const call = vi.fn(async (method) => {
+      if (method === 'host.profile.summaries') {
+        return { profiles: [{ name: 'doc', counts: {} }] };
+      }
+      if (method === 'host.settings.profile_snapshot') {
+        return {
+          detail: {
+            name: 'doc',
+            model: 'openrouter/example',
+            vision_model: 'openrouter/deepseek/deepseek-v4-flash-vision-exp',
+            models: ['openrouter/deepseek/deepseek-v4-flash-vision-exp'],
+          },
+          usage: { days: [] },
+          schedules: { jobs: [] },
+          workgroups: { workgroups: [] },
+          email: { accounts: [] },
+          storage: { storage: [] },
+        };
+      }
+      if (method === 'host.config.set_field') return { ok: true };
+      throw new Error(`unexpected ${method}`);
+    });
+
+    const { container } = render(<ProfileSettings />, { wrapper: wrapper(call) });
+    const scope = within(container);
+    await waitFor(() => expect(scope.getByText('Vision model')).toBeTruthy());
+    expect(scope.getByText('deepseek-v4-flash-vision-exp')).toBeTruthy();
+    await h.visionSheetProps.onSave('openrouter/deepseek/vision-next');
+    expect(call).toHaveBeenCalledWith('host.config.set_field', {
+      profile: 'doc',
+      key: 'tools.read_image.model',
+      value: 'openrouter/deepseek/vision-next',
+    });
   });
 });
 

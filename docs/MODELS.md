@@ -9,7 +9,7 @@ shell commands, browser calls, and user-specific state in context?"
 Use this page as a practical selector. Prices, context windows, and
 provider wrappers move quickly; re-check them every 2-3 months.
 
-Last updated: **2026-07-15**.
+Last updated: **2026-08-26**.
 
 ## What matters for alpi
 
@@ -71,11 +71,21 @@ creating or debugging skills.
 
 | Model | OpenRouter ID | Why |
 |---|---|---|
-| **DeepSeek V4 Flash** | `deepseek/deepseek-v4-flash-0731` | 1M context at the cheap-fast tier, and the cheapest way to get that headroom. Pinned snapshot rather than the moving alias, so a silent swap can't change behaviour under you. Replies cap at 64K output. |
+| **DeepSeek V4 Flash** | `~deepseek/deepseek-v4-flash-latest` | Moving alias for the current Flash release at the cheap-fast tier. Use it when following DeepSeek's current deployment is preferable to pinning an obsolete snapshot. |
 | **MiMo V2.5** | `xiaomi/mimo-v2.5` | Budget sibling to MiMo V2.5 Pro; 1M context, useful for A/B testing cheap service profiles. |
 | **Claude Haiku 4.5** | `anthropic/claude-haiku-4.5` | Cheap and fast with reasoning support; reliable for short-chain turns. |
 | **GPT-5.6 Terra** | `openai/gpt-5.6-terra` | Balanced OpenAI tier for simple tool use; acceptable as a router when the skill catalog is clean and small. |
 | **GPT-5.6 Luna** | `openai/gpt-5.6-luna` | Cheapest OpenAI tier; mechanical turns only. |
+
+### Vision for `read_image`
+
+Use `deepseek/deepseek-v4-flash-vision-exp` as the profile's **Vision
+model** when its main model is text-only. This OpenRouter route accepts text
+and images with a 1M context window, but it is explicitly experimental: keep
+the main model as the fallback rather than making the vision route the whole
+agent. The setting applies to `read_image` and opt-in browser screenshot
+analysis. Images attached directly to chat remain part of the main model's
+turn.
 
 ### High-stakes engineering
 

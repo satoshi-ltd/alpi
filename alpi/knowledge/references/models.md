@@ -36,13 +36,21 @@ For profiles with many skills, persistent memory, database state, shell commands
 
 Pick one for a skill-heavy profile: start with DeepSeek V4 Pro, MiMo V2.5 Pro, or Sonnet 5 by budget/provider.
 
+## Vision route
+
+`deepseek/deepseek-v4-flash-vision-exp` is the current DeepSeek experimental
+vision route on OpenRouter. Configure it as the Vision model when the main model
+is text-only: it is used by `read_image` and browser screenshot analysis, not by
+ordinary chat turns or inline chat attachments. Experimental aliases can move;
+clear the override to fall back to the profile model.
+
 ## Cheap service turns
 
 For scheduled-job turns, heartbeats, summaries, simple lookups, low-risk commands. Not for creating/debugging skills.
 
 | Model | OpenRouter ID | Notes |
 |---|---|---|
-| DeepSeek V4 Flash | `deepseek/deepseek-v4-flash-0731` | 1M context at the cheap-fast tier; pinned snapshot. Caps replies at 64K output, so it is the wrong pick for a single very long generation. |
+| DeepSeek V4 Flash | `~deepseek/deepseek-v4-flash-latest` | Moving alias for the current Flash release at the cheap-fast tier. Prefer it to the obsolete `-0731` snapshot for new profiles. |
 | MiMo V2.5 | `xiaomi/mimo-v2.5` | Budget sibling to MiMo V2.5 Pro; 1M context. |
 | Claude Haiku 4.5 | `anthropic/claude-haiku-4.5` | Cheap, fast, reasoning support; reliable on short chains. |
 | GPT-5.6 Terra | `openai/gpt-5.6-terra` | Balanced OpenAI; router only when the skill catalog is small and clean. |

@@ -27,6 +27,7 @@ import {
   ModelField,
   ReasoningEffortField,
   TierField,
+  VisionModelField,
   VoiceField,
 } from "./fields/agent.jsx";
 import {
@@ -311,6 +312,14 @@ export default function ProfileDetail({
                 />
               </Row>
             </>
+          )}
+          {profile.vision_model !== undefined && (hasModels || profile.vision_model) && (
+            <Row label="vision model">
+              <VisionModelField
+                profile={profile}
+                onSaved={() => { refreshDetail(); onSaved?.(); }}
+              />
+            </Row>
           )}
           <BudgetField profile={profile} onSaved={onSaved} />
           <Row label="workspace">

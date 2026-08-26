@@ -1004,6 +1004,48 @@ async def test_profile_detail_exposes_tiers(
 
 
 @pytest.mark.asyncio
+async def test_vision_model_round_trips_and_empty_value_prunes_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = _bootstrap(tmp_path / "h")
+    monkeypatch.setattr(host_handlers, "_resolve_home", lambda profile: home)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+
+    await srv._dispatch({
+        "id": "set", "method": "host.config.set_field",
+        "params": {
+            "profile": "default",
+            "key": "tools.read_image.model",
+            "value": "openrouter/deepseek/deepseek-v4-flash-vision-exp",
+        },
+    })
+    detail = await srv._dispatch({
+        "id": "detail", "method": "host.profile.detail",
+        "params": {"profile": "default"},
+    })
+    assert detail["result"]["vision_model"] == (
+        "openrouter/deepseek/deepseek-v4-flash-vision-exp"
+    )
+
+    await srv._dispatch({
+        "id": "clear", "method": "host.config.set_field",
+        "params": {"profile": "default", "key": "tools.read_image.model", "value": ""},
+    })
+    assert cfg_mod.load(home).tools.read_image.model == ""
+    import yaml as _yaml
+    raw = _yaml.safe_load((home / "config.yaml").read_text()) or {}
+    assert "tools" not in raw
+
+
+def test_openrouter_curated_models_are_available_when_key_is_set(tmp_path: Path) -> None:
+    home = _bootstrap(tmp_path / "h")
+    (home / ".env").write_text("OPENROUTER_API_KEY=or-test\n")
+    models = host_device_state._models(cfg_mod.load(home), home)
+    assert "openrouter/deepseek/deepseek-v4-flash-vision-exp" in models
+
+
+@pytest.mark.asyncio
 async def test_unset_field_clears_tier_and_prunes_block(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:

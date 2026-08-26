@@ -1,10 +1,11 @@
-"""OpenRouter provider — models tracked per-user in config, not fetched."""
+"""OpenRouter provider — saved and curated models, without a network fetch."""
 
 from __future__ import annotations
 
 from alpi import config as cfg_mod
 from alpi.home import get_home
 from alpi.providers.base import ModelInfo, Provider
+from alpi.providers.curated import load_curated
 
 
 class OpenRouter(Provider):
@@ -15,5 +16,16 @@ class OpenRouter(Provider):
 
     def list_models(self) -> list[ModelInfo]:
         cfg = cfg_mod.load(get_home())
-        ids = cfg.providers.get("openrouter", {}).get("models", []) or []
-        return [ModelInfo(id=f"openrouter/{i}", display=i) for i in ids if i]
+        saved = cfg.providers.get("openrouter", {}).get("models", []) or []
+        rows = [{"id": model} for model in saved if model]
+        rows.extend(load_curated("openrouter"))
+        seen = set()
+        return [
+            ModelInfo(
+                id=f"openrouter/{row['id']}",
+                display=row["id"],
+                note=row.get("note", ""),
+            )
+            for row in rows
+            if row.get("id") and not (row["id"] in seen or seen.add(row["id"]))
+        ]

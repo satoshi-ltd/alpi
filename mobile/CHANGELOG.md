@@ -14,6 +14,16 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.4.5 — 2026-08-26 — choose the image reader
+
+- **Profile Settings now exposes Vision model.** The picker configures
+  `read_image` and browser screenshot analysis while ordinary chat remains on
+  the profile model; Use main model clears the override.
+- **The row is daemon-capability gated.** Connections to older hosts do not
+  show a control they cannot persist and read back.
+
+Requires alpi ≥ 0.14.11. Store builds advance to iOS 29 and Android 29.
+
 ## v0.4.4 — 2026-08-23 — runs travel with the conversation
 
 - **Streaming turns retain their durable run id.** The phone tracks the same

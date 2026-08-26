@@ -3,6 +3,7 @@ export { PeersField } from "./PeersField.jsx";
 export { WorkgroupsField } from "./WorkgroupsField.jsx";
 export { BudgetEditor } from "./BudgetEditor.jsx";
 export { ModelField } from "./ModelField.jsx";
+export { VisionModelField } from "./VisionModelField.jsx";
 export { ReasoningEffortField } from "./ReasoningEffortField.jsx";
 export { AddProviderField } from "./AddProviderField.jsx";
 export { VoiceField } from "./VoiceField.jsx";
