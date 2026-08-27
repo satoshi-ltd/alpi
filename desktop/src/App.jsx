@@ -5,6 +5,7 @@ import { safeUnlisten } from "./lib/tauri-listen.js";
 import Sidebar from "./features/Sidebar.jsx";
 import ChatPane from "./pages/ChatPane.jsx";
 import WorkgroupView from "./pages/WorkgroupView.jsx";
+import WorkgroupsView from "./pages/WorkgroupsView.jsx";
 import Settings from "./pages/Settings.jsx";
 import { Banner } from "./primitives/index.js";
 import { useNotify } from "./primitives/Notification.jsx";
@@ -1056,6 +1057,10 @@ export default function App() {
     });
   }, []);
 
+  const onViewAllWorkgroups = useCallback(() => {
+    setView({ kind: "workgroups" });
+  }, []);
+
   const closeSettings = useCallback(() => {
     const t = settingsTargetRef.current;
     if (t?.kind === "connections") {
@@ -1213,6 +1218,7 @@ export default function App() {
         onNewChat={onNewChat}
         onOpenProfile={onOpenProfile}
         onOpenWorkgroup={onOpenWorkgroup}
+        onViewAllWorkgroups={onViewAllWorkgroups}
         onOpenSettings={adminOnOpenSettings}
         onOpenPalette={onTogglePalette}
         onNewProfile={adminOnNewProfile}
@@ -1282,6 +1288,16 @@ export default function App() {
                     ? `Connected to ${connectionDisplayName} — syncing profiles…`
                     : `Connecting to ${connectionDisplayName}…`}
                 </Banner>
+              )}
+              {view.kind === "workgroups" && (
+                <WorkgroupsView
+                  workgroups={workgroups}
+                  profiles={profiles}
+                  taskByWorkgroup={taskByWorkgroup}
+                  activityByWorkgroup={activityByWorkgroup}
+                  onOpenWorkgroup={onOpenWorkgroup}
+                  onNewWorkgroup={adminOnNewWorkgroup}
+                />
               )}
               {view.kind === "workgroup" && activeWorkgroup && (
                 <WorkgroupView

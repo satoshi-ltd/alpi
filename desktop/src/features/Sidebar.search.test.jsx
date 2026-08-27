@@ -16,7 +16,7 @@ vi.mock("../lib/updater.js", () => ({
   subscribeUpdater: vi.fn(() => () => {}),
 }));
 
-import Sidebar from "./Sidebar.jsx";
+import Sidebar, { fitWorkgroupRows } from "./Sidebar.jsx";
 
 const BASE = {
   profiles: [{ name: "doc", model: "a/b" }, { name: "mind", model: "a/b" }],
@@ -28,6 +28,12 @@ const BASE = {
 const filterInput = () => screen.getByPlaceholderText(/Filter profiles/);
 
 describe("Sidebar filter", () => {
+  it("reserves room for the workgroup inventory link", () => {
+    expect(fitWorkgroupRows(6, 6, -70, 34)).toBe(3);
+    expect(fitWorkgroupRows(3, 6, 68, 34)).toBe(5);
+    expect(fitWorkgroupRows(3, 6, -200, 34)).toBe(2);
+  });
+
   it("swaps New session for the filter input when search is open", () => {
     const { rerender } = render(<Sidebar {...BASE} onNewChat={() => {}} />);
     expect(screen.getByText("New session")).toBeInTheDocument();
@@ -90,5 +96,27 @@ describe("Sidebar filter", () => {
     expect(screen.getByText("doc")).toBeInTheDocument();
     expect(screen.getByText("mind")).toBeInTheDocument();
     expect(screen.getByText("webfactory")).toBeInTheDocument();
+  });
+
+  it("caps workgroups in the sidebar and opens the full inventory", () => {
+    const onViewAllWorkgroups = vi.fn();
+    const workgroups = Array.from({ length: 8 }, (_, index) => ({
+      profile: "doc",
+      id: `wg-${index + 1}`,
+      name: `Workgroup ${index + 1}`,
+      mtime: 8 - index,
+    }));
+    render(
+      <Sidebar
+        {...BASE}
+        workgroups={workgroups}
+        onViewAllWorkgroups={onViewAllWorkgroups}
+      />,
+    );
+
+    expect(screen.getByText("Workgroup 6")).toBeInTheDocument();
+    expect(screen.queryByText("Workgroup 7")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "View all workgroups" }));
+    expect(onViewAllWorkgroups).toHaveBeenCalledTimes(1);
   });
 });

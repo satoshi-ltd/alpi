@@ -1,0 +1,45 @@
+.page { flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; overflow: hidden; background: var(--bg-pane); color: var(--ink); }
+.header { position: sticky; top: 0; z-index: var(--z-chrome); display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-7); }
+.titleBlock { min-width: 0; display: flex; flex: 1; flex-direction: column; gap: var(--space-3); }
+.body { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: var(--space-9) var(--pane-pad-x) 80px; }
+.table { width: 100%; max-width: var(--stream-max); margin: 0 auto; }
+.toolbar { min-height: 42px; padding: 0 var(--space-4); border-bottom: .5px solid var(--line); display: flex; align-items: center; gap: var(--space-7); color: var(--ink-3); }
+.search { width: min(360px, 100%); display: flex; align-items: center; gap: var(--space-3); }
+.search svg { flex-shrink: 0; }
+.search input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font: inherit; }
+.search input::placeholder { color: var(--ink-3); }
+.toolbarRight { margin-left: auto; display: flex; align-items: center; gap: var(--space-7); flex-shrink: 0; }
+.filters { display: flex; align-items: center; gap: var(--space-1); }
+.filters button { min-height: var(--ctrl-xs); padding: 0 var(--space-3); border: 0; border-radius: var(--r-sm); background: transparent; color: var(--ink-3); font: inherit; font-size: var(--fs-sm); cursor: pointer; }
+.filters button:hover { background: var(--hover); color: var(--ink); }
+.filters .filterActive { background: var(--selected); color: var(--ink); font-weight: var(--fw-medium); }
+.toolbarRight > :global(.mono) { flex-shrink: 0; font-size: var(--fs-xs); }
+.tableHead, .row { display: grid; grid-template-columns: minmax(240px, 1fr) 126px 76px 112px 92px; align-items: center; gap: var(--space-5); padding: 0 var(--space-4); }
+.tableHead { min-height: 32px; color: var(--ink-4); font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; }
+.tableHead span:nth-child(n + 3) { text-align: right; }
+.row { width: 100%; min-height: 74px; border: 0; border-bottom: .5px solid var(--line); background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.row:hover { background: var(--hover); }
+.row:focus-visible { outline: 0; box-shadow: inset 0 0 0 1px var(--focus-border); }
+.identity { min-width: 0; display: flex; align-items: center; gap: var(--space-4); }
+.identity > span:last-child { min-width: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.identity strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-base); font-weight: var(--fw-bold); }
+.identity :global(.mono) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-3); font-size: var(--fs-xs); }
+.status { min-width: 0; display: inline-flex; align-items: center; gap: var(--space-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); font-size: var(--fs-sm); }
+.status > span { width: var(--dot-size); height: var(--dot-size); border-radius: 50%; background: var(--ink-4); flex-shrink: 0; }
+.status_active > span { background: var(--c-success); }
+.status_error > span { background: var(--c-danger); }
+.status_paused { color: var(--ink-3); }
+.row > :global(.mono) { text-align: right; color: var(--ink-2); font-size: var(--fs-sm); }
+.spend { min-width: 0; display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-1); }
+.spend :global(.mono) { font-size: var(--fs-sm); }
+.spend small { color: var(--ink-3); font-family: var(--font-mono); font-size: var(--fs-xxs); }
+.updated { text-align: right; color: var(--ink-3); font-family: var(--font-mono); font-size: var(--fs-xs); }
+.empty { padding: 60px; color: var(--ink-3); text-align: center; }
+
+@media (max-width: 900px) {
+  .tableHead, .row { grid-template-columns: minmax(220px, 1fr) 120px 80px 96px; }
+  .tableHead span:nth-child(4), .row > :nth-child(4) { display: none; }
+  .toolbar { align-items: flex-start; flex-wrap: wrap; padding-block: var(--space-3); }
+  .search { width: 100%; }
+  .toolbarRight { width: 100%; justify-content: space-between; }
+}

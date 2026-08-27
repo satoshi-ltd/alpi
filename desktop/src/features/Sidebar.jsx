@@ -37,7 +37,20 @@ import { useDelayedFlag } from "../lib/useDelayedFlag.js";
 import styles from "./Sidebar.module.css";
 
 const MIN_VISIBLE_ALPIS = 3;
+const MIN_VISIBLE_WORKGROUPS = 2;
+const MAX_VISIBLE_WORKGROUPS = 6;
 const ROW_HEIGHT_FALLBACK = 34;
+
+export function fitWorkgroupRows(current, maximum, freeSpace, rowHeight) {
+  const minimum = Math.min(MIN_VISIBLE_WORKGROUPS, maximum);
+  if (freeSpace < 0) {
+    return Math.max(minimum, current - Math.ceil(Math.abs(freeSpace) / rowHeight));
+  }
+  if (freeSpace >= rowHeight) {
+    return Math.min(maximum, current + Math.floor(freeSpace / rowHeight));
+  }
+  return Math.min(maximum, Math.max(minimum, current));
+}
 
 function useMeasuredHeight() {
   const [size, setSize] = useState(0);
@@ -81,6 +94,7 @@ function Sidebar({
   onNewWorkgroup,
   onOpenProfile,
   onOpenWorkgroup,
+  onViewAllWorkgroups,
   onOpenSettings,
   onOpenPalette,
   onSetSettingsTarget,
@@ -247,21 +261,30 @@ function Sidebar({
   }, []);
 
   const [pinnedSectionRef, pinnedSectionH] = useMeasuredHeight();
+  const [profilesSectionRef, profilesSectionH] = useMeasuredHeight();
   const [workgroupsSectionRef, workgroupsSectionH] = useMeasuredHeight();
   const [alpisLabelRef, alpisLabelH] = useMeasuredHeight();
   const [showMoreRef, showMoreH] = useMeasuredHeight();
   const [firstRowRef, firstRowH] = useMeasuredHeight();
   const rowHeight = firstRowH || ROW_HEIGHT_FALLBACK;
+  const [workgroupLimit, setWorkgroupLimit] = useState(MAX_VISIBLE_WORKGROUPS);
+  const maximumWorkgroupRows = Math.min(MAX_VISIBLE_WORKGROUPS, filteredWorkgroups.length);
+  const renderedWorkgroupRows = q
+    ? filteredWorkgroups.length
+    : Math.min(workgroupLimit, maximumWorkgroupRows);
+  const reservedWorkgroupsH = q
+    ? workgroupsSectionH
+    : workgroupsSectionH + (maximumWorkgroupRows - renderedWorkgroupRows) * rowHeight;
 
   const maxAlpisVisible = useMemo(() => {
     if (!navHeight) return sortedProfiles.length;
     const available =
-      navHeight - pinnedSectionH - workgroupsSectionH - alpisLabelH - showMoreH;
+      navHeight - pinnedSectionH - reservedWorkgroupsH - alpisLabelH - showMoreH;
     return Math.max(MIN_VISIBLE_ALPIS, Math.floor(available / rowHeight));
   }, [
     navHeight,
     pinnedSectionH,
-    workgroupsSectionH,
+    reservedWorkgroupsH,
     alpisLabelH,
     showMoreH,
     rowHeight,
@@ -275,6 +298,39 @@ function Sidebar({
       ? sortedProfiles.slice(0, maxAlpisVisible)
       : sortedProfiles;
   const hiddenAlpisCount = sortedProfiles.length - maxAlpisVisible;
+
+  useEffect(() => {
+    if (q || !onViewAllWorkgroups || !navHeight || !workgroupsSectionH) {
+      setWorkgroupLimit(maximumWorkgroupRows);
+      return;
+    }
+    const freeSpace = navHeight - pinnedSectionH - profilesSectionH - workgroupsSectionH;
+    setWorkgroupLimit((current) => fitWorkgroupRows(
+      Math.min(current, maximumWorkgroupRows),
+      maximumWorkgroupRows,
+      freeSpace,
+      rowHeight,
+    ));
+  }, [
+    maximumWorkgroupRows,
+    navHeight,
+    onViewAllWorkgroups,
+    pinnedSectionH,
+    profilesSectionH,
+    q,
+    rowHeight,
+    workgroupsSectionH,
+  ]);
+  const visibleWorkgroups = useMemo(() => {
+    if (q || filteredWorkgroups.length <= workgroupLimit) return filteredWorkgroups;
+    const visible = filteredWorkgroups.slice(0, workgroupLimit);
+    const active = filteredWorkgroups.find(
+      (workgroup) => `${workgroup.profile}/${workgroup.id}` === activeWorkgroupId,
+    );
+    if (!active || visible.includes(active)) return visible;
+    return [...visible.slice(0, -1), active];
+  }, [activeWorkgroupId, filteredWorkgroups, q, workgroupLimit]);
+  const hasWorkgroupOverflow = !q && visibleWorkgroups.length < filteredWorkgroups.length;
 
   const [ctxMenu, setCtxMenu] = useState(null);
   const closeCtxMenu = useCallback(() => setCtxMenu(null), []);
@@ -476,6 +532,7 @@ function Sidebar({
           {filteredProfiles.length > 0 && (
             <Section
               label="Profiles"
+              containerRef={profilesSectionRef}
               labelRef={alpisLabelRef}
               right={
                 onNewProfile ? (
@@ -522,7 +579,14 @@ function Sidebar({
                 ) : null
               }
             >
-              {filteredWorkgroups.map((w) => renderWorkgroupRow(w))}
+              {visibleWorkgroups.map((w) => renderWorkgroupRow(w))}
+              {hasWorkgroupOverflow && onViewAllWorkgroups && (
+                <div className={styles.showMoreWrap}>
+                  <Btn variant="ghost" onClick={onViewAllWorkgroups}>
+                    View all workgroups
+                  </Btn>
+                </div>
+              )}
             </Section>
           )}
           {noMatches && (
