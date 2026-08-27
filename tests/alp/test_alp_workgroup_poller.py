@@ -703,6 +703,76 @@ async def test_dispatch_env_carries_alpi_workspace(short_tmp: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_dispatch_explains_non_owner_phase_denial_as_temporary(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    import sys as _sys
+
+    home = short_tmp / "lingua"
+    home.mkdir()
+    (home / "alp").mkdir()
+    captured: dict = {}
+    real_create = service.asyncio.create_subprocess_exec
+
+    async def fake_create(*argv, **kw):
+        captured["argv"] = argv
+        return await real_create(
+            _sys.executable, "-c", "pass",
+            stdout=service.asyncio.subprocess.PIPE,
+            stderr=service.asyncio.subprocess.PIPE,
+        )
+
+    monkeypatch.setattr(service.asyncio, "create_subprocess_exec", fake_create)
+    await service._dispatch_workgroup_turn(
+        home, profile="lingua", wg_id="wg_x", wg_name="hotel",
+        reason="new task", pipeline=True,
+        write_scope={
+            "root": "", "paths": [], "phase": "media-qa", "owner": "lens",
+        },
+    )
+
+    prompt = captured["argv"][-1]
+    assert "#media-qa` is owned by @lens, not by @lingua" in prompt
+    assert "not a denial in this profile's config.yaml" in prompt
+
+
+@pytest.mark.asyncio
+async def test_dispatch_explains_scoped_terminal_policy_in_docker(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    import sys as _sys
+
+    home = short_tmp / "quill"
+    home.mkdir()
+    (home / "alp").mkdir()
+    captured: dict = {}
+    real_create = service.asyncio.create_subprocess_exec
+
+    async def fake_create(*argv, **kw):
+        captured["argv"] = argv
+        return await real_create(
+            _sys.executable, "-c", "pass",
+            stdout=service.asyncio.subprocess.PIPE,
+            stderr=service.asyncio.subprocess.PIPE,
+        )
+
+    monkeypatch.setenv("ALPI_PLATFORM", "docker")
+    monkeypatch.setattr(service.asyncio, "create_subprocess_exec", fake_create)
+    await service._dispatch_workgroup_turn(
+        home, profile="quill", wg_id="wg_x", wg_name="hotel",
+        reason="new task", pipeline=True,
+        write_scope={
+            "root": "projects/hotel", "paths": ["src/content/**"],
+            "phase": "content", "owner": "quill",
+        },
+    )
+
+    prompt = captured["argv"][-1]
+    assert "Terminal is unavailable during scoped phases in Docker" in prompt
+    assert "Daemon gates still run" in prompt
+
+
+@pytest.mark.asyncio
 async def test_dispatch_timeout_kills_and_records(
     short_tmp: Path, monkeypatch,
 ) -> None:
@@ -2580,9 +2650,24 @@ def test_phase_write_scope_is_owner_only_and_canonicalizes_recovery_slug() -> No
 
     assert service._phase_write_scope(phase_map, posts, "HUB", "quill") == {
         "root": "projects/hotel", "paths": ["src/content/**"],
+        "phase": "content", "owner": "quill",
     }
     assert service._phase_write_scope(phase_map, posts, "HUB", "mira") == {
-        "root": "", "paths": [],
+        "root": "", "paths": [], "phase": "content", "owner": "quill",
+    }
+
+
+def test_phase_write_scope_fails_closed_for_legacy_unroutable_slug() -> None:
+    phase_map = {
+        "content": {
+            "owner": "quill", "cwd": "projects/hotel",
+            "paths": ["src/content/**"],
+        },
+    }
+    posts = [{"seq": 1, "from": "HUB", "text": "@quill #task #fix-locales repair"}]
+
+    assert service._phase_write_scope(phase_map, posts, "HUB", "quill") == {
+        "root": "", "paths": [], "phase": "fix-locales", "owner": "",
     }
 
 

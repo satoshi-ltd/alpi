@@ -33,9 +33,11 @@ class ToolExecutor:
         context: RunContext,
         deny: frozenset[str] | set[str] | None = None,
         max_workers: int = 4,
+        deny_reasons: dict[str, str] | None = None,
     ):
         self.context = context
         self.deny = frozenset(deny or ())
+        self.deny_reasons = dict(deny_reasons or {})
         self.max_workers = max(1, int(max_workers))
 
     def execute(
@@ -48,7 +50,10 @@ class ToolExecutor:
 
         self._record("tool.dispatched", {"name": name, "arguments": arguments})
         effective_deny = self.deny if deny is None else frozenset(deny) | self.deny
-        result = tools._execute_registered(name, arguments, deny=effective_deny)
+        result = tools._execute_registered(
+            name, arguments, deny=effective_deny,
+            deny_reasons=self.deny_reasons,
+        )
         self._record("tool.finished", {
             "name": name, "ok": result.ok, "output": result.output,
             "error": result.error,

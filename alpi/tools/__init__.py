@@ -132,6 +132,7 @@ def _execute_registered(
     name: str,
     arguments: dict,
     deny: frozenset[str] | set[str] | None = None,
+    deny_reasons: dict[str, str] | None = None,
 ) -> ToolResult:
     """Execute a tool by name. Unknown or currently-unavailable names return an error result instead of calling .run(). When ``deny`` includes ``name``, the call is refused — defence in depth against a stale LLM context or prompt injection that names a tool the schema no longer advertises."""
     current_tools = _current_tools()
@@ -144,9 +145,10 @@ def _execute_registered(
             error=f"unknown tool: {name}. Available tools: {available}",
         )
     if deny and name in deny:
+        reason = (deny_reasons or {}).get(name)
         return ToolResult(
             ok=False, output="",
-            error=f"tool denied for this profile: {name} (see tools.deny in config.yaml)",
+            error=reason or f"tool denied for this profile: {name} (see tools.deny in config.yaml)",
         )
     member_refusal = _member_mutation_refusal(name, arguments)
     if member_refusal is not None:

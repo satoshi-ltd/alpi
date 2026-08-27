@@ -38,6 +38,26 @@ def test_docker_world_preserves_paths_and_disables_network(tmp_path: Path, monke
     assert args[-4:] == ["alpi-test:1", "/bin/sh", "-lc", "pwd"]
 
 
+def test_docker_world_mounts_scoped_turn_read_only_except_declared_paths(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    context = _context(tmp_path)
+    allowed = context.workspace / "assets"
+    allowed.mkdir()
+    monkeypatch.setattr(
+        "alpi.core.execution_world.shutil.which", lambda name, **kwargs: "/usr/bin/docker",
+    )
+
+    args = DockerExecutionWorld(context=context).command(
+        "pwd", context.workspace, (), write_rules=(("subpath", allowed),),
+    )
+
+    volumes = [args[index + 1] for index, value in enumerate(args[:-1]) if value == "--volume"]
+    assert f"{context.workspace}:{context.workspace}:ro" in volumes
+    assert f"{context.home}:{context.home}:ro" in volumes
+    assert f"{allowed}:{allowed}:rw" in volumes
+
+
 def test_docker_world_names_container_and_validates_inputs(tmp_path: Path, monkeypatch) -> None:
     context = _context(tmp_path)
     monkeypatch.setattr(

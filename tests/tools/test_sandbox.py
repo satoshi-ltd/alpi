@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 import sys
 from pathlib import Path
@@ -52,6 +53,64 @@ def test_linux_missing_binary_raises(ws: Path, ah: Path) -> None:
         assert "bwrap" in str(ei.value)
 
 
+def test_phase_write_rules_translate_only_exact_sandbox_shapes(ws: Path) -> None:
+    project = ws / "projects" / "hotel"
+    assets = project / "assets"
+    config = project / "src" / "config" / "site.json"
+    assets.mkdir(parents=True)
+    config.parent.mkdir(parents=True)
+    config.write_text("{}\n")
+
+    rules = _sandbox.phase_write_rules(ws, json.dumps({
+        "root": "projects/hotel",
+        "paths": ["assets/**", "src/config/site.json"],
+    }))
+
+    assert rules == (("subpath", assets), ("literal", config))
+
+
+def test_phase_write_rules_fail_closed_on_ambiguous_glob(ws: Path) -> None:
+    project = ws / "projects" / "hotel"
+    project.mkdir(parents=True)
+
+    with pytest.raises(_sandbox.SandboxUnavailable, match="cannot be sandboxed exactly"):
+        _sandbox.phase_write_rules(ws, json.dumps({
+            "root": "projects/hotel", "paths": ["assets/*.webp"],
+        }))
+
+
+def test_phase_write_rules_rejects_missing_file_and_bare_directory(ws: Path) -> None:
+    project = ws / "projects" / "hotel"
+    (project / "assets").mkdir(parents=True)
+
+    for path in ("work/status.yaml", "assets", ""):
+        with pytest.raises(_sandbox.SandboxUnavailable, match="terminal refused"):
+            _sandbox.phase_write_rules(ws, json.dumps({
+                "root": "projects/hotel", "paths": [path],
+            }))
+
+
+def test_phase_write_rules_empty_scope_allows_no_persistent_writes(ws: Path) -> None:
+    assert _sandbox.phase_write_rules(ws, '{"root":"","paths":[]}') == ()
+
+
+def test_macos_scoped_profile_drops_alpi_home_write(ws: Path, ah: Path) -> None:
+    allowed = ws / "assets"
+    allowed.mkdir()
+    with patch.object(_sandbox, "sys") as sysmod, \
+         patch.object(_sandbox.shutil, "which", return_value="/usr/bin/sandbox-exec"):
+        sysmod.platform = "darwin"
+        args = _sandbox.wrap_command(
+            "echo ok", workspace=ws, alpi_home=ah, allow_network=False,
+            write_rules=(("subpath", allowed),),
+        )
+
+    profile = args[args.index("-p") + 1]
+    assert '(subpath (param "WRITE_0"))' in profile
+    assert "ALPI_HOME" not in profile
+    assert f"WRITE_0={allowed}" in args
+
+
 @pytest.mark.skipif(sys.platform != "darwin" or shutil.which("sandbox-exec") is None,
                     reason="macOS-only, requires sandbox-exec")
 def test_macos_builds_sandbox_exec_command(ws: Path, ah: Path) -> None:
@@ -98,6 +157,33 @@ def test_macos_workspace_write_allowed_escape_blocked(ws: Path, ah: Path, tmp_pa
     proc = subprocess.run(args, capture_output=True, text=True, timeout=10)
     assert proc.returncode != 0
     assert not escape.exists()
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(sys.platform != "darwin" or shutil.which("sandbox-exec") is None,
+                    reason="macOS-only, requires sandbox-exec")
+def test_macos_phase_scope_keeps_workspace_readable_and_other_paths_read_only(
+    ws: Path, ah: Path,
+) -> None:
+    import subprocess
+
+    allowed = ws / "project" / "assets"
+    denied = ws / "project" / "src"
+    allowed.mkdir(parents=True)
+    denied.mkdir()
+    (denied / "source.txt").write_text("readable\n")
+    args = _sandbox.wrap_command(
+        f"cat {denied}/source.txt && echo ok > {allowed}/ok.txt && echo no > {denied}/no.txt",
+        workspace=ws, alpi_home=ah, allow_network=False,
+        write_rules=(("subpath", allowed),),
+    )
+
+    proc = subprocess.run(args, capture_output=True, text=True, timeout=10)
+
+    assert proc.returncode != 0
+    assert "readable" in proc.stdout
+    assert (allowed / "ok.txt").read_text() == "ok\n"
+    assert not (denied / "no.txt").exists()
 
 
 @pytest.mark.integration
@@ -235,6 +321,34 @@ def test_linux_root_is_read_only_after_writable_binds(ws: Path, ah: Path) -> Non
 
     assert workspace_bind < remount_ro < chdir
     assert alpi_home_bind < remount_ro < chdir
+
+
+def test_linux_scoped_mounts_keep_workspace_and_home_read_only(
+    ws: Path, ah: Path,
+) -> None:
+    allowed = ws / "assets"
+    allowed.mkdir()
+    with patch.object(_sandbox, "sys") as sysmod, \
+         patch.object(_sandbox.shutil, "which", return_value="/usr/bin/bwrap"):
+        sysmod.platform = "linux"
+        args = _sandbox.wrap_command(
+            "echo ok", workspace=ws, alpi_home=ah, allow_network=False,
+            write_rules=(("subpath", allowed),),
+        )
+
+    workspace_ro = next(
+        index for index in range(len(args) - 2)
+        if args[index:index + 3] == ["--ro-bind", str(ws), str(ws)]
+    )
+    home_ro = next(
+        index for index in range(len(args) - 2)
+        if args[index:index + 3] == ["--ro-bind", str(ah), str(ah)]
+    )
+    allowed_bind = next(
+        index for index in range(len(args) - 2)
+        if args[index:index + 3] == ["--bind", str(allowed), str(allowed)]
+    )
+    assert allowed_bind > max(workspace_ro, home_ro)
 
 
 @pytest.mark.integration

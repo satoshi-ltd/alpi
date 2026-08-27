@@ -25,6 +25,7 @@ class ExecutionWorld:
         env_keys: tuple[str, ...],
         *,
         container_name: str | None = None,
+        write_rules: tuple[tuple[str, Path], ...] | None = None,
     ) -> list[str] | str:
         return command
 
@@ -42,6 +43,7 @@ class DockerExecutionWorld(ExecutionWorld):
         env_keys: tuple[str, ...],
         *,
         container_name: str | None = None,
+        write_rules: tuple[tuple[str, Path], ...] | None = None,
     ) -> list[str]:
         if shutil.which("docker") is None:
             raise RuntimeError("Docker execution requested but the docker CLI is unavailable")
@@ -51,12 +53,20 @@ class DockerExecutionWorld(ExecutionWorld):
             raise RuntimeError(f"Docker execution cwd is not a directory: {cwd}")
         if not self.context.workspace.is_dir() or not self.context.home.is_dir():
             raise RuntimeError("Docker execution workspace and profile home must be directories")
-        mounts = {self.context.workspace.resolve(), self.context.home.resolve(), cwd.resolve()}
+        workspace = self.context.workspace.resolve()
+        home = self.context.home.resolve()
+        mounts = {workspace, home, cwd.resolve()}
         args = ["docker", "run", "--rm", "-i", "--network", "bridge" if self.allow_network else "none"]
         if container_name is not None:
             args.extend(["--name", container_name])
-        for path in sorted(mounts, key=str):
-            args.extend(["--volume", f"{path}:{path}"])
+        if write_rules is None:
+            for path in sorted(mounts, key=str):
+                args.extend(["--volume", f"{path}:{path}"])
+        else:
+            for path in sorted(mounts, key=str):
+                args.extend(["--volume", f"{path}:{path}:ro"])
+            for _, path in write_rules:
+                args.extend(["--volume", f"{path}:{path}:rw"])
         args.extend(["--workdir", str(cwd)])
         for key in env_keys:
             args.extend(["--env", key])

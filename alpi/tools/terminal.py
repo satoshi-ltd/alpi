@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -14,7 +15,9 @@ from pathlib import Path
 from alpi.home import get_home
 from alpi.tools import _state as tool_state_mod
 from alpi.tools._approval import check as approval_check
-from alpi.tools._sandbox import SandboxUnavailable, wrap_command
+from alpi.tools._sandbox import (
+    SandboxUnavailable, phase_write_rules, scoped_temp_dir, wrap_command,
+)
 from alpi.tools.base import Tool, ToolResult
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[a-zA-Z]|\x1b\][^\x07]*\x07|\x1b[@-_]")
@@ -53,6 +56,14 @@ def _build_subprocess_env() -> dict[str, str]:
     out.update(ws)
     if "ALPI_WORKSPACE" in ws:
         out["WORKSPACE"] = ws["ALPI_WORKSPACE"]
+    from alpi.core.execution_world import current
+    world = current()
+    if (
+        os.environ.get("ALPI_WORKGROUP_WRITE_SCOPE") is not None
+        and sys.platform == "darwin"
+        and (world is None or world.backend == "local")
+    ):
+        out["TMPDIR"] = str(scoped_temp_dir())
     return out
 
 
@@ -93,15 +104,6 @@ def _resolve_popen_args(
     from alpi.core.execution_world import current as current_world
 
     world = current_world()
-    if world is not None and world.backend != "local":
-        return world.command(
-            command, Path(cwd or _default_cwd()).resolve(),
-            _SAFE_ENV_KEYS + ("ALPI_HOME", "ALPI_WORKSPACE", "WORKSPACE"),
-            container_name=docker_container_name,
-        )
-    sandbox_enabled, allow_network = _sandbox_config()
-    if not sandbox_enabled:
-        return command
     try:
         from alpi import config as cfg_mod
         cfg = cfg_mod.load(get_home())
@@ -110,11 +112,30 @@ def _resolve_popen_args(
         wp = None
     if wp is None:
         wp = Path(_default_cwd())
+    from alpi.runtime import is_docker
+    if os.environ.get("ALPI_WORKGROUP_WRITE_SCOPE") is not None and is_docker():
+        raise SandboxUnavailable(
+            "terminal is unavailable during scoped workgroup phases in Docker; "
+            "use native file and search tools. Daemon gates still run"
+        )
+    write_rules = phase_write_rules(wp)
+    if world is not None and world.backend != "local":
+        return world.command(
+            command, Path(cwd or _default_cwd()).resolve(),
+            _SAFE_ENV_KEYS + ("ALPI_HOME", "ALPI_WORKSPACE", "WORKSPACE"),
+            container_name=docker_container_name, write_rules=write_rules,
+        )
+    sandbox_enabled, allow_network = _sandbox_config()
+    if not sandbox_enabled and write_rules is None:
+        return command
+    if not sandbox_enabled:
+        allow_network = True
     return wrap_command(
         command,
         workspace=wp,
         alpi_home=get_home(),
         allow_network=allow_network,
+        write_rules=write_rules,
     )
 
 

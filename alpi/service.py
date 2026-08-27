@@ -638,11 +638,17 @@ def _phase_write_scope(
     ]
     phase = max(matches, key=len) if matches else active.slug
     spec = (phase_map or {}).get(phase) or {}
-    if str(spec.get("owner") or "").lower() != profile.lower():
-        return {"root": "", "paths": []}
+    owner = str(spec.get("owner") or "")
+    if owner.lower() != profile.lower():
+        return {"root": "", "paths": [], "phase": phase, "owner": owner}
     if "paths" not in spec:
         return None
-    return {"root": str(spec.get("cwd") or ""), "paths": list(spec.get("paths") or [])}
+    return {
+        "root": str(spec.get("cwd") or ""),
+        "paths": list(spec.get("paths") or []),
+        "phase": phase,
+        "owner": owner,
+    }
 
 
 def _gate_opened_active_task(posts: list[dict], hub_pubkey: str) -> bool:
@@ -2610,6 +2616,45 @@ async def _dispatch_workgroup_turn(
             "Match the user, do not default to English."
         )
         env_extra = {}
+    if write_scope is not None:
+        phase = str(write_scope.get("phase") or "the active phase")
+        owner = str(write_scope.get("owner") or "")
+        paths = list(write_scope.get("paths") or [])
+        from alpi.runtime import is_docker
+        docker_runtime = is_docker()
+        if paths:
+            if docker_runtime:
+                policy = (
+                    f"PHASE WRITE POLICY: this turn owns `#{phase}`. Native file "
+                    f"tools may write only: {', '.join(paths)}. Terminal is unavailable "
+                    "during scoped phases in Docker; use native file and search tools. "
+                    "Daemon gates still run."
+                )
+            else:
+                policy = (
+                    f"PHASE WRITE POLICY: this turn owns `#{phase}`. Native file tools "
+                    f"and terminal subprocesses may write only: {', '.join(paths)}. "
+                    "This temporary boundary is separate from the profile's tools.deny."
+                )
+        else:
+            owned = f" by @{owner}" if owner else ""
+            if docker_runtime:
+                policy = (
+                    f"PHASE WRITE POLICY: `#{phase}` is owned{owned}, not by "
+                    f"@{profile}. Native file mutation and terminal are unavailable. "
+                    "This is a temporary phase boundary, not a denial in this "
+                    "profile's config.yaml; hand the artifact to the declared owner "
+                    "or ask the hub to open the correct phase."
+                )
+            else:
+                policy = (
+                    f"PHASE WRITE POLICY: `#{phase}` is owned{owned}, not by @{profile}. "
+                    "Native file mutation is unavailable and terminal subprocesses see "
+                    "the workspace read-only. This is a temporary phase boundary, not "
+                    "a denial in this profile's config.yaml; hand the artifact to the "
+                    "declared owner or ask the hub to open the correct phase."
+                )
+        prompt += f"\n\n{policy}"
     from alpi.home import effective_profile_env as _effective_profile_env, workspace_env
     soft_budget = _soft_turn_budget(turn_timeout)
     env = _effective_profile_env(home, extra={

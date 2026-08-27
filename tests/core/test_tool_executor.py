@@ -51,7 +51,7 @@ def test_executor_never_journals_terminal_commands(monkeypatch, tmp_path: Path) 
     executor = ToolExecutor(_context(tmp_path))
     monkeypatch.setattr(
         tools, "_execute_registered",
-        lambda name, arguments, deny=None: ToolResult(ok=True, output="done"),
+        lambda name, arguments, deny=None, deny_reasons=None: ToolResult(ok=True, output="done"),
     )
 
     executor.execute("terminal", {
@@ -66,6 +66,22 @@ def test_executor_never_journals_terminal_commands(monkeypatch, tmp_path: Path) 
     dispatched = next(row for row in rows if row["kind"] == "tool.dispatched")
     assert dispatched["data"]["arguments"] == {"action": "run", "cwd": "/workspace"}
     assert "not-shaped-like-a-token" not in str(rows)
+
+
+def test_executor_reports_phase_denial_separately_from_profile_config(tmp_path: Path) -> None:
+    reason = (
+        "tool unavailable in this workgroup turn: #media-qa is owned by @lens; "
+        "this is a temporary phase boundary, not tools.deny in config.yaml"
+    )
+    executor = ToolExecutor(
+        _context(tmp_path), deny={"write_file"},
+        deny_reasons={"write_file": reason},
+    )
+
+    result = executor.execute("write_file", {"path": "x", "content": "y"})
+
+    assert not result.ok
+    assert result.error == reason
 
 
 def test_parallel_calls_overlap_and_keep_input_order(monkeypatch, tmp_path: Path) -> None:

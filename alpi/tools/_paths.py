@@ -110,14 +110,56 @@ def dispatch_tool_denies() -> frozenset[str]:
     raw = os.environ.get("ALPI_WORKGROUP_WRITE_SCOPE")
     if raw is None:
         return frozenset()
+    denied: set[str] = set()
+    from alpi.runtime import is_docker
+    if is_docker():
+        denied.add("terminal")
     try:
         scope = json.loads(raw)
         paths = scope.get("paths")
     except (AttributeError, TypeError, json.JSONDecodeError):
-        return DISPATCH_FILE_MUTATION_TOOLS
+        return frozenset(denied | set(DISPATCH_FILE_MUTATION_TOOLS))
     if paths == []:
-        return DISPATCH_FILE_MUTATION_TOOLS
-    return frozenset() if isinstance(paths, list) else DISPATCH_FILE_MUTATION_TOOLS
+        denied.update(DISPATCH_FILE_MUTATION_TOOLS)
+    elif not isinstance(paths, list):
+        denied.update(DISPATCH_FILE_MUTATION_TOOLS)
+    return frozenset(denied)
+
+
+def dispatch_tool_deny_reasons(
+    profile_denies: frozenset[str] | set[str] | None = None,
+) -> dict[str, str]:
+    denied = dispatch_tool_denies()
+    if not denied:
+        return {}
+    raw = os.environ.get("ALPI_WORKGROUP_WRITE_SCOPE")
+    try:
+        scope = json.loads(raw or "")
+        phase = str(scope.get("phase") or "the active phase")
+        owner = str(scope.get("owner") or "")
+    except (AttributeError, TypeError, json.JSONDecodeError):
+        phase, owner = "the active phase", ""
+    profile_denies = frozenset(profile_denies or ())
+    reasons: dict[str, str] = {}
+    for name in denied:
+        if name == "terminal":
+            phase_reason = (
+                f"terminal is unavailable during scoped workgroup phase #{phase} "
+                "in Docker; use native file and search tools. Daemon gates still run"
+            )
+        else:
+            ownership = f"; its declared owner is @{owner}" if owner else ""
+            phase_reason = (
+                f"tool unavailable in this workgroup turn: #{phase} does not grant "
+                f"this profile file authorship{ownership}"
+            )
+        reasons[name] = (
+            f"tool denied for this profile by tools.deny in config.yaml; {phase_reason}. "
+            "The phase boundary is an additional restriction"
+            if name in profile_denies else
+            f"{phase_reason}. This is a temporary phase boundary, not tools.deny in config.yaml"
+        )
+    return reasons
 
 
 def _is_sensitive(*paths: Path | str) -> str | None:

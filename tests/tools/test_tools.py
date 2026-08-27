@@ -161,6 +161,66 @@ def test_terminal_success() -> None:
     assert "[exit 0]" in r.output
 
 
+def test_scoped_terminal_is_unavailable_in_docker(
+    tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import json
+
+    allowed = tmp_home_no_env / "project" / "assets"
+    allowed.mkdir(parents=True)
+    (tmp_home_no_env / "config.yaml").write_text(
+        f"workspace: {tmp_home_no_env}\n"
+    )
+    monkeypatch.setenv("ALPI_HOME", str(tmp_home_no_env))
+    monkeypatch.setenv("ALPI_PLATFORM", "docker")
+    monkeypatch.setenv("ALPI_WORKGROUP_WRITE_SCOPE", json.dumps({
+        "root": "project", "paths": ["assets/**"],
+    }))
+
+    result = Terminal().run(command="true")
+
+    assert not result.ok
+    assert "unavailable during scoped workgroup phases in Docker" in result.error
+    assert "Daemon gates still run" in result.error
+
+
+@pytest.mark.parametrize(
+    ("sandbox_enabled", "expected_network"),
+    [(False, True), (True, False)],
+)
+def test_scoped_terminal_preserves_profile_network_policy(
+    tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch,
+    sandbox_enabled: bool, expected_network: bool,
+) -> None:
+    import json
+    from alpi.tools import terminal as terminal_mod
+
+    allowed = tmp_home_no_env / "project" / "assets"
+    allowed.mkdir(parents=True)
+    (tmp_home_no_env / "config.yaml").write_text(
+        f"workspace: {tmp_home_no_env}\n"
+    )
+    monkeypatch.setenv("ALPI_HOME", str(tmp_home_no_env))
+    monkeypatch.delenv("ALPI_PLATFORM", raising=False)
+    monkeypatch.setenv("ALPI_WORKGROUP_WRITE_SCOPE", json.dumps({
+        "root": "project", "paths": ["assets/**"],
+    }))
+    monkeypatch.setattr(
+        terminal_mod, "_sandbox_config", lambda: (sandbox_enabled, False),
+    )
+    captured: dict = {}
+
+    def fake_wrap(command, **kwargs):
+        captured.update(kwargs)
+        return ["/bin/sh", "-c", command]
+
+    monkeypatch.setattr(terminal_mod, "wrap_command", fake_wrap)
+
+    terminal_mod._resolve_popen_args("true")
+
+    assert captured["allow_network"] is expected_network
+
+
 def test_terminal_failure_surfaces_exit_code() -> None:
     r = Terminal().run(command="false")
     assert not r.ok
@@ -212,6 +272,34 @@ def test_terminal_background_meta_omits_command(
         assert secret not in status.output
     finally:
         Terminal().run(action="kill", pid=pid)
+
+
+@pytest.mark.integration
+def test_terminal_forces_phase_scope_when_profile_sandbox_is_disabled(
+    tmp_home_no_env: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import json
+
+    project = tmp_home_no_env / "project"
+    allowed = project / "assets"
+    denied = project / "src"
+    allowed.mkdir(parents=True)
+    denied.mkdir()
+    (tmp_home_no_env / "config.yaml").write_text(
+        f"workspace: {tmp_home_no_env}\ntools:\n  terminal:\n    sandbox: false\n"
+    )
+    monkeypatch.setenv("ALPI_HOME", str(tmp_home_no_env))
+    monkeypatch.setenv("ALPI_WORKGROUP_WRITE_SCOPE", json.dumps({
+        "root": "project", "paths": ["assets/**"],
+    }))
+
+    allowed_result = Terminal().run(command=f"echo ok > {allowed}/ok.txt")
+    denied_result = Terminal().run(command=f"echo no > {denied}/no.txt")
+
+    assert allowed_result.ok
+    assert (allowed / "ok.txt").read_text() == "ok\n"
+    assert not denied_result.ok
+    assert not (denied / "no.txt").exists()
 
 
 def test_search_content_finds_pattern() -> None:

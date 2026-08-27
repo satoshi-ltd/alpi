@@ -14,7 +14,10 @@ from typing import Any, Callable
 from alpi import clock, config as cfg_mod
 from alpi import llm, session, tools
 from alpi.tools._budget import apply as _budget_apply
-from alpi.tools._paths import dispatch_tool_denies as _dispatch_tool_denies
+from alpi.tools._paths import (
+    dispatch_tool_denies as _dispatch_tool_denies,
+    dispatch_tool_deny_reasons as _dispatch_tool_deny_reasons,
+)
 from alpi.tools._sanitizer import sanitize_tool_payload
 from alpi.tools.base import ToolResult, failure_payload as _failure_payload
 from alpi.session import ASSISTANT_CAP, ToolLog, truncate_result
@@ -315,9 +318,11 @@ class Engine:
         )
         self.interrupt_requested = bool(preserve_interrupt)
         self._interrupted_this_turn = False
+        profile_denies = frozenset(self.cfg.tools.deny)
         executor = ToolExecutor(
             run_context,
-            deny=frozenset(self.cfg.tools.deny) | _dispatch_tool_denies(),
+            deny=profile_denies | _dispatch_tool_denies(),
+            deny_reasons=_dispatch_tool_deny_reasons(profile_denies),
             max_workers=self.cfg.tools.max_parallel_tool_calls,
         )
         execution_world = build_world(run_context, self.cfg)

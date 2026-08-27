@@ -1,5 +1,32 @@
 # Changelog
 
+## v0.14.14 — 2026-08-27 — workgroup ownership reaches the shell
+
+- **Pipeline write boundaries now cover or remove terminal subprocesses.** On
+  bare metal, a workgroup phase with declared `paths` forces the OS sandbox
+  even when the profile has disabled its ordinary terminal sandbox. The
+  workspace and `~/.alpi` remain readable but become read-only; only exact
+  files and trailing `/**` subtrees are writable. A scope-only sandbox keeps
+  the profile's previous network access, while an explicitly enabled sandbox
+  still applies its configured network policy. In the official Docker runtime,
+  scoped turns omit `terminal`; native file and search tools remain available
+  and daemon gates still run.
+- **Temporary phase restrictions identify themselves correctly.** A stale tool
+  call now tells the agent which phase owns the artifact and distinguishes that
+  boundary from permanent profile `tools.deny`. Dispatch prompts expose the
+  same ownership context, so a routing error produces an actionable handoff
+  instead of a false claim that the profile lacks writing capability.
+- **Quoted handles no longer acquire workgroup tasks.** Routing handles are
+  accepted before `#task` and immediately after its slug, while later mentions
+  in descriptions or QA evidence remain prose. Pipeline openers with invented
+  phase slugs are rejected before posting, preventing ownerless recovery tasks
+  from bypassing the declared chain.
+
+Nothing to migrate. Existing recipe `paths` declarations acquire terminal
+enforcement automatically. In bare-metal profiles, unsupported intermediate
+globs must be replaced by exact files or trailing `/**` subtrees before that
+phase can use `terminal`.
+
 ## v0.14.13 — 2026-08-26 — content search respects secret boundaries
 
 - **Directory searches no longer bypass sensitive-file protection.** `search`

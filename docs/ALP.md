@@ -1624,9 +1624,16 @@ the gate would run, changes outside the declared globs red the phase
 pressure is precisely what causes cross-phase edits, so the edit is
 surfaced instead of graded. The dispatched owner receives the same globs as
 its native file-tool write boundary; non-owners cannot use native file
-mutation tools during that phase. `terminal` follows the profile's tool
-policy, while the gate remains authoritative over the workspace diff. A
-missing or unreadable baseline fails closed because the daemon cannot prove
+mutation tools during that phase. On bare metal, `terminal` keeps the workspace
+readable but is forced through the OS sandbox even when the profile disables
+it: only exact literal paths and trailing `/**` subtrees are writable,
+unsupported globs fail closed, and `ALPI_HOME` stays read-only. A scope-only
+sandbox preserves the profile's existing network access. In the official
+Docker runtime, `terminal` is unavailable during scoped phases; native file and
+search tools remain available and daemon gates still run. Phase denials are
+reported separately from profile `tools.deny`; the gate remains the final
+workspace-diff audit. A missing or unreadable baseline fails closed because
+the daemon cannot prove
 lane ownership. `paths` requires a `gate` — its `cwd` anchors the project root
 and its run is the check moment.
 

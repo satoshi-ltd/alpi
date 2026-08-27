@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import sys
+import tempfile
 from pathlib import Path
 from typing import Iterable
 
@@ -61,11 +63,8 @@ _MACOS_PROFILE = """
     (regex #"/\\.alpi/(profiles/[^/]+/)?\\.env$")
     (regex #"/\\.alpi/.*/secrets/"))
 (allow file-write*
-    (subpath (param "WORKSPACE"))
-    (subpath (param "ALPI_HOME"))
-    (subpath "/tmp")
-    (subpath "/private/tmp")
-    (subpath "/private/var/folders")
+%PERSISTENT_WRITES%
+%TEMP_WRITES%
     ; Character devices that well-behaved CLI tools reopen for r+w
     ; (git writes progress lines to /dev/null when no tty is attached,
     ; node/python seed from /dev/urandom, anything interactive probes
@@ -93,12 +92,17 @@ def wrap_command(
     workspace: Path,
     alpi_home: Path,
     allow_network: bool,
+    write_rules: tuple[tuple[str, Path], ...] | None = None,
 ) -> list[str]:
     platform = sys.platform
     if platform == "darwin":
-        return _wrap_macos(cmd, workspace, alpi_home, allow_network)
+        return _wrap_macos(
+            cmd, workspace, alpi_home, allow_network, write_rules,
+        )
     if platform.startswith("linux"):
-        return _wrap_linux(cmd, workspace, alpi_home, allow_network)
+        return _wrap_linux(
+            cmd, workspace, alpi_home, allow_network, write_rules,
+        )
     raise SandboxUnavailable(
         f"No sandbox implementation for platform {platform!r}. "
         "Set tools.terminal.sandbox=false to run without OS isolation."
@@ -110,6 +114,7 @@ def _wrap_macos(
     workspace: Path,
     alpi_home: Path,
     allow_network: bool,
+    write_rules: tuple[tuple[str, Path], ...] | None,
 ) -> list[str]:
     if shutil.which("sandbox-exec") is None:
         raise SandboxUnavailable(
@@ -118,16 +123,37 @@ def _wrap_macos(
             "tools.terminal.sandbox=false."
         )
     home = os.path.expanduser("~")
+    effective_rules = write_rules
+    if effective_rules is None:
+        effective_rules = (("subpath", workspace), ("subpath", alpi_home))
+        temp_writes = """    (subpath "/tmp")
+    (subpath "/private/tmp")
+    (subpath "/private/var/folders")"""
+        terminal_tmp = None
+    else:
+        terminal_tmp = scoped_temp_dir()
+        temp_writes = '    (subpath (param "TERMINAL_TMP"))'
+    persistent = "\n".join(
+        f'    ({kind} (param "WRITE_{index}"))'
+        for index, (kind, _) in enumerate(effective_rules)
+    )
     profile = _MACOS_PROFILE.replace(
+        "%PERSISTENT_WRITES%", persistent,
+    ).replace(
+        "%TEMP_WRITES%", temp_writes,
+    ).replace(
         "%NETWORK%",
         "(allow network*)" if allow_network else "(deny network*)",
     )
     params = [
-        f"-D WORKSPACE={workspace}",
-        f"-D ALPI_HOME={alpi_home}",
         f"-D HOME_SSH={home}/.ssh",
         f"-D HOME_AWS={home}/.aws",
         f"-D HOME_GNUPG={home}/.gnupg",
+        *(
+            f"-D WRITE_{index}={path}"
+            for index, (_, path) in enumerate(effective_rules)
+        ),
+        *([f"-D TERMINAL_TMP={terminal_tmp}"] if terminal_tmp is not None else []),
     ]
     return [
         "sandbox-exec",
@@ -143,6 +169,7 @@ def _wrap_linux(
     workspace: Path,
     alpi_home: Path,
     allow_network: bool,
+    write_rules: tuple[tuple[str, Path], ...] | None,
 ) -> list[str]:
     if shutil.which("bwrap") is None:
         raise SandboxUnavailable(
@@ -159,13 +186,88 @@ def _wrap_linux(
         "/etc/ssl", "/etc/ca-certificates", "/etc/resolv.conf",
     ])
     args += ["--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp"]
-    args += _linux_dir_mounts([workspace, alpi_home])
-    args += ["--bind", str(workspace), str(workspace)]
-    args += ["--bind", str(alpi_home), str(alpi_home)]
+    if write_rules is None:
+        args += _linux_dir_mounts([workspace, alpi_home])
+        args += ["--bind", str(workspace), str(workspace)]
+        args += ["--bind", str(alpi_home), str(alpi_home)]
+    else:
+        writable = [path for _, path in write_rules]
+        args += _linux_dir_mounts([workspace, alpi_home, *writable])
+        args += ["--ro-bind", str(workspace), str(workspace)]
+        args += ["--ro-bind", str(alpi_home), str(alpi_home)]
+        for _, path in write_rules:
+            args += ["--bind", str(path), str(path)]
     args += ["--remount-ro", "/"]
     args += ["--chdir", str(workspace)]
     args += ["--", "/bin/sh", "-c", cmd]
     return args
+
+
+def phase_write_rules(
+    workspace: Path,
+    raw_scope: str | None = None,
+) -> tuple[tuple[str, Path], ...] | None:
+    """Translate an active phase scope to exact OS-sandbox write rules."""
+    raw = os.environ.get("ALPI_WORKGROUP_WRITE_SCOPE") if raw_scope is None else raw_scope
+    if raw is None:
+        return None
+    try:
+        scope = json.loads(raw)
+        root_value = str(scope.get("root") or "")
+        patterns = scope.get("paths")
+    except (AttributeError, TypeError, json.JSONDecodeError) as exc:
+        raise SandboxUnavailable("active phase write scope is invalid; terminal refused") from exc
+    if not isinstance(patterns, list):
+        raise SandboxUnavailable("active phase write scope has no path list; terminal refused")
+    workspace = workspace.resolve()
+    root = (workspace / root_value).resolve()
+    try:
+        root.relative_to(workspace)
+    except ValueError as exc:
+        raise SandboxUnavailable("active phase root escapes the workspace; terminal refused") from exc
+    if not root.is_dir():
+        raise SandboxUnavailable("active phase root is unavailable; terminal refused")
+
+    rules: list[tuple[str, Path]] = []
+    for value in patterns:
+        if not isinstance(value, str) or not value:
+            raise SandboxUnavailable("active phase contains an invalid writable path; terminal refused")
+        pattern = value
+        kind = "literal"
+        relative = pattern
+        if pattern == "**":
+            kind, relative = "subpath", ""
+        elif pattern.endswith("/**") and not any(c in pattern[:-3] for c in "*?["):
+            kind, relative = "subpath", pattern[:-3]
+        elif any(c in pattern for c in "*?["):
+            raise SandboxUnavailable(
+                f"active phase path pattern cannot be sandboxed exactly: {pattern!r}; terminal refused"
+            )
+        path = (root / relative).resolve()
+        try:
+            path.relative_to(root)
+        except ValueError as exc:
+            raise SandboxUnavailable(
+                f"active phase path escapes its root: {pattern!r}; terminal refused"
+            ) from exc
+        if kind == "subpath" and not path.is_dir():
+            raise SandboxUnavailable(
+                f"active phase writable directory is unavailable: {pattern!r}; terminal refused"
+            )
+        if kind == "literal" and not path.is_file():
+            raise SandboxUnavailable(
+                f"active phase writable file is unavailable: {pattern!r}; terminal refused"
+            )
+        rule = (kind, path)
+        if rule not in rules:
+            rules.append(rule)
+    return tuple(rules)
+
+
+def scoped_temp_dir() -> Path:
+    path = Path(tempfile.gettempdir()).resolve() / f"alpi-terminal-{os.getuid()}"
+    path.mkdir(mode=0o700, parents=True, exist_ok=True)
+    return path
 
 
 def _linux_dir_mounts(paths: Iterable[Path]) -> list[str]:

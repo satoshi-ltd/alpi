@@ -78,7 +78,7 @@ class TaskEvent:
     seq: int           # post seq this marker came from
     by: str            # author pubkey b64
     slug: str = ""     # stable identifier for `#task` events ("" for `#done`)
-    participants: tuple[str, ...] = ()  # peer-ids mentioned before `#task` on the opener line
+    participants: tuple[str, ...] = ()  # routing handles around `#task` and its slug
 
 
 @dataclass(frozen=True)
@@ -91,7 +91,7 @@ class Task:
     closed_seq: int | None = None    # None while open
     closed_by: str | None = None
     result: str | None = None        # None while open
-    participants: tuple[str, ...] = ()  # task roster from opener-line mentions; () = collective (whole workgroup)
+    participants: tuple[str, ...] = ()  # task roster from routing handles; () = collective (whole workgroup)
 
     @property
     def is_open(self) -> bool:
@@ -205,11 +205,19 @@ def parse_post(
     for m in tasks:
         slug = m.group(1).lower()
         desc = (m.group(2) or "").strip()
-        # Participants = @mentions on the `#task` opener LINE only; other lines are body.
-        participants = tuple(mentions_in(m.group(0)))
+        # Routing handles surround the marker/slug; quoted handles later in the description do not join.
+        opener = m.group(0)
+        participants = mentions_in(opener[:opener.find("#task")])
+        remainder = (m.group(2) or "").lstrip()
+        while True:
+            leading = _MENTION_RE.match(remainder)
+            if leading is None:
+                break
+            participants.append(leading.group(1))
+            remainder = remainder[leading.end():].lstrip()
         out.append(TaskEvent(
             kind="task", text=desc, seq=seq, by=by, slug=slug,
-            participants=participants,
+            participants=tuple(participants),
         ))
     for m in dones:
         result = m.group(1).strip()

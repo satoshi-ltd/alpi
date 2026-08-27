@@ -143,6 +143,91 @@ def test_non_owner_pipeline_turn_hides_mutating_tools(
     assert "terminal" in schema_names[0]
 
 
+def test_stale_non_owner_tool_call_reports_phase_policy_not_profile_config(
+    engine: Engine, monkeypatch,
+) -> None:
+    import json
+
+    (engine.home / "config.yaml").write_text(yaml.safe_dump({
+        "model": "gpt-5.4-mini", "tools": {"deny": []},
+    }))
+    monkeypatch.setenv(
+        "ALPI_WORKGROUP_WRITE_SCOPE",
+        json.dumps({
+            "root": "", "paths": [], "phase": "media-qa", "owner": "lens",
+        }),
+    )
+    calls = {"count": 0}
+
+    def stream(messages, tools, **kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            yield {
+                "final": True, "input_tokens": 1, "output_tokens": 1,
+                "cost_usd": 0.0, "tool_calls": [{
+                    "id": "write", "name": "write_file",
+                    "arguments": '{"path":"note.txt","content":"no"}',
+                }],
+            }
+        else:
+            yield from _stream_one("done")
+
+    monkeypatch.setattr("alpi.llm.stream", stream)
+    engine.run_turn("write", emit=lambda _e: None)
+
+    journal = engine.home / "runs" / f"{engine.last_run_id}.jsonl"
+    rows = [json.loads(line) for line in journal.read_text().splitlines()]
+    finished = next(
+        row for row in rows
+        if row["kind"] == "tool.finished" and row["data"]["name"] == "write_file"
+    )
+    assert "#media-qa" in finished["data"]["error"]
+    assert "@lens" in finished["data"]["error"]
+    assert "not tools.deny" in finished["data"]["error"]
+
+
+def test_stale_tool_call_reports_both_profile_and_phase_denials(
+    engine: Engine, monkeypatch,
+) -> None:
+    import json
+
+    (engine.home / "config.yaml").write_text(yaml.safe_dump({
+        "model": "gpt-5.4-mini", "tools": {"deny": ["write_file"]},
+    }))
+    monkeypatch.setenv(
+        "ALPI_WORKGROUP_WRITE_SCOPE",
+        json.dumps({
+            "root": "", "paths": [], "phase": "media-qa", "owner": "lens",
+        }),
+    )
+    calls = {"count": 0}
+
+    def stream(messages, tools, **kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            yield {
+                "final": True, "input_tokens": 1, "output_tokens": 1,
+                "cost_usd": 0.0, "tool_calls": [{
+                    "id": "write", "name": "write_file",
+                    "arguments": '{"path":"note.txt","content":"no"}',
+                }],
+            }
+        else:
+            yield from _stream_one("done")
+
+    monkeypatch.setattr("alpi.llm.stream", stream)
+    engine.run_turn("write", emit=lambda _e: None)
+
+    journal = engine.home / "runs" / f"{engine.last_run_id}.jsonl"
+    rows = [json.loads(line) for line in journal.read_text().splitlines()]
+    finished = next(
+        row for row in rows
+        if row["kind"] == "tool.finished" and row["data"]["name"] == "write_file"
+    )
+    assert "tools.deny in config.yaml" in finished["data"]["error"]
+    assert "#media-qa" in finished["data"]["error"]
+
+
 def test_owner_pipeline_turn_uses_path_checked_write_tools(
     engine: Engine, monkeypatch,
 ) -> None:
@@ -166,6 +251,33 @@ def test_owner_pipeline_turn_uses_path_checked_write_tools(
 
     assert {"delete_file", "edit_file", "write_file"} <= schema_names[0]
     assert "terminal" in schema_names[0]
+
+
+def test_docker_owner_pipeline_turn_hides_terminal(
+    engine: Engine, monkeypatch,
+) -> None:
+    schema_names: list[set[str]] = []
+
+    def capturing_stream(messages, tools, **kwargs):
+        schema_names.append({s["function"]["name"] for s in tools})
+        yield from _stream_one("ok")
+
+    monkeypatch.setenv("ALPI_PLATFORM", "docker")
+    monkeypatch.setenv(
+        "ALPI_WORKGROUP_WRITE_SCOPE",
+        '{"root":"projects/demo","paths":["src/content/**"],'
+        '"phase":"content","owner":"quill"}',
+    )
+    (engine.home / "config.yaml").write_text(yaml.safe_dump({
+        "model": "gpt-5.4-mini",
+        "tools": {"deny": []},
+    }))
+    monkeypatch.setattr("alpi.llm.stream", capturing_stream)
+
+    engine.run_turn("author", emit=lambda _e: None)
+
+    assert {"delete_file", "edit_file", "write_file"} <= schema_names[0]
+    assert "terminal" not in schema_names[0]
 
 
 def test_budget_exceeded_mid_turn_aborts(engine: Engine, monkeypatch) -> None:

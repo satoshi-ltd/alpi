@@ -1561,6 +1561,44 @@ def test_validate_workflow_task_requires_declared_owner(short_tmp: Path) -> None
     )
 
 
+def test_recovery_slug_requires_the_canonical_phase_owner(short_tmp: Path) -> None:
+    home = short_tmp / "recoveryowner"; home.mkdir()
+    _pin(home, "lingua", "LINGUA_PK", ["workgroup.post"])
+    _pin(home, "lens", "LENS_PK", ["workgroup.post"])
+    wg = _fake_wg(
+        "HUB", ["LINGUA_PK", "LENS_PK"],
+        pipelines={"media-update": ("media-update", "media-qa")},
+        launch_pipeline="media-update",
+        pipeline_steps={
+            "media-update": {"owner": "muse"},
+            "media-qa": {"owner": "lens"},
+        },
+    )
+
+    with pytest.raises(ValueError, match="workflow-task-owner-missing"):
+        wc._validate_task_participants(
+            home, wg,
+            "@lingua #task #media-qa-fix · QA FAIL from @lens: locales missing",
+        )
+    wc._validate_task_participants(
+        home, wg,
+        "@lens @lingua #task #media-qa-fix · ask Lingua for evidence",
+    )
+
+
+def test_pipeline_rejects_an_invented_phase_slug() -> None:
+    import types
+
+    wg = types.SimpleNamespace(meta=types.SimpleNamespace(
+        pipelines={"content-update": ("content-update", "content-locales")},
+    ))
+
+    with pytest.raises(ValueError, match="task-slug-unroutable"):
+        wc._check_task_slug_is_routable(
+            wg, "@lingua #task #fix-locales · repair translations",
+        )
+
+
 def test_gate_less_workflow_close_requires_declared_owner(short_tmp: Path) -> None:
     home = short_tmp / "hubclose"; home.mkdir()
     _pin(home, "muse", "MUSE_PK", ["workgroup.post"])
