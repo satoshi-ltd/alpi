@@ -388,6 +388,137 @@ async def test_data_chat_send_streams_events_in_order(
 
 
 @pytest.mark.asyncio
+async def test_local_delegate_owns_sidecar_and_marks_session_active(
+    monkeypatch, short_tmp: Path,
+) -> None:
+    import threading
+
+    home = short_tmp / "h"
+    home.mkdir()
+    load_or_generate(home)
+    started = threading.Event()
+    release = threading.Event()
+
+    class _BlockingEngine(_FakeEngine):
+        def __init__(self, *, home: Path, cfg) -> None:  # noqa: ANN001
+            super().__init__(home=home, cfg=cfg)
+            from alpi.host.connection_context import current
+            self.session.connection_id = current().connection_id
+
+        def run_turn(self, text, emit, **kwargs) -> None:  # noqa: ANN001
+            from alpi.engine import AgentEvent
+
+            started.set()
+            emit(AgentEvent(kind="tool_start", name="search", args={"q": "x"}))
+            release.wait(timeout=2)
+            emit(AgentEvent(kind="assistant_done", text="done", final=True))
+
+    from alpi import config as cfg_mod
+    from alpi.host import chat as dc
+    from alpi.host import connections
+    import alpi.engine
+
+    monkeypatch.setattr(cfg_mod, "load", lambda h: SimpleNamespace(model="x"))
+    monkeypatch.setattr(alpi.engine, "Engine", _BlockingEngine)
+    monkeypatch.setattr(dc, "_resolve_home", lambda profile: home)
+    monkeypatch.setattr(connections, "list_connections", lambda: [{
+        "id": "conn_test",
+        "status": "active",
+        "role": "admin",
+        "profile_scope": [],
+    }])
+
+    srv = host_server.Server(home=home)
+    data_handlers.register(srv)
+    dc.register(srv)
+    await srv.start()
+    reader = writer = None
+    try:
+        reader, writer = await asyncio.open_unix_connection(str(srv.socket_path()))
+        writer.write((json.dumps({
+            "id": "delegated",
+            "method": "host.chat.delegate",
+            "params": {
+                "profile": "smith",
+                "connection_id": "conn_test",
+                "text": "audit",
+                "request_id": "delegated",
+            },
+        }) + "\n").encode())
+        await writer.drain()
+        assert await asyncio.to_thread(started.wait, 1)
+        for _ in range(100):
+            if dc.session_key("smith", "fake-session-id") in dc._session_active:
+                break
+            await asyncio.sleep(0.01)
+        assert dc.session_key("smith", "fake-session-id") in dc._session_active
+        assert dc._chat_events.connection_id(home, "fake-session-id") == "conn_test"
+        replay = {"events": []}
+        for _ in range(100):
+            replay = dc._chat_events.read_since(home, "fake-session-id")
+            if any(
+                row["frame"].get("event") == "tool_start"
+                for row in replay["events"]
+            ):
+                break
+            await asyncio.sleep(0.01)
+        assert any(
+            row["frame"].get("event") == "tool_start"
+            for row in replay["events"]
+        )
+        release.set()
+        events = []
+        while line := await reader.readline():
+            events.append(json.loads(line))
+        assert any(event.get("event") == "done" for event in events)
+    finally:
+        release.set()
+        if writer is not None:
+            writer.close()
+            await writer.wait_closed()
+        await srv.stop()
+
+
+@pytest.mark.asyncio
+async def test_delegate_rejects_unknown_connection(monkeypatch) -> None:
+    from alpi.host import chat as dc
+    from alpi.host import connections
+
+    monkeypatch.setattr(connections, "list_connections", lambda: [])
+    with pytest.raises(host_server.HandlerError, match="not-found"):
+        await dc._data_chat_delegate({
+            "profile": "smith",
+            "connection_id": "conn_missing",
+            "text": "audit",
+            "request_id": "missing",
+        }, host_server.Server(home=Path("/tmp")), lambda frame: None)
+
+
+@pytest.mark.asyncio
+async def test_delegate_preserves_member_profile_scope(monkeypatch) -> None:
+    from alpi.host import chat as dc
+    from alpi.host import connections
+
+    monkeypatch.setattr(connections, "list_connections", lambda: [{
+        "id": "conn_member",
+        "status": "active",
+        "role": "member",
+        "profile_scope": ["neo"],
+    }])
+    with pytest.raises(host_server.HandlerError, match="forbidden"):
+        await dc._data_chat_delegate({
+            "profile": "smith",
+            "connection_id": "conn_member",
+            "text": "audit",
+            "request_id": "scoped",
+        }, host_server.Server(home=Path("/tmp")), lambda frame: None)
+
+
+def test_chat_delegate_is_local_only() -> None:
+    assert "host.chat.delegate" in host_server._LOCAL_ONLY_METHODS
+
+
+@pytest.mark.asyncio
 async def test_data_chat_send_reports_overridden_model(
     monkeypatch, short_tmp: Path,
 ) -> None:

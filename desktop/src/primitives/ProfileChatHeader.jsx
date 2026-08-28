@@ -2,7 +2,6 @@ import { ChatHeader, MeterChip, Mono } from "./index.js";
 import { profileLabel } from "../lib/profile-display.js";
 import { modelLabel } from "../lib/modelLabel.js";
 import SessionsButton from "./SessionsButton.jsx";
-import RunsButton from "./RunsButton.jsx";
 import SoundWave from "./SoundWave.jsx";
 import HeaderMenu from "./HeaderMenu.jsx";
 import Tip from "./Tip.jsx";
@@ -111,7 +110,6 @@ export default function ProfileChatHeader({
           onNew={onNewSession}
         />
       )}
-      <RunsButton profile={profile?.name} connectionId={connectionId} />
       <SoundWave accent={accent} />
       <HeaderMenu
         paused={paused}

@@ -20,7 +20,7 @@ On-disk layout under ``~/.alpi/<profile>/alp/workgroups/<wg_id>/``:
     meta.yaml         # name, hub_pubkey, created_at, current_key_version, budget?
     members.yaml      # [{pubkey, sealed_key, key_version, joined, joined_at}]
     transcript.jsonl  # one ciphertext post per line, tagged with key_version + cost
-    ledger.json       # {usd, tokens, posts} cumulative across the workgroup's life
+    ledger.json       # cumulative post spend plus hidden per-turn settlements
     files/            # encrypted file sidecars keyed by plaintext SHA-256
 """
 
@@ -284,6 +284,31 @@ def validate_turn_id(value: Any) -> str:
     if not isinstance(value, str) or not _TURN_ID_RE.fullmatch(value):
         raise ValueError("turn_id must be 32 lowercase hexadecimal characters")
     return value
+
+
+def normalize_declared_cost(raw: Any) -> dict[str, Any]:
+    """Clamp an untrusted workgroup usage declaration."""
+    cost = raw if isinstance(raw, dict) else {}
+    declared_usd = max(0.0, min(_as_float(cost.get("usd")), _MAX_DECLARED_USD))
+    declared_tokens = max(0, min(_as_int(cost.get("tokens")), _MAX_DECLARED_TOKENS))
+    declared_in = max(0, min(_as_int(cost.get("tokens_in")), _MAX_DECLARED_TOKENS))
+    declared_out = max(0, min(_as_int(cost.get("tokens_out")), _MAX_DECLARED_TOKENS))
+    raw_cached = cost.get("cached_in")
+    declared_measured = max(0, min(
+        _as_int(cost.get("measured_in", declared_in)), declared_in,
+    )) if raw_cached is not None else 0
+    declared_cached = (
+        max(0, min(_as_int(raw_cached), declared_measured))
+        if raw_cached is not None else None
+    )
+    return {
+        "usd": declared_usd,
+        "tokens": max(declared_tokens, declared_in + declared_out),
+        "tokens_in": declared_in,
+        "tokens_out": declared_out,
+        "cached_in": declared_cached,
+        "measured_in": declared_measured,
+    }
 
 
 def _utcnow() -> str:
@@ -982,29 +1007,32 @@ def _append_transcript(d: Path, entry: dict[str, Any]) -> None:
 def _load_ledger(d: Path) -> dict[str, Any]:
     p = d / _LEDGER
     if not p.exists():
-        return {"usd": 0.0, "tokens": 0, "posts": 0}
+        return {"usd": 0.0, "tokens": 0, "posts": 0, "settlements": []}
     try:
         raw = json.loads(p.read_text())
     except json.JSONDecodeError:
-        return {"usd": 0.0, "tokens": 0, "posts": 0}
+        return {"usd": 0.0, "tokens": 0, "posts": 0, "settlements": []}
+    settlements = raw.get("settlements")
     return {
         "usd": float(raw.get("usd", 0.0)),
         "tokens": int(raw.get("tokens", 0)),
         "posts": int(raw.get("posts", 0)),
+        "settlements": settlements if isinstance(settlements, list) else [],
     }
 
 
 def _save_ledger(d: Path, ledger: dict[str, Any]) -> None:
     import tempfile
     d.mkdir(parents=True, exist_ok=True)
-    text = json.dumps(
-        {
-            "usd": float(ledger.get("usd", 0.0)),
-            "tokens": int(ledger.get("tokens", 0)),
-            "posts": int(ledger.get("posts", 0)),
-        },
-        separators=(",", ":"),
-    )
+    payload: dict[str, Any] = {
+        "usd": float(ledger.get("usd", 0.0)),
+        "tokens": int(ledger.get("tokens", 0)),
+        "posts": int(ledger.get("posts", 0)),
+    }
+    settlements = ledger.get("settlements")
+    if isinstance(settlements, list) and settlements:
+        payload["settlements"] = settlements
+    text = json.dumps(payload, separators=(",", ":"))
     fd, tmp_name = tempfile.mkstemp(dir=str(d), prefix=f".{_LEDGER}.", suffix=".tmp")
     tmp = Path(tmp_name)
     try:
@@ -1017,6 +1045,79 @@ def _save_ledger(d: Path, ledger: dict[str, Any]) -> None:
     except Exception:
         tmp.unlink(missing_ok=True)
         raise
+
+
+def settle_turn_cost(
+    home: Path,
+    wg_id: str,
+    author_pubkey: str,
+    turn_id: str,
+    raw_cost: Any,
+) -> dict[str, Any]:
+    """Add a turn's undeclared residual usage to the lifetime ledger once."""
+    turn_id = validate_turn_id(turn_id)
+    if not turn_id:
+        raise ValueError("turn_id required")
+    wg = load(home, wg_id)
+    if wg is None:
+        raise ValueError(f"workgroup {wg_id!r} not found")
+    if wg.member(author_pubkey) is None:
+        raise ValueError("author is not a workgroup member")
+
+    total = normalize_declared_cost(raw_cost)
+    d = _wg_dir(home, wg_id)
+    with _transcript_write_lock(d):
+        ledger = _load_ledger(d)
+        settlements = ledger["settlements"]
+        if any(
+            row.get("turn_id") == turn_id and row.get("from") == author_pubkey
+            for row in settlements if isinstance(row, dict)
+        ):
+            return {"settled": False, "cost": {"usd": 0.0, "tokens": 0}}
+
+        declared = {
+            "usd": 0.0,
+            "tokens": 0,
+            "tokens_in": 0,
+            "tokens_out": 0,
+        }
+        for entry in _read_transcript(d):
+            if entry.get("turn_id") != turn_id or entry.get("from") != author_pubkey:
+                continue
+            cost = entry.get("cost") or {}
+            declared["usd"] += max(0.0, _as_float(cost.get("usd")))
+            declared["tokens"] += max(0, _as_int(cost.get("tokens")))
+            declared["tokens_in"] += max(0, _as_int(cost.get("tokens_in")))
+            declared["tokens_out"] += max(0, _as_int(cost.get("tokens_out")))
+
+        residual_tokens = max(0, total["tokens"] - declared["tokens"])
+        residual_in = max(0, total["tokens_in"] - declared["tokens_in"])
+        residual_out = max(0, total["tokens_out"] - declared["tokens_out"])
+        residual_split = residual_in + residual_out
+        if residual_split > residual_tokens:
+            residual_in = round(residual_tokens * residual_in / residual_split)
+            residual_out = residual_tokens - residual_in
+        elif residual_split < residual_tokens:
+            residual_in += residual_tokens - residual_split
+        residual = {
+            "usd": max(0.0, total["usd"] - declared["usd"]),
+            "tokens": residual_tokens,
+            "tokens_in": residual_in,
+            "tokens_out": residual_out,
+        }
+        if residual["usd"] < 1e-12:
+            residual["usd"] = 0.0
+        settlement = {
+            "ts": _utcnow(),
+            "from": author_pubkey,
+            "turn_id": turn_id,
+            "cost": residual,
+        }
+        settlements.append(settlement)
+        ledger["usd"] = float(ledger.get("usd", 0.0)) + residual["usd"]
+        ledger["tokens"] = int(ledger.get("tokens", 0)) + residual["tokens"]
+        _save_ledger(d, ledger)
+    return {"settled": True, "cost": residual}
 
 
 _PIPELINE_SLUG_RE = _re.compile(r"^[a-z0-9][a-z0-9_-]*$")
@@ -1400,12 +1501,40 @@ def register(server: alp_server.Server, home: Path) -> None:
         srv: alp_server.Server,
     ) -> dict[str, Any]:
         wg_id = str((params or {}).get("workgroup_id") or "").strip()
-        nonce = str((params or {}).get("nonce") or "")
-        ciphertext = str((params or {}).get("ciphertext") or "")
-        if not (wg_id and nonce and ciphertext):
+        if not wg_id:
             raise alp_server.HandlerError(
                 -32602, "invalid-params",
-                data={"detail": "workgroup_id, nonce, ciphertext required"},
+                data={"detail": "workgroup_id required"},
+            )
+        if bool((params or {}).get("settle_only")):
+            wg = load(home, wg_id)
+            if wg is None:
+                raise alp_server.HandlerError(-32009, "workgroup-not-found")
+            member = wg.member(peer.pubkey)
+            if member is None:
+                raise alp_server.HandlerError(-32008, "workgroup-not-member")
+            if not member.joined:
+                raise alp_server.HandlerError(
+                    -32008, "workgroup-not-joined",
+                    data={"detail": "run workgroup.join before posting"},
+                )
+            try:
+                turn_id = validate_turn_id((params or {}).get("turn_id"))
+                return settle_turn_cost(
+                    home, wg_id, peer.pubkey, turn_id,
+                    (params or {}).get("cost"),
+                )
+            except ValueError as e:
+                raise alp_server.HandlerError(
+                    -32602, "invalid-params", data={"detail": str(e)},
+                ) from e
+
+        nonce = str((params or {}).get("nonce") or "")
+        ciphertext = str((params or {}).get("ciphertext") or "")
+        if not (nonce and ciphertext):
+            raise alp_server.HandlerError(
+                -32602, "invalid-params",
+                data={"detail": "nonce and ciphertext required"},
             )
         if len(ciphertext) > _MAX_POST_CIPHERTEXT:
             raise alp_server.HandlerError(
@@ -1446,22 +1575,13 @@ def register(server: alp_server.Server, home: Path) -> None:
                 },
             )
 
-        # Poster is untrusted: clamp self-declared cost before it gates budget / lands in the ledger.
-        declared_usd = max(0.0, min(_as_float(cost.get("usd")), _MAX_DECLARED_USD))
-        declared_tokens = max(0, min(_as_int(cost.get("tokens")), _MAX_DECLARED_TOKENS))
-        declared_in = max(0, min(_as_int(cost.get("tokens_in")), _MAX_DECLARED_TOKENS))
-        declared_out = max(0, min(_as_int(cost.get("tokens_out")), _MAX_DECLARED_TOKENS))
-        # Cached is a SHARE of measured_in (<= tokens_in), never an addition; absent = unmeasured.
-        raw_cached = cost.get("cached_in") if isinstance(cost, dict) else None
-        declared_measured = max(0, min(
-            _as_int(cost.get("measured_in", declared_in)), declared_in,
-        )) if raw_cached is not None else 0
-        declared_cached = (
-            max(0, min(_as_int(raw_cached), declared_measured))
-            if raw_cached is not None else None
-        )
-        # Keep the combined total consistent with the split for the gate + usage.
-        declared_tokens = max(declared_tokens, declared_in + declared_out)
+        declared = normalize_declared_cost(cost)
+        declared_usd = declared["usd"]
+        declared_tokens = declared["tokens"]
+        declared_in = declared["tokens_in"]
+        declared_out = declared["tokens_out"]
+        declared_cached = declared["cached_in"]
+        declared_measured = declared["measured_in"]
 
         d = _wg_dir(home, wg_id)
         entry: dict[str, Any] = {

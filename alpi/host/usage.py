@@ -157,7 +157,9 @@ def compute_workgroup_daily(
     home: Path, wg_id: str, today: date | None = None,
 ) -> list[dict[str, Any]]:
     from alpi.alp import workgroup as alp_wg
-    entries = alp_wg._read_transcript(alp_wg._wg_dir(home, wg_id))
+    directory = alp_wg._wg_dir(home, wg_id)
+    entries = alp_wg._read_transcript(directory)
+    entries.extend(alp_wg._load_ledger(directory).get("settlements") or [])
     return bucket_workgroup(entries, today or _utc_today())
 
 

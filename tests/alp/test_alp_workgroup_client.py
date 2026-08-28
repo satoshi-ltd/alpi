@@ -1051,6 +1051,34 @@ async def test_post_as_hub_persists_turn_id(short_tmp: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_post_as_hub_normalizes_declared_cost(short_tmp: Path) -> None:
+    hub_home = short_tmp / "alice"
+    hub_home.mkdir()
+    hub_kp = load_or_generate(hub_home)
+    wg = wg_mod.create(
+        hub_home, name="design", hub_kp=hub_kp, member_pubkeys=[],
+    )
+
+    await wc.post(hub_home, wg.meta.id, b"hello team", cost={
+        "usd": -5.0,
+        "tokens": 1,
+        "tokens_in": 100,
+        "tokens_out": 50,
+        "cached_in": 999,
+    })
+
+    raw = wg_mod._read_transcript(wg_mod._wg_dir(hub_home, wg.meta.id))
+    assert raw[0]["cost"] == {
+        "usd": 0.0,
+        "tokens": 150,
+        "tokens_in": 100,
+        "tokens_out": 50,
+        "cached_in": 100,
+        "measured_in": 100,
+    }
+
+
+@pytest.mark.asyncio
 async def test_post_rejects_invalid_turn_id(short_tmp: Path) -> None:
     home = short_tmp / "alice"; home.mkdir()
     with pytest.raises(ValueError, match="turn_id"):

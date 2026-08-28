@@ -34,8 +34,55 @@ def _get_session_lock(key: tuple[str, str]) -> asyncio.Lock:
 
 def register(server: host_server.Server) -> None:
     server.register_stream("host.chat.send", _data_chat_send)
+    server.register_stream("host.chat.delegate", _data_chat_delegate)
     server.register("host.chat.cancel", _data_chat_cancel)
     server.register("host.chat.events_since", _data_chat_events_since)
+
+
+async def _data_chat_delegate(
+    params: dict[str, Any], server: host_server.Server, send_frame,
+) -> None:
+    from alpi.host.connection_context import (
+        HOST_CONNECTION_ID,
+        ConnectionContext,
+        current,
+        use,
+    )
+
+    if current().connection_id != HOST_CONNECTION_ID:
+        raise host_server.HandlerError(-32001, "forbidden", data={"detail": "method is local-only"})
+    connection_id = str((params or {}).get("connection_id") or "").strip()
+    profile = str((params or {}).get("profile") or "").strip()
+    from alpi.host.handlers import _check_id
+    _check_id(connection_id, "connection_id")
+    _check_id(profile, "profile")
+
+    from alpi.host import connections
+    rows = await asyncio.to_thread(connections.list_connections)
+    target = next(
+        (row for row in rows if row.get("id") == connection_id and row.get("status") == "active"),
+        None,
+    )
+    if target is None:
+        raise host_server.HandlerError(
+            -32004, "not-found", data={"detail": "active connection not found"},
+        )
+    role = str(target.get("role") or "member")
+    scope = list(target.get("profile_scope") or [])
+    if role != "admin" and scope and profile not in scope:
+        raise host_server.HandlerError(
+            -32001, "forbidden", data={"detail": "profile not in connection scope"},
+        )
+
+    forwarded = dict(params)
+    forwarded.pop("connection_id", None)
+    delegated = ConnectionContext(
+        connection_id=connection_id,
+        source="local-delegate",
+        role=role,
+    )
+    with use(delegated):
+        await _data_chat_send(forwarded, server, send_frame)
 
 
 def _resolve_home(profile: str) -> Path:

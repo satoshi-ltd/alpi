@@ -111,6 +111,7 @@ alpi                         # interactive TUI
 alpi -c                      # resume last session
 alpi -p work                 # use named profile
 alpi chat --once "status?"   # one-shot stdout turn
+alpi -p smith chat --once "audit" --connection-id conn_x  # visible, live delegated chat
 
 alpi setup                   # model, email, MCPs, sandbox, daemon
 alpi doctor                  # live health checks

@@ -302,6 +302,16 @@ def _start_new_profiles(
                 "profile %s: cannot read config — retry next tick", profile,
             )
             continue
+        try:
+            from alpi import runs
+            reconciled = runs.reconcile_stale(home)
+            if reconciled:
+                log.info(
+                    "profile %s: closed %d stale run journal(s)",
+                    profile, reconciled,
+                )
+        except Exception:  # noqa: BLE001
+            log.exception("profile %s: stale run reconciliation failed", profile)
         task_map = _profile_tasks(home, profile)
         registry[profile] = {"tasks": task_map, "fps": fps}
         count = sum(len(ts) for ts in task_map.values())
@@ -2471,6 +2481,7 @@ async def _dispatch_workgroup_turn(
 ) -> None:
     """Spawn a background ``chat --once`` turn for a workgroup."""
     turn_id = os.urandom(16).hex()
+    run_id = os.urandom(16).hex()
     turn_timeout = turn_budget_s or _turn_timeout_for(pipeline)
     if continuation and not next_phase:
         prompt = (
@@ -2661,6 +2672,7 @@ async def _dispatch_workgroup_turn(
         "ALPI_HOME": str(home),
         "ALPI_WORKGROUP_DISPATCH": wg_id,
         "ALPI_WORKGROUP_TURN_ID": turn_id,
+        "ALPI_RUN_ID": run_id,
         **({"ALPI_TURN_BUDGET_S": str(soft_budget)} if soft_budget else {}),
         **({"ALPI_WORKGROUP_WRITE_SCOPE": json.dumps(write_scope)} if write_scope is not None else {}),
         **workspace_env(home),
@@ -2722,6 +2734,7 @@ async def _dispatch_workgroup_turn(
         "ts": _utcnow_iso(), "event": "start",
         "profile": profile, "wg_id": wg_id, "wg_name": wg_name,
         "reason": reason, "pid": proc.pid, "turn_id": turn_id,
+        "run_id": run_id,
     })
 
     # Register in-flight state so the preempt watcher can SIGTERM us.
@@ -2730,6 +2743,7 @@ async def _dispatch_workgroup_turn(
         "profile": profile,
         "wg_name": wg_name,
         "hub_pubkey": hub_pubkey,
+        "run_id": run_id,
         "started_against_task_seq": int(started_against_task_seq),
         "started_at": started_at,
     }
@@ -2783,15 +2797,22 @@ async def _dispatch_workgroup_turn(
     if cancelled:
         event = "cancelled"
         extra = {"cancel_reason": cancel_reason, "killed": True}
+        run_outcome = "interrupted"
     elif preempted:
         event = "preempted"
         extra = {"preempted_by_seq": preempted_by_seq, "killed": True}
+        run_outcome = "interrupted"
     elif timed_out:
         event = "timeout"
         extra = {"killed": True, "kill_reason": kill_reason}
+        run_outcome = "timeout"
     else:
         event = "end"
         extra = {"error": err_preview} if err_preview else {}
+        run_outcome = "completed" if rc == 0 else "failed"
+    await _finalize_workgroup_run(
+        home, wg_id, turn_id, run_id, run_outcome,
+    )
     if event_tail:
         # Cap bytes too (drain caps lines): keep turns.jsonl small + avoid stashing a huge/sensitive payload.
         extra["event_tail"] = event_tail[-2000:]
@@ -2803,6 +2824,7 @@ async def _dispatch_workgroup_turn(
         "profile": profile, "wg_id": wg_id, "wg_name": wg_name,
         "duration_s": duration_s, "rc": rc,
         "posts_added": posts_added[0], "turn_id": turn_id,
+        "run_id": run_id,
         **extra,
     })
     if transient_failure[0] and posts_added[0] == 0 and recovery_kind:
@@ -2819,6 +2841,29 @@ async def _dispatch_workgroup_turn(
         require_delivery=pipeline,
     ):
         _advance_member_cursor(home, wg_id, int(member_responded_seq))
+
+
+async def _finalize_workgroup_run(
+    home: Path,
+    wg_id: str,
+    turn_id: str,
+    run_id: str,
+    outcome: str,
+) -> None:
+    from alpi import runs
+    from alpi.alp import workgroup_client
+
+    runs.finish_if_running(home, run_id, outcome)
+    usage = runs.usage_summary(home, run_id)
+    if not usage["usd"] and not usage["tokens"]:
+        return
+    try:
+        await workgroup_client.settle_turn(home, wg_id, turn_id, usage)
+    except Exception as e:  # noqa: BLE001
+        log.warning(
+            "wg poller: run settlement failed for %s/%s: %s",
+            wg_id, run_id, e,
+        )
 
 
 def _should_advance_cursor(

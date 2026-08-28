@@ -1031,6 +1031,33 @@ async def post(
     return result
 
 
+async def settle_turn(
+    home: Path,
+    wg_id: str,
+    turn_id: str,
+    cost: dict[str, Any],
+) -> dict[str, Any]:
+    """Settle a supervised turn's residual usage without adding a post."""
+    kp = load_or_generate(home)
+    turn_id = wg_mod.validate_turn_id(turn_id)
+    wg = wg_mod.load(home, wg_id)
+    if wg is not None and wg.meta.hub_pubkey == kp.pubkey_b64():
+        return wg_mod.settle_turn_cost(
+            home, wg_id, kp.pubkey_b64(), turn_id, cost,
+        )
+    sub = sub_mod.get(home, wg_id)
+    if sub is None:
+        raise ValueError(
+            f"not subscribed to {wg_id!r} — run `alpi workgroup join` first",
+        )
+    return await _call(home, kp, sub.hub_id, "workgroup.post", {
+        "workgroup_id": wg_id,
+        "settle_only": True,
+        "turn_id": turn_id,
+        "cost": cost,
+    })
+
+
 def _file_group_key(home: Path, wg_id: str, version: int | None = None) -> tuple[bytes, int]:
     kp = load_or_generate(home)
     wg = wg_mod.load(home, wg_id)
@@ -1431,16 +1458,13 @@ def _post_as_hub_locked(
         ),
     )
 
-    declared_usd = float(cost_dict.get("usd", 0.0)) if cost_dict else 0.0
-    declared_tokens = int(cost_dict.get("tokens", 0)) if cost_dict else 0
-    declared_in = int(cost_dict.get("tokens_in", 0)) if cost_dict else 0
-    declared_out = int(cost_dict.get("tokens_out", 0)) if cost_dict else 0
-    raw_cached = cost_dict.get("cached_in") if cost_dict else None
-    declared_measured = max(0, min(
-        int(cost_dict.get("measured_in", declared_in)) if cost_dict else 0,
-        declared_in,
-    )) if raw_cached is not None else 0
-    declared_cached = max(0, min(int(raw_cached), declared_measured)) if raw_cached is not None else None
+    declared = wg_mod.normalize_declared_cost(cost_dict)
+    declared_usd = declared["usd"]
+    declared_tokens = declared["tokens"]
+    declared_in = declared["tokens_in"]
+    declared_out = declared["tokens_out"]
+    declared_cached = declared["cached_in"]
+    declared_measured = declared["measured_in"]
     # Budget/cap verdict precedes the baseline write so a rejected opener leaves no trace.
     try:
         _gate_post(wg.meta, _load_ledger(d), {"usd": declared_usd, "tokens": declared_tokens})

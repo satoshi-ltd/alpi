@@ -311,7 +311,7 @@ class Engine:
             role=self.connection_context.role,
             job_id=os.environ.get("ALPI_SCHEDULE_ID") or None,
             workgroup_id=os.environ.get("ALPI_WORKGROUP_DISPATCH") or None,
-            run_id=run_id,
+            run_id=run_id or os.environ.get("ALPI_RUN_ID") or None,
         )
         preserve_interrupt = (
             self.interrupt_requested and self.active_run_id == run_context.run_id

@@ -9,7 +9,7 @@ from alpi.core.run_context import RunContext
 from alpi.engine import AgentEvent
 
 
-def _context(home: Path) -> RunContext:
+def _context(home: Path, *, run_id: str | None = None) -> RunContext:
     return RunContext.create(
         home=home,
         workspace=home / "workspace",
@@ -18,6 +18,7 @@ def _context(home: Path) -> RunContext:
         session_id="s1",
         connection_id="c1",
         device_id="d1",
+        run_id=run_id,
     )
 
 
@@ -70,6 +71,67 @@ def test_finish_releases_per_run_process_state(tmp_path: Path) -> None:
     runs.finish(context, "completed")
 
     assert path_key not in runs._locks and path_key not in runs._seq
+
+
+def test_supervisor_can_finish_a_child_run_once(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    runs.start(context)
+
+    assert runs.finish_if_running(tmp_path, context.run_id, "interrupted") is True
+    assert runs.finish_if_running(tmp_path, context.run_id, "failed") is False
+    assert runs.summary(tmp_path, context.run_id)["status"] == "interrupted"
+
+
+def test_usage_summary_sums_every_usage_event(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    runs.start(context)
+    runs.append(tmp_path, context.run_id, "agent.usage", {
+        "tokens_in": 100, "tokens_out": 20, "cost": 0.12,
+    })
+    runs.append(tmp_path, context.run_id, "agent.usage", {
+        "tokens_in": 50, "tokens_out": 5, "cost": 0.03,
+    })
+
+    assert runs.usage_summary(tmp_path, context.run_id) == {
+        "usd": pytest.approx(0.15),
+        "tokens": 175,
+        "tokens_in": 150,
+        "tokens_out": 25,
+    }
+
+
+def test_reconcile_stale_closes_legacy_run_but_not_live_pid(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    monkeypatch.setattr(runs.time, "time", lambda: 100.0)
+    legacy_id = "legacy"
+    runs.append(tmp_path, legacy_id, "run.started", {
+        "run_id": legacy_id, "profile": "default",
+    })
+    live = _context(tmp_path)
+    runs.start(live)
+    monkeypatch.setattr(runs.time, "time", lambda: 5000.0)
+
+    assert runs.reconcile_stale(tmp_path, older_than_s=3600) == 1
+    assert runs.summary(tmp_path, legacy_id)["status"] == "interrupted"
+    assert runs.summary(tmp_path, live.run_id)["status"] == "running"
+
+
+def test_reconcile_stale_scans_beyond_the_public_list_limit(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    monkeypatch.setattr(runs.time, "time", lambda: 100.0)
+    runs.append(tmp_path, "buried", "run.started", {
+        "run_id": "buried", "profile": "default",
+    })
+    for index in range(runs.MAX_LIST_LIMIT + 1):
+        context = _context(tmp_path, run_id=f"newer-{index}")
+        runs.start(context)
+        runs.finish(context, "completed")
+    monkeypatch.setattr(runs.time, "time", lambda: 5000.0)
+
+    assert runs.reconcile_stale(tmp_path, older_than_s=3600) == 1
+    assert runs.summary(tmp_path, "buried")["status"] == "interrupted"
 
 
 def test_terminal_arguments_are_omitted_from_agent_events_and_workflows(tmp_path: Path) -> None:

@@ -55,6 +55,7 @@ def _max_message_bytes() -> int:
 
 # Reserved for the local Unix socket — even an admin remote device cannot rebind the network or restart the daemon.
 _LOCAL_ONLY_METHODS = frozenset({
+    "host.chat.delegate",
     "host.network.status",
     "host.network.set_advertised",
     "host.network.restart_host_server",

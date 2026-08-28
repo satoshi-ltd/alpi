@@ -1548,6 +1548,109 @@ def test_ledger_records_cumulative_spend(short_tmp: Path) -> None:
     assert initial == {"usd": 0.0, "tokens": 0, "posts": 0}
 
 
+def test_turn_settlement_adds_only_undeclared_usage_once(short_tmp: Path) -> None:
+    hub_home = short_tmp / "hub"
+    hub_home.mkdir()
+    bob_home = short_tmp / "bob"
+    bob_home.mkdir()
+    hub_kp = load_or_generate(hub_home)
+    bob_kp = load_or_generate(bob_home)
+    wg = wg_mod.create(
+        hub_home, name="settlement", hub_kp=hub_kp,
+        member_pubkeys=[bob_kp.pubkey_b64()], budget={"max_usd": 0.5},
+    )
+    d = wg_mod._wg_dir(hub_home, wg.meta.id)
+    turn_id = "a" * 32
+    wg_mod.admit_post(
+        d, wg.meta,
+        {
+            "ts": wg_mod._utcnow(), "from": bob_kp.pubkey_b64(),
+            "turn_id": turn_id, "cost": {
+                "usd": 0.2, "tokens": 100,
+                "tokens_in": 80, "tokens_out": 20,
+            },
+        },
+        0.2, 100,
+    )
+
+    result = wg_mod.settle_turn_cost(
+        hub_home, wg.meta.id, bob_kp.pubkey_b64(), turn_id,
+        {"usd": 0.7, "tokens": 300, "tokens_in": 240, "tokens_out": 60},
+    )
+    duplicate = wg_mod.settle_turn_cost(
+        hub_home, wg.meta.id, bob_kp.pubkey_b64(), turn_id,
+        {"usd": 0.7, "tokens": 300, "tokens_in": 240, "tokens_out": 60},
+    )
+
+    assert result["cost"] == {
+        "usd": pytest.approx(0.5), "tokens": 200,
+        "tokens_in": 160, "tokens_out": 40,
+    }
+    assert duplicate == {"settled": False, "cost": {"usd": 0.0, "tokens": 0}}
+    ledger = wg_mod._load_ledger(d)
+    assert ledger["usd"] == pytest.approx(0.7)
+    assert ledger["tokens"] == 300
+    assert ledger["posts"] == 1
+    assert len(ledger["settlements"]) == 1
+    with pytest.raises(alp_server.HandlerError, match="budget-exceeded"):
+        wg_mod.admit_post(
+            d, wg.meta,
+            {"ts": wg_mod._utcnow(), "from": bob_kp.pubkey_b64()},
+        )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_remote_turn_settlement_needs_no_ciphertext_and_works_paused(
+    short_tmp: Path,
+) -> None:
+    hub_home = short_tmp / "hub"
+    hub_home.mkdir()
+    bob_home = short_tmp / "bob"
+    bob_home.mkdir()
+    hub_kp = load_or_generate(hub_home)
+    bob_kp = load_or_generate(bob_home)
+    _pin(hub_home, "bob", bob_kp.pubkey_b64(), ["workgroup.join", "workgroup.post"])
+    wg = wg_mod.create(
+        hub_home, name="settlement", hub_kp=hub_kp,
+        member_pubkeys=[bob_kp.pubkey_b64()],
+    )
+    server = alp_server.Server(home=hub_home, agent_name="hub")
+    wg_mod.register(server, hub_home)
+    await server.start()
+    try:
+        await alp_client.call(
+            socket_path=server.socket_path(), sender=bob_kp,
+            recipient_pubkey_b64=hub_kp.pubkey_b64(), method="workgroup.join",
+            params={"workgroup_id": wg.meta.id},
+        )
+        wg.meta.paused = True
+        wg_mod._save_meta(wg_mod._wg_dir(hub_home, wg.meta.id), wg.meta)
+        params = {
+            "workgroup_id": wg.meta.id,
+            "settle_only": True,
+            "turn_id": "b" * 32,
+            "cost": {"usd": 0.3, "tokens": 120},
+        }
+        first = await alp_client.call(
+            socket_path=server.socket_path(), sender=bob_kp,
+            recipient_pubkey_b64=hub_kp.pubkey_b64(), method="workgroup.post",
+            params=params,
+        )
+        second = await alp_client.call(
+            socket_path=server.socket_path(), sender=bob_kp,
+            recipient_pubkey_b64=hub_kp.pubkey_b64(), method="workgroup.post",
+            params=params,
+        )
+        assert first["settled"] is True
+        assert second["settled"] is False
+        assert wg_mod._load_ledger(
+            wg_mod._wg_dir(hub_home, wg.meta.id),
+        )["usd"] == pytest.approx(0.3)
+    finally:
+        await server.stop()
+
+
 # PR 3 — pause + resume
 
 

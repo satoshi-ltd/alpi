@@ -42,6 +42,26 @@ def test_chat_help_exposes_attach() -> None:
     assert "--attach" in result.output
 
 
+def test_chat_help_exposes_connection_id() -> None:
+    result = CliRunner().invoke(cli.main, ["chat", "--help"])
+    assert "--connection-id" in result.output
+
+
+def test_run_once_delegated_calls_host_stream(monkeypatch, capsys) -> None:
+    captured = {}
+
+    async def fake_delegate(profile, connection_id, text, **kwargs):  # noqa: ANN001
+        captured.update(profile=profile, connection_id=connection_id, text=text, **kwargs)
+        return "pong", []
+
+    monkeypatch.setattr(cli, "_host_chat_delegate", fake_delegate)
+    cli._run_once_delegated("smith", "conn_test", "ping")
+    assert captured["profile"] == "smith"
+    assert captured["connection_id"] == "conn_test"
+    assert captured["text"] == "ping"
+    assert capsys.readouterr().out == "pong\n"
+
+
 def test_run_once_forwards_attachments(tmp_path, monkeypatch) -> None:
     from types import SimpleNamespace
 

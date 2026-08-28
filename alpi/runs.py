@@ -152,6 +152,7 @@ def start(context: RunContext, *, model: str = "", input_text: str = "") -> None
         "job_id": context.job_id,
         "workgroup_id": context.workgroup_id,
         "workspace": str(context.workspace),
+        "pid": os.getpid(),
         "model": model,
         "input": input_text,
     })
@@ -186,6 +187,117 @@ def finish(context: RunContext, outcome: str) -> None:
         with _locks_guard:
             _seq.pop(key, None)
             _locks.pop(key, None)
+
+
+def finish_if_running(home: Path, run_id: str, outcome: str) -> bool:
+    """Close a child-owned run journal when its supervising process exits first."""
+    try:
+        row = summary(home, run_id)
+    except (FileNotFoundError, OSError, ValueError):
+        return False
+    if row.get("status") != "running":
+        return False
+    path = run_path(home, run_id)
+    try:
+        append(home, run_id, "run.finished", {"outcome": outcome})
+    finally:
+        key = str(path)
+        with _locks_guard:
+            _seq.pop(key, None)
+            _locks.pop(key, None)
+    return True
+
+
+def usage_summary(home: Path, run_id: str) -> dict[str, Any]:
+    """Sum recorded completion usage for one durable run."""
+    totals: dict[str, Any] = {
+        "usd": 0.0, "tokens": 0, "tokens_in": 0, "tokens_out": 0,
+    }
+    after_seq = -1
+    while True:
+        try:
+            page = read(home, run_id, after_seq=after_seq, limit=5000)
+        except (FileNotFoundError, OSError, ValueError):
+            return totals
+        events = page["events"]
+        for event in events:
+            if event.get("kind") != "agent.usage":
+                continue
+            data = event.get("data") or {}
+            tokens_in = max(0, _safe_int(data.get("tokens_in")))
+            tokens_out = max(0, _safe_int(data.get("tokens_out")))
+            totals["usd"] += max(0.0, _safe_float(data.get("cost")))
+            totals["tokens_in"] += tokens_in
+            totals["tokens_out"] += tokens_out
+        if not events or int(page["next_seq"]) <= after_seq:
+            break
+        after_seq = int(page["next_seq"])
+        if len(events) < 5000:
+            break
+    totals["tokens"] = totals["tokens_in"] + totals["tokens_out"]
+    return totals
+
+
+def reconcile_stale(home: Path, *, older_than_s: float = 3600.0) -> int:
+    """Close legacy journals that cannot still belong to a live process."""
+    now = time.time()
+    closed = 0
+    directory = home / "runs"
+    if not directory.exists() or directory.is_symlink():
+        return 0
+    try:
+        paths = list(directory.glob("*.jsonl"))
+    except OSError:
+        return 0
+    for path in paths:
+        if path.is_symlink():
+            continue
+        try:
+            row = summary(home, path.stem)
+        except (OSError, ValueError):
+            continue
+        if row.get("status") != "running":
+            continue
+        try:
+            first = _first_record(path) or {}
+            pid = _safe_int((first.get("data") or {}).get("pid"))
+            age = now - float(row.get("updated_at") or 0.0)
+        except (OSError, TypeError, ValueError):
+            continue
+        if pid > 0 and _pid_alive(pid):
+            continue
+        if pid <= 0 and age < older_than_s:
+            continue
+        if finish_if_running(home, str(row["id"]), "interrupted"):
+            closed += 1
+    return closed
+
+
+def _safe_int(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _safe_float(value: Any) -> float:
+    try:
+        result = float(value or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+    return result if math.isfinite(result) else 0.0
+
+
+def _pid_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
 
 
 def record_agent_event(context: RunContext, event: Any) -> None:
@@ -329,6 +441,7 @@ def list_runs(home: Path, *, limit: int = 50) -> list[dict]:
 
 __all__ = [
     "FORMAT_VERSION", "MAX_EVENT_BYTES", "MAX_LIST_LIMIT", "active", "active_ids", "append", "finish",
+    "finish_if_running", "reconcile_stale", "usage_summary",
     "persisted_tool_arguments",
     "list_runs", "read", "record_agent_event", "run_path", "start", "summary",
     "register_active", "unregister_active",

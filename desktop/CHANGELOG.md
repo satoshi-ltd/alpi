@@ -11,6 +11,20 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.5.17 — 2026-08-28 — workgroups at scale
+
+- **Workgroups have a dedicated connection-wide view.** The sidebar keeps a
+  compact recent set and opens a searchable list with activity filters, member
+  count, spend and update time instead of growing without limit.
+- **Pinning cannot crash the interface when WebKit storage is full.** Desktop
+  discards only regenerable session and workgroup caches, retries the pin, and
+  keeps the in-memory selection even if storage remains unavailable.
+- **Profile headers expose user concepts, not execution internals.** The Runs
+  control is gone; durable runs remain an implementation detail used to keep
+  turns resumable and cancellable.
+
+Client-side only — no daemon contract changes. Requires alpi ≥ 0.14.14.
+
 ## v0.5.16 — 2026-08-26 — one model in every place
 
 - **The conversation header and composer now describe the same next turn.** An

@@ -1402,10 +1402,10 @@ async def test_scoped_member_can_call_tools_list(short_tmp: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_network_status_stays_local_only_for_remote_token(
-    short_tmp: Path,
+@pytest.mark.parametrize("method", ["host.network.status", "host.chat.delegate"])
+async def test_local_only_method_rejects_remote_token(
+    short_tmp: Path, method: str,
 ) -> None:
-    # host.network.status is in _LOCAL_ONLY_METHODS; HOST.1 must not promote it through the scope-free allowlist.
     row = devices.add(label="phone", role="member")
     srv = host_server.Server(home=short_tmp)
 
@@ -1414,7 +1414,7 @@ async def test_network_status_stays_local_only_for_remote_token(
         sent.append(payload)
 
     body = {
-        "id": "r", "method": "host.network.status",
+        "id": "r", "method": method,
         "params": {"auth_token": row["token"]},
     }
     await srv._handle_request(json.dumps(body), send, require_token=True)

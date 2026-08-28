@@ -79,6 +79,13 @@ returned `session_id`. Reconnect/backfill: `host.chat.events_since`
 `{ profile, session_id, after_seq }` → `{ events, next_seq, exists,
 in_flight }`; track `next_seq`, poll while `in_flight`.
 
+Local automation that must place the chat in an existing paired connection
+uses `alpi -p <profile> chat --once <text> --connection-id <id>`. The CLI calls
+the Unix-socket-only `host.chat.delegate`, validates that the connection is
+active and in scope, and then reuses `host.chat.send`; clients therefore see
+the canonical sidecar and `in_flight` state. Never expose delegation over the
+WebSocket or implement a second run-to-chat reconstruction path.
+
 ## Workgroup methods (member-callable, all take `profile`, scope-checked)
 
 | Method | Params | Returns |

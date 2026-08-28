@@ -151,6 +151,22 @@ arrives before `done`.
 To continue a conversation, pass the `session_id` you got back as
 `params.session_id` on the next `host.chat.send`.
 
+### Local delegated chat
+
+A sovereign local operator can create a chat owned by an existing paired
+connection without bypassing the daemon's streaming lifecycle:
+
+```sh
+alpi -p smith chat --once "audit engine-payments" --connection-id conn_javi
+```
+
+The CLI calls the local-only `host.chat.delegate`, which validates the active
+connection and its profile scope, then executes through `host.chat.send`.
+Consequently the paired clients see the session as `in_flight` and can replay
+tool activity through `host.chat.events_since`. The method is rejected over
+WebSocket even for remote admins; it is an operator facility, not an integration
+API.
+
 ## Step 4 — talk to a profile (Node)
 
 ```js

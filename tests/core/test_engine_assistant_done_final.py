@@ -101,6 +101,19 @@ def test_single_step_reply_is_final(patched_engine: Engine, monkeypatch) -> None
     assert journal[-1]["data"]["outcome"] == "completed"
 
 
+def test_engine_uses_supervisor_run_id_from_environment(
+    patched_engine: Engine, monkeypatch,
+) -> None:
+    monkeypatch.setenv("ALPI_RUN_ID", "supervised-run")
+    _stub_stream(monkeypatch, [_final_chunk("done")])
+
+    patched_engine.run_turn("hi", emit=lambda _event: None)
+
+    assert patched_engine.last_run_id == "supervised-run"
+    from alpi import runs
+    assert runs.summary(patched_engine.home, "supervised-run")["status"] == "completed"
+
+
 def test_targeted_interrupt_before_engine_entry_is_preserved(
     patched_engine: Engine, monkeypatch,
 ) -> None:

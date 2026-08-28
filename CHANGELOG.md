@@ -1,5 +1,38 @@
 # Changelog
 
+## v0.14.15 — 2026-08-28 — delegated chats and workgroup runs close cleanly
+
+- **Local operators can launch a chat for an existing paired connection.**
+  `alpi -p <profile> chat --once <prompt> --connection-id <id>` now enters the
+  running daemon through a local-only delegated stream instead of creating an
+  unrelated CLI engine. The saved session belongs to the selected connection,
+  while the ordinary `host.chat.send` path owns execution.
+- **Externally launched chats expose the same live state as client-originated
+  turns.** The daemon records `in_flight`, replay sidecar frames, heartbeats,
+  tool progress, the stable run id, completion, and cancellation in the
+  canonical host-chat lifecycle. Desktop and mobile can therefore reconstruct
+  activity for a delegated session without a second run-state protocol.
+- **Delegation cannot cross the remote trust boundary.** `host.chat.delegate`
+  is accepted only on the sovereign Unix socket, requires an active target
+  connection, and preserves member profile scopes. Paired WebSocket clients,
+  including admins, cannot impersonate another connection.
+- **Forced workgroup exits no longer leave durable runs open.** The daemon now
+  assigns the child run id before launch and records its terminal outcome when
+  the child is timed out, preempted, cancelled, or otherwise exits before its
+  own cleanup runs. On startup, stale journals left by older daemons are closed
+  as interrupted instead of remaining permanently `running`.
+- **Workgroup spend is complete even when no final post lands.** After each
+  supervised turn, the daemon compares the run's recorded usage with the cost
+  already declared by that turn's accepted posts and adds only the residual to
+  the lifetime workgroup ledger. The settlement is hidden from the transcript,
+  keyed by `turn_id`, and idempotent, so retries cannot double-charge it. Daily
+  workgroup usage includes the same residual records.
+
+Nothing to migrate. Existing `alpi chat --once` behavior is unchanged unless
+`--connection-id` is supplied; the daemon must already be running for a
+delegated launch. Stale run journals are reconciled automatically on daemon
+startup.
+
 ## v0.14.14 — 2026-08-27 — workgroup ownership reaches the shell
 
 - **Pipeline write boundaries now cover or remove terminal subprocesses.** On

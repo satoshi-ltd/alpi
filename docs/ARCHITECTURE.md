@@ -59,6 +59,7 @@ alpi -p <name>                 profile flag, combinable with any command
 alpi chat                      alias for `alpi`
 alpi chat --once "<text>"      one-shot turn to stdout (pipe-friendly)
 alpi chat --once ... -c | --session <id>   continue the last / a specific session (one-shot)
+alpi chat --once ... --connection-id <id>  local-only delegated turn visible live to that connection
 alpi chat --once ... --emit-events     INTERNAL — scheduler subprocess contract
 alpi chat --once ... --no-save         INTERNAL — do not write a session file
 
@@ -167,7 +168,7 @@ alpi/
 ├── host/                   control plane for desktop / mobile clients (default profile only)
 │   ├── server.py          Unix-socket JSON-RPC server (no envelope, no Noise — fs perms = trust)
 │   ├── handlers.py        read verbs (host.workgroup.transcript, host.sessions.*)
-│   ├── chat.py            host.chat.send (streaming) + host.chat.cancel
+│   ├── chat.py            host.chat.send/delegate (streaming) + host.chat.cancel
 │   ├── runs.py            host.runs.list + host.run.{read,cancel}
 │   ├── config.py          mutation verbs (host.providers.*, host.peers.*, host.profile.*, host.mcp.*, host.email.*, host.sandbox.*, host.voice.*)
 │   ├── connections.py     host.connections.* identities, device credentials and devices.yaml migration

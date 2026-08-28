@@ -14,6 +14,15 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.4.6 — 2026-08-28 — conversations lose an implementation detail
+
+- **Profile menus expose user concepts, not execution internals.** The Runs
+  sheet is gone; durable runs remain an implementation detail used to keep
+  turns resumable and cancellable.
+
+Requires alpi >= 0.14.11, unchanged from 0.4.5. Store builds advance to iOS 30
+and Android 30.
+
 ## v0.4.5 — 2026-08-26 — choose the image reader
 
 - **Profile Settings now exposes Vision model.** The picker configures

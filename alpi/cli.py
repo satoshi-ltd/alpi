@@ -375,6 +375,126 @@ def _run_once(
     sys.stdout.flush()
 
 
+async def _host_chat_delegate(
+    profile: str,
+    connection_id: str,
+    text: str,
+    *,
+    attachments: list[dict[str, str]] | None = None,
+    session_id: str | None = None,
+    emit_events: bool = False,
+) -> tuple[str, list[dict]]:
+    import json
+    import uuid
+
+    reader, writer = await asyncio.open_unix_connection(str(home.alpi_root() / "host" / "host.sock"))
+    request_id = f"cli-chat-{uuid.uuid4().hex}"
+    params: dict[str, Any] = {
+        "profile": profile,
+        "connection_id": connection_id,
+        "text": text,
+        "request_id": request_id,
+    }
+    if attachments:
+        params["attachments"] = attachments
+    if session_id:
+        params["session_id"] = session_id
+    writer.write((json.dumps({
+        "id": request_id,
+        "method": "host.chat.delegate",
+        "params": params,
+    }) + "\n").encode())
+    await writer.drain()
+
+    final = ""
+    produced: list[dict] = []
+    errors: list[str] = []
+    last_model_state_at = 0.0
+    try:
+        while True:
+            raw = await reader.readline()
+            if not raw:
+                break
+            frame = json.loads(raw.decode())
+            rpc_error = frame.get("error")
+            if isinstance(rpc_error, dict):
+                detail = (rpc_error.get("data") or {}).get("detail")
+                raise RuntimeError(str(detail or rpc_error.get("message") or "delegated chat failed"))
+            event = str(frame.get("event") or "")
+            if event == "reply":
+                final = str(frame.get("text") or "")
+                produced = list(frame.get("attachments") or [])
+            elif event == "error":
+                errors.append(str(frame.get("text") or "delegated chat failed"))
+            if emit_events:
+                payload: dict[str, Any] | None = None
+                if event == "tool_start":
+                    payload = {
+                        "kind": "tool_start",
+                        "name": frame.get("name"),
+                        "preview": frame.get("preview"),
+                    }
+                elif event == "tool_end":
+                    payload = {"kind": "tool_end", "name": frame.get("name"), "ok": frame.get("ok")}
+                elif event == "tool_state":
+                    payload = {"kind": "tool_state", "name": frame.get("name")}
+                elif event in ("reasoning_delta", "assistant_delta", "routing"):
+                    now = time.monotonic()
+                    if now - last_model_state_at >= 10.0:
+                        last_model_state_at = now
+                        payload = {"kind": "model_state"}
+                elif event in ("interrupted", "error"):
+                    payload = {"kind": event, **({"text": frame.get("text")} if event == "error" else {})}
+                if payload is not None:
+                    sys.stdout.write(json.dumps(payload, ensure_ascii=False) + "\n")
+                    sys.stdout.flush()
+            if event == "done":
+                break
+    finally:
+        writer.close()
+        await writer.wait_closed()
+    if not final and errors:
+        final = "\n\n".join(f"[error] {error}" for error in errors)
+    return final, produced
+
+
+def _run_once_delegated(
+    profile: str,
+    connection_id: str,
+    user_text: str,
+    *,
+    emit_events: bool = False,
+    attach: tuple[str, ...] = (),
+    session_id: str | None = None,
+) -> None:
+    attachments = (
+        [{"path": str(Path(p).expanduser().resolve()), "name": Path(p).name} for p in attach]
+        or None
+    )
+    try:
+        final, produced = asyncio.run(_host_chat_delegate(
+            profile,
+            connection_id,
+            user_text,
+            attachments=attachments,
+            session_id=session_id,
+            emit_events=emit_events,
+        ))
+    except (OSError, ValueError, RuntimeError) as exc:
+        raise click.ClickException(f"delegated chat failed: {exc}") from None
+    if emit_events:
+        import json as json_mod
+
+        payload = {"kind": "reply", "text": final}
+        if produced:
+            payload["attachments"] = produced
+        click.echo(json_mod.dumps(payload, ensure_ascii=False))
+        return
+    from alpi.attachments import render_output_attachments
+    listing = render_output_attachments(produced)
+    click.echo("\n\n".join(x for x in (final, listing) if x))
+
+
 class _OrderedGroup(click.Group):
     """List subcommands in _ORDER (user-frequency) instead of Click's default alphabetical."""
 
@@ -554,6 +674,10 @@ def runs_cancel(ctx: click.Context, run_id: str) -> None:
     "--session", "session", default=None,
     help="With --once, resume a specific session id (robust under concurrency; --continue resumes the last).",
 )
+@click.option(
+    "--connection-id", default=None,
+    help="Run through the local daemon and assign the new chat to this paired connection.",
+)
 @click.pass_context
 def chat(
     ctx: click.Context,
@@ -563,11 +687,26 @@ def chat(
     continue_last: bool,
     session: str | None,
     attach: tuple[str, ...],
+    connection_id: str | None,
 ) -> None:
     """Launch the TUI, or run one turn with ``--once "text"``."""
     h: Path = ctx.obj["home"]
     resume_last = continue_last or bool(ctx.obj.get("continue_last"))
     if input_text is not None or attach:
+        if connection_id:
+            if resume_last:
+                raise click.UsageError("--connection-id requires --session instead of --continue")
+            if no_save:
+                raise click.UsageError("--connection-id cannot be combined with --no-save")
+            _run_once_delegated(
+                ctx.obj["profile"],
+                connection_id,
+                input_text or "",
+                emit_events=emit_events,
+                attach=attach,
+                session_id=session,
+            )
+            return
         _run_once(
             h,
             input_text or "",

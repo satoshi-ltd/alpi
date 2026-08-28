@@ -584,8 +584,10 @@ async def test_dispatch_records_start_and_end_events(short_tmp: Path) -> None:
     assert events[0]["reason"] == "test trigger"
     assert events[0]["pid"] > 0
     assert len(events[0]["turn_id"]) == 32
+    assert len(events[0]["run_id"]) == 32
     assert events[1]["event"] == "end"
     assert events[1]["turn_id"] == events[0]["turn_id"]
+    assert events[1]["run_id"] == events[0]["run_id"]
     assert events[1]["rc"] == 0
     assert "duration_s" in events[1]
     assert events[1]["posts_added"] == 0
@@ -699,7 +701,48 @@ async def test_dispatch_env_carries_alpi_workspace(short_tmp: Path) -> None:
     assert captured["env"].get("ALPI_WORKSPACE") == str(ws.resolve())
     assert captured["env"].get("ALPI_WORKGROUP_DISPATCH") == "wg_x"
     assert len(captured["env"].get("ALPI_WORKGROUP_TURN_ID", "")) == 32
+    assert len(captured["env"].get("ALPI_RUN_ID", "")) == 32
     assert captured["env"].get("ALPI_TURN_BUDGET_S") == "240"
+
+
+@pytest.mark.asyncio
+async def test_finalize_workgroup_run_closes_and_settles_recorded_usage(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    home = short_tmp / "quill"
+    home.mkdir()
+    closed = []
+    settled = []
+
+    monkeypatch.setattr(
+        "alpi.runs.finish_if_running",
+        lambda target, run_id, outcome: closed.append((target, run_id, outcome)),
+    )
+    monkeypatch.setattr(
+        "alpi.runs.usage_summary",
+        lambda target, run_id: {
+            "usd": 0.31, "tokens": 900,
+            "tokens_in": 800, "tokens_out": 100,
+        },
+    )
+
+    async def fake_settle(target, wg_id, turn_id, cost):
+        settled.append((target, wg_id, turn_id, cost))
+        return {"settled": True}
+
+    monkeypatch.setattr(
+        "alpi.alp.workgroup_client.settle_turn", fake_settle,
+    )
+
+    await service._finalize_workgroup_run(
+        home, "wg_x", "a" * 32, "run_x", "interrupted",
+    )
+
+    assert closed == [(home, "run_x", "interrupted")]
+    assert settled == [(
+        home, "wg_x", "a" * 32,
+        {"usd": 0.31, "tokens": 900, "tokens_in": 800, "tokens_out": 100},
+    )]
 
 
 @pytest.mark.asyncio

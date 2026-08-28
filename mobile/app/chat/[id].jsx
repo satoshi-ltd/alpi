@@ -32,7 +32,6 @@ import { ToolModule } from '../../src/features/chat/ToolCallRow';
 import { askUserNoAnswerTag } from '../../src/features/chat/askUserAnswer';
 import { Diamond } from '../../src/components/Diamond';
 import { SessionsSheet } from '../../src/features/sheets/SessionsSheet';
-import { RunsSheet } from '../../src/features/sheets/RunsSheet';
 import { useChatSend } from '../../src/hooks/useChatSend';
 import { oversizeError, resolveAttachmentMime, stageAttachment } from '../../src/lib/attachments';
 import { useProfileSummaries, useSessionsList } from '../../src/hooks/useDaemonData';
@@ -428,7 +427,6 @@ function ProfileChatInner() {
   const toast = useToast();
   const [actionTarget, setActionTarget] = useState(null);
   const [sessionsOpen, setSessionsOpen] = useState(false);
-  const [runsOpen, setRunsOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
   const accent = profile?.accent ?? colors.ink3;
@@ -655,7 +653,6 @@ function ProfileChatInner() {
     onOpenMemory: canAdmin ? () => router.push(`/profile/${profile.name}/brain/memory`) : null,
     onOpenTools: canAdmin ? () => router.push(`/profile/${profile.name}/brain/tools`) : null,
     onOpenSchedule: canAdmin ? () => router.push(`/profile/${profile.name}/schedule`) : null,
-    onOpenRuns: () => setRunsOpen(true),
     onRefresh: () => {
       sessionsList.refresh();
       session.refresh();
@@ -753,11 +750,6 @@ function ProfileChatInner() {
           setSessionPicked(true);
           setSessionId(null);
         }}
-      />
-      <RunsSheet
-        open={runsOpen}
-        onClose={() => setRunsOpen(false)}
-        profile={profile.name}
       />
     </SafeAreaView>
   );

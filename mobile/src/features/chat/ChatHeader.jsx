@@ -21,7 +21,6 @@ export function headerMenuActions({
   onOpenMemory,
   onOpenTools,
   onOpenSchedule,
-  onOpenRuns,
   onRefresh,
 } = {}) {
   const Noun = noun.charAt(0).toUpperCase() + noun.slice(1);
@@ -52,7 +51,6 @@ export function headerMenuActions({
   if (onOpenMemory) brain.push({ id: 'memory', label: 'Memory', icon: glyph('archive'), onPress: onOpenMemory });
   if (onOpenTools) brain.push({ id: 'tools', label: 'Tools', icon: glyph('cpu'), onPress: onOpenTools });
   if (onOpenSchedule) brain.push({ id: 'schedule', label: 'Schedule', icon: glyph('clock'), onPress: onOpenSchedule });
-  if (onOpenRuns) brain.push({ id: 'runs', label: 'Runs', icon: glyph('cpu'), onPress: onOpenRuns });
   const tail = onRefresh
     ? [{ id: 'refresh', label: 'Refresh thread', icon: glyph('refresh-cw'), onPress: onRefresh }]
     : [];

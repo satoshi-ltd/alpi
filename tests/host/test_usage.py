@@ -88,7 +88,9 @@ def test_bucket_workgroup_skips_costless_and_bad_ts() -> None:
     assert sum(d["cost"] for d in out) == 0
 
 
-def test_compute_workgroup_daily_reads_transcript(tmp_path: Path) -> None:
+def test_compute_workgroup_daily_reads_transcript_and_hidden_settlements(
+    tmp_path: Path,
+) -> None:
     ts = "2026-06-09T12:00:00Z"
     today = usage._iso_day(ts)
     d = tmp_path / "alp" / "workgroups" / "wg1"
@@ -100,10 +102,21 @@ def test_compute_workgroup_daily_reads_transcript(tmp_path: Path) -> None:
         + json.dumps({"seq": 2, "ts": ts, "from": "x", "nonce": "n", "ciphertext": "c"})
         + "\n",
     )
+    (d / "ledger.json").write_text(json.dumps({
+        "usd": 0.08,
+        "tokens": 1250,
+        "posts": 2,
+        "settlements": [{
+            "ts": ts,
+            "from": "x",
+            "turn_id": "a" * 32,
+            "cost": {"usd": 0.03, "tokens": 250, "tokens_in": 200, "tokens_out": 50},
+        }],
+    }))
     out = usage.compute_workgroup_daily(tmp_path, "wg1", today=today)
-    assert out[-1]["tokIn"] == 700
-    assert out[-1]["tokOut"] == 300
-    assert out[-1]["cost"] == 0.05
+    assert out[-1]["tokIn"] == 900
+    assert out[-1]["tokOut"] == 350
+    assert out[-1]["cost"] == 0.08
 
 @pytest.mark.asyncio
 async def test_usage_daily_prices_off_the_event_loop(
