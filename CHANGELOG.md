@@ -1,5 +1,38 @@
 # Changelog
 
+## v0.14.16 — 2026-08-28 — failed QA pipelines reach a durable close
+
+- **Automatic hubs can close a failed QA phase before the generic final
+  checkpoint.** The exception is deliberately narrow: the active phase must be
+  QA, its declared owner must have posted an exact `QA FAIL` or `QA BLOCKED`
+  verdict, and the hub must preserve that verdict in its blocked close. Other
+  automatic `BLOCKED` attempts remain rejected until the final checkpoint.
+- **Exhausted repair watchdogs no longer leave pipelines open forever.** When a
+  final repair request makes no transcript progress after all retries, the
+  daemon now records a machine-authored `#done BLOCKED` outcome with the last QA
+  verdict and stalled sequence. The folded workgroup state therefore agrees
+  with the watchdog instead of appearing active indefinitely.
+- **Project launches tolerate temporary clone contention.** Template clones now
+  have five minutes to complete instead of two, preventing parallel factory
+  launches and their dependency installs from turning a slow clone into an
+  orphan-free but unnecessary launch failure.
+- **Pipeline supervision no longer races the provider's first-token watchdog.**
+  The pipeline idle window now leaves a one-minute margin beyond the default
+  provider timeout, so the model layer can report or retry a stalled request
+  before the outer workgroup supervisor terminates its process.
+- **Large production phases have a thirty-minute active-runtime backstop.**
+  Image optimization and other active builds can exceed fifteen minutes on
+  supplied media sets; suspending the host no longer spends a turn's soft time
+  budget, while idle supervision still terminates genuinely stalled turns
+  after six minutes without progress.
+- **Parallel workgroups now apply backpressure per profile.** A profile runs at
+  most two automatic workgroup turns at once; additional ready workgroups stay
+  queued and are picked up by the normal poll cycle. A queued phase does not
+  spend watchdog recovery attempts while its owner is at capacity.
+
+Nothing to migrate. Existing workgroups acquire the stricter QA recovery and
+durable watchdog close when the daemon restarts on this version.
+
 ## v0.14.15 — 2026-08-28 — delegated chats and workgroup runs close cleanly
 
 - **Local operators can launch a chat for an existing paired connection.**

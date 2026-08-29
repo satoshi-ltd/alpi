@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from alpi import service
+from alpi import config, service
 from alpi.alp import subscription as sub_mod
 from alpi.alp import workgroup as wg_mod
 
@@ -29,8 +29,10 @@ def short_tmp() -> Path:
 @pytest.fixture(autouse=True)
 def _clear_turn_end_stamps():
     service._LAST_TURN_END.clear()
+    service._INFLIGHT.clear()
     yield
     service._LAST_TURN_END.clear()
+    service._INFLIGHT.clear()
 
 
 # `_should_dispatch` wake decision.
@@ -906,6 +908,23 @@ def test_inflight_keyed_by_wg_id_and_profile() -> None:
         service._INFLIGHT.pop(("wg_test", "bob"), None)
 
 
+def test_profile_turn_slots_bound_parallel_workgroups() -> None:
+    assert service._MAX_INFLIGHT_TURNS_PER_PROFILE == 2
+    keys = [
+        (f"wg_cap_{index}", "scout")
+        for index in range(service._MAX_INFLIGHT_TURNS_PER_PROFILE)
+    ]
+    for key in keys:
+        service._INFLIGHT[key] = {"profile": "scout"}
+    service._INFLIGHT[("wg_other", "muse")] = {"profile": "muse"}
+    try:
+        assert service._profile_turn_slot_available("scout") is False
+        assert service._profile_turn_slot_available("muse") is True
+    finally:
+        for key in [*keys, ("wg_other", "muse")]:
+            service._INFLIGHT.pop(key, None)
+
+
 @pytest.mark.asyncio
 async def test_dispatch_installs_and_pops_inflight_under_tuple_key(
     short_tmp: Path,
@@ -1188,6 +1207,7 @@ async def test_watchdog_repair_mode_on_second_nudge_for_pipeline(
         {"seq": 2, "from": "ATLAS", "text": "wrote seo/keywords-es.yaml", "ts": old},
     ]
     calls: list[dict] = []
+    closes: list[str] = []
 
     def fake_dispatch(*a, **kw):
         calls.append(kw)
@@ -1196,6 +1216,10 @@ async def test_watchdog_repair_mode_on_second_nudge_for_pipeline(
         return _noop()
 
     monkeypatch.setattr(service, "_dispatch_workgroup_turn", fake_dispatch)
+    async def fake_post(_home, _wg_id, payload):
+        closes.append(payload.decode())
+        return {"seq": 10}
+    monkeypatch.setattr("alpi.alp.workgroup_client.post", fake_post)
     monkeypatch.setattr(
         service, "_spawn_dispatch",
         lambda wid, coro: (None, coro.close())[0],
@@ -1236,9 +1260,8 @@ async def test_watchdog_repair_mode_on_second_nudge_for_pipeline(
     assert calls[2].get("closure_only") is False
     assert calls[2].get("final_repair") is True
 
-    # Fourth nudge on the same seq → capped: both recovery wakes spent, no
-    # further dispatch (wg.blocked stays the visible state until the transcript
-    # moves).
+    # Fourth nudge on the same seq → no further dispatch; close the stalled
+    # attempt explicitly so every surface folds the same blocked state.
     sentinel = (
         _dt.datetime.now(tz=_dt.timezone.utc) - _dt.timedelta(minutes=6)
     ).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -1247,6 +1270,9 @@ async def test_watchdog_repair_mode_on_second_nudge_for_pipeline(
     service._save_poller_state(home, st)
     await service._maybe_watchdog_close(home, "mira", wg, recent)
     assert len(calls) == 3
+    assert closes == [
+        "#done BLOCKED · watchdog exhausted after FINAL REPAIR with no progress on seq #2",
+    ]
     # Capped path does NOT dispatch, so it must NOT touch hub_last_dispatch_at
     # (otherwise it injects a fake cooldown that delays a real later dispatch).
     st2 = service._load_poller_state(home)
@@ -1298,7 +1324,7 @@ def test_turn_timeout_longer_for_pipeline() -> None:
     """Pipeline workgroups get the longer production wall-clock budget;
     deliberation workgroups keep the short convergence budget."""
     assert service._turn_timeout_for(True) == service._PIPELINE_TURN_TIMEOUT_SECONDS
-    assert service._turn_timeout_for(True) == 900
+    assert service._turn_timeout_for(True) == 1800
     assert service._turn_timeout_for(False) == service._TURN_TIMEOUT_SECONDS
     assert service._turn_timeout_for(False) == 300
     assert service._soft_turn_budget(1800) == 1620
@@ -1648,8 +1674,9 @@ async def test_model_progress_keeps_turn_alive_via_drain() -> None:
     assert proc.signals == []  # never killed — stdout activity kept it alive
 
 
-def test_turn_idle_timeout_for_pipeline_is_wider() -> None:
+def test_turn_idle_timeout_for_pipeline_is_wider(short_tmp: Path) -> None:
     assert service._turn_idle_timeout_for(True) > service._turn_idle_timeout_for(False)
+    assert service._turn_idle_timeout_for(True) > config.load(short_tmp).runtime.first_byte_timeout_s
 
 
 # Paused workgroups run no automatic turns (control-plane gate).
@@ -2412,6 +2439,42 @@ async def test_watchdog_stall_path_defers_to_an_inflight_member_turn(
 
 
 @pytest.mark.asyncio
+async def test_watchdog_defers_while_member_waits_for_profile_capacity(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    import datetime as _dt
+
+    home = short_tmp / "hub"; home.mkdir()
+    old = (
+        _dt.datetime.now(tz=_dt.timezone.utc) - _dt.timedelta(hours=2)
+    ).strftime("%Y-%m-%dT%H:%M:%SZ")
+    wg = types.SimpleNamespace(meta=types.SimpleNamespace(
+        id="wg_queued", name="site", hub_pubkey="HUB", paused=False,
+        pipelines={"setup": ("intake", "qa")}, launch_pipeline="setup",
+        pipeline_steps={}, quorum_timeout_seconds=0,
+    ))
+    recent = [
+        {"seq": 1, "from": "HUB", "text": "@scout #task #intake go", "ts": old},
+    ]
+    spawned: list[str] = []
+    monkeypatch.setattr(service, "_spawn_dispatch", lambda wid, coro: spawned.append(wid))
+    monkeypatch.setattr(service, "_dispatch_workgroup_turn", lambda *a, **k: None)
+    monkeypatch.setattr(service, "_budget_blocks_dispatch", lambda *a, **k: False)
+
+    service._INFLIGHT[("wg_other_a", "scout")] = {"profile": "scout"}
+    service._INFLIGHT[("wg_other_b", "scout")] = {"profile": "scout"}
+    try:
+        await service._maybe_watchdog_close(home, "mira", wg, recent)
+        assert spawned == []
+    finally:
+        service._INFLIGHT.pop(("wg_other_a", "scout"), None)
+        service._INFLIGHT.pop(("wg_other_b", "scout"), None)
+
+    await service._maybe_watchdog_close(home, "mira", wg, recent)
+    assert spawned == ["wg_queued"]
+
+
+@pytest.mark.asyncio
 async def test_watchdog_working_grace_covers_the_phase_turn_budget(
     short_tmp: Path, monkeypatch,
 ) -> None:
@@ -2456,7 +2519,7 @@ async def test_watchdog_default_working_grace_unchanged_without_budget(
 
     home = short_tmp / "hub"; home.mkdir()
     old = (
-        _dt.datetime.now(tz=_dt.timezone.utc) - _dt.timedelta(seconds=1000)
+        _dt.datetime.now(tz=_dt.timezone.utc) - _dt.timedelta(seconds=1900)
     ).strftime("%Y-%m-%dT%H:%M:%SZ")
     wg = types.SimpleNamespace(meta=types.SimpleNamespace(
         id="wg_nobudget", name="site", hub_pubkey="HUB", paused=False,

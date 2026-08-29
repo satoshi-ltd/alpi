@@ -18,7 +18,7 @@ class LaunchError(ValueError):
 
 
 _STAGING = ".recipe-staging"
-_CLONE_TIMEOUT = 120
+_CLONE_TIMEOUT = 300
 
 
 def register(server: host_server.Server) -> None:

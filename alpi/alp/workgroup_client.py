@@ -593,18 +593,15 @@ def _done_carries_failed_qa(plaintext: str, verdict: str) -> bool:
     )
 
 
-def _check_qa_verdict_respected(
-    home: Path, wg, posts: list[dict], plaintext: str, own_pubkey: str,
-) -> None:
-    """A hub close may not claim PASS over the phase owner's FAIL/BLOCKED verdict."""
-    if not tasks_mod.is_done(plaintext):
-        return
+def _latest_qa_verdict(
+    home: Path, wg, posts: list[dict], own_pubkey: str,
+) -> str:
     active = tasks_mod.active_task(posts, hub_pubkey=own_pubkey)
     if active is None or not active.slug:
-        return
+        return ""
     declared_owner = _workflow_phase_owner(wg, active.slug)
     if not declared_owner:
-        return
+        return ""
     owner_pubkeys = {own_pubkey} if declared_owner.lower() == _own_profile_id(home) else set()
     for m in wg.members:
         peer = peers_mod.get_by_pubkey(home, m.pubkey)
@@ -621,6 +618,16 @@ def _check_qa_verdict_respected(
             m = _QA_VERDICT_SEGMENT_RE.match(segment.strip())
             if m:
                 verdict = m.group(1)
+    return verdict
+
+
+def _check_qa_verdict_respected(
+    home: Path, wg, posts: list[dict], plaintext: str, own_pubkey: str,
+) -> None:
+    """A hub close may not claim PASS over the phase owner's FAIL/BLOCKED verdict."""
+    if not tasks_mod.is_done(plaintext):
+        return
+    verdict = _latest_qa_verdict(home, wg, posts, own_pubkey)
     if verdict in ("QA FAIL", "QA BLOCKED") and not _done_carries_failed_qa(plaintext, verdict):
         raise ValueError(
             f"qa-verdict-mismatch: the phase owner's verdict was `{verdict}` and "
@@ -680,7 +687,7 @@ def _close_override_kind(plaintext: str, own_pubkey: str) -> str:
 
 def _check_automatic_blocked_close(
     is_pipeline: bool, plaintext: str, own_pubkey: str,
-    *, operator_abandon: bool,
+    *, operator_abandon: bool, qa_verdict: str = "",
 ) -> None:
     if (
         not is_pipeline
@@ -688,6 +695,7 @@ def _check_automatic_blocked_close(
         or _close_override_kind(plaintext, own_pubkey) != "blocked"
         or not os.environ.get("ALPI_WORKGROUP_DISPATCH")
         or os.environ.get("ALPI_WORKGROUP_FINAL_REPAIR") == "1"
+        or qa_verdict in ("QA FAIL", "QA BLOCKED")
     ):
         return
     raise ValueError(
@@ -1433,9 +1441,16 @@ def _post_as_hub_locked(
     member_pubkeys = [m.pubkey for m in wg.members]
     quorum_roster = _quorum_roster(home, wg, existing, member_pubkeys)
     is_pipeline = wg_mod.is_pipeline_workgroup(wg.meta)
+    guard_active = tasks_mod.active_task(existing, hub_pubkey=kp.pubkey_b64())
+    qa_verdict = (
+        _latest_qa_verdict(home, wg, existing, kp.pubkey_b64())
+        if guard_active is not None
+        and (guard_active.slug == "qa" or guard_active.slug.endswith("-qa"))
+        else ""
+    )
     _check_automatic_blocked_close(
         is_pipeline, plaintext, kp.pubkey_b64(),
-        operator_abandon=operator_abandon,
+        operator_abandon=operator_abandon, qa_verdict=qa_verdict,
     )
     close_override = _check_pipeline_close_owner(
         home, wg, existing, plaintext, kp.pubkey_b64(),

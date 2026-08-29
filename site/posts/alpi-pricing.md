@@ -136,7 +136,7 @@ available to read, study, and modify from day one; personal, research, and
 evaluation use are free; commercial production use of current versions needs a
 license. The conversion is your structural protection: if the publisher
 disappeared tomorrow, every version ever shipped becomes open source within at
-most four years. The Alpi Link Protocol is Apache-2.0 from day one.
+most four years.
 
 ---
 

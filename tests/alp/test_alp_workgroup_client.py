@@ -1946,6 +1946,36 @@ async def test_automatic_hub_cannot_block_before_final_repair(
 
 
 @pytest.mark.asyncio
+async def test_automatic_hub_may_block_an_explicit_qa_failure(
+    short_tmp: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = short_tmp / "hubqa"
+    home.mkdir()
+    wg = _dormant_chain_hub(home)
+    await wc.post(
+        home, wg.meta.id,
+        b"@muse #task #media-qa audit media",
+        operator_abandon=True,
+    )
+    muse_pk = next(
+        member.pubkey for member in wg.members
+        if (
+            (peer := peers_mod.get_by_pubkey(home, member.pubkey)) is not None
+            and peer.id == "muse"
+        )
+    )
+    monkeypatch.setenv("ALPI_WORKGROUP_DISPATCH", wg.meta.id)
+    _member_post(home, wg, muse_pk, "QA FAIL · stale dist")
+
+    out = await wc.post(
+        home, wg.meta.id,
+        b"#done BLOCKED \xc2\xb7 QA FAIL \xc2\xb7 reopen #media-update @muse",
+    )
+
+    assert isinstance(out.get("seq"), int)
+
+
+@pytest.mark.asyncio
 async def test_final_repair_may_block_a_pipeline(
     short_tmp: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:

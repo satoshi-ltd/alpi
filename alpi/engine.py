@@ -410,7 +410,7 @@ class Engine:
 
         # Accumulate this turn's state for the persistent log.
         turn_started = time.time()
-        turn_deadline = _turn_deadline_from_env(turn_started)
+        turn_deadline = _turn_deadline_from_env(time.monotonic())
         turn_tools: list[ToolLog] = []
         turn_produced: list[dict] = []
         turn_reasoning_parts: list[str] = []
@@ -587,7 +587,7 @@ class Engine:
                 if self.interrupt_requested:
                     self._finalize_interrupt(emit)
                     return
-                if turn_deadline is not None and time.time() >= turn_deadline:
+                if turn_deadline is not None and time.monotonic() >= turn_deadline:
                     deadline_hit = True
                     break
                 # step 0 included: auto-compaction may have spent past the cap after the turn-start check.
@@ -606,7 +606,7 @@ class Engine:
                     if self.interrupt_requested:
                         self._finalize_interrupt(emit)
                         return
-                    if turn_deadline is not None and time.time() >= turn_deadline:
+                    if turn_deadline is not None and time.monotonic() >= turn_deadline:
                         deadline_hit = True
                         break
                     accumulated_text = []
@@ -624,7 +624,7 @@ class Engine:
                             if chunk.get("final"):
                                 final = chunk
                                 continue
-                            if turn_deadline is not None and time.time() >= turn_deadline:
+                            if turn_deadline is not None and time.monotonic() >= turn_deadline:
                                 deadline_hit = True
                                 break
                             if chunk.get("retry_reset"):
@@ -752,7 +752,7 @@ class Engine:
                 if (
                     tool_calls
                     and turn_deadline is not None
-                    and time.time() >= turn_deadline
+                    and time.monotonic() >= turn_deadline
                 ):
                     deadline_hit = True
                     break

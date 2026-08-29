@@ -342,7 +342,26 @@ def test_turn_deadline_from_env(monkeypatch) -> None:
     assert _turn_deadline_from_env(100.0) is None
 
 
-def test_wall_clock_deadline_triggers_wrap_up(
+def test_wall_clock_jump_does_not_expire_turn(
+    patched_engine: Engine, monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "alpi.engine._turn_deadline_from_env", lambda started: 80.0,
+    )
+    monkeypatch.setattr("alpi.engine.time.monotonic", lambda: 50.0)
+
+    _stub_stream(monkeypatch, [_final_chunk("finished")])
+    events = []
+    patched_engine.run_turn("go", emit=lambda event: events.append(event))
+
+    assert any(
+        event.kind == "assistant_done" and event.final and event.text == "finished"
+        for event in events
+    )
+    assert not any(event.kind == "error" for event in events)
+
+
+def test_monotonic_deadline_triggers_wrap_up(
     patched_engine: Engine, monkeypatch,
 ) -> None:
     monkeypatch.setenv("ALPI_TURN_BUDGET_S", "0.0001")
@@ -382,7 +401,7 @@ def test_deadline_reached_during_stream_skips_returned_tool_calls(
         "alpi.ledger.record", lambda *args, **kwargs: ledger_calls.append(kwargs),
     )
     monkeypatch.setattr(
-        "alpi.engine._turn_deadline_from_env", lambda started: time.time() + 0.01,
+        "alpi.engine._turn_deadline_from_env", lambda started: time.monotonic() + 0.01,
     )
     calls = {"loop": 0, "wrap": 0}
 
@@ -421,7 +440,7 @@ def test_deadline_stops_a_stream_that_keeps_emitting_reasoning(
 ) -> None:
     now = [100.0]
     calls = {"loop": 0, "wrap": 0, "deltas": 0}
-    monkeypatch.setattr("alpi.engine.time.time", lambda: now[0])
+    monkeypatch.setattr("alpi.engine.time.monotonic", lambda: now[0])
     monkeypatch.setattr(
         "alpi.engine._turn_deadline_from_env", lambda started: 105.0,
     )

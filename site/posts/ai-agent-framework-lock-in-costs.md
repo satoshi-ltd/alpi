@@ -48,7 +48,7 @@ Decoupling from any single vendor or framework needs three things:
 
 3. **Framework-agnostic deployment** — the infrastructure should not dictate which framework your agents run on. Currently, LangGraph Platform runs LangGraph agents; CrewAI Factory runs CrewAI agents. That is the lock-in chain at the infrastructure level.
 
-**Alpi is built around all three.** It uses LiteLLM at its core to support 100+ providers through a single OpenAI-compatible interface, with per-agent model config and daily budget enforcement. Knowledge and memory are plain Markdown and JSON — you own them, not the platform. ALP (Alpi Link Protocol) is Apache-2.0 from day one, with no registry, no discovery service, and no telemetry. Your agent definitions are not locked to Alpi's runtime; portable documents outlive any one execution layer.
+**Alpi is built around all three.** It uses LiteLLM at its core to support 100+ providers through a single OpenAI-compatible interface, with per-agent model config and daily budget enforcement. Knowledge and memory are plain Markdown and JSON — you own them, not the platform. ALP (Alpi Link Protocol) has no registry, no discovery service, and no telemetry. Your agent definitions are not locked to Alpi's runtime; portable documents outlive any one execution layer.
 
 ## The only durable strategy
 

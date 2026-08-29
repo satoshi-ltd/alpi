@@ -73,6 +73,20 @@ _EXPECTED_CHAINS = {
 }
 
 
+def test_recipe_git_allows_slow_template_clones(monkeypatch):
+    seen = {}
+
+    def fake_run(*args, **kwargs):
+        seen.update(kwargs)
+        return subprocess.CompletedProcess(args[0], 0, stdout="", stderr="")
+
+    monkeypatch.setattr(host_recipes.subprocess, "run", fake_run)
+
+    host_recipes._git(["status"])
+
+    assert seen["timeout"] == 300
+
+
 def _project_recipe(repo: Path, with_brief: bool = False, retired: bool = False) -> str:
     inputs = "\ninputs:\n  brief: { dest: brief.md, required: true }\n" if with_brief else ""
     chains = _RETIRED_CHAINS if retired else _CANONICAL_CHAINS

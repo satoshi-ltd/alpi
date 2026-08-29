@@ -53,8 +53,8 @@ const DOCS = [
   { slug: 'DEPLOYMENTS',  src: 'docs/DEPLOYMENTS.md',   ix: '11', category: 'ops',       sub: 'launchd on macOS, systemd on Linux. Per-machine daemon, scheduler, keep-alive, logs.' },
   { slug: 'OPERATIONS',   src: 'docs/OPERATIONS.md',    ix: '12', category: 'ops',       sub: 'Day-2 runbook. Doctor, diagnostics, log rotation, backup, recovery, upgrade.' },
   { slug: 'INTEGRATIONS', src: 'docs/INTEGRATIONS.md',  ix: '13', category: 'reference', sub: 'Talk to a profile or workgroup from your own code: a scoped device token over the host-plane WebSocket, host.chat.send frames, workgroup methods, and a Node example.' },
-  { slug: 'LICENSE',      src: 'LICENSE',               ix: '14', category: 'legal',     sub: 'Legal terms for the source-available agent core and Apache-2.0 Alpi Link Protocol.', raw: true },
-  { slug: 'ROADMAP',      src: 'docs/ROADMAP.md',       ix: '15', category: 'planning',  sub: 'Open release gates, ALP launch work, long-term bets, and discarded decisions.' },
+  { slug: 'LICENSE',      src: 'LICENSE',               ix: '14', category: 'legal',     sub: 'Legal terms for Alpi\'s source-available code.', raw: true },
+  { slug: 'ROADMAP',      src: 'docs/ROADMAP.md',       ix: '15', category: 'planning',  sub: 'Open release gates, demand-gated candidates, and discarded decisions.' },
   { slug: 'CHANGELOG',    src: 'CHANGELOG.md',          ix: '16', category: 'log',       sub: 'Version-by-version log of user-visible changes since v0.1.' },
 ];
 const TOTAL = DOCS.length;
@@ -627,7 +627,7 @@ ${bodyHtml}
       <a class="btn btn-primary" href="../index.html#install">$ uv tool install alpi-agent <span class="arr">→</span></a>
       <a class="btn btn-ghost" href="https://github.com/satoshi-ltd/alpi">View source <span class="arr">→</span></a>
     </div>
-    <p class="post-cta-meta">BUSL-1.1 → Apache-2.0 (rolling) · the ALP protocol is Apache-2.0 from day one</p>
+    <p class="post-cta-meta">BUSL-1.1 → Apache-2.0 (rolling)</p>
   </aside>
 
   <nav class="pager">

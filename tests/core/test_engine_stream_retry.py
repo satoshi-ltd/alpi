@@ -393,7 +393,7 @@ def test_deadline_during_primary_failure_goes_to_time_limit_wrapup(tmp_path, mon
     import time as _time
     eng = _mk_engine(tmp_path, monkeypatch, fallbacks=["gpt-5.4-pro"])
     monkeypatch.setattr(
-        "alpi.engine._turn_deadline_from_env", lambda started: _time.time() + 0.1,
+        "alpi.engine._turn_deadline_from_env", lambda started: _time.monotonic() + 0.1,
     )
     calls: list[dict] = []
 
@@ -479,7 +479,7 @@ def test_deadline_during_backoff_goes_to_wrapup_not_retry(tmp_path, monkeypatch)
     import time as _time
     eng = _mk_engine(tmp_path, monkeypatch)
     monkeypatch.setattr(
-        "alpi.engine._turn_deadline_from_env", lambda started: _time.time() + 0.1,
+        "alpi.engine._turn_deadline_from_env", lambda started: _time.monotonic() + 0.1,
     )
     monkeypatch.setattr("alpi.llm._backoff_sleep", lambda *_a: _time.sleep(0.2))
     tooled_calls = {"n": 0}

@@ -85,7 +85,7 @@ The agent ecosystem is going through a transition that the web infrastructure we
 
 Multi-agent systems that span machines, organizations, and trust boundaries cannot scale without cryptographic identity at the transport layer. The question is not whether the ecosystem will get there — it is how many production incidents it takes before teams stop treating agent identity as an application concern.
 
-Alpi ships identity as infrastructure today. You can see exactly how it works — the ALP protocol is Apache 2.0, and the agent core is source-available.
+Alpi ships identity as infrastructure today. You can inspect how it works: the protocol documentation and agent core are source-available.
 
 ```bash
 uv tool install alpi-agent

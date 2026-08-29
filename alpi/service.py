@@ -961,6 +961,12 @@ async def _maybe_dispatch_for_sub(
             sub.wg_id, trigger,
         )
         return True
+    if not _profile_turn_slot_available(profile):
+        log.info(
+            "wg poller: %s queued (profile %s has %s active turns)",
+            sub.wg_id, profile, _MAX_INFLIGHT_TURNS_PER_PROFILE,
+        )
+        return True
     log.info(
         "wg poller: %s dispatching turn (reason=%s, member-of)",
         sub.wg_id, trigger,
@@ -1011,6 +1017,7 @@ _HUB_FOLLOWUP_STALE_SECONDS = 60
 
 
 _INFLIGHT: dict[tuple[str, str], dict] = {}
+_MAX_INFLIGHT_TURNS_PER_PROFILE = 2
 
 _TURN_END_CAP = 512
 # Post-exit pipe EOF is immediate unless a descendant inherited the pipes; an unbounded wait would hold _INFLIGHT forever.
@@ -1029,6 +1036,11 @@ def _stamp_turn_end(wg_id: str) -> None:
         if len(_LAST_TURN_END) >= _TURN_END_CAP:
             _LAST_TURN_END.pop(next(iter(_LAST_TURN_END)))
     _LAST_TURN_END[wg_id] = now_mono
+
+
+def _profile_turn_slot_available(profile: str) -> bool:
+    active = sum(1 for _, active_profile in _INFLIGHT if active_profile == profile)
+    return active < _MAX_INFLIGHT_TURNS_PER_PROFILE
 
 
 # Strong refs for fire-and-forget dispatch tasks.
@@ -1322,6 +1334,12 @@ async def _maybe_dispatch_for_hub(
         log.info(
             "wg poller: %s skipped (in-flight dispatch, reason=%s)",
             wg.meta.id, trigger,
+        )
+        return
+    if not _profile_turn_slot_available(profile):
+        log.info(
+            "wg poller: %s queued (profile %s has %s active turns)",
+            wg.meta.id, profile, _MAX_INFLIGHT_TURNS_PER_PROFILE,
         )
         return
     log.info(
@@ -1634,6 +1652,15 @@ async def _maybe_watchdog_close(
     if not recent:
         return
     active = wg_tasks.active_task(recent, hub_pubkey=wg.meta.hub_pubkey)
+    if (
+        active is not None
+        and active.participants
+        and any(
+            not _profile_turn_slot_available(participant.lower())
+            for participant in active.participants
+        )
+    ):
+        return
     continuation = active is None
     next_phase = ""
     if continuation:
@@ -1821,9 +1848,24 @@ async def _maybe_watchdog_close(
     # REPAIR — before abandon (the final one recovers a lost-handoff: green
     # artifact on disk, member's handoff missing). Non-pipeline stops after one.
     if (is_pipeline and count >= 4) or (not is_pipeline and count >= 3):
-        # All recovery attempts spent and the transcript never moved.
-        # `wg.blocked` stays the visible state until a new post resets the
-        # seq. Stop waking the hub — repeating burns turns for nothing.
+        # All recovery attempts spent and the transcript never moved. Close
+        # the attempt explicitly so every surface folds a durable blocked state.
+        if is_pipeline:
+            from alpi.alp import keys as keys_mod
+            from alpi.alp import workgroup_client as wc
+
+            own_pubkey = keys_mod.load_or_generate(home).pubkey_b64()
+            verdict = wc._latest_qa_verdict(home, wg, recent, own_pubkey)
+            carried = f" · {verdict}" if verdict in ("QA FAIL", "QA BLOCKED") else ""
+            close = (
+                f"#done BLOCKED{carried} · watchdog exhausted after FINAL REPAIR "
+                f"with no progress on seq #{last_seq}"
+            )
+            try:
+                await wc.post(home, wg.meta.id, close.encode())
+                log.warning("wg poller: %s closed BLOCKED after exhausted watchdog", wg.meta.id)
+            except Exception as e:  # noqa: BLE001
+                log.error("wg poller: %s exhausted-watchdog close failed: %s", wg.meta.id, e)
         return
     if final_repair:
         # Last automatic wake on this seq. Force a deterministic resolution
@@ -2359,11 +2401,11 @@ def _stamp_at_or_after(left: str, right: str) -> bool:
 
 _TURN_TIMEOUT_SECONDS = 300
 # Absolute wall-clock backstop (pipeline phases run longer than deliberation); idle kills sooner.
-_PIPELINE_TURN_TIMEOUT_SECONDS = 900
+_PIPELINE_TURN_TIMEOUT_SECONDS = 1800
 _TURN_SIGTERM_GRACE_SECONDS = 5
 # Idle kill observes coalesced model progress, tool events, mid-tool state and stderr from `--emit-events`.
 _TURN_IDLE_TIMEOUT_SECONDS = 180
-_PIPELINE_TURN_IDLE_TIMEOUT_SECONDS = 300
+_PIPELINE_TURN_IDLE_TIMEOUT_SECONDS = 360
 
 
 def _turn_timeout_for(pipeline: bool) -> int:

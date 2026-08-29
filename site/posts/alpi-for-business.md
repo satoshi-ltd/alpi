@@ -125,5 +125,5 @@ governance, and trust stop being someone's side project and become the
 substrate. Build on that substrate, or spend a year rebuilding it.
 
 You can install it and read the source today: `uv tool install alpi-agent`. The
-agent core is source-available; the protocol that links agents across machines
-is Apache-2.0.
+agent core and the protocol that links agents across machines are
+source-available.
