@@ -7,6 +7,17 @@ export const NOTIFIABLE_KINDS = [
 ];
 
 
+// Only approval.request expires: the daemon auto-denies at its own deadline, and a banner for an already-decided request is worse than silence.
+export function isStale(event, nowMs) {
+  if (event?.event !== 'approval.request') return false;
+  const data = event?.data || {};
+  const ts = Number(data.ts);
+  const timeout = Number(data.timeout_s);
+  if (!Number.isFinite(ts) || !Number.isFinite(timeout) || timeout <= 0) return false;
+  return Number(nowMs) > (ts + timeout) * 1000;
+}
+
+
 export function formatNotification(event, connection) {
   const kind = event?.event;
   const data = event?.data || {};

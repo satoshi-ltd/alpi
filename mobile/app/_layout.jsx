@@ -28,6 +28,7 @@ import { ToastProvider, useToast } from '../src/components/Toast';
 import { ApprovalSheet } from '../src/features/approval/ApprovalSheet';
 import { ClarificationSheet } from '../src/features/clarification/ClarificationSheet';
 import { useNotificationTapRouter } from '../src/features/aln/deeplink';
+import { NotificationBridge } from '../src/features/aln/NotificationBridge';
 import { PaneShell } from '../src/features/shell/PaneShell';
 import { EventsProvider } from '../src/hooks/useEvents';
 import { useScheduleToast } from '../src/hooks/useScheduleToast';
@@ -111,6 +112,7 @@ function Routes() {
       <AuthFailedBridge />
       <AppBootstrap>
         <PaneShell>
+          <NotificationBridge />
           <Stack screenOptions={screenOptions} />
         </PaneShell>
       </AppBootstrap>

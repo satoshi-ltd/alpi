@@ -17,6 +17,7 @@ import {
 } from '../../lib/biometric';
 import { useEndpoint } from '../../lib/EndpointContext';
 import { signOut } from '../../lib/signOut';
+import { describeHealth, readHealth } from '../aln/health';
 import { getPermissionStatus, requestPermission } from '../aln/notify';
 import { useTheme } from '../../theme/ThemeContext';
 import {
@@ -75,13 +76,15 @@ export function SettingsBody({ active = true, onDismiss }) {
   const [bioCaps, setBioCaps] = useState({ hasHardware: false, enrolled: false, label: 'Biometric' });
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const [notifPerm, setNotifPerm] = useState('undetermined');
+  const [notifHealth, setNotifHealth] = useState(null);
 
   useEffect(() => {
     if (!active) return;
     biometricCapabilities().then(setBioCaps);
     getBiometricPref().then(setBioOn);
     getPermissionStatus().then(setNotifPerm);
-  }, [active]);
+    readHealth().then((h) => setNotifHealth(describeHealth(h))).catch(() => setNotifHealth(null));
+  }, [active, notifPerm]);
 
   const onPermissionPress = async () => {
     if (notifPerm === 'granted') {
@@ -162,11 +165,22 @@ export function SettingsBody({ active = true, onDismiss }) {
         <SectionHeader>Notifications</SectionHeader>
         <Row
           label="System permission"
-          helper="ambient background updates · zero relay · ~15–60 min cadence"
+          helper="instant while alpi is open · in the background the OS decides when to check"
           value={<StatusValue active={notifPerm === 'granted'} />}
           onPress={onPermissionPress}
           chevron={notifPerm !== 'granted'}
         />
+        {notifHealth && (
+          <>
+            <RowSeparator />
+            <Row
+              label="Delivery status"
+              helper={notifHealth.detail}
+              value={<StatusValue active={notifHealth.ok} />}
+              chevron={false}
+            />
+          </>
+        )}
         {__DEV__ && (
           <>
             <RowSeparator />

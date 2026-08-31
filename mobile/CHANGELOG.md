@@ -14,6 +14,44 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.4.7 — 2026-08-31 — notifications arrive while you are looking at the app
+
+- **Live events now notify.** The app already held an authenticated event stream
+  while open and used it only to update the UI; it now also raises the
+  notification, so notifiable events from the active daemon land in about a
+  second instead of waiting for the next OS-scheduled background check.
+- **Catch-up on open and on resume.** Returning to the app checks every paired
+  daemon, and keeps checking while it stays open, so the other daemons are no
+  longer stuck behind the background schedule either.
+- **Notifications are no longer dropped on a failed delivery.** Each event is
+  raised first and only then marked delivered, one at a time, so a failure or
+  an OS kill mid-batch leaves the rest to be retried rather than discarded —
+  where before a whole batch was marked delivered before the first
+  notification was attempted.
+- **Pairing a busy daemon no longer floods you.** The first check anchors to
+  the daemon's current position instead of replaying its retained history.
+- **A member pairing no longer costs you admin-only alerts.** When a daemon is
+  reachable both as admin and as member, only the admin view advances the read
+  position, so events a member is not shown are still delivered later.
+- **Delivery starts when you enable notifications.** Nothing is consumed while
+  permission is off, so turning it on later works — but it begins from that
+  moment rather than replaying what happened before.
+- **Member-only pairings notify again.** They were skipped entirely; they now
+  poll behind admin routes for the kinds the daemon permits them.
+- **Daemons stop starving each other.** The wake budget used to cut the same
+  daemons off every time; the starting daemon now rotates between checks and
+  a small number of them are checked at once.
+- **Approvals that already expired stay silent.** The daemon auto-denies at its
+  own deadline, and a banner for a decision already made is worse than none.
+- **Notification permission now explains itself before it asks.** After pairing
+  you get a short note on what alpi will tell you and that nothing routes
+  through a push service, with Enable notifications or Not now; Not now is
+  remembered and Settings stays open as the way in later.
+- **Settings reports whether delivery actually works** — the worst of your
+  paired daemons, not the best, plus when the last successful check ran.
+
+Requires alpi >= 0.14.11, unchanged from 0.4.6. Store builds advance to iOS 31 and Android 31.
+
 ## v0.4.6 — 2026-08-28 — conversations lose an implementation detail
 
 - **Profile menus expose user concepts, not execution internals.** The Runs

@@ -12,6 +12,8 @@ const RECONNECT_MAX_MS = 30000;
 const STALE_STREAM_MS = 75000;
 const WATCHDOG_TICK_MS = 20000;
 const RESUME_STALE_MS = 30000;
+// Must match HISTORY_MAX in alpi/host/events.py: the daemon clamps to it and tail-truncates, so asking for less discards recoverable events.
+const BACKFILL_LIMIT = 500;
 
 export function EventsProvider({ children }) {
   const { endpoint, call, callStream } = useEndpoint();
@@ -65,7 +67,7 @@ export function EventsProvider({ children }) {
       try {
         const res = await callRef.current('host.events.history', {
           after_seq: lastSeqRef.current,
-          limit: 200,
+          limit: BACKFILL_LIMIT,
         });
         // Stale-after-swap guard: post-await events belong to the old daemon's seq space; must not fanOut.
         if (cancelled) return;

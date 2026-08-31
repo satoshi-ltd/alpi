@@ -65,6 +65,7 @@ vi.mock('../src/components/Toast', () => ({
 vi.mock('../src/features/approval/ApprovalSheet', () => ({ ApprovalSheet: () => null }));
 vi.mock('../src/features/clarification/ClarificationSheet', () => ({ ClarificationSheet: () => null }));
 vi.mock('../src/features/aln/deeplink', () => ({ useNotificationTapRouter: () => {} }));
+vi.mock('../src/features/aln/NotificationBridge', () => ({ NotificationBridge: () => null }));
 vi.mock('../src/features/shell/SidebarPane', () => ({
   SidebarPane: () => React.createElement('div', { 'data-testid': 'sidebar' }),
 }));

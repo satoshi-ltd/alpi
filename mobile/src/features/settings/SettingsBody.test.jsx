@@ -208,7 +208,7 @@ describe('one settings implementation', () => {
     expect(source).not.toContain('Re-pair this phone');
   });
 
-  it.each(['opens QR scanner', 'Sign out of this phone?', 'ambient background updates'])(
+  it.each(['opens QR scanner', 'Sign out of this phone?', 'instant while alpi is open'])(
     '“%s” exists in exactly one file',
     (needle) => {
       const owners = [...sourceFiles('src'), ...sourceFiles('app')].filter((path) =>

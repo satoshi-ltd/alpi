@@ -1,26 +1,34 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const hoisted = vi.hoisted(() => ({
-  fireMock: vi.fn(async () => true),
+  deliverMock: vi.fn(async (events) => events.length),
   pollMock: vi.fn(),
-  commitMock: vi.fn(async () => {}),
+  healthMock: vi.fn(async () => {}),
   permMock: vi.fn(async () => 'granted'),
   loadConnectionsMock: vi.fn(async () => ({ connections: [] })),
+  loadFlagMock: vi.fn(async (_name, fallback) => fallback),
+  saveFlagMock: vi.fn(async () => {}),
 }));
 
 vi.mock('./notify', () => ({
-  fireForEvent: hoisted.fireMock,
   getPermissionStatus: hoisted.permMock,
+}));
+
+vi.mock('./deliver', () => ({
+  deliverEvents: hoisted.deliverMock,
 }));
 
 vi.mock('./poll', () => ({
   pollConnection: hoisted.pollMock,
-  commitDelivered: hoisted.commitMock,
+  recordGroupHealth: hoisted.healthMock,
   WAKE_BUDGET_MS: 25_000,
+  POLL_TIMEOUT_MS: 8_000,
 }));
 
 vi.mock('./state', () => ({
   alnStateKey: (conn) => (conn?.deviceId ? `daemon:${conn.deviceId}` : ''),
+  loadFlag: hoisted.loadFlagMock,
+  saveFlag: hoisted.saveFlagMock,
 }));
 
 vi.mock('../../lib/store', () => ({
@@ -44,15 +52,19 @@ vi.mock('expo-task-manager', () => ({
 import { groupConnectionsByDaemon, runPollOnce } from './backgroundTask';
 
 beforeEach(() => {
-  hoisted.fireMock.mockReset();
-  hoisted.fireMock.mockImplementation(async () => true);
+  hoisted.deliverMock.mockReset();
+  hoisted.deliverMock.mockImplementation(async (events) => events.length);
   hoisted.pollMock.mockReset();
-  hoisted.commitMock.mockReset();
-  hoisted.commitMock.mockImplementation(async () => {});
+  hoisted.healthMock.mockReset();
+  hoisted.healthMock.mockImplementation(async () => {});
   hoisted.permMock.mockReset();
   hoisted.permMock.mockImplementation(async () => 'granted');
   hoisted.loadConnectionsMock.mockReset();
   hoisted.loadConnectionsMock.mockImplementation(async () => ({ connections: [] }));
+  hoisted.loadFlagMock.mockReset();
+  hoisted.loadFlagMock.mockImplementation(async (_name, fallback) => fallback);
+  hoisted.saveFlagMock.mockReset();
+  hoisted.saveFlagMock.mockImplementation(async () => {});
 });
 
 describe('groupConnectionsByDaemon', () => {
@@ -106,17 +118,22 @@ describe('groupConnectionsByDaemon', () => {
     expect(groupConnectionsByDaemon({})).toEqual([]);
   });
 
-  it('excludes member-role routes before grouping — their empty inbox would shadow an admin route', () => {
+  it('keeps member routes but ranks them behind admin — a member-only pairing must still poll its permitted kinds', () => {
     const conns = [
       { id: 'm', ip: '100.x', port: 49200, deviceId: 'mac', added_at: 200, role: 'member' },
       { id: 'a', ip: '192.x', port: 49200, deviceId: 'mac', added_at: 100, role: 'admin' },
     ];
     const groups = groupConnectionsByDaemon(conns);
     expect(groups).toHaveLength(1);
-    expect(groups[0].map((c) => c.id)).toEqual(['a']);
+    expect(groups[0].map((c) => c.id)).toEqual(['a', 'm']);
   });
 
-  it('keeps routes whose role is unknown (unprobed) — only KNOWN members are excluded', () => {
+  it('groups a member-only daemon instead of dropping it', () => {
+    const conns = [{ id: 'm', ip: '100.x', port: 49200, deviceId: 'mac', added_at: 1, role: 'member' }];
+    expect(groupConnectionsByDaemon(conns).flat().map((c) => c.id)).toEqual(['m']);
+  });
+
+  it('keeps routes whose role is unknown (unprobed)', () => {
     const conns = [{ id: 'u', ip: '100.x', port: 49200, deviceId: 'mac', added_at: 1 }];
     expect(groupConnectionsByDaemon(conns).flat().map((c) => c.id)).toEqual(['u']);
   });
@@ -127,39 +144,49 @@ describe('runPollOnce', () => {
   const ev1 = { event: 'agent.message', seq: 10, data: { profile: 'abby' } };
   const ev2 = { event: 'agent.message', seq: 11, data: { profile: 'abby' } };
 
-  it('commits the events BEFORE firing notifications — claim-before-fire so an OS-kill mid-task cannot re-fire the same event next wake', async () => {
+  it('hands the whole page to the single delivery coordinator, untouched and in order', async () => {
     hoisted.loadConnectionsMock.mockResolvedValueOnce({ connections: [conn] });
     hoisted.pollMock.mockResolvedValueOnce({ ok: true, events: [ev1, ev2] });
-
-    const order = [];
-    hoisted.commitMock.mockImplementation(async (key, evs) => {
-      order.push(['commit', key, evs.length]);
-    });
-    hoisted.fireMock.mockImplementation(async (ev) => {
-      order.push(['fire', ev.seq]);
-      return true;
-    });
-
-    await runPollOnce();
-
-    expect(order).toEqual([
-      ['commit', 'daemon:mac', 2],
-      ['fire', 10],
-      ['fire', 11],
-    ]);
-  });
-
-  it('keeps firing later events even if an earlier fire returns false (foreground gate)', async () => {
-    hoisted.loadConnectionsMock.mockResolvedValueOnce({ connections: [conn] });
-    hoisted.pollMock.mockResolvedValueOnce({ ok: true, events: [ev1, ev2] });
-    hoisted.fireMock
-      .mockResolvedValueOnce(false)
-      .mockResolvedValueOnce(true);
 
     const result = await runPollOnce();
 
-    expect(hoisted.fireMock).toHaveBeenCalledTimes(2);
+    expect(hoisted.deliverMock).toHaveBeenCalledTimes(1);
+    const [events, route] = hoisted.deliverMock.mock.calls[0];
+    expect(events).toEqual([ev1, ev2]);
+    expect(route.id).toBe('c1');
+    expect(result.notifications).toBe(2);
+  });
+
+  it('counts only what the coordinator actually notified', async () => {
+    hoisted.loadConnectionsMock.mockResolvedValueOnce({ connections: [conn] });
+    hoisted.pollMock.mockResolvedValueOnce({ ok: true, events: [ev1, ev2] });
+    hoisted.deliverMock.mockResolvedValueOnce(1);
+
+    const result = await runPollOnce();
+
     expect(result.notifications).toBe(1);
+  });
+
+  it('rotates the starting daemon group across wakes so a budget cut never starves the same one', async () => {
+    const d1 = { id: 'd1', ip: '1.x', port: 49200, deviceId: 'one', added_at: 1 };
+    const d2 = { id: 'd2', ip: '2.x', port: 49200, deviceId: 'two', added_at: 1 };
+    const d3 = { id: 'd3', ip: '3.x', port: 49200, deviceId: 'three', added_at: 1 };
+    hoisted.loadConnectionsMock.mockResolvedValue({ connections: [d1, d2, d3] });
+    hoisted.pollMock.mockResolvedValue({ ok: true, events: [], nextSeq: null });
+
+    let stored = 0;
+    hoisted.loadFlagMock.mockImplementation(async () => stored);
+    hoisted.saveFlagMock.mockImplementation(async (_name, value) => { stored = value; });
+
+    await runPollOnce();
+    const firstWake = hoisted.pollMock.mock.calls.map((c) => c[0].id);
+    hoisted.pollMock.mockClear();
+    await runPollOnce();
+    const secondWake = hoisted.pollMock.mock.calls.map((c) => c[0].id);
+
+    expect(firstWake[0]).toBe('d1');
+    expect(secondWake[0]).toBe('d2');
+    expect(stored).toBe(2);
   });
 
   it('fails over to the next route in the same daemon group when the first route returns ok=false', async () => {
@@ -175,8 +202,8 @@ describe('runPollOnce', () => {
     expect(hoisted.pollMock).toHaveBeenCalledTimes(2);
     expect(hoisted.pollMock.mock.calls[0][0].id).toBe('lan');
     expect(hoisted.pollMock.mock.calls[1][0].id).toBe('ts');
-    expect(hoisted.commitMock).toHaveBeenCalledWith('daemon:mac', [ev1]);
-    expect(hoisted.fireMock).toHaveBeenCalledTimes(1);
+    expect(hoisted.deliverMock).toHaveBeenCalledTimes(1);
+    expect(hoisted.deliverMock.mock.calls[0][0]).toEqual([ev1]);
   });
 
   it('a route WITH events wins immediately and stops the search', async () => {
@@ -204,8 +231,8 @@ describe('runPollOnce', () => {
     expect(hoisted.pollMock).toHaveBeenCalledTimes(2);
     expect(hoisted.pollMock.mock.calls[0][0].id).toBe('member');
     expect(hoisted.pollMock.mock.calls[1][0].id).toBe('admin');
-    expect(hoisted.commitMock).toHaveBeenCalledWith('daemon:mac', [ev1]);
-    expect(hoisted.fireMock).toHaveBeenCalledTimes(1);
+    expect(hoisted.deliverMock).toHaveBeenCalledTimes(1);
+    expect(hoisted.deliverMock.mock.calls[0][0]).toEqual([ev1]);
   });
 
   it('skips the whole daemon group when every route fails (no spurious commit, no spurious notification)', async () => {
@@ -217,8 +244,7 @@ describe('runPollOnce', () => {
     const result = await runPollOnce();
 
     expect(hoisted.pollMock).toHaveBeenCalledTimes(2);
-    expect(hoisted.commitMock).not.toHaveBeenCalled();
-    expect(hoisted.fireMock).not.toHaveBeenCalled();
+    expect(hoisted.deliverMock).not.toHaveBeenCalled();
     expect(result.notifications).toBe(0);
   });
 
@@ -241,14 +267,41 @@ describe('runPollOnce', () => {
     }
   });
 
-  it('skips commit when poll returns no events (avoids a no-op write)', async () => {
+  it('still calls the coordinator on an empty page so a fresh daemon can anchor', async () => {
     hoisted.loadConnectionsMock.mockResolvedValueOnce({ connections: [conn] });
-    hoisted.pollMock.mockResolvedValueOnce({ ok: true, events: [] });
+    hoisted.pollMock.mockResolvedValueOnce({ ok: true, events: [], nextSeq: 40 });
+
+    const result = await runPollOnce();
+
+    expect(hoisted.deliverMock).toHaveBeenCalledTimes(1);
+    const [events, , opts] = hoisted.deliverMock.mock.calls[0];
+    expect(events).toEqual([]);
+    expect(opts.nextSeq).toBe(40);
+    expect(result.notifications).toBe(0);
+  });
+
+  it('reports a daemon reachable only through a member fallback as degraded', async () => {
+    const admin = { id: 'admin', ip: '192.168.x', port: 49200, deviceId: 'mac', added_at: 100, role: 'admin' };
+    const member = { id: 'member', ip: '100.x', port: 49200, deviceId: 'mac', added_at: 200, role: 'member' };
+    hoisted.loadConnectionsMock.mockResolvedValueOnce({ connections: [admin, member] });
+    hoisted.pollMock
+      .mockResolvedValueOnce({ ok: false, events: [], error: 'unreachable' })
+      .mockResolvedValueOnce({ ok: true, events: [], nextSeq: 5 });
 
     await runPollOnce();
 
-    expect(hoisted.commitMock).not.toHaveBeenCalled();
-    expect(hoisted.fireMock).not.toHaveBeenCalled();
+    expect(hoisted.healthMock.mock.calls[0][1].degraded).toBe(true);
+  });
+
+  it('is not degraded once the admin route answers', async () => {
+    const admin = { id: 'admin', ip: '192.168.x', port: 49200, deviceId: 'mac', added_at: 100, role: 'admin' };
+    const member = { id: 'member', ip: '100.x', port: 49200, deviceId: 'mac', added_at: 200, role: 'member' };
+    hoisted.loadConnectionsMock.mockResolvedValueOnce({ connections: [admin, member] });
+    hoisted.pollMock.mockResolvedValue({ ok: true, events: [], nextSeq: 5 });
+
+    await runPollOnce();
+
+    expect(hoisted.healthMock.mock.calls[0][1].degraded).toBe(false);
   });
 
   it('bails early with skipped=no-permission when notifications are denied', async () => {
@@ -268,8 +321,139 @@ describe('runPollOnce', () => {
 
     expect(hoisted.pollMock).toHaveBeenCalledTimes(1);
     expect(hoisted.pollMock.mock.calls[0][0].id).toBe('admin');
-    expect(hoisted.commitMock).toHaveBeenCalledWith('daemon:mac', [ev1]);
-    expect(hoisted.fireMock).toHaveBeenCalledTimes(1);
+    expect(hoisted.deliverMock).toHaveBeenCalledTimes(1);
+    expect(hoisted.deliverMock.mock.calls[0][0]).toEqual([ev1]);
+  });
+
+  it('polls a member-only daemon at all — dropping it produced zero notifications forever', async () => {
+    const member = { id: 'm', ip: '100.x', port: 49200, deviceId: 'mac', added_at: 1, role: 'member', token: 'm' };
+    hoisted.loadConnectionsMock.mockResolvedValueOnce({ connections: [member] });
+    hoisted.pollMock.mockResolvedValueOnce({ ok: true, events: [] });
+
+    await runPollOnce();
+
+    expect(hoisted.pollMock).toHaveBeenCalledTimes(1);
+    expect(hoisted.pollMock.mock.calls[0][0].id).toBe('m');
+  });
+
+  it('delivers a member-only daemon\'s page — wg.done survives the daemon\'s role filter, agent.message would not', async () => {
+    const member = { id: 'm', ip: '100.x', port: 49200, deviceId: 'mac', added_at: 1, role: 'member', token: 'm' };
+    const permitted = { event: 'wg.done', seq: 12, data: { wg_id: 'wg1' } };
+    hoisted.loadConnectionsMock.mockResolvedValueOnce({ connections: [member] });
+    hoisted.pollMock.mockResolvedValueOnce({ ok: true, events: [permitted] });
+
+    const result = await runPollOnce();
+
+    expect(hoisted.deliverMock.mock.calls[0][0]).toEqual([permitted]);
+    expect(result.notifications).toBe(1);
+  });
+
+  it('a member route winning a group that HAS an admin route must not advance the shared cursor', async () => {
+    const admin = { id: 'admin', ip: '192.168.x', port: 49200, deviceId: 'mac', added_at: 100, role: 'admin' };
+    const member = { id: 'member', ip: '100.x', port: 49200, deviceId: 'mac', added_at: 200, role: 'member' };
+    hoisted.loadConnectionsMock.mockResolvedValueOnce({ connections: [admin, member] });
+    hoisted.pollMock
+      .mockResolvedValueOnce({ ok: false, events: [], error: 'unreachable' })
+      .mockResolvedValueOnce({ ok: true, events: [{ event: 'wg.done', seq: 102 }] });
+
+    await runPollOnce();
+
+    expect(hoisted.deliverMock.mock.calls[0][1].id).toBe('member');
+    expect(hoisted.deliverMock.mock.calls[0][2].advanceCursor).toBe(false);
+  });
+
+  it('an admin route always advances the cursor', async () => {
+    const admin = { id: 'admin', ip: '192.168.x', port: 49200, deviceId: 'mac', added_at: 100, role: 'admin' };
+    hoisted.loadConnectionsMock.mockResolvedValueOnce({ connections: [admin] });
+    hoisted.pollMock.mockResolvedValueOnce({ ok: true, events: [ev1] });
+
+    await runPollOnce();
+
+    expect(hoisted.deliverMock.mock.calls[0][2].advanceCursor).toBe(true);
+  });
+
+  it('a member-only group advances its own cursor — there is no fuller view to lose', async () => {
+    const member = { id: 'm', ip: '100.x', port: 49200, deviceId: 'mac', added_at: 1, role: 'member' };
+    hoisted.loadConnectionsMock.mockResolvedValueOnce({ connections: [member] });
+    hoisted.pollMock.mockResolvedValueOnce({ ok: true, events: [{ event: 'wg.done', seq: 12 }] });
+
+    await runPollOnce();
+
+    expect(hoisted.deliverMock.mock.calls[0][2].advanceCursor).toBe(true);
+  });
+
+  it('writes health once per daemon, marking it reached when ANY route answered', async () => {
+    const lan = { id: 'lan', ip: '192.168.x', port: 49200, deviceId: 'mac', added_at: 200 };
+    const ts = { id: 'ts', ip: '100.x', port: 49200, deviceId: 'mac', added_at: 100 };
+    hoisted.loadConnectionsMock.mockResolvedValueOnce({ connections: [lan, ts] });
+    hoisted.pollMock
+      .mockResolvedValueOnce({ ok: false, events: [], error: 'unreachable' })
+      .mockResolvedValueOnce({ ok: true, events: [] });
+
+    await runPollOnce();
+
+    expect(hoisted.healthMock).toHaveBeenCalledTimes(1);
+    expect(hoisted.healthMock.mock.calls[0][1]).toEqual({ ok: true, error: 'unreachable', degraded: false });
+  });
+
+  it('reports a daemon as unreached only when every route failed', async () => {
+    hoisted.loadConnectionsMock.mockResolvedValueOnce({ connections: [conn] });
+    hoisted.pollMock.mockResolvedValueOnce({ ok: false, events: [], error: 'unreachable' });
+
+    await runPollOnce();
+
+    expect(hoisted.healthMock.mock.calls[0][1]).toEqual({ ok: false, error: 'unreachable', degraded: false });
+  });
+
+  it('one daemon throwing does not abort the rest of the wake', async () => {
+    const d1 = { id: 'd1', ip: '1.x', port: 49200, deviceId: 'one', added_at: 1 };
+    const d2 = { id: 'd2', ip: '2.x', port: 49200, deviceId: 'two', added_at: 1 };
+    hoisted.loadConnectionsMock.mockResolvedValueOnce({ connections: [d1, d2] });
+    hoisted.pollMock.mockImplementation(async (route) => {
+      if (route.id === 'd1') throw new Error('boom');
+      return { ok: true, events: [ev1] };
+    });
+
+    const result = await runPollOnce();
+
+    expect(result.notifications).toBe(1);
+  });
+
+  it('stops polling further daemons once the wake budget cannot fit another poll', async () => {
+    const many = Array.from({ length: 6 }, (_, i) => (
+      { id: `d${i}`, ip: `${i}.x`, port: 49200, deviceId: `dev${i}`, added_at: 1 }
+    ));
+    hoisted.loadConnectionsMock.mockResolvedValueOnce({ connections: many });
+    let now = 0;
+    const spy = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    try {
+      hoisted.pollMock.mockImplementation(async () => { now += 4000; return { ok: true, events: [] }; });
+      await runPollOnce({ budgetMs: 20_000 });
+    } finally {
+      spy.mockRestore();
+    }
+
+    expect(hoisted.pollMock.mock.calls.length).toBeLessThan(6);
+  });
+
+  it('caps how many daemon groups are polled at once', async () => {
+    const many = Array.from({ length: 8 }, (_, i) => (
+      { id: `d${i}`, ip: `${i}.x`, port: 49200, deviceId: `dev${i}`, added_at: 1 }
+    ));
+    hoisted.loadConnectionsMock.mockResolvedValueOnce({ connections: many });
+    let inFlight = 0;
+    let peak = 0;
+    hoisted.pollMock.mockImplementation(async () => {
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      await new Promise((r) => setTimeout(r, 0));
+      inFlight -= 1;
+      return { ok: true, events: [] };
+    });
+
+    await runPollOnce();
+
+    expect(peak).toBe(3);
   });
 
   it('skips connections without deviceId entirely (no legacy fallback)', async () => {

@@ -1,56 +1,51 @@
 import { call } from '../../lib/rpc';
 import { NOTIFIABLE_KINDS } from './kinds';
-import { alnStateKey, loadState, recordSeen, saveState } from './state';
+import { alnStateKey, loadState, mutateState } from './state';
 
-export { recordSeen };
-
-// host.events.history returns the tail when >limit events since cursor — ALN surfaces the latest and skips ahead, no backfill of older missed events.
-const POLL_LIMIT = 50;
-const POLL_TIMEOUT_MS = 8000;
+// Must match HISTORY_MAX in alpi/host/events.py: the daemon clamps to it and tail-truncates, so anything lower discards recoverable events.
+const POLL_LIMIT = 500;
+export const POLL_TIMEOUT_MS = 8000;
 
 export const WAKE_BUDGET_MS = 25_000;
 
-export async function pollConnection(connection, { now } = {}) {
-  const nowMs = now ?? Date.now();
+export async function pollConnection(connection) {
   const key = alnStateKey(connection);
-  let state = await loadState(key);
-  state.lastPollMs = nowMs;
+  const cursor = await loadState(key);
 
-  const newEvents = [];
+  // The whole page, seen events included: deliverEvents owns the dedupe, and dropping seen events here would leave afterSeq parked below them and re-download the page forever.
+  let events = [];
+  let nextSeq = null;
   let ok = false;
+  let lastError = '';
 
   try {
     const resp = await call(
       connection,
       'host.events.history',
-      { after_seq: state.afterSeq, limit: POLL_LIMIT, kinds: NOTIFIABLE_KINDS },
+      { after_seq: cursor.afterSeq, limit: POLL_LIMIT, kinds: NOTIFIABLE_KINDS },
       { timeoutMs: POLL_TIMEOUT_MS },
     );
-    const events = Array.isArray(resp?.events) ? resp.events : [];
-    for (const ev of events) {
-      const evId = `${ev?.event || ''}:${ev?.seq ?? ''}`;
-      if (state.seenIds.includes(evId)) continue;
-      newEvents.push(ev);
+    events = Array.isArray(resp?.events) ? resp.events : [];
+    if (Number.isFinite(resp?.next_seq)) nextSeq = resp.next_seq;
+    // A daemon reimage restarts seq at 0; without this the cursor parks above the counter and filters everything out forever.
+    if (nextSeq !== null && nextSeq < cursor.afterSeq) {
+      await mutateState(key, (s) => ({ ...s, afterSeq: 0, anchored: true, seenIds: [] }));
     }
-    state.lastSuccessMs = Date.now();
-    state.lastError = '';
     ok = true;
   } catch (e) {
-    state.lastError = String(e?.message || e || 'poll failed');
+    lastError = String(e?.message || e || 'poll failed');
   }
 
-  await saveState(key, state);
-  return { events: newEvents, state, ok };
+  return { events, nextSeq, ok, error: lastError };
 }
 
-export async function commitDelivered(stateKey, events) {
-  let state = await loadState(stateKey);
-  let cursor = state.afterSeq;
-  for (const ev of events) {
-    const evId = `${ev?.event || ''}:${ev?.seq ?? ''}`;
-    state = recordSeen(state, evId);
-    if (Number.isFinite(ev?.seq) && ev.seq > cursor) cursor = ev.seq;
-  }
-  state.afterSeq = cursor;
-  await saveState(stateKey, state);
+// Per daemon, not per route: a stale alternate route must not stamp its error over a sibling that reached the daemon.
+export async function recordGroupHealth(connection, { ok, error, degraded = false }) {
+  await mutateState(alnStateKey(connection), (s) => ({
+    ...s,
+    lastPollMs: Date.now(),
+    lastSuccessMs: ok ? Date.now() : s.lastSuccessMs,
+    lastError: ok ? '' : (error || s.lastError),
+    degraded: ok ? degraded : s.degraded,
+  }));
 }

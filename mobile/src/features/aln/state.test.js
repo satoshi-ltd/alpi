@@ -18,8 +18,12 @@ vi.mock('expo-secure-store', () => ({
 import {
   alnStateKey,
   clearState,
+  eventId,
+  loadFlag,
   loadState,
+  mutateState,
   recordSeen,
+  saveFlag,
   saveState,
   stateKey,
 } from './state';
@@ -120,5 +124,88 @@ describe('recordSeen', () => {
     expect(s.seenIds.length).toBe(500);
     expect(s.seenIds[499]).toBe('e:new');
     expect(s.seenIds[0]).toBe('e:1');
+  });
+});
+
+describe('eventId', () => {
+  it('builds kind:seq for a usable frame', () => {
+    expect(eventId({ event: 'wg.done', seq: 7 })).toBe('wg.done:7');
+  });
+
+  it('is empty for a seq-less frame so it can never be stored as "kind:"', () => {
+    expect(eventId({ event: 'wg.done', seq: null })).toBe('');
+    expect(eventId({ event: 'wg.done' })).toBe('');
+    expect(eventId({ seq: 3 })).toBe('');
+  });
+});
+
+describe('mutateState serialization', () => {
+  beforeEach(() => { store.clear(); });
+
+  it('does not lose an update when two read-modify-writes overlap', async () => {
+    await saveState('c1', { afterSeq: 0, seenIds: [], lastPollMs: 0, lastSuccessMs: 0, lastError: '' });
+
+    await Promise.all([
+      mutateState('c1', (s) => ({ ...s, afterSeq: 42 })),
+      mutateState('c1', (s) => ({ ...s, lastSuccessMs: 99 })),
+    ]);
+
+    const s = await loadState('c1');
+    expect(s.afterSeq).toBe(42);
+    expect(s.lastSuccessMs).toBe(99);
+  });
+
+  it('a concurrent seen-only write cannot roll the cursor back', async () => {
+    await saveState('c1', { afterSeq: 120, seenIds: [], lastPollMs: 0, lastSuccessMs: 0, lastError: '' });
+
+    await Promise.all([
+      mutateState('c1', (s) => recordSeen(s, 'agent.message:400')),
+      mutateState('c1', (s) => ({ ...s, afterSeq: 130 })),
+    ]);
+
+    const s = await loadState('c1');
+    expect(s.afterSeq).toBe(130);
+    expect(s.seenIds).toEqual(['agent.message:400']);
+  });
+
+  it('a forget landing mid-delivery is not resurrected by the in-flight write', async () => {
+    await saveState('c1', { afterSeq: 1, seenIds: [], lastPollMs: 0, lastSuccessMs: 0, lastError: '' });
+
+    let release;
+    const parked = new Promise((r) => { release = r; });
+    const inFlight = mutateState('c1', async (st) => {
+      await parked;
+      return { ...st, afterSeq: 77 };
+    });
+    const forget = clearState('c1');
+    release();
+    await Promise.all([inFlight, forget]);
+
+    expect(store.has('aln.state.c1')).toBe(false);
+  });
+
+  it('survives a throwing mutation without poisoning later writes on the same key', async () => {
+    await saveState('c1', { afterSeq: 1, seenIds: [], lastPollMs: 0, lastSuccessMs: 0, lastError: '' });
+
+    await expect(mutateState('c1', () => { throw new Error('boom'); })).rejects.toThrow('boom');
+    await mutateState('c1', (s) => ({ ...s, afterSeq: 2 }));
+
+    expect((await loadState('c1')).afterSeq).toBe(2);
+  });
+});
+
+describe('flags', () => {
+  beforeEach(() => { store.clear(); });
+
+  it('round-trips a value and falls back when unset', async () => {
+    expect(await loadFlag('wakeIndex', 0)).toBe(0);
+    await saveFlag('wakeIndex', 2);
+    expect(await loadFlag('wakeIndex', 0)).toBe(2);
+  });
+
+  it('stores booleans distinctly from the fallback', async () => {
+    expect(await loadFlag('permissionAsked', false)).toBe(false);
+    await saveFlag('permissionAsked', true);
+    expect(await loadFlag('permissionAsked', false)).toBe(true);
   });
 });
