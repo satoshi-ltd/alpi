@@ -782,12 +782,18 @@ async def _skill_file(
     return {"file": row}
 
 
-def _aggregate_workgroups(profile: str | None) -> list[dict[str, Any]]:
+def _aggregate_workgroups(
+    profile: str | None, *, include_pipeline_status: bool = False,
+) -> list[dict[str, Any]]:
     if profile:
-        return _workgroups_for(str(profile))
+        return _workgroups_for(
+            str(profile), include_pipeline_status=include_pipeline_status,
+        )
     by_id: dict[str, dict[str, Any]] = {}
     for p in _profiles():
-        for wg in _workgroups_for(p["name"]):
+        for wg in _workgroups_for(
+            p["name"], include_pipeline_status=include_pipeline_status,
+        ):
             old = by_id.get(wg["id"])
             if old is not None and old.get("is_hub"):
                 continue
@@ -801,7 +807,12 @@ async def _workgroups_list(
     params: dict[str, Any], _server: host_server.Server,
 ) -> dict[str, Any]:
     profile = params.get("profile")
-    rows = await asyncio.to_thread(_aggregate_workgroups, profile)
+    include_pipeline_status = params.get("include_pipeline_status") is True
+    rows = await asyncio.to_thread(
+        _aggregate_workgroups,
+        profile,
+        include_pipeline_status=include_pipeline_status,
+    )
     return {"workgroups": rows}
 
 
@@ -1354,17 +1365,40 @@ def _pipeline_row(raw: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _workgroups_for(profile: str) -> list[dict[str, Any]]:
+def _workgroups_for(
+    profile: str, *, include_pipeline_status: bool = False,
+) -> list[dict[str, Any]]:
     home = _resolve_home(profile)
-    rows = _hub_workgroups(home, profile) + _subscribed_workgroups(home, profile)
+    rows = _hub_workgroups(
+        home, profile, include_pipeline_status=include_pipeline_status,
+    ) + _subscribed_workgroups(
+        home, profile, include_pipeline_status=include_pipeline_status,
+    )
     rows.sort(key=lambda x: int(x.get("mtime") or 0), reverse=True)
     return rows
 
 
-def _hub_workgroups(home: Path, profile: str) -> list[dict[str, Any]]:
+def _pipeline_status(home: Path, wg_id: str) -> str | None:
+    from alpi.host import workgroup as host_workgroup
+
+    state = host_workgroup.fold_task_state(home, wg_id)
+    run = state.get("pipeline_run") if isinstance(state, dict) else None
+    if not isinstance(run, dict):
+        return None
+    return str(run.get("status") or "") or None
+
+
+def _hub_workgroups(
+    home: Path, profile: str, *, include_pipeline_status: bool = False,
+) -> list[dict[str, Any]]:
     root = home / "alp" / "workgroups"
     if not root.exists():
         return []
+    if include_pipeline_status:
+        from alpi.alp import pipeline_queue
+        queued = pipeline_queue.positions(home)
+    else:
+        queued = {}
     out = []
     for path in sorted(root.iterdir()):
         if not path.is_dir():
@@ -1378,7 +1412,11 @@ def _hub_workgroups(home: Path, profile: str) -> list[dict[str, Any]]:
         except OSError:
             mtime = 0
         budget = meta.get("budget") if isinstance(meta.get("budget"), dict) else {}
-        out.append({
+        queue_item = queued.get(path.name)
+        pipeline_status = "queued" if queue_item else None
+        if include_pipeline_status and pipeline_status is None:
+            pipeline_status = _pipeline_status(home, path.name)
+        row = {
             "id": path.name,
             "profile": profile,
             "name": meta.get("name"),
@@ -1393,11 +1431,20 @@ def _hub_workgroups(home: Path, profile: str) -> list[dict[str, Any]]:
             "spent_usd": float(ledger.get("usd") or 0.0),
             "is_hub": True,
             "hub_id": profile,
-        })
+        }
+        if include_pipeline_status:
+            row.update({
+                "pipeline_status": pipeline_status,
+                "queued_pipeline": queue_item.get("pipeline") if queue_item else None,
+                "queue_position": queue_item.get("position") if queue_item else None,
+            })
+        out.append(row)
     return out
 
 
-def _subscribed_workgroups(home: Path, profile: str) -> list[dict[str, Any]]:
+def _subscribed_workgroups(
+    home: Path, profile: str, *, include_pipeline_status: bool = False,
+) -> list[dict[str, Any]]:
     from alpi.alp import subscription as sub_mod
 
     path = sub_mod.path(home)
@@ -1409,7 +1456,7 @@ def _subscribed_workgroups(home: Path, profile: str) -> list[dict[str, Any]]:
     out = []
     for sub in data:
         roster = sub.roster or {}
-        out.append({
+        row = {
             "id": sub.wg_id,
             "profile": profile,
             "name": sub.name,
@@ -1434,7 +1481,14 @@ def _subscribed_workgroups(home: Path, profile: str) -> list[dict[str, Any]]:
             "spent_usd": 0.0,
             "is_hub": False,
             "hub_id": sub.hub_id,
-        })
+        }
+        if include_pipeline_status:
+            row["pipeline_status"] = (
+                _pipeline_status(home, sub.wg_id)
+                if sub.pipeline_mode
+                else None
+            )
+        out.append(row)
     return out
 
 

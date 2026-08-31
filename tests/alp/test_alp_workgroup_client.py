@@ -2277,6 +2277,27 @@ async def test_trigger_pipeline_posts_the_declared_opener_verbatim(
 
 
 @pytest.mark.asyncio
+async def test_trigger_pipeline_queues_until_the_daemon_admits_it(
+    short_tmp: Path,
+) -> None:
+    from alpi.alp import pipeline_queue
+
+    home = short_tmp / "hubtrigqueue"; home.mkdir()
+    (home / "config.yaml").write_text(
+        "alp:\n  max_active_pipelines: 1\n", encoding="utf-8",
+    )
+    wg, muse_pk = _chain_hub(home, launch=None)
+
+    out = await wc.trigger_pipeline(home, wg.meta.id, "media-update")
+
+    assert out["queued"] is True
+    assert out["position"] == 1
+    assert out["seq"] is None
+    assert _transcript_texts(home, wg) == []
+    assert pipeline_queue.positions(home)[wg.meta.id]["pipeline"] == "media-update"
+
+
+@pytest.mark.asyncio
 async def test_trigger_pipeline_normalizes_the_requested_key(
     short_tmp: Path,
 ) -> None:

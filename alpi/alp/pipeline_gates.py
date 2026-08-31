@@ -177,6 +177,22 @@ def snapshot_baseline(wg_dir: Path, step: GateStep, workspace: Path) -> bool:
     return True
 
 
+def refresh_baseline(wg_dir: Path, step: GateStep, workspace: Path) -> bool:
+    """Accept the trusted gate command's own filesystem effects after a clean boundary check."""
+    if not step.paths:
+        return False
+    root = _project_root(step, workspace)
+    if root is None:
+        return False
+    bp = _baseline_path(wg_dir, step.phase)
+    bp.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    snapshot = _scan_project(root)
+    tmp = bp.with_suffix(".tmp")
+    tmp.write_text(json.dumps(snapshot, separators=(",", ":")))
+    os.replace(tmp, bp)
+    return True
+
+
 # NOT _SCAN_EXCLUDE: a build gate observes dist/ and public/.
 _SIGNATURE_EXCLUDE = {".git", "node_modules", ".venv", ".cache", "__pycache__"}
 

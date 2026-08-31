@@ -1356,7 +1356,7 @@ async def test_scoped_member_can_call_workgroups_list_filtered(
     row = devices.add(label="phone", role="member", profile_scope=["work"])
     monkeypatch.setattr(
         "alpi.host.device_state._aggregate_workgroups",
-        lambda profile: [
+        lambda profile, *, include_pipeline_status=False: [
             {"id": "1", "profile": "work", "name": "ops"},
             {"id": "2", "profile": "personal", "name": "home"},
         ],

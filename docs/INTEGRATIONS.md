@@ -284,10 +284,10 @@ Member-callable workgroup methods (all take `profile`, scope-checked):
 
 | Method | Params | Returns |
 |---|---|---|
-| `host.workgroups.list` | `profile?` | `{ workgroups: [{ id, profile, name, members, is_hub, hub_id, … }] }` |
+| `host.workgroups.list` | `profile?`, `include_pipeline_status?` | `{ workgroups: [{ id, profile, name, members, is_hub, hub_id, pipeline_status?, queued_pipeline?, queue_position?, … }] }` |
 | `host.workgroup.post` | `profile`, `wg_id`, `text` | `{ ok, seq }` |
 | `host.workgroup.transcript` | `profile`, `wg_id`, `after_seq?`, `limit?`, `tail?` | `{ posts: [{ seq, at, from, body, cost }], next_seq, limit }` |
-| `host.workgroup.tasks` | `profile`, `wg_id` | `{ active, closed, blocked }` |
+| `host.workgroup.tasks` | `profile`, `wg_id` | `{ active, closed, blocked, pipeline_run }` |
 
 `host.workgroup.create` / `update` / `add_member` / `kick` / `remove` /
 `action` are **admin-only** — out of reach for a member token.

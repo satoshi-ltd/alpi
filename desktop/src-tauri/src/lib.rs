@@ -660,8 +660,11 @@ async fn workgroups(
 ) -> Result<serde_json::Value, String> {
     off_main(move || {
         let params = match profile {
-            Some(p) => serde_json::json!({"profile": p}),
-            None => serde_json::json!({}),
+            Some(p) => serde_json::json!({
+                "profile": p,
+                "include_pipeline_status": true,
+            }),
+            None => serde_json::json!({"include_pipeline_status": true}),
         };
         let result = match connection_id.as_deref() {
             Some(cid) => host_client::call_for(cid, "host.workgroups.list", params),

@@ -569,12 +569,16 @@ no reachable address (no `network.host`, no Tailscale/LAN, not Docker) even
 | `alp.tcp_port` | `7423` (default profile only) | The ALP peer TCP port. Auto-exposed for the `default` profile; a named profile binds TCP only if it sets its own unique port here. The address is `network.host`. |
 | `alp.link_idle_timeout_s` | `60` | Cancel `link.ask` after this many seconds without a signed response or progress frame. `0` disables the idle watchdog. |
 | `alp.link_max_duration_s` | `0` | Optional absolute cap for one `link.ask`; `0` allows an active turn to run without a fixed wall-clock limit. |
+| `alp.max_active_pipelines` | `0` | Maximum admitted workgroup pipelines for this hub profile. `0` is unlimited; excess launches and triggers wait in a persistent FIFO queue. |
+| `alp.working_after_s` | `30` | Post an automatic `#working` heartbeat when a member turn remains silent for this many seconds. `0` disables it. |
 
 ```yaml
 alp:
   tcp_port: 7423
   link_idle_timeout_s: 60
   link_max_duration_s: 0
+  max_active_pipelines: 5
+  working_after_s: 30
 ```
 
 `link.ask` uses streaming internally even when the caller only needs the final
@@ -583,6 +587,14 @@ review can run longer than `link_idle_timeout_s`; the watchdog measures silence,
 not total duration. Set `link_max_duration_s` only when the operator wants a
 hard cap as well. A timed-out caller requests `link.cancel` and reports the
 reason explicitly instead of returning an empty transport error.
+
+Pipeline admission is local to each hub profile. The queue limits whole active
+pipelines, not agent turns: admitted workgroups retain normal parallel phase
+execution, while excess launches and manual triggers wait FIFO on disk and
+survive daemon restarts. `running` and between-phase pipelines occupy a slot;
+completed or blocked pipelines release it. Both settings take effect after a
+configuration reload; a daemon that predates this feature still needs the
+updated process before it can enforce them.
 
 ### Relay
 

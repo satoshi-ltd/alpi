@@ -198,7 +198,7 @@ def test_closed_hub_owned_pipeline_task_does_not_wake_the_hub() -> None:
 
 
 @pytest.mark.asyncio
-async def test_gate_opened_task_bypasses_member_cooldown(
+async def test_gate_opened_task_dispatches_with_other_turns_on_the_same_profile(
     short_tmp: Path, monkeypatch,
 ) -> None:
     home = short_tmp / "lingua"
@@ -232,7 +232,13 @@ async def test_gate_opened_task_bypasses_member_cooldown(
 
     monkeypatch.setattr(service, "_dispatch_workgroup_turn", fake_turn)
     monkeypatch.setattr(service, "_spawn_dispatch", fake_spawn)
-    await service._maybe_dispatch_for_sub(home, "lingua", sub, hot=True)
+    service._INFLIGHT[("wg_other_a", "lingua")] = {"profile": "lingua"}
+    service._INFLIGHT[("wg_other_b", "lingua")] = {"profile": "lingua"}
+    try:
+        await service._maybe_dispatch_for_sub(home, "lingua", sub, hot=True)
+    finally:
+        service._INFLIGHT.pop(("wg_other_a", "lingua"), None)
+        service._INFLIGHT.pop(("wg_other_b", "lingua"), None)
     assert spawned == ["wg_fast"]
 
 
@@ -906,23 +912,6 @@ def test_inflight_keyed_by_wg_id_and_profile() -> None:
     finally:
         service._INFLIGHT.pop(("wg_test", "alice"), None)
         service._INFLIGHT.pop(("wg_test", "bob"), None)
-
-
-def test_profile_turn_slots_bound_parallel_workgroups() -> None:
-    assert service._MAX_INFLIGHT_TURNS_PER_PROFILE == 2
-    keys = [
-        (f"wg_cap_{index}", "scout")
-        for index in range(service._MAX_INFLIGHT_TURNS_PER_PROFILE)
-    ]
-    for key in keys:
-        service._INFLIGHT[key] = {"profile": "scout"}
-    service._INFLIGHT[("wg_other", "muse")] = {"profile": "muse"}
-    try:
-        assert service._profile_turn_slot_available("scout") is False
-        assert service._profile_turn_slot_available("muse") is True
-    finally:
-        for key in [*keys, ("wg_other", "muse")]:
-            service._INFLIGHT.pop(key, None)
 
 
 @pytest.mark.asyncio
@@ -2439,42 +2428,6 @@ async def test_watchdog_stall_path_defers_to_an_inflight_member_turn(
 
 
 @pytest.mark.asyncio
-async def test_watchdog_defers_while_member_waits_for_profile_capacity(
-    short_tmp: Path, monkeypatch,
-) -> None:
-    import datetime as _dt
-
-    home = short_tmp / "hub"; home.mkdir()
-    old = (
-        _dt.datetime.now(tz=_dt.timezone.utc) - _dt.timedelta(hours=2)
-    ).strftime("%Y-%m-%dT%H:%M:%SZ")
-    wg = types.SimpleNamespace(meta=types.SimpleNamespace(
-        id="wg_queued", name="site", hub_pubkey="HUB", paused=False,
-        pipelines={"setup": ("intake", "qa")}, launch_pipeline="setup",
-        pipeline_steps={}, quorum_timeout_seconds=0,
-    ))
-    recent = [
-        {"seq": 1, "from": "HUB", "text": "@scout #task #intake go", "ts": old},
-    ]
-    spawned: list[str] = []
-    monkeypatch.setattr(service, "_spawn_dispatch", lambda wid, coro: spawned.append(wid))
-    monkeypatch.setattr(service, "_dispatch_workgroup_turn", lambda *a, **k: None)
-    monkeypatch.setattr(service, "_budget_blocks_dispatch", lambda *a, **k: False)
-
-    service._INFLIGHT[("wg_other_a", "scout")] = {"profile": "scout"}
-    service._INFLIGHT[("wg_other_b", "scout")] = {"profile": "scout"}
-    try:
-        await service._maybe_watchdog_close(home, "mira", wg, recent)
-        assert spawned == []
-    finally:
-        service._INFLIGHT.pop(("wg_other_a", "scout"), None)
-        service._INFLIGHT.pop(("wg_other_b", "scout"), None)
-
-    await service._maybe_watchdog_close(home, "mira", wg, recent)
-    assert spawned == ["wg_queued"]
-
-
-@pytest.mark.asyncio
 async def test_watchdog_working_grace_covers_the_phase_turn_budget(
     short_tmp: Path, monkeypatch,
 ) -> None:
@@ -2669,6 +2622,43 @@ def test_stamp_turn_end_keeps_live_entries_at_the_cap() -> None:
     assert "wg_new" in service._LAST_TURN_END
     assert "wg_200" in service._LAST_TURN_END
     assert "wg_3" not in service._LAST_TURN_END
+
+
+@pytest.mark.asyncio
+async def test_automatic_working_posts_once_for_a_silent_member_turn(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    posted = []
+
+    async def fake_post(home, wg_id, body):
+        posted.append((home, wg_id, body.decode()))
+
+    monkeypatch.setattr("alpi.alp.workgroup_client.post", fake_post)
+    proc = types.SimpleNamespace(returncode=None)
+
+    assert await service._auto_working_after(
+        short_tmp, "wg_slow", "assets", 0, proc, [0],
+    ) is True
+    assert posted == [(
+        short_tmp,
+        "wg_slow",
+        "#working #assets deliverable still in progress (automatic turn heartbeat)",
+    )]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("returncode,posts", [(0, 0), (None, 1)])
+async def test_automatic_working_stays_silent_after_exit_or_delivery(
+    short_tmp: Path, monkeypatch, returncode, posts,
+) -> None:
+    async def unexpected(*args, **kwargs):
+        raise AssertionError("must not post")
+
+    monkeypatch.setattr("alpi.alp.workgroup_client.post", unexpected)
+    proc = types.SimpleNamespace(returncode=returncode)
+    assert await service._auto_working_after(
+        short_tmp, "wg_fast", "content", 0, proc, [posts],
+    ) is False
 
 
 @pytest.mark.asyncio

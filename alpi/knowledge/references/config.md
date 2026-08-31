@@ -45,6 +45,8 @@
 | `runtime.{first_byte_timeout_s,stream_idle_timeout_s,stream_max_duration_s}` | Provider-stream watchdogs in seconds (`0` disables one): first output, silence between meaningful deltas, and absolute duration of one request. |
 | `alp.link_idle_timeout_s` | Silence watchdog for `link.ask` (default 60s; `0` disables). Start/progress frames reset it, so it is not a total turn limit. Takes effect on the next peer call. |
 | `alp.link_max_duration_s` | Optional absolute `link.ask` duration cap (default `0` = disabled). Takes effect on the next peer call. |
+| `alp.max_active_pipelines` | Maximum admitted workgroup pipelines for this hub profile (default `0` = unlimited). Additional launches and triggers enter a persistent FIFO queue. |
+| `alp.working_after_s` | Delay before a long member turn automatically posts `#working` when the agent has not posted yet (default 30s; `0` disables). |
 
 Removed `service.{schedule,alp,workgroups,host}` keys are ignored because these
 daemon capabilities always start. Startup logs and `alpi doctor` warn while the

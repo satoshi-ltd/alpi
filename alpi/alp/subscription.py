@@ -222,11 +222,33 @@ def _tombstones_dir(home: Path) -> Path:
     return home / _SECRETS_DIR / _TOMBSTONES_DIR
 
 
+_tombstone_cache: dict[str, tuple[int, frozenset[str]]] = {}
+_tombstone_cache_lock = threading.Lock()
+
+
+def _invalidate_tombstone_cache(home: Path) -> None:
+    with _tombstone_cache_lock:
+        _tombstone_cache.pop(str(_tombstones_dir(home)), None)
+
+
 def tombstones(home: Path) -> set[str]:
+    directory = _tombstones_dir(home)
     try:
-        return set(os.listdir(_tombstones_dir(home)))
+        stamp = directory.stat().st_mtime_ns
     except OSError:
         return set()
+    key = str(directory)
+    with _tombstone_cache_lock:
+        cached = _tombstone_cache.get(key)
+        if cached is not None and cached[0] == stamp:
+            return set(cached[1])
+    try:
+        values = frozenset(os.listdir(directory))
+    except OSError:
+        return set()
+    with _tombstone_cache_lock:
+        _tombstone_cache[key] = (stamp, values)
+    return set(values)
 
 
 def tombstone(home: Path, wg_id: str) -> None:
@@ -236,6 +258,7 @@ def tombstone(home: Path, wg_id: str) -> None:
     d = _tombstones_dir(home)
     d.mkdir(mode=0o700, parents=True, exist_ok=True)
     (d / wg_id).touch()
+    _invalidate_tombstone_cache(home)
     _invalidate_cache(path(home))
 
 
@@ -247,6 +270,7 @@ def revive(home: Path, wg_id: str) -> None:
         (_tombstones_dir(home) / wg_id).unlink()
     except OSError:
         return
+    _invalidate_tombstone_cache(home)
     _invalidate_cache(path(home))
 
 

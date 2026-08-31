@@ -228,15 +228,27 @@ async def launch(
         created_wg_dir = home / "alp" / "workgroups" / wg.meta.id
         kick = _kickoff_text(spec["task"], wg.meta.launch_chain, steps)
         if kick:
-            # No guard bypass: the kickoff must pass as the virgin launch-chain opener, so a misauthored recipe fails loudly here.
-            await wc.post(home, wg.meta.id, kick.encode())
+            if wg.meta.launch_pipeline:
+                launch_result = await wc.trigger_pipeline(
+                    home, wg.meta.id, wg.meta.launch_pipeline, _opener=kick,
+                )
+            else:
+                # No guard bypass: a deliberation kickoff must pass the normal post contract.
+                await wc.post(home, wg.meta.id, kick.encode())
     except BaseException:
         if created_wg_dir is not None:
             wg_mod.destroy(home, created_wg_dir.name)
         if created_dest is not None:
             shutil.rmtree(created_dest, ignore_errors=True)
         raise
-    return {"workgroup_id": wg.meta.id, "project_path": project_path}
+    return {
+        "workgroup_id": wg.meta.id,
+        "project_path": project_path,
+        **({
+            "queued": bool(launch_result.get("queued")),
+            "queue_position": launch_result.get("position"),
+        } if kick and wg.meta.launch_pipeline else {}),
+    }
 
 
 async def _describe(params: dict[str, Any], _server: host_server.Server) -> dict[str, Any]:

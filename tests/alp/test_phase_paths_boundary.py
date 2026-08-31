@@ -154,6 +154,25 @@ def test_symlinked_cwd_escaping_the_workspace_is_rejected(tmp_path: Path):
     assert not (tmp_path / "wgdir" / "phase_baselines").exists()
 
 
+def test_gate_side_effects_refresh_boundary_without_hiding_later_agent_edits(tmp_path: Path):
+    workspace = tmp_path / "ws"
+    root = _project(workspace)
+    wg_dir = tmp_path / "wgdir"
+    step = _step(_wg())
+
+    assert gates.snapshot_baseline(wg_dir, step, workspace) is True
+    generated = root / "src" / "env.d.ts"
+    generated.parent.mkdir(parents=True, exist_ok=True)
+    generated.write_text('/// <reference path="../.astro/types.d.ts" />\n')
+
+    assert "src/env.d.ts" in gates.paths_violations(wg_dir, step, workspace)
+    assert gates.refresh_baseline(wg_dir, step, workspace) is True
+    assert gates.paths_violations(wg_dir, step, workspace) == ""
+
+    (root / "src" / "runtime.js").write_text("changed after the gate\n")
+    assert "src/runtime.js" in gates.paths_violations(wg_dir, step, workspace)
+
+
 @pytest.mark.asyncio
 async def test_gate_advance_reds_on_a_boundary_violation(tmp_path: Path, monkeypatch):
     home = tmp_path / "hub"

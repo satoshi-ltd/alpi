@@ -1671,10 +1671,12 @@ def _run_being_stopped(key: str, state: dict[str, Any] | None) -> dict[str, Any]
 
 
 async def trigger_pipeline(
-    home: Path, wg_id: str, pipeline: str,
+    home: Path, wg_id: str, pipeline: str, *, _admit: bool = False,
+    _opener: str = "",
 ) -> dict[str, Any]:
-    """Hub-admin only: publishes the recipe-authored owner/task verbatim, never preempts, never invents text."""
+    """Hub-admin only: queue or publish the recipe-authored opener."""
     from alpi.host import workgroup as host_wg
+    from alpi.alp import pipeline_queue
 
     key = str(pipeline or "").strip().lower()
     if not key:
@@ -1714,12 +1716,29 @@ async def trigger_pipeline(
                 f"pipeline {key!r} declares no owner/task for its first phase "
                 f"#{phase}, so the opener cannot be authored from the recipe",
             )
+        opener = _opener.strip() or f"@{owner} #task #{phase} · {task}"
+        if not _admit and pipeline_queue.limit(home) > 0:
+            queued = pipeline_queue.enqueue(
+                home, wg_id, key, opener=opener if _opener.strip() else "",
+            )
+            from alpi.alp import wakes
+            wakes.fire(home, wg_id)
+            _emit_workgroup_changed(home, wg_id, "queued")
+            return {
+                "ok": True,
+                "queued": True,
+                "position": queued["position"],
+                "pipeline": key,
+                "phase": phase,
+                "seq": None,
+                "stopped": None,
+            }
         state = await asyncio.to_thread(host_wg.fold_task_state, home, wg_id)
         stopped = _run_being_stopped(key, state)
         try:
             # One chain at a time: the opener preempts whatever was mid-flight.
             result = await post(
-                home, wg_id, f"@{owner} #task #{phase} · {task}".encode(),
+                home, wg_id, opener.encode(),
                 operator_abandon=True,
             )
         except ValueError as e:
@@ -1783,6 +1802,8 @@ async def _set_paused(home: Path, wg_id: str, paused: bool) -> dict[str, Any]:
                     _service.reset_workgroup_poller_state(home, wg_id)
                 except Exception:  # noqa: BLE001
                     pass
+                from alpi.alp import wakes
+                wakes.fire(home, wg_id)
         return {
             "workgroup_id": wg_id,
             "paused": paused,

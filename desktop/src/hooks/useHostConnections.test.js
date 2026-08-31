@@ -34,6 +34,7 @@ function renderHostConnections() {
   const setRewriteDraft = vi.fn();
   const setActiveTask = vi.fn();
   const setView = vi.fn();
+  const notify = vi.fn();
   const r = renderHook(() =>
     useHostConnections({
       setSessionData,
@@ -41,19 +42,55 @@ function renderHostConnections() {
       setRewriteDraft,
       setActiveTask,
       setView,
+      notify,
     }),
   );
-  return { ...r, setView, clearTurnsForConnection };
+  return { ...r, setView, clearTurnsForConnection, notify };
 }
 
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.restoreAllMocks();
   _resetDaemonBus();
   localStorage.clear();
   connectionStatusListener = null;
   listen.mockImplementation(async (eventName, cb) => {
     if (eventName === "connection-status") connectionStatusListener = cb;
     return () => {};
+  });
+});
+
+describe("useHostConnections cache persistence", () => {
+  it("evicts only regenerable caches and retries a full workgroup snapshot", async () => {
+    localStorage.setItem("alpi.session.cache.v1.local.mira.s-1", "cached session");
+    localStorage.setItem("alpi.workgroup.cache.local.mira.wg-live", "cached posts");
+    localStorage.setItem("alpi.drafts.v1", "important draft");
+    const nativeSetItem = Storage.prototype.setItem;
+    let workgroupWrites = 0;
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(function setItem(key, value) {
+      if (key === "alf:workgroups:v1:local" && workgroupWrites++ === 0) {
+        throw new DOMException("The quota has been exceeded.", "QuotaExceededError");
+      }
+      return nativeSetItem.call(this, key, value);
+    });
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "host_connections") return makeConnections("local");
+      if (cmd === "profile_summaries") return [{ name: "mira", model: "a/b" }];
+      if (cmd === "workgroups") {
+        return [{ id: "wg-live", profile: "mira", name: "Live workgroup" }];
+      }
+      return null;
+    });
+
+    const { result } = renderHostConnections();
+    await waitFor(() => expect(result.current.workgroups).toHaveLength(1));
+
+    expect(localStorage.getItem("alpi.session.cache.v1.local.mira.s-1")).toBeNull();
+    expect(localStorage.getItem("alpi.workgroup.cache.local.mira.wg-live")).toBeNull();
+    expect(localStorage.getItem("alpi.drafts.v1")).toBe("important draft");
+    expect(JSON.parse(localStorage.getItem("alf:workgroups:v1:local"))).toEqual([
+      { id: "wg-live", profile: "mira", name: "Live workgroup" },
+    ]);
   });
 });
 
@@ -137,6 +174,35 @@ describe("useHostConnections.onSetHostConnection", () => {
 
     expect(result.current.hostConnectionsRef.current.active_id).toBe("remote");
     expect(result.current.pickerAlpi).toBe("mirai");
+  });
+
+  it("notifies and falls back to the previous connection when activating a revoked one fails", async () => {
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "host_connections") return makeConnections("local");
+      if (cmd === "profile_summaries") return [{ name: "doc", model: "a/b" }];
+      if (cmd === "workgroups") return [];
+      if (cmd === "host_connection_set_active") {
+        throw new Error("connection is revoked: remote");
+      }
+      return null;
+    });
+
+    const { result, notify } = renderHostConnections();
+    await waitFor(() => expect(result.current.profiles.length).toBe(1));
+
+    await act(async () => {
+      result.current.onSetHostConnection("remote");
+    });
+
+    await waitFor(() =>
+      expect(notify).toHaveBeenCalledWith(
+        expect.objectContaining({
+          variant: "error",
+          message: expect.stringContaining("revoked"),
+        }),
+      ),
+    );
+    expect(result.current.hostConnectionsRef.current.active_id).toBe("local");
   });
 
   it("rejects stale reload responses from a previous switch (A→B→A race)", async () => {

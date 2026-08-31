@@ -12,11 +12,25 @@ import styles from "./WorkgroupsView.module.css";
 const FILTERS = [
   { id: "all", label: "All" },
   { id: "active", label: "Active" },
+  { id: "queued", label: "Queued" },
   { id: "paused", label: "Paused" },
 ];
 
 function workgroupState(workgroup, task, busy) {
   if (workgroup.paused) return { id: "paused", label: "Paused" };
+  if (workgroup.pipeline_status === "queued") {
+    const position = Number(workgroup.queue_position || 0);
+    return { id: "queued", label: position ? `Queued · #${position}` : "Queued" };
+  }
+  if (workgroup.pipeline_status === "blocked") {
+    return { id: "error", label: "Needs attention" };
+  }
+  if (["running", "between"].includes(workgroup.pipeline_status)) {
+    return { id: "active", label: "Working" };
+  }
+  if (workgroup.pipeline_status === "completed") {
+    return { id: "idle", label: "Idle" };
+  }
   if (task?.state === "error") return { id: "error", label: "Needs attention" };
   if (busy || task?.state === "open") return { id: "active", label: "Working" };
   return { id: "idle", label: "Idle" };
@@ -57,6 +71,7 @@ export default function WorkgroupsView({
       })
       .filter(({ workgroup, state }) => {
         if (filter === "active" && state.id !== "active" && state.id !== "error") return false;
+        if (filter === "queued" && state.id !== "queued") return false;
         if (filter === "paused" && state.id !== "paused") return false;
         if (!needle) return true;
         return [workgroup.name, workgroup.id, workgroup.profile, workgroup.hub_id, state.label]
@@ -66,12 +81,36 @@ export default function WorkgroupsView({
           .includes(needle);
       })
       .sort((left, right) => {
-        const leftRank = left.state.id === "active" || left.state.id === "error" ? 0 : left.state.id === "paused" ? 2 : 1;
-        const rightRank = right.state.id === "active" || right.state.id === "error" ? 0 : right.state.id === "paused" ? 2 : 1;
+        const leftRank = left.state.id === "active" || left.state.id === "error" ? 0 : left.state.id === "queued" ? 1 : left.state.id === "paused" ? 3 : 2;
+        const rightRank = right.state.id === "active" || right.state.id === "error" ? 0 : right.state.id === "queued" ? 1 : right.state.id === "paused" ? 3 : 2;
         return leftRank - rightRank
+          || (left.state.id === "queued" && right.state.id === "queued"
+            ? Number(left.workgroup.queue_position || 0) - Number(right.workgroup.queue_position || 0)
+            : 0)
           || Number(right.workgroup.mtime || 0) - Number(left.workgroup.mtime || 0);
       });
   }, [activityByWorkgroup, filter, query, taskByWorkgroup, workgroups]);
+  const summary = useMemo(() => {
+    const counts = { active: 0, error: 0, idle: 0, queued: 0, paused: 0 };
+    workgroups.forEach((workgroup) => {
+      const key = `${workgroup.profile}/${workgroup.id}`;
+      const state = workgroupState(
+        workgroup,
+        taskByWorkgroup[key],
+        Boolean(activityByWorkgroup[key]),
+      );
+      counts[state.id] += 1;
+    });
+    return counts;
+  }, [activityByWorkgroup, taskByWorkgroup, workgroups]);
+  const workgroupLabel = `${workgroups.length} workgroup${workgroups.length === 1 ? "" : "s"}`;
+  const activityParts = [
+    `${summary.active} working`,
+    summary.queued ? `${summary.queued} queued` : null,
+    `${summary.idle} idle`,
+    summary.paused ? `${summary.paused} paused` : null,
+    summary.error ? `${summary.error} need attention` : null,
+  ].filter(Boolean);
 
   return (
     <section className={styles.page}>
@@ -80,9 +119,12 @@ export default function WorkgroupsView({
           <div className="title-row">
             <DiamondStack size="md" />
             <h1>Workgroups</h1>
-            <span className="eyebrow">{workgroups.length} total</span>
           </div>
-          <div className="meta-row">Shared work across every profile on this connection</div>
+          <div className="meta-row">
+            <span>{workgroupLabel}</span>
+            <span className="sep" aria-hidden />
+            <span>{activityParts.join(" · ")}</span>
+          </div>
         </div>
         {onNewWorkgroup && (
           <Button icon={<PlusIcon />} onClick={onNewWorkgroup}>New workgroup</Button>
@@ -143,20 +185,14 @@ export default function WorkgroupsView({
                 >
                   <span className={styles.identity}>
                     <DiamondStack color={accent} />
-                    <span>
-                      <strong>{workgroup.name ?? workgroup.id}</strong>
-                      <Mono>{workgroup.id}</Mono>
-                    </span>
+                    <strong>{workgroup.name ?? workgroup.id}</strong>
                   </span>
                   <span className={`${styles.status} ${styles[`status_${state.id}`]}`}>
                     <span aria-hidden />
                     {state.label}
                   </span>
                   <Mono tnum>{workgroup.members ?? 0}</Mono>
-                  <span className={styles.spend}>
-                    <Mono tnum>{money(workgroup.spent_usd)}</Mono>
-                    {workgroup.budget_usd != null && <small>of {money(workgroup.budget_usd)}</small>}
-                  </span>
+                  <Mono tnum className={styles.spend}>{money(workgroup.spent_usd)}</Mono>
                   <span className={styles.updated}>
                     {workgroup.mtime ? <RelativeTime ts={workgroup.mtime} /> : "—"}
                   </span>

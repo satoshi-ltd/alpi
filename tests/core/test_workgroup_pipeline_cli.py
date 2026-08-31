@@ -114,6 +114,24 @@ def test_trigger_publishes_the_declared_opener(short_tmp: Path, monkeypatch) -> 
     assert [p["body"] for p in posts] == ["@muse #task #media-update · map the supplied media"]
 
 
+def test_trigger_reports_a_queued_pipeline(short_tmp: Path, monkeypatch) -> None:
+    home = short_tmp / "hub"
+    wg = _hub(home)
+    (home / "config.yaml").write_text(
+        "alp:\n  max_active_pipelines: 1\n", encoding="utf-8",
+    )
+
+    result = _run(
+        monkeypatch, home,
+        ["workgroup", "trigger", wg.meta.id, "media-update"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "queued media-update · position 1" in result.output
+    from alpi.host import workgroup as host_wg
+    assert host_wg.decrypt_transcript(home, wg.meta.id) == []
+
+
 def test_trigger_surfaces_the_daemon_rejection_verbatim(short_tmp: Path, monkeypatch) -> None:
     home = short_tmp / "hub"
     wg = _hub(home)

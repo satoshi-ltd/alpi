@@ -11,6 +11,34 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.5.18 — 2026-08-31 — a quieter workgroup inventory
+
+- **The workgroup header now reports useful activity.** Its summary sits below
+  the title and separates working, idle, paused and attention-needed groups
+  instead of leaving a misaligned total beside the heading.
+- **Inventory rows keep only operational information.** Internal workgroup ids
+  and repeated budget caps move out of the list, while the compact rows retain
+  status, member count, actual spend and last update.
+- **Pipeline status now outranks stale local task cache.** Completed workgroups
+  return to Idle, blocked runs need attention, and queued rows appear in FIFO
+  order instead of making an old open marker look like live work.
+- **Busy local daemons no longer look disconnected.** A slow inventory request
+  cannot override a live event stream, and a revoked active connection falls
+  back to the local daemon instead of leaving the client in contradictory state.
+- **A still-valid pairing recovers on its own.** A transient authentication
+  blip — such as a socket identity that changes across a tunnel — no longer
+  latches a device as permanently revoked; the next authenticated probe that
+  succeeds clears the flag, so a good pairing reconnects without a re-pair.
+  When a pairing really is revoked, the connection list marks it plainly and
+  switching to it says a re-pair is needed, rather than showing a healthy dot
+  that leads nowhere.
+- **Workgroups survive WebKit storage pressure.** When the connection snapshot
+  hits the browser quota, Desktop removes only regenerable conversation caches
+  and retries before an offline transition can restore an empty sidebar.
+
+Requires alpi ≥ 0.14.17 for inventory pipeline status; older daemons keep the
+task-based fallback.
+
 ## v0.5.17 — 2026-08-28 — workgroups at scale
 
 - **Workgroups have a dedicated connection-wide view.** The sidebar keeps a

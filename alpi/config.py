@@ -56,6 +56,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "alp": {
         "link_idle_timeout_s": 60,
         "link_max_duration_s": 0,
+        "max_active_pipelines": 0,
+        "working_after_s": 30,
     },
     "email": {
         "accounts": {},

@@ -288,6 +288,28 @@ async def test_launch_project_recipe_end_to_end(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_launch_queues_the_pipeline_when_admission_is_limited(tmp_path):
+    from alpi.alp import pipeline_queue
+
+    repo = _fixture_repo(tmp_path)
+    home = _hub_home(tmp_path)
+    _pin_member(home, "scout")
+    (home / "config.yaml").write_text(
+        (home / "config.yaml").read_text()
+        + "alp:\n  max_active_pipelines: 1\n",
+    )
+
+    result = await host_recipes.launch(
+        home, _project_recipe(repo), {"slug": "casa-bahia"},
+    )
+
+    assert result["queued"] is True
+    assert result["queue_position"] == 1
+    assert _bodies(home, result["workgroup_id"]) == []
+    assert pipeline_queue.positions(home)[result["workgroup_id"]]["pipeline"] == "intake"
+
+
+@pytest.mark.asyncio
 async def test_launch_rejects_a_recipe_on_the_retired_shape(tmp_path):
     repo = _fixture_repo(tmp_path)
     home = _hub_home(tmp_path)

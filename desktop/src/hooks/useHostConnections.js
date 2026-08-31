@@ -12,6 +12,10 @@ import { purgeConnectionReadState } from "./useReadState.js";
 
 const PROFILES_CACHE_PREFIX = "alf:profiles:v1:";
 const WORKGROUPS_CACHE_PREFIX = "alf:workgroups:v1:";
+const TRANSIENT_CACHE_PREFIXES = [
+  "alpi.session.cache.v1.",
+  "alpi.workgroup.cache.",
+];
 const OFFLINE_REPROBE_MIN_MS = 4000;
 const OFFLINE_REPROBE_MAX_MS = 60000;
 
@@ -47,6 +51,7 @@ export function useHostConnections({
   setRewriteDraft,
   setActiveTask,
   setView,
+  notify,
 }) {
   const [hostConnections, setHostConnections] = useState({
     active_id: "local",
@@ -138,15 +143,30 @@ export function useHostConnections({
   );
 
   const saveToCache = useCallback((connectionId, ps, ws) => {
+    const profilesKey = `${PROFILES_CACHE_PREFIX}${connectionId}`;
+    const workgroupsKey = `${WORKGROUPS_CACHE_PREFIX}${connectionId}`;
+    const serializedProfiles = JSON.stringify(ps);
+    const serializedWorkgroups = JSON.stringify(ws);
+    const write = () => {
+      localStorage.setItem(workgroupsKey, serializedWorkgroups);
+      localStorage.setItem(profilesKey, serializedProfiles);
+    };
     try {
-      localStorage.setItem(
-        `${PROFILES_CACHE_PREFIX}${connectionId}`,
-        JSON.stringify(ps),
-      );
-      localStorage.setItem(
-        `${WORKGROUPS_CACHE_PREFIX}${connectionId}`,
-        JSON.stringify(ws),
-      );
+      write();
+      return;
+    } catch (error) {
+      if (error?.name !== "QuotaExceededError") return;
+    }
+    try {
+      const disposable = [];
+      for (let i = 0; i < localStorage.length; i += 1) {
+        const key = localStorage.key(i);
+        if (key && TRANSIENT_CACHE_PREFIXES.some((prefix) => key.startsWith(prefix))) {
+          disposable.push(key);
+        }
+      }
+      for (const key of disposable) localStorage.removeItem(key);
+      write();
     } catch {}
   }, []);
 
@@ -359,13 +379,20 @@ export function useHostConnections({
               if (connectionSwitchRef.current === switchId) setConnectionSyncing(false);
             });
         })
-        .catch(() => {
+        .catch((e) => {
           if (connectionSwitchRef.current === switchId) {
             hostConnectionsRef.current = previousState;
             setHostConnections(previousState);
             setPickerAlpi(null);
             loadFromCache(previousState.active_id);
             setConnectionSyncing(false);
+            notify?.({
+              message: String(e).includes("revoked")
+                ? "This device's pairing was revoked — re-pair to reconnect."
+                : "Could not switch connection.",
+              variant: "error",
+              duration: 5000,
+            });
           }
           reloadConnections();
         });

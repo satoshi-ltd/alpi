@@ -1632,7 +1632,10 @@ sandbox preserves the profile's existing network access. In the official
 Docker runtime, `terminal` is unavailable during scoped phases; native file and
 search tools remain available and daemon gates still run. Phase denials are
 reported separately from profile `tools.deny`; the gate remains the final
-workspace-diff audit. A missing or unreadable baseline fails closed because
+workspace-diff audit. Once that pre-command audit is clean, filesystem effects
+created by the trusted gate command become the retry baseline, so a red gate
+cannot misattribute its own generated files to the phase owner; later
+out-of-scope agent edits still fail. A missing or unreadable baseline fails closed because
 the daemon cannot prove
 lane ownership. `paths` requires a `gate` — its `cwd` anchors the project root
 and its run is the check moment.
@@ -1698,8 +1701,10 @@ nothing, which used to strand a pipeline with every check green.
 
 **Pipeline runs.** Static definitions and the currently relevant run
 are separate surfaces. `host.workgroups.list` returns the definitions
-without decrypting anything; `host.workgroup.tasks` folds the task
-ledger and adds `pipeline_run`:
+without decrypting anything by default. Inventory clients can request
+`include_pipeline_status: true`; the daemon then uses the same cached
+task-ledger fold as `host.workgroup.tasks` and adds its status to each
+row. The full task response adds `pipeline_run`:
 
 ```json
 {

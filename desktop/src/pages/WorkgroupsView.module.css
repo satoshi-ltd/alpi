@@ -17,22 +17,19 @@
 .tableHead, .row { display: grid; grid-template-columns: minmax(240px, 1fr) 126px 76px 112px 92px; align-items: center; gap: var(--space-5); padding: 0 var(--space-4); }
 .tableHead { min-height: 32px; color: var(--ink-4); font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; }
 .tableHead span:nth-child(n + 3) { text-align: right; }
-.row { width: 100%; min-height: 74px; border: 0; border-bottom: .5px solid var(--line); background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.row { width: 100%; min-height: 64px; border: 0; border-bottom: .5px solid var(--line); background: transparent; color: inherit; text-align: left; cursor: pointer; }
 .row:hover { background: var(--hover); }
 .row:focus-visible { outline: 0; box-shadow: inset 0 0 0 1px var(--focus-border); }
 .identity { min-width: 0; display: flex; align-items: center; gap: var(--space-4); }
-.identity > span:last-child { min-width: 0; display: flex; flex-direction: column; gap: var(--space-1); }
 .identity strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-base); font-weight: var(--fw-bold); }
-.identity :global(.mono) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-3); font-size: var(--fs-xs); }
 .status { min-width: 0; display: inline-flex; align-items: center; gap: var(--space-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); font-size: var(--fs-sm); }
 .status > span { width: var(--dot-size); height: var(--dot-size); border-radius: 50%; background: var(--ink-4); flex-shrink: 0; }
 .status_active > span { background: var(--c-success); }
+.status_queued > span { background: var(--c-warning); }
 .status_error > span { background: var(--c-danger); }
 .status_paused { color: var(--ink-3); }
 .row > :global(.mono) { text-align: right; color: var(--ink-2); font-size: var(--fs-sm); }
-.spend { min-width: 0; display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-1); }
-.spend :global(.mono) { font-size: var(--fs-sm); }
-.spend small { color: var(--ink-3); font-family: var(--font-mono); font-size: var(--fs-xxs); }
+.spend { min-width: 0; text-align: right; font-size: var(--fs-sm); }
 .updated { text-align: right; color: var(--ink-3); font-family: var(--font-mono); font-size: var(--fs-xs); }
 .empty { padding: 60px; color: var(--ink-3); text-align: center; }
 

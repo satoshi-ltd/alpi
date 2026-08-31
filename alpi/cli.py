@@ -3918,6 +3918,13 @@ def _echo_active_pipeline(home: Path, wg_id: str) -> None:
     # Never inferred from the launch selector: the transcript picks the visible run.
     from alpi.host import workgroup as host_wg
 
+    from alpi.alp import pipeline_queue
+
+    queued = pipeline_queue.positions(home).get(wg_id)
+    if queued:
+        click.echo(
+            f"Queued pipeline: {queued['pipeline']} [position {queued['position']}]"
+        )
     try:
         run = (host_wg.fold_task_state(home, wg_id) or {}).get("pipeline_run")
     except Exception:  # noqa: BLE001
@@ -3946,11 +3953,19 @@ def workgroup_list(ctx: click.Context) -> None:
         return
     if hub:
         click.echo("hub of:")
+        from alpi.alp import pipeline_queue
+        queued = pipeline_queue.positions(h)
         for w in hub:
             paused = " [paused]" if w.meta.paused else ""
+            queue_item = queued.get(w.meta.id)
+            queue_note = (
+                f" [queued {queue_item['pipeline']} #{queue_item['position']}]"
+                if queue_item else ""
+            )
             click.echo(
                 f"  {w.meta.id}  {w.meta.name}  ({len(w.members)} members)"
-                f"{_pipelines_summary(w.meta.pipelines, w.meta.launch_pipeline)}{paused}"
+                f"{_pipelines_summary(w.meta.pipelines, w.meta.launch_pipeline)}"
+                f"{paused}{queue_note}"
             )
     if sub:
         click.echo("member of:")
@@ -4173,7 +4188,11 @@ def workgroup_launch(
     except ValueError as e:
         raise click.ClickException(str(e))
     proj = f" · project {result['project_path']}" if result.get("project_path") else ""
-    click.echo(f"launched {result['workgroup_id']}{proj}")
+    queued = (
+        f" · queued #{result['queue_position']}"
+        if result.get("queued") else ""
+    )
+    click.echo(f"launched {result['workgroup_id']}{proj}{queued}")
 
 
 @workgroup.command("join")
@@ -4428,10 +4447,15 @@ def workgroup_trigger(ctx: click.Context, wg_id: str, pipeline: str) -> None:
             f"#{stopped['phase']})"
             + (f" · preempted open #{stopped['open_task']}" if stopped["open_task"] else "")
         )
-    click.echo(
-        f"triggered {result['pipeline']} · opened #{result['phase']} "
-        f"at seq {result['seq']}"
-    )
+    if result.get("queued"):
+        click.echo(
+            f"queued {result['pipeline']} · position {result['position']}"
+        )
+    else:
+        click.echo(
+            f"triggered {result['pipeline']} · opened #{result['phase']} "
+            f"at seq {result['seq']}"
+        )
 
 
 @workgroup.command("turns")

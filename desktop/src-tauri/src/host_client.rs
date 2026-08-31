@@ -38,7 +38,7 @@ const PROBE_REMOTE_TIMEOUT_MS: u64 = 8000;
 const PROBE_RETRY_DELAY_MS: u64 = 350;
 // Sticky offline: tolerate transient blips on noisy Tailscale links.
 const STICKY_OFFLINE_THRESHOLD: u32 = 2;
-// Recent stream traffic vetoes probe-only offline transitions.
+// Recent stream traffic vetoes request/probe-only offline transitions.
 const STREAM_LIVENESS_WINDOW_SECS: u64 = 30;
 // Bound concurrent request/response RPCs per remote connection so a Settings fan-out (or 10 remotes) can't open a burst of sockets at once. Local socket and streams are uncapped.
 const MAX_INFLIGHT_PER_REMOTE: usize = 4;
@@ -218,6 +218,7 @@ fn set_role(id: &str, role: Option<String>) {
 enum StatusSource {
     General,
     Probe,
+    Request,
     Stream,
 }
 
@@ -245,7 +246,9 @@ fn update_status(
         }
         match status {
             ConnectionStatus::Offline if entry.status == ConnectionStatus::Online => {
-                if matches!(source, StatusSource::Probe) && stream_is_live(entry) {
+                if matches!(source, StatusSource::Probe | StatusSource::Request)
+                    && stream_is_live(entry)
+                {
                     return false;
                 }
                 entry.consecutive_failures = entry.consecutive_failures.saturating_add(1);
@@ -290,6 +293,10 @@ fn record_probe_failure(id: &str, status: ConnectionStatus, error: String) {
     }
 }
 
+fn record_request_failure(id: &str, status: ConnectionStatus, error: String) {
+    update_status(id, status, Some(error), StatusSource::Request);
+}
+
 fn classify_remote_error(err: &str) -> ConnectionStatus {
     if err.contains("connection-disabled") {
         ConnectionStatus::Disabled
@@ -308,6 +315,13 @@ fn classify_local_error(err: &str) -> ConnectionStatus {
     } else {
         ConnectionStatus::Offline
     }
+}
+
+// A genuine revoke (unknown/removed grant) authenticates as a bare auth-failed; transient reasons like a socket-identity change must not latch the connection revoked.
+fn is_revocation_error(err: &str) -> bool {
+    err.contains("auth-failed")
+        && !err.contains("connection-disabled")
+        && !err.contains("socket-identity-changed")
 }
 
 fn probe_timeout_for(conn: &HostConnection) -> Duration {
@@ -413,6 +427,10 @@ impl HostConnection {
             HostConnection::Local { id, .. } => id,
             HostConnection::Remote { id, .. } => id,
         }
+    }
+
+    fn is_revoked(&self) -> bool {
+        matches!(self, HostConnection::Remote { revoked: true, .. })
     }
 
     pub fn device_id(&self) -> Option<&str> {
@@ -588,7 +606,11 @@ pub fn load_connections() -> ConnectionsState {
         Err(_) => return ConnectionsState::default(),
     };
     ensure_local(&mut state);
-    if !state.connections.iter().any(|c| c.id() == state.active_id) {
+    if !state
+        .connections
+        .iter()
+        .any(|c| c.id() == state.active_id && !c.is_revoked())
+    {
         state.active_id = LOCAL_ID.to_string();
     }
     state
@@ -761,8 +783,13 @@ pub fn connections_for_ui() -> Value {
 
 pub fn set_active_connection(id: String) -> Result<(), String> {
     try_mutate_connections(|state| {
-        if !state.connections.iter().any(|c| c.id() == id) {
-            return Err(format!("unknown connection: {id}"));
+        let conn = state
+            .connections
+            .iter()
+            .find(|c| c.id() == id)
+            .ok_or_else(|| format!("unknown connection: {id}"))?;
+        if conn.is_revoked() {
+            return Err(format!("connection is revoked: {id}"));
         }
         state.active_id = id;
         Ok(())
@@ -887,12 +914,28 @@ pub fn mark_connection_revoked(id: &str) {
                 }
             }
         }
-        if changed && state.active_id == id {
+        if state.active_id == id {
             state.active_id = LOCAL_ID.to_string();
+            changed = true;
         }
         changed
     });
     purge_ws_pool(id);
+}
+
+pub fn clear_connection_revoked(id: &str) {
+    mutate_connections(|state| {
+        let mut changed = false;
+        for c in &mut state.connections {
+            if let HostConnection::Remote { id: cid, revoked, .. } = c {
+                if cid == id && *revoked {
+                    *revoked = false;
+                    changed = true;
+                }
+            }
+        }
+        changed
+    });
 }
 
 fn active_id_cache() -> &'static Mutex<Option<String>> {
@@ -1156,13 +1199,13 @@ fn call_conn_with_retry(
                 HostConnection::Local { .. } => classify_local_error(e),
                 HostConnection::Remote { .. } => {
                     let cls = classify_remote_error(e);
-                    if cls == ConnectionStatus::AuthFailed {
+                    if is_revocation_error(e) {
                         mark_connection_revoked(&id);
                     }
                     cls
                 }
             };
-            set_status(&id, next, Some(e.clone()));
+            record_request_failure(&id, next, e.clone());
         }
     }
     result
@@ -1516,8 +1559,16 @@ where
             if reason == "connection-disabled" {
                 return Err("alp -32000: auth-failed — connection-disabled".to_string());
             }
-            mark_connection_revoked(connection_id);
-            return Err("alp -32000: auth-failed".to_string());
+            // A transient socket-identity change must not latch revoked; a bare auth-failed (unknown/removed grant) still does.
+            if reason != "socket-identity-changed" {
+                mark_connection_revoked(connection_id);
+            }
+            let suffix = if reason.is_empty() {
+                String::new()
+            } else {
+                format!(" — {reason}")
+            };
+            return Err(format!("alp -32000: auth-failed{suffix}"));
         }
         note_stream_frame(connection_id);
         let keep_going = on_frame(frame);
@@ -2071,6 +2122,8 @@ pub fn probe_connection(conn: &HostConnection) {
         Ok(_) => {
             set_status(&id, ConnectionStatus::Online, None);
             persist_last_connected(&id);
+            // A successful authenticated probe proves the grant is valid — drop any stale revoke latch so the connection is usable without a re-pair.
+            clear_connection_revoked(&id);
             let version_call = match conn {
                 HostConnection::Local { .. } => {
                     call_local_inner("host.version", json!({}), timeout)
@@ -2142,7 +2195,7 @@ pub fn probe_connection(conn: &HostConnection) {
                 HostConnection::Local { .. } => ConnectionStatus::Offline,
                 HostConnection::Remote { .. } => {
                     let cls = classify_remote_error(&e);
-                    if cls == ConnectionStatus::AuthFailed {
+                    if is_revocation_error(&e) {
                         mark_connection_revoked(&id);
                     }
                     cls
@@ -2438,6 +2491,94 @@ mod tests {
     }
 
     #[test]
+    fn a_revoked_active_connection_falls_back_to_local() {
+        let _fs = TEST_FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = std::env::temp_dir().join(format!(
+            "alpi-revoked-active-test-{}",
+            std::process::id(),
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        *config_dir_override().lock().unwrap() = Some(dir.clone());
+
+        let state = ConnectionsState {
+            active_id: "revoked".to_string(),
+            connections: vec![HostConnection::Remote {
+                id: "revoked".to_string(),
+                name: "Revoked".to_string(),
+                host: "wss://client.example.com".to_string(),
+                port: 0,
+                token: "secret".to_string(),
+                revoked: true,
+                device_id: None,
+                last_connected: None,
+                last_role: None,
+            }],
+        };
+        save_connections(&state).unwrap();
+
+        let loaded = load_connections();
+        assert_eq!(loaded.active_id, LOCAL_ID);
+        assert!(set_active_connection("revoked".to_string()).is_err());
+
+        *config_dir_override().lock().unwrap() = None;
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn is_revocation_error_excludes_transient_and_disabled() {
+        assert!(is_revocation_error("alp -32000: auth-failed"));
+        assert!(!is_revocation_error(
+            "alp -32000: auth-failed — socket-identity-changed"
+        ));
+        assert!(!is_revocation_error(
+            "alp -32000: auth-failed — connection-disabled"
+        ));
+        assert!(!is_revocation_error("connect ws://10.0.0.2:49200: refused"));
+    }
+
+    #[test]
+    fn clear_connection_revoked_drops_the_latch() {
+        let _fs = TEST_FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = std::env::temp_dir().join(format!("alpi-unrevoke-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        *config_dir_override().lock().unwrap() = Some(dir.clone());
+
+        let state = ConnectionsState {
+            active_id: LOCAL_ID.to_string(),
+            connections: vec![HostConnection::Remote {
+                id: "r".to_string(),
+                name: "R".to_string(),
+                host: "wss://client.example.com".to_string(),
+                port: 0,
+                token: "secret".to_string(),
+                revoked: true,
+                device_id: None,
+                last_connected: None,
+                last_role: None,
+            }],
+        };
+        save_connections(&state).unwrap();
+
+        clear_connection_revoked("r");
+
+        let loaded = load_connections();
+        let still_revoked = loaded
+            .connections
+            .iter()
+            .any(|c| matches!(c, HostConnection::Remote { revoked: true, .. }));
+        assert!(!still_revoked, "a healed probe must drop the revoke latch");
+        assert!(
+            set_active_connection("r".to_string()).is_ok(),
+            "an un-revoked connection can be activated again"
+        );
+
+        *config_dir_override().lock().unwrap() = None;
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn remote_connection_json_reads_legacy_host_and_writes_url() {
         let state = decode_connections(
             r#"{"active_id":"r","connections":[{"kind":"remote","id":"r","name":"R","host":"100.64.0.1","port":49200,"token":"t"}]}"#,
@@ -2707,6 +2848,22 @@ mod tests {
         if let Ok(map) = status_map().lock() {
             assert_eq!(map.get(id).unwrap().consecutive_failures, 0);
         }
+    }
+
+    #[test]
+    fn a_live_stream_outranks_parallel_request_timeouts() {
+        let id = "stream-live-request";
+        set_status(id, ConnectionStatus::Online, None);
+        note_stream_frame(id);
+
+        record_request_failure(id, ConnectionStatus::Offline, "profiles timeout".into());
+        record_request_failure(id, ConnectionStatus::Offline, "workgroups timeout".into());
+
+        assert_eq!(
+            status_for(id).0,
+            ConnectionStatus::Online,
+            "ordinary requests cannot declare a live event stream offline",
+        );
     }
 
     #[test]

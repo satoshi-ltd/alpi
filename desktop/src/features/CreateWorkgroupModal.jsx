@@ -179,9 +179,11 @@ export default function CreateWorkgroupModal({
           ...(connectionId ? { connectionId } : {}),
         });
         notify({
-          message: recipeIdle
-            ? `Created idle from recipe ${recipeMeta?.id || ""} — trigger a pipeline when ready`
-            : `Launched from recipe ${recipeMeta?.id || ""}`,
+          message: res?.queued
+            ? `Queued from recipe ${recipeMeta?.id || ""} · position ${res.queue_position}`
+            : recipeIdle
+              ? `Created idle from recipe ${recipeMeta?.id || ""} — trigger a pipeline when ready`
+              : `Launched from recipe ${recipeMeta?.id || ""}`,
           variant: "success",
         });
         onCreated?.(res?.workgroup_id, recipeHub);

@@ -1,5 +1,39 @@
 # Changelog
 
+## v0.14.17 — 2026-08-31 — workgroup pipelines queue without disappearing
+
+- **Hub profiles can cap whole active pipelines without serializing their
+  phases.** `alp.max_active_pipelines` defaults to unlimited; a positive value
+  admits that many running or between-phase workgroups and stores excess
+  launches and triggers in a persistent FIFO queue that survives daemon
+  restarts.
+- **Queued work remains observable and recoverable.** CLI launch, list, show and
+  trigger output expose queue admission and position; the opt-in host inventory
+  status reports queued, running, between, blocked and completed pipelines for
+  clients. Deleting a workgroup also removes its queue entry, while pausing it
+  leaves its place durable until it can run again.
+- **Slow member turns announce useful progress automatically.** A member that
+  has not posted after `alp.working_after_s` emits one phase-specific `#working`
+  heartbeat; an earlier post or process exit cancels it. The setting defaults
+  to 30 seconds and can be disabled with `0`.
+- **Pipeline admission replaces the temporary per-profile turn throttle.** Once
+  a workgroup is admitted, its existing profile dispatch and watchdog rules
+  operate normally; capacity is controlled at the maintainable pipeline
+  boundary instead of making individual profile turns appear starved.
+- **A red gate no longer poisons its phase boundary with its own generated
+  files.** After the pre-gate boundary check passes, Alpi records the trusted
+  gate command's filesystem effects as the next retry baseline; later agent
+  edits outside the declared paths remain blocked.
+- **Deleted workgroup history no longer starves active pipelines.** Member
+  profiles cache their tombstone inventory until its directory changes instead
+  of relisting every historical marker on every subscription pull. The
+  anti-resurrection guarantee is unchanged, while large local histories stop
+  consuming the daemon's dispatch loop.
+
+Nothing to migrate. The queue is disabled by default; set
+`alp.max_active_pipelines` on a hub profile and restart its daemon to enable
+bounded admission.
+
 ## v0.14.16 — 2026-08-28 — failed QA pipelines reach a durable close
 
 - **Automatic hubs can close a failed QA phase before the generic final

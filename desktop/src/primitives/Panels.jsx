@@ -82,8 +82,9 @@ export function ConnectionPanel({
         <div className={`col ${styles.connList}`}>
           {connections.map((r) => {
             const active = activeId === r.id;
-            const dotColor =
-              r.status === "connected" || r.status === "online"
+            const dotColor = r.revoked
+              ? "var(--c-warning)"
+              : r.status === "connected" || r.status === "online"
                 ? "var(--c-success)"
                 : r.status === "offline"
                   ? "var(--c-danger)"
@@ -123,6 +124,9 @@ export function ConnectionPanel({
                       </span>
                     )}
                     {r.status === "disabled" && <span className="tag">disabled</span>}
+                    {r.revoked && (
+                      <span className={`tag ${styles.tagOffline}`}>revoked</span>
+                    )}
                     {r.update_available && (
                       <span className={`tag ${styles.tagUpdate}`}>update</span>
                     )}

@@ -388,6 +388,7 @@ export default function App() {
     setRewriteDraft,
     setActiveTask,
     setView,
+    notify,
   });
 
   useEffect(() => {

@@ -66,6 +66,30 @@ def test_tombstones_are_never_evicted(tmp_path: Path) -> None:
     assert "wg_0000" in ids and "wg_0499" in ids
 
 
+def test_tombstones_reuse_directory_snapshot_until_it_changes(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    home = tmp_path / "profile"
+    sub_mod.tombstone(home, "wg_a")
+    real_listdir = sub_mod.os.listdir
+    calls = 0
+
+    def counted_listdir(path):
+        nonlocal calls
+        calls += 1
+        return real_listdir(path)
+
+    monkeypatch.setattr(sub_mod.os, "listdir", counted_listdir)
+
+    assert sub_mod.tombstones(home) == {"wg_a"}
+    assert sub_mod.tombstones(home) == {"wg_a"}
+    assert calls == 1
+
+    sub_mod.tombstone(home, "wg_b")
+    assert sub_mod.tombstones(home) == {"wg_a", "wg_b"}
+    assert calls == 2
+
+
 def test_concurrent_tombstones_all_survive(tmp_path: Path) -> None:
     home = tmp_path / "quill"
     errors: list[Exception] = []

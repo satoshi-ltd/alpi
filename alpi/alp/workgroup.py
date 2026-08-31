@@ -591,8 +591,11 @@ def remove(home: Path, wg_id: str) -> list[str]:
 
 
 def _purge_after_delete(home: Path, wg_id: str) -> list[str]:
+    from alpi.alp import pipeline_queue
     from alpi.alp import subscription as sub_mod
     from alpi.home import _ROOT
+
+    pipeline_queue.remove(home, wg_id)
 
     try:
         from alpi.tools.workgroup_search import forget_workgroup

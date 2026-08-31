@@ -54,6 +54,30 @@ describe("Scrim", () => {
   });
 });
 
+describe("ConnectionPanel revoked row", () => {
+  it("marks a revoked connection instead of showing it healthy", () => {
+    const { getByText } = render(
+      <ConnectionPanel
+        open
+        onClose={() => {}}
+        activeId="local"
+        connections={[
+          {
+            id: "r",
+            kind: "remote",
+            name: "alpi.mirai.com",
+            host: "alpi.mirai.host:49250",
+            status: "online",
+            revoked: true,
+            alpi_version: "0.14.10",
+          },
+        ]}
+      />,
+    );
+    expect(getByText("revoked")).toBeTruthy();
+  });
+});
+
 describe("ConnectionPanel locked", () => {
   it("hides the close button so the only path forward is adding a connection", () => {
     const onClose = vi.fn();

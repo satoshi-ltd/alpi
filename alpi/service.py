@@ -804,6 +804,7 @@ async def _run_workgroup_poller(home: Path, profile: str) -> None:
     try:
         while True:
             try:
+                await _drain_pipeline_queue(home)
                 subscriptions = {
                     sub.wg_id for sub in await _sub_io(sub_mod.load, home)
                 }
@@ -901,6 +902,76 @@ async def _run_workgroup_poller(home: Path, profile: str) -> None:
             await asyncio.gather(*sub_workers.values(), return_exceptions=True)
 
 
+def _active_pipeline_ids(home: Path) -> set[str]:
+    from alpi.alp import workgroup as wg_mod
+    from alpi.host import workgroup as host_wg
+
+    active: set[str] = set()
+    for wg in wg_mod.list_workgroups(home):
+        try:
+            run = (host_wg.fold_task_state(home, wg.meta.id) or {}).get("pipeline_run")
+        except Exception:  # noqa: BLE001
+            continue
+        if run and run.get("status") in {"running", "between"}:
+            active.add(wg.meta.id)
+    return active
+
+
+async def _drain_pipeline_queue(home: Path) -> int:
+    from alpi.alp import pipeline_queue
+    from alpi.alp import workgroup as wg_mod
+    from alpi.alp import workgroup_client as wc
+
+    pending = await asyncio.to_thread(pipeline_queue.entries, home)
+    if not pending:
+        return 0
+    maximum = pipeline_queue.limit(home)
+    active = await asyncio.to_thread(_active_pipeline_ids, home)
+    admitted = 0
+    for item in pending:
+        wg_id = item["wg_id"]
+        wg = await asyncio.to_thread(wg_mod.load, home, wg_id)
+        if wg is None:
+            await asyncio.to_thread(
+                pipeline_queue.remove, home, wg_id, item["pipeline"],
+                enqueued_at=item["enqueued_at"],
+            )
+            continue
+        if wg.meta.paused:
+            continue
+        consumes_slot = wg_id not in active
+        if maximum > 0 and consumes_slot and len(active) >= maximum:
+            break
+        try:
+            await wc.trigger_pipeline(
+                home, wg_id, item["pipeline"], _admit=True,
+                _opener=str(item.get("opener") or ""),
+            )
+        except wc.TriggerError as e:
+            if e.code == "workgroup-paused":
+                continue
+            log.warning(
+                "wg pipeline queue dropped %s/%s: %s",
+                wg_id, item["pipeline"], e,
+            )
+        except Exception as e:  # noqa: BLE001
+            log.warning(
+                "wg pipeline queue admission failed for %s/%s: %s",
+                wg_id, item["pipeline"], e,
+            )
+            break
+        removed = await asyncio.to_thread(
+            pipeline_queue.remove, home, wg_id, item["pipeline"],
+            enqueued_at=item["enqueued_at"],
+        )
+        if removed:
+            wc._emit_workgroup_changed(home, wg_id, "admitted")
+        if consumes_slot:
+            active.add(wg_id)
+        admitted += 1
+    return admitted
+
+
 def _merged_posts(recent: list[dict], new_posts: list[dict] | None) -> list[dict]:
     # `append_recent` trims the cached window to RECENT_POSTS_CACHE, so one pull wider than that would drop its own trigger before it is read.
     if not new_posts:
@@ -961,12 +1032,6 @@ async def _maybe_dispatch_for_sub(
             sub.wg_id, trigger,
         )
         return True
-    if not _profile_turn_slot_available(profile):
-        log.info(
-            "wg poller: %s queued (profile %s has %s active turns)",
-            sub.wg_id, profile, _MAX_INFLIGHT_TURNS_PER_PROFILE,
-        )
-        return True
     log.info(
         "wg poller: %s dispatching turn (reason=%s, member-of)",
         sub.wg_id, trigger,
@@ -1007,6 +1072,7 @@ async def _maybe_dispatch_for_sub(
                 posts, sub.hub_pubkey, profile,
             ),
             member_responded_seq=new_responded,
+            member_turn=True,
         ),
     )
     return True
@@ -1017,7 +1083,6 @@ _HUB_FOLLOWUP_STALE_SECONDS = 60
 
 
 _INFLIGHT: dict[tuple[str, str], dict] = {}
-_MAX_INFLIGHT_TURNS_PER_PROFILE = 2
 
 _TURN_END_CAP = 512
 # Post-exit pipe EOF is immediate unless a descendant inherited the pipes; an unbounded wait would hold _INFLIGHT forever.
@@ -1036,11 +1101,6 @@ def _stamp_turn_end(wg_id: str) -> None:
         if len(_LAST_TURN_END) >= _TURN_END_CAP:
             _LAST_TURN_END.pop(next(iter(_LAST_TURN_END)))
     _LAST_TURN_END[wg_id] = now_mono
-
-
-def _profile_turn_slot_available(profile: str) -> bool:
-    active = sum(1 for _, active_profile in _INFLIGHT if active_profile == profile)
-    return active < _MAX_INFLIGHT_TURNS_PER_PROFILE
 
 
 # Strong refs for fire-and-forget dispatch tasks.
@@ -1214,6 +1274,13 @@ async def _maybe_gate_advance(
         passed, output = False, violations
     else:
         passed, output = await asyncio.to_thread(gates.run_gate, step, workspace)
+        try:
+            await asyncio.to_thread(
+                gates.refresh_baseline,
+                home / "alp" / "workgroups" / wg.meta.id, step, workspace,
+            )
+        except OSError as e:
+            log.warning("wg %s gate baseline refresh failed: %s", wg.meta.id, e)
     try:
         gates.write_gate_log(
             home / "alp" / "workgroups" / wg.meta.id,
@@ -1334,12 +1401,6 @@ async def _maybe_dispatch_for_hub(
         log.info(
             "wg poller: %s skipped (in-flight dispatch, reason=%s)",
             wg.meta.id, trigger,
-        )
-        return
-    if not _profile_turn_slot_available(profile):
-        log.info(
-            "wg poller: %s queued (profile %s has %s active turns)",
-            wg.meta.id, profile, _MAX_INFLIGHT_TURNS_PER_PROFILE,
         )
         return
     log.info(
@@ -1652,15 +1713,6 @@ async def _maybe_watchdog_close(
     if not recent:
         return
     active = wg_tasks.active_task(recent, hub_pubkey=wg.meta.hub_pubkey)
-    if (
-        active is not None
-        and active.participants
-        and any(
-            not _profile_turn_slot_available(participant.lower())
-            for participant in active.participants
-        )
-    ):
-        return
     continuation = active is None
     next_phase = ""
     if continuation:
@@ -2421,6 +2473,36 @@ def _turn_idle_timeout_for(pipeline: bool) -> int:
     return _PIPELINE_TURN_IDLE_TIMEOUT_SECONDS if pipeline else _TURN_IDLE_TIMEOUT_SECONDS
 
 
+def _working_after_for(home: Path) -> int:
+    from alpi import config as cfg_mod
+
+    raw = (cfg_mod.load(home).alp or {}).get("working_after_s", 30)
+    try:
+        return max(0, int(raw))
+    except (TypeError, ValueError):
+        return 30
+
+
+async def _auto_working_after(
+    home: Path, wg_id: str, phase: str, delay: int,
+    proc: Any, posts_added: list[int],
+) -> bool:
+    await asyncio.sleep(delay)
+    if proc.returncode is not None or posts_added[0] > 0:
+        return False
+    from alpi.alp import workgroup_client
+    try:
+        await workgroup_client.post(
+            home, wg_id,
+            f"#working #{phase} deliverable still in progress "
+            "(automatic turn heartbeat)".encode(),
+        )
+    except Exception as e:  # noqa: BLE001
+        log.debug("wg poller: automatic #working failed for %s: %s", wg_id, e)
+        return False
+    return True
+
+
 async def _kill_proc(proc: Any, wait_task: "asyncio.Future[int]") -> int:
     # wait_task is shielded so our own timeout/cancel can't cancel the single in-flight proc.wait().
     try:
@@ -2520,6 +2602,7 @@ async def _dispatch_workgroup_turn(
     recovery_kind: str = "",
     recovery_seq: int = 0,
     recovery_attempt: int = 0,
+    member_turn: bool = False,
 ) -> None:
     """Spawn a background ``chat --once`` turn for a workgroup."""
     turn_id = os.urandom(16).hex()
@@ -2790,6 +2873,17 @@ async def _dispatch_workgroup_turn(
         "started_at": started_at,
     }
 
+    working_task: asyncio.Task | None = None
+    working_after = _working_after_for(home) if member_turn else 0
+    if working_after > 0:
+        phase = str((write_scope or {}).get("phase") or "active-task")
+        working_task = asyncio.create_task(
+            _auto_working_after(
+                home, wg_id, phase, working_after, proc, posts_added,
+            ),
+            name=f"wg-working-{profile}-{wg_id}",
+        )
+
     timed_out = False
     kill_reason: str | None = None
     try:
@@ -2817,11 +2911,15 @@ async def _dispatch_workgroup_turn(
         except Exception:  # noqa: BLE001
             pass
     finally:
+        if working_task is not None:
+            working_task.cancel()
         # No await between pop and stamp: a yield here is a window where neither watchdog guard holds.
         info = _INFLIGHT.pop((wg_id, profile), {})
         # Only a delivered turn buys settle time: a silently looping turn must leave the watchdog eligible to escalate.
         if posts_added[0] > 0:
             _stamp_turn_end(wg_id)
+    if working_task is not None:
+        await asyncio.gather(working_task, return_exceptions=True)
     preempted = bool(info.get("preempted"))
     preempted_by_seq = int(info.get("preempted_by_seq", 0))
     cancelled = bool(info.get("cancelled"))

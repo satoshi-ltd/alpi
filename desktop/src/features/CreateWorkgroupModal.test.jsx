@@ -86,7 +86,9 @@ describe("CreateWorkgroupModal", () => {
           }],
         };
       }
-      if (cmd === "workgroup_launch_recipe") return { workgroup_id: "wg-saved" };
+      if (cmd === "workgroup_launch_recipe") {
+        return { workgroup_id: "wg-saved", queued: true, queue_position: 3 };
+      }
       return null;
     });
     const onCreated = vi.fn();
@@ -118,6 +120,10 @@ describe("CreateWorkgroupModal", () => {
       });
     });
     expect(onCreated).toHaveBeenCalledWith("wg-saved", "mira");
+    expect(notifyMock).toHaveBeenCalledWith({
+      message: "Queued from recipe hotel · position 3",
+      variant: "success",
+    });
   });
 
   const HOTEL_RECIPE = {

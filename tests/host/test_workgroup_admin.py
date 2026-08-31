@@ -176,6 +176,63 @@ def test_workgroup_list_rows_carry_chains_without_the_retired_key(short_tmp: Pat
     assert "operations" not in rows[0]
 
 
+def test_workgroup_list_rows_expose_pipeline_queue_position(short_tmp: Path) -> None:
+    from alpi.alp import pipeline_queue
+    from alpi.alp import workgroup as wg_mod
+    from alpi.host.device_state import _hub_workgroups
+
+    home = short_tmp / "h"
+    _seed(home)
+    wg = wg_mod.create(
+        home, name="factory", hub_kp=load_or_generate(home), member_pubkeys=[],
+        pipelines={"intake": ["intake"]}, launch_pipeline="intake",
+    )
+    pipeline_queue.enqueue(home, wg.meta.id, "intake")
+
+    row = _hub_workgroups(home, "default", include_pipeline_status=True)[0]
+    assert row["pipeline_status"] == "queued"
+    assert row["queued_pipeline"] == "intake"
+    assert row["queue_position"] == 1
+
+
+@pytest.mark.asyncio
+async def test_workgroups_list_includes_pipeline_status_only_when_requested(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    from alpi import home as home_mod
+    from alpi.alp import workgroup as wg_mod
+    from alpi.host import device_state
+
+    home = short_tmp / "h"
+    _seed(home)
+    monkeypatch.setattr(home_mod, "_ROOT", short_tmp)
+    monkeypatch.setattr(home_mod, "home_for", lambda profile: home)
+    wg = wg_mod.create(
+        home, name="factory", hub_kp=load_or_generate(home), member_pubkeys=[],
+        pipelines={"intake": ["intake"]}, launch_pipeline="intake",
+    )
+    monkeypatch.setattr(
+        device_state, "_pipeline_status",
+        lambda resolved_home, wg_id: (
+            "completed" if resolved_home == home and wg_id == wg.meta.id else None
+        ),
+    )
+    srv = host_server.Server(home=home)
+    device_state.register(srv)
+
+    lean = await srv._dispatch({
+        "id": "lean", "method": "host.workgroups.list",
+        "params": {"profile": "default"},
+    })
+    rich = await srv._dispatch({
+        "id": "rich", "method": "host.workgroups.list",
+        "params": {"profile": "default", "include_pipeline_status": True},
+    })
+
+    assert "pipeline_status" not in lean["result"]["workgroups"][0]
+    assert rich["result"]["workgroups"][0]["pipeline_status"] == "completed"
+
+
 def test_workgroup_list_flags_a_retired_shape_as_needs_relaunch(short_tmp: Path) -> None:
     """The poller refuses to load such a workgroup, so its row must not read as a healthy deliberation wg."""
     import yaml

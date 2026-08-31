@@ -90,10 +90,10 @@ WebSocket or implement a second run-to-chat reconstruction path.
 
 | Method | Params | Returns |
 |---|---|---|
-| `host.workgroups.list` | `profile?` | `{ workgroups: [{ id, profile, name, members, is_hub, hub_id, … }] }` |
+| `host.workgroups.list` | `profile?`, `include_pipeline_status?` | `{ workgroups: [{ id, profile, name, members, is_hub, hub_id, pipeline_status?, queued_pipeline?, queue_position?, … }] }` |
 | `host.workgroup.post` | `profile`, `wg_id`, `text` | `{ ok, seq }` |
 | `host.workgroup.transcript` | `profile`, `wg_id`, `after_seq?`, `limit?`, `tail?` | `{ posts: [{ seq, at, from, body, cost }], next_seq, limit }` |
-| `host.workgroup.tasks` | `profile`, `wg_id` | `{ active, closed, blocked }` |
+| `host.workgroup.tasks` | `profile`, `wg_id` | `{ active, closed, blocked, pipeline_run }` |
 
 The token acts as a local member profile; the daemon holds that profile's
 keys and does the group crypto. `create`/`update`/`add_member`/`kick`/

@@ -106,6 +106,7 @@ export default function ConnectionSwitcher({
           name: c.kind === "remote" ? c.name : "Local daemon",
           host: connectionEndpoint(c),
           status: c.status,
+          revoked: c.revoked ?? false,
           alpi_version: c.alpi_version ?? null,
         }))}
         activeId={activeId}
