@@ -20,6 +20,29 @@ beforeEach(() => {
 });
 
 describe("SessionsButton — profile switch", () => {
+  it("isolates a same-named profile across two connections", async () => {
+    let resolveRemote;
+    invokeMock.mockImplementation((_cmd, args) => {
+      if (args.connectionId === "local") return Promise.resolve(sessA);
+      return new Promise((resolve) => { resolveRemote = resolve; });
+    });
+    const { rerender } = render(
+      <SessionsButton profile="A" connectionId="local" />,
+    );
+    await waitFor(() => expect(screen.getByText("Sessions")).toBeTruthy());
+
+    rerender(<SessionsButton profile="A" connectionId="remote" />);
+    expect(screen.queryByText("Sessions")).toBeNull();
+
+    await act(async () => { resolveRemote(sessB); });
+    await waitFor(() => expect(screen.getByText("Sessions")).toBeTruthy());
+    expect(invokeMock).toHaveBeenLastCalledWith("sessions", {
+      profile: "A",
+      limit: 30,
+      connectionId: "remote",
+    });
+  });
+
   it("hides the previous profile's sessions until the new profile's fetch resolves", async () => {
     invokeMock.mockResolvedValue(sessA);
     const { rerender } = render(<SessionsButton profile="A" />);

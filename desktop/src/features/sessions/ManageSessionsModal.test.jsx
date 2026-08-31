@@ -117,7 +117,7 @@ describe("ManageSessionsModal", () => {
 
     const call = invoke.mock.calls.find(([cmd]) => cmd === "sessions_delete");
     expect(call).toBeDefined();
-    expect(call[1]).toEqual({ profile: "doc", ids: ["stub"] });
+    expect(call[1]).toEqual({ profile: "doc", ids: ["stub"], connectionId: null });
   });
 
   it("locks the active session — its checkbox is disabled", async () => {

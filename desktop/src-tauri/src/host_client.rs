@@ -1261,7 +1261,8 @@ fn call_local_inner(method: &str, params: Value, timeout: Duration) -> Result<Va
         .ok_or_else(|| "daemon returned neither result nor error".to_string())
 }
 
-pub fn call_stream<F>(
+pub fn call_stream_for<F>(
+    connection_id: &str,
     method: &str,
     params: Value,
     mut on_frame: F,
@@ -1269,7 +1270,7 @@ pub fn call_stream<F>(
 where
     F: FnMut(Value),
 {
-    call_stream_until(method, params, move |frame| {
+    call_stream_for_until(connection_id, method, params, move |frame| {
         on_frame(frame);
         true
     })
@@ -1285,6 +1286,32 @@ where
     F: FnMut(Value) -> bool,
 {
     let conn = active_connection();
+    call_stream_conn(conn, method, params, on_frame)
+}
+
+pub fn call_stream_for_until<F>(
+    connection_id: &str,
+    method: &str,
+    params: Value,
+    on_frame: F,
+) -> Result<(), String>
+where
+    F: FnMut(Value) -> bool,
+{
+    let conn = connection_by_id(connection_id)
+        .ok_or_else(|| format!("unknown connection: {connection_id}"))?;
+    call_stream_conn(conn, method, params, on_frame)
+}
+
+fn call_stream_conn<F>(
+    conn: HostConnection,
+    method: &str,
+    params: Value,
+    on_frame: F,
+) -> Result<(), String>
+where
+    F: FnMut(Value) -> bool,
+{
     let id = conn.id().to_string();
     let result = match &conn {
         HostConnection::Local { .. } => call_stream_local(&id, method, params, on_frame),

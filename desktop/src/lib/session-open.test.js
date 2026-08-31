@@ -133,9 +133,9 @@ describe("createSessionOpener", () => {
     opener.open("work", "s");
     await flush();
     expect(calls).toEqual([
-      { tailTurns: 60 },
-      { beforeTurn: 190, maxTurns: 100 },
-      { beforeTurn: 90, maxTurns: 100 },
+      { tailTurns: 60, connectionId: "conn-1" },
+      { beforeTurn: 190, maxTurns: 100, connectionId: "conn-1" },
+      { beforeTurn: 90, maxTurns: 100, connectionId: "conn-1" },
     ]);
     expect(state.data.turns).toHaveLength(250);
     expect(state.data.turnsOffset).toBeUndefined();
@@ -183,7 +183,10 @@ describe("createSessionOpener", () => {
     });
     opener.open("work", "s");
     await flush();
-    expect(fetchFull).toHaveBeenCalledWith("work", "s", { known });
+    expect(fetchFull).toHaveBeenCalledWith("work", "s", {
+      known,
+      connectionId: "conn-1",
+    });
     expect(state.data.turns).toHaveLength(6);
     expect(state.sync).toBeNull();
   });
@@ -320,7 +323,7 @@ describe("createSessionOpener", () => {
     const { state, opener } = harness({ fetchDetail, fetchFull });
     opener.open("work", "s");
     await flush();
-    expect(fetchFull).toHaveBeenCalledWith("work", "s");
+    expect(fetchFull).toHaveBeenCalledWith("work", "s", { connectionId: "conn-1" });
     expect(state.data.turns).toHaveLength(100);
   });
 });

@@ -22,6 +22,10 @@ fn active_chats() -> &'static Mutex<HashMap<String, String>> {
     SLOT.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
+fn active_chat_key(connection_id: &str, profile: &str) -> String {
+    format!("{connection_id}\0{profile}")
+}
+
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
@@ -433,12 +437,16 @@ async fn host_connection_probe(id: String) -> String {
 }
 
 #[tauri::command]
-async fn sessions(profile: Option<String>, limit: Option<usize>) -> Vec<SessionEntry> {
+async fn sessions(
+    profile: Option<String>,
+    limit: Option<usize>,
+    connection_id: Option<String>,
+) -> Vec<SessionEntry> {
     off_main(move || match profile {
-        Some(p) => sessions_via_alp(&p, limit),
-        None => host_profile_names()
+        Some(p) => sessions_via_alp(&p, limit, connection_id.as_deref()),
+        None => host_profile_names(connection_id.as_deref())
             .into_iter()
-            .flat_map(|p| sessions_via_alp(&p, limit))
+            .flat_map(|p| sessions_via_alp(&p, limit, connection_id.as_deref()))
             .collect(),
     })
     .await
@@ -487,8 +495,13 @@ async fn run_cancel(
     .await?
 }
 
-fn host_profile_names() -> Vec<String> {
-    let value = host_array_value("host.profiles.list", serde_json::json!({}), "profiles");
+fn host_profile_names(connection_id: Option<&str>) -> Vec<String> {
+    let value = host_array_value_for(
+        connection_id,
+        "host.profiles.list",
+        serde_json::json!({}),
+        "profiles",
+    );
     value
         .as_array()
         .cloned()
@@ -520,15 +533,20 @@ fn host_array_value_for(
         .unwrap_or_else(|| serde_json::Value::Array(vec![]))
 }
 
-fn sessions_via_alp(profile: &str, limit: Option<usize>) -> Vec<SessionEntry> {
+fn sessions_via_alp(
+    profile: &str,
+    limit: Option<usize>,
+    connection_id: Option<&str>,
+) -> Vec<SessionEntry> {
     let mut params = serde_json::json!({"profile": profile});
     if let Some(limit) = limit {
         params["limit"] = serde_json::json!(limit);
     }
-    let result = match host_client::call(
-        "host.sessions.list",
-        params,
-    ) {
+    let call_result = match connection_id {
+        Some(cid) => host_client::call_for(cid, "host.sessions.list", params),
+        None => host_client::call("host.sessions.list", params),
+    };
+    let result = match call_result {
         Ok(v) => v,
         Err(_) => return vec![],
     };
@@ -621,6 +639,7 @@ async fn session_detail(
     tail_turns: Option<u64>,
     before_turn: Option<u64>,
     max_turns: Option<u64>,
+    connection_id: Option<String>,
 ) -> Result<serde_json::Value, String> {
     off_main(move || {
         let mut params = serde_json::json!({"profile": profile, "id": id});
@@ -637,7 +656,10 @@ async fn session_detail(
             params["max_turns"] = serde_json::json!(max);
         }
         // Full envelope: total_turns is the client's only signal that the daemon honored the slice.
-        host_client::call("host.session.read", params)
+        match connection_id {
+            Some(cid) => host_client::call_for(&cid, "host.session.read", params),
+            None => host_client::call("host.session.read", params),
+        }
     })
     .await?
 }
@@ -646,9 +668,13 @@ async fn session_detail(
 async fn sessions_delete(
     profile: String,
     ids: Vec<String>,
+    connection_id: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let params = serde_json::json!({"profile": profile, "ids": ids});
-    tauri::async_runtime::spawn_blocking(move || host_client::call("host.sessions.delete", params))
+    tauri::async_runtime::spawn_blocking(move || match connection_id {
+        Some(cid) => host_client::call_for(&cid, "host.sessions.delete", params),
+        None => host_client::call("host.sessions.delete", params),
+    })
         .await
         .map_err(|e| format!("host.sessions.delete: {e}"))?
 }
@@ -2707,7 +2733,10 @@ fn validate_attachment_size(mime: &str, size: u64) -> Result<(), String> {
 // Remote daemon can't read local paths — upload bytes, return the daemon-side path.
 #[tauri::command]
 async fn attachment_stage(
-    profile: String, path: String, mime: String,
+    profile: String,
+    path: String,
+    mime: String,
+    connection_id: Option<String>,
 ) -> Result<serde_json::Value, String> {
     use base64::Engine;
     if mime.trim().is_empty() {
@@ -2725,10 +2754,16 @@ async fn attachment_stage(
     let bytes = std::fs::read(p).map_err(|e| format!("read {path}: {e}"))?;
     let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
     let res = tauri::async_runtime::spawn_blocking(move || {
-        host_client::call_fetch(
-            "host.attachments.stage",
-            serde_json::json!({"profile": profile, "name": name, "mime": mime, "data_base64": b64}),
-        )
+        let params = serde_json::json!({
+            "profile": profile,
+            "name": name,
+            "mime": mime,
+            "data_base64": b64,
+        });
+        match connection_id {
+            Some(cid) => host_client::call_for_fetch(&cid, "host.attachments.stage", params),
+            None => host_client::call_fetch("host.attachments.stage", params),
+        }
     })
     .await
     .map_err(|e| format!("join: {e}"))??;
@@ -2854,16 +2889,23 @@ async fn ollama_models(profile: String) -> Result<serde_json::Value, String> {
 }
 
 #[tauri::command]
-async fn chat_cancel(profile: String, request_id: Option<String>) -> Result<(), String> {
+async fn chat_cancel(
+    profile: String,
+    request_id: Option<String>,
+    connection_id: Option<String>,
+) -> Result<(), String> {
+    let connection_id = connection_id.unwrap_or_else(host_client::active_connection_id);
+    let chat_key = active_chat_key(&connection_id, &profile);
     let request_id = match request_id {
         Some(rid) if !rid.is_empty() => Some(rid),
-        _ => active_chats().lock().unwrap().get(&profile).cloned(),
+        _ => active_chats().lock().unwrap().get(&chat_key).cloned(),
     };
     let Some(request_id) = request_id else {
         return Ok(());
     };
     tauri::async_runtime::spawn_blocking(move || {
-        host_client::call(
+        host_client::call_for(
+            &connection_id,
             "host.chat.cancel",
             serde_json::json!({"request_id": request_id}),
         )
@@ -2883,14 +2925,27 @@ fn chat_send_stream(
     model: Option<String>,
     request_id: Option<String>,
     attachments: Option<serde_json::Value>,
+    connection_id: Option<String>,
 ) {
+    let connection_id = connection_id.unwrap_or_else(host_client::active_connection_id);
     thread::spawn(move || {
-        stream_chat(app, profile, session_id, rewrite_from_turn, text, model, request_id, attachments)
+        stream_chat(
+            app,
+            connection_id,
+            profile,
+            session_id,
+            rewrite_from_turn,
+            text,
+            model,
+            request_id,
+            attachments,
+        )
     });
 }
 
 fn stream_chat(
     app: AppHandle,
+    connection_id: String,
     profile: String,
     session_id: Option<String>,
     rewrite_from_turn: Option<usize>,
@@ -2899,6 +2954,7 @@ fn stream_chat(
     request_id_opt: Option<String>,
     attachments: Option<serde_json::Value>,
 ) {
+    let chat_key = active_chat_key(&connection_id, &profile);
     let request_id = request_id_opt.unwrap_or_else(|| format!(
         "tauri-{}-{}",
         profile,
@@ -2910,7 +2966,7 @@ fn stream_chat(
     active_chats()
         .lock()
         .unwrap()
-        .insert(profile.clone(), request_id.clone());
+        .insert(chat_key.clone(), request_id.clone());
 
     let mut params = serde_json::json!({
         "profile": profile,
@@ -2939,7 +2995,7 @@ fn stream_chat(
     let app_for_frames = app.clone();
     let rid_for_frames = request_id.clone();
 
-    let result = host_client::call_stream("host.chat.send", params, |frame| {
+    let result = host_client::call_stream_for(&connection_id, "host.chat.send", params, |frame| {
         if let Some(err) = frame.get("error") {
             got_error = true;
             let _ = app_for_frames.emit(
@@ -3104,8 +3160,8 @@ fn stream_chat(
 
     {
         let mut map = active_chats().lock().unwrap();
-        if map.get(&profile).map(|s| s.as_str()) == Some(&request_id) {
-            map.remove(&profile);
+        if map.get(&chat_key).map(|s| s.as_str()) == Some(&request_id) {
+            map.remove(&chat_key);
         }
     }
 
@@ -3118,7 +3174,7 @@ fn stream_chat(
         },
     );
     if !got_error && !got_interrupted {
-        notifications::dispatch_session_done(&app, &host_client::active_connection_id(), &profile, &resolved_id);
+        notifications::dispatch_session_done(&app, &connection_id, &profile, &resolved_id);
     }
     let _ = app.emit(
         "chat-event",
@@ -3135,6 +3191,7 @@ async fn chat_events_since(
     session_id: String,
     after_seq: Option<u64>,
     limit: Option<u64>,
+    connection_id: Option<String>,
 ) -> Result<serde_json::Value, String> {
     // Replay sidecar for the freeze case: when host.chat.send's stream socket dies mid-turn, the desktop polls this to backfill missed frames.
     off_main(move || {
@@ -3148,7 +3205,10 @@ async fn chat_events_since(
         if let Some(l) = limit {
             params["limit"] = serde_json::Value::from(l);
         }
-        host_client::call("host.chat.events_since", params)
+        match connection_id {
+            Some(cid) => host_client::call_for(&cid, "host.chat.events_since", params),
+            None => host_client::call("host.chat.events_since", params),
+        }
     })
     .await?
 }

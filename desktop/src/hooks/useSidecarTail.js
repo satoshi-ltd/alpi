@@ -4,7 +4,7 @@ import { reconstructFromEvents } from "../lib/reconstructTurn.js";
 
 const TAIL_POLL_MS = 1200;
 
-export function useSidecarTail({ profile, sessionId, active, onDone }) {
+export function useSidecarTail({ profile, sessionId, connectionId = null, active, onDone }) {
   const [live, setLive] = useState(null);
   const stateRef = useRef({ key: null, events: [], nextSeq: 0, done: false });
   const onDoneRef = useRef(onDone);
@@ -16,7 +16,7 @@ export function useSidecarTail({ profile, sessionId, active, onDone }) {
       stateRef.current = { key: null, events: [], nextSeq: 0, done: false };
       return undefined;
     }
-    const key = `${profile}/${sessionId}`;
+    const key = `${connectionId || "local"}/${profile}/${sessionId}`;
     if (stateRef.current.key !== key) {
       stateRef.current = { key, events: [], nextSeq: 0, done: false };
       setLive(null);
@@ -27,7 +27,12 @@ export function useSidecarTail({ profile, sessionId, active, onDone }) {
       const st = stateRef.current;
       if (!st.done) {
         try {
-          const res = await invoke("chat_events_since", { profile, sessionId, afterSeq: st.nextSeq });
+          const res = await invoke("chat_events_since", {
+            profile,
+            sessionId,
+            afterSeq: st.nextSeq,
+            connectionId,
+          });
           if (!cancelled && res?.exists) {
             const fresh = Array.isArray(res.events) ? res.events : [];
             if (fresh.length) {
@@ -47,7 +52,7 @@ export function useSidecarTail({ profile, sessionId, active, onDone }) {
     };
     tick();
     return () => { cancelled = true; if (timer) clearTimeout(timer); };
-  }, [profile, sessionId, active]);
+  }, [profile, sessionId, connectionId, active]);
 
   return live;
 }

@@ -21,7 +21,7 @@ export function createSessionRefresher({
     const current = sessionDataRef.current;
     const known = current?.id === sessionId ? current : null;
     try {
-      const data = await fetchFullSession(profile, sessionId, { known });
+      const data = await fetchFullSession(profile, sessionId, { known, connectionId: connId });
       if (!isChatSessionData(data)) return;
       saveCachedSession(connId, profile, sessionId, data);
       if (activeConnectionIdRef.current !== connId) return;

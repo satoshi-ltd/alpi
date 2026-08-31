@@ -487,7 +487,7 @@ export default function App() {
       setRecents([]);
     }
     let cancelled = false;
-    invoke("sessions", { limit: 8 })
+    invoke("sessions", { limit: 8, connectionId: hostConnections.active_id })
       .then((rows) => {
         if (cancelled) return;
         const list = Array.isArray(rows) ? rows : [];
@@ -945,7 +945,7 @@ export default function App() {
           tools: [],
           error: null,
           profile: profileName,
-          connectionId: hostConnectionsRef.current?.active_id ?? null,
+          connectionId: activeConnectionId,
           sessionId: startSessionId,
           launchSessionId: startSessionId,
           requestId,
@@ -963,7 +963,10 @@ export default function App() {
               wireAttachments = await Promise.all(
                 attachments.map(async (a) => {
                   const staged = await invoke("attachment_stage", {
-                    profile: profileName, path: a.path, mime: a.mime,
+                    profile: profileName,
+                    path: a.path,
+                    mime: a.mime,
+                    connectionId: activeConnectionId,
                   });
                   return { path: staged.path, name: staged.name, mime: staged.mime };
                 }),
@@ -985,6 +988,7 @@ export default function App() {
             model: model ?? null,
             requestId,
             attachments: wireAttachments,
+            connectionId: activeConnectionId,
           });
         } catch (e) {
           notify({ message: String(e), variant: "error" });
@@ -1000,7 +1004,11 @@ export default function App() {
   const onCancelTurn = useCallback(() => {
     const pending = foregroundTurnRef.current;
     if (!pending?.profile) return;
-    invoke("chat_cancel", { profile: pending.profile, requestId: pending.requestId }).catch(() => {});
+    invoke("chat_cancel", {
+      profile: pending.profile,
+      requestId: pending.requestId,
+      connectionId: pending.connectionId ?? null,
+    }).catch(() => {});
   }, []);
 
   const onNewChat = useCallback(() => {

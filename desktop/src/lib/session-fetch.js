@@ -46,11 +46,18 @@ export function isSessionGone(err) {
 export async function fetchSessionDetail(
   profile,
   sessionId,
-  { afterTurn = null, tailTurns = null, beforeTurn = null, maxTurns = null } = {},
+  {
+    afterTurn = null,
+    tailTurns = null,
+    beforeTurn = null,
+    maxTurns = null,
+    connectionId = null,
+  } = {},
 ) {
   const raw = await invoke("session_detail", {
     profile,
     id: sessionId,
+    ...(connectionId ? { connectionId } : {}),
     ...(afterTurn != null ? { afterTurn } : {}),
     ...(tailTurns != null ? { tailTurns } : {}),
     ...(beforeTurn != null ? { beforeTurn } : {}),
@@ -59,17 +66,18 @@ export async function fetchSessionDetail(
   return normalizeSessionResult(raw);
 }
 
-export async function fetchFullSession(profile, sessionId, { known = null } = {}) {
+export async function fetchFullSession(profile, sessionId, { known = null, connectionId = null } = {}) {
   const usable = isDeltaBase(known) && known.id === sessionId && known.in_flight !== true;
   if (usable && known.turns.length > 0) {
     const res = await fetchSessionDetail(profile, sessionId, {
       afterTurn: absoluteEnd(known),
+      connectionId,
     });
     if (res.totalTurns == null) return withEnvelope(res.session, res);
     const merged = mergeSessionTurns(known, res);
     if (merged) return withEnvelope(merged, res);
   }
-  const res = await fetchSessionDetail(profile, sessionId);
+  const res = await fetchSessionDetail(profile, sessionId, { connectionId });
   return withEnvelope(res.session, res);
 }
 

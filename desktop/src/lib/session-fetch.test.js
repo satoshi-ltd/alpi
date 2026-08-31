@@ -228,6 +228,16 @@ describe("mergeSessionTurns with offsets", () => {
 });
 
 describe("fetchSessionDetail params", () => {
+  it("pins the read to its originating connection", async () => {
+    invokeMock.mockResolvedValueOnce({ session: { id: "s", turns: [] }, total_turns: 0, turns_offset: 0 });
+    await fetchSessionDetail("work", "s", { connectionId: "remote-b" });
+    expect(invokeMock).toHaveBeenCalledWith("session_detail", {
+      profile: "work",
+      id: "s",
+      connectionId: "remote-b",
+    });
+  });
+
   it("passes tailTurns through", async () => {
     invokeMock.mockResolvedValueOnce({ session: { id: "s", turns: [] }, total_turns: 0, turns_offset: 0 });
     await fetchSessionDetail("work", "s", { tailTurns: 60 });

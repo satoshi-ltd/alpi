@@ -85,7 +85,7 @@ export default function ManageSessionsModal({
   const refresh = useCallback(async () => {
     if (!profile) return;
     try {
-      const list = await invoke("sessions", { profile, limit: null });
+      const list = await invoke("sessions", { profile, limit: null, connectionId });
       const enriched = (list || [])
         .filter((s) => s.kind === "chat")
         .map((s) => ({ ...s, activityMs: activityMs(s) }));
@@ -93,7 +93,7 @@ export default function ManageSessionsModal({
     } catch (e) {
       notify({ message: `sessions: ${String(e)}`, variant: "error", duration: 4000 });
     }
-  }, [profile, notify]);
+  }, [profile, connectionId, notify]);
 
   useEffect(() => {
     if (!open) return;
@@ -214,7 +214,11 @@ export default function ManageSessionsModal({
     if (selectedIds.length === 0) return;
     setDeleting(true);
     try {
-      const result = await invoke("sessions_delete", { profile, ids: selectedIds });
+      const result = await invoke("sessions_delete", {
+        profile,
+        ids: selectedIds,
+        connectionId,
+      });
       const deleted = (result?.deleted ?? []).length;
       const errors = result?.errors ?? [];
       if (deleted > 0) {

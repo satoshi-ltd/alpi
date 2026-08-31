@@ -1,6 +1,21 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { listen } from "@tauri-apps/api/event";
 
-import { connectionToSwitch, resolveDeeplink } from "./useNotificationDeeplink.js";
+vi.mock("@tauri-apps/plugin-notification", () => ({
+  isPermissionGranted: vi.fn(async () => true),
+  requestPermission: vi.fn(async () => "granted"),
+}));
+
+import {
+  connectionToSwitch,
+  resolveDeeplink,
+  useNotificationDeeplink,
+} from "./useNotificationDeeplink.js";
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 describe("resolveDeeplink", () => {
   it("opens the chat with a specific session when kind=chat carries id", () => {
@@ -87,5 +102,50 @@ describe("connectionToSwitch", () => {
     expect(connectionToSwitch({ kind: "chat" }, "local")).toBeNull();
     expect(connectionToSwitch({ kind: "chat", connection_id: "" }, "local")).toBeNull();
     expect(connectionToSwitch(null, "local")).toBeNull();
+  });
+});
+
+describe("useNotificationDeeplink", () => {
+  it("navigates only after explicit notification activation, never on delivery", async () => {
+    const listeners = new Map();
+    listen.mockImplementation(async (name, callback) => {
+      listeners.set(name, callback);
+      return () => listeners.delete(name);
+    });
+    const setView = vi.fn();
+    const onSwitchConnection = vi.fn();
+
+    renderHook(() => useNotificationDeeplink({
+      setView,
+      setSettingsTarget: vi.fn(),
+      openNotifications: vi.fn(),
+      onSwitchConnection,
+      activeConnectionId: "local",
+    }));
+
+    await waitFor(() => expect(listeners.has("notification-activated")).toBe(true));
+    expect(listeners.has("notification-fired")).toBe(false);
+    expect(setView).not.toHaveBeenCalled();
+    expect(onSwitchConnection).not.toHaveBeenCalled();
+
+    await act(async () => {
+      listeners.get("notification-activated")({
+        payload: {
+          deeplink: {
+            kind: "workgroup",
+            profile: "mira",
+            id: "wg-1",
+            connection_id: "remote-b",
+          },
+        },
+      });
+    });
+
+    expect(onSwitchConnection).toHaveBeenCalledWith("remote-b");
+    expect(setView).toHaveBeenCalledWith({
+      kind: "workgroup",
+      profile: "mira",
+      id: "wg-1",
+    });
   });
 });

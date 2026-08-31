@@ -70,12 +70,26 @@ export function useHostConnections({
   const connectionSwitchRef = useRef(0);
   const syncedStatusRef = useRef("");
 
-  const reloadConnections = useCallback(async () => {
+  const reloadConnections = useCallback(async ({ acceptActiveChange = false } = {}) => {
+    const switchId = connectionSwitchRef.current;
+    const expectedActiveId = hostConnectionsRef.current?.active_id ?? "local";
     try {
       const value = await invoke("host_connections");
+      if (connectionSwitchRef.current !== switchId) return null;
+      const current = hostConnectionsRef.current;
+      if (
+        !acceptActiveChange &&
+        current?.connections?.length > 0 &&
+        value?.active_id !== expectedActiveId
+      ) {
+        return null;
+      }
       hostConnectionsRef.current = value;
       setHostConnections(value);
-    } catch {}
+      return value;
+    } catch {
+      return null;
+    }
   }, []);
 
   // Local mtime patch for background workgroup activity — keeps the sidebar's unread dot and recency order truthful without a per-post workgroups RPC. Capped at one patch per second per workgroup.
@@ -421,7 +435,7 @@ export function useHostConnections({
         ...(token ? { token } : {}),
         ...(pairingToken ? { pairingToken } : {}),
       });
-      await reloadConnections();
+      await reloadConnections({ acceptActiveChange: true });
       invoke("host_connections_probe_active").catch(() => {});
       return { name: resolvedName };
     },
@@ -438,7 +452,7 @@ export function useHostConnections({
         invalidateProfileDetailCache(id);
         invalidateTranscriptCache(id);
         invalidateSessionCache(id);
-        await reloadConnections();
+        await reloadConnections({ acceptActiveChange: true });
         await reload();
       } catch {}
     },

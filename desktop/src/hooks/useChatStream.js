@@ -43,7 +43,10 @@ export function useChatStream({
   const fetchFinishedSession = useCallback(async (turn, sid) => {
     const current = sessionDataRef?.current;
     const known = current?.id === sid ? current : null;
-    const data = await fetchFullSession(turn.profile, sid, { known });
+    const data = await fetchFullSession(turn.profile, sid, {
+      known,
+      connectionId: turn.connectionId ?? null,
+    });
     // Cache under the turn's own connection — resolving the active one here would poison another daemon's cache after a mid-fetch switch.
     saveCachedSession(turn.connectionId ?? null, turn.profile, sid, data);
     return data;
@@ -302,6 +305,7 @@ export function useChatStream({
         profile: turn.profile,
         sessionId: turn.sessionId,
         afterSeq: 0,
+        connectionId: turn.connectionId ?? null,
       });
       if (!result?.exists) return;
       if (settlementsRef.current.has(requestId)) return;

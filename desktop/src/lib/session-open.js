@@ -84,11 +84,12 @@ export function createSessionOpener({
         const res = await fetchDetail(profile, sessionId, {
           beforeTurn: offset,
           maxTurns: BACKFILL_CHUNK_TURNS,
+          connectionId: connId,
         });
         if (!live()) return;
         const r = prependOlderTurns(cur, res);
         if (r.action === "restart") {
-          const data = await fetchFull(profile, sessionId);
+          const data = await fetchFull(profile, sessionId, { connectionId: connId });
           if (!live()) return;
           saveCached(connId, profile, sessionId, data);
           setSessionData(data);
@@ -110,10 +111,13 @@ export function createSessionOpener({
         let data;
         if (cached?.data && isDeltaBase(cached.data) && cached.data.id === sessionId && cached.data.turns.length > 0) {
           sync({ phase: "refresh" });
-          data = await fetchFull(profile, sessionId, { known: cached.data });
+          data = await fetchFull(profile, sessionId, { known: cached.data, connectionId: connId });
         } else {
           sync({ phase: "refresh" });
-          const res = await fetchDetail(profile, sessionId, { tailTurns: TAIL_TURNS });
+          const res = await fetchDetail(profile, sessionId, {
+            tailTurns: TAIL_TURNS,
+            connectionId: connId,
+          });
           data = sessionFromSlice(res);
         }
         if (!live()) return;

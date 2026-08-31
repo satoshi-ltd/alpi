@@ -1,7 +1,7 @@
 use serde::Serialize;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 #[cfg(not(all(debug_assertions, target_os = "macos")))]
 use tauri_plugin_notification::NotificationExt;
 
@@ -57,16 +57,7 @@ fn schedule_failure_body(name: &str, reason: &str) -> String {
     }
 }
 
-fn show(app: &AppHandle, title: &str, body: &str, deeplink: Deeplink) {
-    // Plugin has no per-notification click callback; React consumes the deeplink on next window focus.
-    let payload = serde_json::json!({
-        "title": title,
-        "body": body,
-        "deeplink": deeplink,
-        "fired_at": chrono::Utc::now().timestamp_millis(),
-    });
-    let _ = app.emit("notification-fired", payload);
-
+fn show(_app: &AppHandle, title: &str, body: &str, _deeplink: Deeplink) {
     #[cfg(all(debug_assertions, target_os = "macos"))]
     {
         // `tauri dev` runs unsigned; macOS Notification Center blocks the plugin silently. Fall back to osascript which uses the system Script Editor identity — no signing or permission grant needed for verification.
@@ -74,7 +65,7 @@ fn show(app: &AppHandle, title: &str, body: &str, deeplink: Deeplink) {
     }
     #[cfg(not(all(debug_assertions, target_os = "macos")))]
     {
-        let _ = app
+        let _ = _app
             .notification()
             .builder()
             .title(title)

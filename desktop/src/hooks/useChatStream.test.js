@@ -94,7 +94,7 @@ describe("useChatStream live frames", () => {
   it("done removes the turn when there is no error", async () => {
     const { result } = mount();
     await waitForListen();
-    seedTurn(result, { sessionId: "sess-1" });
+    seedTurn(result, { connectionId: "A", sessionId: "sess-1" });
     emit({ kind: "done" });
     await settle();
     expect(turnOf(result)).toBeNull();
@@ -619,14 +619,19 @@ describe("useChatStream stall watchdog", () => {
     });
     const { result, notify } = mount();
     await waitForListen();
-    seedTurn(result, { sessionId: "sess-1" });
+    seedTurn(result, { connectionId: "A", sessionId: "sess-1" });
 
     await act(async () => { await vi.advanceTimersByTimeAsync(12_000); });
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
 
     expect(invoke).toHaveBeenCalledWith(
       "chat_events_since",
-      expect.objectContaining({ profile: "doc", sessionId: "sess-1", afterSeq: 0 }),
+      expect.objectContaining({
+        profile: "doc",
+        sessionId: "sess-1",
+        afterSeq: 0,
+        connectionId: "A",
+      }),
     );
     expect(notify).toHaveBeenCalledWith(
       expect.objectContaining({ variant: "info" }),

@@ -11,6 +11,25 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.5.19 — 2026-09-01 — stay on the connection you chose
+
+- **Background activity can no longer take over the interface.** Delivering a
+  native chat or workgroup notification does not switch connections or views;
+  desktop notifications remain passive instead of treating the next window
+  focus as a click.
+- **Every live conversation remains attached to its origin daemon.** Sending,
+  cancelling, replaying, refreshing, uploading attachments and managing
+  sessions all carry the captured connection id, so changing connection while
+  a turn runs cannot redirect its next operation.
+- **Late connection snapshots cannot undo a user switch.** Desktop rejects
+  stale or lagging `host_connections` responses instead of returning to the
+  previously selected daemon when an unrelated event refreshes the UI.
+- **Session lists and caches are isolated by connection.** Profiles with the
+  same name on two daemons no longer share recent-session data while switching.
+
+Client-side only — no daemon contract changes. Requires alpi ≥ 0.14.17,
+unchanged from 0.5.18.
+
 ## v0.5.18 — 2026-08-31 — a quieter workgroup inventory
 
 - **The workgroup header now reports useful activity.** Its summary sits below

@@ -251,6 +251,35 @@ describe("useHostConnections.onSetHostConnection", () => {
       result.current.profiles.some((p) => p.name === "STALE-local-profile"),
     ).toBe(false);
   });
+
+  it("does not let a lagging host_connections snapshot undo an optimistic switch", async () => {
+    let releaseSetActive;
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "host_connections") return makeConnections("local");
+      if (cmd === "profile_summaries") return [{ name: "doc", model: "a/b" }];
+      if (cmd === "workgroups") return [];
+      if (cmd === "host_connection_set_active") {
+        return new Promise((resolve) => { releaseSetActive = resolve; });
+      }
+      return null;
+    });
+
+    const { result } = renderHostConnections();
+    await waitFor(() => expect(result.current.hostConnections.connections.length).toBe(2));
+
+    act(() => result.current.onSetHostConnection("remote"));
+    await waitFor(() => expect(result.current.hostConnections.active_id).toBe("remote"));
+
+    await act(async () => {
+      await result.current.reload();
+    });
+    expect(result.current.hostConnections.active_id).toBe("remote");
+
+    await act(async () => {
+      releaseSetActive();
+      await Promise.resolve();
+    });
+  });
 });
 
 describe("useHostConnections.onAddHostConnection", () => {

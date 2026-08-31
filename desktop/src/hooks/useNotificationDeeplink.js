@@ -1,14 +1,11 @@
 import { useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import {
   isPermissionGranted,
   requestPermission,
 } from "@tauri-apps/plugin-notification";
 import { safeUnlisten } from "../lib/tauri-listen.js";
-
-const DEEPLINK_TTL_MS = 30_000;
 
 export function resolveDeeplink(deeplink) {
   const { kind, profile, id, connection_id: connectionId } = deeplink || {};
@@ -52,7 +49,6 @@ export function useNotificationDeeplink({
   onSwitchConnection,
   activeConnectionId,
 }) {
-  const pendingRef = useRef(null);
   const openNotificationsRef = useRef(openNotifications);
   useEffect(() => { openNotificationsRef.current = openNotifications; }, [openNotifications]);
   const onSwitchConnectionRef = useRef(onSwitchConnection);
@@ -61,21 +57,13 @@ export function useNotificationDeeplink({
   useEffect(() => { activeConnectionIdRef.current = activeConnectionId; }, [activeConnectionId]);
 
   useEffect(() => {
-    let unlistenFired = null;
-    let unlistenFocus = null;
+    let unlistenActivated = null;
     let cancelled = false;
 
-    const consume = () => {
-      const pending = pendingRef.current;
-      if (!pending) return;
-      if (Date.now() - pending.firedAt > DEEPLINK_TTL_MS) {
-        pendingRef.current = null;
-        return;
-      }
-      pendingRef.current = null;
-      const target = connectionToSwitch(pending.deeplink, activeConnectionIdRef.current);
+    const consume = (deeplink) => {
+      const target = connectionToSwitch(deeplink, activeConnectionIdRef.current);
       if (target) onSwitchConnectionRef.current?.(target);
-      const action = resolveDeeplink(pending.deeplink);
+      const action = resolveDeeplink(deeplink);
       if (!action) return;
       if (action.settingsTarget !== undefined) {
         setSettingsTarget(action.settingsTarget);
@@ -92,30 +80,18 @@ export function useNotificationDeeplink({
       }
       if (cancelled) return;
       try {
-        unlistenFired = await listen("notification-fired", (ev) => {
-          const payload = ev?.payload || {};
-          pendingRef.current = {
-            firedAt: Number(payload.fired_at) || Date.now(),
-            deeplink: payload.deeplink || {},
-          };
+        unlistenActivated = await listen("notification-activated", (ev) => {
+          consume(ev?.payload?.deeplink || {});
         });
       } catch { /* tauri race */ }
       if (cancelled) {
-        safeUnlisten(unlistenFired);
-        return;
+        safeUnlisten(unlistenActivated);
       }
-      try {
-        const win = getCurrentWebviewWindow();
-        unlistenFocus = await win.onFocusChanged(({ payload: focused }) => {
-          if (focused) consume();
-        });
-      } catch { /* tauri race */ }
     })();
 
     return () => {
       cancelled = true;
-      safeUnlisten(unlistenFired);
-      safeUnlisten(unlistenFocus);
+      safeUnlisten(unlistenActivated);
     };
   }, [setView, setSettingsTarget]);
 }

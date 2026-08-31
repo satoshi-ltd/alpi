@@ -33,7 +33,6 @@ function bucketFor(ms) {
 
 const _sessionsCache = new Map();
 
-// Keyed by profile name only — App must call this on connection switch so a same-named profile on another daemon can't serve a stale list.
 export function invalidateSessionsButtonCache() {
   _sessionsCache.clear();
 }
@@ -47,10 +46,11 @@ export default function SessionsButton({
   onChange,
   onNew,
 }) {
+  const cacheKey = profile ? `${connectionId || "local"}|${profile}` : null;
   const [open, setOpen] = useState(false);
   const [manageOpen, setManageOpen] = useState(false);
-  const [sessions, setSessions] = useState(() => (profile ? _sessionsCache.get(profile) ?? [] : []));
-  const [loadedProfile, setLoadedProfile] = useState(() => (profile && _sessionsCache.has(profile) ? profile : null));
+  const [sessions, setSessions] = useState(() => (cacheKey ? _sessionsCache.get(cacheKey) ?? [] : []));
+  const [loadedKey, setLoadedKey] = useState(() => (cacheKey && _sessionsCache.has(cacheKey) ? cacheKey : null));
   const [reloadTick, setReloadTick] = useState(0);
   const [loadTick, setLoadTick] = useState(0);
   const [, setTitleTick] = useState(0);
@@ -74,35 +74,35 @@ export default function SessionsButton({
   useEffect(() => {
     if (!profile) {
       setSessions([]);
-      setLoadedProfile(null);
+      setLoadedKey(null);
       return undefined;
     }
-    const cached = _sessionsCache.get(profile);
+    const cached = _sessionsCache.get(cacheKey);
     if (cached) {
       setSessions(cached);
-      setLoadedProfile(profile);
+      setLoadedKey(cacheKey);
     }
     let cancelled = false;
-    invoke("sessions", { profile, limit: RECENT_LIMIT })
+    invoke("sessions", { profile, limit: RECENT_LIMIT, connectionId })
       .then((all) => {
         if (cancelled) return;
         const chats = (all || []).filter((s) => s.kind === "chat");
-        _sessionsCache.set(profile, chats);
+        _sessionsCache.set(cacheKey, chats);
         setSessions(chats);
-        setLoadedProfile(profile);
+        setLoadedKey(cacheKey);
       })
       .catch(() => {
         if (cancelled) return;
-        setSessions(_sessionsCache.get(profile) ?? []);
-        setLoadedProfile(profile);
+        setSessions(_sessionsCache.get(cacheKey) ?? []);
+        setLoadedKey(cacheKey);
       });
     return () => {
       cancelled = true;
     };
-  }, [profile, loadTick, reloadTick]);
+  }, [profile, connectionId, cacheKey, loadTick, reloadTick]);
 
   // Never show a prior profile's list while a switch is still loading (stale on remote).
-  const isFresh = loadedProfile === profile;
+  const isFresh = loadedKey === cacheKey;
   const shownSessions = isFresh ? sessions : [];
 
   const grouped = useMemo(() => {

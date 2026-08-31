@@ -471,6 +471,7 @@ const Transcript = memo(function Transcript({
   const liveTail = useSidecarTail({
     profile: profileName,
     sessionId,
+    connectionId,
     active: lastTurnInFlight && !pendingTurn,
     onDone: onRefreshSession,
   });

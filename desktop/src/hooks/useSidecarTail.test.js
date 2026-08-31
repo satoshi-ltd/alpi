@@ -30,9 +30,18 @@ describe("useSidecarTail", () => {
       }
       return null;
     });
-    const { result } = renderHook(() => useSidecarTail({ profile: "a", sessionId: "s1", active: true }));
+    const { result } = renderHook(() => useSidecarTail({
+      profile: "a",
+      sessionId: "s1",
+      connectionId: "remote-b",
+      active: true,
+    }));
     await act(async () => { await vi.advanceTimersByTimeAsync(50); });
-    expect(invoke).toHaveBeenCalledWith("chat_events_since", expect.objectContaining({ sessionId: "s1", afterSeq: 0 }));
+    expect(invoke).toHaveBeenCalledWith("chat_events_since", expect.objectContaining({
+      sessionId: "s1",
+      afterSeq: 0,
+      connectionId: "remote-b",
+    }));
     expect(result.current?.tools).toHaveLength(1);
     expect(result.current.tools[0].name).toBe("search");
   });
