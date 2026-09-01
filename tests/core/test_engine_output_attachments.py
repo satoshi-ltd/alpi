@@ -242,6 +242,54 @@ def test_free_model_lifts_tool_call_ceiling(bootstrapped_home, monkeypatch):
     assert len(engine.session.turns[-1].tools) == 150
 
 
+def test_budget_capped_profile_lifts_tool_call_ceiling(bootstrapped_home, monkeypatch):
+    from alpi import engine as engine_mod
+    cfg_path = bootstrapped_home / "config.yaml"
+    cfg_path.write_text(cfg_path.read_text() + "\nbudget:\n  daily_usd: 12.0\n")
+    cfg = config.load(bootstrapped_home)
+    assert cfg.tools.max_steps_per_turn == 100
+    assert cfg.budget == {"daily_usd": 12.0}
+    monkeypatch.setattr(engine_mod.llm, "is_free_model", lambda _m: False)
+    monkeypatch.setattr(engine_mod.llm, "stream", _k_tools_then_reply(150))
+    monkeypatch.setattr(engine_mod.tools, "execute", lambda *_a, **_k: ToolResult(ok=True, output="ok"))
+
+    engine = Engine(home=bootstrapped_home, cfg=cfg)
+    engine.run_turn("do it", lambda _e: None)
+
+    assert len(engine.session.turns[-1].tools) == 150
+
+
+def test_no_budget_paid_model_keeps_default_ceiling(bootstrapped_home, monkeypatch):
+    from alpi import engine as engine_mod
+    cfg = config.load(bootstrapped_home)
+    assert cfg.tools.max_steps_per_turn == 100
+    cfg.budget = {}
+    monkeypatch.setattr(engine_mod.llm, "is_free_model", lambda _m: False)
+    monkeypatch.setattr(engine_mod.llm, "stream", _k_tools_then_reply(150))
+    monkeypatch.setattr(engine_mod.tools, "execute", lambda *_a, **_k: ToolResult(ok=True, output="ok"))
+
+    engine = Engine(home=bootstrapped_home, cfg=cfg)
+    engine.run_turn("do it", lambda _e: None)
+
+    assert len(engine.session.turns[-1].tools) == 100
+
+
+def test_explicit_cap_respected_even_with_budget(bootstrapped_home, monkeypatch):
+    from alpi import engine as engine_mod
+    cfg = config.load(bootstrapped_home)
+    cfg.tools.max_steps_per_turn = 3
+    cfg.raw["tools"] = {"max_steps_per_turn": 3}
+    cfg.budget = {"daily_usd": 12.0}
+    monkeypatch.setattr(engine_mod.llm, "is_free_model", lambda _m: False)
+    monkeypatch.setattr(engine_mod.llm, "stream", _k_tools_then_reply(10))
+    monkeypatch.setattr(engine_mod.tools, "execute", lambda *_a, **_k: ToolResult(ok=True, output="ok"))
+
+    engine = Engine(home=bootstrapped_home, cfg=cfg)
+    engine.run_turn("do it", lambda _e: None)
+
+    assert len(engine.session.turns[-1].tools) == 3
+
+
 def test_explicit_cap_respected_even_for_free_model(bootstrapped_home, monkeypatch):
     from alpi import engine as engine_mod
     cfg = config.load(bootstrapped_home)

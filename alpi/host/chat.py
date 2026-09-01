@@ -375,6 +375,16 @@ async def _data_chat_send(
                     "tokens_before": ev.tokens_in,
                     "tokens_after": ev.tokens_out,
                 })
+            elif ev.kind == "usage":
+                await emit({
+                    "event": "usage",
+                    "tokens_in": ev.tokens_in,
+                    "tokens_out": ev.tokens_out,
+                    "cached_in": ev.cached_in,
+                    "context_tokens": ev.context_tokens,
+                    "cost": ev.cost,
+                    "model": ev.model,
+                })
             elif ev.kind == "assistant_done" and ev.final:
                 if ev.attachments:
                     produced.extend(ev.attachments)

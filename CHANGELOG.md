@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.14.19 — 2026-09-01 — busy fleets stay responsive and observable
+
+- **The host inventory folds each shared workgroup only once.** A workgroup
+  mirrored across six member profiles is deduplicated before its pipeline state
+  is read, instead of repeating the same transcript fold for every profile.
+  Large queues therefore stop starving cheap host RPCs used by Desktop.
+- **The curated OpenRouter picker includes `z-ai/glm-5.3-flash`.** Its committed
+  context catalog reserves 32K tokens for output from the provider's 1M window.
+- **Desktop can follow a turn's context while it is still running.** Host chat
+  streams completion usage with an explicit context value, distinct from usage
+  produced by vision, research and other side calls, so clients never infer the
+  conversation meter from the wrong model call.
+- **A configured daily budget can replace the conservative paid-model step
+  ceiling.** When `tools.max_steps_per_turn` is left at its default, a profile
+  with a positive `budget.daily_usd` gets the same 1000-step runaway backstop as
+  free and local models; an explicit step cap always wins.
+
+Nothing to migrate. Pipeline admission, FIFO order and the maximum active count
+are unchanged.
+
 ## v0.14.18 — 2026-09-01 — pipeline inputs prepare themselves at admission
 
 - **A pipeline can declare one deterministic admission preflight.** A

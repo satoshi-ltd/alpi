@@ -25,6 +25,7 @@ export default function ProfileChatHeader({
   sessionData,
   model,
   contextWindow = 200_000,
+  liveCtxTokens = null,
   activeSessionId,
   connectionId = null,
   onOpenSkills,
@@ -44,7 +45,7 @@ export default function ProfileChatHeader({
 }) {
   const accent = profile?.accent || "var(--accent)";
   const shownModel = model || profile?.model;
-  const ctxTokens = sessionData?.last_ctx_tokens ?? 0;
+  const ctxTokens = liveCtxTokens ?? sessionData?.last_ctx_tokens ?? 0;
   const ctxPct = contextWindow > 0 ? Math.min(1, ctxTokens / contextWindow) : 0;
 
   const capUsd = profile?.budget_daily_usd;

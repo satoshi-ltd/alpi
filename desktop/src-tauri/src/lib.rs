@@ -81,6 +81,15 @@ enum ChatEvent {
         tokens_before: u64,
         tokens_after: u64,
     },
+    Usage {
+        request_id: String,
+        tokens_in: u64,
+        tokens_out: u64,
+        cached_in: u64,
+        context_tokens: u64,
+        cost: f64,
+        model: String,
+    },
     Reply {
         request_id: String,
         text: String,
@@ -3122,6 +3131,20 @@ fn stream_chat(
                     },
                 );
             }
+            "usage" => {
+                let _ = app_for_frames.emit(
+                    "chat-event",
+                    ChatEvent::Usage {
+                        request_id: rid_for_frames.clone(),
+                        tokens_in: frame["tokens_in"].as_u64().unwrap_or(0),
+                        tokens_out: frame["tokens_out"].as_u64().unwrap_or(0),
+                        cached_in: frame["cached_in"].as_u64().unwrap_or(0),
+                        context_tokens: frame["context_tokens"].as_u64().unwrap_or(0),
+                        cost: frame["cost"].as_f64().unwrap_or(0.0),
+                        model: frame["model"].as_str().unwrap_or("").to_string(),
+                    },
+                );
+            }
             "reply" => {
                 final_reply = frame["text"].as_str().unwrap_or("").to_string();
                 if let Some(sid) = frame.get("session_id").and_then(|v| v.as_str()) {
@@ -3876,6 +3899,28 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod chat_event_tests {
+    use super::ChatEvent;
+
+    #[test]
+    fn usage_event_keeps_context_tokens_distinct_from_side_call_usage() {
+        let event = ChatEvent::Usage {
+            request_id: "req-1".to_string(),
+            tokens_in: 42_000,
+            tokens_out: 120,
+            cached_in: 10_000,
+            context_tokens: 42_000,
+            cost: 0.0031,
+            model: "openrouter/z-ai/glm-5.3-flash".to_string(),
+        };
+        let value = serde_json::to_value(event).unwrap();
+        assert_eq!(value["kind"], "usage");
+        assert_eq!(value["context_tokens"], 42_000);
+        assert_eq!(value["model"], "openrouter/z-ai/glm-5.3-flash");
+    }
 }
 
 #[cfg(test)]

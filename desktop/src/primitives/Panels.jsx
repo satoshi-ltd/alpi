@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { I } from "./icons.jsx";
 import Tip from "./Tip.jsx";
 import styles from "./Panels.module.css";
@@ -12,7 +13,7 @@ export function Scrim({ onClose, children, align = "flex-start", top = 96, dismi
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose, dismissable]);
-  return (
+  return createPortal(
     <div
       className={`anim-fade ${styles.scrim}`}
       onClick={(e) => {
@@ -24,7 +25,8 @@ export function Scrim({ onClose, children, align = "flex-start", top = 96, dismi
       }}
     >
       {children}
-    </div>
+    </div>,
+    document.body,
   );
 }
 

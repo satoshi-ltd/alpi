@@ -233,6 +233,47 @@ async def test_workgroups_list_includes_pipeline_status_only_when_requested(
     assert rich["result"]["workgroups"][0]["pipeline_status"] == "completed"
 
 
+def test_aggregate_workgroups_folds_each_deduplicated_row_once(monkeypatch) -> None:
+    from alpi.host import device_state
+
+    profiles = [{"name": "member"}, {"name": "hub"}]
+    rows = {
+        "member": [{
+            "id": "wg_shared", "profile": "member", "is_hub": False, "mtime": 1,
+        }],
+        "hub": [{
+            "id": "wg_shared", "profile": "hub", "is_hub": True, "mtime": 2,
+        }],
+    }
+    calls = []
+    monkeypatch.setattr(device_state, "_profiles", lambda: profiles)
+    monkeypatch.setattr(
+        device_state, "_workgroups_for",
+        lambda profile, include_pipeline_status=False: rows[profile],
+    )
+    monkeypatch.setattr(
+        device_state, "_resolve_home", lambda profile: Path(f"/{profile}"),
+    )
+    monkeypatch.setattr(
+        device_state, "_pipeline_status",
+        lambda home, wg_id: calls.append((home, wg_id)) or "running",
+    )
+    monkeypatch.setattr(
+        "alpi.alp.pipeline_queue.positions", lambda _home: {},
+    )
+
+    result = device_state._aggregate_workgroups(
+        None, include_pipeline_status=True,
+    )
+
+    assert result == [{
+        "id": "wg_shared", "profile": "hub", "is_hub": True, "mtime": 2,
+        "pipeline_status": "running", "queued_pipeline": None,
+        "queue_position": None,
+    }]
+    assert calls == [(Path("/hub"), "wg_shared")]
+
+
 def test_workgroup_list_flags_a_retired_shape_as_needs_relaunch(short_tmp: Path) -> None:
     """The poller refuses to load such a workgroup, so its row must not read as a healthy deliberation wg."""
     import yaml

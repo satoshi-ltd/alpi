@@ -11,6 +11,27 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.5.20 — 2026-09-01 — busy views stay visible and truthful
+
+- **Connection and command panels now cover sticky view chrome correctly.**
+  Shared panel scrims render at the document overlay layer, so the Workgroups
+  header can no longer appear above an open modal.
+- **Pipeline flow no longer disappears while a busy daemon refreshes it.** The
+  workgroup view keeps its last canonical fold during navigation and shows an
+  explicit loading row before the first response instead of leaving a blank gap.
+- **A slow local RPC no longer masquerades as a dead daemon.** Once Desktop has
+  connected to the Unix socket, a read timeout keeps the connection online while
+  the affected view reports its stale state; connect failures still mark it
+  offline.
+- **The context meter moves with a live turn.** Completion usage crosses the
+  daemon and native bridge with an explicit conversation-context value, so tool
+  sub-model calls cannot replace it; compaction and reconnect replay preserve
+  the newest value until the saved session catches up.
+
+Requires alpi ≥ 0.14.19 for live context usage frames. Older daemons retain the
+last persisted context value while a turn runs; every other change remains
+client-side compatible.
+
 ## v0.5.19 — 2026-09-01 — stay on the connection you chose
 
 - **Background activity can no longer take over the interface.** Delivering a

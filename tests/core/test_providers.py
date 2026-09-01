@@ -91,6 +91,15 @@ def test_openrouter_curated_uses_current_deepseek_flash_alias() -> None:
     assert "deepseek/deepseek-v4-flash-0731" not in ids
 
 
+def test_openrouter_curated_includes_glm_5_3_flash() -> None:
+    rows = {row["id"]: row for row in curated.load_curated("openrouter")}
+    assert rows["z-ai/glm-5.3-flash"] == {
+        "id": "z-ai/glm-5.3-flash",
+        "note": "multimodal · cheap · fast · 1M",
+        "reasoning": True,
+    }
+
+
 def test_ollama_helpers_cover_root_and_size() -> None:
     assert ollama._root("http://localhost:11434/v1/") == "http://localhost:11434"
     assert ollama._root("http://localhost:11434/") == "http://localhost:11434"

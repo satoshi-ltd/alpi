@@ -39,4 +39,14 @@ describe("reconstructFromEvents", () => {
     const r = reconstructFromEvents([ev("error", { text: "boom" }, 1)]);
     expect(r.error).toBe("boom");
   });
+
+  it("restores the latest durable chat-context value", () => {
+    const r = reconstructFromEvents([
+      ev("usage", { context_tokens: 120000 }, 1),
+      ev("usage", { context_tokens: 0, tokens_in: 9000 }, 2),
+      ev("auto_compact", { tokens_after: 70000 }, 3),
+      ev("usage", { context_tokens: 76000 }, 4),
+    ]);
+    expect(r.ctxTokens).toBe(76000);
+  });
 });

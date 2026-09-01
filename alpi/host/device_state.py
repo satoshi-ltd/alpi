@@ -792,13 +792,29 @@ def _aggregate_workgroups(
     by_id: dict[str, dict[str, Any]] = {}
     for p in _profiles():
         for wg in _workgroups_for(
-            p["name"], include_pipeline_status=include_pipeline_status,
+            p["name"], include_pipeline_status=False,
         ):
             old = by_id.get(wg["id"])
             if old is not None and old.get("is_hub"):
                 continue
             by_id[wg["id"]] = wg
     rows = list(by_id.values())
+    if include_pipeline_status:
+        queued_by_home: dict[Path, dict[str, dict[str, Any]]] = {}
+        from alpi.alp import pipeline_queue
+
+        for row in rows:
+            home = _resolve_home(str(row.get("profile") or ""))
+            queue_item = None
+            if row.get("is_hub"):
+                if home not in queued_by_home:
+                    queued_by_home[home] = pipeline_queue.positions(home)
+                queue_item = queued_by_home[home].get(str(row.get("id") or ""))
+            row["pipeline_status"] = (
+                "queued" if queue_item else _pipeline_status(home, str(row.get("id") or ""))
+            )
+            row["queued_pipeline"] = queue_item.get("pipeline") if queue_item else None
+            row["queue_position"] = queue_item.get("position") if queue_item else None
     rows.sort(key=lambda x: int(x.get("mtime") or 0), reverse=True)
     return rows
 

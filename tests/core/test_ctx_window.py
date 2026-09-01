@@ -68,3 +68,7 @@ def test_committed_catalog_is_positive_int_map() -> None:
     limits = ctx_window._openrouter_limits()
     assert limits
     assert all(isinstance(v, int) and v > 0 for v in limits.values())
+
+
+def test_committed_catalog_includes_glm_5_3_flash_safe_input_limit() -> None:
+    assert ctx_window._openrouter_limits()["z-ai/glm-5.3-flash"] == 1_015_808

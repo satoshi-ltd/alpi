@@ -325,6 +325,7 @@ z-ai/glm-5: 172032
 z-ai/glm-5-turbo: 169984
 z-ai/glm-5.1: 167232
 z-ai/glm-5.2: 229376
+z-ai/glm-5.3-flash: 1015808
 z-ai/glm-5v-turbo: 169984
 ~anthropic/claude-fable-latest: 967232
 ~anthropic/claude-haiku-latest: 167232

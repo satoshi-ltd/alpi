@@ -43,14 +43,29 @@ describe("Scrim", () => {
 
   it("ignores Escape and backdrop clicks when not dismissable", () => {
     const onClose = vi.fn();
-    const { container } = render(
+    const { getByText } = render(
       <Scrim onClose={onClose} dismissable={false}>
         <div>body</div>
       </Scrim>,
     );
     esc();
-    fireEvent.click(container.firstChild);
+    fireEvent.click(getByText("body").parentElement);
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("mounts outside the caller stacking context", () => {
+    const { getByTestId, getByText } = render(
+      <div data-testid="stacking-host">
+        <Scrim onClose={() => {}}>
+          <div>panel body</div>
+        </Scrim>
+      </div>,
+    );
+
+    const host = getByTestId("stacking-host");
+    const scrim = getByText("panel body").parentElement;
+    expect(host.contains(scrim)).toBe(false);
+    expect(scrim.parentElement).toBe(document.body);
   });
 });
 

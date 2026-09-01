@@ -1098,6 +1098,71 @@ async def test_data_chat_send_forwards_routing_and_reply_model(
 
 
 @pytest.mark.asyncio
+async def test_data_chat_send_forwards_usage_frames(
+    monkeypatch, short_tmp: Path,
+) -> None:
+    home = short_tmp / "h"
+    home.mkdir()
+    load_or_generate(home)
+
+    class _UsageEngine(_FakeEngine):
+        def run_turn(self, text, emit, **kwargs) -> None:  # noqa: ANN001
+            from alpi.engine import AgentEvent
+
+            emit(AgentEvent(kind="tool_start", name="search", args={"q": "x"}))
+            emit(AgentEvent(kind="tool_end", name="search", ok=True))
+            emit(AgentEvent(
+                kind="usage", tokens_in=42_000, tokens_out=120,
+                cached_in=10_000, cost=0.0031, model="openrouter/z-ai/glm-5.3-flash",
+                context_tokens=42_000,
+            ))
+            emit(AgentEvent(kind="assistant_done", text="done", final=True))
+
+    from alpi import config as cfg_mod
+    monkeypatch.setattr(cfg_mod, "load", lambda h: SimpleNamespace(model="x"))
+    import alpi.engine
+    monkeypatch.setattr(alpi.engine, "Engine", _UsageEngine)
+    from alpi.host import chat as dc
+    monkeypatch.setattr(dc, "_resolve_home", lambda profile: home)
+
+    srv = host_server.Server(home=home)
+    data_handlers.register(srv)
+    dc.register(srv)
+    await srv.start()
+
+    try:
+        reader, writer = await asyncio.open_unix_connection(str(srv.socket_path()))
+        writer.write((json.dumps({
+            "id": "req-us",
+            "method": "host.chat.send",
+            "params": {"profile": "default", "text": "hi", "request_id": "req-us"},
+        }) + "\n").encode("utf-8"))
+        await writer.drain()
+
+        events: list[dict] = []
+        while True:
+            line = await reader.readline()
+            if not line:
+                break
+            events.append(json.loads(line))
+        writer.close()
+        await writer.wait_closed()
+    finally:
+        await srv.stop()
+
+    usage = next(e for e in events if e.get("event") == "usage")
+    assert usage["tokens_in"] == 42_000
+    assert usage["tokens_out"] == 120
+    assert usage["cached_in"] == 10_000
+    assert usage["context_tokens"] == 42_000
+    assert usage["cost"] == 0.0031
+    assert usage["model"] == "openrouter/z-ai/glm-5.3-flash"
+    kinds = [e.get("event") for e in events if e.get("event") not in ("preparing", "heartbeat")]
+    assert kinds.index("usage") > kinds.index("tool_end")
+    assert kinds.index("usage") < kinds.index("reply")
+
+
+@pytest.mark.asyncio
 async def test_preparing_and_heartbeat_precede_session_start(
     monkeypatch, short_tmp: Path,
 ) -> None:

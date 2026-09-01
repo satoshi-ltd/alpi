@@ -58,6 +58,15 @@ import {
 import styles from "./WorkgroupView.module.css";
 
 const MY_SEQS_KEY = "alpi.workgroup.mySeqs";
+const taskStateCache = new Map();
+
+function taskCacheKey(connectionId, profile, wgId) {
+  return `${connectionId || "local"}/${profile}/${wgId}`;
+}
+
+export function _resetTaskStateCache() {
+  taskStateCache.clear();
+}
 
 function mySeqsKey(connectionId, profile, wgId) {
   return `${MY_SEQS_KEY}.${connectionId || "local"}.${profile}.${wgId}`;
@@ -110,8 +119,12 @@ export default function WorkgroupView({
     loadMySeqs(connectionId, workgroup.profile, workgroup.id),
   );
   const [error, setError] = useState(null);
-  const [taskState, setTaskState] = useState(null);
+  const taskKey = taskCacheKey(connectionId, workgroup.profile, workgroup.id);
+  const [taskState, setTaskState] = useState(() => taskStateCache.get(taskKey) ?? null);
   const [taskStateStale, setTaskStateStale] = useState(false);
+  const taskTargetRef = useRef(taskKey);
+  const taskRequestRef = useRef(0);
+  const taskAcceptedRef = useRef(0);
   const scrollRef = useStickyScroll([messages]);
   const refreshMountedRef = useRef(false);
   const pauseMountedRef = useRef(false);
@@ -121,6 +134,13 @@ export default function WorkgroupView({
     search.reset();
     onCloseSearch?.();
   };
+
+  useEffect(() => {
+    taskTargetRef.current = taskKey;
+    return () => {
+      if (taskTargetRef.current === taskKey) taskTargetRef.current = null;
+    };
+  }, [taskKey]);
 
   // Resolve inline images against the workgroup profile's workspace (project assets).
   const { detail: wgDetail } = useProfileDetail(connectionId ?? null, workgroup.profile ?? null);
@@ -307,18 +327,25 @@ export default function WorkgroupView({
       .then((rows) => !cancelled && setMembers(Array.isArray(rows) ? rows : []))
       .catch(() => {});
 
+    const taskRequest = taskRequestRef.current + 1;
+    taskRequestRef.current = taskRequest;
     invoke("workgroup_tasks", {
       profile: workgroup.profile,
       wgId: workgroup.id,
       ...(connectionId ? { connectionId } : {}),
     })
       .then((res) => {
-        if (cancelled) return;
-        setTaskState(res && typeof res === "object" ? res : null);
+        if (taskTargetRef.current !== taskKey || taskRequest < taskAcceptedRef.current) return;
+        const next = res && typeof res === "object" ? res : null;
+        taskAcceptedRef.current = taskRequest;
+        if (next) taskStateCache.set(taskKey, next);
+        else taskStateCache.delete(taskKey);
+        setTaskState(next);
         setTaskStateStale(false);
       })
-      // Stale, not dropped: dropping hides a blocked workgroup, keeping it silently asserts a stale chain.
-      .catch(() => !cancelled && setTaskStateStale(true));
+      .catch(() => {
+        if (taskTargetRef.current === taskKey) setTaskStateStale(true);
+      });
 
     fetchWorkgroupTranscript(connectionId, workgroup.profile, workgroup.id)
       .then((rows) => {
@@ -467,6 +494,12 @@ export default function WorkgroupView({
         }
       />
       {banners}
+      {taskState == null && workgroup.pipeline_mode && (
+        <div className={styles.pipeline} data-testid="pipeline-loading">
+          <Eyebrow className={styles.pipelineLabel}>pipeline</Eyebrow>
+          <Chip size="sm" ghost icon={<SpinnerIcon />}>Loading flow…</Chip>
+        </div>
+      )}
       {run && Array.isArray(run.phases) && run.phases.length > 0 && (
         <div className={styles.pipeline}>
           <Eyebrow className={styles.pipelineLabel}>pipeline · {run.pipeline}</Eyebrow>

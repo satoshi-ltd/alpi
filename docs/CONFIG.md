@@ -102,7 +102,7 @@ Vision model row in desktop/mobile. `read_image` and
 the profile's main model. It does **not** reroute image attachments sent directly
 to chat: those remain part of the main model's turn.
 
-`max_steps_per_turn` is a **runaway-loop backstop, not the cost guard** — the cost guard is `budget.daily_usd`. Hitting the cap does NOT fail the turn: the engine forces one tools-off **wrap-up** reply so the gathered work (and its cost) isn't thrown away. **When left at the default**, a **free** model (zero per-token pricing) or a **local/ollama** one raises the effective ceiling to 1000 (no runaway cost to bound); an explicit value is always respected. Raise it for agentic profiles whose skills legitimately chain many tool calls.
+`max_steps_per_turn` is a **runaway-loop backstop, not the cost guard** — the cost guard is `budget.daily_usd`. Hitting the cap does NOT fail the turn: the engine forces one tools-off **wrap-up** reply so the gathered work (and its cost) isn't thrown away. **When left at the default**, a **free** model (zero per-token pricing), a **local/ollama** one, or a profile with a positive daily budget raises the effective ceiling to 1000; the model is cost-free or the ledger checks the configured spend cap between steps. An explicit step value is always respected. Raise it for agentic profiles whose skills legitimately chain many tool calls.
 
 `tools.budget.per_result_chars` caps the size of any tool output the LLM
 sees in-context, with a `… [N chars elided by tool budget]` suffix when

@@ -208,6 +208,7 @@ export default function ChatPane({
     onTogglePauseProfile && activeProfile ? () => onTogglePauseProfile(activeProfile) : null;
   const effectiveModel = pickEffectiveModel(modelOverride, activeProfile?.model);
   const contextWindow = useContextWindow(activeProfile?.name, effectiveModel, connectionId);
+  const liveCtxTokens = pendingTurn?.ctxTokens ?? null;
 
   if (noModel) {
     return (
@@ -311,6 +312,7 @@ export default function ChatPane({
           sessionData={sessionData}
           model={effectiveModel}
           contextWindow={contextWindow}
+          liveCtxTokens={liveCtxTokens}
           activeSessionId={view.sessionId}
           connectionId={connectionId}
           onOpenSettings={onConfigureProfile ? () => onConfigureProfile(activeProfile) : null}

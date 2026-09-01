@@ -21,7 +21,7 @@ vi.mock("../hooks/useProfileDetail.js", () => ({
   useProfileDetail: () => ({ detail: null }),
 }));
 
-import WorkgroupView from "./WorkgroupView.jsx";
+import WorkgroupView, { _resetTaskStateCache } from "./WorkgroupView.jsx";
 import styles from "./WorkgroupView.module.css";
 import chipStyles from "../primitives/Chip.module.css";
 import markerStyles from "../primitives/MarkerCard.module.css";
@@ -78,6 +78,7 @@ function poke() {
 }
 
 beforeEach(() => {
+  _resetTaskStateCache();
   invokeMock.mockReset();
   taskState = null;
   taskFail = false;
@@ -93,6 +94,72 @@ beforeEach(() => {
 });
 
 describe("WorkgroupView pipeline strip", () => {
+  it("shows a pipeline loading row until the first canonical fold arrives", async () => {
+    let resolveTasks;
+    invokeMock.mockImplementation((cmd) => {
+      if (cmd === "workgroup_tasks") {
+        return new Promise((resolve) => {
+          resolveTasks = resolve;
+        });
+      }
+      return Promise.resolve("");
+    });
+
+    render(<WorkgroupView workgroup={workgroup} profiles={profiles} connectionId="local" />);
+
+    expect(screen.getByTestId("pipeline-loading")).toHaveTextContent("Loading flow…");
+    resolveTasks({
+      active: { slug: "enrich", title: "go", opened_seq: 42 },
+      closed: [],
+      blocked: null,
+      pipeline_run: {
+        pipeline: "setup",
+        status: "running",
+        started_seq: 40,
+        current_phase: "enrich",
+        phases: [
+          { slug: "setup", state: "completed", seq: 41 },
+          { slug: "enrich", state: "current", seq: 42 },
+        ],
+      },
+    });
+
+    await waitFor(() => expect(screen.getByText("pipeline · setup")).toBeInTheDocument());
+    expect(screen.queryByTestId("pipeline-loading")).toBeNull();
+  });
+
+  it("keeps the last valid flow visible while a remounted view refreshes", async () => {
+    const state = {
+      active: { slug: "enrich", title: "go", opened_seq: 42 },
+      closed: [],
+      blocked: null,
+      pipeline_run: {
+        pipeline: "setup",
+        status: "running",
+        started_seq: 40,
+        current_phase: "enrich",
+        phases: [
+          { slug: "setup", state: "completed", seq: 41 },
+          { slug: "enrich", state: "current", seq: 42 },
+        ],
+      },
+    };
+    tasksReply(state);
+    const first = render(
+      <WorkgroupView workgroup={workgroup} profiles={profiles} connectionId="local" />,
+    );
+    await waitFor(() => expect(screen.getByText("pipeline · setup")).toBeInTheDocument());
+    first.unmount();
+
+    invokeMock.mockImplementation((cmd) => (
+      cmd === "workgroup_tasks" ? new Promise(() => {}) : Promise.resolve("")
+    ));
+    render(<WorkgroupView workgroup={workgroup} profiles={profiles} connectionId="local" />);
+
+    expect(screen.getByText("pipeline · setup")).toBeInTheDocument();
+    expect(screen.queryByTestId("pipeline-loading")).toBeNull();
+  });
+
   it("labels the strip with the launch pipeline key and renders its phases", async () => {
     tasksReply({
       active: { slug: "enrich", title: "go", opened_seq: 42 },

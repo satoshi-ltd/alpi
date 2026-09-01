@@ -5,6 +5,7 @@ export function reconstructFromEvents(events) {
   let assistant = "";
   let reasoning = "";
   let errorText = null;
+  let ctxTokens = null;
   for (const rec of events) {
     const f = rec.frame ?? {};
     const kind = f.event;
@@ -53,6 +54,10 @@ export function reconstructFromEvents(events) {
       assistant += f.text ?? "";
     } else if (kind === "reasoning_delta") {
       reasoning += f.text ?? "";
+    } else if (kind === "usage" && f.context_tokens > 0) {
+      ctxTokens = f.context_tokens;
+    } else if (kind === "auto_compact" && f.tokens_after > 0) {
+      ctxTokens = f.tokens_after;
     } else if (kind === "error") {
       errorText = f.text ?? "stream error";
     } else if (kind === "reply") {
@@ -62,5 +67,5 @@ export function reconstructFromEvents(events) {
       if (f.session_id) finalSessionId = f.session_id;
     }
   }
-  return { tools: nextTools, assistant, reasoning, error: errorText, sawDone, finalSessionId };
+  return { tools: nextTools, assistant, reasoning, error: errorText, sawDone, finalSessionId, ctxTokens };
 }

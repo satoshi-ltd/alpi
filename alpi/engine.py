@@ -122,6 +122,7 @@ class AgentEvent:
     tokens_in: int = 0
     tokens_out: int = 0
     cached_in: int = 0
+    context_tokens: int = 0       # non-zero only when this completion becomes the chat context meter
     cost: float = 0.0
     tool_id: str = ""
     transient: bool = False
@@ -570,8 +571,15 @@ class Engine:
         max_steps = self.cfg.tools.max_steps_per_turn
         _explicit_cap = (self.cfg.raw.get("tools") or {}).get("max_steps_per_turn") is not None
         if max_steps == cfg_mod.DEFAULT_CONFIG["tools"]["max_steps_per_turn"] and not _explicit_cap:
+            from alpi import ledger as _ledger_mod
             from alpi.providers.ollama import is_ollama
-            if llm.is_free_model(call_kwargs.get("model", "")) or is_ollama(call_kwargs.get("api_base") or ""):
+            # A budget-capped profile is already bounded by the per-step ledger check;
+            # the step ceiling stays only as a runaway-loop backstop.
+            if (
+                _ledger_mod._budget(self.cfg.budget)[0] is not None
+                or llm.is_free_model(call_kwargs.get("model", ""))
+                or is_ollama(call_kwargs.get("api_base") or "")
+            ):
                 max_steps = _FREE_MODEL_MAX_STEPS
 
         self._maybe_auto_compact(emit)
@@ -745,6 +753,7 @@ class Engine:
                     tokens_in=final.get("input_tokens", 0),
                     tokens_out=final.get("output_tokens", 0),
                     cached_in=int(final.get("cached_tokens") or 0),
+                    context_tokens=int(final.get("input_tokens", 0)),
                     cost=final.get("cost_usd", 0.0),
                     model=turn_model,
                 ))
@@ -1149,6 +1158,7 @@ class Engine:
                             tokens_in=wrap_final.get("input_tokens", 0),
                             tokens_out=wrap_final.get("output_tokens", 0),
                             cached_in=int(wrap_final.get("cached_tokens") or 0),
+                            context_tokens=int(wrap_final.get("input_tokens", 0)),
                             cost=wrap_final.get("cost_usd", 0.0),
                             model=turn_model,
                         ))

@@ -310,11 +310,23 @@ fn classify_remote_error(err: &str) -> ConnectionStatus {
 }
 
 fn classify_local_error(err: &str) -> ConnectionStatus {
-    if err.starts_with("alp ") {
+    if err.starts_with("alp ") || err.starts_with("read-timeout:") {
         ConnectionStatus::Online
     } else {
         ConnectionStatus::Offline
     }
+}
+
+fn format_local_read_error(err: std::io::Error) -> String {
+    let prefix = if matches!(
+        err.kind(),
+        std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
+    ) {
+        "read-timeout"
+    } else {
+        "read"
+    };
+    format!("{prefix}: {err}")
 }
 
 // A genuine revoke (unknown/removed grant) authenticates as a bare auth-failed; transient reasons like a socket-identity change must not latch the connection revoked.
@@ -1247,7 +1259,7 @@ fn call_local_inner(method: &str, params: Value, timeout: Duration) -> Result<Va
     let mut response_line = String::new();
     reader
         .read_line(&mut response_line)
-        .map_err(|e| format!("read: {e}"))?;
+        .map_err(format_local_read_error)?;
     if response_line.is_empty() {
         return Err("daemon closed connection without responding".to_string());
     }
@@ -1388,7 +1400,7 @@ where
     for line in reader.lines() {
         let line = match line {
             Ok(l) => l,
-            Err(e) => return Err(format!("read: {e}")),
+            Err(e) => return Err(format_local_read_error(e)),
         };
         if line.trim().is_empty() {
             continue;
@@ -2784,9 +2796,25 @@ mod tests {
             ConnectionStatus::Online
         );
         assert_eq!(
+            classify_local_error("read-timeout: Resource temporarily unavailable (os error 35)"),
+            ConnectionStatus::Online
+        );
+        assert_eq!(
+            classify_local_error("read: Connection reset by peer (os error 54)"),
+            ConnectionStatus::Offline
+        );
+        assert_eq!(
             classify_local_error("connect /tmp/host.sock: refused"),
             ConnectionStatus::Offline
         );
+    }
+
+    #[test]
+    fn local_read_errors_distinguish_timeouts_from_broken_connections() {
+        let timeout = std::io::Error::from(std::io::ErrorKind::WouldBlock);
+        assert!(format_local_read_error(timeout).starts_with("read-timeout:"));
+        let reset = std::io::Error::from(std::io::ErrorKind::ConnectionReset);
+        assert!(format_local_read_error(reset).starts_with("read:"));
     }
 
     #[test]

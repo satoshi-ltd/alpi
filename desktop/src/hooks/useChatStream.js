@@ -276,13 +276,14 @@ export function useChatStream({
 
   // Rebuild a turn's state from the persisted sidecar — used when its live stream goes silent.
   const applyReplayedEvents = useCallback((requestId, events) => {
-    const { tools, assistant, reasoning, error, sawDone, finalSessionId } = reconstructFromEvents(events);
+    const { tools, assistant, reasoning, error, sawDone, finalSessionId, ctxTokens } = reconstructFromEvents(events);
     updateTurn(requestId, (prev) => ({
       ...prev,
       tools,
       assistantPreview: assistant || prev.assistantPreview,
       reasoningPreview: reasoning || prev.reasoningPreview,
       error,
+      ctxTokens: ctxTokens ?? prev.ctxTokens,
     }));
     return { sawDone, finalSessionId };
   }, [updateTurn]);
@@ -466,9 +467,15 @@ export function useChatStream({
         const buf = (deltaBufferRef.current[rid] ??= { assistant: "", reasoning: "" });
         buf.reasoning += p.text;
         scheduleDeltaFlush();
+      } else if (p.kind === "usage") {
+        updateTurn(rid, (prev) => ({
+          ...prev,
+          ctxTokens: p.context_tokens > 0 ? p.context_tokens : prev.ctxTokens,
+        }));
       } else if (p.kind === "auto_compact") {
         updateTurn(rid, (prev) => ({
           ...prev,
+          ctxTokens: p.tokens_after > 0 ? p.tokens_after : prev.ctxTokens,
           tools: [
             ...prev.tools,
             {

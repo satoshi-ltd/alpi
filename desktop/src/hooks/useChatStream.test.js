@@ -82,6 +82,26 @@ describe("useChatStream live frames", () => {
     expect(turnOf(result).sessionId).toBe("sess-1");
   });
 
+  it("usage frames track only completions that update the chat context", async () => {
+    const { result } = mount();
+    await waitForListen();
+    seedTurn(result);
+    emit({ kind: "usage", tokens_in: 42000, context_tokens: 42000 });
+    expect(turnOf(result).ctxTokens).toBe(42000);
+    emit({ kind: "usage", tokens_in: 55000, context_tokens: 55000 });
+    expect(turnOf(result).ctxTokens).toBe(55000);
+    emit({ kind: "usage", tokens_in: 8000, context_tokens: 0, model: "vision-side-call" });
+    expect(turnOf(result).ctxTokens).toBe(55000);
+  });
+
+  it("auto-compaction replaces the live context with its reduced size", async () => {
+    const { result } = mount();
+    await waitForListen();
+    seedTurn(result, { ctxTokens: 180000 });
+    emit({ kind: "auto_compact", text: "compacted", tokens_before: 180000, tokens_after: 90000 });
+    expect(turnOf(result).ctxTokens).toBe(90000);
+  });
+
   it("heartbeat is a no-op (only resets the watchdog clock)", async () => {
     const { result } = mount();
     await waitForListen();
