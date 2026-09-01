@@ -236,7 +236,7 @@ class Meta:
     pipelines: dict[str, tuple[str, ...]] = field(default_factory=dict)
     # Which chain the launch kickoff opens; None = idle workgroup whose chains wait for an explicit trigger.
     launch_pipeline: str | None = None
-    # Hub-local gate specs per phase ({phase: {owner, task?, gate: {argv, cwd?}}}); never transmitted on the wire, never accepts remote text.
+    # Hub-local phase specs ({phase: {owner, task?, prepare?, gate?}}); commands never cross the wire or accept remote text.
     pipeline_steps: dict = field(default_factory=dict)
     # Hub-local desktop playback preference — not replicated to members
     auto_read: bool = False
@@ -1338,6 +1338,7 @@ def validate_pipeline_steps(
         raise ValueError(f"pipeline_steps must be a mapping, got {type(pipeline_steps).__name__}")
     pipelines = pipelines or {}
     phases = {slug for chain in pipelines.values() for slug in chain}
+    first_phases = set(pipelines)
     out: dict[str, dict] = {}
     for phase, raw in pipeline_steps.items():
         phase = str(phase).strip().lower()
@@ -1385,7 +1386,30 @@ def validate_pipeline_steps(
             cwd = gate.get("cwd", "")
             if not isinstance(cwd, str):
                 raise ValueError(f"pipeline_steps[{phase!r}].gate.cwd must be a string")
+            repair = gate.get("repair", "owner")
+            if repair not in {"owner", "hub"}:
+                raise ValueError(
+                    f"pipeline_steps[{phase!r}].gate.repair must be 'owner' or 'hub'"
+                )
             step["gate"] = {"argv": list(argv), "cwd": cwd}
+            if repair == "hub":
+                step["gate"]["repair"] = "hub"
+        prepare = raw.get("prepare")
+        if prepare is not None:
+            if phase not in first_phases:
+                raise ValueError(
+                    f"pipeline_steps[{phase!r}].prepare is only valid on a "
+                    "pipeline's first phase"
+                )
+            if not isinstance(prepare, dict):
+                raise ValueError(f"pipeline_steps[{phase!r}].prepare must be a mapping")
+            argv = prepare.get("argv")
+            if not isinstance(argv, list) or not argv or not all(isinstance(a, str) and a for a in argv):
+                raise ValueError(f"pipeline_steps[{phase!r}].prepare.argv must be a non-empty list of strings")
+            cwd = prepare.get("cwd", "")
+            if not isinstance(cwd, str):
+                raise ValueError(f"pipeline_steps[{phase!r}].prepare.cwd must be a string")
+            step["prepare"] = {"argv": list(argv), "cwd": cwd}
         paths = raw.get("paths")
         if paths is not None:
             if not isinstance(paths, list) or not all(

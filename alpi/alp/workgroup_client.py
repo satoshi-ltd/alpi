@@ -1733,6 +1733,31 @@ async def trigger_pipeline(
                 "seq": None,
                 "stopped": None,
             }
+        from alpi import config as cfg_mod
+        from alpi.alp import pipeline_gates as gates
+        prepare = gates.prepare_for(wg.meta, key)
+        if prepare is not None:
+            workspace = cfg_mod.load(home).workspace_path or home
+            passed, output = await asyncio.to_thread(
+                gates.run_prepare, prepare, workspace,
+            )
+            try:
+                await asyncio.to_thread(
+                    gates.write_prepare_log,
+                    home / "alp" / "workgroups" / wg.meta.id,
+                    prepare, passed, output,
+                )
+            except OSError as e:
+                raise TriggerError(
+                    "pipeline-prepare-audit-failed",
+                    f"pipeline {key!r} prepare log could not be written: {e}",
+                ) from e
+            if not passed:
+                detail = output.splitlines()[-1][:500] if output else "no output"
+                raise TriggerError(
+                    "pipeline-prepare-failed",
+                    f"pipeline {key!r} prepare failed: {detail}",
+                )
         state = await asyncio.to_thread(host_wg.fold_task_state, home, wg_id)
         stopped = _run_being_stopped(key, state)
         try:

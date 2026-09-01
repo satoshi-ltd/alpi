@@ -976,7 +976,19 @@ copied verbatim from `pipeline_steps` — clients never author that
 post, so a chain cannot start on operator prose that drifted from the
 recipe. It follows the normal workgroup post path, so owner
 validation, transcript ordering, events, dispatch and gate handling
-stay single-sourced. **Pipelines run one at a time.** Starting a chain stops whatever was
+stay single-sourced.
+
+The first phase may also declare `prepare: {argv, cwd}`. This trusted local
+command runs immediately before admission, after any FIFO wait and before the
+opener is posted. It uses the gate command jail, minimal environment, timeout
+and output cap, and writes its latest result to
+`prepares/<pipeline>.log` with mode 0600. A failure rejects direct admission as
+`pipeline-prepare-failed`; a queued failure removes only that queue entry and
+does not consume a pipeline slot. No member sees the command and no model turn
+starts. `prepare` is rejected on non-first phases because it would otherwise
+have no unambiguous admission boundary.
+
+**Pipelines run one at a time.** Starting a chain stops whatever was
 mid-flight: the opener preempts an open task (the transcript records the
 displaced phase as `preempted by #<slug>`, never as done) and the
 displaced run stops being advanced. The trigger returns what it stopped
@@ -1587,7 +1599,7 @@ and the member's agent context renders the chains directly instead of
 depending on a briefing that narrates them by hand.
 
 **Deterministic phase gates (`meta.pipeline_steps`, hub-local).** A
-phase may declare `{owner, task, gate: {argv, cwd?}}` in the
+phase may declare `{owner, task, gate: {argv, cwd?, repair?}}` in the
 hub's own metadata — never transmitted on the wire, never accepting
 remote text into `argv`/`cwd`. When the expected owner posts while
 that phase is active, the runtime executes the gate locally
@@ -1598,8 +1610,10 @@ normal hub SDK path — rotation, quorum and `task-already-active`
 still apply, and the machine-authored close is auditable
 (`#done <phase> verified · gate:<check> · …` plus a private
 `gates/<phase>-<seq>.log`, mode 0600). A failing gate never
-advances: it wakes the hub's agent with the bounded error, one
-attempt per owner post. Phases without a step (or whose transition
+advances. The default `repair: owner` re-tasks the same phase owner;
+`repair: hub` instead wakes orchestration on the first red result so a
+read-only verifier can route the exact finding to an earlier phase whose
+owner can change the artifact. Phases without a step (or whose transition
 needs judgment — intake signals, QA) stay LLM-owned, and so does a
 step that declares `{owner, task}` but omits `gate`: it is
 still dispatched and owner-typed, it just closes on quorum instead of

@@ -56,6 +56,37 @@ class GateStep:
     argv: tuple[str, ...]
     cwd: str
     paths: tuple[str, ...] = ()
+    repair: str = "owner"
+
+
+@dataclass(frozen=True)
+class PrepareStep:
+    pipeline: str
+    phase: str
+    argv: tuple[str, ...]
+    cwd: str
+
+
+def prepare_for(meta, pipeline: str) -> PrepareStep | None:
+    chain = (getattr(meta, "pipelines", None) or {}).get(pipeline)
+    if not chain:
+        return None
+    phase = chain[0]
+    raw = (getattr(meta, "pipeline_steps", None) or {}).get(phase)
+    prepare = raw.get("prepare") if isinstance(raw, dict) else None
+    if not isinstance(prepare, dict):
+        return None
+    argv = prepare.get("argv")
+    cwd = prepare.get("cwd") or ""
+    if (
+        not isinstance(argv, list) or not argv or not argv[0]
+        or not all(isinstance(a, str) for a in argv)
+        or not isinstance(cwd, str)
+    ):
+        return None
+    return PrepareStep(
+        pipeline=pipeline, phase=phase, argv=tuple(argv), cwd=cwd,
+    )
 
 
 def chain_for(meta, phase: str) -> tuple[str, ...] | None:
@@ -100,11 +131,13 @@ def step_for(meta, phase: str) -> GateStep | None:
     next_owner = str(nxt.get("owner") or "") if isinstance(nxt, dict) else ""
     next_task = str(nxt.get("task") or "") if isinstance(nxt, dict) else ""
     paths = raw.get("paths")
+    repair = str(gate.get("repair") or "owner")
     return GateStep(
         phase=phase, owner=owner,
         next_phase=next_phase, next_owner=next_owner, next_task=next_task,
         argv=tuple(argv), cwd=cwd,
         paths=tuple(str(g) for g in paths) if isinstance(paths, list) else (),
+        repair=repair,
     )
 
 
@@ -293,24 +326,26 @@ def _stop_process_group(proc: subprocess.Popen) -> None:
         proc.wait()
 
 
-def run_gate(step: GateStep, workspace: Path) -> tuple[bool, str]:
-    cwd = (workspace / step.cwd).resolve() if step.cwd else workspace.resolve()
+def _run_command(
+    argv: tuple[str, ...], cwd_value: str, workspace: Path, kind: str,
+) -> tuple[bool, str]:
+    cwd = (workspace / cwd_value).resolve() if cwd_value else workspace.resolve()
     try:
         cwd.relative_to(workspace.resolve())
     except ValueError:
-        return False, f"gate cwd escapes the workspace: {cwd}"
+        return False, f"{kind} cwd escapes the workspace: {cwd}"
     if not cwd.is_dir():
-        return False, f"gate cwd missing: {cwd}"
+        return False, f"{kind} cwd missing: {cwd}"
     env = {k: v for k, v in os.environ.items() if k in _GATE_ENV_KEYS}
     tail = bytearray()
     try:
         proc = subprocess.Popen(
-            list(step.argv), cwd=str(cwd), env=env, shell=False,
+            list(argv), cwd=str(cwd), env=env, shell=False,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             start_new_session=True,
         )
     except OSError as e:
-        return False, f"gate failed to start: {e}"
+        return False, f"{kind} failed to start: {e}"
 
     def _drain() -> None:
         assert proc.stdout is not None
@@ -337,8 +372,39 @@ def run_gate(step: GateStep, workspace: Path) -> tuple[bool, str]:
         reader.join(timeout=1)
     out = bytes(tail).decode("utf-8", errors="replace").strip()
     if timed_out:
-        return False, f"gate timed out after {GATE_TIMEOUT_SECONDS}s"
+        return False, f"{kind} timed out after {GATE_TIMEOUT_SECONDS}s"
     return returncode == 0, out
+
+
+def run_gate(step: GateStep, workspace: Path) -> tuple[bool, str]:
+    return _run_command(step.argv, step.cwd, workspace, "gate")
+
+
+def run_prepare(step: PrepareStep, workspace: Path) -> tuple[bool, str]:
+    return _run_command(step.argv, step.cwd, workspace, "prepare")
+
+
+def write_prepare_log(
+    wg_dir: Path, step: PrepareStep, passed: bool, output: str,
+) -> None:
+    log_dir = wg_dir / "prepares"
+    log_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    record = json.dumps({
+        "pipeline": step.pipeline, "phase": step.phase,
+        "argv": list(step.argv), "cwd": step.cwd,
+        "passed": passed, "output": output[-GATE_LOG_CAP:],
+    }, ensure_ascii=False, indent=2)
+    fd, tmp = tempfile.mkstemp(dir=log_dir, prefix=".prepare-")
+    try:
+        with os.fdopen(fd, "w") as fh:
+            fh.write(record + "\n")
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, log_dir / f"{step.pipeline}.log")
+    except OSError:
+        Path(tmp).unlink(missing_ok=True)
+        raise
 
 
 def gate_log_record(wg_dir: Path, phase: str, seq: int) -> dict | None:

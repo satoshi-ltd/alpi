@@ -320,6 +320,37 @@ def test_pipeline_steps_are_validated_and_normalized_at_parse_time() -> None:
     assert all("next" not in step for step in r.pipeline_steps.values())
 
 
+def test_pipeline_first_phase_accepts_a_prepare_command() -> None:
+    text = VALID.replace(
+        'gate: { argv: [npm, run, intake-check], cwd: "projects/{slug}" }',
+        'prepare: { argv: [npm, run, media-inventory], cwd: "projects/{slug}" }, '
+        'gate: { argv: [npm, run, intake-check], cwd: "projects/{slug}" }',
+    )
+    step = recipes.parse_recipe(text, "hotel").pipeline_steps["intake"]
+    assert step["prepare"] == {
+        "argv": ["npm", "run", "media-inventory"],
+        "cwd": "projects/{slug}",
+    }
+
+
+def test_pipeline_gate_accepts_hub_routed_repair() -> None:
+    text = VALID.replace(
+        'gate: { argv: [npm, run, intake-check], cwd: "projects/{slug}" }',
+        'gate: { argv: [npm, run, intake-check], cwd: "projects/{slug}", repair: hub }',
+    )
+    gate = recipes.parse_recipe(text, "hotel").pipeline_steps["intake"]["gate"]
+    assert gate["repair"] == "hub"
+
+
+def test_pipeline_gate_rejects_unknown_repair_mode() -> None:
+    text = VALID.replace(
+        'gate: { argv: [npm, run, intake-check], cwd: "projects/{slug}" }',
+        'gate: { argv: [npm, run, intake-check], cwd: "projects/{slug}", repair: magic }',
+    )
+    with pytest.raises(ValueError, match="gate.repair must be 'owner' or 'hub'"):
+        recipes.parse_recipe(text, "hotel")
+
+
 def test_resolve_returns_pipelines_and_launch_pipeline() -> None:
     spec = recipes.resolve(recipes.parse_recipe(VALID, "hotel"), {"slug": "abc", "tier": "pro"})
     assert spec["pipelines"] == {"intake": ["intake", "content", "qa"]}
@@ -421,6 +452,11 @@ def test_launchless_pipelines_resolve_with_a_null_selector() -> None:
         "pipelines:\n  intake: [intake, content]\nlaunch: intake\n"
         "pipeline_steps: { intake: { owner: scout, task: t, next: content } }",
         r"pipeline_steps\['intake'\]\.next is derived from pipelines\['intake'\]; remove next",
+    ),
+    (
+        "pipelines:\n  intake: [intake, content]\nlaunch: intake\n"
+        "pipeline_steps: { intake: { owner: scout, task: t }, content: { owner: quill, prepare: { argv: [true] } } }",
+        "prepare is only valid on a pipeline's first phase",
     ),
     ("pipeline_steps: notamap", "pipeline_steps must be a mapping"),
 ])

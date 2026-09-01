@@ -102,3 +102,40 @@ async def test_daemon_flushes_the_queue_when_the_limit_is_disabled(
 
     assert await service._drain_pipeline_queue(home) == 2
     assert pipeline_queue.entries(home) == []
+
+
+@pytest.mark.asyncio
+async def test_prepare_failure_drops_only_that_queue_entry(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    from alpi.alp import workgroup_client as wc
+
+    home = tmp_path / "hub"
+    _config(home, 2)
+    pipeline_queue.enqueue(home, "wg_bad", "media-update")
+    pipeline_queue.enqueue(home, "wg_good", "setup")
+    monkeypatch.setattr(service, "_active_pipeline_ids", lambda _home: set())
+    monkeypatch.setattr(
+        "alpi.alp.workgroup.load",
+        lambda _home, wid: SimpleNamespace(meta=SimpleNamespace(paused=False, id=wid)),
+    )
+    triggered = []
+
+    async def fake_trigger(_home, wid, pipeline, **kwargs):
+        triggered.append((wid, pipeline))
+        if wid == "wg_bad":
+            raise wc.TriggerError("pipeline-prepare-failed", "inventory command failed")
+        return {"ok": True}
+
+    actions = []
+    monkeypatch.setattr("alpi.alp.workgroup_client.trigger_pipeline", fake_trigger)
+    monkeypatch.setattr(
+        "alpi.alp.workgroup_client._emit_workgroup_changed",
+        lambda _home, wid, action: actions.append((wid, action)),
+    )
+
+    assert await service._drain_pipeline_queue(home) == 1
+    assert triggered == [("wg_bad", "media-update"), ("wg_good", "setup")]
+    assert pipeline_queue.entries(home) == []
+    assert ("wg_bad", "admission_failed") in actions
+    assert ("wg_good", "admitted") in actions

@@ -594,6 +594,51 @@ async def test_new_owner_delivery_gets_a_fresh_gate_verdict(tmp_path, monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_hub_routed_gate_failure_does_not_retask_read_only_owner(
+    tmp_path, monkeypatch,
+):
+    home = tmp_path / "hub-routed"
+    home.mkdir()
+    steps = {
+        "qa": {
+            "owner": "lens", "task": "audit it",
+            "gate": {"argv": ["false"], "cwd": "", "repair": "hub"},
+        },
+    }
+    wg = types.SimpleNamespace(meta=types.SimpleNamespace(
+        id="wg_hub_repair", name="site", hub_pubkey="HUB", paused=False,
+        pipelines={"setup": ("qa",)}, launch_pipeline="setup",
+        pipeline_steps=steps,
+    ))
+    monkeypatch.setattr(
+        "alpi.alp.peers.load",
+        lambda h: [types.SimpleNamespace(id="lens", pubkey="LENSPK")],
+    )
+    monkeypatch.setattr(
+        "alpi.config.load",
+        lambda h: types.SimpleNamespace(workspace_path=tmp_path),
+    )
+    recent = [
+        {"seq": 1, "from": "HUB", "ts": _OLD, "text": "@lens #task #qa audit it"},
+        {"seq": 2, "from": "LENSPK", "ts": _OLD, "text": "QA FAIL · content is invalid"},
+    ]
+    posted = []
+
+    async def fake_post(*args, **kwargs):
+        posted.append(args)
+
+    monkeypatch.setattr("alpi.alp.workgroup_client.post", fake_post)
+
+    result = await service._maybe_gate_advance(home, wg, recent, "HUB")
+
+    assert isinstance(result, str)
+    assert "declares hub-routed repair" in result
+    assert "Do not re-task @lens" in result
+    assert posted == []
+    assert service._GATE_REPAIRS == {}
+
+
+@pytest.mark.asyncio
 async def test_watchdog_reruns_the_gate_instead_of_waking(tmp_path, monkeypatch):
     home = tmp_path / "hub"
     home.mkdir()

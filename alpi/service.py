@@ -954,6 +954,13 @@ async def _drain_pipeline_queue(home: Path) -> int:
                 "wg pipeline queue dropped %s/%s: %s",
                 wg_id, item["pipeline"], e,
             )
+            removed = await asyncio.to_thread(
+                pipeline_queue.remove, home, wg_id, item["pipeline"],
+                enqueued_at=item["enqueued_at"],
+            )
+            if removed:
+                wc._emit_workgroup_changed(home, wg_id, "admission_failed")
+            continue
         except Exception as e:  # noqa: BLE001
             log.warning(
                 "wg pipeline queue admission failed for %s/%s: %s",
@@ -1302,6 +1309,14 @@ async def _maybe_gate_advance(
         if recheck:
             # A silent re-run must never consume a repair round nor re-post.
             return None
+        if step.repair == "hub":
+            findings = gates.findings_excerpt(output)
+            return (
+                f"GATE {step.phase} FAILED and declares hub-routed repair:\n"
+                f"{findings}\n"
+                f"Do not re-task @{step.owner}; route the finding to an earlier "
+                "phase in this pipeline whose owner can modify the failing artifact."
+            )
         rkey = (str(home), wg.meta.id, step.phase, int(active.opened_seq))
         rounds = _GATE_REPAIRS.get(rkey, 0) + 1
         if len(_GATE_REPAIRS) >= _GATE_REPAIRS_CAP:

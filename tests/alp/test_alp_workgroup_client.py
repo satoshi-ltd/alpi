@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import shutil
 import stat
+import sys
 import tempfile
 from pathlib import Path
 
@@ -2277,6 +2279,64 @@ async def test_trigger_pipeline_posts_the_declared_opener_verbatim(
 
 
 @pytest.mark.asyncio
+async def test_trigger_pipeline_prepares_before_posting_the_opener(
+    short_tmp: Path,
+) -> None:
+    home = short_tmp / "hubtrigprepare"; home.mkdir()
+    workspace = short_tmp / "workspace"; workspace.mkdir()
+    project = workspace / "app"; project.mkdir()
+    (home / "config.yaml").write_text(f"workspace: {workspace}\n")
+    steps = {key: dict(value) for key, value in _CHAIN_STEPS.items()}
+    steps["media-update"]["prepare"] = {
+        "argv": [
+            sys.executable, "-c",
+            "from pathlib import Path; Path('inventory.json').write_text('fresh')",
+        ],
+        "cwd": "app",
+    }
+    wg, muse_pk = _chain_hub(home, launch=None, steps=steps)
+
+    out = await wc.trigger_pipeline(home, wg.meta.id, "media-update")
+
+    assert out["seq"] == 1
+    assert (project / "inventory.json").read_text() == "fresh"
+    record = json.loads(
+        (home / "alp/workgroups" / wg.meta.id / "prepares/media-update.log").read_text()
+    )
+    assert record["passed"] is True
+    assert record["pipeline"] == "media-update"
+    assert _transcript_texts(home, wg) == [
+        "@muse #task #media-update · install client media",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_trigger_pipeline_prepare_failure_posts_nothing(
+    short_tmp: Path,
+) -> None:
+    home = short_tmp / "hubtrigpreparefail"; home.mkdir()
+    workspace = short_tmp / "workspace-fail"; workspace.mkdir()
+    (home / "config.yaml").write_text(f"workspace: {workspace}\n")
+    steps = {key: dict(value) for key, value in _CHAIN_STEPS.items()}
+    steps["media-update"]["prepare"] = {
+        "argv": [sys.executable, "-c", "raise SystemExit('inventory unavailable')"],
+        "cwd": "",
+    }
+    wg, muse_pk = _chain_hub(home, launch=None, steps=steps)
+
+    with pytest.raises(wc.TriggerError) as exc:
+        await wc.trigger_pipeline(home, wg.meta.id, "media-update")
+
+    assert exc.value.code == "pipeline-prepare-failed"
+    assert "inventory unavailable" in exc.value.detail
+    assert _transcript_texts(home, wg) == []
+    record = json.loads(
+        (home / "alp/workgroups" / wg.meta.id / "prepares/media-update.log").read_text()
+    )
+    assert record["passed"] is False
+
+
+@pytest.mark.asyncio
 async def test_trigger_pipeline_queues_until_the_daemon_admits_it(
     short_tmp: Path,
 ) -> None:
@@ -2295,6 +2355,40 @@ async def test_trigger_pipeline_queues_until_the_daemon_admits_it(
     assert out["seq"] is None
     assert _transcript_texts(home, wg) == []
     assert pipeline_queue.positions(home)[wg.meta.id]["pipeline"] == "media-update"
+
+
+@pytest.mark.asyncio
+async def test_queued_pipeline_prepares_only_when_admitted(
+    short_tmp: Path,
+) -> None:
+    home = short_tmp / "hubtrigqueuedprepare"; home.mkdir()
+    workspace = short_tmp / "workspace-queued"; workspace.mkdir()
+    project = workspace / "app"; project.mkdir()
+    (home / "config.yaml").write_text(
+        f"workspace: {workspace}\nalp:\n  max_active_pipelines: 1\n",
+    )
+    steps = {key: dict(value) for key, value in _CHAIN_STEPS.items()}
+    steps["media-update"]["prepare"] = {
+        "argv": [
+            sys.executable, "-c",
+            "from pathlib import Path; Path('inventory.json').write_text('admitted')",
+        ],
+        "cwd": "app",
+    }
+    wg, muse_pk = _chain_hub(home, launch=None, steps=steps)
+
+    queued = await wc.trigger_pipeline(home, wg.meta.id, "media-update")
+
+    assert queued["queued"] is True
+    assert not (project / "inventory.json").exists()
+    assert _transcript_texts(home, wg) == []
+
+    admitted = await wc.trigger_pipeline(
+        home, wg.meta.id, "media-update", _admit=True,
+    )
+
+    assert admitted["seq"] == 1
+    assert (project / "inventory.json").read_text() == "admitted"
 
 
 @pytest.mark.asyncio

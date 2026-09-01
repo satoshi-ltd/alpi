@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.14.18 — 2026-09-01 — pipeline inputs prepare themselves at admission
+
+- **A pipeline can declare one deterministic admission preflight.** A
+  first-phase `prepare: {argv, cwd}` runs after any FIFO wait and before the
+  opener reaches its owner, under the same workspace jail, minimal environment,
+  timeout and output bounds as gates. Commands stay hub-local and their latest
+  result is recorded privately in `prepares/<pipeline>.log`.
+- **A failed preflight starts no agent turn and consumes no pipeline slot.**
+  Direct triggers return the stable `pipeline-prepare-failed` reason without
+  appending to the transcript. Queued failures remove only their own entry,
+  emit an admission-failed refresh and let the next FIFO item proceed.
+- **Media updates no longer depend on a stale hand-maintained inventory.** The
+  hotel recipe asks the cloned project to rebuild its own media inventory at
+  admission, so copying files into `assets/source/` and triggering
+  `media-update` is sufficient; Muse receives the exact current file set.
+- **Read-only verification gates can return failures to orchestration.** A
+  recipe may set `gate.repair: hub`; the first red result wakes the hub instead
+  of exhausting repair rounds against an owner that cannot modify the failing
+  artifact.
+
+Nothing to migrate. Existing workgroups keep their immutable recipe snapshot;
+relaunch them from a recipe declaring `prepare` to acquire this behavior.
+
 ## v0.14.17 — 2026-08-31 — workgroup pipelines queue without disappearing
 
 - **Hub profiles can cap whole active pipelines without serializing their
