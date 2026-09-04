@@ -26,7 +26,9 @@ function workgroupState(workgroup, task, busy) {
     return { id: "error", label: "Needs attention" };
   }
   if (["running", "between"].includes(workgroup.pipeline_status)) {
-    return { id: "active", label: "Working" };
+    const phase = workgroup.pipeline_phase
+      || (task?.state === "open" ? task.slug : "");
+    return { id: "active", label: phase ? `Working · ${phase}` : "Working" };
   }
   if (workgroup.pipeline_status === "completed") {
     return { id: "idle", label: "Idle" };
@@ -38,6 +40,11 @@ function workgroupState(workgroup, task, busy) {
 
 function money(value) {
   return `$${Number(value || 0).toFixed(2)}`;
+}
+
+// Same displayed age → working first, then queued, then the rest; the list still follows recency.
+function stateRank(stateId) {
+  return stateId === "active" || stateId === "error" ? 0 : stateId === "queued" ? 1 : 2;
 }
 
 export default function WorkgroupsView({
@@ -55,6 +62,7 @@ export default function WorkgroupsView({
     [profiles],
   );
   const rows = useMemo(() => {
+    const now = Date.now();
     const needle = query.trim().toLowerCase();
     return workgroups
       .map((workgroup) => {
@@ -81,13 +89,11 @@ export default function WorkgroupsView({
           .includes(needle);
       })
       .sort((left, right) => {
-        const leftRank = left.state.id === "active" || left.state.id === "error" ? 0 : left.state.id === "queued" ? 1 : left.state.id === "paused" ? 3 : 2;
-        const rightRank = right.state.id === "active" || right.state.id === "error" ? 0 : right.state.id === "queued" ? 1 : right.state.id === "paused" ? 3 : 2;
-        return leftRank - rightRank
-          || (left.state.id === "queued" && right.state.id === "queued"
-            ? Number(left.workgroup.queue_position || 0) - Number(right.workgroup.queue_position || 0)
-            : 0)
-          || Number(right.workgroup.mtime || 0) - Number(left.workgroup.mtime || 0);
+        const leftTime = Number(left.workgroup.mtime || 0);
+        const rightTime = Number(right.workgroup.mtime || 0);
+        return stateRank(left.state.id) - stateRank(right.state.id)
+          || Number(left.workgroup.queue_position || 0) - Number(right.workgroup.queue_position || 0)
+          || rightTime - leftTime;
       });
   }, [activityByWorkgroup, filter, query, taskByWorkgroup, workgroups]);
   const summary = useMemo(() => {

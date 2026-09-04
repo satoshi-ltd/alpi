@@ -1,4 +1,5 @@
 import json
+import time
 
 from alpi import ledger, service
 
@@ -181,6 +182,10 @@ def test_watchdog_burns_no_retry_while_the_budget_is_exhausted(tmp_path, monkeyp
     assert blocked == [], "wg.blocked fired while the real cause was budget"
 
     (home / "config.yaml").write_text("budget:\n  daily_usd: 50.0\n")
+    service._WATCHDOG_OBSERVED_AT[(str(home), "wg_1")] = (
+        2,
+        time.monotonic() - service._HUB_FOLLOWUP_STALE_SECONDS - 1,
+    )
     asyncio.run(
         service._maybe_watchdog_close(home, "scout", _WG(), _stale_open_task())
     )

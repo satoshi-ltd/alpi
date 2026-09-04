@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from typing import Any
 
 from alpi.alp import client as alp_client
@@ -41,23 +42,42 @@ class WorkgroupPostTool(Tool):
         "properties": {
             "wg_id": {
                 "type": "string",
-                "description": "Workgroup id (e.g. wg_jqa3pux6gz3tbo5a).",
+                "description": "Workgroup id (e.g. wg_jqa3pux6gz3tbo5a); inside a dispatched workgroup turn it defaults to that workgroup.",
             },
             "text": {
                 "type": "string",
                 "description": "Message body (plaintext; encrypted client-side).",
             },
         },
-        "required": ["wg_id", "text"],
+        "required": ["text"],
     }
 
     def run(self, **kwargs: Any) -> ToolResult:
         wg_id = kwargs.get("wg_id")
         text = kwargs.get("text")
+        dispatch_wg = os.environ.get("ALPI_WORKGROUP_DISPATCH") or ""
+        corrected = ""
+        if dispatch_wg and wg_id != dispatch_wg:
+            if wg_id:
+                corrected = f" · wg_id {wg_id!r} replaced by this turn's workgroup {dispatch_wg!r}"
+            wg_id = dispatch_wg
         if not wg_id or not text:
             return ToolResult(ok=False, output="", error="wg_id and text required")
-
+        from alpi.alp import tasks as tasks_mod
         from alpi.tools import _state as _wg_state
+        member_turn = os.environ.get("ALPI_WORKGROUP_MEMBER_TURN") == "1"
+        continuation = tasks_mod.CONTINUATION_MARK in text
+        if member_turn and tasks_mod.is_working_only(text) and not continuation:
+            return ToolResult(
+                ok=False, output="",
+                error="the daemon tracks this turn's progress; post only your handoff when the deliverable is ready",
+            )
+        if member_turn and not continuation and _wg_state.get_turn_tools_run() == 0:
+            return ToolResult(
+                ok=False, output="",
+                error="nothing ran this turn: read the briefing, produce and verify the deliverable with your tools, then post the handoff as the last call",
+            )
+
         pending, snapshot = _wg_state.get_undeclared_turn_usage()
         cost = _declared_cost(pending)
         turn_id = _wg_state.get_turn_id()
@@ -72,11 +92,21 @@ class WorkgroupPostTool(Tool):
         except alp_client.RemoteError as e:
             err = f"hub rejected: {e.code} {e.message}"
             _record_post_failure(wg_id, err, text)
-            return ToolResult(ok=False, output="", error=err)
-        except (ValueError, alp_client.ClientError) as e:
+            return ToolResult(
+                ok=False,
+                output="",
+                error=err,
+                transient=alp_client.is_transient_link_error(e),
+            )
+        except (ValueError, alp_client.ClientError, OSError, asyncio.TimeoutError) as e:
             err = str(e)
             _record_post_failure(wg_id, err, text)
-            return ToolResult(ok=False, output="", error=err)
+            return ToolResult(
+                ok=False,
+                output="",
+                error=err,
+                transient=alp_client.is_transient_link_error(e),
+            )
         _wg_state.mark_turn_usage_declared(snapshot)
         cost_hint = ""
         if cost:
@@ -85,7 +115,7 @@ class WorkgroupPostTool(Tool):
             )
         return ToolResult(
             ok=True,
-            output=f"posted seq {result.get('seq')} at {result.get('ts')}{cost_hint}",
+            output=f"posted seq {result.get('seq')} at {result.get('ts')}{cost_hint}{corrected}",
         )
 
 

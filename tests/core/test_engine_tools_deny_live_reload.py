@@ -143,6 +143,27 @@ def test_non_owner_pipeline_turn_hides_mutating_tools(
     assert "terminal" in schema_names[0]
 
 
+def test_pipeline_turn_hides_historical_context_tools(
+    engine: Engine, monkeypatch,
+) -> None:
+    schema_names: list[set[str]] = []
+
+    def capturing_stream(messages, tools, **kwargs):
+        schema_names.append({s["function"]["name"] for s in tools})
+        yield from _stream_one("ok")
+
+    monkeypatch.setenv("ALPI_WORKGROUP_PIPELINE", "1")
+    monkeypatch.setattr("alpi.llm.stream", capturing_stream)
+
+    engine.run_turn("execute", emit=lambda _e: None)
+
+    assert {
+        "memory", "session_search", "session_read", "recall_sessions",
+        "index_sessions", "workgroup_search", "index_workgroups", "peer",
+    }.isdisjoint(schema_names[0])
+    assert "read_file" in schema_names[0]
+
+
 def test_stale_non_owner_tool_call_reports_phase_policy_not_profile_config(
     engine: Engine, monkeypatch,
 ) -> None:

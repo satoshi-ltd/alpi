@@ -23,6 +23,7 @@ _turn_usage: ContextVar[Optional[dict]] = ContextVar("alpi_turn_usage", default=
 _declared_turn_usage: ContextVar[Optional[dict]] = ContextVar(
     "alpi_declared_turn_usage", default=None,
 )
+_turn_tools_run: ContextVar[int] = ContextVar("alpi_turn_tools_run", default=0)
 _turn_counters: ContextVar[Optional[dict[str, int]]] = ContextVar(
     "alpi_turn_counters", default=None,
 )
@@ -105,7 +106,16 @@ def reset_turn_usage() -> None:
         "cached_in": 0, "measured_in": 0,
     })
     _turn_counters.set({})
+    _turn_tools_run.set(0)
     _turn_id.set(os.environ.get("ALPI_WORKGROUP_TURN_ID") or uuid.uuid4().hex)
+
+
+def set_turn_tools_run(count: int) -> None:
+    _turn_tools_run.set(int(count))
+
+
+def get_turn_tools_run() -> int:
+    return _turn_tools_run.get()
 
 
 def get_turn_usage() -> Optional[dict]:

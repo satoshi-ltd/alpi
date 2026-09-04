@@ -14,7 +14,7 @@
 .filters button:hover { background: var(--hover); color: var(--ink); }
 .filters .filterActive { background: var(--selected); color: var(--ink); font-weight: var(--fw-medium); }
 .toolbarRight > :global(.mono) { flex-shrink: 0; font-size: var(--fs-xs); }
-.tableHead, .row { display: grid; grid-template-columns: minmax(240px, 1fr) 126px 76px 112px 92px; align-items: center; gap: var(--space-5); padding: 0 var(--space-4); }
+.tableHead, .row { display: grid; grid-template-columns: minmax(240px, 1fr) 10.5rem 76px 112px 92px; align-items: center; gap: var(--space-5); padding: 0 var(--space-4); }
 .tableHead { min-height: 32px; color: var(--ink-4); font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; }
 .tableHead span:nth-child(n + 3) { text-align: right; }
 .row { width: 100%; min-height: 64px; border: 0; border-bottom: .5px solid var(--line); background: transparent; color: inherit; text-align: left; cursor: pointer; }
@@ -34,7 +34,7 @@
 .empty { padding: 60px; color: var(--ink-3); text-align: center; }
 
 @media (max-width: 900px) {
-  .tableHead, .row { grid-template-columns: minmax(220px, 1fr) 120px 80px 96px; }
+  .tableHead, .row { grid-template-columns: minmax(220px, 1fr) 9.75rem 80px 96px; }
   .tableHead span:nth-child(4), .row > :nth-child(4) { display: none; }
   .toolbar { align-items: flex-start; flex-wrap: wrap; padding-block: var(--space-3); }
   .search { width: 100%; }

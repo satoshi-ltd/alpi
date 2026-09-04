@@ -9,9 +9,15 @@ import { useProfileSnapshot } from "../../hooks/useProfileSnapshot.js";
 import { useUsageDaily } from "../../hooks/useUsage.js";
 import { Section, Row, CopyButton } from "./primitives.jsx";
 import Usage from "./Usage.jsx";
-import { SettingsHero } from "../../primitives/index.js";
+import {
+  CopyIcon,
+  MeterChip,
+  Mono,
+  SettingsHero,
+  Tip,
+} from "../../primitives/index.js";
 import { profileLabel } from "../../lib/profile-display.js";
-import { CopyIcon, Mono } from "../../primitives/index.js";
+import { modelLabel } from "../../lib/modelLabel.js";
 import RefreshBar from "../../primitives/RefreshBar.jsx";
 import { FIELD_KEYS, providerPills } from "./util.js";
 import { mergeProfileDraft } from "../../lib/profile-draft.js";
@@ -191,24 +197,37 @@ export default function ProfileDetail({
 
   const capUsd = profile.budget_daily_usd;
   const usedUsd = profile.budget_used_usd ?? 0;
+  const accent = profile.accent || "var(--accent)";
   const providers = providerPills(profile, ollamaErrors);
   const hasModels =
     (profile.models?.length ?? 0) > 0 || (profile.provider_ollama?.length ?? 0) > 0;
   const heroMeta = (
     <>
       {profile.model && (
-        <Mono className={styles.heroMetaValue}>{profile.model}</Mono>
+        <Tip text={profile.model} side="down" escape wide>
+          <Mono className={styles.heroMetaValue}>{modelLabel(profile.model)}</Mono>
+        </Tip>
       )}
-      {capUsd != null && (
-        <>
-          <span aria-hidden className={styles.heroMetaSep} />
-          <span>
-            <span className={styles.heroMetaLabel}>budget </span>
-            <Mono className={`tnum ${styles.heroMetaValue}`}>
-              ${usedUsd.toFixed(2)}/${capUsd.toFixed(2)}
-            </Mono>
-          </span>
-        </>
+      {profile.model && capUsd != null && capUsd > 0 && (
+        <span aria-hidden className={styles.heroMetaSep} />
+      )}
+      {capUsd != null && capUsd > 0 && (
+        <Tip
+          text="Daily budget"
+          side="down"
+          escape
+        >
+          <MeterChip
+            value={
+              <>
+                ${usedUsd.toFixed(2)}
+                <span className={styles.heroMetaMuted}>/${capUsd.toFixed(2)}</span>
+              </>
+            }
+            pct={Math.min(1, usedUsd / capUsd)}
+            color={accent}
+          />
+        </Tip>
       )}
     </>
   );
@@ -224,7 +243,7 @@ export default function ProfileDetail({
       <SettingsHero
         kind="profile"
         id={profileLabel(profile.name)}
-        accent={profile.accent || "var(--accent)"}
+        accent={accent}
         bio={profile.bio || profile.public_bio}
         meta={heroMeta}
         onOpenChat={onOpenChat ? () => onOpenChat(profile) : undefined}

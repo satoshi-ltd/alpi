@@ -221,6 +221,12 @@ def test_presence_write_is_coalesced() -> None:
     assert wg_mod._presence_write_due("2026-07-17T12:00:00Z", now) is True
 
 
+def test_only_live_or_productive_pulls_refresh_presence() -> None:
+    assert wg_mod._pull_refreshes_presence(25.0, []) is True
+    assert wg_mod._pull_refreshes_presence(0.0, [{"seq": 1}]) is True
+    assert wg_mod._pull_refreshes_presence(0.0, []) is False
+
+
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_pull_long_poll_times_out_empty_and_returns_early_on_post(short_tmp: Path) -> None:
@@ -250,7 +256,25 @@ async def test_pull_long_poll_times_out_empty_and_returns_early_on_post(short_tm
         )
         group_key = wg_mod.open_sealed_group_key(join_result["sealed_key"], bob_kp)
         members_path = alice_home / "alp" / "workgroups" / wg.meta.id / "members.yaml"
+        loaded = wg_mod.load(alice_home, wg.meta.id)
+        assert loaded is not None
+        bob_member = loaded.member(bob_kp.pubkey_b64())
+        assert bob_member is not None
+        bob_member.last_seen_at = "2020-01-01T00:00:00Z"
+        wg_mod._save_members(members_path.parent, loaded.members)
         presence_mtime = members_path.stat().st_mtime_ns
+
+        probe = await alp_client.call(
+            socket_path=server.socket_path(), sender=bob_kp,
+            recipient_pubkey_b64=alice_kp.pubkey_b64(),
+            method="workgroup.pull",
+            params={"workgroup_id": wg.meta.id, "since": 0},
+        )
+        assert probe["posts"] == []
+        assert members_path.stat().st_mtime_ns == presence_mtime
+        persisted = wg_mod.load(alice_home, wg.meta.id)
+        assert persisted is not None
+        assert persisted.member(bob_kp.pubkey_b64()).last_seen_at == "2020-01-01T00:00:00Z"
 
         t0 = _t.monotonic()
         empty = await alp_client.call(
@@ -262,7 +286,7 @@ async def test_pull_long_poll_times_out_empty_and_returns_early_on_post(short_tm
         held = _t.monotonic() - t0
         assert empty["posts"] == []
         assert held >= 1.0
-        assert members_path.stat().st_mtime_ns == presence_mtime
+        assert members_path.stat().st_mtime_ns != presence_mtime
 
         async def _post_later() -> None:
             await asyncio.sleep(0.6)

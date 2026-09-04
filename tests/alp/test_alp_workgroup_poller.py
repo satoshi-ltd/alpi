@@ -461,6 +461,177 @@ def test_working_redispatch_allows_same_second_as_dispatch() -> None:
     assert reason and "resume after #working" in reason
 
 
+def test_working_redispatch_stops_past_the_per_round_allowance() -> None:
+    posts = [{
+        "seq": 1, "ts": "2026-06-02T10:00:00Z",
+        "text": "@quill #task #content write content", "from": "hub_pk",
+    }]
+    for n in range(1, 6):
+        posts.append({
+            "seq": n + 1, "ts": f"2026-06-02T10:0{n}:00Z",
+            "text": f"#working continuation {n} (continuation)", "from": "quill_pk",
+        })
+
+    assert service._working_redispatch_reason(
+        "quill", "quill_pk", posts[:5], "2026-06-02T10:00:30Z", "hub_pk",
+    ) is not None
+    assert service._working_redispatch_reason(
+        "quill", "quill_pk", posts, "2026-06-02T10:00:30Z", "hub_pk",
+    ) is None
+
+
+def test_working_redispatch_counts_continuations_per_round() -> None:
+    posts = [
+        {"seq": 21, "ts": "2026-09-04T01:00:00Z", "text": "@lingua #task #translation go", "from": "hub_pk"},
+        {"seq": 22, "ts": "2026-09-04T01:05:00Z", "text": "#working drafts (continuation)", "from": "lingua_pk"},
+        {"seq": 23, "ts": "2026-09-04T01:06:00Z", "text": "#working resuming", "from": "lingua_pk"},
+        {"seq": 24, "ts": "2026-09-04T01:20:00Z", "text": "#translation done", "from": "lingua_pk"},
+        {"seq": 25, "ts": "2026-09-04T01:27:50Z", "text": "@lingua gate red on #translation (repair round 1/3)", "from": "hub_pk"},
+        {"seq": 26, "ts": "2026-09-04T01:55:08Z", "text": "#working repair drafts verified (continuation)", "from": "lingua_pk"},
+    ]
+    reason = service._working_redispatch_reason(
+        "lingua", "lingua_pk", posts, "2026-09-04T01:27:51Z", "hub_pk",
+    )
+    assert reason and "seq #26" in reason
+
+
+def test_model_authored_working_does_not_count_as_a_continuation() -> None:
+    posts = [
+        {"seq": 1, "ts": "2026-09-04T01:00:00Z", "text": "@quill #task #content go", "from": "hub_pk"},
+        {"seq": 2, "ts": "2026-09-04T01:01:00Z", "text": "#working starting", "from": "quill_pk"},
+        {"seq": 3, "ts": "2026-09-04T01:20:00Z", "text": "#working cut (continuation)", "from": "quill_pk"},
+        {"seq": 4, "ts": "2026-09-04T01:21:00Z", "text": "#working resuming", "from": "quill_pk"},
+        {"seq": 5, "ts": "2026-09-04T01:40:00Z", "text": "#working cut again (continuation)", "from": "quill_pk"},
+    ]
+    assert service._working_redispatch_reason(
+        "quill", "quill_pk", posts, "2026-09-04T01:21:00Z", "hub_pk",
+    )
+
+
+def test_exhausted_working_phase_detects_the_fifth_continuation(monkeypatch) -> None:
+    wg = types.SimpleNamespace(meta=types.SimpleNamespace(
+        pipelines={"setup": ("content",)},
+        pipeline_steps={"content": {"owner": "quill"}},
+    ))
+    posts = [
+        {
+            "seq": 1, "ts": "2026-06-02T10:00:00Z",
+            "text": "@quill #task #content write content", "from": "hub_pk",
+        },
+        *[
+            {
+                "seq": seq, "ts": f"2026-06-02T10:0{seq}:00Z",
+                "text": f"#working heartbeat {seq - 1} (continuation)", "from": "quill_pk",
+            }
+            for seq in (2, 3, 4, 5, 6)
+        ],
+    ]
+    monkeypatch.setattr(
+        "alpi.alp.peers.load",
+        lambda home: [types.SimpleNamespace(id="quill", pubkey="quill_pk")],
+    )
+
+    assert service._exhausted_working_phase(
+        Path("/tmp/home"), wg, posts[:-1], "hub_pk",
+    ) is None
+    assert service._exhausted_working_phase(
+        Path("/tmp/home"), wg, posts, "hub_pk",
+    ) == ("content", 6)
+
+
+def test_automatic_heartbeats_do_not_consume_continuations(monkeypatch) -> None:
+    wg = types.SimpleNamespace(meta=types.SimpleNamespace(
+        pipelines={"setup": ("content",)},
+        pipeline_steps={"content": {"owner": "quill"}},
+    ))
+    posts = [
+        {
+            "seq": 1, "ts": "2026-06-02T10:00:00Z",
+            "text": "@quill #task #content write content", "from": "hub_pk",
+        },
+        {
+            "seq": 2, "ts": "2026-06-02T10:00:30Z",
+            "text": "#working #content deliverable still in progress "
+            "(automatic turn heartbeat)", "from": "quill_pk",
+        },
+        {
+            "seq": 3, "ts": "2026-06-02T10:01:00Z",
+            "text": "#working deadline one (continuation)", "from": "quill_pk",
+        },
+        {
+            "seq": 4, "ts": "2026-06-02T10:01:30Z",
+            "text": "#working #content deliverable still in progress "
+            "(automatic turn heartbeat)", "from": "quill_pk",
+        },
+        {
+            "seq": 5, "ts": "2026-06-02T10:02:00Z",
+            "text": "#working deadline two (continuation)", "from": "quill_pk",
+        },
+    ]
+    monkeypatch.setattr(
+        "alpi.alp.peers.load",
+        lambda home: [types.SimpleNamespace(id="quill", pubkey="quill_pk")],
+    )
+
+    assert service._working_redispatch_reason(
+        "quill", "quill_pk", posts[:2], "2026-06-02T10:00:00Z", "hub_pk",
+    ) is None
+    assert service._exhausted_working_phase(
+        Path("/tmp/home"), wg, posts, "hub_pk",
+    ) is None
+    for seq, label in ((6, "three"), (7, "four"), (8, "five")):
+        posts.append({
+            "seq": seq, "ts": f"2026-06-02T10:0{seq - 3}:00Z",
+            "text": f"#working deadline {label} (continuation)", "from": "quill_pk",
+        })
+    assert service._exhausted_working_phase(
+        Path("/tmp/home"), wg, posts, "hub_pk",
+    ) == ("content", 8)
+
+
+@pytest.mark.asyncio
+async def test_hub_closes_immediately_when_member_continuations_are_exhausted(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    home = tmp_path / "hub"
+    wg = types.SimpleNamespace(meta=types.SimpleNamespace(
+        id="wg_exhausted", paused=False, hub_pubkey="hub_pk",
+        pipelines={"setup": ("content",)}, launch_pipeline="setup",
+        pipeline_steps={"content": {"owner": "quill"}},
+    ))
+    posts = [
+        {"seq": 1, "text": "@quill #task #content write content", "from": "hub_pk"},
+        {"seq": 2, "text": "#working initial turn (continuation)", "from": "quill_pk"},
+        {"seq": 3, "text": "#working continuation one (continuation)", "from": "quill_pk"},
+        {"seq": 4, "text": "#working continuation two (continuation)", "from": "quill_pk"},
+        {"seq": 5, "text": "#working continuation three (continuation)", "from": "quill_pk"},
+        {"seq": 6, "text": "#working continuation four (continuation)", "from": "quill_pk"},
+    ]
+    monkeypatch.setattr(
+        "alpi.alp.keys.load_or_generate",
+        lambda h: types.SimpleNamespace(pubkey_b64=lambda: "hub_pk"),
+    )
+    monkeypatch.setattr(
+        "alpi.alp.peers.load",
+        lambda h: [types.SimpleNamespace(id="quill", pubkey="quill_pk")],
+    )
+    posted: list[str] = []
+
+    async def fake_post(h, wid, text, cost=None):
+        posted.append(text.decode())
+        return {"seq": 5}
+
+    monkeypatch.setattr("alpi.alp.workgroup_client.post", fake_post)
+    monkeypatch.setattr(service, "_emit_wg_blocked", lambda *args: None)
+
+    await service._maybe_dispatch_for_hub(home, "mira", wg, posts)
+
+    assert posted == [
+        "#done BLOCKED · content · owner exhausted 4 bounded continuation "
+        "turns without a deliverable",
+    ]
+
+
 # Cooldown — `_in_cooldown_str`
 
 
@@ -711,6 +882,47 @@ async def test_dispatch_env_carries_alpi_workspace(short_tmp: Path) -> None:
     assert len(captured["env"].get("ALPI_WORKGROUP_TURN_ID", "")) == 32
     assert len(captured["env"].get("ALPI_RUN_ID", "")) == 32
     assert captured["env"].get("ALPI_TURN_BUDGET_S") == "240"
+
+
+@pytest.mark.asyncio
+async def test_pipeline_member_dispatch_uses_the_short_execution_prompt(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    import sys as _sys
+
+    home = short_tmp / "scout"
+    home.mkdir()
+    (home / "alp").mkdir()
+    captured: dict = {}
+    real_create = service.asyncio.create_subprocess_exec
+
+    async def fake_create(*argv, **kw):
+        captured["prompt"] = argv[-1]
+        captured["env"] = kw.get("env") or {}
+        return await real_create(
+            _sys.executable, "-c", "pass",
+            stdout=service.asyncio.subprocess.PIPE,
+            stderr=service.asyncio.subprocess.PIPE,
+        )
+
+    monkeypatch.setattr(service.asyncio, "create_subprocess_exec", fake_create)
+    await service._dispatch_workgroup_turn(
+        home, profile="scout", wg_id="wg_x", wg_name="hotel",
+        reason="targeted task", pipeline=True, member_turn=True,
+        write_scope={
+            "root": "projects/hotel", "paths": ["work/**", "src/config/site.json"],
+            "phase": "intake", "owner": "scout",
+        },
+    )
+
+    prompt = captured["prompt"]
+    assert prompt.startswith("[workgroup-pipeline]")
+    assert "runtime may emit #working only when a bounded turn exhausts" in prompt
+    assert "make exactly one plain `workgroup_post" in prompt
+    assert "use `web_search`" not in prompt
+    assert "Valid actions, in priority" not in prompt
+    assert captured["env"].get("ALPI_WORKGROUP_PIPELINE") == "1"
+    assert captured["env"].get("ALPI_WORKGROUP_MEMBER_TURN") == "1"
 
 
 @pytest.mark.asyncio
@@ -1041,6 +1253,9 @@ async def test_watchdog_dispatches_pipeline_continuation_once(
     monkeypatch.setattr(service, "_dispatch_workgroup_turn", fake_dispatch)
     monkeypatch.setattr(service, "_spawn_dispatch", fake_spawn)
     monkeypatch.setattr(service, "_latest_hub_task_seq_for", lambda *a, **k: 0)
+    service._WATCHDOG_OBSERVED_AT[(str(home), "wg1")] = (
+        3, time.monotonic() - service._HUB_FOLLOWUP_STALE_SECONDS - 1,
+    )
 
     await service._maybe_watchdog_close(home, "mira", _pipe_wg(True), recent)
     assert spawned == ["wg1"]
@@ -1133,8 +1348,92 @@ async def test_final_repair_sets_its_dispatch_capability(
 
 
 @pytest.mark.asyncio
-async def test_transient_provider_failure_restores_watchdog_attempt(
+async def test_exhausted_gate_final_repair_is_closure_only(
     short_tmp: Path, monkeypatch,
+) -> None:
+    home = short_tmp / "miragatefinal"
+    home.mkdir()
+    captured: dict = {}
+
+    async def fake_exec(*argv, env=None, **kw):
+        captured["argv"] = argv
+        captured["env"] = env or {}
+        raise OSError("blocked in test")
+
+    monkeypatch.setattr(service.asyncio, "create_subprocess_exec", fake_exec)
+    await service._dispatch_workgroup_turn(
+        home, "mira", "wg1", "proj",
+        "GATE content FAILED after 4 repair rounds: repeated opener",
+        closure_only=True, final_repair=True,
+    )
+
+    prompt = captured["argv"][-1]
+    assert "[workgroup-gate-final]" in prompt
+    assert "#done BLOCKED" in prompt
+    assert "Do not inspect files" in prompt
+    assert captured["env"].get("ALPI_WORKGROUP_FINAL_REPAIR") == "1"
+    assert captured["env"].get("ALPI_WORKGROUP_CLOSURE_ONLY") == "1"
+
+
+def test_watchdog_observed_age_ignores_sleep_before_first_observation(
+    short_tmp: Path,
+) -> None:
+    home = short_tmp / "monotonic-age"
+    key = (str(home), "wg1")
+    try:
+        assert service._watchdog_observed_age(
+            home, "wg1", 9, now=100.0,
+        ) == 0.0
+        assert service._WATCHDOG_OBSERVED_AT[key] == (9, 100.0)
+    finally:
+        service._clear_watchdog_timing(home, "wg1")
+
+
+def test_watchdog_observed_age_ignores_sleep_after_observation(
+    short_tmp: Path,
+) -> None:
+    home = short_tmp / "monotonic-sleep"
+    key = (str(home), "wg1")
+    try:
+        assert service._watchdog_observed_age(
+            home, "wg1", 9, now=100.0,
+        ) == 0.0
+        assert service._watchdog_observed_age(
+            home, "wg1", 9, now=105.0,
+        ) == 5.0
+        assert service._WATCHDOG_OBSERVED_AT[key] == (9, 100.0)
+    finally:
+        service._clear_watchdog_timing(home, "wg1")
+
+
+def test_watchdog_refire_uses_monotonic_elapsed(short_tmp: Path) -> None:
+    home = short_tmp / "monotonic-refire"
+    try:
+        assert service._watchdog_refire_due(
+            home, "wg1", "watchdog", 9, now=100.0,
+        ) is False
+        assert service._watchdog_refire_due(
+            home, "wg1", "watchdog", 9, now=101.0,
+        ) is False
+        assert service._watchdog_refire_due(
+            home, "wg1", "watchdog", 9,
+            now=100.0 + service._HUB_WATCHDOG_REFIRE_SECONDS + 1,
+        ) is True
+    finally:
+        service._clear_watchdog_timing(home, "wg1")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "event_line",
+    [
+        '{"kind":"error","text":"provider 500","transient":true}',
+        '{"kind":"tool_end","name":"peer","ok":false,"transient":true}',
+    ],
+    ids=["provider-error", "peer-tool"],
+)
+async def test_transient_child_event_restores_watchdog_attempt(
+    short_tmp: Path, monkeypatch, event_line: str,
 ) -> None:
     import json
     import sys as _sys
@@ -1148,7 +1447,7 @@ async def test_transient_provider_failure_restores_watchdog_attempt(
     async def fake_create(*argv, **kw):
         return await real_create(
             _sys.executable, "-c",
-            "print('{\"kind\":\"error\",\"text\":\"provider 500\",\"transient\":true}')",
+            f"print({event_line!r})",
             stdout=service.asyncio.subprocess.PIPE,
             stderr=service.asyncio.subprocess.PIPE,
         )
@@ -1165,6 +1464,81 @@ async def test_transient_provider_failure_restores_watchdog_attempt(
         for line in service.turn_log_path(home).read_text().splitlines()
     ]
     assert events[-1]["transient_failure"] is True
+
+
+@pytest.mark.asyncio
+async def test_spawn_failure_restores_watchdog_attempt(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    import json
+
+    home = short_tmp / "spawn-failure"
+    home.mkdir()
+    attempt = service._bump_hub_watchdog_count(home, "wg1", 9)
+
+    async def fail_spawn(*args, **kwargs):
+        raise OSError("temporarily unavailable")
+
+    monkeypatch.setattr(service.asyncio, "create_subprocess_exec", fail_spawn)
+    await service._dispatch_workgroup_turn(
+        home, "mira", "wg1", "proj", "watchdog",
+        recovery_kind="watchdog", recovery_seq=9, recovery_attempt=attempt,
+    )
+
+    assert service._peek_hub_watchdog_count(home, "wg1", 9) == 0
+    event = json.loads(service.turn_log_path(home).read_text().splitlines()[-1])
+    assert event["event"] == "spawn-failed"
+    assert event["transient_failure"] is True
+
+
+@pytest.mark.asyncio
+async def test_transient_exhausted_watchdog_close_is_retried_after_refire_delay(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    home = short_tmp / "watchdog-close-transient"
+    home.mkdir()
+    wg = _pipe_wg(True)
+    old = (
+        _dt.datetime.now(tz=_dt.timezone.utc) - _dt.timedelta(minutes=10)
+    ).strftime("%Y-%m-%dT%H:%M:%SZ")
+    recent = [
+        {"seq": 1, "from": "HUB", "text": "@atlas #task #intake produce it", "ts": old},
+        {"seq": 2, "from": "ATLAS", "text": "delivery", "ts": old},
+    ]
+    service._LAST_TURN_END.pop(wg.meta.id, None)
+    for _ in range(3):
+        service._bump_hub_watchdog_count(home, wg.meta.id, 2)
+    service._set_hub_watchdog_seq(home, wg.meta.id, 2)
+    state = service._load_poller_state(home)
+    state.setdefault("hub_last_dispatch_at", {})[wg.meta.id] = old
+    service._save_poller_state(home, state)
+    observed_key = (str(home), wg.meta.id)
+    fired_key = (str(home), wg.meta.id, "watchdog")
+    service._WATCHDOG_OBSERVED_AT[observed_key] = (
+        2, time.monotonic() - service._HUB_FOLLOWUP_STALE_SECONDS - 1,
+    )
+    prior_fire = time.monotonic() - service._HUB_WATCHDOG_REFIRE_SECONDS - 1
+    service._WATCHDOG_FIRED_AT[fired_key] = (2, prior_fire)
+    calls = 0
+
+    async def transient_close(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        raise OSError("temporary write failure")
+
+    monkeypatch.setattr("alpi.alp.workgroup_client.post", transient_close)
+    monkeypatch.setattr(service, "_latest_hub_task_seq_for", lambda *a: 1)
+    monkeypatch.setattr(service, "_budget_blocks_dispatch", lambda *a: False)
+    try:
+        await service._maybe_watchdog_close(home, "mira", wg, recent)
+        assert calls == 1
+        assert service._peek_hub_watchdog_count(home, wg.meta.id, 2) == 3
+        assert service._WATCHDOG_FIRED_AT[fired_key][1] > prior_fire
+
+        await service._maybe_watchdog_close(home, "mira", wg, recent)
+        assert calls == 1
+    finally:
+        service._clear_watchdog_timing(home, wg.meta.id)
 
 
 def test_recovery_restore_does_not_rollback_a_newer_attempt(short_tmp: Path) -> None:
@@ -1215,6 +1589,9 @@ async def test_watchdog_repair_mode_on_second_nudge_for_pipeline(
     )
     monkeypatch.setattr(service, "_latest_hub_task_seq_for", lambda *a, **k: 0)
     wg = _pipe_wg(True)
+    service._WATCHDOG_OBSERVED_AT[(str(home), wg.meta.id)] = (
+        2, time.monotonic() - service._HUB_FOLLOWUP_STALE_SECONDS - 1,
+    )
 
     # First nudge → closure-only.
     await service._maybe_watchdog_close(home, "mira", wg, recent)
@@ -1227,6 +1604,9 @@ async def test_watchdog_repair_mode_on_second_nudge_for_pipeline(
     ).strftime("%Y-%m-%dT%H:%M:%SZ")
     st.setdefault("hub_last_dispatch_at", {})[wg.meta.id] = sixmin
     service._save_poller_state(home, st)
+    service._WATCHDOG_FIRED_AT[(
+        str(home), wg.meta.id, "watchdog",
+    )] = (2, time.monotonic() - service._HUB_WATCHDOG_REFIRE_SECONDS - 1)
 
     # Second nudge on the same seq → repair (normal mode, not closure-only).
     await service._maybe_watchdog_close(home, "mira", wg, recent)
@@ -1244,6 +1624,9 @@ async def test_watchdog_repair_mode_on_second_nudge_for_pipeline(
     st = service._load_poller_state(home)
     st.setdefault("hub_last_dispatch_at", {})[wg.meta.id] = sixmin2
     service._save_poller_state(home, st)
+    service._WATCHDOG_FIRED_AT[(
+        str(home), wg.meta.id, "watchdog",
+    )] = (2, time.monotonic() - service._HUB_WATCHDOG_REFIRE_SECONDS - 1)
     await service._maybe_watchdog_close(home, "mira", wg, recent)
     assert len(calls) == 3
     assert calls[2].get("closure_only") is False
@@ -1257,6 +1640,9 @@ async def test_watchdog_repair_mode_on_second_nudge_for_pipeline(
     st = service._load_poller_state(home)
     st.setdefault("hub_last_dispatch_at", {})[wg.meta.id] = sentinel
     service._save_poller_state(home, st)
+    service._WATCHDOG_FIRED_AT[(
+        str(home), wg.meta.id, "watchdog",
+    )] = (2, time.monotonic() - service._HUB_WATCHDOG_REFIRE_SECONDS - 1)
     await service._maybe_watchdog_close(home, "mira", wg, recent)
     assert len(calls) == 3
     assert closes == [
@@ -1296,6 +1682,9 @@ async def test_watchdog_no_repair_for_non_pipeline(
     )
     monkeypatch.setattr(service, "_latest_hub_task_seq_for", lambda *a, **k: 0)
     wg = _pipe_wg(False)
+    service._WATCHDOG_OBSERVED_AT[(str(home), wg.meta.id)] = (
+        2, time.monotonic() - service._HUB_FOLLOWUP_STALE_SECONDS - 1,
+    )
 
     await service._maybe_watchdog_close(home, "vera", wg, recent)
     st = service._load_poller_state(home)
@@ -1304,6 +1693,9 @@ async def test_watchdog_no_repair_for_non_pipeline(
     ).strftime("%Y-%m-%dT%H:%M:%SZ")
     st.setdefault("hub_last_dispatch_at", {})[wg.meta.id] = sixmin
     service._save_poller_state(home, st)
+    service._WATCHDOG_FIRED_AT[(
+        str(home), wg.meta.id, "watchdog",
+    )] = (2, time.monotonic() - service._HUB_WATCHDOG_REFIRE_SECONDS - 1)
     await service._maybe_watchdog_close(home, "vera", wg, recent)
     assert len(calls) == 2
     assert calls[1].get("closure_only") is True
@@ -1352,6 +1744,9 @@ async def test_continuation_bounded_retry_then_stops(
     )
     monkeypatch.setattr(service, "_latest_hub_task_seq_for", lambda *a, **k: 0)
     wg = _pipe_wg(True)
+    service._WATCHDOG_OBSERVED_AT[(str(home), wg.meta.id)] = (
+        3, time.monotonic() - service._HUB_FOLLOWUP_STALE_SECONDS - 1,
+    )
 
     def age_last_dispatch():
         st = service._load_poller_state(home)
@@ -1359,6 +1754,11 @@ async def test_continuation_bounded_retry_then_stops(
             _dt.datetime.now(tz=_dt.timezone.utc) - _dt.timedelta(minutes=6)
         ).strftime("%Y-%m-%dT%H:%M:%SZ")
         service._save_poller_state(home, st)
+        service._WATCHDOG_FIRED_AT[(
+            str(home), wg.meta.id, "continuation",
+        )] = (
+            3, time.monotonic() - service._HUB_WATCHDOG_REFIRE_SECONDS - 1,
+        )
 
     # Fires up to _CONTINUATION_MAX_FIRES times on the same seq...
     for _ in range(service._CONTINUATION_MAX_FIRES + 3):
@@ -1730,7 +2130,10 @@ def test_resume_resets_poller_state_for_wg(short_tmp: Path) -> None:
     service._set_hub_responded_seq(home, "wg_x", 7)
     service._bump_hub_continuation_count(home, "wg_x", 5)
     service._mark_hub_dispatched(home, "wg_x")
+    service._watchdog_observed_age(home, "wg_x", 7, now=20.0)
+    service._watchdog_refire_due(home, "wg_x", "watchdog", 7, now=20.0)
     service._set_hub_watchdog_seq(home, "wg_y", 3)  # bystander
+    service._watchdog_observed_age(home, "wg_y", 3, now=20.0)
 
     service.reset_workgroup_poller_state(home, "wg_x")
 
@@ -1740,9 +2143,15 @@ def test_resume_resets_poller_state_for_wg(short_tmp: Path) -> None:
     # re-fireable on the same seq after resume
     assert service._get_hub_watchdog_seq(home, "wg_x") == 0
     assert service._get_hub_responded_seq(home, "wg_x") == 0
+    assert (str(home), "wg_x") not in service._WATCHDOG_OBSERVED_AT
+    assert not any(
+        key[:2] == (str(home), "wg_x") for key in service._WATCHDOG_FIRED_AT
+    )
     # other workgroup untouched
     assert st.get("hub_watchdog_fired_seq", {}).get("wg_y") == 3
     assert service._get_hub_watchdog_seq(home, "wg_y") == 3
+    assert (str(home), "wg_y") in service._WATCHDOG_OBSERVED_AT
+    service._clear_watchdog_timing(home, "wg_y")
 
 
 def test_poller_start_offset_is_deterministic_and_staggered() -> None:
@@ -1781,7 +2190,9 @@ async def test_poller_starts_subscription_pulls_concurrently(monkeypatch) -> Non
     monkeypatch.setattr(
         sub_mod, "get",
         lambda home, wid: types.SimpleNamespace(
-            wg_id=wid, recent_posts=[], hub_pubkey="hub", last_responded_seq=0,
+            wg_id=wid, recent_posts=[{
+                "seq": 1, "from": "hub", "text": "@alice #task #build go",
+            }], hub_pubkey="hub", last_responded_seq=0,
             last_dispatch_at="", paused=False, pipeline_mode=False,
         ),
     )
@@ -1801,7 +2212,7 @@ async def test_poller_starts_subscription_pulls_concurrently(monkeypatch) -> Non
 
 
 @pytest.mark.asyncio
-async def test_subscription_empty_pull_reopens_without_idle_backoff(monkeypatch) -> None:
+async def test_active_subscription_empty_pull_reopens_without_idle_backoff(monkeypatch) -> None:
     import types
     from alpi.alp import subscription as sub_mod
     from alpi.alp import workgroup_client as wc
@@ -1817,7 +2228,9 @@ async def test_subscription_empty_pull_reopens_without_idle_backoff(monkeypatch)
         await asyncio.Event().wait()
 
     sub = types.SimpleNamespace(
-        wg_id="wg_cold", recent_posts=[], hub_pubkey="hub",
+        wg_id="wg_hot", recent_posts=[{
+            "seq": 1, "from": "hub", "text": "@alice #task #build go",
+        }], hub_pubkey="hub",
         last_responded_seq=0, last_dispatch_at="", paused=False, pipeline_mode=False,
     )
     monkeypatch.setattr(sub_mod, "get", lambda home, wid: sub)
@@ -1826,7 +2239,7 @@ async def test_subscription_empty_pull_reopens_without_idle_backoff(monkeypatch)
     monkeypatch.setattr(service, "_maybe_dispatch_for_sub", lambda *a, **k: asyncio.sleep(0))
 
     worker = asyncio.create_task(
-        service._run_subscription_poller(Path("/tmp/none"), "alice", "wg_cold")
+        service._run_subscription_poller(Path("/tmp/none"), "alice", "wg_hot")
     )
     try:
         await asyncio.wait_for(second_started.wait(), timeout=1)
@@ -1845,6 +2258,9 @@ async def test_removed_subscription_cancels_held_pull(monkeypatch) -> None:
     from alpi.alp import workgroup_client as wc
 
     subs = [types.SimpleNamespace(wg_id="wg_gone")]
+    home = Path("/tmp/none")
+    service._watchdog_observed_age(home, "wg_gone", 1, now=20.0)
+    service._watchdog_refire_due(home, "wg_gone", "watchdog", 1, now=20.0)
     entered = asyncio.Event()
     cancelled = asyncio.Event()
 
@@ -1856,6 +2272,7 @@ async def test_removed_subscription_cancels_held_pull(monkeypatch) -> None:
             cancelled.set()
 
     monkeypatch.setattr(service, "_poller_start_offset", lambda _p: 0.0)
+    monkeypatch.setattr(service, "_subscription_start_offset", lambda *a: 0.0)
     monkeypatch.setattr(service, "WORKGROUP_TICK_SECONDS", 0.01)
     monkeypatch.setattr(sub_mod, "load", lambda home: list(subs))
     monkeypatch.setattr(sub_mod, "get", lambda home, wid: subs[0] if subs else None)
@@ -1863,7 +2280,7 @@ async def test_removed_subscription_cancels_held_pull(monkeypatch) -> None:
     monkeypatch.setattr(wg_mod, "list_workgroups", lambda home: [])
 
     poller = asyncio.create_task(
-        service._run_workgroup_poller(Path("/tmp/none"), "alice")
+        service._run_workgroup_poller(home, "alice")
     )
     try:
         await asyncio.wait_for(entered.wait(), timeout=1)
@@ -1872,6 +2289,11 @@ async def test_removed_subscription_cancels_held_pull(monkeypatch) -> None:
     finally:
         poller.cancel()
         await asyncio.gather(poller, return_exceptions=True)
+
+    assert (str(home), "wg_gone") not in service._WATCHDOG_OBSERVED_AT
+    assert not any(
+        key[:2] == (str(home), "wg_gone") for key in service._WATCHDOG_FIRED_AT
+    )
 
 
 @pytest.mark.asyncio
@@ -1897,6 +2319,31 @@ async def test_hub_scan_does_not_block_the_host_loop(monkeypatch) -> None:
     finally:
         poller.cancel()
         await asyncio.gather(poller, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_paused_hub_skips_transcript_observation(monkeypatch) -> None:
+    wg = types.SimpleNamespace(meta=types.SimpleNamespace(id="wg_paused", paused=True))
+    scans: list[str] = []
+
+    monkeypatch.setattr(service, "_poller_start_offset", lambda _p: 0.0)
+    monkeypatch.setattr(sub_mod, "load", lambda _home: [])
+    monkeypatch.setattr(wg_mod, "list_workgroups", lambda _home: [wg])
+    monkeypatch.setattr(
+        service, "_all_hub_posts_decrypted",
+        lambda _home, current: scans.append(current.meta.id) or [],
+    )
+
+    poller = asyncio.create_task(
+        service._run_workgroup_poller(Path("/tmp/none"), "alice")
+    )
+    try:
+        await asyncio.sleep(0.05)
+    finally:
+        poller.cancel()
+        await asyncio.gather(poller, return_exceptions=True)
+
+    assert scans == []
 
 
 @pytest.mark.asyncio
@@ -2415,6 +2862,9 @@ async def test_watchdog_stall_path_defers_to_an_inflight_member_turn(
     monkeypatch.setattr(service, "_spawn_dispatch", lambda wid, coro: spawned.append(wid))
     monkeypatch.setattr(service, "_dispatch_workgroup_turn", lambda *a, **k: None)
     monkeypatch.setattr(service, "_budget_blocks_dispatch", lambda *a, **k: False)
+    service._WATCHDOG_OBSERVED_AT[(str(home), wg.meta.id)] = (
+        2, time.monotonic() - service._turn_timeout_for(True) - 1,
+    )
 
     service._INFLIGHT[("wg_ff", "scout")] = {"profile": "scout"}
     try:
@@ -2459,7 +2909,9 @@ async def test_watchdog_working_grace_covers_the_phase_turn_budget(
     await service._maybe_watchdog_close(home, "mira", wg, recent)
     assert spawned == []
 
-    recent[1]["ts"] = _ts(1900)
+    service._WATCHDOG_OBSERVED_AT[(str(home), "wg_budget")] = (
+        2, time.monotonic() - 1900,
+    )
     await service._maybe_watchdog_close(home, "mira", wg, recent)
     assert spawned == ["wg_budget"]
 
@@ -2487,6 +2939,9 @@ async def test_watchdog_default_working_grace_unchanged_without_budget(
     monkeypatch.setattr(service, "_spawn_dispatch", lambda wid, coro: spawned.append(wid))
     monkeypatch.setattr(service, "_dispatch_workgroup_turn", lambda *a, **k: None)
     monkeypatch.setattr(service, "_budget_blocks_dispatch", lambda *a, **k: False)
+    service._WATCHDOG_OBSERVED_AT[(str(home), wg.meta.id)] = (
+        2, time.monotonic() - service._turn_timeout_for(True) - 1,
+    )
 
     await service._maybe_watchdog_close(home, "mira", wg, recent)
     assert spawned == ["wg_nobudget"]
@@ -2686,6 +3141,9 @@ async def test_watchdog_waits_for_a_just_finished_turn_to_settle(
     monkeypatch.setattr(service, "_spawn_dispatch", lambda wid, coro: spawned.append(wid))
     monkeypatch.setattr(service, "_dispatch_workgroup_turn", lambda *a, **k: None)
     monkeypatch.setattr(service, "_budget_blocks_dispatch", lambda *a, **k: False)
+    service._WATCHDOG_OBSERVED_AT[(str(home), wg.meta.id)] = (
+        2, _time.monotonic() - service._turn_timeout_for(True) - 1,
+    )
 
     service._LAST_TURN_END["wg_settle"] = _time.monotonic()
     try:
@@ -2863,7 +3321,9 @@ async def test_subscription_poller_reads_subscriptions_off_the_event_loop(
     second_started = asyncio.Event()
 
     sub = types.SimpleNamespace(
-        wg_id="wg_hot", recent_posts=[], hub_pubkey="hub",
+        wg_id="wg_hot", recent_posts=[{
+            "seq": 1, "from": "hub", "text": "@alice #task #build go",
+        }], hub_pubkey="hub",
         last_responded_seq=0, last_dispatch_at="", paused=False, pipeline_mode=False,
     )
 
@@ -2922,7 +3382,9 @@ async def test_subscription_poller_keeps_polling_when_engine_turns_saturate_the_
     iterations = 0
     third_pull = asyncio.Event()
     sub = types.SimpleNamespace(
-        wg_id="wg_hot", recent_posts=[], hub_pubkey="hub",
+        wg_id="wg_hot", recent_posts=[{
+            "seq": 1, "from": "hub", "text": "@alice #task #build go",
+        }], hub_pubkey="hub",
         last_responded_seq=0, last_dispatch_at="", paused=False, pipeline_mode=False,
     )
 
@@ -3350,32 +3812,47 @@ def test_a_retired_workgroup_cancels_an_in_flight_dispatch(short_tmp: Path) -> N
     assert service._dispatch_cancel_reason(home, "wg_dead") == "workgroup-removed"
 
 
-# Idle subscriptions cool their cadence; live ones keep full rate.
+# Active subscriptions long-poll; idle and paused subscriptions only sample state.
 
 
-def test_the_cold_cap_stays_inside_the_hub_stall_window() -> None:
-    # A cooled member must pull, and dispatch, before `_maybe_watchdog_close` reads its silence as a stall and burns a rung of the bounded recovery ladder.
-    assert (
-        service._WG_COLD_SLEEP_MAX_SECONDS + service._WG_LONG_POLL_SECONDS
-        < service._TURN_SETTLE_SECONDS
-    )
+def test_subscription_observation_mode_is_derived_from_live_state() -> None:
+    assert service._subscription_observation_mode(
+        _idle_sub("wg_idle"), "wg_idle", now=10.0,
+    ) == "cold"
+    assert service._subscription_observation_mode(
+        _idle_sub("wg_paused", paused=True), "wg_paused", now=10.0,
+    ) == "off"
+    assert service._subscription_observation_mode(
+        _idle_sub("wg_recent"), "wg_recent", hot_until=11.0, now=10.0,
+    ) == "hot"
+    assert service._subscription_observation_mode(
+        _idle_sub("wg_open", posts=[{
+            "seq": 1, "from": "hub_pk", "text": "@alice #task #build go",
+        }]),
+        "wg_open", now=10.0,
+    ) == "hot"
 
 
-def test_cold_sleep_ladder_holds_full_rate_then_escalates_to_the_cap() -> None:
-    k = service._WG_COLD_AFTER_EMPTY_PULLS
-    cap = service._WG_COLD_SLEEP_MAX_SECONDS
-    assert [service._wg_cold_sleep(i) for i in range(k)] == [0.0] * k
-    assert service._wg_cold_sleep(k) == 30.0
-    assert service._wg_cold_sleep(k + 1) == 60.0
-    assert service._wg_cold_sleep(k + 2) == cap
-    assert service._wg_cold_sleep(k + 3) == cap
-    # Days of silence must not overflow the shift into an unreachable sleep.
-    assert service._wg_cold_sleep(k + 100_000) == cap
+def test_subscription_cadences_keep_idle_and_paused_out_of_long_polling() -> None:
+    assert service._WG_HOT_TICK_SECONDS < service._WG_IDLE_POLL_SECONDS
+    assert service._WG_IDLE_POLL_SECONDS < service._WG_PAUSED_POLL_SECONDS
+
+
+def test_subscription_start_offset_is_deterministic_and_spread() -> None:
+    interval = service._WG_IDLE_POLL_SECONDS
+    first = service._subscription_start_offset("alice", "wg_a", interval)
+    assert first == service._subscription_start_offset("alice", "wg_a", interval)
+    assert 0.0 <= first < interval
+    spread = {
+        service._subscription_start_offset("alice", f"wg_{i}", interval)
+        for i in range(12)
+    }
+    assert len(spread) >= 8
 
 
 async def _drive_polling_poller(
-    monkeypatch, sub, answers: list[list], *, hot_tick: float | None = 0.0,
-    fast_hub: bool = True, dispatch=None,
+    monkeypatch, sub, answers: list[list], *, fast_hub: bool = False,
+    dispatch=None,
 ) -> tuple[list[float], list[float]]:
     from alpi.alp import workgroup_client as wc
 
@@ -3393,10 +3870,8 @@ async def _drive_polling_poller(
     monkeypatch.setattr(sub_mod, "get", lambda h, wid: sub)
     monkeypatch.setattr(wc, "pull", fake_pull)
     monkeypatch.setattr(service, "_maybe_dispatch_for_sub", dispatch or _no_dispatch)
-    if hot_tick is not None:
-        monkeypatch.setattr(service, "_WG_HOT_TICK_SECONDS", hot_tick)
+    monkeypatch.setattr(service, "_subscription_start_offset", lambda *a: 0.0)
     if not fast_hub:
-        # A hub that honours wait_s returns after ~25s, so the poller must reach the cold sleep on its own.
         monkeypatch.setattr(service, "_WG_FAST_HUB_SECONDS", 0.0)
 
     worker = asyncio.create_task(
@@ -3411,81 +3886,68 @@ async def _drive_polling_poller(
 
 
 @pytest.mark.asyncio
-async def test_a_long_polling_hub_cools_on_the_escalating_ladder(monkeypatch) -> None:
-    k = service._WG_COLD_AFTER_EMPTY_PULLS
-    cap = service._WG_COLD_SLEEP_MAX_SECONDS
+async def test_an_idle_subscription_uses_spaced_nonblocking_pulls(monkeypatch) -> None:
     slept, waits = await _drive_polling_poller(
-        monkeypatch, _idle_sub(), [[] for _ in range(k + 4)],
-        hot_tick=None, fast_hub=False,
+        monkeypatch, _idle_sub(), [[], [], []],
     )
 
-    assert len(waits) == k + 4
-    assert set(waits) == {service._WG_LONG_POLL_SECONDS}
-    # K empty pulls of full rate first, then the ladder — nothing sleeps before that.
-    assert slept == [30.0, 60.0, cap, cap, cap]
+    assert waits == [0.0, 0.0, 0.0]
+    assert slept == [service._WG_IDLE_POLL_SECONDS] * 3
 
 
 @pytest.mark.asyncio
-async def test_a_pre_long_poll_hub_paces_at_the_hot_tick_then_cools(
-    monkeypatch,
-) -> None:
-    k = service._WG_COLD_AFTER_EMPTY_PULLS
-    cap = service._WG_COLD_SLEEP_MAX_SECONDS
+async def test_a_paused_subscription_uses_the_off_cadence(monkeypatch) -> None:
     slept, waits = await _drive_polling_poller(
-        monkeypatch, _idle_sub(), [[] for _ in range(k + 3)], hot_tick=None,
+        monkeypatch, _idle_sub(paused=True), [[], []],
     )
 
-    assert set(waits) == {service._WG_LONG_POLL_SECONDS}
-    assert slept == [service._WG_HOT_TICK_SECONDS] * (k - 1) + [30.0, 60.0, cap, cap]
+    assert waits == [0.0, 0.0]
+    assert slept == [service._WG_PAUSED_POLL_SECONDS] * 2
 
 
 @pytest.mark.asyncio
 async def test_a_finished_pipeline_run_cools(monkeypatch) -> None:
-    k = service._WG_COLD_AFTER_EMPTY_PULLS
     sub = _idle_sub(
         "wg_shipped", posts=list(_FINISHED_RUN),
         pipelines=_PIPELINE, pipeline_mode=True, last_responded_seq=6,
     )
-    slept, _waits = await _drive_polling_poller(
-        monkeypatch, sub, [[] for _ in range(k + 2)],
-        hot_tick=None, fast_hub=False,
+    slept, waits = await _drive_polling_poller(
+        monkeypatch, sub, [[], []],
     )
 
-    assert slept == [30.0, 60.0, service._WG_COLD_SLEEP_MAX_SECONDS]
+    assert waits == [0.0, 0.0]
+    assert slept == [service._WG_IDLE_POLL_SECONDS] * 2
 
 
 @pytest.mark.asyncio
 async def test_a_closed_phase_awaiting_its_successor_keeps_full_rate(
     monkeypatch,
 ) -> None:
-    k = service._WG_COLD_AFTER_EMPTY_PULLS
-    # The hub closed #build and has not opened #qa yet: cooling here delays the phase handoff by a whole cold sleep.
     sub = _idle_sub(
         "wg_handoff", posts=list(_FINISHED_RUN[:3]),
         pipelines=_PIPELINE, pipeline_mode=True, last_responded_seq=3,
     )
-    slept, _waits = await _drive_polling_poller(
-        monkeypatch, sub, [[] for _ in range(k * 3)],
-        hot_tick=None, fast_hub=False,
+    slept, waits = await _drive_polling_poller(
+        monkeypatch, sub, [[], [], []],
     )
 
     assert slept == []
+    assert waits == [service._WG_LONG_POLL_SECONDS] * 3
 
 
 @pytest.mark.asyncio
 async def test_a_single_post_returns_a_cooled_subscription_to_full_rate(
     monkeypatch,
 ) -> None:
-    k = service._WG_COLD_AFTER_EMPTY_PULLS
-    answers: list[list] = [[] for _ in range(k + 2)]
-    answers.append([{"seq": 4, "from": "hub_pk", "text": "#done shipped"}])
-    answers += [[] for _ in range(3)]
-
-    slept, _waits = await _drive_polling_poller(
-        monkeypatch, _idle_sub(), answers, hot_tick=None, fast_hub=False,
+    slept, waits = await _drive_polling_poller(
+        monkeypatch, _idle_sub(), [
+            [{"seq": 4, "from": "hub_pk", "text": "#done shipped"}],
+            [],
+        ],
     )
 
-    assert slept == [30.0, 60.0, service._WG_COLD_SLEEP_MAX_SECONDS]
+    assert waits == [0.0, service._WG_LONG_POLL_SECONDS]
+    assert slept == []
 
 
 @pytest.mark.asyncio
@@ -3495,13 +3957,11 @@ async def test_an_open_task_keeps_full_rate_however_long_the_hub_stays_quiet(
     sub = _idle_sub("wg_open", posts=[
         {"seq": 1, "from": "hub_pk", "text": "@alice #task #build ship it"},
     ])
-    k = service._WG_COLD_AFTER_EMPTY_PULLS
     slept, waits = await _drive_polling_poller(
-        monkeypatch, sub, [[] for _ in range(k * 3)],
-        hot_tick=None, fast_hub=False,
+        monkeypatch, sub, [[], [], []],
     )
 
-    assert set(waits) == {service._WG_LONG_POLL_SECONDS}
+    assert waits == [service._WG_LONG_POLL_SECONDS] * 3
     assert slept == []
 
 
@@ -3517,13 +3977,12 @@ async def test_a_transcript_older_than_the_recovery_ladder_cools_anyway(
     sub = _idle_sub("wg_abandoned", posts=[
         {"seq": 1, "from": "hub_pk", "text": "@alice #task #build ship it", "ts": stale},
     ])
-    k = service._WG_COLD_AFTER_EMPTY_PULLS
-    slept, _waits = await _drive_polling_poller(
-        monkeypatch, sub, [[] for _ in range(k + 2)],
-        hot_tick=None, fast_hub=False,
+    slept, waits = await _drive_polling_poller(
+        monkeypatch, sub, [[], []],
     )
 
-    assert slept == [30.0, 60.0, service._WG_COLD_SLEEP_MAX_SECONDS]
+    assert waits == [0.0, 0.0]
+    assert slept == [service._WG_IDLE_POLL_SECONDS] * 2
 
 
 @pytest.mark.asyncio
@@ -3532,13 +3991,12 @@ async def test_a_fresh_open_task_still_keeps_full_rate(monkeypatch) -> None:
     sub = _idle_sub("wg_working", posts=[
         {"seq": 1, "from": "hub_pk", "text": "@alice #task #build ship it", "ts": fresh},
     ])
-    k = service._WG_COLD_AFTER_EMPTY_PULLS
-    slept, _waits = await _drive_polling_poller(
-        monkeypatch, sub, [[] for _ in range(k + 2)],
-        hot_tick=None, fast_hub=False,
+    slept, waits = await _drive_polling_poller(
+        monkeypatch, sub, [[], []],
     )
 
     assert slept == []
+    assert waits == [service._WG_LONG_POLL_SECONDS] * 2
 
 
 @pytest.mark.asyncio
@@ -3546,14 +4004,12 @@ async def test_an_undispatched_trigger_keeps_full_rate(monkeypatch) -> None:
     async def _pending(*args, **kwargs) -> bool:
         return True
 
-    k = service._WG_COLD_AFTER_EMPTY_PULLS
-    slept, _waits = await _drive_polling_poller(
-        monkeypatch, _idle_sub(), [[] for _ in range(k + 2)],
-        hot_tick=None, fast_hub=False, dispatch=_pending,
+    slept, waits = await _drive_polling_poller(
+        monkeypatch, _idle_sub(), [[], []], dispatch=_pending,
     )
 
-    # A trigger blocked on cooldown or budget is work outstanding; `hot` alone does not see it.
     assert slept == []
+    assert waits == [0.0, service._WG_LONG_POLL_SECONDS]
 
 
 @pytest.mark.asyncio
@@ -3563,73 +4019,11 @@ async def test_a_stream_of_posts_never_sleeps_at_all(monkeypatch) -> None:
         for i in range(1, 13)
     ]
     slept, waits = await _drive_polling_poller(
-        monkeypatch, _idle_sub(), answers, hot_tick=None, fast_hub=False,
+        monkeypatch, _idle_sub(), answers,
     )
 
-    assert set(waits) == {service._WG_LONG_POLL_SECONDS}
+    assert waits == [0.0] + [service._WG_LONG_POLL_SECONDS] * 11
     assert slept == []
-
-
-@pytest.mark.asyncio
-async def test_the_idle_run_restarts_from_zero_after_a_post(monkeypatch) -> None:
-    # Zero hot window isolates the counter reset from the 120s hot hold that would otherwise mask it.
-    monkeypatch.setattr(service, "_WG_HOT_WINDOW_SECONDS", 0.0)
-    k = service._WG_COLD_AFTER_EMPTY_PULLS
-    answers: list[list] = [[] for _ in range(k + 2)]
-    answers.append([{"seq": 9, "from": "hub_pk", "text": "#done shipped"}])
-    answers += [[] for _ in range(k)]
-
-    slept, _waits = await _drive_polling_poller(
-        monkeypatch, _idle_sub(), answers, hot_tick=None, fast_hub=False,
-    )
-
-    assert slept == [30.0, 60.0, service._WG_COLD_SLEEP_MAX_SECONDS, 30.0]
-
-
-@pytest.mark.asyncio
-async def test_an_outage_restarts_the_idle_ladder_at_full_rate(monkeypatch) -> None:
-    from alpi.alp import workgroup_client as wc
-    from alpi.alp.client import ClientError
-
-    monkeypatch.setattr(service, "_WG_HOT_WINDOW_SECONDS", 0.0)
-    monkeypatch.setattr(service, "_WG_FAST_HUB_SECONDS", 0.0)
-    monkeypatch.setattr(service, "_WG_HOT_TICK_SECONDS", 0.0)
-    k = service._WG_COLD_AFTER_EMPTY_PULLS
-    slept = _record_sleeps(monkeypatch)
-    script: list = [[] for _ in range(k + 2)] + [ClientError("hub gone")] \
-        + [[] for _ in range(k)]
-    calls = 0
-    parked = asyncio.Event()
-
-    async def fake_pull(h, wid, wait_s=0.0):
-        nonlocal calls
-        if calls >= len(script):
-            parked.set()
-            await asyncio.Event().wait()
-        step = script[calls]
-        calls += 1
-        if isinstance(step, BaseException):
-            raise step
-        return step, 0
-
-    monkeypatch.setattr(sub_mod, "get", lambda h, wid: _idle_sub())
-    monkeypatch.setattr(wc, "pull", fake_pull)
-    monkeypatch.setattr(service, "_maybe_dispatch_for_sub", _no_dispatch)
-
-    worker = asyncio.create_task(
-        service._run_subscription_poller(Path("/tmp/none"), "alice", "wg_cold")
-    )
-    try:
-        await asyncio.wait_for(parked.wait(), timeout=5)
-    finally:
-        worker.cancel()
-        await asyncio.gather(worker, return_exceptions=True)
-
-    # The ladder, then the transport backoff tick, then the ladder from zero.
-    assert slept == [
-        30.0, 60.0, service._WG_COLD_SLEEP_MAX_SECONDS,
-        float(service.WORKGROUP_TICK_SECONDS), 30.0,
-    ]
 
 
 def test_a_pull_wider_than_the_recent_cache_still_finds_its_own_task() -> None:

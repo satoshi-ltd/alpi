@@ -413,6 +413,73 @@ async def test_tcp_rate_limit_triggers_32005(short_tmp: Path) -> None:
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+async def test_tcp_pull_rate_limit_does_not_consume_foreground_budget(
+    short_tmp: Path,
+) -> None:
+    alice_home = short_tmp / "alice"
+    bob_home = short_tmp / "bob"
+    alice_home.mkdir()
+    bob_home.mkdir()
+
+    alice_kp = load_or_generate(alice_home)
+    bob_kp = load_or_generate(bob_home)
+
+    port = await _pick_free_port()
+    _pin(
+        bob_home,
+        "alice",
+        alice_kp.pubkey_b64(),
+        allow=["workgroup.pull", "link.ping"],
+        rate_limit={"per_minute": 2},
+    )
+
+    async def pull(params, peer, server):
+        return {"posts": [], "head": 0}
+
+    bob_srv = alp_server.Server(
+        home=bob_home,
+        agent_name="bob",
+        tcp_host="127.0.0.1",
+        tcp_port=port,
+    )
+    bob_srv.register("workgroup.pull", pull)
+    await bob_srv.start()
+    try:
+        for _ in range(3):
+            await alp_client.call_tcp(
+                host="127.0.0.1",
+                port=port,
+                sender=alice_kp,
+                recipient_pubkey_b64=bob_kp.pubkey_b64(),
+                method="workgroup.pull",
+                params={},
+            )
+        for _ in range(2):
+            result = await alp_client.call_tcp(
+                host="127.0.0.1",
+                port=port,
+                sender=alice_kp,
+                recipient_pubkey_b64=bob_kp.pubkey_b64(),
+                method="link.ping",
+                params={},
+            )
+            assert result["agent_name"] == "bob"
+        with pytest.raises(alp_client.RemoteError) as exc:
+            await alp_client.call_tcp(
+                host="127.0.0.1",
+                port=port,
+                sender=alice_kp,
+                recipient_pubkey_b64=bob_kp.pubkey_b64(),
+                method="link.ping",
+                params={},
+            )
+        assert exc.value.code == -32005
+    finally:
+        await bob_srv.stop()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_call_peer_dispatches_tcp_when_address_set(short_tmp: Path) -> None:
     alice_home = short_tmp / "alice"
     bob_home = short_tmp / "bob"

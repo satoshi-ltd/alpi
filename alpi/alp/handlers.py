@@ -143,6 +143,7 @@ async def _run_turn_stream(
             "tokens_out": 0,
             "cost": 0.0,
             "interrupted": False,
+            "transient": False,
         }
 
         def sink(ev: AgentEvent) -> None:
@@ -159,6 +160,7 @@ async def _run_turn_stream(
                 state["cost"] += ev.cost
             elif ev.kind == "error":
                 state["parts"].append(f"[error] {ev.text}")
+                state["transient"] = state["transient"] or ev.transient
             elif ev.kind == "interrupted":
                 state["interrupted"] = True
 
@@ -226,6 +228,7 @@ async def _run_turn_stream(
             "cost": state["cost"],
             "session_id": engine.session.id,
             "interrupted": state["interrupted"],
+            "transient": state["transient"],
         }
 
 
@@ -268,9 +271,10 @@ def _run_turn(
     tokens_out = 0
     cost = 0.0
     interrupted = False
+    transient = False
 
     def sink(ev: AgentEvent) -> None:
-        nonlocal tokens_in, tokens_out, cost, interrupted
+        nonlocal tokens_in, tokens_out, cost, interrupted, transient
         if ev.kind == "assistant_done" and ev.final:
             if ev.attachments:
                 produced.extend(ev.attachments)
@@ -282,6 +286,7 @@ def _run_turn(
             cost += ev.cost
         elif ev.kind == "error":
             parts.append(f"[error] {ev.text}")
+            transient = transient or ev.transient
         elif ev.kind == "interrupted":
             interrupted = True
 
@@ -320,4 +325,5 @@ def _run_turn(
         "cost": cost,
         "session_id": engine.session.id,
         "interrupted": interrupted,
+        "transient": transient,
     }

@@ -259,6 +259,24 @@ def test_engine_spawns_review_on_cadence(
     assert len(spawned) == 2  # fourth turn — fires again
 
 
+def test_pipeline_turns_do_not_promote_project_facts_to_memory(
+        bootstrapped_home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg = config.load(bootstrapped_home)
+    cfg.memory.review_interval = 1
+    engine = Engine(home=bootstrapped_home, cfg=cfg)
+    spawned: list[object] = []
+    monkeypatch.setattr(
+        "alpi.review.spawn_review",
+        lambda *a, **kw: spawned.append(a),
+    )
+    monkeypatch.setenv("ALPI_WORKGROUP_PIPELINE", "1")
+
+    engine._maybe_spawn_review()
+
+    assert spawned == []
+    assert engine._turns_since_review == 0
+
+
 def test_engine_spawn_failure_does_not_propagate(
         bootstrapped_home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     cfg = config.load(bootstrapped_home)

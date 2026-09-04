@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 const { stableDetail, refreshProfileDetail } = vi.hoisted(() => ({
@@ -65,6 +65,35 @@ vi.mock("./fields/maintenance.jsx", () => ({
 import ProfileDetail from "./ProfileDetail.jsx";
 
 describe("ProfileDetail", () => {
+  it("matches the chat header model and budget treatment", () => {
+    const { container } = render(
+      <ProfileDetail
+        profile={{
+          name: "pulse",
+          accent: "#10b981",
+          model: "openrouter/deepseek/deepseek-v4-flash-latest",
+          budget_daily_usd: 10,
+          budget_used_usd: 0.26,
+        }}
+        profiles={[]}
+        activeConnection={{ id: "remote" }}
+      />,
+    );
+
+    const model = screen.getByText("deepseek-v4-flash-latest");
+    expect(model.closest(".ds-tip-escape")).toBeInTheDocument();
+    fireEvent.mouseEnter(model.closest(".ds-tip-escape"));
+    expect(screen.getByText("openrouter/deepseek/deepseek-v4-flash-latest"))
+      .toHaveClass("ds-tip-wide");
+    expect(container.querySelector(".ds-meter")).toHaveTextContent("$0.26/$10.00");
+    const budgetTip = container.querySelector(".ds-meter").closest(".ds-tip-escape");
+    expect(budgetTip).toBeInTheDocument();
+    fireEvent.mouseEnter(budgetTip);
+    expect(screen.getByText("Daily budget")).toBeInTheDocument();
+    expect(container.querySelector(".ds-meter [role='progressbar']"))
+      .toHaveAttribute("aria-valuenow", "3");
+  });
+
   it("shows the settings sync progress bar under the header", () => {
     render(
       <ProfileDetail

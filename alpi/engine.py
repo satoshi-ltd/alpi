@@ -45,10 +45,14 @@ def _turn_deadline_from_env(started: float) -> float | None:
     return started + budget if budget > 0 else None
 
 
-_FREE_MODEL_MAX_STEPS = 1000
 _PEER_USAGE_MARKER = "\n\n---\ntokens:"
 _ESCALATE_AFTER_FAILURES = 3
 _BUDGET_ESCALATION_GUARD = 0.8
+_WORKGROUP_FINALIZE_SECONDS = 45.0
+
+
+def _fallback_continuation(cause: str) -> str:
+    return f"#working turn ended before its handoff ({cause}); saved work stays in the project, resuming from it on the next dispatch"
 
 
 def _route_tier_from_env() -> str | None:
@@ -465,12 +469,14 @@ class Engine:
         if wg_block:
             host_parts.append(wg_block)
 
-        # Per-turn skill boost; only fires when ``user_text`` matches a declared keyword.
-        try:
-            from alpi.tools.skill import keyword_match_hint as _kw_hint
-            hint = _kw_hint(self.home, user_text, cfg_raw=self.cfg.raw)
-        except Exception:  # noqa: BLE001
-            hint = ""
+        # Detached workgroup prompts already carry their exact task and tool contract.
+        hint = ""
+        if not dispatch_wg_id:
+            try:
+                from alpi.tools.skill import keyword_match_hint as _kw_hint
+                hint = _kw_hint(self.home, user_text, cfg_raw=self.cfg.raw)
+            except Exception:  # noqa: BLE001
+                hint = ""
         if hint:
             host_parts.append(hint)
 
@@ -569,18 +575,6 @@ class Engine:
         call_kwargs.update(_pc.cache_kwargs_for_model(call_kwargs.get("model", "")))
         call_kwargs = self._with_affinity(call_kwargs)
         max_steps = self.cfg.tools.max_steps_per_turn
-        _explicit_cap = (self.cfg.raw.get("tools") or {}).get("max_steps_per_turn") is not None
-        if max_steps == cfg_mod.DEFAULT_CONFIG["tools"]["max_steps_per_turn"] and not _explicit_cap:
-            from alpi import ledger as _ledger_mod
-            from alpi.providers.ollama import is_ollama
-            # A budget-capped profile is already bounded by the per-step ledger check;
-            # the step ceiling stays only as a runaway-loop backstop.
-            if (
-                _ledger_mod._budget(self.cfg.budget)[0] is not None
-                or llm.is_free_model(call_kwargs.get("model", ""))
-                or is_ollama(call_kwargs.get("api_base") or "")
-            ):
-                max_steps = _FREE_MODEL_MAX_STEPS
 
         self._maybe_auto_compact(emit)
 
@@ -589,7 +583,56 @@ class Engine:
         todo_token = todo_mod.bind_store(self.session.todos)
 
         deadline_hit = False
+        dispatch_handoff_text = ""
+        dispatch_finalize_reason = ""
         _empty_retry_done = False
+
+        def _post_workgroup_handoff(
+            text: str, *, tool_id: str, reasoning: str = "",
+        ) -> ToolResult:
+            nonlocal first_tool_at
+
+            final_args = {"wg_id": dispatch_wg_id, "text": text}
+            emit(AgentEvent(
+                kind="tool_start", name="workgroup_post",
+                args=final_args, tool_id=tool_id,
+            ))
+            from alpi.tools import _state as tool_state_mod
+
+            def _relay_final(label: str, is_error: bool = False) -> None:
+                emit(AgentEvent(
+                    kind="tool_state", name="workgroup_post",
+                    tool_id=tool_id, text=label, ok=not is_error,
+                ))
+
+            tool_state_mod.set_emit(_relay_final)
+            tool_started = time.time()
+            try:
+                result = tools.execute(
+                    "workgroup_post", final_args, deny=deny_tools,
+                )
+            finally:
+                tool_state_mod.set_emit(None)
+            if first_tool_at is None:
+                first_tool_at = tool_started
+            payload = result.output if result.ok else _failure_payload(result)
+            payload = _budget_apply("workgroup_post", payload)
+            from alpi.runs import persisted_tool_arguments
+            turn_tools.append(ToolLog(
+                at=tool_started, name="workgroup_post",
+                args=persisted_tool_arguments("workgroup_post", final_args),
+                result=_result_for_log("workgroup_post", payload),
+                ok=result.ok, duration_s=time.time() - tool_started,
+                reasoning=reasoning,
+            ))
+            emit(AgentEvent(
+                kind="tool_end", name="workgroup_post",
+                args=final_args, output=payload, ok=result.ok,
+                tool_id=tool_id,
+                transient=getattr(result, "transient", False),
+            ))
+            return result
+
         try:
             for step_idx in range(max_steps):
                 if self.interrupt_requested:
@@ -625,7 +668,8 @@ class Engine:
                         for chunk in llm.stream(
                             messages=self.session.messages, tools=schemas,
                             rt=self.cfg.runtime,
-                            replay_visible=bool(dispatch_wg_id), **call_kwargs,
+                            replay_visible=bool(dispatch_wg_id),
+                            absolute_deadline=turn_deadline, **call_kwargs,
                         ):
                             if self.interrupt_requested:
                                 break
@@ -653,6 +697,13 @@ class Engine:
                                 emit(AgentEvent(kind="model_state"))
                         call_done = True
                     except Exception as e:  # noqa: BLE001
+                        if (
+                            isinstance(e, llm.TurnBudgetExceeded)
+                            or turn_deadline is not None
+                            and time.monotonic() >= turn_deadline
+                        ):
+                            deadline_hit = True
+                            break
                         # Visible partials block fallback only when a client could have observed them.
                         fb_applied = False
                         if dispatch_wg_id:
@@ -817,6 +868,10 @@ class Engine:
                             })
                             continue
                         content = _relay_fallback(relay_peer)
+                        if dispatch_wg_id:
+                            turn_error = f"relay: no valid reply from '{relay_peer}'"
+                            emit(AgentEvent(kind="error", text=turn_error))
+                            return
                         emit(AgentEvent(kind="assistant_done", text=content, final=True))
                         final_assistant = content
                         turn_error = f"relay: no valid reply from '{relay_peer}'"
@@ -832,17 +887,50 @@ class Engine:
                                 turn_routing.append(note)
                                 emit(AgentEvent(kind="routing", model=turn_model, text=note))
                         remaining = max_steps - step_idx - 1
-                        self.session.messages.append({
-                            "role": "user",
-                            "content": (
+                        if dispatch_wg_id:
+                            nudge = (
+                                "[engine] You ended this workgroup turn with an empty reply. "
+                                "If the deliverable is complete and verified, call "
+                                "`workgroup_post` once with the handoff; otherwise keep "
+                                "working with your tools. Assistant text is not delivered. "
+                                f"This consumed one of your remaining {remaining} steps."
+                            )
+                        else:
+                            nudge = (
                                 "[engine] You ended your turn with an empty reply. Write "
                                 "your answer to the user now, in plain text and in the "
                                 "user's language. If you don't have the information, say "
                                 "so briefly. This consumed one of your remaining "
                                 f"{remaining} steps."
-                            ),
-                        })
+                            )
+                        self.session.messages.append({"role": "user", "content": nudge})
                         continue
+                    if (
+                        dispatch_wg_id
+                        and os.environ.get("ALPI_WORKGROUP_CLOSURE_ONLY") == "1"
+                    ):
+                        turn_completed = True
+                        emit(AgentEvent(kind="done"))
+                        return
+                    if (
+                        dispatch_wg_id
+                        and content.strip()
+                        and os.environ.get("ALPI_WORKGROUP_MEMBER_TURN") == "1"
+                        and not turn_tools
+                    ):
+                        turn_completed = True
+                        emit(AgentEvent(kind="done"))
+                        return
+                    if dispatch_wg_id and content.strip():
+                        dispatch_handoff_text = content.strip()
+                        break
+                    if dispatch_wg_id and turn_produced:
+                        break
+                    if dispatch_wg_id:
+                        dispatch_finalize_reason = (
+                            "You ended this detached workgroup turn without a handoff"
+                        )
+                        break
                     if content or turn_produced:
                         emit(AgentEvent(kind="assistant_done", text=content, final=True, attachments=turn_produced))
                     # Last assistant-only message wins as the final reply.
@@ -976,6 +1064,7 @@ class Engine:
                                     error=f"relay mode: only peer '{relay_peer}' may be consulted",
                                 )
                             else:
+                                tool_state_mod.set_turn_tools_run(len(turn_tools))
                                 result = tools.execute(name, args, deny=deny_tools)
                         finally:
                             tool_state_mod.set_emit(None)
@@ -1029,6 +1118,7 @@ class Engine:
                     emit(AgentEvent(
                         kind="tool_end", name=name, args=args,
                         output=payload, ok=result.ok, tool_id=tid,
+                        transient=getattr(result, "transient", False),
                     ))
 
                 tool_state_mod.set_interrupt_getter(None)
@@ -1063,7 +1153,7 @@ class Engine:
                     return
 
                 peer_reply = _last_peer_reply(turn_tools)
-                if peer_reply and (not relay_peer or relay_consulted):
+                if peer_reply and not dispatch_wg_id and (not relay_peer or relay_consulted):
                     final_assistant = peer_reply
                     turn_completed = True
                     emit(AgentEvent(kind="assistant_done", text=peer_reply, final=True))
@@ -1083,32 +1173,100 @@ class Engine:
 
             if relay_peer and not relay_consulted and not self.interrupt_requested:
                 content = _relay_fallback(relay_peer)
+                if dispatch_wg_id:
+                    turn_error = f"relay: no valid reply from '{relay_peer}'"
+                    emit(AgentEvent(kind="error", text=turn_error))
+                    return
                 emit(AgentEvent(kind="assistant_done", text=content, final=True))
                 final_assistant = content
                 turn_error = f"relay: no valid reply from '{relay_peer}'"
                 emit(AgentEvent(kind="done"))
                 return
 
+            if dispatch_wg_id and dispatch_handoff_text:
+                from alpi.alp import tasks as _wg_tasks
+                if _wg_tasks.is_working_only(dispatch_handoff_text):
+                    turn_error = (
+                        "Workgroup final handoff cannot be another #working post."
+                    )
+                    emit(AgentEvent(kind="error", text=turn_error))
+                    return
+                try:
+                    result = _post_workgroup_handoff(
+                        dispatch_handoff_text,
+                        tool_id="workgroup-direct-handoff",
+                    )
+                except Exception as e:  # noqa: BLE001
+                    turn_error = str(e)
+                    emit(AgentEvent(
+                        kind="error", text=turn_error,
+                        transient=llm.is_transient(e),
+                    ))
+                    return
+                if not result.ok:
+                    turn_error = result.error or "Workgroup final handoff failed."
+                    emit(AgentEvent(
+                        kind="error", text=turn_error,
+                        transient=getattr(result, "transient", False),
+                    ))
+                    return
+                turn_completed = True
+                emit(AgentEvent(kind="done"))
+                return
+
             if not turn_error and not self.interrupt_requested:
-                _wrap_reason = (
-                    "You are out of time for this turn"
-                    if deadline_hit
-                    else f"You have reached the {max_steps}-step tool limit for this turn"
-                )
+                if dispatch_finalize_reason:
+                    _wrap_reason = dispatch_finalize_reason
+                    _wrap_cause = "no handoff was posted"
+                elif deadline_hit:
+                    _wrap_reason = "You are out of time for this turn"
+                    _wrap_cause = "out of time"
+                else:
+                    _wrap_reason = (
+                        f"You have reached the {max_steps}-step tool limit "
+                        "for this turn"
+                    )
+                    _wrap_cause = f"{max_steps}-step tool limit"
+                wrap_tools: list[dict] = []
+                wrap_call_kwargs = dict(call_kwargs)
+                wrap_deadline = None
+                if dispatch_wg_id:
+                    wrap_tools = [
+                        schema for schema in schemas
+                        if _schema_name(schema) == "workgroup_post"
+                    ]
+                    if len(wrap_tools) != 1:
+                        turn_error = "Workgroup final handoff is unavailable."
+                        emit(AgentEvent(kind="error", text=turn_error))
+                        return
+                    wrap_call_kwargs["tool_choice"] = "required"
+                    wrap_call_kwargs["parallel_tool_calls"] = False
+                    wrap_deadline = time.monotonic() + _WORKGROUP_FINALIZE_SECONDS
+                    wrap_instruction = (
+                        f"{_wrap_reason}. This detached workgroup turn cannot "
+                        "deliver partial artifacts. Call `workgroup_post` exactly "
+                        f"once now with wg_id={dispatch_wg_id!r}. Its text must be "
+                        "a single `#working <completed work; next action>` status. "
+                        "Do not claim delivery, do not start new work, do not call "
+                        "another tool, and do not write prose outside the call."
+                    )
+                else:
+                    wrap_instruction = (
+                        f"{_wrap_reason}. Do NOT call any more tools — give your "
+                        "best final answer now using what you have already gathered."
+                    )
                 wrap_msgs = self.session.messages + [{
                     "role": "user",
-                    "content": (
-                        f"{_wrap_reason}. Do NOT call any more tools — give your best "
-                        "final answer now using what you have already gathered."
-                    ),
+                    "content": wrap_instruction,
                 }]
                 wrap_text: list[str] = []
                 wrap_final: dict = {}
                 self._turn_prefix_reasons.add("wrap_up")
                 try:
                     for chunk in llm.stream(
-                        messages=wrap_msgs, tools=[], rt=self.cfg.runtime,
-                        replay_visible=bool(dispatch_wg_id), **call_kwargs,
+                        messages=wrap_msgs, tools=wrap_tools, rt=self.cfg.runtime,
+                        replay_visible=bool(dispatch_wg_id),
+                        absolute_deadline=wrap_deadline, **wrap_call_kwargs,
                     ):
                         if self.interrupt_requested:
                             break
@@ -1162,6 +1320,40 @@ class Engine:
                             cost=wrap_final.get("cost_usd", 0.0),
                             model=turn_model,
                         ))
+                    if dispatch_wg_id:
+                        from alpi.alp import tasks as _wg_tasks
+                        final_calls = list(wrap_final.get("tool_calls") or [])
+                        final_call = final_calls[0] if len(final_calls) == 1 else {}
+                        final_tid = str(final_call.get("id") or "workgroup-final-handoff")
+                        try:
+                            final_args = json.loads(final_call.get("arguments") or "")
+                        except (TypeError, json.JSONDecodeError):
+                            final_args = None
+                        model_text = ""
+                        if (
+                            final_call.get("name") == "workgroup_post"
+                            and isinstance(final_args, dict)
+                            and str(final_args.get("wg_id") or "") == dispatch_wg_id
+                            and _wg_tasks.is_working_only(str(final_args.get("text") or ""))
+                        ):
+                            model_text = str(final_args["text"]).rstrip()
+                        continuation_text = model_text or _fallback_continuation(_wrap_cause)
+                        if _wg_tasks.CONTINUATION_MARK not in continuation_text:
+                            continuation_text = f"{continuation_text} {_wg_tasks.CONTINUATION_MARK}"
+                        result = _post_workgroup_handoff(
+                            continuation_text, tool_id=final_tid,
+                            reasoning=wrap_content,
+                        )
+                        if not result.ok:
+                            turn_error = result.error or "Workgroup final handoff failed."
+                            emit(AgentEvent(
+                                kind="error", text=turn_error,
+                                transient=getattr(result, "transient", False),
+                            ))
+                            return
+                        turn_completed = True
+                        emit(AgentEvent(kind="done"))
+                        return
                     if wrap_content:
                         self.session.messages.append({"role": "assistant", "content": wrap_content})
                         final_assistant = wrap_content
@@ -1170,8 +1362,20 @@ class Engine:
                         emit(AgentEvent(kind="done"))
                         return
                 except Exception as e:  # noqa: BLE001
+                    if dispatch_wg_id:
+                        from alpi.alp import tasks as _wg_tasks
+                        result = _post_workgroup_handoff(
+                            f"{_fallback_continuation(f'{_wrap_cause}, handoff call failed: {type(e).__name__}')} {_wg_tasks.CONTINUATION_MARK}",
+                            tool_id="workgroup-final-handoff",
+                            reasoning=_strip_cache_noise("".join(wrap_text)),
+                        )
+                        if result.ok:
+                            turn_completed = True
+                            emit(AgentEvent(kind="done"))
+                            return
+                    turn_error = str(e)
                     emit(AgentEvent(
-                        kind="error", text=str(e),
+                        kind="error", text=turn_error,
                         transient=llm.is_transient(e),
                     ))
                     return
@@ -1258,6 +1462,8 @@ class Engine:
 
         Snapshots the live messages list so the daemon thread is decoupled
         from any subsequent mutation by the parent loop."""
+        if os.environ.get("ALPI_WORKGROUP_PIPELINE"):
+            return
         interval = int(getattr(self.cfg.memory, "review_interval", 0) or 0)
         if interval <= 0:
             return

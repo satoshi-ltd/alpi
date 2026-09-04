@@ -44,4 +44,24 @@ describe("WorkgroupView empty state", () => {
     expect(screen.getByText(/direct @hub to open a #task/)).toBeInTheDocument();
     expect(container.querySelector("svg")).toBeTruthy();
   });
+
+  it("drops a deleted workgroup when its transcript returns not-found", async () => {
+    const onGone = vi.fn();
+    fetchWorkgroupTranscriptMock.mockRejectedValueOnce(
+      "alp -32004: not-found — no workgroup 'launch'",
+    );
+
+    render(
+      <WorkgroupView
+        workgroup={workgroup}
+        profiles={profiles}
+        connectionId="local"
+        onGone={onGone}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(onGone).toHaveBeenCalledWith("local", "hub", "launch");
+    });
+  });
 });

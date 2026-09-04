@@ -71,6 +71,7 @@ class Server:
             path=home / "alp" / "secrets" / "replay.jsonl",
         )
         self.rate_limiter = rl.RateLimiter()
+        self.pull_rate_limiter = rl.RateLimiter(default_per_minute=600)
         self.file_rate_limiter = rl.RateLimiter(default_per_minute=600)
         self.handlers: dict[str, Handler] = {}
         self._handshake_sem: asyncio.Semaphore | None = None
@@ -370,8 +371,16 @@ class Server:
             method in {"workgroup.file_put", "workgroup.file_get"}
             and request_offset > 0
         )
-        limiter = self.file_rate_limiter if continuation else self.rate_limiter
-        rate_config = None if continuation else peer.rate_limit
+        if continuation:
+            limiter = self.file_rate_limiter
+        elif method == "workgroup.pull":
+            limiter = self.pull_rate_limiter
+        else:
+            limiter = self.rate_limiter
+        rate_config = (
+            None if continuation or method == "workgroup.pull"
+            else peer.rate_limit
+        )
         if not limiter.admit(peer.pubkey, rate_config):
             log.info("alp: rate-limit %s pubkey=%s...", peer.id, peer.pubkey[:12])
             yield _err(-32005, "rate-limited", {"window_seconds": int(rl.WINDOW_SECONDS)})

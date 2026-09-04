@@ -440,54 +440,29 @@ budget; your profile's daily cap applies on top.
 WORKGROUP_GUARDRAILS_PIPELINE = """\
 === Workgroup engagement rules (pipeline) ===
 
-This workgroup runs declared pipelines: the daemon sequences the
-phases shown in your context block, posts each phase's task, and
-runs each phase's gate mechanically. Your job is your phase, done
-with tools, handed off cleanly.
+The daemon sequences the declared phases, owns pipeline `#working`
+heartbeats, and runs gates. Follow only the active task in the context
+block.
 
-THE PROTOCOL (SDK-enforced; a violating post is rejected):
-  1. ONLY THE HUB OPENS a task, as `#task #<slug> <problem>`, and
-     ONLY THE HUB CLOSES it with `#done <result>` — member `#task`
-     and `#done` markers are rejected. You deliver with a normal
-     substantive post.
-  2. ONE CONTRIBUTING POST PER ROUND (hub post to hub post).
-     `#working` heartbeats are exempt and capped at one per round.
-  3. `#WORKING` (member-only) buys time, nothing else. Post it
-     BEFORE any pass of work longer than ~30s, naming the concrete
-     action and tool: `#working writing src/content/** (write_file)`.
-     It must be the only non-empty line in that post; put no plan or
-     delivery prose beside it.
-     It does not consume your round slot and does not count as a
-     contribution — you must still deliver.
-  4. `#SKIP` (member-only) means "tasked, but nothing to do here":
-     post `#skip <one-line reason>` and nothing else. Never a prose
-     paraphrase of it.
-  5. A NEW `#task` PREEMPTS the active one; stale reactions are
-     rejected. ONE lifecycle marker per post — never `#done` +
-     `#task` together.
+MEMBER:
+- If the task targets you, execute the phase with tools and deliver once
+  through `workgroup_post`, in the task's language. Name the artifacts,
+  verification and any blocker.
+- Never post `#working`, `#task` or `#done`. The daemon already records
+  progress; the hub owns task lifecycle markers.
+- Use `#skip <one-line reason>` only when the phase has no applicable work.
+  Otherwise do not narrate progress or send acknowledgements.
+- If the task does not target you, stay silent.
 
-WHEN TASKED (`@you` in the `#task`): post the one-line `#working`
-heartbeat described above,
-do the work with your tools, then hand off ONE substantive post in
-the task's language: what you produced, where it lives on disk, what
-you verified, and any blocker (state a blocker explicitly — the hub
-routes on it). Do not narrate tool-by-tool progress across posts.
+HUB:
+- Verify delivery against disk and gate output, then close with
+  `#done <result>`. A green gate opens its successor; after a gate-less
+  close, open only the declared successor.
+- `BLOCKED` halts the pipeline. Follow watchdog repair instructions
+  exactly.
 
-WHEN NOT TASKED: stay silent. A post that mentions another peer is
-not your turn. Do not post acknowledgements ("ok", "on it"), do not
-paraphrase other posts, and never fabricate — "I don't know" beats
-an invented fact.
-
-HUB: verify a delivery against the disk and gate log — never the prose —
-then close `#done <result>`. A green gate opens its successor; after a
-gate-less close, open the declared successor yourself when one exists.
-Use `skipped` only before any substantive owner delivery; `BLOCKED`
-halts the chain. Follow each watchdog wake's explicit repair instruction:
-an early closure wake permits silence, while REPAIR requires resolution.
-
-COSTS ARE REAL. Every `workgroup_post` auto-declares this turn's USD
-cost against the workgroup budget; your profile's daily cap applies
-on top.
+A new `#task` preempts older work. One member delivery is allowed per
+round; invalid lifecycle or rotation posts are rejected by the SDK.
 """
 
 
@@ -512,6 +487,13 @@ def _format_subscription_block(
     posts = sub.recent_posts or []
     active = tasks.active_task(posts, hub_pubkey=sub.hub_pubkey)
     last = posts[-_RECENT_POSTS:]
+    latest_directed = next((
+        index for index in range(len(last) - 1, -1, -1)
+        if any(
+            mention == own_id
+            for mention in tasks.mentions_in(str(last[index].get("text", "")))
+        )
+    ), None)
     mentions = sum(
         1 for p in last
         if any(m == own_id for m in tasks.mentions_in(str(p.get("text", ""))))
@@ -539,11 +521,12 @@ def _format_subscription_block(
         lines.append("  no active task")
     if last:
         lines.append("  recent:")
-        for p in last:
+        for index, p in enumerate(last):
             who = aliases.get(p.get("from", ""), _short_author(p.get("from", "")))
             raw = str(p.get("text", ""))
+            cap = _DIRECTED_POST_CHARS if index == latest_directed else _POST_PREVIEW_CHARS
             lines.append(
-                f"    [#{p.get('seq')}] {who}: {_preview(raw, _post_cap(raw, own_id))}",
+                f"    [#{p.get('seq')}] {who}: {_preview(raw, cap)}",
             )
     if mentions:
         lines.append(
@@ -553,7 +536,7 @@ def _format_subscription_block(
     return "\n".join(lines)
 
 
-# A cooled member polls every `_WG_COLD_SLEEP_MAX_SECONDS + _WG_LONG_POLL_SECONDS` (115s) and the hub persists presence at most every 30s, so anything tighter renders a healthy idle roster as offline.
+# Presence describes recent work, not background polling; deliveries persist it before dispatch.
 _ONLINE_SECONDS = 180
 
 
@@ -563,9 +546,7 @@ def _format_roster(
 ) -> str:
     """Render the roster as ``@alice (online, "product engineer") ·
     @bob (last seen 12m ago, "systems engineer")``. "Online" = stamp
-    within ``_ONLINE_SECONDS`` — one cooled member poll cycle plus the
-    hub's presence-write interval, so an idle-but-healthy member never
-    renders as absent; otherwise show how long ago.
+    within ``_ONLINE_SECONDS``; otherwise show how long ago.
     Empty stamp = "unknown" (likely never pulled). The bio tag-line is
     self-published by each peer via ``public_bio`` and propagated to
     the hub on ``workgroup.join``; empty bio renders without the

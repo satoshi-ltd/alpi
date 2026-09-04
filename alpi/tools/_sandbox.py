@@ -251,9 +251,12 @@ def phase_write_rules(
                 f"active phase path escapes its root: {pattern!r}; terminal refused"
             ) from exc
         if kind == "subpath" and not path.is_dir():
-            raise SandboxUnavailable(
-                f"active phase writable directory is unavailable: {pattern!r}; terminal refused"
-            )
+            try:
+                path.mkdir(parents=True, exist_ok=True)
+            except OSError as exc:
+                raise SandboxUnavailable(
+                    f"active phase writable directory is unavailable: {pattern!r}; terminal refused"
+                ) from exc
         if kind == "literal" and not path.is_file():
             raise SandboxUnavailable(
                 f"active phase writable file is unavailable: {pattern!r}; terminal refused"

@@ -372,6 +372,7 @@ export default function App() {
     profiles,
     setProfiles,
     workgroups,
+    dropWorkgroup,
     connectionSyncing,
     connectionSwitching,
     touchWorkgroup,
@@ -421,6 +422,19 @@ export default function App() {
   useEffect(() => {
     reloadRef.current = reload;
   }, [reload]);
+
+  const onWorkgroupGone = useCallback((connectionId, profile, wgId) => {
+    dropWorkgroup(connectionId, profile, wgId);
+    const current = viewRef.current;
+    if (
+      hostConnectionsRef.current?.active_id === connectionId
+      && current?.kind === "workgroup"
+      && current.profile === profile
+      && current.id === wgId
+    ) {
+      setView({ kind: "workgroups" });
+    }
+  }, [dropWorkgroup, hostConnectionsRef]);
 
   const { rows: unreadOutputs } = useAllOutputs({
     connections: hostConnections.connections,
@@ -1316,6 +1330,7 @@ export default function App() {
                   connectionId={hostConnections.active_id}
                   onReload={reload}
                   daemonOffline={daemonOffline}
+                  onGone={onWorkgroupGone}
                   onActiveTask={(task) => {
                     setActiveTask(task);
                     if (task == null) return;

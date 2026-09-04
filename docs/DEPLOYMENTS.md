@@ -125,12 +125,17 @@ clients pair to it. No web terminal — reach the TUI with `docker exec`.
 
 ### Public client access through WSS
 
-Internet-facing Desktop/Mobile access uses a TLS reverse proxy. The daemon
-continues speaking plaintext WebSocket only inside the private host or Compose
-network:
+Internet-facing Desktop/Mobile access puts a TLS terminator in front of the
+daemon, which keeps speaking plaintext WebSocket only on its private address.
+Two topologies work: a **self-hosted reverse proxy** running beside the daemon
+(Caddy, below), or a **managed TLS edge** — a cloud load balancer or CDN that
+terminates TLS with a managed certificate and forwards to the daemon's private
+listener:
 
 ```text
-client -> wss://your.domain.com:443 -> Caddy -> alpi:49200
+client -> wss://your.domain.com:443 -> Caddy (self-hosted)  -> alpi:49200
+client -> wss://your.domain.com     -> CDN / load balancer  -> alpi:49200
+                                        (managed TLS)
 ```
 
 Use the supplied `docker-compose.wss.yml` overlay and `docker/Caddyfile`. The
@@ -138,13 +143,19 @@ overlay publishes Caddy on `80/443`, removes the base mappings for `49200` and
 `7423`, and forwards to the effective `ALPI_HOST_TCP_PORT` over the private
 Compose network. It requires Docker Compose 2.24.4 or newer for `!reset`.
 
-The operator must still complete four independent steps:
+With the self-hosted proxy, the operator completes four independent steps:
 
 1. point `ALPI_DOMAIN` in public DNS at the Docker host;
 2. allow public TCP 80/443 and deny the daemon ports;
 3. configure `wss://your.domain.com` as the **Public route** under
    `alpi setup -> Connections -> Network`;
 4. create a scoped connection and test its pairing from an external network.
+
+With a managed TLS edge instead, steps 1–2 move to the edge: public DNS points
+at the edge (typically a CNAME) and TLS plus the public 80/443 surface are the
+edge's concern — the instance never opens a public port and needs no local proxy
+or certificate. Steps 3–4 are unchanged: advertise the `wss://` hostname as the
+Public route and test pairing from outside.
 
 ### Customer isolation boundary
 
@@ -172,9 +183,9 @@ connection's role and profile scope remain unchanged.
 `alpi` only; every additional service such as the commented `alpi-2` template
 must remove/reset its own `ports:` and receive its own Caddy upstream.
 
-The proxy and the advertised route are deliberately separate: starting Caddy
-does not mint credentials or rewrite Alpi config, and adding `host.endpoints`
-does not open a port or obtain a certificate. See the complete commands,
+The proxy and the advertised route are deliberately separate: starting the TLS
+front-end does not mint credentials or rewrite Alpi config, and adding
+`host.endpoints` does not open a port or obtain a certificate. See the complete commands,
 certificate checks, update procedure and custom-port behavior in
 [docker/README.md](../docker/README.md#secure-internet-access-wss).
 

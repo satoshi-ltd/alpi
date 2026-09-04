@@ -55,7 +55,9 @@ def _hub(
     )
 
 
-def _append(home: Path, wg_id: str, body: str) -> int:
+def _append(
+    home: Path, wg_id: str, body: str, *, pipeline_trigger: bool = False,
+) -> int:
     kp = load_or_generate(home)
     wg = wg_mod.load(home, wg_id)
     assert wg is not None
@@ -76,6 +78,8 @@ def _append(home: Path, wg_id: str, body: str) -> int:
         "nonce": nonce_b64,
         "ciphertext": ct_b64,
     }
+    if pipeline_trigger:
+        entry["pipeline_trigger"] = True
     with p.open("a", encoding="utf-8") as f:
         f.write(json.dumps(entry, separators=(",", ":")) + "\n")
     return seq
@@ -303,6 +307,39 @@ def test_same_slug_reopen_stays_in_the_run_and_keeps_earlier_phases(
     }
     # The latest attempt owns the visible seq, not the blocked close it repaired.
     assert _seqs(run)["content"] == 5
+
+
+def test_reopening_completed_phase_invalidates_downstream_phases(
+    short_tmp: Path,
+) -> None:
+    home = short_tmp / "hub"
+    wg = _hub(home, pipelines=_CHAIN, launch="intake", steps=_STEPS)
+    _append(
+        home, wg.meta.id, "@scout #task #intake gather the brief",
+        pipeline_trigger=True,
+    )
+    _transcript(home, wg.meta.id, [
+        "#done intake ready",
+        "@quill #task #content write the copy",
+        "#done content ready",
+        "@pixel #task #build build the site",
+        "#done build ready",
+        "@mira #task #qa audit the site",
+        "#done qa PASS",
+        "@quill #task #content-fix correct the copy",
+    ])
+
+    run = data_workgroup.fold_task_state(home, wg.meta.id)["pipeline_run"]
+    assert run["started_seq"] == 1
+    assert run["status"] == "running"
+    assert run["current_phase"] == "content"
+    assert _states(run) == {
+        "intake": "completed", "content": "current",
+        "build": "pending", "qa": "pending",
+    }
+    assert _seqs(run) == {
+        "intake": 2, "content": 9, "build": None, "qa": None,
+    }
 
 
 def test_first_phase_reopen_on_the_first_phase_stays_in_the_run(

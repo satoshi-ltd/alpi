@@ -6,7 +6,8 @@
 #   1. Kills the desktop binary, Vite dev server, and frees port 1420.
 #   2. Drops Vite's transform cache.
 #   3. Cleans only this crate's Cargo build so rebuilds stay fast.
-#   4. Re-runs `pnpm tauri dev` from the desktop/ root.
+#   4. Prunes stale build outputs (release / cross-arch) untouched for 7+ days.
+#   5. Re-runs `pnpm tauri dev` from the desktop/ root.
 #
 # Usage:  desktop/scripts/dev-clean.sh
 
@@ -34,6 +35,16 @@ fi
 
 echo "→ cleaning alpi-desktop crate build (deps stay cached)…"
 (cd src-tauri && cargo clean -p alpi-desktop)
+
+echo "→ pruning stale build outputs (release / cross-arch, untouched 7+ days)…"
+for d in release aarch64-apple-darwin x86_64-apple-darwin universal-apple-darwin; do
+  full="src-tauri/target/$d"
+  [ -d "$full" ] || continue
+  if [ -z "$(find "$full" -type f -mtime -7 2>/dev/null | head -1)" ]; then
+    echo "   removing target/$d ($(du -sh "$full" | cut -f1))"
+    rm -rf "$full"
+  fi
+done
 
 echo "→ launching pnpm tauri dev…"
 exec pnpm tauri dev

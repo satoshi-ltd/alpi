@@ -815,6 +815,10 @@ def _aggregate_workgroups(
             )
             row["queued_pipeline"] = queue_item.get("pipeline") if queue_item else None
             row["queue_position"] = queue_item.get("position") if queue_item else None
+            if row["pipeline_status"] in {"running", "between"}:
+                pipeline_phase = _pipeline_phase(home, str(row.get("id") or ""))
+                if pipeline_phase:
+                    row["pipeline_phase"] = pipeline_phase
     rows.sort(key=lambda x: int(x.get("mtime") or 0), reverse=True)
     return rows
 
@@ -1404,6 +1408,16 @@ def _pipeline_status(home: Path, wg_id: str) -> str | None:
     return str(run.get("status") or "") or None
 
 
+def _pipeline_phase(home: Path, wg_id: str) -> str | None:
+    from alpi.host import workgroup as host_workgroup
+
+    state = host_workgroup.fold_task_state(home, wg_id)
+    run = state.get("pipeline_run") if isinstance(state, dict) else None
+    if not isinstance(run, dict):
+        return None
+    return str(run.get("current_phase") or "") or None
+
+
 def _hub_workgroups(
     home: Path, profile: str, *, include_pipeline_status: bool = False,
 ) -> list[dict[str, Any]]:
@@ -1419,7 +1433,10 @@ def _hub_workgroups(
     for path in sorted(root.iterdir()):
         if not path.is_dir():
             continue
-        meta = _load_yaml(path / "meta.yaml")
+        meta_path = path / "meta.yaml"
+        if not meta_path.is_file():
+            continue
+        meta = _load_yaml(meta_path)
         members = _load_yaml(path / "members.yaml")
         ledger = _load_json(path / "ledger.json")
         transcript = path / "transcript.jsonl"
@@ -1454,6 +1471,10 @@ def _hub_workgroups(
                 "queued_pipeline": queue_item.get("pipeline") if queue_item else None,
                 "queue_position": queue_item.get("position") if queue_item else None,
             })
+            if pipeline_status in {"running", "between"}:
+                pipeline_phase = _pipeline_phase(home, path.name)
+                if pipeline_phase:
+                    row["pipeline_phase"] = pipeline_phase
         out.append(row)
     return out
 
@@ -1499,11 +1520,16 @@ def _subscribed_workgroups(
             "hub_id": sub.hub_id,
         }
         if include_pipeline_status:
-            row["pipeline_status"] = (
+            pipeline_status = (
                 _pipeline_status(home, sub.wg_id)
                 if sub.pipeline_mode
                 else None
             )
+            row["pipeline_status"] = pipeline_status
+            if pipeline_status in {"running", "between"}:
+                pipeline_phase = _pipeline_phase(home, sub.wg_id)
+                if pipeline_phase:
+                    row["pipeline_phase"] = pipeline_phase
         out.append(row)
     return out
 

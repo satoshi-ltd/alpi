@@ -1,5 +1,72 @@
 # Changelog
 
+## v0.14.20 — 2026-09-04 — pipelines finish without an operator
+
+- **A turn that runs out of time or steps continues instead of failing.** The
+  worker posts a single `#working (continuation)` describing what is done and
+  what is next, and the daemon resumes the same task up to four times per
+  repair round. Partial or untouched artifacts are never gated as deliveries, an empty
+  final reply takes the same path, and only finalizer continuations count, so
+  a red gate after an earlier continuation can no longer strand a phase. When
+  the model cannot even write that status in time, the daemon posts it itself,
+  so the next dispatch follows within seconds instead of waiting for the
+  watchdog.
+- **A handoff that changed nothing is a continuation, not a repair.** When a
+  red gate finds the owned artifacts unchanged, or byte-identical to the
+  previous red delivery, the daemon re-dispatches the same task twice without
+  spending a repair round, then halts loudly.
+- **A `QA FAIL` reopens the phase it names.** Instead of stopping at
+  `#done BLOCKED`, the daemon closes the QA phase with the verdict and reopens
+  the phase whose declared paths own the file the verdict names (a
+  `src/config/site.json` defect goes back to intake, not to content), up to
+  twice per workgroup; the chain then re-walks translation, build and QA. A
+  green deterministic gate still cannot overrule an explicit `QA FAIL` or
+  `QA BLOCKED`.
+- **A red hub-routed gate repairs itself or stops.** When a verification gate
+  such as `check:audit` fails, the daemon reopens the phase that owns the
+  failing file before waking the hub; if no phase can own it, the hub is woken
+  at most three times and the daemon then closes `#done BLOCKED` itself, so a
+  hub with no legal move can no longer re-wake the auditor forever.
+- **Build phases start on a clean clone.** A declared output directory such as
+  `dist/` or `.astro/` is created when the phase opens instead of refusing the
+  terminal until it exists, so the first `npm run build` runs on the first
+  attempt and no worker has to invent placeholder files that later fail the
+  boundary audit.
+- **An exhausted repair ladder closes once and stops.** The hub's final move is
+  a durable `#done BLOCKED`; every accepted blocked close emits the same
+  structured event whether the model or the daemon wrote it, and expected QA
+  verdict rejections are informational in the daemon log.
+- **Dispatched workers always deliver to their own workgroup.** `workgroup_post`
+  defaults to the dispatch workgroup and corrects a mistyped id, pipeline
+  members no longer see the `peer` tool, a bare model-authored `#working` is
+  refused, and a handoff posted before any tool ran is refused too, so a
+  delivery cannot be lost to a typo, a side channel, a stray heartbeat or an
+  acknowledgement mistaken for a result. A worker that answers with nothing is
+  told to hand off or keep working, not to write prose that nobody reads.
+- **Pipeline workers receive a compact execution contract.** Targeted members
+  execute one active phase and deliver once; declared pipeline turns omit
+  cross-project memory and historical search tools while direct chats keep
+  their normal context, and a foreground `terminal` command may run for 15
+  minutes by default so a cold `npm ci` finishes. A repair round carries every
+  retained blocking finding with passing and informational noise removed.
+- **Idle and paused workgroups cost almost nothing.** Member mirrors derive
+  their cadence from task state: live work long-polls, idle work samples
+  nonblocking, paused work waits for a remote resume; empty pulls no longer
+  refresh presence or rewrite the mirror, and paused hubs skip transcript work
+  and admission slots.
+- **Recovery timing follows awake time and stays honest.** Watchdog age and
+  refire spacing use daemon-observed monotonic time, so a suspended laptop
+  cannot consume repair attempts; transient transport failures keep their flag
+  through peer and workgroup calls; the configured step ceiling is literal
+  again for budgeted, free and local models.
+- **Clients see exact workgroup state.** Inventories expose the active pipeline
+  phase, reopening an earlier phase clears downstream completion, deleting a
+  busy workgroup leaves no phantom row, and removing the last session prunes
+  its preview index.
+
+Nothing to migrate. Queue admission, pipeline gates and the ALP wire protocol
+retain the v0.14.19 behavior.
+
 ## v0.14.19 — 2026-09-01 — busy fleets stay responsive and observable
 
 - **The host inventory folds each shared workgroup only once.** A workgroup

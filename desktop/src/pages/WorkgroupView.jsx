@@ -97,6 +97,7 @@ export default function WorkgroupView({
   profiles,
   connectionId,
   onActiveTask,
+  onGone,
   onOpenSettings,
   onReload,
   daemonOffline = false,
@@ -354,12 +355,19 @@ export default function WorkgroupView({
         setMessages(fresh);
         saveCachedMessages(connectionId, workgroup.profile, workgroup.id, fresh);
       })
-      .catch((e) => !cancelled && setError(String(e)));
+      .catch((e) => {
+        if (cancelled) return;
+        if (String(e).includes("-32004")) {
+          onGone?.(connectionId || "local", workgroup.profile, workgroup.id);
+          return;
+        }
+        setError(String(e));
+      });
 
     return () => {
       cancelled = true;
     };
-  }, [workgroup.id, workgroup.profile, refreshTick, connectionId]);
+  }, [workgroup.id, workgroup.profile, refreshTick, connectionId, onGone]);
 
   useEffect(() => {
     let cancelled = false;
@@ -846,7 +854,6 @@ const WgMessage = memo(function WgMessage({
       <MarkerCard
         variant={variant}
         outcome={done ? doneOutcome(body) : null}
-        label={isStale ? "WORK" : undefined}
         stale={isStale}
         side={isFromHub ? "right" : "left"}
         taskId={seq}

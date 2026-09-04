@@ -109,6 +109,10 @@ def _presence_write_due(last_seen_at: str, now: _dt.datetime) -> bool:
     return (now - previous).total_seconds() >= _PRESENCE_WRITE_INTERVAL_S
 
 
+def _pull_refreshes_presence(wait_s: float, fresh: list[dict[str, Any]]) -> bool:
+    return wait_s > 0 or bool(fresh)
+
+
 def _as_float(v: Any) -> float:
     try:
         return float(v)
@@ -581,12 +585,20 @@ def destroy(home: Path, wg_id: str) -> list[str]:
 def remove(home: Path, wg_id: str) -> list[str]:
     # Canonical user-facing delete: spend survives deletion, or nothing is deleted.
     from alpi.cleanup import archive_workgroup_spend
+    from alpi.alp import subscription as sub_mod
 
     wg_dir = _wg_dir(home, wg_id)
     archive_err = archive_workgroup_spend(home, wg_dir)
     if archive_err:
         raise OSError(f"spend archive failed; workgroup not removed: {archive_err}")
-    _shutil.rmtree(wg_dir)
+    was_tombstoned = wg_id in sub_mod.tombstones(home)
+    sub_mod.tombstone(home, wg_id)
+    try:
+        _shutil.rmtree(wg_dir)
+    except OSError:
+        if not was_tombstoned:
+            sub_mod.revive(home, wg_id)
+        raise
     return _purge_after_delete(home, wg_id)
 
 
@@ -1678,14 +1690,15 @@ def register(server: alp_server.Server, home: Path) -> None:
         member = wg.member(peer.pubkey)
         if member is None:
             raise alp_server.HandlerError(-32008, "workgroup-not-member")
-        now_dt = _dt.datetime.now(tz=_dt.timezone.utc)
-        persist_presence = _presence_write_due(member.last_seen_at, now_dt)
-        member.last_seen_at = now_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
-        if persist_presence:
-            _save_members(_wg_dir(home, wg_id), wg.members)
         all_posts = _read_transcript(_wg_dir(home, wg_id))
         fresh = [p for p in all_posts if int(p.get("seq", 0)) > since]
         wait_s = _coerce_wait_s((params or {}).get("wait_s"))
+        if _pull_refreshes_presence(wait_s, fresh):
+            now_dt = _dt.datetime.now(tz=_dt.timezone.utc)
+            persist_presence = _presence_write_due(member.last_seen_at, now_dt)
+            member.last_seen_at = now_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+            if persist_presence:
+                _save_members(_wg_dir(home, wg_id), wg.members)
         if not fresh and wait_s > 0:
             # Stat-probe wait, not an in-process event: the hub's own posts land via direct file append from dispatch subprocesses, invisible to any signal registry in this process.
             deadline = _time.monotonic() + wait_s

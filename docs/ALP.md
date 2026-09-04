@@ -372,6 +372,7 @@ result:                         # when stream is false (default)
   tokens_out: int
   cost: float                   # USD; matches the per-turn ledger entry
   interrupted: bool             # true when link.cancel landed mid-turn
+  transient: bool               # true when failure is safe to retry
 ```
 
 Runs a **full agent turn** on the target profile with `prompt`
@@ -390,7 +391,7 @@ signed response envelopes for the same `id`, each carrying a
   an active tool/model turn from looking stalled.
 - `stream: "final"` — last frame, `result` carries the same shape as
   the non-streaming reply: aggregated `text`, `session_id`,
-  `tokens_in`, `tokens_out`, `cost`, `interrupted`.
+  `tokens_in`, `tokens_out`, `cost`, `interrupted`, `transient`.
 
 Caller policy: Alpi's interactive surfaces and agent-internal `peer` tool pass
 `stream: true`. Interactive callers render text chunks; `peer` ignores those
@@ -665,8 +666,9 @@ methods callable by pinned peers in the workgroup roster.
   The response also echoes the caller's currently-sealed group
   key and the workgroup's `current_key_version` so members detect
   rekeys (e.g., after another member's `leave`) on their next
-  pull and update their local key map. Each `pull` also stamps the
-  caller's `last_seen_at` and returns a fresh roster snapshot
+  pull and update their local key map. A held pull, or a pull returning
+  fresh posts, stamps the caller's `last_seen_at`; an empty nonblocking
+  idle probe does not. Every response returns a fresh roster snapshot
   (`{pubkey, last_seen_at, bio}` per member) so liveness and
   self-published bios stay current without an extra verb. Pull is
   the canonical fan-out for ALP.3 — each member observes new
@@ -1328,15 +1330,16 @@ human in the loop. Each member runs a poller that wakes its agent
 on relevant new traffic, plus a pre-turn context hook that injects
 workgroup state into every engine turn.
 
-**Poller.** Every remote subscription owns one independent held
-pull (`wait_s`≤25 s), so workgroups wait concurrently and a fresh
-post returns immediately even after a long idle period. An empty
-successful pull is reopened at once; only transport failures back
-off exponentially (30 s to 15 min). Local hub workgroups use a 5 s
-transcript-stat probe whose decrypted result is cached, so an idle
-fleet performs no model work and little file I/O without becoming
-deaf. Fresh posts, open tasks and in-flight dispatches use the
-short 10 s dispatch cooldown. Per workgroup the poller compares
+**Poller.** Every active remote subscription owns one independent held
+pull (`wait_s`≤25 s), so live workgroups wait concurrently and fresh
+posts return immediately. Idle subscriptions use staggered nonblocking
+samples every 60 s, while paused subscriptions sample every 300 s only
+to observe a remote resume. An empty active pull is reopened at once;
+transport failures back off exponentially (30 s to 15 min). Local hub
+workgroups use a 5 s transcript-stat probe whose decrypted result is
+cached, so an idle fleet performs no model work and little file I/O
+without becoming deaf. Fresh posts, open tasks and in-flight dispatches
+use the short 10 s dispatch cooldown. Per workgroup the poller compares
 the cached transcript against a ``last_responded_seq`` cursor and
 dispatches an engine turn when any of these triggers fires (in
 priority order):
@@ -1598,6 +1601,14 @@ so a hub-side edit reaches existing subscriptions without a rejoin,
 and the member's agent context renders the chains directly instead of
 depending on a briefing that narrates them by hand.
 
+**Pipeline turns are project-local.** A declared pipeline dispatch keeps the
+profile's identity, user preferences, skills and active workgroup context, but
+does not inject `MEMORY.md` or expose session, workgroup-history and memory
+search tools. It also cannot promote project facts into persistent profile
+memory. Direct profile chats and ordinary non-pipeline workgroups keep the full
+history surface. This prevents one generated project from contaminating the
+next without weakening the profile outside factory execution.
+
 **Deterministic phase gates (`meta.pipeline_steps`, hub-local).** A
 phase may declare `{owner, task, gate: {argv, cwd?, repair?}}` in the
 hub's own metadata — never transmitted on the wire, never accepting
@@ -1621,6 +1632,25 @@ on a check. Omitting the gate is the right call for a phase that may
 legitimately produce nothing — its owner posts `#skip`, then the hub
 closes `#done skipped · <reason>` before any substantive delivery —
 because a gate there would fail a correct outcome.
+
+Owner repair is bounded to three daemon-authored rounds per task opener. If a
+fourth delivery is still red, the hub gets one terminal-repair turn with the
+same authority as watchdog final repair: it must write one durable `#done
+BLOCKED · <reason>` and stop. It is not instructed to reopen automatically;
+recovery after that explicit halt is an operator decision, so a permanently
+red gate cannot create a close/reopen loop. A repair round is counted only
+after its note reaches the owner. A transient or local delivery failure keeps
+the same round available and retries it after the normal gate cooldown.
+For a phase with declared `paths`, a red delivery that changed none of those
+paths since the opener — or repeats the workspace signature of the preceding
+red delivery — is not a repair attempt. The daemon continues the same task at
+most twice and leaves the repair counter untouched; a third no-progress
+delivery halts loudly. Likewise, a pipeline member that reaches its soft time
+or tool-step limit may post only `#working`, never a partial delivery, and
+receives at most four continuation turns per repair round, counted from the hub's latest note and only for the finalizer's own `(continuation)` posts. If both also
+exhaust, its final heartbeat makes the hub close the phase `BLOCKED`
+immediately; the silence watchdog is not involved. Legacy automatic turn
+heartbeats are ignored by both counters.
 
 `skipped` remains valid only while the resolved owner has made no
 substantive delivery for that phase in the current pipeline run. Reopening
@@ -1670,17 +1700,23 @@ red gate's command on every tick. The wake still fires either way; the
 findings it would re-carry are already in the transcript.
 `workgroup resume` clears the in-memory gate state for the workgroup, so
 a delivery parked behind a pause re-fires its gate on the next tick. A
+QA owner's verdict is recognized at the start of a `·` segment, after an
+explicit verdict label, or as the terminal token of its phase-tagged handoff
+line (`@hub #qa … — QA FAIL.`); prose mentions and negations do not count. A
 terminal close whose verdict carries the owner's exact failure token in
 verdict position (a `·`-segment starting with it: `#done <phase> ·
 QA FAIL · …`; prose mentions, quotes or negations do not count, and a
 FAIL may not stand in for a BLOCKED) and routes nothing draws exactly
 ONE follow-up wake — re-task the findings or leave the run halted,
-loudly. And the targeted phase owner
+loudly. When that failing close is a `QA FAIL` and the chain has an earlier artifact-owning phase, the daemon rewinds at gate time instead of waiting for that wake: it closes the QA phase with the verdict, reopens the phase the verdict names — an explicit `#phase`, else the phase whose declared `paths` own a file the verdict cites, else `content` — with the findings, and does so at most twice per workgroup before falling back to the hub-authored close. A red `repair: hub` gate takes the same path first (its own output names the failing file, and there the last authored phase is eligible too); only when no phase owns the file is the hub woken, at most three times, after which the daemon closes `#done BLOCKED` itself. And the targeted phase owner
 is exempt from the one-post-per-round rotation cap: a repair delivery
 may arrive in pieces (a fix note, then the re-delivery the gate re-runs
 on) without muting the owner. A `#done BLOCKED` still halts its chain,
 but a hub `#task` on any phase EARLIER in the chain is now allowed. A
 rewind re-walks the same run, including when it returns to the first phase.
+The runtime fold invalidates every later phase when an earlier phase is
+reopened, so clients cannot display stale downstream checks beside the new
+current task.
 
 **One authority decides the successor.** Both the continuation path (a
 phase closed by quorum, gate-less or LLM-owned) and the gate path call
@@ -1857,13 +1893,14 @@ with escalation:
   `workgroup_client.post` rejects any non-`#done` post
   (`closure-only`), so a nudged hub cannot reopen the round with
   fresh content.
-- **Pipeline workgroups** (ordered `meta.pipeline` slugs) escalate
+- **Pipeline workgroups** (ordered `meta.pipelines` chains) escalate
   across spaced re-fires: a `closure` nudge → a normal-mode
   **repair** (re-verify the on-disk state and re-task or close) → a
   one-shot **final repair** (the last automatic wake: verify the
   artifact and either `#done` it or post a concrete `#done BLOCKED ·
-  <reason>`). After that the task is abandoned — the `wg.blocked`
-  alert stays the visible state until the transcript moves.
+  <reason>`). If that turn still makes no transcript progress, the next
+  spaced checkpoint writes a machine-authored `#done BLOCKED`, leaving a
+  durable blocked pipeline instead of an open task.
 
 **`#done BLOCKED` halts a pipeline.** A `#done` whose result string
 begins with `BLOCKED` closes the task but does NOT advance to the
@@ -1900,14 +1937,15 @@ service log.
 
 ### Member liveness
 
-The hub stamps a `last_seen_at` ISO timestamp on each member every
-time that member calls `workgroup.pull` or `workgroup.post`, and
+The hub stamps a `last_seen_at` ISO timestamp on each member when it
+posts, holds an active pull or receives fresh posts through a pull, and
 returns the full roster (`[{pubkey, last_seen_at, bio}]`) on `join`
 and on every `pull`. Each member caches the roster locally and the
 pre-turn hook renders it into the system prompt as e.g.
 `@alice (online, "product engineer — velocity") · @bob (last seen
 12m ago, "systems engineer — durability") · @carla (offline >30m)`.
-"Online" means seen within the last few poll ticks.
+"Online" means real workgroup activity was seen within 180 seconds;
+empty idle probes do not refresh presence.
 
 This is a passive signal — no extra ping traffic. It lets agents
 tell the difference between a peer who hasn't replied yet and a

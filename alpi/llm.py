@@ -31,6 +31,10 @@ class ProviderStreamDeadline(RuntimeError):
     pass
 
 
+class TurnBudgetExceeded(RuntimeError):
+    pass
+
+
 @dataclass
 class Completion:
     content: str
@@ -345,7 +349,7 @@ def _chunk_has_activity(chunk: Any) -> bool:
 
 def _iter_with_watchdog(
     stream_iter, first_byte_timeout: float, idle_timeout: float,
-    max_duration: float = 0,
+    max_duration: float = 0, absolute_deadline: float | None = None,
 ):
     # Empty transport keepalives do not prove that the provider is making progress.
     q: queue.Queue = queue.Queue(maxsize=1)
@@ -372,7 +376,13 @@ def _iter_with_watchdog(
     threading.Thread(target=_pump, daemon=True).start()
     first = True
     deadline: float | None = None
-    absolute_deadline = time.monotonic() + max_duration if max_duration > 0 else None
+    duration_deadline = time.monotonic() + max_duration if max_duration > 0 else None
+    if absolute_deadline is None:
+        stream_deadline = duration_deadline
+    elif duration_deadline is None:
+        stream_deadline = absolute_deadline
+    else:
+        stream_deadline = min(absolute_deadline, duration_deadline)
     try:
         while True:
             timeout = first_byte_timeout if first else idle_timeout
@@ -380,14 +390,22 @@ def _iter_with_watchdog(
                 if timeout and timeout > 0:
                     if deadline is None:
                         deadline = time.monotonic() + timeout
-                    next_deadline = min(deadline, absolute_deadline) if absolute_deadline else deadline
+                    next_deadline = (
+                        min(deadline, stream_deadline)
+                        if stream_deadline is not None else deadline
+                    )
                     kind, payload = q.get(timeout=max(0.0, next_deadline - time.monotonic()))
-                elif absolute_deadline is not None:
-                    kind, payload = q.get(timeout=max(0.0, absolute_deadline - time.monotonic()))
+                elif stream_deadline is not None:
+                    kind, payload = q.get(timeout=max(0.0, stream_deadline - time.monotonic()))
                 else:
                     kind, payload = q.get()
             except queue.Empty:
-                if absolute_deadline is not None and time.monotonic() >= absolute_deadline:
+                now = time.monotonic()
+                if absolute_deadline is not None and now >= absolute_deadline:
+                    raise TurnBudgetExceeded(
+                        "turn budget deadline exceeded"
+                    ) from None
+                if duration_deadline is not None and now >= duration_deadline:
                     raise ProviderStreamDeadline(
                         f"provider stream exceeded {max_duration:.0f}s"
                     ) from None
@@ -395,14 +413,19 @@ def _iter_with_watchdog(
                     f"provider sent no {'first token' if first else 'further output'} "
                     f"within {timeout:.0f}s"
                 ) from None
+            now = time.monotonic()
+            if absolute_deadline is not None and now >= absolute_deadline:
+                raise TurnBudgetExceeded(
+                    "turn budget deadline exceeded"
+                ) from None
+            if duration_deadline is not None and now >= duration_deadline:
+                raise ProviderStreamDeadline(
+                    f"provider stream exceeded {max_duration:.0f}s"
+                ) from None
             if kind == "done":
                 return
             if kind == "error":
                 raise payload
-            if absolute_deadline is not None and time.monotonic() >= absolute_deadline:
-                raise ProviderStreamDeadline(
-                    f"provider stream exceeded {max_duration:.0f}s"
-                ) from None
             if _chunk_has_activity(payload):
                 first = False
                 deadline = None
@@ -505,6 +528,7 @@ def stream(
     api_key: str | None = None,
     rt: Any = None,
     replay_visible: bool = False,
+    absolute_deadline: float | None = None,
     **extra: Any,
 ):
     """Yield streaming chunks, with first-byte / idle watchdogs and jittered retries (RT.1)."""
@@ -545,15 +569,31 @@ def stream(
 
     attempt = 0
     while True:
+        attempt_kwargs = kwargs
+        if absolute_deadline is not None:
+            remaining = absolute_deadline - time.monotonic()
+            if remaining <= 0:
+                raise TurnBudgetExceeded(
+                    "turn budget deadline exceeded"
+                )
+            attempt_kwargs = dict(kwargs)
+            try:
+                configured_timeout = float(attempt_kwargs.get("timeout", remaining))
+            except (TypeError, ValueError):
+                configured_timeout = remaining
+            attempt_kwargs["timeout"] = (
+                min(configured_timeout, remaining)
+                if configured_timeout > 0 else remaining
+            )
         visible = False
         tool_calls_accum: dict[int, dict[str, str]] = {}
         last_chunk = None
         started = _breadcrumb("request start", f"model={model} attempt={attempt}")
         first_delta_at: float | None = None
         try:
-            stream_iter = _completion_silenced(kwargs)
+            stream_iter = _completion_silenced(attempt_kwargs)
             for chunk in _iter_with_watchdog(
-                stream_iter, first_byte, idle, max_duration,
+                stream_iter, first_byte, idle, max_duration, absolute_deadline,
             ):
                 last_chunk = chunk
                 norm = _normalize_chunk(chunk, tool_calls_accum)
@@ -581,6 +621,12 @@ def stream(
                 f"error={type(exc).__name__} "
                 f"status={getattr(exc, 'status_code', None) or '-'}",
             )
+            if absolute_deadline is not None and time.monotonic() >= absolute_deadline:
+                if isinstance(exc, TurnBudgetExceeded):
+                    raise
+                raise TurnBudgetExceeded(
+                    "turn budget deadline exceeded"
+                ) from exc
             # Detached workgroup turns can replay partial text because no client observes it.
             if (not visible or replay_visible) and _is_transient(exc) and attempt < max_retries:
                 attempt += 1

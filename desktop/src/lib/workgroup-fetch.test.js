@@ -4,6 +4,7 @@ import {
   mergeByseq,
   fetchWorkgroupTranscript,
   invalidateTranscriptCache,
+  invalidateWorkgroupTranscriptCache,
   _resetTranscriptCachesForTests,
 } from "./workgroup-fetch.js";
 
@@ -135,6 +136,34 @@ describe("invalidateTranscriptCache", () => {
       afterSeq: 1,
       limit: 200,
       connectionId: "conn-b",
+    });
+  });
+
+  it("can clear one deleted workgroup without resetting its neighbors", async () => {
+    invoke.mockResolvedValue({ posts: [{ seq: 1 }], next_seq: 1 });
+    await fetchWorkgroupTranscript("conn-a", "doc", "wg-dead");
+    await fetchWorkgroupTranscript("conn-a", "doc", "wg-live");
+
+    invalidateWorkgroupTranscriptCache("conn-a", "doc", "wg-dead");
+
+    invoke.mockResolvedValueOnce({ posts: [], next_seq: 0 });
+    await fetchWorkgroupTranscript("conn-a", "doc", "wg-dead");
+    expect(invoke).toHaveBeenLastCalledWith("workgroup_transcript", {
+      profile: "doc",
+      wgId: "wg-dead",
+      tail: true,
+      limit: 200,
+      connectionId: "conn-a",
+    });
+
+    invoke.mockResolvedValueOnce({ posts: [], next_seq: 1 });
+    await fetchWorkgroupTranscript("conn-a", "doc", "wg-live");
+    expect(invoke).toHaveBeenLastCalledWith("workgroup_transcript", {
+      profile: "doc",
+      wgId: "wg-live",
+      afterSeq: 1,
+      limit: 200,
+      connectionId: "conn-a",
     });
   });
 });

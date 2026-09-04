@@ -90,6 +90,18 @@ def test_phase_write_rules_rejects_missing_file_and_bare_directory(ws: Path) -> 
             }))
 
 
+def test_phase_write_rules_create_a_declared_output_directory_that_does_not_exist_yet(ws: Path) -> None:
+    project = ws / "projects" / "hotel"
+    project.mkdir(parents=True)
+
+    rules = _sandbox.phase_write_rules(ws, json.dumps({
+        "root": "projects/hotel", "paths": ["dist/**", ".astro/**"],
+    }))
+
+    assert rules == (("subpath", project / "dist"), ("subpath", project / ".astro"))
+    assert (project / "dist").is_dir() and (project / ".astro").is_dir()
+
+
 def test_phase_write_rules_empty_scope_allows_no_persistent_writes(ws: Path) -> None:
     assert _sandbox.phase_write_rules(ws, '{"root":"","paths":[]}') == ()
 

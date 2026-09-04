@@ -46,6 +46,22 @@ def test_exact_remove_does_not_drop_a_replaced_entry(tmp_path: Path) -> None:
     assert pipeline_queue.positions(home)["wg_one"]["pipeline"] == "media"
 
 
+def test_paused_running_pipeline_does_not_consume_an_admission_slot(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    running = SimpleNamespace(meta=SimpleNamespace(id="wg_running", paused=False))
+    paused = SimpleNamespace(meta=SimpleNamespace(id="wg_paused", paused=True))
+    monkeypatch.setattr(
+        "alpi.alp.workgroup.list_workgroups", lambda _home: [running, paused],
+    )
+    monkeypatch.setattr(
+        "alpi.host.workgroup.fold_task_state",
+        lambda _home, _wid: {"pipeline_run": {"status": "running"}},
+    )
+
+    assert service._active_pipeline_ids(tmp_path) == {"wg_running"}
+
+
 @pytest.mark.asyncio
 async def test_daemon_admits_only_the_available_fifo_slots(
     tmp_path: Path, monkeypatch,

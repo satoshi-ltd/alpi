@@ -18,6 +18,21 @@ function renderHeader(extra = {}) {
 }
 
 describe("ProfileChatHeader context meter", () => {
+  it("keeps only the model tooltip wide and labels the visible meters", () => {
+    const { container } = renderHeader({
+      profile: {
+        ...profile,
+        budget_daily_usd: 10,
+        budget_used_usd: 0.26,
+      },
+    });
+    expect(container.querySelectorAll(".ds-tip-wide")).toHaveLength(1);
+    expect(container.querySelectorAll(".ds-tip-wide")[0])
+      .toHaveTextContent("openrouter/z-ai/glm-5.3-flash");
+    expect(container.textContent).toContain("Context window");
+    expect(container.textContent).toContain("Daily budget");
+  });
+
   it("shows the persisted session tokens when no turn is live", () => {
     const { container } = renderHeader();
     expect(container.textContent).toContain("20K/200K");

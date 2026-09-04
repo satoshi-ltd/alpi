@@ -11,9 +11,10 @@ for agent-to-agent links see [ALP.md](ALP.md).
 
 There is no public HTTP API and there is no cloud middleman. Your code
 becomes a **host-plane client** of a specific daemon — the same role the
-mobile app plays. It dials the daemon over a WebSocket on a private network or
-through a TLS reverse proxy, authenticates with one device credential under a
-**connection**, and
+mobile app plays. It dials the daemon over a WebSocket — on a private network,
+or through a TLS front-end (a self-hosted reverse proxy, or a managed TLS edge
+such as a cloud load balancer / CDN) — authenticates with one device credential
+under a **connection**, and
 calls the same `host.*` JSON-RPC methods the apps use.
 
 ```
@@ -40,9 +41,10 @@ For "a script on the private net wants to ask a profile", the device-token
 route is the right one. The rest of this doc covers it.
 
 Use `ws://` only with a Tailscale/private IP literal over a trusted network;
-hostname routes require `wss://`. For Internet access, expose a reverse proxy
-on `wss://` and keep the daemon's plaintext listener private.
-Desktop and mobile validate the proxy certificate and reject invalid TLS.
+hostname routes require `wss://`. For Internet access, put a TLS front-end on
+`wss://` — a self-hosted reverse proxy, or a managed TLS edge (a cloud load
+balancer / CDN terminating TLS) — and keep the daemon's plaintext listener
+private. Desktop and mobile validate the served certificate and reject invalid TLS.
 
 ## Step 1 — turn on the listener (machine B)
 
@@ -71,9 +73,10 @@ explicitly set `host.allow_public_bind: true` (don't, for an integration).
 Configure routes in `alpi setup` → **Connections** → **Network**. Their order
 is preserved and the first route is the default encoded in a pairing code.
 For the supplied Docker/Caddy topology, follow
-[`docker/README.md`](../docker/README.md#secure-internet-access-wss): the proxy
-must be reachable and its certificate valid before a client can dial the
-advertised route.
+[`docker/README.md`](../docker/README.md#secure-internet-access-wss); for a
+managed edge, point it at the daemon's private listener instead. Either way the
+front-end must be reachable and its certificate valid before a client can dial
+the advertised route.
 
 ## Step 2 — create a scoped connection
 

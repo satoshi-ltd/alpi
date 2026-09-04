@@ -134,6 +134,9 @@ def _fold_pipeline_run(
                 "states": {},
                 "seqs": {},
             }
+        for downstream in chain[chain.index(phase) + 1:]:
+            run["states"].pop(downstream, None)
+            run["seqs"].pop(downstream, None)
         state = _attempt_state(task)
         run["current_phase"] = phase
         run["states"][phase] = state

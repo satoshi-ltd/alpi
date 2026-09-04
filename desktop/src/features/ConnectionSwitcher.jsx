@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { orderConnections, readLastActive } from "../lib/connection-recency.js";
 import { ConnPill } from "../primitives/index.js";
 import { ConnectionPanel } from "../primitives/Panels.jsx";
 import { Eyebrow } from "../primitives/index.js";
@@ -100,7 +101,7 @@ export default function ConnectionSwitcher({
         open={open || locked}
         locked={locked}
         onClose={closePanel}
-        connections={connections.map((c) => ({
+        connections={orderConnections(connections, readLastActive()).map((c) => ({
           id: c.id,
           kind: c.kind,
           name: c.kind === "remote" ? c.name : "Local daemon",

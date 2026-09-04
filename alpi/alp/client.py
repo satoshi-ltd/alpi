@@ -48,6 +48,32 @@ class RemoteError(ClientError):
         self.data = data
 
 
+_TRANSIENT_REMOTE_ERRORS = frozenset({
+    (-32005, "rate-limited"),
+    (-32007, "target-busy"),
+})
+
+
+def is_transient_link_error(exc: BaseException) -> bool:
+    """Return whether a failed peer call is safe to retry later."""
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, RemoteError):
+            return (current.code, current.message) in _TRANSIENT_REMOTE_ERRORS
+        if isinstance(current, (TargetOffline, asyncio.TimeoutError, OSError)):
+            return True
+        if isinstance(current, tcp.TransportError):
+            detail = str(current).lower()
+            if "peer closed" in detail or "timeout" in detail:
+                return True
+        if isinstance(current, ClientError) and str(current) == "empty response":
+            return True
+        current = current.__cause__ or current.__context__
+    return False
+
+
 @dataclass
 class _TcpSession:
     reader: asyncio.StreamReader

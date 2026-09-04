@@ -92,6 +92,28 @@ describe("useHostConnections cache persistence", () => {
       { id: "wg-live", profile: "mira", name: "Live workgroup" },
     ]);
   });
+
+  it("drops a not-found workgroup from live state and the persisted snapshot", async () => {
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "host_connections") return makeConnections("local");
+      if (cmd === "profile_summaries") return [{ name: "mira", model: "a/b" }];
+      if (cmd === "workgroups") {
+        return [{ id: "wg-dead", profile: "mira", name: "Deleted workgroup" }];
+      }
+      return null;
+    });
+
+    const { result } = renderHostConnections();
+    await waitFor(() => expect(result.current.workgroups).toHaveLength(1));
+
+    act(() => {
+      result.current.dropWorkgroup("local", "mira", "wg-dead");
+    });
+
+    expect(result.current.workgroups).toEqual([]);
+    expect(JSON.parse(localStorage.getItem("alf:workgroups:v1:local"))).toEqual([]);
+    expect(pruneCachedMessages).toHaveBeenLastCalledWith("local", []);
+  });
 });
 
 describe("useHostConnections.onSetHostConnection", () => {

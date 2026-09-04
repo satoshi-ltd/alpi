@@ -393,6 +393,18 @@ def test_disk_index_recomputes_changed_and_prunes_deleted(
     assert set(index["rows"]) == {"aaa.json", "bbb.json"}
 
 
+def test_disk_index_prunes_every_row_when_sessions_become_empty(tmp_path: Path) -> None:
+    session = _seed_session(tmp_path, "abc", "hello")
+    data_sessions.list_sessions(tmp_path)
+    session.unlink()
+    data_sessions._clear_row_cache()
+
+    assert data_sessions.list_sessions(tmp_path) == []
+
+    index = json.loads((tmp_path / "sessions" / "_index.json").read_text(encoding="utf-8"))
+    assert index["rows"] == {}
+
+
 def test_disk_index_never_listed_and_corruption_is_recoverable(tmp_path: Path) -> None:
     _seed_session(tmp_path, "abc", "hello")
     data_sessions.list_sessions(tmp_path)
@@ -986,6 +998,18 @@ async def test_session_read_kind_classifies_pre_slice_first_turn(
     result = await _read_rpc(tmp_path, monkeypatch, {"id": sid, "tail_turns": 1})
     assert result["kind"] == "workgroup"
     assert [t["user"] for t in result["session"]["turns"]] == ["plain follow-up"]
+
+
+@pytest.mark.parametrize(
+    "marker",
+    [
+        "[workgroup-pipeline]",
+        "[workgroup-gate-final]",
+        "[workgroup-watchdog]",
+    ],
+)
+def test_classify_first_user_recognizes_internal_workgroup_markers(marker: str) -> None:
+    assert data_sessions.classify_first_user(f"{marker} continue") == "workgroup"
 
 
 @pytest.mark.asyncio

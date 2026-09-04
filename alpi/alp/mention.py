@@ -62,6 +62,7 @@ class Result:
     tokens_in: int = 0
     tokens_out: int = 0
     cost: float = 0.0
+    transient: bool = False
 
 
 def _link_timeouts(
@@ -174,17 +175,26 @@ async def execute(
         max_duration=max_duration,
     ):
         if frame.get("kind") == "error":
-            return Result(ok=False, error=str(frame.get("text") or "unknown error"))
+            return Result(
+                ok=False,
+                error=str(frame.get("text") or "unknown error"),
+                transient=frame.get("transient") is True,
+            )
         if frame.get("kind") == "final":
             final = frame
     if not final:
-        return Result(ok=False, error="peer closed link.ask without a final response")
+        return Result(
+            ok=False,
+            error="peer closed link.ask without a final response",
+            transient=True,
+        )
     return Result(
         ok=True,
         reply=str(final.get("text") or "").strip(),
         tokens_in=int(final.get("tokens_in") or 0),
         tokens_out=int(final.get("tokens_out") or 0),
         cost=float(final.get("cost") or 0.0),
+        transient=final.get("transient") is True,
     )
 
 
@@ -238,6 +248,7 @@ async def execute_stream(
                 yield {
                     "kind": "error",
                     "text": f"listener not running (`alpi -p {peer_id} alp start`)",
+                    "transient": True,
                 }
                 return
             agen = alp_client.call_stream(
@@ -262,6 +273,7 @@ async def execute_stream(
                 yield {
                     "kind": "error",
                     "text": "peer closed link.ask without a final response",
+                    "transient": True,
                 }
                 return
             if result.get("session_id"):
@@ -273,9 +285,15 @@ async def execute_stream(
             if kind == "final":
                 return
     except alp_client.TargetOffline as e:
-        yield {"kind": "error", "text": f"target-offline: {e}"}
+        yield {
+            "kind": "error", "text": f"target-offline: {e}",
+            "transient": True,
+        }
     except alp_client.RemoteError as e:
-        yield {"kind": "error", "text": str(e)}
+        yield {
+            "kind": "error", "text": str(e),
+            "transient": alp_client.is_transient_link_error(e),
+        }
     except asyncio.TimeoutError:
         cancelled = await _cancel(home, peer, sender, session_id)
         if max_seconds > 0 and time.monotonic() - started >= max_seconds:
@@ -285,10 +303,13 @@ async def execute_stream(
         else:
             reason = f"link.ask timed out after {idle_timeout:g}s waiting for the peer"
         suffix = "; remote turn cancelled" if cancelled else ""
-        yield {"kind": "error", "text": reason + suffix}
+        yield {"kind": "error", "text": reason + suffix, "transient": True}
     except Exception as e:  # noqa: BLE001
         detail = str(e).strip() or type(e).__name__
-        yield {"kind": "error", "text": detail}
+        yield {
+            "kind": "error", "text": detail,
+            "transient": alp_client.is_transient_link_error(e),
+        }
     finally:
         if agen is not None:
             await agen.aclose()

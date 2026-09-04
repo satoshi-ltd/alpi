@@ -47,6 +47,14 @@ def test_chat_help_exposes_connection_id() -> None:
     assert "--connection-id" in result.output
 
 
+def test_pipeline_dispatch_is_not_a_local_chat_session() -> None:
+    payload = {
+        "turns": [{"user": "[workgroup-pipeline] execute the active phase"}],
+    }
+
+    assert cli._is_local_chat_session_payload(payload) is False
+
+
 def test_run_once_delegated_calls_host_stream(monkeypatch, capsys) -> None:
     captured = {}
 

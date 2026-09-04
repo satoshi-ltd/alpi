@@ -188,8 +188,8 @@ Output attachments (MM.2):
   embedder/root mismatch errors.
 - Remote file preview missing: session attachment paths are best-effort; output
   attachment fetch is scoped to profile home/workspace/temp roots.
-- Long tool loops on free/local models: default effective step ceiling is higher
-  (1000), but an explicit `tools.max_steps_per_turn` always bounds loops.
+- Long tool loops: `tools.max_steps_per_turn` always bounds model iterations;
+  the default is 100 for every provider and budget configuration.
 
 ## Related topics
 

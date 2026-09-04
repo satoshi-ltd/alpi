@@ -60,14 +60,14 @@ export default function ProfileChatHeader({
         </>
       ),
       pct: Math.min(1, usedUsd / capUsd),
-      tip: `Daily budget — spent ${fmtCost(usedUsd)} of $${capUsd.toFixed(2)} cap today`,
+      tip: "Daily budget",
     };
   }
 
   const meta = (
     <>
       {shownModel && (
-        <Tip text={shownModel} side="down">
+        <Tip text={shownModel} side="down" wide>
           <Mono className={styles.ink2}>{modelLabel(shownModel)}</Mono>
         </Tip>
       )}
@@ -84,7 +84,7 @@ export default function ProfileChatHeader({
           }
           pct={ctxPct}
           color={accent}
-          tip={`Context window — ${fmtCount(ctxTokens)} of ${fmtCount(contextWindow)} tokens in use`}
+          tip="Context window"
         />
       )}
       {budgetSeg && (

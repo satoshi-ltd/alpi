@@ -11,6 +11,29 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.5.21 — 2026-09-04 — workgroups read the way they run
+
+- **The list reads the way the fleet runs.** Working workgroups come first,
+  queued ones follow in their admission order, and paused or idle ones close
+  the list; inside each group the most recently updated row is on top. The
+  state chip and the filter still separate working, queued and paused.
+- **The connection picker lists recent connections first.** The local daemon
+  stays on top, reachable remotes follow in the order you last used them, and
+  offline or disabled ones sink to the bottom.
+- **Working rows name their pipeline step.** The inventory shows `Working ·
+  content` and similar, with a cached-task fallback on older daemons.
+- **Every `#working` card reads WORKING.** A heartbeat superseded by a later
+  post keeps its dimmed style without changing its label.
+- **Profile Settings matches the chat header.** Same compact model label with
+  the full identifier on hover, same daily-budget bar and percentage.
+- **Deleted workgroups vanish from an open detail view at once.** A canonical
+  not-found reply evicts the stale inventory and transcript cache instead of
+  leaving an ID-only row.
+
+Requires alpi ≥ 0.14.20 for canonical pipeline phases and orphan-free workgroup
+inventory. Older daemons keep the cached-task fallback and client-side row
+eviction.
+
 ## v0.5.20 — 2026-09-01 — busy views stay visible and truthful
 
 - **Connection and command panels now cover sticky view chrome correctly.**
@@ -27,7 +50,6 @@ daemon. Each release pins a minimum compatible alpi version.
   daemon and native bridge with an explicit conversation-context value, so tool
   sub-model calls cannot replace it; compaction and reconnect replay preserve
   the newest value until the saved session catches up.
-
 Requires alpi ≥ 0.14.19 for live context usage frames. Older daemons retain the
 last persisted context value while a turn runs; every other change remains
 client-side compatible.

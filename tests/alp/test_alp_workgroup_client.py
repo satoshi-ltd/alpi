@@ -751,6 +751,30 @@ def test_member_rotation_blocks_double_working_in_same_round() -> None:
         wc._check_member_rotation(posts, "BOB", "HUB", "#working still going")
 
 
+def test_pipeline_owner_can_report_exhaustion_one_past_the_allowance() -> None:
+    posts = [_post(1, "HUB", "@bob #task #x X")]
+    for n in range(1, 6):
+        text = f"#working continuation {n} (continuation)"
+        wc._check_member_rotation(posts, "BOB", "HUB", text, phase_owner=True)
+        posts.append(_post(n + 1, "BOB", text))
+    with pytest.raises(ValueError, match=r"5 time\(s\)"):
+        wc._check_member_rotation(
+            posts, "BOB", "HUB", "#working sixth heartbeat (continuation)", phase_owner=True,
+        )
+
+
+def test_model_authored_working_never_blocks_a_finalizer_continuation() -> None:
+    posts = [
+        _post(1, "HUB", "@bob #task #x X"),
+        _post(2, "BOB", "#working starting"),
+        _post(3, "BOB", "#working still going"),
+        _post(4, "BOB", "#working almost"),
+    ]
+    wc._check_member_rotation(
+        posts, "BOB", "HUB", "#working cut by deadline (continuation)", phase_owner=True,
+    )
+
+
 def test_member_rotation_resets_after_hub_speaks() -> None:
     posts = [
         _post(1, "HUB", "#task #x X"),
@@ -1110,6 +1134,44 @@ async def test_post_as_hub_with_done_emits_both_events(
     kinds = [k for (k, _) in captured]
     assert "wg.post" in kinds
     assert "wg.done" in kinds
+
+
+@pytest.mark.asyncio
+async def test_post_as_hub_with_blocked_done_emits_blocked_once(
+    short_tmp: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    hub_home = short_tmp / "alice"; hub_home.mkdir()
+    monkeypatch.setattr("alpi.home.profile_name", lambda _home: "alice")
+    hub_kp = load_or_generate(hub_home)
+    wg = wg_mod.create(
+        hub_home, name="design", hub_kp=hub_kp, member_pubkeys=[],
+        pipelines={"content": ["content"]}, launch_pipeline="content",
+        pipeline_steps={
+            "content": {"owner": "alice", "gate": {"argv": ["true"]}},
+        },
+    )
+    await wc.post(
+        hub_home, wg.meta.id,
+        b"@alice #task #content Write the content.",
+    )
+    await wc.post(hub_home, wg.meta.id, b"content draft")
+    captured: list[tuple[str, dict]] = []
+    import alpi.host.events as host_events
+    monkeypatch.setattr(
+        host_events, "emit",
+        lambda kind, data=None: captured.append((kind, data or {})),
+    )
+
+    result = await wc.post(
+        hub_home, wg.meta.id,
+        "#done BLOCKED · content · source unavailable".encode(),
+        operator_abandon=True,
+    )
+
+    blocked = [data for kind, data in captured if kind == "wg.blocked"]
+    assert len(blocked) == 1
+    assert blocked[0]["seq"] == result["seq"]
+    assert blocked[0]["phase"] == "content"
 
 
 @pytest.mark.integration
@@ -2804,6 +2866,36 @@ def test_qa_verdict_is_the_last_token_by_position_and_exact(
         home, wg, posts, "#done qa · QA FAIL · routed to build", "HUB",
     )
 
+    posts[1]["text"] = (
+        "#qa audit · dist/ (launch) — QA FAIL\n\n"
+        "The rendered label is `hotel · 1 stars`.\n\n"
+        "QA FAIL · star category contradicts the brief"
+    )
+    with pytest.raises(ValueError, match="`QA FAIL`"):
+        wc._check_qa_verdict_respected(
+            home, wg, posts, "#done qa verified · gate green", "HUB",
+        )
+
+    posts[1]["text"] = (
+        "@mira #qa audit of dist/ complete — QA FAIL.\n\n"
+        "BLOCKER · authored dining count does not match the rendered cards"
+    )
+    with pytest.raises(ValueError, match="`QA FAIL`"):
+        wc._check_qa_verdict_respected(
+            home, wg, posts, "#done qa verified · gate green", "HUB",
+        )
+
+    posts[1]["text"] = "@mira #qa audit could not run — QA BLOCKED."
+    with pytest.raises(ValueError, match="`QA BLOCKED`"):
+        wc._check_qa_verdict_respected(
+            home, wg, posts, "#done qa verified · gate green", "HUB",
+        )
+
+    posts[1]["text"] = "@mira #qa audit of dist/ complete — QA PASS."
+    wc._check_qa_verdict_respected(
+        home, wg, posts, "#done qa verified · gate green", "HUB",
+    )
+
     posts[1]["text"] = "looked like QA FAIL at first, but the rebuilt dist is clean: QA PASS"
     wc._check_qa_verdict_respected(
         home, wg, posts, "#done qa PASS · verified clean", "HUB",
@@ -2828,6 +2920,9 @@ def test_qa_verdict_is_the_last_token_by_position_and_exact(
         "If this were QA FAIL we would route it to build",
         '"QA FAIL" is not the verdict here',
         "we cannot classify the result as QA FAIL",
+        "@mira #qa report complete — no QA FAIL was observed",
+        "@mira #qa cannot classify this as QA FAIL",
+        "@mira #qa checked the QA FAIL-SAFE behavior",
     ):
         posts[1]["text"] = negated_mention
         wc._check_qa_verdict_respected(

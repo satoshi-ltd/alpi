@@ -189,8 +189,8 @@ doesn't reach:
     redeem that high-entropy, short-lived grant; it cannot create connections
     or choose their role/scope. `host.endpoints` may advertise direct `ws://` routes only
     with private/Tailscale IP literals; every hostname requires `wss://`.
-    WSS is terminated by a certificate-
-    validating reverse proxy; the daemon still authenticates every forwarded
+    WSS is terminated by a certificate-validating front-end — a reverse proxy
+    or a managed TLS edge; the daemon still authenticates every forwarded
     request with the same per-device token. The route is client-side transport
     metadata, never an authorization boundary.
     This is a deliberate protocol cut: older clients cannot consume new grants,

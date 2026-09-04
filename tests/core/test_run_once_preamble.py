@@ -115,6 +115,7 @@ def test_emit_events_serializes_tool_state(tmp_home: Path, monkeypatch) -> None:
         AgentEvent(kind="tool_start", name="terminal", args={"command": "npm run build"}),
         AgentEvent(kind="tool_state", name="terminal", text="running… 15s"),
         AgentEvent(kind="tool_end", name="terminal", ok=True),
+        AgentEvent(kind="tool_end", name="peer", ok=False, transient=True),
         AgentEvent(kind="assistant_done", text="build green", final=True),
     ]
     monkeypatch.setattr("alpi.engine.Engine.run_turn", _make_run_turn(events))
@@ -123,12 +124,95 @@ def test_emit_events_serializes_tool_state(tmp_home: Path, monkeypatch) -> None:
     monkeypatch.setattr(sys, "stdout", buf)
     _cli_mod._run_once(tmp_home, "build it", emit_events=True, persist=False)
 
-    kinds = [
-        json.loads(line)["kind"]
+    payloads = [
+        json.loads(line)
         for line in buf.getvalue().splitlines() if line.strip().startswith("{")
     ]
+    kinds = [payload["kind"] for payload in payloads]
     assert "tool_state" in kinds
     assert kinds.index("tool_state") > kinds.index("tool_start")
+    peer_end = next(payload for payload in payloads if payload.get("name") == "peer")
+    assert peer_end["transient"] is True
+
+
+def test_workgroup_dispatch_does_not_parse_internal_peer_mentions(
+    tmp_home: Path, monkeypatch,
+) -> None:
+    monkeypatch.setattr(_cli_mod, "_bootstrap", lambda _h: None)
+    monkeypatch.setattr(
+        "alpi.config.load",
+        lambda _h: Config(home=tmp_home, model="stub", raw={}),
+    )
+    monkeypatch.setattr("alpi.engine.Engine.save_session", lambda self: None)
+    monkeypatch.setattr("alpi.engine._maybe_load_mcps", lambda _cfg: [])
+    monkeypatch.setattr("alpi.engine.Engine._build_system_prompt", lambda self: "stub")
+    monkeypatch.setattr("alpi.ctx_window.resolve", lambda _h, _c, _m: 200_000)
+    monkeypatch.setattr("alpi.ledger.check", lambda *a, **kw: None)
+    monkeypatch.setattr("alpi.ledger.record", lambda *a, **kw: None)
+    monkeypatch.setenv("ALPI_WORKGROUP_DISPATCH", "wg_1")
+
+    def unexpected_parse(*args, **kwargs):
+        raise AssertionError("internal dispatch prompts are not direct mentions")
+
+    monkeypatch.setattr("alpi.alp.mention.parse", unexpected_parse)
+    monkeypatch.setattr(
+        "alpi.engine.Engine.run_turn",
+        _make_run_turn([
+            AgentEvent(kind="assistant_done", text="workgroup handled", final=True),
+        ]),
+    )
+
+    buf = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", buf)
+    _cli_mod._run_once(
+        tmp_home, "internal example @bob", emit_events=False, persist=False,
+    )
+
+    assert buf.getvalue().strip() == "workgroup handled"
+
+
+def test_direct_mention_emits_transient_peer_failure(
+    tmp_home: Path, monkeypatch,
+) -> None:
+    import json
+
+    from alpi.alp.mention import Mention, Result
+
+    monkeypatch.setattr(_cli_mod, "_bootstrap", lambda _h: None)
+    monkeypatch.setattr(
+        "alpi.config.load",
+        lambda _h: Config(home=tmp_home, model="stub", raw={}),
+    )
+    monkeypatch.setattr("alpi.engine.Engine.save_session", lambda self: None)
+    monkeypatch.setattr("alpi.engine._maybe_load_mcps", lambda _cfg: [])
+    monkeypatch.setattr("alpi.engine.Engine._build_system_prompt", lambda self: "stub")
+    monkeypatch.setattr("alpi.ctx_window.resolve", lambda _h, _c, _m: 200_000)
+    monkeypatch.setattr("alpi.ledger.check", lambda *a, **kw: None)
+    monkeypatch.setattr("alpi.ledger.record", lambda *a, **kw: None)
+    monkeypatch.delenv("ALPI_WORKGROUP_DISPATCH", raising=False)
+    monkeypatch.setattr(
+        "alpi.alp.mention.parse", lambda *a, **k: Mention("bob", "ping"),
+    )
+
+    async def fake_execute(*args, **kwargs):
+        return Result(
+            ok=False, error="-32007 target-busy", transient=True,
+        )
+
+    monkeypatch.setattr("alpi.alp.mention.execute", fake_execute)
+
+    buf = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", buf)
+    _cli_mod._run_once(
+        tmp_home, "@bob ping", emit_events=True, persist=False,
+    )
+
+    events = [json.loads(line) for line in buf.getvalue().splitlines()]
+    peer_end = next(
+        event for event in events
+        if event.get("kind") == "tool_end" and event.get("name") == "peer"
+    )
+    assert peer_end["transient"] is True
 
 
 def test_emit_events_identifies_accepted_workgroup_post(

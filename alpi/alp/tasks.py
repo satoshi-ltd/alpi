@@ -177,6 +177,15 @@ def is_working_only(text: str) -> bool:
     return bool(lines) and all(_WORKING_RE.fullmatch(line) for line in lines)
 
 
+HEARTBEAT_MARK = "(automatic turn heartbeat)"
+CONTINUATION_MARK = "(continuation)"
+CONTINUATIONS_PER_ROUND = 4
+
+
+def is_continuation_working(text: str) -> bool:
+    return is_working_only(text) and CONTINUATION_MARK in (text or "")
+
+
 def is_skip_only(text: str) -> bool:
     """Return True when every non-empty line is a skip marker."""
     lines = [line for line in (text or "").splitlines() if line.strip()]

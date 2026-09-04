@@ -176,6 +176,17 @@ def test_workgroup_list_rows_carry_chains_without_the_retired_key(short_tmp: Pat
     assert "operations" not in rows[0]
 
 
+def test_workgroup_list_ignores_runtime_directory_without_meta(short_tmp: Path) -> None:
+    home = short_tmp / "h"
+    orphan = home / "alp" / "workgroups" / "wg_orphan" / "gates"
+    orphan.mkdir(parents=True)
+    (orphan / "intake-10.log").write_text("stale\n")
+
+    from alpi.host.device_state import _hub_workgroups
+
+    assert _hub_workgroups(home, "default") == []
+
+
 def test_workgroup_list_rows_expose_pipeline_queue_position(short_tmp: Path) -> None:
     from alpi.alp import pipeline_queue
     from alpi.alp import workgroup as wg_mod
@@ -231,6 +242,37 @@ async def test_workgroups_list_includes_pipeline_status_only_when_requested(
 
     assert "pipeline_status" not in lean["result"]["workgroups"][0]
     assert rich["result"]["workgroups"][0]["pipeline_status"] == "completed"
+
+
+@pytest.mark.asyncio
+async def test_workgroups_list_includes_the_active_pipeline_phase(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    from alpi import home as home_mod
+    from alpi.alp import workgroup as wg_mod
+    from alpi.host import device_state
+
+    home = short_tmp / "h"
+    _seed(home)
+    monkeypatch.setattr(home_mod, "_ROOT", short_tmp)
+    monkeypatch.setattr(home_mod, "home_for", lambda profile: home)
+    wg_mod.create(
+        home, name="factory", hub_kp=load_or_generate(home), member_pubkeys=[],
+        pipelines={"setup": ["setup", "content"]}, launch_pipeline="setup",
+    )
+    monkeypatch.setattr(device_state, "_pipeline_status", lambda _home, _wg_id: "running")
+    monkeypatch.setattr(device_state, "_pipeline_phase", lambda _home, _wg_id: "content")
+    srv = host_server.Server(home=home)
+    device_state.register(srv)
+
+    rich = await srv._dispatch({
+        "id": "rich", "method": "host.workgroups.list",
+        "params": {"profile": "default", "include_pipeline_status": True},
+    })
+
+    row = rich["result"]["workgroups"][0]
+    assert row["pipeline_status"] == "running"
+    assert row["pipeline_phase"] == "content"
 
 
 def test_aggregate_workgroups_folds_each_deduplicated_row_once(monkeypatch) -> None:
@@ -487,6 +529,8 @@ async def test_remove_aborts_when_delete_fails(short_tmp: Path, monkeypatch) -> 
     assert "error" in resp
     assert "permission denied" in str(resp["error"])
     assert wg_dir.exists()
+    from alpi.alp import subscription as sub_mod
+    assert wg_id not in sub_mod.tombstones(home)
     assert not any(
         k == "workgroup_changed" and d.get("action") == "removed"
         for k, d in captured

@@ -144,11 +144,12 @@ class _DiskIndex:
         self._dirty = True
 
     def flush(self, names: set[str]) -> None:
-        if self._rows is None:
+        if self._rows is None and names:
             return
-        stale = set(self._rows) - names
+        rows = self._load()
+        stale = set(rows) - names
         for n in stale:
-            self._rows.pop(n, None)
+            rows.pop(n, None)
         if stale:
             self._dirty = True
         if not self._dirty:
@@ -484,7 +485,7 @@ def delete_session(home: Path, session_id: str) -> bool:
 
 def classify_first_user(first_user: str) -> str:
     s = first_user.lstrip()
-    if s.startswith("[workgroup-poller]") or s.startswith("[workgroup "):
+    if s.startswith("[workgroup-") or s.startswith("[workgroup "):
         return "workgroup"
     if s.startswith("[SCHEDULED:") or s.startswith("[CRON"):
         return "scheduled"

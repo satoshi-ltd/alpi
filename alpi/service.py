@@ -454,12 +454,14 @@ def _poller_start_offset(profile: str) -> float:
     return (h % (WORKGROUP_TICK_SECONDS * 1000)) / 1000.0
 
 
-# Failed pulls back off to 15 min; a hot subscription's empty pull immediately reopens the held request.
+# Failed pulls back off to 15 min; only live work keeps a held pull open.
 _WG_POLL_STEADY_TICKS = 3
 _WG_POLL_BACKOFF_MAX = 30
 _WG_HOT_WINDOW_SECONDS = 120.0
 _WG_HOT_TICK_SECONDS = 5.0
 _WG_LONG_POLL_SECONDS = 25.0
+_WG_IDLE_POLL_SECONDS = 60.0
+_WG_PAUSED_POLL_SECONDS = 300.0
 _HOT_DISPATCH_COOLDOWN_SECONDS = 10
 # A hub answering an empty long poll faster than this ignores wait_s (pre-long-poll build), so the poller must pace itself instead of spinning.
 _WG_FAST_HUB_SECONDS = 1.0
@@ -475,13 +477,6 @@ _WG_DEFINITIVE_PULL_REJECTIONS = frozenset({
 _WG_RETIRE_AFTER_REJECTIONS = 5
 _WG_RETIRE_MIN_SECONDS = 300.0
 
-_WG_COLD_AFTER_EMPTY_PULLS = 8
-_WG_COLD_SLEEP_BASE_SECONDS = 30.0
-# Bounded by the hub's stall watchdog, not by a savings target: a cooled member must still pull within `_TURN_SETTLE_SECONDS` of a hub post or its silence burns a rung of the bounded recovery ladder.
-_WG_COLD_SLEEP_MAX_SECONDS = (
-    _TURN_SETTLE_SECONDS - _WG_LONG_POLL_SECONDS - _WG_HOT_TICK_SECONDS
-)
-_WG_COLD_SLEEP_MAX_STEPS = 16
 # Past the hub's whole recovery ladder (4 watchdog fires 300s apart) an open task or an unopened successor phase is no longer evidence of live work.
 _WG_HOT_TRANSCRIPT_HORIZON_SECONDS = 3600.0
 
@@ -538,16 +533,6 @@ def _retire_subscription(home: Path, wg_id: str) -> bool:
     return True
 
 
-def _wg_cold_sleep(empty_pulls: int) -> float:
-    if empty_pulls < _WG_COLD_AFTER_EMPTY_PULLS:
-        return 0.0
-    steps = min(empty_pulls - _WG_COLD_AFTER_EMPTY_PULLS, _WG_COLD_SLEEP_MAX_STEPS)
-    return min(
-        _WG_COLD_SLEEP_MAX_SECONDS,
-        _WG_COLD_SLEEP_BASE_SECONDS * float(1 << steps),
-    )
-
-
 def _wg_is_hot(wid: str, hot_until: dict[str, float], now: float) -> bool:
     if now < hot_until.get(wid, 0.0):
         return True
@@ -581,6 +566,28 @@ def _sub_stays_hot(new_posts: list, sub) -> bool:
         return False
     # Must stay the hub's own predicate: a narrower one cools between a `#done` and the next `#task` and the phase handoff then waits a whole cold sleep.
     return _hub_stays_hot(bool(new_posts), _sub_as_hub(sub), recent)
+
+
+def _subscription_observation_mode(
+    sub, wg_id: str, hot_until: float = 0.0, now: float | None = None,
+) -> str:
+    if getattr(sub, "paused", False):
+        return "off"
+    at = time.monotonic() if now is None else now
+    if (
+        at < hot_until
+        or any(key[0] == wg_id for key in _INFLIGHT)
+        or _sub_stays_hot([], sub)
+    ):
+        return "hot"
+    return "cold"
+
+
+def _subscription_start_offset(profile: str, wg_id: str, interval: float) -> float:
+    if interval <= 0:
+        return 0.0
+    digest = hashlib.sha1(f"{profile}:{wg_id}".encode("utf-8")).digest()[:4]
+    return (int.from_bytes(digest, "big") % max(1, int(interval * 1000))) / 1000.0
 
 
 def _sub_as_hub(sub):
@@ -697,22 +704,41 @@ def _hub_stays_hot(fresh: bool, wg, recent: list[dict]) -> bool:
 
 
 async def _run_subscription_poller(home: Path, profile: str, wg_id: str) -> None:
-    """Keep one held pull open for a subscription; transport failures back off, an idle one cools, a repeated definitive rejection retires it."""
+    """Observe one subscription at the cadence implied by its current state."""
     from alpi.alp import subscription as sub_mod
     from alpi.alp import workgroup_client as wc
 
     failures = 0
     rejections = 0
     rejected_since = 0.0
-    empty_pulls = 0
     hot_until = 0.0
+    first_poll = True
     while True:
-        if await _sub_io(sub_mod.get, home, wg_id) is None:
+        sub = await _sub_io(sub_mod.get, home, wg_id)
+        if sub is None:
             return
+        mode = _subscription_observation_mode(sub, wg_id, hot_until)
+        interval = {
+            "cold": _WG_IDLE_POLL_SECONDS,
+            "off": _WG_PAUSED_POLL_SECONDS,
+        }.get(mode, 0.0)
+        if interval:
+            delay = (
+                _subscription_start_offset(profile, wg_id, interval)
+                if first_poll else interval
+            )
+            if delay:
+                await asyncio.sleep(delay)
+            sub = await _sub_io(sub_mod.get, home, wg_id)
+            if sub is None:
+                return
+            mode = _subscription_observation_mode(sub, wg_id, hot_until)
+        first_poll = False
         started = time.monotonic()
         try:
             new_posts, _head = await wc.pull(
-                home, wg_id, wait_s=_WG_LONG_POLL_SECONDS,
+                home, wg_id,
+                wait_s=_WG_LONG_POLL_SECONDS if mode == "hot" else 0.0,
             )
             refreshed = await _sub_io(sub_mod.get, home, wg_id)
             if refreshed is None:
@@ -720,33 +746,28 @@ async def _run_subscription_poller(home: Path, profile: str, wg_id: str) -> None
             now = time.monotonic()
             if new_posts:
                 hot_until = now + _WG_HOT_WINDOW_SECONDS
-            hot = (
-                now < hot_until
-                or _sub_stays_hot(new_posts, refreshed)
-                or _wg_is_hot(wg_id, {}, now)
-            )
+            hot = _subscription_observation_mode(
+                refreshed, wg_id, hot_until, now,
+            ) == "hot"
             pending = await _maybe_dispatch_for_sub(
                 home, profile, refreshed, hot=hot, new_posts=new_posts,
             )
+            if pending:
+                hot_until = now + _WG_HOT_WINDOW_SECONDS
             failures = 0
             rejections = 0
             rejected_since = 0.0
-            # `hot` only picks the dispatch cooldown window, so an undispatched trigger has to keep the cadence up on its own.
-            empty_pulls = 0 if (new_posts or hot or pending) else empty_pulls + 1
-            cold = _wg_cold_sleep(empty_pulls)
             fast_hub = (
-                not new_posts
+                mode == "hot"
+                and not new_posts
                 and time.monotonic() - started < _WG_FAST_HUB_SECONDS
             )
-            delay = max(_WG_HOT_TICK_SECONDS, cold) if fast_hub else cold
-            if delay:
-                await asyncio.sleep(delay)
+            if fast_hub:
+                await asyncio.sleep(_WG_HOT_TICK_SECONDS)
         except asyncio.CancelledError:
             raise
         except Exception as e:  # noqa: BLE001
             failures += 1
-            # An error is not an observation of silence: a recovered hub restarts the idle ladder at full rate.
-            empty_pulls = 0
             if not _is_definitive_pull_rejection(e):
                 rejections = 0
                 rejected_since = 0.0
@@ -837,6 +858,9 @@ async def _run_workgroup_poller(home: Path, profile: str) -> None:
                     for wid in list(state):
                         if wid not in active_hubs:
                             state.pop(wid, None)
+                for timing_key in list(_WATCHDOG_OBSERVED_AT):
+                    if timing_key[0] == str(home) and timing_key[1] not in active_hubs:
+                        _clear_watchdog_timing(home, timing_key[1])
                 hot_hubs.intersection_update(active_hubs)
 
                 requested = None if scan_all else set(dirty_hubs)
@@ -850,6 +874,9 @@ async def _run_workgroup_poller(home: Path, profile: str) -> None:
                 for wg in selected:
                     await asyncio.sleep(0)
                     wid = wg.meta.id
+                    if getattr(wg.meta, "paused", False):
+                        hot_hubs.discard(wid)
+                        continue
                     try:
                         recent = await asyncio.to_thread(
                             _all_hub_posts_decrypted, home, wg,
@@ -908,6 +935,8 @@ def _active_pipeline_ids(home: Path) -> set[str]:
 
     active: set[str] = set()
     for wg in wg_mod.list_workgroups(home):
+        if getattr(wg.meta, "paused", False):
+            continue
         try:
             run = (host_wg.fold_task_state(home, wg.meta.id) or {}).get("pipeline_run")
         except Exception:  # noqa: BLE001
@@ -1174,8 +1203,16 @@ _GATE_RECHECK_SECONDS = 120
 _GATE_RED_SIGNATURE: dict[tuple[str, str, int], str] = {}
 # A gate's own output moves the signature, so pre != post alone never means "fixed".
 _GATE_RED_RETRY: set[tuple[str, str, int]] = set()
+# Failed repair delivery retries after the normal gate cooldown without spending a round.
+_GATE_REPAIR_RETRY: set[tuple[str, str, int]] = set()
 _GATE_REPAIRS: dict[tuple[str, str, str, int], int] = {}
 _GATE_REPAIRS_CAP = 512
+_GATE_NO_PROGRESS: dict[tuple[str, str, str, int], int] = {}
+_GATE_NO_PROGRESS_MAX = 2
+
+
+class _GateRepairExhausted(str):
+    pass
 
 
 async def _ensure_phase_baseline(home: Path, wg, recent: list[dict]) -> None:
@@ -1255,16 +1292,31 @@ async def _maybe_gate_advance(
         if not _gate_recheck_due(home, wg.meta.id, step.phase, latest_seq):
             return None
         recheck = True
+    repair_delivery_retry = recheck and key in _GATE_REPAIR_RETRY
     workspace = cfg_mod.load(home).workspace_path or home
+    wg_dir = home / "alp" / "workgroups" / wg.meta.id
+    owned_changed = await asyncio.to_thread(
+        gates.owned_paths_changed, wg_dir, step, workspace,
+    )
     evaluated_sig = await asyncio.to_thread(
         gates.workspace_signature, step, workspace,
     )
+    previous_red_sig = next((
+        signature
+        for (red_home, red_wg, red_seq), signature in sorted(
+            _GATE_RED_SIGNATURE.items(), key=lambda item: item[0][2], reverse=True,
+        )
+        if red_home == str(home)
+        and red_wg == wg.meta.id
+        and int(active.opened_seq) < red_seq < latest_seq
+    ), None)
     consumed_retry = False
     if recheck and key in _GATE_RED_SIGNATURE and evaluated_sig == _GATE_RED_SIGNATURE[key]:
-        if key not in _GATE_RED_RETRY:
+        if key not in _GATE_RED_RETRY and not repair_delivery_retry:
             return None
-        _GATE_RED_RETRY.discard(key)
-        consumed_retry = True
+        if key in _GATE_RED_RETRY:
+            _GATE_RED_RETRY.discard(key)
+            consumed_retry = True
     elif recheck:
         _GATE_RED_RETRY.discard(key)
     # Marked here, not earlier: anything that fails before the run must stay retryable.
@@ -1274,7 +1326,7 @@ async def _maybe_gate_advance(
     _GATE_RECHECK_AT[key] = time.monotonic()
     violations = await asyncio.to_thread(
         gates.paths_violations,
-        home / "alp" / "workgroups" / wg.meta.id, step, workspace,
+        wg_dir, step, workspace,
     )
     if violations:
         # Boundary red before the command: gate pressure is what causes cross-phase edits.
@@ -1284,13 +1336,13 @@ async def _maybe_gate_advance(
         try:
             await asyncio.to_thread(
                 gates.refresh_baseline,
-                home / "alp" / "workgroups" / wg.meta.id, step, workspace,
+                wg_dir, step, workspace,
             )
         except OSError as e:
             log.warning("wg %s gate baseline refresh failed: %s", wg.meta.id, e)
     try:
         gates.write_gate_log(
-            home / "alp" / "workgroups" / wg.meta.id,
+            wg_dir,
             step, latest_seq, passed, output,
         )
     except OSError as e:
@@ -1306,18 +1358,80 @@ async def _maybe_gate_advance(
         # A retry run may not re-arm, or a self-mutating gate loops.
         if not consumed_retry and post_sig != evaluated_sig:
             _GATE_RED_RETRY.add(key)
-        if recheck:
+        if recheck and not repair_delivery_retry:
             # A silent re-run must never consume a repair round nor re-post.
             return None
         if step.repair == "hub":
             findings = gates.findings_excerpt(output)
+            if await _maybe_gate_rewind(home, wg, step, findings):
+                return True
+            hkey = (str(home), wg.meta.id, step.phase, int(active.opened_seq))
+            hub_rounds = _GATE_REPAIRS.get(hkey, 0) + 1
+            if len(_GATE_REPAIRS) >= _GATE_REPAIRS_CAP:
+                _GATE_REPAIRS.pop(next(iter(_GATE_REPAIRS)))
+            _GATE_REPAIRS[hkey] = hub_rounds
+            if hub_rounds > _GATE_REPAIR_ROUNDS:
+                # The hub has no legal move left; without this close the red gate re-wakes hub and owner forever.
+                close = (
+                    f"#done BLOCKED · GATE {step.phase} red · hub repair exhausted after "
+                    f"{_GATE_REPAIR_ROUNDS} rounds: {gates.findings_excerpt(output, 300)}"
+                )
+                try:
+                    await wc.post(home, wg.meta.id, close.encode())
+                    log.warning(
+                        "wg gate %s/%s closed BLOCKED after %d hub-routed rounds",
+                        wg.meta.id, step.phase, _GATE_REPAIR_ROUNDS,
+                    )
+                    return True
+                except Exception as e:  # noqa: BLE001
+                    log.error("wg gate %s/%s exhausted close failed: %s", wg.meta.id, step.phase, e)
             return (
-                f"GATE {step.phase} FAILED and declares hub-routed repair:\n"
+                f"GATE {step.phase} FAILED and declares hub-routed repair "
+                f"(round {min(hub_rounds, _GATE_REPAIR_ROUNDS)}/{_GATE_REPAIR_ROUNDS}):\n"
                 f"{findings}\n"
                 f"Do not re-task @{step.owner}; route the finding to an earlier "
                 "phase in this pipeline whose owner can modify the failing artifact."
             )
         rkey = (str(home), wg.meta.id, step.phase, int(active.opened_seq))
+        if owned_changed is False or (
+            previous_red_sig is not None and evaluated_sig == previous_red_sig
+        ):
+            attempts = _GATE_NO_PROGRESS.get(rkey, 0) + 1
+            if len(_GATE_NO_PROGRESS) >= _GATE_REPAIRS_CAP:
+                _GATE_NO_PROGRESS.pop(next(iter(_GATE_NO_PROGRESS)))
+            _GATE_NO_PROGRESS[rkey] = attempts
+            findings = gates.findings_excerpt(output)
+            if attempts <= _GATE_NO_PROGRESS_MAX:
+                note = (
+                    f"@{step.owner} gate red on #{step.phase}, but no owned "
+                    f"artifact changed (continuation {attempts}/"
+                    f"{_GATE_NO_PROGRESS_MAX}) — continue this same task, update "
+                    "the declared artifacts, then deliver:\n"
+                    f"{findings}"
+                )
+                try:
+                    res = await wc.post(home, wg.meta.id, note.encode())
+                    if isinstance(res, dict):
+                        _set_hub_responded_seq(
+                            home, wg.meta.id, int(res.get("seq", latest_seq)),
+                        )
+                    return True
+                except Exception as e:  # noqa: BLE001
+                    if attempts <= 1:
+                        _GATE_NO_PROGRESS.pop(rkey, None)
+                    else:
+                        _GATE_NO_PROGRESS[rkey] = attempts - 1
+                    return (
+                        f"GATE {step.phase} found no artifact progress, but its "
+                        f"continuation could not be delivered: {e}.\n{findings}"
+                    )
+            return _GateRepairExhausted(
+                f"GATE {step.phase} received {_GATE_NO_PROGRESS_MAX + 1} "
+                "deliveries without any owned artifact change — close exactly "
+                "once with `#done BLOCKED · <reason>` and stop. No gate repair "
+                "round was consumed by these no-progress deliveries."
+            )
+        _GATE_NO_PROGRESS.pop(rkey, None)
         rounds = _GATE_REPAIRS.get(rkey, 0) + 1
         if len(_GATE_REPAIRS) >= _GATE_REPAIRS_CAP:
             _GATE_REPAIRS.pop(next(iter(_GATE_REPAIRS)))
@@ -1338,16 +1452,36 @@ async def _maybe_gate_advance(
                     "wg gate %s/%s repair note posted (round %d)",
                     wg.meta.id, step.phase, rounds,
                 )
+                _GATE_REPAIR_RETRY.discard(key)
                 return True
             except Exception as e:  # noqa: BLE001
+                if rounds <= 1:
+                    _GATE_REPAIRS.pop(rkey, None)
+                else:
+                    _GATE_REPAIRS[rkey] = rounds - 1
+                if len(_GATE_REPAIR_RETRY) >= _GATE_ATTEMPTED_CAP:
+                    _GATE_REPAIR_RETRY.pop()
+                _GATE_REPAIR_RETRY.add(key)
+                _GATE_RECHECK_AT[key] = time.monotonic()
                 log.error("wg gate %s/%s repair note failed: %s", wg.meta.id, step.phase, e)
+                return (
+                    f"GATE {step.phase} FAILED, but repair round "
+                    f"{rounds}/{_GATE_REPAIR_ROUNDS} could not be delivered: {e}.\n"
+                    f"{findings}\n"
+                    f"Route the finding to @{step.owner}; the repair ladder is not exhausted."
+                )
         findings = gates.findings_excerpt(output, 300)
-        return (
+        return _GateRepairExhausted(
             f"GATE {step.phase} FAILED after {rounds} repair rounds: {findings} — "
-            "halt with `#done BLOCKED · <reason>`, then re-open "
-            f"`@{step.owner} #task #{step.phase}` (or an earlier phase in the same "
-            "chain) so the gate can run on a new delivery."
+            "close exactly once with `#done BLOCKED · <reason>` and stop. "
+            "Do not re-open a phase automatically; an operator may explicitly "
+            "re-open recovery after inspecting the durable blocker."
         )
+    _GATE_REPAIR_RETRY.discard(key)
+    rkey = (str(home), wg.meta.id, step.phase, int(active.opened_seq))
+    _GATE_NO_PROGRESS.pop(rkey, None)
+    if step.repair == "hub" and await _maybe_qa_rewind(home, wg, recent, active, step, own_pubkey):
+        return True
     last_posted = latest_seq
     done_seq = latest_seq
     try:
@@ -1361,7 +1495,13 @@ async def _maybe_gate_advance(
             if isinstance(res, dict):
                 last_posted = int(res.get("seq", last_posted))
     except Exception as e:  # noqa: BLE001
-        log.error("wg gate %s/%s advance post failed: %s", wg.meta.id, step.phase, e)
+        if "qa-verdict-mismatch" in str(e):
+            log.info(
+                "wg gate %s/%s advance declined by QA verdict: %s",
+                wg.meta.id, step.phase, e,
+            )
+        else:
+            log.error("wg gate %s/%s advance post failed: %s", wg.meta.id, step.phase, e)
         return f"GATE {step.phase} passed but the advance post failed: {e}"
     cursor_seq = (
         done_seq
@@ -1384,6 +1524,28 @@ async def _maybe_dispatch_for_hub(
         return
     own_pubkey = _keys.load_or_generate(home).pubkey_b64()
     await _ensure_phase_baseline(home, wg, recent)
+    exhausted = _exhausted_working_phase(home, wg, recent, own_pubkey)
+    if exhausted is not None:
+        from alpi.alp import workgroup_client as wc
+
+        phase, seq = exhausted
+        from alpi.alp import tasks as _wg_tasks
+        close = (
+            f"#done BLOCKED · {phase} · owner exhausted {_wg_tasks.CONTINUATIONS_PER_ROUND} bounded "
+            "continuation turns without a deliverable"
+        )
+        try:
+            await wc.post(home, wg.meta.id, close.encode())
+            log.warning(
+                "wg poller: %s/%s closed BLOCKED after exhausted member continuations",
+                wg.meta.id, phase,
+            )
+        except Exception as e:  # noqa: BLE001
+            log.error(
+                "wg poller: %s/%s continuation-exhausted close failed: %s",
+                wg.meta.id, phase, e,
+            )
+        return
     gate_fail = await _maybe_gate_advance(home, wg, recent, own_pubkey)
     if gate_fail is True:
         return
@@ -1397,8 +1559,12 @@ async def _maybe_dispatch_for_hub(
         hub_owned_phases=_hub_owned_phases(home, wg),
         pipeline_meta=wg.meta,
     )
+    gate_repair_exhausted = isinstance(gate_fail, _GateRepairExhausted)
+    if gate_repair_exhausted and not trigger:
+        trigger = str(gate_fail)
     if trigger and isinstance(gate_fail, str):
-        trigger = f"{trigger} · {gate_fail}"
+        if str(gate_fail) not in trigger:
+            trigger = f"{trigger} · {gate_fail}"
     if not trigger:
         if new_responded > last_responded:
             _set_hub_responded_seq(home, wg.meta.id, new_responded)
@@ -1433,6 +1599,7 @@ async def _maybe_dispatch_for_hub(
         wg.meta.id,
         _dispatch_workgroup_turn(
             home, profile, wg.meta.id, wg.meta.name, trigger,
+            closure_only=gate_repair_exhausted,
             pipeline=_wg_is_pipeline(wg),
             hub_pubkey=wg.meta.hub_pubkey,
             started_against_task_seq=started_against,
@@ -1441,11 +1608,57 @@ async def _maybe_dispatch_for_hub(
                 wg_mod.safe_phase_map(wg.meta), recent,
                 wg.meta.hub_pubkey, profile,
             ),
+            final_repair=gate_repair_exhausted,
         ),
     )
 
 
 _HUB_WATCHDOG_REFIRE_SECONDS = 5 * 60  # 5 min between re-fires
+
+_WATCHDOG_OBSERVED_AT: dict[tuple[str, str], tuple[int, float]] = {}
+_WATCHDOG_FIRED_AT: dict[tuple[str, str, str], tuple[int, float]] = {}
+
+
+def _watchdog_observed_age(
+    home: Path, wg_id: str, seq: int, now: float | None = None,
+) -> float:
+    """Measure one transcript head with daemon-active monotonic time."""
+    at = time.monotonic() if now is None else now
+    key = (str(home), wg_id)
+    observed = _WATCHDOG_OBSERVED_AT.get(key)
+    if observed is None or observed[0] != int(seq):
+        observed = (int(seq), at)
+        _WATCHDOG_OBSERVED_AT[key] = observed
+    return max(0.0, at - observed[1])
+
+
+def _watchdog_refire_due(
+    home: Path, wg_id: str, recovery_kind: str, seq: int,
+    now: float | None = None,
+) -> bool:
+    """Gate repeated recovery wakes on daemon-active monotonic time."""
+    at = time.monotonic() if now is None else now
+    key = (str(home), wg_id, recovery_kind)
+    fired = _WATCHDOG_FIRED_AT.get(key)
+    if fired is None or fired[0] != int(seq):
+        _WATCHDOG_FIRED_AT[key] = (int(seq), at)
+        return False
+    return at - fired[1] >= _HUB_WATCHDOG_REFIRE_SECONDS
+
+
+def _stamp_watchdog_fire(
+    home: Path, wg_id: str, recovery_kind: str, seq: int,
+) -> None:
+    _WATCHDOG_FIRED_AT[(str(home), wg_id, recovery_kind)] = (
+        int(seq), time.monotonic(),
+    )
+
+
+def _clear_watchdog_timing(home: Path, wg_id: str) -> None:
+    base = (str(home), wg_id)
+    _WATCHDOG_OBSERVED_AT.pop(base, None)
+    for key in [key for key in _WATCHDOG_FIRED_AT if key[:2] == base]:
+        _WATCHDOG_FIRED_AT.pop(key, None)
 
 
 def _pipeline_continuation_due(wg, recent: list[dict], active) -> bool:
@@ -1775,7 +1988,7 @@ async def _maybe_watchdog_close(
         last_dt = last_dt.replace(tzinfo=_dt.timezone.utc)
     except ValueError:
         return
-    age = (_dt.datetime.now(tz=_dt.timezone.utc) - last_dt).total_seconds()
+    age = _watchdog_observed_age(home, wg.meta.id, last_seq)
     # A member `#working` is a sign-of-life: it earns the full turn-timeout of
     # grace before the hub treats silence as a stall (a long local write posts
     # nothing while it runs). Any other last post uses the short threshold.
@@ -1808,19 +2021,10 @@ async def _maybe_watchdog_close(
         wg.meta.id, ""
     )
     if last_seq <= fired_seq:
-        # Allow re-fire only after a substantial gap.
-        if not last_dispatch_str:
-            return
-        try:
-            last_dispatch_dt = _dt.datetime.strptime(
-                last_dispatch_str, "%Y-%m-%dT%H:%M:%SZ",
-            ).replace(tzinfo=_dt.timezone.utc)
-        except ValueError:
-            return
-        elapsed_since_fire = (
-            _dt.datetime.now(tz=_dt.timezone.utc) - last_dispatch_dt
-        ).total_seconds()
-        if elapsed_since_fire < _HUB_WATCHDOG_REFIRE_SECONDS:
+        recovery_kind = "continuation" if continuation else "watchdog"
+        if not _watchdog_refire_due(
+            home, wg.meta.id, recovery_kind, last_seq,
+        ):
             return
 
     if _in_cooldown_str(last_dispatch_str):
@@ -1865,6 +2069,7 @@ async def _maybe_watchdog_close(
             wg.meta.id, reason,
         )
         _mark_hub_dispatched(home, wg.meta.id)
+        _stamp_watchdog_fire(home, wg.meta.id, "continuation", last_seq)
         _spawn_dispatch(
             wg.meta.id,
             _dispatch_workgroup_turn(
@@ -1933,6 +2138,16 @@ async def _maybe_watchdog_close(
                 log.warning("wg poller: %s closed BLOCKED after exhausted watchdog", wg.meta.id)
             except Exception as e:  # noqa: BLE001
                 log.error("wg poller: %s exhausted-watchdog close failed: %s", wg.meta.id, e)
+                from alpi.alp import client as alp_client
+
+                if alp_client.is_transient_link_error(e):
+                    _restore_recovery_attempt(
+                        home, "hub_watchdog_fire_count", wg.meta.id,
+                        last_seq, count,
+                    )
+                    _stamp_watchdog_fire(
+                        home, wg.meta.id, "watchdog", last_seq,
+                    )
         return
     if final_repair:
         # Last automatic wake on this seq. Force a deterministic resolution
@@ -1984,6 +2199,7 @@ async def _maybe_watchdog_close(
     )
     _set_hub_watchdog_seq(home, wg.meta.id, last_seq)
     _mark_hub_dispatched(home, wg.meta.id)
+    _stamp_watchdog_fire(home, wg.meta.id, "watchdog", last_seq)
     _spawn_dispatch(
         wg.meta.id,
         _dispatch_workgroup_turn(
@@ -2164,6 +2380,7 @@ _RESUMABLE_POLLER_TABLES = (
 def reset_workgroup_poller_state(home: Path, wg_id: str) -> None:
     """Drop the per-wg poller guards for ``wg_id`` so resume re-opens normal
     dispatch/watchdog evaluation. No auto-post — the next tick decides."""
+    _clear_watchdog_timing(home, wg_id)
     # In-memory edge state: without this a delivery parked behind a pause never re-fires its gate.
     key_home = str(home)
     for k in [k for k in _GATE_ATTEMPTED if k[0] == key_home and k[1] == wg_id]:
@@ -2175,6 +2392,8 @@ def reset_workgroup_poller_state(home: Path, wg_id: str) -> None:
             del table[k]
     for k in [k for k in _GATE_RED_RETRY if k[0] == key_home and k[1] == wg_id]:
         _GATE_RED_RETRY.discard(k)
+    for k in [k for k in _GATE_REPAIR_RETRY if k[0] == key_home and k[1] == wg_id]:
+        _GATE_REPAIR_RETRY.discard(k)
     state = _load_poller_state(home)
     changed = False
     for table in _RESUMABLE_POLLER_TABLES:
@@ -2232,6 +2451,19 @@ def _restore_recovery_attempt(
     else:
         table[wg_id] = [int(seq), int(attempt) - 1]
     _save_poller_state(home, state)
+
+
+def _restore_dispatch_recovery(
+    home: Path, recovery_kind: str, wg_id: str, seq: int, attempt: int,
+) -> None:
+    if not recovery_kind:
+        return
+    table_name = (
+        "hub_watchdog_fire_count"
+        if recovery_kind == "watchdog"
+        else "hub_continuation_fire_count"
+    )
+    _restore_recovery_attempt(home, table_name, wg_id, seq, attempt)
 
 
 def _bump_hub_watchdog_count(home: Path, wg_id: str, seq: int) -> int:
@@ -2430,16 +2662,24 @@ def _working_redispatch_reason(
     if active.participants and profile not in active.participants:
         return None
 
+    round_start = _round_start_seq(recent_posts, active, hub_pubkey)
     own_posts = [
         p for p in recent_posts
-        if int(p.get("seq", 0)) >= active.opened_seq
+        if int(p.get("seq", 0)) > round_start
         and str(p.get("from") or "") == own_pubkey
+        and wg_tasks.HEARTBEAT_MARK not in str(p.get("text") or "")
     ]
     if not own_posts:
         return None
     latest_own = max(own_posts, key=lambda p: int(p.get("seq", 0)))
     text = str(latest_own.get("text") or "")
     if not wg_tasks.is_working_only(text):
+        return None
+    working_count = sum(
+        1 for post in own_posts
+        if wg_tasks.is_continuation_working(str(post.get("text") or ""))
+    )
+    if working_count > wg_tasks.CONTINUATIONS_PER_ROUND:
         return None
     working_ts = str(latest_own.get("ts") or "")
     # >= not > : timestamps are second-granular, so a turn that posts #working in
@@ -2453,6 +2693,190 @@ def _working_redispatch_reason(
         "resume after #working without handoff "
         f"(seq #{int(latest_own.get('seq', 0))})"
     )
+
+
+def _exhausted_working_phase(
+    home: Path, wg, recent_posts: list[dict], hub_pubkey: str,
+) -> tuple[str, int] | None:
+    """Return the active phase once its owner posts more continuations than a round allows."""
+    from alpi.alp import peers as peers_mod
+    from alpi.alp import tasks as wg_tasks
+    from alpi.alp import workgroup as wg_mod
+
+    if not _wg_is_pipeline(wg):
+        return None
+    active = wg_tasks.active_task(recent_posts, hub_pubkey=hub_pubkey)
+    if active is None or not active.slug:
+        return None
+    phase = wg_mod.canonical_pipeline_phase(wg.meta, active.slug)
+    if phase is None:
+        return None
+    phase_name = phase[1]
+    owner = str(
+        wg_mod.safe_phase_map(wg.meta).get(phase_name, {}).get("owner") or ""
+    ).lower()
+    owner_peer = next(
+        (peer for peer in peers_mod.load(home) if peer.id.lower() == owner),
+        None,
+    )
+    if owner_peer is None or owner_peer.pubkey == hub_pubkey:
+        return None
+    round_start = _round_start_seq(recent_posts, active, hub_pubkey)
+    owner_posts = [
+        post for post in recent_posts
+        if int(post.get("seq", 0)) > round_start
+        and str(post.get("from") or "") == owner_peer.pubkey
+        and wg_tasks.HEARTBEAT_MARK not in str(post.get("text") or "")
+    ]
+    if any(
+        not wg_tasks.is_working_only(str(post.get("text") or ""))
+        for post in owner_posts
+    ):
+        return None
+    working = [
+        post for post in owner_posts
+        if wg_tasks.is_continuation_working(str(post.get("text") or ""))
+    ]
+    if len(working) <= wg_tasks.CONTINUATIONS_PER_ROUND:
+        return None
+    return phase_name, max(int(post.get("seq", 0)) for post in working)
+
+
+def _round_start_seq(recent_posts: list[dict], active, hub_pubkey: str) -> int:
+    # A hub note (gate red, re-task) opens a new round; continuations are bounded per round, not per task.
+    hub_key = hub_pubkey or str(getattr(active, "opened_by", "") or "")
+    return max(
+        (
+            int(p.get("seq", 0)) for p in recent_posts
+            if int(p.get("seq", 0)) >= int(active.opened_seq)
+            and str(p.get("from") or "") == hub_key
+        ),
+        default=int(active.opened_seq),
+    )
+
+
+_QA_REWIND_MAX = 2
+
+
+def _qa_rewind_count(home: Path, wg_id: str) -> int:
+    return int((_load_poller_state(home).get("qa_rewind_count") or {}).get(wg_id, 0))
+
+
+def _bump_qa_rewind_count(home: Path, wg_id: str) -> int:
+    state = _load_poller_state(home)
+    table = state.setdefault("qa_rewind_count", {})
+    table[wg_id] = int(table.get(wg_id, 0)) + 1
+    _save_poller_state(home, state)
+    return int(table[wg_id])
+
+
+def _phases_owning_named_paths(verdict_text: str, authored: list[str], steps: dict) -> list[str]:
+    # A verdict naming src/config/site.json must reopen intake, not the default content phase whose scope cannot touch it; a catch-all `**` scope (setup) owns nothing specific, and the caller drops the last authored phase because its output (dist) derives from earlier ones.
+    import fnmatch
+
+    named = {
+        token.strip("`'\"(),.:;")
+        for token in re.findall(r"[A-Za-z0-9_./-]+/[A-Za-z0-9_./-]+", verdict_text)
+    }
+    out: list[str] = []
+    for phase in authored:
+        patterns = [p for p in (steps[phase].get("paths") or []) if isinstance(p, str) and p != "**"]
+        if any(
+            fnmatch.fnmatchcase(path, pattern) or path.endswith("/" + pattern)
+            for path in named for pattern in patterns
+        ):
+            out.append(phase)
+    return out
+
+
+def _qa_rewind_target(wg, step, verdict_text: str, include_last: bool = False) -> str | None:
+    from alpi.alp import workgroup as wg_mod
+
+    owner = wg_mod.pipeline_for_phase(wg.meta, step.phase)
+    if owner is None:
+        return None
+    chain = owner[1]
+    earlier = list(chain[: chain.index(step.phase)])
+    steps = getattr(wg.meta, "pipeline_steps", None) or {}
+    authored = [
+        phase for phase in earlier
+        if isinstance(steps.get(phase), dict)
+        and steps[phase].get("owner") and steps[phase].get("paths")
+    ]
+    for slug in re.findall(r"#([a-z0-9][a-z0-9-]*)", verdict_text.lower()):
+        if slug in authored:
+            return slug
+    owners = _phases_owning_named_paths(verdict_text, authored if include_last else authored[:-1], steps)
+    if owners:
+        return owners[0]
+    for preferred in ("content", "content-copy", "media-update"):
+        if preferred in authored:
+            return preferred
+    return authored[-1] if authored else None
+
+
+async def _maybe_qa_rewind(home: Path, wg, recent: list[dict], active, step, own_pubkey: str) -> bool:
+    # A QA FAIL names artifact defects an earlier owner can fix; bounded rewinds keep the draft pipeline moving without an operator.
+    from alpi.alp import workgroup_client as wc
+
+    if wc._latest_qa_verdict(home, wg, recent, own_pubkey) != "QA FAIL":
+        return False
+    verdict_posts = [
+        p for p in recent
+        if int(p.get("seq", 0)) > int(active.opened_seq)
+        and str(p.get("from") or "") != own_pubkey
+        and "QA FAIL" in str(p.get("text") or "")
+    ]
+    verdict_text = str(verdict_posts[-1].get("text") or "") if verdict_posts else ""
+    target = _qa_rewind_target(wg, step, verdict_text)
+    return await _rewind_to(
+        home, wg, step, target, label="QA FAIL",
+        reason=f"QA FAIL from @{step.owner}", excerpt=verdict_text,
+    )
+
+
+async def _maybe_gate_rewind(home: Path, wg, step, gate_output: str) -> bool:
+    # A red hub-routed gate names the failing artifact; the hub itself has no legal move while the phase stays open (task-already-active vs phase-gate-abandoned), so the daemon reopens the owning phase.
+    target = _qa_rewind_target(wg, step, gate_output, include_last=True)
+    return await _rewind_to(
+        home, wg, step, target, label=f"GATE {step.phase} red",
+        reason=f"GATE {step.phase} red", excerpt=gate_output,
+    )
+
+
+async def _rewind_to(home: Path, wg, step, target: str | None, *, label: str, reason: str, excerpt: str) -> bool:
+    from alpi.alp import workgroup as wg_mod
+    from alpi.alp import workgroup_client as wc
+
+    if target is None:
+        return False
+    used = _qa_rewind_count(home, wg.meta.id)
+    if used >= _QA_REWIND_MAX:
+        return False
+    phase_map = wg_mod.safe_phase_map(wg.meta)
+    owner = str(phase_map.get(target, {}).get("owner") or "")
+    task = str(phase_map.get(target, {}).get("task") or f"run the {target} phase")
+    excerpt = " ".join(excerpt.split())[:1500]
+    attempt = used + 1
+    close = f"#done BLOCKED · {label} · rewinding to #{target} ({attempt}/{_QA_REWIND_MAX})"
+    opener = (
+        f"@{owner} #task #{target} · {task} · {reason} "
+        f"(rewind {attempt}/{_QA_REWIND_MAX}): {excerpt}"
+    )
+    try:
+        await wc.post(home, wg.meta.id, close.encode())
+        res = await wc.post(home, wg.meta.id, opener.encode())
+    except Exception as e:  # noqa: BLE001
+        log.error("wg gate %s/%s rewind failed: %s", wg.meta.id, step.phase, e)
+        return False
+    _bump_qa_rewind_count(home, wg.meta.id)
+    if isinstance(res, dict) and res.get("seq") is not None:
+        _set_hub_responded_seq(home, wg.meta.id, int(res["seq"]))
+    log.info(
+        "wg gate %s/%s %s rewound to %s (%d/%d)",
+        wg.meta.id, step.phase, label, target, attempt, _QA_REWIND_MAX,
+    )
+    return True
 
 
 def _stamp_at_or_after(left: str, right: str) -> bool:
@@ -2660,6 +3084,18 @@ async def _dispatch_workgroup_turn(
             "turn that leaves the pipeline stuck. Open the task and stop."
         )
         env_extra: dict[str, str] = {}
+    elif closure_only and final_repair:
+        prompt = (
+            f"[workgroup-gate-final] '#{wg_name or wg_id}' "
+            f"(wg_id={wg_id}). {reason}.\n\n"
+            "The declared gate is still red after every bounded owner repair "
+            "round. Make exactly one "
+            f"`workgroup_post(wg_id=\"{wg_id}\", text=\"#done BLOCKED · "
+            "<phase> · <concise gate finding>\")` call, using the concrete "
+            "finding above, then stop. Do not inspect files, re-task an owner, "
+            "re-open a phase, post prose, or invent another recovery step."
+        )
+        env_extra = {"ALPI_WORKGROUP_CLOSURE_ONLY": "1"}
     elif closure_only:
         prompt = (
             f"[workgroup-watchdog] '#{wg_name or wg_id}' "
@@ -2687,6 +3123,22 @@ async def _dispatch_workgroup_turn(
             "the transcript and burns budget."
         )
         env_extra = {"ALPI_WORKGROUP_CLOSURE_ONLY": "1"}
+    elif pipeline and member_turn:
+        prompt = (
+            f"[workgroup-pipeline] '#{wg_name or wg_id}' (wg_id={wg_id}). "
+            f"{reason}.\n\n"
+            "You are the targeted worker for the active pipeline phase. Read "
+            "the briefing and active task from the workgroup context, complete "
+            "only that deliverable with your tools, and verify it with the "
+            "declared gate. Research only when the active task explicitly "
+            "requires it. Do not post plans or progress; the runtime may emit "
+            "#working only when a bounded turn exhausts. When finished, make exactly one "
+            f"plain `workgroup_post(wg_id=\"{wg_id}\", text=\"…\")` handoff "
+            "in the task's language naming the produced paths, verification, "
+            "or blocker. Members never post #task or #done. If you are not the "
+            "targeted owner, stay silent. Assistant text is not delivered."
+        )
+        env_extra = {}
     else:
         prompt = (
             f"[workgroup-poller] new activity in workgroup "
@@ -2813,6 +3265,8 @@ async def _dispatch_workgroup_turn(
         "ALPI_WORKGROUP_DISPATCH": wg_id,
         "ALPI_WORKGROUP_TURN_ID": turn_id,
         "ALPI_RUN_ID": run_id,
+        **({"ALPI_WORKGROUP_PIPELINE": "1"} if pipeline else {}),
+        **({"ALPI_WORKGROUP_MEMBER_TURN": "1"} if member_turn else {}),
         **({"ALPI_TURN_BUDGET_S": str(soft_budget)} if soft_budget else {}),
         **({"ALPI_WORKGROUP_WRITE_SCOPE": json.dumps(write_scope)} if write_scope is not None else {}),
         **workspace_env(home),
@@ -2835,10 +3289,14 @@ async def _dispatch_workgroup_turn(
         )
     except OSError as e:
         log.warning("wg poller: subprocess spawn failed: %s", e)
+        _restore_dispatch_recovery(
+            home, recovery_kind, wg_id, recovery_seq, recovery_attempt,
+        )
         _append_turn_event(home, {
             "ts": _utcnow_iso(), "event": "spawn-failed",
             "profile": profile, "wg_id": wg_id, "wg_name": wg_name,
             "reason": reason, "error": str(e), "turn_id": turn_id,
+            "transient_failure": True,
         })
         return
     last_activity = [started_at]
@@ -2854,7 +3312,7 @@ async def _dispatch_workgroup_turn(
             event = json.loads(line)
         except (TypeError, ValueError):
             return
-        if event.get("kind") == "error" and event.get("transient") is True:
+        if event.get("transient") is True:
             transient_failure[0] = True
         if (
             event.get("kind") == "tool_end"
@@ -2889,7 +3347,7 @@ async def _dispatch_workgroup_turn(
     }
 
     working_task: asyncio.Task | None = None
-    working_after = _working_after_for(home) if member_turn else 0
+    working_after = _working_after_for(home) if member_turn and not pipeline else 0
     if working_after > 0:
         phase = str((write_scope or {}).get("phase") or "active-task")
         working_task = asyncio.create_task(
@@ -2983,13 +3441,8 @@ async def _dispatch_workgroup_turn(
         **extra,
     })
     if transient_failure[0] and posts_added[0] == 0 and recovery_kind:
-        table_name = (
-            "hub_watchdog_fire_count"
-            if recovery_kind == "watchdog"
-            else "hub_continuation_fire_count"
-        )
-        _restore_recovery_attempt(
-            home, table_name, wg_id, recovery_seq, recovery_attempt,
+        _restore_dispatch_recovery(
+            home, recovery_kind, wg_id, recovery_seq, recovery_attempt,
         )
     if member_responded_seq is not None and _should_advance_cursor(
         rc, posts_added[0], preempted, timed_out, cancelled,

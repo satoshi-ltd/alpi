@@ -200,6 +200,30 @@ def test_interrupt_before_parallel_dispatch_skips_batch(
     assert patched_engine.session.turns[-1].interrupted is True
 
 
+def test_tool_end_preserves_structured_transient_result(
+    patched_engine: Engine, monkeypatch,
+) -> None:
+    _stub_stream(monkeypatch, [
+        _final_chunk("", tool_calls=[{
+            "id": "busy", "name": "todo", "arguments": '{"action":"list"}',
+        }]),
+        _final_chunk("done"),
+    ])
+    monkeypatch.setattr(
+        "alpi.tools.execute",
+        lambda *_args, **_kwargs: ToolResult(
+            ok=False, output="", error="target busy", transient=True,
+        ),
+    )
+    events = []
+
+    patched_engine.run_turn("try once", emit=events.append)
+
+    tool_end = next(event for event in events if event.kind == "tool_end")
+    assert tool_end.ok is False
+    assert tool_end.transient is True
+
+
 def test_terminal_command_is_not_persisted_in_turn_or_run_journal(
     patched_engine: Engine, monkeypatch,
 ) -> None:
@@ -771,6 +795,27 @@ def test_workgroup_dispatch_requests_only_its_context(
     assert "target context" in patched_engine.last_host_context
 
 
+def test_workgroup_dispatch_skips_keyword_skill_hints(
+    patched_engine: Engine, monkeypatch,
+) -> None:
+    calls = []
+    monkeypatch.setenv("ALPI_WORKGROUP_DISPATCH", "wg_target")
+    monkeypatch.setattr(
+        "alpi.alp.agent_context.build",
+        lambda _home, wg_id=None, max_chars=None: "target context",
+    )
+    monkeypatch.setattr(
+        "alpi.tools.skill.keyword_match_hint",
+        lambda *_args, **_kwargs: calls.append(True) or "wrong hint",
+    )
+    _stub_stream(monkeypatch, [_final_chunk(""), _final_chunk("")])
+
+    patched_engine.run_turn("research hotel", emit=lambda _event: None)
+
+    assert calls == []
+    assert "wrong hint" not in patched_engine.last_host_context
+
+
 def test_workgroup_dispatch_fails_before_llm_without_target_context(
     patched_engine: Engine, monkeypatch,
 ) -> None:
@@ -835,17 +880,291 @@ def test_workgroup_dispatch_continues_after_working_post(
         "alpi.alp.agent_context.build",
         lambda _home, wg_id=None, max_chars=None: "target context",
     )
-    monkeypatch.setattr(
-        "alpi.tools.execute",
-        lambda _name, _args, deny=None: ToolResult(ok=True, output="posted seq 2"),
-    )
+    deliveries = []
+
+    def fake_execute(name, args, deny=None):
+        if name == "workgroup_post":
+            deliveries.append(dict(args))
+        return ToolResult(ok=True, output="posted seq 2")
+
+    monkeypatch.setattr("alpi.tools.execute", fake_execute)
     events = []
 
     patched_engine.run_turn("work", emit=events.append)
 
     assert calls["i"] == 2
+    assert [row["text"] for row in deliveries] == [
+        "#working running the build (terminal)",
+        "finished locally",
+    ]
     finals = [event.text for event in events if event.kind == "assistant_done" and event.final]
-    assert finals == ["finished locally"]
+    assert finals == []
+
+
+def test_workgroup_step_limit_posts_a_working_continuation(
+    patched_engine: Engine, monkeypatch,
+) -> None:
+    patched_engine.cfg.tools.max_steps_per_turn = 2
+    monkeypatch.setenv("ALPI_WORKGROUP_DISPATCH", "wg_target")
+    monkeypatch.setattr(
+        "alpi.alp.agent_context.build",
+        lambda _home, wg_id=None, max_chars=None: "target context",
+    )
+    calls = []
+
+    def fake_stream(messages, tools, **kwargs):
+        names = [_schema["function"]["name"] for _schema in tools]
+        calls.append({
+            "names": names,
+            "tool_choice": kwargs.get("tool_choice"),
+            "parallel_tool_calls": kwargs.get("parallel_tool_calls"),
+        })
+        if len(calls) <= 2:
+            yield _final_chunk("", tool_calls=[{
+                "id": f"todo-{len(calls)}", "name": "todo",
+                "arguments": '{"action":"list"}',
+            }])
+            return
+        yield _final_chunk("", tool_calls=[{
+            "id": "handoff", "name": "workgroup_post",
+            "arguments": (
+                '{"wg_id":"wg_target","text":"#working first pass written; validating remaining fields"}'
+            ),
+        }])
+
+    deliveries = []
+
+    def fake_execute(name, args, **_kwargs):
+        if name == "workgroup_post":
+            deliveries.append(dict(args))
+        return ToolResult(ok=True, output="posted seq 9")
+
+    monkeypatch.setattr("alpi.llm.stream", fake_stream)
+    monkeypatch.setattr("alpi.tools.execute", fake_execute)
+    events = []
+
+    patched_engine.run_turn("work", emit=events.append)
+
+    assert len(calls) == 3
+    assert calls[-1] == {
+        "names": ["workgroup_post"],
+        "tool_choice": "required",
+        "parallel_tool_calls": False,
+    }
+    assert deliveries == [{
+        "wg_id": "wg_target",
+        "text": "#working first pass written; validating remaining fields (continuation)",
+    }]
+    assert [tool.name for tool in patched_engine.session.turns[-1].tools] == [
+        "todo", "todo", "workgroup_post",
+    ]
+    assert any(
+        event.kind == "tool_end"
+        and event.name == "workgroup_post"
+        and event.ok
+        for event in events
+    )
+    assert not any(
+        event.kind == "assistant_done" and event.final for event in events
+    )
+
+
+def test_workgroup_deadline_posts_a_working_continuation(
+    patched_engine: Engine, monkeypatch,
+) -> None:
+    now = [100.0]
+    monkeypatch.setenv("ALPI_WORKGROUP_DISPATCH", "wg_target")
+    monkeypatch.setattr("alpi.engine.time.monotonic", lambda: now[0])
+    monkeypatch.setattr(
+        "alpi.engine._turn_deadline_from_env", lambda _started: 105.0,
+    )
+    monkeypatch.setattr(
+        "alpi.alp.agent_context.build",
+        lambda _home, wg_id=None, max_chars=None: "target context",
+    )
+    schemas = []
+    deadlines = []
+
+    def fake_stream(messages, tools, **kwargs):
+        schemas.append([schema["function"]["name"] for schema in tools])
+        deadlines.append(kwargs.get("absolute_deadline"))
+        if len(schemas) == 1:
+            yield {"reasoning_delta": "started"}
+            now[0] = 106.0
+            raise RuntimeError("provider still blocked at the soft deadline")
+        yield _final_chunk("", tool_calls=[{
+            "id": "handoff", "name": "workgroup_post",
+            "arguments": '{"wg_id":"wg_target","text":"#working draft saved; completing intake"}',
+        }])
+
+    executed = []
+
+    def fake_execute(name, args, **_kwargs):
+        executed.append((name, dict(args)))
+        return ToolResult(ok=True, output="posted seq 10")
+
+    monkeypatch.setattr("alpi.llm.stream", fake_stream)
+    monkeypatch.setattr("alpi.tools.execute", fake_execute)
+    events = []
+
+    patched_engine.run_turn("work", emit=events.append)
+
+    assert deadlines == [105.0, 151.0]
+    assert schemas[-1] == ["workgroup_post"]
+    assert executed == [(
+        "workgroup_post",
+        {"wg_id": "wg_target", "text": "#working draft saved; completing intake (continuation)"},
+    )]
+    assert not any(
+        event.kind == "assistant_done" and event.final for event in events
+    )
+
+
+def test_workgroup_empty_reply_posts_a_working_continuation(
+    patched_engine: Engine, monkeypatch,
+) -> None:
+    monkeypatch.setenv("ALPI_WORKGROUP_DISPATCH", "wg_target")
+    monkeypatch.setenv("ALPI_WORKGROUP_PIPELINE", "1")
+    monkeypatch.setenv("ALPI_WORKGROUP_MEMBER_TURN", "1")
+    monkeypatch.setattr(
+        "alpi.alp.agent_context.build",
+        lambda _home, wg_id=None, max_chars=None: "target context",
+    )
+    calls = _stub_stream(monkeypatch, [
+        _final_chunk(""),
+        _final_chunk(""),
+        _final_chunk("", tool_calls=[{
+            "id": "handoff", "name": "workgroup_post",
+            "arguments": (
+                '{"wg_id":"wg_target","text":"#working locale files written; validating bounds"}'
+            ),
+        }]),
+    ])
+    deliveries = []
+
+    def fake_execute(name, args, **_kwargs):
+        if name == "workgroup_post":
+            deliveries.append(dict(args))
+        return ToolResult(ok=True, output="posted seq 10")
+
+    monkeypatch.setattr("alpi.tools.execute", fake_execute)
+    events = []
+
+    patched_engine.run_turn("work", emit=events.append)
+
+    assert calls["i"] == 3
+    nudges = [
+        m["content"] for m in patched_engine.session.messages
+        if m.get("role") == "user" and str(m.get("content", "")).startswith("[engine] You ended this workgroup turn")
+    ]
+    assert len(nudges) == 1 and "workgroup_post" in nudges[0] and "plain text" not in nudges[0]
+    assert deliveries == [{
+        "wg_id": "wg_target",
+        "text": "#working locale files written; validating bounds (continuation)",
+    }]
+    assert any(event.kind == "done" for event in events)
+    assert not any(event.kind == "error" for event in events)
+
+
+def test_workgroup_closure_only_text_finishes_silently(
+    patched_engine: Engine, monkeypatch,
+) -> None:
+    monkeypatch.setenv("ALPI_WORKGROUP_DISPATCH", "wg_target")
+    monkeypatch.setenv("ALPI_WORKGROUP_CLOSURE_ONLY", "1")
+    monkeypatch.setattr(
+        "alpi.alp.agent_context.build",
+        lambda _home, wg_id=None, max_chars=None: "target context",
+    )
+    _stub_stream(monkeypatch, [_final_chunk("The task is still active.")])
+    deliveries = []
+    monkeypatch.setattr(
+        "alpi.tools.execute",
+        lambda name, args, **_kwargs: deliveries.append((name, args)),
+    )
+    events = []
+
+    patched_engine.run_turn("close or stay silent", emit=events.append)
+
+    assert deliveries == []
+    assert any(event.kind == "done" for event in events)
+    assert not any(event.kind == "error" for event in events)
+
+
+def test_workgroup_member_text_without_tools_finishes_silently(
+    patched_engine: Engine, monkeypatch,
+) -> None:
+    monkeypatch.setenv("ALPI_WORKGROUP_DISPATCH", "wg_target")
+    monkeypatch.setenv("ALPI_WORKGROUP_PIPELINE", "1")
+    monkeypatch.setenv("ALPI_WORKGROUP_MEMBER_TURN", "1")
+    monkeypatch.setattr(
+        "alpi.alp.agent_context.build",
+        lambda _home, wg_id=None, max_chars=None: "target context",
+    )
+    _stub_stream(monkeypatch, [_final_chunk("I will inspect the files now.")])
+    deliveries = []
+    monkeypatch.setattr(
+        "alpi.tools.execute",
+        lambda name, args, **_kwargs: deliveries.append((name, args)),
+    )
+    events = []
+
+    patched_engine.run_turn("work", emit=events.append)
+
+    assert deliveries == []
+    assert any(event.kind == "done" for event in events)
+    assert not any(event.kind == "error" for event in events)
+
+
+@pytest.mark.parametrize("bad_final", [
+    _final_chunk("plain text instead of a post"),
+    _final_chunk("", tool_calls=[{
+        "id": "delivery", "name": "workgroup_post",
+        "arguments": '{"wg_id":"wg_target","text":"partial work handed off"}',
+    }]),
+    _final_chunk("", tool_calls=[{
+        "id": "wrong", "name": "workgroup_post",
+        "arguments": '{"wg_id":"wg_other","text":"wrong target"}',
+    }]),
+])
+def test_workgroup_finalizer_never_surfaces_or_misroutes_assistant_text(
+    patched_engine: Engine, monkeypatch, bad_final: dict,
+) -> None:
+    patched_engine.cfg.tools.max_steps_per_turn = 1
+    monkeypatch.setenv("ALPI_WORKGROUP_DISPATCH", "wg_target")
+    monkeypatch.setattr(
+        "alpi.alp.agent_context.build",
+        lambda _home, wg_id=None, max_chars=None: "target context",
+    )
+    _stub_stream(monkeypatch, [
+        _final_chunk("", tool_calls=[{
+            "id": "todo", "name": "todo",
+            "arguments": '{"action":"list"}',
+        }]),
+        bad_final,
+    ])
+    executed = []
+
+    def fake_execute(name, args, **_kwargs):
+        if name == "workgroup_post":
+            executed.append((name, args))
+        return ToolResult(ok=True, output="ok")
+
+    monkeypatch.setattr(
+        "alpi.tools.execute", fake_execute,
+    )
+    events = []
+
+    patched_engine.run_turn("work", emit=events.append)
+
+    assert [(name, args["wg_id"]) for name, args in executed] == [("workgroup_post", "wg_target")]
+    assert executed[0][1]["text"] == (
+        "#working turn ended before its handoff (1-step tool limit); "
+        "saved work stays in the project, resuming from it on the next dispatch (continuation)"
+    )
+    assert not any(event.kind == "error" for event in events)
+    assert not any(
+        event.kind == "assistant_done" and event.final for event in events
+    )
 
 
 def test_side_purpose_gets_its_own_affinity(patched_engine: Engine) -> None:
@@ -884,3 +1203,78 @@ def test_reset_session_clears_prefix_diag_state(patched_engine: Engine) -> None:
     assert patched_engine._turn_prefix_reasons == set()
     assert patched_engine._expected_rewrite == "reset"
     assert patched_engine.last_host_context == ""
+
+
+def test_workgroup_finalizer_failure_still_posts_a_code_authored_continuation(
+    patched_engine: Engine, monkeypatch,
+) -> None:
+    from alpi import llm as _llm
+
+    now = [100.0]
+    monkeypatch.setenv("ALPI_WORKGROUP_DISPATCH", "wg_target")
+    monkeypatch.setattr("alpi.engine.time.monotonic", lambda: now[0])
+    monkeypatch.setattr(
+        "alpi.engine._turn_deadline_from_env", lambda _started: 105.0,
+    )
+    monkeypatch.setattr(
+        "alpi.alp.agent_context.build",
+        lambda _home, wg_id=None, max_chars=None: "target context",
+    )
+    calls = {"i": 0}
+
+    def fake_stream(messages, tools, **kwargs):
+        calls["i"] += 1
+        if calls["i"] == 1:
+            yield {"reasoning_delta": "started"}
+            now[0] = 106.0
+            raise RuntimeError("provider still blocked at the soft deadline")
+        yield {"reasoning_delta": "still thinking"}
+        raise _llm.TurnBudgetExceeded("turn budget deadline exceeded")
+
+    executed = []
+
+    def fake_execute(name, args, **_kwargs):
+        executed.append((name, dict(args)))
+        return ToolResult(ok=True, output="posted seq 11")
+
+    monkeypatch.setattr("alpi.llm.stream", fake_stream)
+    monkeypatch.setattr("alpi.tools.execute", fake_execute)
+    events = []
+
+    patched_engine.run_turn("work", emit=events.append)
+
+    assert calls["i"] == 2
+    assert len(executed) == 1 and executed[0][0] == "workgroup_post"
+    text = executed[0][1]["text"]
+    assert executed[0][1]["wg_id"] == "wg_target"
+    assert text.startswith("#working turn ended before its handoff (out of time, handoff call failed: TurnBudgetExceeded)")
+    assert text.endswith("(continuation)")
+    assert any(event.kind == "done" for event in events)
+    assert not any(event.kind == "error" for event in events)
+
+
+
+def test_engine_exposes_the_turn_tool_count_to_each_tool_call(
+    patched_engine: Engine, monkeypatch,
+) -> None:
+    from alpi.tools import _state
+
+    calls = _stub_stream(monkeypatch, [
+        _final_chunk("", tool_calls=[
+            {"id": "t1", "name": "todo", "arguments": '{"action":"list"}'},
+            {"id": "t2", "name": "todo", "arguments": '{"action":"list"}'},
+        ]),
+        _final_chunk("done"),
+    ])
+    seen = []
+
+    def fake_execute(name, args, **_kwargs):
+        seen.append(_state.get_turn_tools_run())
+        return ToolResult(ok=True, output="ok")
+
+    monkeypatch.setattr("alpi.tools.execute", fake_execute)
+
+    patched_engine.run_turn("work", emit=lambda _e: None)
+
+    assert calls["i"] == 2
+    assert seen == [0, 1]

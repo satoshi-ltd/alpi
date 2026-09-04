@@ -933,3 +933,12 @@ def test_research_prefixes_inner_emit_with_step_counter(
         f"expected prefixed inner label, got: {captured}"
     )
     assert any(s.startswith("fast · step 1/") for s in captured)
+
+
+def test_terminal_default_timeout_grows_inside_pipeline_turns(monkeypatch):
+    from alpi.tools import terminal as terminal_mod
+
+    monkeypatch.delenv("ALPI_WORKGROUP_PIPELINE", raising=False)
+    assert terminal_mod.default_run_timeout() == 120
+    monkeypatch.setenv("ALPI_WORKGROUP_PIPELINE", "1")
+    assert terminal_mod.default_run_timeout() == 900

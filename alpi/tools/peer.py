@@ -65,13 +65,19 @@ class PeerTool(Tool):
 
         result = asyncio.run(alp_mention.execute(get_home(), peer_id, prompt))
         if not result.ok:
-            return ToolResult(ok=False, output="", error=result.error)
+            return ToolResult(
+                ok=False, output="", error=result.error,
+                transient=getattr(result, "transient", False),
+            )
 
         usage = (
             f"\n\n---\ntokens: in={result.tokens_in} out={result.tokens_out} · "
             f"cost=${result.cost:.4f}"
         )
-        return ToolResult(ok=True, output=result.reply + usage)
+        return ToolResult(
+            ok=True, output=result.reply + usage,
+            transient=getattr(result, "transient", False),
+        )
 
 
 TOOL = PeerTool

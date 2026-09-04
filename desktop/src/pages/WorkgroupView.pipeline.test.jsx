@@ -93,6 +93,36 @@ beforeEach(() => {
   fetchWorkgroupTranscriptMock.mockResolvedValue(POSTS);
 });
 
+describe("WorkgroupView working heartbeats", () => {
+  it("labels every #working card WORKING, even once a later heartbeat supersedes it", async () => {
+    fetchWorkgroupTranscriptMock.mockResolvedValue([
+      ...POSTS,
+      { seq: 43, from_pubkey: "quill-pubkey", body: "#working" },
+      { seq: 44, from_pubkey: "quill-pubkey", body: "#working half written; next pages (continuation)" },
+    ]);
+    tasksReply({
+      active: { slug: "enrich", title: "go", opened_seq: 42 },
+      closed: [],
+      blocked: null,
+      pipeline_run: {
+        pipeline: "setup",
+        status: "running",
+        started_seq: 40,
+        current_phase: "enrich",
+        phases: [
+          { slug: "setup", state: "completed", seq: 41 },
+          { slug: "enrich", state: "current", seq: 42 },
+        ],
+      },
+    });
+
+    render(<WorkgroupView workgroup={workgroup} profiles={profiles} connectionId="local" />);
+
+    await waitFor(() => expect(screen.getAllByText("WORKING")).toHaveLength(2));
+    expect(screen.queryByText("WORK")).toBeNull();
+  });
+});
+
 describe("WorkgroupView pipeline strip", () => {
   it("shows a pipeline loading row until the first canonical fold arrives", async () => {
     let resolveTasks;

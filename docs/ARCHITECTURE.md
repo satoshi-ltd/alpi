@@ -275,7 +275,7 @@ that live at `{home}/skills/<category>/<name>/`.
 
 ### Engine loop (`alpi/engine.py`)
 
-Per turn: append user message → loop {LLM stream → emit deltas → exec tool calls → append tool results} until the LLM stops emitting tool calls OR the effective step ceiling is hit — `max_steps_per_turn` (default 100), raised to 1000 for free (zero-priced), local/ollama, or positive-daily-budget profiles **when left at the default**; an explicit value is always respected. Hitting the ceiling does not drop the turn: the engine makes one tools-off wrap-up call so the model still returns a best-effort final reply. `interrupt_requested` is polled at three checkpoints (between iterations, mid-stream, between tool calls). A turn lock serializes concurrent runs so a delayed `research` tool from the previous turn can't bleed into the next.
+Per turn: append user message → loop {LLM stream → emit deltas → exec tool calls → append tool results} until the LLM stops emitting tool calls OR `max_steps_per_turn` is hit. The configured value (default 100 model iterations) is literal for every provider and budget. Hitting it does not drop gathered work: normal chats get one tools-off best-effort wrap-up; detached workgroup turns get one `workgroup_post`-only handoff. `interrupt_requested` is polled at three checkpoints (between iterations, mid-stream, between tool calls). A turn lock serializes concurrent runs so a delayed `research` tool from the previous turn can't bleed into the next.
 
 Events emitted to the UI sink: `user`, `reasoning_delta`, `assistant_delta`, `assistant_done`, `tool_start`, `tool_state`, `tool_end`, `usage`, `error`, `done`, `interrupted`. The TUI consumes them; the scheduler subprocess consumes a subset via JSON-lines.
 
@@ -287,7 +287,7 @@ still carries accounting fields but cannot move a client's conversation meter.
 
 The system prompt for each turn is built from: `AGENT.md` (agent profile — voice, style, identity) → base prompt → environment block (workspace, profile home, path rule) → **platform hint** (`_platform_hint()` — injects per-surface guidance when `ALPI_PLATFORM` is set by the caller: `cron`; empty for TUI and the apps) → **skills index** (auto-injected by `alpi.tools.skill.skills_index_block`) → `USER.md` → `MEMORY.md`.
 
-The scheduler (`alpi/scheduler/run.py`) sets `ALPI_PLATFORM=cron` so scheduled jobs run knowing no user is present and they cannot ask for clarification. Each fire runs as a subprocess capped at `job_run_timeout(job)` seconds — `job.timeout` if set, else `DEFAULT_RUN_TIMEOUT_SECONDS` (900), clamped to `[30, MAX_RUN_TIMEOUT_SECONDS]` (3600). The cap is a stuck-process backstop for unattended runs, not the cost guard (`budget.daily_usd` is) and not a hint that jobs must be short; heavy jobs (deep research, multi-step publishing) opt into a longer budget via `schedule(add|update, timeout=…)`. The scheduler passes the child a soft budget via `ALPI_TURN_BUDGET_S` (the cap minus a ~10% reserve, floor 60s); when the engine crosses it mid-turn it makes one tools-off wrap-up call and returns a best-effort final reply instead of being killed with nothing — the same graceful close the max-step ceiling gets. The hard `subprocess` timeout remains as the last-resort kill if the wrap-up itself stalls.
+The scheduler (`alpi/scheduler/run.py`) sets `ALPI_PLATFORM=cron` so scheduled jobs run knowing no user is present and they cannot ask for clarification. Each fire runs as a subprocess capped at `job_run_timeout(job)` seconds — `job.timeout` if set, else `DEFAULT_RUN_TIMEOUT_SECONDS` (900), clamped to `[30, MAX_RUN_TIMEOUT_SECONDS]` (3600). The cap is a stuck-process backstop for unattended runs, not the cost guard (`budget.daily_usd` is) and not a hint that jobs must be short; heavy jobs (deep research, multi-step publishing) opt into a longer budget via `schedule(add|update, timeout=…)`. The scheduler passes the child a soft budget via `ALPI_TURN_BUDGET_S` (the cap minus a ~10% reserve, floor 60s); when the engine crosses it, normal jobs get one tools-off best-effort reply and detached workgroup turns get one `workgroup_post`-only handoff. The hard subprocess timeout remains the last-resort kill if finalization itself stalls.
 
 Cron jobs with `no_agent: true` skip the LLM entirely. The `prompt` is shlex-tokenized and exec'd directly (`shell=False`); `${ALPI_HOME}` expands to the profile home and the profile's `.env` overrides inherited env keys so skills find their declared `requires_env`. A form-based allowlist enforces that the command is `python[3] [flags] <script>` or `<script>` invoked directly, where `<script>` resolves to `<home>/skills/<category>/<name>/scripts/…`; non-python executables and `-c`/`-m` inline-code flags are rejected at both `schedule(add)` time and inside the scheduler before exec. Use this for deterministic skills (sync, file processors) — saves both tokens and the agent boot latency per fire.
 
@@ -514,9 +514,9 @@ readable. These are internal capabilities, not configurable services:
   on a Unix socket plus optional Noise_XK on TCP: `link.ping`,
   `link.ask`, `link.cancel` **and** every `workgroup.*`
   verb.
-- **workgroups** — the **poller** (outbound). Periodically calls
-  `workgroup.pull` against the hubs of every workgroup this profile
-  subscribes to, decrypts new posts, and dispatches an autonomous
+- **workgroups** — the **poller** (outbound). Holds `workgroup.pull` open
+  for active subscriptions and uses staggered nonblocking probes for idle
+  or paused mirrors, decrypts new posts, and dispatches an autonomous
   agent turn when a post mentions this profile or opens a `#task`.
   Sibling preempt watcher ticks ~6× faster to abort in-flight
   responses when a new `#task` lands. Independent from `alp`

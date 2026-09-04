@@ -102,7 +102,7 @@ Vision model row in desktop/mobile. `read_image` and
 the profile's main model. It does **not** reroute image attachments sent directly
 to chat: those remain part of the main model's turn.
 
-`max_steps_per_turn` is a **runaway-loop backstop, not the cost guard** — the cost guard is `budget.daily_usd`. Hitting the cap does NOT fail the turn: the engine forces one tools-off **wrap-up** reply so the gathered work (and its cost) isn't thrown away. **When left at the default**, a **free** model (zero per-token pricing), a **local/ollama** one, or a profile with a positive daily budget raises the effective ceiling to 1000; the model is cost-free or the ledger checks the configured spend cap between steps. An explicit step value is always respected. Raise it for agentic profiles whose skills legitimately chain many tool calls.
+`max_steps_per_turn` is a **runaway-loop backstop, not the cost guard** — the cost guard is `budget.daily_usd`. It counts model iterations, and the configured value (default 100) is literal for every provider and budget. Hitting the cap does not discard gathered work: normal chats get one tools-off best-effort wrap-up, while detached workgroup turns get one `workgroup_post`-only handoff. Raise it explicitly only for profiles whose skills legitimately need longer tool chains.
 
 `tools.budget.per_result_chars` caps the size of any tool output the LLM
 sees in-context, with a `… [N chars elided by tool budget]` suffix when
@@ -732,7 +732,8 @@ host:
 The address itself lives in `network.host` (shared with the ALP listener),
 not here. `host.endpoints` is advertisement only: it does not open listeners,
 terminate TLS, or change authentication. A `wss://` route normally points at a
-TLS reverse proxy such as Caddy, which forwards to the daemon's `tcp_port`.
+TLS front-end — a reverse proxy such as Caddy, or a managed edge like a cloud
+load balancer / CDN — which forwards to the daemon's `tcp_port`.
 The Service UI shows that derived WS endpoint as **Private route** and the
 configured WSS endpoint as **Public route**. Removing the public route removes
 only WSS advertisement; private access continues whenever a safe private

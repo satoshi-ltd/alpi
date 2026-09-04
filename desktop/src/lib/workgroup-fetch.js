@@ -71,3 +71,9 @@ export function invalidateTranscriptCache(connectionId) {
     if (k.startsWith(prefix)) cache.delete(k);
   }
 }
+
+export function invalidateWorkgroupTranscriptCache(connectionId, profile, wgId) {
+  const key = makeKey(connectionId, profile, wgId);
+  cursors.delete(key);
+  cache.delete(key);
+}

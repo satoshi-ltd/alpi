@@ -195,6 +195,15 @@ def _record_terminal_run(
         pass
 
 
+PIPELINE_RUN_TIMEOUT_SECONDS = 900
+DEFAULT_RUN_TIMEOUT_SECONDS = 120
+
+
+def default_run_timeout() -> int:
+    # A bootstrap's cold `npm ci` under a full fleet outlives 120 s; the soft turn budget still bounds the turn.
+    return PIPELINE_RUN_TIMEOUT_SECONDS if os.environ.get("ALPI_WORKGROUP_PIPELINE") == "1" else DEFAULT_RUN_TIMEOUT_SECONDS
+
+
 class Terminal(Tool):
     name = "terminal"
     description = (
@@ -232,7 +241,7 @@ class Terminal(Tool):
                 "default": "run",
             },
             "command": {"type": "string", "description": "Shell command (run/background)."},
-            "timeout": {"type": "integer", "description": "Seconds (run only).", "default": 120},
+            "timeout": {"type": "integer", "description": "Seconds (run only). Defaults to 120, or 900 inside a pipeline turn where a cold `npm ci` must finish.", "default": 120},
             "cwd": {"type": "string", "description": "Working directory (absolute)."},
             "pid": {"type": "integer", "description": "PID for status/output/kill."},
         },
@@ -242,12 +251,12 @@ class Terminal(Tool):
         self,
         action: str = "run",
         command: str | None = None,
-        timeout: int = 120,
+        timeout: int | None = None,
         cwd: str | None = None,
         pid: int | None = None,
     ) -> ToolResult:
         if action == "run":
-            return self._run_fg(command or "", timeout, cwd)
+            return self._run_fg(command or "", timeout or default_run_timeout(), cwd)
         if action == "background":
             return self._run_bg(command or "", cwd)
         if action in ("status", "output", "kill"):

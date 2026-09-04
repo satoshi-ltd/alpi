@@ -95,6 +95,25 @@ def test_in_paths_edits_and_gate_outputs_stay_clean(tmp_path: Path):
     assert gates.paths_violations(wg_dir, step, workspace) == ""
 
 
+def test_owned_paths_changed_distinguishes_a_handoff_from_no_progress(
+    tmp_path: Path,
+):
+    workspace = tmp_path / "ws"
+    root = _project(workspace)
+    wg_dir = tmp_path / "wgdir"
+    step = _step(_wg())
+
+    assert gates.owned_paths_changed(wg_dir, step, workspace) is None
+    gates.snapshot_baseline(wg_dir, step, workspace)
+    assert gates.owned_paths_changed(wg_dir, step, workspace) is False
+
+    (root / "assets" / "manifest.yaml").write_text("outside: changed\n")
+    assert gates.owned_paths_changed(wg_dir, step, workspace) is False
+
+    (root / "work" / "status.yaml").write_text("phase: complete\n")
+    assert gates.owned_paths_changed(wg_dir, step, workspace) is True
+
+
 def test_deletion_outside_paths_is_a_violation(tmp_path: Path):
     workspace = tmp_path / "ws"
     root = _project(workspace)
@@ -219,6 +238,114 @@ async def test_gate_advance_reds_on_a_boundary_violation(tmp_path: Path, monkeyp
 
     log = home / "alp" / "workgroups" / "wg_gate_paths" / "gates" / "media-build-2.log"
     assert log.exists(), "the violation is auditable like any other red"
+
+
+@pytest.mark.asyncio
+async def test_no_progress_delivery_continues_without_spending_repairs(
+    tmp_path: Path, monkeypatch,
+):
+    home = tmp_path / "hub"
+    home.mkdir()
+    workspace = tmp_path / "ws"
+    _project(workspace)
+    wg = _wg("wg_no_progress")
+    monkeypatch.setattr(
+        "alpi.alp.peers.load",
+        lambda h: [types.SimpleNamespace(id="pixel", pubkey="PIXELPK")],
+    )
+    monkeypatch.setattr(
+        "alpi.config.load",
+        lambda h: types.SimpleNamespace(workspace_path=workspace),
+    )
+    monkeypatch.setattr(
+        "alpi.alp.pipeline_gates.run_gate",
+        lambda step, ws: (False, "work/status.yaml is unchanged"),
+    )
+    monkeypatch.setattr(service, "_set_hub_responded_seq", lambda *a: None)
+    posted: list[str] = []
+
+    async def fake_post(h, wid, text, cost=None):
+        posted.append(text.decode())
+        return {"seq": 20 + len(posted)}
+
+    monkeypatch.setattr("alpi.alp.workgroup_client.post", fake_post)
+    service._GATE_ATTEMPTED.clear()
+    service._GATE_REPAIRS.clear()
+    service._GATE_NO_PROGRESS.clear()
+    opener = {"seq": 1, "from": "HUB", "text": "@pixel #task #media-build rebuild"}
+    await service._ensure_phase_baseline(home, wg, [opener])
+
+    for seq in (2, 3):
+        out = await service._maybe_gate_advance(
+            home, wg,
+            [opener, {"seq": seq, "from": "PIXELPK", "text": "not delivered"}],
+            "HUB",
+        )
+        assert out is True
+
+    out = await service._maybe_gate_advance(
+        home, wg,
+        [opener, {"seq": 4, "from": "PIXELPK", "text": "still not delivered"}],
+        "HUB",
+    )
+
+    assert isinstance(out, service._GateRepairExhausted)
+    assert service._GATE_REPAIRS == {}
+    assert "continuation 1/2" in posted[0]
+    assert "continuation 2/2" in posted[1]
+    assert "No gate repair round was consumed" in out
+
+
+@pytest.mark.asyncio
+async def test_repeated_red_delivery_counts_as_no_progress(
+    tmp_path: Path, monkeypatch,
+):
+    home = tmp_path / "hub"
+    home.mkdir()
+    workspace = tmp_path / "ws"
+    root = _project(workspace)
+    wg = _wg("wg_repeated_red")
+    monkeypatch.setattr(
+        "alpi.alp.peers.load",
+        lambda h: [types.SimpleNamespace(id="pixel", pubkey="PIXELPK")],
+    )
+    monkeypatch.setattr(
+        "alpi.config.load",
+        lambda h: types.SimpleNamespace(workspace_path=workspace),
+    )
+    monkeypatch.setattr(service, "_set_hub_responded_seq", lambda *a: None)
+    posted: list[str] = []
+
+    async def fake_post(h, wid, text, cost=None):
+        posted.append(text.decode())
+        return {"seq": 20 + len(posted)}
+
+    monkeypatch.setattr("alpi.alp.workgroup_client.post", fake_post)
+    service._GATE_ATTEMPTED.clear()
+    service._GATE_RED_SIGNATURE.clear()
+    service._GATE_REPAIRS.clear()
+    service._GATE_NO_PROGRESS.clear()
+    opener = {"seq": 1, "from": "HUB", "text": "@pixel #task #media-build rebuild"}
+    await service._ensure_phase_baseline(home, wg, [opener])
+    (root / "work" / "status.yaml").write_text("phase: attempted\n")
+    (root / "assets" / "manifest.yaml").write_text("outside: changed\n")
+
+    first = await service._maybe_gate_advance(
+        home, wg,
+        [opener, {"seq": 2, "from": "PIXELPK", "text": "first delivery"}],
+        "HUB",
+    )
+    second = await service._maybe_gate_advance(
+        home, wg,
+        [opener, {"seq": 3, "from": "PIXELPK", "text": "same delivery again"}],
+        "HUB",
+    )
+
+    assert first is True
+    assert second is True
+    assert len(service._GATE_REPAIRS) == 1
+    assert "repair round 1/3" in posted[0]
+    assert "continuation 1/2" in posted[1]
 
 
 @pytest.fixture

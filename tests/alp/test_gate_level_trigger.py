@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+import time
 import types
 from pathlib import Path
 
@@ -47,6 +49,7 @@ def _clear_gate_state():
     service._GATE_RECHECK_AT.clear()
     service._GATE_RED_SIGNATURE.clear()
     service._GATE_RED_RETRY.clear()
+    service._GATE_REPAIR_RETRY.clear()
 
 
 @pytest.fixture(autouse=True)
@@ -185,6 +188,76 @@ async def test_green_gate_advances_through_the_real_workgroup_sdk(tmp_path, monk
     texts = [post["text"] for post in _real_recent(home, wg)]
     assert texts[-2].startswith("#done content verified")
     assert texts[-1].startswith("@lingua #task #translation")
+
+
+@pytest.mark.asyncio
+async def test_green_gate_cannot_override_explicit_qa_fail(
+    tmp_path, monkeypatch, caplog,
+):
+    from alpi import home as home_mod
+    from alpi.host import workgroup as host_wg
+
+    root = tmp_path / "root"
+    monkeypatch.setattr(home_mod, "_ROOT", root)
+    home = root / "profiles" / "mira"
+    lens_home = root / "profiles" / "lens"
+    home.mkdir(parents=True)
+    lens_home.mkdir(parents=True)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    lens_pk = load_or_generate(lens_home).pubkey_b64()
+    peers_mod.add(home, Peer(id="lens", pubkey=lens_pk, allow=["workgroup.post"]))
+    wg = wg_mod.create(
+        home,
+        name="site",
+        hub_kp=load_or_generate(home),
+        member_pubkeys=[lens_pk],
+        pipelines={"qa": ["qa"]},
+        launch_pipeline="qa",
+        pipeline_steps={
+            "qa": {
+                "owner": "lens",
+                "task": "audit the build",
+                "gate": {"argv": ["true"], "cwd": ""},
+            },
+        },
+    )
+    monkeypatch.setattr(
+        "alpi.config.load",
+        lambda h: types.SimpleNamespace(workspace_path=workspace),
+    )
+    monkeypatch.setattr(
+        "alpi.alp.pipeline_gates.run_gate",
+        lambda step, ws: (True, "audit clean"),
+    )
+
+    await wc.post(home, wg.meta.id, b"@lens #task #qa audit the build")
+    _append_member_post(
+        home,
+        wg,
+        lens_pk,
+        "@mira #qa audit of dist/ complete — QA FAIL.\n\n"
+        "BLOCKER · authored claim contradicts the rendered collection",
+    )
+
+    with caplog.at_level(logging.INFO, logger="alpi.service"):
+        result = await service._maybe_gate_advance(
+            home, wg, _real_recent(home, wg), wg.meta.hub_pubkey,
+        )
+    assert isinstance(result, str)
+    assert "qa-verdict-mismatch" in result
+    matching = [r for r in caplog.records if "qa-verdict-mismatch" in r.message]
+    assert matching and all(r.levelno == logging.INFO for r in matching)
+    run = host_wg.fold_task_state(home, wg.meta.id)["pipeline_run"]
+    assert run["status"] == "running"
+    assert run["current_phase"] == "qa"
+
+    _append_member_post(home, wg, lens_pk, "@mira #qa re-audit complete — QA PASS.")
+    assert await service._maybe_gate_advance(
+        home, wg, _real_recent(home, wg), wg.meta.hub_pubkey,
+    ) is True
+    run = host_wg.fold_task_state(home, wg.meta.id)["pipeline_run"]
+    assert run["status"] == "completed"
 
 
 @pytest.mark.asyncio
@@ -469,6 +542,9 @@ async def test_an_abandoned_stall_stops_bumping_and_logging(tmp_path, monkeypatc
         return real_bump(h, wid, seq)
 
     monkeypatch.setattr(service, "_bump_hub_watchdog_count", counting_bump)
+    service._WATCHDOG_OBSERVED_AT[(str(home), wg.meta.id)] = (
+        2, time.monotonic() - service._HUB_FOLLOWUP_STALE_SECONDS - 1,
+    )
 
     for _ in range(5):
         await service._maybe_watchdog_close(home, "mira", wg, _recent())
@@ -634,8 +710,76 @@ async def test_hub_routed_gate_failure_does_not_retask_read_only_owner(
     assert isinstance(result, str)
     assert "declares hub-routed repair" in result
     assert "Do not re-task @lens" in result
+    assert "(round 1/3)" in result
     assert posted == []
-    assert service._GATE_REPAIRS == {}
+    assert list(service._GATE_REPAIRS.values()) == [1]
+
+
+@pytest.mark.asyncio
+async def test_qa_fail_rewinds_to_the_artifact_owner_twice_then_stops(
+    tmp_path, monkeypatch,
+):
+    home = tmp_path / "hub-rewind"
+    (home / "alp").mkdir(parents=True)
+    steps = {
+        "content": {
+            "owner": "quill", "task": "write the copy",
+            "gate": {"argv": ["true"], "cwd": ""}, "paths": ["src/content/**"],
+        },
+        "qa": {
+            "owner": "lens", "task": "audit it",
+            "gate": {"argv": ["true"], "cwd": "", "repair": "hub"},
+        },
+    }
+    wg = types.SimpleNamespace(meta=types.SimpleNamespace(
+        id="wg_rewind", name="site", hub_pubkey="HUB", paused=False,
+        pipelines={"setup": ("content", "qa")}, launch_pipeline="setup",
+        pipeline_steps=steps,
+    ), members=[types.SimpleNamespace(pubkey="LENSPK")])
+    monkeypatch.setattr(
+        "alpi.alp.peers.load",
+        lambda h: [types.SimpleNamespace(id="lens", pubkey="LENSPK")],
+    )
+    monkeypatch.setattr(
+        "alpi.alp.peers.get_by_pubkey",
+        lambda h, pk: types.SimpleNamespace(id="lens", pubkey="LENSPK") if pk == "LENSPK" else None,
+    )
+    monkeypatch.setattr(
+        "alpi.config.load",
+        lambda h: types.SimpleNamespace(workspace_path=tmp_path),
+    )
+    monkeypatch.setattr("alpi.alp.pipeline_gates.run_gate", lambda step, ws: (True, "audit clean"))
+    monkeypatch.setattr(service, "_set_hub_responded_seq", lambda *a: None)
+    service._GATE_ATTEMPTED.clear()
+    recent = [
+        {"seq": 5, "from": "HUB", "ts": _OLD, "text": "@lens #task #qa audit it"},
+        {"seq": 6, "from": "LENSPK", "ts": _OLD, "text": "QA FAIL · counts exceed rendered items · fix in #content"},
+    ]
+    posted = []
+
+    async def fake_post(h, wid, text, cost=None):
+        posted.append(text.decode())
+        return {"seq": 10 + len(posted)}
+
+    monkeypatch.setattr("alpi.alp.workgroup_client.post", fake_post)
+
+    assert await service._maybe_gate_advance(home, wg, recent, "HUB") is True
+    assert posted[0].startswith("#done BLOCKED · QA FAIL · rewinding to #content (1/2)")
+    assert posted[1].startswith("@quill #task #content · write the copy · QA FAIL from @lens (rewind 1/2): QA FAIL")
+    assert service._qa_rewind_count(home, "wg_rewind") == 1
+
+    service._GATE_ATTEMPTED.clear()
+    recent[1] = {"seq": 26, "from": "LENSPK", "ts": _OLD, "text": "QA FAIL · still wrong"}
+    recent[0] = {"seq": 25, "from": "HUB", "ts": _OLD, "text": "@lens #task #qa audit it"}
+    assert await service._maybe_gate_advance(home, wg, recent, "HUB") is True
+    assert "(2/2)" in posted[2]
+
+    service._GATE_ATTEMPTED.clear()
+    recent[0] = {"seq": 45, "from": "HUB", "ts": _OLD, "text": "@lens #task #qa audit it"}
+    recent[1] = {"seq": 46, "from": "LENSPK", "ts": _OLD, "text": "QA FAIL · third time"}
+    before = len(posted)
+    await service._maybe_gate_advance(home, wg, recent, "HUB")
+    assert not any("rewinding to" in text for text in posted[before:])
 
 
 @pytest.mark.asyncio
@@ -667,6 +811,9 @@ async def test_watchdog_reruns_the_gate_instead_of_waking(tmp_path, monkeypatch)
     )
     service._GATE_ATTEMPTED[(str(home), "wg_wd1", 2)] = True
     monkeypatch.setattr(service, "_GATE_RECHECK_SECONDS", 0)
+    service._WATCHDOG_OBSERVED_AT[(str(home), wg.meta.id)] = (
+        2, time.monotonic() - service._HUB_FOLLOWUP_STALE_SECONDS - 1,
+    )
 
     await service._maybe_watchdog_close(home, "mira", wg, _recent())
     assert spawned == []
@@ -709,6 +856,9 @@ async def test_a_stalled_red_gate_is_not_respawned_per_watchdog_pass(tmp_path, m
     monkeypatch.setattr(service, "_dispatch_workgroup_turn", fake_dispatch)
     monkeypatch.setattr(service, "_spawn_dispatch", lambda wid, coro: coro.close())
     monkeypatch.setattr(service, "_emit_wg_blocked", lambda *a, **k: None)
+    service._WATCHDOG_OBSERVED_AT[(str(home), wg.meta.id)] = (
+        2, time.monotonic() - service._HUB_FOLLOWUP_STALE_SECONDS - 1,
+    )
 
     await service._maybe_watchdog_close(home, "mira", wg, _recent())
     assert captured, "the wake must still fire when the recheck stays red"
@@ -727,13 +877,17 @@ def test_resume_level_triggers_the_gate(tmp_path):
     service._GATE_ATTEMPTED[(str(home), "wg_b", 7)] = True
     service._GATE_REPAIRS[(str(home), "wg_a", "content", 1)] = 2
     service._GATE_REPAIRS[(str(home), "wg_b", "content", 1)] = 2
+    service._GATE_REPAIR_RETRY.add((str(home), "wg_a", 7))
+    service._GATE_REPAIR_RETRY.add((str(home), "wg_b", 7))
 
     service.reset_workgroup_poller_state(home, "wg_a")
 
     assert (str(home), "wg_a", 7) not in service._GATE_ATTEMPTED
     assert (str(home), "wg_a", "content", 1) not in service._GATE_REPAIRS
+    assert (str(home), "wg_a", 7) not in service._GATE_REPAIR_RETRY
     assert (str(home), "wg_b", 7) in service._GATE_ATTEMPTED
     assert (str(home), "wg_b", "content", 1) in service._GATE_REPAIRS
+    assert (str(home), "wg_b", 7) in service._GATE_REPAIR_RETRY
 
 
 @pytest.mark.parametrize("result, needs", [
@@ -789,6 +943,9 @@ async def test_failing_terminal_close_gets_one_routing_wake(tmp_path, monkeypatc
     blocked: list = []
     monkeypatch.setattr(
         service, "_emit_wg_blocked_once", lambda *a, **k: blocked.append(a),
+    )
+    service._WATCHDOG_OBSERVED_AT[(str(home), wg.meta.id)] = (
+        3, time.monotonic() - service._HUB_FOLLOWUP_STALE_SECONDS - 1,
     )
 
     await service._maybe_watchdog_close(home, "mira", wg, recent)
@@ -1007,3 +1164,130 @@ def test_the_session_separates_unreported_from_a_measured_miss(tmp_path):
     s.record(input_tokens=1000, output_tokens=50, cost=0.01, cached_input_tokens=800)
     assert (s.cached_input_tokens, s.cache_measured_input_tokens) == (800, 2000)
     assert s.input_tokens == 3000
+
+
+def test_qa_rewind_target_follows_the_files_the_verdict_names():
+    steps = {
+        "setup": {"owner": "pixel", "paths": ["**"]},
+        "intake": {"owner": "scout", "paths": ["work/**", "src/config/site.json"]},
+        "content": {"owner": "quill", "paths": ["src/content/**", "work/status.yaml"]},
+        "build": {"owner": "pixel", "paths": ["dist/**"]},
+        "qa": {"owner": "lens"},
+    }
+    wg = types.SimpleNamespace(meta=types.SimpleNamespace(
+        pipelines={"setup": ("setup", "intake", "content", "build", "qa")}, pipeline_steps=steps,
+    ))
+    step = types.SimpleNamespace(phase="qa")
+
+    site_json = "QA FAIL · editorial note leaked into `src/config/site.json` (contact.address.region) and every built page"
+    assert service._qa_rewind_target(wg, step, site_json) == "intake"
+    copy = "QA FAIL · src/content/rooms/suite.es.json summary repeats the hero"
+    assert service._qa_rewind_target(wg, step, copy) == "content"
+    assert service._qa_rewind_target(wg, step, "QA FAIL · counts exceed rendered items · fix in #build") == "build"
+    assert service._qa_rewind_target(wg, step, "QA FAIL · dist/es/index.html has two h1") == "content"
+
+
+@pytest.mark.asyncio
+async def test_hub_routed_gate_failure_rewinds_to_the_phase_owning_the_named_file(
+    tmp_path, monkeypatch,
+):
+    home = tmp_path / "hub-gate-rewind"
+    (home / "alp").mkdir(parents=True)
+    steps = {
+        "content": {
+            "owner": "quill", "task": "write the copy",
+            "gate": {"argv": ["true"], "cwd": ""}, "paths": ["src/content/**"],
+        },
+        "build": {
+            "owner": "pixel", "task": "run the build once",
+            "gate": {"argv": ["true"], "cwd": ""}, "paths": ["dist/**", "public/img/**"],
+        },
+        "qa": {
+            "owner": "lens", "task": "audit it",
+            "gate": {"argv": ["sh", "-c", "echo 'FAIL boundary: public/img/.gitkeep'; exit 1"], "cwd": "", "repair": "hub"},
+        },
+    }
+    wg = types.SimpleNamespace(meta=types.SimpleNamespace(
+        id="wg_gate_rewind", name="site", hub_pubkey="HUB", paused=False,
+        pipelines={"setup": ("content", "build", "qa")}, launch_pipeline="setup",
+        pipeline_steps=steps,
+    ), members=[types.SimpleNamespace(pubkey="LENSPK")])
+    monkeypatch.setattr(
+        "alpi.alp.peers.load",
+        lambda h: [types.SimpleNamespace(id="lens", pubkey="LENSPK")],
+    )
+    monkeypatch.setattr(
+        "alpi.alp.peers.get_by_pubkey",
+        lambda h, pk: types.SimpleNamespace(id="lens", pubkey="LENSPK") if pk == "LENSPK" else None,
+    )
+    monkeypatch.setattr(
+        "alpi.config.load",
+        lambda h: types.SimpleNamespace(workspace_path=tmp_path),
+    )
+    recent = [
+        {"seq": 1, "from": "HUB", "ts": _OLD, "text": "@lens #task #qa audit it"},
+        {"seq": 2, "from": "LENSPK", "ts": _OLD, "text": "QA PASS · dist is clean"},
+    ]
+    posted = []
+
+    async def fake_post(home_, wg_id, body, **kwargs):
+        posted.append(body.decode())
+        return {"seq": 10 + len(posted)}
+
+    monkeypatch.setattr("alpi.alp.workgroup_client.post", fake_post)
+
+    result = await service._maybe_gate_advance(home, wg, recent, "HUB")
+
+    assert result is True
+    assert posted[0] == "#done BLOCKED · GATE qa red · rewinding to #build (1/2)"
+    assert posted[1].startswith("@pixel #task #build · run the build once · GATE qa red (rewind 1/2): ")
+    assert "public/img/.gitkeep" in posted[1]
+
+
+@pytest.mark.asyncio
+async def test_hub_routed_gate_failure_closes_blocked_after_three_hub_rounds(
+    tmp_path, monkeypatch,
+):
+    home = tmp_path / "hub-exhausted"
+    home.mkdir()
+    steps = {
+        "qa": {
+            "owner": "lens", "task": "audit it",
+            "gate": {"argv": ["sh", "-c", "echo 'FAIL boundary: public/img/.gitkeep'; exit 1"], "cwd": "", "repair": "hub"},
+        },
+    }
+    wg = types.SimpleNamespace(meta=types.SimpleNamespace(
+        id="wg_hub_exhausted", name="site", hub_pubkey="HUB", paused=False,
+        pipelines={"setup": ("qa",)}, launch_pipeline="setup",
+        pipeline_steps=steps,
+    ))
+    monkeypatch.setattr(
+        "alpi.alp.peers.load",
+        lambda h: [types.SimpleNamespace(id="lens", pubkey="LENSPK")],
+    )
+    monkeypatch.setattr(
+        "alpi.config.load",
+        lambda h: types.SimpleNamespace(workspace_path=tmp_path),
+    )
+    posted = []
+
+    async def fake_post(home_, wg_id, body, **kwargs):
+        posted.append(body.decode())
+        return {"seq": 90 + len(posted)}
+
+    monkeypatch.setattr("alpi.alp.workgroup_client.post", fake_post)
+    recent = [{"seq": 1, "from": "HUB", "ts": _OLD, "text": "@lens #task #qa audit it"}]
+    results = []
+    for n in range(4):
+        recent.append({"seq": 2 + 2 * n, "from": "LENSPK", "ts": _OLD, "text": f"QA PASS · re-audit {n}"})
+        results.append(await service._maybe_gate_advance(home, wg, recent, "HUB"))
+        recent.append({"seq": 3 + 2 * n, "from": "HUB", "ts": _OLD, "text": f"routing attempt {n} rejected"})
+
+    assert [isinstance(r, str) for r in results] == [True, True, True, False]
+    assert "(round 1/3)" in results[0] and "(round 3/3)" in results[2]
+    assert results[3] is True
+    assert posted == [
+        "#done BLOCKED · GATE qa red · hub repair exhausted after 3 rounds: "
+        + posted[0].split("rounds: ", 1)[1]
+    ]
+    assert "public/img/.gitkeep" in posted[0]

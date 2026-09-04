@@ -105,12 +105,28 @@ DISPATCH_FILE_MUTATION_TOOLS = frozenset({
     "delete_file", "edit_file", "write_file",
 })
 
+PIPELINE_SIDE_CHANNEL_TOOLS = frozenset({"peer"})
+
+PIPELINE_HISTORY_TOOLS = frozenset({
+    "memory",
+    "session_search",
+    "session_read",
+    "recall_sessions",
+    "index_sessions",
+    "workgroup_search",
+    "index_workgroups",
+})
+
 
 def dispatch_tool_denies() -> frozenset[str]:
     raw = os.environ.get("ALPI_WORKGROUP_WRITE_SCOPE")
+    denied: set[str] = (
+        set(PIPELINE_HISTORY_TOOLS) | set(PIPELINE_SIDE_CHANNEL_TOOLS)
+        if os.environ.get("ALPI_WORKGROUP_PIPELINE")
+        else set()
+    )
     if raw is None:
-        return frozenset()
-    denied: set[str] = set()
+        return frozenset(denied)
     from alpi.runtime import is_docker
     if is_docker():
         denied.add("terminal")
@@ -142,7 +158,17 @@ def dispatch_tool_deny_reasons(
     profile_denies = frozenset(profile_denies or ())
     reasons: dict[str, str] = {}
     for name in denied:
-        if name == "terminal":
+        if name in PIPELINE_HISTORY_TOOLS:
+            phase_reason = (
+                "historical profile context is unavailable during pipeline turns; "
+                "use only the active workgroup context and declared project inputs"
+            )
+        elif name in PIPELINE_SIDE_CHANNEL_TOOLS:
+            phase_reason = (
+                "direct peer messaging is unavailable during pipeline turns; "
+                "deliver through workgroup_post on the active workgroup"
+            )
+        elif name == "terminal":
             phase_reason = (
                 f"terminal is unavailable during scoped workgroup phase #{phase} "
                 "in Docker; use native file and search tools. Daemon gates still run"
@@ -157,7 +183,7 @@ def dispatch_tool_deny_reasons(
             f"tool denied for this profile by tools.deny in config.yaml; {phase_reason}. "
             "The phase boundary is an additional restriction"
             if name in profile_denies else
-            f"{phase_reason}. This is a temporary phase boundary, not tools.deny in config.yaml"
+            f"{phase_reason}. This is a temporary pipeline boundary, not tools.deny in config.yaml"
         )
     return reasons
 

@@ -119,6 +119,46 @@ async def test_streaming_link_ask_does_not_persist_inflight_stub(
 
 
 @pytest.mark.asyncio
+async def test_streaming_link_ask_preserves_remote_transient_error(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    from alpi.engine import AgentEvent
+
+    home = tmp_path / "bob"
+    home.mkdir()
+
+    class TransientEngine(_FakeEngine):
+        def run_turn(
+            self, prompt, emit, *, source="user", persist_inflight=True,
+        ):
+            emit(AgentEvent(
+                kind="error", text="provider unavailable", transient=True,
+            ))
+
+    def factory(*, home: Path, cfg):
+        return TransientEngine(home=home, cfg=cfg)
+
+    monkeypatch.setattr(alp_handlers, "Engine", factory)
+    monkeypatch.setattr("alpi.engine.Engine", factory)
+    monkeypatch.setattr(
+        alp_handlers.cfg_mod, "load", lambda _h: type("C", (), {"model": "x"})(),
+    )
+
+    frames = [
+        frame async for frame in alp_handlers._run_turn_stream(
+            home, "hello", "alice", alp_handlers._ActiveTurn(), asyncio.Lock(),
+        )
+    ]
+
+    assert frames[-1]["text"] == "[error] provider unavailable"
+    assert frames[-1]["transient"] is True
+    direct = alp_handlers._run_turn(
+        home, "hello", "alice", alp_handlers._ActiveTurn(),
+    )
+    assert direct["transient"] is True
+
+
+@pytest.mark.asyncio
 async def test_streaming_link_ask_keeps_active_turn_alive_with_progress_frames(
     monkeypatch, tmp_path: Path,
 ) -> None:

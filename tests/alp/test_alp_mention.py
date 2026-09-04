@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import socket
 from pathlib import Path
 
 import pytest
 
+from alpi.alp import client as alp_client
 from alpi.alp import peers as peers_mod
 from alpi.alp.mention import execute, parse
 from alpi.alp.peers import Peer
@@ -122,6 +124,96 @@ def test_no_home_skips_roster_validation() -> None:
 
 
 # execute() routing
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        alp_client.TargetOffline("offline"),
+        asyncio.TimeoutError(),
+        socket.gaierror(-2, "name not known"),
+        ConnectionResetError("reset"),
+        alp_client.RemoteError(-32005, "rate-limited"),
+        alp_client.RemoteError(-32007, "target-busy"),
+    ],
+)
+def test_transient_link_errors_are_classified(error: BaseException) -> None:
+    assert alp_client.is_transient_link_error(error) is True
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        alp_client.RemoteError(-32005, "budget-exceeded"),
+        alp_client.RemoteError(-32001, "capability-denied"),
+        alp_client.ClientError("handshake failed: pinned key mismatch"),
+        ValueError("bad local configuration"),
+    ],
+)
+def test_permanent_link_errors_are_not_classified_transient(
+    error: BaseException,
+) -> None:
+    assert alp_client.is_transient_link_error(error) is False
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        socket.gaierror(-2, "name not known"),
+        ConnectionResetError("reset"),
+        alp_client.RemoteError(-32005, "rate-limited"),
+        alp_client.RemoteError(-32007, "target-busy"),
+    ],
+)
+def test_execute_preserves_transient_peer_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, error: BaseException,
+) -> None:
+    home = tmp_path / "me"
+    home.mkdir()
+    peers_mod.add(
+        home,
+        Peer(id="bob", pubkey="BOB_PK", address="example.test:7425", allow=["link.ask"]),
+    )
+
+    async def fail_call(**kwargs):
+        if False:
+            yield None
+        raise error
+
+    monkeypatch.setattr(
+        "alpi.alp.mention.alp_client.call_tcp_stream", fail_call,
+    )
+
+    result = asyncio.run(execute(home, "bob", "ping"))
+
+    assert result.ok is False
+    assert result.transient is True
+
+
+def test_execute_preserves_remote_transient_final(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "me"
+    home.mkdir()
+    peers_mod.add(
+        home,
+        Peer(id="bob", pubkey="BOB_PK", address="example.test:7425", allow=["link.ask"]),
+    )
+
+    async def fake_call(**kwargs):
+        yield {
+            "text": "[error] provider unavailable",
+            "transient": True,
+        }, "final"
+
+    monkeypatch.setattr(
+        "alpi.alp.mention.alp_client.call_tcp_stream", fake_call,
+    )
+
+    result = asyncio.run(execute(home, "bob", "ping"))
+
+    assert result.ok is True
+    assert result.transient is True
 
 
 def test_execute_routes_remote_peer_over_tcp(

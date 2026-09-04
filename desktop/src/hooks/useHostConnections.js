@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { stampLastActive } from "../lib/connection-recency.js";
 import { invoke } from "@tauri-apps/api/core";
 
 import { pruneCachedMessages } from "../lib/workgroup-cache.js";
 import { subscribe } from "../lib/daemon-bus.js";
 import { purgeConnectionStorage } from "../lib/connection-gc.js";
 import { invalidateConnectionCaches } from "../lib/swr-cache.js";
-import { invalidateTranscriptCache } from "../lib/workgroup-fetch.js";
+import {
+  invalidateTranscriptCache,
+  invalidateWorkgroupTranscriptCache,
+} from "../lib/workgroup-fetch.js";
 import { invalidateSessionCache } from "../lib/session-cache.js";
 import { invalidateProfileDetailCache } from "./useProfileDetail.js";
 import { purgeConnectionReadState } from "./useReadState.js";
@@ -184,6 +188,19 @@ export function useHostConnections({
     } catch {}
   }, []);
 
+  const dropWorkgroup = useCallback((connectionId, profile, wgId) => {
+    const targetId = connectionId || "local";
+    if (hostConnectionsRef.current?.active_id !== targetId) return;
+    invalidateWorkgroupTranscriptCache(targetId, profile, wgId);
+    setWorkgroups((rows) => {
+      const next = rows.filter((w) => w.profile !== profile || w.id !== wgId);
+      if (next.length === rows.length) return rows;
+      saveToCache(targetId, profiles, next);
+      pruneCachedMessages(targetId, next);
+      return next;
+    });
+  }, [profiles, saveToCache]);
+
   const showCachedOrClear = useCallback(
     (connectionId, status) => {
       if (status === "auth-failed") {
@@ -356,6 +373,7 @@ export function useHostConnections({
     (id) => {
       const current = hostConnectionsRef.current;
       if (current.active_id === id) return;
+      stampLastActive(id);
       const previousState = current;
       const switchId = ++connectionSwitchRef.current;
       // ref + state must flip BEFORE loadFromCache — pruneCachedMessages reads hostConnectionsRef
@@ -469,6 +487,7 @@ export function useHostConnections({
     profiles,
     setProfiles,
     workgroups,
+    dropWorkgroup,
     connectionSyncing,
     connectionSwitching: switchTargetId != null && connectionSyncing,
     touchWorkgroup,

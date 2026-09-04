@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import WorkgroupsView from "./WorkgroupsView.jsx";
 
 const WORKGROUPS = [
-  { id: "wg-active", name: "Active hotel", profile: "mira", pipeline_status: "running", members: 7, mtime: 20, spent_usd: 1.2, budget_usd: 8 },
+  { id: "wg-active", name: "Active hotel", profile: "mira", pipeline_status: "running", pipeline_phase: "content", members: 7, mtime: 20, spent_usd: 1.2, budget_usd: 8 },
   { id: "wg-done", name: "Finished hotel", profile: "mira", pipeline_status: "completed", members: 7, mtime: 10 },
   { id: "wg-paused", name: "Paused hotel", profile: "mira", paused: true, members: 3, mtime: 5 },
   { id: "wg-queued", name: "Queued hotel", profile: "mira", pipeline_status: "queued", queue_position: 2, members: 7, mtime: 4 },
@@ -27,7 +27,7 @@ describe("WorkgroupsView", () => {
     expect(screen.getByText("4 workgroups")).toBeInTheDocument();
     expect(screen.getByText("1 working · 1 queued · 1 idle · 1 paused")).toBeInTheDocument();
     expect(screen.getByText("Active hotel")).toBeInTheDocument();
-    expect(screen.getByText("Working")).toBeInTheDocument();
+    expect(screen.getByText("Working · content")).toBeInTheDocument();
     expect(screen.getAllByText("Idle")).toHaveLength(1);
     expect(screen.getByText("Queued · #2")).toBeInTheDocument();
     expect(screen.queryByText("Complete")).not.toBeInTheDocument();
@@ -38,12 +38,52 @@ describe("WorkgroupsView", () => {
     expect(onOpenWorkgroup).toHaveBeenCalledWith(WORKGROUPS[1]);
   });
 
-  it("orders queued pipelines by their FIFO position", () => {
+  it("groups working first, then queued, then paused and idle by last update", () => {
+    const now = Math.floor(Date.now() / 1000);
     render(
       <WorkgroupsView
         workgroups={[
-          { id: "wg-2", name: "Second", profile: "mira", pipeline_status: "queued", queue_position: 2, mtime: 20 },
-          { id: "wg-1", name: "First", profile: "mira", pipeline_status: "queued", queue_position: 1, mtime: 10 },
+          { id: "wg-old-active", name: "Old active", profile: "mira", pipeline_status: "running", mtime: now - 600 },
+          { id: "wg-paused", name: "Fresh paused", profile: "mira", paused: true, mtime: now - 60 },
+          { id: "wg-idle", name: "Older idle", profile: "mira", pipeline_status: "completed", mtime: now - 3000 },
+          { id: "wg-queued", name: "Queued hotel", profile: "mira", pipeline_status: "queued", queue_position: 1, mtime: now - 180 },
+        ]}
+      />,
+    );
+
+    expect(screen.getAllByText(/^(Fresh paused|Queued hotel|Old active|Older idle)$/).map((node) => node.textContent)).toEqual([
+      "Old active",
+      "Queued hotel",
+      "Fresh paused",
+      "Older idle",
+    ]);
+  });
+
+  it("working comes before queued and queued before idle regardless of age", () => {
+    const now = Math.floor(Date.now() / 1000);
+    render(
+      <WorkgroupsView
+        workgroups={[
+          { id: "wg-idle", name: "Idle hotel", profile: "mira", pipeline_status: "completed", mtime: now - 500 },
+          { id: "wg-queued", name: "Queued hotel", profile: "mira", pipeline_status: "queued", queue_position: 1, mtime: now - 490 },
+          { id: "wg-active", name: "Working hotel", profile: "mira", pipeline_status: "running", mtime: now - 510 },
+        ]}
+      />,
+    );
+
+    expect(screen.getAllByText(/^(Idle hotel|Queued hotel|Working hotel)$/).map((node) => node.textContent)).toEqual([
+      "Working hotel",
+      "Queued hotel",
+      "Idle hotel",
+    ]);
+  });
+
+  it("breaks an update tie between queued pipelines by their FIFO position", () => {
+    render(
+      <WorkgroupsView
+        workgroups={[
+          { id: "wg-2", name: "Second", profile: "mira", pipeline_status: "queued", queue_position: 2, mtime: Math.floor(Date.now() / 1000) - 300 },
+          { id: "wg-1", name: "First", profile: "mira", pipeline_status: "queued", queue_position: 1, mtime: Math.floor(Date.now() / 1000) - 310 },
         ]}
       />,
     );
@@ -52,6 +92,20 @@ describe("WorkgroupsView", () => {
       "Queued · #1",
       "Queued · #2",
     ]);
+  });
+
+  it("falls back to the open task while an older daemon omits the pipeline phase", () => {
+    render(
+      <WorkgroupsView
+        workgroups={[{
+          id: "wg-active", name: "Active hotel", profile: "mira",
+          pipeline_status: "running", members: 7, mtime: 20,
+        }]}
+        taskByWorkgroup={{ "mira/wg-active": { state: "open", slug: "assets" } }}
+      />,
+    );
+
+    expect(screen.getByText("Working · assets")).toBeInTheDocument();
   });
 
   it("searches and filters without hiding the complete inventory", () => {

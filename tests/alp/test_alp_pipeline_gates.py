@@ -148,6 +148,20 @@ def test_write_gate_log_is_private_and_capped(tmp_path):
     assert len(record["output"]) <= gates.GATE_LOG_CAP
 
 
+def test_gate_log_does_not_recreate_a_removed_workgroup(tmp_path):
+    from alpi.alp import subscription as sub_mod
+
+    home = tmp_path / "home"
+    wg_dir = home / "alp" / "workgroups" / "wg_removed"
+    sub_mod.tombstone(home, wg_dir.name)
+    step = gates.GateStep("intake", "scout", "", "", "", ("true",), "")
+
+    with pytest.raises(FileNotFoundError):
+        gates.write_gate_log(wg_dir, step, 10, True, "clean")
+
+    assert not wg_dir.exists()
+
+
 def test_gate_log_record_belongs_to_the_delivery_in_its_filename(tmp_path):
     step = gates.GateStep("content", "quill", "", "", "", ("true",), "")
     gates.write_gate_log(tmp_path, step, 7, True, "clean")
@@ -302,6 +316,25 @@ def test_gate_findings_excerpt_keeps_the_tail_of_an_oversized_final_error():
 def test_gate_findings_excerpt_honors_degenerate_limits():
     assert gates.findings_excerpt("long failure", 0) == ""
     assert gates.findings_excerpt("long failure", 1) == "…"
+
+
+def test_default_gate_findings_include_every_blocking_line():
+    findings = [
+        f"  src/content/rooms/room-{index}.es.json:1  INVALID CONTENT SCHEMA: field {index}"
+        for index in range(16)
+    ]
+    output = "\n".join([
+        "Checking artifact: content",
+        "CHECK content FAILED — fix these before handoff:",
+        *findings,
+        "content check failed with 16 blocking findings.",
+    ])
+
+    excerpt = gates.findings_excerpt(output)
+
+    assert all(finding in excerpt for finding in findings)
+    assert excerpt.count(findings[0]) == 1
+    assert "16 blocking findings" in excerpt
 
 
 @pytest.mark.asyncio
@@ -660,6 +693,7 @@ async def test_gate_failure_posts_repair_note_to_the_owner(tmp_path, monkeypatch
     monkeypatch.setattr(service, "_set_hub_responded_seq", lambda h, w, s: cursor.append(s))
     service._GATE_ATTEMPTED.clear()
     service._GATE_REPAIRS.clear()
+    service._GATE_REPAIR_RETRY.clear()
 
     out = await service._maybe_gate_advance(home, wg, recent, "HUB")
     assert out is True
@@ -672,11 +706,57 @@ async def test_gate_failure_posts_repair_note_to_the_owner(tmp_path, monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_gate_repair_note_posts_all_blocking_findings(tmp_path, monkeypatch):
+    from alpi import service
+
+    home = tmp_path / "hub-complete-findings"
+    home.mkdir()
+    wg = types.SimpleNamespace(meta=types.SimpleNamespace(
+        id="wg_complete_findings", hub_pubkey="HUB",
+        pipelines={"content": ("content", "translation")},
+        launch_pipeline="content", pipeline_steps=STEPS, paused=False,
+    ))
+    recent = [
+        {"seq": 1, "from": "HUB", "text": "@quill #task #content write it"},
+        {"seq": 2, "from": "QUILLPK", "text": "content complete"},
+    ]
+    findings = [
+        f"src/content/rooms/room-{index}.es.json:1 INVALID CONTENT SCHEMA: field {index}"
+        for index in range(16)
+    ]
+    monkeypatch.setattr(
+        "alpi.alp.peers.load",
+        lambda h: [types.SimpleNamespace(id="quill", pubkey="QUILLPK")],
+    )
+    monkeypatch.setattr(
+        "alpi.alp.pipeline_gates.run_gate",
+        lambda step, ws: (False, "\n".join(findings)),
+    )
+    posted = []
+
+    async def fake_post(h, wid, text, cost=None):
+        posted.append(text.decode())
+        return {"seq": 3}
+
+    monkeypatch.setattr("alpi.alp.workgroup_client.post", fake_post)
+    monkeypatch.setattr(service, "_set_hub_responded_seq", lambda *a: None)
+    service._GATE_ATTEMPTED.clear()
+    service._GATE_REPAIRS.clear()
+    service._GATE_REPAIR_RETRY.clear()
+
+    assert await service._maybe_gate_advance(home, wg, recent, "HUB") is True
+    assert all(finding in posted[0] for finding in findings)
+    assert max(service._GATE_REPAIRS.values()) == 1
+
+
+@pytest.mark.asyncio
 async def test_gate_failure_past_the_repair_cap_wakes_the_hub(tmp_path, monkeypatch):
     from alpi import service
 
     home = tmp_path / "hub"
     home.mkdir()
+    project = home / "projects" / "casa"
+    project.mkdir(parents=True)
     wg = types.SimpleNamespace(meta=types.SimpleNamespace(
         id="wg_c", hub_pubkey="HUB",
         pipelines={"content": ("content", "translation")},
@@ -700,6 +780,7 @@ async def test_gate_failure_past_the_repair_cap_wakes_the_hub(tmp_path, monkeypa
     service._GATE_REPAIRS.clear()
 
     for attempt in range(1, 4):
+        (project / "artifact.txt").write_text(f"repair {attempt}\n")
         recent = [
             {"seq": 1, "from": "HUB", "text": "@quill #task #content write it"},
             {"seq": 1 + attempt, "from": "QUILLPK", "text": f"delivery {attempt}"},
@@ -710,12 +791,160 @@ async def test_gate_failure_past_the_repair_cap_wakes_the_hub(tmp_path, monkeypa
         {"seq": 1, "from": "HUB", "text": "@quill #task #content write it"},
         {"seq": 9, "from": "QUILLPK", "text": "delivery 4"},
     ]
+    (project / "artifact.txt").write_text("repair 4\n")
     out = await service._maybe_gate_advance(home, wg, recent, "HUB")
     assert isinstance(out, str)
+    assert isinstance(out, service._GateRepairExhausted)
     assert "GATE content FAILED after 4 repair rounds" in out
     assert "#done BLOCKED" in out
-    assert "then re-open" in out
+    assert "exactly once" in out
+    assert "Do not re-open" in out
     assert "skipped" not in out.lower()
+
+
+@pytest.mark.asyncio
+async def test_failed_repair_note_does_not_exhaust_the_repair_ladder(
+    tmp_path, monkeypatch,
+):
+    from alpi import service
+
+    home = tmp_path / "hub-repair-post"
+    home.mkdir()
+    wg = types.SimpleNamespace(meta=types.SimpleNamespace(
+        id="wg_repair_post", hub_pubkey="HUB",
+        pipelines={"content": ("content", "translation")},
+        launch_pipeline="content", pipeline_steps=STEPS, paused=False,
+    ))
+    recent = [
+        {"seq": 1, "from": "HUB", "text": "@quill #task #content write it"},
+        {"seq": 2, "from": "QUILLPK", "text": "content complete"},
+    ]
+    monkeypatch.setattr(
+        "alpi.alp.peers.load",
+        lambda h: [types.SimpleNamespace(id="quill", pubkey="QUILLPK")],
+    )
+    monkeypatch.setattr(
+        "alpi.alp.pipeline_gates.run_gate", lambda step, ws: (False, "still red"),
+    )
+
+    async def failed_post(*args, **kwargs):
+        raise OSError("temporary write failure")
+
+    monkeypatch.setattr("alpi.alp.workgroup_client.post", failed_post)
+    service._GATE_ATTEMPTED.clear()
+    service._GATE_REPAIRS.clear()
+    service._GATE_REPAIR_RETRY.clear()
+
+    out = await service._maybe_gate_advance(home, wg, recent, "HUB")
+
+    assert isinstance(out, str)
+    assert not isinstance(out, service._GateRepairExhausted)
+    assert "repair round 1/3 could not be delivered" in out
+    assert "repair ladder is not exhausted" in out
+    assert service._GATE_REPAIRS == {}
+    assert service._GATE_REPAIR_RETRY
+
+
+@pytest.mark.asyncio
+async def test_failed_repair_note_retries_same_round_after_gate_cooldown(
+    tmp_path, monkeypatch,
+):
+    from alpi import service
+
+    home = tmp_path / "hub-repair-retry"
+    home.mkdir()
+    wg = types.SimpleNamespace(meta=types.SimpleNamespace(
+        id="wg_repair_retry", hub_pubkey="HUB",
+        pipelines={"content": ("content", "translation")},
+        launch_pipeline="content", pipeline_steps=STEPS, paused=False,
+    ))
+    recent = [
+        {"seq": 1, "from": "HUB", "text": "@quill #task #content write it"},
+        {"seq": 2, "from": "QUILLPK", "text": "content complete"},
+    ]
+    monkeypatch.setattr(
+        "alpi.alp.peers.load",
+        lambda h: [types.SimpleNamespace(id="quill", pubkey="QUILLPK")],
+    )
+    monkeypatch.setattr(
+        "alpi.alp.pipeline_gates.run_gate", lambda step, ws: (False, "still red"),
+    )
+    calls = 0
+    posted: list[str] = []
+
+    async def flaky_post(h, wid, text, cost=None):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise OSError("temporary write failure")
+        posted.append(text.decode())
+        return {"seq": 3}
+
+    monkeypatch.setattr("alpi.alp.workgroup_client.post", flaky_post)
+    monkeypatch.setattr(service, "_GATE_RECHECK_SECONDS", 0)
+    monkeypatch.setattr(service, "_set_hub_responded_seq", lambda *a: None)
+    service._GATE_ATTEMPTED.clear()
+    service._GATE_REPAIRS.clear()
+    service._GATE_REPAIR_RETRY.clear()
+
+    first = await service._maybe_gate_advance(home, wg, recent, "HUB")
+    second = await service._maybe_gate_advance(home, wg, recent, "HUB")
+
+    assert "could not be delivered" in first
+    assert second is True
+    assert posted and "repair round 1/3" in posted[0]
+    assert max(service._GATE_REPAIRS.values()) == 1
+    assert not service._GATE_REPAIR_RETRY
+
+
+@pytest.mark.asyncio
+async def test_gate_repair_exhaustion_dispatches_as_final_repair(
+    tmp_path, monkeypatch,
+):
+    from alpi import service
+    from alpi.alp.keys import load_or_generate
+
+    home = tmp_path / "hub-exhausted"
+    home.mkdir()
+    hub_pubkey = load_or_generate(home).pubkey_b64()
+    wg = types.SimpleNamespace(meta=types.SimpleNamespace(
+        id="wg_exhausted", name="site", hub_pubkey=hub_pubkey, paused=False,
+        pipelines={"setup": ("content",)}, launch_pipeline="setup",
+        pipeline_steps={}, quorum_timeout_seconds=0,
+    ))
+    recent = [
+        {"seq": 1, "from": hub_pubkey, "text": "@quill #task #content write it"},
+        {"seq": 9, "from": "QUILLPK", "text": "delivery 4"},
+    ]
+    exhausted = service._GateRepairExhausted(
+        "GATE content FAILED after 4 repair rounds — close exactly once and stop",
+    )
+
+    async def fake_gate(*args):
+        return exhausted
+
+    captured = {}
+
+    def fake_turn(*args, **kwargs):
+        captured["reason"] = args[4]
+        captured.update(kwargs)
+        return None
+
+    monkeypatch.setattr(service, "_maybe_gate_advance", fake_gate)
+    monkeypatch.setattr(service, "_should_dispatch", lambda *a, **k: (None, 9))
+    monkeypatch.setattr(service, "_hub_owned_phases", lambda *a: frozenset())
+    monkeypatch.setattr(service, "_hub_phase_turn_budget", lambda *a: 0)
+    monkeypatch.setattr(service, "_phase_write_scope", lambda *a: {"root": "", "paths": []})
+    monkeypatch.setattr(service, "_budget_blocks_dispatch", lambda *a: False)
+    monkeypatch.setattr(service, "_latest_hub_task_seq_for", lambda *a: 1)
+    monkeypatch.setattr(service, "_dispatch_workgroup_turn", fake_turn)
+    monkeypatch.setattr(service, "_spawn_dispatch", lambda *a: None)
+
+    await service._maybe_dispatch_for_hub(home, "mira", wg, recent)
+
+    assert captured["reason"] == exhausted
+    assert captured["final_repair"] is True
+    assert captured["closure_only"] is True
 
 
 @pytest.mark.asyncio

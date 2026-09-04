@@ -22,18 +22,37 @@ list targeting v0.14.x patch releases.
 
 ### Runtime hardening
 
+MCP.1 and PROC.1 were isolated on the 2026-09-03 mirai box: sentinel's
+PR-review cron leaked one orphaned `bitbucket-mcp` server per run, 38 zombies
+against 41 h of daemon uptime.
+
 | ID | Item | Status |
 |---|---|---|
+| MCP.1 | `MCPClient.stop()` signals only the process it spawned. A stdio server started through `npx` is a wrapper chain (`npm exec …` → `sh` → server), so `terminate()` reaches the wrapper and the real server survives, orphaned, on every turn. Spawn with `start_new_session=True` and stop the group with `os.killpg`, the pattern `_stop_process_group` in `alpi/alp/pipeline_gates.py` and the `terminal` tool already use — `alpi/mcp/client.py` is the only spawn site that does neither. | 🟡 |
+| PROC.1 | The daemon is PID 1 inside the image (`ENTRYPOINT ["alpi-docker"]`, no init), so every orphan in the container reparents to it and stays a zombie: it never calls `wait()` on children it did not spawn. Reap them when `os.getpid() == 1` — a SIGCHLD handler draining `waitpid(-1, WNOHANG)` — so a hard-killed turn, a crashed MCP server, or a `terminal` grandchild cannot accumulate. Independent of MCP.1: that closes the common leak, this bounds every other path. | 🟡 |
 | COST.1 | Per-pipeline cost telemetry: attribute ledger spend and tokens to a pipeline run, replacing manual checkpoint arithmetic. | 🔵 |
 | BG.1 | `alpi doctor` verifies the installed LiteLLM against the pinned version and hashes, catching a supply-chain swap locally (review cadence stays in [OPERATIONS.md](OPERATIONS.md)). | 🔵 |
+
+### Host token hardening
+
+Raised by the 2026-09 mirai WSS deployment review. Migration invariant for
+every item: **no existing connection is lost or re-paired.** The cleartext
+token lives on the client, which keeps presenting it unchanged; only the
+server-side representation and policy move.
+
+| ID | Item | Status |
+|---|---|---|
+| TOKEN.1 | Store device tokens hashed at rest (SHA-256), matching what pairing secrets already do. Rename `token` → `token_hash` so the one-shot store migration is explicit and idempotent — same pattern as the `devices.yaml` → `connections.yaml` migration; auth hashes the presented token before `compare_digest`. | 🟡 |
+| TOKEN.2 | Optional device-token expiry driven by **inactivity**, not age: `host.token_ttl_days` (absent = today's behavior, no expiry) evaluated against `last_seen`, so devices in active use never expire and legacy rows stay valid until the operator sets the policy. Expired rows must read as inactive to `_active_authorizations` so live sessions drop too. | 🟡 |
+| RATE.1 | Simple pre-auth rate limit on the WS listener: reuse the sliding-window `RateLimiter` from `alpi/alp/rate_limit.py` keyed by source address, counting auth failures only; over-cap closes `1013` before token validation. Behind Caddy the socket peer is the proxy, so honor `X-Forwarded-For` only when the peer address is private/loopback. Settles the edge per-IP decision left open in ONLINE.4. | 🟡 |
 
 ### Production client exposure
 
 The public host channel already ships: WSS routes, one-time pairing,
 per-device revocation, role/profile scope, abuse bounds, Docker/Caddy topology,
-and attributed administrative activity. This cycle does not add another
-security layer to that protocol. It proves the supplied design on the first
-definitive customer deployment.
+and attributed administrative activity. Beyond the token hardening above,
+this cycle does not add another security layer to that protocol. It proves
+the supplied design on the first definitive customer deployment.
 
 | ID | Item | Status |
 |---|---|---|
@@ -60,6 +79,7 @@ usage or a concrete blocker; standing maintenance belongs in
 | ID | Candidate and promotion condition |
 |---|---|
 | TERM.2 | SSH terminal backend for remote command execution. Promote when an unattended profile needs to operate on a remote machine. |
+| SANDBOX.1 | OS sandbox effective inside the managed Docker runtime, so a `terminal`-enabled profile stays contained even when the container is the only wall. Promote before any member-scoped connection is granted a profile with `terminal` enabled (mirai: neo). |
 | AUDIT.2 | Enterprise audit and accountability: complete local mutation coverage, then add tamper-evident external records, provider policy, encryption, or RBAC only when a real fleet or compliance regime requires them. |
 | ALP.7 | Pinned shared memory per workgroup (`wiki.md`). Promote when sustained workgroup use shows that the transcript is no longer enough. |
 | SK.2 | Safe skill import (`alpi skill import <dir\|zip>` with preview, scan, and install). Promote when users repeatedly exchange skills outside their own profile. |

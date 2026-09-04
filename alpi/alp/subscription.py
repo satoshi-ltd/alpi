@@ -482,28 +482,12 @@ def _entry(s: Subscription) -> dict[str, Any]:
     return entry
 
 
-PRESENCE_BUCKET_SECONDS = 120
-
-
-def _presence_bucket(stamp: Any) -> Any:
-    import datetime as _dt
-
-    try:
-        seen = _dt.datetime.strptime(str(stamp), "%Y-%m-%dT%H:%M:%SZ")
-    except (TypeError, ValueError):
-        return str(stamp)
-    epoch = seen.replace(tzinfo=_dt.timezone.utc).timestamp()
-    return int(epoch) // PRESENCE_BUCKET_SECONDS
-
-
 def persisted_signature(s: Subscription) -> str:
     entry = _entry(s)
     roster = entry.get("roster")
     if roster:
-        # Bucket, never raw (hub restamps every pull, so the file rewrites every tick) and never dropped (mirror freezes, healthy peers render offline).
-        entry["roster"] = sorted(
-            (str(pk), _presence_bucket(ts)) for pk, ts in roster.items()
-        )
+        # Persist membership, but let volatile timestamps ride on the next substantive write.
+        entry["roster"] = sorted(str(pk) for pk in roster)
     return repr(entry)
 
 

@@ -83,6 +83,7 @@ def test_dispatch_context_keeps_large_target_recent_activity(
     assert len(block) <= HOST_CONTEXT_CAP
     assert "[#5]" in block
     assert "repair-5" in block
+    assert "repair-1 " + "x" * agent_context._DIRECTED_POST_CHARS not in block
 
 
 def test_dispatch_context_returns_none_for_unknown_target(short_tmp: Path) -> None:
@@ -612,8 +613,10 @@ def test_pipeline_only_context_uses_the_short_guardrails(short_tmp: Path) -> Non
     block = agent_context.build(home)
     assert "engagement rules (pipeline)" in block
     assert "DETECT YOUR OWN LOOP" not in block, "discussion-only guidance must not ship to pipeline members"
-    assert "ONLY THE HUB OPENS" in block and "#working" in block
-    assert "only non-empty line in that post" in block
+    assert "owns pipeline `#working`" in block
+    assert "Never post `#working`" in block
+    assert "post the one-line `#working`" not in block
+    assert len(agent_context.WORKGROUP_GUARDRAILS_PIPELINE) < 1500
 
 
 def test_mixed_membership_keeps_the_full_guardrails(short_tmp: Path) -> None:

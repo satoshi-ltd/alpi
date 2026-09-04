@@ -59,11 +59,24 @@ def _check_member_rotation(
     prior_consuming = len(own_in_round) - prior_working
 
     if new_is_working:
+        # One continuation past the per-round allowance reports exhaustion; model-authored #working never counts against it.
+        if phase_owner and prior_consuming == 0:
+            prior_continuations = sum(
+                1 for p in own_in_round
+                if tasks_mod.is_continuation_working(str(p.get("text") or ""))
+            )
+            counted = prior_continuations if tasks_mod.is_continuation_working(plaintext) else prior_working
+            limit = tasks_mod.CONTINUATIONS_PER_ROUND + 1
+            if counted >= limit:
+                raise ValueError(
+                    f"turn-rotation: you already posted `#working` {limit} time(s) in "
+                    "this round. Deliver substantive content or wait for the hub."
+                )
+            return
         if prior_working >= 1:
             raise ValueError(
-                "turn-rotation: you already posted `#working` in "
-                "this round. Wait until you have substantive "
-                "content or `#skip` to post again."
+                "turn-rotation: you already posted `#working` 1 time(s) in this "
+                "round. Deliver substantive content or wait for the hub."
             )
         return
     if phase_owner:
@@ -579,6 +592,25 @@ def _check_blocked_phase_not_skipped(
 _QA_VERDICT_SEGMENT_RE = re.compile(
     r"^(?:[^·]*:)?\s*[*_\s]*(QA BLOCKED|QA FAIL|QA PASS)(?![\w-])"
 )
+_QA_HANDOFF_MARKER_RE = re.compile(
+    r"^(?:@\S+\s+)*#([A-Za-z0-9][A-Za-z0-9_-]{0,63})(?:\s|$)"
+)
+_QA_HANDOFF_VERDICT_RE = re.compile(
+    r"(?:^|(?:--|—|–)\s*)[*_\s]*(QA BLOCKED|QA FAIL|QA PASS)"
+    r"(?![\w-])[*_\s.!?]*$"
+)
+
+
+def _qa_handoff_verdict(wg, active_slug: str, segment: str) -> str:
+    marker = _QA_HANDOFF_MARKER_RE.match(segment)
+    if marker is None:
+        return ""
+    active_phase = wg_mod.canonical_pipeline_phase(wg.meta, active_slug)
+    tagged_phase = wg_mod.canonical_pipeline_phase(wg.meta, marker.group(1).lower())
+    if active_phase is None or tagged_phase != active_phase:
+        return ""
+    match = _QA_HANDOFF_VERDICT_RE.search(segment[marker.end():].strip())
+    return match.group(1) if match else ""
 
 
 def _done_carries_failed_qa(plaintext: str, verdict: str) -> bool:
@@ -614,10 +646,15 @@ def _latest_qa_verdict(
         if str(p.get("from") or "") not in owner_pubkeys:
             continue
         # The LAST verdict-position token wins: "cannot grant QA PASS … VERDICT: QA FAIL" must read FAIL.
-        for segment in str(p.get("text") or "").split("·"):
-            m = _QA_VERDICT_SEGMENT_RE.match(segment.strip())
-            if m:
-                verdict = m.group(1)
+        for line in str(p.get("text") or "").splitlines():
+            for segment in line.split("·"):
+                segment = segment.strip()
+                handoff_verdict = _qa_handoff_verdict(wg, active.slug, segment)
+                if handoff_verdict:
+                    verdict = handoff_verdict
+                m = _QA_VERDICT_SEGMENT_RE.match(segment)
+                if m:
+                    verdict = m.group(1)
     return verdict
 
 
@@ -966,12 +1003,16 @@ async def post(
             try:
                 from alpi.host import events as host_events
                 from alpi.home import profile_name
-                host_events.emit("wg.done", {
+                payload = {
                     "profile": profile_name(home),
                     "wg_id": wg_id,
                     "seq": result.get("seq") if isinstance(result, dict) else None,
+                    "phase": result.get("phase", "") if isinstance(result, dict) else "",
                     "summary": _plaintext[:200],
-                })
+                }
+                host_events.emit("wg.done", payload)
+                if _close_override_kind(_plaintext, kp.pubkey_b64()) == "blocked":
+                    host_events.emit("wg.blocked", payload)
             except Exception:  # noqa: BLE001
                 pass
         return result
@@ -1516,7 +1557,10 @@ def _post_as_hub_locked(
             gates.clear_baseline(d, phase)
         raise ValueError(str(e)) from e
     _baselines_after_post(wg, d, post_events, active_phase)
-    return {"seq": int(entry["seq"]), "ts": ts}
+    result = {"seq": int(entry["seq"]), "ts": ts}
+    if tasks_mod.is_done(plaintext) and active_phase is not None:
+        result["phase"] = active_phase.slug
+    return result
 
 
 async def pull(

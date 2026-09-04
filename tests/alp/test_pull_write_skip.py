@@ -104,40 +104,18 @@ async def test_repeated_empty_pulls_never_rewrite_the_file(
 
 
 @pytest.mark.asyncio
-async def test_presence_restamps_inside_one_bucket_do_not_rewrite_the_file(
+async def test_presence_restamps_do_not_rewrite_the_file(
     member: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    stamps = ["2026-08-22T10:00:11Z", "2026-08-22T10:01:04Z", "2026-08-22T10:01:59Z"]
-    buckets = {sub_mod._presence_bucket(s) for s in stamps}
-    assert len(buckets) == 1
+    stamps = ["2026-08-22T10:00:11Z", "2026-08-22T10:01:59Z", "2026-08-22T18:00:00Z"]
     reply = _reply()
-    for row in reply["members"]:
-        row["last_seen_at"] = stamps[0]
-    before, _ = await _pull_and_stamp(member, monkeypatch, reply)
-    assert not _rewrote(member, before)
-    for stamp in stamps[1:]:
+    before = sub_mod.path(member).stat().st_mtime_ns
+    for stamp in stamps:
         for row in reply["members"]:
             row["last_seen_at"] = stamp
         _wire(member, monkeypatch, reply)
         await wc.pull(member, "wg_a")
         assert not _rewrote(member, before)
-
-
-@pytest.mark.asyncio
-async def test_a_presence_restamp_past_the_bucket_refreshes_the_mirror_once(
-    member: Path, monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    reply = _reply()
-    for row in reply["members"]:
-        row["last_seen_at"] = "2026-08-22T18:00:00Z"
-    before, _ = await _pull_and_stamp(member, monkeypatch, reply)
-    assert _rewrote(member, before)
-    settled = sub_mod.path(member).stat().st_mtime_ns
-    for row in reply["members"]:
-        row["last_seen_at"] = "2026-08-22T18:01:30Z"
-    _wire(member, monkeypatch, reply)
-    await wc.pull(member, "wg_a")
-    assert not _rewrote(member, settled)
 
 
 @pytest.mark.asyncio
@@ -312,34 +290,13 @@ def test_every_persisted_field_moves_the_signature() -> None:
         assert sub_mod.persisted_signature(sub) != baseline, name
 
 
-def test_a_presence_restamp_inside_one_bucket_does_not_move_the_signature() -> None:
+def test_a_presence_restamp_does_not_move_the_signature() -> None:
     sub = _populated()
     baseline = sub_mod.persisted_signature(sub)
-    same_bucket = "2026-08-22T10:01:59Z"
-    assert sub_mod._presence_bucket(same_bucket) == sub_mod._presence_bucket(
-        sub.roster["PK_A"],
-    )
-    sub.roster = {"PK_A": same_bucket}
+    sub.roster = {"PK_A": "2026-08-22T18:00:00Z"}
     assert sub_mod.persisted_signature(sub) == baseline
-    sub.roster = {"PK_A": same_bucket, "PK_B": ""}
+    sub.roster = {"PK_A": "2026-08-22T18:00:00Z", "PK_B": ""}
     assert sub_mod.persisted_signature(sub) != baseline
-
-
-def test_a_presence_restamp_past_the_bucket_refreshes_the_mirror() -> None:
-    sub = _populated()
-    baseline = sub_mod.persisted_signature(sub)
-    next_bucket = "2026-08-22T10:05:00Z"
-    assert sub_mod._presence_bucket(next_bucket) != sub_mod._presence_bucket(
-        sub.roster["PK_A"],
-    )
-    sub.roster = {"PK_A": next_bucket}
-    assert sub_mod.persisted_signature(sub) != baseline
-
-
-def test_the_mirror_cannot_go_stale_enough_to_read_as_offline() -> None:
-    from alpi.alp.agent_context import _ONLINE_SECONDS
-
-    assert sub_mod.PRESENCE_BUCKET_SECONDS < _ONLINE_SECONDS
 
 
 def test_an_unparseable_presence_stamp_still_sorts() -> None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+import time
 from types import SimpleNamespace as NS
 
 import pytest
@@ -73,6 +74,7 @@ def test_is_transient_classification():
 
     assert llm._is_transient(llm.ProviderStalled("x"))
     assert llm._is_transient(llm.ProviderStreamDeadline("x"))
+    assert not llm._is_transient(llm.TurnBudgetExceeded("x"))
     assert llm._is_transient(Timeout())
     assert llm._is_transient(NS_exc(503))
     assert llm._is_transient(NS_exc(429))
@@ -173,6 +175,29 @@ def test_continuous_empty_keepalives_cannot_outrun_deadline(monkeypatch):
             model="x", messages=[],
             rt=_rt(first_byte_timeout_s=0.02, max_retries=0),
         ))
+
+
+def test_absolute_deadline_preempts_first_byte_timeout_without_retry(monkeypatch):
+    calls = {"n": 0}
+    request_timeouts = []
+
+    def fake(kwargs):
+        calls["n"] += 1
+        request_timeouts.append(kwargs["timeout"])
+        return _stalling_iter()
+
+    monkeypatch.setattr(llm, "_completion_silenced", fake)
+    started = time.monotonic()
+    with pytest.raises(llm.TurnBudgetExceeded, match="turn budget"):
+        list(llm.stream(
+            model="x", messages=[],
+            rt=_rt(first_byte_timeout_s=1.0, max_retries=2),
+            absolute_deadline=started + 0.03,
+        ))
+
+    assert time.monotonic() - started < 0.3
+    assert calls["n"] == 1
+    assert 0 < request_timeouts[0] <= 0.03
 
 
 def test_empty_tool_call_chunks_do_not_hide_idle_stall(monkeypatch):

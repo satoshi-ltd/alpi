@@ -101,6 +101,20 @@ def test_memory_change_only_affects_memory_part(tmp_path: Path) -> None:
     assert moved == ["memory_md"]
 
 
+def test_pipeline_prompt_omits_cross_project_memory(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    cfg = _make_cfg(tmp_path)
+    _write_memory(tmp_path, "USER.md", "Use Spanish.\n")
+    _write_memory(tmp_path, "MEMORY.md", "Old hotel facts.\n")
+    monkeypatch.setenv("ALPI_WORKGROUP_PIPELINE", "1")
+
+    parts = pc.build_parts(tmp_path, cfg)
+
+    assert "Use Spanish." in parts["user_md"]
+    assert parts["memory_md"] == ""
+
+
 def _write_memory(home: Path, name: str, body: str) -> None:
     (home / "memories").mkdir(parents=True, exist_ok=True)
     (home / "memories" / name).write_text(body, encoding="utf-8")

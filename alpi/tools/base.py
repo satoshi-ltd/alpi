@@ -12,9 +12,13 @@ class ToolResult:
     ok: bool
     output: str
     error: str | None = None
+    transient: bool = False
 
     def to_dict(self) -> dict[str, Any]:
-        return {"ok": self.ok, "output": self.output, "error": self.error}
+        out = {"ok": self.ok, "output": self.output, "error": self.error}
+        if self.transient:
+            out["transient"] = True
+        return out
 
 
 # Every consumer that relays a failed tool to a model must use this: the output often carries the diagnosis (skill runners print their fail() JSON to stdout), and dropping it forces the model to debug blind. Callers cap size afterwards via their budget.

@@ -25,7 +25,7 @@ def _is_local_chat_session_payload(data: dict[str, Any]) -> bool:
         first = str((turns[0] or {}).get("user") or "").lstrip()
     if not first:
         return True
-    if first.startswith("[workgroup-poller]") or first.startswith("[workgroup "):
+    if first.startswith("[workgroup-") or first.startswith("[workgroup "):
         return False
     if first.startswith("[SCHEDULED:") or first.startswith("[CRON"):
         return False
@@ -234,7 +234,11 @@ def _run_once(
     )
 
     from alpi.alp import mention as alp_mention
-    parsed = alp_mention.parse(user_text, home=h)
+    parsed = (
+        None
+        if os.environ.get("ALPI_WORKGROUP_DISPATCH")
+        else alp_mention.parse(user_text, home=h)
+    )
     if parsed is not None:
         import asyncio as _aio
         import time as _t
@@ -253,9 +257,12 @@ def _run_once(
         result = _aio.run(alp_mention.execute(h, parsed.peer_id, parsed.prompt))
         reply = result.reply if result.ok else f"[error] {result.error}"
         if emit_events:
-            sys.stdout.write(json.dumps({
+            payload = {
                 "kind": "tool_end", "name": "peer", "ok": result.ok,
-            }) + "\n")
+            }
+            if getattr(result, "transient", False):
+                payload["transient"] = True
+            sys.stdout.write(json.dumps(payload) + "\n")
             sys.stdout.flush()
         engine.session.messages.append({"role": "user", "content": user_text})
         engine.session.messages.append({"role": "assistant", "content": reply})
@@ -303,6 +310,8 @@ def _run_once(
                 }
         elif ev.kind == "tool_end":
             payload = {"kind": "tool_end", "name": ev.name, "ok": ev.ok}
+            if ev.transient:
+                payload["transient"] = True
             if ev.name == "workgroup_post":
                 payload["wg_id"] = str((ev.args or {}).get("wg_id") or "")
         elif ev.kind == "tool_state":

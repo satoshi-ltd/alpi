@@ -126,13 +126,23 @@ def test_workgroup_visible_partial_falls_back_in_same_turn(tmp_path, monkeypatch
         yield from _ok_stream()
 
     monkeypatch.setattr("alpi.llm.stream", fake_stream)
+    deliveries = []
+    monkeypatch.setattr(
+        "alpi.tools.execute",
+        lambda name, args, **_kwargs: deliveries.append((name, dict(args)))
+        or ToolResult(ok=True, output="posted"),
+    )
     events = []
     eng.run_turn("q", emit=events.append)
 
-    assert calls == [("gpt-5.4-mini", True), ("gpt-5.4-pro", True)]
+    assert calls == [
+        ("gpt-5.4-mini", True),
+        ("gpt-5.4-pro", True),
+    ]
+    assert deliveries == [("workgroup_post", {"wg_id": "wg_1", "text": "all good"})]
     assert not any(e.kind == "error" for e in events)
     finals = [e for e in events if e.kind == "assistant_done" and e.final]
-    assert finals[-1].text == "all good"
+    assert finals == []
 
 
 def test_workgroup_retry_reset_discards_partial_text(tmp_path, monkeypatch) -> None:
@@ -140,17 +150,36 @@ def test_workgroup_retry_reset_discards_partial_text(tmp_path, monkeypatch) -> N
     monkeypatch.setenv("ALPI_WORKGROUP_DISPATCH", "wg_1")
     monkeypatch.setattr("alpi.alp.agent_context.build", lambda *_a, **_kw: "[workgroup]")
 
+    calls = {"n": 0}
+
     def fake_stream(messages, tools, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            yield {
+                "final": True, "input_tokens": 1, "output_tokens": 1,
+                "cost_usd": 0.0, "tool_calls": [{
+                    "id": "handoff", "name": "workgroup_post",
+                    "arguments": '{"wg_id":"wg_1","text":"all good"}',
+                }],
+            }
+            return
         yield {"text_delta": "discard me"}
         yield {"retry_reset": True}
         yield from _ok_stream()
 
     monkeypatch.setattr("alpi.llm.stream", fake_stream)
+    deliveries = []
+    monkeypatch.setattr(
+        "alpi.tools.execute",
+        lambda name, args, **_kwargs: deliveries.append((name, dict(args)))
+        or ToolResult(ok=True, output="posted"),
+    )
     events = []
     eng.run_turn("q", emit=events.append)
 
+    assert deliveries == [("workgroup_post", {"wg_id": "wg_1", "text": "all good"})]
     finals = [e for e in events if e.kind == "assistant_done" and e.final]
-    assert finals[-1].text == "all good"
+    assert finals == []
 
 
 def test_tool_call_stream_emits_model_progress(tmp_path, monkeypatch) -> None:

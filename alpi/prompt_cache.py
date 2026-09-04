@@ -131,7 +131,7 @@ def build_parts(home: Path, cfg) -> dict[str, str]:
     mem = memory.MemoryStore(home=home)
     snap = mem.snapshot()
     user_md = snap["USER.md"].strip()
-    memory_md = snap["MEMORY.md"].strip()
+    memory_md = "" if os.environ.get("ALPI_WORKGROUP_PIPELINE") else snap["MEMORY.md"].strip()
     parts["user_md"] = _guard_recalled(("# USER PROFILE\n" + user_md) if user_md else "")
     parts["memory_md"] = _guard_recalled(("# AGENT MEMORY\n" + memory_md) if memory_md else "")
     return parts

@@ -13,10 +13,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 GATE_TIMEOUT_SECONDS = 180
-GATE_OUTPUT_CAP = 8_000
+GATE_OUTPUT_CAP = 6_000
 GATE_LOG_CAP = 64_000
-# agent_context sizes its directed-post budget off this constant.
-GATE_FINDINGS_POST_CHARS = 900
+# Agent context sizes its directed-post budget off this constant; a repair must carry every retained actionable line.
+GATE_FINDINGS_POST_CHARS = GATE_OUTPUT_CAP
 # Minimal env on purpose: gate commands never see the profile's secrets (.env keys stay out).
 _GATE_ENV_KEYS = ("PATH", "HOME", "LANG", "LC_ALL", "TMPDIR")
 
@@ -24,10 +24,16 @@ _GATE_ENV_KEYS = ("PATH", "HOME", "LANG", "LC_ALL", "TMPDIR")
 def findings_excerpt(output: str, limit: int = GATE_FINDINGS_POST_CHARS) -> str:
     if limit <= 0:
         return ""
-    lines = [
-        line.rstrip() for line in output.splitlines()
-        if not line.lstrip().startswith(("PASS  ", "INFO  ", "Checking artifact:"))
-    ]
+    lines = []
+    seen = set()
+    for raw in output.splitlines():
+        line = raw.rstrip()
+        if line.lstrip().startswith(("PASS  ", "INFO  ", "Checking artifact:")):
+            continue
+        if line in seen:
+            continue
+        seen.add(line)
+        lines.append(line)
     text = "\n".join(lines).strip() or output.strip()
     if len(text) <= limit:
         return text
@@ -155,6 +161,20 @@ def _baseline_path(wg_dir: Path, phase: str) -> Path:
     return wg_dir / "phase_baselines" / f"{phase}.json"
 
 
+def _runtime_dir(wg_dir: Path, name: str) -> Path:
+    from alpi.alp import subscription as sub_mod
+
+    try:
+        home = wg_dir.parents[2]
+    except IndexError:
+        home = None
+    if home is not None and wg_dir.name in sub_mod.tombstones(home):
+        raise FileNotFoundError(f"workgroup {wg_dir.name!r} was removed")
+    path = wg_dir / name
+    path.mkdir(mode=0o700, parents=True, exist_ok=True)
+    return path
+
+
 def _file_stamp(fp: Path) -> str | None:
     """Content digest, never mtime: restoring a file must clear its violation, and a rewrite always moves mtime."""
     h = hashlib.blake2b(digest_size=16)
@@ -202,7 +222,7 @@ def snapshot_baseline(wg_dir: Path, step: GateStep, workspace: Path) -> bool:
     bp = _baseline_path(wg_dir, step.phase)
     if bp.exists():
         return False
-    bp.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    _runtime_dir(wg_dir, "phase_baselines")
     snapshot = _scan_project(root)
     tmp = bp.with_suffix(".tmp")
     tmp.write_text(json.dumps(snapshot, separators=(",", ":")))
@@ -218,12 +238,36 @@ def refresh_baseline(wg_dir: Path, step: GateStep, workspace: Path) -> bool:
     if root is None:
         return False
     bp = _baseline_path(wg_dir, step.phase)
-    bp.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    _runtime_dir(wg_dir, "phase_baselines")
     snapshot = _scan_project(root)
     tmp = bp.with_suffix(".tmp")
     tmp.write_text(json.dumps(snapshot, separators=(",", ":")))
     os.replace(tmp, bp)
     return True
+
+
+def owned_paths_changed(
+    wg_dir: Path, step: GateStep, workspace: Path,
+) -> bool | None:
+    """Whether this phase changed an owned path since its opener baseline."""
+    if not step.paths:
+        return None
+    root = _project_root(step, workspace)
+    if root is None:
+        return None
+    try:
+        baseline = json.loads(_baseline_path(wg_dir, step.phase).read_text())
+    except (OSError, ValueError):
+        return None
+    if not isinstance(baseline, dict):
+        return None
+    current = _scan_project(root)
+    owned = tuple(step.paths)
+    relevant = {
+        rel for rel in set(baseline) | set(current)
+        if any(fnmatch.fnmatchcase(rel, pattern) for pattern in owned)
+    }
+    return any(baseline.get(rel) != current.get(rel) for rel in relevant)
 
 
 # NOT _SCAN_EXCLUDE: a build gate observes dist/ and public/.
@@ -387,8 +431,7 @@ def run_prepare(step: PrepareStep, workspace: Path) -> tuple[bool, str]:
 def write_prepare_log(
     wg_dir: Path, step: PrepareStep, passed: bool, output: str,
 ) -> None:
-    log_dir = wg_dir / "prepares"
-    log_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    log_dir = _runtime_dir(wg_dir, "prepares")
     record = json.dumps({
         "pipeline": step.pipeline, "phase": step.phase,
         "argv": list(step.argv), "cwd": step.cwd,
@@ -466,8 +509,7 @@ def owner_delivery(
 
 
 def write_gate_log(wg_dir: Path, step: GateStep, seq: int, passed: bool, output: str) -> None:
-    log_dir = wg_dir / "gates"
-    log_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    log_dir = _runtime_dir(wg_dir, "gates")
     record = json.dumps({
         "phase": step.phase, "task_seq": seq, "argv": list(step.argv),
         "cwd": step.cwd, "passed": passed, "output": output[-GATE_LOG_CAP:],
