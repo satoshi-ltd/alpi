@@ -369,6 +369,23 @@ async def test_device_config_field_mutations_go_through_host(
     assert host_set["result"]["ok"] is True
     assert cfg_mod.load(home).host["tcp_port"] == 49200
 
+    limit_set = await srv._dispatch({
+        "id": "limit-set",
+        "method": "host.config.set_field",
+        "params": {"profile": "default", "key": "alp.max_active_workgroups", "value": "4"},
+    })
+    assert limit_set["result"]["ok"] is True
+    assert cfg_mod.load(home).alp["max_active_workgroups"] == 4
+
+    for bad in ("-1", "abc", None):
+        rejected = await srv._dispatch({
+            "id": f"limit-bad-{bad}",
+            "method": "host.config.set_field",
+            "params": {"profile": "default", "key": "alp.max_active_workgroups", "value": bad},
+        })
+        assert rejected.get("error", {}).get("code") == -32602, bad
+    assert cfg_mod.load(home).alp["max_active_workgroups"] == 4
+
     # No half-written tmp left behind by the atomic writer.
     cfg_path = home / "config.yaml"
     assert not cfg_path.with_suffix(cfg_path.suffix + ".tmp").exists()
@@ -1413,3 +1430,28 @@ async def test_set_field_rpc_refreshes_the_summary(
         "host.config.set_field emitted its event without dropping the cached "
         "summary — the desktop's reload would show the pre-edit value"
     )
+
+
+@pytest.mark.asyncio
+async def test_changing_the_default_cap_invalidates_every_inheriting_hub(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from alpi.host import events as host_events
+
+    home = _bootstrap(tmp_path / "h")
+    (home / "profiles" / "mira").mkdir(parents=True)
+    (home / "profiles" / "scout").mkdir(parents=True)
+    monkeypatch.setattr(host_handlers, "_resolve_home", lambda profile: home)
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+    captured: list[tuple[str, dict]] = []
+    monkeypatch.setattr(host_events, "emit", lambda kind, data=None: captured.append((kind, data or {})))
+
+    await srv._dispatch({
+        "id": "cap",
+        "method": "host.config.set_field",
+        "params": {"profile": "default", "key": "alp.max_active_workgroups", "value": "2"},
+    })
+
+    changed = sorted(d["profile"] for k, d in captured if k == "config_changed")
+    assert changed == sorted(["default", "mira", "scout"])

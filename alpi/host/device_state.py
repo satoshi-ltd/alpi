@@ -13,6 +13,7 @@ from typing import Any
 
 import yaml
 
+from alpi.alp import pipeline_queue as _pipeline_queue
 from alpi import __version__ as _alpi_version
 from alpi import config as cfg_mod
 from alpi import home as home_mod
@@ -254,9 +255,13 @@ def _has_any_provider(home: Path, cfg: cfg_mod.Config) -> bool:
 def _profile_detail_payload(home: Path) -> dict[str, Any]:
     cfg = cfg_mod.load(home)
     from alpi.providers.reasoning import supports_reasoning
+    active_cap, active_cap_origin = _pipeline_queue.limit_origin(home)
     return {
         "workspace": cfg.workspace or None,
         "tcp_port": cfg.alp.get("tcp_port"),
+        "max_active_workgroups": active_cap,
+        "max_active_workgroups_origin": active_cap_origin,
+        "queued_pipelines": len(_pipeline_queue.entries(home)),
         "advertise_host": (cfg.network or {}).get("host"),  # shared accessible address
         "provider_keys": _provider_keys(home),
         "provider_ollama": _ollama_providers(cfg),
@@ -509,6 +514,17 @@ async def _profile_storage(
     return {"storage": await asyncio.to_thread(_storage_rows_cached, home)}
 
 
+def _emit_inherited_cap_changed(home: Path) -> None:
+    # The cap on the default profile is inherited by every hub without its own; their clients must refetch detail too.
+    from alpi import home as home_mod
+
+    if home.resolve() != _pipeline_queue.default_home_for(home).resolve() or home.parent.name == "profiles":
+        return
+    for name in home_mod.list_profiles(home):
+        if name != "default":
+            _emit_config_changed(home / "profiles" / name, scope="alp")
+
+
 def _emit_config_changed(home: Path, scope: str) -> None:
     from alpi import home as home_mod
     from alpi.host import events as host_events
@@ -614,6 +630,8 @@ async def _config_set_field(
         _set_dotted(data, key, coerced)
     _write_user_yaml(home, data)
     _emit_config_changed(home, scope=key.split(".", 1)[0] or "field")
+    if key == "alp.max_active_workgroups":
+        _emit_inherited_cap_changed(home)
     return {"ok": True}
 
 
@@ -630,6 +648,8 @@ async def _config_unset_field(
         _prune_empty_read_image(data)
     _write_user_yaml(home, data)
     _emit_config_changed(home, scope=key.split(".", 1)[0] or "field")
+    if key == "alp.max_active_workgroups":
+        _emit_inherited_cap_changed(home)
     return {"ok": True}
 
 
@@ -1041,6 +1061,17 @@ def _unset_dotted(data: dict[str, Any], key: str) -> None:
 def _coerce_config_value(key: str, value: Any) -> Any:
     if key in {"alp.tcp_port", "host.tcp_port"}:
         return int(value)
+    if key == "alp.max_active_workgroups":
+        try:
+            parsed = int(str(value).strip())
+        except (TypeError, ValueError):
+            parsed = -1
+        if parsed < 0:
+            raise host_server.HandlerError(
+                -32602, "invalid-params",
+                data={"detail": "alp.max_active_workgroups must be 0 (unlimited) or a positive integer"},
+            )
+        return parsed
     if key in {"budget.daily_usd"}:
         return float(value)
     if str(value).lower() == "true":

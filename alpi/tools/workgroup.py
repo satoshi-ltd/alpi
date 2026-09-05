@@ -28,6 +28,30 @@ def _declared_cost(tally: dict | None) -> dict | None:
     return cost
 
 
+def _append_dispatch_recheck(text: str) -> str:
+    phase = os.environ.get("ALPI_WORKGROUP_RECHECK_PHASE", "").strip()
+    suffix = os.environ.get("ALPI_WORKGROUP_RECHECK_SUFFIX", "")
+    if not phase or not suffix:
+        return text
+    from alpi.alp import tasks as tasks_mod
+
+    lines = text.splitlines(keepends=True)
+    for index, line in enumerate(lines):
+        events = tasks_mod.parse_post(line, 0, "", hub_pubkey="")
+        opened = next(
+            (event.slug for event in events if event.kind == "task" and event.slug),
+            "",
+        )
+        if opened != phase and not opened.startswith(f"{phase}-"):
+            continue
+        if suffix not in line:
+            ending = "\r\n" if line.endswith("\r\n") else "\n" if line.endswith("\n") else ""
+            body = line[:-len(ending)] if ending else line
+            lines[index] = body.rstrip() + suffix + ending
+        return "".join(lines)
+    return text
+
+
 class WorkgroupPostTool(Tool):
     name = "workgroup_post"
     description = (
@@ -65,6 +89,7 @@ class WorkgroupPostTool(Tool):
             return ToolResult(ok=False, output="", error="wg_id and text required")
         from alpi.alp import tasks as tasks_mod
         from alpi.tools import _state as _wg_state
+        text = _append_dispatch_recheck(text)
         member_turn = os.environ.get("ALPI_WORKGROUP_MEMBER_TURN") == "1"
         continuation = tasks_mod.CONTINUATION_MARK in text
         if member_turn and tasks_mod.is_working_only(text) and not continuation:

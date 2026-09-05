@@ -267,3 +267,18 @@ def test_paused_roundtrips(tmp_home_no_env: Path) -> None:
     cfg.paused = True
     config.save(cfg)
     assert config.load(tmp_home_no_env).paused is True
+
+
+def test_seed_caps_active_workgroups_only_on_the_default_home(tmp_path: Path) -> None:
+    from alpi import yamlfast
+    from alpi.alp import pipeline_queue
+
+    root = tmp_path / "root"
+    hub = root / "profiles" / "mira"
+    hub.mkdir(parents=True)
+    config.seed_defaults(root)
+    config.seed_defaults(hub)
+
+    assert yamlfast.safe_load((root / "config.yaml").read_text())["alp"]["max_active_workgroups"] == 5
+    assert "alp" not in yamlfast.safe_load((hub / "config.yaml").read_text())
+    assert pipeline_queue.limit_origin(hub) == (5, "default")

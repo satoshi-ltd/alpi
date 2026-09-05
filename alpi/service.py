@@ -929,7 +929,8 @@ async def _run_workgroup_poller(home: Path, profile: str) -> None:
             await asyncio.gather(*sub_workers.values(), return_exceptions=True)
 
 
-def _active_pipeline_ids(home: Path) -> set[str]:
+def _active_workgroup_ids(home: Path) -> set[str]:
+    # A deliberation workgroup with an open task holds a slot like a running pipeline does.
     from alpi.alp import workgroup as wg_mod
     from alpi.host import workgroup as host_wg
 
@@ -938,10 +939,11 @@ def _active_pipeline_ids(home: Path) -> set[str]:
         if getattr(wg.meta, "paused", False):
             continue
         try:
-            run = (host_wg.fold_task_state(home, wg.meta.id) or {}).get("pipeline_run")
+            state = host_wg.fold_task_state(home, wg.meta.id) or {}
         except Exception:  # noqa: BLE001
             continue
-        if run and run.get("status") in {"running", "between"}:
+        run = state.get("pipeline_run")
+        if (run and run.get("status") in {"running", "between"}) or state.get("active"):
             active.add(wg.meta.id)
     return active
 
@@ -955,7 +957,7 @@ async def _drain_pipeline_queue(home: Path) -> int:
     if not pending:
         return 0
     maximum = pipeline_queue.limit(home)
-    active = await asyncio.to_thread(_active_pipeline_ids, home)
+    active = await asyncio.to_thread(_active_workgroup_ids, home)
     admitted = 0
     for item in pending:
         wg_id = item["wg_id"]
@@ -1491,7 +1493,12 @@ async def _maybe_gate_advance(
             done_seq = last_posted
         nxt = gates.next_task_text(step)
         if nxt:
+            recheck_kind, recheck = _peek_qa_recheck(home, wg.meta.id, step.next_phase)
+            if recheck:
+                nxt += _recheck_suffix(recheck_kind, recheck)
             res = await wc.post(home, wg.meta.id, nxt.encode())
+            if recheck:
+                _ack_qa_recheck(home, wg.meta.id, step.next_phase)
             if isinstance(res, dict):
                 last_posted = int(res.get("seq", last_posted))
     except Exception as e:  # noqa: BLE001
@@ -2756,6 +2763,87 @@ def _round_start_seq(recent_posts: list[dict], active, hub_pubkey: str) -> int:
 
 
 _QA_REWIND_MAX = 2
+_QA_RECHECK_MAX_CHARS = 6_000
+
+
+def _bounded_qa_recheck(excerpt: str) -> str:
+    text = " ".join(str(excerpt or "").replace("\x00", " ").split())
+    if len(text) <= _QA_RECHECK_MAX_CHARS:
+        return text
+    marker = " … [truncated]"
+    return text[:_QA_RECHECK_MAX_CHARS - len(marker)].rstrip() + marker
+
+
+def _set_qa_recheck(home: Path, wg_id: str, phase: str, excerpt: str, kind: str = "qa") -> None:
+    # Keyed by phase so nested rewinds of different QA phases keep their own checklist; the same phase keeps its latest verdict. `kind` tells a QA FAIL from a red gate so the opener never invents a verdict.
+    state = _load_poller_state(home)
+    state.setdefault("qa_recheck", {}).setdefault(wg_id, {})[phase] = {
+        "kind": kind, "excerpt": _bounded_qa_recheck(excerpt),
+    }
+    _save_poller_state(home, state)
+
+
+def _peek_qa_recheck(home: Path, wg_id: str, phase: str) -> tuple[str, str]:
+    table = (_load_poller_state(home).get("qa_recheck") or {}).get(wg_id) or {}
+    entry = table.get(phase) if isinstance(table, dict) else None
+    if not isinstance(entry, dict):
+        return "", ""
+    return str(entry.get("kind") or "qa"), str(entry.get("excerpt") or "")
+
+
+def _recheck_suffix(kind: str, excerpt: str) -> str:
+    if kind == "gate":
+        return (
+            " · Re-verify each retained gate finding that reopened this phase and state it "
+            f"as resolved or persistent before the verdict: {excerpt}"
+        )
+    return (
+        " · Re-verify each retained finding of the previous QA FAIL and state it "
+        f"as resolved or persistent before the verdict: {excerpt}"
+    )
+
+
+def _qa_recheck_delivered(
+    home: Path, wg_id: str, phase: str, suffix: str, after_seq: int,
+) -> bool:
+    from alpi.alp import tasks as wg_tasks
+    from alpi.alp import workgroup as wg_mod
+
+    wg = wg_mod.load(home, wg_id)
+    if wg is None:
+        return False
+    for post in reversed(_all_hub_posts_decrypted(home, wg)):
+        if int(post.get("seq", 0)) <= after_seq:
+            continue
+        if str(post.get("from") or "") != wg.meta.hub_pubkey:
+            continue
+        text = str(post.get("text") or "")
+        opened = next(
+            (
+                event for event in wg_tasks.parse_post(
+                    text, int(post.get("seq", 0)), wg.meta.hub_pubkey,
+                    hub_pubkey=wg.meta.hub_pubkey,
+                )
+                if event.kind == "task" and event.slug
+            ),
+            None,
+        )
+        if opened is None:
+            continue
+        resolved = wg_mod.canonical_pipeline_phase(wg.meta, opened.slug)
+        return resolved is not None and resolved[1] == phase and suffix in opened.text
+    return False
+
+
+def _ack_qa_recheck(home: Path, wg_id: str, phase: str) -> None:
+    state = _load_poller_state(home)
+    table = (state.get("qa_recheck") or {}).get(wg_id)
+    if not isinstance(table, dict) or phase not in table:
+        return
+    del table[phase]
+    if not table:
+        state["qa_recheck"].pop(wg_id, None)
+    _save_poller_state(home, state)
 
 
 def _qa_rewind_count(home: Path, wg_id: str) -> int:
@@ -2856,7 +2944,7 @@ async def _rewind_to(home: Path, wg, step, target: str | None, *, label: str, re
     phase_map = wg_mod.safe_phase_map(wg.meta)
     owner = str(phase_map.get(target, {}).get("owner") or "")
     task = str(phase_map.get(target, {}).get("task") or f"run the {target} phase")
-    excerpt = " ".join(excerpt.split())[:1500]
+    excerpt = _bounded_qa_recheck(excerpt)
     attempt = used + 1
     close = f"#done BLOCKED · {label} · rewinding to #{target} ({attempt}/{_QA_REWIND_MAX})"
     opener = (
@@ -2870,6 +2958,8 @@ async def _rewind_to(home: Path, wg, step, target: str | None, *, label: str, re
         log.error("wg gate %s/%s rewind failed: %s", wg.meta.id, step.phase, e)
         return False
     _bump_qa_rewind_count(home, wg.meta.id)
+    # The re-walk must re-verify what failed; the QA opener carries this excerpt as a checklist, worded by its origin.
+    _set_qa_recheck(home, wg.meta.id, step.phase, excerpt, kind="qa" if label == "QA FAIL" else "gate")
     if isinstance(res, dict) and res.get("seq") is not None:
         _set_hub_responded_seq(home, wg.meta.id, int(res["seq"]))
     log.info(
@@ -3047,6 +3137,12 @@ async def _dispatch_workgroup_turn(
     turn_id = os.urandom(16).hex()
     run_id = os.urandom(16).hex()
     turn_timeout = turn_budget_s or _turn_timeout_for(pipeline)
+    recheck_kind, recheck = (
+        _peek_qa_recheck(home, wg_id, next_phase)
+        if continuation and next_phase
+        else ("", "")
+    )
+    recheck_suffix = _recheck_suffix(recheck_kind, recheck) if recheck else ""
     if continuation and not next_phase:
         prompt = (
             f"[workgroup-routing] '#{wg_name or wg_id}' (wg_id={wg_id}). "
@@ -3083,6 +3179,12 @@ async def _dispatch_workgroup_turn(
             "searching, re-reading, prose, another `#done` — is a FAILED "
             "turn that leaves the pipeline stuck. Open the task and stop."
         )
+        if recheck_suffix:
+            prompt += (
+                "\n\nThis phase is being revisited after a failed verification. "
+                "The runtime will append the retained findings to the opener "
+                "verbatim; do not replace the task with a summary of them."
+            )
         env_extra: dict[str, str] = {}
     elif closure_only and final_repair:
         prompt = (
@@ -3272,6 +3374,10 @@ async def _dispatch_workgroup_turn(
         **workspace_env(home),
         **({"ALPI_WORKGROUP_ROUND_HUB_SEQ": str(round_hub_seq)} if (round_hub_seq is not None and round_hub_seq > 0) else {}),
         **({"ALPI_WORKGROUP_FINAL_REPAIR": "1"} if final_repair else {}),
+        **({
+            "ALPI_WORKGROUP_RECHECK_PHASE": next_phase,
+            "ALPI_WORKGROUP_RECHECK_SUFFIX": recheck_suffix,
+        } if recheck_suffix else {}),
         **env_extra,
     })
     # `--emit-events`: child prints JSON event lines to stdout = the idle-timeout's sign-of-life (tail discarded).
@@ -3426,6 +3532,11 @@ async def _dispatch_workgroup_turn(
     await _finalize_workgroup_run(
         home, wg_id, turn_id, run_id, run_outcome,
     )
+    if recheck_suffix and await asyncio.to_thread(
+        _qa_recheck_delivered,
+        home, wg_id, next_phase, recheck_suffix, int(started_against_task_seq),
+    ):
+        _ack_qa_recheck(home, wg_id, next_phase)
     if event_tail:
         # Cap bytes too (drain caps lines): keep turns.jsonl small + avoid stashing a huge/sensitive payload.
         extra["event_tail"] = event_tail[-2000:]

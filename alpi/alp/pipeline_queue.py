@@ -10,7 +10,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from alpi import config as cfg_mod
 
 
 if sys.platform == "win32":
@@ -25,12 +24,46 @@ def path(home: Path) -> Path:
     return home / "alp" / "pipeline_queue.json"
 
 
-def limit(home: Path) -> int:
-    raw = (cfg_mod.load(home).alp or {}).get("max_active_pipelines", 0)
+DEFAULT_LIMIT = 0
+LIMIT_KEY = "max_active_workgroups"
+
+
+def default_home_for(home: Path) -> Path:
+    return home.parent.parent if home.parent.name == "profiles" else home
+
+
+def _explicit_limit(home: Path) -> int | None:
+    from alpi import yamlfast
+
     try:
-        return max(0, int(raw))
+        data = yamlfast.safe_load((home / "config.yaml").read_text(encoding="utf-8")) or {}
+    except (OSError, ValueError):
+        return None
+    alp = (data.get("alp") or {}) if isinstance(data, dict) else {}
+    raw = alp.get(LIMIT_KEY)
+    if raw is None:
+        return None
+    try:
+        parsed = int(raw)
     except (TypeError, ValueError):
-        return 0
+        return None
+    return parsed if parsed >= 0 else None
+
+
+def limit_origin(home: Path) -> tuple[int, str]:
+    # The cap counts workgroups with live work, pipelines or not; it is kept on the default profile (seeded at 5), a hub may pin its own, and an unset key means unlimited so a trigger without a daemon still opens.
+    own = _explicit_limit(home)
+    if own is not None:
+        return own, "profile"
+    shared_home = default_home_for(home)
+    shared = _explicit_limit(shared_home) if shared_home != home else None
+    if shared is not None:
+        return shared, "default"
+    return DEFAULT_LIMIT, "built-in"
+
+
+def limit(home: Path) -> int:
+    return limit_origin(home)[0]
 
 
 @contextlib.contextmanager

@@ -127,6 +127,57 @@ def test_dispatch_turn_posts_to_its_own_workgroup_even_with_a_mistyped_id(
     assert calls[-1] == "wg_y3qtl5shxutlhyxq"
 
 
+def test_gate_less_continuation_appends_the_pending_recheck_to_the_qa_opener(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = []
+
+    async def post(home, wg_id, text, cost=None, turn_id=None):
+        calls.append(text.decode())
+        return {"seq": 8, "ts": "2026-09-05T00:00:00Z"}
+
+    monkeypatch.setattr(tool_mod.wc, "post", post)
+    monkeypatch.setattr(tool_mod, "get_home", lambda: None)
+    monkeypatch.setenv("ALPI_WORKGROUP_DISPATCH", "wg_target")
+    monkeypatch.setenv("ALPI_WORKGROUP_RECHECK_PHASE", "qa")
+    monkeypatch.setenv(
+        "ALPI_WORKGROUP_RECHECK_SUFFIX",
+        " · Re-verify each retained finding: room count is wrong",
+    )
+
+    result = WorkgroupPostTool().run(text="@lens #task #qa · audit the build")
+
+    assert result.ok
+    assert calls == [
+        "@lens #task #qa · audit the build · Re-verify each retained finding: room count is wrong",
+    ]
+
+
+def test_gate_less_recheck_is_appended_to_the_opener_line_not_trailing_prose(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = []
+
+    async def post(home, wg_id, text, cost=None, turn_id=None):
+        calls.append(text.decode())
+        return {"seq": 8, "ts": "2026-09-05T00:00:00Z"}
+
+    monkeypatch.setattr(tool_mod.wc, "post", post)
+    monkeypatch.setattr(tool_mod, "get_home", lambda: None)
+    monkeypatch.setenv("ALPI_WORKGROUP_DISPATCH", "wg_target")
+    monkeypatch.setenv("ALPI_WORKGROUP_RECHECK_PHASE", "qa")
+    monkeypatch.setenv("ALPI_WORKGROUP_RECHECK_SUFFIX", " · retained finding")
+
+    result = WorkgroupPostTool().run(
+        text="@lens #task #qa · audit the build\nThis line is not the opener",
+    )
+
+    assert result.ok
+    assert calls == [
+        "@lens #task #qa · audit the build · retained finding\nThis line is not the opener",
+    ]
+
+
 def test_member_turn_rejects_a_bare_working_post_but_keeps_finalizer_continuations(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

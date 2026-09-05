@@ -65,7 +65,7 @@ def _run(monkeypatch, home: Path, args: list[str]):
 
 
 def test_show_prints_every_pipeline_with_the_launch_marker(short_tmp: Path, monkeypatch) -> None:
-    home = short_tmp / "hub"
+    home = short_tmp / "profiles" / "hub"
     wg = _hub(home)
     out = _run(monkeypatch, home, ["workgroup", "show", wg.meta.id]).output
     assert "Pipelines" in out
@@ -76,7 +76,7 @@ def test_show_prints_every_pipeline_with_the_launch_marker(short_tmp: Path, monk
 
 
 def test_show_reports_a_launchless_workgroup_as_such(short_tmp: Path, monkeypatch) -> None:
-    home = short_tmp / "hub"
+    home = short_tmp / "profiles" / "hub"
     wg = _hub(home, launch=None)
     out = _run(monkeypatch, home, ["workgroup", "show", wg.meta.id]).output
     assert "no launch pipeline" in out
@@ -84,7 +84,7 @@ def test_show_reports_a_launchless_workgroup_as_such(short_tmp: Path, monkeypatc
 
 
 def test_list_annotates_pipelines_and_the_selector(short_tmp: Path, monkeypatch) -> None:
-    home = short_tmp / "hub"
+    home = short_tmp / "profiles" / "hub"
     _hub(home, launch=None)
     out = _run(monkeypatch, home, ["workgroup", "list"]).output
     assert "pipelines: 2 · launch: none" in out
@@ -94,7 +94,7 @@ def test_list_annotates_pipelines_and_the_selector(short_tmp: Path, monkeypatch)
 async def test_show_prints_the_transcript_selected_run_not_the_launch_chain(
     short_tmp: Path, monkeypatch,
 ) -> None:
-    home = short_tmp / "hub"
+    home = short_tmp / "profiles" / "hub"
     wg = _hub(home)
     await wc.trigger_pipeline(home, wg.meta.id, "media-update")
     out = _run(monkeypatch, home, ["workgroup", "show", wg.meta.id]).output
@@ -103,7 +103,7 @@ async def test_show_prints_the_transcript_selected_run_not_the_launch_chain(
 
 
 def test_trigger_publishes_the_declared_opener(short_tmp: Path, monkeypatch) -> None:
-    home = short_tmp / "hub"
+    home = short_tmp / "profiles" / "hub"
     wg = _hub(home)
     result = _run(monkeypatch, home, ["workgroup", "trigger", wg.meta.id, "media-update"])
     assert result.exit_code == 0, result.output
@@ -115,10 +115,10 @@ def test_trigger_publishes_the_declared_opener(short_tmp: Path, monkeypatch) -> 
 
 
 def test_trigger_reports_a_queued_pipeline(short_tmp: Path, monkeypatch) -> None:
-    home = short_tmp / "hub"
+    home = short_tmp / "profiles" / "hub"
     wg = _hub(home)
     (home / "config.yaml").write_text(
-        "alp:\n  max_active_pipelines: 1\n", encoding="utf-8",
+        "alp:\n  max_active_workgroups: 1\n", encoding="utf-8",
     )
 
     result = _run(
@@ -133,7 +133,7 @@ def test_trigger_reports_a_queued_pipeline(short_tmp: Path, monkeypatch) -> None
 
 
 def test_trigger_surfaces_the_daemon_rejection_verbatim(short_tmp: Path, monkeypatch) -> None:
-    home = short_tmp / "hub"
+    home = short_tmp / "profiles" / "hub"
     wg = _hub(home)
     result = _run(monkeypatch, home, ["workgroup", "trigger", wg.meta.id, "nope"])
     assert result.exit_code != 0
@@ -145,7 +145,7 @@ def test_trigger_surfaces_the_daemon_rejection_verbatim(short_tmp: Path, monkeyp
 
 @pytest.mark.parametrize("chain", ["setup, build", ""])
 def test_update_has_no_pipeline_option(short_tmp: Path, monkeypatch, chain: str) -> None:
-    home = short_tmp / "hub"
+    home = short_tmp / "profiles" / "hub"
     wg = _hub(home)
     result = _run(
         monkeypatch, home,
@@ -172,7 +172,7 @@ def test_trigger_is_reachable_from_the_workgroup_group() -> None:
 def test_setup_menu_exposes_pipelines_and_trigger(short_tmp: Path) -> None:
     from alpi.alp import workgroup_setup as wg_setup
 
-    home = short_tmp / "hub"
+    home = short_tmp / "profiles" / "hub"
     wg = _hub(home, launch=None)
     assert wg_setup._pipelines_summary(wg.meta) == "2 · launch: none"
     reloaded = wg_mod.load(home, wg.meta.id)
@@ -201,7 +201,7 @@ def test_subscriber_show_lists_the_hydrated_chains(short_tmp: Path, monkeypatch)
 
 
 def test_trigger_prints_the_run_it_stopped(short_tmp: Path, monkeypatch) -> None:
-    home = short_tmp / "hub"
+    home = short_tmp / "profiles" / "hub"
     wg = _hub(home)
     first = _run(monkeypatch, home, ["workgroup", "trigger", wg.meta.id, "setup"])
     assert first.exit_code == 0, first.output
@@ -220,7 +220,7 @@ def test_trigger_help_states_the_one_at_a_time_rule() -> None:
 
 
 def test_create_makes_a_deliberation_workgroup(short_tmp: Path, monkeypatch) -> None:
-    home = short_tmp / "hub"
+    home = short_tmp / "profiles" / "hub"
     home.mkdir(parents=True, exist_ok=True)
     load_or_generate(home)
     result = _run(monkeypatch, home, [
@@ -233,3 +233,21 @@ def test_create_makes_a_deliberation_workgroup(short_tmp: Path, monkeypatch) -> 
     assert wgs[0].meta.pipelines == {}
     assert wgs[0].meta.launch_pipeline is None
     assert wgs[0].meta.quorum_timeout_seconds == 120
+
+
+def test_limit_sets_and_reports_the_admission_cap(short_tmp: Path, monkeypatch) -> None:
+    root = short_tmp
+    home = root / "profiles" / "hub"
+    _hub(home, launch=None)
+    assert "active workgroups: unlimited (built-in)" in _run(monkeypatch, home, ["workgroup", "limit"]).output
+    (root / "config.yaml").write_text("alp:\n  max_active_workgroups: 5\n", encoding="utf-8")
+    assert "active workgroups: 5 (default)" in _run(monkeypatch, home, ["workgroup", "limit"]).output
+    assert "active workgroups: 3 (profile)" in _run(monkeypatch, home, ["workgroup", "limit", "3"]).output
+    from alpi import config as cfg_mod
+    assert cfg_mod.load(home).alp["max_active_workgroups"] == 3
+    assert "admission: 3 active workgroups (profile) · 0 queued" in _run(monkeypatch, home, ["workgroup", "list"]).output
+    assert "active workgroups: unlimited (profile)" in _run(monkeypatch, home, ["workgroup", "limit", "0"]).output
+    assert "active workgroups: 5 (default)" in _run(monkeypatch, home, ["workgroup", "limit", "--inherit"]).output
+    assert "max_active_workgroups" not in (cfg_mod.load(home).raw.get("alp") or {})
+    assert _run(monkeypatch, home, ["workgroup", "limit", "-1"]).exit_code != 0
+    assert _run(monkeypatch, root, ["workgroup", "limit", "--inherit"]).exit_code != 0

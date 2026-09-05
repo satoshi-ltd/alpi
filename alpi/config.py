@@ -56,7 +56,6 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "alp": {
         "link_idle_timeout_s": 60,
         "link_max_duration_s": 0,
-        "max_active_pipelines": 0,
         "working_after_s": 30,
     },
     "email": {
@@ -715,6 +714,16 @@ def resolve_model(
     return out
 
 
+DEFAULT_HOME_ACTIVE_WORKGROUPS = 5
+
+
+def seed_config_for(home: Path) -> dict[str, Any]:
+    # Only the default home carries the daemon-wide cap; profile homes inherit it through pipeline_queue.limit_origin.
+    if home.parent.name == "profiles":
+        return SEED_CONFIG
+    return {**SEED_CONFIG, "alp": {**SEED_CONFIG.get("alp", {}), "max_active_workgroups": DEFAULT_HOME_ACTIVE_WORKGROUPS}}
+
+
 def seed_defaults(home: Path) -> None:
     """Write a starter config.yaml on first run.
 
@@ -726,5 +735,5 @@ def seed_defaults(home: Path) -> None:
     cfg_path = home / "config.yaml"
     if not cfg_path.exists():
         cfg_path.write_text(
-            yamlfast.safe_dump(SEED_CONFIG, sort_keys=False, allow_unicode=True),
+            yamlfast.safe_dump(seed_config_for(home), sort_keys=False, allow_unicode=True),
         )

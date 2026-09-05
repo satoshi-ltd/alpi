@@ -34,10 +34,11 @@ export function Section({ label, children, kicker }) {
   );
 }
 
-export function Field({ label, children, helper, align = "center" }) {
+export function Field({ label, children, helper, align = "center", hidden = false }) {
   const rowAlign = align === "center" ? styles.fieldRowCenter : styles.fieldRowTop;
+  // `hidden` keeps the same element so children stay mounted while the row is out of view.
   return (
-    <div className={`row ${styles.fieldRow} ${rowAlign}`}>
+    <div className={`row ${styles.fieldRow} ${rowAlign}`} hidden={hidden}>
       <div
         className={`${styles.fieldLabelCol} ${align === "top" ? styles.fieldLabelColTop : ""}`}
       >

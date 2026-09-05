@@ -38,11 +38,20 @@ vi.mock("./fields/agent.jsx", () => ({
   VisionModelField: () => <span>vision field</span>,
   VoiceField: () => null,
 }));
-vi.mock("./fields/alp.jsx", () => ({
-  PeersField: () => null,
-  TcpPortField: () => null,
-  WorkgroupsField: () => null,
-}));
+const workgroupsProbe = vi.hoisted(() => ({ count: 0 }));
+vi.mock("./fields/alp.jsx", async () => {
+  const { useEffect } = await import("react");
+  return {
+    PeersField: () => null,
+    PipelineLimitField: () => <span>pipeline limit</span>,
+    TcpPortField: () => null,
+    WorkgroupsField: ({ onCountChange }) => {
+      const count = workgroupsProbe.count;
+      useEffect(() => { onCountChange?.(count); }, [count, onCountChange]);
+      return <span>workgroups probe</span>;
+    },
+  };
+});
 vi.mock("./fields/services.jsx", () => ({
   EmailCell: () => null,
 }));
@@ -213,5 +222,45 @@ describe("ProfileDetail — vision model gating", () => {
     expect(screen.getByText("vision field")).toBeInTheDocument();
     delete stableDetail.models;
     delete stableDetail.vision_model;
+  });
+});
+
+
+describe("ProfileDetail — workgroups row", () => {
+  it("stays mounted while hidden so the loader can report a late count", () => {
+    workgroupsProbe.count = 0;
+    const { rerender } = render(
+      <ProfileDetail profile={{ name: "mira", accent: "#10b981" }} profiles={[]} activeConnection={{ id: "local" }} />,
+    );
+    expect(screen.getByText("workgroups probe")).not.toBeVisible();
+    expect(screen.getByText("workgroups")).not.toBeVisible();
+
+    workgroupsProbe.count = 3;
+    rerender(
+      <ProfileDetail profile={{ name: "mira", accent: "#10b981" }} profiles={[]} activeConnection={{ id: "local" }} refreshTick={1} />,
+    );
+    expect(screen.getByText("workgroups probe")).toBeVisible();
+    expect(screen.getByText("workgroups")).toBeInTheDocument();
+  });
+});
+
+
+describe("ProfileDetail — concurrency gating", () => {
+  it("hides the concurrency row when the daemon does not report the cap", () => {
+    render(<ProfileDetail profile={{ name: "mira", accent: "#10b981" }} profiles={[]} activeConnection={{ id: "local" }} />);
+    expect(screen.queryByText("concurrency")).toBeNull();
+    expect(screen.queryByText("pipeline limit")).toBeNull();
+  });
+
+  it("shows it once the daemon exposes max_active_workgroups", () => {
+    render(
+      <ProfileDetail
+        profile={{ name: "mira", accent: "#10b981", max_active_workgroups: 5, max_active_workgroups_origin: "default" }}
+        profiles={[]}
+        activeConnection={{ id: "local" }}
+      />,
+    );
+    expect(screen.getByText("concurrency")).toBeInTheDocument();
+    expect(screen.getByText("pipeline limit")).toBeInTheDocument();
   });
 });

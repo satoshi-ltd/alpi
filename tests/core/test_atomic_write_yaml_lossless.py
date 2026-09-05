@@ -102,7 +102,7 @@ def test_seed_config_round_trips(tmp_path: Path) -> None:
 
     config_mod.seed_defaults(tmp_path)
     raw = yamlfast.safe_load((tmp_path / "config.yaml").read_text())
-    assert raw == config_mod.SEED_CONFIG
+    assert raw == config_mod.seed_config_for(tmp_path)
 
 
 def test_a_lone_surrogate_raises_instead_of_writing_a_broken_file(

@@ -1311,6 +1311,48 @@ async def test_continuation_prompt_permits_task_not_closure_only(
 
 
 @pytest.mark.asyncio
+async def test_gate_less_continuation_carries_and_only_acks_a_delivered_recheck(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    import sys as _sys
+
+    home = short_tmp / "mira-recheck"
+    (home / "alp").mkdir(parents=True)
+    service._set_qa_recheck(home, "wg_recheck", "qa", "QA FAIL · wrong room count")
+    captured = {}
+    checked = []
+    real_create = service.asyncio.create_subprocess_exec
+
+    async def fake_create(*argv, env=None, **kw):
+        captured["prompt"] = argv[-1]
+        captured["env"] = env or {}
+        return await real_create(
+            _sys.executable, "-c", "pass",
+            stdout=service.asyncio.subprocess.PIPE,
+            stderr=service.asyncio.subprocess.PIPE,
+        )
+
+    def delivered(home_, wg_id, phase, suffix, after_seq):
+        checked.append((wg_id, phase, suffix, after_seq))
+        return True
+
+    monkeypatch.setattr(service.asyncio, "create_subprocess_exec", fake_create)
+    monkeypatch.setattr(service, "_qa_recheck_delivered", delivered)
+
+    await service._dispatch_workgroup_turn(
+        home, "mira", "wg_recheck", "site", "open qa",
+        continuation=True, next_phase="qa", started_against_task_seq=12,
+    )
+
+    assert "being revisited after a failed verification" in captured["prompt"]
+    assert captured["env"]["ALPI_WORKGROUP_RECHECK_PHASE"] == "qa"
+    suffix = captured["env"]["ALPI_WORKGROUP_RECHECK_SUFFIX"]
+    assert "wrong room count" in suffix
+    assert checked == [("wg_recheck", "qa", suffix, 12)]
+    assert service._peek_qa_recheck(home, "wg_recheck", "qa") == ("", "")
+
+
+@pytest.mark.asyncio
 async def test_closure_prompt_sets_closure_only_env(
     short_tmp: Path, monkeypatch,
 ) -> None:

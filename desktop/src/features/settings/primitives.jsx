@@ -10,9 +10,9 @@ export function Section({ title, tooltip, kicker, children }) {
   return <DSSection label={title} kicker={kicker ?? tooltip}>{children}</DSSection>;
 }
 
-export function Row({ label, alignTop, children }) {
+export function Row({ label, alignTop, hidden = false, children }) {
   return (
-    <DSField label={label} align={alignTop ? "top" : "center"}>
+    <DSField label={label} align={alignTop ? "top" : "center"} hidden={hidden}>
       {children}
     </DSField>
   );

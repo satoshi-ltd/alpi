@@ -21,6 +21,7 @@ DOCUMENTED_BUT_PARSED_ELSEWHERE = {
     "tools.budget.per_result_chars",
     "tools.<name>.max_result_chars",
     "tools.web_search.max_per_turn",  # alpi/tools/web_search.py::_max_per_turn
+    "alp.max_active_workgroups",  # alpi/alp/pipeline_queue.py::limit_origin reads raw YAML so absence stays absence
     "model_reasoning.effort",
     "memory.review_interval",
     "host.tcp_port",

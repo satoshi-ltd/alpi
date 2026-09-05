@@ -2406,7 +2406,7 @@ async def test_trigger_pipeline_queues_until_the_daemon_admits_it(
 
     home = short_tmp / "hubtrigqueue"; home.mkdir()
     (home / "config.yaml").write_text(
-        "alp:\n  max_active_pipelines: 1\n", encoding="utf-8",
+        "alp:\n  max_active_workgroups: 1\n", encoding="utf-8",
     )
     wg, muse_pk = _chain_hub(home, launch=None)
 
@@ -2427,7 +2427,7 @@ async def test_queued_pipeline_prepares_only_when_admitted(
     workspace = short_tmp / "workspace-queued"; workspace.mkdir()
     project = workspace / "app"; project.mkdir()
     (home / "config.yaml").write_text(
-        f"workspace: {workspace}\nalp:\n  max_active_pipelines: 1\n",
+        f"workspace: {workspace}\nalp:\n  max_active_workgroups: 1\n",
     )
     steps = {key: dict(value) for key, value in _CHAIN_STEPS.items()}
     steps["media-update"]["prepare"] = {

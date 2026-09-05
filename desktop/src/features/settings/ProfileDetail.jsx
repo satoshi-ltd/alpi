@@ -38,6 +38,7 @@ import {
 } from "./fields/agent.jsx";
 import {
   PeersField,
+  PipelineLimitField,
   TcpPortField,
   WorkgroupsField,
 } from "./fields/alp.jsx";
@@ -121,6 +122,10 @@ export default function ProfileDetail({
   const [ollamaErrors, setOllamaErrors] = useState([]);
 
   const [workgroupsLoading, setWorkgroupsLoading] = useState(false);
+  const [workgroupCount, setWorkgroupCount] = useState(workgroupsPre?.length ?? 0);
+  useEffect(() => {
+    if (workgroupsPre !== undefined) setWorkgroupCount(workgroupsPre.length);
+  }, [workgroupsPre]);
 
   const notify = useNotify();
   const timersRef = useRef({});
@@ -488,7 +493,7 @@ export default function ProfileDetail({
               />
             </LazyMount>
           </Row>
-          <Row label="workgroups">
+          <Row label="workgroups" hidden={!workgroupsLoading && workgroupCount === 0}>
             <WorkgroupsField
               profile={profile}
               profiles={profiles}
@@ -499,8 +504,14 @@ export default function ProfileDetail({
                 onNavigate?.({ kind: "workgroup", id })
               }
               onLoadingChange={setWorkgroupsLoading}
+              onCountChange={setWorkgroupCount}
             />
           </Row>
+          {profile.max_active_workgroups !== undefined && (
+            <Row label="concurrency">
+              <PipelineLimitField profile={profile} onSaved={onSaved} />
+            </Row>
+          )}
         </Section>
 
         <Section

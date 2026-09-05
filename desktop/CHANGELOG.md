@@ -11,6 +11,16 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.5.22 — 2026-09-05 — the fleet size is a setting
+
+- **Concurrency is a profile setting.** Every profile shows how many
+  workgroups may be active at once, whether that cap is its own or inherited
+  from the default profile, and how many launches wait in the admission
+  queue. Edit it in place, or send a hub back to the default with one click;
+  `0` means unlimited. Requires alpi 0.14.22 for the live value.
+- **Empty rows stay out of the way.** A profile without workgroups no longer
+  shows a `workgroups · none` line in its settings.
+
 ## v0.5.21 — 2026-09-04 — workgroups read the way they run
 
 - **The list reads the way the fleet runs.** Working workgroups come first,

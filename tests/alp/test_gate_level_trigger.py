@@ -1291,3 +1291,135 @@ async def test_hub_routed_gate_failure_closes_blocked_after_three_hub_rounds(
         + posted[0].split("rounds: ", 1)[1]
     ]
     assert "public/img/.gitkeep" in posted[0]
+
+
+@pytest.mark.asyncio
+async def test_qa_opener_after_a_rewind_carries_the_previous_findings(tmp_path, monkeypatch):
+    home = tmp_path / "hub-recheck"
+    (home / "alp").mkdir(parents=True)
+    steps = {
+        "build": {"owner": "pixel", "task": "run the build once", "gate": {"argv": ["true"], "cwd": ""}},
+        "qa": {"owner": "lens", "task": "audit it", "gate": {"argv": ["true"], "cwd": "", "repair": "hub"}},
+    }
+    wg = types.SimpleNamespace(meta=types.SimpleNamespace(
+        id="wg_recheck", name="site", hub_pubkey="HUB", paused=False,
+        pipelines={"setup": ("build", "qa")}, launch_pipeline="setup", pipeline_steps=steps,
+    ), members=[types.SimpleNamespace(pubkey="PIXELPK")])
+    monkeypatch.setattr(
+        "alpi.alp.peers.load",
+        lambda h: [types.SimpleNamespace(id="pixel", pubkey="PIXELPK"), types.SimpleNamespace(id="lens", pubkey="LENSPK")],
+    )
+    monkeypatch.setattr("alpi.config.load", lambda h: types.SimpleNamespace(workspace_path=tmp_path))
+    monkeypatch.setattr("alpi.alp.pipeline_gates.run_gate", lambda step, ws: (True, "Dist check passed."))
+    monkeypatch.setattr(service, "_set_hub_responded_seq", lambda *a: None)
+    service._GATE_ATTEMPTED.clear()
+    service._set_qa_recheck(home, "wg_recheck", "qa", "QA FAIL · rooms render an empty Room information section")
+    recent = [
+        {"seq": 30, "from": "HUB", "ts": _OLD, "text": "@pixel #task #build run the build once"},
+        {"seq": 31, "from": "PIXELPK", "ts": _OLD, "text": "#build complete, dist/ ready"},
+    ]
+    posted = []
+
+    async def fake_post(h, wid, text, cost=None):
+        posted.append(text.decode())
+        return {"seq": 40 + len(posted)}
+
+    monkeypatch.setattr("alpi.alp.workgroup_client.post", fake_post)
+
+    assert await service._maybe_gate_advance(home, wg, recent, "HUB") is True
+    assert posted[0].startswith("#done build verified")
+    assert posted[1].startswith(
+        "@lens #task #qa · audit it · Re-verify each retained finding of the previous QA FAIL",
+    )
+    assert posted[1].endswith("QA FAIL · rooms render an empty Room information section")
+    assert service._peek_qa_recheck(home, "wg_recheck", "qa") == ("", "")
+
+
+@pytest.mark.asyncio
+async def test_qa_recheck_survives_a_failed_opener_and_keeps_other_phases(tmp_path, monkeypatch):
+    home = tmp_path / "hub-recheck-keep"
+    (home / "alp").mkdir(parents=True)
+    steps = {
+        "build": {"owner": "pixel", "task": "run the build once", "gate": {"argv": ["true"], "cwd": ""}},
+        "qa": {"owner": "lens", "task": "audit it", "gate": {"argv": ["true"], "cwd": "", "repair": "hub"}},
+    }
+    wg = types.SimpleNamespace(meta=types.SimpleNamespace(
+        id="wg_keep", name="site", hub_pubkey="HUB", paused=False,
+        pipelines={"setup": ("build", "qa")}, launch_pipeline="setup", pipeline_steps=steps,
+    ), members=[types.SimpleNamespace(pubkey="PIXELPK")])
+    monkeypatch.setattr(
+        "alpi.alp.peers.load",
+        lambda h: [types.SimpleNamespace(id="pixel", pubkey="PIXELPK"), types.SimpleNamespace(id="lens", pubkey="LENSPK")],
+    )
+    monkeypatch.setattr("alpi.config.load", lambda h: types.SimpleNamespace(workspace_path=tmp_path))
+    monkeypatch.setattr("alpi.alp.pipeline_gates.run_gate", lambda step, ws: (True, "Dist check passed."))
+    monkeypatch.setattr(service, "_set_hub_responded_seq", lambda *a: None)
+    service._GATE_ATTEMPTED.clear()
+    service._set_qa_recheck(home, "wg_keep", "qa", "QA FAIL · empty room section")
+    service._set_qa_recheck(home, "wg_keep", "media-qa", "QA FAIL · hero still a placeholder")
+    recent = [
+        {"seq": 30, "from": "HUB", "ts": _OLD, "text": "@pixel #task #build run the build once"},
+        {"seq": 31, "from": "PIXELPK", "ts": _OLD, "text": "#build complete, dist/ ready"},
+    ]
+    calls = []
+
+    async def failing_post(h, wid, text, cost=None):
+        calls.append(text.decode())
+        if len(calls) == 2:
+            raise RuntimeError("hub unreachable")
+        return {"seq": 40 + len(calls)}
+
+    monkeypatch.setattr("alpi.alp.workgroup_client.post", failing_post)
+
+    result = await service._maybe_gate_advance(home, wg, recent, "HUB")
+
+    assert isinstance(result, str) and "advance post failed" in result
+    assert service._peek_qa_recheck(home, "wg_keep", "qa") == ("qa", "QA FAIL · empty room section")
+    assert service._peek_qa_recheck(home, "wg_keep", "media-qa") == ("qa", "QA FAIL · hero still a placeholder")
+
+
+def test_a_red_gate_rewind_is_never_reported_as_a_qa_fail(tmp_path):
+    home = tmp_path / "hub-gate-kind"
+    (home / "alp").mkdir(parents=True)
+    service._set_qa_recheck(home, "wg_kind", "qa", "FAIL boundary: public/img/.gitkeep", kind="gate")
+
+    kind, excerpt = service._peek_qa_recheck(home, "wg_kind", "qa")
+    suffix = service._recheck_suffix(kind, excerpt)
+
+    assert kind == "gate"
+    assert "retained gate finding that reopened this phase" in suffix
+    assert "QA FAIL" not in suffix
+
+
+def test_qa_recheck_keeps_the_full_bounded_checklist_and_marks_truncation(tmp_path):
+    home = tmp_path / "hub-recheck-cap"
+    (home / "alp").mkdir(parents=True)
+    findings = "QA FAIL · " + "A" * 6_100 + " · final finding"
+
+    service._set_qa_recheck(home, "wg_cap", "qa", findings)
+
+    kind, excerpt = service._peek_qa_recheck(home, "wg_cap", "qa")
+    assert kind == "qa"
+    assert len(excerpt) == service._QA_RECHECK_MAX_CHARS
+    assert excerpt.endswith("… [truncated]")
+
+
+def test_qa_recheck_delivery_requires_the_matching_opener_and_suffix(tmp_path, monkeypatch):
+    suffix = " · Re-verify retained findings: broken room count"
+    wg = types.SimpleNamespace(meta=types.SimpleNamespace(
+        hub_pubkey="HUB",
+        pipelines={"setup": ("build", "qa")},
+        pipeline_steps={},
+    ))
+    monkeypatch.setattr("alpi.alp.workgroup.load", lambda home, wid: wg)
+    posts = [
+        {"seq": 10, "from": "HUB", "text": "@lens #task #qa · audit" + suffix},
+    ]
+    monkeypatch.setattr(service, "_all_hub_posts_decrypted", lambda home, loaded: posts)
+
+    assert service._qa_recheck_delivered(tmp_path, "wg", "qa", suffix, 9)
+    assert not service._qa_recheck_delivered(tmp_path, "wg", "qa", suffix, 10)
+    assert not service._qa_recheck_delivered(tmp_path, "wg", "build", suffix, 9)
+
+    posts[0]["text"] = "@lens #task #qa · audit\nUnrelated note" + suffix
+    assert not service._qa_recheck_delivered(tmp_path, "wg", "qa", suffix, 9)

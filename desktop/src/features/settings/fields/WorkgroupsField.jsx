@@ -11,6 +11,7 @@ export function WorkgroupsField({
   prefetched,
   onSelectWorkgroup,
   onLoadingChange = null,
+  onCountChange = null,
   defer = false,
 }) {
   const prefetchedMode = prefetched !== undefined;
@@ -45,8 +46,10 @@ export function WorkgroupsField({
     };
   }, [profile.name, connectionId, prefetchedMode, prefetched, defer, onLoadingChange]);
 
+  useEffect(() => { onCountChange?.(groups.length); }, [groups.length, onCountChange]);
+
   if (groups.length === 0) {
-    return <span className={styles.muted}>{loading ? "loading…" : "none"}</span>;
+    return loading ? <span className={styles.muted}>loading…</span> : null;
   }
 
   const hubCount = groups.filter((g) => g.is_hub).length;

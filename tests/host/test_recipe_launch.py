@@ -296,7 +296,7 @@ async def test_launch_queues_the_pipeline_when_admission_is_limited(tmp_path):
     _pin_member(home, "scout")
     (home / "config.yaml").write_text(
         (home / "config.yaml").read_text()
-        + "alp:\n  max_active_pipelines: 1\n",
+        + "alp:\n  max_active_workgroups: 1\n",
     )
 
     result = await host_recipes.launch(

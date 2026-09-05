@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.14.22 — 2026-09-05 — a rewound QA re-checks what failed
+
+- **The auditor re-verifies its own findings.** When a `QA FAIL` rewinds a
+  pipeline and the chain walks back to QA, the reopened task carries the
+  retained findings from the previous verdict as a checklist the auditor is
+  asked to state as resolved or persistent, instead of auditing from a blank
+  page. The checklist follows both deterministic gate advances and hub-authored
+  continuations through a single task-post boundary.
+- **How many workgroups are active at once is a daemon setting.** The cap is
+  now `alp.max_active_workgroups`: it counts every workgroup with live work,
+  a deliberation with an open task as much as a running pipeline, and it is
+  enforced where launches queue — pipelines wait for a slot, deliberations
+  always open and count against it. It lives on
+  the default profile and applies to every hub, a hub may still pin its own,
+  and new installs seed it at `5` instead of unlimited. `alpi workgroup
+  limit` shows or sets it (`0` = unlimited), `workgroup list` reports the cap,
+  its origin and the admission queue, and the profile detail exposes them so
+  clients can edit the value without touching `config.yaml`.
+
 ## v0.14.21 — 2026-09-05 — MCP servers no longer survive stop()
 
 - **Stopping an MCP server now takes its whole wrapper chain down.** A stdio

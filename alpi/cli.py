@@ -3970,6 +3970,11 @@ def workgroup_list(ctx: click.Context) -> None:
         click.echo("hub of:")
         from alpi.alp import pipeline_queue
         queued = pipeline_queue.positions(h)
+        maximum, origin = pipeline_queue.limit_origin(h)
+        click.echo(
+            f"  admission: {maximum if maximum else 'unlimited'} active workgroups ({origin})"
+            f" · {len(queued)} queued  (alpi workgroup limit N)"
+        )
         for w in hub:
             paused = " [paused]" if w.meta.paused else ""
             queue_item = queued.get(w.meta.id)
@@ -3989,6 +3994,37 @@ def workgroup_list(ctx: click.Context) -> None:
                 f"  {s.wg_id}  {s.name}  via @{s.hub_id}  (seq {s.last_seq})"
                 f"{_pipelines_summary(s.pipelines, s.launch_pipeline)}"
             )
+
+
+@workgroup.command("limit")
+@click.argument("maximum", required=False, type=int)
+@click.option("--inherit", is_flag=True, help="Remove this hub's override and follow the default profile.")
+@click.pass_context
+def workgroup_limit(ctx: click.Context, maximum: int | None, inherit: bool) -> None:
+    """Show or set how many workgroups run at once (0 = unlimited)."""
+    from alpi.alp import pipeline_queue
+    from alpi.host import device_state
+
+    h: Path = ctx.obj["home"]
+    if inherit and maximum is not None:
+        raise click.UsageError("MAXIMUM and --inherit are mutually exclusive")
+    if inherit and h.parent.name != "profiles":
+        raise click.UsageError("the default profile cannot inherit a workgroup limit")
+    if inherit:
+        data = device_state._load_user_yaml(h)
+        device_state._unset_dotted(data, "alp.max_active_workgroups")
+        device_state._write_user_yaml(h, data)
+    if maximum is not None:
+        if maximum < 0:
+            raise click.BadParameter("must be 0 or a positive integer", param_hint="MAXIMUM")
+        data = device_state._load_user_yaml(h)
+        device_state._set_dotted(data, "alp.max_active_workgroups", maximum)
+        device_state._write_user_yaml(h, data)
+    current, origin = pipeline_queue.limit_origin(h)
+    click.echo(
+        f"active workgroups: {current if current else 'unlimited'} ({origin})"
+        f" · {len(pipeline_queue.entries(h))} queued"
+    )
 
 
 @workgroup.command("recipes")

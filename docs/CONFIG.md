@@ -569,7 +569,7 @@ no reachable address (no `network.host`, no Tailscale/LAN, not Docker) even
 | `alp.tcp_port` | `7423` (default profile only) | The ALP peer TCP port. Auto-exposed for the `default` profile; a named profile binds TCP only if it sets its own unique port here. The address is `network.host`. |
 | `alp.link_idle_timeout_s` | `60` | Cancel `link.ask` after this many seconds without a signed response or progress frame. `0` disables the idle watchdog. |
 | `alp.link_max_duration_s` | `0` | Optional absolute cap for one `link.ask`; `0` allows an active turn to run without a fixed wall-clock limit. |
-| `alp.max_active_pipelines` | `0` | Maximum admitted workgroup pipelines for this hub profile. `0` is unlimited; excess launches and triggers wait in a persistent FIFO queue. |
+| `alp.max_active_workgroups` | `5` on the default profile | How many workgroups may be active at once: a running pipeline or a deliberation with an open task each hold a slot. Enforced at pipeline admission: excess pipeline launches and triggers wait in a persistent FIFO queue, while deliberation launches always open and count against the cap. Read from the hub's own `config.yaml` when set there, else from the default profile's (the daemon-wide setting, seeded at `5` on new installs), else unlimited; `0` is unlimited. Set it with `alpi workgroup limit N` (on the default profile for every hub, on a hub to override), remove a hub override with `alpi workgroup limit --inherit`, or edit it from any profile's settings in the desktop app; `workgroup list` shows the cap, its origin and the queue. |
 | `alp.working_after_s` | `30` | Post an automatic `#working` heartbeat when a member turn remains silent for this many seconds. `0` disables it. |
 
 ```yaml
@@ -577,7 +577,7 @@ alp:
   tcp_port: 7423
   link_idle_timeout_s: 60
   link_max_duration_s: 0
-  max_active_pipelines: 5
+  max_active_workgroups: 5
   working_after_s: 30
 ```
 
