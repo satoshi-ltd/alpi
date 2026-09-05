@@ -22,14 +22,13 @@ list targeting v0.14.x patch releases.
 
 ### Runtime hardening
 
-MCP.1 and PROC.1 were isolated on the 2026-09-03 mirai box: sentinel's
-PR-review cron leaked one orphaned `bitbucket-mcp` server per run, 38 zombies
-against 41 h of daemon uptime.
+PROC.1 was isolated on the 2026-09-03 mirai box: sentinel's PR-review cron
+leaked one orphaned `bitbucket-mcp` server per run, 38 zombies against 41 h
+of daemon uptime.
 
 | ID | Item | Status |
 |---|---|---|
-| MCP.1 | `MCPClient.stop()` signals only the process it spawned. A stdio server started through `npx` is a wrapper chain (`npm exec …` → `sh` → server), so `terminate()` reaches the wrapper and the real server survives, orphaned, on every turn. Spawn with `start_new_session=True` and stop the group with `os.killpg`, the pattern `_stop_process_group` in `alpi/alp/pipeline_gates.py` and the `terminal` tool already use — `alpi/mcp/client.py` is the only spawn site that does neither. | 🟡 |
-| PROC.1 | The daemon is PID 1 inside the image (`ENTRYPOINT ["alpi-docker"]`, no init), so every orphan in the container reparents to it and stays a zombie: it never calls `wait()` on children it did not spawn. Reap them when `os.getpid() == 1` — a SIGCHLD handler draining `waitpid(-1, WNOHANG)` — so a hard-killed turn, a crashed MCP server, or a `terminal` grandchild cannot accumulate. Independent of MCP.1: that closes the common leak, this bounds every other path. | 🟡 |
+| PROC.1 | The daemon is PID 1 inside the image (`ENTRYPOINT ["alpi-docker"]`, no init), so every orphan in the container reparents to it and stays a zombie: it never calls `wait()` on children it did not spawn. Reap them when `os.getpid() == 1` — a SIGCHLD handler draining `waitpid(-1, WNOHANG)` — so a hard-killed turn, a crashed MCP server, or a `terminal` grandchild cannot accumulate. v0.14.21 kills the whole MCP wrapper chain so no live server survives `stop()`; this reaps the exits it leaves under PID 1 and bounds every other path. | 🟡 |
 | COST.1 | Per-pipeline cost telemetry: attribute ledger spend and tokens to a pipeline run, replacing manual checkpoint arithmetic. | 🔵 |
 | BG.1 | `alpi doctor` verifies the installed LiteLLM against the pinned version and hashes, catching a supply-chain swap locally (review cadence stays in [OPERATIONS.md](OPERATIONS.md)). | 🔵 |
 

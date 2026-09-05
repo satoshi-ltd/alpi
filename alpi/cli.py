@@ -63,6 +63,12 @@ def _run_chat(h: Path, continue_last: bool = False) -> None:
         AlpiApp(home_dir=h, continue_last=continue_last).run()
     finally:
         _restore_terminal()
+        from alpi.mcp.registry import shutdown_all
+
+        try:
+            shutdown_all()
+        except Exception:  # noqa: BLE001
+            pass
         # os._exit, not return: atexit would .join() a worker still blocked on the LLM HTTP call.
         import os
 

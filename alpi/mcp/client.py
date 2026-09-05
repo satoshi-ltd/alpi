@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import signal
 import subprocess
 import threading
 import time
@@ -65,6 +66,8 @@ class MCPClient:
                 env=env,
                 text=True,
                 bufsize=1,
+                # Own process group: an `npx` server is a wrapper chain, and stop() must reach the real server, not just the wrapper.
+                start_new_session=True,
             )
         except FileNotFoundError as e:
             raise MCPError(
@@ -88,14 +91,11 @@ class MCPClient:
             raise
 
     def stop(self) -> None:
-        if self._proc is None:
+        proc = self._proc
+        if proc is None:
             return
         try:
-            self._proc.terminate()
-            try:
-                self._proc.wait(timeout=3.0)
-            except subprocess.TimeoutExpired:
-                self._proc.kill()
+            _stop_process_group(proc)
         except Exception:  # noqa: BLE001
             pass
         self._proc = None
@@ -231,6 +231,48 @@ class MCPClient:
             lines = [ln for ln in self._stderr_buf[-10:] if ln.strip()]
             return "\n".join(lines)
 
+
+
+_STOP_GRACE_SECONDS = 3.0
+_STOP_TERM_GRACE_SECONDS = 1.0
+
+
+def _stop_process_group(proc: subprocess.Popen) -> None:
+    # A reaped pid may already belong to another group (bpo-38630): never signal it.
+    if proc.poll() is not None:
+        return
+    if proc.stdin is not None:
+        try:
+            proc.stdin.close()
+        except (OSError, ValueError):
+            pass
+    try:
+        proc.wait(timeout=_STOP_GRACE_SECONDS)
+        return
+    except subprocess.TimeoutExpired:
+        pass
+    pgid = proc.pid
+    try:
+        os.killpg(pgid, signal.SIGTERM)
+    except OSError:
+        pass
+    # Never wait on group existence: under PID 1 killed grandchildren stay zombies (until PROC.1), so the SIGTERM grace is a fixed bounded sleep.
+    deadline = time.monotonic() + _STOP_TERM_GRACE_SECONDS
+    try:
+        proc.wait(timeout=_STOP_TERM_GRACE_SECONDS)
+    except subprocess.TimeoutExpired:
+        pass
+    remaining = deadline - time.monotonic()
+    if remaining > 0:
+        time.sleep(remaining)
+    try:
+        os.killpg(pgid, signal.SIGKILL)
+    except OSError:
+        pass
+    try:
+        proc.wait(timeout=1.0)
+    except subprocess.TimeoutExpired:
+        pass
 
 
 _SAFE_ENV_KEYS = (

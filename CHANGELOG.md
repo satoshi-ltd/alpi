@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.14.21 — 2026-09-05 — MCP servers no longer survive stop()
+
+- **Stopping an MCP server now takes its whole wrapper chain down.** A stdio
+  server started through `npx` is a wrapper chain, and stopping only the
+  wrapper left the real server running, orphaned, on every turn — the source
+  of sentinel's leaked `bitbucket-mcp` servers on the mirai box. Each server
+  now runs in its own process group; `stop()` closes the server's stdin so a
+  well-behaved server exits on its own within the grace period, and only then
+  escalates to SIGTERM and, last, SIGKILL on the whole group. The terminal
+  client now runs that shutdown before it exits, so servers no longer outlive
+  the TUI. This ends live orphaned servers. Reaping the exited processes when
+  the daemon runs as PID 1 remains open as PROC.1 — until it lands, those
+  exits still show as zombies inside the container.
+
 ## v0.14.20 — 2026-09-04 — pipelines finish without an operator
 
 - **A turn that runs out of time or steps continues instead of failing.** The

@@ -17,7 +17,11 @@ from __future__ import annotations
 import io
 import json
 import os
+import signal
+import sys
 import threading
+import time
+import types
 from pathlib import Path
 from typing import Any
 
@@ -87,6 +91,7 @@ class _FakePopen:
         self._stdout = _BufferedStdout()
         self._stderr = io.StringIO()
         self.returncode: int | None = None
+        self.pid = 99999
 
     @property
     def stdin(self):
@@ -123,6 +128,7 @@ class _BufferedStdin:
         self._server = server
         self._on_request = on_request
         self._buf = ""
+        self.closed = False
 
     def write(self, data: str) -> int:
         self._buf += data
@@ -138,6 +144,9 @@ class _BufferedStdin:
 
     def flush(self):
         pass
+
+    def close(self):
+        self.closed = True
 
 
 class _BufferedStdout:
@@ -163,11 +172,18 @@ class _BufferedStdout:
 def server_and_patch(monkeypatch):
     server = _FakeServer()
     server.handle("initialize", {"protocolVersion": "2024-11-05"})
+    server.spawn_kwargs = {}
+    server.killpg_calls = []
 
-    def factory(args, stdin=None, stdout=None, stderr=None, env=None, text=None, bufsize=None):
+    def factory(args, **kwargs):
+        server.spawn_kwargs = kwargs
         return _FakePopen(server)
 
+    def fake_killpg(pgid, sig):
+        server.killpg_calls.append((pgid, sig))
+
     monkeypatch.setattr(mcp_client.subprocess, "Popen", factory)
+    monkeypatch.setattr(mcp_client.os, "killpg", fake_killpg)
     return server
 
 
@@ -235,6 +251,175 @@ def test_missing_command_raises_clean_error(monkeypatch) -> None:
     c = mcp_client.MCPClient("nope", "doesntexist")
     with pytest.raises(mcp_client.MCPError, match="command not found"):
         c.start()
+
+
+def test_start_spawns_in_new_session(server_and_patch) -> None:
+    server = server_and_patch
+    server.handle("tools/list", {"tools": []})
+    c = mcp_client.MCPClient("github", "echo")
+    c.start()
+    try:
+        assert server.spawn_kwargs.get("start_new_session") is True
+    finally:
+        c.stop()
+
+
+def test_stop_skips_signals_when_process_already_reaped(server_and_patch) -> None:
+    server = server_and_patch
+    server.handle("tools/list", {"tools": []})
+    c = mcp_client.MCPClient("github", "echo")
+    c.start()
+    c._proc.returncode = 0
+    c.stop()
+    assert server.killpg_calls == []
+    assert not c.is_running()
+
+
+def test_stop_closes_stdin_and_sends_no_signal_when_wrapper_exits(server_and_patch) -> None:
+    server = server_and_patch
+    server.handle("tools/list", {"tools": []})
+    c = mcp_client.MCPClient("github", "echo")
+    c.start()
+    stdin = c._proc.stdin
+    started = time.monotonic()
+    c.stop()
+    assert time.monotonic() - started < 1.0
+    assert stdin.closed
+    assert server.killpg_calls == []
+    assert not c.is_running()
+
+
+def test_stop_escalates_to_sigterm_then_sigkill_when_eof_is_ignored(server_and_patch, monkeypatch) -> None:
+    server = server_and_patch
+    server.handle("tools/list", {"tools": []})
+    monkeypatch.setattr(mcp_client, "_STOP_GRACE_SECONDS", 0.05)
+    monkeypatch.setattr(mcp_client, "_STOP_TERM_GRACE_SECONDS", 0.05)
+    c = mcp_client.MCPClient("github", "echo")
+    c.start()
+    proc = c._proc
+
+    def stubborn_wait(timeout=None):
+        if (proc.pid, signal.SIGKILL) not in server.killpg_calls:
+            raise mcp_client.subprocess.TimeoutExpired(cmd="wrapper", timeout=timeout)
+        return -9
+
+    proc.wait = stubborn_wait
+    c.stop()
+    assert server.killpg_calls == [(proc.pid, signal.SIGTERM), (proc.pid, signal.SIGKILL)]
+    assert not c.is_running()
+
+
+def test_stop_gives_sigterm_grace_before_sigkill_when_wrapper_dies_first(server_and_patch, monkeypatch) -> None:
+    server = server_and_patch
+    server.handle("tools/list", {"tools": []})
+    monkeypatch.setattr(mcp_client, "_STOP_GRACE_SECONDS", 0.05)
+    monkeypatch.setattr(mcp_client, "_STOP_TERM_GRACE_SECONDS", 0.2)
+    c = mcp_client.MCPClient("github", "echo")
+    c.start()
+    proc = c._proc
+    stamps: dict[int, float] = {}
+
+    def killpg(pgid, sig):
+        stamps[sig] = time.monotonic()
+        server.killpg_calls.append((pgid, sig))
+
+    monkeypatch.setattr(mcp_client.os, "killpg", killpg)
+
+    def wrapper_dies_on_sigterm(timeout=None):
+        if signal.SIGTERM not in stamps:
+            raise mcp_client.subprocess.TimeoutExpired(cmd="wrapper", timeout=timeout)
+        return 0
+
+    proc.wait = wrapper_dies_on_sigterm
+    c.stop()
+    assert server.killpg_calls == [(proc.pid, signal.SIGTERM), (proc.pid, signal.SIGKILL)]
+    assert stamps[signal.SIGKILL] - stamps[signal.SIGTERM] >= 0.2 * 0.9
+
+
+_WRAPPER = """
+import subprocess, sys
+leaf = subprocess.Popen([sys.executable, "-c", sys.argv[1], *sys.argv[2:]])
+sys.exit(leaf.wait())
+"""
+
+_LEAF_RPC = """
+import json, os, signal, sys, time
+def serve():
+    for line in sys.stdin:
+        try:
+            req = json.loads(line)
+        except ValueError:
+            continue
+        if "id" not in req:
+            continue
+        method = req.get("method")
+        if method == "initialize":
+            result = {"protocolVersion": "2024-11-05", "capabilities": {},
+                      "serverInfo": {"name": "leaf", "version": "0"}}
+        elif method == "tools/list":
+            result = {"tools": []}
+        else:
+            result = {}
+        sys.stdout.write(json.dumps({"jsonrpc": "2.0", "id": req["id"], "result": result}) + "\\n")
+        sys.stdout.flush()
+"""
+
+_SLOW_GRACEFUL_LEAF = _LEAF_RPC + """
+open(sys.argv[1], "w").write(str(os.getpid()))
+serve()
+time.sleep(0.5)
+open(sys.argv[2], "w").write("done")
+"""
+
+_STUBBORN_LEAF = _LEAF_RPC + """
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+open(sys.argv[1], "w").write(str(os.getpid()))
+serve()
+time.sleep(300)
+"""
+
+
+def _stop_leaf(leaf: str, tmp_path, monkeypatch, *, grace: float, term_grace: float) -> Path:
+    monkeypatch.setattr(mcp_client, "_STOP_GRACE_SECONDS", grace)
+    monkeypatch.setattr(mcp_client, "_STOP_TERM_GRACE_SECONDS", term_grace)
+    pidfile = tmp_path / "leaf.pid"
+    marker = tmp_path / "cleanup.done"
+    c = mcp_client.MCPClient(
+        "wrapper", sys.executable, ["-c", _WRAPPER, leaf, str(pidfile), str(marker)],
+    )
+    c.start(timeout=10)
+    leaf_pid = int(pidfile.read_text())
+    try:
+        os.kill(leaf_pid, 0)
+        c.stop()
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            try:
+                os.kill(leaf_pid, 0)
+            except ProcessLookupError:
+                break
+            time.sleep(0.05)
+        else:
+            pytest.fail(f"leaf {leaf_pid} survived stop()")
+    finally:
+        c.stop()
+        try:
+            os.kill(leaf_pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    return marker
+
+
+@pytest.mark.integration
+def test_stop_lets_leaf_finish_cleanup_on_eof(tmp_path, monkeypatch) -> None:
+    marker = _stop_leaf(_SLOW_GRACEFUL_LEAF, tmp_path, monkeypatch, grace=3.0, term_grace=0.3)
+    assert marker.exists()
+
+
+@pytest.mark.integration
+def test_stop_escalates_to_sigkill_for_leaf_ignoring_eof_and_sigterm(tmp_path, monkeypatch) -> None:
+    marker = _stop_leaf(_STUBBORN_LEAF, tmp_path, monkeypatch, grace=0.3, term_grace=0.3)
+    assert not marker.exists()
 
 
 # --------------------------------------------------------------------
@@ -695,6 +880,38 @@ def test_shutdown_all_stops_cached_clients(monkeypatch, clean_cache):
     mcp_registry.shutdown_all()
     assert not client.is_running()
     assert mcp_registry._CACHE == {}
+
+
+def test_run_chat_shuts_down_mcp_servers_before_exit(monkeypatch, tmp_path) -> None:
+    from alpi import cli
+
+    events: list[object] = []
+
+    class _App:
+        def __init__(self, **kwargs) -> None:
+            pass
+
+        def run(self) -> None:
+            events.append("run")
+
+    fake_tui = types.ModuleType("alpi.tui")
+    fake_tui.AlpiApp = _App
+    monkeypatch.setitem(sys.modules, "alpi.tui", fake_tui)
+    monkeypatch.setattr(cli, "_bootstrap", lambda h: None)
+    monkeypatch.setattr(cli, "_restore_terminal", lambda: events.append("restore"))
+    monkeypatch.setattr(mcp_registry, "shutdown_all", lambda: events.append("shutdown_all"))
+
+    class _Exit(BaseException):
+        pass
+
+    def fake_exit(code: int) -> None:
+        events.append(("exit", code))
+        raise _Exit
+
+    monkeypatch.setattr(os, "_exit", fake_exit)
+    with pytest.raises(_Exit):
+        cli._run_chat(tmp_path)
+    assert events == ["run", "restore", "shutdown_all", ("exit", 0)]
 
 
 def test_two_profiles_do_not_share_mcp_tools(monkeypatch, clean_cache):
