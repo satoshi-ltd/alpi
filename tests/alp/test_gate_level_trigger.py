@@ -144,6 +144,37 @@ async def test_a_silent_fixer_is_recovered_without_a_wake(tmp_path, monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_an_owner_skip_is_gated_like_a_delivery(tmp_path, monkeypatch):
+    home = tmp_path / "hub"
+    home.mkdir()
+    wg = _gated_wg()
+    _mock_owner(monkeypatch)
+    _mock_workspace(monkeypatch, tmp_path)
+    gated: list[str] = []
+    monkeypatch.setattr(
+        "alpi.alp.pipeline_gates.run_gate",
+        lambda step, ws: (gated.append(step.phase) or True, "clean"),
+    )
+    posted: list[str] = []
+
+    async def fake_post(h, wid, text, cost=None):
+        posted.append(text.decode())
+        return {"seq": 10 + len(posted)}
+
+    monkeypatch.setattr("alpi.alp.workgroup_client.post", fake_post)
+    monkeypatch.setattr(service, "_set_hub_responded_seq", lambda *a: None)
+
+    recent = [
+        {"seq": 1, "from": "HUB", "ts": _OLD, "text": "@quill #task #content write it"},
+        {"seq": 2, "from": "QUILLPK", "ts": _OLD, "text": "#skip every source file already stands from the previous pass"},
+    ]
+    assert await service._maybe_gate_advance(home, wg, recent, "HUB") is True
+    assert gated == ["content"]
+    assert posted[0].startswith("#done content verified")
+    assert posted[1].startswith("@lingua #task #translation")
+
+
+@pytest.mark.asyncio
 async def test_green_gate_advances_through_the_real_workgroup_sdk(tmp_path, monkeypatch):
     from alpi import home as home_mod
 
@@ -709,7 +740,7 @@ async def test_hub_routed_gate_failure_does_not_retask_read_only_owner(
 
     assert isinstance(result, str)
     assert "declares hub-routed repair" in result
-    assert "Do not re-task @lens" in result
+    assert "one legal move is to re-task @lens on #qa" in result
     assert "(round 1/3)" in result
     assert posted == []
     assert list(service._GATE_REPAIRS.values()) == [1]
@@ -1185,6 +1216,28 @@ def test_qa_rewind_target_follows_the_files_the_verdict_names():
     assert service._qa_rewind_target(wg, step, copy) == "content"
     assert service._qa_rewind_target(wg, step, "QA FAIL · counts exceed rendered items · fix in #build") == "build"
     assert service._qa_rewind_target(wg, step, "QA FAIL · dist/es/index.html has two h1") == "content"
+
+
+def test_qa_rewind_prefers_the_most_specific_owner_over_a_directory_scope():
+    steps = {
+        "setup": {"owner": "pixel", "paths": ["**"]},
+        "enrich": {"owner": "scout", "paths": ["work/**"]},
+        "intake": {"owner": "scout", "paths": ["work/**", "src/config/site.json"]},
+        "assets": {"owner": "muse", "paths": ["assets/manifest.yaml", "src/config/site.json", "work/status.yaml"]},
+        "content": {"owner": "quill", "paths": ["src/content/**", "work/status.yaml"]},
+        "build": {"owner": "pixel", "paths": ["dist/**"]},
+        "qa": {"owner": "lens"},
+    }
+    wg = types.SimpleNamespace(meta=types.SimpleNamespace(
+        pipelines={"setup": ("setup", "enrich", "intake", "assets", "content", "build", "qa")}, pipeline_steps=steps,
+    ))
+    step = types.SimpleNamespace(phase="qa")
+
+    audited = "QA FAIL · audit of dist/ vs work/intake.md, work/status.yaml and src/config/site.json · legal.company.registry missing in src/config/site.json"
+    assert service._qa_rewind_target(wg, step, audited) == "intake"
+    copy = "QA FAIL · audited against work/status.yaml · typo in src/content/pages/practical.fr.json:38"
+    assert service._qa_rewind_target(wg, step, copy) == "content"
+    assert service._qa_rewind_target(wg, step, "QA FAIL · work/enrichment.md cites no source") == "enrich"
 
 
 @pytest.mark.asyncio

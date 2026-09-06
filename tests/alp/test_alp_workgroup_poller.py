@@ -926,6 +926,40 @@ async def test_pipeline_member_dispatch_uses_the_short_execution_prompt(
 
 
 @pytest.mark.asyncio
+async def test_member_dispatch_carries_the_phase_without_a_write_scope(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    import sys as _sys
+
+    home = short_tmp / "scout"
+    home.mkdir()
+    (home / "alp").mkdir()
+    captured: dict = {}
+    real_create = service.asyncio.create_subprocess_exec
+
+    async def fake_create(*argv, **kw):
+        captured["env"] = kw.get("env") or {}
+        return await real_create(
+            _sys.executable, "-c", "pass",
+            stdout=service.asyncio.subprocess.PIPE,
+            stderr=service.asyncio.subprocess.PIPE,
+        )
+
+    monkeypatch.setattr(service.asyncio, "create_subprocess_exec", fake_create)
+    phase_map = {"research": {"owner": "scout"}}
+    posts = [{"seq": 1, "from": "HUB", "text": "@scout #task #research compare sources"}]
+    assert service._phase_write_scope(phase_map, posts, "HUB", "scout") is None
+    await service._dispatch_workgroup_turn(
+        home, profile="scout", wg_id="wg_x", wg_name="hotel",
+        reason="targeted task", pipeline=True, member_turn=True,
+        write_scope=service._phase_write_scope(phase_map, posts, "HUB", "scout"),
+        phase=service._active_phase_slug(phase_map, posts, "HUB"),
+    )
+    assert "ALPI_WORKGROUP_WRITE_SCOPE" not in captured["env"]
+    assert captured["env"].get("ALPI_WORKGROUP_PHASE") == "research"
+
+
+@pytest.mark.asyncio
 async def test_finalize_workgroup_run_closes_and_settles_recorded_usage(
     short_tmp: Path, monkeypatch,
 ) -> None:

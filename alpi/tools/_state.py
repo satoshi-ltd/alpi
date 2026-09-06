@@ -24,6 +24,8 @@ _declared_turn_usage: ContextVar[Optional[dict]] = ContextVar(
     "alpi_declared_turn_usage", default=None,
 )
 _turn_tools_run: ContextVar[int] = ContextVar("alpi_turn_tools_run", default=0)
+_scope_baseline: ContextVar[Optional[dict[str, str]]] = ContextVar("alpi_scope_baseline", default=None)
+_scope_error: ContextVar[str] = ContextVar("alpi_scope_error", default="")
 _turn_counters: ContextVar[Optional[dict[str, int]]] = ContextVar(
     "alpi_turn_counters", default=None,
 )
@@ -107,6 +109,8 @@ def reset_turn_usage() -> None:
     })
     _turn_counters.set({})
     _turn_tools_run.set(0)
+    _scope_baseline.set(None)
+    _scope_error.set("")
     _turn_id.set(os.environ.get("ALPI_WORKGROUP_TURN_ID") or uuid.uuid4().hex)
 
 
@@ -116,6 +120,54 @@ def set_turn_tools_run(count: int) -> None:
 
 def get_turn_tools_run() -> int:
     return _turn_tools_run.get()
+
+
+def snapshot_write_scope() -> None:
+    from alpi.tools import _scope
+
+    _scope_error.set("")
+    try:
+        _scope_baseline.set(_scope.load_or_create_baseline())
+    except _scope.ScopeUnverifiable as exc:
+        _scope_baseline.set(None)
+        _scope_error.set(str(exc))
+    except Exception as exc:  # noqa: BLE001
+        _scope_baseline.set(None)
+        _scope_error.set(f"scope snapshot failed: {exc}")
+
+
+def pipeline_phase() -> str:
+    return os.environ.get("ALPI_WORKGROUP_PHASE", "").strip()
+
+
+def write_scope_error() -> str:
+    """Non-empty when a bounded scope is declared but could not be measured; the handoff guard fails closed on it."""
+    return _scope_error.get()
+
+
+def write_scope_changed() -> Optional[bool]:
+    """None when the turn has no bounded scope; otherwise whether any file inside it differs from the round baseline."""
+    from alpi.tools import _scope
+
+    baseline = _scope_baseline.get()
+    if baseline is None:
+        return None
+    try:
+        current = _scope.snapshot()
+    except _scope.ScopeUnverifiable as exc:
+        _scope_error.set(str(exc))
+        return None
+    return current is not None and current != baseline
+
+
+def clear_write_scope_baseline() -> None:
+    from alpi.tools import _scope
+
+    try:
+        _scope.clear_baseline()
+    except OSError:
+        pass
+    _scope_baseline.set(None)
 
 
 def get_turn_usage() -> Optional[dict]:

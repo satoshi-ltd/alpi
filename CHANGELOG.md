@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.14.23 — 2026-09-06 — the hub always has a legal move
+
+- **A red gate lets the hub re-task the same phase.** `task-already-active`
+  now yields while the gate on the owner's latest delivery is red, so a hub
+  woken for a red verification gate can re-open that phase instead of being
+  refused every move it tries.
+- **Progress prose is not a delivery.** In a phase that owns artifacts, a
+  member handoff is refused when no file inside the declared paths changed
+  since the round opened, unless the post is a `#skip <reason>` alone; the
+  acknowledgement that used to burn a repair continuation now comes back as
+  an error the worker can act on.
+- **A handoff names its phase.** A pipeline member's post must carry
+  `#<phase>`; a mid-turn note such as "now the site.json pass" is returned
+  as an error instead of closing the phase on an untouched scaffold.
+- **QA rewinds land on the real owner.** The phase owning the most of the
+  files a verdict names wins, shared status files carry no vote, so an audit
+  that lists its inputs no longer sends every failure back to enrich.
+- **A skipped re-run still closes.** An owner's bare `#skip` in a gated phase
+  runs the gate like a delivery, so a phase re-opened by a rewind whose
+  artifacts already stand advances instead of looping between hub and owner.
+
 ## v0.14.22 — 2026-09-05 — a rewound QA re-checks what failed
 
 - **The auditor re-verifies its own findings.** When a `QA FAIL` rewinds a

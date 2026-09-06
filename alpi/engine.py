@@ -492,6 +492,7 @@ class Engine:
         # Reset per-turn workgroup usage tracking.
         from alpi.tools import _state as _wg_state
         _wg_state.reset_turn_usage()
+        _wg_state.snapshot_write_scope()
         self._turn_prefix_reasons = set()
         _wg_state.reset_skill_env()
         _wg_state.reset_turn_attachments()

@@ -1708,7 +1708,7 @@ verdict position (a `·`-segment starting with it: `#done <phase> ·
 QA FAIL · …`; prose mentions, quotes or negations do not count, and a
 FAIL may not stand in for a BLOCKED) and routes nothing draws exactly
 ONE follow-up wake — re-task the findings or leave the run halted,
-loudly. When that failing close is a `QA FAIL` and the chain has an earlier artifact-owning phase, the daemon rewinds at gate time instead of waiting for that wake: it closes the QA phase with the verdict, reopens the phase the verdict names — an explicit `#phase`, else the phase whose declared `paths` own a file the verdict cites, else `content` — with the findings, and does so at most twice per workgroup before falling back to the hub-authored close. When the re-walk reaches the QA phase again, its opener appends up to 6,000 retained characters from the previous verdict as a checklist the auditor must state as resolved or persistent; the same task-post boundary applies this on deterministic gate advances and hub-authored continuations. A red `repair: hub` gate takes the same path first (its own output names the failing file, and there the last authored phase is eligible too); only when no phase owns the file is the hub woken, at most three times, after which the daemon closes `#done BLOCKED` itself. And the targeted phase owner
+loudly. When that failing close is a `QA FAIL` and the chain has an earlier artifact-owning phase, the daemon rewinds at gate time instead of waiting for that wake: it closes the QA phase with the verdict, reopens the phase the verdict names — an explicit `#phase`, else the phase whose declared `paths` own a file the verdict cites, else `content` — with the findings, and does so at most twice per workgroup before falling back to the hub-authored close. When the re-walk reaches the QA phase again, its opener appends up to 6,000 retained characters from the previous verdict as a checklist the auditor must state as resolved or persistent; the same task-post boundary applies this on deterministic gate advances and hub-authored continuations. A red `repair: hub` gate takes the same path first (its own output names the failing file, and there the last authored phase is eligible too); per named path only the most specific scope pattern counts, a path shared by half the chain (`work/status.yaml`) carries no vote, and the phase owning most of the cited paths wins, so an audit that lists `work/**` inputs beside a `site.json` defect reopens intake, not enrich; only when no phase owns the file is the hub woken, at most three times, after which the daemon closes `#done BLOCKED` itself. And the targeted phase owner
 is exempt from the one-post-per-round rotation cap: a repair delivery
 may arrive in pieces (a fix note, then the re-delivery the gate re-runs
 on) without muting the owner. A `#done BLOCKED` still halts its chain,
@@ -1819,7 +1819,26 @@ direction.
 a collective one with no `@`-mentions, and re-tasking with a different
 slug is the normal pivot. Re-opening the slug that is already active is
 rejected (`task-already-active`) — a duplicate would only preempt
-itself. A `#done` there is terminal: nothing continues afterwards.
+itself. A `#done` there is terminal: nothing continues afterwards. In a
+pipeline the same slug may be re-opened in two cases: while the phase
+is stalled (no owner post yet) and while the gate on the owner's latest
+delivery is red, so a hub woken by a red `repair: hub` gate always has
+one legal move.
+
+A member handoff in a phase that declares `paths` must have changed
+something inside them: the engine digests those files when the round
+opens, keeps that baseline across `#working … (continuation)` turns
+until the handoff is accepted, and refuses the post when nothing
+differs, unless it is a `#skip <reason>` alone. A scope that cannot be
+measured refuses the handoff too. In any pipeline phase, with or without
+`paths`, the handoff must also name its phase (`#intake done — …`), so
+a mid-turn narration is returned as an error instead of landing as the
+delivery the daemon gates. Daemon state under the workspace (the
+`.alpi` root and profile homes, Docker's `/data/.alpi`) is pruned from
+the boundary scan and never counts as an out-of-scope change. Progress prose, read-only commands and writes outside the scope
+are not a delivery. An owner's bare `#skip` in a gated phase is gated
+like a delivery: after a rewind the artifacts may already stand, and
+the gate is the only close left once the run holds an earlier delivery.
 
 **In a pipeline workgroup the same pivot is deliberately harder.**
 Every `#task` must name its owner (`pipeline-task-untargeted`

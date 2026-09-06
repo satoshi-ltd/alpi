@@ -2123,8 +2123,23 @@ async def test_skip_only_cannot_close_a_gated_phase(short_tmp: Path) -> None:
     wg, pk = _gated_hub(home)
     await wc.post(home, wg.meta.id, b"@scout #task #intake produce site.json")
     _member_post(home, wg, pk, "#skip not my phase")
-    with pytest.raises(ValueError, match="phase-owner-missing"):
+    with pytest.raises(ValueError, match="phase-gate-unverified"):
         await wc.post(home, wg.meta.id, b"#done intake complete")
+
+
+@pytest.mark.asyncio
+async def test_a_gated_owner_skip_closes_the_phase(short_tmp: Path) -> None:
+    from alpi.alp import pipeline_gates as gates
+
+    home = short_tmp / "hub"
+    home.mkdir()
+    wg, pk = _gated_hub(home)
+    await wc.post(home, wg.meta.id, b"@scout #task #intake produce site.json")
+    skipped = _member_post(home, wg, pk, "#skip site.json already stands from the previous pass")
+    step = gates.step_for(wg.meta, "intake")
+    gates.write_gate_log(wg_mod._wg_dir(home, wg.meta.id), step, skipped, True, "clean")
+    result = await wc.post(home, wg.meta.id, b"#done intake verified \xc2\xb7 gate:npm \xc2\xb7 clean")
+    assert result.get("seq") == skipped + 1
 
 
 @pytest.mark.asyncio
@@ -2928,3 +2943,41 @@ def test_qa_verdict_is_the_last_token_by_position_and_exact(
         wc._check_qa_verdict_respected(
             home, wg, posts, "#done qa PASS · clean close over a prose mention", "HUB",
         )
+
+
+def test_hub_may_retask_the_open_phase_while_its_gate_is_red() -> None:
+    posts = [
+        _post(1, "HUB", "@lens #task #qa audit it"),
+        _post(2, "LENS", "QA PASS · dist is clean"),
+    ]
+    with pytest.raises(ValueError, match="task-already-active"):
+        wc._check_hub_rotation(posts, "HUB", "@lens #task #qa re-audit the boundary", ["LENS"], allow_stalled_retask=True)
+    wc._check_hub_rotation(
+        posts, "HUB", "@lens #task #qa re-audit the boundary", ["LENS"],
+        allow_stalled_retask=True, retask_red_gate=True,
+    )
+
+
+@pytest.mark.asyncio
+async def test_hub_retask_of_the_open_phase_is_accepted_only_under_a_red_gate(short_tmp: Path) -> None:
+    import json as _json
+
+    home = short_tmp / "hubredgate"
+    home.mkdir()
+    wg, muse_pk = _chain_hub(home, launch=None)
+    await wc.trigger_pipeline(home, wg.meta.id, "intake")
+    delivered = _member_post(home, wg, muse_pk, "#intake delivered: work/intake.md written")
+
+    with pytest.raises(ValueError, match="task-already-active"):
+        await wc.post(home, wg.meta.id, b"@muse #task #intake fix the red config")
+
+    gates_dir = home / "alp" / "workgroups" / wg.meta.id / "gates"
+    gates_dir.mkdir(parents=True, exist_ok=True)
+    (gates_dir / f"intake-{delivered}.log").write_text(_json.dumps({
+        "phase": "intake", "task_seq": delivered, "argv": ["npm", "run", "check:config"],
+        "cwd": "app", "passed": False, "output": "CHECK config FAILED",
+    }), encoding="utf-8")
+
+    result = await wc.post(home, wg.meta.id, b"@muse #task #intake fix the red config")
+    assert result["seq"] > delivered
+    assert _transcript_texts(home, wg)[-1] == "@muse #task #intake fix the red config"

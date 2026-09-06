@@ -126,6 +126,32 @@ def test_deletion_outside_paths_is_a_violation(tmp_path: Path):
     assert "deleted" in out and "assets/manifest.yaml" in out
 
 
+def test_daemon_state_under_the_workspace_never_trips_the_boundary(tmp_path: Path, monkeypatch):
+    from alpi import home as home_mod
+
+    workspace = tmp_path / "ws"
+    root = _project(workspace)
+    alpi_root = workspace / ".alpi"
+    monkeypatch.setattr(home_mod, "_ROOT", alpi_root)
+    wg_dir = alpi_root / "profiles" / "mira" / "alp" / "workgroups" / "wg_paths"
+    steps = {"media-build": {"owner": "pixel", "cwd": "", "paths": ["projects/**"],
+                             "gate": {"argv": ["true"], "cwd": ""}},
+             "media-qa": {"owner": "lens"}}
+    step = _step(_wg(steps=steps))
+    assert step.paths == ("projects/**",)
+    gates.snapshot_baseline(wg_dir, step, workspace)
+
+    member_baseline = alpi_root / "profiles" / "pixel" / "alp" / "scope_baselines" / "wg_paths-7.json"
+    member_baseline.parent.mkdir(parents=True)
+    member_baseline.write_text("{}")
+    (alpi_root / "profiles" / "mira" / "alp" / "turns.jsonl").write_text("{}\n")
+    (root / "assets" / "manifest.yaml").write_text("slots: {logo: supplied}\n")
+    assert gates.paths_violations(wg_dir, step, workspace) == ""
+
+    (workspace / "notes.md").write_text("stray")
+    assert "notes.md — created" in gates.paths_violations(wg_dir, step, workspace)
+
+
 def test_missing_baseline_fails_closed(tmp_path: Path):
     workspace = tmp_path / "ws"
     _project(workspace)

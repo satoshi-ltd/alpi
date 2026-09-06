@@ -187,12 +187,28 @@ def _file_stamp(fp: Path) -> str | None:
     return h.hexdigest()
 
 
-def _scan_project(root: Path) -> dict[str, str]:
+def _state_roots(wg_dir: Path) -> frozenset[Path]:
+    # Daemon state under the workspace (Docker: /data/.alpi) is never a deliverable: the hub home, the profiles root and the member homes holding scope baselines all fall outside every phase scope.
+    from alpi import home as home_mod
+
+    roots = {home_mod._ROOT}
+    home = wg_dir.parents[2] if len(wg_dir.parents) > 2 else None
+    if home is not None:
+        roots.add(home)
+        if home.parent.name == "profiles":
+            roots.add(home.parent.parent)
+    return frozenset(r.resolve() for r in roots)
+
+
+def _scan_project(root: Path, exclude: frozenset[Path] = frozenset()) -> dict[str, str]:
     out: dict[str, str] = {}
     if not root.is_dir():
         return out
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if d not in _SCAN_EXCLUDE]
+        dirnames[:] = [
+            d for d in dirnames
+            if d not in _SCAN_EXCLUDE and (Path(dirpath) / d).resolve() not in exclude
+        ]
         for fn in filenames:
             if fn in _SCAN_EXCLUDE_FILES:
                 continue
@@ -223,7 +239,7 @@ def snapshot_baseline(wg_dir: Path, step: GateStep, workspace: Path) -> bool:
     if bp.exists():
         return False
     _runtime_dir(wg_dir, "phase_baselines")
-    snapshot = _scan_project(root)
+    snapshot = _scan_project(root, _state_roots(wg_dir))
     tmp = bp.with_suffix(".tmp")
     tmp.write_text(json.dumps(snapshot, separators=(",", ":")))
     os.replace(tmp, bp)
@@ -239,7 +255,7 @@ def refresh_baseline(wg_dir: Path, step: GateStep, workspace: Path) -> bool:
         return False
     bp = _baseline_path(wg_dir, step.phase)
     _runtime_dir(wg_dir, "phase_baselines")
-    snapshot = _scan_project(root)
+    snapshot = _scan_project(root, _state_roots(wg_dir))
     tmp = bp.with_suffix(".tmp")
     tmp.write_text(json.dumps(snapshot, separators=(",", ":")))
     os.replace(tmp, bp)
@@ -261,7 +277,7 @@ def owned_paths_changed(
         return None
     if not isinstance(baseline, dict):
         return None
-    current = _scan_project(root)
+    current = _scan_project(root, _state_roots(wg_dir))
     owned = tuple(step.paths)
     relevant = {
         rel for rel in set(baseline) | set(current)
@@ -332,7 +348,7 @@ def paths_violations(wg_dir: Path, step: GateStep, workspace: Path) -> str:
             f"BOUNDARY {step.phase}: phase baseline is missing or unreadable; "
             "refusing to verify this phase"
         )
-    current = _scan_project(root)
+    current = _scan_project(root, _state_roots(wg_dir))
     allowed = tuple(step.paths)
 
     def _within(rel: str) -> bool:
@@ -478,7 +494,9 @@ def gate_log_verdict(wg_dir: Path, phase: str, seq: int) -> bool | None:
 
 def owner_post_under_gate(
     posts: list[dict], owner_pubkeys: set[str], hub_pubkey: str, opened_seq: int,
+    *, include_skip: bool = False,
 ) -> int | None:
+    # The daemon gates an owner's bare `#skip` too: after a rewind a phase whose artifacts already stand can only close through its gate, since `#done skipped` is refused once the run holds an earlier delivery.
     from alpi.alp import tasks as tasks_mod
 
     seqs = [
@@ -487,7 +505,7 @@ def owner_post_under_gate(
         and (str(p.get("from") or "") in owner_pubkeys if owner_pubkeys
              else str(p.get("from") or "") != hub_pubkey)
         and not tasks_mod.is_working_only(str(p.get("text") or ""))
-        and not tasks_mod.is_skip_only(str(p.get("text") or ""))
+        and (include_skip or not tasks_mod.is_skip_only(str(p.get("text") or "")))
     ]
     return max(seqs) if seqs else None
 

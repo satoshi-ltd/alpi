@@ -52,6 +52,8 @@ def _append_dispatch_recheck(text: str) -> str:
     return text
 
 
+
+
 class WorkgroupPostTool(Tool):
     name = "workgroup_post"
     description = (
@@ -76,7 +78,7 @@ class WorkgroupPostTool(Tool):
         "required": ["text"],
     }
 
-    def run(self, **kwargs: Any) -> ToolResult:
+    def run(self, **kwargs: Any) -> ToolResult:  # noqa: C901
         wg_id = kwargs.get("wg_id")
         text = kwargs.get("text")
         dispatch_wg = os.environ.get("ALPI_WORKGROUP_DISPATCH") or ""
@@ -91,7 +93,7 @@ class WorkgroupPostTool(Tool):
         from alpi.tools import _state as _wg_state
         text = _append_dispatch_recheck(text)
         member_turn = os.environ.get("ALPI_WORKGROUP_MEMBER_TURN") == "1"
-        continuation = tasks_mod.CONTINUATION_MARK in text
+        continuation = tasks_mod.is_continuation_working(text)
         if member_turn and tasks_mod.is_working_only(text) and not continuation:
             return ToolResult(
                 ok=False, output="",
@@ -102,6 +104,25 @@ class WorkgroupPostTool(Tool):
                 ok=False, output="",
                 error="nothing ran this turn: read the briefing, produce and verify the deliverable with your tools, then post the handoff as the last call",
             )
+        phase = _wg_state.pipeline_phase() if member_turn else ""
+        if phase and not continuation and not tasks_mod.is_skip_only(text) and not tasks_mod.names_phase(text, phase):
+            return ToolResult(
+                ok=False, output="",
+                error=f"a pipeline handoff names its phase: post `#{phase} done — <what changed and where>` once the deliverable is complete, or `#skip <reason>` alone; progress notes are not posted, keep working",
+            )
+        if member_turn and not continuation and not tasks_mod.is_skip_only(text):
+            scope_changed = _wg_state.write_scope_changed()
+            scope_error = _wg_state.write_scope_error()
+            if scope_error:
+                return ToolResult(
+                    ok=False, output="",
+                    error=f"the phase write scope cannot be verified ({scope_error}); the handoff is refused until the daemon runs this turn with a configured workspace",
+                )
+            if scope_changed is False:
+                return ToolResult(
+                    ok=False, output="",
+                    error="this phase owns artifacts and none changed since the round opened: write the deliverable first, or post `#skip <reason>` alone when there is nothing to produce",
+                )
 
         pending, snapshot = _wg_state.get_undeclared_turn_usage()
         cost = _declared_cost(pending)
@@ -133,6 +154,8 @@ class WorkgroupPostTool(Tool):
                 transient=alp_client.is_transient_link_error(e),
             )
         _wg_state.mark_turn_usage_declared(snapshot)
+        if member_turn and not continuation:
+            _wg_state.clear_write_scope_baseline()
         cost_hint = ""
         if cost:
             cost_hint = (

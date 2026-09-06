@@ -186,6 +186,10 @@ def is_continuation_working(text: str) -> bool:
     return is_working_only(text) and CONTINUATION_MARK in (text or "")
 
 
+def names_phase(text: str, phase: str) -> bool:
+    return re.search(rf"(?<![\w#-])#{re.escape(phase)}(?![\w-])", text or "", re.IGNORECASE) is not None
+
+
 def is_skip_only(text: str) -> bool:
     """Return True when every non-empty line is a skip marker."""
     lines = [line for line in (text or "").splitlines() if line.strip()]

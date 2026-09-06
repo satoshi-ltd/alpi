@@ -258,6 +258,29 @@ def _own_profile_id(home: Path) -> str:
         return ""
 
 
+def _phase_gate_is_red(home: Path, wg, posts: list[dict], active, own_pubkey: str) -> bool:
+    # A red gate on the owner's latest delivery is the one state where re-tasking the open phase is the sanctioned repair, so `task-already-active` yields to it.
+    from alpi.alp import peers as peers_mod
+    from alpi.alp import pipeline_gates as gates
+
+    if active is None or not active.slug:
+        return False
+    canonical = wg_mod.canonical_pipeline_phase(wg.meta, active.slug)
+    if canonical is None:
+        return False
+    phase = canonical[1]
+    owner = _workflow_phase_owner(wg, phase).lower()
+    owner_pubkeys = {own_pubkey} if owner and owner == _own_profile_id(home) else {
+        peer.pubkey for peer in peers_mod.load(home) if peer.id.lower() == owner
+    }
+    if not owner_pubkeys:
+        return False
+    delivery = gates.owner_delivery(posts, owner_pubkeys, int(active.opened_seq))
+    if delivery is None:
+        return False
+    return gates.gate_log_verdict(wg_mod._wg_dir(home, wg.meta.id), phase, delivery[0]) is False
+
+
 def _hub_owns_phase(home: Path, wg, slug: str) -> bool:
     """A declared phase whose owner IS the hub profile: the hub is the worker, not the orchestrator."""
     owner = _workflow_phase_owner(wg, slug)
@@ -391,9 +414,13 @@ def _check_pipeline_close_owner(
                 "close `#done BLOCKED · <reason>`."
             )
         return True
-    if delivered_seq is not None:
-        _require_passing_gate(home, wg, active, delivered_seq, own_pubkey)
-        return False
+    gated_seq = gates_mod.owner_post_under_gate(
+        posts, owner_pubkeys, own_pubkey, int(active.opened_seq), include_skip=True,
+    )
+    if gated_seq is not None:
+        _require_passing_gate(home, wg, active, gated_seq, own_pubkey)
+        # A green gate over a bare `#skip` is the whole evidence: no substantive post exists for quorum to count.
+        return delivered_seq is None
     owners = ", ".join(f"@{pid}" for pid in participants) or "the owner"
     first_owner = f"@{participants[0]}" if participants else "@<owner>"
     raise ValueError(
@@ -746,6 +773,7 @@ def _check_hub_rotation(
     member_pubkeys: list[str] | None = None,
     quorum_timeout: int = _FULL_QUORUM_TIMEOUT_SECONDS,
     *, allow_stalled_retask: bool = False,
+    retask_red_gate: bool = False,
     pipeline_close_override: bool = False,
     hub_owns_active_phase: bool = False,
 ) -> None:
@@ -775,12 +803,13 @@ def _check_hub_rotation(
                     and not tasks_mod.is_working_only(str(p.get("text") or ""))
                     for p in posts
                 )
-                if not stalled:
+                if not stalled and not retask_red_gate:
                     raise ValueError(
                         f"task-already-active: #{new_slug} is already the open "
                         "task and its members have responded — a duplicate "
                         "#task only preempts itself. Wait for the owner's "
-                        "handoff or close with #done."
+                        "handoff or close with #done; the same slug may be "
+                        "re-tasked only while its gate is red."
                     )
         return
 
@@ -1507,6 +1536,7 @@ def _post_as_hub_locked(
         existing, kp.pubkey_b64(), plaintext, quorum_roster,
         wg.meta.quorum_timeout_seconds or _FULL_QUORUM_TIMEOUT_SECONDS,
         allow_stalled_retask=is_pipeline,
+        retask_red_gate=is_pipeline and _phase_gate_is_red(home, wg, existing, active_phase, kp.pubkey_b64()),
         pipeline_close_override=close_override,
         hub_owns_active_phase=(
             active_phase is not None

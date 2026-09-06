@@ -462,7 +462,7 @@ def _storage_rows(home: Path) -> list[dict[str, Any]]:
         ("audio", "audio", [home / "cache" / "tts", home / "cache" / "inbound"]),
         ("logs", "logs", [home / "logs"]),
         ("schedule", "schedule", [home / "schedule" / "output"]),
-        ("workgroups", "workgroups", [home / "alp" / "workgroups", home / "alp" / "turns.jsonl"]),
+        ("workgroups", "workgroups", [home / "alp" / "workgroups", home / "alp" / "turns.jsonl", home / "alp" / "scope_baselines"]),
         ("mentions", "mentions", [home / "mentions"]),
         ("attachments", "attachments", [home / "host" / "attachments" / "tmp"]),
     ]

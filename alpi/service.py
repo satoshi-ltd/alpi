@@ -639,21 +639,27 @@ def _phase_turn_budget(phase_map: dict, posts: list, hub_pubkey: str) -> int:
         return 0
 
 
-def _phase_write_scope(
-    phase_map: dict, posts: list, hub_pubkey: str, profile: str,
-) -> dict | None:
+def _active_phase_slug(phase_map: dict, posts: list, hub_pubkey: str) -> str:
     from alpi.alp import tasks as wg_tasks
 
     if not phase_map:
-        return None
+        return ""
     active = wg_tasks.active_task(posts or [], hub_pubkey=hub_pubkey or None)
     if active is None or not active.slug:
-        return None
+        return ""
     matches = [
-        phase for phase in (phase_map or {})
+        phase for phase in phase_map
         if active.slug == phase or active.slug.startswith(f"{phase}-")
     ]
-    phase = max(matches, key=len) if matches else active.slug
+    return max(matches, key=len) if matches else active.slug
+
+
+def _phase_write_scope(
+    phase_map: dict, posts: list, hub_pubkey: str, profile: str,
+) -> dict | None:
+    phase = _active_phase_slug(phase_map, posts, hub_pubkey)
+    if not phase:
+        return None
     spec = (phase_map or {}).get(phase) or {}
     owner = str(spec.get("owner") or "")
     if owner.lower() != profile.lower():
@@ -1109,6 +1115,9 @@ async def _maybe_dispatch_for_sub(
                 getattr(sub, "phase_map", None) or {},
                 posts, sub.hub_pubkey, profile,
             ),
+            phase=_active_phase_slug(
+                getattr(sub, "phase_map", None) or {}, posts, sub.hub_pubkey,
+            ),
             member_responded_seq=new_responded,
             member_turn=True,
         ),
@@ -1284,7 +1293,7 @@ async def _maybe_gate_advance(
         return None
     # Only the opener bounds the round: a later hub note must not hide the delivery.
     latest_seq = gates.owner_post_under_gate(
-        recent, {owner_peer.pubkey}, own_pubkey, int(active.opened_seq),
+        recent, {owner_peer.pubkey}, own_pubkey, int(active.opened_seq), include_skip=True,
     )
     if latest_seq is None:
         return None
@@ -1391,8 +1400,10 @@ async def _maybe_gate_advance(
                 f"GATE {step.phase} FAILED and declares hub-routed repair "
                 f"(round {min(hub_rounds, _GATE_REPAIR_ROUNDS)}/{_GATE_REPAIR_ROUNDS}):\n"
                 f"{findings}\n"
-                f"Do not re-task @{step.owner}; route the finding to an earlier "
-                "phase in this pipeline whose owner can modify the failing artifact."
+                f"The daemon found no earlier phase that owns the failing artifact, so the "
+                f"one legal move is to re-task @{step.owner} on #{step.phase} with the "
+                "finding (`@owner #task #phase · <finding>`), accepted while this gate is "
+                "red; opening another phase is refused while this gated phase is open."
             )
         rkey = (str(home), wg.meta.id, step.phase, int(active.opened_seq))
         if owned_changed is False or (
@@ -1615,6 +1626,7 @@ async def _maybe_dispatch_for_hub(
                 wg_mod.safe_phase_map(wg.meta), recent,
                 wg.meta.hub_pubkey, profile,
             ),
+            phase=_active_phase_slug(wg_mod.safe_phase_map(wg.meta), recent, wg.meta.hub_pubkey),
             final_repair=gate_repair_exhausted,
         ),
     )
@@ -1890,7 +1902,7 @@ def _warn_gate_overdue(home: Path, wg, recent: list[dict], own_pubkey: str) -> N
         )
         return
     seq = gates.owner_post_under_gate(
-        recent, {owner.pubkey}, own_pubkey, int(active.opened_seq),
+        recent, {owner.pubkey}, own_pubkey, int(active.opened_seq), include_skip=True,
     )
     if seq is None:
         return
@@ -2219,6 +2231,7 @@ async def _maybe_watchdog_close(
                 wg_mod.safe_phase_map(wg.meta), recent,
                 wg.meta.hub_pubkey, profile,
             ),
+            phase=_active_phase_slug(wg_mod.safe_phase_map(wg.meta), recent, wg.meta.hub_pubkey),
             final_repair=final_repair,
             recovery_kind="watchdog",
             recovery_seq=last_seq,
@@ -2859,22 +2872,31 @@ def _bump_qa_rewind_count(home: Path, wg_id: str) -> int:
 
 
 def _phases_owning_named_paths(verdict_text: str, authored: list[str], steps: dict) -> list[str]:
-    # A verdict naming src/config/site.json must reopen intake, not the default content phase whose scope cannot touch it; a catch-all `**` scope (setup) owns nothing specific, and the caller drops the last authored phase because its output (dist) derives from earlier ones.
+    # A verdict naming src/config/site.json must reopen intake, not the default content phase whose scope cannot touch it; a catch-all `**` scope (setup) owns nothing specific, and the caller drops the last authored phase because its output (dist) derives from earlier ones. Per named path only the most specific matching pattern counts, paths shared by half the chain (work/status.yaml) carry no vote, and the phase owning most cited paths wins, so an audit list citing work/** files no longer reopens enrich for a site.json defect.
     import fnmatch
 
     named = {
         token.strip("`'\"(),.:;")
         for token in re.findall(r"[A-Za-z0-9_./-]+/[A-Za-z0-9_./-]+", verdict_text)
     }
-    out: list[str] = []
-    for phase in authored:
-        patterns = [p for p in (steps[phase].get("paths") or []) if isinstance(p, str) and p != "**"]
-        if any(
-            fnmatch.fnmatchcase(path, pattern) or path.endswith("/" + pattern)
-            for path in named for pattern in patterns
-        ):
-            out.append(phase)
-    return out
+    votes: dict[str, int] = {}
+    for path in named:
+        best: list[tuple[int, str]] = []
+        for phase in authored:
+            for pattern in steps[phase].get("paths") or []:
+                if not isinstance(pattern, str) or pattern == "**":
+                    continue
+                if fnmatch.fnmatchcase(path, pattern) or path.endswith("/" + pattern):
+                    best.append((len(pattern.replace("*", "")), phase))
+        if not best:
+            continue
+        top = max(score for score, _ in best)
+        owners = {phase for score, phase in best if score == top}
+        if len(owners) > 1 and len(owners) * 2 >= len(authored):
+            continue
+        for phase in owners:
+            votes[phase] = votes.get(phase, 0) + 1
+    return sorted(votes, key=lambda phase: (-votes[phase], authored.index(phase)))
 
 
 def _qa_rewind_target(wg, step, verdict_text: str, include_last: bool = False) -> str | None:
@@ -2924,7 +2946,7 @@ async def _maybe_qa_rewind(home: Path, wg, recent: list[dict], active, step, own
 
 
 async def _maybe_gate_rewind(home: Path, wg, step, gate_output: str) -> bool:
-    # A red hub-routed gate names the failing artifact; the hub itself has no legal move while the phase stays open (task-already-active vs phase-gate-abandoned), so the daemon reopens the owning phase.
+    # A red hub-routed gate names the failing artifact; the daemon reopens the owning phase first, and only when none owns it does the hub get woken with its one legal move, re-tasking the same phase.
     target = _qa_rewind_target(wg, step, gate_output, include_last=True)
     return await _rewind_to(
         home, wg, step, target, label=f"GATE {step.phase} red",
@@ -3127,6 +3149,7 @@ async def _dispatch_workgroup_turn(
     member_responded_seq: int | None = None,
     turn_budget_s: int = 0,
     write_scope: dict | None = None,
+    phase: str = "",
     final_repair: bool = False,
     recovery_kind: str = "",
     recovery_seq: int = 0,
@@ -3371,6 +3394,7 @@ async def _dispatch_workgroup_turn(
         **({"ALPI_WORKGROUP_MEMBER_TURN": "1"} if member_turn else {}),
         **({"ALPI_TURN_BUDGET_S": str(soft_budget)} if soft_budget else {}),
         **({"ALPI_WORKGROUP_WRITE_SCOPE": json.dumps(write_scope)} if write_scope is not None else {}),
+        **({"ALPI_WORKGROUP_PHASE": phase} if phase else {}),
         **workspace_env(home),
         **({"ALPI_WORKGROUP_ROUND_HUB_SEQ": str(round_hub_seq)} if (round_hub_seq is not None and round_hub_seq > 0) else {}),
         **({"ALPI_WORKGROUP_FINAL_REPAIR": "1"} if final_repair else {}),
