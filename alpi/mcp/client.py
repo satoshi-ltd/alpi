@@ -256,7 +256,7 @@ def _stop_process_group(proc: subprocess.Popen) -> None:
         os.killpg(pgid, signal.SIGTERM)
     except OSError:
         pass
-    # Never wait on group existence: under PID 1 killed grandchildren stay zombies (until PROC.1), so the SIGTERM grace is a fixed bounded sleep.
+    # Never wait on group existence: unreaped zombies keep the group alive, so the SIGTERM grace is a fixed bounded sleep.
     deadline = time.monotonic() + _STOP_TERM_GRACE_SECONDS
     try:
         proc.wait(timeout=_STOP_TERM_GRACE_SECONDS)

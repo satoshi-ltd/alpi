@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.14.26 — 2026-09-06 — the container reaps its orphans
+
+- **The container reaps its orphans.** `alpi daemon start` used to be PID 1
+  inside the image, so every orphan in the container reparented to a daemon
+  that never waited for it: sentinel's PR-review cron left 38 zombies against
+  41 h of uptime on the mirai box. When the command finds itself as PID 1 it
+  now forks first: PID 1 stays a minimal init that forwards signals, reaps
+  every exited process the kernel hands it and exits with the daemon's code,
+  and the daemon runs as its only child. Exited MCP wrapper chains,
+  `docker exec` sessions and the grandchildren of a hard-killed turn no longer
+  accumulate; the restart policy sees the same exit codes as before. The
+  reaper lives outside the daemon on purpose — a `waitpid(-1)` in that process
+  would steal exit statuses from its own `Popen` and asyncio children.
+
 ## v0.14.25 — 2026-09-06 — a refused handoff still continues
 
 - **A refused automatic handoff resumes the member.** When a worker ends its turn on a

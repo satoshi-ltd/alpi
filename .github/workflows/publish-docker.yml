@@ -129,6 +129,39 @@ jobs:
           "
           '
 
+      # PID 1 semantics exist only inside a container: prove the init reaps the orphans `docker exec` leaves, forwards SIGTERM and mirrors the daemon's exit code.
+      - name: smoke — PID 1 reaps orphans and forwards SIGTERM
+        run: |
+          docker run -d --name alpi-pid1 "alpi-smoke:$VERSION"
+          for _ in $(seq 60); do
+            docker exec alpi-pid1 test -f /data/.alpi/service.pid && break
+            sleep 1
+          done
+          docker exec alpi-pid1 sh -c 'sleep 0.2 & exit 0'
+          sleep 3
+          docker exec alpi-pid1 python -c '
+          import os, sys
+          title = open("/proc/1/cmdline", "rb").read().split(b"\0")[0].decode()
+          zombies = []
+          for d in os.listdir("/proc"):
+              if not d.isdigit():
+                  continue
+              try:
+                  stat = open(f"/proc/{d}/stat").read()
+              except OSError:
+                  continue
+              if stat[stat.rfind(")") + 2] == "Z":
+                  zombies.append(int(d))
+          print("pid 1:", title, "zombies:", zombies)
+          if title != "alpi (init)" or zombies:
+              sys.exit("PID 1 is not reaping the container")
+          '
+          docker stop -t 60 alpi-pid1
+          code=$(docker inspect --format "{{.State.ExitCode}}" alpi-pid1)
+          docker logs alpi-pid1 | tail -n 40
+          docker rm alpi-pid1
+          test "$code" = "0" || { echo "daemon exit code $code did not propagate cleanly"; exit 1; }
+
       - uses: docker/build-push-action@v7
         with:
           context: .

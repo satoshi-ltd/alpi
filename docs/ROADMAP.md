@@ -22,13 +22,8 @@ list targeting v0.14.x patch releases.
 
 ### Runtime hardening
 
-PROC.1 was isolated on the 2026-09-03 mirai box: sentinel's PR-review cron
-leaked one orphaned `bitbucket-mcp` server per run, 38 zombies against 41 h
-of daemon uptime.
-
 | ID | Item | Status |
 |---|---|---|
-| PROC.1 | The daemon is PID 1 inside the image (`ENTRYPOINT ["alpi-docker"]`, no init), so every orphan in the container reparents to it and stays a zombie: it never calls `wait()` on children it did not spawn. Reap them when `os.getpid() == 1` — a SIGCHLD handler draining `waitpid(-1, WNOHANG)` — so a hard-killed turn, a crashed MCP server, or a `terminal` grandchild cannot accumulate. v0.14.21 kills the whole MCP wrapper chain so no live server survives `stop()`; this reaps the exits it leaves under PID 1 and bounds every other path. | 🟡 |
 | COST.1 | Per-pipeline cost telemetry: attribute ledger spend and tokens to a pipeline run, replacing manual checkpoint arithmetic. | 🔵 |
 | BG.1 | `alpi doctor` verifies the installed LiteLLM against the pinned version and hashes, catching a supply-chain swap locally (review cadence stays in [OPERATIONS.md](OPERATIONS.md)). | 🔵 |
 

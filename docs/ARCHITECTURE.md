@@ -551,6 +551,23 @@ ExecStart. It:
 6. SIGTERM / SIGINT cancels every task cooperatively; PID file
    removed on exit.
 
+**PID 1 (`alpi/pid1.py`).** Inside the image `alpi daemon start` is PID 1
+(`ENTRYPOINT ["alpi-docker"]`, no init). Before anything else it forks: PID 1
+stays a minimal init — `waitpid(-1)` in a loop, SIGTERM / SIGINT / SIGHUP /
+SIGQUIT / SIGUSR1 / SIGUSR2 forwarded to its only child, exit code mirrored
+(128 + signal on a signal death) — and `serve_all` runs in the child, which
+owns `service.pid` and `service.lock` as before. Every orphan in the container
+(an exited `npx` wrapper chain, a `docker exec` session, the grandchildren of a
+hard-killed turn) reparents to PID 1 and is reaped there, each one logged to
+stderr. The reaper is deliberately not inside the daemon: a `waitpid(-1)` in
+that process would steal exit statuses from `Popen.poll()` / `wait()` and from
+asyncio's child watcher, which then report 0 or 255 for a child they never
+saw exit. Outside a container `os.getpid() != 1` and the fork is skipped.
+`pytest` covers the fork, the forwarding and the exit-code mirror; the PID 1
+case itself runs in `publish-docker.yml`, which starts the built image,
+leaves an orphan through `docker exec`, asserts no zombie remains and that
+`docker stop` returns the daemon's exit code.
+
 **Operational invariants of `serve_all`** (each one is the root cause of a real production incident; do not regress):
 
 - `~/.alpi/service.lock` is held under an OS-level non-blocking lock (`fcntl.flock` on Unix, `msvcrt.locking` on Windows) for the daemon's lifetime; this guarantees one daemon per installation. A second `alpi daemon start` exits with a warning instead of racing the existing one.

@@ -926,9 +926,18 @@ def _root() -> Path:
 @daemon.command("start")
 def daemon_start() -> None:
     """Run the daemon in the foreground."""
-    from alpi import service as svc
+    from alpi import pid1
 
     root = _root()
+    if pid1.is_pid1():
+        pid1.run(lambda: _serve_daemon(root))
+    else:
+        _serve_daemon(root)
+
+
+def _serve_daemon(root: Path) -> None:
+    from alpi import service as svc
+
     _bootstrap(root)
     if svc.daemon_running_pid(root) is not None:
         raise click.ClickException(

@@ -10,6 +10,5 @@ mkdir -p "$HOME/.alpi"
 # starttime check so `alpi daemon start` never refuses on a stale pidfile.
 rm -f "$HOME/.alpi/service.pid"
 
-# exec → the daemon becomes PID 1 and receives SIGTERM/SIGINT directly
-# (serve_all installs handlers for graceful shutdown).
+# exec → alpi is PID 1; `daemon start` forks a reaping init (alpi/pid1.py) in front of the daemon.
 exec alpi daemon start

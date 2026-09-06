@@ -1,5 +1,5 @@
 # Deployment runtime (ALPI_PLATFORM). Only container runtime is docker:
-# entrypoint supervises the daemon as PID 1, bind 0.0.0.0, advertise via env.
+# PID 1 is alpi/pid1.py's init with the daemon as its only child, bind 0.0.0.0, advertise via env.
 # ALPI_PLATFORM also marks scheduled/cron runs — not runtimes.
 
 from __future__ import annotations

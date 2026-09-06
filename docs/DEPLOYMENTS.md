@@ -77,7 +77,8 @@ but that'd just be two profiles — see topology 3).
 ## 2a. Docker home server
 
 The packaged form of the home-server topology. The daemon runs inside a
-container as PID 1, stores the Alpi root on a mounted volume, and exposes
+container behind a minimal PID 1 init that forwards signals and reaps orphans,
+stores the Alpi root on a mounted volume, and exposes
 the host plane (and optionally the ALP peer port) so desktop / mobile
 clients pair to it. No web terminal — reach the TUI with `docker exec`.
 
@@ -86,11 +87,12 @@ clients pair to it. No web terminal — reach the TUI with `docker exec`.
 │ Linux host (Docker)                  │
 │                                      │
 │  container: satoshiltd/alpi          │
-│    alpi daemon (PID 1)               │
-│      ├─ scheduler                    │
-│      ├─ ALP listener (:7423)         │
-│      ├─ workgroups poller            │
-│      └─ host plane (:49200)          │
+│    alpi init (PID 1)                 │
+│    └─ alpi daemon                    │
+│         ├─ scheduler                 │
+│         ├─ ALP listener (:7423)      │
+│         ├─ workgroups poller         │
+│         └─ host plane (:49200)       │
 │                                      │
 │  /data  (mounted volume → .alpi)     │
 └──────────────────────────────────────┘

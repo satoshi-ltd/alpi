@@ -1,9 +1,10 @@
 # Alpi on Docker
 
 A single image (`satoshiltd/alpi`) that runs the Alpi daemon for a normal
-Linux host. The container entrypoint supervises the daemon as PID 1 — there is
-no install/start/stop inside the container, and no web terminal: reach an
-agent's TUI with `docker exec`.
+Linux host. `alpi daemon start` runs as PID 1 and forks a minimal init in front
+of the daemon — it forwards signals, reaps every orphan in the container and
+exits with the daemon's code — so there is no install/start/stop inside the
+container, and no web terminal: reach an agent's TUI with `docker exec`.
 
 ## Quick start (compose)
 

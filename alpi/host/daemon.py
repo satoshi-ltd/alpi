@@ -32,7 +32,7 @@ async def _daemon_update(
 
 
 def schedule_self_terminate(delay: float = 0.2) -> None:
-    # Deferred so the RPC returns before we SIGTERM ourselves; synchronous self-kill blocks the loop. Respawn: launchd/systemd on a host, restart policy in docker (daemon is PID 1).
+    # Deferred so the RPC returns before we SIGTERM ourselves; synchronous self-kill blocks the loop. Respawn: launchd/systemd on a host, restart policy in docker (PID 1 exits with the daemon's code).
     loop = asyncio.get_running_loop()
     loop.call_later(delay, _self_terminate)
 
