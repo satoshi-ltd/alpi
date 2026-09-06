@@ -901,6 +901,102 @@ def test_workgroup_dispatch_continues_after_working_post(
     assert finals == []
 
 
+def _member_dispatch(monkeypatch, final_text: str):
+    calls = _stub_stream(monkeypatch, [
+        _final_chunk("", tool_calls=[{
+            "id": "t1", "name": "todo", "arguments": '{"action":"list"}',
+        }]),
+        _final_chunk(final_text),
+    ])
+    monkeypatch.setenv("ALPI_WORKGROUP_DISPATCH", "wg_target")
+    monkeypatch.setattr(
+        "alpi.alp.agent_context.build",
+        lambda _home, wg_id=None, max_chars=None: "target context",
+    )
+    deliveries = []
+
+    def fake_execute(name, args, **_kwargs):
+        if name != "workgroup_post":
+            return ToolResult(ok=True, output="[]")
+        deliveries.append(dict(args))
+        if "(continuation)" in args["text"]:
+            return ToolResult(ok=True, output="posted seq 25")
+        return ToolResult(
+            ok=False, output="",
+            error="a pipeline handoff names its phase: post `#translation done — <what changed and where>`",
+        )
+
+    monkeypatch.setattr("alpi.tools.execute", fake_execute)
+    return calls, deliveries
+
+
+def test_member_turn_continues_when_its_automatic_handoff_is_refused(
+    patched_engine: Engine, monkeypatch,
+) -> None:
+    monkeypatch.setenv("ALPI_WORKGROUP_MEMBER_TURN", "1")
+    _, deliveries = _member_dispatch(monkeypatch, "Continuing the Italian pack — dining (4), amenities (3).")
+    events = []
+
+    patched_engine.run_turn("work", emit=events.append)
+
+    assert deliveries[0]["text"].startswith("Continuing the Italian pack")
+    assert deliveries[1]["text"].startswith("#working turn ended before its handoff (direct handoff refused: a pipeline handoff names its phase")
+    assert deliveries[1]["text"].endswith("(continuation)")
+    assert len(deliveries) == 2
+    assert any(event.kind == "done" for event in events)
+    assert not any(event.kind == "error" for event in events)
+
+
+def test_member_turn_ending_on_working_text_posts_it_as_a_continuation(
+    patched_engine: Engine, monkeypatch,
+) -> None:
+    monkeypatch.setenv("ALPI_WORKGROUP_MEMBER_TURN", "1")
+    _, deliveries = _member_dispatch(monkeypatch, "#working italian pack half done, resuming")
+    events = []
+
+    patched_engine.run_turn("work", emit=events.append)
+
+    assert [row["text"] for row in deliveries] == [
+        "#working italian pack half done, resuming (continuation)",
+    ]
+    assert any(event.kind == "done" for event in events)
+    assert not any(event.kind == "error" for event in events)
+
+
+def test_a_refused_automatic_handoff_stays_an_error_outside_member_turns(
+    patched_engine: Engine, monkeypatch,
+) -> None:
+    monkeypatch.delenv("ALPI_WORKGROUP_MEMBER_TURN", raising=False)
+    _, deliveries = _member_dispatch(monkeypatch, "Continuing the Italian pack — dining (4).")
+    events = []
+
+    patched_engine.run_turn("work", emit=events.append)
+
+    assert len(deliveries) == 1
+    assert any(event.kind == "error" and "names its phase" in (event.text or "") for event in events)
+
+
+def test_an_interrupted_member_turn_does_not_post_a_continuation(
+    patched_engine: Engine, monkeypatch,
+) -> None:
+    monkeypatch.setenv("ALPI_WORKGROUP_MEMBER_TURN", "1")
+    _, deliveries = _member_dispatch(monkeypatch, "Continuing the Italian pack — dining (4).")
+    original = patched_engine.run_turn
+
+    def fake_execute_then_interrupt(name, args, **_kwargs):
+        if name == "workgroup_post":
+            deliveries.append(dict(args))
+            patched_engine.interrupt_requested = True
+            return ToolResult(ok=False, output="", error="a pipeline handoff names its phase")
+        return ToolResult(ok=True, output="[]")
+
+    monkeypatch.setattr("alpi.tools.execute", fake_execute_then_interrupt)
+    events = []
+    original("work", emit=events.append)
+
+    assert len(deliveries) == 1
+
+
 def test_workgroup_step_limit_posts_a_working_continuation(
     patched_engine: Engine, monkeypatch,
 ) -> None:

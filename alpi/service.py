@@ -3301,9 +3301,9 @@ async def _dispatch_workgroup_turn(
             "declared gate. Research only when the active task explicitly "
             "requires it. Do not post plans or progress; the runtime may emit "
             "#working only when a bounded turn exhausts. When finished, make exactly one "
-            f"plain `workgroup_post(wg_id=\"{wg_id}\", text=\"…\")` handoff "
-            "in the task's language naming the produced paths, verification, "
-            "or blocker. Members never post #task or #done. If you are not the "
+            f"`workgroup_post(wg_id=\"{wg_id}\", text=\"#<phase> done — …\")` handoff "
+            "that starts with the active phase token, in the task's language, naming "
+            "the produced paths, verification, or blocker. Members never post #task or #done. If you are not the "
             "targeted owner, stay silent. Assistant text is not delivered."
         )
         env_extra = {}

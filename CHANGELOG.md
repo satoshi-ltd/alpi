@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.14.25 — 2026-09-06 — a refused handoff still continues
+
+- **A refused automatic handoff resumes the member.** When a worker ends its turn on a
+  progress note that the handoff guard refuses, the runtime now posts the
+  bounded `#working … (continuation)` in its place, so the daemon resumes the
+  worker right away instead of waiting out the watchdog's grace period.
+- **The pipeline prompt says what the guard checks.** Workers are asked for a
+  `#<phase> done — …` handoff, matching the rule that was already enforced.
+
 ## v0.14.24 — 2026-09-06 — bounded pipeline recovery
 
 - Bound empty pipeline hub exchanges to four notes without a member delivery or phase transition, then close as `BLOCKED` once workers have settled. Gate repair and continuation notes retain their existing limits.

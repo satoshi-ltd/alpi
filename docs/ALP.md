@@ -1844,7 +1844,11 @@ a mid-turn narration is returned as an error instead of landing as the
 delivery the daemon gates. Daemon state under the workspace (the
 `.alpi` root and profile homes, Docker's `/data/.alpi`) is pruned from
 the boundary scan and never counts as an out-of-scope change. Progress prose, read-only commands and writes outside the scope
-are not a delivery. An owner's bare `#skip` in a gated phase is gated
+are not a delivery. When the runtime turns a member's final text into
+the automatic handoff and the guard refuses it, the turn posts the
+bounded `#working … (continuation)` instead of ending silent, so the
+daemon re-dispatches at once instead of after the watchdog's full
+`#working` grace. An owner's bare `#skip` in a gated phase is gated
 like a delivery: after a rewind the artifacts may already stand, and
 the gate is the only close left once the run holds an earlier delivery.
 

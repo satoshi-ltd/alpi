@@ -1186,7 +1186,23 @@ class Engine:
 
             if dispatch_wg_id and dispatch_handoff_text:
                 from alpi.alp import tasks as _wg_tasks
+                member_turn = os.environ.get("ALPI_WORKGROUP_MEMBER_TURN") == "1"
+
+                def _continue_after_refused_handoff(text: str) -> bool:
+                    # A refused automatic handoff must not end a member turn in silence: the bounded continuation re-arms the daemon's resume, and the SDK still refuses it once the task has moved on.
+                    if not member_turn or self.interrupt_requested:
+                        return False
+                    if _wg_tasks.CONTINUATION_MARK not in text:
+                        text = f"{text} {_wg_tasks.CONTINUATION_MARK}"
+                    return bool(_post_workgroup_handoff(
+                        text, tool_id="workgroup-direct-handoff-continuation",
+                    ).ok)
+
                 if _wg_tasks.is_working_only(dispatch_handoff_text):
+                    if _continue_after_refused_handoff(dispatch_handoff_text.rstrip()):
+                        turn_completed = True
+                        emit(AgentEvent(kind="done"))
+                        return
                     turn_error = (
                         "Workgroup final handoff cannot be another #working post."
                     )
@@ -1205,7 +1221,14 @@ class Engine:
                     ))
                     return
                 if not result.ok:
-                    turn_error = result.error or "Workgroup final handoff failed."
+                    refusal = result.error or "Workgroup final handoff failed."
+                    if _continue_after_refused_handoff(
+                        _fallback_continuation(f"direct handoff refused: {refusal[:120]}"),
+                    ):
+                        turn_completed = True
+                        emit(AgentEvent(kind="done"))
+                        return
+                    turn_error = refusal
                     emit(AgentEvent(
                         kind="error", text=turn_error,
                         transient=getattr(result, "transient", False),

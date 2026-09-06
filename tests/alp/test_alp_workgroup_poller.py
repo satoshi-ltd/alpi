@@ -918,7 +918,7 @@ async def test_pipeline_member_dispatch_uses_the_short_execution_prompt(
     prompt = captured["prompt"]
     assert prompt.startswith("[workgroup-pipeline]")
     assert "runtime may emit #working only when a bounded turn exhausts" in prompt
-    assert "make exactly one plain `workgroup_post" in prompt
+    assert 'text="#<phase> done — …")` handoff that starts with the active phase token' in prompt
     assert "use `web_search`" not in prompt
     assert "Valid actions, in priority" not in prompt
     assert captured["env"].get("ALPI_WORKGROUP_PIPELINE") == "1"
