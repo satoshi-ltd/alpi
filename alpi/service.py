@@ -461,7 +461,7 @@ _WG_HOT_WINDOW_SECONDS = 120.0
 _WG_HOT_TICK_SECONDS = 5.0
 _WG_LONG_POLL_SECONDS = 25.0
 _WG_IDLE_POLL_SECONDS = 60.0
-_WG_PAUSED_POLL_SECONDS = 300.0
+_WG_PAUSED_POLL_SECONDS = 60.0
 _HOT_DISPATCH_COOLDOWN_SECONDS = 10
 # A hub answering an empty long poll faster than this ignores wait_s (pre-long-poll build), so the poller must pace itself instead of spinning.
 _WG_FAST_HUB_SECONDS = 1.0
@@ -1531,6 +1531,32 @@ async def _maybe_gate_advance(
     return True
 
 
+_HUB_EMPTY_EXCHANGE_LIMIT = 4
+
+
+def _empty_hub_exchange_phase(wg, recent: list[dict]) -> str:
+    from alpi.alp import tasks
+
+    if not _wg_is_pipeline(wg):
+        return ""
+    active = tasks.active_task(recent, hub_pubkey=wg.meta.hub_pubkey)
+    if active is None:
+        return ""
+    count = 0
+    for post in recent:
+        if int(post.get("seq", 0)) <= active.opened_seq:
+            continue
+        text = str(post.get("text") or "")
+        if tasks.is_working_only(text):
+            continue
+        if str(post.get("from") or "") == wg.meta.hub_pubkey:
+            if "(repair round " not in text and "(continuation " not in text:
+                count += 1
+        elif not tasks.is_skip_only(text):
+            count = 0
+    return active.slug if count >= _HUB_EMPTY_EXCHANGE_LIMIT else ""
+
+
 async def _maybe_dispatch_for_hub(
     home: Path, profile: str, wg, recent: list[dict], hot: bool = False,
 ) -> None:
@@ -1566,6 +1592,16 @@ async def _maybe_dispatch_for_hub(
         return
     gate_fail = await _maybe_gate_advance(home, wg, recent, own_pubkey)
     if gate_fail is True:
+        return
+    empty_phase = _empty_hub_exchange_phase(wg, recent)
+    if (empty_phase and not any(key[0] == wg.meta.id for key in _INFLIGHT)
+            and time.monotonic() - _LAST_TURN_END.get(wg.meta.id, float("-inf")) >= _TURN_SETTLE_SECONDS):
+        from alpi.alp import workgroup_client as wc
+
+        await wc.post(home, wg.meta.id, (
+            f"#done BLOCKED · {empty_phase} · hub exchange exhausted after "
+            f"{_HUB_EMPTY_EXCHANGE_LIMIT} notes without a member delivery or phase transition"
+        ).encode())
         return
     if gate_fail is None:
         _warn_gate_overdue(home, wg, recent, own_pubkey)
@@ -2982,6 +3018,13 @@ async def _rewind_to(home: Path, wg, step, target: str | None, *, label: str, re
     _bump_qa_rewind_count(home, wg.meta.id)
     # The re-walk must re-verify what failed; the QA opener carries this excerpt as a checklist, worded by its origin.
     _set_qa_recheck(home, wg.meta.id, step.phase, excerpt, kind="qa" if label == "QA FAIL" else "gate")
+    chain = next((list(chain) for chain in wg.meta.pipelines.values()
+                  if target in chain and step.phase in chain
+                  and list(chain).index(target) < list(chain).index(step.phase)), [])
+    if chain:
+        intermediates = chain[chain.index(target) + 1:chain.index(step.phase)]
+        for phase in _phases_owning_named_paths(excerpt, intermediates, phase_map):
+            _set_qa_recheck(home, wg.meta.id, phase, excerpt, kind="qa" if label == "QA FAIL" else "gate")
     if isinstance(res, dict) and res.get("seq") is not None:
         _set_hub_responded_seq(home, wg.meta.id, int(res["seq"]))
     log.info(

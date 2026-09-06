@@ -456,7 +456,8 @@ class Server:
                 await out.aclose()
             return
 
-        log.info(
+        emit_log = log.debug if method == "workgroup.pull" else log.info
+        emit_log(
             "alp: %s from %s · %.2fs",
             method, peer.id, _time.monotonic() - t0,
         )

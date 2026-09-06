@@ -101,6 +101,16 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
 # --------------------------------------------------------------------
 
 @pytest.fixture(autouse=True, scope="session")
+def _isolate_default_home(tmp_path_factory):
+    from alpi import home
+
+    original = home._ROOT
+    home._ROOT = tmp_path_factory.mktemp("alpi-default-home")
+    yield
+    home._ROOT = original
+
+
+@pytest.fixture(autouse=True, scope="session")
 def _isolate_host_events_history(tmp_path_factory: pytest.TempPathFactory) -> None:
     from alpi.host import events as _host_events
     _host_events._history_path = tmp_path_factory.mktemp("host-events") / "events.jsonl"
@@ -113,6 +123,7 @@ def _scrub_sensitive_env(monkeypatch: pytest.MonkeyPatch) -> None:
     paths run ``load_dotenv`` which would otherwise import the profile
     ``.env``. Tests that genuinely need real creds opt back in via
     ``tmp_home_with_real_env`` (used only by ``@pytest.mark.llm``)."""
+    monkeypatch.delenv("ALPI_HOME", raising=False)
     for var in _SENSITIVE_ENV_VARS:
         monkeypatch.delenv(var, raising=False)
 

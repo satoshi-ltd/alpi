@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.14.24 — 2026-09-06 — bounded pipeline recovery
+
+- Bound empty pipeline hub exchanges to four notes without a member delivery or phase transition, then close as `BLOCKED` once workers have settled. Gate repair and continuation notes retain their existing limits.
+- Carry retained QA findings to intermediate phases whose paths own the cited files during a rewind.
+- Poll paused subscriptions every 60 seconds instead of five minutes so resumed work is noticed sooner.
+- Log successful `workgroup.pull` RPCs at DEBUG and isolate the test suite's default Alpi home from the live installation.
+
 ## v0.14.23 — 2026-09-06 — the hub always has a legal move
 
 - **A red gate lets the hub re-task the same phase.** `task-already-active`

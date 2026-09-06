@@ -4,7 +4,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from alpi import home
+
+
+@pytest.fixture(autouse=True)
+def production_default_root(monkeypatch):
+    monkeypatch.setattr(home, "_ROOT", Path.home() / ".alpi")
 
 
 def test_default_is_home_alpi(monkeypatch) -> None:

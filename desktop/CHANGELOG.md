@@ -11,6 +11,12 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.5.23 — 2026-09-06 — a quieter concurrency chip
+
+- **The concurrency chip says one thing.** It reads `3 workgroups` (or
+  `unlimited`); whether the value is inherited shows as a small `from default`
+  hint beside it, and the admission queue count moved into the tooltip.
+
 ## v0.5.22 — 2026-09-05 — the fleet size is a setting
 
 - **Concurrency is a profile setting.** Every profile shows how many

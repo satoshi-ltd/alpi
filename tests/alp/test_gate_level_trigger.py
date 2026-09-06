@@ -1476,3 +1476,73 @@ def test_qa_recheck_delivery_requires_the_matching_opener_and_suffix(tmp_path, m
 
     posts[0]["text"] = "@lens #task #qa · audit\nUnrelated note" + suffix
     assert not service._qa_recheck_delivered(tmp_path, "wg", "qa", suffix, 9)
+
+
+@pytest.mark.asyncio
+async def test_rewind_carries_findings_to_each_intermediate_owner(tmp_path, monkeypatch):
+    steps = {
+        'intake': {'owner': 'scout', 'paths': ['src/config/site.json']},
+        'assets': {'owner': 'muse', 'paths': ['assets/**']},
+        'content': {'owner': 'quill', 'paths': ['src/content/**']},
+        'qa': {'owner': 'lens', 'paths': []},
+    }
+    wg = types.SimpleNamespace(meta=types.SimpleNamespace(
+        id='wg_multi', pipelines={'setup': list(steps)},
+        pipeline_steps={name: {**spec, 'gate': {'argv': ['true'], 'cwd': ''}} for name, spec in steps.items()},
+    ))
+    async def post(*args, **kwargs):
+        return {'seq': 12}
+    monkeypatch.setattr(wc, 'post', post)
+    excerpt = 'QA FAIL: src/config/site.json and src/content/pages/home.es.json contradict the brief'
+    assert await service._rewind_to(tmp_path, wg, types.SimpleNamespace(phase='qa'),
+                                    'intake', label='QA FAIL', reason='repair', excerpt=excerpt)
+    assert service._peek_qa_recheck(tmp_path, 'wg_multi', 'content') == ('qa', excerpt)
+    assert service._peek_qa_recheck(tmp_path, 'wg_multi', 'assets') == ('', '')
+    assert service._peek_qa_recheck(tmp_path, 'wg_multi', 'qa') == ('qa', excerpt)
+
+
+def test_empty_hub_exchange_is_bounded_but_deliveries_and_new_tasks_reset_it():
+    wg = _gated_wg()
+    posts = _recent()[:1]
+    for i in range(4):
+        posts.extend([
+            {'seq': i * 2 + 2, 'from': 'QUILLPK', 'text': '#skip already complete'},
+            {'seq': i * 2 + 3, 'from': 'HUB', 'text': 'Please deliver again'},
+        ])
+    assert service._empty_hub_exchange_phase(wg, posts) == 'content'
+    assert service._empty_hub_exchange_phase(wg, posts + [
+        {'seq': 11, 'from': 'QUILLPK', 'text': '#content corrected the page'},
+    ]) == ''
+    assert service._empty_hub_exchange_phase(wg, posts + [
+        {'seq': 11, 'from': 'HUB', 'text': '#done BLOCKED'},
+    ]) == ''
+    assert service._empty_hub_exchange_phase(wg, posts + [
+        {'seq': 11, 'from': 'HUB', 'text': '@quill #task #content repair'},
+    ]) == ''
+
+
+@pytest.mark.asyncio
+async def test_empty_exchange_closes_once_through_the_real_sdk(tmp_path, monkeypatch):
+    from alpi import home as home_mod
+
+    root = tmp_path / 'root'
+    monkeypatch.setattr(home_mod, '_ROOT', root)
+    home = root / 'profiles' / 'mira'
+    home.mkdir(parents=True)
+    workspace = tmp_path / 'workspace'
+    workspace.mkdir()
+    quill_pk = load_or_generate(root / 'profiles' / 'quill').pubkey_b64()
+    peers_mod.add(home, Peer(id='quill', pubkey=quill_pk, allow=['workgroup.post']))
+    wg = wg_mod.create(home, name='site', hub_kp=load_or_generate(home),
+                       member_pubkeys=[quill_pk], pipelines={'content': ['content']},
+                       launch_pipeline='content', pipeline_steps={'content': {'owner': 'quill'}})
+    monkeypatch.setattr('alpi.config.load', lambda h: types.SimpleNamespace(workspace_path=workspace))
+    await wc.post(home, wg.meta.id, b'@quill #task #content write it')
+    for _ in range(4):
+        _append_member_post(home, wg, quill_pk, '#skip already complete')
+        await wc.post(home, wg.meta.id, b'Please deliver again')
+    await service._maybe_dispatch_for_hub(home, 'mira', wg, _real_recent(home, wg))
+    recent = _real_recent(home, wg)
+    assert recent[-1]['text'].startswith('#done BLOCKED')
+    assert 'hub exchange exhausted' in recent[-1]['text']
+    assert service._empty_hub_exchange_phase(wg, recent) == ''

@@ -3911,7 +3911,7 @@ def test_subscription_observation_mode_is_derived_from_live_state() -> None:
 
 def test_subscription_cadences_keep_idle_and_paused_out_of_long_polling() -> None:
     assert service._WG_HOT_TICK_SECONDS < service._WG_IDLE_POLL_SECONDS
-    assert service._WG_IDLE_POLL_SECONDS < service._WG_PAUSED_POLL_SECONDS
+    assert service._WG_IDLE_POLL_SECONDS <= service._WG_PAUSED_POLL_SECONDS <= 60
 
 
 def test_subscription_start_offset_is_deterministic_and_spread() -> None:

@@ -8,10 +8,8 @@ import { useNotify } from "../../../primitives/Notification.jsx";
 import { useDismissOnOutside } from "../../../hooks/useDismissOnOutside.js";
 import styles from "../Settings.module.css";
 
-export function pipelineLimitLabel(limit, queued = 0, origin = "profile") {
-  const cap = Number(limit) > 0 ? `${limit} workgroups` : "unlimited";
-  const inherited = origin === "default" ? `${cap} · from default` : cap;
-  return queued > 0 ? `${inherited} · ${queued} queued` : inherited;
+export function pipelineLimitLabel(limit) {
+  return Number(limit) > 0 ? `${limit} workgroups` : "unlimited";
 }
 
 export function PipelineLimitField({ profile, onSaved }) {
@@ -64,7 +62,7 @@ export function PipelineLimitField({ profile, onSaved }) {
   }
 
   return (
-    <span ref={wrapRef} className={styles.popoverAnchor}>
+    <span ref={wrapRef} className={`${styles.popoverAnchor} ${styles.withHint}`}>
       <Chip
         state={current > 0 ? "on" : "off"}
         onClick={() => setOpen((o) => !o)}
@@ -72,14 +70,15 @@ export function PipelineLimitField({ profile, onSaved }) {
           <>
             <div>{isDefaultProfile ? "Workgroups every hub runs at once" : "Workgroups this hub runs at once"}</div>
             <div className={styles.tooltipStatus}>
-              {origin === "default" ? "inherited from the default profile · " : ""}
+              {(profile.queued_pipelines ?? 0) > 0 ? `${profile.queued_pipelines} queued · ` : ""}
               pipelines beyond the cap wait in the admission queue; deliberations always open and count · click to edit
             </div>
           </>
         }
       >
-        {pipelineLimitLabel(current, profile.queued_pipelines ?? 0, origin)}
+        {pipelineLimitLabel(current)}
       </Chip>
+      {origin === "default" && <span className={styles.hint}>from default</span>}
       {open && (
         <div className={styles.popover}>
           <div className={styles.field}>

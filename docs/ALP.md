@@ -1780,6 +1780,14 @@ posted a substantive delivery. Delivered work must pass its gate,
 repair the same phase, or close `BLOCKED`. A blocked phase stays
 `current` and the run-level status carries the failure.
 
+A pipeline also closes `BLOCKED` after four hub notes without a member
+delivery or a phase transition, once local workers have settled. Bare skips
+and working markers do not reset this count; mechanical repair and
+continuation notes keep their separate limits. During a QA rewind, retained
+findings also reach intermediate phases whose declared paths own a cited file.
+Paused subscriptions poll every 60 seconds to notice a resume; this is not
+an immediate wake guarantee. Successful `workgroup.pull` RPC logs use DEBUG.
+
 The LATEST task overall selects the visible run, so an ad-hoc task
 opened after a chain makes `pipeline_run` null rather than leaving a
 finished chain on screen. Runs are cut at boundaries, not at every

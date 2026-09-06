@@ -149,3 +149,5 @@ Client-side diagnostics (SDK Python exceptions, no JSON-RPC code, never on wire)
 - Host-plane clients and pairing: `deployments`
 - Profile identity boundaries: `profiles`
 - Security model: `security`
+
+Pipeline liveness: after four hub notes without a member delivery or phase transition, close `BLOCKED` once local workers settle. Skips/working markers do not reset the count; mechanical repair/continuation notes have separate bounds. QA rewind findings also reach intermediate owners of cited paths. Paused subscriptions probe every 60 seconds; resume is not an immediate wake. Successful `workgroup.pull` RPC logs are DEBUG.
