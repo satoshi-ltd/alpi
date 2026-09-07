@@ -14,6 +14,15 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.4.8 — 2026-09-07 — cleanup counts items
+
+- **Reclaim space offers categories that weigh nothing.** The sheet listed a
+  category only when it had bytes to free, so a profile with thousands of
+  expired workgroup tombstones (empty marker files) read as tidy. Every row now
+  shows bytes and items, the confirmation toast counts what it removed, and a
+  zero-byte category with items is offered like any other. Requires alpi
+  0.14.27 for the tombstones category.
+
 ## v0.4.7 — 2026-08-31 — notifications arrive while you are looking at the app
 
 - **Live events now notify.** The app already held an authenticated event stream

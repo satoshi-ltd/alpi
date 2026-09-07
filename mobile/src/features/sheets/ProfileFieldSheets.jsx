@@ -353,6 +353,10 @@ function formatCleanupBytes(n) {
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
+function countLabel(n) {
+  return `${n} ${n === 1 ? 'item' : 'items'}`;
+}
+
 export function CleanupSheet({ open, onClose, profileName, call, onCleaned }) {
   const { colors, fonts, fontSizes } = useTheme();
   const toast = useToast();
@@ -385,7 +389,7 @@ export function CleanupSheet({ open, onClose, profileName, call, onCleaned }) {
           duration: 2600,
         });
       } else {
-        toast({ title: `${cat.label}: freed ${formatCleanupBytes(freed)}`, duration: 1800 });
+        toast({ title: `${cat.label}: freed ${formatCleanupBytes(freed)} · ${countLabel(removed)}`, duration: 1800 });
       }
       await fetchPlan();
       if (removed > 0) onCleaned?.();
@@ -412,7 +416,7 @@ export function CleanupSheet({ open, onClose, profileName, call, onCleaned }) {
     );
   };
 
-  const reclaimable = plan === 'error' ? [] : (plan ?? []).filter((c) => c.size > 0);
+  const reclaimable = plan === 'error' ? [] : (plan ?? []).filter((c) => c.size > 0 || c.count > 0);
   return (
     <Sheet
       open={open}
@@ -450,7 +454,12 @@ export function CleanupSheet({ open, onClose, profileName, call, onCleaned }) {
               <PickerRow
                 label={c.label}
                 helper={c.desc}
-                meta={<Pill>{formatCleanupBytes(c.size)}</Pill>}
+                meta={(
+                  <View style={{ flexDirection: 'row', gap: space.s2 }}>
+                    <Pill>{formatCleanupBytes(c.size)}</Pill>
+                    <Pill>{countLabel(c.count ?? 0)}</Pill>
+                  </View>
+                )}
                 onPress={() => (busyKey ? null : clean(c))}
               />
             </View>

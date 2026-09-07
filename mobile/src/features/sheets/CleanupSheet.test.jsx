@@ -34,7 +34,8 @@ vi.mock('../../components/PickerRow', () => ({
 vi.mock('../../components/Pill', () => ({ Pill: ({ children }) => <em>{children}</em> }));
 vi.mock('../../components/Row', () => ({ RowSeparator: () => <hr />, SectionHeader: ({ children }) => <h2>{children}</h2> }));
 vi.mock('../../components/Field', () => ({ Field: () => null }));
-vi.mock('../../components/Toast', () => ({ useToast: () => () => {} }));
+const toast = vi.hoisted(() => vi.fn());
+vi.mock('../../components/Toast', () => ({ useToast: () => toast }));
 vi.mock('../../hooks/useDaemonData', () => ({ useOllamaModels: () => ({ data: null, loading: false }) }));
 vi.mock('../../lib/EndpointContext', () => ({ useEndpoint: () => ({ call: vi.fn() }) }));
 vi.mock('../../lib/curatedModels', () => ({ noteFor: () => null }));
@@ -82,6 +83,31 @@ describe('CleanupSheet', () => {
       expect(call).toHaveBeenCalledWith('host.cleanup.apply', { profile: 'agora', keys: ['tts'] }),
     );
     await waitFor(() => expect(onCleaned).toHaveBeenCalled());
+  });
+
+  it('offers a category that weighs nothing but has items', async () => {
+    toast.mockClear();
+    const tombstones = { key: 'tombstones', label: 'Workgroup tombstones', desc: 'markers', size: 0, count: 5, action: 'unlink', destructive: false };
+    const call = vi.fn(async (verb) => {
+      if (verb === 'host.cleanup.plan') return { categories: [PLAN[2], tombstones] };
+      if (verb === 'host.cleanup.apply') return { results: [{ key: 'tombstones', ok: true, removed: 5, freed_bytes: 0 }] };
+      throw new Error(`unexpected ${verb}`);
+    });
+    const { container } = render(
+      <CleanupSheet open onClose={() => {}} profileName="agora" call={call} />,
+    );
+    const scope = within(container);
+    await waitFor(() => expect(scope.getByText('Workgroup tombstones')).toBeTruthy());
+    expect(scope.queryByText(/Nothing to clean/)).toBeNull();
+    expect(scope.getByText('0 B')).toBeTruthy();
+    expect(scope.getByText('5 items')).toBeTruthy();
+    fireEvent.click(scope.getByText('Workgroup tombstones'));
+    await waitFor(() =>
+      expect(call).toHaveBeenCalledWith('host.cleanup.apply', { profile: 'agora', keys: ['tombstones'] }),
+    );
+    await waitFor(() =>
+      expect(toast).toHaveBeenCalledWith({ title: 'Workgroup tombstones: freed 0 B · 5 items', duration: 1800 }),
+    );
   });
 
   it('shows the tidy state when nothing is reclaimable', async () => {
