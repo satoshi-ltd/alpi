@@ -782,6 +782,8 @@ async def test_profile_storage_lists_all_known_categories(
     (home / "schedule" / "output").mkdir(parents=True)
     (home / "schedule" / "output" / "job.log").write_text("ok\n")
     (home / "alp" / "workgroups").mkdir(parents=True)
+    (home / "alp" / "secrets" / "subscriptions.removed.d").mkdir(parents=True)
+    (home / "alp" / "secrets" / "subscriptions.removed.d" / "wg_gone").touch()
     (home / "mentions").mkdir(parents=True)
     (home / "mentions" / "peer-a.json").write_text("{}")
     (home / "out").mkdir(parents=True, exist_ok=True)
@@ -801,7 +803,7 @@ async def test_profile_storage_lists_all_known_categories(
     keys = {row["key"] for row in resp["result"]["storage"]}
     assert keys == {
         "sessions", "skills", "memories", "knowledge", "outputs", "generated",
-        "audio", "logs", "schedule", "workgroups", "mentions", "attachments",
+        "audio", "logs", "schedule", "workgroups", "tombstones", "mentions", "attachments",
     }
     by_key = {row["key"]: row for row in resp["result"]["storage"]}
     assert by_key["skills"]["file_count"] > 0, "skills row should pick up SKILL.md"
@@ -810,6 +812,7 @@ async def test_profile_storage_lists_all_known_categories(
     assert by_key["outputs"]["file_count"] > 0, "outputs row should pick up outputs.jsonl"
     assert by_key["generated"]["file_count"] > 0, "generated row should pick up out/ files"
     assert by_key["attachments"]["file_count"] > 0, "attachments row should pick up staged uploads"
+    assert (by_key["tombstones"]["file_count"], by_key["tombstones"]["size_bytes"]) == (1, 0)
 
 @pytest.fixture(autouse=True)
 def _fresh_storage_cache():

@@ -386,6 +386,23 @@ The third retrieval surface on the same store: semantic search over **hub-owned*
 
 **Forgettable.** Removing a workgroup purges its index in both delete paths — the host RPC (`host/workgroup_admin.py::_remove`) and the CLI (`alpi workgroup remove`) call `workgroup_search.forget_workgroup`; `index_workgroups` orphan-sweeps any tracked workgroup whose directory is gone. No auto-injection into workgroup turns. ALP encryption/transcript behaviour is untouched — this only reads through the existing decrypt path.
 
+**Removal tombstones (`alp/secrets/subscriptions.removed.d/`).** Removing a
+workgroup also touches an empty marker named by its id in every local home
+(each profile and the root), so `load()` hides and `save()` drops the id in
+any process still holding a stale copy — a write-back in flight or the
+hub-side auto-join heal cannot resurrect it. Markers never cross machines
+(a remote member retires by inference instead), so their useful life is the
+longest in-flight dispatch: they expire after `TOMBSTONES_KEEP_DAYS` (2).
+Every tombstone write prunes the expired markers of its home, provided the
+id is no longer in `subscriptions.yaml` nor under `alp/workgroups/` (an
+entry still hidden by its marker keeps it until `compact()` drops the
+entry); when `subscriptions.yaml` cannot be parsed or `alp/workgroups/`
+cannot be scanned, nothing is verifiable and no marker expires. `setup →
+Cleanup` / `host.cleanup.*` offer the same set, per home, under *Workgroup
+tombstones*. Before the expiry, the web factory's churn left
+one marker per removed workgroup per home forever — 12k empty files on a
+seven-profile machine, which per-file sync tools drag along one by one.
+
 **Asset prefetch (`service.py::_prefetch_assets`)**. Scheduled by `_main_all` at boot+600 s — deliberately past the client-reconnection rush (at boot+5 s the Chromium unzip + ONNX load starved small Docker hosts, which read as "the machine is blocked"). Gated by `runtime.prefetch` on the root profile: `auto` (default) fetches the fastembed weights only when some profile has `knowledge.sqlite`, and Chromium only when some profile leaves the `browser` tool un-denied; `all` forces both; `off` — the default under `ALPI_PLATFORM=docker` — skips prefetch entirely. Every asset still fetches lazily on first use, so `off` costs latency, never functionality. `ensure_weights_cached()` downloads through a throwaway embedder and releases the ONNX session instead of leaving ~150 MB resident in every daemon; the first real `embed()` lazy-loads from the disk cache. `ensure_chromium()` warns and stays retryable when the install fails, and after a successful install prunes stale `chromium*` builds (each playwright bump orphans ~520 MB; firefox/webkit are never touched, and nothing is pruned unless the wanted build exists on disk). RapidOCR remains first-use. Concurrent loaders keep the double-checked locking (`_load`, `_ocr_reader`, `ensure_chromium`).
 
 ### Skills

@@ -19,6 +19,7 @@ RUNS_KEEP_DAYS = 30
 GROUP_OF = {
     "tts": "caches",
     "inbound_media": "caches",
+    "tombstones": "caches",
     "sessions": "conversations",
     "mentions": "conversations",
     "logs": "logs",
@@ -191,6 +192,9 @@ def categories(h: Path) -> list[dict[str, Any]]:
         if att_root.exists() else []
     )
     att_size = sum(_dir_size(d) for d in att_dirs)
+    from alpi.alp import subscription as sub_mod
+
+    tombstone_files = sub_mod.expired_tombstones(h)
 
     return [
         {
@@ -206,6 +210,16 @@ def categories(h: Path) -> list[dict[str, Any]]:
             "desc": "downloaded voice notes / attachments in `cache/inbound/`",
             "files": inbound_files,
             "size": _sum(inbound_files),
+        },
+        {
+            "key": "tombstones",
+            "label": "Workgroup tombstones",
+            "desc": (
+                f"removal markers older than {sub_mod.TOMBSTONES_KEEP_DAYS} days in "
+                "`alp/secrets/subscriptions.removed.d/` (empty files, one per removed workgroup)"
+            ),
+            "files": tombstone_files,
+            "size": 0,
         },
         {
             "key": "sessions",

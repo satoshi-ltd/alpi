@@ -11,6 +11,16 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.5.24 — 2026-09-07 — storage counts what weighs nothing
+
+- **Storage shows workgroup removal markers.** The Caches row now counts the
+  empty tombstone files a removed workgroup leaves behind, so a profile holding
+  thousands of them no longer hides them behind `0 B`. Requires alpi 0.14.27
+  for the row.
+- **Clean reclaims by count, not only by bytes.** A category whose items weigh
+  nothing is offered like any other; the Clean button, every delete row and the
+  completion notice now state how many items go along with the bytes.
+
 ## v0.5.23 — 2026-09-06 — a quieter concurrency chip
 
 - **The concurrency chip says one thing.** It reads `3 workgroups` (or

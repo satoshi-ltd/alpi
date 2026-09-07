@@ -451,3 +451,69 @@ def test_cleaning_workgroups_aborts_when_spend_archive_fails(
     assert result["ok"] is False
     assert result["removed"] == 0
     assert transcript.exists()
+
+
+def test_tombstones_category_offers_only_expired_markers_and_apply_unlinks_them(
+    tmp_path: Path,
+) -> None:
+    import os
+    import time
+
+    from alpi.alp import subscription as sub_mod
+    from alpi.cleanup import apply, plan
+    from alpi.cli import _cleanup_status
+
+    d = sub_mod._tombstones_dir(tmp_path)
+    d.mkdir(parents=True)
+    (d / "wg_fresh").touch()
+    (d / "wg_old").touch()
+    old = time.time() - (sub_mod.TOMBSTONES_KEEP_DAYS + 1) * 86_400
+    os.utime(d / "wg_old", (old, old))
+
+    cats = _cleanup_categories(tmp_path)
+    tomb = next(c for c in cats if c["key"] == "tombstones")
+    assert [p.name for p in tomb["files"]] == ["wg_old"]
+    assert tomb["size"] == 0
+    row = next(c for c in plan(tmp_path) if c["key"] == "tombstones")
+    assert (row["count"], row["group"], row["destructive"]) == (1, "caches", False)
+    assert _cleanup_status(tmp_path) == "1 item reclaimable"
+
+    result = apply(tmp_path, "tombstones")
+    assert (result["ok"], result["removed"]) == (True, 1)
+    assert sorted(p.name for p in d.iterdir()) == ["wg_fresh"]
+    assert _cleanup_status(tmp_path) == "nothing to clean"
+
+
+def test_cleanup_survives_an_undecodable_subscriptions_file(tmp_path: Path) -> None:
+    import os
+    import time
+
+    from alpi.alp import subscription as sub_mod
+
+    d = sub_mod._tombstones_dir(tmp_path)
+    d.mkdir(parents=True)
+    (d / "wg_old").touch()
+    old = time.time() - (sub_mod.TOMBSTONES_KEEP_DAYS + 1) * 86_400
+    os.utime(d / "wg_old", (old, old))
+    sub_mod.path(tmp_path).write_bytes(b"\xff\xfe\x00")
+
+    tomb = next(c for c in _cleanup_categories(tmp_path) if c["key"] == "tombstones")
+    assert tomb["files"] == []
+
+
+def test_cleanup_status_counts_items_next_to_bytes(tmp_path: Path) -> None:
+    import os
+    import time
+
+    from alpi.alp import subscription as sub_mod
+    from alpi.cli import _cleanup_status
+
+    (tmp_path / "logs").mkdir()
+    (tmp_path / "logs" / "agent.log").write_bytes(b"x" * 300_000)
+    d = sub_mod._tombstones_dir(tmp_path)
+    d.mkdir(parents=True)
+    (d / "wg_old").touch()
+    old = time.time() - (sub_mod.TOMBSTONES_KEEP_DAYS + 1) * 86_400
+    os.utime(d / "wg_old", (old, old))
+
+    assert _cleanup_status(tmp_path) == f"{home_mod.format_bytes(300_000)} · 2 items reclaimable"

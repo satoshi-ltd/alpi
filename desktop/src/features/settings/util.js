@@ -18,6 +18,7 @@ export const STORAGE_SCOPE = {
   logs: "schedule, agent, approval",
   schedule: "stdout/stderr of past jobs",
   workgroups: "encrypted transcripts + turn telemetry",
+  tombstones: "removal markers of deleted workgroups (empty files, expire after two days)",
   mentions: "@-mention threads from ALP peers",
 };
 
@@ -34,7 +35,7 @@ export const STORAGE_GROUPS = [
   { key: "memories", label: "Memories", usage: ["memories"], content: true, desc: STORAGE_SCOPE.memories },
   { key: "files", label: "Files", usage: ["outputs", "generated", "attachments"], desc: "notifications inbox, generated + staged files" },
   { key: "knowledge", label: "Knowledge", usage: ["knowledge"], desc: "workspace embeddings (sqlite-vec store)" },
-  { key: "caches", label: "Caches", usage: ["audio"], desc: "TTS output + inbound media — regenerated on demand" },
+  { key: "caches", label: "Caches", usage: ["audio", "tombstones"], desc: "TTS output + inbound media + workgroup removal markers — regenerated on demand or expired" },
   { key: "logs", label: "Logs", usage: ["logs", "schedule"], desc: "agent, approval, schedule + curator diagnostics" },
 ];
 

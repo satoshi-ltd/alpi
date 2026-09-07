@@ -463,6 +463,7 @@ def _storage_rows(home: Path) -> list[dict[str, Any]]:
         ("logs", "logs", [home / "logs"]),
         ("schedule", "schedule", [home / "schedule" / "output"]),
         ("workgroups", "workgroups", [home / "alp" / "workgroups", home / "alp" / "turns.jsonl", home / "alp" / "scope_baselines"]),
+        ("tombstones", "tombstones", [home / "alp" / "secrets" / "subscriptions.removed.d"]),
         ("mentions", "mentions", [home / "mentions"]),
         ("attachments", "attachments", [home / "host" / "attachments" / "tmp"]),
     ]

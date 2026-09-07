@@ -3419,11 +3419,20 @@ def _schedules_setup(h: Path) -> None:
 def _cleanup_status(h: Path) -> str:
     from alpi import home as home_mod
 
+    from alpi.cleanup import item_count
+
     cats = _cleanup_categories(h)
     total = sum(c["size"] for c in cats)
-    if total == 0:
+    items = sum(item_count(c) for c in cats)
+    if not total and not items:
         return "nothing to clean"
-    return f"{home_mod.format_bytes(total)} reclaimable"
+    if not total:
+        return f"{_items(items)} reclaimable"
+    return f"{home_mod.format_bytes(total)} · {_items(items)} reclaimable"
+
+
+def _items(n: int) -> str:
+    return f"{n} item{'s' if n != 1 else ''}"
 
 
 def _cleanup_setup(h: Path) -> None:
@@ -3436,16 +3445,19 @@ def _cleanup_setup(h: Path) -> None:
         safe_cats = [c for c in cats if not c.get("destructive")]
         destructive_cats = [c for c in cats if c.get("destructive")]
         safe_size = sum(c["size"] for c in safe_cats)
+        safe_items = sum(item_count(c) for c in safe_cats)
 
         items: list = []
         if safe_cats:
             items.append((
                 "Clean all safe", "__safe__",
-                f"{home_mod.format_bytes(safe_size)} · caches, logs, knowledge",
+                f"{home_mod.format_bytes(safe_size)} · {_items(safe_items)} · caches, logs, knowledge",
             ))
         for c in destructive_cats:
-            n = item_count(c)
-            items.append((f"{c['label']} ⚠", c["key"], f"{home_mod.format_bytes(c['size'])} · {n} item{'s' if n != 1 else ''}"))
+            items.append((
+                f"{c['label']} ⚠", c["key"],
+                f"{home_mod.format_bytes(c['size'])} · {_items(item_count(c))}",
+            ))
 
         choice = ui.menu(
             ui.crumb("setup", "cleanup"),
@@ -3458,15 +3470,18 @@ def _cleanup_setup(h: Path) -> None:
             return
 
         if choice == "__safe__":
-            targets, verb = safe_cats, f"Reclaim {home_mod.format_bytes(safe_size)} of safe storage?"
+            targets = safe_cats
+            verb = (
+                f"Reclaim {home_mod.format_bytes(safe_size)} · {_items(safe_items)} "
+                "of safe storage?"
+            )
         else:
             target = next((c for c in destructive_cats if c["key"] == choice), None)
             if target is None:
                 continue
             targets = [target]
-            n = item_count(target)
             verb = (
-                f"Delete {n} item(s) · {home_mod.format_bytes(target['size'])} "
+                f"Delete {_items(item_count(target))} · {home_mod.format_bytes(target['size'])} "
                 f"from {target['label']}? This cannot be undone."
             )
 
@@ -3483,7 +3498,7 @@ def _cleanup_setup(h: Path) -> None:
             freed += result.get("freed_bytes", 0)
         for err in errors:
             ui.fail(f"could not delete {err}")
-        ui.ok_and_wait(f"reclaimed {home_mod.format_bytes(freed)} · {removed} item(s)")
+        ui.ok_and_wait(f"reclaimed {home_mod.format_bytes(freed)} · {_items(removed)}")
 
 
 @main.group()

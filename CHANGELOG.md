@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.14.27 — 2026-09-07 — workgroup tombstones expire
+
+- **Removal markers no longer accumulate forever.** Removing a workgroup leaves
+  an empty tombstone file per local home under
+  `alp/secrets/subscriptions.removed.d/` so a stale write-back cannot
+  resurrect the subscription. They were kept for ever; with the web factory
+  removing a hundred pipelines a day across eight homes that was 12,000 empty
+  files on one machine, which per-file sync tools drag along one by one. A
+  marker now expires two days after the removal — longer than any in-flight
+  dispatch, and tombstones never cross machines — and every new tombstone
+  prunes the expired ones of its home. A marker still hiding an entry in
+  `subscriptions.yaml`, or whose workgroup directory still exists, is kept
+  until the entry is compacted away, and when either source cannot be read
+  or parsed no marker expires at all.
+- **`setup → Cleanup` sees them.** A *Workgroup tombstones* category (also on
+  `host.cleanup.plan` / `apply`) lists the expired markers of the selected
+  home so an installation upgraded from an earlier release reclaims its
+  backlog profile by profile, like every other category, and Cleanup's status
+  line, rows and confirmations now count items next to the bytes, so a set
+  that weighs nothing no longer reads as `0 B`.
+
 ## v0.14.26 — 2026-09-06 — the container reaps its orphans
 
 - **The container reaps its orphans.** `alpi daemon start` used to be PID 1

@@ -57,7 +57,7 @@ def test_revive_lifts_the_tombstone_for_a_deliberate_rejoin(tmp_path: Path) -> N
     assert sub_mod.get(home, "wg_back") is not None
 
 
-def test_tombstones_are_never_evicted(tmp_path: Path) -> None:
+def test_fresh_tombstones_are_never_evicted(tmp_path: Path) -> None:
     home = tmp_path / "pixel"
     for i in range(500):
         sub_mod.tombstone(home, f"wg_{i:04d}")

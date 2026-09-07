@@ -92,7 +92,7 @@ export function StorageField({ profile, activeConnection, prefetched, onLoadingC
       if (failed.length > 0) {
         notify({ message: `${label}: ${failed[0].errors?.[0] ?? "cleanup failed"}`, variant: "error", duration: 4000 });
       } else {
-        notify({ message: `${label}: freed ${formatBytes(freed)}`, variant: "success" });
+        notify({ message: `${label}: freed ${formatBytes(freed)} · ${countLabel(removed)}`, variant: "success" });
       }
       await fetchPlan();
       if (removed > 0) {
@@ -119,18 +119,19 @@ export function StorageField({ profile, activeConnection, prefetched, onLoadingC
       desc: g.desc,
       size: usageRows.reduce((n, r) => n + r.size_bytes, 0),
       count: usageRows.reduce((n, r) => n + r.file_count, 0),
-      reclaimable: (planByGroup[g.key] ?? []).some((m) => m.size > 0),
+      reclaimable: (planByGroup[g.key] ?? []).some((m) => m.size > 0 || m.count > 0),
     };
   }).filter((g) => g.size > 0 || g.count > 0 || g.reclaimable), [usageBy, planByGroup]);
 
   const safeMembers = useMemo(
-    () => (plan ?? []).filter((m) => !m.destructive && m.size > 0),
+    () => (plan ?? []).filter((m) => !m.destructive && (m.size > 0 || m.count > 0)),
     [plan],
   );
   const safeKeys = safeMembers.map((m) => m.key);
   const safeSize = safeMembers.reduce((n, m) => n + m.size, 0);
+  const safeCount = safeMembers.reduce((n, m) => n + (m.count ?? 0), 0);
   const destructive = useMemo(
-    () => (plan ?? []).filter((m) => m.destructive && m.size > 0),
+    () => (plan ?? []).filter((m) => m.destructive && (m.size > 0 || m.count > 0)),
     [plan],
   );
 
@@ -156,7 +157,7 @@ export function StorageField({ profile, activeConnection, prefetched, onLoadingC
         <Row label="reclaim">
           <span className={styles.inlineRow}>
             <Button size="sm" disabled={busy} onClick={() => doClean(safeKeys, "Clean")}>
-              {busy ? "Cleaning…" : `Clean · ${formatBytes(safeSize)}`}
+              {busy ? "Cleaning…" : `Clean · ${formatBytes(safeSize)} · ${countLabel(safeCount)}`}
             </Button>
             <span className={styles.muted}>caches, logs and knowledge — always safe</span>
           </span>
@@ -169,6 +170,7 @@ export function StorageField({ profile, activeConnection, prefetched, onLoadingC
           <Row key={m.key} label="delete">
             <span className={styles.inlineRow}>
               <Chip size="sm">{formatBytes(m.size)}</Chip>
+              <Chip size="sm">{countLabel(m.count ?? 0)}</Chip>
               <span className={styles.muted}>{note}</span>
               <span className={styles.confirmAnchor}>
                 <Button size="sm" variant="danger" disabled={busy} onClick={() => setConfirmKey(m.key)}>Delete</Button>
@@ -186,6 +188,11 @@ export function StorageField({ profile, activeConnection, prefetched, onLoadingC
       })}
     </>
   );
+}
+
+
+function countLabel(n) {
+  return `${n} ${n === 1 ? "item" : "items"}`;
 }
 
 

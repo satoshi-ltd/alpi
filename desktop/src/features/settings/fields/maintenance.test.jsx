@@ -58,6 +58,27 @@ describe("StorageField", () => {
     expect(screen.queryByText("Curator reports")).toBeNull();
   });
 
+  it("offers a category that weighs nothing but has items", async () => {
+    const usage = [...USAGE, { key: "tombstones", label: "tombstones", path: "/t", size_bytes: 0, file_count: 5 }];
+    const plan = [{ key: "tombstones", label: "Workgroup tombstones", desc: "markers", size: 0, count: 5, action: "unlink", destructive: false, group: "caches" }];
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "profile_storage") return usage;
+      if (cmd === "cleanup_plan") return plan;
+      if (cmd === "cleanup_apply") return [{ ok: true, removed: 5, freed_bytes: 0 }];
+      return null;
+    });
+    render(<StorageField profile={{ name: "doc" }} activeConnection={local} />);
+    expect(await screen.findByText("6 files")).toBeInTheDocument();
+    const btn = await screen.findByRole("button", { name: "Clean · 0 B · 5 items" });
+    await act(async () => { fireEvent.click(btn); });
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("cleanup_apply", expect.objectContaining({ keys: ["tombstones"] })),
+    );
+    await waitFor(() =>
+      expect(notify).toHaveBeenCalledWith(expect.objectContaining({ message: "Clean: freed 0 B · 5 items", variant: "success" })),
+    );
+  });
+
   it("offers a single Clean that reclaims every safe key and no destructive one", async () => {
     mockAll();
     render(<StorageField profile={{ name: "doc" }} activeConnection={local} />);

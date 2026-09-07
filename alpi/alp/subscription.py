@@ -29,6 +29,7 @@ import os
 import re
 import sys
 import threading
+import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
@@ -52,6 +53,8 @@ _SECRETS_DIR = "alp/secrets"
 _FILENAME = "subscriptions.yaml"
 _RETIRED_FILENAME = "subscriptions.retired.yaml"
 _TOMBSTONES_DIR = "subscriptions.removed.d"
+# Outlives any in-flight dispatch or stale process that could write a removed id back; tombstones never cross machines.
+TOMBSTONES_KEEP_DAYS = 2
 _TOMBSTONE_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 _log = _logging.getLogger("alpi.alp.subscription")
@@ -252,14 +255,16 @@ def tombstones(home: Path) -> set[str]:
 
 
 def tombstone(home: Path, wg_id: str) -> None:
-    """One atomic marker file per id (no read-modify-write to race, no eviction ever); load() hides and save() drops marked ids in every process."""
+    """One atomic marker file per id (no read-modify-write to race); load() hides and save() drops marked ids in every process, and only a marker past TOMBSTONES_KEEP_DAYS whose id verifiably nothing references expires."""
     if not _TOMBSTONE_ID_RE.match(wg_id or ""):
         return
+    known = tombstones(home)
     d = _tombstones_dir(home)
     d.mkdir(mode=0o700, parents=True, exist_ok=True)
     (d / wg_id).touch()
     _invalidate_tombstone_cache(home)
     _invalidate_cache(path(home))
+    prune_tombstones(home, names=known)
 
 
 def revive(home: Path, wg_id: str) -> None:
@@ -272,6 +277,85 @@ def revive(home: Path, wg_id: str) -> None:
         return
     _invalidate_tombstone_cache(home)
     _invalidate_cache(path(home))
+
+
+def _read_raw_verified(p: Path) -> list | None:
+    try:
+        raw = yamlfast.safe_load(p.read_text())
+    except (OSError, ValueError, yaml.YAMLError):
+        return None
+    if raw is None:
+        return []
+    return raw if isinstance(raw, list) else None
+
+
+# None = a source could not be verified; every caller must then keep every marker (a dropped marker resurrects the entry it hid).
+def _referenced_ids(home: Path) -> set[str] | None:
+    ids: set[str] = set()
+    p = path(home)
+    if p.exists():
+        try:
+            entries: list | None = _read_raw(p)
+        except ValueError:
+            return None
+        if not entries:
+            entries = _read_raw_verified(p)
+        if entries is None:
+            return None
+        for entry in entries:
+            wg_id = entry.get("wg_id") if isinstance(entry, dict) else None
+            if not isinstance(wg_id, str) or not _TOMBSTONE_ID_RE.match(wg_id):
+                return None
+            ids.add(wg_id)
+    try:
+        with os.scandir(home / "alp" / "workgroups") as it:
+            ids.update(entry.name for entry in it)
+    except FileNotFoundError:
+        pass
+    except OSError:
+        return None
+    return ids
+
+
+def expired_tombstones(
+    home: Path, *, now: float | None = None, names: set[str] | None = None,
+) -> list[Path]:
+    if names is None:
+        names = tombstones(home)
+    if not names:
+        return []
+    directory = _tombstones_dir(home)
+    cutoff = (time.time() if now is None else now) - TOMBSTONES_KEEP_DAYS * 86_400
+    # A marker whose id is still in the file or still has a workgroup dir is the only thing hiding it: keep it until compact() drops the entry.
+    referenced = _referenced_ids(home)
+    if referenced is None:
+        return []
+    out: list[Path] = []
+    for name in names:
+        if name in referenced:
+            continue
+        marker = directory / name
+        try:
+            if marker.stat().st_mtime < cutoff:
+                out.append(marker)
+        except OSError:
+            continue
+    return out
+
+
+def prune_tombstones(
+    home: Path, *, now: float | None = None, names: set[str] | None = None,
+) -> int:
+    removed = 0
+    for marker in expired_tombstones(home, now=now, names=names):
+        try:
+            marker.unlink()
+            removed += 1
+        except OSError:
+            continue
+    if removed:
+        _invalidate_tombstone_cache(home)
+    return removed
 
 
 # pollers call load() 4-5x per pull on the event loop — without this mtime cache the YAML parse starves it
