@@ -1374,3 +1374,30 @@ def test_engine_exposes_the_turn_tool_count_to_each_tool_call(
 
     assert calls["i"] == 2
     assert seen == [0, 1]
+
+
+@pytest.mark.parametrize('reasoning', ['  Keep this exact reasoning.\n', ''])
+def test_deepseek_tool_round_preserves_reasoning(patched_engine, monkeypatch, reasoning):
+    import copy
+    engine = patched_engine
+    engine.cfg.model = 'openrouter/deepseek/deepseek-v4-flash-0731:nitro'
+    requests = []
+
+    def stream(messages, tools, **kwargs):
+        requests.append(copy.deepcopy(messages))
+        if len(requests) == 1:
+            yield {'reasoning_delta': 'discarded retry reasoning'}
+            yield {'retry_reset': True}
+            yield {'reasoning_delta': reasoning}
+            yield _final_chunk('', [{'id': 'tc1', 'name': 'todo', 'arguments': '{"action":"list"}'}])
+        else:
+            yield {'text_delta': 'Done.'}
+            yield _final_chunk('Done.')
+
+    monkeypatch.setattr('alpi.llm.stream', stream)
+    engine.run_turn('Check the task list.', emit=lambda ev: None)
+    assert len(requests) == 2
+    assistant = next(m for m in requests[1] if m['role'] == 'assistant')
+    assert assistant['reasoning_content'] == reasoning
+    assert assistant['tool_calls'][0]['id'] == 'tc1'
+    assert any(m['role'] == 'tool' for m in requests[1])

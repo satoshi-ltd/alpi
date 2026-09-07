@@ -249,7 +249,11 @@ def _compute_cost_detail(resp, model: str) -> tuple[float, str]:
     except Exception:  # noqa: BLE001
         pass
     if str(model).startswith("openrouter/"):
-        price = _openrouter_pricing().get(model.split("/", 1)[1])
+        prices = _openrouter_pricing()
+        slug = model.split("/", 1)[1]
+        price = prices.get(slug)
+        if price is None and slug.endswith(":nitro"):
+            price = prices.get(slug.removesuffix(":nitro"))
         u = getattr(resp, "usage", None)
         if price and u is not None:
             pin = getattr(u, "prompt_tokens", 0) or 0

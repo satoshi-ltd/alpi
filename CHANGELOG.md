@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.14.29 — 2026-09-07 — preserve DeepSeek reasoning and OpenRouter costs
+
+- **DeepSeek retains reasoning between tool calls.** The live conversation sends
+  the exact reasoning text back with each assistant message, including an empty
+  value when none was returned. Partial reasoning from retried requests is
+  discarded. Run journals still omit streaming deltas.
+- **LiteLLM updates to 1.100.0.** OpenRouter streaming now preserves the
+  provider's cost and cache usage through the upstream SDK, so Alpi no longer
+  needs a custom stream adapter. The dependency range stays within 1.100.x;
+  the lockfile pins 1.100.0. HTTP-level tests verify reported costs (including
+  zero), cached tokens, cache writes and reasoning passed back to the model.
+- **Nitro has a pricing fallback.** If neither the provider nor LiteLLM reports
+  a cost and the catalog has no exact `:nitro` entry, use the base model tariff
+  with source `table`. This is an estimate: it excludes cache discounts and
+  priority pricing. Routing and historical ledger entries are unchanged.
+- **Cleaning workgroups tombstones them everywhere.** The *Workgroups* cleanup
+  category removes the complete workgroup directory and creates the same
+  removal markers as manual removal in the hub and every local member profile,
+  so members stop polling deleted workgroups. Cleanup fixes its targets before
+  deletion and uses canonical removal to archive each group's spend first;
+  failed deletion is reported without retiring the surviving directory.
+
 ## v0.14.28 — 2026-09-07 — run journals stop recording the stream
 
 - **Run journals no longer store streaming deltas.** Every `reasoning_delta`

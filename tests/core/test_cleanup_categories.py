@@ -584,3 +584,93 @@ def test_runs_cleanup_size_cap_spares_journals_still_settling(tmp_path: Path, mo
     os.utime(runs.run_path(tmp_path, "settling"), (settled, settled))
     cat = next(c for c in cleanup.categories(tmp_path) if c["key"] == "runs")
     assert sorted(p.name for p in cat["files"]) == ["ancient.jsonl", "settling.jsonl"]
+
+
+def test_cleaning_workgroups_drops_dirs_and_tombstones_every_profile(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    from alpi import cleanup as cleanup_mod
+    from alpi import home as home_mod
+    from alpi.alp import subscription as sub_mod
+
+    root = tmp_path / ".alpi"
+    hub = root / "profiles" / "mira"
+    member = root / "profiles" / "lingua"
+    for p in (hub, member, root):
+        (p / "alp").mkdir(parents=True)
+    monkeypatch.setattr(home_mod, "_ROOT", root)
+
+    wg = hub / "alp" / "workgroups" / "wg_abcdefghijklmnop"
+    wg.mkdir(parents=True)
+    (wg / "transcript.jsonl").write_text('{"seq":1,"cost":{"usd":0.1}}\n')
+    (wg / "gates").mkdir()
+
+    result = cleanup_mod.apply(hub, "workgroups")
+
+    assert result["ok"], result
+    assert not wg.exists()
+    for p in (hub, member, root):
+        assert "wg_abcdefghijklmnop" in sub_mod.tombstones(p)
+
+
+def test_cleaning_workgroups_preserves_group_created_after_archive(tmp_path, monkeypatch):
+    from alpi import cleanup, home, ledger
+    from alpi.alp import subscription
+
+    monkeypatch.setattr(home, "_ROOT", tmp_path)
+    old = tmp_path / "alp/workgroups/old"
+    new = old.parent / "new"
+    old.mkdir(parents=True)
+    transcript = old / "transcript.jsonl"
+    transcript.write_text('{"seq":1,"cost":{"usd":1}}\n')
+    size = transcript.stat().st_size
+    archive = cleanup.archive_workgroup_spend
+
+    def archive_then_create(h, group):
+        error = archive(h, group)
+        new.mkdir()
+        (new / "transcript.jsonl").write_text('{"seq":1,"cost":{"usd":99}}\n')
+        return error
+
+    monkeypatch.setattr(cleanup, "archive_workgroup_spend", archive_then_create)
+    result = cleanup.apply(tmp_path, "workgroups")
+
+    assert result == {
+        "key": "workgroups", "ok": True, "removed": 1,
+        "freed_bytes": size, "errors": [],
+    }
+    assert not old.exists()
+    assert (new / "transcript.jsonl").exists()
+    assert "new" not in subscription.tombstones(tmp_path)
+    archived = ledger.read_archive(tmp_path)
+    assert [(r["id"], r["cost_usd"]) for r in archived] == [("old", 1.0)]
+
+
+def test_cleaning_workgroups_reports_removal_failure_without_purging(tmp_path, monkeypatch):
+    from alpi import cleanup, home
+    from alpi.alp import subscription, workgroup
+
+    monkeypatch.setattr(home, "_ROOT", tmp_path)
+    group = tmp_path / "alp/workgroups/stuck"
+    group.mkdir(parents=True)
+    transcript = group / "transcript.jsonl"
+    transcript.write_text('{"seq":1,"cost":{"usd":1}}\n')
+    turns = tmp_path / "alp/turns.jsonl"
+    turns.write_text("{}\n")
+    purged = []
+
+    def fail_remove(path, **kwargs):
+        if not kwargs.get("ignore_errors"):
+            raise PermissionError("directory is not writable")
+
+    monkeypatch.setattr(workgroup._shutil, "rmtree", fail_remove)
+    monkeypatch.setattr(workgroup, "_purge_after_delete", lambda *args: purged.append(args))
+    result = cleanup.apply(tmp_path, "workgroups")
+
+    assert result["ok"] is False
+    assert result["removed"] == result["freed_bytes"] == 0
+    assert "directory is not writable" in result["errors"][0]
+    assert transcript.exists()
+    assert turns.exists()
+    assert "stuck" not in subscription.tombstones(tmp_path)
+    assert purged == []

@@ -379,20 +379,6 @@ def archive_workgroup_spend(h: Path, wg_dir: Path) -> str | None:
     return None
 
 
-def _archive_workgroups(h: Path) -> list[str]:
-    root = h / "alp" / "workgroups"
-    if not root.exists():
-        return []
-    errors: list[str] = []
-    for d in root.iterdir():
-        if not d.is_dir():
-            continue
-        err = archive_workgroup_spend(h, d)
-        if err:
-            errors.append(err)
-    return errors
-
-
 def apply(h: Path, key: str) -> dict[str, Any]:
     """Reclaim one category. Returns ``{key, ok, removed, freed_bytes, errors}``."""
     target = next((c for c in categories(h) if c["key"] == key), None)
@@ -404,12 +390,7 @@ def apply(h: Path, key: str) -> dict[str, Any]:
     if not target["files"]:
         return {"key": key, "ok": True, "removed": 0, "freed_bytes": 0, "errors": []}
     if key == "workgroups":
-        archive_errors = _archive_workgroups(h)
-        if archive_errors:
-            return {
-                "key": key, "ok": False, "removed": 0,
-                "freed_bytes": 0, "errors": archive_errors,
-            }
+        return _apply_workgroups(h, target)
 
     errors: list[str] = []
     if target.get("action") == "vacuum":
@@ -444,6 +425,43 @@ def apply(h: Path, key: str) -> dict[str, Any]:
             errors.append(f"{p.name}: {e}")
     return {
         "key": key, "ok": not errors, "removed": removed,
+        "freed_bytes": freed, "errors": errors,
+    }
+
+
+def _apply_workgroups(h: Path, target: dict[str, Any]) -> dict[str, Any]:
+    from alpi.alp import workgroup as alp_wg
+
+    root = h / "alp" / "workgroups"
+    groups: dict[str, list[Path]] = {}
+    loose: list[Path] = []
+    for p in target["files"]:
+        relative = p.relative_to(root) if p.is_relative_to(root) else None
+        if relative is not None and len(relative.parts) > 1:
+            groups.setdefault(relative.parts[0], []).append(p)
+        else:
+            loose.append(p)
+    errors: list[str] = []
+    removed = freed = 0
+    for wg_id, files in groups.items():
+        try:
+            size = sum(p.stat().st_size for p in files)
+            alp_wg.remove(h, wg_id)
+            removed += len(files)
+            freed += size
+        except Exception as e:  # noqa: BLE001
+            errors.append(f"{wg_id}: removal failed: {e}")
+    if not errors:
+        for p in loose:
+            try:
+                size = p.stat().st_size
+                p.unlink()
+                removed += 1
+                freed += size
+            except OSError as e:
+                errors.append(f"{p.name}: {e}")
+    return {
+        "key": target["key"], "ok": not errors, "removed": removed,
         "freed_bytes": freed, "errors": errors,
     }
 

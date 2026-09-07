@@ -819,6 +819,8 @@ class Engine:
                     break
 
                 assistant_msg: dict = {"role": "assistant", "content": content}
+                if str(turn_model).removeprefix("openrouter/").lstrip("~").startswith(("deepseek/", "deepseek-")):
+                    assistant_msg["reasoning_content"] = "".join(reasoning_text)
                 if tool_calls:
                     assistant_msg["tool_calls"] = [
                         {
