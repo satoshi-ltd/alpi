@@ -461,6 +461,7 @@ def _storage_rows(home: Path) -> list[dict[str, Any]]:
         ("generated", "generated", [out] if out is not None else []),
         ("audio", "audio", [home / "cache" / "tts", home / "cache" / "inbound"]),
         ("logs", "logs", [home / "logs"]),
+        ("runs", "runs", [home / "runs"]),
         ("schedule", "schedule", [home / "schedule" / "output"]),
         ("workgroups", "workgroups", [home / "alp" / "workgroups", home / "alp" / "turns.jsonl", home / "alp" / "scope_baselines"]),
         ("tombstones", "tombstones", [home / "alp" / "secrets" / "subscriptions.removed.d"]),

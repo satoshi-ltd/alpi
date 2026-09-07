@@ -88,7 +88,7 @@ Contracts:
 - `host.events.subscribe` streams `{event, data, at, seq}`; `host.events.history` is `seq`-based (don't cursor on wall-clock).
 - `host.events.*` is transport, not durable history. `host/events.jsonl` is a bounded reconnect replay buffer (`HISTORY_MAX = 500`) and may drop rows under load. Browseable history must query durable stores: outputs, sessions, workgroup transcripts.
 - `host.chat.send` has a replay sidecar; recover missed frames via `host.chat.events_since(after_seq)`. A local operator may launch the same lifecycle for an active paired connection with `alpi chat --once ... --connection-id <id>`; its local-only `host.chat.delegate` wrapper preserves connection ownership, `in_flight`, sidecar progress, and profile scope.
-- `host.chat.send` streams a stable `run_id`. `host.runs.list` and `host.run.read` expose `runs/<run_id>.jsonl` journals made of bounded, redacted events; terminal command text is omitted from journals, saved turns and reconnect sidecars. `host.run.cancel` interrupts an owned active run, and the sovereign local socket may interrupt any active run. CLI/TUI equivalents are `alpi runs ...` and `/runs`.
+- `host.chat.send` streams a stable `run_id`. `host.runs.list` and `host.run.read` expose `runs/<run_id>.jsonl` journals made of bounded, redacted events — start record, tool starts/states/ends, usage, model state, every `assistant_done` (only the one with `final=True` is the deliverable), errors and the finish outcome; streaming `reasoning_delta` / `assistant_delta` frames are never journaled, so a journal is an operational timeline, not a replay of the stream. Terminal command text is omitted from journals, saved turns and reconnect sidecars. `host.run.cancel` interrupts an owned active run, and the sovereign local socket may interrupt any active run. CLI/TUI equivalents are `alpi runs ...` and `/runs`.
 - `host.profile.summaries` = lightweight sidebar shape. `host.profile.detail` = heavier settings shape; its payload field is `advertise_host` (not `tcp_host`).
 - `host.skills.list` returns per-skill `status`/`reason`/`size`/`keywords` + metadata; `host.skill.read` returns structured detail (frontmatter, resolved `requires[]`, file `tree`, body ≤32K); `host.skill.file` reads one file ≤256K and refuses `secrets/`/symlinks (`name`/`category` must be `[A-Za-z0-9_-]+`).
 - `host.attachments.{stage,fetch}`: `stage` uploads a file in; `fetch` serves a tool-produced output attachment's bytes (base64) out by path, so rich clients render images inline and other files as a metadata chip; text surfaces (CLI/TUI/ALP) get a shared textual listing instead. `fetch` reads are scoped to the profile's workspace/home/temp (see `security`).
@@ -107,7 +107,7 @@ Contracts:
   OSV for installed-package CVEs unless `--offline` is set.
 - `alpi audit-log` — reads the administrative activity trail without requiring
   Desktop; supports connection/device/result filters and JSON output.
-- `alpi setup -> Cleanup` — manual cleanup for caches, logs, run journals older than 30 days, mentions, schedule output, workgroup files, knowledge index freelist vacuum.
+- `alpi setup -> Cleanup` — manual cleanup for caches, logs, completed run journals (older than 30 days, plus the oldest settled beyond 200 MiB per profile; running or just-finished ones are never offered), workgroup tombstones past their two-day expiry, mentions, schedule output, workgroup files, knowledge index freelist vacuum.
 - Desktop Manage Sessions — richer chat-session pruning UI.
 
 ## Tools

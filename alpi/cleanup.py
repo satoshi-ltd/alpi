@@ -15,6 +15,9 @@ SESSIONS_KEEP_DAYS = 30
 GENERATED_KEEP_DAYS = 30
 
 RUNS_KEEP_DAYS = 30
+RUNS_KEEP_BYTES = 200 * 1024 * 1024
+# A child's run.finished lands before the parent settles cost from usage_summary(); the cap never touches that window.
+RUNS_SETTLE_SECONDS = 3600
 
 GROUP_OF = {
     "tts": "caches",
@@ -82,6 +85,45 @@ def _old_sessions(h: Path) -> tuple[list[str] | None, int]:
     return ids, total
 
 
+# Only completed journals (valid summary, status != running) are ever offered: a hung journal is reconcile_stale's job, an unreadable one is kept.
+def _run_journal_candidates(h: Path) -> list[Path]:
+    from alpi import runs as runs_mod
+    from alpi.home import profile_name
+
+    root = h / "runs"
+    if not root.exists() or root.is_symlink():
+        return []
+    try:
+        active = runs_mod.active_ids(profile_name(h))
+    except Exception:  # noqa: BLE001
+        return []
+    completed: list[tuple[float, int, Path]] = []
+    for p in root.iterdir():
+        if p.is_symlink() or not p.is_file() or p.suffix != ".jsonl" or p.stem in active:
+            continue
+        try:
+            row = runs_mod.summary(h, p.stem)
+            st = p.stat()
+        except (OSError, ValueError):
+            continue
+        if row.get("status") == "running":
+            continue
+        completed.append((st.st_mtime, st.st_size, p))
+    completed.sort()
+    now = time.time()
+    cutoff = now - RUNS_KEEP_DAYS * 86_400
+    settled = now - RUNS_SETTLE_SECONDS
+    selected = [p for mtime, _size, p in completed if mtime < cutoff]
+    kept = [(mtime, size, p) for mtime, size, p in completed if mtime >= cutoff]
+    total = sum(size for _mtime, size, _p in kept)
+    for mtime, size, p in kept:
+        if total <= RUNS_KEEP_BYTES or mtime >= settled:
+            break
+        selected.append(p)
+        total -= size
+    return selected
+
+
 def categories(h: Path) -> list[dict[str, Any]]:
     def _dir(name: str) -> Path:
         return h / name
@@ -131,26 +173,7 @@ def categories(h: Path) -> list[dict[str, Any]]:
         ]
         if logs_root.exists() else []
     )
-    from alpi import runs as runs_mod
-    from alpi.home import profile_name
-
-    runs_root = _dir("runs")
-    runs_cutoff = time.time() - RUNS_KEEP_DAYS * 86_400
-    try:
-        active_run_ids = runs_mod.active_ids(profile_name(h))
-    except Exception:  # noqa: BLE001
-        active_run_ids = None
-    run_files = (
-        [
-            p for p in runs_root.iterdir()
-            if p.is_file() and p.suffix == ".jsonl"
-            and p.stem not in active_run_ids and _mtime(p) < runs_cutoff
-        ]
-        if (
-            runs_root.exists() and not runs_root.is_symlink()
-            and active_run_ids is not None
-        ) else []
-    )
+    run_files = _run_journal_candidates(h)
     sched_files = _all(_dir("schedule/output"))
     wg_root = _dir("alp/workgroups")
     wg_files: list[Path] = (
@@ -247,8 +270,11 @@ def categories(h: Path) -> list[dict[str, Any]]:
         },
         {
             "key": "runs",
-            "label": "Old run journals",
-            "desc": f"run journals older than {RUNS_KEEP_DAYS} days in `runs/`",
+            "label": "Old and excess run journals",
+            "desc": (
+                f"completed run journals older than {RUNS_KEEP_DAYS} days, plus the oldest "
+                f"settled ones beyond {RUNS_KEEP_BYTES // 2**20} MiB per profile, in `runs/`"
+            ),
             "files": run_files,
             "size": _sum(run_files),
             "destructive": True,

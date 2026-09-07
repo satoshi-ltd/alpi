@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.14.28 — 2026-09-07 — run journals stop recording the stream
+
+- **Run journals no longer store streaming deltas.** Every `reasoning_delta`
+  and `assistant_delta` frame used to be appended to `runs/<run_id>.jsonl`;
+  one content turn of the web factory was a 20 MB file of which 98% was
+  those frames, and a seven-profile machine held 6 GB after two weeks. The
+  two kinds are now dropped before anything is serialized, while the start
+  record, tool starts and ends, tool states, usage, model state, every
+  `assistant_done` (the one with `final=True` is the deliverable, the earlier
+  ones are preamble), errors and the finish outcome stay. `alpi runs show` and
+  `host.run.read` therefore return an operational timeline, not a replay of
+  the stream — the reconnect replay was always the sessions sidecar.
+- **Run journal retention has a size cap.** The *Old and excess run journals*
+  category offers completed journals older than 30 days plus, oldest first, the
+  completed ones beyond 200 MiB per profile. Only journals with a valid summary
+  whose status is not `running` qualify: a hung journal is left to stale
+  reconciliation, an unreadable one is kept, the size branch never touches a
+  journal completed in the last hour (a workgroup child finishes its journal
+  before the parent settles its cost), and the daemon's active set stays as a
+  second guard. Cleanup only offers; nothing is deleted on its own.
+- **Storage shows run journals.** `host.profile.storage` gains a `runs` row,
+  so the Logs group in the clients counts them.
+
 ## v0.14.27 — 2026-09-07 — workgroup tombstones expire
 
 - **Removal markers no longer accumulate forever.** Removing a workgroup leaves

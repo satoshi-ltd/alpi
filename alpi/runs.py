@@ -25,6 +25,8 @@ _seq: dict[str, int] = {}
 _active: dict[tuple[str, str], tuple[str, Any]] = {}
 _active_lock = threading.Lock()
 _SAFE_RUN_ID = re.compile(r"^[A-Za-z0-9_-]+$")
+# Streaming transport only: every assistant_done is kept (final=True marks the deliverable) and the reconnect replay is the sessions sidecar.
+_TRANSIENT_KINDS = frozenset({"reasoning_delta", "assistant_delta"})
 
 
 def run_path(home: Path, run_id: str) -> Path:
@@ -301,6 +303,9 @@ def _pid_alive(pid: int) -> bool:
 
 
 def record_agent_event(context: RunContext, event: Any) -> None:
+    kind_hint = event.get("kind") if isinstance(event, dict) else getattr(event, "kind", None)
+    if str(kind_hint) in _TRANSIENT_KINDS:
+        return
     if is_dataclass(event):
         data = asdict(event)
     elif isinstance(event, dict):

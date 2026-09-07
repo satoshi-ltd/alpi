@@ -202,7 +202,15 @@ when every call is safe. A mixed batch remains serial. Results and emitted
 states are replayed in original call order, preserving provider transcript
 determinism.
 
-Each turn writes `runs/<run_id>.jsonl` with bounded, redacted events. The
+Each turn writes `runs/<run_id>.jsonl` with bounded, redacted events: the
+start record (pid, model, input), tool starts, states and ends, `model_state`,
+`usage`, every `assistant_done` (preamble ones carry `final=False`; only the
+one closing the turn carries `final=True` — the deliverable, per the contract
+in AGENTS.md), errors and the finish outcome. Streaming
+deltas (`reasoning_delta`, `assistant_delta` — `runs._TRANSIENT_KINDS`) are
+never journaled: they made one content turn a 20 MB file, and the reconnect
+replay is the sessions sidecar, so `alpi runs show` and `host.run.read` return
+an operational timeline, not a replay of the stream. The
 `run_id` is carried by host chat stream frames and the existing run ledger.
 Local operators use `alpi runs list|show|cancel` or `/runs`; paired clients use
 `host.runs.list`, `host.run.read`, and `host.run.cancel`. Reads and cancellation
@@ -210,7 +218,15 @@ are connection-scoped like sessions, while the sovereign local socket can stop
 any active run. Terminal command text is omitted from the journal, saved turn
 metadata, and chat replay sidecar, including terminal steps nested in a
 workflow. Listing reads the first and last journal records rather than replaying
-the event stream; Cleanup offers inactive journals older than 30 days.
+the event stream. Cleanup offers completed journals — a valid `summary()` whose
+status is not `running`; a hung journal is `reconcile_stale`'s job and an
+unreadable one is kept — older than 30 days, plus the oldest completed ones
+beyond 200 MiB per profile. The size branch skips journals completed less than
+an hour ago (`RUNS_SETTLE_SECONDS`): a workgroup child writes `run.finished`
+before the parent settles cost from `usage_summary()`, and the daemon's
+`active_ids()` does not know that child, so it stays as a second guard only for
+the window between `run.finished` and `unregister_active`. Cleanup only offers,
+under the label *Old and excess run journals*; nothing is deleted on its own.
 
 `ExecutionWorld` keeps filesystem resolution and terminal shell execution under one
 run-scoped abstraction. `local` preserves the previous behavior. `docker`

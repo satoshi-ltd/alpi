@@ -58,6 +58,18 @@ describe("StorageField", () => {
     expect(screen.queryByText("Curator reports")).toBeNull();
   });
 
+  it("counts run journals inside the Logs group", async () => {
+    const usage = [...USAGE, { key: "runs", label: "runs", path: "/r", size_bytes: 6_000_000, file_count: 7 }];
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "profile_storage") return usage;
+      if (cmd === "cleanup_plan") return [];
+      return null;
+    });
+    render(<StorageField profile={{ name: "doc" }} activeConnection={local} />);
+    expect(await screen.findByText("11 files")).toBeInTheDocument();
+    expect(screen.getByText(formatBytes(6_002_000))).toBeInTheDocument();
+  });
+
   it("offers a category that weighs nothing but has items", async () => {
     const usage = [...USAGE, { key: "tombstones", label: "tombstones", path: "/t", size_bytes: 0, file_count: 5 }];
     const plan = [{ key: "tombstones", label: "Workgroup tombstones", desc: "markers", size: 0, count: 5, action: "unlink", destructive: false, group: "caches" }];

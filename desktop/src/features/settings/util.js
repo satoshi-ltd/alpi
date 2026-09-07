@@ -16,6 +16,7 @@ export const STORAGE_SCOPE = {
   outputs: "notifications inbox",
   audio: "TTS output + inbound voice notes",
   logs: "schedule, agent, approval",
+  runs: "run journals — one operational timeline per turn",
   schedule: "stdout/stderr of past jobs",
   workgroups: "encrypted transcripts + turn telemetry",
   tombstones: "removal markers of deleted workgroups (empty files, expire after two days)",
@@ -36,7 +37,7 @@ export const STORAGE_GROUPS = [
   { key: "files", label: "Files", usage: ["outputs", "generated", "attachments"], desc: "notifications inbox, generated + staged files" },
   { key: "knowledge", label: "Knowledge", usage: ["knowledge"], desc: "workspace embeddings (sqlite-vec store)" },
   { key: "caches", label: "Caches", usage: ["audio", "tombstones"], desc: "TTS output + inbound media + workgroup removal markers — regenerated on demand or expired" },
-  { key: "logs", label: "Logs", usage: ["logs", "schedule"], desc: "agent, approval, schedule + curator diagnostics" },
+  { key: "logs", label: "Logs", usage: ["logs", "runs", "schedule"], desc: "agent, approval, schedule + curator diagnostics, run journals" },
 ];
 
 export const PAID_PROVIDERS = [

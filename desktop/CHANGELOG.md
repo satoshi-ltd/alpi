@@ -11,6 +11,13 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.5.25 — 2026-09-07 — storage counts run journals
+
+- **The Logs row includes run journals.** `runs/` was the largest directory of
+  a busy profile and Storage did not count it; the Logs row now does, next to
+  the Old and excess run journals category it already offered to clean. Requires alpi
+  0.14.28 for the row.
+
 ## v0.5.24 — 2026-09-07 — storage counts what weighs nothing
 
 - **Storage shows workgroup removal markers.** The Caches row now counts the

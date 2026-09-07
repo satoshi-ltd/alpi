@@ -210,12 +210,17 @@ def test_runs_cleanup_only_offers_old_inactive_journals(tmp_path: Path) -> None:
 
     old = RunContext("old", tmp_path, tmp_path, "default", "user", "s", "host")
     active = RunContext("active", tmp_path, tmp_path, "default", "user", "s", "host")
+    hung = RunContext("hung", tmp_path, tmp_path, "default", "user", "s", "host")
     fresh = RunContext("fresh", tmp_path, tmp_path, "default", "user", "s", "host")
-    for context in (old, active, fresh):
+    for context in (old, active, hung, fresh):
         runs.start(context)
+    runs.finish(old, "completed")
+    runs.finish(active, "completed")
+    runs.finish(fresh, "completed")
+    (tmp_path / "runs" / "corrupt.jsonl").write_text("not a journal\n")
     stale = time.time() - (cleanup.RUNS_KEEP_DAYS + 5) * 86_400
-    os.utime(runs.run_path(tmp_path, old.run_id), (stale, stale))
-    os.utime(runs.run_path(tmp_path, active.run_id), (stale, stale))
+    for name in ("old", "active", "hung", "corrupt"):
+        os.utime(tmp_path / "runs" / f"{name}.jsonl", (stale, stale))
     runs.register_active(active, object())
     try:
         cat = next(c for c in cleanup.categories(tmp_path) if c["key"] == "runs")
@@ -226,8 +231,8 @@ def test_runs_cleanup_only_offers_old_inactive_journals(tmp_path: Path) -> None:
 
     assert result["ok"] and result["removed"] == 1
     assert not runs.run_path(tmp_path, old.run_id).exists()
-    assert runs.run_path(tmp_path, active.run_id).exists()
-    assert runs.run_path(tmp_path, fresh.run_id).exists()
+    for name in ("active", "hung", "fresh", "corrupt"):
+        assert (tmp_path / "runs" / f"{name}.jsonl").exists(), name
 
 
 def test_runs_cleanup_fails_closed_when_active_state_is_unknown(
@@ -517,3 +522,65 @@ def test_cleanup_status_counts_items_next_to_bytes(tmp_path: Path) -> None:
     os.utime(d / "wg_old", (old, old))
 
     assert _cleanup_status(tmp_path) == f"{home_mod.format_bytes(300_000)} · 2 items reclaimable"
+
+
+def test_runs_cleanup_size_cap_selects_the_oldest_completed_journals(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    import os
+    import time
+
+    from alpi import cleanup, runs
+    from alpi.core.run_context import RunContext
+
+    sizes: dict[str, int] = {}
+    now = time.time()
+    for i, name in enumerate(("oldest", "middle", "newest", "running")):
+        context = RunContext(name, tmp_path, tmp_path, "default", "user", "s", "host")
+        runs.start(context)
+        runs.append(tmp_path, name, "agent.tool_end", {"output": "x" * (400 - 100 * i)})
+        if name != "running":
+            runs.finish(context, "completed")
+        path = runs.run_path(tmp_path, name)
+        stamp = now - 3600 * (5 - i)
+        os.utime(path, (stamp, stamp))
+        sizes[name] = path.stat().st_size
+
+    monkeypatch.setattr(cleanup, "RUNS_KEEP_BYTES", sizes["middle"] + sizes["newest"])
+    cat = next(c for c in cleanup.categories(tmp_path) if c["key"] == "runs")
+    assert [p.name for p in cat["files"]] == ["oldest.jsonl"]
+
+    monkeypatch.setattr(cleanup, "RUNS_KEEP_BYTES", sizes["newest"])
+    cat = next(c for c in cleanup.categories(tmp_path) if c["key"] == "runs")
+    assert [p.name for p in cat["files"]] == ["oldest.jsonl", "middle.jsonl"]
+
+    monkeypatch.setattr(cleanup, "RUNS_KEEP_BYTES", 0)
+    cat = next(c for c in cleanup.categories(tmp_path) if c["key"] == "runs")
+    assert [p.name for p in cat["files"]] == ["oldest.jsonl", "middle.jsonl", "newest.jsonl"]
+    assert runs.run_path(tmp_path, "running").exists()
+
+
+def test_runs_cleanup_size_cap_spares_journals_still_settling(tmp_path: Path, monkeypatch) -> None:
+    import os
+    import time
+
+    from alpi import cleanup, runs
+    from alpi.core.run_context import RunContext
+
+    for name in ("settling", "ancient"):
+        context = RunContext(name, tmp_path, tmp_path, "default", "user", "s", "host")
+        runs.start(context)
+        runs.append(tmp_path, name, "agent.usage", {"cost": 0.31, "tokens_in": 900})
+        runs.finish(context, "completed")
+    ancient = time.time() - (cleanup.RUNS_KEEP_DAYS + 1) * 86_400
+    os.utime(runs.run_path(tmp_path, "ancient"), (ancient, ancient))
+
+    monkeypatch.setattr(cleanup, "RUNS_KEEP_BYTES", 0)
+    cat = next(c for c in cleanup.categories(tmp_path) if c["key"] == "runs")
+    assert [p.name for p in cat["files"]] == ["ancient.jsonl"]
+    assert cat["label"] == "Old and excess run journals"
+
+    settled = time.time() - cleanup.RUNS_SETTLE_SECONDS - 1
+    os.utime(runs.run_path(tmp_path, "settling"), (settled, settled))
+    cat = next(c for c in cleanup.categories(tmp_path) if c["key"] == "runs")
+    assert sorted(p.name for p in cat["files"]) == ["ancient.jsonl", "settling.jsonl"]

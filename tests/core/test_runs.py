@@ -25,12 +25,12 @@ def _context(home: Path, *, run_id: str | None = None) -> RunContext:
 def test_run_journal_roundtrip_and_summary(tmp_path: Path) -> None:
     context = _context(tmp_path)
     runs.start(context, model="model-1")
-    runs.record_agent_event(context, AgentEvent(kind="assistant_delta", text="hello"))
+    runs.record_agent_event(context, AgentEvent(kind="assistant_done", text="hello", final=True))
     runs.finish(context, "completed")
 
     journal = runs.read(tmp_path, context.run_id)
     assert [row["kind"] for row in journal["events"]] == [
-        "run.started", "agent.assistant_delta", "run.finished",
+        "run.started", "agent.assistant_done", "run.finished",
     ]
     item = runs.summary(tmp_path, context.run_id)
     assert item["status"] == "completed"
@@ -219,3 +219,20 @@ def test_list_runs_tolerates_journal_deleted_during_scan(tmp_path: Path, monkeyp
     monkeypatch.setattr(Path, "stat", racing_stat)
 
     assert runs.list_runs(tmp_path) == []
+
+
+def test_streaming_deltas_never_reach_the_journal(tmp_path: Path) -> None:
+    assert runs._TRANSIENT_KINDS == {"reasoning_delta", "assistant_delta"}
+    context = _context(tmp_path)
+    runs.start(context)
+    runs.record_agent_event(context, AgentEvent(kind="reasoning_delta", text="thinking"))
+    runs.record_agent_event(context, AgentEvent(kind="assistant_delta", text="hel"))
+    runs.record_agent_event(context, {"kind": "assistant_delta", "text": "lo"})
+    runs.record_agent_event(context, AgentEvent(kind="model_state", text="reasoning"))
+    runs.record_agent_event(context, AgentEvent(kind="assistant_done", text="hello", final=True))
+    runs.finish(context, "completed")
+
+    kinds = [row["kind"] for row in runs.read(tmp_path, context.run_id)["events"]]
+    assert kinds == ["run.started", "agent.model_state", "agent.assistant_done", "run.finished"]
+    text = runs.run_path(tmp_path, context.run_id).read_text()
+    assert "thinking" not in text and "hel" not in text.replace("hello", "")

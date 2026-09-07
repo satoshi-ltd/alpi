@@ -68,7 +68,7 @@ providers:
 
 ## Change paths
 
-- `alpi setup` (recommended): model, email, MCPs, sandbox, voice, peers, workgroups, connections, network, budget, cleanup (including run journals older than 30 days), and daemon lifecycle.
+- `alpi setup` (recommended): model, email, MCPs, sandbox, voice, peers, workgroups, connections, network, budget, cleanup (including completed run journals older than 30 days or beyond 200 MiB per profile, and expired workgroup tombstones), and daemon lifecycle.
 - `/model` inside the TUI.
 - Direct `config.yaml` edit for advanced/cosmetic fields.
 - Desktop/mobile settings through `host.*` where available.
