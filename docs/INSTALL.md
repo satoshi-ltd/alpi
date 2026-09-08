@@ -23,7 +23,7 @@ daemons), and **Kubernetes** (the same image as a stateful workload).
 | | Native | Docker | Kubernetes |
 |---|---|---|---|
 | Platform | Linux, macOS (Windows → WSL2) | any Docker host | any cluster |
-| Python | 3.10–3.13 (uv manages it) | in the image | in the image |
+| Python | 3.11–3.13 (uv manages it) | in the image | in the image |
 | Node.js | 24 LTS on the service PATH — needed for `npx`-launched MCP servers and npm project gates; optional if you use neither | in the image | in the image |
 | git | required when the daemon clones projects (workgroup recipes, repo-working agents); plus `openssh-client` for SSH-URL clones. A chat-only agent needs neither | in the image | in the image |
 | Service manager | launchd (macOS) / systemd user + lingering (Linux) — installed by `alpi setup` | `--restart unless-stopped` | the pod controller |

@@ -40,14 +40,8 @@ def lint_content(path: Path | str, content: str) -> str | None:
         return None
 
     if suffix == ".toml":
-        # tomllib is stdlib in 3.11+; fall back to tomli if installed.
-        try:
-            import tomllib
-        except ImportError:
-            try:
-                import tomli as tomllib  # type: ignore
-            except ImportError:
-                return None
+        import tomllib
+
         try:
             tomllib.loads(content)
         except tomllib.TOMLDecodeError as e:

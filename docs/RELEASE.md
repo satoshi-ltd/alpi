@@ -20,7 +20,7 @@ The flow:
    - **build** — `uv build` + `twine check`.
    - **smoke** — installs the freshly-built wheel under
      `uv tool install` inside five clean container images
-     (Python 3.10/3.11/3.12-slim, Ubuntu 22.04, Debian 12) and
+     (Python 3.11/3.12/3.13-slim, Ubuntu 24.04, Debian 12) and
      asserts `alpi --version` and `alpi --help` work.
    - **publish-pypi** — uploads to PyPI via OIDC (Trusted
      Publisher; no token in repo), tags the commit `v<version>`,
@@ -109,10 +109,9 @@ removed for v0.3 because:
 - **Workflow says "version unchanged".** You forgot to bump
   `pyproject.toml` and `alpi/__init__.py`. Both must change for
   a publish to happen.
-- **Smoke fails on Python 3.10 only.** A dependency dropped 3.10
-  support. Either pin the dep version or bump
-  `requires-python = ">=3.11"` in `pyproject.toml` and adjust
-  classifiers.
+- **Installation rejects Python 3.10.** Alpi requires Python 3.11–3.13.
+  Use a supported interpreter; LiteLLM 1.100.0 imports typing features
+  introduced in Python 3.11.
 - **PyPI publish fails with 403 / OIDC.** Re-check the Trusted
   Publisher config on PyPI: workflow filename matches exactly
   (`publish.yml`), repo owner is `satoshi-ltd`.

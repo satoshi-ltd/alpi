@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.14.30 — 2026-09-08 — repair the cited source before rebuilding
+
+- **QA rewinds prioritize source ownership.** A source file match takes precedence
+  over a later phase mentioned in prose, such as "then #build". An existing
+  `Source:` evidence line narrows the match so retained audit paths do not choose
+  the repair owner. No new delivery field is required; verdicts without that line
+  retain whole-text path matching and phase hashtags remain a fallback.
+
+- **Budget waits do not consume hub recovery attempts.** When an active local
+  phase owner has exhausted its daily budget without a delivery, the hub waits
+  instead of reopening tasks or exhausting its watchdog. Existing budget notices
+  explain the wait. Raising the cap or the daily reset allows dispatch again;
+  completed deliveries and remote owners retain their existing behavior.
+
+- **Python 3.11 is the minimum supported version.** LiteLLM 1.100.0
+  cannot import on Python 3.10. Package metadata and installation docs now
+  declare 3.11–3.13; release smoke tests cover those versions, Ubuntu 24.04
+  and Debian 12. The smoke job receives the version output explicitly so
+  its version check cannot silently match an empty string. TOML validation
+  uses the standard library without the obsolete Python 3.10 fallback.
+
 ## v0.14.29 — 2026-09-07 — preserve DeepSeek reasoning and OpenRouter costs
 
 - **DeepSeek retains reasoning between tool calls.** The live conversation sends

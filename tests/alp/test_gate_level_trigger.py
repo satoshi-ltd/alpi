@@ -1218,6 +1218,36 @@ def test_qa_rewind_target_follows_the_files_the_verdict_names():
     assert service._qa_rewind_target(wg, step, "QA FAIL · dist/es/index.html has two h1") == "content"
 
 
+@pytest.mark.parametrize("chain, source, expected", [
+    (("intake", "content", "build", "qa"), "src/config/site.json", "intake"),
+    (("intake", "content", "build", "qa"), "src/content/rooms/simple.fr.json", "content"),
+    (("media-update", "media-build", "media-qa"), "assets/manifest.yaml", "media-update"),
+    (("content-copy", "content-build", "content-qa"), "src/content/pages/home.fr.json", "content-copy"),
+    (("review-content", "review-build", "review-qa"), "src/content/pages/home.fr.json", "review-content"),
+])
+def test_qa_rewind_repairs_source_before_a_mentioned_rebuild(chain, source, expected):
+    scopes = {
+        "intake": ["src/config/site.json"],
+        "content": ["src/content/**"],
+        "media-update": ["assets/manifest.yaml"],
+        "content-copy": ["src/content/**"],
+        "review-content": ["src/content/**"],
+    }
+    steps = {
+        phase: {"owner": phase, "paths": scopes.get(phase, ["dist/**"])}
+        for phase in chain[:-1]
+    }
+    steps[chain[-1]] = {"owner": "lens"}
+    wg = types.SimpleNamespace(meta=types.SimpleNamespace(
+        pipelines={"pipeline": chain}, pipeline_steps=steps,
+    ))
+    step = types.SimpleNamespace(phase=chain[-1])
+    verdict = f"QA FAIL · unsupported claim · source {source}. Fix the source, then #{chain[-2]}."
+
+    assert service._qa_rewind_target(wg, step, verdict) == expected
+    assert service._qa_rewind_target(wg, step, f"QA FAIL · fix in #{chain[-2]}") == chain[-2]
+
+
 def test_qa_rewind_prefers_the_most_specific_owner_over_a_directory_scope():
     steps = {
         "setup": {"owner": "pixel", "paths": ["**"]},
@@ -1238,6 +1268,15 @@ def test_qa_rewind_prefers_the_most_specific_owner_over_a_directory_scope():
     copy = "QA FAIL · audited against work/status.yaml · typo in src/content/pages/practical.fr.json:38"
     assert service._qa_rewind_target(wg, step, copy) == "content"
     assert service._qa_rewind_target(wg, step, "QA FAIL · work/enrichment.md cites no source") == "enrich"
+    verdict = (
+        "QA FAIL · invented facility in room copy\n"
+        "- Source: `src/content/rooms/twin.fr.json` summary.\n"
+        "## RETAINED\n"
+        "No work/update-*.md input; work/intake.md and work/enrichment.md checked.\n"
+        "Then #build."
+    )
+    assert service._qa_rewind_target(wg, step, verdict) == "content"
+
 
 
 @pytest.mark.asyncio

@@ -1593,6 +1593,8 @@ async def _maybe_dispatch_for_hub(
     gate_fail = await _maybe_gate_advance(home, wg, recent, own_pubkey)
     if gate_fail is True:
         return
+    if _active_owner_budget_blocks_recovery(home, wg, recent):
+        return
     empty_phase = _empty_hub_exchange_phase(wg, recent)
     if (empty_phase and not any(key[0] == wg.meta.id for key in _INFLIGHT)
             and time.monotonic() - _LAST_TURN_END.get(wg.meta.id, float("-inf")) >= _TURN_SETTLE_SECONDS):
@@ -2150,6 +2152,8 @@ async def _maybe_watchdog_close(
     verified = await _maybe_gate_advance(home, wg, recent, wg.meta.hub_pubkey)
     if verified is True:
         return
+    if _active_owner_budget_blocks_recovery(home, wg, recent):
+        return
     gate_note = verified if isinstance(verified, str) else ""
     last_author_is_hub = str(
         last_post.get("from") or ""
@@ -2355,6 +2359,35 @@ def _save_poller_state(home: Path, state: dict) -> None:
     p = _poller_state_path(home)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(state, separators=(",", ":")))
+
+
+def _active_owner_budget_blocks_recovery(home: Path, wg, recent: list[dict]) -> bool:
+    from alpi import home as home_mod
+    from alpi.alp import peers as peers_mod
+    from alpi.alp import pipeline_gates as gates
+    from alpi.alp import tasks as wg_tasks
+    from alpi.alp import workgroup as wg_mod
+
+    phase_map = wg_mod.safe_phase_map(wg.meta)
+    phase = _active_phase_slug(phase_map, recent, wg.meta.hub_pubkey)
+    owner_name = str((phase_map.get(phase) or {}).get("owner") or "")
+    if not owner_name:
+        return False
+    owner = next((p for p in peers_mod.load(home) if p.id.lower() == owner_name.lower()), None)
+    if owner is None or owner.pubkey == wg.meta.hub_pubkey:
+        return False
+    active = wg_tasks.active_task(recent, hub_pubkey=wg.meta.hub_pubkey)
+    if gates.owner_post_under_gate(
+        recent, {owner.pubkey}, wg.meta.hub_pubkey, active.opened_seq, include_skip=True,
+    ) is not None:
+        return False
+    owner_home = home_mod.find_home_by_pubkey(owner.pubkey)
+    if owner_home is None:
+        return False
+    if not _budget_blocks_dispatch(owner_home, owner.id, wg.meta.id, wg.meta.name):
+        return False
+    _clear_watchdog_timing(home, wg.meta.id)
+    return True
 
 
 def _budget_blocks_dispatch(
@@ -2949,12 +2982,17 @@ def _qa_rewind_target(wg, step, verdict_text: str, include_last: bool = False) -
         if isinstance(steps.get(phase), dict)
         and steps[phase].get("owner") and steps[phase].get("paths")
     ]
+    source_lines = "\n".join(
+        line for line in verdict_text.splitlines()
+        if re.match(r"^\s*(?:[-*]\s+)?(?:\*\*)?source\s*:", line, re.IGNORECASE)
+    )
+    candidates = authored if include_last else authored[:-1]
+    owners = _phases_owning_named_paths(source_lines or verdict_text, candidates, steps)
+    if owners:
+        return owners[0]
     for slug in re.findall(r"#([a-z0-9][a-z0-9-]*)", verdict_text.lower()):
         if slug in authored:
             return slug
-    owners = _phases_owning_named_paths(verdict_text, authored if include_last else authored[:-1], steps)
-    if owners:
-        return owners[0]
     for preferred in ("content", "content-copy", "media-update"):
         if preferred in authored:
             return preferred
