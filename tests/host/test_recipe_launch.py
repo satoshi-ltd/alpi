@@ -31,6 +31,13 @@ def _fixture_repo(tmp_path: Path) -> Path:
     }, indent=2))
     (repo / "scripts").mkdir()
     (repo / "scripts" / "intake-check.mjs").write_text("process.exit(0)")
+    (repo / "tests" / "fixtures").mkdir(parents=True)
+    (repo / "tests" / "fixtures" / "demo.json").write_text("{}")
+    (repo / "docs").mkdir()
+    (repo / "docs" / "README.md").write_text("dev only")
+    (repo / "CONTRIBUTING.md").write_text("dev only")
+    (repo / "src" / "config" / "examples").mkdir()
+    (repo / "src" / "config" / "examples" / "demo.js").write_text("export default {}")
     _git(["init", "-q"], repo)
     _git(["add", "-A"], repo)
     _git(["commit", "-q", "-m", "base"], repo)
@@ -87,9 +94,12 @@ def test_recipe_git_allows_slow_template_clones(monkeypatch):
     assert seen["timeout"] == 300
 
 
-def _project_recipe(repo: Path, with_brief: bool = False, retired: bool = False) -> str:
+def _project_recipe(
+    repo: Path, with_brief: bool = False, retired: bool = False, exclude: list[str] | None = None,
+) -> str:
     inputs = "\ninputs:\n  brief: { dest: brief.md, required: true }\n" if with_brief else ""
     chains = _RETIRED_CHAINS if retired else _CANONICAL_CHAINS
+    excluded = f"  exclude: {json.dumps(exclude)}\n" if exclude else ""
     return f"""
 hub: mira
 members: [scout]
@@ -109,7 +119,7 @@ params:
   seed:
     json_merge:
       src/config/site.json: {{ tier: pro, pages: {{ blog: true }} }}
-"""
+{excluded}"""
 
 
 _CHAT_RECIPE = """
@@ -415,6 +425,49 @@ async def test_launch_rolls_back_workgroup_and_project_on_kickoff_failure(tmp_pa
     assert not (tmp_path / "ws" / "projects" / "casa-bahia").exists()
     wg_root = home / "alp" / "workgroups"
     assert not (list(wg_root.glob("wg_*")) if wg_root.exists() else [])
+
+
+@pytest.mark.asyncio
+async def test_launch_excludes_template_dev_paths_without_dirtying_the_clone(tmp_path):
+    repo = _fixture_repo(tmp_path)
+    home = _hub_home(tmp_path)
+    _pin_member(home, "scout")
+
+    recipe = _project_recipe(repo, exclude=["tests", "docs", "src/config/examples", "CONTRIBUTING.md"])
+    result = await host_recipes.launch(home, recipe, {"slug": "casa-bahia"})
+
+    dest = tmp_path / "ws" / "projects" / "casa-bahia"
+    assert not (dest / "tests").exists()
+    assert not (dest / "docs").exists()
+    assert not (dest / "src" / "config" / "examples").exists()
+    assert not (dest / "CONTRIBUTING.md").exists()
+    assert (dest / "scripts" / "intake-check.mjs").is_file()
+    assert json.loads((dest / "src" / "config" / "site.json").read_text())["tier"] == "pro"
+    status = subprocess.run(
+        ["git", "status", "--porcelain=v1", "--untracked-files=all"],
+        cwd=str(dest), check=True, capture_output=True, text=True,
+    ).stdout.splitlines()
+    assert status == [" M src/config/site.json"]
+    wg = wg_mod.load(home, result["workgroup_id"])
+    assert wg.meta.launch["template_commit"]
+
+
+def test_clone_without_exclude_keeps_the_plain_clone(monkeypatch):
+    calls: list[list[str]] = []
+    monkeypatch.setattr(host_recipes, "_git", lambda args, cwd=None: calls.append(args) or "")
+    host_recipes._clone("git@example.com:t.git", Path("/tmp/x"), [])
+    assert calls == [["clone", "--quiet", "--", "git@example.com:t.git", "/tmp/x"]]
+
+
+def test_clone_with_exclude_is_shallow_and_sparse(monkeypatch):
+    calls: list[list[str]] = []
+    monkeypatch.setattr(host_recipes, "_git", lambda args, cwd=None: calls.append(args) or "")
+    host_recipes._clone("git@example.com:t.git", Path("/tmp/x"), ["tests", "src/config/examples"])
+    assert calls == [
+        ["clone", "--quiet", "--depth", "1", "--no-checkout", "--", "git@example.com:t.git", "/tmp/x"],
+        ["sparse-checkout", "set", "--no-cone", "--", "/*", "!/tests", "!/src/config/examples"],
+        ["checkout", "--quiet"],
+    ]
 
 
 @pytest.mark.asyncio

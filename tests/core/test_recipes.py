@@ -560,3 +560,52 @@ def test_saved_recipe_scan_keeps_valid_entries_when_one_is_invalid(tmp_path) -> 
 
     assert [r.recipe_id for r in valid] == ["hotel"]
     assert invalid == [{"id": "broken", "detail": "recipe 'broken' missing 'name'"}]
+
+
+def test_project_exclude_defaults_to_empty():
+    r = recipes.parse_recipe(VALID, "x")
+    assert r.project["exclude"] == []
+
+
+def test_project_exclude_normalizes_and_dedups():
+    text = VALID + "  exclude: [tests, /docs/, 'src/config/examples', tests]\n"
+    r = recipes.parse_recipe(text, "x")
+    assert r.project["exclude"] == ["tests", "docs", "src/config/examples"]
+    assert recipes.resolve(r, {"slug": "a", "tier": "pro"})["project"]["exclude"] == ["tests", "docs", "src/config/examples"]
+
+
+@pytest.mark.parametrize("bad", [
+    "exclude: tests",
+    "exclude: [1]",
+    "exclude: ['']",
+    "exclude: ['../etc']",
+    "exclude: ['tests/./x']",
+    "exclude: ['tests/*']",
+    "exclude: ['!tests']",
+])
+def test_project_exclude_rejects_non_paths(bad):
+    with pytest.raises(recipes.RecipeError, match="project.exclude"):
+        recipes.parse_recipe(VALID + f"  {bad}\n", "x")
+
+
+@pytest.mark.parametrize("value", ["*", "../src", "docs/../src", "", "!src", "docs/?"])
+def test_project_exclude_validates_interpolated_paths(value):
+    recipe = recipes.parse_recipe(VALID + "  exclude: ['{tier}']\n", "x")
+    with pytest.raises(recipes.RecipeError, match="project.exclude"):
+        recipes.resolve(recipe, {"slug": "hotel", "tier": value})
+
+
+def test_project_exclude_normalizes_after_interpolation_without_mutating_recipe():
+    recipe = recipes.parse_recipe(VALID + "  exclude: ['{tier}', docs]\n", "x")
+    result = recipes.resolve(recipe, {"slug": "hotel", "tier": "/docs/"})
+    assert result["project"]["exclude"] == ["docs"]
+    assert recipe.project["exclude"] == ["{tier}", "docs"]
+
+
+@pytest.mark.parametrize("value", ["docs\nsrc", "docs\rsrc", "docs\tsrc", "docs\x00src"])
+def test_project_exclude_rejects_control_characters(value):
+    import json
+
+    recipe_text = VALID + f"  exclude: [{json.dumps(value)}]\n"
+    with pytest.raises(recipes.RecipeError, match="project.exclude"):
+        recipes.parse_recipe(recipe_text, "x")

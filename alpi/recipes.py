@@ -144,6 +144,26 @@ def _coerce_params(raw: Any) -> dict:
     return out
 
 
+def _coerce_exclude(recipe_id: str, raw: Any) -> list[str]:
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raise RecipeError(f"recipe {recipe_id!r} project.exclude must be a list of relative paths")
+    out: list[str] = []
+    for item in raw:
+        if not isinstance(item, str) or not item.strip():
+            raise RecipeError(f"recipe {recipe_id!r} project.exclude entries must be non-empty strings")
+        if any(ord(ch) < 32 or ord(ch) == 127 for ch in item):
+            raise RecipeError(f"recipe {recipe_id!r} project.exclude entries must not contain control characters")
+        path = item.strip().strip("/")
+        parts = path.split("/")
+        if not path or any(part in ("", ".", "..") for part in parts) or any(ch in path for ch in "*?[!\\"):
+            raise RecipeError(f"recipe {recipe_id!r} project.exclude entry must be a plain relative path: {item!r}")
+        if path not in out:
+            out.append(path)
+    return out
+
+
 def _coerce_inputs(raw: Any, has_project: bool) -> dict:
     if raw is None:
         return {}
@@ -225,6 +245,7 @@ def parse_recipe(text: str, recipe_id: str) -> Recipe:
                 raise RecipeError(f"recipe {recipe_id!r} project.seed unknown op {key!r} — use json_merge or files")
             if not isinstance(val, dict):
                 raise RecipeError(f"recipe {recipe_id!r} project.seed.{key} must be a mapping of path → value")
+        project["exclude"] = _coerce_exclude(recipe_id, project.get("exclude"))
 
     digest = "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
     return Recipe(
@@ -359,6 +380,10 @@ def resolve(recipe: Recipe, params: dict[str, str]) -> dict:
     if missing:
         raise RecipeError(f"placeholder(s) with no value: {sorted(missing)}")
 
+    project = _interp(recipe.project, params) if recipe.project else None
+    if project is not None:
+        project["exclude"] = _coerce_exclude(recipe.recipe_id, project.get("exclude"))
+
     return {
         "recipe_id": recipe.recipe_id,
         "recipe_digest": recipe.digest,
@@ -374,5 +399,5 @@ def resolve(recipe: Recipe, params: dict[str, str]) -> dict:
         "launch_pipeline": recipe.launch_pipeline,
         "pipeline_steps": _interp(recipe.pipeline_steps, params),
         "inputs": _interp(recipe.inputs, params),
-        "project": _interp(recipe.project, params) if recipe.project else None,
+        "project": project,
     }

@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.14.31 — 2026-09-10 — project clones carry only what the hotel needs
+
+- **Recipes can exclude template paths from the clone.** A `project.exclude`
+  list of plain relative paths (test fixtures, contributor docs, example
+  configs) makes the project clone shallow and sparse: those paths are absent
+  from the working tree while the clone's `git status` stays clean, so
+  template boundary gates keep passing. Recipes without the field clone
+  exactly as before. Exclusions are validated after parameter interpolation
+  and reject control characters. Sparse checkout omits working-tree files;
+  it does not filter blobs from the fetched commit.
+
 ## v0.14.30 — 2026-09-08 — repair the cited source before rebuilding
 
 - **QA rewinds prioritize source ownership.** A source file match takes precedence

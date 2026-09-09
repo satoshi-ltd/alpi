@@ -98,6 +98,17 @@ def _validate_input_dests(inputs: dict) -> None:
                 raise LaunchError(f"inputs {n1!r} and {n2!r} resolve to nested dests: {p1} vs {p2}")
 
 
+def _clone(repo: str, tmp: Path, exclude: list[str]) -> None:
+    if not exclude:
+        _git(["clone", "--quiet", "--", repo, str(tmp)])
+        return
+    _git(["clone", "--quiet", "--depth", "1", "--no-checkout", "--", repo, str(tmp)])
+    # Non-cone patterns: excluded paths stay skip-worktree, so the clone's git status never reports them.
+    patterns = ["/*", *(f"!/{path}" for path in exclude)]
+    _git(["sparse-checkout", "set", "--no-cone", "--", *patterns], cwd=tmp)
+    _git(["checkout", "--quiet"], cwd=tmp)
+
+
 def _prepare_project(workspace: Path, spec_project: dict) -> tuple[Path, str]:
     dest = (workspace / spec_project["dest"]).resolve()
     dest.relative_to(workspace.resolve())
@@ -109,8 +120,9 @@ def _prepare_project(workspace: Path, spec_project: dict) -> tuple[Path, str]:
     repo = str(spec_project["template_repo"])
     if repo.startswith("-"):
         raise LaunchError(f"template_repo must not start with '-': {repo!r}")
+    exclude = [str(e) for e in (spec_project.get("exclude") or [])]
     try:
-        _git(["clone", "--quiet", "--", repo, str(tmp)])
+        _clone(repo, tmp, exclude)
         commit = _git(["rev-parse", "HEAD"], cwd=tmp)
         _apply_seed(tmp, spec_project.get("seed") or {})
         dest.parent.mkdir(parents=True, exist_ok=True)

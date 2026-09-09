@@ -1141,10 +1141,25 @@ pipeline_steps:
 project:
   template_repo: git@github.com:acme/site-template.git
   dest: "projects/{slug}"
+  exclude: [tests, docs]
   seed:
     files:
       intake.md: "# Intake — {slug}\n\n(scout fills this in the intake phase)"
 ```
+
+`project.exclude` lists plain relative paths of the template that a
+project never needs (test fixtures, contributor docs) — a directory
+excludes its whole subtree, and a single file works too. With it the
+clone is shallow (`--depth 1`) and uses a non-cone sparse checkout, so
+those paths are absent from the working tree while the clone's own
+`git status` stays clean — a template-side boundary check that diffs
+the tree against HEAD does not see them as deletions. Without it the
+clone is the plain full clone. Paths are validated again after parameter
+interpolation; glob patterns, traversal segments and control characters are
+rejected. Sparse checkout reduces the materialized working tree, not the
+contents of the fetched commit: no blob filter is used, so excluded files
+remain available in Git's object database. `--depth 1` reduces history for
+remote clones; Git may ignore it for local-path clones.
 
 A recipe's gates are `argv` run node-free on the daemon (the
 example uses `python3`), matching *Deterministic phase gates* — the
