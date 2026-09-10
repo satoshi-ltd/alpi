@@ -24,7 +24,8 @@ def _completion(content: str = "done", tokens_in: int = 100, tokens_out: int = 5
 def _sink_capture():
     calls: list[tuple] = []
     tool_state_mod.set_usage_sink(
-        lambda i, o, c, cached=None, disc=None, src=None: calls.append((i, o, c, cached, disc, src)),
+        lambda i, o, c, cached=None, disc=None, src=None, provider=None, generation_id=None:
+        calls.append((i, o, c, cached, disc, src)),
     )
     return calls
 
@@ -367,3 +368,58 @@ def test_read_image_finalize_forwards_cache_fields() -> None:
         assert calls == [(100, 50, 0.01, 40, 0.002, "provider")]
     finally:
         tool_state_mod.set_usage_sink(None)
+
+
+def test_record_completion_usage_forwards_endpoint_identity() -> None:
+    seen: list[dict] = []
+
+    def sink(i, o, c, cached=None, disc=None, src=None, provider=None, generation_id=None):
+        seen.append({"cost": c, "src": src, "provider": provider, "generation_id": generation_id})
+
+    tool_state_mod.set_usage_sink(sink)
+    try:
+        out = _completion()
+        out.provider = "OpenInference"
+        out.generation_id = "gen-1789000023-QWErEBRKkhQRzrApGTgy"
+        tool_state_mod.record_completion_usage(out)
+    finally:
+        tool_state_mod.set_usage_sink(None)
+    assert seen == [{
+        "cost": 0.01, "src": "provider", "provider": "OpenInference",
+        "generation_id": "gen-1789000023-QWErEBRKkhQRzrApGTgy",
+    }]
+
+
+def test_record_completion_usage_tolerates_a_completion_without_identity() -> None:
+    seen: list[dict] = []
+    tool_state_mod.set_usage_sink(
+        lambda i, o, c, cached=None, disc=None, src=None, provider=None, generation_id=None:
+        seen.append({"provider": provider, "generation_id": generation_id}),
+    )
+    try:
+        tool_state_mod.record_completion_usage(_completion())
+    finally:
+        tool_state_mod.set_usage_sink(None)
+    assert seen == [{"provider": None, "generation_id": None}]
+
+
+def test_a_failing_sink_runs_once_and_still_updates_the_tally() -> None:
+    """A TypeError raised inside the sink must not look like a signature mismatch and be replayed."""
+    calls: list[float] = []
+
+    def sink(i, o, c, cached=None, disc=None, src=None, provider=None, generation_id=None):
+        calls.append(c)
+        raise TypeError("emitter blew up after booking the spend")
+
+    tool_state_mod.reset_turn_usage()
+    tool_state_mod.set_usage_sink(sink)
+    try:
+        out = _completion()
+        out.cost_usd = 0.50
+        out.provider = "OpenInference"
+        out.generation_id = "gen-x"
+        tool_state_mod.record_completion_usage(out)
+    finally:
+        tool_state_mod.set_usage_sink(None)
+    assert calls == [0.50]
+    assert (tool_state_mod.get_turn_usage() or {})["usd"] == 0.50

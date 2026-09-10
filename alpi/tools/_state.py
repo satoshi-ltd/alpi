@@ -11,7 +11,7 @@ from typing import Callable, Optional
 EmitFn = Callable[[str, bool], None]
 InterruptFn = Callable[[], bool]
 # (input, output, cost_usd, cached, cache_discount, cost_source)
-UsageFn = Callable[[int, int, float, "int | None", "float | None", "str | None"], None]
+UsageFn = Callable[..., None]
 
 _emit: ContextVar[Optional[EmitFn]] = ContextVar("alpi_emit", default=None)
 _interrupt_getter: ContextVar[Optional[InterruptFn]] = ContextVar(
@@ -73,11 +73,24 @@ def set_usage_sink(sink: Optional[UsageFn]) -> None:
     _usage_sink.set(sink)
 
 
+def record_completion_usage(out) -> None:  # noqa: ANN001
+    record_usage(
+        out.input_tokens, out.output_tokens, out.cost_usd,
+        getattr(out, "cached_tokens", None),
+        getattr(out, "cache_discount", None),
+        getattr(out, "cost_source", None),
+        provider=getattr(out, "provider", None),
+        generation_id=getattr(out, "generation_id", None),
+    )
+
+
 def record_usage(
     input_tokens: int, output_tokens: int, cost_usd: float,
     cached_input_tokens: int | None = None,
     cache_discount: float | None = None,
     cost_source: str | None = None,
+    provider: str | None = None,
+    generation_id: str | None = None,
 ) -> None:
     sink = _usage_sink.get()
     if sink is not None:
@@ -85,8 +98,10 @@ def record_usage(
             sink(
                 int(input_tokens), int(output_tokens), float(cost_usd),
                 cached_input_tokens, cache_discount, cost_source,
+                provider=provider, generation_id=generation_id,
             )
-        except Exception:
+        except Exception:  # noqa: BLE001
+            # Never retry: the sink may already have written to the session and the ledger.
             pass
     try:
         bump_turn_usage(input_tokens, output_tokens, cost_usd, cached_input_tokens)

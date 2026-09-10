@@ -88,7 +88,7 @@ def test_compute_cost_zero_when_no_pricing(monkeypatch) -> None:
 
 
 @pytest.mark.parametrize("suffix, expected", [
-    (":nitro", (0.0002, "table")),
+    (":nitro", (0.0002, "table-base")),
     (":free", (0.0, "none")),
     (":extended", (0.0, "none")),
 ])
@@ -124,6 +124,25 @@ def test_nitro_exact_catalog_price_wins(monkeypatch):
     cost, source = llm._compute_cost_detail(chunk, "openrouter/x/y:nitro")
     assert cost == pytest.approx(0.0005)
     assert source == "table"
+
+
+def test_final_chunk_carries_generation_id_and_provider():
+    import alpi.llm as llm
+    chunk = SimpleNamespace(
+        id="gen-1789000023-QWErEBRKkhQRzrApGTgy", provider=None,
+        usage=SimpleNamespace(cost=0.001),
+    )
+    result = llm._final_chunk(chunk, {}, "openrouter/x/y", "OpenInference")
+    assert result["generation_id"] == "gen-1789000023-QWErEBRKkhQRzrApGTgy"
+    assert result["provider"] == "OpenInference"
+
+
+def test_final_chunk_falls_back_to_chunk_provider():
+    import alpi.llm as llm
+    chunk = SimpleNamespace(id=None, provider="DeepInfra", usage=SimpleNamespace(cost=0.001))
+    result = llm._final_chunk(chunk, {}, "openrouter/x/y")
+    assert result["provider"] == "DeepInfra"
+    assert result["generation_id"] is None
 
 
 @pytest.mark.parametrize('reported', [0.0, 0.0123])
@@ -169,3 +188,59 @@ def test_openrouter_wire_usage_survives_litellm_stream(monkeypatch, reported):
     assert captured[0]['reasoning'] == {'effort': 'medium'}
     assistant = captured[0]['messages'][1]
     assert assistant.get('reasoning_content', assistant.get('reasoning')) == 'Previous reasoning.'
+
+
+def test_provider_pin_reaches_the_request_body(monkeypatch):
+    import json
+    import httpx
+    import alpi.llm as llm
+    captured = []
+
+    def send(client, request, **kwargs):
+        captured.append(json.loads(request.content))
+        chunk = {
+            'id': 'gen-pin-test', 'created': 1, 'provider': 'OpenInference',
+            'model': 'deepseek/deepseek-v4-flash-0731',
+            'choices': [{'index': 0, 'delta': {'content': 'ok'}, 'finish_reason': 'stop'}],
+        }
+        usage = dict(chunk, choices=[], usage={
+            'prompt_tokens': 10, 'completion_tokens': 2, 'total_tokens': 12, 'cost': 0.001,
+        })
+        body = ''.join('data: ' + json.dumps(c) + '\n\n' for c in [chunk, usage]) + 'data: [DONE]\n\n'
+        return httpx.Response(200, request=request, headers={'content-type': 'text/event-stream'}, content=body.encode())
+
+    monkeypatch.setattr(httpx.Client, 'send', send)
+    pin = {'order': ['OpenInference'], 'quantizations': ['fp8'], 'allow_fallbacks': False}
+    final = list(llm.stream(
+        messages=[{'role': 'user', 'content': 'test'}], tools=[],
+        model='openrouter/deepseek/deepseek-v4-flash-0731', api_key='local-test-only',
+        extra_body={'provider': pin},
+    ))[-1]
+    assert captured[0]['provider'] == pin
+    assert captured[0]['usage'] == {'include': True}
+    assert final['generation_id'] == 'gen-pin-test'
+    assert final['cost_source'] == 'provider'
+
+
+def test_streaming_drops_provider_but_keeps_generation_id(monkeypatch):
+    """litellm rebuilds stream chunks without OpenRouter's provider field; the generation id is the recovery path."""
+    import json
+    import httpx
+    import alpi.llm as llm
+
+    def send(client, request, **kwargs):
+        chunk = {
+            'id': 'gen-stream-test', 'created': 1, 'provider': 'OpenInference', 'model': 'm',
+            'choices': [{'index': 0, 'delta': {'content': 'ok'}, 'finish_reason': 'stop'}],
+        }
+        usage = dict(chunk, choices=[], usage={'prompt_tokens': 10, 'completion_tokens': 2, 'cost': 0.001})
+        body = ''.join('data: ' + json.dumps(c) + '\n\n' for c in [chunk, usage]) + 'data: [DONE]\n\n'
+        return httpx.Response(200, request=request, headers={'content-type': 'text/event-stream'}, content=body.encode())
+
+    monkeypatch.setattr(httpx.Client, 'send', send)
+    final = list(llm.stream(
+        messages=[{'role': 'user', 'content': 't'}], tools=[],
+        model='openrouter/x/y', api_key='local-test-only',
+    ))[-1]
+    assert final['generation_id'] == 'gen-stream-test'
+    assert final['provider'] is None

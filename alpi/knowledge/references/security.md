@@ -216,7 +216,9 @@ no tamper-evident or external compliance sink. What is recorded:
   workgroup, skill hint, relay); secret-shape redaction runs before write.
 - **Run ledger** (`logs/runs.jsonl`) — append-only, rolling ~1000 runs:
   outcome, elapsed, exit code, backend, last tool, raw cache counts, bounded
-  request-shape diagnosis, and `peer_id` for workgroup runs.
+  request-shape diagnosis, `peer_id` for workgroup runs, and the cost trail:
+  `usd`, `cost_source`, the served `provider` and the provider's
+  `generation_id`. No prompt or reply text beyond the bounded output tail.
 - **Approval log** (`logs/approval.log`) — allow/deny verdicts on
   caution/dangerous terminal gates, with severity and reason.
 - **Cost ledger** (`logs/ledger.json`) — tokens/USD per profile and per peer,

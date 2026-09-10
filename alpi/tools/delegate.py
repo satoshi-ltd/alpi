@@ -348,12 +348,7 @@ class Delegate(Tool):
             except Exception as e:  # noqa: BLE001
                 return ToolResult(ok=False, output="",
                                   error=f"delegate LLM call failed: {e}")
-            tool_state_mod.record_usage(
-                out.input_tokens, out.output_tokens, out.cost_usd,
-                getattr(out, "cached_tokens", None),
-                getattr(out, "cache_discount", None),
-                getattr(out, "cost_source", None),
-            )
+            tool_state_mod.record_completion_usage(out)
 
             content = out.content or ""
             tool_calls = out.tool_calls or []
@@ -428,12 +423,7 @@ class Delegate(Tool):
             except Exception as e:  # noqa: BLE001
                 return ToolResult(ok=False, output="",
                                   error=f"delegate synthesis failed: {e}")
-            tool_state_mod.record_usage(
-                out.input_tokens, out.output_tokens, out.cost_usd,
-                getattr(out, "cached_tokens", None),
-                getattr(out, "cache_discount", None),
-                getattr(out, "cost_source", None),
-            )
+            tool_state_mod.record_completion_usage(out)
             if not final_text:
                 final_text = f"[delegate: {step_cap}-step budget exhausted, no summary]"
         return ToolResult(ok=True, output=final_text)

@@ -81,7 +81,7 @@ def test_is_interrupted_inherits_from_parent() -> None:
 def test_record_usage_fans_out_to_sink() -> None:
     total = {"input": 0, "output": 0, "cost": 0.0, "cached": 0, "unmeasured": 0}
 
-    def _sink(i: int, o: int, c: float, cached: int | None = None, *_rest) -> None:
+    def _sink(i: int, o: int, c: float, cached: int | None = None, *_rest, **_kw) -> None:
         total["input"] += i
         total["output"] += o
         total["cost"] += c

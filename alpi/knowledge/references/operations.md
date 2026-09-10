@@ -57,7 +57,7 @@ Rotated text caps at **1 MB** (`.log.1` = previous gen); `compaction.jsonl` does
 | `approval.log` | per profile | terminal approval decisions (audit trail with `agent.log`). |
 | `admin-audit.jsonl` | root | administrative mutations, max ~20 MB across current + 3 rotations; query with `alpi audit-log`. |
 | `compaction.jsonl` | per profile | compaction/truncation records. |
-| `runs.jsonl` | per profile | run ledger: one line per long-running turn (agent/schedule/workgroup/terminal), including raw cache counts and a bounded request-shape diagnosis; surfaced by `alpi digest`. |
+| `runs.jsonl` | per profile | run ledger: one line per long-running turn (agent/schedule/workgroup/terminal), including raw cache counts, a bounded request-shape diagnosis, and the cost trail (`usd`, `cost_source`, served `provider`, `generation_id`); surfaced by `alpi digest`. |
 | `ledger.json` | per profile | daily budget gate (live counters, UTC reset) + 30-day per-day spend history (USD, input/output/cache tokens, provider-reported cache discount, and cost-source counts; ALL spend incl. non-token costs like image generation); served by `host.usage.daily`. |
 | `prefix_shapes.json` | per profile | best-effort hash-only request-shape history for up to 20 recent conversation affinities; stores no prompt text and is safe to delete. |
 

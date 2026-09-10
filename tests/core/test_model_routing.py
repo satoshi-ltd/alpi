@@ -243,3 +243,49 @@ def test_web_extract_tier_reference_unconfigured_uses_main(monkeypatch, tmp_path
     assert out.ok
     assert seen == ["openrouter/main"]
     assert "[fallback:" not in out.output
+
+
+def test_openrouter_provider_prefs_reach_extra_body(tmp_path: Path) -> None:
+    cfg = _load(tmp_path, {
+        "model": "openrouter/deepseek/deepseek-v4-flash-0731",
+        "providers": {"openrouter": {"provider": {
+            "order": ["OpenInference"], "quantizations": ["fp8"],
+            "allow_fallbacks": False, "require_parameters": True,
+        }}},
+    })
+    out = cfg_mod.resolve_model(cfg)
+    assert out["extra_body"]["provider"] == {
+        "order": ["OpenInference"], "quantizations": ["fp8"],
+        "allow_fallbacks": False, "require_parameters": True,
+    }
+
+
+def test_openrouter_provider_prefs_apply_to_tier_models(tmp_path: Path) -> None:
+    cfg = _load(tmp_path, {
+        "model": "openrouter/main",
+        "providers": {"openrouter": {"provider": {"order": ["OpenInference"]}}},
+        "tiers": {"deep": {"model": "openrouter/deep", "effort": "high"}},
+    })
+    out = cfg_mod.resolve_model(cfg, tier="deep")
+    assert out["model"] == "openrouter/deep"
+    assert out["extra_body"]["provider"] == {"order": ["OpenInference"]}
+    assert out["extra_body"]["reasoning"] == {"effort": "high"}
+
+
+def test_provider_prefs_absent_by_default_and_for_other_providers(tmp_path: Path) -> None:
+    cfg = _load(tmp_path, {"model": "openrouter/main"})
+    assert "extra_body" not in cfg_mod.resolve_model(cfg)
+    (tmp_path / "b").mkdir()
+    other = _load(tmp_path / "b", {
+        "model": "anthropic/claude-sonnet-5",
+        "providers": {"openrouter": {"provider": {"order": ["OpenInference"]}}},
+    })
+    assert "extra_body" not in cfg_mod.resolve_model(other)
+
+
+def test_provider_prefs_ignore_malformed_config(tmp_path: Path) -> None:
+    cfg = _load(tmp_path, {
+        "model": "openrouter/main",
+        "providers": {"openrouter": {"provider": "OpenInference"}},
+    })
+    assert "extra_body" not in cfg_mod.resolve_model(cfg)

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
+import pytest
 import yaml
 
 from alpi import config as cfg_mod
@@ -391,3 +393,99 @@ def test_compaction_fits_transcript_to_the_fast_tier_window(
     assert "elided to fit the summarizer window" in seen["prompt"]
     # ~500-token floor × 4 chars + prompt scaffolding: nowhere near the ~180k-char middle.
     assert len(seen["prompt"]) < 10_000
+
+
+def test_provider_pin_refreshes_between_turns(monkeypatch, tmp_path: Path) -> None:
+    data = {
+        "model": "openrouter/deepseek/deepseek-v4-flash-0731",
+        "providers": {"openrouter": {"provider": {"order": ["old"]}}},
+    }
+    eng = _make_engine(monkeypatch, tmp_path, data)
+    assert cfg_mod.resolve_model(eng.cfg)["extra_body"]["provider"] == {"order": ["old"]}
+
+    data["providers"]["openrouter"]["provider"] = {"order": ["new"], "allow_fallbacks": False}
+    (eng.home / "config.yaml").write_text(yaml.safe_dump(data))
+    eng._refresh_turn_config()
+
+    assert cfg_mod.resolve_model(eng.cfg)["extra_body"]["provider"] == {
+        "order": ["new"], "allow_fallbacks": False,
+    }
+
+
+def test_cost_trail_covers_main_loop_wrap_and_tool_calls(monkeypatch, tmp_path: Path) -> None:
+    """usd books the main loop, the forced close and tool calls, so one real turn must trail all three."""
+    from alpi import run_ledger
+    from alpi.tools import _state as tool_state_mod
+    from alpi.tools.base import ToolResult
+
+    engine = _make_engine(monkeypatch, tmp_path, {
+        "model": "openrouter/x/y", "tools": {"max_steps_per_turn": 1},
+    })
+
+    def script(idx, _kw):
+        if idx == 0:
+            return {
+                "final": True, "input_tokens": 10, "output_tokens": 5,
+                "cost_usd": 0.06, "cost_source": "table-base",
+                "generation_id": "gen-main", "provider": None,
+                "tool_calls": [{"id": "t0", "name": "search", "arguments": "{}"}],
+                "_text": "",
+            }
+        return {
+            "final": True, "input_tokens": 20, "output_tokens": 8,
+            "cost_usd": 0.50, "cost_source": "provider",
+            "generation_id": "gen-wrap", "provider": "OpenInference",
+            "tool_calls": [], "_text": "final answer",
+        }
+
+    _scripted_stream(monkeypatch, script)
+
+    def execute(name, args, deny=frozenset()):
+        tool_state_mod.record_usage(
+            5, 2, 0.01, None, None, "provider",
+            provider="DeepInfra", generation_id="gen-tool",
+        )
+        return ToolResult(ok=True, output="tool output")
+
+    monkeypatch.setattr("alpi.tools.execute", execute)
+    engine.run_turn("hi", emit=lambda _e: None)
+
+    trail = engine._turn_cost_trail
+    assert trail["generation_id"] == ["gen-main", "gen-tool", "gen-wrap"]
+    assert trail["cost_source"] == ["table-base", "provider"]
+    assert trail["provider"] == ["DeepInfra", "OpenInference"]
+
+    row = run_ledger.read(engine.home)[0]
+    assert row["generation_id"] == "gen-main,gen-tool,gen-wrap"
+    assert row["cost_source"] == "table-base,provider"
+    assert row["provider"] == "DeepInfra,OpenInference"
+    assert row["usd"] == pytest.approx(0.57)
+
+
+def test_cost_trail_covers_compaction_side_calls(monkeypatch, tmp_path: Path) -> None:
+    """Compaction books spend through its own side-call path, so that callback must trail it too."""
+    from alpi import compaction
+
+    engine = _make_engine(monkeypatch, tmp_path, {"model": "openrouter/x/y"})
+    monkeypatch.setattr("alpi.llm.complete", lambda **kw: SimpleNamespace(
+        content="summary", tool_calls=[], input_tokens=900, output_tokens=40,
+        cost_usd=0.02, raw=None, cached_tokens=0, cache_discount=None,
+        cost_source="provider", provider="OpenInference", generation_id="gen-compact",
+    ))
+    summaries: list[str] = []
+
+    def fake_compact(messages, user_text, ctx_window, summarize, policy=None, force=False):
+        summaries.append(summarize("a transcript", 500))
+        return list(messages), compaction.CompactionResult(
+            fired=False, tool_truncated=0, summarized_messages=0,
+            tokens_before=0, tokens_after=0,
+        )
+
+    monkeypatch.setattr("alpi.compaction.compact", fake_compact)
+    engine.compact_now(emit=lambda _e: None)
+
+    assert summaries == ["summary"]
+    trail = engine._turn_cost_trail
+    assert trail["generation_id"] == ["gen-compact"]
+    assert trail["provider"] == ["OpenInference"]
+    assert trail["cost_source"] == ["provider"]

@@ -1,5 +1,44 @@
 # Changelog
 
+## v0.14.32 — 2026-09-10 — pin the endpoint, record what answered
+
+- **OpenRouter routing can be pinned per profile.** `providers.openrouter.provider`
+  is passed through untouched as the request's `provider` object, so `order`,
+  `only`, `ignore`, `quantizations`, `sort`, `allow_fallbacks` and
+  `require_parameters` all reach the API. One slug is served by many upstream
+  endpoints that differ in quantization, tokenizer, context window and price;
+  without a pin OpenRouter balances across them and two runs of the same prompt
+  are not comparable. `allow_fallbacks: false` is the load-bearing field, because
+  otherwise a 429 on the chosen endpoint re-routes in silence. Naming a provider
+  narrows the choice without freezing it — one provider can publish several
+  endpoints for the same slug and change them over time — so this buys much less
+  variance, not a byte-identical runtime. The pin applies to the profile model, to
+  tier models and to explicit model overrides, it coexists with the reasoning block
+  already sent in `extra_body`, and a mid-session edit takes effect on the next
+  turn like the rest of the per-turn config.
+
+- **The run ledger records the cost trail.** Each row in `runs.jsonl` now carries
+  the turn's `usd`, the `cost_source` that produced it, the served `provider` and
+  OpenRouter's `generation_id`. LiteLLM rebuilds streaming chunks without the
+  provider field, so agent turns record the generation id and a null provider;
+  the id is enough to recover provider, endpoint and the real charge afterwards.
+  Non-streaming calls record the provider directly. The identity is collected on
+  every path that also books spend — the main loop, the forced wrap-up close, tool
+  calls through the usage sink, and compaction side calls — so the row's `usd` and
+  its trail describe the same set of requests. The generation id never passes
+  through the output-tail redactor, which would mask it as a blob, and the field is
+  trimmed by whole ids so a surviving id is always one you can look up. The usage
+  sink that tools report through now carries the same two fields; it is invoked
+  exactly once per call, because retrying a callback that may already have written
+  to the session and the ledger would double-book the spend.
+
+- **A Nitro cost estimated from the base tariff says so.** When the catalog has no
+  `:nitro` row the fallback still prices the call at the base rate, but tags it
+  `table-base` instead of `table`. The base rate is the cheapest endpoint's, and
+  measurements against live Nitro calls came in 1.45x to 6.5x below the real
+  charge, so the two estimates must not share a label in the cost-source
+  histogram. Reported provider cost is unaffected and still wins.
+
 ## v0.14.31 — 2026-09-10 — project clones carry only what the hotel needs
 
 - **Recipes can exclude template paths from the clone.** A `project.exclude`

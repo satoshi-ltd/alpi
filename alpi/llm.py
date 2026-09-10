@@ -48,6 +48,8 @@ class Completion:
     cache_write_tokens: int | None = None
     cache_discount: float | None = None
     cost_source: str = ""
+    generation_id: str | None = None
+    provider: str | None = None
 
 
 def _cached_tokens(usage: Any) -> int | None:
@@ -252,13 +254,16 @@ def _compute_cost_detail(resp, model: str) -> tuple[float, str]:
         prices = _openrouter_pricing()
         slug = model.split("/", 1)[1]
         price = prices.get(slug)
+        source = "table"
         if price is None and slug.endswith(":nitro"):
+            # The catalog publishes no :nitro tariff, so this is the base rate of the cheapest endpoint — measured 1.45x-6.5x below the real charge.
             price = prices.get(slug.removesuffix(":nitro"))
+            source = "table-base"
         u = getattr(resp, "usage", None)
         if price and u is not None:
             pin = getattr(u, "prompt_tokens", 0) or 0
             pout = getattr(u, "completion_tokens", 0) or 0
-            return pin * price[0] + pout * price[1], "table"
+            return pin * price[0] + pout * price[1], source
     return 0.0, "none"
 
 
@@ -479,9 +484,16 @@ def _normalize_chunk(chunk, tool_calls_accum: dict) -> dict | None:
     }
 
 
-def _final_chunk(last_chunk, tool_calls_accum: dict, model: str) -> dict:
+def _identity(resp) -> tuple[str | None, str | None]:
+    gen_id = getattr(resp, "id", None) if resp is not None else None
+    provider = getattr(resp, "provider", None) if resp is not None else None
+    return (str(gen_id) if gen_id else None, str(provider) if provider else None)
+
+
+def _final_chunk(last_chunk, tool_calls_accum: dict, model: str, provider: str | None = None) -> dict:
     usage = getattr(last_chunk, "usage", None) if last_chunk else None
     cost, cost_source = _compute_cost_detail(last_chunk, model)
+    gen_id, chunk_provider = _identity(last_chunk)
     final_tool_calls = [
         {"id": v["id"], "name": v["name"], "arguments": v["arguments"]}
         for _, v in sorted(tool_calls_accum.items())
@@ -496,6 +508,8 @@ def _final_chunk(last_chunk, tool_calls_accum: dict, model: str) -> dict:
         "cache_write_tokens": _cache_write_tokens(usage),
         "cache_discount": _cache_discount(usage),
         "cost_source": cost_source,
+        "generation_id": gen_id,
+        "provider": provider or chunk_provider,
     }
 
 
@@ -592,6 +606,8 @@ def stream(
         visible = False
         tool_calls_accum: dict[int, dict[str, str]] = {}
         last_chunk = None
+        # The usage-only final chunk carries no provider, so latch it from the content chunks of THIS attempt.
+        served_provider: str | None = None
         started = _breadcrumb("request start", f"model={model} attempt={attempt}")
         first_delta_at: float | None = None
         try:
@@ -600,6 +616,7 @@ def stream(
                 stream_iter, first_byte, idle, max_duration, absolute_deadline,
             ):
                 last_chunk = chunk
+                served_provider = served_provider or getattr(chunk, "provider", None)
                 norm = _normalize_chunk(chunk, tool_calls_accum)
                 if norm is None:
                     continue
@@ -614,7 +631,7 @@ def stream(
                     visible = True
                 yield norm
             _breadcrumb("stream end", f"model={model} total={_dt(started)}")
-            yield _final_chunk(last_chunk, tool_calls_accum, model)
+            yield _final_chunk(last_chunk, tool_calls_accum, model, served_provider)
             return
         except Exception as exc:  # noqa: BLE001
             _breadcrumb(
@@ -683,6 +700,7 @@ def complete(
     usage = getattr(response, "usage", None)
 
     cost, cost_source = _compute_cost_detail(response, model)
+    gen_id, provider = _identity(response)
 
     raw_calls = getattr(choice, "tool_calls", None) or []
     tool_calls = [
@@ -705,4 +723,6 @@ def complete(
         cache_write_tokens=_cache_write_tokens(usage),
         cache_discount=_cache_discount(usage),
         cost_source=cost_source,
+        generation_id=gen_id,
+        provider=provider,
     )

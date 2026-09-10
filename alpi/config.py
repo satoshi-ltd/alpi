@@ -711,7 +711,24 @@ def resolve_model(
         extra = reasoning_kwargs(model_str, cfg.model_reasoning.effort)
         if extra:
             out = merge_into_kwargs(out, extra)
+    prefs = openrouter_provider_prefs(cfg, model_str)
+    if prefs:
+        from alpi.providers.reasoning import merge_into_kwargs
+        out = merge_into_kwargs(out, {"extra_body": {"provider": prefs}})
     return out
+
+
+def openrouter_provider_prefs(cfg: Config, model: str) -> dict[str, Any]:
+    """OpenRouter routing preferences (order/quantizations/allow_fallbacks/...) for `model`, or {} when unset.
+
+    Without a pin OpenRouter balances across every endpoint of a slug, which vary in
+    quantization, tokenizer and price, so two runs of the same prompt are not comparable.
+    """
+    if not str(model).startswith("openrouter/"):
+        return {}
+    section = cfg.providers.get("openrouter")
+    prefs = section.get("provider") if isinstance(section, dict) else None
+    return dict(prefs) if isinstance(prefs, dict) and prefs else {}
 
 
 DEFAULT_HOME_ACTIVE_WORKGROUPS = 5

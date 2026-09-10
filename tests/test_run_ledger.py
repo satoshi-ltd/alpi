@@ -386,3 +386,45 @@ def test_engine_record_run_without_measured_turns_stays_tristate(
     assert row["tokens_cached"] is None
     assert row["tokens_measured"] is None
     assert row["cache_diag"] is None, "diagnosis only accompanies measured turns"
+
+
+def test_record_keeps_cost_provider_and_generation_id(home: Path) -> None:
+    run_ledger.record(
+        home, kind="agent", outcome="ok", elapsed_s=1.0,
+        usd=4.2966e-05, cost_source="provider", provider="OpenInference",
+        generation_id="gen-1789000023-QWErEBRKkhQRzrApGTgy",
+    )
+    row = run_ledger.read(home)[0]
+    assert row["usd"] == 4.2966e-05
+    assert row["cost_source"] == "provider"
+    assert row["provider"] == "OpenInference"
+    assert row["generation_id"] == "gen-1789000023-QWErEBRKkhQRzrApGTgy"
+
+
+def test_record_defaults_cost_fields_to_none(home: Path) -> None:
+    run_ledger.record(home, kind="agent", outcome="ok", elapsed_s=1.0)
+    row = run_ledger.read(home)[0]
+    assert row["usd"] is None
+    assert row["cost_source"] is None
+    assert row["provider"] is None
+    assert row["generation_id"] is None
+
+
+def test_generation_ids_are_never_cut_mid_id(home: Path) -> None:
+    ids = [f"gen-178900002{i}-QWErEBRKkhQRzrApGTgy" for i in range(8)]
+    run_ledger.record(
+        home, kind="agent", outcome="ok", elapsed_s=1.0, generation_id=",".join(ids),
+    )
+    stored = run_ledger.read(home)[0]["generation_id"].split(",")
+    assert stored == ids
+
+
+def test_generation_ids_drop_whole_ids_past_the_cap(home: Path) -> None:
+    ids = [f"gen-{i}-" + "x" * 90 for i in range(8)]
+    run_ledger.record(
+        home, kind="agent", outcome="ok", elapsed_s=1.0, generation_id=",".join(ids),
+    )
+    stored = run_ledger.read(home)[0]["generation_id"].split(",")
+    assert stored == ids[:len(stored)]
+    assert all(s in ids for s in stored)
+    assert len(",".join(stored)) <= run_ledger.MAX_ID_FIELD_CHARS

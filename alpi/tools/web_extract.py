@@ -97,12 +97,7 @@ class WebExtract(Tool):
                 )
                 out = llm.complete(messages=messages, **override_kwargs)
                 from alpi.tools import _state as tool_state_mod
-                tool_state_mod.record_usage(
-                    out.input_tokens, out.output_tokens, out.cost_usd,
-                    getattr(out, "cached_tokens", None),
-                    getattr(out, "cache_discount", None),
-                    getattr(out, "cost_source", None),
-                )
+                tool_state_mod.record_completion_usage(out)
                 content = (out.content or "").strip() or "(empty extraction)"
                 return ToolResult(ok=True, output=content)
             except Exception as e:  # noqa: BLE001
@@ -118,12 +113,7 @@ class WebExtract(Tool):
                 err = f"{first_error}; then {err}"
             return ToolResult(ok=False, output="", error=err)
         from alpi.tools import _state as tool_state_mod
-        tool_state_mod.record_usage(
-            out.input_tokens, out.output_tokens, out.cost_usd,
-            getattr(out, "cached_tokens", None),
-            getattr(out, "cache_discount", None),
-            getattr(out, "cost_source", None),
-        )
+        tool_state_mod.record_completion_usage(out)
 
         content = (out.content or "").strip() or "(empty extraction)"
         # If we fell back, surface that in the output prefix so the user knows.

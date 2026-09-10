@@ -182,6 +182,7 @@ class Engine:
         self._prefix_shape = None
         self._prefix_shape_loaded = False
         self._turn_prefix_reasons: set[str] = set()
+        self._turn_cost_trail: dict[str, list[str]] = {}
         self._expected_rewrite: str = ""
         self._last_relay_peer: str = ""
         self.last_host_context: str = ""
@@ -271,6 +272,7 @@ class Engine:
         self._prefix_shape = None
         self._prefix_shape_loaded = False
         self._turn_prefix_reasons = set()
+        self._turn_cost_trail = {}
         self._expected_rewrite = "reset"
         self.last_host_context = ""
 
@@ -385,6 +387,18 @@ class Engine:
             reset_active_session(session_token)
             reset_active_home(home_token)
 
+    def _note_cost_trail(
+        self, *, cost_source: Any = None, provider: Any = None, generation_id: Any = None,
+    ) -> None:
+        for key, value in (
+            ("cost_source", cost_source), ("provider", provider), ("generation_id", generation_id),
+        ):
+            if not value:
+                continue
+            sink = self._turn_cost_trail.setdefault(key, [])
+            if str(value) not in sink:
+                sink.append(str(value))
+
     def _refresh_turn_config(self) -> None:
         from alpi import config as config_mod
 
@@ -400,6 +414,7 @@ class Engine:
         self.cfg.tiers = fresh.tiers
         self.cfg.fallback_models = fresh.fallback_models
         self.cfg.relay = fresh.relay
+        self.cfg.providers = fresh.providers
 
     def _run_turn_locked(
         self, user_text: str, emit: EventSink, *, source: str = "user",
@@ -494,6 +509,7 @@ class Engine:
         _wg_state.reset_turn_usage()
         _wg_state.snapshot_write_scope()
         self._turn_prefix_reasons = set()
+        self._turn_cost_trail = {}
         _wg_state.reset_skill_env()
         _wg_state.reset_turn_attachments()
 
@@ -798,6 +814,11 @@ class Engine:
                     cost_source=final.get("cost_source"),
                     cfg_budget=self.cfg.budget,
                 )
+                self._note_cost_trail(
+                    cost_source=final.get("cost_source"),
+                    provider=final.get("provider"),
+                    generation_id=final.get("generation_id"),
+                )
                 self.session.last_ctx_tokens = int(final.get("input_tokens", 0))
 
                 emit(AgentEvent(
@@ -953,7 +974,12 @@ class Engine:
                     cached: int | None = None,
                     discount: float | None = None,
                     source: str | None = None,
+                    provider: str | None = None,
+                    generation_id: str | None = None,
                 ) -> None:
+                    self._note_cost_trail(
+                        cost_source=source, provider=provider, generation_id=generation_id,
+                    )
                     self.session.record(
                         input_tokens=in_tok, output_tokens=out_tok, cost=cost,
                         cached_input_tokens=cached,
@@ -1336,6 +1362,11 @@ class Engine:
                             cost_source=wrap_final.get("cost_source"),
                             cfg_budget=self.cfg.budget,
                         )
+                        self._note_cost_trail(
+                            cost_source=wrap_final.get("cost_source"),
+                            provider=wrap_final.get("provider"),
+                            generation_id=wrap_final.get("generation_id"),
+                        )
                         self.session.last_ctx_tokens = int(wrap_final.get("input_tokens", 0))
                         emit(AgentEvent(
                             kind="usage",
@@ -1583,6 +1614,7 @@ class Engine:
             from alpi.tools import _state as _tally_mod
             tally = _tally_mod.get_turn_usage() or {}
             measured = int(tally.get("measured_in", 0) or 0)
+            trail = getattr(self, "_turn_cost_trail", None) or {}
             run_ledger.record(
                 self.home,
                 kind=kind,
@@ -1605,6 +1637,10 @@ class Engine:
                     ",".join(sorted(getattr(self, "_turn_prefix_reasons", None) or ()))
                     if measured > 0 else None
                 ) or None,
+                usd=float(tally.get("usd", 0.0) or 0.0),
+                cost_source=",".join(trail.get("cost_source") or ()) or None,
+                provider=",".join(trail.get("provider") or ()) or None,
+                generation_id=",".join((trail.get("generation_id") or ())[-8:]) or None,
             )
         except Exception:  # noqa: BLE001
             pass
@@ -1671,6 +1707,11 @@ class Engine:
             )
             from alpi.tools import _state as _wg_state
             _wg_state.bump_turn_usage(tokens_in, tokens_out, cost, cached)
+            self._note_cost_trail(
+                cost_source=getattr(out, "cost_source", None),
+                provider=getattr(out, "provider", None),
+                generation_id=getattr(out, "generation_id", None),
+            )
             _ledger.record_completion(self.home, out, cfg_budget=self.cfg.budget)
             emit(AgentEvent(
                 kind="usage", tokens_in=tokens_in, tokens_out=tokens_out,

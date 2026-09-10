@@ -16,6 +16,8 @@ except ImportError:  # pragma: no cover
     fcntl = None
 
 MAX_RUNS = 1000
+# Holds the eight generation ids the engine keeps per turn without cutting one in half.
+MAX_ID_FIELD_CHARS = 400
 TAIL_CAP = 280
 
 KINDS = frozenset({"agent", "schedule", "workgroup", "terminal"})
@@ -68,6 +70,29 @@ class RunRecord:
     tokens_measured: int | None = None
     # Comma-joined prefix_diag reasons for measured turns; "none" = bytes were stable locally, look at TTL/routing instead.
     cache_diag: str | None = None
+    usd: float | None = None
+    # Comma-joined per-turn values: cost_source says whether usd was charged or estimated; provider and generation_id identify the endpoint that served the run.
+    cost_source: str | None = None
+    provider: str | None = None
+    generation_id: str | None = None
+
+
+# A partial generation id cannot be looked up, so drop whole ids rather than cutting one.
+def _clamp_ids(value: str | None, limit: int = MAX_ID_FIELD_CHARS) -> str | None:
+    if not value:
+        return None
+    kept: list[str] = []
+    total = 0
+    for part in str(value).split(","):
+        part = part.strip()
+        if not part:
+            continue
+        extra = len(part) + (1 if kept else 0)
+        if total + extra > limit:
+            break
+        kept.append(part)
+        total += extra
+    return ",".join(kept) or None
 
 
 def store_path(home: Path) -> Path:
@@ -115,6 +140,10 @@ def record(
     tokens_cached: int | None = None,
     tokens_measured: int | None = None,
     cache_diag: str | None = None,
+    usd: float | None = None,
+    cost_source: str | None = None,
+    provider: str | None = None,
+    generation_id: str | None = None,
 ) -> None:
     # Best-effort: coercions are inside the try so a malformed caller value can't escape.
     try:
@@ -148,6 +177,11 @@ def record(
             tokens_cached=int(tokens_cached) if tokens_cached is not None else None,
             tokens_measured=int(tokens_measured) if tokens_measured is not None else None,
             cache_diag=(str(cache_diag)[:200] or None) if cache_diag else None,
+            usd=round(float(usd), 10) if usd is not None else None,
+            cost_source=(str(cost_source)[:80] or None) if cost_source else None,
+            provider=(str(provider)[:120] or None) if provider else None,
+            # Never route through _clamp_tail: _BLOB_RE masks any 32+ char token and would destroy a gen- id.
+            generation_id=_clamp_ids(generation_id),
         )
         path = store_path(home)
         with _lock, _interproc_lock(path):
