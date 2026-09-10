@@ -395,23 +395,6 @@ def test_compaction_fits_transcript_to_the_fast_tier_window(
     assert len(seen["prompt"]) < 10_000
 
 
-def test_provider_pin_refreshes_between_turns(monkeypatch, tmp_path: Path) -> None:
-    data = {
-        "model": "openrouter/deepseek/deepseek-v4-flash-0731",
-        "providers": {"openrouter": {"provider": {"order": ["old"]}}},
-    }
-    eng = _make_engine(monkeypatch, tmp_path, data)
-    assert cfg_mod.resolve_model(eng.cfg)["extra_body"]["provider"] == {"order": ["old"]}
-
-    data["providers"]["openrouter"]["provider"] = {"order": ["new"], "allow_fallbacks": False}
-    (eng.home / "config.yaml").write_text(yaml.safe_dump(data))
-    eng._refresh_turn_config()
-
-    assert cfg_mod.resolve_model(eng.cfg)["extra_body"]["provider"] == {
-        "order": ["new"], "allow_fallbacks": False,
-    }
-
-
 def test_cost_trail_covers_main_loop_wrap_and_tool_calls(monkeypatch, tmp_path: Path) -> None:
     """usd books the main loop, the forced close and tool calls, so one real turn must trail all three."""
     from alpi import run_ledger
@@ -489,3 +472,41 @@ def test_cost_trail_covers_compaction_side_calls(monkeypatch, tmp_path: Path) ->
     assert trail["generation_id"] == ["gen-compact"]
     assert trail["provider"] == ["OpenInference"]
     assert trail["cost_source"] == ["provider"]
+
+
+def test_interactive_turn_does_not_replay_visible_text(monkeypatch, tmp_path: Path) -> None:
+    engine = _make_engine(monkeypatch, tmp_path, {"model": "openrouter/x/y"})
+    monkeypatch.delenv("ALPI_SCHEDULE_CHILD", raising=False)
+    monkeypatch.delenv("ALPI_WORKGROUP_DISPATCH", raising=False)
+    calls = _scripted_stream(monkeypatch, lambda i, kw: _final_chunk("hola"))
+    engine.run_turn("hi", emit=lambda _e: None)
+    assert calls[0]["replay_visible"] is False
+
+
+def test_scheduled_turn_replays_so_a_stall_stays_retryable(monkeypatch, tmp_path: Path) -> None:
+    """Nobody is watching a cron run, so replaying already-streamed text costs nothing and the retry gate opens."""
+    engine = _make_engine(monkeypatch, tmp_path, {"model": "openrouter/x/y"})
+    monkeypatch.setenv("ALPI_SCHEDULE_CHILD", "1")
+    calls = _scripted_stream(monkeypatch, lambda i, kw: _final_chunk("hola"))
+    engine.run_turn("hi", emit=lambda _e: None)
+    assert calls[0]["replay_visible"] is True
+
+
+def test_forced_close_also_replays_when_unattended(monkeypatch, tmp_path: Path) -> None:
+    from alpi.tools.base import ToolResult
+
+    engine = _make_engine(monkeypatch, tmp_path, {
+        "model": "openrouter/x/y", "tools": {"max_steps_per_turn": 1},
+    })
+    monkeypatch.setenv("ALPI_SCHEDULE_CHILD", "1")
+    calls = _scripted_stream(monkeypatch, lambda i, kw: (
+        _final_chunk("", [{"id": "t0", "name": "search", "arguments": "{}"}]) if i == 0
+        else _final_chunk("done")
+    ))
+    monkeypatch.setattr(
+        "alpi.tools.execute",
+        lambda name, args, deny=frozenset(): ToolResult(ok=True, output="ok"),
+    )
+    engine.run_turn("hi", emit=lambda _e: None)
+    assert len(calls) >= 2
+    assert all(c["replay_visible"] is True for c in calls)

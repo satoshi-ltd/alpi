@@ -147,6 +147,11 @@ def _relay_fallback(peer: str) -> str:
     return f"I can only answer using '{peer}' and couldn't consult it for this. Please try again."
 
 
+def _unattended() -> bool:
+    """No live observer, so replaying already-streamed text costs nothing and a transient stall stays retryable."""
+    return bool(os.environ.get("ALPI_SCHEDULE_CHILD") or os.environ.get("ALPI_WORKGROUP_DISPATCH"))
+
+
 class Engine:
     def __init__(self, home: Path, cfg: cfg_mod.Config):
         from alpi.host.connection_context import ConnectionContext, current
@@ -414,7 +419,6 @@ class Engine:
         self.cfg.tiers = fresh.tiers
         self.cfg.fallback_models = fresh.fallback_models
         self.cfg.relay = fresh.relay
-        self.cfg.providers = fresh.providers
 
     def _run_turn_locked(
         self, user_text: str, emit: EventSink, *, source: str = "user",
@@ -685,7 +689,7 @@ class Engine:
                         for chunk in llm.stream(
                             messages=self.session.messages, tools=schemas,
                             rt=self.cfg.runtime,
-                            replay_visible=bool(dispatch_wg_id),
+                            replay_visible=bool(dispatch_wg_id) or _unattended(),
                             absolute_deadline=turn_deadline, **call_kwargs,
                         ):
                             if self.interrupt_requested:
@@ -1317,7 +1321,7 @@ class Engine:
                 try:
                     for chunk in llm.stream(
                         messages=wrap_msgs, tools=wrap_tools, rt=self.cfg.runtime,
-                        replay_visible=bool(dispatch_wg_id),
+                        replay_visible=bool(dispatch_wg_id) or _unattended(),
                         absolute_deadline=wrap_deadline, **wrap_call_kwargs,
                     ):
                         if self.interrupt_requested:

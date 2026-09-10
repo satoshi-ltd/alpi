@@ -22,7 +22,7 @@
 | `tiers` | Optional `fast` / `deep` `{model, effort}` slots for dynamic routing; unconfigured tiers resolve to `model`. |
 | `workspace` | Default project root for file/terminal tools. |
 | `budget` | Daily spend limit (USD or tokens, mutually exclusive). |
-| `providers` | Provider-specific saved endpoints/choices. `providers.openrouter.provider` pins OpenRouter routing (`order`, `only`, `ignore`, `quantizations`, `sort`, `allow_fallbacks`, `require_parameters`) and is sent verbatim as `extra_body.provider`. |
+| `providers` | Provider-specific saved endpoints/choices. |
 | `tools` | Sandbox, vision, TTS/STT, approvals, denylist, char budget. |
 | `runtime` | Provider watchdog/retry settings and daemon asset prefetch mode. |
 | `schedule` | Scheduler settings. |
@@ -66,21 +66,6 @@ providers:
       url: http://localhost:11434
 ```
 
-One OpenRouter slug is served by many upstream endpoints differing in quantization, tokenizer, context window and price, and without a pin OpenRouter balances across them. Pin the endpoint whenever outputs are compared across time, such as a scheduled auditor whose findings open and close tickets:
-
-```yaml
-model: openrouter/deepseek/deepseek-v4-flash-0731
-providers:
-  openrouter:
-    provider:
-      order: [OpenInference]
-      quantizations: [fp8]
-      allow_fallbacks: false
-      require_parameters: true
-```
-
-`allow_fallbacks: false` is the load-bearing field: without it a 429 re-routes elsewhere in silence. Naming a provider narrows the choice rather than freezing it, since one provider can publish several endpoints for the same slug and change them over time, so pair `order` with `quantizations` and expect much less variance, not none. `runs.jsonl` records `generation_id` for every turn so the endpoint that actually answered stays recoverable from `GET /api/v1/generation?id=`.
-
 ## Change paths
 
 - `alpi setup` (recommended): model, email, MCPs, sandbox, voice, peers, workgroups, connections, network, budget, cleanup (including completed run journals older than 30 days or beyond 200 MiB per profile, and expired workgroup tombstones), and daemon lifecycle.
@@ -104,7 +89,6 @@ providers:
 | `network.host`, `host.tcp_port`, `alp.tcp_port` | Daemon restart (listeners bind at boot). |
 | `host.device_name` | Next pairing/status (read fresh per call, no restart). |
 | `host.endpoints` | Next pairing code (read fresh per call, no restart). |
-| `providers.openrouter.provider` | Next turn (kwargs are resolved per call). |
 
 ## TTS / voice
 

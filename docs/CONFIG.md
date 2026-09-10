@@ -65,7 +65,6 @@ Three options:
 | `tiers.deep.effort` | `""` | `low` \| `medium` \| `high` — reasoning effort for the deep tier's own model | next turn |
 | `providers.ollama` | `[]` | list of `{name, url}` — one per Ollama server | next session |
 | `providers.openrouter.models` | `[]` | list of OpenRouter model ids the user has picked | next session |
-| `providers.openrouter.provider` | `{}` | dict — OpenRouter routing preferences sent verbatim as `extra_body.provider` for every `openrouter/*` model: `order`, `only`, `ignore`, `quantizations`, `sort`, `allow_fallbacks`, `require_parameters`. Empty = OpenRouter picks any endpoint | next turn |
 | `public_bio` | `""` | string — one-line public tag-line broadcast to every workgroup this profile joins (source of truth for `Member.bio` on the hub). Empty = don't publish; peers see name only. `AGENT.md` stays private. | next `workgroup.join` |
 | `paused` | `false` | bool — profile-level pause flag. Surfaced in the desktop / mobile profile summary so paired apps can show + respect the state; the daemon itself does not gate turns on this flag. Persisted only when `true`. | next host-plane read |
 
@@ -627,27 +626,7 @@ providers:
 
 Add via `alpi setup → Model → Add Ollama`. Remove via `alpi setup → Model → Remove keys`.
 
-### OpenRouter endpoint pinning
-
-A single OpenRouter slug is served by many upstream endpoints that differ in quantization, tokenizer, context window and price. Without a pin, OpenRouter balances across them, so two runs of the same prompt can be served by different hardware at different rates. That is fine for chat and wrong for anything whose output is compared across time, such as a scheduled auditor whose findings open and close tickets.
-
-Naming a provider narrows the choice, it does not freeze it: one provider can publish several endpoints for the same slug, differing in quantization, region or context window, and add or retire them over time. Pair `order` with `quantizations` to cut the widest axis, and treat the pin as a large reduction in variance rather than a guarantee of a byte-identical runtime. See [OpenRouter's provider selection guide](https://openrouter.ai/docs/guides/routing/provider-selection#targeting-specific-provider-endpoints).
-
-`providers.openrouter.provider` is passed through untouched as OpenRouter's provider-preferences object:
-
-```yaml
-providers:
-  openrouter:
-    provider:
-      order: [OpenInference]
-      quantizations: [fp8]
-      allow_fallbacks: false
-      require_parameters: true
-```
-
-`allow_fallbacks: false` is the field that carries the weight: without it a 429 on the pinned endpoint silently re-routes elsewhere. `require_parameters: true` refuses an endpoint that would drop tools or structured output.
-
-The pin declares the intent; `runs.jsonl` records what answered. Agent turns stream, and litellm rebuilds stream chunks without OpenRouter's `provider` field, so those rows carry `generation_id` and a null `provider`; `GET /api/v1/generation?id=<generation_id>` returns `provider_name`, `endpoint_id` and the real `total_cost` after the fact. Non-streaming calls record `provider` directly.
+The run ledger records what answered each turn. Agent turns stream, and litellm rebuilds stream chunks without OpenRouter's `provider` field, so those rows carry `generation_id` and a null `provider`; `GET /api/v1/generation?id=<generation_id>` returns `provider_name`, `endpoint_id` and the real `total_cost` after the fact. Non-streaming calls record `provider` directly.
 
 ### MCP
 

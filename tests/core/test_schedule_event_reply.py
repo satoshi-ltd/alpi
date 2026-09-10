@@ -404,3 +404,97 @@ def test_notify_true_delivers_native_inbox_without_gateway(
     assert "no chat_id" not in payload["message"]
     assert payload.get("output_id")  # a native inbox output was filed
     assert any(k == "output.created" for k, _ in emits)
+
+
+def _proc_emitting(*events: dict):
+    class _Proc:
+        returncode = 0
+        stdout = "\n".join(json.dumps(e) for e in events)
+        stderr = ""
+    return _Proc
+
+
+def test_agent_error_event_fails_the_job_even_with_rc_zero(
+    monkeypatch, tmp_home_no_env: Path,
+) -> None:
+    """The child exits 0 whether the turn died or not, so its error event is the only failure signal."""
+    monkeypatch.setattr(scheduler.subprocess, "run", lambda *a, **kw: _proc_emitting(
+        {"kind": "error", "text": "provider sent no further output within 120s"},
+        {"kind": "reply", "text": ""},
+    )())
+    emits = _capture_emit(monkeypatch)
+    _seed_job(tmp_home_no_env, {
+        "id": "stalled", "kind": "cron", "expression": "* * * * *",
+        "prompt": "write the weekly post", "last_run_at": None,
+    })
+
+    scheduler.tick(tmp_home_no_env)
+
+    assert [e for e in emits if e[0] == "schedule.done"] == []
+    failed = [d for k, d in emits if k == "schedule.failed"]
+    assert len(failed) == 1
+    assert "provider sent no further output" in failed[0]["message"]
+    runs = json.loads((tmp_home_no_env / "schedule" / "runs.json").read_text())
+    assert runs["stalled"]["last_run_status"] == "error"
+
+
+def test_agent_error_without_text_still_fails_the_job(
+    monkeypatch, tmp_home_no_env: Path,
+) -> None:
+    """The engine builds the text from str(exc), which can be empty; presence is the signal, not the message."""
+    monkeypatch.setattr(scheduler.subprocess, "run", lambda *a, **kw: _proc_emitting(
+        {"kind": "error", "text": ""},
+        {"kind": "reply", "text": ""},
+    )())
+    emits = _capture_emit(monkeypatch)
+    _seed_job(tmp_home_no_env, {
+        "id": "quiet", "kind": "cron", "expression": "* * * * *",
+        "prompt": "do the thing", "last_run_at": None,
+    })
+
+    scheduler.tick(tmp_home_no_env)
+
+    failed = [d for k, d in emits if k == "schedule.failed"]
+    assert len(failed) == 1
+    assert "agent error" in failed[0]["message"]
+    assert [e for e in emits if e[0] == "schedule.done"] == []
+
+
+def test_notify_job_with_no_reply_is_a_failure(
+    monkeypatch, tmp_home_no_env: Path,
+) -> None:
+    """A notify job promises to deliver a reply, so an empty one is a broken contract, not a silent success."""
+    monkeypatch.setattr(scheduler.subprocess, "run", lambda *a, **kw: _proc_emitting(
+        {"kind": "reply", "text": ""},
+    )())
+    emits = _capture_emit(monkeypatch)
+    _seed_job(tmp_home_no_env, {
+        "id": "chatty", "kind": "cron", "expression": "* * * * *",
+        "prompt": "report status", "notify": True, "last_run_at": None,
+    })
+
+    scheduler.tick(tmp_home_no_env)
+
+    failed = [d for k, d in emits if k == "schedule.failed"]
+    assert len(failed) == 1
+    assert "no reply" in failed[0]["message"]
+
+
+def test_silent_job_with_no_reply_is_still_ok(
+    monkeypatch, tmp_home_no_env: Path,
+) -> None:
+    """A notify:false job is invited to end with an empty reply; that must stay a success."""
+    monkeypatch.setattr(scheduler.subprocess, "run", lambda *a, **kw: _proc_emitting(
+        {"kind": "reply", "text": ""},
+    )())
+    emits = _capture_emit(monkeypatch)
+    _seed_job(tmp_home_no_env, {
+        "id": "quietly", "kind": "cron", "expression": "* * * * *",
+        "prompt": "tidy up", "last_run_at": None,
+    })
+
+    scheduler.tick(tmp_home_no_env)
+
+    done = [d for k, d in emits if k == "schedule.done"]
+    assert len(done) == 1
+    assert "silent run ok" in done[0]["message"]

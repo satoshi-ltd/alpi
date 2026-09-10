@@ -44,6 +44,9 @@ class ParsedEvents:
     notified_natively: bool
     reply: str
     agent_messages: list[dict]
+    # Presence is tracked apart from the text: the engine builds it from str(exc), which can be empty.
+    errored: bool = False
+    error: str = ""
 
 
 # How often to wake up and check for due jobs. 30s is fine-grained enough
@@ -403,13 +406,19 @@ def run_job(job: dict, home: Path) -> JobOutcome:
     _emit_agent_messages(home, parsed.agent_messages)
     reply = parsed.reply
 
+    # The child exits 0 whether the turn succeeded or died, so its error event is the only failure signal.
+    if parsed.errored:
+        return JobOutcome(False, f"agent error: {parsed.error or 'no message'}")
+
     if parsed.notified_natively:
         # The agent already notified the user (called notify) — don't double-notify the reply.
         return JobOutcome(
             True, "agent notified the user; no duplicate", delivered_to="external",
         )
 
-    if notify_user and reply:
+    if notify_user and not reply:
+        return JobOutcome(False, "agent produced no reply")
+    if notify_user:
         return JobOutcome(True, "notified", reply=reply, delivered_to="alpi")
 
     summary = (reply[:120] + "…") if len(reply) > 120 else reply
@@ -422,6 +431,8 @@ def run_job(job: dict, home: Path) -> JobOutcome:
 def _parse_events(stdout: str) -> ParsedEvents:
     notified_natively = False
     reply = ""
+    errored = False
+    error = ""
     pending: dict[str, list[dict]] = {"notify": []}
     agent_messages: list[dict] = []
     for line in stdout.splitlines():
@@ -445,7 +456,10 @@ def _parse_events(stdout: str) -> ParsedEvents:
                 agent_messages.append(args)
         elif kind == "reply":
             reply = (ev.get("text") or "").strip()
-    return ParsedEvents(notified_natively, reply, agent_messages)
+        elif kind == "error":
+            errored = True
+            error = (ev.get("text") or "").strip()
+    return ParsedEvents(notified_natively, reply, agent_messages, errored, error)
 
 
 def _emit_agent_messages(home: Path, messages: list[dict]) -> None:

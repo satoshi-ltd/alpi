@@ -190,7 +190,7 @@ def test_openrouter_wire_usage_survives_litellm_stream(monkeypatch, reported):
     assert assistant.get('reasoning_content', assistant.get('reasoning')) == 'Previous reasoning.'
 
 
-def test_provider_pin_reaches_the_request_body(monkeypatch):
+def test_extra_body_reaches_the_request_and_identity_comes_back(monkeypatch):
     import json
     import httpx
     import alpi.llm as llm
@@ -210,13 +210,13 @@ def test_provider_pin_reaches_the_request_body(monkeypatch):
         return httpx.Response(200, request=request, headers={'content-type': 'text/event-stream'}, content=body.encode())
 
     monkeypatch.setattr(httpx.Client, 'send', send)
-    pin = {'order': ['OpenInference'], 'quantizations': ['fp8'], 'allow_fallbacks': False}
+    extra = {'session_id': 'alpi-test'}
     final = list(llm.stream(
         messages=[{'role': 'user', 'content': 'test'}], tools=[],
         model='openrouter/deepseek/deepseek-v4-flash-0731', api_key='local-test-only',
-        extra_body={'provider': pin},
+        extra_body=extra,
     ))[-1]
-    assert captured[0]['provider'] == pin
+    assert captured[0]['session_id'] == 'alpi-test'
     assert captured[0]['usage'] == {'include': True}
     assert final['generation_id'] == 'gen-pin-test'
     assert final['cost_source'] == 'provider'

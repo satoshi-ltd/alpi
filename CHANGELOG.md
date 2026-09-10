@@ -1,5 +1,46 @@
 # Changelog
 
+## v0.14.33 — 2026-09-10 — a failed run says so, and the unused pin goes
+
+- **The scheduler no longer records a dead turn as `ok`.** The child process exits 0
+  whether its turn succeeded or died, and `_parse_events` had no branch for the `error`
+  event the child emits, so a turn that ended in a provider stall reached the operator as
+  `last_run_status: "ok"` with an output tail of "silent run ok". A real weekly job failed
+  this way twice in a row, three weeks apart, with the work written to disk and never
+  published, and nothing anywhere said so. The error event is now carried through and
+  turns the run into a failure, which is all the existing alert machinery needed. Presence
+  is tracked separately from the message because the engine builds that text from
+  `str(exc)`, which can be empty. A `notify: true` job that produces no reply is also a
+  failure now: its prompt header promises a delivered reply, so an empty one is a broken
+  contract rather than a quiet success. A `notify: false` job may still finish silently.
+
+- **A transient stall is retried when nobody is watching.** `llm.stream` refuses to retry
+  once visible text has been emitted, because replaying it would duplicate output in front
+  of a reader. Scheduled and workgroup-dispatched turns have no reader, and they were
+  bound to the workgroup case alone, so a cron run that stalled twelve seconds after its
+  first token died with two retries unspent and most of its budget unused. Both stream
+  paths, the main loop and the forced wrap-up close, now allow the replay for unattended
+  runs. Interactive turns are unchanged.
+
+- **OpenRouter endpoint pinning is removed.** `providers.openrouter.provider`, introduced
+  in v0.14.32, rested on the theory that pinning a provider would make weekly re-audits
+  comparable. Measured on one real auditor — a single agent, model and repository, so
+  read it as that case and not as a verdict on pinning in general — it did not pay: one
+  pinned endpoint (fp8) put the agent in a scan-and-reread loop that never produced a
+  report, and the other (bf16) delivered an equivalent verdict, the same two findings
+  with the same severities and classifications and no false positives, for 1.8x the cost
+  and 4x the wall time. Free routing produced the correct result in eleven minutes for
+  eight cents. A key nothing sets is a liability in the config surface, so it goes,
+  together with its plumbing in `resolve_model`, the per-turn refresh of `cfg.providers`
+  it required, and its documentation. The experiment was cheap and its answer is recorded
+  here; bringing the key back is a small change if another model behaves differently.
+
+- **The cost trail stays, because it is what settled the question.** `runs.jsonl` keeps
+  recording each turn's `usd`, its `cost_source`, the served `provider` and OpenRouter's
+  `generation_id`, collected across every path that books spend. Those fields are how
+  the two configurations above were compared at all: before them the run ledger carried
+  no cost figure, and the generation id is what proved which endpoint actually answered.
+
 ## v0.14.32 — 2026-09-10 — pin the endpoint, record what answered
 
 - **OpenRouter routing can be pinned per profile.** `providers.openrouter.provider`
