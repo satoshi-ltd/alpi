@@ -9,11 +9,13 @@ export default function DialogFooter({
   destructive = false,
   onCancel,
   cancelLabel,
+  leading,
 }) {
   const hasPrimary = Boolean(primaryLabel);
   const secondaryLabel = cancelLabel || (hasPrimary ? "Cancel" : "Close");
   return (
     <div className={styles.root}>
+      {leading && <span className={styles.leading}>{leading}</span>}
       {onCancel && (
         <Button variant="ghost" onClick={onCancel} disabled={primaryLoading}>
           {secondaryLabel}

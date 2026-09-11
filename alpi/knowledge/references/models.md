@@ -21,6 +21,10 @@ For skill-heavy profiles, quality shows up in routing:
 
 A cheap model can be excellent for status checks yet a bad primary for a many-skill profile.
 
+**Two different hazards, often confused.** A *floating id* redirects: `~vendor/model-latest` resolves to whatever the vendor ships next, so the agent changes underneath a running fleet with no config change and no notice. On OpenRouter every alias carries the `~` prefix, which makes them easy to refuse. A *preview or experimental id* carries a different risk: its endpoint can be withdrawn, and withdrawal is a hard failure rather than a silent swap. Some carry a dated snapshot in `canonical_slug` and some, like `deepseek/deepseek-v3.2-exp`, repeat the id instead, which tells you the id is not visibly pinned but not what it will resolve to tomorrow. Neither hazard is diagnosed by the substring alone: `alias_target` is the reliable test for redirection, a dated `canonical_slug` is evidence of pinning, and the absence of one is only the absence of that evidence. Prefer a dated snapshot; accept an experimental one only where losing it is survivable.
+
+**The advertised context is not your input budget.** A slug's headline window is the ceiling of its best endpoint, and most of these models are also served by 256K endpoints, so the window you actually get depends on routing. Separately, alpi does not offer the whole window as input: `alpi/providers/openrouter_models.yaml` holds a per-model input limit that reserves a reply margin, and `ctx_window` uses that number. Expect the usable figure to be below the advertised one on both counts.
+
 The tables below use **OpenRouter routes** as the primary ID. Native routes also work for Anthropic and OpenAI if you have those provider keys — see the Native routes section at the bottom.
 
 ## Good primary routers
@@ -29,12 +33,14 @@ For profiles with many skills, persistent memory, database state, shell commands
 
 | Model | OpenRouter ID | Notes |
 |---|---|---|
-| DeepSeek V4 Pro | `deepseek/deepseek-v4-pro` | Strong tool discipline at 1M context; sensible flagship-class daily driver. |
-| MiMo V2.5 Pro | `xiaomi/mimo-v2.5-pro` | Strong persistent-agent adoption; 1M context, good price/quality. |
-| MiniMax M3 | `minimax/minimax-m3` | Mid-tier agent model; 512K context. |
+| GLM 5.3 Flash | `z-ai/glm-5.3-flash` | Highest published agentic index of the cheap tier (Artificial Analysis, via OpenRouter, read 2026-09-11); up to 1.25M context, image and video in. Reasoning is mandatory and defaults to `max`, with `low` and `high` also accepted — set `model_reasoning.effort` deliberately. |
+| DeepSeek V4.1 Flash | `deepseek/deepseek-v4.1-flash` | Encoder-decoder architecture with a low cache-read price; suits agents whose system prompt is large and stable. Released 2026-09-10 and not yet scored on the agentic index. |
+| DeepSeek V4 Flash 0731 | `deepseek/deepseek-v4-flash-0731` | Text only, up to 1.25M context, served by a large number of providers. Third by weekly tokens on OpenRouter's public leaderboard (window ending 2026-09-10). |
 | Claude Sonnet 5 | `anthropic/claude-sonnet-5` | Premium daily driver; strongest tool discipline at this tier. |
+| MiMo V2.5 Pro | `xiaomi/mimo-v2.5-pro` | Text only, up to 1M context; scores above the base MiMo on agentic and coding, at about 3x the input price. |
+| MiniMax M3 | `minimax/minimax-m3` | Mid-tier agent model. 1M is the announced ceiling; some endpoints serve 512K or 256K. |
 
-Pick one for a skill-heavy profile: start with DeepSeek V4 Pro, MiMo V2.5 Pro, or Sonnet 5 by budget/provider.
+Pick one for a skill-heavy profile: start with GLM 5.3 Flash or Sonnet 5 by budget/provider. `deepseek/deepseek-v4-pro` is no longer recommended as a daily driver: the bare id is pinned to the 2026-04 build and a measured audit put it behind the flash tier at many times the price.
 
 ## Vision route
 
@@ -50,7 +56,8 @@ For scheduled-job turns, heartbeats, summaries, simple lookups, low-risk command
 
 | Model | OpenRouter ID | Notes |
 |---|---|---|
-| DeepSeek V4 Flash | `~deepseek/deepseek-v4-flash-latest` | Moving alias for the current Flash release at the cheap-fast tier. Prefer it to the obsolete `-0731` snapshot for new profiles. |
+| DeepSeek V4 Flash 0731 | `deepseek/deepseek-v4-flash-0731` | Cheapest model with a real agentic score; 1.25M context, broad provider support. |
+| DeepSeek V4.1 Flash | `deepseek/deepseek-v4.1-flash` | Cheap cache read; the better pick when the prompt is large and mostly unchanged between turns. |
 | MiMo V2.5 | `xiaomi/mimo-v2.5` | Budget sibling to MiMo V2.5 Pro; 1M context. |
 | Claude Haiku 4.5 | `anthropic/claude-haiku-4.5` | Cheap, fast, reasoning support; reliable on short chains. |
 | GPT-5.6 Terra | `openai/gpt-5.6-terra` | Balanced OpenAI; router only when the skill catalog is small and clean. |
@@ -63,7 +70,7 @@ When a wrong tool call is expensive: refactors, code review, long debugging, sch
 | Model | OpenRouter ID | Notes |
 |---|---|---|
 | Claude Fable 5 | `anthropic/claude-fable-5` | Ceiling — next-gen intelligence for long-running agents; most capable widely-released model. |
-| Claude Opus 4.8 | `anthropic/claude-opus-4.8` | Flagship for complex agentic coding and enterprise engineering. |
+| Claude Opus 5 | `anthropic/claude-opus-5` | Flagship for complex agentic coding and enterprise engineering; supersedes Opus 4.8 at the same price. |
 | Claude Sonnet 5 | `anthropic/claude-sonnet-5` | Best daily premium balance for coding-heavy profiles. |
 | GPT-5.6 Sol | `openai/gpt-5.6-sol` | OpenAI flagship; leads the coding-agent index, strong general engineering. |
 | Nemotron 3 Super | `nvidia/nemotron-3-super-120b-a12b` | Open-weight engineering option; 256K context. |
@@ -81,7 +88,7 @@ When the user has ANTHROPIC_API_KEY or OPENAI_API_KEY, native routes work and us
 | Provider | OpenRouter route | Native route |
 |---|---|---|
 | Anthropic | `anthropic/claude-fable-5` | `claude-fable-5` |
-| Anthropic | `anthropic/claude-opus-4.8` | `claude-opus-4-8` (hyphens, not dots) |
+| Anthropic | `anthropic/claude-opus-5` | `claude-opus-5` (hyphens, not dots) |
 | Anthropic | `anthropic/claude-sonnet-5` | `claude-sonnet-5` |
 | Anthropic | `anthropic/claude-haiku-4.5` | `claude-haiku-4-5` |
 | OpenAI | `openai/gpt-5.6-sol` | `gpt-5.6-sol` (alias `gpt-5.6`, no prefix) |

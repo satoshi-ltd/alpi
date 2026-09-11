@@ -12,6 +12,7 @@ import yaml
 URL = "https://openrouter.ai/api/v1/models"
 OUT = Path(__file__).resolve().parent.parent / "alpi" / "providers" / "openrouter_models.yaml"
 _OUTPUT_RESERVE = 32_768
+_MAX_RESERVE_FRACTION = 4  # the reply margin never exceeds a quarter of the window
 
 
 def safe_input_limit(model: dict) -> int | None:
@@ -27,8 +28,12 @@ def safe_input_limit(model: dict) -> int | None:
         mc = int(tp.get("max_completion_tokens") or 0)
     except (TypeError, ValueError):
         mc = 0
-    # reserve a modest reply margin, never the provider's theoretical max output
-    reserve = min(_OUTPUT_RESERVE, mc) if mc > 0 else _OUTPUT_RESERVE
+    # Reserve a reply margin that is never the provider's theoretical max output and never
+    # eats the window: a 4K model advertising 3.6K of output would otherwise leave 400 tokens
+    # of input and send every short chat straight into compaction.
+    reserve = min(_OUTPUT_RESERVE, ctx // _MAX_RESERVE_FRACTION)
+    if mc > 0:
+        reserve = min(reserve, mc)
     limit = ctx - reserve
     return limit if limit > 0 else ctx
 

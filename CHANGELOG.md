@@ -1,5 +1,51 @@
 # Changelog
 
+## v0.14.34 — 2026-09-11 — the model catalog stops lying
+
+- **Four curated entries carried wrong facts.** MiniMax M3 was labelled 512K flatly; its
+  announced ceiling is 1,048,576 and its endpoints range from 262,144 to that, with
+  several serving 524,288, so no single number is the context. GLM 5.3 Flash was labelled
+  1M when its ceiling is 1,310,720, and its note said nothing about reasoning being
+  mandatory — it cannot be switched off, and it defaults to `max`, though `low` and `high`
+  are accepted — which is the setting that most affects what a turn costs and how long it
+  takes. StepFun Step 3.7 Flash declared `reasoning: false` when the provider declares
+  reasoning mandatory. Claude Opus 4.8 is superseded by Opus 5 at exactly the same price
+  with a better score on every published index.
+
+- **The picker offered a floating id and the docs recommended it.** `~deepseek/…-latest`
+  redirects to whatever the vendor ships next, so a scheduled fleet changes model with
+  no config change and no notice; `MODELS.md` went further and told operators to prefer
+  it over the "obsolete" `-0731` snapshot, advice that is also self-contradictory
+  because the alias resolves to that very snapshot. The alias is gone from the catalog,
+  the docs now open with the rule that a profile is never pinned to a floating id, and
+  the test that used to require the alias now requires that no curated id carries the
+  `~` prefix. `deepseek/deepseek-v4-flash-0731` joins the list on its merits: the most
+  used model on OpenRouter, the cheapest with a published agentic score, 1.25M context.
+
+- **Notes follow one schema.** Every curated entry now reads
+  `<modalities> · <context> · <distinguishing trait>`, with the modalities taken from
+  the provider's own `input_modalities` rather than from memory. Raw benchmark indices
+  are out: a bare "agentic 56" in a dropdown carries no scale and informs nobody.
+
+- **`deepseek/deepseek-v4.1-flash` is listed**, and `deepseek/deepseek-v4-pro` stays with
+  a note recording that the bare id is pinned to the 2026-04 build — DeepSeek ships
+  refreshes as new ids, so a stable id is also a stale one.
+
+- **A greedy `max_completion_tokens` no longer eats the input budget.** The catalog
+  generator reserved a reply margin capped only at 32,768 and at the provider's declared
+  maximum output, so a 4K model advertising 3.6K of output was recorded as having 400
+  tokens of input and sent every short exchange straight into compaction. The reserve is
+  now also capped at a quarter of the window, and regenerating the catalog corrected 46
+  entries. `scripts/refresh_models.py` gains a test file covering small windows, large
+  windows, a modest declared output, and missing or malformed values.
+
+- **The docs stop overselling context.** An advertised window is the ceiling of a slug's
+  best endpoint — most of these models are also served at 256K — and alpi's own input
+  budget sits below that again because of the reply reserve. Both documents now say so,
+  separate a floating alias, which redirects and is detectable by `alias_target`, from an
+  experimental route, whose endpoint can be withdrawn, correct an inverted claim about
+  the two MiMo variants, and date their comparisons with the source they came from.
+
 ## v0.14.33 — 2026-09-10 — a failed run says so, and the unused pin goes
 
 - **The scheduler no longer records a dead turn as `ok`.** The child process exits 0

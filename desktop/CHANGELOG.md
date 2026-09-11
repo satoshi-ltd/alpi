@@ -11,6 +11,44 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.5.26 — 2026-09-11 — one list for providers, one for models
+
+- **Providers are a dropdown, not a row of pills.** Five pills wrapped onto two lines
+  and said nothing beyond the name. The picker now uses the same dropdown as the
+  reasoning-effort field, full width, ordered by how often a profile needs them:
+  Ollama, OpenRouter, Anthropic, OpenAI, Gemini. Each row carries a caption with how
+  many models alpi curates for that provider, so the count is visible before you spend
+  a key on it; Ollama shows the live model count across configured endpoints instead.
+  A provider whose key is already stored shows its preview, so you can see what you
+  are about to replace. The counts come from a new `provider_catalog` field on the
+  profile **detail** payload, keyed by API-key env var because clients name providers
+  differently — the daemon calls it `google` where this client calls it Gemini.
+  Requires alpi 0.14.34 for the counts; without it the captions fall back to naming
+  what the provider needs.
+
+- **Removing a provider lives with the provider.** The standing CONFIGURED block at the
+  top of the dialog is gone; the Remove action now appears under the provider you have
+  selected, and selecting Ollama lists its endpoints with theirs. One list to read
+  instead of two.
+
+- **Choosing an OpenRouter model is a dropdown too, and the model is now optional.**
+  The grid of model chips grew with every saved model and pushed the dialog past the
+  window; the known models are a dropdown, with an `Enter any slug` action in the label
+  row beside it. That action is not a fallback: alpi curates twelve OpenRouter models
+  and OpenRouter serves several hundred, so typing a slug is the normal way to reach
+  the rest, and the dropdown is labelled `Known models` rather than pretending to be
+  the catalog.
+
+  The model field no longer blocks Save. This dialog configures a provider; the profile's
+  model belongs to the model field. Saving a model still adds it to the provider's list,
+  but it is only promoted to the profile's model when the profile has none — replacing an
+  expired key used to silently move a running profile onto whichever model you happened
+  to pick.
+
+- **Remove sits in the footer.** The destructive action is on the left of the dialog
+  footer, opposite Cancel and Save, and still asks for confirmation. `DialogFooter`
+  gained a `leading` slot for it.
+
 ## v0.5.25 — 2026-09-07 — storage counts run journals
 
 - **The Logs row includes run journals.** `runs/` was the largest directory of

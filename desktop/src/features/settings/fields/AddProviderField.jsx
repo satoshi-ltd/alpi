@@ -117,7 +117,9 @@ function ProviderEditor({ profile, onClose, onSaved }) {
     if (!canSave) return;
     setBusy(true);
     try {
-      const msg = await applyProvider(profile.name, providerValue);
+      const msg = await applyProvider(profile.name, providerValue, {
+        currentModel: profile.model,
+      });
       notify({ message: msg, variant: "success" });
       await onSaved?.();
       onClose?.();
@@ -152,38 +154,28 @@ function ProviderEditor({ profile, onClose, onSaved }) {
     }
   }
 
-  const hasAnyConfigured = configured.length > 0 || ollamas.length > 0;
+  const selectedPaid = PAID_PROVIDERS.find((p) => p.id === providerValue.id);
+  const selectedConfigured =
+    selectedPaid && configuredEnvs.has(selectedPaid.env) ? selectedPaid : null;
+  const showOllamaEndpoints = providerValue.id === "ollama" && ollamas.length > 0;
 
   return (
     <>
-      {hasAnyConfigured && (
-        <div className={styles.field}>
-          <Eyebrow as="label">configured</Eyebrow>
+      <div className={styles.field}>
+        <Eyebrow as="label">providers</Eyebrow>
+        <ProviderPickerForm
+          value={providerValue}
+          onChange={setProviderValue}
+          configuredEnvs={configuredEnvs}
+          configuredPreviews={configuredPreviews}
+          savedOpenRouterModels={savedOpenRouterModels}
+          ollamaModelCount={Object.values(ollamaCounts).reduce((a, b) => a + b, 0)}
+          ollamaEndpointCount={ollamas.length}
+          providerCatalog={profile.provider_catalog}
+          autoFocusFirstField
+        />
+        {showOllamaEndpoints && (
           <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
-            {PAID_PROVIDERS.filter((p) => configuredEnvs.has(p.env)).map((p) => {
-              const preview =
-                configured.find((k) => k.env === p.env)?.preview ?? "";
-              return (
-                <span
-                  key={p.env}
-                  className={`${styles.inlineRow} ${styles.inlineRowSpaceBetween}`}
-                >
-                  <span>
-                    <strong>{p.label}</strong>{" "}
-                    <span className={`${styles.muted} ${styles.mono}`}>
-                      · {preview}
-                    </span>
-                  </span>
-                  <ConfirmDeleteAction
-                    label="Remove"
-                    title={`Remove ${p.label} provider?`}
-                    consequence="The stored API key is wiped. You can add it again any time."
-                    confirmLabel="Remove"
-                    onConfirm={() => removePaid(p.env, p.label)}
-                  />
-                </span>
-              );
-            })}
             {ollamas.map((o) => {
               const count = ollamaCounts[o.name];
               const err = ollamaErrors[o.name];
@@ -218,22 +210,21 @@ function ProviderEditor({ profile, onClose, onSaved }) {
               );
             })}
           </div>
-        </div>
-      )}
-
-      <div className={styles.field}>
-        <Eyebrow as="label">add new</Eyebrow>
-        <ProviderPickerForm
-          value={providerValue}
-          onChange={setProviderValue}
-          configuredEnvs={configuredEnvs}
-          configuredPreviews={configuredPreviews}
-          savedOpenRouterModels={savedOpenRouterModels}
-          autoFocusFirstField
-        />
+        )}
       </div>
 
       <DialogFooter
+        leading={
+          selectedConfigured ? (
+            <ConfirmDeleteAction
+              label={`Remove ${selectedConfigured.label}`}
+              title={`Remove ${selectedConfigured.label} provider?`}
+              consequence="The stored API key is wiped. You can add it again any time."
+              confirmLabel="Remove"
+              onConfirm={() => removePaid(selectedConfigured.env, selectedConfigured.label)}
+            />
+          ) : null
+        }
         onCancel={onClose}
         primaryLabel="Save"
         primaryDisabled={!canSave}

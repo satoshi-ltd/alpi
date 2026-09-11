@@ -272,6 +272,7 @@ def _profile_detail_payload(home: Path) -> dict[str, Any]:
         "mcps": _mcp_servers(cfg),
         "peers": _profile_peers(home),
         "models": _models(cfg, home),
+        "provider_catalog": _provider_catalog(),
         "vision_model": cfg.tools.read_image.model,
         "model_reasoning_effort": cfg.model_reasoning.effort,
         "model_reasoning_supported": supports_reasoning(cfg.model),
@@ -1260,6 +1261,18 @@ def _model_provider_available(model: str, env: dict[str, str]) -> bool:
         if (p.model_prefix or p.name) == head:
             return bool(p.api_key_env) and bool(env.get(p.api_key_env))
     return True
+
+
+# What each provider would offer once its key is set — the picker shows it before you add one.
+# Keyed by api_key_env because clients name providers differently (google here, gemini there).
+def _provider_catalog() -> dict[str, int]:
+    from alpi import providers as prov_mod
+
+    return {
+        p.api_key_env: len(_curated_ids_for(p.name))
+        for p in prov_mod.builtin()
+        if p.api_key_env
+    }
 
 
 def _curated_ids_for(provider: str) -> list[str]:

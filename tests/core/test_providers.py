@@ -85,17 +85,18 @@ def test_curated_load_curated_returns_copy(monkeypatch) -> None:
     assert curated.load_curated("google") == [{"id": "gemini/flash"}]
 
 
-def test_openrouter_curated_uses_current_deepseek_flash_alias() -> None:
+def test_openrouter_curated_offers_no_floating_id() -> None:
+    """A `~` id redirects to whatever the vendor ships next, so a scheduled fleet changes model with no config change; every alias in OpenRouter's catalog carries that prefix."""
     ids = {row["id"] for row in curated.load_curated("openrouter")}
-    assert "~deepseek/deepseek-v4-flash-latest" in ids
-    assert "deepseek/deepseek-v4-flash-0731" not in ids
+    assert not [i for i in ids if i.startswith("~")]
+    assert "deepseek/deepseek-v4-flash-0731" in ids
 
 
 def test_openrouter_curated_includes_glm_5_3_flash() -> None:
     rows = {row["id"]: row for row in curated.load_curated("openrouter")}
     assert rows["z-ai/glm-5.3-flash"] == {
         "id": "z-ai/glm-5.3-flash",
-        "note": "multimodal · cheap · fast · 1M",
+        "note": "text+image+video · up to 1.25M · reasoning always on, defaults to max",
         "reasoning": True,
     }
 

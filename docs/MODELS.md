@@ -32,10 +32,45 @@ tool-heavy agent workloads rather than chat-only benchmarks. Treat
 that data as a weak signal, not a ranking: defaults, price, rate
 limits, regional availability, and provider wrappers all bias usage.
 
-Common high-usage models in tool-heavy agent workloads currently
-include MiMo V2.5 Pro / V2.5, DeepSeek V4 Pro / V4 Flash, MiniMax M3,
-Claude Sonnet 5 / Opus 4.8 / Fable 5, Nemotron 3 Super, and OpenAI
-GPT-5.6 Sol / Terra.
+OpenRouter's public leaderboard for the week ending 2026-09-10 put
+DeepSeek V4 Flash 0731 third and GLM 5.3 Flash fourth by tokens
+processed, with MiMo V2.5 fifth. It ranks adoption, not quality, it
+counts only traffic the caller did not mark private, and a single
+large application can move a row several places.
+
+## Two hazards, often confused
+
+A **floating id** redirects. `~vendor/model-latest` resolves to whatever the
+vendor ships next, so the agent changes underneath a running fleet with no
+config change and no notice. On OpenRouter every alias carries the `~` prefix,
+which makes them easy to refuse; `alias_target` in the models API confirms it.
+
+A **preview or experimental id** carries a different risk: its endpoint can be
+withdrawn, and that is a hard failure rather than a silent swap. Some carry a dated
+snapshot in `canonical_slug`; others, like `deepseek/deepseek-v3.2-exp`, repeat
+the id instead, which tells you the id is not visibly pinned but not what it
+will resolve to tomorrow. The substring `exp` or `preview` alone does not tell
+you which case you are in: `alias_target` is the reliable test for redirection,
+a dated `canonical_slug` is evidence of pinning, and its absence is only the
+absence of that evidence.
+
+Prefer dated snapshots. Accept an experimental route only where losing it is
+survivable, as with the vision route below.
+
+## The advertised context is not your input budget
+
+A slug's headline window is the ceiling of its best endpoint. Most of the
+models here are also served by 256K endpoints, so the window you actually get
+depends on routing. Narrowing the provider list reduces that spread, though a
+single provider can publish several endpoints of its own, so it buys less
+variance rather than a guaranteed window.
+
+Separately, alpi does not offer the whole window as input. The per-model input
+limit in `alpi/providers/openrouter_models.yaml` reserves a reply margin —
+capped at 32,768 tokens, at the provider's own maximum output, and at a
+quarter of the window, whichever is smallest — and `ctx_window` uses that
+number to decide when to compact. Expect the usable figure to sit below the
+advertised one on both counts.
 
 ## Pick by workload
 
@@ -54,14 +89,18 @@ daily interactive alpi use.
 
 | Model | OpenRouter ID | Why |
 |---|---|---|
-| **DeepSeek V4 Pro** | `deepseek/deepseek-v4-pro` | Strong tool discipline at 1M context; sensible flagship-class daily driver. |
-| **MiMo V2.5 Pro** | `xiaomi/mimo-v2.5-pro` | Strong adoption in persistent-agent workloads; 1M context, good price-for-quality. |
-| **MiniMax M3** | `minimax/minimax-m3` | Mid-tier agent model; 512K context, decent for persistent sessions. |
+| **GLM 5.3 Flash** | `z-ai/glm-5.3-flash` | Highest published agentic index of the cheap tier (Artificial Analysis, via OpenRouter, read 2026-09-11); up to 1.25M context, image and video input. Reasoning is mandatory and defaults to `max`; `low` and `high` are also accepted, so set `model_reasoning.effort` deliberately. |
+| **DeepSeek V4.1 Flash** | `deepseek/deepseek-v4.1-flash` | Encoder-decoder architecture with a low cache-read price; suits agents whose system prompt is large and stable. Released 2026-09-10 and not yet scored on the agentic index. |
+| **DeepSeek V4 Flash 0731** | `deepseek/deepseek-v4-flash-0731` | Text only, up to 1.25M context, served by a large number of providers. Third by weekly tokens on OpenRouter's public leaderboard (window ending 2026-09-10). |
 | **Claude Sonnet 5** | `anthropic/claude-sonnet-5` | Premium daily driver; strongest tool discipline and coding judgement at this tier. |
+| **MiMo V2.5 Pro** | `xiaomi/mimo-v2.5-pro` | Text only, up to 1M context. Scores above the base MiMo on the published agentic and coding indices, at about three times the input price. |
+| **MiniMax M3** | `minimax/minimax-m3` | Mid-tier agent model. 1M is the announced ceiling; several of its endpoints serve 512K or 256K, so the window you get depends on routing. |
 
 If you can only choose one model for a skill-heavy profile, start with
-DeepSeek V4 Pro, MiMo V2.5 Pro, or Sonnet 5 depending on budget and
-provider preference.
+GLM 5.3 Flash or Sonnet 5 depending on budget and provider preference.
+`deepseek/deepseek-v4-pro` is no longer a recommended daily driver: the bare
+id is pinned to the 2026-04 build, and a measured audit put it behind the
+flash tier at many times the price.
 
 ### Cheap service turns
 
@@ -71,7 +110,8 @@ creating or debugging skills.
 
 | Model | OpenRouter ID | Why |
 |---|---|---|
-| **DeepSeek V4 Flash** | `~deepseek/deepseek-v4-flash-latest` | Moving alias for the current Flash release at the cheap-fast tier. Use it when following DeepSeek's current deployment is preferable to pinning an obsolete snapshot. |
+| **DeepSeek V4 Flash 0731** | `deepseek/deepseek-v4-flash-0731` | Cheapest model with a real agentic score; 1.25M context and broad provider support. |
+| **DeepSeek V4.1 Flash** | `deepseek/deepseek-v4.1-flash` | Cheap cache read; the better pick when the prompt is large and barely changes between turns. |
 | **MiMo V2.5** | `xiaomi/mimo-v2.5` | Budget sibling to MiMo V2.5 Pro; 1M context, useful for A/B testing cheap service profiles. |
 | **Claude Haiku 4.5** | `anthropic/claude-haiku-4.5` | Cheap and fast with reasoning support; reliable for short-chain turns. |
 | **GPT-5.6 Terra** | `openai/gpt-5.6-terra` | Balanced OpenAI tier for simple tool use; acceptable as a router when the skill catalog is clean and small. |
@@ -95,7 +135,7 @@ long debugging sessions, schema changes, release work.
 | Model | OpenRouter ID | Why |
 |---|---|---|
 | **Claude Fable 5** | `anthropic/claude-fable-5` | Ceiling — next-gen intelligence for long-running agents; most capable widely-released model. |
-| **Claude Opus 4.8** | `anthropic/claude-opus-4.8` | Flagship for complex agentic coding and enterprise engineering. |
+| **Claude Opus 5** | `anthropic/claude-opus-5` | Flagship for complex agentic coding and enterprise engineering; supersedes Opus 4.8 at the same price. |
 | **Claude Sonnet 5** | `anthropic/claude-sonnet-5` | Best daily premium balance for coding-heavy profiles. |
 | **GPT-5.6 Sol** | `openai/gpt-5.6-sol` | OpenAI flagship; leads the coding-agent index, strong general engineering. |
 | **Nemotron 3 Super** | `nvidia/nemotron-3-super-120b-a12b` | Open-weight engineering option; 256K context. |
@@ -124,7 +164,7 @@ latency and one less layer to break.
 | Provider | OpenRouter route | Native route |
 |---|---|---|
 | Anthropic | `anthropic/claude-fable-5` | `claude-fable-5` |
-| Anthropic | `anthropic/claude-opus-4.8` | `claude-opus-4-8` (hyphens, not dots) |
+| Anthropic | `anthropic/claude-opus-5` | `claude-opus-5` (hyphens, not dots) |
 | Anthropic | `anthropic/claude-sonnet-5` | `claude-sonnet-5` |
 | Anthropic | `anthropic/claude-haiku-4.5` | `claude-haiku-4-5` |
 | OpenAI | `openai/gpt-5.6-sol` | `gpt-5.6-sol` (alias `gpt-5.6`, no prefix) |
@@ -190,11 +230,12 @@ routing around it (see `docs/CONFIG.md` → `tiers` / `fallback_models`):
 Unconfigured tiers always resolve to the main model, so none of this
 changes behavior until you opt in. Profiles still split roles best:
 
-- **Personal skill-heavy profile**: DeepSeek V4 Pro, MiMo V2.5 Pro,
-  or Sonnet 5.
-- **High-volume service profile**: DeepSeek V4 Flash, MiMo V2.5,
-  Haiku 4.5, or GPT-5.6 Terra, with fewer skills and tighter prompts.
-- **Engineering profile**: Sonnet 5, Opus 4.8, Fable 5, or
+- **Personal skill-heavy profile**: GLM 5.3 Flash, Sonnet 5, or
+  MiMo V2.5 Pro.
+- **High-volume service profile**: DeepSeek V4 Flash 0731,
+  DeepSeek V4.1 Flash, MiMo V2.5, Haiku 4.5, or GPT-5.6 Terra, with
+  fewer skills and tighter prompts.
+- **Engineering profile**: Sonnet 5, Opus 5, Fable 5, or
   GPT-5.6 Sol.
 - **Local/private profile**: a current Qwen-coder, Gemma, or codestral
   family model, sized to your VRAM.

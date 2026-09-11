@@ -22,36 +22,39 @@ anthropic:
     note: cheap · fast
     reasoning: true
 openrouter:
+  - id: deepseek/deepseek-v4.1-flash
+    note: text+image · up to 1M · low cache-read price
+    reasoning: true
   - id: z-ai/glm-5.3-flash
-    note: multimodal · cheap · fast · 1M
+    note: text+image+video · up to 1.25M · reasoning always on, defaults to max
+    reasoning: true
+  - id: deepseek/deepseek-v4-flash-0731
+    note: text · up to 1.25M · broad provider coverage
     reasoning: true
   - id: deepseek/deepseek-v4-flash-vision-exp
-    note: vision · experimental · 1M
-    reasoning: true
-  - id: ~deepseek/deepseek-v4-flash-latest
-    note: cheap · fast · latest · 1M
+    note: text+image · up to 1M · experimental endpoint
     reasoning: true
   - id: minimax/minimax-m3
-    note: 512K ctx
+    note: text+image+video · up to 1M · mid-tier
     reasoning: true
   - id: deepseek/deepseek-v4-pro
-    note: pro · 1M
+    note: text · up to 1M · pro tier · id pinned to the 2026-04 build
     reasoning: true
   - id: stepfun/step-3.7-flash
-    note: fast
-    reasoning: false
+    note: text+image+video · up to 256K · reasoning always on
+    reasoning: true
   - id: nvidia/nemotron-3-super-120b-a12b
-    note: open · 256K
+    note: text · up to 256K · open weights
     reasoning: true
   - id: anthropic/claude-sonnet-5
-    note: balanced
+    note: text+image+file · up to 1M · balanced
     reasoning: true
-  - id: anthropic/claude-opus-4.8
-    note: flagship
+  - id: anthropic/claude-opus-5
+    note: text+image+file · up to 1M · flagship
     reasoning: true
   - id: xiaomi/mimo-v2.5
-    note: cheap
+    note: multimodal · up to 1M · audio and video in
     reasoning: true
   - id: xiaomi/mimo-v2.5-pro
-    note: pro
+    note: text · up to 1M · higher agentic score than the base
     reasoning: true

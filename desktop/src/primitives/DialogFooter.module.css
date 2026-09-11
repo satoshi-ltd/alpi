@@ -7,6 +7,11 @@
   margin-top: var(--space-4);
 }
 
+/* Pushes everything else right, so a destructive action sits opposite the confirm pair. */
+.leading {
+  margin-right: auto;
+}
+
 .destructive {
   background: var(--c-danger);
   color: var(--bg-pane);

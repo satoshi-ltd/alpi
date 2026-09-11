@@ -4,12 +4,6 @@
   gap: var(--space-7);
 }
 
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-
 .grid {
   display: grid;
   grid-template-columns: 1fr 2fr;
@@ -43,9 +37,9 @@
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--ink) 6%, transparent);
 }
 
-.modelChips {
+.labelRow {
   display: flex;
-  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
   gap: var(--space-2);
-  margin-top: var(--space-2);
 }

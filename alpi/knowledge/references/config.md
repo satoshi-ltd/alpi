@@ -55,7 +55,7 @@ keys remain. Legacy `service.prefetch` migrates to `runtime.prefetch` on save.
 ## Model examples
 
 ```yaml
-model: openrouter/~deepseek/deepseek-v4-flash-latest
+model: openrouter/deepseek/deepseek-v4-flash-0731
 ```
 
 ```yaml

@@ -1462,3 +1462,21 @@ async def test_changing_the_default_cap_invalidates_every_inheriting_hub(
 
     changed = sorted(d["profile"] for k, d in captured if k == "config_changed")
     assert changed == sorted(["default", "mira", "scout"])
+
+
+def test_provider_catalog_counts_curated_models_per_key() -> None:
+    """The picker shows these before a key exists, so they are keyed by env var: the daemon says google where clients say gemini."""
+    catalog = host_device_state._provider_catalog()
+    assert catalog["OPENROUTER_API_KEY"] == len(
+        host_device_state._curated_ids_for("openrouter"),
+    )
+    assert catalog["ANTHROPIC_API_KEY"] == len(
+        host_device_state._curated_ids_for("anthropic"),
+    )
+    assert all(isinstance(v, int) and v >= 0 for v in catalog.values())
+    assert all(k.endswith("_API_KEY") for k in catalog)
+
+
+def test_provider_catalog_reports_zero_for_a_provider_alpi_curates_nothing_for() -> None:
+    catalog = host_device_state._provider_catalog()
+    assert catalog["GEMINI_API_KEY"] == 0

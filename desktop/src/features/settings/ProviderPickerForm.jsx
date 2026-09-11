@@ -1,12 +1,48 @@
+import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Chip, Eyebrow } from "../../primitives/index.js";
+import { ActionLink, Eyebrow } from "../../primitives/index.js";
+import Dropdown from "../../primitives/Dropdown.jsx";
 import { PAID_PROVIDERS } from "./util.js";
 import styles from "./ProviderPickerForm.module.css";
 
-const PROVIDER_OPTIONS = [
-  { id: "ollama", label: "Ollama" },
-  ...PAID_PROVIDERS,
-];
+// Ordered by how often a profile actually needs them, not alphabetically.
+const PROVIDER_ORDER = ["ollama", "openrouter", "anthropic", "openai", "gemini"];
+
+function plural(n, word) {
+  return `${n} ${word}${n === 1 ? "" : "s"}`;
+}
+
+const PROVIDER_OPTIONS = PROVIDER_ORDER.map(
+  (id) =>
+    id === "ollama"
+      ? { id: "ollama", label: "Ollama" }
+      : PAID_PROVIDERS.find((p) => p.id === id),
+).filter(Boolean);
+
+export function providerHint(
+  id,
+  {
+    configuredEnvs,
+    configuredPreviews,
+    providerCatalog,
+    ollamaModelCount = 0,
+    ollamaEndpointCount = 0,
+  } = {},
+) {
+  if (id === "ollama") {
+    if (!ollamaEndpointCount) return "local · no API key";
+    return `local · ${plural(ollamaModelCount, "model")}`;
+  }
+  const meta = PAID_PROVIDERS.find((p) => p.id === id);
+  if (!meta) return "";
+  const count = providerCatalog?.[meta.env];
+  const models = count == null ? "" : plural(count, "model");
+  if (configuredEnvs?.has?.(meta.env)) {
+    const preview = configuredPreviews?.get?.(meta.env);
+    return [models, preview ? `key · ${preview}` : "key set"].filter(Boolean).join(" · ");
+  }
+  return [models, "needs a key"].filter(Boolean).join(" · ");
+}
 
 export function defaultProviderValue() {
   return { id: "ollama", name: "", url: "http://localhost:11434" };
@@ -24,14 +60,10 @@ export function isProviderValueValid(value, { configuredEnvs } = {}) {
   const keyAlreadySet = configuredEnvs?.has?.(meta.env) ?? false;
   const trimmedKey = (value.keyValue || "").trim();
   const keyOk = keyAlreadySet || trimmedKey.length > 0;
-  if (value.id === "openrouter") {
-    const model = (value.model || "").trim().replace(/^openrouter\//, "");
-    return keyOk && model.length > 0;
-  }
   return keyOk;
 }
 
-export async function applyProvider(profile, value) {
+export async function applyProvider(profile, value, { currentModel } = {}) {
   if (value.id === "ollama") {
     const name = value.name.trim();
     const url = value.url.trim().replace(/\/$/, "");
@@ -48,16 +80,20 @@ export async function applyProvider(profile, value) {
     });
   }
   if (value.id === "openrouter") {
-    const model = value.model.trim().replace(/^openrouter\//, "");
-    if (model) {
-      await invoke("provider_add_openrouter_model", { profile, model });
+    const model = (value.model || "").trim().replace(/^openrouter\//, "");
+    if (!model) return "OpenRouter key saved";
+    await invoke("provider_add_openrouter_model", { profile, model });
+    // Only seed the profile's model when it has none — replacing a key must not move a
+    // running profile onto a different model behind the operator's back.
+    if (!currentModel) {
       await invoke("set_config_field", {
         profile,
         key: "model",
         value: `openrouter/${model}`,
       });
+      return `OpenRouter ${model} ready`;
     }
-    return `OpenRouter ${model} ready`;
+    return `${model} added to OpenRouter models`;
   }
   return `${meta.label} key saved`;
 }
@@ -69,7 +105,11 @@ export default function ProviderPickerForm({
   configuredPreviews,
   savedOpenRouterModels = [],
   autoFocusFirstField = false,
+  ollamaModelCount = 0,
+  ollamaEndpointCount = 0,
+  providerCatalog,
 }) {
+  const [manualModel, setManualModel] = useState(false);
   const v = value ?? defaultProviderValue();
   const isOllama = v.id === "ollama";
   const isOpenRouter = v.id === "openrouter";
@@ -89,17 +129,38 @@ export default function ProviderPickerForm({
 
   return (
     <div className={styles.root}>
-      <div className={styles.chips}>
-        {PROVIDER_OPTIONS.map((p) => (
-          <Chip
-            key={p.id}
-            state={v.id === p.id ? "on" : "off"}
-            onClick={() => pick(p.id)}
-          >
-            {p.label}
-          </Chip>
-        ))}
-      </div>
+      <Dropdown
+        trigger={{ label: PROVIDER_OPTIONS.find((p) => p.id === v.id)?.label ?? "Provider" }}
+        direction="down"
+        align="left"
+        width={260}
+        variant="field"
+        fullWidth
+      >
+        {({ close }) => (
+          <>
+            {PROVIDER_OPTIONS.map((p) => (
+              <Dropdown.Row
+                key={p.id}
+                onClick={() => {
+                  pick(p.id);
+                  close?.();
+                }}
+                caption={providerHint(p.id, {
+                  configuredEnvs,
+                  configuredPreviews,
+                  providerCatalog,
+                  ollamaModelCount,
+                  ollamaEndpointCount,
+                })}
+                selected={p.id === v.id}
+              >
+                {p.label}
+              </Dropdown.Row>
+            ))}
+          </>
+        )}
+      </Dropdown>
 
       {isOllama ? (
         <div className={styles.grid}>
@@ -145,27 +206,56 @@ export default function ProviderPickerForm({
           </div>
           {isOpenRouter && (
             <div className={styles.field}>
-              <Eyebrow>MODEL</Eyebrow>
-              <input
-                className={styles.input}
-                value={v.model ?? ""}
-                onChange={(e) => patch({ model: e.target.value })}
-                placeholder="provider/model-id"
-                spellCheck={false}
-              />
-              {savedOpenRouterModels.length > 0 && (
-                <div className={styles.modelChips}>
-                  {savedOpenRouterModels.map((m) => (
-                    <Chip
-                      key={m}
-                      size="sm"
-                      state={v.model === m ? "on" : "off"}
-                      onClick={() => patch({ model: m })}
-                    >
-                      {m}
-                    </Chip>
-                  ))}
-                </div>
+              <span className={styles.labelRow}>
+                <Eyebrow>MODEL</Eyebrow>
+                {savedOpenRouterModels.length > 0 && (
+                  <ActionLink onClick={() => {
+                    setManualModel((on) => !on);
+                    patch({ model: "" });
+                  }}>
+                    {manualModel ? "Pick from the list" : "Enter any slug"}
+                  </ActionLink>
+                )}
+              </span>
+              {manualModel || savedOpenRouterModels.length === 0 ? (
+                <>
+                  <input
+                    className={styles.input}
+                    value={v.model ?? ""}
+                    onChange={(e) => patch({ model: e.target.value })}
+                    placeholder="provider/model-id (optional)"
+                    spellCheck={false}
+                    autoFocus={manualModel}
+                  />
+                </>
+              ) : (
+                <>
+                  <Dropdown
+                    trigger={{ label: v.model || "Known models" }}
+                    direction="down"
+                    align="left"
+                    width={320}
+                    variant="field"
+                    fullWidth
+                  >
+                    {({ close }) => (
+                      <>
+                        {savedOpenRouterModels.map((m) => (
+                          <Dropdown.Row
+                            key={m}
+                            onClick={() => {
+                              patch({ model: m });
+                              close?.();
+                            }}
+                            selected={v.model === m}
+                          >
+                            {m}
+                          </Dropdown.Row>
+                        ))}
+                      </>
+                    )}
+                  </Dropdown>
+                </>
               )}
             </div>
           )}
