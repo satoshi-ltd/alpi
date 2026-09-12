@@ -411,6 +411,10 @@ def run_and_render(console, home: Path, profile: str, version: str) -> list[Chec
     console.print(f"[b]alpi[/b] {version} · profile: [b]{profile}[/b]")
     console.print("")
 
+    # Same env the daemon gives a real MCP spawn; without it every env:VAR in the spec resolves empty and a healthy server reports its credential missing.
+    from alpi.home import effective_profile_env
+    env_base = effective_profile_env(cfg.home)
+
     with Live(_render(), console=console, refresh_per_second=12,
               transient=False) as live:
         with ThreadPoolExecutor(max_workers=8) as pool:
@@ -426,7 +430,7 @@ def run_and_render(console, home: Path, profile: str, version: str) -> list[Chec
                 futures.append(f)
             for n, spec in servers.items():
                 key = f"mcp:{n}"
-                f = pool.submit(_probe_mcp, n, spec)
+                f = pool.submit(_probe_mcp, n, spec, env_base)
                 f.add_done_callback(
                     lambda fu, k=key: _set(k, fu.result()) or live.update(_render())
                 )

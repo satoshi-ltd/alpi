@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.14.36 — 2026-09-12 — doctor probes MCP servers with the profile's own env
+
+- **The interactive `doctor` spawned MCP servers without the profile `.env`.** The
+  daemon starts every MCP server with the profile's effective environment, and so did
+  `doctor.run_all`, but the spinner path the CLI actually runs handed the probe only the
+  server spec. Every `env:VAR` reference in that spec then resolved to an empty string,
+  so a healthy Bitbucket server reported `BITBUCKET_URL is required` and a healthy Lobby
+  server sent an empty `x-mcp-secret` header and surfaced as an OAuth 404. The same two
+  profiles were reviewing pull requests and producing reports all day; only the check
+  was wrong. Both paths now build the environment the same way. A regression test drives
+  `run_and_render` against a profile whose MCP spec references a `.env` key and asserts
+  the probe receives it. Runtime spawning, retries and cost accounting are untouched.
+
 ## v0.14.35 — 2026-09-12 — failed streams keep their generation identity
 
 - **Provider lifecycle logs retain the generation ID and provider when available.**

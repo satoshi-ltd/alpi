@@ -598,3 +598,31 @@ def test_rendered_doctor_reports_duplicate_peer_pubkey(
     rendered = _rendered(tmp_path)
     assert [c for c in rendered if c.status == "fail" and c.group == "ALP"]
     assert doctor.exit_code(rendered) != 0
+
+
+def test_run_and_render_gives_the_mcp_probe_the_profile_env(tmp_path: Path, monkeypatch) -> None:
+    (tmp_path / "config.yaml").write_text(
+        "model: openrouter/foo/bar\n"
+        f"workspace: {tmp_path}\n"
+        "mcp:\n  servers:\n    bitbucket:\n      command: npx\n      args: [-y, bitbucket-mcp]\n"
+        "      env:\n        BITBUCKET_URL: env:BITBUCKET_URL\n"
+    )
+    _write_env(tmp_path, OPENROUTER_API_KEY="sk-fake", BITBUCKET_URL="https://bb.example")
+    from alpi import service
+    monkeypatch.setattr(service, "daemon_installed", lambda: False)
+    monkeypatch.setattr(service, "daemon_running_pid", lambda root: None)
+
+    seen: dict = {}
+
+    def fake_probe(name, spec, env_base=None):
+        seen["env_base"] = env_base
+        return doctor.Check("MCPs", name, "ok", "1 tool")
+
+    monkeypatch.setattr(doctor, "_probe_mcp", fake_probe)
+
+    import io
+    from rich.console import Console
+    doctor.run_and_render(Console(file=io.StringIO(), width=120), tmp_path, "default", "0.0.0")
+
+    assert seen["env_base"] is not None
+    assert seen["env_base"]["BITBUCKET_URL"] == "https://bb.example"
