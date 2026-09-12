@@ -608,6 +608,8 @@ def stream(
         last_chunk = None
         # The usage-only final chunk carries no provider, so latch it from the content chunks of THIS attempt.
         served_provider: str | None = None
+        # Keep the generation id for later OpenRouter lookup; logging never fetches provider metadata.
+        gen_id: str | None = None
         started = _breadcrumb("request start", f"model={model} attempt={attempt}")
         first_delta_at: float | None = None
         try:
@@ -617,6 +619,7 @@ def stream(
             ):
                 last_chunk = chunk
                 served_provider = served_provider or getattr(chunk, "provider", None)
+                gen_id = gen_id or getattr(chunk, "id", None)
                 norm = _normalize_chunk(chunk, tool_calls_accum)
                 if norm is None:
                     continue
@@ -625,12 +628,16 @@ def stream(
                     or norm.get("tool_calls_delta")
                 ):
                     first_delta_at = _breadcrumb(
-                        "first delta", f"model={model} after={_dt(started)}",
+                        "first delta",
+                        f"model={model} after={_dt(started)} gen={gen_id or '-'} provider={served_provider or '-'}",
                     )
                 if norm.get("text_delta"):
                     visible = True
                 yield norm
-            _breadcrumb("stream end", f"model={model} total={_dt(started)}")
+            _breadcrumb(
+                "stream end",
+                f"model={model} total={_dt(started)} gen={gen_id or '-'} provider={served_provider or '-'}",
+            )
             yield _final_chunk(last_chunk, tool_calls_accum, model, served_provider)
             return
         except Exception as exc:  # noqa: BLE001
@@ -640,7 +647,8 @@ def stream(
                 f"first_delta={'yes' if first_delta_at else 'NO'} "
                 f"visible={'yes' if visible else 'no'} "
                 f"error={type(exc).__name__} "
-                f"status={getattr(exc, 'status_code', None) or '-'}",
+                f"status={getattr(exc, 'status_code', None) or '-'} "
+                f"gen={gen_id or '-'} provider={served_provider or '-'}",
             )
             if absolute_deadline is not None and time.monotonic() >= absolute_deadline:
                 if isinstance(exc, TurnBudgetExceeded):

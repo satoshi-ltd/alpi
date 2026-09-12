@@ -413,7 +413,7 @@ def test_stream_emits_provider_lifecycle_breadcrumbs(monkeypatch, tmp_path) -> N
     )
 
     def fake_completion(kwargs):
-        yield NS(choices=[NS(delta=NS(content="hola", tool_calls=None), finish_reason=None)], usage=None)
+        yield NS(id="gen-abc", provider="Acme", choices=[NS(delta=NS(content="hola", tool_calls=None), finish_reason=None)], usage=None)
         yield NS(choices=[NS(delta=NS(content=None, tool_calls=None), finish_reason="stop")],
                  usage=NS(prompt_tokens=1, completion_tokens=1))
 
@@ -424,6 +424,9 @@ def test_stream_emits_provider_lifecycle_breadcrumbs(monkeypatch, tmp_path) -> N
     assert events[0] == "request start"
     assert "first delta" in events
     assert events[-1] == "stream end"
+    details = dict(crumbs)
+    assert "gen=gen-abc" in details["first delta"] and "provider=Acme" in details["first delta"]
+    assert "gen=gen-abc" in details["stream end"] and "provider=Acme" in details["stream end"]
 
 
 def test_breadcrumb_correlates_concurrent_workgroup_turns(monkeypatch, tmp_path) -> None:
@@ -468,3 +471,64 @@ def test_stream_error_breadcrumb_says_whether_the_provider_ever_answered(
 
     err = next(d for e, d in crumbs if e == "stream error")
     assert "first_delta=NO" in err, "the attribution bit: provider never sent a byte"
+    assert "gen=-" in err and "provider=-" in err, "nothing arrived, so nothing to attribute"
+
+
+def test_stream_error_retains_identity_after_partial_response(monkeypatch) -> None:
+    crumbs = []
+    monkeypatch.setattr(
+        llm, "_breadcrumb",
+        lambda event, detail: crumbs.append((event, detail)) or 1.0,
+    )
+
+    def fake_completion(kwargs):
+        chunk = _chunk("partial response")
+        chunk.id, chunk.provider = "gen-first", "Acme"
+        yield chunk
+        yield _chunk("more without identity")
+        raise llm.ProviderStalled("stream stalled")
+
+    monkeypatch.setattr(llm, "_completion_silenced", fake_completion)
+    with pytest.raises(llm.ProviderStalled):
+        list(llm.stream(model="openrouter/x/y", messages=[], rt=_rt(max_retries=0)))
+
+    err = next(detail for event, detail in crumbs if event == "stream error")
+    assert "gen=gen-first" in err and "provider=Acme" in err
+    assert "first_delta=yes" in err and "visible=yes" in err
+
+
+@pytest.mark.parametrize("with_identity", [False, True])
+def test_retry_breadcrumbs_do_not_inherit_previous_identity(monkeypatch, with_identity) -> None:
+    crumbs = []
+    monkeypatch.setattr(
+        llm, "_breadcrumb",
+        lambda event, detail: crumbs.append((event, detail)) or 1.0,
+    )
+    attempts = 0
+
+    def fake_completion(kwargs):
+        nonlocal attempts
+        attempts += 1
+        chunk = _chunk("partial" if attempts == 1 else "complete")
+        if attempts == 1:
+            chunk.id, chunk.provider = "gen-first", "Acme"
+        elif with_identity:
+            chunk.id, chunk.provider = "gen-second", "Other"
+        yield chunk
+        if attempts == 1:
+            raise llm.ProviderStalled("stream stalled")
+
+    monkeypatch.setattr(llm, "_completion_silenced", fake_completion)
+    events = list(llm.stream(
+        model="openrouter/x/y", messages=[], rt=_rt(max_retries=1), replay_visible=True,
+    ))
+
+    assert attempts == 2
+    assert sum(bool(event.get("retry_reset")) for event in events) == 1
+    assert events[-1]["final"] is True
+    second_start = next(i for i, (event, detail) in enumerate(crumbs) if event == "request start" and "attempt=1" in detail)
+    second = dict(crumbs[second_start:])
+    expected = "gen=gen-second provider=Other" if with_identity else "gen=- provider=-"
+    for event in ("first delta", "stream end"):
+        assert expected in second[event]
+        assert "gen-first" not in second[event] and "Acme" not in second[event]

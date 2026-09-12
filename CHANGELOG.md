@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.14.35 — 2026-09-12 — failed streams keep their generation identity
+
+- **Provider lifecycle logs retain the generation ID and provider when available.**
+  First-delta, stream-end and stream-error records now include the identity seen in
+  that attempt, even when a later chunk omits it. A stream that fails after answering
+  can be correlated with the provider's records; an OpenRouter generation ID can be
+  looked up separately when its provider is absent from the chunks. Logging makes no
+  metadata requests and does not change retries, timeouts or cost accounting.
+- **Retries start with a clean identity.** Regression tests cover failure after a
+  partial response and a retry with either a new identity or none, so one attempt's
+  generation and provider cannot be attributed to the next.
+
 ## v0.14.34 — 2026-09-11 — the model catalog stops lying
 
 - **Four curated entries carried wrong facts.** MiniMax M3 was labelled 512K flatly; its
