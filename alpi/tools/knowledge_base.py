@@ -32,6 +32,8 @@ _REQUIRED_FILES = ("index.md", "log.md")
 _ALLOWED_TYPES = frozenset({"concept", "project", "person", "source", "note"})
 _EMBED_BATCH = 64
 _MAX_SNIPPET = 700
+_MAX_RELATED_PAGE = 12_000
+_MAX_RELATED_TOTAL = 30_000
 _DEFAULT_K = 5
 _LINK_RE = re.compile(r"(?<!!)\[[^\]]+\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
 _TOKEN_RE = re.compile(r"[A-Za-z0-9_]{2,}")
@@ -180,7 +182,7 @@ def lint_knowledge(root: Path) -> dict[str, Any]:
     page_set = {_rel(root, p) for p in pages}
     for required in _REQUIRED_FILES:
         if required not in page_set:
-            issues.append(_issue(required, "required OKF file is missing"))
+            issues.append(_issue(required, "required knowledge file is missing"))
 
     parsed: dict[str, dict[str, Any]] = {}
     inbound: dict[str, set[str]] = {rel: set() for rel in page_set}
@@ -749,12 +751,26 @@ def _knowledge_safety_findings(text: str) -> list[str]:
     return out
 
 
-def _apply_maintenance(root: Path, proposal: dict[str, Any], source_ref: str) -> dict[str, Any]:
+_READ_ONLY_REASON = (
+    "existing page not rewritten: the synthesizer did not receive its full body this run "
+    "(cut by the size caps or not retrieved); split the page or maintain it with a topic that retrieves it"
+)
+
+
+def _apply_maintenance(
+    root: Path,
+    proposal: dict[str, Any],
+    source_ref: str,
+    *,
+    seen_full: frozenset[str],
+) -> dict[str, Any]:
     _ensure_bundle(root)
     pages = proposal.get("pages") or []
     if not isinstance(pages, list):
         raise ValueError("proposal.pages must be a list")
     written: list[str] = []
+    sizes: list[dict[str, Any]] = []
+    skipped: list[dict[str, str]] = []
     for raw_page in pages:
         if not isinstance(raw_page, dict):
             raise ValueError("each proposed page must be an object")
@@ -784,15 +800,24 @@ def _apply_maintenance(root: Path, proposal: dict[str, Any], source_ref: str) ->
         target = (root / rel).resolve()
         if not str(target).startswith(str(root.resolve())):
             raise ValueError(f"{rel}: resolved path escapes knowledge bundle")
+        if target.is_file() and rel not in seen_full:
+            skipped.append({"path": rel, "reason": _READ_ONLY_REASON})
+            continue
         target.parent.mkdir(parents=True, exist_ok=True)
+        bytes_before = target.stat().st_size if target.is_file() else 0
         target.write_text(rendered, encoding="utf-8")
         written.append(rel)
+        sizes.append({
+            "path": rel,
+            "bytes_before": bytes_before,
+            "bytes_after": len(rendered.encode("utf-8")),
+        })
 
     if written:
         _update_index(root, written)
     log_text = str(proposal.get("log") or "").strip()
     _append_log(root, log_text or f"Updated {', '.join(written) if written else 'knowledge bundle'}.")
-    return {"written": written}
+    return {"written": written, "pages": sizes, "skipped": skipped}
 
 
 def _update_index(root: Path, pages: list[str]) -> None:
@@ -829,7 +854,45 @@ def _append_log(root: Path, line: str) -> None:
     log.write_text(text.rstrip() + entry, encoding="utf-8")
 
 
-_MAINTAIN_PROMPT = """You maintain an OKF-style local Markdown knowledge bundle.
+def _page_body_on_disk(root: Path, rel: str) -> str | None:
+    if not rel:
+        return None
+    target = (root / rel).resolve()
+    if not target.is_relative_to(root.resolve()) or not target.is_file():
+        return None
+    text = target.read_text(encoding="utf-8")
+    try:
+        return _frontmatter_parts(text)[1]
+    except ValueError:
+        return text.strip()
+
+
+def _related_pages_for_prompt(root: Path, results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    budget = _MAX_RELATED_TOTAL
+    for row in results:
+        body = _page_body_on_disk(root, str(row.get("path") or ""))
+        truncated = body is None
+        if body is None:
+            body = str(row.get("snippet") or "")
+        cap = max(0, min(_MAX_RELATED_PAGE, budget))
+        if len(body) > cap:
+            body = body[:cap]
+            truncated = True
+        budget -= len(body)
+        out.append({
+            "path": row.get("path"),
+            "title": row.get("title"),
+            "type": row.get("type"),
+            "tags": row.get("tags") or [],
+            "links": row.get("links") or [],
+            "body": body,
+            "truncated": truncated,
+        })
+    return out
+
+
+_MAINTAIN_PROMPT = """You maintain the user's local Markdown knowledge wiki.
 
 Return one JSON object only, no prose and no fences:
 {
@@ -846,6 +909,11 @@ Return one JSON object only, no prose and no fences:
   "log": "One short sentence describing the maintenance change."
 }
 
+related_pages carries the current full body of each existing page you may update.
+A proposed body replaces the whole file: return the complete page and keep every
+fact that still holds, dropping only what the source contradicts or the topic asks
+to remove. Pages marked truncated=true, and existing pages not listed, are
+read-only this run: link to them, never propose them.
 Prefer updating a small number of durable concept/project/person/source pages.
 Do not include secrets, credentials, API keys, tokens, or raw private data.
 Do not create pages for ephemeral session state.
@@ -886,6 +954,7 @@ def maintain_knowledge(
             raise
         except Exception:  # noqa: BLE001
             related = []
+    related = _related_pages_for_prompt(root, related)
     cfg = cfg_mod.load(home)
     messages = [
         {"role": "system", "content": _MAINTAIN_PROMPT},
@@ -905,7 +974,8 @@ def maintain_knowledge(
     proposal = _parse_llm_json(completion.content)
     if not apply:
         return {"applied": False, "proposal": proposal}
-    applied = _apply_maintenance(root, proposal, source_ref)
+    seen_full = frozenset(str(p["path"]) for p in related if not p["truncated"])
+    applied = _apply_maintenance(root, proposal, source_ref, seen_full=seen_full)
     lint = lint_knowledge(root)
     return {"applied": True, "proposal": proposal, "lint": lint, **applied}
 
@@ -950,7 +1020,7 @@ class Knowledge(Tool):
     name = "knowledge"
     description = (
         "Work with the user's workspace knowledge wiki. Actions: search durable "
-        "OKF Markdown pages, ingest a source file into synthesized Markdown "
+        "Markdown pages, ingest a source file into synthesized Markdown "
         "without saving the raw source, maintain pages explicitly, lint the "
         "bundle, or rebuild the derived SQLite index. Use alpi_knowledge "
         "instead for questions about alpi itself."
@@ -990,7 +1060,7 @@ class Knowledge(Tool):
             },
             "force": {
                 "type": "boolean",
-                "description": "Drop and rebuild the OKF index for action='index'.",
+                "description": "Drop and rebuild the knowledge index for action='index'.",
                 "default": False,
             },
             "apply": {

@@ -22,7 +22,7 @@
 
 | Family | Tools | Use |
 |---|---|---|
-| Knowledge wiki | `knowledge` | OKF-style synthesized Markdown knowledge; SQLite is only the derived search index. |
+| Knowledge wiki | `knowledge` | Synthesized Markdown pages under `<workspace>/knowledge/`; SQLite is only the derived search index. |
 | Session recall | `session_search`, `session_read`, `recall_sessions`, `index_sessions` | Lexical then semantic search over past local chat sessions; `session_read` lists recent sessions and opens a windowed turn slice (around a phrase or index) with no LLM call. |
 | Workgroup recall | `workgroup_search`, `index_workgroups` | Semantic search over hub-owned workgroup transcripts. |
 | Files | `read_file`, `write_file`, `edit_file`, `delete_file`, `search` | Direct filesystem work; deletion is workspace-only. |
@@ -118,18 +118,23 @@ Output attachments (MM.2):
 - Supported output kinds: `image`, `pdf`, `text`, `sheet`, `doc`, `deck`, `file`
   (Office files must be real ZIP-based `xlsx/docx/pptx`).
 
-## OKF knowledge wiki
+## Knowledge wiki
 
 - Knowledge pages live under `<workspace>/knowledge/`; Markdown is the source of
   truth and `<home>/knowledge.sqlite` is a rebuildable derived index.
-- `knowledge(action="search", query, k=5)` returns synthesized OKF pages for
+- `knowledge(action="search", query, k=5)` returns synthesized pages for
   compiled durable concepts/projects/people/sources.
 - `knowledge(action="ingest", source_path?|name?, topic?, ocr?)` reads a source
   file or current-turn attachment, synthesizes Markdown pages, updates
   `index.md` and `log.md`, lints, and refreshes the derived index. It does not
   save a raw copy of the source document.
 - `knowledge(action="maintain", source_path?, topic?, apply=true, ocr=false)` is
-  the explicit LLM-wiki workflow for reorganizing or updating durable pages.
+  the explicit LLM-wiki workflow for reorganizing or updating durable pages. The
+  synthesizer sees the current full body of each related page; an existing page
+  is rewritten only when it received that body in full (`truncated: true` marks a
+  body cut by the size caps), otherwise it lands in `skipped` with the reason and
+  the file stays untouched. `pages` lists `bytes_before` / `bytes_after` per
+  written page: a shrink is visible, tell the user instead of staying quiet.
 - `knowledge(action="lint", path?)` validates required `index.md` / `log.md`,
   minimal YAML frontmatter, relative Markdown links, and orphan pages.
 - `knowledge(action="index", path?, force?)` indexes valid pages into separate

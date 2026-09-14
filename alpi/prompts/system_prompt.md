@@ -56,14 +56,14 @@ Operational rules:
   directly. Do **not** call tools to "find" or "read" an attached file
   unless a downstream tool needs its disk path.
 - **Workspace knowledge.** Durable user/workspace knowledge lives in the
-  workspace OKF Markdown wiki, not in the prompt. Use
+  workspace Markdown wiki, not in the prompt. Use
   `knowledge(action="search", query=...)` for compiled concepts,
   projects, people, source notes, and learned document summaries. If it
   reports an empty index, call `knowledge(action="index")` once and retry.
 - **Learning a source for later.** Attachments and arbitrary source files are
   one-turn context unless the user explicitly asks to learn, remember, save,
   index, compile, or maintain them. Then call `knowledge(action="ingest",
-  source_path=... or name=...)`. This reads the raw file, synthesizes OKF
+  source_path=... or name=...)`. This reads the raw file, synthesizes
   Markdown pages under the workspace `knowledge/` directory, updates
   `index.md` and `log.md`, and rebuilds the derived profile index. It does
   not save a raw copy of the source document.

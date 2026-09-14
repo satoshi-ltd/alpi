@@ -144,7 +144,7 @@ Canonical names are the strings used at registration time —
 `write_file`, `edit_file`, `terminal`, `email`,
 `schedule`, `delegate`, `peer`, `knowledge`, `alpi_knowledge`,
 `research`, `browser`, `workgroup`, etc. See `alpi/tools/__init__.py`
-for the full registry. Note: `knowledge` is the user's workspace OKF
+for the full registry. Note: `knowledge` is the user's workspace Markdown
 wiki; `alpi_knowledge` is the packaged docs tool for alpi itself.
 
 Useful for tightening a profile that is exposed to less-trusted input

@@ -42,9 +42,9 @@ alpi --version
 
 - Tool-calling agent loop over LiteLLM-compatible providers (first-class Ollama); fresh profiles ship no default model.
 - TUI: streaming, slash commands, live tool cards, interrupt, session resume, model switching, cost/token display.
-- Multimodal input: attach images/PDFs/text+source files per turn (TUI `/attach`, desktop/mobile paperclip); `knowledge(action="ingest")` makes the content durable by synthesizing OKF Markdown under the workspace `knowledge/` directory. The raw source is not copied.
+- Multimodal input: attach images/PDFs/text+source files per turn (TUI `/attach`, desktop/mobile paperclip); `knowledge(action="ingest")` makes the content durable by synthesizing Markdown pages under the workspace `knowledge/` directory. The raw source is not copied.
 - Tools: file, terminal, browser/search, memory, schedule, MCP client, plus:
-  - `knowledge`: user/workspace OKF wiki search, ingest, maintenance, lint, and index actions.
+  - `knowledge`: user/workspace knowledge wiki search, ingest, maintenance, lint, and index actions.
   - `recall_sessions` / `index_sessions`: semantic recall over past conversations (`session_search` is the lexical layer, `session_read` opens the exact turn window — no model call); opt-in, forgettable, no auto-injection.
   - `workgroup_search` / `index_workgroups`: semantic search over hub-owned workgroup transcripts; profile-local, no cross-peer search, opt-in, forgettable.
   - `research(brief, depth)`: read-only sub-agent, tiers `fast`/`normal`/`deep`.

@@ -147,7 +147,7 @@ tools:
     - delegate
 ```
 
-Use the canonical registered name. `knowledge` is the user/workspace OKF wiki;
+Use the canonical registered name. `knowledge` is the user's workspace Markdown wiki;
 `alpi_knowledge` is packaged docs about alpi itself. Unknown names are no-ops
 (typos are harmless). A bare string (`deny: terminal`) collapses to `[]`, not a
 per-char iteration.

@@ -358,11 +358,11 @@ source of truth is Markdown under `<workspace>/knowledge/`; SQLite under
 and attachments are read only as inputs for synthesis; alpi does not copy them
 into a durable documents store.
 
-- `knowledge(action="search", query, k=5)` — hybrid sqlite-vec + FTS search over OKF pages, returning page-level results (`path`, `title`, `type`, `tags`, `snippet`, `score`, `links`). Use `alpi_knowledge`, not this tool, for questions about alpi itself.
-- `knowledge(action="ingest", source_path?|name?, topic?, apply=true, ocr=false)` — explicit learn path. Resolves an existing file or current-turn attachment, validates it with the same attachment allowlist/caps, extracts text (PDF/DOCX/EPUB/HTML/text, OCR for scanned PDF/images when requested), asks the LLM to synthesize durable Markdown pages, updates `index.md` and `log.md`, lints, and refreshes the derived OKF index. The raw file is not copied.
-- `knowledge(action="maintain", source_path?, topic?, apply=true, ocr=false)` — explicit LLM-wiki maintenance for reorganizing or updating pages.
+- `knowledge(action="search", query, k=5)` — hybrid sqlite-vec + FTS search over knowledge pages, returning page-level results (`path`, `title`, `type`, `tags`, `snippet`, `score`, `links`). Use `alpi_knowledge`, not this tool, for questions about alpi itself.
+- `knowledge(action="ingest", source_path?|name?, topic?, apply=true, ocr=false)` — explicit learn path. Resolves an existing file or current-turn attachment, validates it with the same attachment allowlist/caps, extracts text (PDF/DOCX/EPUB/HTML/text, OCR for scanned PDF/images when requested), asks the LLM to synthesize durable Markdown pages, updates `index.md` and `log.md`, lints, and refreshes the derived index. The raw file is not copied.
+- `knowledge(action="maintain", source_path?, topic?, apply=true, ocr=false)` — explicit LLM-wiki maintenance for reorganizing or updating pages. The synthesizer receives the current full body of every related page (per-page and aggregate caps, `truncated` flagged). An existing page is replaced only when the synthesizer received its full body in that run; otherwise the proposal for it is reported under `skipped` and the file stays untouched. The result lists `bytes_before` / `bytes_after` for each written page so a legitimate shrink is visible.
 - `knowledge(action="lint", path?)` — validates required `index.md` / `log.md`, minimal YAML frontmatter (`type`, `title`, `tags`, `updated_at`, `sources`), relative Markdown links, and orphan pages.
-- `knowledge(action="index", path?, force?)` — chunks valid pages, writes `okf_*` tables, sqlite-vec rows, FTS rows, metadata, and outgoing links. Incremental by `mtime` + `size`; `force=true`, root drift, or embedder drift rebuilds only the OKF table family.
+- `knowledge(action="index", path?, force?)` — chunks valid pages, writes `okf_*` tables, sqlite-vec rows, FTS rows, metadata, and outgoing links. Incremental by `mtime` + `size`; `force=true`, root drift, or embedder drift rebuilds only the `okf_*` table family.
 
 Supported ingest formats: markdown / text / source / configs (stdlib read),
 HTML (`html2text`), PDF (`pypdf` for text-layer, RapidOCR fallback when
@@ -378,7 +378,7 @@ library, not an agent-facing recall surface.
 
 **Embedder (`alpi/core/embed.py`)**. `Embedder` Protocol; default `FastembedEmbedder` wraps the ONNX export of `sentence-transformers/all-MiniLM-L6-v2` (384-dim, ~90 MB, no torch). Numerically equivalent to the original sentence-transformers checkpoint but ~10× lighter at runtime. Lazy-loaded under a `threading.Lock` so concurrent first-touch calls serialize on a single model instance instead of racing.
 
-The bundle uses minimal OKF-style YAML frontmatter, relative Markdown links,
+The bundle uses minimal YAML frontmatter, relative Markdown links,
 and required `index.md` / `log.md`. It is never auto-injected into the system
 prompt; access happens only through `knowledge` tool output.
 
@@ -461,7 +461,7 @@ Spawns a sub-agent with a read-only toolset (`web_search`, `web_fetch`, `web_ext
 
 **Per-turn only.** Bytes live only in the in-memory message. `session_metadata` is itself bytes- and **path-free** (`{name, mime, size}`), but the engine re-adds a **best-effort local `path`** to each persisted chat-turn attachment so clients can thumbnail history — the path may be unfetchable from another client (outside `host.attachments.fetch` roots) or after a staged file's TTL, so this is preview replay, not durable storage. The validated turn attachments (`{name, path, mime}`) are also published to a runtime-only `ContextVar` (`tools/_state.set_turn_attachments`) so a tool can resolve a turn's files. Remote clients (mobile, or desktop pointed at a remote daemon) can't hand the daemon a local path, so they upload bytes via the `host.attachments.stage` RPC (type-aware caps, content validated 1:1 with send) which writes to a TTL-swept temp dir and returns a daemon-side path.
 
-**Durable.** `knowledge(action="ingest")` is the bridge from per-turn input to permanent knowledge. It reads an attachment or source file, synthesizes OKF Markdown under `<workspace>/knowledge/`, updates `index.md` / `log.md`, and refreshes the profile-local derived index in `knowledge.sqlite`. The raw source is not copied into a durable documents directory. There is **no auto-learn**: attachments stay one-turn unless the user explicitly asks to learn/remember/save/index/compile one.
+**Durable.** `knowledge(action="ingest")` is the bridge from per-turn input to permanent knowledge. It reads an attachment or source file, synthesizes Markdown pages under `<workspace>/knowledge/`, updates `index.md` / `log.md`, and refreshes the profile-local derived index in `knowledge.sqlite`. The raw source is not copied into a durable documents directory. There is **no auto-learn**: attachments stay one-turn unless the user explicitly asks to learn/remember/save/index/compile one.
 
 ### Vision (`alpi/tools/read_image.py`)
 

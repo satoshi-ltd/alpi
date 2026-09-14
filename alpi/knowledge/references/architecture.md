@@ -35,7 +35,7 @@ Local agent runtime, per turn:
 | `alpi/memory.py` | `USER.md`, `MEMORY.md`, `AGENT.md`. |
 | `alpi/promotion.py` | Compaction-to-memory promotion queue. |
 | `alpi/compaction.py` | Auto-compact pipeline + logs. |
-| `alpi/tools/knowledge_base.py` | `knowledge` tool for user/workspace OKF wiki. |
+| `alpi/tools/knowledge_base.py` | `knowledge` tool for the user/workspace Markdown knowledge wiki. |
 | `alpi/tools/workspace.py` | Document readers/chunker used by knowledge ingest. |
 | `alpi/tui/` | Terminal UI. |
 | `alpi/host/` | Host-plane JSON-RPC for desktop/mobile. |
@@ -118,7 +118,7 @@ Every turn binds one `RunContext`, `ToolExecutor`, and `ExecutionWorld`. Tools a
 
 - `write_file` / `edit_file` — syntax-lint before writing supported formats.
 - `safe_write_secret(...)` — canonical path for credential files.
-- `knowledge(action="search", query, k=5)` — semantic + lexical recall over synthesized OKF pages in `<workspace>/knowledge/`.
+- `knowledge(action="search", query, k=5)` — semantic + lexical recall over synthesized Markdown pages in `<workspace>/knowledge/`.
 - `knowledge(action="ingest", source_path?|name?, topic?, ocr?)` — explicit learning from a source file or current-turn attachment. The source is read and summarized into Markdown; the raw file is not copied.
 - `knowledge(action="maintain", source_path?, topic?, apply=true, ocr=false)` — explicit LLM-wiki workflow: write/update pages, update index/log, lint, then refresh the derived index.
 - `knowledge(action="lint", path?)` / `knowledge(action="index", path?, force?)` — validate the bundle or rebuild the `okf_*` derived tables in `knowledge.sqlite`.

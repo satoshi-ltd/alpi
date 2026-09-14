@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -567,3 +568,234 @@ def test_knowledge_tool_search_hint_uses_single_tool(tmp_home: Path, stub_embedd
 def test_search_query_description_guides_language_matching() -> None:
     desc = kb.Knowledge.parameters["properties"]["query"]["description"]
     assert "language" in desc.lower()
+
+
+def _completion(proposal: dict) -> Completion:
+    return Completion(
+        content=json.dumps(proposal),
+        tool_calls=[],
+        input_tokens=0,
+        output_tokens=0,
+        cost_usd=0.0,
+        raw=None,
+    )
+
+
+def _long_polaris_workspace(tmp_home: Path, tmp_path: Path) -> tuple[Path, str]:
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    (tmp_home / "config.yaml").write_text(f"workspace: {workspace}\n")
+    root = _bundle(workspace)
+    body = "# Polaris\n\n" + "\n\n".join(
+        f"Polaris section {i}: launch knowledge that must survive maintenance." for i in range(120)
+    ) + "\n\nTAIL-MARKER closes the page."
+    assert len(body) > kb._MAX_SNIPPET
+    (root / "concepts" / "polaris.md").write_text(_page("Polaris", body, tags=["launch"]))
+    kb.index_knowledge(tmp_home, root)
+    return root, body
+
+
+def _run_maintain_capturing_payload(monkeypatch, make_proposal) -> tuple[dict, dict]:
+    seen: dict = {}
+
+    def fake_complete(**kwargs):
+        payload = json.loads(kwargs["messages"][1]["content"])
+        seen.update(payload)
+        return _completion(make_proposal(payload["related_pages"][0]))
+
+    monkeypatch.setattr(kb.llm, "complete", fake_complete)
+    result = kb.Knowledge().run(action="maintain", topic="Polaris launch knowledge")
+    assert result.ok, result.error
+    return seen, json.loads(result.output)
+
+
+def test_maintain_gives_synthesizer_full_page_bodies_and_reports_sizes(
+    tmp_home: Path, tmp_path: Path, monkeypatch, stub_embedder,
+) -> None:
+    root, _ = _long_polaris_workspace(tmp_home, tmp_path)
+
+    def echo_page(related: dict) -> dict:
+        return {
+            "pages": [{
+                "path": related["path"],
+                "type": "concept",
+                "title": "Polaris",
+                "tags": ["launch"],
+                "sources": [],
+                "body": related["body"],
+            }],
+            "log": "Refreshed Polaris.",
+        }
+
+    seen, body = _run_maintain_capturing_payload(monkeypatch, echo_page)
+
+    related = seen["related_pages"][0]
+    assert related["path"] == "concepts/polaris.md"
+    assert "TAIL-MARKER" in related["body"]
+    assert related["truncated"] is False
+    assert "snippet" not in related
+    report = body["pages"][0]
+    assert report["path"] == "concepts/polaris.md"
+    assert report["bytes_before"] > kb._MAX_SNIPPET
+    assert abs(report["bytes_after"] - report["bytes_before"]) < 200
+    assert "TAIL-MARKER" in (root / "concepts" / "polaris.md").read_text()
+
+
+def test_maintain_reports_a_page_that_shrank(
+    tmp_home: Path, tmp_path: Path, monkeypatch, stub_embedder,
+) -> None:
+    _long_polaris_workspace(tmp_home, tmp_path)
+
+    def shrink(related: dict) -> dict:
+        return {
+            "pages": [{
+                "path": related["path"],
+                "type": "concept",
+                "title": "Polaris",
+                "tags": ["launch"],
+                "sources": [],
+                "body": "# Polaris\n\nOne line.",
+            }],
+            "log": "Condensed Polaris.",
+        }
+
+    _, body = _run_maintain_capturing_payload(monkeypatch, shrink)
+
+    report = body["pages"][0]
+    assert report["bytes_before"] > kb._MAX_SNIPPET
+    assert report["bytes_after"] < report["bytes_before"]
+    assert body["written"] == ["concepts/polaris.md"]
+
+
+def _rewrite_received(related: dict) -> dict:
+    return {
+        "path": related["path"],
+        "type": "concept",
+        "title": related["title"],
+        "tags": related["tags"],
+        "sources": [],
+        "body": related["body"],
+    }
+
+
+def test_maintain_refuses_to_rewrite_a_page_cut_by_the_page_cap(
+    tmp_home: Path, tmp_path: Path, monkeypatch, stub_embedder,
+) -> None:
+    root, _ = _long_polaris_workspace(tmp_home, tmp_path)
+    monkeypatch.setattr(kb, "_MAX_RELATED_PAGE", 400)
+    before = (root / "concepts" / "polaris.md").read_text()
+
+    seen, body = _run_maintain_capturing_payload(
+        monkeypatch,
+        lambda related: {
+            "pages": [
+                _rewrite_received(related),
+                {"path": "concepts/vega.md", "type": "concept", "title": "Vega", "tags": [], "sources": [], "body": "# Vega\n\nNew page."},
+            ],
+            "log": "Rewrote Polaris and added Vega.",
+        },
+    )
+
+    related = seen["related_pages"][0]
+    assert related["truncated"] is True
+    assert len(related["body"]) == 400
+    assert "TAIL-MARKER" not in related["body"]
+    assert (root / "concepts" / "polaris.md").read_text() == before
+    assert body["written"] == ["concepts/vega.md"]
+    assert [p["path"] for p in body["pages"]] == ["concepts/vega.md"]
+    assert body["skipped"] == [{"path": "concepts/polaris.md", "reason": kb._READ_ONLY_REASON}]
+    assert (root / "concepts" / "vega.md").is_file()
+
+
+def test_maintain_refuses_to_rewrite_a_page_cut_by_the_aggregate_cap(
+    tmp_home: Path, tmp_path: Path, monkeypatch, stub_embedder,
+) -> None:
+    root, polaris_body = _long_polaris_workspace(tmp_home, tmp_path)
+    vega_body = "# Vega\n\n" + "\n\n".join(
+        f"Vega section {i}: Polaris launch knowledge shared with Vega." for i in range(120)
+    ) + "\n\nTAIL-MARKER closes the page."
+    (root / "concepts" / "vega.md").write_text(_page("Vega", vega_body, tags=["launch"]))
+    kb.index_knowledge(tmp_home, root)
+    monkeypatch.setattr(kb, "_MAX_RELATED_TOTAL", max(len(polaris_body), len(vega_body)) + 200)
+    before = {rel: (root / rel).read_text() for rel in ("concepts/polaris.md", "concepts/vega.md")}
+
+    seen: dict = {}
+
+    def fake_complete(**kwargs):
+        payload = json.loads(kwargs["messages"][1]["content"])
+        seen.update(payload)
+        return _completion({
+            "pages": [_rewrite_received(r) for r in payload["related_pages"]],
+            "log": "Rewrote both pages.",
+        })
+
+    monkeypatch.setattr(kb.llm, "complete", fake_complete)
+    result = kb.Knowledge().run(action="maintain", topic="Polaris launch knowledge")
+    assert result.ok, result.error
+    body = json.loads(result.output)
+
+    related = seen["related_pages"]
+    assert sorted(r["path"] for r in related) == ["concepts/polaris.md", "concepts/vega.md"]
+    cut = [r for r in related if r["truncated"]]
+    full = [r for r in related if not r["truncated"]]
+    assert len(cut) == 1 and len(full) == 1
+    assert "TAIL-MARKER" not in cut[0]["body"]
+    assert body["written"] == [full[0]["path"]]
+    assert body["skipped"] == [{"path": cut[0]["path"], "reason": kb._READ_ONLY_REASON}]
+    assert (root / cut[0]["path"]).read_text() == before[cut[0]["path"]]
+    assert "TAIL-MARKER" in (root / full[0]["path"]).read_text()
+
+
+def test_maintain_refuses_to_rewrite_an_existing_page_it_never_saw(
+    tmp_home: Path, tmp_path: Path, monkeypatch, stub_embedder,
+) -> None:
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    (tmp_home / "config.yaml").write_text(f"workspace: {workspace}\n")
+    root = _bundle(workspace)
+    (workspace / "source.md").write_text("# Notes\nPolaris moved to a new launch window.\n")
+    before = (root / "concepts" / "polaris.md").read_text()
+
+    seen: dict = {}
+
+    def fake_complete(**kwargs):
+        seen.update(json.loads(kwargs["messages"][1]["content"]))
+        return _completion({
+            "pages": [{
+                "path": "concepts/polaris.md",
+                "type": "concept",
+                "title": "Polaris",
+                "tags": [],
+                "sources": [],
+                "body": "# Polaris\n\nRewritten blind.",
+            }],
+            "log": "Rewrote Polaris.",
+        })
+
+    monkeypatch.setattr(kb.llm, "complete", fake_complete)
+    result = kb.Knowledge().run(action="maintain", source_path="source.md")
+    assert result.ok, result.error
+    body = json.loads(result.output)
+
+    assert seen["related_pages"] == []
+    assert (root / "concepts" / "polaris.md").read_text() == before
+    assert body["written"] == []
+    assert body["skipped"] == [{"path": "concepts/polaris.md", "reason": kb._READ_ONLY_REASON}]
+
+
+def test_model_facing_knowledge_text_never_says_okf(tmp_path: Path) -> None:
+    import alpi
+
+    pkg = Path(alpi.__file__).parent
+    surfaces = {
+        "tool description": kb.Knowledge.description,
+        "tool parameters": json.dumps(kb.Knowledge.parameters),
+        "maintain prompt": kb._MAINTAIN_PROMPT,
+        "system prompt": (pkg / "prompts" / "system_prompt.md").read_text(),
+        "lint output": json.dumps(kb.lint_knowledge(tmp_path)),
+    }
+    for ref in sorted((pkg / "knowledge" / "references").glob("*.md")):
+        surfaces[ref.name] = ref.read_text()
+
+    assert "required knowledge file is missing" in surfaces["lint output"]
+    assert [name for name, text in surfaces.items() if re.search(r"\bOKF\b", text)] == []

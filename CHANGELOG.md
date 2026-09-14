@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.14.38 — 2026-09-14 — maintain reads the whole page it rewrites
+
+- **`knowledge(action="maintain")` no longer truncates existing pages.** The
+  synthesizer used to see only a 700-character search snippet of each related page
+  and then overwrote the whole file with what it reconstructed, so any page longer
+  than a snippet shrank silently on every touch. It now receives the current full
+  body of each related page, read from disk under the requested root, with a
+  per-page and an aggregate size cap and a `truncated` flag when a cap applied; the
+  prompt states that a proposed body replaces the whole file. An existing page is
+  replaced only when the synthesizer received its full body in that run: a page cut
+  by a cap, or never retrieved, is reported under `skipped` with the reason and the
+  file stays untouched, while new pages in the same proposal still land. The result
+  lists `bytes_before` / `bytes_after` for every written page under `pages`, so a
+  legitimate consolidation is visible and can be reported to the user instead of
+  staying quiet. Regression tests: a multi-KB page survives a maintenance that
+  touches it, a shrink is reported, and a page cut by the per-page cap, cut by the
+  aggregate cap, or never retrieved keeps its bytes.
+- **"OKF" is gone from everything the model or the user reads.** The system
+  prompt, the `knowledge` tool description and parameters, the maintain prompt,
+  the lint message for a missing `index.md` / `log.md`, the packaged references and
+  the architecture and config docs now say "knowledge wiki" or "Markdown pages
+  under `knowledge/`". The acronym was never expanded anywhere and the model kept
+  repeating it into memories and replies because the prompt handed it over. The
+  `okf_*` SQLite table names are internal and stay. A test scans every model-facing
+  surface for the word.
+
 ## v0.14.37 + desktop-v0.5.27 — 2026-09-14 — an unquoted timestamp is still a timestamp
 
 - **Knowledge pages accept an unquoted `updated_at`.** YAML reads
