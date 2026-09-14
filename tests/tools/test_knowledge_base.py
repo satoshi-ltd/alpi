@@ -113,6 +113,28 @@ def test_knowledge_lint_reports_invalid_frontmatter(tmp_path: Path) -> None:
     assert any("title" in issue["message"] for issue in report["issues"])
 
 
+def test_frontmatter_accepts_unquoted_iso_timestamp(tmp_path: Path) -> None:
+    root = _bundle(tmp_path)
+    (root / "concepts" / "stamped.md").write_text(
+        "---\ntype: concept\ntitle: Stamped\ntags: []\nupdated_at: 2026-09-14T04:19:00Z\nsources: []\n---\n\n# Stamped\n"
+    )
+    report = kb.lint_knowledge(root)
+    assert not [i for i in report["issues"] if "updated_at" in i["message"]], report["issues"]
+    meta, _body = kb._frontmatter_parts((root / "concepts" / "stamped.md").read_text())
+    assert meta["updated_at"] == "2026-09-14T04:19:00Z"
+
+
+def test_frontmatter_accepts_unquoted_date(tmp_path: Path) -> None:
+    root = _bundle(tmp_path)
+    (root / "concepts" / "dated.md").write_text(
+        "---\ntype: concept\ntitle: Dated\ntags: []\nupdated_at: 2026-09-14\nsources: []\n---\n\n# Dated\n"
+    )
+    report = kb.lint_knowledge(root)
+    assert not [i for i in report["issues"] if "updated_at" in i["message"]], report["issues"]
+    meta, _body = kb._frontmatter_parts((root / "concepts" / "dated.md").read_text())
+    assert meta["updated_at"] == "2026-09-14"
+
+
 def test_knowledge_lint_detects_broken_links(tmp_path: Path) -> None:
     root = _bundle(tmp_path)
     (root / "index.md").write_text(

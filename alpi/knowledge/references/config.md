@@ -23,6 +23,7 @@
 | `workspace` | Default project root for file/terminal tools. |
 | `budget` | Daily spend limit (USD or tokens, mutually exclusive). |
 | `providers` | Provider-specific saved endpoints/choices. |
+| `providers.openrouter.ignore` | OpenRouter provider slugs (lowercase, e.g. `together`) excluded from routing for every `openrouter/…` model of the profile — main model, tiers and fallbacks. An exclusion, not a pin: OpenRouter still picks freely among the rest, so `:nitro` sorting keeps working. Sent as `extra_body.provider.ignore`; re-read from disk each turn. |
 | `tools` | Sandbox, vision, TTS/STT, approvals, denylist, char budget. |
 | `runtime` | Provider watchdog/retry settings and daemon asset prefetch mode. |
 | `schedule` | Scheduler settings. |
@@ -82,6 +83,7 @@ providers:
 | `budget` | Next turn. |
 | `tools.terminal.sandbox` | Next terminal call. |
 | `tools.deny` | Next turn (re-read from disk per turn, same as `budget`). |
+| `providers.openrouter.ignore` | Next turn (re-read from disk per turn, same as `tools.deny`). |
 | `tools.max_steps_per_turn` | Next turn. |
 | `tui.*` | Next session (`tui.auto_resume`: next launch). |
 | Email creds (`.env` `EMAIL__<ID>__PASSWORD` / shared `GMAIL_CLIENT_*`, `secrets/gmail_tokens/<id>.json`) | Next `email` tool call (read at call time, no restart). |

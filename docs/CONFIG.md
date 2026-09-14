@@ -65,6 +65,7 @@ Three options:
 | `tiers.deep.effort` | `""` | `low` \| `medium` \| `high` — reasoning effort for the deep tier's own model | next turn |
 | `providers.ollama` | `[]` | list of `{name, url}` — one per Ollama server | next session |
 | `providers.openrouter.models` | `[]` | list of OpenRouter model ids the user has picked | next session |
+| `providers.openrouter.ignore` | `[]` | OpenRouter provider slugs (lowercase, e.g. `together`) excluded from routing for every `openrouter/…` model of this profile, tiers and fallbacks included. An exclusion, not a pin: OpenRouter still picks freely among the rest, so `:nitro` sorting keeps working. Sent as `extra_body.provider.ignore` | next turn |
 | `public_bio` | `""` | string — one-line public tag-line broadcast to every workgroup this profile joins (source of truth for `Member.bio` on the hub). Empty = don't publish; peers see name only. `AGENT.md` stays private. | next `workgroup.join` |
 | `paused` | `false` | bool — profile-level pause flag. Surfaced in the desktop / mobile profile summary so paired apps can show + respect the state; the daemon itself does not gate turns on this flag. Persisted only when `true`. | next host-plane read |
 

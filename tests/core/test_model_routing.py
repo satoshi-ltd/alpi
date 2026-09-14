@@ -243,3 +243,46 @@ def test_web_extract_tier_reference_unconfigured_uses_main(monkeypatch, tmp_path
     assert out.ok
     assert seen == ["openrouter/main"]
     assert "[fallback:" not in out.output
+
+
+def _cfg_with(tmp_path: Path, text: str):
+    (tmp_path / "config.yaml").write_text(text)
+    return cfg_mod.load(tmp_path)
+
+
+def test_openrouter_ignore_list_reaches_extra_body(tmp_path: Path) -> None:
+    cfg = _cfg_with(tmp_path, "model: openrouter/deepseek/deepseek-v4.1-flash:nitro\nproviders:\n  openrouter:\n    ignore: [together]\nmodel_reasoning:\n  effort: medium\n")
+    out = cfg_mod.resolve_model(cfg)
+    assert out["extra_body"]["provider"] == {"ignore": ["together"]}
+    assert out["extra_body"]["reasoning"] == {"effort": "medium"}, "the exclusion must not clobber the reasoning entry"
+
+
+def test_openrouter_ignore_is_normalised_and_deduped(tmp_path: Path) -> None:
+    cfg = _cfg_with(tmp_path, "model: openrouter/deepseek/deepseek-v4.1-flash\nproviders:\n  openrouter:\n    ignore: [' Together', 'deepinfra', 'together', '']\n")
+    assert cfg_mod.openrouter_ignore(cfg) == ["together", "deepinfra"]
+    assert cfg_mod.resolve_model(cfg)["extra_body"]["provider"]["ignore"] == ["together", "deepinfra"]
+
+
+def test_openrouter_ignore_accepts_a_bare_string(tmp_path: Path) -> None:
+    cfg = _cfg_with(tmp_path, "model: openrouter/x/y\nproviders:\n  openrouter:\n    ignore: Together\n")
+    assert cfg_mod.resolve_model(cfg)["extra_body"]["provider"]["ignore"] == ["together"]
+
+
+def test_openrouter_ignore_never_touches_other_providers(tmp_path: Path) -> None:
+    cfg = _cfg_with(tmp_path, "model: anthropic/claude-opus-5\nproviders:\n  openrouter:\n    ignore: [together]\n")
+    assert "extra_body" not in cfg_mod.resolve_model(cfg)
+
+
+def test_openrouter_ignore_absent_or_empty_adds_nothing(tmp_path: Path) -> None:
+    for text in ("model: openrouter/x/y\n", "model: openrouter/x/y\nproviders:\n  openrouter:\n    ignore: []\n", "model: openrouter/x/y\nproviders:\n  openrouter:\n    models: [x/y]\n"):
+        out = cfg_mod.resolve_model(_cfg_with(tmp_path, text))
+        assert "provider" not in (out.get("extra_body") or {}), text
+
+
+def test_openrouter_ignore_applies_to_tiers_and_overrides(tmp_path: Path) -> None:
+    cfg = _cfg_with(tmp_path, "model: openrouter/a/b\nproviders:\n  openrouter:\n    ignore: [together]\ntiers:\n  fast:\n    model: openrouter/c/d\n    effort: low\n")
+    fast = cfg_mod.resolve_model(cfg, tier="fast")
+    assert fast["model"] == "openrouter/c/d" and fast["extra_body"]["provider"]["ignore"] == ["together"]
+    assert fast["extra_body"]["reasoning"] == {"effort": "low"}
+    fb = cfg_mod.resolve_model(cfg, model="openrouter/e/f")
+    assert fb["extra_body"]["provider"]["ignore"] == ["together"]

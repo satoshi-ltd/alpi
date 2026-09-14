@@ -11,6 +11,21 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.5.27 — 2026-09-14 — the Stop button lets go
+
+- **Stop no longer sticks on a failed run.** When the daemon ended a run with an error
+  it sent `error` then `done`; the client kept the errored turn on screen so you could
+  read the message — correct — but still treated it as running. The composer went on
+  showing *Stop*, and pressing it sent `host.chat.cancel` for a request the daemon had
+  already forgotten, so nothing came back and the button sat on *Stopping…* with no
+  way to send until the next turn. An errored turn is now marked `ended` the moment
+  `done` lands, the composer shows *Send* for it, and a pending *Stopping…* clears when
+  the turn ends whether or not the daemon confirms the cancel. Regression tests in
+  `useChatStream` (error then done marks the turn ended; error alone stays stoppable)
+  and `ChatPane` (an ended turn shows Send; Stopping releases when the turn ends).
+  Client-only change: the minimum compatible alpi stays at 0.14.34, as pinned by
+  v0.5.26.
+
 ## v0.5.26 — 2026-09-11 — one list for providers, one for models
 
 - **Providers are a dropdown, not a row of pills.** Five pills wrapped onto two lines

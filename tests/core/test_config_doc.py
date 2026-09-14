@@ -33,6 +33,7 @@ DOCUMENTED_BUT_PARSED_ELSEWHERE = {
     "budget.daily_usd",
     "mcp.servers",
     "providers.openrouter.models",
+    "providers.openrouter.ignore",  # config.openrouter_ignore
     "relay.peer",
 }
 

@@ -153,6 +153,18 @@ describe("useChatStream live frames", () => {
     emit({ kind: "done" });
     expect(turnOf(result)).not.toBeNull();
     expect(turnOf(result).error).toBe("model timeout");
+    expect(turnOf(result).ended).toBe(true);
+    expect(turnOf(result).settling).toBeFalsy();
+  });
+
+  it("an error frame alone leaves the turn stoppable until done lands", async () => {
+    const { result } = mount();
+    await waitForListen();
+    seedTurn(result, { sessionId: "sess-1" });
+    emit({ kind: "error", text: "upstream 502" });
+    expect(turnOf(result).ended).toBeFalsy();
+    emit({ kind: "done" });
+    expect(turnOf(result).ended).toBe(true);
   });
 
   it("drops frames whose request_id is not a tracked turn (interrupted/stale)", async () => {

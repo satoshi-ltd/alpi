@@ -711,6 +711,25 @@ def resolve_model(
         extra = reasoning_kwargs(model_str, cfg.model_reasoning.effort)
         if extra:
             out = merge_into_kwargs(out, extra)
+    ignore = openrouter_ignore(cfg)
+    if ignore and head == "openrouter":
+        from alpi.providers.reasoning import merge_into_kwargs
+        # An exclusion list, not a pin: OpenRouter still routes freely among every other endpoint, so :nitro sorting and fallbacks keep working.
+        out = merge_into_kwargs(out, {"extra_body": {"provider": {"ignore": ignore}}})
+    return out
+
+
+def openrouter_ignore(cfg: Config) -> list[str]:
+    raw = (cfg.providers.get("openrouter") or {}).get("ignore") if isinstance(cfg.providers.get("openrouter"), dict) else None
+    if isinstance(raw, str):
+        raw = [raw]
+    if not isinstance(raw, list):
+        return []
+    out: list[str] = []
+    for item in raw:
+        slug = str(item or "").strip().lower()
+        if slug and slug not in out:
+            out.append(slug)
     return out
 
 

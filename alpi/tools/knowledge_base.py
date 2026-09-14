@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -88,6 +88,9 @@ def _frontmatter_parts(text: str) -> tuple[dict[str, Any], str]:
         raise ValueError(f"invalid YAML frontmatter: {e}") from e
     if not isinstance(meta, dict):
         raise ValueError("frontmatter must be a mapping")
+    # An unquoted ISO timestamp parses as a datetime; agents drop the quotes often enough that rejecting it costs a rewrite per page.
+    if isinstance(meta.get("updated_at"), (datetime, date)):
+        meta["updated_at"] = meta["updated_at"].isoformat().replace("+00:00", "Z")
     return meta, "\n".join(lines[end + 1:]).strip()
 
 

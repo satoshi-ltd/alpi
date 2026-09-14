@@ -109,13 +109,13 @@ export default function ChatPane({
 
   useEffect(() => {
     setStopping(false);
-  }, [pendingTurn?.requestId]);
+  }, [pendingTurn?.requestId, pendingTurn?.ended]);
 
   const handleCancel = useCallback(() => {
     setStopping(true);
     onCancel?.();
   }, [onCancel]);
-  const cancellableTurn = !!pendingTurn && !pendingTurn.settling;
+  const cancellableTurn = !!pendingTurn && !pendingTurn.settling && !pendingTurn.ended;
 
   // Lazy heavy fields — voice_id / models / mcps. Scoped per connection so two daemons with the same profile name never share state.
   const { detail: activeDetail, refresh: refreshActiveDetail } = useProfileDetail(connectionId ?? null, activeProfile?.name ?? null);

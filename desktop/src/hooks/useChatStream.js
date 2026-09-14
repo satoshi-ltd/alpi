@@ -242,8 +242,8 @@ export function useChatStream({
       const cur = prev[requestId];
       if (cur === undefined) return prev;
       if (cur.error) {
-        // keep an errored turn on screen
-        return cur.settling ? { ...prev, [requestId]: { ...cur, settling: false } } : prev;
+        // keep an errored turn on screen; `ended` tells the composer there is nothing left to stop
+        return cur.ended && !cur.settling ? prev : { ...prev, [requestId]: { ...cur, settling: false, ended: true } };
       }
       const { [requestId]: _omit, ...rest } = prev;
       return rest;

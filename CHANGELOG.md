@@ -1,5 +1,35 @@
 # Changelog
 
+## v0.14.37 + desktop-v0.5.27 — 2026-09-14 — an unquoted timestamp is still a timestamp
+
+- **Knowledge pages accept an unquoted `updated_at`.** YAML reads
+  `updated_at: 2026-09-14T04:19:00Z` as a datetime, and the frontmatter validator
+  rejected it with *must be a non-empty string*. Agents drop the quotes often enough
+  that every Confluence ingest on a busy profile ended with the same four `edit_file`
+  fixes and a second index run. The frontmatter reader now normalises a YAML datetime
+  or date back to its ISO string before validation; quoted values are untouched.
+  Regression tests cover both shapes through `lint_knowledge`.
+- **OpenRouter provider exclusions, opt-in.** `providers.openrouter.ignore: [together]`
+  in a profile's `config.yaml` sends `provider.ignore` with every request for that
+  profile's `openrouter/…` models — the main model, its tiers and its fallbacks alike.
+  It is an exclusion list, not a pin: OpenRouter keeps choosing freely among the other
+  endpoints, so `:nitro` throughput sorting and its fallbacks still apply. Slugs are
+  lower-cased and de-duplicated; a bare string is accepted as a one-item list; an
+  empty or absent list adds nothing to the request, and non-OpenRouter models never
+  see the field. The list is re-read from disk on every turn like `tools.deny`, so
+  adding, changing or removing an exclusion reaches the next request of a live engine
+  without a restart. Documented in `docs/CONFIG.md` and the config reference. Six
+  routing tests pin the request shape; five engine tests pin the live reload (first
+  turn, changed, added, removed, saved models untouched).
+- **Desktop: the Stop button no longer sticks after a failed run.** When a run died
+  mid-stream the daemon sent `error` then `done`; the client kept the errored turn on
+  screen — correct — but still treated it as running, so the composer showed *Stop*,
+  and pressing it sent `host.chat.cancel` for a request that no longer existed. Nothing
+  came back and the button stayed on *Stopping…* until the next turn. An errored turn
+  is now marked `ended` when `done` lands, the composer shows *Send* for it, and a
+  pending *Stopping…* clears the moment the turn ends whether or not the daemon answers
+  the cancel. Four regression tests, in the stream hook and the chat pane.
+
 ## v0.14.36 — 2026-09-12 — doctor probes MCP servers with the profile's own env
 
 - **The interactive `doctor` spawned MCP servers without the profile `.env`.** The

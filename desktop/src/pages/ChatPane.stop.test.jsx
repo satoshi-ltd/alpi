@@ -6,9 +6,9 @@ import ChatPane from "./ChatPane.jsx";
 globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} };
 globalThis.Element.prototype.scrollTo ??= () => {};
 
-function renderPending(onCancel, pendingExtra = {}) {
+function pendingPane(onCancel, pendingExtra = {}) {
   const profile = { name: "lens", model: "x/y" };
-  return render(
+  return (
     <ChatPane
       view={{ kind: "profile", profile: profile.name, sessionId: "s1" }}
       profiles={[profile]}
@@ -19,8 +19,12 @@ function renderPending(onCancel, pendingExtra = {}) {
       onCancel={onCancel}
       onRewriteMessage={vi.fn()}
       onRetryMessage={vi.fn()}
-    />,
+    />
   );
+}
+
+function renderPending(onCancel, pendingExtra = {}) {
+  return render(pendingPane(onCancel, pendingExtra));
 }
 
 describe("ChatPane — stop button optimistic feedback", () => {
@@ -51,5 +55,25 @@ describe("ChatPane — stop button optimistic feedback", () => {
 
     expect(screen.getByLabelText("Send")).toBeTruthy();
     expect(screen.queryByLabelText("Stop")).toBeNull();
+  });
+
+  it("shows Send, not Stop, for a turn that ended in error and stays on screen", () => {
+    renderPending(vi.fn(), { error: "upstream 502", ended: true });
+
+    expect(screen.getByLabelText("Send")).toBeTruthy();
+    expect(screen.queryByLabelText("Stop")).toBeNull();
+  });
+
+  it("leaves the 'Stopping' state once the turn ends, even when the daemon never confirmed", () => {
+    const onCancel = vi.fn();
+    const { rerender } = renderPending(onCancel);
+
+    fireEvent.click(screen.getByLabelText("Stop"));
+    expect(screen.getByLabelText("Stopping")).toBeTruthy();
+
+    rerender(pendingPane(onCancel, { error: "upstream 502", ended: true }));
+
+    expect(screen.getByLabelText("Send")).toBeTruthy();
+    expect(screen.queryByLabelText("Stopping")).toBeNull();
   });
 });

@@ -419,6 +419,16 @@ class Engine:
         self.cfg.tiers = fresh.tiers
         self.cfg.fallback_models = fresh.fallback_models
         self.cfg.relay = fresh.relay
+        openrouter = self.cfg.providers.get("openrouter")
+        if not isinstance(openrouter, dict):
+            openrouter = {}
+        ignore = config_mod.openrouter_ignore(fresh)
+        if ignore:
+            openrouter["ignore"] = ignore
+        else:
+            openrouter.pop("ignore", None)
+        if openrouter or "openrouter" in self.cfg.providers:
+            self.cfg.providers["openrouter"] = openrouter
 
     def _run_turn_locked(
         self, user_text: str, emit: EventSink, *, source: str = "user",
