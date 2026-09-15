@@ -177,6 +177,11 @@ doesn't reach:
     list, and an unparsable hop falls back to the socket peer. Rejected
     pairing codes count too; successful authentications, timeouts,
     protocol errors and internal errors never do. Every
+    Device tokens do not expire by default; `host.token_ttl_days`
+    expires them after that many days of **inactivity**, evaluated
+    against `last_seen` on every read, so a device in regular use never
+    expires and an expired one fails with `token-expired` and drops its
+    live sockets until it pairs again. Every
     authenticated request must carry a per-device token in
     `params.auth_token`. Connections and their device credentials live in
     `~/.alpi/host/connections.yaml` (mode 0600, device tokens stored as

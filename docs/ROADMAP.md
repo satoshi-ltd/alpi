@@ -44,17 +44,6 @@ frontmatter as one unit; KB.8 closes. Each fix lands with its own test.
 | KB.7 | Round-trip with external editors. Export already works (opens as an Obsidian vault; GitHub and VS Code render clean); import only partly (an unquoted `updated_at` is accepted since v0.14.37). `_LINK_RE` only sees inline `[t](dest)`: recognize `[[wikilinks]]` and CommonMark reference links for the graph (never emit them, alpi keeps writing standard relative links) and skip fenced code blocks, which today yield real broken-link findings. Note in docs that `type` collides with Hugo's reserved layout key and that the no-orphans rule is alpi's own, the main reason an external vault fails lint. | 🔵 |
 | KB.8 | Cover the untested rules: the orphan rule, required `index.md`/`log.md` (every test bundle ships both), root drift across two roots, embedder drift without `force`, attachment resolution in ingest, `_parse_llm_json`, `_update_index`, `_append_log`, `k` bounds, the tool-level `index`/`lint` branches and the OCR paths. Separate PR from the fixes above. | 🔵 |
 
-### Host token hardening
-
-Raised by the 2026-09 mirai WSS deployment review. Migration invariant for
-every item: **no existing connection is lost or re-paired.** The cleartext
-token lives on the client, which keeps presenting it unchanged; only the
-server-side representation and policy move.
-
-| ID | Item | Status |
-|---|---|---|
-| TOKEN.2 | Optional device-token expiry driven by **inactivity**, not age: `host.token_ttl_days` (absent = today's behavior, no expiry) evaluated against `last_seen`, so devices in active use never expire and legacy rows stay valid until the operator sets the policy. Expired rows must read as inactive to `_active_authorizations` so live sessions drop too. | 🟡 |
-
 ### Production client exposure
 
 The public host channel already ships: WSS routes, one-time pairing,

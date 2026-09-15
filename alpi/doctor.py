@@ -848,6 +848,30 @@ def _check_credential_copies() -> list[Check]:
     legacy = connections_mod.legacy_store_path()
     host = live.parent
     out: list[Check] = []
+    ttl = connections_mod.token_ttl_seconds()
+    if ttl > 0:
+        days = ttl // 86400
+        try:
+            devices = [
+                device
+                for connection in connections_mod.list_connections()
+                if connection["status"] == "active"
+                for device in connection["devices"]
+                if device["status"] == "active"
+            ]
+        except Exception as exc:  # noqa: BLE001 — a broken store must not hide the rest of the section
+            out.append(Check(
+                "Security", "Device token expiry", "warn",
+                f"{days} day(s) of inactivity · cannot be verified: the connection store is unreadable ({exc})",
+            ))
+        else:
+            stale = sum(1 for device in devices if connections_mod.device_expired(device, ttl))
+            detail = f"{days} day(s) of inactivity · {len(devices) - stale} active, {stale} expired"
+            out.append(Check(
+                "Security", "Device token expiry",
+                "warn" if stale else "ok",
+                detail + (" — expired devices must re-pair" if stale else ""),
+            ))
     if legacy.exists():
         out.append(Check(
             "Security", "Legacy device store", "warn",

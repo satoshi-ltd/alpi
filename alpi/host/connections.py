@@ -4,6 +4,7 @@ import contextlib
 import hashlib
 import hmac
 import logging
+import math
 import os
 import re
 import secrets
@@ -44,6 +45,8 @@ _cached_path: str | None = None
 _cached_identity: tuple[str, int, int, int] | None = None
 _failed_identity: tuple[str, int, int, int] | None = None
 _pending_migration: tuple[str, str] | None = None
+_ttl_cache: tuple[tuple[str, int, int] | None, int] | None = None
+_MAX_TTL_DAYS = 36500
 _MISSING = object()
 
 
@@ -130,6 +133,75 @@ def _tokens_match(stored: str, presented: str) -> bool:
 
 def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _config_identity() -> tuple[str, int, int] | None:
+    path = _root() / "config.yaml"
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
+    return (str(path), stat.st_size, stat.st_mtime_ns)
+
+
+def _token_ttl_days_raw() -> Any:
+    """Read only this policy out of config.yaml. Going through the full config parser would let an unrelated broken key raise on every authenticated request."""
+    # ValueError covers what the reader itself refuses: bytes that are not UTF-8, and an integer literal past Python's int-str conversion limit.
+    try:
+        raw = yaml.safe_load((_root() / "config.yaml").read_text(encoding="utf-8"))
+    except (OSError, ValueError, yaml.YAMLError) as exc:
+        log.warning("host.token_ttl_days unreadable (%s); no expiry is applied", exc)
+        return None
+    host = raw.get("host") if isinstance(raw, dict) else None
+    return host.get("token_ttl_days") if isinstance(host, dict) else None
+
+
+def _ttl_days(raw: Any) -> float | int:
+    """The policy as a number of days, or 0 when the value cannot be one. Integers stay integers: `float()` overflows on a 400-digit YAML int, and the clamp below handles the size."""
+    if isinstance(raw, bool):
+        log.warning("ignoring boolean host.token_ttl_days: %r", raw)
+        return 0
+    if isinstance(raw, int):
+        return raw
+    try:
+        days = float(raw)
+    except (TypeError, ValueError, OverflowError):
+        log.warning("ignoring non-numeric host.token_ttl_days: %r", raw)
+        return 0
+    if not math.isfinite(days):
+        log.warning("ignoring non-finite host.token_ttl_days: %r", raw)
+        return 0
+    return days
+
+
+def token_ttl_seconds() -> int:
+    """Seconds of inactivity after which a device token stops authenticating; 0 disables expiry. Never raises: a policy we cannot read must not revoke anyone. Cached by config identity — this runs on every authenticated request."""
+    global _ttl_cache
+    identity = _config_identity()
+    if _ttl_cache is not None and _ttl_cache[0] == identity:
+        return _ttl_cache[1]
+    seconds = 0
+    raw = _token_ttl_days_raw() if identity is not None else None
+    days = _ttl_days(raw) if raw is not None else 0
+    if days > 0:
+        seconds = int(min(days, _MAX_TTL_DAYS) * 86400)
+    elif days < 0:
+        log.warning("ignoring negative host.token_ttl_days: %r", raw)
+    _ttl_cache = (identity, seconds)
+    return seconds
+
+
+def device_expired(device: dict[str, Any], ttl_seconds: int, now: int | None = None) -> bool:
+    """True when inactivity has outlived the policy. Read-only: the row keeps its data and authenticates again if the operator lifts the TTL. Unreadable timestamps never expire a device — a parsing accident must not revoke anyone."""
+    if ttl_seconds <= 0:
+        return False
+    try:
+        reference = int(device.get("last_seen") or device.get("created") or 0)
+    except (TypeError, ValueError):
+        return False
+    if reference <= 0:
+        return False
+    return (now if now is not None else int(time.time())) - reference > ttl_seconds
 
 
 def _role(value: Any) -> str:
@@ -504,7 +576,8 @@ def save_store(data: dict[str, Any]) -> None:
 
 
 def invalidate_cache() -> None:
-    global _cached, _cached_path, _cached_identity, _failed_identity
+    global _cached, _cached_path, _cached_identity, _failed_identity, _ttl_cache
+    _ttl_cache = None
     with _cache_lock:
         _cached = None
         _cached_path = None
@@ -575,6 +648,7 @@ def _device_payload(device: dict[str, Any]) -> dict[str, Any]:
         "created": device.get("created") or 0,
         "last_seen": device.get("last_seen"),
         "status": device.get("status") or "active",
+        "expired": device.get("status") == "active" and device_expired(device, token_ttl_seconds()),
     }
 
 
@@ -939,6 +1013,13 @@ def authenticate(token: str, min_interval: float = 60.0) -> AuthResult:
                 )
             if connection["status"] != "active":
                 continue
+            if device_expired(device, token_ttl_seconds(), now):
+                return AuthResult(
+                    False,
+                    connection_id=connection["id"],
+                    device_id=device["id"],
+                    reason="token-expired",
+                )
             result = AuthResult(
                 True,
                 connection["role"],

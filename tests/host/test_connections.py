@@ -4,6 +4,7 @@ import hashlib
 import json
 import logging
 import multiprocessing as mp
+import time
 import shutil
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
@@ -314,6 +315,232 @@ def test_migration_writes_no_backup_and_leaves_historical_copies_alone(
     assert not legacy.exists()
     assert historical.read_text() == "older backup"
     assert sorted(p.name for p in legacy.parent.glob("devices.yaml*")) == ["devices.yaml.migrated"]
+
+
+DAY = 86400
+
+
+def _with_ttl(root: Path, days) -> None:
+    """Write the policy only — no cache reset, so every test exercises the automatic invalidation."""
+    text = "model: x\n" if days is None else f"model: x\nhost:\n  token_ttl_days: {days}\n"
+    (root / "config.yaml").write_text(text)
+
+
+def _age_device(connection_id: str, device_id: str, seconds_ago: int) -> None:
+    data = connections.load_store()
+    for row in data["connections"]:
+        if row["id"] != connection_id:
+            continue
+        for device in row["devices"]:
+            if device["id"] == device_id:
+                device["last_seen"] = int(time.time()) - seconds_ago
+    connections.save_store(data)
+
+
+def test_without_a_ttl_an_idle_device_keeps_working(monkeypatch, tmp_path: Path) -> None:
+    root = _root(monkeypatch, tmp_path)
+    row, device = connections.create_connection("Javi")
+    _with_ttl(root, None)
+    _age_device(row["id"], device["id"], 900 * DAY)
+
+    assert connections.token_ttl_seconds() == 0
+    assert connections.authenticate(device["token"], min_interval=10**9).valid
+    assert connections.public_connection(connections.list_connections()[0])["devices"][0]["expired"] is False
+
+
+def test_inactivity_past_the_ttl_stops_authenticating_without_touching_the_store(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    root = _root(monkeypatch, tmp_path)
+    row, device = connections.create_connection("Javi", profile_scope=["atlas"])
+    _with_ttl(root, 30)
+    _age_device(row["id"], device["id"], 31 * DAY)
+    before = connections.store_path().read_text()
+
+    auth = connections.authenticate(device["token"], min_interval=10**9)
+
+    assert auth.valid is False
+    assert auth.reason == "token-expired"
+    assert (auth.connection_id, auth.device_id) == (row["id"], device["id"])
+    assert connections.store_path().read_text() == before
+    public = connections.public_connection(connections.list_connections()[0])["devices"][0]
+    assert public["expired"] is True
+    assert public["token_id"] == device["token"][-8:]
+
+    # The policy is a read-time judgement: lifting it brings the device straight back.
+    _with_ttl(root, None)
+    assert connections.authenticate(device["token"], min_interval=10**9).valid
+
+
+def test_a_device_in_daily_use_never_expires(monkeypatch, tmp_path: Path) -> None:
+    root = _root(monkeypatch, tmp_path)
+    row, device = connections.create_connection("Javi")
+    _with_ttl(root, 30)
+
+    for _ in range(3):
+        _age_device(row["id"], device["id"], 29 * DAY)
+        assert connections.authenticate(device["token"], min_interval=0).valid
+
+    stored = yaml.safe_load(connections.store_path().read_text())["connections"][0]["devices"][0]
+    assert int(time.time()) - int(stored["last_seen"]) < 5
+
+
+def test_expiry_follows_a_config_change_without_a_restart(monkeypatch, tmp_path: Path) -> None:
+    root = _root(monkeypatch, tmp_path)
+    row, device = connections.create_connection("Javi")
+    _age_device(row["id"], device["id"], 10 * DAY)
+
+    _with_ttl(root, 30)
+    assert connections.authenticate(device["token"], min_interval=10**9).valid
+    _with_ttl(root, 7)
+    assert connections.authenticate(device["token"], min_interval=10**9).reason == "token-expired"
+    _with_ttl(root, 30)
+    assert connections.authenticate(device["token"], min_interval=10**9).valid
+
+
+@pytest.mark.parametrize("value", ["soon", -5, 0, ""])
+def test_an_unusable_ttl_is_ignored_rather_than_locking_everyone_out(
+    monkeypatch, tmp_path: Path, value,
+) -> None:
+    root = _root(monkeypatch, tmp_path)
+    row, device = connections.create_connection("Javi")
+    _with_ttl(root, f'"{value}"' if isinstance(value, str) else value)
+    _age_device(row["id"], device["id"], 900 * DAY)
+
+    assert connections.token_ttl_seconds() == 0
+    assert connections.authenticate(device["token"], min_interval=10**9).valid
+
+
+def test_a_device_that_never_connected_expires_from_its_creation(monkeypatch, tmp_path: Path) -> None:
+    root = _root(monkeypatch, tmp_path)
+    _root_row, device = connections.create_connection("Javi")
+    _with_ttl(root, 7)
+    data = connections.load_store()
+    data["connections"][0]["devices"][0]["created"] = int(time.time()) - 8 * DAY
+    data["connections"][0]["devices"][0]["last_seen"] = None
+    connections.save_store(data)
+
+    assert connections.authenticate(device["token"], min_interval=10**9).reason == "token-expired"
+
+
+def test_expired_devices_read_as_inactive_so_live_sockets_drop(monkeypatch, tmp_path: Path) -> None:
+    from alpi.host import server as host_server
+
+    root = _root(monkeypatch, tmp_path)
+    row, device = connections.create_connection("Javi")
+    _, fresh = connections.add_device(row["id"])
+    _with_ttl(root, 30)
+
+    assert host_server._active_authorizations() == {(row["id"], device["id"]), (row["id"], fresh["id"])}
+
+    _age_device(row["id"], device["id"], 31 * DAY)
+
+    assert host_server._active_authorizations() == {(row["id"], fresh["id"])}
+
+
+def test_an_unrelated_broken_config_key_never_revokes_anyone(monkeypatch, tmp_path: Path) -> None:
+    from alpi.host import server as host_server
+
+    root = _root(monkeypatch, tmp_path)
+    row, device = connections.create_connection("Javi")
+    (root / "config.yaml").write_text(
+        "model: x\nhost:\n  token_ttl_days: 30\ntools:\n  max_steps_per_turn: broken\n",
+    )
+
+    assert connections.token_ttl_seconds() == 30 * DAY
+    assert connections.authenticate(device["token"], min_interval=10**9).valid
+    assert host_server._active_authorizations() == {(row["id"], device["id"])}
+
+
+@pytest.mark.parametrize("value", [".inf", "-.inf", ".nan", "true", "1e400"])
+def test_a_policy_that_cannot_be_a_duration_is_ignored(monkeypatch, tmp_path: Path, value) -> None:
+    from alpi.host import server as host_server
+
+    root = _root(monkeypatch, tmp_path)
+    row, device = connections.create_connection("Javi")
+    _with_ttl(root, value)
+    _age_device(row["id"], device["id"], 900 * DAY)
+
+    assert connections.token_ttl_seconds() == 0
+    assert connections.authenticate(device["token"], min_interval=10**9).valid
+    assert host_server._active_authorizations() == {(row["id"], device["id"])}
+
+
+@pytest.mark.parametrize("body", ["host:\n  token_ttl_days: [30\n", "", "just a string\n"])
+def test_an_unreadable_config_leaves_every_device_authenticating(monkeypatch, tmp_path: Path, body) -> None:
+    from alpi.host import server as host_server
+
+    root = _root(monkeypatch, tmp_path)
+    row, device = connections.create_connection("Javi")
+    _age_device(row["id"], device["id"], 900 * DAY)
+    (root / "config.yaml").write_text(body)
+
+    assert connections.token_ttl_seconds() == 0
+    assert connections.authenticate(device["token"], min_interval=10**9).valid
+    assert host_server._active_authorizations() == {(row["id"], device["id"])}
+
+
+def test_a_device_row_with_an_unusable_timestamp_is_not_expired(monkeypatch, tmp_path: Path) -> None:
+    root = _root(monkeypatch, tmp_path)
+    _with_ttl(root, 1)
+
+    assert connections.device_expired({"last_seen": "not-a-time"}, connections.token_ttl_seconds()) is False
+    assert connections.device_expired({"created": None, "last_seen": None}, connections.token_ttl_seconds()) is False
+
+
+@pytest.mark.parametrize("value", ["1e12", "9" * 401])
+def test_a_very_large_policy_is_clamped_instead_of_overflowing(
+    monkeypatch, tmp_path: Path, value,
+) -> None:
+    from alpi.host import server as host_server
+
+    root = _root(monkeypatch, tmp_path)
+    row, device = connections.create_connection("Javi")
+    _with_ttl(root, value)
+    _age_device(row["id"], device["id"], 900 * DAY)
+
+    assert connections.token_ttl_seconds() == connections._MAX_TTL_DAYS * DAY
+    assert connections.authenticate(device["token"], min_interval=10**9).valid
+    assert host_server._active_authorizations() == {(row["id"], device["id"])}
+
+
+def test_a_hugely_negative_policy_is_ignored_rather_than_clamped(monkeypatch, tmp_path: Path) -> None:
+    root = _root(monkeypatch, tmp_path)
+    row, device = connections.create_connection("Javi")
+    _with_ttl(root, "-" + "9" * 401)
+    _age_device(row["id"], device["id"], 900 * DAY)
+
+    assert connections.token_ttl_seconds() == 0
+    assert connections.authenticate(device["token"], min_interval=10**9).valid
+
+
+def test_a_number_the_parser_refuses_to_read_disables_expiry_instead_of_revoking(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    from alpi.host import server as host_server
+
+    root = _root(monkeypatch, tmp_path)
+    row, device = connections.create_connection("Javi")
+    _age_device(row["id"], device["id"], 900 * DAY)
+    # Python refuses to convert an integer literal past 4300 digits, so YAML cannot read it at all.
+    _with_ttl(root, "9" * 5000)
+
+    assert connections.token_ttl_seconds() == 0
+    assert connections.authenticate(device["token"], min_interval=10**9).valid
+    assert host_server._active_authorizations() == {(row["id"], device["id"])}
+
+
+def test_a_config_file_that_is_not_utf8_never_revokes_anyone(monkeypatch, tmp_path: Path) -> None:
+    from alpi.host import server as host_server
+
+    root = _root(monkeypatch, tmp_path)
+    row, device = connections.create_connection("Javi")
+    _age_device(row["id"], device["id"], 900 * DAY)
+    (root / "config.yaml").write_bytes(b"model: x\nhost:\n  token_ttl_days: 30\n  label: \xff\xfe\n")
+
+    assert connections.token_ttl_seconds() == 0
+    assert connections.authenticate(device["token"], min_interval=10**9).valid
+    assert host_server._active_authorizations() == {(row["id"], device["id"])}
 
 
 def test_device_tokens_are_stored_hashed(monkeypatch, tmp_path: Path) -> None:

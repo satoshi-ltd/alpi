@@ -1244,12 +1244,15 @@ def _active_authorizations() -> set[tuple[str, str]]:
 
     if connections_mod.store_path().exists():
         data = connections_mod.load_auth_store()
+        ttl = connections_mod.token_ttl_seconds()
         return {
             (connection["id"], device["id"])
             for connection in data["connections"]
             if connection["status"] == "active"
             for device in connection["devices"]
-            if device["status"] == "active" and device.get("token_hash")
+            if device["status"] == "active"
+            and device.get("token_hash")
+            and not connections_mod.device_expired(device, ttl)
         }
     from alpi.host import devices as devices_mod
 

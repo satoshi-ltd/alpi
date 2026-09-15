@@ -28,6 +28,7 @@ DOCUMENTED_BUT_PARSED_ELSEWHERE = {
     "host.device_name",
     "host.endpoints",
     "host.allow_public_bind",
+    "host.token_ttl_days",  # alpi/host/connections.py::token_ttl_seconds
     "alp.tcp_port",
     "network.host",
     "budget.daily_usd",

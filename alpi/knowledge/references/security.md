@@ -74,7 +74,11 @@ Desktop/mobile WebSocket transport uses per-device tokens grouped in
 `role` (`admin`/`member`) and optional `profile_scope`; each linked device has
 its own revocable token (stored as a SHA-256 digest; the cleartext lives only
 on the client and auth hashes the presented value before comparing), client
-metadata and `last_seen`.
+metadata and `last_seen`. Tokens never expire unless the operator sets
+`host.token_ttl_days`: then a device idle for that many days fails with
+`token-expired` and loses its live sockets until it pairs again, while a device
+in regular use never expires. The rule is applied on read, never written into
+the store, so lifting the policy restores the device.
 New QR/links carry a high-entropy one-time grant instead of that token. The
 store keeps only the grant hash. `host.connections.exchange_pairing` consumes
 it atomically, creates one permanent device credential and records the client

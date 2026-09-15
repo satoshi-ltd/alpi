@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.14.42 — 2026-09-15 — a token nobody uses stops being a key
+
+- **Optional device-token expiry driven by inactivity.** `host.token_ttl_days` in
+  `config.yaml` (absent by default, so nothing changes until an operator sets it)
+  expires a device token after that many days without use. It is measured against the
+  device's `last_seen`, or its creation time if it never connected, so a device in
+  regular use never expires no matter how old its token is, and every existing pairing
+  stays valid until the policy exists. An expired device fails authentication with
+  `token-expired`, reads as inactive to the WebSocket authorization watcher so its live
+  sockets drop, and must pair again. The judgement is made on read and never written
+  into the store: lowering, raising or removing the policy takes effect on the next
+  request without a restart, and lifting it brings the device straight back. An
+  unusable value is logged and ignored rather than locking everyone out: text, a
+  negative number, a boolean, `.inf` or `.nan`, and a value beyond a century is
+  clamped. The policy is read straight out of `config.yaml` instead of through the full
+  config parser, so an unrelated broken key cannot raise on every authenticated request,
+  and a file the parser cannot read — corrupt YAML, bytes that are not UTF-8, a number
+  too long for Python to convert — means *no expiry* rather than a silent mass
+  revocation — the same for a device row whose timestamp cannot be parsed.
+  `alpi doctor` reports the policy and how many devices are expired, saying so plainly
+  when a broken store makes that uncountable instead of claiming zero, and
+  `host.connections.list` carries an `expired` flag per device. The config read is
+  cached by file identity, so per-request authentication does not re-parse the file
+  and an edit still takes effect on the next request.
+
 ## v0.14.41 — 2026-09-15 — a source that keeps failing gets the door
 
 - **The WebSocket listener throttles authentication failures per source address.**

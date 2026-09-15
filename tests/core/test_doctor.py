@@ -262,6 +262,59 @@ def test_security_lists_historical_credential_copies(tmp_path: Path, monkeypatch
     assert legacy.status == "warn"
 
 
+def test_security_reports_device_token_expiry_only_when_the_operator_sets_it(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    import time
+
+    from alpi import config as cfg_mod, home
+    from alpi.host import connections
+
+    monkeypatch.delenv("ALPI_PLATFORM", raising=False)
+    monkeypatch.setattr(home, "_ROOT", tmp_path)
+    connections.invalidate_cache()
+    (tmp_path / "config.yaml").write_text("model: x\n")
+    row, _device = connections.create_connection("Javi")
+    connections.add_device(row["id"])
+
+    checks = doctor._check_security(cfg_mod.load(tmp_path))
+    assert not [c for c in checks if c.name == "Device token expiry"]
+
+    (tmp_path / "config.yaml").write_text("model: x\nhost:\n  token_ttl_days: 30\n")
+    connections.invalidate_cache()
+    data = connections.load_store()
+    data["connections"][0]["devices"][0]["last_seen"] = int(time.time()) - 31 * 86400
+    connections.save_store(data)
+
+    check = next(c for c in doctor._check_security(cfg_mod.load(tmp_path)) if c.name == "Device token expiry")
+    assert check.status == "warn"
+    assert "30 day(s) of inactivity" in check.detail
+    assert "1 active, 1 expired" in check.detail
+    assert "re-pair" in check.detail
+
+
+def test_security_reports_an_unverifiable_expiry_without_losing_the_section(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    from alpi import config as cfg_mod, home
+    from alpi.host import connections
+
+    monkeypatch.delenv("ALPI_PLATFORM", raising=False)
+    monkeypatch.setattr(home, "_ROOT", tmp_path)
+    connections.invalidate_cache()
+    (tmp_path / "config.yaml").write_text("model: x\nhost:\n  token_ttl_days: 30\n")
+    (tmp_path / "host").mkdir()
+    (tmp_path / "host" / "connections.yaml").write_text("connections: not-a-list\n")
+
+    checks = doctor._check_security(cfg_mod.load(tmp_path))
+
+    expiry = next(c for c in checks if c.name == "Device token expiry")
+    assert expiry.status == "warn"
+    assert "cannot be verified" in expiry.detail
+    assert "0 active" not in expiry.detail
+    assert [c.name for c in checks if c.name == "Sandbox"] == ["Sandbox"]
+
+
 def test_cli_doctor_command_exits_nonzero_on_fail(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("ALPI_HOME", str(tmp_path))
     (tmp_path / "config.yaml").write_text("model: \n")
