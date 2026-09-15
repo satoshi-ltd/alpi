@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.14.40 + desktop-v0.5.28 — 2026-09-15 — the pairing link stays on one line
+
+- **`alpi setup` prints the desktop pairing link without hard wrapping.** Rich broke
+  the long `alpi://device?…` link at the terminal width, so a copy from the terminal
+  carried a newline inside `pairing_token` and the desktop's exchange failed with
+  `pairing-invalid` while the code was still valid. The link is now printed with soft
+  wrapping: the terminal may still display it on two rows, but the copied text is one
+  line. A test pins the output on a narrow console. The desktop parser gained the
+  matching tolerance (desktop-v0.5.28).
+
 ## v0.14.39 — 2026-09-15 — the store keeps a digest, the client keeps the token
 
 - **Device tokens are stored hashed at rest.** `connections.yaml` now holds the

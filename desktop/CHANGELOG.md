@@ -11,6 +11,18 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.5.28 — 2026-09-15 — a wrapped link still pairs
+
+- **Pasting a pairing link copied from a wrapped terminal line now works.** `alpi setup`
+  prints the `alpi://device?…` link on one line, but a terminal narrower than the link
+  wraps it, and copying from there drops a newline or a space into the middle of
+  `pairing_token`. The desktop sent that value verbatim, the daemon hashed it, nothing
+  matched and the pairing failed with `pairing-invalid` while the code was still valid.
+  The link parser now strips every whitespace character from an `alpi://` payload
+  before reading its fields; JSON QR payloads are untouched. Regression test in
+  `useHostConnections`. Client-only change: the minimum compatible alpi stays at
+  0.14.34, as pinned by v0.5.26.
+
 ## v0.5.27 — 2026-09-14 — the Stop button lets go
 
 - **Stop no longer sticks on a failed run.** When the daemon ended a run with an error

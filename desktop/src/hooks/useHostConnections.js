@@ -26,7 +26,7 @@ const OFFLINE_REPROBE_MAX_MS = 60000;
 function parsePairingPayload(payload) {
   const text = payload.trim();
   if (text.startsWith("alpi://device?")) {
-    const url = new URL(text);
+    const url = new URL(text.replace(/\s+/g, ""));
     const endpointUrl = url.searchParams.get("url");
     const legacyHost = url.searchParams.get("host");
     const legacyPort = Number(url.searchParams.get("port"));

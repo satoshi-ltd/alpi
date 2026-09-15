@@ -320,6 +320,11 @@ describe("useHostConnections.onAddHostConnection", () => {
       "wss://client.example.com",
       { pairingToken: "grant" },
     ],
+    [
+      "alpi://device?url=ws%3A%2F%2F100.64.0.1%3A49200&name=MacBook-Pro&pairing_token=first\nhalf second&connection_id=conn_x",
+      "ws://100.64.0.1:49200",
+      { pairingToken: "firsthalfsecond" },
+    ],
   ].map((row) => row.length === 2 ? [...row, { token: "secret" }] : row))(
     "stores a complete endpoint URL from new and legacy pairings",
     async (payload, url, credential) => {

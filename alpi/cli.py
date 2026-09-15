@@ -2554,7 +2554,7 @@ def _device_add(h: Path, endpoints: list[dict[str, str]]) -> None:
     ui._console.print(f"[dim]label:    [/dim] {connection['label']}")
     ui._console.print(f"[dim]role:     [/dim] {connection['role']}")
     ui._console.print("[dim]status:   [/dim] pending · expires in 10 minutes")
-    ui._console.print(f"[dim]desktop:  [/dim] {link}")
+    _print_pairing_link(link, "desktop:  ")
     ui._console.print("")
     ui.dim(
         "Scan the QR from mobile or paste the desktop link into the desktop app.\n"
@@ -2570,6 +2570,13 @@ def _device_add(h: Path, endpoints: list[dict[str, str]]) -> None:
     elif status and status["status"] == "pending":
         connections_mod.cancel_pairing(connection["id"], pairing["id"])
         ui.dim("pairing cancelled")
+
+
+def _print_pairing_link(link: str, label: str) -> None:
+    from alpi import ui
+
+    # soft_wrap keeps the link one logical line: a hard wrap puts a newline inside pairing_token when copied from the terminal.
+    ui._console.print(f"[dim]{label}[/dim] {link}", soft_wrap=True)
 
 
 def _devices_network_setup(h: Path) -> None:
@@ -2866,7 +2873,7 @@ def _show_connection_pairing(h: Path, endpoint, connection, pairing) -> None:
     buf = io.StringIO()
     qr.print_ascii(out=buf, invert=True)
     ui._console.print(buf.getvalue())
-    ui._console.print(f"[dim]desktop:[/dim] {link}")
+    _print_pairing_link(link, "desktop:")
     ui._console.print("[dim]status: [/dim] pending · expires in 10 minutes")
     ui.press_enter()
     from alpi.host import connections as connections_mod
