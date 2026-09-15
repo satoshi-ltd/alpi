@@ -335,6 +335,7 @@ export function useHostConnections({
     const status = active?.status;
     if (syncedStatusRef.current === activeStatusKey) return;
     syncedStatusRef.current = activeStatusKey;
+    if (!active) return;
     if (status === "online") {
       reloadConnections().finally(() => reload());
     } else if (status === "auth-failed") {
@@ -343,13 +344,23 @@ export function useHostConnections({
     } else if (status === "offline" || status === "disabled") {
       setConnectionSyncing(false);
       reloadConnections().finally(() => loadFromCache(hostConnectionsRef.current.active_id));
+    } else {
+      loadFromCache(hostConnectionsRef.current.active_id);
     }
   }, [activeStatusKey, clearConnectionContent, loadFromCache, reload, reloadConnections]);
 
+  // The backend owns active_id; painting any cache before asking it shows the local daemon's profiles under a remote connection's name on cold start. An online answer is fetched once, by the status effect.
   useEffect(() => {
-    reload();
+    reloadConnections({ acceptActiveChange: true }).then((value) => {
+      if (value === null) {
+        reload();
+        return;
+      }
+      const active = value.connections?.find((c) => c.id === value.active_id);
+      if (active?.status !== "online") showCachedOrClear(value.active_id, active?.status);
+    });
     invoke("host_connections_probe_active").catch(() => {});
-  }, [reload, reloadConnections]);
+  }, [reload, reloadConnections, showCachedOrClear]);
 
   // Offline has no liveness stream to recover on; terminal authentication states wait for user or host action.
   useEffect(() => {

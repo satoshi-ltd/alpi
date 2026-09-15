@@ -577,6 +577,48 @@ describe("useHostConnections connection-status", () => {
 });
 
 
+describe("useHostConnections cold start", () => {
+  it.each(["unknown", "probing"])(
+    "paints the backend's active connection cache, never the local one, while the remote is %s",
+    async (remoteStatus) => {
+      setProfileCache("local", [{ name: "scout", model: "a/b" }], [{ id: "wg-local", profile: "scout" }]);
+      setProfileCache("remote", [{ name: "agora", model: "a/b" }], []);
+      invoke.mockImplementation(async (cmd) => {
+        if (cmd === "host_connections") {
+          return makeConnections("remote", { local: "unknown", remote: remoteStatus });
+        }
+        if (cmd === "profile_summaries" || cmd === "workgroups") return [];
+        return null;
+      });
+
+      const { result } = renderHostConnections();
+      await waitFor(() => {
+        expect(result.current.hostConnections.active_id).toBe("remote");
+        expect(result.current.profiles.map((p) => p.name)).toEqual(["agora"]);
+      });
+
+      const paintedLocal = pruneCachedMessages.mock.calls.some(([, ws]) =>
+        Array.isArray(ws) && ws.some((w) => w.id === "wg-local"),
+      );
+      expect(paintedLocal).toBe(false);
+      expect(invoke.mock.calls.some(([cmd]) => cmd === "profile_summaries")).toBe(false);
+    },
+  );
+
+  it("still shows the local cache when the backend cannot answer", async () => {
+    setProfileCache("local", [{ name: "scout", model: "a/b" }], []);
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "host_connections") throw new Error("backend down");
+      return null;
+    });
+
+    const { result } = renderHostConnections();
+    await waitFor(() => {
+      expect(result.current.profiles.map((p) => p.name)).toEqual(["scout"]);
+    });
+  });
+});
+
 describe("useHostConnections.connectionSwitching", () => {
   it("stays false during background reloads even while syncing", async () => {
     let resolveProfiles;

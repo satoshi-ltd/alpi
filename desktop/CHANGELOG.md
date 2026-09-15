@@ -11,6 +11,20 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.5.29 — 2026-09-15 — the sidebar follows the connection it names
+
+- **Cold start no longer shows one connection's profiles under another connection's
+  name.** The sidebar painted the local daemon's cached profiles and workgroups before
+  asking the backend which connection was active; when the answer was a remote, the
+  header switched but the list stayed local until that remote reported online and the
+  refresh landed — up to 20 s on a slow WSS link, or indefinitely while it stayed
+  unknown or probing. The hook now asks for the active connection first and paints that
+  connection's own cache, and a connection whose status is still unknown or probing
+  gets its cache instead of inheriting whatever was on screen. Regression tests cover a
+  remote active connection in unknown and probing state, and the local fallback when
+  the backend cannot answer. Client-only change: the minimum compatible alpi stays at
+  0.14.34, as pinned by v0.5.26.
+
 ## v0.5.28 — 2026-09-15 — a wrapped link still pairs
 
 - **Pasting a pairing link copied from a wrapped terminal line now works.** `alpi setup`
