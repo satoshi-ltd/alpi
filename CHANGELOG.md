@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.14.39 — 2026-09-15 — the store keeps a digest, the client keeps the token
+
+- **Device tokens are stored hashed at rest.** `connections.yaml` now holds the
+  SHA-256 digest of each device token (`token_hash`), the same treatment pairing
+  grants already had; the cleartext exists only on the paired desktop or mobile
+  client, and authentication hashes the presented token before the constant-time
+  compare. A copy of the file is no longer a usable credential.
+- **The active store migrates itself at startup, with no new backups.** Before the
+  WebSocket listener opens, a cleartext `connections.yaml` is rewritten with
+  digests once; a legacy `devices.yaml` becomes a hashed `connections.yaml` that is
+  re-read and verified before the source is deleted, and no `devices.yaml.migrated`
+  is written any more. Every paired client keeps its token, every `token_id`, revoke
+  and list operation behaves as before, and nothing is re-paired. If both files are
+  found after an interrupted run, `connections.yaml` is the authority, verified
+  first: the legacy file goes only when it has the expected shape and every token
+  in it is provably represented there, otherwise it stays with an explicit
+  pending-migration warning and nothing is imported or revived. An empty, `null` or corrupt store is an explicit error, never zero
+  connections, and a failed migration keeps remote access closed on every path the
+  daemon uses to open the WebSocket listener.
+- **Historical copies are an explicit cleanup, not an automatic one.** Files left by
+  earlier releases (`devices.yaml.migrated`, hand-made `.bak` copies,
+  `connections.yaml.damaged-*`) may still hold cleartext tokens; the daemon leaves
+  them alone, `alpi doctor` lists them, and `docs/OPERATIONS.md` says when to delete
+  them. Downgrading below 0.14.39 is not supported: earlier code cannot read
+  `token_hash`.
+
 ## v0.14.38 — 2026-09-14 — maintain reads the whole page it rewrites
 
 - **`knowledge(action="maintain")` no longer truncates existing pages.** The

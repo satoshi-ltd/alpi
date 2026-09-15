@@ -72,7 +72,9 @@ matches the supported interpreter set: `sh / bash / zsh / ash / dash / ksh
 Desktop/mobile WebSocket transport uses per-device tokens grouped in
 `~/.alpi/host/connections.yaml`. A connection carries the shared `label`,
 `role` (`admin`/`member`) and optional `profile_scope`; each linked device has
-its own revocable token, client metadata and `last_seen`.
+its own revocable token (stored as a SHA-256 digest; the cleartext lives only
+on the client and auth hashes the presented value before comparing), client
+metadata and `last_seen`.
 New QR/links carry a high-entropy one-time grant instead of that token. The
 store keeps only the grant hash. `host.connections.exchange_pairing` consumes
 it atomically, creates one permanent device credential and records the client
@@ -127,10 +129,20 @@ Per-connection profile scope:
   one-time grant to the same identity. The exact pre-authentication exchange
   verb can only redeem an existing grant; it cannot choose role or scope.
 
-When `connections.yaml` is absent, startup migrates every `devices.yaml` row
-to its own connection, preserving token and access, then renames the source
-to `devices.yaml.migrated`. The old schema cannot prove which rows should be
-grouped. Pre-migration sessions have no owner and remain local to synthetic
+Startup migrates the credential store before the WebSocket listener opens:
+a `devices.yaml` without `connections.yaml` becomes one connection per row
+with hashed tokens and preserved access, verified on re-read before the source
+is deleted, with no backup written; a pre-0.14.39 `connections.yaml` with
+cleartext `token` fields is rewritten with `token_hash` once. When both files
+exist, `connections.yaml` is the authority, verified first, and the legacy file
+is deleted only if it has the device-list shape and every token in it is
+represented there, else it stays with a pending warning and nothing is imported
+or revived. An empty or corrupt active store
+is an explicit error, never zero connections; a failed migration keeps remote
+access closed. Rolling back below 0.14.39 is not supported. Historical copies
+(`devices.yaml.migrated`, `.bak`, `.damaged-*`) are left alone; `alpi doctor`
+lists them for explicit removal. The old schema cannot prove which rows should
+be grouped. Pre-migration sessions have no owner and remain local to synthetic
 connection `host`.
 
 Local-only verbs (admin role does not unlock them): `host.network.status`,

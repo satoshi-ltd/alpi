@@ -234,57 +234,83 @@ async def test_guard_task_isolates_task_crash() -> None:
     # If we got here, the crash was swallowed.
 
 
-@pytest.mark.asyncio
-async def test_host_starts_when_legacy_connections_store_is_corrupt(
-    monkeypatch, tmp_path: Path, caplog,
-) -> None:
-    from alpi import home as home_mod
+async def _run_host_with_recorded_ws(monkeypatch, root: Path, caplog) -> tuple[list, list]:
     from alpi.host import connections, network, server as host_server
 
-    root = tmp_path / "root"
-    (root / "host").mkdir(parents=True)
-    (root / "host" / "devices.yaml").write_text("[")
-    monkeypatch.setattr(home_mod, "_ROOT", root)
     connections.invalidate_cache()
+    started: list = []
+    served: list = []
 
-    instances = []
+    async def fake_start_ws(self, host, port):
+        started.append((host, port))
 
-    class FakeServer:
-        def __init__(self, **kwargs):
-            self.home = kwargs["home"]
-            self.started = False
-            self.served = False
-            self.stopped = False
-            instances.append(self)
+    async def fake_serve_forever(self):
+        served.append(self.socket_path().exists())
 
-        def register(self, *_args, **_kwargs):
-            return None
-
-        def register_stream(self, *_args, **_kwargs):
-            return None
-
-        async def start(self):
-            self.started = True
-
-        async def enable_tcp(self, _bind):
-            return None
-
-        async def serve_forever(self):
-            self.served = True
-
-        async def stop(self):
-            self.stopped = True
-
-    monkeypatch.setattr(host_server, "Server", FakeServer)
+    monkeypatch.setattr(host_server.Server, "_start_ws", fake_start_ws)
+    monkeypatch.setattr(host_server.Server, "serve_forever", fake_serve_forever)
     monkeypatch.setattr(network, "host_allow_public_bind", lambda _home: False)
-    monkeypatch.setattr(network, "resolve_host_tcp_bind", lambda _home: None)
-
+    monkeypatch.setattr(network, "resolve_host_tcp_bind", lambda _home: ("10.1.2.3", 49200))
+    caplog.set_level("ERROR", logger="alpi.host.server")
     await service._run_host(root, "default")
+    return started, served
 
-    assert instances[0].started
-    assert instances[0].served
-    assert instances[0].stopped
-    assert "remote authentication will fail closed" in caplog.text
+
+@pytest.mark.asyncio
+async def test_daemon_keeps_remote_access_closed_when_the_credential_store_is_corrupt(
+    monkeypatch, caplog,
+) -> None:
+    import shutil
+    import tempfile
+
+    from alpi import home as home_mod
+
+    root = Path(tempfile.mkdtemp(prefix="alpi-host-", dir="/tmp"))
+    try:
+        (root / "host").mkdir(parents=True)
+        (root / "host" / "devices.yaml").write_text("[")
+        monkeypatch.setattr(home_mod, "_ROOT", root)
+
+        started, served = await _run_host_with_recorded_ws(monkeypatch, root, caplog)
+
+        assert served == [True]
+        assert started == []
+        assert (root / "host" / "devices.yaml").exists()
+        assert not (root / "host" / "connections.yaml").exists()
+        assert "remote access stays closed" in caplog.text
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+@pytest.mark.asyncio
+async def test_daemon_opens_remote_access_after_the_credential_store_migrates(
+    monkeypatch, caplog,
+) -> None:
+    import shutil
+    import tempfile
+
+    import yaml
+
+    from alpi import home as home_mod
+    from alpi.host import connections
+
+    root = Path(tempfile.mkdtemp(prefix="alpi-host-", dir="/tmp"))
+    try:
+        (root / "host").mkdir(parents=True)
+        (root / "host" / "devices.yaml").write_text(
+            yaml.safe_dump([{"token": "legacy-token", "label": "Javi", "created": 10}]),
+        )
+        monkeypatch.setattr(home_mod, "_ROOT", root)
+
+        started, served = await _run_host_with_recorded_ws(monkeypatch, root, caplog)
+
+        assert served == [True]
+        assert started == [("10.1.2.3", 49200)]
+        assert not (root / "host" / "devices.yaml").exists()
+        assert "legacy-token" not in (root / "host" / "connections.yaml").read_text()
+        assert connections.authenticate("legacy-token").valid
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
 
 
 def test_profile_home_resolves_against_root(tmp_path: Path) -> None:

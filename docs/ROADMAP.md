@@ -53,7 +53,6 @@ server-side representation and policy move.
 
 | ID | Item | Status |
 |---|---|---|
-| TOKEN.1 | Store device tokens hashed at rest (SHA-256), matching what pairing secrets already do. Rename `token` → `token_hash` so the one-shot store migration is explicit and idempotent — same pattern as the `devices.yaml` → `connections.yaml` migration; auth hashes the presented token before `compare_digest`. | 🟡 |
 | TOKEN.2 | Optional device-token expiry driven by **inactivity**, not age: `host.token_ttl_days` (absent = today's behavior, no expiry) evaluated against `last_seen`, so devices in active use never expire and legacy rows stay valid until the operator sets the policy. Expired rows must read as inactive to `_active_authorizations` so live sessions drop too. | 🟡 |
 | RATE.1 | Simple pre-auth rate limit on the WS listener: reuse the sliding-window `RateLimiter` from `alpi/alp/rate_limit.py` keyed by source address, counting auth failures only; over-cap closes `1013` before token validation. Behind Caddy the socket peer is the proxy, so honor `X-Forwarded-For` only when the peer address is private/loopback. Settles the edge per-IP decision left open in ONLINE.4. | 🟡 |
 

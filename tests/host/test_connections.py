@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import hashlib
 import json
+import logging
 import multiprocessing as mp
+import shutil
+import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -279,28 +283,421 @@ def test_migrates_devices_store_without_rotating_tokens(monkeypatch, tmp_path: P
 
     assert len(rows) == 1
     assert rows[0]["label"] == "Javi MacBook"
-    assert rows[0]["devices"][0]["token"] == "legacy-token"
+    assert rows[0]["devices"][0]["token_hash"] == hashlib.sha256(b"legacy-token").hexdigest()
+    assert rows[0]["devices"][0]["token_id"] == "legacy-token"[-8:]
+    assert "legacy-token" not in connections.store_path().read_text()
     assert rows[0]["devices"][0]["client"] == "unknown"
-    assert connections.authenticate("legacy-token").connection_id == rows[0]["id"]
+    auth = connections.authenticate("legacy-token")
+    assert (auth.connection_id, auth.role, auth.profile_scope) == (rows[0]["id"], "member", ("atlas",))
     assert connections.store_path().exists()
+    assert oct(connections.store_path().stat().st_mode & 0o777) == "0o600"
     assert not legacy.exists()
-    assert legacy.with_name("devices.yaml.migrated").exists()
+    assert list(legacy.parent.glob("devices.yaml*")) == []
+
+    before = connections.store_path().stat().st_mtime_ns
+    connections.load_store()
+    assert connections.store_path().stat().st_mtime_ns == before
 
 
-def test_migration_keeps_an_existing_backup_and_moves_the_live_store(
+def test_migration_writes_no_backup_and_leaves_historical_copies_alone(
     monkeypatch, tmp_path: Path,
 ) -> None:
     root = _root(monkeypatch, tmp_path)
     legacy = root / "host" / "devices.yaml"
     legacy.parent.mkdir(parents=True)
     legacy.write_text(yaml.safe_dump([{"token": "live", "label": "Live"}]))
-    legacy.with_name("devices.yaml.migrated").write_text("older backup")
+    historical = legacy.with_name("devices.yaml.migrated")
+    historical.write_text("older backup")
 
     connections.load_store()
 
     assert not legacy.exists()
-    assert legacy.with_name("devices.yaml.migrated").read_text() == "older backup"
-    assert len(list(legacy.parent.glob("devices.yaml.migrated.*"))) == 1
+    assert historical.read_text() == "older backup"
+    assert sorted(p.name for p in legacy.parent.glob("devices.yaml*")) == ["devices.yaml.migrated"]
+
+
+def test_device_tokens_are_stored_hashed(monkeypatch, tmp_path: Path) -> None:
+    _root(monkeypatch, tmp_path)
+    row, device = connections.create_connection("Javi")
+
+    text = connections.store_path().read_text()
+    stored = yaml.safe_load(text)["connections"][0]["devices"][0]
+
+    assert device["token"] not in text
+    assert "token" not in stored
+    assert stored["token_hash"] == hashlib.sha256(device["token"].encode()).hexdigest()
+    assert stored["token_id"] == device["token"][-8:]
+    assert connections.authenticate(device["token"]).connection_id == row["id"]
+    assert connections.authenticate(stored["token_hash"]).valid is False
+
+
+def test_cleartext_store_is_hashed_on_first_read_without_re_pairing(monkeypatch, tmp_path: Path) -> None:
+    root = _root(monkeypatch, tmp_path)
+    path = root / "host" / "connections.yaml"
+    path.parent.mkdir(parents=True)
+    path.write_text(yaml.safe_dump({"version": 2, "connections": [{
+        "id": "conn_javi", "label": "Javi", "created": 1, "status": "active",
+        "role": "member", "profile_scope": ["atlas"], "pairings": [],
+        "devices": [
+            {"id": "dev_mac", "token": "plain-macbook-token", "name": "MacBook",
+             "client": "desktop", "created": 1, "last_seen": 2, "status": "active"},
+            {"id": "dev_old", "token": "", "token_id": "oldphone", "name": "Old",
+             "client": "mobile", "created": 1, "status": "deleted"},
+        ],
+    }]}))
+
+    auth = connections.authenticate("plain-macbook-token")
+
+    assert auth.valid
+    assert (auth.connection_id, auth.device_id, auth.profile_scope) == ("conn_javi", "dev_mac", ("atlas",))
+    text = path.read_text()
+    assert "plain-macbook-token" not in text
+    devices = {d["id"]: d for d in yaml.safe_load(text)["connections"][0]["devices"]}
+    assert devices["dev_mac"]["token_hash"] == hashlib.sha256(b"plain-macbook-token").hexdigest()
+    assert devices["dev_mac"]["token_id"] == "plain-macbook-token"[-8:]
+    assert "token" not in devices["dev_mac"]
+    assert (devices["dev_old"]["token_hash"], devices["dev_old"]["token_id"]) == ("", "oldphone")
+    assert oct(path.stat().st_mode & 0o777) == "0o600"
+
+    before = path.stat().st_mtime_ns
+    connections.load_store()
+    assert path.stat().st_mtime_ns == before
+
+    assert connections.revoke_by_token_id("plain-macbook-token"[-8:]) is True
+    assert connections.authenticate("plain-macbook-token").valid is False
+
+
+def _legacy_rows(*tokens: str) -> str:
+    return yaml.safe_dump([
+        {"token": token, "label": f"Device {index}", "created": 10, "last_seen": 20,
+         "role": "member", "profile_scope": ["atlas"]}
+        for index, token in enumerate(tokens)
+    ])
+
+
+def _write_store(host: Path, text: str) -> Path:
+    path = host / "connections.yaml"
+    path.write_text(text)
+    path.chmod(0o600)
+    return path
+
+
+def _hashed_store(token: str, *, status: str = "active") -> str:
+    return yaml.safe_dump({"version": 2, "connections": [{
+        "id": "conn_javi", "label": "Javi", "created": 1, "status": "active", "role": "member",
+        "profile_scope": ["atlas"], "pairings": [],
+        "devices": [{
+            "id": "dev_mac",
+            "token_hash": hashlib.sha256(token.encode()).hexdigest() if status == "active" else "",
+            "token_id": token[-8:], "name": "MacBook", "client": "desktop",
+            "created": 1, "last_seen": 2, "status": status,
+        }],
+    }]})
+
+
+def test_legacy_migration_write_failure_keeps_the_origin_intact(monkeypatch, tmp_path: Path) -> None:
+    root = _root(monkeypatch, tmp_path)
+    legacy = root / "host" / "devices.yaml"
+    legacy.parent.mkdir(parents=True)
+    legacy.write_text(_legacy_rows("legacy-token"))
+    before = legacy.read_text()
+
+    def fail(_data):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(connections, "_atomic_write", fail)
+    with pytest.raises(OSError):
+        connections.load_store()
+
+    assert legacy.read_text() == before
+    assert not connections.store_path().exists()
+    assert list(legacy.parent.glob("devices.yaml.*")) == []
+
+
+def test_legacy_migration_verification_failure_keeps_the_origin_and_recovers_later(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    root = _root(monkeypatch, tmp_path)
+    legacy = root / "host" / "devices.yaml"
+    legacy.parent.mkdir(parents=True)
+    legacy.write_text(_legacy_rows("legacy-token"))
+    before = legacy.read_text()
+
+    original = connections._verify_written_store
+
+    def reject(_expected):
+        raise connections.StoreUnavailable("simulated verification failure")
+
+    connections._verify_written_store = reject
+    try:
+        with pytest.raises(connections.StoreUnavailable):
+            connections.load_store()
+    finally:
+        connections._verify_written_store = original
+
+    assert legacy.read_text() == before
+    assert "legacy-token" not in connections.store_path().read_text()
+
+    connections.load_store()
+
+    assert not legacy.exists()
+    assert connections.authenticate("legacy-token").valid
+    assert connections.pending_migration() is None
+
+
+def test_interrupted_legacy_migration_completes_on_the_next_read(monkeypatch, tmp_path: Path) -> None:
+    root = _root(monkeypatch, tmp_path)
+    host = root / "host"
+    host.mkdir(parents=True)
+    _write_store(host, _hashed_store("legacy-token"))
+    (host / "devices.yaml").write_text(_legacy_rows("legacy-token"))
+    before = (host / "connections.yaml").stat().st_mtime_ns
+
+    connections.load_store()
+
+    assert not (host / "devices.yaml").exists()
+    assert (host / "connections.yaml").stat().st_mtime_ns == before
+    assert connections.authenticate("legacy-token").device_id == "dev_mac"
+    assert connections.pending_migration() is None
+    assert list(host.glob("devices.yaml*")) == []
+
+
+def test_divergent_legacy_store_is_kept_and_reported(monkeypatch, tmp_path: Path, caplog) -> None:
+    root = _root(monkeypatch, tmp_path)
+    host = root / "host"
+    host.mkdir(parents=True)
+    _write_store(host, _hashed_store("legacy-token"))
+    (host / "devices.yaml").write_text(_legacy_rows("legacy-token", "extra-token"))
+    legacy_before = (host / "devices.yaml").read_text()
+    store_before = (host / "connections.yaml").stat().st_mtime_ns
+    caplog.set_level(logging.WARNING, logger="alpi.host.connections")
+
+    rows = connections.load_store()["connections"]
+
+    assert (host / "devices.yaml").read_text() == legacy_before
+    assert (host / "connections.yaml").stat().st_mtime_ns == store_before
+    assert [d["id"] for c in rows for d in c["devices"]] == ["dev_mac"]
+    assert connections.authenticate("legacy-token", min_interval=10**9).valid
+    assert connections.authenticate("extra-token").valid is False
+    assert "1 device token(s) absent" in (connections.pending_migration() or "")
+    assert any("migration pending" in record.message for record in caplog.records)
+    assert "extra-token" not in caplog.text
+
+
+def test_leftover_legacy_of_unexpected_shape_is_kept_with_a_warning(monkeypatch, tmp_path: Path) -> None:
+    root = _root(monkeypatch, tmp_path)
+    host = root / "host"
+    host.mkdir(parents=True)
+    _write_store(host, _hashed_store("legacy-token"))
+    odd = "devices:\n  - token: synthetic-legacy-secret\n"
+    (host / "devices.yaml").write_text(odd)
+    store_before = (host / "connections.yaml").stat().st_mtime_ns
+
+    connections.load_store()
+
+    assert (host / "devices.yaml").read_text() == odd
+    assert (host / "connections.yaml").stat().st_mtime_ns == store_before
+    assert "not a device list" in (connections.pending_migration() or "")
+    assert connections.authenticate("synthetic-legacy-secret").valid is False
+    assert connections.authenticate("legacy-token", min_interval=10**9).valid
+
+
+def test_legacy_rows_without_tokens_keep_the_file_for_review(monkeypatch, tmp_path: Path) -> None:
+    root = _root(monkeypatch, tmp_path)
+    legacy = root / "host" / "devices.yaml"
+    legacy.parent.mkdir(parents=True)
+    legacy.write_text(yaml.safe_dump([
+        {"token": "legacy-token", "label": "Javi", "created": 10},
+        {"label": "no credential here", "created": 11},
+    ]))
+    before = legacy.read_text()
+
+    connections.load_store()
+
+    assert connections.authenticate("legacy-token").valid
+    assert "legacy-token" not in connections.store_path().read_text()
+    assert legacy.read_text() == before
+    assert "1 row(s) without a token" in (connections.pending_migration() or "")
+
+
+def test_leftover_legacy_is_removed_only_after_the_destination_is_hashed(monkeypatch, tmp_path: Path) -> None:
+    root = _root(monkeypatch, tmp_path)
+    host = root / "host"
+    host.mkdir(parents=True)
+    _write_store(host, yaml.safe_dump({"version": 2, "connections": [{
+        "id": "conn_javi", "label": "Javi", "created": 1, "status": "active", "role": "member",
+        "profile_scope": [], "pairings": [],
+        "devices": [{"id": "dev_mac", "token": "legacy-token", "created": 1, "status": "active"}],
+    }]}))
+    (host / "devices.yaml").write_text(_legacy_rows("legacy-token"))
+
+    connections.load_store()
+
+    assert "legacy-token" not in (host / "connections.yaml").read_text()
+    assert not (host / "devices.yaml").exists()
+    assert connections.authenticate("legacy-token").valid
+    assert connections.pending_migration() is None
+
+
+def test_leftover_legacy_survives_a_corrupt_destination(monkeypatch, tmp_path: Path) -> None:
+    root = _root(monkeypatch, tmp_path)
+    host = root / "host"
+    host.mkdir(parents=True)
+    _write_store(host, "{{{ not yaml\n")
+    (host / "devices.yaml").write_text(_legacy_rows("legacy-token"))
+
+    with pytest.raises(connections.StoreUnavailable):
+        connections.load_store()
+
+    assert (host / "devices.yaml").exists()
+    assert (host / "connections.yaml").read_text() == "{{{ not yaml\n"
+
+
+def test_revoked_device_is_not_revived_from_a_leftover_legacy_store(monkeypatch, tmp_path: Path) -> None:
+    root = _root(monkeypatch, tmp_path)
+    host = root / "host"
+    host.mkdir(parents=True)
+    _write_store(host, _hashed_store("legacy-token", status="deleted"))
+    (host / "devices.yaml").write_text(_legacy_rows("legacy-token"))
+
+    connections.load_store()
+
+    assert (host / "devices.yaml").exists()
+    assert connections.authenticate("legacy-token").valid is False
+    assert connections.pending_migration() is not None
+
+
+def test_empty_store_file_keeps_the_last_valid_cache(monkeypatch, tmp_path: Path) -> None:
+    _root(monkeypatch, tmp_path)
+    row, device = connections.create_connection("Javi")
+    connections.authenticate(device["token"])
+    assert connections.authenticate(device["token"], min_interval=10**9).valid
+    path = connections.store_path()
+
+    for content in ("", "null\n", "{{{ not yaml\n"):
+        path.write_text(content)
+
+        assert connections.authenticate(device["token"], min_interval=10**9).valid
+        with pytest.raises(connections.StoreUnavailable):
+            connections.load_store()
+        with pytest.raises(connections.StoreUnavailable):
+            connections.add_device(row["id"])
+        assert path.read_text() == content
+
+
+@pytest.mark.asyncio
+async def test_server_start_migrates_legacy_devices_into_hashed_connections(monkeypatch) -> None:
+    from alpi.host import server as host_server
+
+    short = Path(tempfile.mkdtemp(prefix="alpi-tok-", dir="/tmp"))
+    try:
+        root = _root(monkeypatch, short)
+        legacy = root / "host" / "devices.yaml"
+        legacy.parent.mkdir(parents=True)
+        legacy.write_text(yaml.safe_dump([{
+            "token": "legacy-token", "label": "Javi", "created": 10,
+            "last_seen": 20, "role": "member", "profile_scope": [],
+        }]))
+        srv = Server(home=root)
+        await srv.start()
+        try:
+            assert not legacy.exists()
+            text = connections.store_path().read_text()
+            assert "legacy-token" not in text
+            stored = yaml.safe_load(text)["connections"][0]["devices"][0]
+            assert stored["token_hash"] == hashlib.sha256(b"legacy-token").hexdigest()
+            meta = host_server._check_token_meta(
+                {"method": "host.config.get", "params": {"auth_token": "legacy-token"}},
+            )
+            assert meta.valid
+            assert meta.connection_id.startswith("conn_")
+            assert list((root / "host").glob("devices.yaml*")) == []
+        finally:
+            await srv.stop()
+    finally:
+        shutil.rmtree(short, ignore_errors=True)
+
+
+async def _start_with_fake_ws(monkeypatch, root: Path) -> tuple[Server, list]:
+    srv = Server(home=root)
+    srv._tcp_bind = ("10.1.2.3", 49200)
+    started: list = []
+
+    async def fake_start_ws(host, port):
+        started.append((host, port))
+
+    monkeypatch.setattr(srv, "_start_ws", fake_start_ws)
+    await srv.start()
+    return srv, started
+
+
+@pytest.mark.asyncio
+async def test_server_start_keeps_remote_access_closed_when_migration_fails(monkeypatch) -> None:
+    short = Path(tempfile.mkdtemp(prefix="alpi-tok-", dir="/tmp"))
+    try:
+        root = _root(monkeypatch, short)
+        legacy = root / "host" / "devices.yaml"
+        legacy.parent.mkdir(parents=True)
+        legacy.write_text("not: [valid yaml\n")
+        srv, started = await _start_with_fake_ws(monkeypatch, root)
+        try:
+            assert started == []
+            assert legacy.exists()
+            assert not connections.store_path().exists()
+        finally:
+            await srv.stop()
+    finally:
+        shutil.rmtree(short, ignore_errors=True)
+
+
+@pytest.mark.asyncio
+async def test_enable_tcp_refuses_until_the_credential_store_migrates(monkeypatch) -> None:
+    short = Path(tempfile.mkdtemp(prefix="alpi-tok-", dir="/tmp"))
+    try:
+        root = _root(monkeypatch, short)
+        legacy = root / "host" / "devices.yaml"
+        legacy.parent.mkdir(parents=True)
+        legacy.write_text("not: [valid yaml\n")
+        srv = Server(home=root)
+        started: list = []
+
+        async def fake_start_ws(host, port):
+            started.append((host, port))
+
+        monkeypatch.setattr(srv, "_start_ws", fake_start_ws)
+        await srv.start()
+        try:
+            await srv.enable_tcp(("10.1.2.3", 49200))
+            assert started == []
+            assert legacy.exists()
+
+            legacy.write_text(yaml.safe_dump([{"token": "legacy-token", "label": "Javi", "created": 10}]))
+            await srv.enable_tcp(("10.1.2.3", 49200))
+            assert started == [("10.1.2.3", 49200)]
+            assert not legacy.exists()
+            assert connections.authenticate("legacy-token").valid
+        finally:
+            await srv.stop()
+    finally:
+        shutil.rmtree(short, ignore_errors=True)
+
+
+@pytest.mark.asyncio
+async def test_server_start_opens_remote_access_after_a_clean_migration(monkeypatch) -> None:
+    short = Path(tempfile.mkdtemp(prefix="alpi-tok-", dir="/tmp"))
+    try:
+        root = _root(monkeypatch, short)
+        legacy = root / "host" / "devices.yaml"
+        legacy.parent.mkdir(parents=True)
+        legacy.write_text(yaml.safe_dump([{"token": "legacy-token", "label": "Javi", "created": 10}]))
+        srv, started = await _start_with_fake_ws(monkeypatch, root)
+        try:
+            assert started == [("10.1.2.3", 49200)]
+            assert not legacy.exists()
+        finally:
+            await srv.stop()
+    finally:
+        shutil.rmtree(short, ignore_errors=True)
 
 
 def test_connection_can_hold_multiple_independently_revocable_devices(monkeypatch, tmp_path: Path) -> None:
@@ -468,6 +865,7 @@ def test_pairing_grant_is_hashed_and_exchanged_once(monkeypatch, tmp_path: Path)
 
     assert exchanged["id"] == row["id"]
     assert connections.authenticate(device["token"]).connection_id == row["id"]
+    assert device["token"] not in connections.store_path().read_text()
     assert connections.pairing_status(row["id"], pairing["id"])["status"] == "consumed"
     with pytest.raises(connections.PairingExchangeError) as replay:
         connections.exchange_pairing(

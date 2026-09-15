@@ -241,6 +241,7 @@ class Server:
         self._server: asyncio.AbstractServer | None = None
         self._ws_server: Any | None = None
         self._ws_auth_watch_task: asyncio.Task[None] | None = None
+        self._credentials_ready: bool | None = None
         self._allow_public_bind = allow_public_bind
         self._tcp_bind: tuple[str, int] | None = (
             self._validate_tcp_bind(tcp_bind, allow_public_bind) if tcp_bind else None
@@ -319,7 +320,13 @@ class Server:
             raise ValueError("methods must use the 'host.' namespace")
         self.stream_handlers[method] = handler
 
+    async def _ensure_credentials_ready(self) -> bool:
+        if self._credentials_ready is not True:
+            self._credentials_ready = await asyncio.to_thread(_migrate_credential_store)
+        return self._credentials_ready
+
     async def start(self) -> None:
+        credentials_ready = await self._ensure_credentials_ready()
         sock = self.socket_path()
         sock.parent.mkdir(parents=True, exist_ok=True)
         if sock.exists():
@@ -329,7 +336,9 @@ class Server:
         )
         sock.chmod(0o600)
         log.info("host server listening on %s", sock)
-        if self._tcp_bind is not None:
+        if self._tcp_bind is not None and not credentials_ready:
+            log.error("WebSocket listener not started: the credential store did not migrate")
+        elif self._tcp_bind is not None:
             await self._start_ws(*self._tcp_bind)
 
     async def _start_ws(self, host: str, port: int) -> None:
@@ -349,6 +358,9 @@ class Server:
     async def enable_tcp(self, bind: tuple[str, int]) -> None:
         # Bind the TCP/WS listener after start(), so host.sock (Unix) comes up first — the bind address needs slow network detection.
         if self._ws_server is not None:
+            return
+        if not await self._ensure_credentials_ready():
+            log.error("WebSocket listener not started: the credential store did not migrate")
             return
         host, port = self._validate_tcp_bind(bind, self._allow_public_bind)
         self._tcp_bind = (host, port)
@@ -1124,6 +1136,19 @@ def _filter_payload_by_scope(
     return payload
 
 
+def _migrate_credential_store() -> bool:
+    from alpi.host import connections as connections_mod
+
+    if not (connections_mod.store_path().exists() or connections_mod.legacy_store_path().exists()):
+        return True
+    try:
+        connections_mod.load_store()
+    except Exception as exc:  # noqa: BLE001
+        log.error("host credential store migration failed; remote access stays closed: %s", exc)
+        return False
+    return True
+
+
 def _check_token(body: dict[str, Any]) -> bool:
     return bool(_check_token_meta(body).valid)
 
@@ -1143,7 +1168,7 @@ def _active_authorizations() -> set[tuple[str, str]]:
             for connection in data["connections"]
             if connection["status"] == "active"
             for device in connection["devices"]
-            if device["status"] == "active" and device.get("token")
+            if device["status"] == "active" and device.get("token_hash")
         }
     from alpi.host import devices as devices_mod
 

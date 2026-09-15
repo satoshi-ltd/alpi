@@ -235,6 +235,33 @@ def test_security_warns_about_ignored_legacy_service_switches(
     assert "all daemon capabilities start" in warning.detail
 
 
+def test_security_lists_historical_credential_copies(tmp_path: Path, monkeypatch) -> None:
+    from alpi import config as cfg_mod, home
+    from alpi.host import connections
+
+    monkeypatch.delenv("ALPI_PLATFORM", raising=False)
+    monkeypatch.setattr(home, "_ROOT", tmp_path)
+    connections.invalidate_cache()
+    (tmp_path / "config.yaml").write_text("model: x\n")
+    host = tmp_path / "host"
+    host.mkdir()
+    copies = ("devices.yaml.migrated", "devices.yaml.bak-20260520-093349", "connections.yaml.damaged-20260807-140917")
+    for name in copies:
+        (host / name).write_text("- token: synthetic-secret\n")
+    (host / "devices.yaml").write_text("[]\n")
+    (host / "connections.lock").write_text("")
+
+    checks = doctor._check_security(cfg_mod.load(tmp_path))
+
+    listed = next(c for c in checks if c.name == "Historical credential copies")
+    assert listed.status == "warn"
+    assert all(name in listed.detail for name in copies)
+    assert "synthetic-secret" not in listed.detail
+    assert "connections.lock" not in listed.detail
+    legacy = next(c for c in checks if c.name == "Legacy device store")
+    assert legacy.status == "warn"
+
+
 def test_cli_doctor_command_exits_nonzero_on_fail(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("ALPI_HOME", str(tmp_path))
     (tmp_path / "config.yaml").write_text("model: \n")

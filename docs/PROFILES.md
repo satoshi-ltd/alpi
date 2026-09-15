@@ -62,7 +62,7 @@ Not isolated (shared globally by design):
 - Whisper model downloads (`~/.cache/huggingface/`).
 - Chromium for the `browser` tool (Playwright's own cache).
 - The user's shell, git config, workspace contents.
-- **Host-plane root state.** `~/.alpi/host/host.sock` (control-plane socket), `~/.alpi/host/connections.yaml` (connection identities and device tokens), `~/.alpi/host/events.jsonl` (host event stream), and `~/.alpi/host/device_id` are root-only — ONE instance per installation, not duplicated per profile. The desktop / mobile client always pairs against the root and reaches sibling profiles via the `profile` parameter on each verb. Named profiles still get their own `host/attachments/tmp/` (uploaded chat attachments) — that IS per profile and appears in the table above.
+- **Host-plane root state.** `~/.alpi/host/host.sock` (control-plane socket), `~/.alpi/host/connections.yaml` (connection identities and hashed device tokens), `~/.alpi/host/events.jsonl` (host event stream), and `~/.alpi/host/device_id` are root-only — ONE instance per installation, not duplicated per profile. The desktop / mobile client always pairs against the root and reaches sibling profiles via the `profile` parameter on each verb. Named profiles still get their own `host/attachments/tmp/` (uploaded chat attachments) — that IS per profile and appears in the table above.
 
 ## Creating and removing profiles
 

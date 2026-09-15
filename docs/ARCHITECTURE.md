@@ -711,8 +711,11 @@ listener other alpis use for `link.*` and `workgroup.*`.
 
 The store lives at `~/.alpi/host/connections.yaml` (mode 0600). A connection
 is the operational identity: `{id, label, role, profile_scope, status}`. Its
-`devices[]` each hold a separate opaque token plus self-reported client/name/
-version metadata and `last_seen`. Desktop and mobile may therefore share one
+`devices[]` each hold the SHA-256 digest of a separate opaque token
+(`token_hash`; the cleartext exists only on the client) plus self-reported
+client/name/version metadata and `last_seen`. Auth hashes the presented token
+before the constant-time compare, so a copy of the file is not a credential.
+Desktop and mobile may therefore share one
 connection, its sessions and accounting, without sharing a credential.
 `pairings[]` holds only hashed temporary grants and lifecycle metadata. A
 pending grant expires after ten minutes; the first exchange marks it consumed
@@ -783,11 +786,28 @@ Lifecycle:
   device. `host.connections.delete` tombstones the parent and clears every
   linked token while retaining historical session/ledger attribution.
 
-On startup, when `connections.yaml` is absent and `devices.yaml` exists, each
-legacy device row is migrated to one connection with one device. Tokens,
-roles and profile scopes are preserved; the source becomes
-`devices.yaml.migrated`. No rows are merged because the old schema has no
-reliable grouping key. Sessions written before this contract lack an owner
+The daemon migrates the credential store at startup, under the store locks
+and before it opens the WebSocket listener. A `devices.yaml` with no
+`connections.yaml` beside it becomes one connection per legacy row, tokens
+hashed, roles and profile scopes preserved; the destination is re-read and
+checked (every legacy token hash present, no cleartext, mode 0600) before the
+source is deleted, and no backup copy is written. No rows are merged because
+the old schema has no reliable grouping key. A `connections.yaml` from a
+release before 0.14.39 still carries cleartext `token` fields; the first read
+rewrites it with `token_hash`, once, and an already hashed store is never
+rewritten. When both files exist after an interrupted run, `connections.yaml`
+is the authority: the destination is hashed and verified first, and the
+legacy file is deleted only when it has the legacy device-list shape and every
+token in it is provably represented there; otherwise it stays, nothing is
+imported or revived, and the log carries an explicit pending-migration warning. An empty,
+`null` or corrupt active store is an explicit error, never zero connections,
+and is never overwritten; if the migration fails, the WebSocket listener does
+not start, whether the bind comes from `start()` or from the daemon's later
+`enable_tcp()`. Rolling back below 0.14.39 is not supported: earlier code cannot
+read `token_hash`. Copies left by earlier releases (`devices.yaml.migrated`,
+hand-made `.bak` files, `connections.yaml.damaged-*`) are not touched;
+`alpi doctor` lists them and [OPERATIONS.md](OPERATIONS.md) gives the explicit
+removal procedure. Sessions written before this contract lack an owner
 and remain under the synthetic `host` connection.
 
 `host.devices.*` remains as a compatibility RPC alias for older management

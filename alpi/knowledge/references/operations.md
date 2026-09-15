@@ -112,7 +112,8 @@ alpi restore ~/vault/alpi.alpi-backup --force
 - Stop daemon before restore; run `alpi doctor` and restart afterward.
 - A normal restore from a trusted encrypted archive preserves existing device credentials; re-pairing is not required solely because the host moved.
 - Lost client device: revoke that device from a trusted admin/local host, then add its replacement on the same connection.
-- Exposed Alpi home, `connections.yaml`, snapshot, or backup: remove public reachability, rebuild on a trusted host, revoke every restored device before reopening WSS, re-pair clients, and rotate provider/email/skill secrets plus the ALP identity if its private key was included. Uncertain backup custody counts as exposure.
+- Exposed Alpi home, `connections.yaml`, snapshot, or backup: remove public reachability, rebuild on a trusted host, revoke every restored device before reopening WSS, re-pair clients (the store holds only token hashes, so the file alone is not a usable credential; revoke anyway), and rotate provider/email/skill secrets plus the ALP identity if its private key was included. Uncertain backup custody counts as exposure.
+- Historical credential copies (`devices.yaml.migrated`, `devices.yaml.bak-*`, `connections.yaml.damaged-*`) may hold cleartext device tokens; the daemon never touches them. `alpi doctor` lists them; verify the live store, then delete them by hand. Until then the host is not free of cleartext tokens.
 
 ## Common failure modes
 

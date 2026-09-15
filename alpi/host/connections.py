@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import hmac
+import logging
 import os
 import re
 import secrets
@@ -35,12 +36,15 @@ _VALID_ROLES = frozenset({"member", "admin"})
 _VALID_STATUSES = frozenset({"active", "disabled", "deleted"})
 _VALID_CLIENTS = frozenset({"desktop", "mobile", "unknown"})
 _SAFE_PROFILE = re.compile(r"^[A-Za-z0-9_-]+$")
+log = logging.getLogger(__name__)
 _CORRUPT_SCOPE = "<corrupt>"
 _cache_lock = threading.Lock()
 _cached: dict[str, Any] | None = None
 _cached_path: str | None = None
 _cached_identity: tuple[str, int, int, int] | None = None
 _failed_identity: tuple[str, int, int, int] | None = None
+_pending_migration: tuple[str, str] | None = None
+_MISSING = object()
 
 
 class StoreUnavailable(Exception):
@@ -124,6 +128,10 @@ def _tokens_match(stored: str, presented: str) -> bool:
         return False
 
 
+def _hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
 def _role(value: Any) -> str:
     value = str(value or "").strip().lower()
     return value if value in _VALID_ROLES else "member"
@@ -170,13 +178,14 @@ def _normalise_device(row: Any, fallback_label: str = "") -> dict[str, Any] | No
     if not isinstance(row, dict):
         return None
     token = str(row.get("token") or "")
+    token_hash = str(row.get("token_hash") or "") or (_hash_token(token) if token else "")
     token_id = str(row.get("token_id") or (token[-8:] if token else ""))
-    if not token and not token_id:
+    if not token_hash and not token_id:
         return None
     client = str(row.get("client") or "unknown").strip().lower()
     return {
         "id": str(row.get("id") or _new_id("dev")),
-        "token": token,
+        "token_hash": token_hash,
         "token_id": token_id,
         "name": str(row.get("name") or fallback_label or "").strip(),
         "client": client if client in _VALID_CLIENTS else "unknown",
@@ -320,49 +329,173 @@ def _atomic_write(data: dict[str, Any]) -> None:
     invalidate_cache()
 
 
+def _has_cleartext_tokens(raw: Any) -> bool:
+    if isinstance(raw, list):
+        return any(isinstance(row, dict) and row.get("token") for row in raw)
+    if not isinstance(raw, dict):
+        return False
+    for row in raw.get("connections") or []:
+        if not isinstance(row, dict):
+            continue
+        if any(isinstance(d, dict) and d.get("token") for d in row.get("devices") or []):
+            return True
+    return False
+
+
+def _legacy_hashes(rows: Any) -> set[str]:
+    return {
+        _hash_token(str(row["token"]))
+        for row in (rows if isinstance(rows, list) else [])
+        if isinstance(row, dict) and row.get("token")
+    }
+
+
+def _stored_hashes(data: dict[str, Any]) -> set[str]:
+    return {
+        device["token_hash"]
+        for connection in data["connections"]
+        for device in connection["devices"]
+        if device.get("token_hash")
+    }
+
+
+def _verify_written_store(expected_hashes: set[str]) -> dict[str, Any]:
+    raw = _read_raw()
+    if raw is _MISSING or _has_cleartext_tokens(raw):
+        raise StoreUnavailable("credential store verification failed: cleartext tokens remain")
+    data = _normalise_store(raw)
+    if not expected_hashes <= _stored_hashes(data):
+        raise StoreUnavailable("credential store verification failed: migrated devices are missing")
+    if os.stat(store_path()).st_mode & 0o077:
+        raise StoreUnavailable("credential store verification failed: mode is not 0600")
+    return data
+
+
+def _set_pending_migration(reason: str | None) -> None:
+    global _pending_migration
+    if reason and reason != pending_migration():
+        log.warning("credential store migration pending: %s", reason)
+    _pending_migration = (str(legacy_store_path().parent), reason) if reason else None
+
+
+def pending_migration() -> str | None:
+    if _pending_migration is None or _pending_migration[0] != str(legacy_store_path().parent):
+        return None
+    return _pending_migration[1]
+
+
+def _hash_tokens_if_needed_inside_lock() -> None:
+    raw = _read_raw()
+    if _has_cleartext_tokens(raw):
+        data = _normalise_store(raw)
+        _atomic_write(data)
+        _verify_written_store(_stored_hashes(data))
+
+
+def _legacy_shape_issue(rows: Any) -> str | None:
+    if not isinstance(rows, list):
+        return "not a device list"
+    bad = sum(
+        1 for row in rows
+        if not (isinstance(row, dict) and isinstance(row.get("token"), str) and row["token"])
+    )
+    return f"{bad} row(s) without a token" if bad else None
+
+
+def _shape_notice(legacy: Path, target: Path, issue: str) -> str:
+    return (
+        f"{legacy} kept for review: {issue}; {target.name} is the authority, "
+        "nothing else was imported or deleted"
+    )
+
+
 def _migrate_if_needed_inside_lock() -> None:
+    _hash_tokens_if_needed_inside_lock()
+    _migrate_legacy_inside_lock()
+
+
+def _migrate_legacy_inside_lock() -> None:
     target = store_path()
     legacy = legacy_store_path()
-    if target.exists() or not legacy.exists():
+    if not legacy.exists():
+        _set_pending_migration(None)
         return
     from alpi.host import devices
     # lock order: connections.lock then devices.lock, never the reverse
     with devices._store_lock():
-        if target.exists() or not legacy.exists():
+        if not legacy.exists():
+            _set_pending_migration(None)
             return
-        data = _from_legacy(_read_yaml(legacy))
-        _atomic_write(data)
-        backup = legacy.with_name("devices.yaml.migrated")
-        if backup.exists():
-            backup = legacy.with_name(
-                f"devices.yaml.migrated.{int(time.time())}.{secrets.token_hex(3)}",
+        try:
+            rows = _read_yaml(legacy)
+        except StoreUnavailable:
+            if not target.exists():
+                raise
+            _set_pending_migration(
+                f"{legacy} is unreadable while {target.name} exists; nothing was imported or deleted, review the file by hand",
             )
-        os.replace(legacy, backup)
+            return
+        shape_issue = _legacy_shape_issue(rows)
+        if not target.exists():
+            _atomic_write(_from_legacy(rows))
+            _verify_written_store(_legacy_hashes(rows))
+            if shape_issue:
+                _set_pending_migration(_shape_notice(legacy, target, shape_issue))
+                return
+            legacy.unlink()
+            _set_pending_migration(None)
+            return
+        if shape_issue:
+            _set_pending_migration(_shape_notice(legacy, target, shape_issue))
+            return
+        try:
+            stored = _verify_written_store(set())
+        except StoreUnavailable as exc:
+            _set_pending_migration(f"{legacy} kept: {target.name} failed verification ({exc})")
+            return
+        missing = _legacy_hashes(rows) - _stored_hashes(stored)
+        if missing:
+            _set_pending_migration(
+                f"{legacy} holds {len(missing)} device token(s) absent from {target.name}; "
+                f"{target.name} is the authority, nothing was imported or deleted, review the file by hand",
+            )
+            return
+        legacy.unlink()
+        _set_pending_migration(None)
 
 
 def _migrate_if_needed() -> None:
-    if store_path().exists() or not legacy_store_path().exists():
+    if not legacy_store_path().exists():
         return
     with _locked():
         _migrate_if_needed_inside_lock()
 
 
-def _read_store() -> dict[str, Any]:
+def _read_raw() -> Any:
     path = store_path()
-    if not path.exists():
+    return _read_yaml(path) if path.exists() else _MISSING
+
+
+def _read_store(raw: Any) -> dict[str, Any]:
+    if raw is _MISSING:
         return {"version": SCHEMA_VERSION, "connections": []}
-    return _normalise_store(_read_yaml(path))
+    return _normalise_store(raw)
 
 
 def _load_inside_lock() -> dict[str, Any]:
     _migrate_if_needed_inside_lock()
-    return _read_store()
+    return _read_store(_read_raw())
 
 
 def load_store() -> dict[str, Any]:
     # lock-free read: _atomic_write's rename makes every read see a whole file; only writers/migration take the lock
     _migrate_if_needed()
-    return _read_store()
+    raw = _read_raw()
+    if _has_cleartext_tokens(raw):
+        with _locked():
+            _hash_tokens_if_needed_inside_lock()
+            raw = _read_raw()
+    return _read_store(raw)
 
 
 def save_store(data: dict[str, Any]) -> None:
@@ -435,7 +568,7 @@ def list_connections(*, include_deleted: bool = False) -> list[dict[str, Any]]:
 def _device_payload(device: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": device["id"],
-        "token_id": device.get("token_id") or str(device.get("token") or "")[-8:],
+        "token_id": device.get("token_id") or "",
         "name": device.get("name") or "",
         "client": device.get("client") or "unknown",
         "app_version": device.get("app_version") or "",
@@ -529,6 +662,12 @@ def create_device_pairing(connection_id: str) -> tuple[dict[str, Any], dict[str,
         return connection, pairing
 
 
+def _mint_device(nbytes: int, fallback_label: str = "", **fields: Any) -> tuple[dict[str, Any], dict[str, Any]]:
+    secret = secrets.token_urlsafe(nbytes)
+    stored = _normalise_device({**fields, "token": secret}, fallback_label)
+    return stored, {**stored, "token": secret}
+
+
 def exchange_pairing(
     pairing_token: str, *, client: str, name: str, app_version: str,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -571,21 +710,22 @@ def exchange_pairing(
                 if status != "pending" or connection.get("status") != "active":
                     raise PairingExchangeError("pairing-invalid")
                 clean_client = client if client in _VALID_CLIENTS else "unknown"
-                device = _normalise_device({
-                    "id": _new_id("dev"),
-                    "token": secrets.token_urlsafe(32),
-                    "name": name.strip()[:128],
-                    "client": clean_client,
-                    "app_version": app_version.strip()[:64],
-                    "created": now,
-                    "status": "active",
-                }, connection.get("label") or "")
+                device, issued = _mint_device(
+                    32,
+                    connection.get("label") or "",
+                    id=_new_id("dev"),
+                    name=name.strip()[:128],
+                    client=clean_client,
+                    app_version=app_version.strip()[:64],
+                    created=now,
+                    status="active",
+                )
                 connection["devices"].append(device)
                 pairing["status"] = "consumed"
                 pairing["consumed_at"] = now
                 pairing["device_id"] = device["id"]
                 _atomic_write(data)
-                return connection, device
+                return connection, issued
     raise PairingExchangeError("pairing-invalid")
 
 
@@ -638,12 +778,7 @@ def create_connection(
     with _locked():
         data = _load_inside_lock()
         now = int(time.time())
-        device = _normalise_device({
-            "id": _new_id("dev"),
-            "token": secrets.token_urlsafe(24),
-            "created": now,
-            "status": "active",
-        })
+        device, issued = _mint_device(24, id=_new_id("dev"), created=now, status="active")
         connection = _normalise_connection({
             "id": _new_id("conn"),
             "label": (label or "").strip() or "pending",
@@ -655,7 +790,7 @@ def create_connection(
         })
         data["connections"].append(connection)
         _atomic_write(data)
-        return connection, device
+        return connection, issued
 
 
 def add_device(connection_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -667,14 +802,10 @@ def add_device(connection_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
         )
         if connection is None:
             raise KeyError(connection_id)
-        device = _normalise_device({
-            "id": _new_id("dev"),
-            "token": secrets.token_urlsafe(24),
-            "created": int(time.time()),
-        })
+        device, issued = _mint_device(24, id=_new_id("dev"), created=int(time.time()))
         connection["devices"].append(device)
         _atomic_write(data)
-        return connection, device
+        return connection, issued
 
 
 def update_connection(
@@ -710,8 +841,8 @@ def update_connection(
 
 
 def _mark_device_deleted(device: dict[str, Any]) -> None:
-    device["token_id"] = device.get("token_id") or str(device.get("token") or "")[-8:]
-    device["token"] = ""
+    device["token_id"] = device.get("token_id") or ""
+    device["token_hash"] = ""
     device["status"] = "deleted"
 
 
@@ -752,8 +883,7 @@ def revoke_by_token_id(token_id: str) -> bool:
         data = _load_inside_lock()
         for connection in data["connections"]:
             for device in connection["devices"]:
-                current = device.get("token_id") or str(device.get("token") or "")[-8:]
-                if current != token_id:
+                if device.get("token_id") != token_id:
                     continue
                 active = [d for d in connection["devices"] if d["status"] != "deleted"]
                 if not device.get("last_seen") and len(active) == 1:
@@ -769,11 +899,12 @@ def register_device(token: str, *, client: str, name: str, app_version: str) -> 
     client = client if client in _VALID_CLIENTS else "unknown"
     clean_name = name.strip()
     clean_version = app_version.strip()
+    presented = _hash_token(token) if token else ""
     with _locked():
         data = _load_inside_lock()
         for connection in data["connections"]:
             for device in connection["devices"]:
-                if _tokens_match(str(device.get("token") or ""), token):
+                if _tokens_match(str(device.get("token_hash") or ""), presented):
                     changed = device.get("client") != client
                     if changed:
                         device["client"] = client
@@ -792,11 +923,12 @@ def register_device(token: str, *, client: str, name: str, app_version: str) -> 
 def authenticate(token: str, min_interval: float = 60.0) -> AuthResult:
     if not token:
         return AuthResult(False)
+    presented = _hash_token(token)
     data = _cached_store()
     now = int(time.time())
     for connection in data["connections"]:
         for device in connection["devices"]:
-            if device["status"] != "active" or not _tokens_match(device.get("token", ""), token):
+            if device["status"] != "active" or not _tokens_match(device.get("token_hash", ""), presented):
                 continue
             if connection["status"] == "disabled":
                 return AuthResult(
@@ -815,17 +947,17 @@ def authenticate(token: str, min_interval: float = 60.0) -> AuthResult:
                 device["id"],
             )
             if now - int(device.get("last_seen") or 0) >= min_interval:
-                _touch(token, now, min_interval)
+                _touch(presented, now, min_interval)
             return result
     return AuthResult(False)
 
 
-def _touch(token: str, now: int, min_interval: float) -> None:
+def _touch(token_hash: str, now: int, min_interval: float) -> None:
     with _locked():
         data = _load_inside_lock()
         for connection in data["connections"]:
             for device in connection["devices"]:
-                if _tokens_match(device.get("token", ""), token):
+                if _tokens_match(device.get("token_hash", ""), token_hash):
                     if now - int(device.get("last_seen") or 0) < min_interval:
                         return
                     device["last_seen"] = now
@@ -1048,8 +1180,7 @@ async def _register_device(params: dict[str, Any], _server: host_server.Server) 
 def _find_token_id(token_id: str) -> tuple[dict[str, Any], dict[str, Any]] | None:
     for connection in list_connections(include_deleted=True):
         for device in connection["devices"]:
-            current = device.get("token_id") or str(device.get("token") or "")[-8:]
-            if current == token_id:
+            if device.get("token_id") == token_id:
                 return connection, device
     return None
 
@@ -1061,7 +1192,7 @@ async def _legacy_list(_params: dict[str, Any], _server: host_server.Server) -> 
             if device["status"] == "deleted":
                 continue
             rows.append({
-                "token_id": device.get("token_id") or str(device.get("token") or "")[-8:],
+                "token_id": device.get("token_id") or "",
                 "label": connection["label"],
                 "created": device["created"],
                 "last_seen": device["last_seen"],

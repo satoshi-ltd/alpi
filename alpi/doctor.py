@@ -837,6 +837,34 @@ def _check_security(cfg: cfg_mod.Config) -> list[Check]:
         ))
 
     out.extend(_check_network_exposure(cfg))
+    out.extend(_check_credential_copies())
+    return out
+
+
+def _check_credential_copies() -> list[Check]:
+    from alpi.host import connections as connections_mod
+
+    live = connections_mod.store_path()
+    legacy = connections_mod.legacy_store_path()
+    host = live.parent
+    out: list[Check] = []
+    if legacy.exists():
+        out.append(Check(
+            "Security", "Legacy device store", "warn",
+            f"{legacy} still present — migration pending; the daemon log says why",
+        ))
+    copies = sorted(
+        p.name
+        for pattern in (f"{legacy.name}.*", f"{live.name}.*")
+        for p in (host.glob(pattern) if host.is_dir() else [])
+        if p.is_file()
+    )
+    if copies:
+        out.append(Check(
+            "Security", "Historical credential copies", "warn",
+            f"{len(copies)} file(s) in {host} may hold cleartext device tokens: "
+            f"{', '.join(copies)} — verify the live store, then delete them by hand (OPERATIONS.md)",
+        ))
     return out
 
 

@@ -266,10 +266,20 @@ Use the smallest response that matches the incident:
 - **Exposed `connections.yaml`, Alpi home, server snapshot, or backup:** remove
   public reachability to the affected runtime, rebuild on a trusted host,
   revoke every restored device credential before reopening WSS, and re-pair
-  each client. Rotate every other secret present in the exposed material:
+  each client. Device tokens are stored hashed since 0.14.39, so the file alone
+  cannot be replayed as a credential; revoke and re-pair anyway because the
+  custody of the rest of the material is what is in doubt. Rotate every other
+  secret present in the exposed material:
   provider/API keys, email credentials or OAuth tokens, skill secrets, and the
   ALP identity when its private key was included.
 - **Uncertain backup custody:** treat it as exposure, not as a normal restore.
+- **Historical credential copies (`devices.yaml.migrated`, `devices.yaml.bak-*`,
+  `connections.yaml.damaged-*`):** releases before 0.14.39 left them beside the
+  live store and they may hold cleartext device tokens. The daemon never touches
+  them. Run `alpi doctor` to list them, confirm the live `connections.yaml`
+  carries only `token_hash` fields and still authenticates every paired client,
+  then delete the copies by hand. Until they are gone, do not describe the host
+  as free of cleartext tokens.
   Changing only the backup passphrase cannot revoke credentials already copied
   from an older archive.
 

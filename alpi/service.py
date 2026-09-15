@@ -3895,13 +3895,6 @@ async def _run_host(home: Path, profile: str) -> None:
         tcp_bind=None,
         allow_public_bind=host_allow_public_bind(home),
     )
-    try:
-        host_connections.load_store()
-    except host_connections.StoreUnavailable:
-        log.warning(
-            "connections store unavailable at boot; remote authentication will fail closed",
-            exc_info=True,
-        )
     host_handlers.register(server)
     host_chat.register(server)
     host_config.register(server)
