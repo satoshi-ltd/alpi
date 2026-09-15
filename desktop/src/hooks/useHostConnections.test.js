@@ -696,6 +696,147 @@ describe("useHostConnections.connectionSwitching", () => {
   });
 });
 
+describe("useHostConnections rate-limited", () => {
+  const probeActiveCount = () =>
+    invoke.mock.calls.filter(([c]) => c === "host_connections_probe_active").length;
+
+  function mockRemote(getStatus) {
+    invoke.mockImplementation(async (cmd, args) => {
+      if (cmd === "host_connections") return makeConnections("remote", { remote: getStatus() });
+      if (cmd === "host_connection_set_active") return null;
+      if (cmd === "host_connection_probe") return getStatus();
+      if (cmd === "profile_summaries") return [{ name: "fresh", model: "a/b" }];
+      if (cmd === "workgroups") return [{ id: "wg-1", profile: "fresh" }];
+      return null;
+    });
+  }
+
+  it("keeps cached profiles, clears nothing and does not revoke when the daemon throttles", async () => {
+    let status = "online";
+    mockRemote(() => status);
+    const { result, clearTurnsForConnection, setView } = renderHostConnections();
+    // connectionSyncing starts false; wait for the first load to land before throttling it.
+    await waitFor(() => {
+      expect(result.current.profiles.map((p) => p.name)).toEqual(["fresh"]);
+      expect(result.current.workgroups.map((w) => w.id)).toEqual(["wg-1"]);
+      expect(result.current.connectionSyncing).toBe(false);
+    });
+    clearTurnsForConnection.mockClear();
+    setView.mockClear();
+
+    status = "rate-limited";
+    await act(async () => {
+      await connectionStatusListener({
+        payload: { id: "remote", status: "rate-limited", error: "websocket closed by daemon (1013 auth-rate-limited)" },
+      });
+    });
+
+    await waitFor(() => expect(result.current.connectionSyncing).toBe(false));
+    const remote = result.current.hostConnections.connections.find((c) => c.id === "remote");
+    expect(remote.status).toBe("rate-limited");
+    expect(remote.revoked).toBeFalsy();
+    expect(result.current.profiles.map((p) => p.name)).toEqual(["fresh"]);
+    expect(result.current.workgroups.map((w) => w.id)).toEqual(["wg-1"]);
+    expect(clearTurnsForConnection).not.toHaveBeenCalled();
+    expect(setView).not.toHaveBeenCalled();
+    expect(localStorage.getItem("alf:profiles:v1:remote")).not.toBeNull();
+    expect(invoke.mock.calls.some(([cmd]) => cmd === "host_connection_forget")).toBe(false);
+  });
+
+  it("re-probes after a minute, never sooner, and stops when the connection changes", async () => {
+    let status = "rate-limited";
+    mockRemote(() => status);
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHostConnections();
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(
+        result.current.hostConnections.connections.find((c) => c.id === "remote")?.status,
+      ).toBe("rate-limited");
+
+      invoke.mockClear();
+      await act(async () => { vi.advanceTimersByTime(59000); });
+      expect(probeActiveCount()).toBe(0);
+      await act(async () => { vi.advanceTimersByTime(2000); });
+      expect(probeActiveCount()).toBe(1);
+
+      act(() => result.current.onSetHostConnection("local"));
+      await act(async () => { await Promise.resolve(); });
+      invoke.mockClear();
+      await act(async () => { vi.advanceTimersByTime(200000); });
+      expect(probeActiveCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a throttled connection never changes the active one, and switching away cancels its retries", async () => {
+    let active = "local";
+    invoke.mockImplementation(async (cmd, args) => {
+      if (cmd === "host_connections") return makeConnections(active, { local: "online", remote: "online" });
+      if (cmd === "host_connection_set_active") {
+        active = args.id;
+        return null;
+      }
+      if (cmd === "host_connection_probe") return "online";
+      if (cmd === "profile_summaries") return [{ name: "local-doc", model: "a/b" }];
+      if (cmd === "workgroups") return [];
+      return null;
+    });
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHostConnections();
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      // A late throttle from the connection we are not on must stay on its own row.
+      await act(async () => {
+        await connectionStatusListener({
+          payload: { id: "remote", status: "rate-limited", error: "websocket closed by daemon (1013 auth-rate-limited)" },
+        });
+      });
+
+      const rows = Object.fromEntries(
+        result.current.hostConnections.connections.map((c) => [c.id, c.status]),
+      );
+      expect(rows.remote).toBe("rate-limited");
+      expect(rows.local).toBe("online");
+      expect(result.current.profiles.map((p) => p.name)).toEqual(["local-doc"]);
+
+      invoke.mockClear();
+      await act(async () => { vi.advanceTimersByTime(180000); });
+      expect(invoke.mock.calls.filter(([c]) => c === "host_connections_probe_active").length).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("returns to online and refreshes once the daemon accepts again", async () => {
+    let status = "rate-limited";
+    mockRemote(() => status);
+    const { result } = renderHostConnections();
+    await waitFor(() =>
+      expect(result.current.hostConnections.connections.find((c) => c.id === "remote")?.status).toBe("rate-limited"),
+    );
+    invoke.mockClear();
+
+    status = "online";
+    await act(async () => {
+      await connectionStatusListener({ payload: { id: "remote", status: "online" } });
+    });
+
+    await waitFor(() => expect(result.current.profiles.map((p) => p.name)).toEqual(["fresh"]));
+    expect(result.current.hostConnections.connections.find((c) => c.id === "remote")?.status).toBe("online");
+  });
+});
+
 describe("useHostConnections offline auto-reprobe", () => {
   function mockOfflineLocal(getStatus) {
     invoke.mockImplementation(async (cmd) => {

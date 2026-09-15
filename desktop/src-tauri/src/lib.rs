@@ -437,6 +437,7 @@ async fn host_connection_probe(id: String) -> String {
             host_client::ConnectionStatus::Offline => "offline",
             host_client::ConnectionStatus::Disabled => "disabled",
             host_client::ConnectionStatus::AuthFailed => "auth-failed",
+            host_client::ConnectionStatus::RateLimited => "rate-limited",
             host_client::ConnectionStatus::Unknown => "unknown",
         }
         .to_string()
@@ -3729,6 +3730,7 @@ pub fn run() {
                             host_client::ConnectionStatus::Offline => "offline",
                             host_client::ConnectionStatus::Disabled => "disabled",
                             host_client::ConnectionStatus::AuthFailed => "auth-failed",
+                            host_client::ConnectionStatus::RateLimited => "rate-limited",
                             host_client::ConnectionStatus::Unknown => "unknown",
                         },
                         "error": error,

@@ -4,10 +4,24 @@ import { ConnPill } from "../primitives/index.js";
 import { ConnectionPanel } from "../primitives/Panels.jsx";
 import { Eyebrow } from "../primitives/index.js";
 import { useNotify } from "../primitives/Notification.jsx";
+import {
+  RATE_LIMITED,
+  RATE_LIMITED_MESSAGE,
+  isRateLimitedError,
+} from "../lib/connection-status.js";
 import styles from "./ConnectionSwitcher.module.css";
+
+export function pairingFailureNotice(error) {
+  const text = String(error);
+  if (isRateLimitedError(text)) {
+    return { message: RATE_LIMITED_MESSAGE, variant: "warning", duration: 5000 };
+  }
+  return { message: `Pairing failed: ${text}`, variant: "error", duration: 5000 };
+}
 
 function tooltipFor(_connection, status) {
   if (status === "disabled") return "Connection disabled by host";
+  if (status === RATE_LIMITED) return RATE_LIMITED_MESSAGE;
   return status === "offline" || status === "auth-failed"
     ? "Daemon offline — click to retry"
     : "Switch connection";
@@ -126,11 +140,7 @@ export default function ConnectionSwitcher({
             closePanel();
             return true;
           } catch (e) {
-            notify({
-              message: `Pairing failed: ${String(e)}`,
-              variant: "error",
-              duration: 5000,
-            });
+            notify(pairingFailureNotice(e));
             return false;
           }
         }}

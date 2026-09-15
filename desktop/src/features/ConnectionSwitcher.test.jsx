@@ -1,7 +1,23 @@
 import { describe, it, expect, vi } from "vitest";
 import { renderHook } from "@testing-library/react";
 
-import { connectionEndpoint, useFireOnce } from "./ConnectionSwitcher.jsx";
+import { connectionEndpoint, pairingFailureNotice, useFireOnce } from "./ConnectionSwitcher.jsx";
+import { RATE_LIMITED_MESSAGE } from "../lib/connection-status.js";
+
+describe("pairingFailureNotice", () => {
+  it("explains a throttled pairing exchange without blaming the code", () => {
+    const notice = pairingFailureNotice("websocket closed by daemon (1013 auth-rate-limited)");
+    expect(notice.message).toBe(RATE_LIMITED_MESSAGE);
+    expect(notice.variant).toBe("warning");
+    expect(notice.message).not.toMatch(/re-pair|token/i);
+  });
+
+  it("keeps the generic wording for every other failure", () => {
+    expect(pairingFailureNotice("alp -32011: pairing-invalid").message).toBe(
+      "Pairing failed: alp -32011: pairing-invalid",
+    );
+  });
+});
 
 describe("connectionEndpoint", () => {
   it("shows the complete URL returned for current remote connections", () => {

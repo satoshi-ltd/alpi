@@ -760,6 +760,8 @@ fit Desktop and Mobile; changing them requires a daemon restart.
 | `ALPI_HOST_WS_MAX_CONNECTIONS` | `128` | Maximum simultaneous WebSockets. |
 | `ALPI_HOST_WS_MAX_CONNECTIONS_PER_DEVICE` | `8` | Maximum sockets sharing one device credential. |
 | `ALPI_HOST_WS_MAX_RPCS_PER_DEVICE` | `8` | Maximum concurrent RPC handlers or streams for one device. |
+| `ALPI_HOST_WS_AUTH_FAILURES_PER_MINUTE` | `10` | Authentication failures (rejected token or rejected pairing code) one source address may accumulate per minute before its new sockets are closed with 1013 before any token is read. |
+| `ALPI_HOST_WS_TRUSTED_PROXIES` | empty | Comma-separated IPs or CIDRs of reverse proxies whose `X-Forwarded-For` is trusted; the client is the rightmost hop not in this list. Empty means the header is ignored and the socket peer is the source. The WSS overlay pins Caddy to `172.30.250.10` and lists it. |
 | `ALPI_HOST_WS_AUTH_TIMEOUT` | `10` | Seconds allowed for the first authenticated request. |
 | `ALPI_HOST_WS_AUTH_RECHECK` | `1` | Seconds between active-socket authorization checks. |
 | `ALPI_HOST_WS_CLOSE_TIMEOUT` | `1` | Maximum graceful WebSocket close wait in seconds. |

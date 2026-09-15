@@ -157,6 +157,22 @@ describe("useChatStream live frames", () => {
     expect(turnOf(result).settling).toBeFalsy();
   });
 
+  it("a throttled transport close reads as the rate-limit notice and never resends the turn", async () => {
+    const { result } = mount();
+    await waitForListen();
+    seedTurn(result, { sessionId: "sess-1" });
+    const streamCalls = () => invoke.mock.calls.filter(([cmd]) => cmd === "stream_chat").length;
+    const before = streamCalls();
+    emit({ kind: "error", text: "websocket closed by daemon (1013 auth-rate-limited)" });
+    emit({ kind: "done" });
+    await settle(70000);
+    expect(turnOf(result).error).toBe(
+      "Too many authentication attempts from this IP. Wait a minute and try again.",
+    );
+    expect(turnOf(result).ended).toBe(true);
+    expect(streamCalls()).toBe(before);
+  });
+
   it("an error frame alone leaves the turn stoppable until done lands", async () => {
     const { result } = mount();
     await waitForListen();

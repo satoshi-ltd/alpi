@@ -11,6 +11,34 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.5.30 — 2026-09-15 — a throttled connection says so
+
+- **A daemon that throttles this IP is shown as what it is, not as offline or
+  revoked.** alpi 0.14.41 closes a socket it is rate-limiting with WebSocket code
+  1013 and the reason `auth-rate-limited`. The Rust transport now keeps the close
+  code and reason of every daemon close, and only that exact pair becomes the new
+  `rate-limited` connection state; any other 1013 stays a capacity close. The state
+  reaches the connection pill, the connection panel, the top banner (as a warning,
+  without a Retry button), pairing and chat turns with one message: *Too many
+  authentication attempts from this IP. Wait a minute and try again.* Credentials,
+  connection and cached profiles stay untouched, nothing is marked revoked, and a
+  generic transport error arriving right after the throttle does not overwrite the
+  reason. A refused socket is not a dead host: while another socket of that connection
+  is still streaming, the operation fails with the notice but the connection stays
+  online, and a live frame lifts a throttled connection back to online by itself. A
+  throttle on one connection never touches another, and switching away cancels its
+  pending retry. The connection re-probes once a minute instead of the 4-second
+  offline backoff, stops when the connection changes, and returns to online on the
+  first accepted probe; a throttled pairing keeps the pasted link so it can be
+  retried, and a throttled chat turn shows the notice without resending the message.
+  With daemons older than 0.14.41 the generic behaviour is unchanged. Tests cover the
+  close-frame decoding and classification, the retry exclusion, the hold against a
+  later generic error, the live-stream distinction in both directions, cross-connection
+  isolation, the pill, the pairing notice, the chat turn and the one-minute reprobe
+  with fake timers.
+  Client-only change: the minimum compatible alpi stays at 0.14.34, as pinned by
+  v0.5.26; the specific notice needs alpi 0.14.41.
+
 ## v0.5.29 — 2026-09-15 — the sidebar follows the connection it names
 
 - **Cold start no longer shows one connection's profiles under another connection's

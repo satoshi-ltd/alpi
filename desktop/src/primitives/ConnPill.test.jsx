@@ -19,6 +19,12 @@ describe("ConnPill", () => {
     expect(screen.queryByText("1.2.3.4:7423")).not.toBeInTheDocument();
   });
 
+  it("names the temporary throttle without offering a re-pair", () => {
+    render(<ConnPill kind="remote" name="office" host="1.2.3.4:7423" status="rate-limited" />);
+    expect(screen.getByText("rate limited · retrying in a minute")).toBeInTheDocument();
+    expect(screen.queryByText("offline · retrying…")).not.toBeInTheDocument();
+  });
+
   it("keeps the offline caption when offline", () => {
     render(<ConnPill kind="remote" name="office" host="1.2.3.4:7423" status="offline" />);
     expect(screen.getByText("offline · retrying…")).toBeInTheDocument();

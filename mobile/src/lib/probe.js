@@ -1,8 +1,9 @@
-// Status set: 'online' | 'offline' | 'disabled' | 'auth-failed' | 'probing' | 'unknown'.
+// Status set: 'online' | 'offline' | 'disabled' | 'auth-failed' | 'rate-limited' | 'probing' | 'unknown'.
 
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { AUTH_FAILED, RpcError, call } from './rpc';
+import { RATE_LIMITED } from './rateLimit';
 import { endpointUrl } from './endpoint.js';
 
 const PROBE_TIMEOUT_MS = 3500;
@@ -50,6 +51,9 @@ export async function probe(endpoint) {
     }
     return { status: 'online', version, updateAvailable, deviceName, deviceId, role, summaries };
   } catch (e) {
+    if (e instanceof RpcError && e.code === RATE_LIMITED) {
+      return { status: 'rate-limited', version: null, updateAvailable: null, deviceName: null, deviceId: null, role: null, summaries: null };
+    }
     if (e instanceof RpcError && e.code === AUTH_FAILED) {
       if (e.data?.reason === 'connection-disabled') {
         return { status: 'disabled', version: null, updateAvailable: null, deviceName: null, deviceId: null, role: null, summaries: null };

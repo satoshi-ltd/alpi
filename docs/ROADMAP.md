@@ -54,7 +54,6 @@ server-side representation and policy move.
 | ID | Item | Status |
 |---|---|---|
 | TOKEN.2 | Optional device-token expiry driven by **inactivity**, not age: `host.token_ttl_days` (absent = today's behavior, no expiry) evaluated against `last_seen`, so devices in active use never expire and legacy rows stay valid until the operator sets the policy. Expired rows must read as inactive to `_active_authorizations` so live sessions drop too. | 🟡 |
-| RATE.1 | Simple pre-auth rate limit on the WS listener: reuse the sliding-window `RateLimiter` from `alpi/alp/rate_limit.py` keyed by source address, counting auth failures only; over-cap closes `1013` before token validation. Behind Caddy the socket peer is the proxy, so honor `X-Forwarded-For` only when the peer address is private/loopback. Settles the edge per-IP decision left open in ONLINE.4. | 🟡 |
 
 ### Production client exposure
 
@@ -69,7 +68,7 @@ the supplied design on the first definitive customer deployment.
 | ONLINE.1 | Deploy one isolated Alpi runtime and volume per mutually untrusted customer; profiles/connections remain an identity and RPC boundary, not tenant isolation. | 🔴 |
 | ONLINE.2 | Put the definitive hostname behind Caddy with a valid public certificate; publish only TCP 80/443 and verify the effective Compose config exposes neither 49200 nor 7423. | 🔴 |
 | ONLINE.3 | Run external Desktop/Mobile acceptance: authenticated WSS RPC succeeds, invalid certificates fail closed, live-stream revocation disconnects only the target device, and direct public probes to 49200/7423 fail. | 🔴 |
-| ONLINE.4 | Establish the operating checks: certificate-expiry monitoring, WebSocket capacity/rejection alerts, and an explicit decision on an edge per-IP limit where the real client IP is available. | 🔴 |
+| ONLINE.4 | Establish the operating checks: certificate-expiry monitoring and WebSocket capacity/rejection alerts (including `auth_rate_limited`). The daemon already throttles authentication failures per source address and reads the real client IP from the last `X-Forwarded-For` hop behind Caddy, so the edge needs no per-IP rule of its own. | 🔴 |
 
 The cycle is complete only after those checks pass against the real domain and
 firewall, not another local tunnel. Credential-loss and backup-exposure

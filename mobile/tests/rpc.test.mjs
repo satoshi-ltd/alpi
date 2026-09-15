@@ -30,10 +30,22 @@ class FakeWs {
   message(payload) {
     if (this.onmessage) this.onmessage({ data: JSON.stringify(payload) });
   }
+  closeWith(code, reason) {
+    this.readyState = 3;
+    if (this.onclose) this.onclose({ code, reason });
+  }
 }
 globalThis.WebSocket = FakeWs;
 
-const { call, dropEndpointPool, setAuthFailedHandler, _resetPoolForTests } = await import('../src/lib/rpc.js');
+const { call, callStream, dropEndpointPool, hasLiveSocket, setAuthFailedHandler, setRateLimitedHandler, RATE_LIMITED, RATE_LIMITED_MESSAGE, _resetPoolForTests } = await import('../src/lib/rpc.js');
+const { RATE_LIMITED_HOLD_MS, CLOSE_AFTER_ERROR_GRACE_MS } = await import('../src/lib/rateLimit.js');
+
+const realNow = Date.now;
+async function atTime(ms, fn) {
+  Date.now = () => ms;
+  try { return await fn(); } finally { Date.now = realNow; }
+}
+const settle = (ms = CLOSE_AFTER_ERROR_GRACE_MS + 20) => new Promise((r) => setTimeout(r, ms));
 
 let passed = 0;
 let failed = 0;
@@ -315,6 +327,274 @@ await test('connection-disabled reports its reason without masquerading as rejec
   assert.strictEqual(failures.length, 1);
   assert.strictEqual(failures[0].reason, 'connection-disabled');
   setAuthFailedHandler(null);
+});
+
+await test('a 1013 auth-rate-limited close rejects with the rate-limited error and notifies the handler', async () => {
+  _resetPoolForTests();
+  nextWs = null;
+  const seen = [];
+  setRateLimitedHandler((info) => { seen.push(info); });
+  const ep = { id: 'ep-1', ip: '127.0.0.1', port: 9999, token: 't' };
+  const p = call(ep, 'host.ping', {});
+  nextWs.closeWith(1013, 'auth-rate-limited');
+  await assert.rejects(p, (err) => (
+    err.code === RATE_LIMITED
+    && err.message === RATE_LIMITED_MESSAGE
+    && err.data.reason === 'auth-rate-limited'
+    && err.data.close_code === 1013
+  ));
+  assert.strictEqual(seen.length, 1);
+  assert.strictEqual(seen[0].endpoint.id, 'ep-1');
+  setRateLimitedHandler(null);
+});
+
+await test('any other 1013 close stays a generic connection-closed error', async () => {
+  _resetPoolForTests();
+  nextWs = null;
+  const seen = [];
+  setRateLimitedHandler((info) => { seen.push(info); });
+  const p = call(endpoint, 'host.ping', {});
+  nextWs.closeWith(1013, 'Device connection limit reached');
+  await assert.rejects(p, (err) => err.code === -32002 && /connection closed/.test(err.message));
+  assert.strictEqual(seen.length, 0);
+  setRateLimitedHandler(null);
+});
+
+await test('a later generic transport error does not overwrite the rate-limited rejection', async () => {
+  _resetPoolForTests();
+  nextWs = null;
+  const p = call(endpoint, 'host.ping', {});
+  const ws = nextWs;
+  ws.closeWith(1013, 'auth-rate-limited');
+  if (ws.onerror) ws.onerror();
+  ws.closeWith(1006, '');
+  await assert.rejects(p, (err) => err.code === RATE_LIMITED && err.message === RATE_LIMITED_MESSAGE);
+});
+
+await test('stream sockets surface the throttle once through onError', async () => {
+  _resetPoolForTests();
+  nextWs = null;
+  const errors = [];
+  callStream(endpoint, 'host.chat.send', { text: 'hi' }, { onError: (e) => errors.push(e), onFrame: () => {}, onDone: () => {} });
+  const ws = nextWs;
+  ws.closeWith(1013, 'auth-rate-limited');
+  if (ws.onerror) ws.onerror();
+  ws.closeWith(1006, '');
+  assert.strictEqual(errors.length, 1);
+  assert.strictEqual(errors[0].code, RATE_LIMITED);
+  assert.strictEqual(errors[0].message, RATE_LIMITED_MESSAGE);
+});
+
+await test('a generic onerror before the close frame does not lose the daemon reason, and settles once', async () => {
+  _resetPoolForTests();
+  nextWs = null;
+  const rejections = [];
+  const p = call(endpoint, 'host.ping', {}).catch((e) => { rejections.push(e); });
+  const ws = nextWs;
+  ws.onerror();
+  ws.closeWith(1013, 'auth-rate-limited');
+  ws.closeWith(1006, '');
+  await p;
+  await settle();
+  assert.strictEqual(rejections.length, 1);
+  assert.strictEqual(rejections[0].code, RATE_LIMITED);
+  assert.strictEqual(rejections[0].message, RATE_LIMITED_MESSAGE);
+});
+
+await test('an onerror with no close following still settles the call from the transport', async () => {
+  _resetPoolForTests();
+  nextWs = null;
+  const p = call(endpoint, 'host.ping', {});
+  nextWs.onerror();
+  await assert.rejects(p, (err) => err.code === -32001);
+});
+
+await test('a stream keeps the daemon reason when onerror precedes the close, and fires onError once', async () => {
+  _resetPoolForTests();
+  nextWs = null;
+  const errors = [];
+  callStream(endpoint, 'host.chat.send', { text: 'hi' }, { onError: (e) => errors.push(e), onFrame: () => {}, onDone: () => {} });
+  const ws = nextWs;
+  ws.onerror();
+  ws.closeWith(1013, 'auth-rate-limited');
+  ws.closeWith(1006, '');
+  await settle();
+  assert.strictEqual(errors.length, 1);
+  assert.strictEqual(errors[0].code, RATE_LIMITED);
+});
+
+await test('every layer waits out the hold: no socket is opened, then one attempt is allowed', async () => {
+  _resetPoolForTests();
+  nextWs = null;
+  const ep = { id: 'ep-hold', ip: '127.0.0.1', port: 9999, token: 't' };
+
+  await atTime(1000, async () => {
+    const first = call(ep, 'host.ping', {});
+    nextWs.closeWith(1013, 'auth-rate-limited');
+    await assert.rejects(first, (e) => e.code === RATE_LIMITED);
+  });
+
+  await atTime(1000 + RATE_LIMITED_HOLD_MS - 1, async () => {
+    nextWs = null;
+    await assert.rejects(call(ep, 'host.ping', {}), (e) => e.code === RATE_LIMITED);
+    await assert.rejects(call(ep, 'host.other', {}), (e) => e.code === RATE_LIMITED);
+    const streamErrors = [];
+    callStream(ep, 'host.chat.send', {}, { onError: (e) => streamErrors.push(e) });
+    assert.strictEqual(streamErrors.length, 1);
+    assert.strictEqual(streamErrors[0].code, RATE_LIMITED);
+    assert.strictEqual(nextWs, null, 'no socket may be opened while the hold stands');
+  });
+
+  let live = null;
+  await atTime(1000 + RATE_LIMITED_HOLD_MS + 1, async () => {
+    nextWs = null;
+    const retry = call(ep, 'host.ping', {});
+    assert.ok(nextWs, 'the hold must expire into exactly one new attempt');
+    live = nextWs;
+    live.open();
+    const id = JSON.parse(live.sent[0]).id;
+    live.message({ id, result: { ok: true } });
+    assert.deepStrictEqual(await retry, { ok: true });
+  });
+
+  await atTime(1000 + RATE_LIMITED_HOLD_MS + 2, async () => {
+    const after = call(ep, 'host.ping', {});
+    const id = JSON.parse(live.sent[live.sent.length - 1]).id;
+    live.message({ id, result: { ok: true } });
+    assert.deepStrictEqual(await after, { ok: true }, 'the expired hold leaves nothing behind');
+  });
+});
+
+await test('only an authenticated socket counts as live, and a refused one never vouches for itself', async () => {
+  _resetPoolForTests();
+  nextWs = null;
+  const ep = { id: 'ep-live', ip: '127.0.0.1', port: 9999, token: 't' };
+  callStream(ep, 'host.chat.send', { text: 'hi' }, { onError: () => {}, onFrame: () => {}, onDone: () => {} });
+  const stream = nextWs;
+  stream.open();
+  assert.strictEqual(hasLiveSocket(ep), false, 'a socket that only shook hands proves nothing about the token');
+  stream.message({ id: JSON.parse(stream.sent[0]).id, event: 'assistant_delta', text: 'hi' });
+  assert.strictEqual(hasLiveSocket(ep), true);
+
+  const pooled = call(ep, 'host.ping', {});
+  nextWs.closeWith(1013, 'auth-rate-limited');
+  await assert.rejects(pooled, (e) => e.code === RATE_LIMITED);
+  assert.strictEqual(hasLiveSocket(ep), true, 'the working stream still proves the host is reachable');
+
+  stream.closeWith(1000, '');
+  assert.strictEqual(hasLiveSocket(ep), false);
+});
+
+await test('the refused socket is gone before the handler is told, so the block is never hidden by its own victim', async () => {
+  for (const shape of ['rpc', 'stream']) {
+    _resetPoolForTests();
+    nextWs = null;
+    const ep = { id: `ep-self-${shape}`, ip: '127.0.0.1', port: 9999, token: 't' };
+    const seen = [];
+    setRateLimitedHandler(({ endpoint }) => { seen.push(hasLiveSocket(endpoint)); });
+
+    if (shape === 'rpc') {
+      const p = call(ep, 'host.ping', {});
+      nextWs.closeWith(1013, 'auth-rate-limited');
+      await assert.rejects(p, (e) => e.code === RATE_LIMITED);
+    } else {
+      callStream(ep, 'host.chat.send', {}, { onError: () => {} });
+      nextWs.closeWith(1013, 'auth-rate-limited');
+    }
+
+    assert.deepStrictEqual(seen, [false], `${shape}: the dying socket must not report itself as live`);
+    setRateLimitedHandler(null);
+  }
+});
+
+await test('the hold stops new sockets but never an authenticated one already in the pool', async () => {
+  _resetPoolForTests();
+  nextWs = null;
+  const ep = { id: 'ep-healthy', ip: '127.0.0.1', port: 9999, token: 't' };
+
+  const first = call(ep, 'host.ping', {});
+  const healthy = nextWs;
+  healthy.open();
+  healthy.message({ id: JSON.parse(healthy.sent[0]).id, result: { ok: true } });
+  assert.deepStrictEqual(await first, { ok: true });
+
+  nextWs = null;
+  const streamErrors = [];
+  callStream(ep, 'host.chat.send', {}, { onError: (e) => streamErrors.push(e) });
+  nextWs.closeWith(1013, 'auth-rate-limited');
+  assert.strictEqual(streamErrors[0].code, RATE_LIMITED);
+
+  nextWs = null;
+  const cancel = call(ep, 'host.chat.cancel', { request_id: 'r-1' });
+  assert.strictEqual(nextWs, null, 'the healthy socket is reused, no new socket is opened');
+  healthy.message({ id: JSON.parse(healthy.sent[healthy.sent.length - 1]).id, result: { cancelled: true } });
+  assert.deepStrictEqual(await cancel, { cancelled: true }, 'a held endpoint must still answer over its authenticated socket');
+
+  healthy.closeWith(1000, '');
+  nextWs = null;
+  await assert.rejects(call(ep, 'host.ping', {}), (e) => e.code === RATE_LIMITED);
+  assert.strictEqual(nextWs, null, 'with no authenticated socket left, the hold applies again');
+  assert.strictEqual(hasLiveSocket(ep), false);
+});
+
+await test('a stream that times out opening leaves no phantom live socket behind', async () => {
+  _resetPoolForTests();
+  nextWs = null;
+  const ep = { id: 'ep-phantom', ip: '127.0.0.1', port: 9999, token: 't' };
+  const errors = [];
+  const handle = callStream(ep, 'host.chat.send', {}, { onError: (e) => errors.push(e) });
+  const ws = nextWs;
+  ws.open();
+  ws.message({ id: JSON.parse(ws.sent[0]).id, event: 'assistant_delta', text: 'hi' });
+  assert.strictEqual(hasLiveSocket(ep), true);
+  handle.detach();
+  assert.strictEqual(hasLiveSocket(ep), false, 'detach must release the count');
+
+  // Fire the 8s open timeout immediately instead of waiting it out; nothing else about the stream changes.
+  const realSetTimeout = globalThis.setTimeout;
+  globalThis.setTimeout = (fn, ms, ...rest) => realSetTimeout(fn, ms === 8000 ? 0 : ms, ...rest);
+  nextWs = null;
+  const timedOut = [];
+  try {
+    callStream(ep, 'host.chat.send', {}, { onError: (e) => timedOut.push(e) });
+    await new Promise((r) => realSetTimeout(r, 20));
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+  }
+  assert.strictEqual(timedOut.length, 1);
+  assert.match(timedOut[0].message, /stream open timed out/);
+  assert.strictEqual(hasLiveSocket(ep), false, 'an open timeout may not leave the endpoint counted as live');
+  assert.strictEqual(errors.length, 0);
+});
+
+await test('dropping an endpoint clears its hold and its late close cannot touch another endpoint', async () => {
+  _resetPoolForTests();
+  nextWs = null;
+  const epA = { id: 'ep-a', ip: '127.0.0.1', port: 9999, token: 'a' };
+  const epB = { id: 'ep-b', ip: '127.0.0.2', port: 9999, token: 'b' };
+  const marked = [];
+  setRateLimitedHandler(({ endpoint }) => marked.push(endpoint.id));
+
+  const a = call(epA, 'host.ping', {});
+  const wsA = nextWs;
+  dropEndpointPool(epA);
+  await assert.rejects(a, (e) => e.code === -32002);
+
+  nextWs = null;
+  const b = call(epB, 'host.ping', {});
+  wsA.closeWith(1013, 'auth-rate-limited');
+  assert.deepStrictEqual(marked, [], 'a late close from a dropped socket marks nothing');
+  nextWs.open();
+  const idB = JSON.parse(nextWs.sent[0]).id;
+  nextWs.message({ id: idB, result: { ok: true } });
+  assert.deepStrictEqual(await b, { ok: true });
+
+  nextWs = null;
+  const again = call(epA, 'host.ping', {});
+  assert.ok(nextWs, 'dropping the endpoint released its hold');
+  nextWs.closeWith(1006, '');
+  await assert.rejects(again, (e) => e.code === -32002);
+  setRateLimitedHandler(null);
 });
 
 if (failed > 0) {

@@ -227,6 +227,19 @@ describe("useChatSend.send", () => {
     expect(result.current.pendingTurn.assistant).toBe("second answer");
   });
 
+  it("a throttled stream close shows the rate-limit notice on the turn and never resends it", async () => {
+    const { RpcError, RATE_LIMITED, RATE_LIMITED_MESSAGE } = await import("../lib/rpc.js");
+    const { result } = renderHook(() => useChatSend({ profile: "doc" }));
+    act(() => result.current.send("hola"));
+    await act(async () => {
+      await lastStreamHandlers.onError(new RpcError(RATE_LIMITED, RATE_LIMITED_MESSAGE, { close_code: 1013, reason: "auth-rate-limited" }));
+    });
+    expect(result.current.pendingTurn.error).toBe(RATE_LIMITED_MESSAGE);
+    expect(result.current.pendingTurn.pending).toBe(false);
+    await act(async () => { await new Promise((r) => setTimeout(r, 30)); });
+    expect(mockCallStream).toHaveBeenCalledTimes(1);
+  });
+
   it("cancel cancels the stream handle and clears pendingTurn", async () => {
     const { result } = renderHook(() => useChatSend({ profile: "doc" }));
     act(() => result.current.send("hi"));

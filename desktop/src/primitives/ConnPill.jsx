@@ -1,4 +1,5 @@
 import { CpuIcon, Dot, ServerIcon, ChevDownIcon, Tip } from "./index.js";
+import { RATE_LIMITED, RATE_LIMITED_MESSAGE } from "../lib/connection-status.js";
 import styles from "./ConnPill.module.css";
 
 const STATUS_COLORS = {
@@ -7,6 +8,7 @@ const STATUS_COLORS = {
   offline: "var(--c-danger)",
   disabled: "var(--ink-3)",
   "auth-failed": "var(--c-warning)",
+  [RATE_LIMITED]: "var(--c-warning)",
   probing: "var(--c-warning)",
   unknown: "var(--ink-3)",
 };
@@ -22,12 +24,15 @@ export default function ConnPill({
   const isDisabled = status === "disabled";
   const isOffline = status === "offline" || status === "auth-failed";
   const isProbing = status === "probing";
+  const isRateLimited = status === RATE_LIMITED;
   const statusColor = STATUS_COLORS[status] || STATUS_COLORS.unknown;
   return (
     <Tip
       text={
         isDisabled
           ? "Connection disabled by host"
+          : isRateLimited
+          ? RATE_LIMITED_MESSAGE
           : isOffline
           ? "Daemon offline — click to retry"
           : isProbing
@@ -59,6 +64,8 @@ export default function ConnPill({
           >
             {isDisabled
               ? "disabled"
+              : isRateLimited
+                ? "rate limited · retrying in a minute"
               : isOffline
                 ? "offline · retrying…"
                 : isProbing

@@ -154,7 +154,20 @@ the direct host-plane and ALP mappings; verify the merged Compose output and
 the external firewall because a daemon inside Docker cannot observe host port
 publication. `host.endpoints` is advertisement only: it neither opens ports nor
 obtains certificates. Caddy still forwards every RPC to Alpi's normal
-per-device authentication.
+per-device authentication. The listener throttles authentication failures per
+source address (default 10 per minute, `ALPI_HOST_WS_AUTH_FAILURES_PER_MINUTE`):
+over budget, a source's new sockets close with 1013 and the reason
+`auth-rate-limited` before any token is read. It is a temporary block on that
+source address, shown by the clients as `rate-limited` — never as a rejected
+token or an offline daemon: credentials and caches survive, one attempt is made
+per minute, and another socket of the same connection that keeps streaming still
+counts as reachable.
+Behind Caddy the socket peer is the proxy, so the client is read from
+`X-Forwarded-For`, but only when the peer is listed in
+`ALPI_HOST_WS_TRUSTED_PROXIES` (the WSS overlay pins Caddy's address and lists
+it); otherwise the header is ignored and a direct client cannot relabel itself.
+Rejected pairing codes count; successful authentications, timeouts, protocol
+errors and internal errors never do. Per-source state is bounded and expires.
 
 `host.profile.read_file` denies secret content regardless of role, checked
 by path *components* (not just top-level prefixes), so nested ones don't

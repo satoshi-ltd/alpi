@@ -162,7 +162,21 @@ doesn't reach:
     Docker → `0.0.0.0`. Loopback is never bound. A `0.0.0.0` bind
     leans on the pairing token plus a firewall/NAT, so `alpi doctor`
     warns on it (`alpi/host/server.py::_validate_tcp_bind` is the
-    defence-in-depth gate). Every
+    defence-in-depth gate). The listener throttles authentication
+    failures per source address (default 10 per minute,
+    `ALPI_HOST_WS_AUTH_FAILURES_PER_MINUTE`): once a source is over
+    budget its new sockets close with 1013 and the reason
+    `auth-rate-limited` before any token is read; the block is temporary and
+    scoped to that source address. Desktop and mobile show it as such, never as
+    a rejected token or a lost daemon, keep the device credential and their
+    cache, and try again about a minute later. A refused socket does not
+    invalidate another socket of the same connection that is still
+    authenticated and carrying traffic. `X-Forwarded-For` is honoured only from proxies listed in
+    `ALPI_HOST_WS_TRUSTED_PROXIES` (empty by default, so a direct client
+    cannot relabel itself); the client is the rightmost hop not in that
+    list, and an unparsable hop falls back to the socket peer. Rejected
+    pairing codes count too; successful authentications, timeouts,
+    protocol errors and internal errors never do. Every
     authenticated request must carry a per-device token in
     `params.auth_token`. Connections and their device credentials live in
     `~/.alpi/host/connections.yaml` (mode 0600, device tokens stored as

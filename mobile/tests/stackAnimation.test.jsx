@@ -78,7 +78,7 @@ vi.mock('../src/lib/EndpointContext', () => ({
 vi.mock('../src/lib/EndpointProvider', () => ({
   EndpointProvider: ({ children }) => React.createElement('div', {}, children),
 }));
-vi.mock('../src/lib/rpc', () => ({ setAuthFailedHandler: vi.fn() }));
+vi.mock('../src/lib/rpc', () => ({ setAuthFailedHandler: vi.fn(), setRateLimitedHandler: vi.fn() }));
 
 import RootLayout from '../app/_layout.jsx';
 

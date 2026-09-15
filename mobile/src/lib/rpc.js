@@ -1,5 +1,16 @@
 // auth_token injected into every request; daemon: alpi/host/server.py::_check_token.
 import { endpointUrl } from './endpoint.js';
+import {
+  CLOSE_AFTER_ERROR_GRACE_MS,
+  RATE_LIMITED,
+  RATE_LIMITED_CLOSE_CODE,
+  RATE_LIMITED_CLOSE_REASON,
+  RATE_LIMITED_HOLD_MS,
+  RATE_LIMITED_MESSAGE,
+  isRateLimitedClose,
+} from './rateLimit.js';
+
+export { RATE_LIMITED, RATE_LIMITED_MESSAGE };
 
 export class RpcError extends Error {
   constructor(code, message, data) {
@@ -22,6 +33,67 @@ function maybeAuthFailed(err, endpoint, method) {
       _authFailedHandler?.({ endpoint, method, reason: err?.data?.reason ?? null });
     } catch { /* */ }
   }
+}
+
+let _rateLimitedHandler = null;
+export function setRateLimitedHandler(cb) {
+  _rateLimitedHandler = cb;
+}
+function maybeRateLimited(err, endpoint) {
+  if (err?.code !== RATE_LIMITED) return;
+  try {
+    _rateLimitedHandler?.({ endpoint });
+  } catch { /* */ }
+}
+
+// Only 1013 + the daemon's reason means throttling; every other close keeps the generic transport error.
+function closeError(event, fallback) {
+  if (!isRateLimitedClose(event)) return fallback;
+  return rateLimitedError(event.code);
+}
+
+function rateLimitedError(closeCode = RATE_LIMITED_CLOSE_CODE) {
+  return new RpcError(RATE_LIMITED, RATE_LIMITED_MESSAGE, {
+    close_code: closeCode,
+    reason: RATE_LIMITED_CLOSE_REASON,
+  });
+}
+
+const _heldUntil = new Map();  // endpointKey -> ms timestamp
+
+function holdRateLimited(key) {
+  _heldUntil.set(key, Date.now() + RATE_LIMITED_HOLD_MS);
+}
+
+function isHeld(key) {
+  const until = _heldUntil.get(key);
+  if (!until) return false;
+  if (Date.now() >= until) {
+    _heldUntil.delete(key);
+    return false;
+  }
+  return true;
+}
+
+// Only time or dropping the endpoint lifts the hold: an answer on a socket opened before the block says nothing about whether new ones are accepted.
+function releaseRateLimited(key) {
+  _heldUntil.delete(key);
+}
+
+const _openStreams = new Map();  // endpointKey -> count of authenticated stream sockets
+
+function reusableEntry(key) {
+  const entry = _pool.get(key);
+  if (!entry || entry.closed) return null;
+  return Date.now() - entry.lastSeen < STALE_SOCKET_MS ? entry : null;
+}
+
+// True while another socket for this endpoint is authenticated and carrying traffic: one rejected new socket is not a dead host. A socket that only completed its handshake proves nothing about the token.
+export function hasLiveSocket(endpoint) {
+  const key = endpointKey(endpoint);
+  if ((_openStreams.get(key) ?? 0) > 0) return true;
+  const entry = reusableEntry(key);
+  return !!entry && entry.authenticated === true;
 }
 
 const REQUEST_TIMEOUT_MS = 10000;
@@ -69,9 +141,10 @@ function closeIfDrained(entry) {
 
 function ensureEntry(endpoint) {
   const key = endpointKey(endpoint);
+  const reusable = reusableEntry(key);
+  if (reusable) return reusable;
   let entry = _pool.get(key);
   if (entry && !entry.closed) {
-    if (Date.now() - entry.lastSeen < STALE_SOCKET_MS) return entry;
     _pool.delete(key);
     if (entry.pending.size > 0) entry.retired = true;
     else settleEntry(entry, new RpcError(-32002, `connection to ${entry.url} went stale`));
@@ -83,9 +156,11 @@ function ensureEntry(endpoint) {
     key,
     ws,
     url,
+    endpoint,
     opened: false,
     closed: false,
     retired: false,
+    authenticated: false,
     lastSeen: Date.now(),
     pending: new Map(),  // id -> { resolve, reject, timer, method, endpoint }
     sendQueue: [],
@@ -126,6 +201,8 @@ function ensureEntry(endpoint) {
     if (!slot) return;  // late frame after timeout — discard
     if (body.error) {
       const err = new RpcError(body.error.code, body.error.message, body.error.data);
+      // Any answer the daemon routed to a handler proves this socket is past authentication.
+      if (err.code !== AUTH_FAILED && err.code !== RATE_LIMITED) entry.authenticated = true;
       maybeAuthFailed(err, slot.endpoint, slot.method);
       if (err.code === AUTH_FAILED) {
         dropSocket(err);
@@ -139,16 +216,29 @@ function ensureEntry(endpoint) {
     }
     entry.pending.delete(id);
     clearTimeout(slot.timer);
+    entry.authenticated = true;
     slot.resolve(body.result);
     closeIfDrained(entry);
   };
 
+  // onerror arrives before the close frame is parsed; settling here would drop the daemon's close reason, so it only arms a fallback.
   ws.onerror = () => {
-    dropSocket(new RpcError(-32001, `connection failed to ${url}`));
+    if (entry.closed) return;
+    entry.pendingError = new RpcError(-32001, `connection failed to ${url}`);
+    entry.graceTimer = setTimeout(() => finish(entry.pendingError), CLOSE_AFTER_ERROR_GRACE_MS);
   };
 
-  ws.onclose = () => {
-    dropSocket(new RpcError(-32002, 'connection closed before response'));
+  const finish = (err) => {
+    if (entry.closed) return;
+    clearTimeout(entry.graceTimer);
+    if (err?.code === RATE_LIMITED) holdRateLimited(key);
+    // Retire the socket first: a handler asking whether the endpoint still has a live socket must not be answered by the one that just died.
+    dropSocket(err);
+    maybeRateLimited(err, entry.endpoint);
+  };
+
+  ws.onclose = (event) => {
+    finish(closeError(event, entry.pendingError ?? new RpcError(-32002, 'connection closed before response')));
   };
 
   return entry;
@@ -160,6 +250,12 @@ export async function call(endpoint, method, params = {}, options = {}) {
   const payload = JSON.stringify({
     id, method, params: buildParams(endpoint, params),
   });
+
+  // The hold exists to stop new sockets, not to cut an authenticated one — cancelling a turn must still get through.
+  const poolKey = endpointKey(endpoint);
+  if (!reusableEntry(poolKey) && isHeld(poolKey)) {
+    return Promise.reject(rateLimitedError());
+  }
 
   return new Promise((resolve, reject) => {
     const entry = ensureEntry(endpoint);
@@ -199,22 +295,54 @@ const STREAM_OPEN_TIMEOUT_MS = 8000;
 // Stream sockets NOT pooled — chat is long-lived, must not contend with unary RPCs. `cancelMethod` opt-in (chat: 'host.chat.cancel').
 export function callStream(endpoint, method, params, handlers) {
   const url = endpointUrl(endpoint);
+  const key = endpointKey(endpoint);
+  if (isHeld(key)) {
+    handlers?.onError?.(rateLimitedError());
+    return { requestId: null, cancel: () => {}, detach: () => {} };
+  }
   const ws = new WebSocket(url);
   const id = nextId();
   let closed = false;
   let opened = false;
+  let live = false;
+  let pendingError = null;
+  let graceTimer = null;
+  let openTimer = null;
 
+  // A stream counts as live only once the daemon answers it: a socket waiting on its handshake proves nothing about the token.
+  const markLive = () => {
+    if (live || closed) return;
+    live = true;
+    _openStreams.set(key, (_openStreams.get(key) ?? 0) + 1);
+  };
+
+  // Every exit runs through here, so a timeout can never leave the endpoint counted as live.
   const close = () => {
     if (closed) return;
     closed = true;
+    clearTimeout(graceTimer);
+    clearTimeout(openTimer);
+    if (live) {
+      live = false;
+      const left = (_openStreams.get(key) ?? 1) - 1;
+      if (left > 0) _openStreams.set(key, left);
+      else _openStreams.delete(key);
+    }
     try { ws.close(); } catch {}
   };
 
-  const openTimer = setTimeout(() => {
+  // One terminal outcome per stream, whatever order error/close events arrive in.
+  const fail = (err) => {
+    if (closed) return;
+    if (err?.code === RATE_LIMITED) holdRateLimited(key);
+    close();
+    maybeRateLimited(err, endpoint);
+    handlers?.onError?.(err);
+  };
+
+  openTimer = setTimeout(() => {
     if (opened || closed) return;
-    closed = true;
-    try { ws.close(); } catch {}
-    handlers?.onError?.(new RpcError(-32001, `stream open timed out after ${STREAM_OPEN_TIMEOUT_MS}ms`));
+    fail(new RpcError(-32001, `stream open timed out after ${STREAM_OPEN_TIMEOUT_MS}ms`));
   }, STREAM_OPEN_TIMEOUT_MS);
 
   ws.onopen = () => {
@@ -233,23 +361,22 @@ export function callStream(endpoint, method, params, handlers) {
     try {
       body = JSON.parse(typeof event.data === 'string' ? event.data : '');
     } catch {
-      handlers.onError?.(new RpcError(-32700, 'invalid JSON in frame'));
-      close();
+      fail(new RpcError(-32700, 'invalid JSON in frame'));
       return;
     }
     if (body.id !== id) return;
     if (body.error) {
       const err = new RpcError(body.error.code, body.error.message, body.error.data);
+      if (err.code !== AUTH_FAILED && err.code !== RATE_LIMITED) markLive();
       maybeAuthFailed(err, endpoint, method);
-      handlers.onError?.(err);
-      close();
+      fail(err);
       return;
     }
+    markLive();
     const ev = body.event;
     // Trap event:"error" BEFORE onFrame so consumers never see it as a regular frame.
     if (ev === 'error') {
-      close();
-      handlers.onError?.(new RpcError(-32003, body.text || 'stream error', body));
+      fail(new RpcError(-32003, body.text || 'stream error', body));
       return;
     }
     handlers.onFrame?.(body);
@@ -261,14 +388,14 @@ export function callStream(endpoint, method, params, handlers) {
 
   ws.onerror = () => {
     clearTimeout(openTimer);
-    handlers.onError?.(new RpcError(-32001, `connection failed to ${url}`));
-    close();
+    if (closed) return;
+    pendingError = new RpcError(-32001, `connection failed to ${url}`);
+    graceTimer = setTimeout(() => fail(pendingError), CLOSE_AFTER_ERROR_GRACE_MS);
   };
 
-  ws.onclose = () => {
+  ws.onclose = (event) => {
     clearTimeout(openTimer);
-    if (!closed) handlers.onError?.(new RpcError(-32002, 'connection closed before done'));
-    closed = true;
+    fail(closeError(event, pendingError ?? new RpcError(-32002, 'connection closed before done')));
   };
 
   return {
@@ -289,11 +416,16 @@ export function callStream(endpoint, method, params, handlers) {
 // Public: drop the pooled socket for one endpoint (call on unpair / endpoint change). Pending RPCs reject with "connection closed"; subsequent calls reconnect lazily.
 export function dropEndpointPool(endpoint) {
   if (!endpoint) return;
-  dropEntry(endpointKey(endpoint), new RpcError(-32002, 'endpoint dropped'));
+  const key = endpointKey(endpoint);
+  releaseRateLimited(key);
+  _openStreams.delete(key);
+  dropEntry(key, new RpcError(-32002, 'endpoint dropped'));
 }
 
 // Test-only: drop all pool entries (callers should NOT depend on this in app code).
 export function _resetPoolForTests() {
+  _heldUntil.clear();
+  _openStreams.clear();
   for (const key of Array.from(_pool.keys())) {
     dropEntry(key, new RpcError(-32099, 'pool reset'));
   }

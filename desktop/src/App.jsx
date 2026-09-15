@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { RATE_LIMITED, RATE_LIMITED_MESSAGE } from "./lib/connection-status.js";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { safeUnlisten } from "./lib/tauri-listen.js";
@@ -99,6 +100,9 @@ export function connectionFailureMessage(connection) {
   }
   if (connection?.status === "auth-failed") {
     return `${connection?.name ?? "Remote"} — token rejected. Re-pair device from Settings.`;
+  }
+  if (connection?.status === RATE_LIMITED) {
+    return `${connection?.name ?? "Remote"} — ${RATE_LIMITED_MESSAGE}`;
   }
   return null;
 }
@@ -557,7 +561,8 @@ export default function App() {
     connectionOnlineRef.current =
       conn?.status !== "offline" &&
       conn?.status !== "disabled" &&
-      conn?.status !== "auth-failed";
+      conn?.status !== "auth-failed" &&
+      conn?.status !== RATE_LIMITED;
   }, [hostConnections]);
   useEffect(() => {
     workgroupsRef.current = workgroups;
@@ -1122,7 +1127,8 @@ export default function App() {
     !!activeConnection &&
     (activeConnection.status === "offline" ||
       activeConnection.status === "disabled" ||
-      activeConnection.status === "auth-failed");
+      activeConnection.status === "auth-failed" ||
+      activeConnection.status === RATE_LIMITED);
 
   const sidebarSearchAvailable = !daemonOffline && view.kind !== "settings";
   useEffect(() => {
@@ -1135,6 +1141,7 @@ export default function App() {
 
   const activeStatus = activeConnection?.status;
   const connectionDisabled = activeStatus === "disabled";
+  const connectionRateLimited = activeStatus === RATE_LIMITED;
   const switchBannerVisible = useDelayedFlag(
     connectionSwitching && !daemonOffline,
     300,
@@ -1290,10 +1297,10 @@ export default function App() {
             <>
               {daemonOffline && (
                 <Banner
-                  kind={isLocalAutostartInFlight ? "info" : connectionDisabled ? "warning" : "danger"}
-                  pulsing={!isLocalAutostartInFlight && !connectionDisabled}
-                  action={isLocalAutostartInFlight || connectionDisabled ? null : "Retry"}
-                  onAction={isLocalAutostartInFlight || connectionDisabled ? null : onRefreshHostConnectionStatus}
+                  kind={isLocalAutostartInFlight ? "info" : connectionDisabled || connectionRateLimited ? "warning" : "danger"}
+                  pulsing={!isLocalAutostartInFlight && !connectionDisabled && !connectionRateLimited}
+                  action={isLocalAutostartInFlight || connectionDisabled || connectionRateLimited ? null : "Retry"}
+                  onAction={isLocalAutostartInFlight || connectionDisabled || connectionRateLimited ? null : onRefreshHostConnectionStatus}
                 >
                   {connectionFailureMessage(activeConnection) ??
                     (activeConnection?.kind === "remote"

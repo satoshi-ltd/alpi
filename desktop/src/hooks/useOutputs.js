@@ -270,7 +270,7 @@ export function useAllOutputs({ connections, status, activeId = null, deferMs = 
         clearTimeout(pending);
         timersRef.current.delete(c.id);
       }
-      if (c.status === "offline" || c.status === "disabled" || c.status === "auth-failed" || c.role === "member") {
+      if (c.status === "offline" || c.status === "disabled" || c.status === "auth-failed" || c.status === "rate-limited" || c.role === "member") {
         byConnRef.current.delete(c.id);
         _rowsMemory.delete(_memoryKey(c.id, _authId(c), statusKey));
         seqRef.current.set(c.id, (seqRef.current.get(c.id) ?? 0) + 1);

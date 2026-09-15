@@ -15,6 +15,7 @@ import { useToast } from '../src/components/Toast';
 import { useBack } from '../src/hooks/useBack';
 import { useEndpoint } from '../src/lib/EndpointContext';
 import { exchangePairing, pairingLinkFromParams, parsePairing, PairingError } from '../src/lib/pairing';
+import { RATE_LIMITED_MESSAGE, RATE_LIMITED_STATUS } from '../src/lib/rateLimit';
 import { probe } from '../src/lib/probe';
 import { call } from '../src/lib/rpc';
 import { useTheme } from '../src/theme/ThemeContext';
@@ -60,6 +61,9 @@ export default function Pair() {
       }
       if (status === 'disabled') {
         throw new PairingError('Connection disabled by host. Ask an admin to enable it in Settings → Connections.');
+      }
+      if (status === RATE_LIMITED_STATUS) {
+        throw new PairingError(RATE_LIMITED_MESSAGE);
       }
       if (status !== 'online') {
         throw new PairingError(`Daemon unreachable at ${endpoint.url}. Make sure the daemon is running, the route is reachable, and the port is open.`);

@@ -37,7 +37,8 @@ import { AppBootstrap } from '../src/lib/AppBootstrap';
 import { useEndpoint } from '../src/lib/EndpointContext';
 import { EndpointProvider } from '../src/lib/EndpointProvider';
 import { isPaneRoot, stackAnimation } from '../src/lib/panes';
-import { setAuthFailedHandler } from '../src/lib/rpc';
+import { hasLiveSocket, setAuthFailedHandler, setRateLimitedHandler } from '../src/lib/rpc';
+import { RATE_LIMITED_STATUS } from '../src/lib/rateLimit';
 import { ThemeProvider, useTheme } from '../src/theme/ThemeContext';
 
 // Hold native splash until fonts load so first frame isn't unstyled text.
@@ -86,7 +87,16 @@ function AuthFailedBridge() {
         router.replace('/pair');
       }
     });
-    return () => setAuthFailedHandler(null);
+    // Throttling is temporary: mark the connection so the banner explains it, keep the token, let the reprobe recover. A refused new socket while another one still streams means the operation failed, not the daemon.
+    setRateLimitedHandler(({ endpoint } = {}) => {
+      const failedId = endpoint?.id;
+      if (!failedId || hasLiveSocket(endpoint)) return;
+      stateRef.current.markConnectionStatus?.(failedId, RATE_LIMITED_STATUS);
+    });
+    return () => {
+      setAuthFailedHandler(null);
+      setRateLimitedHandler(null);
+    };
   }, [router, toast]);
   return null;
 }

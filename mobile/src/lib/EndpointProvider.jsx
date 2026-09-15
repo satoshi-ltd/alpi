@@ -6,6 +6,7 @@ import { seedCache } from '../hooks/useDaemonData';
 import { probe, probeAll } from './probe';
 import { call as rpcCall, callStream as rpcCallStream, dropEndpointPool } from './rpc';
 import { clearAll, loadConnections, removeConnection, rolesFromConnections, saveConnection, setActiveConnection, setDeviceIds, setRoles } from './store';
+import { RATE_LIMITED_REPROBE_MS, RATE_LIMITED_STATUS } from './rateLimit';
 
 const OFFLINE_REPROBE_MS = 4000;
 
@@ -104,14 +105,15 @@ export function EndpointProvider({ children }) {
   const connectionsRef = useRef(connections);
   connectionsRef.current = connections;
 
-  // A dropped daemon has no liveness stream to recover on; terminal authentication states wait for user or host action.
+  // A dropped daemon has no liveness stream to recover on; terminal authentication states wait for user or host action. A throttled source waits a full minute: probing sooner only extends the daemon's window.
   const activeStatus = activeId ? (probeState.get(activeId) ?? 'unknown') : null;
   useEffect(() => {
     if (!activeId) return undefined;
-    if (activeStatus !== 'offline' && activeStatus !== 'unknown') return undefined;
+    const rateLimited = activeStatus === RATE_LIMITED_STATUS;
+    if (!rateLimited && activeStatus !== 'offline' && activeStatus !== 'unknown') return undefined;
     const timer = setInterval(() => {
       probeByIdFrom(connectionsRef.current, activeId).catch(() => {});
-    }, OFFLINE_REPROBE_MS);
+    }, rateLimited ? RATE_LIMITED_REPROBE_MS : OFFLINE_REPROBE_MS);
     return () => clearInterval(timer);
   }, [activeId, activeStatus, probeByIdFrom]);
 

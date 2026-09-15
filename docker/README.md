@@ -80,6 +80,14 @@ ALPI_HOST_TCP_PORT=30494
 The same value now configures the daemon and Caddy's private upstream. It is
 not added to the public URL: `wss://your.domain.com` already means port 443.
 
+The overlay pins the Compose network to `172.30.250.0/24`, gives Caddy the fixed
+address `172.30.250.10`, and sets `ALPI_HOST_WS_TRUSTED_PROXIES=172.30.250.10/32`
+on the daemon. That is what lets the daemon read the real client address from
+`X-Forwarded-For` for its per-source authentication-failure throttle while
+ignoring the header from anyone else. If that subnet collides with your network,
+change the three values together; leaving the variable empty is safe but then
+every remote client shares one failure budget behind the proxy.
+
 ### 3. Verify the effective Compose model
 
 Render the merged configuration before starting it:

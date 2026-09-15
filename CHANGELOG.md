@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.14.41 — 2026-09-15 — a source that keeps failing gets the door
+
+- **The WebSocket listener throttles authentication failures per source address.**
+  Ten failures per minute (`ALPI_HOST_WS_AUTH_FAILURES_PER_MINUTE`), counted on a
+  sliding window shared with the ALP peer limiter, and a source over budget has its
+  new sockets closed with 1013 before any token is read. Bad device tokens and bad
+  pairing codes both count; successful authentications, timeouts and protocol
+  errors and internal errors never do, so a busy legitimate client is never slowed
+  down. Behind a reverse proxy the socket peer is the proxy, so the client is read
+  from `X-Forwarded-For`, but only when the peer is listed in
+  `ALPI_HOST_WS_TRUSTED_PROXIES` (IPs or CIDRs, empty by default): a direct client
+  cannot relabel itself or charge its failures to another address, the client is the
+  rightmost hop not in the list, and an unparsable hop falls back to the peer. The WSS
+  Compose overlay pins Caddy to `172.30.250.10` and lists it. Per-source counters
+  expire with their window and are capped in number, so anonymous traffic cannot grow
+  the table without bound. `host.network.status` reports the limit, the trusted-proxy
+  count and the `auth_rate_limited` count. A throttled socket is closed with
+  WebSocket code 1013 and the stable reason `auth-rate-limited`, distinct from the
+  capacity closes, so desktop-v0.5.30 and mobile-v0.4.9 can show the block as
+  temporary instead of as an offline daemon or a rejected token, keep the credential
+  and the cache, wait a minute before trying again, and tell a refused socket apart
+  from a host that has actually gone away. Tests cover the
+  throttle, a direct client sending forged forwarded-for headers, a configured proxy,
+  rejected and internal pairing errors, the successful-auth exemption, the bounded
+  limiter and the close code and reason of both 1013 paths.
+
 ## v0.14.40 + desktop-v0.5.28 — 2026-09-15 — the pairing link stays on one line
 
 - **`alpi setup` prints the desktop pairing link without hard wrapping.** Rich broke

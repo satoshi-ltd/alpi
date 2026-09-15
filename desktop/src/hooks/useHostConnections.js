@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { RATE_LIMITED, RATE_LIMITED_RETRY_MS } from "../lib/connection-status.js";
 import { stampLastActive } from "../lib/connection-recency.js";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -341,7 +342,7 @@ export function useHostConnections({
     } else if (status === "auth-failed") {
       setConnectionSyncing(false);
       reloadConnections().finally(() => clearConnectionContent());
-    } else if (status === "offline" || status === "disabled") {
+    } else if (status === "offline" || status === "disabled" || status === RATE_LIMITED) {
       setConnectionSyncing(false);
       reloadConnections().finally(() => loadFromCache(hostConnectionsRef.current.active_id));
     } else {
@@ -362,17 +363,18 @@ export function useHostConnections({
     invoke("host_connections_probe_active").catch(() => {});
   }, [reload, reloadConnections, showCachedOrClear]);
 
-  // Offline has no liveness stream to recover on; terminal authentication states wait for user or host action.
+  // Offline has no liveness stream to recover on; terminal authentication states wait for user or host action. A rate-limited source re-probes once a minute: sooner only extends the daemon's window.
   useEffect(() => {
     const status = activeConnectionForSync?.status;
-    if (status !== "offline" && status !== "unknown") return undefined;
+    const rateLimited = status === RATE_LIMITED;
+    if (!rateLimited && status !== "offline" && status !== "unknown") return undefined;
     // Backoff resets to 4s each offline period — the effect re-runs on status change, bounding the recursion to one continuous outage.
-    let delay = OFFLINE_REPROBE_MIN_MS;
+    let delay = rateLimited ? RATE_LIMITED_RETRY_MS : OFFLINE_REPROBE_MIN_MS;
     let timer = null;
-    const jitter = (ms) => ms * (0.8 + Math.random() * 0.4);
+    const jitter = (ms) => (rateLimited ? ms : ms * (0.8 + Math.random() * 0.4));
     const tick = () => {
       invoke("host_connections_probe_active").catch(() => {});
-      delay = Math.min(delay * 2, OFFLINE_REPROBE_MAX_MS);
+      if (!rateLimited) delay = Math.min(delay * 2, OFFLINE_REPROBE_MAX_MS);
       timer = setTimeout(tick, jitter(delay));
     };
     timer = setTimeout(tick, jitter(delay));
@@ -414,7 +416,7 @@ export function useHostConnections({
               if (connectionSwitchRef.current !== switchId) return;
               if (status === "online") {
                 reloadConnections().finally(() => reload());
-              } else if (status === "offline" || status === "disabled" || status === "auth-failed") {
+              } else if (status === "offline" || status === "disabled" || status === "auth-failed" || status === RATE_LIMITED) {
                 setConnectionSyncing(false);
               }
             })

@@ -15,6 +15,7 @@ from typing import Any, Awaitable, Callable
 import websockets
 from websockets.asyncio.server import ServerConnection, serve as ws_serve
 
+from alpi.alp.rate_limit import RateLimiter
 from alpi.host.tailscale import is_tailscale_ip
 
 
@@ -29,6 +30,8 @@ WS_MAX_CONNECTIONS = 128
 WS_MAX_CONNECTIONS_PER_DEVICE = 8
 WS_MAX_RPCS_PER_DEVICE = 8
 WS_MAX_QUEUE = (16, 4)
+WS_AUTH_FAILURES_PER_MINUTE = 10
+WS_CLOSE_REASON_RATE_LIMITED = "auth-rate-limited"
 
 
 def _env_number(
@@ -222,6 +225,7 @@ class WebSocketMetrics:
     auth_timeouts: int = 0
     protocol_failures: int = 0
     device_connections_rejected: int = 0
+    auth_rate_limited: int = 0
     device_rpcs_rejected: int = 0
     peak_connections: int = 0
     revoked_connections: int = 0
@@ -281,6 +285,12 @@ class Server:
             "ALPI_HOST_WS_MAX_RPCS_PER_DEVICE", WS_MAX_RPCS_PER_DEVICE,
             minimum=1, maximum=1_000,
         ))
+        self._ws_auth_failure_limit = int(_env_number(
+            "ALPI_HOST_WS_AUTH_FAILURES_PER_MINUTE", WS_AUTH_FAILURES_PER_MINUTE,
+            minimum=1, maximum=10_000,
+        ))
+        self._ws_auth_failures = RateLimiter(default_per_minute=self._ws_auth_failure_limit)
+        self._ws_trusted_proxies = _parse_networks(os.environ.get("ALPI_HOST_WS_TRUSTED_PROXIES", ""))
 
     @staticmethod
     def _validate_tcp_bind(
@@ -440,6 +450,8 @@ class Server:
             "connection_limit": self._ws_max_connections,
             "connections_per_device_limit": self._ws_max_connections_per_device,
             "rpcs_per_device_limit": self._ws_max_rpcs_per_device,
+            "auth_failures_per_minute_limit": self._ws_auth_failure_limit,
+            "trusted_proxy_count": len(self._ws_trusted_proxies),
             "auth_timeout_seconds": self._ws_auth_timeout,
             "auth_recheck_seconds": self._ws_auth_recheck,
             "close_timeout_seconds": self._ws_close_timeout,
@@ -451,6 +463,7 @@ class Server:
             "auth_timeouts": metrics.auth_timeouts,
             "protocol_failures": metrics.protocol_failures,
             "device_connections_rejected": metrics.device_connections_rejected,
+            "auth_rate_limited": metrics.auth_rate_limited,
             "device_rpcs_rejected": metrics.device_rpcs_rejected,
             "revoked_connections": metrics.revoked_connections,
             "pairing_exchange_attempts": metrics.pairing_exchange_attempts,
@@ -503,6 +516,11 @@ class Server:
             self._ws_metrics.handshakes_rejected += 1
             await ws.close(code=1013, reason="WebSocket capacity reached")
             return
+        source = _ws_source(ws, self._ws_trusted_proxies)
+        if self._ws_auth_failures.exceeded(source):
+            self._ws_metrics.auth_rate_limited += 1
+            await ws.close(code=1013, reason=WS_CLOSE_REASON_RATE_LIMITED)
+            return
         self._ws_connections.add(ws)
         task = asyncio.current_task()
         if task is not None:
@@ -521,10 +539,18 @@ class Server:
             pairing_request = _preauth_pairing_request(message)
             if pairing_request is not None:
                 self._ws_metrics.pairing_exchange_attempts += 1
-                await self._handle_request(pairing_request, send, bootstrap=True)
+                outcome: list[dict[str, Any]] = []
+
+                async def observed_send(payload: dict[str, Any]) -> None:
+                    outcome.append(payload)
+                    await send(payload)
+
+                await self._handle_request(pairing_request, observed_send, bootstrap=True)
+                if any((payload.get("error") or {}).get("code") == _PAIRING_REJECTED for payload in outcome):
+                    self._ws_auth_failures.admit(source, None)
                 await ws.close(code=1000, reason="Pairing exchange complete")
                 return
-            authenticated = await self._authenticate_websocket_message(message, send)
+            authenticated = await self._authenticate_websocket_message(message, send, source=source)
             if authenticated is None:
                 await ws.close(code=1008, reason="Authentication failed")
                 return
@@ -573,7 +599,7 @@ class Server:
             self._unregister_websocket(ws)
 
     async def _authenticate_websocket_message(
-        self, message: str | bytes, send: SendCoro,
+        self, message: str | bytes, send: SendCoro, *, source: str | None = None,
     ) -> tuple[str, dict[str, Any], "AuthMeta"] | None:
         try:
             line = message if isinstance(message, str) else message.decode("utf-8")
@@ -595,6 +621,8 @@ class Server:
         meta = await asyncio.to_thread(_check_token_meta, body)
         if not meta.valid:
             self._ws_metrics.auth_failures += 1
+            if source is not None:
+                self._ws_auth_failures.admit(source, None)
             error: dict[str, Any] = {"code": -32000, "message": "auth-failed"}
             if meta.reason:
                 error["data"] = {"reason": meta.reason}
@@ -1020,6 +1048,59 @@ def _is_private_or_overlay(addr: str) -> bool:
     except ValueError:
         return False
     return any(ip in net for net in _PRIVATE_RANGES)
+
+
+_PAIRING_REJECTED = -32011
+_Networks = tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]
+
+
+def _parse_networks(raw: str) -> _Networks:
+    out: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
+    for item in str(raw or "").split(","):
+        item = item.strip()
+        if not item:
+            continue
+        try:
+            out.append(ipaddress.ip_network(item, strict=False))
+        except ValueError:
+            log.warning("ignoring invalid ALPI_HOST_WS_TRUSTED_PROXIES entry: %r", item)
+    return tuple(out)
+
+
+def _in_networks(addr: str, networks: _Networks) -> bool:
+    try:
+        ip = ipaddress.ip_address(addr)
+    except ValueError:
+        return False
+    return any(ip in net for net in networks)
+
+
+def _ws_source_key(peer_host: str | None, forwarded_for: str | None, trusted: _Networks = ()) -> str:
+    peer = str(peer_host or "").strip() or "unknown"
+    if not forwarded_for or not _in_networks(peer, trusted):
+        return peer
+    # Walk right to left past the proxies we trust; the first other hop is the client. Any unparsable hop means the header is not ours to trust.
+    for hop in reversed([hop.strip() for hop in forwarded_for.split(",")]):
+        try:
+            ip = ipaddress.ip_address(hop)
+        except ValueError:
+            return peer
+        if not _in_networks(str(ip), trusted):
+            return str(ip)
+    return peer
+
+
+def _ws_source(ws: ServerConnection, trusted: _Networks = ()) -> str:
+    remote = getattr(ws, "remote_address", None)
+    peer = remote[0] if isinstance(remote, tuple) and remote else None
+    headers = getattr(getattr(ws, "request", None), "headers", None)
+    forwarded_for = None
+    if headers is not None and trusted:
+        try:
+            forwarded_for = headers.get("X-Forwarded-For")
+        except Exception:  # noqa: BLE001
+            forwarded_for = None
+    return _ws_source_key(peer, forwarded_for, trusted)
 
 
 def _is_safe_bind(addr: str, allow_public: bool = False) -> bool:

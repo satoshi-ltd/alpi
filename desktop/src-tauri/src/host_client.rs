@@ -55,6 +55,7 @@ pub enum ConnectionStatus {
     Offline,
     Disabled,
     AuthFailed,
+    RateLimited,
 }
 
 impl ConnectionStatus {
@@ -66,7 +67,29 @@ impl ConnectionStatus {
             ConnectionStatus::Offline => "offline",
             ConnectionStatus::Disabled => "disabled",
             ConnectionStatus::AuthFailed => "auth-failed",
+            ConnectionStatus::RateLimited => "rate-limited",
         }
+    }
+}
+
+// The daemon closes a throttled socket with 1013 and this exact reason (alpi >= 0.14.41); any other 1013 is capacity, not throttling.
+pub const RATE_LIMITED_CLOSE: &str = "1013 auth-rate-limited";
+const RATE_LIMIT_HOLD_SECS: u64 = 90;
+
+pub fn is_rate_limited_error(err: &str) -> bool {
+    err.contains(RATE_LIMITED_CLOSE)
+}
+
+fn describe_close_frame(payload: &[u8]) -> String {
+    if payload.len() < 2 {
+        return "websocket closed by daemon".to_string();
+    }
+    let code = u16::from_be_bytes([payload[0], payload[1]]);
+    let reason = String::from_utf8_lossy(&payload[2..]).trim().to_string();
+    if reason.is_empty() {
+        format!("websocket closed by daemon ({code})")
+    } else {
+        format!("websocket closed by daemon ({code} {reason})")
     }
 }
 
@@ -74,6 +97,7 @@ impl ConnectionStatus {
 struct StatusEntry {
     status: ConnectionStatus,
     error: Option<String>,
+    rate_limited_at: Option<Instant>,
     consecutive_failures: u32,
     last_stream_frame: Option<Instant>,
     alpi_version: Option<String>,
@@ -86,6 +110,7 @@ impl Default for StatusEntry {
         Self {
             status: ConnectionStatus::Unknown,
             error: None,
+            rate_limited_at: None,
             consecutive_failures: 0,
             last_stream_frame: None,
             alpi_version: None,
@@ -245,6 +270,24 @@ fn update_status(
             }
         }
         match status {
+            ConnectionStatus::Offline if entry.status == ConnectionStatus::RateLimited => {
+                // A throttled socket dies with generic transport errors right after; keep the specific reason on screen for the hold window.
+                if entry
+                    .rate_limited_at
+                    .is_some_and(|at| at.elapsed() < Duration::from_secs(RATE_LIMIT_HOLD_SECS))
+                {
+                    return true;
+                }
+            }
+            ConnectionStatus::RateLimited => {
+                // One refused socket is not a dead host: while another socket of this connection keeps streaming, the operation failed but the connection did not.
+                if matches!(source, StatusSource::Probe | StatusSource::Request)
+                    && stream_is_live(entry)
+                {
+                    return false;
+                }
+                entry.rate_limited_at = Some(Instant::now());
+            }
             ConnectionStatus::Offline if entry.status == ConnectionStatus::Online => {
                 if matches!(source, StatusSource::Probe | StatusSource::Request)
                     && stream_is_live(entry)
@@ -298,7 +341,9 @@ fn record_request_failure(id: &str, status: ConnectionStatus, error: String) {
 }
 
 fn classify_remote_error(err: &str) -> ConnectionStatus {
-    if err.contains("connection-disabled") {
+    if is_rate_limited_error(err) {
+        ConnectionStatus::RateLimited
+    } else if err.contains("connection-disabled") {
         ConnectionStatus::Disabled
     } else if err.contains("auth-failed") {
         ConnectionStatus::AuthFailed
@@ -1470,6 +1515,7 @@ where
 
 fn should_retry_remote_ws(err: &str) -> bool {
     !err.contains("auth-failed")
+        && !is_rate_limited_error(err)
         && (err.starts_with("websocket ")
             || err.starts_with("connect ")
             || err.starts_with("set read timeout")
@@ -2088,7 +2134,7 @@ impl WsClient {
                     return String::from_utf8(bytes)
                         .map_err(|e| format!("websocket text utf8: {e}"));
                 }
-                0x8 => return Err("websocket closed by daemon".to_string()),
+                0x8 => return Err(describe_close_frame(&payload)),
                 0x9 => self.send_pong(&payload)?,
                 0xa => continue,
                 _ => continue,
@@ -2148,7 +2194,9 @@ pub fn probe_connection(conn: &HostConnection) {
             HostConnection::Remote { .. } => {
                 !matches!(
                     classify_remote_error(e),
-                    ConnectionStatus::AuthFailed | ConnectionStatus::Disabled
+                    ConnectionStatus::AuthFailed
+                        | ConnectionStatus::Disabled
+                        | ConnectionStatus::RateLimited
                 )
             }
         };
@@ -2753,6 +2801,72 @@ mod tests {
 
         *config_dir_override().lock().unwrap() = None;
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn close_frames_keep_code_and_reason() {
+        let mut payload = 1013u16.to_be_bytes().to_vec();
+        payload.extend_from_slice(b"auth-rate-limited");
+        let described = describe_close_frame(&payload);
+        assert_eq!(described, "websocket closed by daemon (1013 auth-rate-limited)");
+        assert!(is_rate_limited_error(&described));
+        assert!(described.starts_with("websocket closed by daemon"));
+
+        let mut capacity = 1013u16.to_be_bytes().to_vec();
+        capacity.extend_from_slice(b"Device connection limit reached");
+        assert!(!is_rate_limited_error(&describe_close_frame(&capacity)));
+        assert_eq!(describe_close_frame(&1000u16.to_be_bytes()), "websocket closed by daemon (1000)");
+        assert_eq!(describe_close_frame(&[]), "websocket closed by daemon");
+    }
+
+    #[test]
+    fn a_refused_socket_does_not_down_a_connection_whose_stream_is_alive() {
+        let id = "rate-limit-live-stream-test";
+        let err = "websocket closed by daemon (1013 auth-rate-limited)".to_string();
+        set_status(id, ConnectionStatus::Online, None);
+        note_stream_frame(id);
+
+        record_request_failure(id, ConnectionStatus::RateLimited, err.clone());
+        assert_eq!(status_for(id).0, ConnectionStatus::Online);
+        record_probe_failure(id, ConnectionStatus::RateLimited, err.clone());
+        assert_eq!(status_for(id).0, ConnectionStatus::Online);
+
+        // No stream to vouch for it: the refusal is the connection's state.
+        let quiet = "rate-limit-no-stream-test";
+        set_status(quiet, ConnectionStatus::Online, None);
+        record_request_failure(quiet, ConnectionStatus::RateLimited, err);
+        assert_eq!(status_for(quiet).0, ConnectionStatus::RateLimited);
+    }
+
+    #[test]
+    fn a_live_stream_frame_lifts_a_rate_limited_connection_back_online() {
+        let id = "rate-limit-recovers-test";
+        set_status(id, ConnectionStatus::Online, None);
+        set_status(id, ConnectionStatus::RateLimited, Some("websocket closed by daemon (1013 auth-rate-limited)".into()));
+        assert_eq!(status_for(id).0, ConnectionStatus::RateLimited);
+
+        note_stream_frame(id);
+        assert_eq!(status_for(id).0, ConnectionStatus::Online);
+    }
+
+    #[test]
+    fn rate_limited_close_is_terminal_for_retries_and_holds_against_generic_offline() {
+        let err = "websocket closed by daemon (1013 auth-rate-limited)";
+        assert_eq!(classify_remote_error(err), ConnectionStatus::RateLimited);
+        assert!(!should_retry_remote_ws(err));
+        assert!(!is_revocation_error(err));
+        assert_eq!(
+            classify_remote_error("websocket closed by daemon (1013 Device connection limit reached)"),
+            ConnectionStatus::Offline
+        );
+
+        let id = "rate-limit-hold-test";
+        set_status(id, ConnectionStatus::Online, None);
+        set_status(id, ConnectionStatus::RateLimited, Some(err.to_string()));
+        set_status(id, ConnectionStatus::Offline, Some("websocket read: timed out".to_string()));
+        assert_eq!(status_for(id).0, ConnectionStatus::RateLimited);
+        set_status(id, ConnectionStatus::Online, None);
+        assert_eq!(status_for(id).0, ConnectionStatus::Online);
     }
 
     #[test]

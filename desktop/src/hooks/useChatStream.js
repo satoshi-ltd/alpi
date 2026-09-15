@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { describeConnectionError } from "../lib/connection-status.js";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { safeUnlisten } from "../lib/tauri-listen.js";
@@ -494,7 +495,7 @@ export function useChatStream({
           ],
         }));
       } else if (p.kind === "error") {
-        updateTurn(rid, (prev) => ({ ...prev, error: p.text }));
+        updateTurn(rid, (prev) => ({ ...prev, error: describeConnectionError(p.text) }));
       } else if (p.kind === "reply") {
         if (!p.session_id) return;
         const turn = pendingTurnsRef.current[rid];

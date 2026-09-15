@@ -14,6 +14,35 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.4.9 — 2026-09-15 — a throttled connection says so
+
+- **A daemon that throttles this phone's IP is shown as a temporary block, not as
+  a dead daemon or a rejected token.** alpi 0.14.41 closes a socket it is
+  rate-limiting with WebSocket code 1013 and the reason `auth-rate-limited`. The RPC
+  transport keeps that close code and reason on pooled and streaming sockets, maps
+  only that exact pair to a `rate-limited` error and connection state, and lets any
+  other 1013 stay a generic close. The daemon banner explains it as a warning with one
+  message: *Too many authentication attempts from this IP. Wait a minute and try
+  again.* The pairing token and the cached data stay, nothing is forgotten or
+  re-paired, and the reason survives whichever order the socket events arrive in: a
+  generic `error` before the close no longer wins, and each call or stream ends
+  exactly once however many error and close events follow. While the block stands the
+  transport itself refuses to open a new socket for that endpoint for a minute and
+  answers every caller with the same notice, so data hooks, probes and retries cannot
+  hammer the daemon and extend its window. A socket that is already authenticated keeps
+  working throughout — cancelling a turn still gets through — because the block stops
+  new sockets, not live ones, and only time or unpairing lifts it. A refused socket is
+  not a dead daemon: while another *authenticated* socket of that endpoint is still
+  carrying frames the banner stays quiet, and the refused socket itself is retired
+  before anything asks, so it can never vouch for itself. Every stream exit, including
+  an open timeout, runs through one cleanup, so nothing stays counted as live. Dropping or switching an endpoint clears its block and its late close cannot
+  touch another one. A throttled pairing shows the notice and keeps the pasted link; a
+  throttled chat turn shows it without resending the message. With daemons older than
+  0.14.41 the generic behaviour is unchanged. Tests cover the transport mapping in both
+  event orders, settle-once, the one-attempt-per-window hold, live-socket awareness,
+  endpoint isolation, the probe status, the banner, the pair screen, the chat turn and
+  the one-minute reprobe with fake timers. Build 33.
+
 ## v0.4.8 — 2026-09-07 — cleanup counts items
 
 - **Reclaim space offers categories that weigh nothing.** The sheet listed a

@@ -1,4 +1,5 @@
 import { Banner } from './Banner';
+import { RATE_LIMITED_MESSAGE, RATE_LIMITED_STATUS } from '../lib/rateLimit';
 
 export const DAEMON_STATUS_BANNERS = {
   offline: {
@@ -14,6 +15,11 @@ export const DAEMON_STATUS_BANNERS = {
   'auth-failed': {
     kind: 'danger',
     message: 'Token rejected by daemon. Re-pair this phone to continue.',
+    action: null,
+  },
+  [RATE_LIMITED_STATUS]: {
+    kind: 'warning',
+    message: RATE_LIMITED_MESSAGE,
     action: null,
   },
 };

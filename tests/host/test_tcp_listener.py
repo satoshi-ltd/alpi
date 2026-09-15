@@ -775,6 +775,197 @@ async def test_first_frame_allows_only_pairing_exchange_without_authentication(
         await server.stop()
 
 
+def test_ws_source_key_trusts_forwarded_for_only_from_configured_proxies() -> None:
+    import ipaddress
+
+    key = host_server._ws_source_key
+    proxy = (ipaddress.ip_network("127.0.0.1/32"),)
+    chain = (ipaddress.ip_network("127.0.0.1/32"), ipaddress.ip_network("10.0.0.2/32"))
+
+    assert key("127.0.0.1", "203.0.113.5") == "127.0.0.1"
+    assert key("172.17.0.1", "203.0.113.5") == "172.17.0.1"
+    assert key("100.64.0.9", "203.0.113.5") == "100.64.0.9"
+    assert key("127.0.0.1", "203.0.113.5, 10.0.0.2", proxy) == "10.0.0.2"
+    assert key("127.0.0.1", "203.0.113.5, 10.0.0.2", chain) == "203.0.113.5"
+    assert key("127.0.0.1", " 198.51.100.7 ", proxy) == "198.51.100.7"
+    assert key("127.0.0.1", "not-an-ip", proxy) == "127.0.0.1"
+    assert key("127.0.0.1", "203.0.113.5, garbage", proxy) == "127.0.0.1"
+    assert key("127.0.0.1", "127.0.0.1", proxy) == "127.0.0.1"
+    assert key("8.8.8.8", "203.0.113.5", proxy) == "8.8.8.8"
+    assert key(None, None, proxy) == "unknown"
+    assert host_server._parse_networks("127.0.0.1, 10.0.0.0/8 ,bogus") == (
+        ipaddress.ip_network("127.0.0.1/32"), ipaddress.ip_network("10.0.0.0/8"),
+    )
+
+
+async def _fail_auth_once(url: str, **connect_kwargs) -> None:
+    async with websockets.connect(url, **connect_kwargs) as ws:
+        await ws.send(_ws_request("invalid-token"))
+        assert json.loads(await ws.recv())["error"]["message"] == "auth-failed"
+        with pytest.raises(websockets.ConnectionClosedError):
+            await ws.recv()
+        assert ws.close_code == 1008
+
+
+@pytest.mark.asyncio
+async def test_websocket_throttles_authentication_failures_per_source(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    from alpi.alp.rate_limit import RateLimiter
+    from alpi.host import connections
+
+    server, url = await _start_security_test_server(short_tmp, monkeypatch)
+    server._ws_auth_failures = RateLimiter(default_per_minute=2)
+    _, device = connections.create_connection("Javi")
+    try:
+        await _fail_auth_once(url)
+        await _fail_auth_once(url)
+
+        async with websockets.connect(url) as ws:
+            with pytest.raises(websockets.ConnectionClosedError):
+                await ws.send(_ws_request(device["token"]))
+                await ws.recv()
+            assert ws.close_code == 1013
+            assert ws.close_reason == "auth-rate-limited"
+        assert server.websocket_status()["auth_rate_limited"] == 1
+        assert server.websocket_status()["auth_failures"] == 2
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_websocket_ignores_forwarded_for_from_a_direct_client(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    from alpi.alp.rate_limit import RateLimiter
+
+    server, url = await _start_security_test_server(short_tmp, monkeypatch)
+    server._ws_auth_failures = RateLimiter(default_per_minute=2)
+    try:
+        await _fail_auth_once(url, additional_headers={"X-Forwarded-For": "203.0.113.1"})
+        await _fail_auth_once(url, additional_headers={"X-Forwarded-For": "203.0.113.2"})
+
+        async with websockets.connect(url, additional_headers={"X-Forwarded-For": "203.0.113.3"}) as ws:
+            with pytest.raises(websockets.ConnectionClosedError):
+                await ws.send(_ws_request("invalid-token"))
+                await ws.recv()
+            assert ws.close_code == 1013
+            assert ws.close_reason == "auth-rate-limited"
+        assert server.websocket_status()["auth_rate_limited"] == 1
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_websocket_keys_by_forwarded_client_behind_a_configured_proxy(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    import ipaddress
+
+    from alpi.alp.rate_limit import RateLimiter
+    from alpi.host import connections
+
+    server, url = await _start_security_test_server(short_tmp, monkeypatch)
+    server._ws_auth_failures = RateLimiter(default_per_minute=1)
+    server._ws_trusted_proxies = (ipaddress.ip_network("127.0.0.1/32"),)
+    _, device = connections.create_connection("Javi")
+    try:
+        await _fail_auth_once(url, additional_headers={"X-Forwarded-For": "203.0.113.1"})
+
+        async with websockets.connect(url, additional_headers={"X-Forwarded-For": "203.0.113.1"}) as ws:
+            with pytest.raises(websockets.ConnectionClosedError):
+                await ws.send(_ws_request(device["token"]))
+                await ws.recv()
+            assert ws.close_code == 1013
+            assert ws.close_reason == "auth-rate-limited"
+
+        async with websockets.connect(url, additional_headers={"X-Forwarded-For": "203.0.113.2"}) as ws:
+            await ws.send(_ws_request(device["token"]))
+            assert json.loads(await ws.recv())["result"] == {"pong": True}
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_websocket_internal_pairing_errors_do_not_count_toward_the_throttle(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    from alpi.alp.rate_limit import RateLimiter
+    from alpi.host import connections
+
+    server, url = await _start_security_test_server(short_tmp, monkeypatch)
+    connections.register(server)
+    server._ws_auth_failures = RateLimiter(default_per_minute=1)
+    _, device = connections.create_connection("Javi")
+
+    def explode(*_args, **_kwargs):
+        raise RuntimeError("store hiccup")
+
+    monkeypatch.setattr(connections, "exchange_pairing", explode)
+    try:
+        async with websockets.connect(url) as ws:
+            await ws.send(json.dumps({
+                "id": "pair", "method": "host.connections.exchange_pairing",
+                "params": {"pairing_token": "whatever"},
+            }))
+            assert json.loads(await ws.recv())["error"]["code"] == -32603
+
+        async with websockets.connect(url) as ws:
+            await ws.send(_ws_request(device["token"]))
+            assert json.loads(await ws.recv())["result"] == {"pong": True}
+        assert server.websocket_status()["auth_rate_limited"] == 0
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_websocket_counts_failed_pairing_exchanges_toward_the_throttle(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    from alpi.alp.rate_limit import RateLimiter
+    from alpi.host import connections
+
+    server, url = await _start_security_test_server(short_tmp, monkeypatch)
+    connections.register(server)
+    server._ws_auth_failures = RateLimiter(default_per_minute=1)
+    try:
+        async with websockets.connect(url) as ws:
+            await ws.send(json.dumps({
+                "id": "pair", "method": "host.connections.exchange_pairing",
+                "params": {"pairing_token": "not-a-grant"},
+            }))
+            assert json.loads(await ws.recv())["error"]["code"] == -32011
+
+        async with websockets.connect(url) as ws:
+            with pytest.raises(websockets.ConnectionClosedError):
+                await ws.recv()
+            assert ws.close_code == 1013
+            assert ws.close_reason == "auth-rate-limited"
+        assert server.websocket_status()["auth_rate_limited"] == 1
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_websocket_successful_authentication_never_counts_toward_the_throttle(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    from alpi.alp.rate_limit import RateLimiter
+    from alpi.host import connections
+
+    server, url = await _start_security_test_server(short_tmp, monkeypatch)
+    server._ws_auth_failures = RateLimiter(default_per_minute=1)
+    _, device = connections.create_connection("Javi")
+    try:
+        for index in range(3):
+            async with websockets.connect(url) as ws:
+                await ws.send(_ws_request(device["token"], str(index)))
+                assert json.loads(await ws.recv())["result"] == {"pong": True}
+        assert server.websocket_status()["auth_rate_limited"] == 0
+    finally:
+        await server.stop()
+
+
 @pytest.mark.asyncio
 async def test_websocket_requires_authentication_before_deadline(
     short_tmp: Path, monkeypatch,
@@ -897,6 +1088,8 @@ async def test_websocket_limits_connections_per_device(
                 assert rejected["error"]["message"] == "too-many-connections"
                 with pytest.raises(websockets.ConnectionClosedError):
                     await second.recv()
+                assert second.close_code == 1013
+                assert second.close_reason == "Device connection limit reached"
             await first.send(_ws_request(device["token"], "3"))
             assert "result" in json.loads(await first.recv())
         assert server.websocket_status()["device_connections_rejected"] == 1

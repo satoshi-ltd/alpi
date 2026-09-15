@@ -3,12 +3,18 @@ services:
     ports: !reset []
     expose:
       - "${ALPI_HOST_TCP_PORT:-49200}"
+    environment:
+      # Only Caddy's pinned address may set X-Forwarded-For; the daemon keys its auth-failure throttle by the real client.
+      ALPI_HOST_WS_TRUSTED_PROXIES: 172.30.250.10/32
 
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
     depends_on:
       - alpi
+    networks:
+      default:
+        ipv4_address: 172.30.250.10
     environment:
       ALPI_DOMAIN: ${ALPI_DOMAIN}
       ALPI_UPSTREAM_PORT: ${ALPI_HOST_TCP_PORT:-49200}
@@ -19,6 +25,12 @@ services:
       - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.30.250.0/24
 
 volumes:
   caddy_data:
