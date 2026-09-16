@@ -1722,3 +1722,662 @@ def test_model_facing_knowledge_text_never_says_okf(tmp_path: Path) -> None:
 
     assert "required knowledge file is missing" in surfaces["lint output"]
     assert [name for name, text in surfaces.items() if re.search(r"\bOKF\b", text)] == []
+
+
+def _attach(monkeypatch, *items) -> None:
+    monkeypatch.setattr(kb._state, "get_turn_attachments", lambda: list(items))
+
+
+def _file(tmp_path: Path, name: str, text: str = "# Memo\n\nPolaris pricing moves to annual plans.\n") -> dict:
+    path = tmp_path / name
+    path.write_text(text)
+    return {"path": str(path), "name": name}
+
+
+def _ingest_bundle(tmp_home: Path, tmp_path: Path, monkeypatch, proposal: dict | None = None) -> Path:
+    workspace = tmp_path / "ws"
+    workspace.mkdir(exist_ok=True)
+    (tmp_home / "config.yaml").write_text(f"workspace: {workspace}\n")
+    monkeypatch.setattr(
+        kb.llm,
+        "complete",
+        lambda **kwargs: _completion(proposal or _proposal(_proposed("sources/memo.md", page_type="source"))),
+    )
+    return workspace / "knowledge"
+
+
+def test_ingest_takes_the_only_attachment_of_the_turn(tmp_home: Path, tmp_path: Path, monkeypatch, stub_embedder) -> None:
+    root = _ingest_bundle(tmp_home, tmp_path, monkeypatch)
+    _attach(monkeypatch, _file(tmp_path, "memo.md"))
+
+    result = kb.Knowledge().run(action="ingest")
+
+    assert result.ok, result.error
+    assert json.loads(result.output)["source"]["name"] == "memo.md"
+    assert (root / "sources" / "memo.md").is_file()
+
+
+def test_ingest_takes_the_attachment_the_caller_names(tmp_home: Path, tmp_path: Path, monkeypatch, stub_embedder) -> None:
+    root = _ingest_bundle(tmp_home, tmp_path, monkeypatch)
+    _attach(monkeypatch, _file(tmp_path, "memo.md"), _file(tmp_path, "other.md"))
+
+    result = kb.Knowledge().run(action="ingest", name="other.md")
+
+    assert result.ok, result.error
+    assert json.loads(result.output)["source"]["name"] == "other.md"
+    assert (root / "sources" / "memo.md").is_file()
+
+
+def test_ingest_says_which_attachment_names_exist_when_the_one_asked_for_does_not(
+    tmp_home: Path, tmp_path: Path, monkeypatch,
+) -> None:
+    _ingest_bundle(tmp_home, tmp_path, monkeypatch)
+    _attach(monkeypatch, _file(tmp_path, "memo.md"))
+
+    result = kb.Knowledge().run(action="ingest", name="absent.md")
+
+    assert not result.ok
+    assert "no attachment named 'absent.md'" in result.error
+
+
+def test_ingest_refuses_an_attachment_name_carried_by_more_than_one_file(
+    tmp_home: Path, tmp_path: Path, monkeypatch,
+) -> None:
+    _ingest_bundle(tmp_home, tmp_path, monkeypatch)
+    sub = tmp_path / "sub"
+    sub.mkdir()
+    _attach(monkeypatch, _file(tmp_path, "memo.md"), _file(sub, "memo.md"))
+
+    result = kb.Knowledge().run(action="ingest", name="memo.md")
+
+    assert not result.ok
+    assert "multiple attachments named 'memo.md'" in result.error
+
+
+def test_ingest_refuses_to_guess_between_several_attachments(tmp_home: Path, tmp_path: Path, monkeypatch) -> None:
+    _ingest_bundle(tmp_home, tmp_path, monkeypatch)
+    _attach(monkeypatch, _file(tmp_path, "memo.md"), _file(tmp_path, "other.md"))
+
+    result = kb.Knowledge().run(action="ingest")
+
+    assert not result.ok
+    assert "memo.md, other.md" in result.error
+
+
+def test_ingest_with_nothing_attached_says_what_to_do(tmp_home: Path, tmp_path: Path, monkeypatch) -> None:
+    _ingest_bundle(tmp_home, tmp_path, monkeypatch)
+    _attach(monkeypatch)
+
+    result = kb.Knowledge().run(action="ingest")
+
+    assert not result.ok
+    assert "attach a file or pass source_path" in result.error
+
+
+def test_ingest_refuses_a_source_path_that_is_not_a_file(tmp_home: Path, tmp_path: Path, monkeypatch) -> None:
+    _ingest_bundle(tmp_home, tmp_path, monkeypatch)
+
+    result = kb.Knowledge().run(action="ingest", source_path=str(tmp_path / "missing.md"))
+
+    assert not result.ok
+    assert "file not found" in result.error
+
+
+def _maintain_reply(monkeypatch, content: str) -> None:
+    monkeypatch.setattr(
+        kb.llm,
+        "complete",
+        lambda **kwargs: Completion(
+            content=content, tool_calls=[], input_tokens=0, output_tokens=0, cost_usd=0.0, raw=None,
+        ),
+    )
+
+
+def test_a_fenced_json_reply_is_still_applied(tmp_home: Path, tmp_path: Path, monkeypatch, stub_embedder) -> None:
+    root = _workspace_root(tmp_home, tmp_path)
+    shutil.copytree(_bundle(tmp_path), root)
+    _maintain_reply(
+        monkeypatch,
+        "```json\n" + json.dumps(_proposal(_proposed("concepts/vega.md", title="Vega"))) + "\n```",
+    )
+
+    result = kb.Knowledge().run(action="maintain", topic="Vega")
+
+    assert result.ok, result.error
+    assert (root / "concepts" / "vega.md").is_file()
+
+
+def test_an_unparseable_reply_reports_invalid_json(tmp_home: Path, tmp_path: Path, monkeypatch) -> None:
+    root = _workspace_root(tmp_home, tmp_path)
+    shutil.copytree(_bundle(tmp_path), root)
+    _maintain_reply(monkeypatch, "here you go: {pages: []")
+
+    result = kb.Knowledge().run(action="maintain", topic="Vega")
+
+    assert not result.ok
+    assert "LLM returned invalid JSON" in result.error
+
+
+def test_a_reply_that_is_not_an_object_is_refused(tmp_home: Path, tmp_path: Path, monkeypatch) -> None:
+    root = _workspace_root(tmp_home, tmp_path)
+    shutil.copytree(_bundle(tmp_path), root)
+    _maintain_reply(monkeypatch, "[]")
+
+    result = kb.Knowledge().run(action="maintain", topic="Vega")
+
+    assert not result.ok
+    assert "must be a JSON object" in result.error
+
+
+@pytest.mark.parametrize(
+    ("proposal", "expected"),
+    [
+        ({"pages": "concepts/vega.md", "log": "x"}, "proposal.pages must be a list"),
+        ({"pages": ["concepts/vega.md"], "log": "x"}, "each proposed page must be an object"),
+    ],
+)
+def test_a_malformed_proposal_shape_is_refused(
+    tmp_home: Path, tmp_path: Path, monkeypatch, proposal, expected,
+) -> None:
+    root = _workspace_root(tmp_home, tmp_path)
+    shutil.copytree(_bundle(tmp_path), root)
+    _maintain_reply(monkeypatch, json.dumps(proposal))
+
+    result = kb.Knowledge().run(action="maintain", topic="Vega")
+
+    assert not result.ok
+    assert expected in result.error
+
+
+def test_a_proposed_page_with_no_body_gets_its_title_as_one(
+    tmp_home: Path, tmp_path: Path, monkeypatch, stub_embedder,
+) -> None:
+    root = _workspace_root(tmp_home, tmp_path)
+    shutil.copytree(_bundle(tmp_path), root)
+    _maintain_reply(
+        monkeypatch,
+        json.dumps(_proposal(_proposed("concepts/vega.md", title="Vega", body=""))),
+    )
+
+    assert kb.Knowledge().run(action="maintain", topic="Vega").ok
+    assert "# Vega" in (root / "concepts" / "vega.md").read_text()
+
+
+def test_search_refuses_an_empty_query(tmp_home: Path, stub_embedder) -> None:
+    result = kb.Knowledge().run(action="search", query="   ")
+
+    assert not result.ok
+    assert result.error == "Empty query."
+
+
+@pytest.mark.parametrize("k", [0, -1, 51])
+def test_search_refuses_a_k_outside_its_range(tmp_home: Path, stub_embedder, k) -> None:
+    result = kb.Knowledge().run(action="search", query="polaris", k=k)
+
+    assert not result.ok
+    assert result.error == "k must be in [1, 50]."
+
+
+def test_an_unknown_action_names_itself(tmp_home: Path) -> None:
+    result = kb.Knowledge().run(action="summarise")
+
+    assert not result.ok
+    assert "unknown knowledge action: summarise" in result.error
+
+
+def test_the_tool_lint_action_reports_what_lint_reports(tmp_home: Path, tmp_path: Path) -> None:
+    root = _bundle(tmp_path)
+    (root / "concepts" / "vega.md").write_text(_page("Vega", "# Vega\n\nNobody links here."))
+
+    result = kb.Knowledge().run(action="lint", path=str(root))
+
+    assert result.ok, result.error
+    assert json.loads(result.output) == kb.lint_knowledge(root)
+    assert {i["message"] for i in json.loads(result.output)["issues"]} == {"orphan page: no inbound links"}
+
+
+def test_lint_reports_a_missing_root_instead_of_raising(tmp_home: Path, tmp_path: Path) -> None:
+    result = kb.Knowledge().run(action="lint", path=str(tmp_path / "absent"))
+
+    assert result.ok, result.error
+    body = json.loads(result.output)
+    assert body["ok"] is False
+    assert [i["message"] for i in body["issues"]] == ["knowledge root does not exist"]
+
+
+def test_indexing_something_that_is_not_a_directory_says_so(tmp_home: Path, tmp_path: Path) -> None:
+    loose = tmp_path / "notes.md"
+    loose.write_text("# Notes\n")
+
+    result = kb.Knowledge().run(action="index", path=str(loose))
+
+    assert not result.ok
+    assert "Not a directory" in result.error
+
+
+def test_searching_after_the_embedder_changed_asks_for_a_reindex(
+    tmp_home: Path, tmp_path: Path, monkeypatch, stub_embedder,
+) -> None:
+    root = _workspace_root(tmp_home, tmp_path)
+    shutil.copytree(_bundle(tmp_path), root)
+    kb.index_knowledge(tmp_home, root, embedder=stub_embedder)
+    monkeypatch.setattr(embed_mod, "_DEFAULT", OtherEmbedder())
+
+    result = kb.Knowledge().run(action="search", query="polaris")
+
+    assert not result.ok
+    assert 'knowledge(action="index")' in result.error
+
+
+def test_reindexing_after_the_embedder_changed_rebuilds_without_force(
+    tmp_home: Path, tmp_path: Path, monkeypatch, stub_embedder,
+) -> None:
+    root = _workspace_root(tmp_home, tmp_path)
+    shutil.copytree(_bundle(tmp_path), root)
+    kb.index_knowledge(tmp_home, root, embedder=stub_embedder)
+    other = OtherEmbedder()
+    monkeypatch.setattr(embed_mod, "_DEFAULT", other)
+
+    result = kb.Knowledge().run(action="index")
+
+    assert result.ok, result.error
+    conn = kb.open_store(tmp_home)
+    try:
+        assert kb._get_meta(conn, "embedder") == other.name
+        assert kb._get_meta(conn, "dim") == str(other.dim)
+    finally:
+        conn.close()
+
+
+def test_indexing_a_second_bundle_through_the_tool_is_refused(
+    tmp_home: Path, tmp_path: Path, stub_embedder,
+) -> None:
+    primary, other = _two_bundles(tmp_home, tmp_path)
+    kb.index_knowledge(tmp_home, primary, embedder=stub_embedder)
+
+    result = kb.Knowledge().run(action="index", path=str(other))
+
+    assert not result.ok
+    assert str(primary.resolve()) in result.error
+
+
+def _lint_message(root: Path, rel: str) -> str:
+    return "; ".join(i["message"] for i in kb.lint_knowledge(root)["issues"] if i["path"] == rel)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("# Vega\n\nNo frontmatter at all.\n", "missing YAML frontmatter block"),
+        ("---\ntype: concept\ntitle: Vega\n", "unterminated YAML frontmatter block"),
+        ("---\ntype: [concept\n---\n\n# Vega\n", "invalid YAML frontmatter"),
+        ("---\njust a string\n---\n\n# Vega\n", "frontmatter must be a mapping"),
+    ],
+)
+def test_lint_names_the_frontmatter_it_cannot_read(tmp_path: Path, text, expected) -> None:
+    root = _bundle(tmp_path)
+    (root / "concepts" / "vega.md").write_text(text)
+
+    assert expected in _lint_message(root, "concepts/vega.md")
+
+
+@pytest.mark.parametrize(
+    ("line", "expected"),
+    [
+        ("type: rumour", "frontmatter.type must be one of"),
+        ("title: '   '", "frontmatter.title must be a non-empty string"),
+        ("tags: notalist", "frontmatter.tags must be a list of strings"),
+        ("tags: [1, 2]", "frontmatter.tags must be a list of strings"),
+        ("updated_at: ''", "frontmatter.updated_at must be a non-empty string"),
+        ("sources: 7", "frontmatter.sources must be a list of strings"),
+        ("sources: [1]", "frontmatter.sources must be a list of strings"),
+    ],
+)
+def test_lint_names_the_frontmatter_field_that_is_wrong(tmp_path: Path, line, expected) -> None:
+    root = _bundle(tmp_path)
+    field = line.split(":", 1)[0]
+    base = {
+        "type": "concept",
+        "title": "Vega",
+        "tags": "[]",
+        "updated_at": '"2026-07-01T00:00:00Z"',
+        "sources": "[]",
+    }
+    base.pop(field)
+    front = "\n".join(f"{key}: {value}" for key, value in base.items())
+    (root / "concepts" / "vega.md").write_text(f"---\n{front}\n{line}\n---\n\n# Vega\n")
+
+    assert expected in _lint_message(root, "concepts/vega.md")
+
+
+def test_an_unquoted_timestamp_is_accepted_as_written(tmp_path: Path) -> None:
+    root = _bundle(tmp_path)
+    (root / "concepts" / "polaris.md").write_text(
+        "---\ntype: concept\ntitle: Polaris\ntags: []\n"
+        "updated_at: 2026-07-01T00:00:00+00:00\nsources: []\n---\n\n# Polaris\n",
+    )
+
+    assert kb.lint_knowledge(root)["issues"] == []
+    assert kb._parse_page(root, root / "concepts" / "polaris.md")["meta"]["updated_at"] == "2026-07-01T00:00:00Z"
+
+
+def test_a_page_that_cannot_be_parsed_is_not_counted_as_an_orphan(tmp_path: Path) -> None:
+    root = _bundle(tmp_path)
+    (root / "concepts" / "broken.md").write_text("no frontmatter here\n")
+
+    assert kb._orphan_pages(root) == ["concepts/broken.md"]
+    assert "concepts/polaris.md" not in kb._orphan_pages(root)
+
+
+def test_a_link_out_of_the_bundle_is_reported_as_external(tmp_path: Path) -> None:
+    root = _bundle(tmp_path)
+    links = kb._extract_links(
+        root, root / "concepts" / "polaris.md", "See [Outside](../../elsewhere.md) and [Nothing](%20).",
+    )
+
+    assert links == [{"raw": "../../elsewhere.md", "target": "../../elsewhere.md", "external": True}]
+
+
+def test_the_index_and_log_are_created_when_a_bundle_lacks_them(tmp_path: Path) -> None:
+    root = tmp_path / "knowledge"
+    (root / "concepts").mkdir(parents=True)
+    (root / "concepts" / "vega.md").write_text(_page("Vega", "# Vega\n\nBody."))
+
+    kb._update_index(root, ["concepts/vega.md"])
+    kb._append_log(root, "Wrote Vega.")
+
+    assert "- [Vega](concepts/vega.md)" in (root / "index.md").read_text()
+    assert "Wrote Vega." in (root / "log.md").read_text()
+    assert kb.lint_knowledge(root)["issues"] == []
+
+
+def test_the_index_falls_back_to_the_filename_when_a_page_will_not_parse(tmp_path: Path) -> None:
+    root = _bundle(tmp_path)
+    (root / "concepts" / "deep-space.md").write_text("no frontmatter here\n")
+
+    kb._update_index(root, ["concepts/deep-space.md"])
+
+    assert "- [Deep Space](concepts/deep-space.md)" in (root / "index.md").read_text()
+
+
+@pytest.mark.parametrize("rel", ["", "../outside.md", "concepts/absent.md"])
+def test_no_body_is_read_from_outside_the_bundle(tmp_path: Path, rel) -> None:
+    root = _bundle(tmp_path)
+    (tmp_path / "outside.md").write_text("# Outside\n")
+
+    assert kb._page_body_on_disk(root, rel) is None
+
+
+def test_a_page_without_frontmatter_still_yields_its_body(tmp_path: Path) -> None:
+    root = _bundle(tmp_path)
+    (root / "concepts" / "raw.md").write_text("# Raw\n\nStraight markdown.\n")
+
+    assert kb._page_body_on_disk(root, "concepts/raw.md") == "# Raw\n\nStraight markdown."
+
+
+def test_search_survives_a_damaged_keyword_table(tmp_home: Path, tmp_path: Path, stub_embedder) -> None:
+    root = _bundle(tmp_path)
+    kb.index_knowledge(tmp_home, root, embedder=stub_embedder)
+    conn = kb.open_store(tmp_home)
+    try:
+        conn.execute("DROP TABLE okf_fts")
+        conn.commit()
+    finally:
+        conn.close()
+
+    assert "concepts/polaris.md" in [r["path"] for r in kb.search_knowledge(tmp_home, "polaris launch", k=5)]
+
+
+def test_search_survives_a_page_whose_tags_are_not_json(tmp_home: Path, tmp_path: Path, stub_embedder) -> None:
+    root = _bundle(tmp_path)
+    kb.index_knowledge(tmp_home, root, embedder=stub_embedder)
+    conn = kb.open_store(tmp_home)
+    try:
+        conn.execute("UPDATE okf_files SET tags = ? WHERE path = ?", ("launch, react", "concepts/polaris.md"))
+        conn.commit()
+    finally:
+        conn.close()
+
+    hit = next(r for r in kb.search_knowledge(tmp_home, "polaris launch", k=5) if r["path"] == "concepts/polaris.md")
+    assert hit["tags"] == []
+
+
+def test_search_returns_keyword_hits_when_no_vector_survives(tmp_home: Path, tmp_path: Path, stub_embedder) -> None:
+    root = _bundle(tmp_path)
+    kb.index_knowledge(tmp_home, root, embedder=stub_embedder)
+    conn = kb.open_store(tmp_home)
+    try:
+        conn.execute("DELETE FROM okf_vec")
+        conn.commit()
+    finally:
+        conn.close()
+
+    assert "concepts/polaris.md" in [r["path"] for r in kb.search_knowledge(tmp_home, "polaris", k=5)]
+
+
+def test_a_proposal_without_a_path_says_the_path_is_required(tmp_home: Path, tmp_path: Path, monkeypatch) -> None:
+    root = _workspace_root(tmp_home, tmp_path)
+    shutil.copytree(_bundle(tmp_path), root)
+    _maintain_reply(monkeypatch, json.dumps(_proposal(_proposed(""))))
+
+    result = kb.Knowledge().run(action="maintain", topic="Vega")
+
+    assert not result.ok
+    assert "page path is required" in result.error
+
+
+def test_a_page_at_the_bundle_root_keeps_its_links_as_written(
+    tmp_home: Path, tmp_path: Path, monkeypatch, stub_embedder,
+) -> None:
+    root = _workspace_root(tmp_home, tmp_path)
+    shutil.copytree(_bundle(tmp_path), root)
+    _maintain_reply(
+        monkeypatch,
+        json.dumps(_proposal(_proposed(
+            "vega.md", title="Vega", body="# Vega\n\nSee [Polaris](concepts/polaris.md) and [Blank]( ).",
+        ))),
+    )
+
+    assert kb.Knowledge().run(action="maintain", topic="Vega").ok
+    assert "[Polaris](concepts/polaris.md)" in (root / "vega.md").read_text()
+
+
+def test_a_link_with_an_empty_destination_is_left_alone(
+    tmp_home: Path, tmp_path: Path, monkeypatch, stub_embedder,
+) -> None:
+    root = _workspace_root(tmp_home, tmp_path)
+    shutil.copytree(_bundle(tmp_path), root)
+    _maintain_reply(
+        monkeypatch,
+        json.dumps(_proposal(_proposed(
+            "projects/alpha.md", title="Alpha", page_type="project",
+            body="# Alpha\n\nSee [Blank](%20) and [Polaris](concepts/polaris.md).",
+        ))),
+    )
+
+    assert kb.Knowledge().run(action="maintain", topic="Alpha").ok
+    written = (root / "projects" / "alpha.md").read_text()
+    assert "[Blank](%20)" in written
+    assert "[Polaris](../concepts/polaris.md)" in written
+
+
+def test_a_page_reached_through_a_symlink_out_of_the_bundle_is_refused(
+    tmp_home: Path, tmp_path: Path, monkeypatch,
+) -> None:
+    root = _workspace_root(tmp_home, tmp_path)
+    shutil.copytree(_bundle(tmp_path), root)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (root / "escape").symlink_to(outside, target_is_directory=True)
+    _maintain_reply(monkeypatch, json.dumps(_proposal(_proposed("escape/vega.md"))))
+
+    result = kb.Knowledge().run(action="maintain", topic="Vega")
+
+    assert not result.ok
+    assert "escapes knowledge bundle" in result.error
+    assert not (outside / "vega.md").exists()
+
+
+def test_an_image_read_without_ocr_says_how_to_read_it(tmp_path: Path) -> None:
+    image = tmp_path / "pixel.png"
+    image.write_bytes(b"\x89PNG\r\n\x1a\nx")
+
+    with pytest.raises(ValueError, match='ocr=true'):
+        kb._read_source(image)
+
+
+def test_a_result_whose_page_is_gone_falls_back_to_its_snippet(tmp_path: Path) -> None:
+    root = _bundle(tmp_path)
+
+    related = kb._related_pages_for_prompt(root, [{
+        "path": "concepts/vanished.md", "title": "Vanished", "type": "concept",
+        "snippet": "What the index still remembers.", "tags": [], "links": [],
+    }])
+
+    assert related[0]["body"] == "What the index still remembers."
+    assert related[0]["truncated"] is True
+
+
+def test_maintain_refuses_a_source_that_is_not_there(tmp_home: Path, tmp_path: Path) -> None:
+    result = kb.Knowledge().run(action="maintain", source_path=str(tmp_path / "missing.md"))
+
+    assert not result.ok
+    assert "source file not found" in result.error
+
+
+def test_maintain_refuses_a_source_the_attachment_rules_reject(tmp_home: Path, tmp_path: Path) -> None:
+    source = tmp_path / "notes.md"
+    source.write_bytes(b"# Notes\n\x00\x01binary payload")
+
+    result = kb.Knowledge().run(action="maintain", source_path=str(source))
+
+    assert not result.ok
+    assert "notes.md" in result.error
+
+
+def test_maintain_refuses_an_image_without_ocr(tmp_home: Path, tmp_path: Path) -> None:
+    image = tmp_path / "pixel.png"
+    image.write_bytes(b"\x89PNG\r\n\x1a\nx")
+
+    result = kb.Knowledge().run(action="maintain", source_path=str(image))
+
+    assert not result.ok
+    assert "only ingestible with ocr=true" in result.error
+
+
+def test_maintain_with_neither_a_source_nor_a_topic_says_what_it_needs(tmp_home: Path, tmp_path: Path) -> None:
+    result = kb.Knowledge().run(action="maintain")
+
+    assert not result.ok
+    assert "source_path or topic is required" in result.error
+
+
+def test_maintain_after_the_embedder_changed_asks_for_a_reindex(
+    tmp_home: Path, tmp_path: Path, monkeypatch, stub_embedder,
+) -> None:
+    root = _workspace_root(tmp_home, tmp_path)
+    shutil.copytree(_bundle(tmp_path), root)
+    kb.index_knowledge(tmp_home, root, embedder=stub_embedder)
+    monkeypatch.setattr(embed_mod, "_DEFAULT", OtherEmbedder())
+    _maintain_reply(monkeypatch, json.dumps(_proposal(_proposed("concepts/vega.md"))))
+
+    result = kb.Knowledge().run(action="maintain", topic="Vega")
+
+    assert not result.ok
+    assert 'knowledge(action="index")' in result.error
+    assert not (root / "concepts" / "vega.md").exists()
+
+
+def test_an_image_is_ingested_when_ocr_is_asked_for(
+    tmp_home: Path, tmp_path: Path, monkeypatch, stub_embedder,
+) -> None:
+    from alpi import extract as extract_mod
+
+    root = _ingest_bundle(
+        tmp_home, tmp_path, monkeypatch,
+        _proposal(_proposed(
+            "sources/whiteboard.md", title="Whiteboard", page_type="source",
+            body="# Whiteboard\n\nRenewal threshold is ninety days.",
+        )),
+    )
+    image = tmp_path / "whiteboard.png"
+    image.write_bytes(b"\x89PNG\r\n\x1a\nnot a real raster")
+    monkeypatch.setattr(extract_mod, "ocr_image", lambda p: "Renewal threshold is ninety days.")
+    seen: dict = {}
+    original = kb.llm.complete
+
+    def capture(**kwargs):
+        seen.update(json.loads(kwargs["messages"][1]["content"]))
+        return original(**kwargs)
+
+    monkeypatch.setattr(kb.llm, "complete", capture)
+
+    result = kb.Knowledge().run(action="ingest", source_path=str(image), ocr=True)
+
+    assert result.ok, result.error
+    assert "Renewal threshold" in seen["source_excerpt"]
+    body = json.loads(result.output)
+    assert body["source"]["mime"] == "image/png"
+    assert (root / "sources" / "whiteboard.md").is_file()
+    assert any(r["path"] == "sources/whiteboard.md" for r in kb.search_knowledge(tmp_home, "renewal threshold", k=5))
+
+
+def test_a_keyword_query_the_engine_refuses_leaves_the_vector_side_answering(
+    tmp_home: Path, tmp_path: Path, monkeypatch, stub_embedder,
+) -> None:
+    root = _bundle(tmp_path)
+    kb.index_knowledge(tmp_home, root, embedder=stub_embedder)
+    monkeypatch.setattr(kb, "_fts_query", lambda query: '"unterminated')
+
+    assert "concepts/polaris.md" in [r["path"] for r in kb.search_knowledge(tmp_home, "polaris", k=5)]
+
+
+def test_ingest_refuses_a_source_the_attachment_rules_reject(tmp_home: Path, tmp_path: Path, monkeypatch) -> None:
+    _ingest_bundle(tmp_home, tmp_path, monkeypatch)
+    source = tmp_path / "notes.md"
+    source.write_bytes(b"# Notes\n\x00\x01binary payload")
+
+    result = kb.Knowledge().run(action="ingest", source_path=str(source))
+
+    assert not result.ok
+    assert "notes.md" in result.error
+
+
+def test_a_wikilink_resolves_from_the_root_when_no_page_set_is_offered(tmp_path: Path) -> None:
+    root = _linked_bundle(tmp_path)
+
+    links = kb._extract_links(root, root / "projects" / "alpha.md", "See [[concepts/widget]].")
+
+    assert links == [{"raw": "concepts/widget", "target": "concepts/widget.md", "external": False}]
+
+
+def test_a_query_with_nothing_to_match_on_still_answers(tmp_home: Path, tmp_path: Path, stub_embedder) -> None:
+    root = _bundle(tmp_path)
+    kb.index_knowledge(tmp_home, root, embedder=stub_embedder)
+
+    assert kb._fts_query("!!! ...") == ""
+    assert kb.search_knowledge(tmp_home, "!!! ...", k=5)
+
+
+def test_a_page_linking_to_itself_does_not_count_as_its_own_inbound_link(tmp_path: Path) -> None:
+    root = _linked_bundle(tmp_path)
+    (root / "concepts" / "widget.md").write_text(
+        _page("Widget", "# Widget\n\nSee [itself](widget.md) and [Polaris](polaris.md).\n"),
+    )
+    _index_with(root, "# Knowledge Index\n\n- [Polaris](concepts/polaris.md)\n")
+
+    assert kb._orphan_pages(root) == ["concepts/widget.md"]
+    assert [i["path"] for i in kb.lint_knowledge(root)["issues"]] == ["concepts/widget.md"]
+
+
+def test_a_reference_use_without_a_definition_sits_beside_one_that_has_it(tmp_path: Path) -> None:
+    root = _linked_bundle(tmp_path)
+
+    links = kb._extract_links(
+        root,
+        root / "index.md",
+        "See [Widget][w], [an aside] and [Polaris][p].\n\n[w]: concepts/widget.md\n[p]: concepts/polaris.md\n",
+        pages={"concepts/widget.md", "concepts/polaris.md"},
+    )
+
+    assert [entry["target"] for entry in links] == ["concepts/widget.md", "concepts/polaris.md"]

@@ -25,18 +25,8 @@ list targeting v0.14.x patch releases.
 | ID | Item | Status |
 |---|---|---|
 | COST.1 | Per-pipeline-run cost telemetry: roll the per-turn settlements already in the workgroup ledger up to the `pipeline_run` boundaries `fold_task_state` computes, so a run and each of its phases carry spend and tokens. Per-turn, per-workgroup, per-connection and per-peer attribution already ship; the run and phase dimension does not, and an operator still sums it by hand from the per-post costs the transcript prints. | 🔵 |
+| LINT.1 | Pin the Ruff rule selection in `pyproject.toml`. The config sets only `line-length` and `target-version`, so the effective rule set moves with whatever Ruff version is installed: a newer one reports 225 findings across `alpi/` and `tests/` that no release introduced, which makes the lint gate unable to separate a regression from a version bump. Choose the selection, settle the backlog it names, and keep it its own change. | 🔵 |
 | BG.1 | `alpi doctor` verifies the installed LiteLLM against the pinned version and hashes, catching a supply-chain swap locally (review cadence stays in [OPERATIONS.md](OPERATIONS.md)). | 🔵 |
-
-### Knowledge subsystem
-
-Raised by the 2026-08-28 audit of `alpi/tools/knowledge_base.py`. Invariant
-for every item: **the Markdown tree stays the source of truth and SQLite a
-derived, rebuildable index.** KB.8 closes the section. Each fix lands with its
-own test.
-
-| ID | Item | Status |
-|---|---|---|
-| KB.8 | Close the remaining knowledge test gaps (89% statement coverage on `alpi/tools/knowledge_base.py` today): attachment resolution in ingest, where `_resolve_source` is only exercised through `source_path`, so named, ambiguous, lone, zero and multiple attachments are all unrun; `_parse_llm_json` beyond clean JSON (code-fenced, unparseable, non-object replies); the `k` bounds and empty-query guards in the tool; embedder drift on `index` without `force`; the tool-level `lint`, unknown-action, `EmbedderMismatch` and `KnowledgeRootMismatch` branches, since every lint test calls `lint_knowledge` directly; lint's own `orphan page` finding, which only its `_orphan_pages` mirror covers today; and one `ocr=true` ingest end to end. Separate PR from the fixes above. | 🔵 |
 
 ### Production client exposure
 
@@ -157,5 +147,5 @@ repo.
 | Renaming the `okf_*` SQLite tables | Internal and never rendered; the rename runs the drop and rebuild path, which v0.14.44 made transactional, so the only bar left is an observable benefit and there is none. |
 | Hard-rejecting page shrinks in `maintain` | Consolidating is legitimate; `maintain` reports `bytes_before`/`bytes_after` per written page instead of blocking. |
 | Root-relative fallback in the knowledge link resolver | Would pass lint while breaking the links in Obsidian, GitHub and VS Code; page-relative stays canonical (KB.5). |
-| Renaming the `type` frontmatter key | Invalidates every existing page over a Hugo layout-key collision that will likely never matter; KB.7 will note the collision in the docs instead. |
+| Renaming the `type` frontmatter key | Invalidates every existing page over a Hugo layout-key collision that will likely never matter; the docs note the collision instead (KB.7). |
 | Defining what "OKF" stands for | The acronym was coined without a referent; writing an expansion now would invent a retroactive justification. It is gone from every model- and user-facing string; only the `okf_*` table names keep it. |

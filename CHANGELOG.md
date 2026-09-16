@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.14.47 — 2026-09-16 — the knowledge subsystem says what it does
+
+- **Every path through knowledge is now pinned by a test.** The subsystem carried the
+  daemon's densest logic on the thinnest cover: attachment resolution, the model's reply
+  parsing, the search guards and half the tool's own error branches had no test behind
+  them, so a refactor could change what `ingest`, `search` or `maintain` answer without a
+  single failure. Coverage of the module is complete, and the behaviour it fixes in place
+  is the behaviour that shipped — this release changes nothing a user can observe.
+- **What the new tests hold still.** `ingest` picks the lone attachment of a turn, takes
+  the one you name, and refuses rather than guesses when a name is absent, ambiguous or
+  missing among several. A model reply survives being fenced in backticks and is refused
+  when it is unparseable, not an object, or shaped wrong. `search` refuses an empty query
+  and a `k` outside its range, and keeps answering when the keyword side of the index is
+  damaged or the query has nothing to match on. `lint` names the frontmatter field that
+  is wrong instead of failing opaquely, and a page linking only to itself is still an
+  orphan. A page reached through a symlink out of the bundle is refused before anything
+  is written, and an image is ingested only when `ocr=true` is asked for.
+
 ## v0.14.46 — 2026-09-16 — links survive the trip in both directions
 
 - **A link written from a subfolder stops lint-ing as broken.** The maintenance prompt
