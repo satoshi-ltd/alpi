@@ -682,6 +682,351 @@ def test_a_page_pointing_outside_the_bundle_is_one_finding_not_a_dead_walk(
     assert [r["path"] for r in kb.search_knowledge(tmp_home, "polaris", k=5)]
 
 
+def _linked_bundle(tmp_path: Path) -> Path:
+    root = _bundle(tmp_path)
+    (root / "projects").mkdir()
+    (root / "concepts" / "widget.md").write_text(_page("Widget", "# Widget"))
+    _index_with(
+        root,
+        "# Knowledge Index\n\n- [Polaris](concepts/polaris.md)\n- [Widget](concepts/widget.md)\n",
+    )
+    return root
+
+
+def _index_with(root: Path, body: str) -> None:
+    (root / "index.md").write_text(_page("Knowledge Index", body, page_type="note"))
+
+
+@pytest.mark.parametrize(
+    "sample",
+    [
+        "# Index\n\n- [Polaris](concepts/polaris.md)\n\n```md\n[Ghost](concepts/ghost.md)\n```\n",
+        "# Index\n\n- [Polaris](concepts/polaris.md)\n\n~~~\n[Ghost](concepts/ghost.md)\n~~~\n",
+        "# Index\n\n- [Polaris](concepts/polaris.md)\n\nWrite `[Ghost](concepts/ghost.md)` like this.\n",
+    ],
+)
+def test_a_link_shown_as_code_is_not_a_link(tmp_path: Path, sample) -> None:
+    root = _bundle(tmp_path)
+    _index_with(root, sample)
+
+    assert kb.lint_knowledge(root)["issues"] == []
+
+
+@pytest.mark.parametrize(
+    "sample",
+    [
+        "````md\n```\n[Ghost](concepts/ghost.md)\n```\n````\n",
+        "```md\n``` not a close\n[Ghost](concepts/ghost.md)\n```\n",
+        "````md\n[Ghost](concepts/ghost.md)\n````\n",
+        "~~~md\n[Ghost](concepts/ghost.md)\n~~~\n",
+        "~~~md\n```\n[Ghost](concepts/ghost.md)\n```\n~~~\n",
+    ],
+)
+def test_a_fence_closes_only_the_way_commonmark_says(tmp_path: Path, sample) -> None:
+    root = _bundle(tmp_path)
+    _index_with(root, f"# Index\n\n- [Polaris](concepts/polaris.md)\n\n{sample}")
+
+    assert kb.lint_knowledge(root)["issues"] == []
+
+
+def test_the_normalizer_leaves_a_longer_fence_alone(tmp_path: Path) -> None:
+    root = _linked_bundle(tmp_path)
+    body = "# Alpha\n\n````md\n```\n[Widget](concepts/widget.md)\n```\n````\n"
+
+    kb._apply_maintenance(
+        root,
+        _proposal(_proposed("projects/alpha.md", title="Alpha", page_type="project", body=body)),
+        "",
+        seen_full=frozenset(),
+    )
+
+    assert "[Widget](concepts/widget.md)" in (root / "projects" / "alpha.md").read_text()
+
+
+@pytest.mark.parametrize("reference", ["[[concepts/widget]]", "[[concepts/widget.md]]", "[[widget]]"])
+def test_a_wikilink_from_a_subfolder_resolves_from_the_bundle_root(
+    tmp_path: Path, reference,
+) -> None:
+    root = _linked_bundle(tmp_path)
+    (root / "projects" / "alpha.md").write_text(
+        _page("Alpha", f"# Alpha\n\nUses {reference}.", page_type="project"),
+    )
+    _index_with(
+        root,
+        "# Knowledge Index\n\n- [Polaris](concepts/polaris.md)\n- [Alpha](projects/alpha.md)\n",
+    )
+
+    assert kb.lint_knowledge(root)["issues"] == []
+
+
+@pytest.mark.parametrize(
+    "definition",
+    [
+        "[the widget]: ../concepts/widget.md",
+        "[the   widget]: ../concepts/widget.md",
+        "[The Widget]: ../concepts/widget.md",
+        "[the widget]:\n    ../concepts/widget.md",
+        "[the widget]: <../concepts/widget.md>",
+    ],
+)
+def test_a_reference_definition_matches_the_way_commonmark_says(
+    tmp_path: Path, definition,
+) -> None:
+    root = _linked_bundle(tmp_path)
+    (root / "projects" / "alpha.md").write_text(
+        _page("Alpha", f"# Alpha\n\nUses [the widget].\n\n{definition}\n", page_type="project"),
+    )
+    _index_with(
+        root,
+        "# Knowledge Index\n\n- [Polaris](concepts/polaris.md)\n- [Alpha](projects/alpha.md)\n",
+    )
+
+    assert kb.lint_knowledge(root)["issues"] == []
+
+
+def test_a_definition_separated_by_a_blank_line_is_not_a_definition(tmp_path: Path) -> None:
+    root = _linked_bundle(tmp_path)
+    (root / "projects" / "alpha.md").write_text(
+        _page(
+            "Alpha",
+            "# Alpha\n\nUses [the widget].\n\n[the widget]:\n\n../concepts/widget.md\n",
+            page_type="project",
+        ),
+    )
+    _index_with(
+        root,
+        "# Knowledge Index\n\n- [Polaris](concepts/polaris.md)\n- [Alpha](projects/alpha.md)\n",
+    )
+
+    messages = [i["message"] for i in kb.lint_knowledge(root)["issues"]]
+
+    assert any("orphan" in m and "widget" in i["path"] for i, m in zip(kb.lint_knowledge(root)["issues"], messages))
+
+
+@pytest.mark.parametrize(
+    "reference",
+    ["[[widget]]", "[[concepts/widget]]", "[[widget|The widget]]", "[[concepts/widget.md]]"],
+)
+def test_a_wikilink_counts_as_an_edge(tmp_path: Path, reference) -> None:
+    root = _linked_bundle(tmp_path)
+    _index_with(root, f"# Index\n\n- [Polaris](concepts/polaris.md)\n- {reference}\n")
+
+    assert kb.lint_knowledge(root)["issues"] == []
+
+
+@pytest.mark.parametrize(
+    "usage",
+    ["[The widget][w]", "[w][]", "[w]"],
+)
+def test_a_reference_link_counts_as_an_edge(tmp_path: Path, usage) -> None:
+    root = _linked_bundle(tmp_path)
+    _index_with(
+        root,
+        f"# Index\n\n- [Polaris](concepts/polaris.md)\n- {usage}\n\n[w]: concepts/widget.md\n",
+    )
+
+    assert kb.lint_knowledge(root)["issues"] == []
+
+
+@pytest.mark.parametrize(
+    "sample",
+    [
+        "Run `npm i to bootstrap.\n\n- [Polaris](concepts/polaris.md)\n\nThen `npm test`.\n",
+        "- [Polaris](concepts/polaris.md)\n\n> ~~~md\n> [Ghost](concepts/ghost.md)\n> ~~~\n",
+        "- [Polaris](concepts/polaris.md)\n\n1. Example:\n\n    ~~~md\n    [Ghost](concepts/ghost.md)\n    ~~~\n",
+        "- [Polaris](concepts/polaris.md)\n\nExample:\n\n    [Ghost](concepts/ghost.md)\n\nDone.\n",
+        "- [Polaris](concepts/polaris.md)\n\n\t~~~md\n\t[Ghost](concepts/ghost.md)\n\t~~~\n",
+        "```\naa\n```\n\n- [Polaris](concepts/polaris.md)\n",
+        "- [Polaris](concepts/polaris.md)\n\n![Logo][logo]\n\n[logo]: assets/logo.png\n",
+        "- [Polaris](concepts/polaris.md)\n\n[Summary]: The widget ships next week.\n\nSee the [Summary] above.\n",
+    ],
+)
+def test_the_link_graph_reads_a_page_the_way_a_markdown_reader_would(tmp_path: Path, sample) -> None:
+    root = _bundle(tmp_path)
+    _index_with(root, f"# Knowledge Index\n\n{sample}")
+
+    assert kb.lint_knowledge(root)["issues"] == []
+
+
+@pytest.mark.parametrize(
+    "reference",
+    ["[[polaris|The [good] one]]", "[[polaris|Note [1]]]", "[[/concepts/polaris]]", "[[concepts/Polaris]]"],
+)
+def test_a_wikilink_survives_the_shapes_obsidian_writes(tmp_path: Path, reference) -> None:
+    root = _bundle(tmp_path)
+    _index_with(root, f"# Knowledge Index\n\n- {reference}\n")
+
+    assert kb.lint_knowledge(root)["issues"] == []
+
+
+def test_an_attachment_embed_keeps_its_own_extension(tmp_path: Path) -> None:
+    root = _bundle(tmp_path)
+    (root / "diagram.png").write_bytes(b"not really a png")
+    _index_with(
+        root,
+        "# Knowledge Index\n\n- [Polaris](concepts/polaris.md)\n\n![[diagram.png]]\n",
+    )
+
+    assert kb.lint_knowledge(root)["issues"] == []
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "# Alpha\n\nExample:\n\n    [Widget](concepts/widget.md)\n\nDone.\n",
+        "# Alpha\n\n> ~~~md\n> [Widget](concepts/widget.md)\n> ~~~\n",
+        "# Alpha\n\n1. Example:\n\n    ```md\n    [Widget](concepts/widget.md)\n    ```\n",
+        "# Alpha\n\n>     [Widget](concepts/widget.md)\n",
+        "# Alpha\n\n- ```markdown\n  [Widget](concepts/widget.md)\n\n  Still inside.\n  ```\n",
+        "# Alpha\n\n- ```markdown\n  [Widget](concepts/widget.md)\n  ```\n",
+        "# Alpha\n\n> Quoted:\n>\n>     [Widget](concepts/widget.md)\n",
+    ],
+)
+def test_the_normalizer_never_edits_code_whatever_holds_it(tmp_path: Path, body) -> None:
+    root = _linked_bundle(tmp_path)
+
+    kb._apply_maintenance(
+        root,
+        _proposal(_proposed("projects/alpha.md", title="Alpha", page_type="project", body=body)),
+        "",
+        seen_full=frozenset(),
+    )
+
+    assert "[Widget](concepts/widget.md)" in (root / "projects" / "alpha.md").read_text()
+
+
+@pytest.mark.parametrize(
+    "link",
+    ["[[../concepts/widget]]", "[[../concepts/widget.md]]", "[[../concepts/widget|Widget]]"],
+)
+def test_a_wikilink_written_relative_still_resolves_from_its_own_page(tmp_path: Path, link) -> None:
+    root = _linked_bundle(tmp_path)
+    (root / "projects" / "alpha.md").write_text(
+        _page("Alpha", f"# Alpha\n\nSee {link}.\n", page_type="project"),
+    )
+    _index_with(
+        root,
+        "# Knowledge Index\n\n- [Polaris](concepts/polaris.md)\n- [Widget](concepts/widget.md)\n"
+        "- [Alpha](projects/alpha.md)\n",
+    )
+
+    links = kb._extract_links(
+        root, root / "projects" / "alpha.md", (root / "projects" / "alpha.md").read_text(),
+        pages={"concepts/widget.md", "concepts/polaris.md", "projects/alpha.md", "index.md"},
+    )
+
+    assert [entry["target"] for entry in links if not entry["external"]] == ["concepts/widget.md"]
+    assert kb.lint_knowledge(root)["issues"] == []
+
+
+def test_a_wikilink_written_from_the_vault_root_still_resolves(tmp_path: Path) -> None:
+    root = _linked_bundle(tmp_path)
+    (root / "projects" / "alpha.md").write_text(
+        _page("Alpha", "# Alpha\n\nSee [[concepts/widget]] and [[polaris]].\n", page_type="project"),
+    )
+    _index_with(
+        root,
+        "# Knowledge Index\n\n- [Polaris](concepts/polaris.md)\n- [Widget](concepts/widget.md)\n"
+        "- [Alpha](projects/alpha.md)\n",
+    )
+
+    assert kb.lint_knowledge(root)["issues"] == []
+
+
+def test_a_bracketed_phrase_without_a_definition_is_not_a_link(tmp_path: Path) -> None:
+    root = _linked_bundle(tmp_path)
+    _index_with(
+        root,
+        "# Index\n\n- [Polaris](concepts/polaris.md)\n- [Widget](concepts/widget.md)\n\n"
+        "A sentence with [an aside] and [another one] in it.\n",
+    )
+
+    assert kb.lint_knowledge(root)["issues"] == []
+
+
+def test_an_ambiguous_wikilink_is_not_guessed(tmp_path: Path) -> None:
+    root = _linked_bundle(tmp_path)
+    (root / "projects" / "widget.md").write_text(_page("Widget project", "# Widget", page_type="project"))
+    _index_with(
+        root,
+        "# Index\n\n- [Polaris](concepts/polaris.md)\n- [Widget](concepts/widget.md)\n- [[widget]]\n",
+    )
+
+    messages = [i["message"] for i in kb.lint_knowledge(root)["issues"]]
+
+    assert any("orphan" in m for m in messages)
+    assert any("broken link: widget" in m for m in messages)
+
+
+def test_a_root_relative_link_written_from_a_subfolder_is_pointed_at_the_real_page(
+    tmp_path: Path,
+) -> None:
+    root = _linked_bundle(tmp_path)
+
+    kb._apply_maintenance(
+        root,
+        _proposal(_proposed(
+            "projects/alpha.md", title="Alpha", page_type="project",
+            body="# Alpha\n\nSee [Widget](concepts/widget.md).",
+        )),
+        "",
+        seen_full=frozenset(),
+    )
+
+    body = (root / "projects" / "alpha.md").read_text()
+    assert "](../concepts/widget.md)" in body
+    assert kb.lint_knowledge(root)["issues"] == []
+
+
+def test_the_normalizer_leaves_correct_dead_and_quoted_links_alone(tmp_path: Path) -> None:
+    root = _linked_bundle(tmp_path)
+
+    kb._apply_maintenance(
+        root,
+        _proposal(_proposed(
+            "projects/alpha.md", title="Alpha", page_type="project",
+            body=(
+                "# Alpha\n\n"
+                "- [Right](../concepts/widget.md)\n"
+                "- [Gone](concepts/missing.md)\n"
+                "- [Away](https://example.com/concepts/widget.md)\n\n"
+                "```md\n[Sample](concepts/widget.md)\n```\n"
+            ),
+        )),
+        "",
+        seen_full=frozenset(),
+    )
+
+    body = (root / "projects" / "alpha.md").read_text()
+    assert "- [Right](../concepts/widget.md)" in body
+    assert "- [Gone](concepts/missing.md)" in body
+    assert "- [Away](https://example.com/concepts/widget.md)" in body
+    assert "[Sample](concepts/widget.md)" in body
+
+
+def test_a_link_to_a_page_the_same_proposal_writes_is_normalized_too(tmp_path: Path) -> None:
+    root = _linked_bundle(tmp_path)
+
+    kb._apply_maintenance(
+        root,
+        _proposal(
+            _proposed("projects/alpha.md", title="Alpha", page_type="project",
+                      body="# Alpha\n\nSee [Beta](concepts/beta.md)."),
+            _proposed("concepts/beta.md", title="Beta", body="# Beta"),
+        ),
+        "",
+        seen_full=frozenset(),
+    )
+
+    assert "](../concepts/beta.md)" in (root / "projects" / "alpha.md").read_text()
+    assert kb.lint_knowledge(root)["issues"] == []
+
+
+def test_the_maintain_prompt_states_the_link_convention() -> None:
+    assert "../concepts/widget.md" in kb._MAINTAIN_PROMPT
+    assert "relative to the page holding them" in kb._MAINTAIN_PROMPT
+
+
 def test_knowledge_lint_reports_invalid_frontmatter(tmp_path: Path) -> None:
     root = _bundle(tmp_path)
     (root / "concepts" / "broken.md").write_text(

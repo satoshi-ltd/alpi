@@ -383,6 +383,17 @@ The bundle uses minimal YAML frontmatter, relative Markdown links,
 and required `index.md` / `log.md`. It is never auto-injected into the system
 prompt; access happens only through `knowledge` tool output.
 
+Links resolve relative to the page holding them, the way GitHub, Obsidian and VS
+Code resolve them, and that is the only form alpi writes. The link graph reads
+more than it writes: bare, angle-bracketed and percent-encoded destinations,
+`[[wikilinks]]` (by path, or by page name when it is unambiguous) and CommonMark
+reference links, while links inside fenced blocks or code spans are examples, not
+edges. `maintain` also repoints a proposed link that is written from the bundle
+root onto the page it plainly means. Two rules are alpi's own rather than
+Markdown's, and are the usual reasons an imported vault fails `lint`: every page
+needs an inbound link, and the `type` frontmatter key collides with Hugo's
+reserved layout key if the same tree is published with Hugo.
+
 ### Session recall (`alpi/tools/recall.py`)
 
 Recall over **past conversations**, the conversational-memory peer of knowledge recall, in three layers: lexical find (`session_search`, term counts over `sessions/*.json`), exact browse (`session_read`, no model call), and opt-in semantic search (`index_sessions` / `recall_sessions`) for fuzzy "when did we discuss X / what did we decide about Y".

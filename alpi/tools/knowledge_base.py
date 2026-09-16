@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import posixpath
 import re
 import sqlite3
 from datetime import date, datetime, timezone
@@ -42,6 +43,19 @@ _LINK_RE = re.compile(
     r"(?<!!)\[" + _LINK_TEXT + r"\]\(\s*(?:<([^>]*)>|([^)\s]+))(?:\s+\"[^\"]*\")?\s*\)"
 )
 _TEXT_ESCAPE_RE = re.compile(r"([\[\]\\])")
+_CODE_SPAN_RE = re.compile(r"(?<!`)(`+)(?!`)(?:(?!\n[ \t]*\n).)+?(?<!`)\1(?!`)", re.DOTALL)
+_FENCE_RE = re.compile(r"^(`{3,}|~{3,})")
+_CONTAINER_RE = re.compile(r"^((?:[ \t]*>)*)(.*)$")
+_LIST_MARKER_RE = re.compile(r"^[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+")
+_IMAGE_RE = re.compile(r"!\[" + _LINK_TEXT + r"\](?:\([^)]*\)|\[[^\]]*\])?")
+_WIKILINK_RE = re.compile(r"\[\[\s*([^\[\]|]+?)\s*(?:\|(?:(?!\]\])[\s\S])*?)?\]\]")
+_REF_DEF_RE = re.compile(
+    r"^ {0,3}\[([^\]]+)\]:[ \t]*(?:\n[ \t]*)?(?:<([^>]*)>|(\S+))"
+    r"[ \t]*(?:\"[^\"]*\"|'[^']*'|\([^)]*\))?[ \t]*$",
+    re.MULTILINE,
+)
+_LABEL_WS_RE = re.compile(r"\s+")
+_REF_USE_RE = re.compile(r"(?<!!)\[(" + _LINK_TEXT + r")\](?:\[([^\]]*)\])?")
 _TOKEN_RE = re.compile(r"[A-Za-z0-9_]{2,}")
 _INVISIBLE_RE = re.compile("[\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]")
 _SECRET_FINDING_TERMS = (
@@ -177,7 +191,7 @@ def _meta_issues(meta: dict[str, Any]) -> list[str]:
     return issues
 
 
-def _parse_page(root: Path, path: Path) -> dict[str, Any]:
+def _parse_page(root: Path, path: Path, pages: set[str] | None = None) -> dict[str, Any]:
     rel = _rel(root, path)
     text = path.read_text(encoding="utf-8")
     meta, body = _frontmatter_parts(text)
@@ -189,7 +203,7 @@ def _parse_page(root: Path, path: Path) -> dict[str, Any]:
         "meta": meta,
         "body": body,
         "text": text,
-        "links": _extract_links(root, path, body),
+        "links": _extract_links(root, path, body, pages),
     }
 
 
@@ -203,23 +217,146 @@ def _skip_href(href: str) -> bool:
     )
 
 
-def _extract_links(root: Path, page_path: Path, body: str) -> list[dict[str, Any]]:
+def _blank_line(line: str) -> str:
+    body = line.rstrip("\n")
+    return " " * len(body) + line[len(body):]
+
+
+def _leading_width(text: str) -> int:
+    width = 0
+    for char in text:
+        if char == " ":
+            width += 1
+        elif char == "\t":
+            width += 4 - (width % 4)
+        else:
+            break
+    return width
+
+
+def _mask_code(body: str, *, strict: bool = False) -> str:
+    # Blank out code so a link shown as an example is not read as an edge. Offsets are preserved, so callers can still edit the original text by span. Fences follow CommonMark's closing rules and are recognised inside blockquotes and list items; indented blocks count too. `strict` is for the write side: anything that might be code is masked, because abstaining costs a missed rewrite while guessing rewrites someone's sample.
+    fence: tuple[str, int] | None = None
+    indented = False
+    previous_blank = True
+    out: list[str] = []
+    for line in body.splitlines(keepends=True):
+        prefix, rest = _CONTAINER_RE.match(line.rstrip("\n")).groups()
+        content = _LIST_MARKER_RE.sub("", rest, count=1) if strict else rest
+        stripped = content.strip()
+        marker = _FENCE_RE.match(stripped)
+        if fence is not None:
+            out.append(_blank_line(line))
+            if (
+                marker is not None
+                and marker.group(1)[0] == fence[0]
+                and len(marker.group(1)) >= fence[1]
+                and not stripped[marker.end():].strip()
+            ):
+                fence = None
+            previous_blank = False
+            continue
+        if marker is not None and (strict or _leading_width(content) <= 3):
+            fence = (marker.group(1)[0], len(marker.group(1)))
+            indented = False
+            out.append(_blank_line(line))
+            previous_blank = False
+            continue
+        blank = not stripped
+        deep = _leading_width(content) >= 4
+        if not blank and deep and (strict or (not prefix and (indented or previous_blank))):
+            indented = True
+            out.append(_blank_line(line))
+            previous_blank = False
+            continue
+        if not blank:
+            indented = False
+        elif indented:
+            out.append(_blank_line(line))
+            previous_blank = True
+            continue
+        out.append(line)
+        previous_blank = blank
+    masked = "".join(out)
+    masked = _IMAGE_RE.sub(lambda m: " " * len(m.group(0)), masked)
+    return _CODE_SPAN_RE.sub(lambda m: " " * len(m.group(0)), masked)
+
+
+def _ref_label(label: str) -> str:
+    # CommonMark matches reference labels case-insensitively with internal whitespace collapsed.
+    return _LABEL_WS_RE.sub(" ", label).strip().lower()
+
+
+def _blank(text: str, span: tuple[int, int]) -> str:
+    start, end = span
+    return text[:start] + " " * (end - start) + text[end:]
+
+
+def _resolve_href(
+    root: Path, page_path: Path, raw: str, pages: set[str] | None, *, wiki: bool = False,
+) -> dict[str, Any] | None:
+    if _skip_href(raw):
+        return None
+    # Split the fragment before decoding: a literal # in a filename arrives percent-encoded.
+    target_raw = unquote(raw.split("#", 1)[0].split("?", 1)[0]).strip()
+    if not target_raw:
+        return None
+    base = page_path.parent
+    if wiki and not target_raw.startswith(("./", "../")):
+        target_raw = target_raw.lstrip("/")
+        if not Path(target_raw).suffix:
+            target_raw += ".md"
+        if pages is not None:
+            if "/" in target_raw:
+                matches = [p for p in sorted(pages) if p.lower() == target_raw.lower()]
+            else:
+                stem = Path(target_raw).stem.lower()
+                matches = [p for p in sorted(pages) if Path(p).stem.lower() == stem]
+            if len(matches) == 1:
+                return {"raw": raw, "target": matches[0], "external": False}
+        base = root
+    elif wiki and not Path(target_raw).suffix:
+        target_raw += ".md"
+    target = (base / target_raw).resolve()
+    try:
+        return {"raw": raw, "target": target.relative_to(root.resolve()).as_posix(), "external": False}
+    except ValueError:
+        return {"raw": raw, "target": target_raw, "external": True}
+
+
+def _extract_links(
+    root: Path, page_path: Path, body: str, pages: set[str] | None = None,
+) -> list[dict[str, Any]]:
+    scan = _mask_code(body)
+    found: list[tuple[str, bool]] = []
+
+    for match in _LINK_RE.finditer(scan):
+        group = 1 if match.group(1) is not None else 2
+        found.append((match.group(group).strip(), False))
+        scan = _blank(scan, match.span())
+
+    for match in _WIKILINK_RE.finditer(scan):
+        found.append((match.group(1).strip(), True))
+        scan = _blank(scan, match.span())
+
+    definitions: dict[str, str] = {}
+    for match in _REF_DEF_RE.finditer(scan):
+        dest = match.group(2) if match.group(2) is not None else match.group(3)
+        definitions.setdefault(_ref_label(match.group(1)), (dest or "").strip())
+        scan = _blank(scan, match.span())
+
+    if definitions:
+        for match in _REF_USE_RE.finditer(scan):
+            label = match.group(2) or match.group(1)
+            dest = definitions.get(_ref_label(label))
+            if dest:
+                found.append((dest, False))
+
     out: list[dict[str, Any]] = []
-    for match in _LINK_RE.finditer(body):
-        raw = (match.group(1) if match.group(1) is not None else match.group(2)).strip()
-        if _skip_href(raw):
-            continue
-        # Split the fragment before decoding: a literal # in a filename arrives percent-encoded.
-        target_raw = unquote(raw.split("#", 1)[0].split("?", 1)[0])
-        if not target_raw:
-            continue
-        target = (page_path.parent / target_raw).resolve()
-        try:
-            target_rel = target.relative_to(root.resolve()).as_posix()
-        except ValueError:
-            out.append({"raw": raw, "target": target_raw, "external": True})
-            continue
-        out.append({"raw": raw, "target": target_rel, "external": False})
+    for raw, wiki in found:
+        link = _resolve_href(root, page_path, raw, pages, wiki=wiki)
+        if link is not None:
+            out.append(link)
     return out
 
 
@@ -250,7 +387,7 @@ def lint_knowledge(root: Path) -> dict[str, Any]:
     for path in pages:
         rel = _rel(root, path)
         try:
-            parsed[rel] = _parse_page(root, path)
+            parsed[rel] = _parse_page(root, path, page_set)
         except ValueError as e:
             issues.append(_issue(rel, str(e)))
             continue
@@ -452,13 +589,14 @@ def index_knowledge(
         parsed_pages: dict[str, dict[str, Any]] = {}
 
         pages, escaped = _partition_pages(root)
+        page_set = {_rel(root, p) for p in pages}
         for path in escaped:
             failed.append({"path": path.relative_to(root).as_posix(), "reason": _ESCAPED_PAGE})
         for path in pages:
             rel = _rel(root, path)
             seen.add(rel)
             try:
-                page = _parse_page(root, path)
+                page = _parse_page(root, path, page_set)
             except ValueError as e:
                 if conn.execute("SELECT 1 FROM okf_files WHERE path = ?", (rel,)).fetchone():
                     _delete_page(conn, rel)
@@ -708,6 +846,32 @@ def _safe_rel_page(path: str) -> str:
     return Path(*clean_parts).as_posix()
 
 
+def _normalize_body_links(rel: str, body: str, known: set[str]) -> str:
+    # The prompt says links resolve page-relative, but a model writing from a subfolder still reaches for the bundle-root path; point it at the page it plainly means instead of shipping a link that lints broken.
+    page_dir = posixpath.dirname(rel)
+    if not page_dir:
+        return body
+    scan = _mask_code(body, strict=True)
+    edits: list[tuple[int, int, str]] = []
+    for match in _LINK_RE.finditer(scan):
+        group = 1 if match.group(1) is not None else 2
+        raw = match.group(group).strip()
+        if _skip_href(raw) or raw.startswith("/"):
+            continue
+        head = raw.split("#", 1)[0].split("?", 1)[0]
+        target_raw = unquote(head).strip()
+        if not target_raw:
+            continue
+        as_written = posixpath.normpath(posixpath.join(page_dir, target_raw))
+        if as_written in known or target_raw not in known:
+            continue
+        fixed = quote(posixpath.relpath(target_raw, page_dir), safe="/")
+        edits.append((match.start(group), match.end(group), fixed + raw[len(head):]))
+    for start, end, replacement in reversed(edits):
+        body = body[:start] + replacement + body[end:]
+    return body
+
+
 def _canonical_rel(root: Path, rel: str) -> str:
     # On a case-insensitive filesystem a proposed Concepts/ lands inside concepts/, so record the path the page will really take. The bundle's own names count even before the bundle exists, because creating it is what puts them there.
     standard = {name.lower(): name for name in (*_BUNDLE_FOLDERS, *_REQUIRED_FILES)}
@@ -864,7 +1028,7 @@ def _apply_maintenance(
     if not isinstance(pages, list):
         raise ValueError("proposal.pages must be a list")
     # Validate every page before writing any: a refusal halfway through used to leave earlier pages on disk, unlinked and unlogged, while the tool reported failure.
-    planned: list[tuple[str, str, Path]] = []
+    planned: list[tuple[str, dict[str, Any], str, Path]] = []
     skipped: list[dict[str, str]] = []
     claimed: dict[str, str] = {}
     for raw_page in pages:
@@ -896,22 +1060,27 @@ def _apply_maintenance(
             "updated_at": _now_iso(),
             "sources": [_strip_invisible(str(s)).strip() for s in sources if _strip_invisible(str(s)).strip()],
         }
-        rendered = _render_page(meta, body)
-        findings = _knowledge_safety_findings(rendered)
-        if findings:
-            raise ValueError(f"{rel}: refused to write unsafe knowledge content: {', '.join(findings)}")
         target = (root / rel).resolve()
         if not str(target).startswith(str(root.resolve())):
             raise ValueError(f"{rel}: resolved path escapes knowledge bundle")
         if target.is_file() and rel not in seen_full:
             skipped.append({"path": rel, "reason": _READ_ONLY_REASON})
             continue
-        planned.append((rel, rendered, target))
+        planned.append((rel, meta, body, target))
+
+    known = {_rel(root, p) for p in _partition_pages(root)[0]} | {entry[0] for entry in planned}
+    rendered_pages: list[tuple[str, str, Path]] = []
+    for rel, meta, body, target in planned:
+        rendered = _render_page(meta, _normalize_body_links(rel, body, known))
+        findings = _knowledge_safety_findings(rendered)
+        if findings:
+            raise ValueError(f"{rel}: refused to write unsafe knowledge content: {', '.join(findings)}")
+        rendered_pages.append((rel, rendered, target))
 
     _ensure_bundle(root)
     written: list[str] = []
     sizes: list[dict[str, Any]] = []
-    for rel, rendered, target in planned:
+    for rel, rendered, target in rendered_pages:
         target.parent.mkdir(parents=True, exist_ok=True)
         bytes_before = target.stat().st_size if target.is_file() else 0
         target.write_text(rendered, encoding="utf-8")
@@ -932,11 +1101,12 @@ def _apply_maintenance(
 def _orphan_pages(root: Path) -> list[str]:
     # Mirrors lint's orphan rule exactly, so indexing repairs what lint would report and nothing else.
     pages = _partition_pages(root)[0]
+    page_set = {_rel(root, p) for p in pages}
     inbound: set[str] = set()
     for path in pages:
         rel = _rel(root, path)
         try:
-            parsed = _parse_page(root, path)
+            parsed = _parse_page(root, path, page_set)
         except ValueError:
             continue
         for link in parsed["links"]:
@@ -956,15 +1126,17 @@ def _update_index(root: Path, pages: list[str]) -> None:
             encoding="utf-8",
         )
     text = index.read_text(encoding="utf-8")
+    known = {_rel(root, p) for p in _partition_pages(root)[0]}
     linked = {
-        link["target"] for link in _extract_links(root, index, text) if not link["external"]
+        link["target"] for link in _extract_links(root, index, text, known)
+        if not link["external"]
     }
     additions: list[str] = []
     for rel in pages:
         if rel in linked:
             continue
         try:
-            page = _parse_page(root, root / rel)
+            page = _parse_page(root, root / rel, known)
             title = page["meta"]["title"]
         except Exception:  # noqa: BLE001
             title = Path(rel).stem.replace("-", " ").title()
@@ -1035,7 +1207,7 @@ Return one JSON object only, no prose and no fences:
       "title": "Human title",
       "tags": ["short", "lowercase"],
       "sources": ["optional source reference"],
-      "body": "# Human title\\n\\nConcise Markdown synthesis with relative links when useful."
+      "body": "# Human title\\n\\nConcise Markdown synthesis. Link other pages relative to THIS page: from projects/alpha.md write ../concepts/widget.md, from a page at the root write concepts/widget.md."
     }
   ],
   "log": "One short sentence describing the maintenance change."
@@ -1046,6 +1218,9 @@ A proposed body replaces the whole file: return the complete page and keep every
 fact that still holds, dropping only what the source contradicts or the topic asks
 to remove. Pages marked truncated=true, and existing pages not listed, are
 read-only this run: link to them, never propose them.
+Links resolve relative to the page holding them, as GitHub, Obsidian and VS Code
+resolve them: each related_pages entry gives its path from the bundle root, so a
+page one folder deep reaches it with ../.
 Prefer updating a small number of durable concept/project/person/source pages.
 Do not include secrets, credentials, API keys, tokens, or raw private data.
 Do not create pages for ephemeral session state.

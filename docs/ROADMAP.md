@@ -31,13 +31,11 @@ list targeting v0.14.x patch releases.
 
 Raised by the 2026-08-28 audit of `alpi/tools/knowledge_base.py`. Invariant
 for every item: **the Markdown tree stays the source of truth and SQLite a
-derived, rebuildable index.** Recommended order: KB.5 and KB.7 touch the link
-graph as one unit; KB.8 closes. Each fix lands with its own test.
+derived, rebuildable index.** KB.8 closes the section. Each fix lands with its
+own test.
 
 | ID | Item | Status |
 |---|---|---|
-| KB.5 | The synthesizer prompt stops steering toward broken links. It shows root-relative paths (`concepts/example.md`) while `_extract_links` resolves page-relative, so a page under `projects/` linking `concepts/x.md` lints as broken and loses that edge in every search result (`links` filters `broken=0`). The target also reads as an orphan in the lint `maintain` returns, but that half heals itself since v0.14.43: `maintain` links every page it writes and `index` repairs the rest. The broken link does not heal. Page-relative stays canonical (CommonMark, GitHub, Obsidian, VS Code); the prompt declares the convention with a subfolder example (`../concepts/x.md`) and each `related_pages` entry carries a precomputed href to copy rather than infer. Test: a proposal linking across two subfolders lints clean. | 🔵 |
-| KB.7 | Round-trip with external editors. Export already works (opens as an Obsidian vault; GitHub and VS Code render clean); import only partly. An unquoted `updated_at` is accepted since v0.14.37, and since v0.14.43 the link graph also reads angle-bracketed and percent-encoded destinations and link text carrying escaped or nested brackets. Three shapes stay invisible: `[[wikilinks]]` and CommonMark reference links (`[t][ref]`), whose targets lint as orphans, and links inside fenced code blocks, which lint as real broken links. Recognize the first two and skip the third; never emit either form, alpi keeps writing standard relative links. Note in docs that `type` collides with Hugo's reserved layout key and that the no-orphans rule is alpi's own, the main reason an external vault fails lint. | 🔵 |
 | KB.8 | Close the remaining knowledge test gaps (89% statement coverage on `alpi/tools/knowledge_base.py` today): attachment resolution in ingest, where `_resolve_source` is only exercised through `source_path`, so named, ambiguous, lone, zero and multiple attachments are all unrun; `_parse_llm_json` beyond clean JSON (code-fenced, unparseable, non-object replies); the `k` bounds and empty-query guards in the tool; embedder drift on `index` without `force`; the tool-level `lint`, unknown-action, `EmbedderMismatch` and `KnowledgeRootMismatch` branches, since every lint test calls `lint_knowledge` directly; lint's own `orphan page` finding, which only its `_orphan_pages` mirror covers today; and one `ocr=true` ingest end to end. Separate PR from the fixes above. | 🔵 |
 
 ### Production client exposure

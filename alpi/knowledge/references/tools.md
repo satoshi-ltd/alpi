@@ -142,6 +142,12 @@ Output attachments (MM.2):
   A proposed folder that differs only in case from one that exists lands in the
   existing one, even when that structure is about to be created; two pages aiming at
   the same file, or at `index.md` / `log.md` under any spelling or folder, are refused.
+- Links resolve relative to the page holding them; that is the only form alpi
+  writes. The graph also reads `[[wikilinks]]`, CommonMark reference links and
+  angle-bracketed or percent-encoded destinations, and ignores links inside code,
+  whether fenced (including inside a blockquote or a list), indented or in a span. The no-orphans rule is alpi's own, not Markdown's, and
+  `type` collides with Hugo's reserved layout key — the two usual reasons an
+  imported vault fails `lint`.
 - `knowledge(action="lint", path?)` validates required `index.md` / `log.md`,
   minimal YAML frontmatter, relative Markdown links, and orphan pages. A page that
   resolves outside the bundle (a symlink pointing away) is one finding on that

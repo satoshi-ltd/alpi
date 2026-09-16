@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.14.46 — 2026-09-16 — links survive the trip in both directions
+
+- **A link written from a subfolder stops lint-ing as broken.** The maintenance prompt
+  offered root-relative example paths while links resolve relative to the page holding
+  them, so a page under `projects/` linking `concepts/widget.md` pointed at
+  `projects/concepts/widget.md`: a broken-link finding that never healed, and a page
+  that lost that edge in every search result. The prompt now states the convention with
+  a subfolder example, and a proposed link that is written from the bundle root is
+  repointed at the page it plainly means before the page is written. A link that is
+  already correct, one that resolves nowhere and an external URL are left exactly as
+  written, and so is every line whose place in the page could be code: the rewrite
+  abstains rather than guess inside a container it does not fully model.
+- **An imported vault no longer reads as a wall of false findings.** The link graph saw
+  only inline `[text](dest)` links, so `[[wikilinks]]` and CommonMark reference links
+  were invisible and their targets were reported as orphans, while a link shown as an
+  example inside a fenced block or a code span was reported as a real broken link. All
+  four now behave: wikilinks resolve by path or by page name when the name is
+  unambiguous, keeping an alias, a leading slash or a file's own extension, while one
+  written with `./` or `../` still resolves from the page holding it; reference
+  links resolve through their definitions, matched the way CommonMark matches them, and
+  a definition with prose after it is prose. Code is read as code wherever it sits: a
+  fence closes only under CommonMark's rules, and a fence inside a blockquote or a list,
+  an indented block and a code span are all excluded. A bracketed phrase with no
+  definition behind it is still just prose, and an image is never an edge. alpi keeps
+  writing plain relative links; the extra forms are read, never emitted.
+- The docs now say which rules are alpi's own rather than Markdown's: every page needs
+  an inbound link, and `type` collides with Hugo's reserved layout key.
+
 ## v0.14.45 — 2026-09-16 — a refused page leaves the bundle as it was
 
 - **A maintenance run that refuses one page no longer half-writes the rest.** Pages
