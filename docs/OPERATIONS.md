@@ -159,8 +159,9 @@ alpi doesn't ship silent migrations. When the on-disk schema
 changes, the release notes say so and ask you to move files by
 hand. Today's upgrade rule of thumb:
 
-1. `git pull` + `uv tool install --reinstall .` (or the equivalent
-   with `uv tool install <version>`).
+1. `alpi update` — checks PyPI, shows what changed, and runs the
+   `uv tool` / `pipx` upgrade on confirmation. From a source checkout
+   instead: `git pull` + `uv tool install --reinstall .`.
 2. `alpi doctor` — the Daemon row flags a stale binary.
 3. `alpi daemon restart` — one daemon supervises every profile,
    so a single restart picks up the new code for all of them.
@@ -194,6 +195,15 @@ review:
 4. Bump the floor in ``pyproject.toml`` to the new tested version,
    keep the upper bound one minor ahead (``>=1.83,<1.85`` shape).
 5. ``uv lock``, commit.
+
+**Local verification — every `alpi doctor` run.** The Dependencies rows check the
+installed LiteLLM against the pin recorded in alpi's own package metadata, and every
+file of the distribution against the sha256 digests its installer wrote. A version
+outside the pin or a file that no longer matches its digest is a `fail`, so a cron'd
+doctor exits non-zero on a local swap. A missing `RECORD` warns instead: the check
+says it could not verify rather than pretending it did. This is a tamper check on
+what is already installed, not a substitute for the quarterly review above or for
+`alpi audit` — it knows nothing about advisories.
 
 **CVEs.** `alpi audit` checks installed Python packages against OSV with exact
 versions. Use `alpi audit --offline` on machines that must not make network

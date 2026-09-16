@@ -22,8 +22,8 @@ alpi setup                     # use
 PyPI package is `alpi-agent`; the binary is `alpi`. Alternatives
 and update path → [INSTALL.md](docs/INSTALL.md).
 
-Needs Python ≥ 3.10. The browser tool downloads Chromium
-(~200 MB) the first time it runs — no separate install step.
+Needs Python 3.11–3.13. The browser tool downloads the Chromium
+headless shell (~340 MB) the first time it runs — no separate install step.
 
 Check it works:
 

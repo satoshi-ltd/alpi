@@ -1174,6 +1174,7 @@ Checks:
 - **Service** — daemon installation + PID checks distinguish "installed but dead" from "running" from "not installed".
 - **MCPs** (live) — spawn each configured server, `list_tools`, stop. Parallelised; per-server timeout 8 s.
 - **Security** — sandbox backend binary on PATH (if `tools.terminal.sandbox: true`), approval allowlist count.
+- **Dependencies** — the installed LiteLLM against the pin alpi's own metadata records, and every file of the distribution against the sha256 digests its installer wrote to `RECORD`. Catches a local swap or edit of the one dependency every provider call routes through. The pin row is sync; the file hashing runs in the pool with the network checks, so it never delays the first frame. An absent `RECORD` warns rather than fails — the check reports what it could not verify instead of claiming it did.
 
 Parallelism: the network-bound tasks (IMAP/Gmail/MCPs) submit to a `ThreadPoolExecutor(max_workers=8)`. Sync checks (model, workspace, services, security) run on the main thread while the pool works. Total wall time ≈ slowest single task, not sum — ~5-10 s on a healthy profile.
 

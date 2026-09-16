@@ -706,3 +706,286 @@ def test_run_and_render_gives_the_mcp_probe_the_profile_env(tmp_path: Path, monk
 
     assert seen["env_base"] is not None
     assert seen["env_base"]["BITBUCKET_URL"] == "https://bb.example"
+
+
+def _fake_dist(tmp_path: Path, *, version: str = "1.100.0", files: dict | None = None, record: bool = True):
+    import base64
+    import hashlib
+    from importlib.metadata import PathDistribution
+
+    site = tmp_path / "site-packages"
+    site.mkdir(exist_ok=True)
+    info = site / f"litellm-{version}.dist-info"
+    info.mkdir()
+    (info / "METADATA").write_text(f"Metadata-Version: 2.1\nName: litellm\nVersion: {version}\n")
+    entries = []
+    for rel, text in (files or {"litellm/__init__.py": "completion = 1\n"}).items():
+        target = site / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text)
+        digest = base64.urlsafe_b64encode(hashlib.sha256(text.encode()).digest()).rstrip(b"=").decode()
+        entries.append(f"{rel},sha256={digest},{len(text)}")
+    if record:
+        entries.append(f"{info.name}/RECORD,,")
+        (info / "RECORD").write_text("\n".join(entries) + "\n")
+    return PathDistribution(info), site
+
+
+def _install(monkeypatch, dist, *, pin: str | None = "<1.101,>=1.100.0") -> None:
+    from importlib import metadata
+
+    monkeypatch.setattr(metadata, "distribution", lambda name: dist)
+    monkeypatch.setattr(doctor, "_pinned_specifier", lambda name: pin)
+
+
+def test_the_hot_path_dependency_is_verified_as_installed(tmp_path: Path) -> None:
+    dist = doctor._watched_dist()
+    pin = doctor._check_dependency_pin(dist)
+    files = doctor._check_dependency_files(dist)
+
+    assert [(c.name, c.status) for c in pin] == [("litellm pin", "ok")]
+    assert (files.name, files.status) == ("litellm files", "ok")
+    assert "satisfies" in pin[0].detail
+    assert "match the installer's record" in files.detail
+
+
+def test_the_pin_is_read_from_what_the_package_itself_records() -> None:
+    spec = doctor._pinned_specifier("litellm")
+
+    assert spec is not None
+    assert "1.100" in spec
+    assert doctor._pinned_specifier("a-package-alpi-does-not-require") is None
+
+
+def test_a_swapped_dependency_version_is_refused(tmp_path: Path, monkeypatch) -> None:
+    dist, _ = _fake_dist(tmp_path, version="1.99.0")
+    _install(monkeypatch, dist)
+
+    pin = doctor._check_dependency_pin(doctor._watched_dist())[0]
+
+    assert pin.status == "fail"
+    assert "1.99.0 installed" in pin.detail
+    assert "uv sync" in pin.detail
+
+
+def test_a_rewritten_dependency_file_is_caught(tmp_path: Path, monkeypatch) -> None:
+    dist, site = _fake_dist(tmp_path)
+    (site / "litellm" / "__init__.py").write_text("completion = 1\nimport os; os.system('curl evil')\n")
+    _install(monkeypatch, dist)
+
+    files = doctor._check_dependency_files(doctor._watched_dist())
+
+    assert files.status == "fail"
+    assert "litellm/__init__.py" in files.detail
+    assert "1 of 1 file(s) no longer match" in files.detail
+
+
+def test_a_deleted_dependency_file_is_caught(tmp_path: Path, monkeypatch) -> None:
+    dist, site = _fake_dist(tmp_path)
+    (site / "litellm" / "__init__.py").unlink()
+    _install(monkeypatch, dist)
+
+    files = doctor._check_dependency_files(doctor._watched_dist())
+
+    assert files.status == "fail"
+    assert "litellm/__init__.py" in files.detail
+
+
+def test_many_rewritten_files_are_summarised_rather_than_dumped(tmp_path: Path, monkeypatch) -> None:
+    names = [f"litellm/mod_{i}.py" for i in range(10)]
+    dist, site = _fake_dist(tmp_path, files={name: f"value = {i}\n" for i, name in enumerate(names)})
+    for name in names:
+        (site / name).write_text("tampered\n")
+    _install(monkeypatch, dist)
+
+    files = doctor._check_dependency_files(doctor._watched_dist())
+
+    assert files.status == "fail"
+    assert "10 of 10 file(s) no longer match" in files.detail
+    assert files.detail.count("litellm/mod_") == 3
+    assert "…" in files.detail
+    assert len(files.detail) < 250
+
+
+def test_an_install_with_no_file_record_says_it_cannot_verify(tmp_path: Path, monkeypatch) -> None:
+    dist, _ = _fake_dist(tmp_path, record=False)
+    _install(monkeypatch, dist)
+
+    files = doctor._check_dependency_files(doctor._watched_dist())
+
+    assert files.status == "warn"
+    assert "unverifiable" in files.detail
+
+
+def test_an_install_that_records_no_pin_is_reported_without_a_verdict(tmp_path: Path, monkeypatch) -> None:
+    dist, _ = _fake_dist(tmp_path)
+    _install(monkeypatch, dist, pin=None)
+
+    dist = doctor._watched_dist()
+    pin = doctor._check_dependency_pin(dist)[0]
+
+    assert pin.status == "info"
+    assert "no pin recorded" in pin.detail
+    assert doctor._check_dependency_files(dist).status == "ok"
+
+
+def test_a_pin_is_unreadable_when_alpi_itself_is_not_installed(monkeypatch) -> None:
+    from importlib import metadata
+
+    def absent(name):
+        raise metadata.PackageNotFoundError(name)
+
+    monkeypatch.setattr(metadata, "requires", absent)
+
+    assert doctor._pinned_specifier("litellm") is None
+
+
+def test_a_missing_hot_path_dependency_fails_outright(monkeypatch) -> None:
+    from importlib import metadata
+
+    def absent(name):
+        raise metadata.PackageNotFoundError(name)
+
+    monkeypatch.setattr(metadata, "distribution", absent)
+
+    assert doctor._watched_dist() is None
+    checks = doctor._check_dependency_pin(None)
+
+    assert [c.status for c in checks] == ["fail"]
+    assert "not installed" in checks[0].detail
+
+
+def test_doctor_exits_nonzero_when_the_hot_path_dependency_was_swapped(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    from alpi import service
+
+    _write_cfg(tmp_path, workspace=str(tmp_path))
+    _write_env(tmp_path, OPENROUTER_API_KEY="sk-fake")
+    monkeypatch.setattr(service, "daemon_installed", lambda: False)
+    monkeypatch.setattr(service, "daemon_running_pid", lambda root: None)
+    dist, site = _fake_dist(tmp_path)
+    (site / "litellm" / "__init__.py").write_text("tampered\n")
+    _install(monkeypatch, dist)
+
+    checks = doctor.run_all(tmp_path, "default")
+
+    swapped = next(c for c in checks if c.name == "litellm files")
+    assert swapped.status == "fail"
+    assert doctor.exit_code(checks) == 1
+    assert [c.group for c in checks].index("Dependencies") > [c.group for c in checks].index("Security")
+
+
+def test_a_dependency_version_that_will_not_parse_is_refused(tmp_path: Path, monkeypatch) -> None:
+    dist, _ = _fake_dist(tmp_path, version="not-a-version")
+    _install(monkeypatch, dist)
+
+    pin = doctor._check_dependency_pin(doctor._watched_dist())[0]
+
+    assert pin.status == "fail"
+    assert "not-a-version installed" in pin.detail
+
+
+def test_doctor_reports_both_dependency_rows(tmp_path: Path, monkeypatch) -> None:
+    from alpi import service
+
+    _write_cfg(tmp_path, workspace=str(tmp_path))
+    monkeypatch.setattr(service, "daemon_installed", lambda: False)
+    monkeypatch.setattr(service, "daemon_running_pid", lambda root: None)
+
+    rows = [(c.group, c.name) for c in doctor.run_all(tmp_path, "default")]
+
+    assert ("Dependencies", "litellm pin") in rows
+    assert ("Dependencies", "litellm files") in rows
+
+
+def test_an_unreadable_dependency_file_is_not_called_tampering(tmp_path: Path, monkeypatch) -> None:
+    dist, site = _fake_dist(tmp_path, files={"litellm/a.py": "a = 1\n", "litellm/b.py": "b = 2\n"})
+    (site / "litellm" / "b.py").chmod(0)
+    _install(monkeypatch, dist)
+
+    files = doctor._check_dependency_files(doctor._watched_dist())
+    (site / "litellm" / "b.py").chmod(0o644)
+
+    assert files.status == "warn"
+    assert "could not be read" in files.detail
+    assert "litellm/b.py" in files.detail
+    assert "differ" not in files.detail and "no longer match" not in files.detail
+
+
+def test_a_record_with_nothing_to_hash_is_not_reported_as_verified(tmp_path: Path, monkeypatch) -> None:
+    dist, site = _fake_dist(tmp_path)
+    info = site / "litellm-1.100.0.dist-info"
+    (info / "RECORD").write_text("litellm/__init__.py,,\nlitellm-1.100.0.dist-info/RECORD,,\n")
+    _install(monkeypatch, dist)
+
+    files = doctor._check_dependency_files(doctor._watched_dist())
+
+    assert files.status == "warn"
+    assert "no digest to check against" in files.detail
+
+
+def test_cached_bytecode_that_does_not_come_from_the_source_fails(tmp_path: Path, monkeypatch) -> None:
+    from importlib.util import cache_from_source
+
+    dist, site = _fake_dist(tmp_path)
+    source = site / "litellm" / "__init__.py"
+    cached = Path(cache_from_source(str(source)))
+    cached.parent.mkdir(parents=True, exist_ok=True)
+    cached.write_bytes(b"\x00" * 4 + (0).to_bytes(4, "little") + (1).to_bytes(4, "little") + (1).to_bytes(4, "little") + b"payload")
+    _install(monkeypatch, dist)
+
+    files = doctor._check_dependency_files(doctor._watched_dist())
+
+    assert files.status == "fail"
+    assert "shadowed by cached bytecode" in files.detail
+    assert "litellm/__init__.py" in files.detail
+
+
+def test_bytecode_built_from_the_verified_source_is_accepted(tmp_path: Path, monkeypatch) -> None:
+    from importlib.util import cache_from_source
+
+    dist, site = _fake_dist(tmp_path)
+    source = site / "litellm" / "__init__.py"
+    stat = source.stat()
+    cached = Path(cache_from_source(str(source)))
+    cached.parent.mkdir(parents=True, exist_ok=True)
+    cached.write_bytes(
+        b"\x00" * 4
+        + (0).to_bytes(4, "little")
+        + (int(stat.st_mtime) & 0xFFFFFFFF).to_bytes(4, "little")
+        + (stat.st_size & 0xFFFFFFFF).to_bytes(4, "little")
+        + b"payload"
+    )
+    _install(monkeypatch, dist)
+
+    assert doctor._check_dependency_files(doctor._watched_dist()).status == "ok"
+
+
+def test_a_record_row_pointing_outside_the_distribution_is_refused(tmp_path: Path, monkeypatch) -> None:
+    dist, site = _fake_dist(tmp_path)
+    info = site / "litellm-1.100.0.dist-info"
+    (info / "RECORD").write_text(
+        (info / "RECORD").read_text() + "/etc/hosts,sha256=AAAA,1\n"
+    )
+    _install(monkeypatch, dist)
+
+    files = doctor._check_dependency_files(doctor._watched_dist())
+
+    assert files.status == "fail"
+    assert "/etc/hosts" in files.detail
+
+
+def test_a_check_that_crashes_reports_itself_instead_of_the_report(tmp_path: Path, monkeypatch) -> None:
+    dist, _ = _fake_dist(tmp_path)
+
+    def boom(_):
+        raise RuntimeError("record exploded")
+
+    monkeypatch.setattr(doctor, "_verify_record", boom)
+    _install(monkeypatch, dist)
+
+    files = doctor._check_dependency_files(doctor._watched_dist())
+
+    assert files.status == "warn"
+    assert "record exploded" in files.detail

@@ -83,7 +83,7 @@ with one of them is cut rather than the principle.
 - **Peer.** Another agent that the local profile has pinned, by
   pubkey, in its peer list. Peering is asymmetric by default —
   pinning B from A does not imply A is pinned from B.
-- **Peer list.** A YAML file (`~/.alpi/<profile>/alp/peers.yaml`)
+- **Peer list.** A YAML file (`~/.alpi/alp/peers.yaml` for the default profile, `~/.alpi/profiles/<name>/alp/peers.yaml` for a named one)
   that enumerates the agents this profile will accept traffic
   from and send traffic to, along with per-peer capabilities
   and rate limits.

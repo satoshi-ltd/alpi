@@ -125,7 +125,7 @@ uv tool install alpi-agent==0.2.99 --force
 ## Uninstalling
 
 ```bash
-uv tool uninstall alpi   # or: pipx uninstall alpi
+uv tool uninstall alpi-agent   # or: pipx uninstall alpi-agent
 rm -rf ~/.alpi           # only if you want to drop profiles too
 ```
 

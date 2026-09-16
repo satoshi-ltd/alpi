@@ -77,8 +77,8 @@ The current release ships the full local-to-network shape:
 - Cron + one-shot scheduler hosted by the unified service.
 - MCP client for user-configured local MCP servers.
 - ALP.1: intra-machine agent-to-agent links over Unix sockets.
-- ALP.2: inter-machine links over Noise_XK TCP, with per-peer budget
-  and rate-limit enforcement.
+- ALP.2: inter-machine links over Noise_XK TCP, with per-peer rate
+  limits and the profile's daily USD budget enforced on inbound calls.
 - ALP.3: hub-anchored shared workgroups for multiple alpis and optional
   human participants.
 - Host-plane access for paired desktop / mobile clients over Unix
@@ -101,8 +101,8 @@ During setup, pick a model, paste the relevant key, and pin a
 workspace. For local-only inference, install Ollama first and add it in
 `alpi setup -> Model`.
 
-The browser tool downloads Chromium (~200 MB) on first use,
-cached at `~/.cache/ms-playwright/`. No manual step.
+The browser tool downloads the Chromium headless shell (~340 MB) on
+first use, cached at `~/.cache/ms-playwright/`. No manual step.
 
 Common commands:
 
@@ -235,9 +235,11 @@ alpi is source-available from day one. The agent core is published by
 Apache 2.0 on 2030-04-23, or four years after each version's first
 public release, whichever comes first.
 
-Personal use, research, evaluation, and non-production deployments are
-free. Commercial production deployments, or offering alpi as a hosted,
-embedded, or managed service, are covered by a Satoshi Ltd. commercial
-licence.
+Individuals are free. A natural person running alpi on machines they
+control may use it in production for any personal, research, or
+non-commercial purpose. Legal entities are free for evaluation,
+internal development, and experimentation; production deployment by a
+company, or offering alpi as a hosted, embedded, or managed service,
+needs a Satoshi Ltd. commercial licence.
 
 Commercial enquiries: **info@satoshi-ltd.com**.

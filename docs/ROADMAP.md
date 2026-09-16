@@ -26,7 +26,6 @@ list targeting v0.14.x patch releases.
 |---|---|---|
 | COST.1 | Per-pipeline-run cost telemetry: roll the per-turn settlements already in the workgroup ledger up to the `pipeline_run` boundaries `fold_task_state` computes, so a run and each of its phases carry spend and tokens. Per-turn, per-workgroup, per-connection and per-peer attribution already ship; the run and phase dimension does not, and an operator still sums it by hand from the per-post costs the transcript prints. | 🔵 |
 | LINT.1 | Pin the Ruff rule selection in `pyproject.toml`. The config sets only `line-length` and `target-version`, so the effective rule set moves with whatever Ruff version is installed: a newer one reports 225 findings across `alpi/` and `tests/` that no release introduced, which makes the lint gate unable to separate a regression from a version bump. Choose the selection, settle the backlog it names, and keep it its own change. | 🔵 |
-| BG.1 | `alpi doctor` verifies the installed LiteLLM against the pinned version and hashes, catching a supply-chain swap locally (review cadence stays in [OPERATIONS.md](OPERATIONS.md)). | 🔵 |
 
 ### Production client exposure
 

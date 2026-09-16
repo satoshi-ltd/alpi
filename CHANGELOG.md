@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.14.48 — 2026-09-16 — doctor checks the dependency everything routes through
+
+- **`alpi doctor` now verifies LiteLLM itself, not just that it imports.** Every provider
+  call in alpi — OpenAI, Anthropic, Ollama, OpenRouter, Gemini, Groq, Mistral, DeepSeek —
+  goes through that one package, and nothing on the machine checked that the copy on disk
+  was the copy that was installed. Two new rows close that: the installed version against
+  the pin alpi's own package metadata records, and every file of the distribution against
+  the sha256 digests its installer wrote down. A version outside the pin, an edited file
+  or a deleted one is a failure, so a cron'd doctor exits non-zero on a local swap.
+- **It says what it could not check.** An install whose file record is absent warns rather
+  than claiming a clean bill of health, and a machine where no pin is recorded reports the
+  version without a verdict. The check needs no network and knows nothing about
+  advisories — `alpi audit` still owns those, and the quarterly LiteLLM review still owns
+  deciding which version to pin.
+- The file hashing runs alongside the network checks, so the report still paints its first
+  row immediately.
+- **The documentation now says what the licence actually grants.** The README, the
+  deployment guide and the site all read "non-production deployments are free", which
+  denied individuals the production right the licence gives them: a natural person running
+  alpi on machines they control is covered for any personal, research or non-commercial
+  purpose. Corrected everywhere it appeared.
+- Other documentation corrections a reader could have acted on and been wrong: the
+  uninstall command named the wrong package, the upgrade runbook opened with `git pull`
+  (impossible from a PyPI install), the deployment guide described an `ALPI_YOLO=1`
+  override that does not exist and contradicts the no-override rule, per-peer budgets were
+  advertised where only a per-profile daily cap ships, and the Python floor and Chromium
+  download size were both stale.
+
 ## v0.14.47 — 2026-09-16 — the knowledge subsystem says what it does
 
 - **Every path through knowledge is now pinned by a test.** The subsystem carried the

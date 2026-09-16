@@ -7,7 +7,7 @@ adapt. For the primitives each shape leans on see
 [ALP.md](ALP.md) (the wire protocol).
 
 The shapes below are technical deployment patterns, not pricing tiers.
-Personal use, evaluation, and non-production deployments are free.
+Individuals are free, production included, on machines they control. Companies are free to evaluate and develop; production deployment needs a commercial licence.
 Commercial production deployments are covered by the terms in
 [LICENSE](../LICENSE); contact `info@satoshi-ltd.com` when you are
 planning that rollout.
@@ -347,12 +347,15 @@ with narrow capabilities. Audit trail centralised.
   ships them to the log hub in a format your SIEM consumes. See
   [OPERATIONS.md](OPERATIONS.md) for the log schema.
 - **Cost management.** Per-profile `.env` + model selection means
-  finance can ring-fence spend per team. ALP.2 enforces budgets on
-  peer traffic with daily token / USD caps and per-minute limits.
+  finance can ring-fence spend per team. Each profile enforces its own
+  `budget.daily_usd` cap — USD only, there is no token cap — against every
+  turn, inbound ALP calls included, and each pinned peer carries its own
+  per-minute rate limit.
 - **Sandbox + approval.** The company policy pushes
   `tools.terminal.sandbox: true` into every profile's
-  `config.yaml` at onboarding. Dangerous commands always deny
-  without `ALPI_YOLO=1` (which isn't set).
+  `config.yaml` at onboarding. Dangerous commands are always denied,
+  with no override: no environment variable and no config key re-enables
+  them.
 - **Network posture.** ALP.2 speaks Noise_XK directly over
   Tailscale / WireGuard. No HTTPS, no cert management, no public
   endpoint. If Tailscale goes, alpis can't reach each other —

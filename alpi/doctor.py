@@ -19,7 +19,7 @@ import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Literal
+from typing import Any, Callable, Literal
 
 from alpi import config as cfg_mod
 
@@ -52,6 +52,9 @@ def run_all(home: Path, profile: str) -> list[Check]:
         ("email", lambda: _check_email_live(home)),
         ("mcps", lambda: _check_mcps_live(cfg)),
     ]
+    watched = _watched_dist()
+    if watched is not None:
+        live_specs.append(("dependency files", lambda: [_check_dependency_files(watched)]))
     live: dict[str, list[Check]] = {}
     with ThreadPoolExecutor(max_workers=6) as pool:
         futures = {pool.submit(fn): key for key, fn in live_specs}
@@ -66,6 +69,7 @@ def run_all(home: Path, profile: str) -> list[Check]:
             "services": _check_services(home, profile),
             "alp": _check_alp_integrity(home, cfg),
             "security": _check_security(cfg),
+            "dependencies": _check_dependency_pin(watched),
             "storage": _check_storage(home),
             "assets": _check_assets(home),
         }
@@ -89,6 +93,8 @@ def run_all(home: Path, profile: str) -> list[Check]:
     out.extend(sync_checks["alp"])
     out.extend(live.get("mcps", []))
     out.extend(sync_checks["security"])
+    out.extend(sync_checks["dependencies"])
+    out.extend(live.get("dependency files", []))
     out.extend(sync_checks["storage"])
     out.extend(sync_checks["assets"])
     return out
@@ -372,6 +378,10 @@ def run_and_render(console, home: Path, profile: str, version: str) -> list[Chec
 
     _add_sync(_check_alp_integrity(home, cfg))
     _add_sync(_check_security(cfg))
+    watched = _watched_dist()
+    _add_sync(_check_dependency_pin(watched))
+    if watched is not None:
+        _add_pending("deps:files", "Dependencies", f"{_PINNED_DIST} files")
     _add_sync(_check_storage(home))
     _add_sync(_check_assets(home))
 
@@ -433,6 +443,12 @@ def run_and_render(console, home: Path, profile: str, version: str) -> list[Chec
                 f = pool.submit(_probe_mcp, n, spec, env_base)
                 f.add_done_callback(
                     lambda fu, k=key: _set(k, fu.result()) or live.update(_render())
+                )
+                futures.append(f)
+            if watched is not None:
+                f = pool.submit(_check_dependency_files, watched)
+                f.add_done_callback(
+                    lambda fu: _set("deps:files", fu.result()) or live.update(_render())
                 )
                 futures.append(f)
 
@@ -890,6 +906,175 @@ def _check_credential_copies() -> list[Check]:
             f"{', '.join(copies)} — verify the live store, then delete them by hand (OPERATIONS.md)",
         ))
     return out
+
+
+_PINNED_DIST = "litellm"
+
+
+def _watched_dist():
+    from importlib import metadata
+
+    try:
+        return metadata.distribution(_PINNED_DIST)
+    except metadata.PackageNotFoundError:
+        return None
+
+
+def _pinned_specifier(name: str) -> str | None:
+    from importlib import metadata
+
+    try:
+        required = metadata.requires("alpi-agent") or []
+    except metadata.PackageNotFoundError:
+        return None
+    from packaging.requirements import Requirement
+
+    for raw in required:
+        try:
+            req = Requirement(raw)
+        except Exception:  # noqa: BLE001 — a requirement we cannot parse is not the one we watch
+            continue
+        if req.name.lower() != name.lower():
+            continue
+        if req.marker is not None and not req.marker.evaluate():
+            continue
+        return str(req.specifier) or None
+    return None
+
+
+def _check_dependency_pin(dist) -> list[Check]:
+    if dist is None:
+        return [Check("Dependencies", _PINNED_DIST, "fail",
+                      "not installed — every provider call routes through it")]
+    installed = dist.version or "unknown"
+    spec = _pinned_specifier(_PINNED_DIST)
+    if spec is None:
+        return [Check("Dependencies", f"{_PINNED_DIST} pin", "info",
+                      f"{installed} · no pin recorded for this install")]
+    from packaging.specifiers import SpecifierSet
+    from packaging.version import InvalidVersion, Version
+
+    try:
+        satisfied = Version(installed) in SpecifierSet(spec, prereleases=True)
+    except InvalidVersion:
+        satisfied = False
+    return [Check(
+        "Dependencies", f"{_PINNED_DIST} pin",
+        "ok" if satisfied else "fail",
+        f"{installed} satisfies {spec}" if satisfied else
+        f"{installed} installed, pin requires {spec} — reinstall with `uv sync`",
+    )]
+
+
+def _shadowed_by_bytecode(source: Path) -> bool:
+    # CPython prefers a cached .pyc over the .py and no installer records it, so verified source proves nothing unless the bytecode beside it is derived from that source.
+    from importlib.util import cache_from_source
+
+    try:
+        cached = Path(cache_from_source(str(source)))
+        if not cached.is_file():
+            return False
+        with open(cached, "rb") as fh:
+            header = fh.read(16)
+        if len(header) < 16:
+            return True
+        flags = int.from_bytes(header[4:8], "little")
+        if flags & 0b01:
+            return not flags & 0b10
+        stat = source.stat()
+        return (
+            int.from_bytes(header[8:12], "little") != int(stat.st_mtime) & 0xFFFFFFFF
+            or int.from_bytes(header[12:16], "little") != stat.st_size & 0xFFFFFFFF
+        )
+    except (OSError, ValueError, UnicodeError):
+        return True
+
+
+def _verify_record(dist) -> dict[str, Any] | None:
+    import base64
+    import csv
+    import hashlib
+
+    try:
+        record = dist.read_text("RECORD")
+    except Exception:  # noqa: BLE001 — an unreadable record is the same as an absent one
+        record = None
+    if not record:
+        return None
+    base = Path(dist.locate_file(""))
+    out: dict[str, Any] = {"matched": 0, "changed": [], "unreadable": [], "shadowed": [], "skipped": 0}
+    try:
+        rows = list(csv.reader(record.splitlines()))
+    except Exception:  # noqa: BLE001 — a record we cannot even split is no record at all
+        return None
+    for row in rows:
+        if len(row) < 2 or not row[0] or not row[1].startswith("sha256="):
+            out["skipped"] += 1
+            continue
+        name = row[0]
+        try:
+            target = base / name
+            if Path(name).is_absolute() or not target.is_file():
+                raise ValueError(name)
+            data = target.read_bytes()
+        except OSError:
+            out["unreadable"].append(name)
+            continue
+        except Exception:  # noqa: BLE001 — a row this malformed describes no file we can account for
+            out["changed"].append(name)
+            continue
+        got = base64.urlsafe_b64encode(hashlib.sha256(data).digest()).rstrip(b"=").decode()
+        if got != row[1].split("=", 1)[1]:
+            out["changed"].append(name)
+            continue
+        out["matched"] += 1
+        if name.endswith(".py") and _shadowed_by_bytecode(target):
+            out["shadowed"].append(name)
+    return out
+
+
+def _listed(names: list[str]) -> str:
+    return ", ".join(sorted(names)[:3]) + ("\u2026" if len(names) > 3 else "")
+
+
+def _check_dependency_files(dist) -> Check:
+    # Hashes the whole distribution, so it belongs off the render's critical path; every sibling pool task is exception-total and so is this one.
+    name = f"{_PINNED_DIST} files"
+    installed = (dist.version if dist is not None else "") or "unknown"
+    try:
+        verified = _verify_record(dist) if dist is not None else None
+    except Exception as e:  # noqa: BLE001 — a crash here must fail the check, not the report
+        return Check("Dependencies", name, "warn", f"{installed} · integrity unverifiable — {e}")
+    if verified is None:
+        return Check("Dependencies", name, "warn",
+                     f"{installed} · integrity unverifiable — the installer left no file record")
+
+    matched, changed = verified["matched"], verified["changed"]
+    shadowed, unreadable = verified["shadowed"], verified["unreadable"]
+    if changed:
+        return Check(
+            "Dependencies", name, "fail",
+            f"{len(changed)} of {matched + len(changed)} file(s) no longer match the installer's record: "
+            f"{_listed(changed)} — reinstall with `uv sync` before trusting a provider call",
+        )
+    if shadowed:
+        return Check(
+            "Dependencies", name, "fail",
+            f"{len(shadowed)} file(s) are shadowed by cached bytecode that does not come from them: "
+            f"{_listed(shadowed)} — that bytecode runs instead of the verified source; reinstall with `uv sync`",
+        )
+    if not matched:
+        return Check(
+            "Dependencies", name, "warn",
+            f"{installed} · integrity unverifiable — the file record lists no digest to check against",
+        )
+    if unreadable:
+        return Check(
+            "Dependencies", name, "warn",
+            f"{matched} file(s) match the installer's record · {len(unreadable)} could not be read "
+            f"({_listed(unreadable)}) and were not checked",
+        )
+    return Check("Dependencies", name, "ok", f"{matched} file(s) match the installer's record")
 
 
 def _check_network_exposure(cfg: cfg_mod.Config) -> list[Check]:
