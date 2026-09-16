@@ -467,6 +467,221 @@ def test_maintain_on_another_bundle_reports_the_skip_and_spares_the_index(
     assert [r["path"] for r in kb.search_knowledge(tmp_home, "polaris marker", k=5)] == before
 
 
+def _proposal(*pages, log: str = "Updated.") -> dict:
+    return {"pages": list(pages), "log": log}
+
+
+def _proposed(path: str, *, title: str = "Example", page_type: str = "concept", body: str = "# Example") -> dict:
+    return {"path": path, "type": page_type, "title": title, "tags": [], "sources": [], "body": body}
+
+
+def test_a_case_variant_folder_lands_in_the_one_that_exists(tmp_path: Path) -> None:
+    root = _bundle(tmp_path)
+
+    applied = kb._apply_maintenance(
+        root, _proposal(_proposed("Concepts/Example.md")), "", seen_full=frozenset(),
+    )
+
+    assert applied["written"] == ["concepts/Example.md"]
+    assert (root / "concepts" / "Example.md").is_file()
+    # Listing by name, not by lookup: a case-insensitive filesystem answers exists() for either spelling.
+    assert "Concepts" not in {entry.name for entry in root.iterdir()}
+    assert "](concepts/Example.md)" in (root / "index.md").read_text()
+    assert kb.lint_knowledge(root)["issues"] == []
+
+
+def test_a_case_variant_of_an_existing_page_is_skipped_not_forked(tmp_path: Path) -> None:
+    root = _bundle(tmp_path)
+    before = (root / "concepts" / "polaris.md").read_text()
+
+    applied = kb._apply_maintenance(
+        root, _proposal(_proposed("Concepts/Polaris.md", body="# Overwritten")), "", seen_full=frozenset(),
+    )
+
+    assert applied["written"] == []
+    assert [s["path"] for s in applied["skipped"]] == ["concepts/polaris.md"]
+    assert (root / "concepts" / "polaris.md").read_text() == before
+    assert kb.lint_knowledge(root)["issues"] == []
+
+
+def test_a_proposal_that_fails_halfway_writes_nothing(tmp_path: Path) -> None:
+    root = _bundle(tmp_path)
+    index_before = (root / "index.md").read_text()
+    log_before = (root / "log.md").read_text()
+
+    with pytest.raises(ValueError, match="concepts/bad.md: invalid type 'wibble'"):
+        kb._apply_maintenance(
+            root,
+            _proposal(
+                _proposed("concepts/good.md", title="Good", body="# Good"),
+                _proposed("concepts/bad.md", title="Bad", page_type="wibble", body="# Bad"),
+            ),
+            "",
+            seen_full=frozenset(),
+        )
+
+    assert not (root / "concepts" / "good.md").exists()
+    assert (root / "index.md").read_text() == index_before
+    assert (root / "log.md").read_text() == log_before
+    assert kb.lint_knowledge(root)["issues"] == []
+
+
+@pytest.mark.parametrize(
+    ("first", "second", "message"),
+    [
+        ("concepts/new.md", "concepts/new.md", "already writes concepts/new.md"),
+        ("concepts/New.md", "concepts/new.md", "already writes concepts/New.md"),
+    ],
+)
+def test_two_pages_aiming_at_one_file_are_refused(tmp_path: Path, first, second, message) -> None:
+    root = _bundle(tmp_path)
+    before = sorted(p.relative_to(root).as_posix() for p in root.rglob("*.md"))
+
+    with pytest.raises(ValueError, match=message):
+        kb._apply_maintenance(
+            root,
+            _proposal(
+                _proposed(first, title="First", body="# First"),
+                _proposed(second, title="Second", body="# Second"),
+            ),
+            "",
+            seen_full=frozenset(),
+        )
+
+    assert sorted(p.relative_to(root).as_posix() for p in root.rglob("*.md")) == before
+    assert kb.lint_knowledge(root)["issues"] == []
+
+
+@pytest.mark.parametrize("proposed", ["Index.md", "Log.md", "index.md", "log.md"])
+def test_the_bundle_files_cannot_be_claimed_through_another_spelling(tmp_path: Path, proposed) -> None:
+    root = _bundle(tmp_path)
+    reserved = proposed.lower()
+    before = (root / reserved).read_text()
+
+    with pytest.raises(ValueError, match=f"{reserved} is managed by"):
+        kb._apply_maintenance(
+            root,
+            _proposal(_proposed(proposed, title="Hijack", body="# Hijack")),
+            "",
+            seen_full=frozenset({reserved}),
+        )
+
+    assert (root / reserved).read_text() == before
+
+
+@pytest.mark.parametrize("proposed", ["concepts/Index.md", "projects/Log.md"])
+def test_a_reserved_name_is_refused_in_any_folder_and_any_spelling(tmp_path: Path, proposed) -> None:
+    # _safe_rel_page already refuses concepts/index.md; the capitalised spelling must not be a way in.
+    root = _bundle(tmp_path)
+
+    with pytest.raises(ValueError, match="is managed by"):
+        kb._apply_maintenance(
+            root,
+            _proposal(_proposed(proposed, title="Hijack", body="# Hijack")),
+            "",
+            seen_full=frozenset(),
+        )
+
+    assert not (root / proposed).exists()
+
+
+@pytest.mark.parametrize("proposed", ["Index.md", "Log.md"])
+def test_the_bundle_files_are_reserved_before_the_bundle_exists(tmp_path: Path, proposed) -> None:
+    root = tmp_path / "knowledge"
+
+    with pytest.raises(ValueError, match=f"{proposed.lower()} is managed by"):
+        kb._apply_maintenance(
+            root,
+            _proposal(_proposed(proposed, title="Hijack", body="# Hijack")),
+            "",
+            seen_full=frozenset({"index.md", "log.md"}),
+        )
+
+    assert not root.exists()
+
+
+def test_a_case_variant_folder_folds_into_the_bundle_that_does_not_exist_yet(tmp_path: Path) -> None:
+    root = tmp_path / "knowledge"
+
+    applied = kb._apply_maintenance(
+        root, _proposal(_proposed("Concepts/Example.md")), "", seen_full=frozenset(),
+    )
+
+    assert applied["written"] == ["concepts/Example.md"]
+    assert "Concepts" not in {entry.name for entry in root.iterdir()}
+    assert "](concepts/Example.md)" in (root / "index.md").read_text()
+    assert kb.lint_knowledge(root)["issues"] == []
+
+
+def test_a_refused_proposal_does_not_scaffold_a_new_bundle(tmp_path: Path) -> None:
+    root = tmp_path / "knowledge"
+
+    with pytest.raises(ValueError, match="invalid type"):
+        kb._apply_maintenance(
+            root,
+            _proposal(_proposed("concepts/bad.md", title="Bad", page_type="wibble", body="# Bad")),
+            "",
+            seen_full=frozenset(),
+        )
+
+    assert not root.exists()
+
+
+def test_an_accepted_proposal_still_creates_the_bundle_it_needs(tmp_path: Path) -> None:
+    root = tmp_path / "knowledge"
+
+    applied = kb._apply_maintenance(
+        root,
+        _proposal(_proposed("concepts/good.md", title="Good", body="# Good")),
+        "",
+        seen_full=frozenset(),
+    )
+
+    assert applied["written"] == ["concepts/good.md"]
+    assert (root / "index.md").is_file() and (root / "log.md").is_file()
+    assert kb.lint_knowledge(root)["issues"] == []
+
+
+def test_an_unsafe_page_stops_the_whole_proposal(tmp_path: Path) -> None:
+    root = _bundle(tmp_path)
+
+    with pytest.raises(ValueError, match="refused to write unsafe knowledge content"):
+        kb._apply_maintenance(
+            root,
+            _proposal(
+                _proposed("concepts/first.md", title="First", body="# First"),
+                _proposed(
+                    "concepts/leak.md", title="Leak",
+                    body="# Leak\n\nexport GITHUB_TOKEN=ghp_0123456789abcdefghijklmnopqrstuvwxyzAB\n",
+                ),
+            ),
+            "",
+            seen_full=frozenset(),
+        )
+
+    assert not (root / "concepts" / "first.md").exists()
+
+
+def test_a_page_pointing_outside_the_bundle_is_one_finding_not_a_dead_walk(
+    tmp_home: Path, tmp_path: Path, stub_embedder,
+) -> None:
+    root = _bundle(tmp_path)
+    outside = tmp_path / "outside.md"
+    outside.write_text(_page("Outside", "# Outside"))
+    (root / "concepts" / "escape.md").symlink_to(outside)
+
+    report = kb.lint_knowledge(root)
+
+    assert ("concepts/escape.md", kb._ESCAPED_PAGE) in [(i["path"], i["message"]) for i in report["issues"]]
+    assert report["pages"] >= 3
+
+    summary = kb.index_knowledge(tmp_home, root, embedder=stub_embedder)
+
+    assert {"path": "concepts/escape.md", "reason": kb._ESCAPED_PAGE} in summary["failed_pages"]
+    assert summary["indexed_pages"] >= 1
+    assert [r["path"] for r in kb.search_knowledge(tmp_home, "polaris", k=5)]
+
+
 def test_knowledge_lint_reports_invalid_frontmatter(tmp_path: Path) -> None:
     root = _bundle(tmp_path)
     (root / "concepts" / "broken.md").write_text(

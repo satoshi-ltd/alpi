@@ -1,5 +1,35 @@
 # Changelog
 
+## v0.14.45 — 2026-09-16 — a refused page leaves the bundle as it was
+
+- **A maintenance run that refuses one page no longer half-writes the rest.** Pages
+  were validated and written in the same pass, so a proposal whose second page had a
+  bad path, an unknown type or a secret in it left the first page on disk while the
+  tool reported failure: unlinked, unlogged, and invisible to the index until someone
+  ran `index` again. The agent's natural retry then hit the read-only guard on the page
+  it had already written. Every page is now checked before any is written, so a
+  refusal leaves the bundle exactly as it was, with the same error naming the same
+  page, and a proposal that is refused before anything is written does not create the
+  bundle either: a brand-new knowledge root stays absent instead of being scaffolded
+  for a run that never happened. Two entries aiming at the same file, including two
+  spellings that differ only in case, are refused as well, rather than letting the
+  second quietly overwrite the first.
+- **A folder that differs only in case stops forking the bundle.** A proposed
+  `Concepts/Example.md` landed inside the existing `concepts/` on macOS but was
+  recorded under the proposed spelling, so the index linked a page that was not there:
+  a broken-link finding that never healed, a page counted as an orphan, a missing edge
+  in every search result, and since v0.14.43 a second index line on each run. Proposed
+  paths now fold onto the folders and pages that already exist, and an existing page
+  reached through another spelling is skipped rather than forked into a duplicate.
+  `index.md` and `log.md` stay off limits through every spelling and in every folder:
+  the check runs on the path a page will really take, and the bundle's own names count
+  even before the bundle exists, so `Index.md` proposed into a brand-new root can no
+  longer land on the index that the run itself is about to create.
+- **A page pointing out of the bundle is one finding, not the end of the run.** A
+  symlinked `.md` resolving outside the knowledge root raised a raw path error that
+  aborted the whole `lint` or `index` with zero findings and no clue which file caused
+  it. Both now report that page and carry on with the rest.
+
 ## v0.14.44 — 2026-09-16 — the index survives a bad rebuild and knows whose it is
 
 - **A failed rebuild no longer empties the knowledge index.** Rebuilding dropped the

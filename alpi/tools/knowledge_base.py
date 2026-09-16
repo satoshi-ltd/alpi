@@ -30,6 +30,7 @@ from alpi.tools.workspace import (
 
 _KNOWLEDGE_REL = ("knowledge",)
 _REQUIRED_FILES = ("index.md", "log.md")
+_BUNDLE_FOLDERS = ("concepts", "projects", "people", "sources")
 _ALLOWED_TYPES = frozenset({"concept", "project", "person", "source", "note"})
 _EMBED_BATCH = 64
 _MAX_SNIPPET = 700
@@ -109,6 +110,24 @@ def _iter_pages(root: Path) -> list[Path]:
     if not root.exists() or not root.is_dir():
         return []
     return sorted(p for p in root.rglob("*.md") if p.is_file())
+
+
+def _partition_pages(root: Path) -> tuple[list[Path], list[Path]]:
+    # A symlinked page pointing out of the bundle breaks every root-relative path; report it per page instead of aborting the walk.
+    resolved = root.resolve()
+    inside: list[Path] = []
+    escaped: list[Path] = []
+    for path in _iter_pages(root):
+        try:
+            path.resolve().relative_to(resolved)
+        except ValueError:
+            escaped.append(path)
+        else:
+            inside.append(path)
+    return inside, escaped
+
+
+_ESCAPED_PAGE = "page resolves outside the knowledge bundle"
 
 
 def _frontmatter_parts(text: str) -> tuple[dict[str, Any], str]:
@@ -218,7 +237,9 @@ def lint_knowledge(root: Path) -> dict[str, Any]:
             "issues": [_issue(".", "knowledge root does not exist")],
         }
 
-    pages = _iter_pages(root)
+    pages, escaped = _partition_pages(root)
+    for path in escaped:
+        issues.append(_issue(path.relative_to(root).as_posix(), _ESCAPED_PAGE))
     page_set = {_rel(root, p) for p in pages}
     for required in _REQUIRED_FILES:
         if required not in page_set:
@@ -430,7 +451,10 @@ def index_knowledge(
         seen: set[str] = set()
         parsed_pages: dict[str, dict[str, Any]] = {}
 
-        for path in _iter_pages(root):
+        pages, escaped = _partition_pages(root)
+        for path in escaped:
+            failed.append({"path": path.relative_to(root).as_posix(), "reason": _ESCAPED_PAGE})
+        for path in pages:
             rel = _rel(root, path)
             seen.add(rel)
             try:
@@ -684,6 +708,25 @@ def _safe_rel_page(path: str) -> str:
     return Path(*clean_parts).as_posix()
 
 
+def _canonical_rel(root: Path, rel: str) -> str:
+    # On a case-insensitive filesystem a proposed Concepts/ lands inside concepts/, so record the path the page will really take. The bundle's own names count even before the bundle exists, because creating it is what puts them there.
+    standard = {name.lower(): name for name in (*_BUNDLE_FOLDERS, *_REQUIRED_FILES)}
+    current = root
+    parts: list[str] = []
+    for segment in Path(rel).parts:
+        chosen = segment
+        if current.is_dir():
+            for entry in current.iterdir():
+                if entry.name != segment and entry.name.lower() == segment.lower():
+                    chosen = entry.name
+                    break
+        if chosen == segment and current == root:
+            chosen = standard.get(segment.lower(), segment)
+        parts.append(chosen)
+        current = current / chosen
+    return Path(*parts).as_posix()
+
+
 def _render_page(meta: dict[str, Any], body: str) -> str:
     frontmatter = yaml.safe_dump(meta, sort_keys=False, allow_unicode=True).strip()
     return f"---\n{frontmatter}\n---\n\n{body.strip()}\n"
@@ -704,7 +747,7 @@ def _default_page(page_type: str, title: str, body: str = "") -> str:
 
 def _ensure_bundle(root: Path) -> None:
     root.mkdir(parents=True, exist_ok=True)
-    for folder in ("concepts", "projects", "people", "sources"):
+    for folder in _BUNDLE_FOLDERS:
         (root / folder).mkdir(exist_ok=True)
     index = root / "index.md"
     if not index.exists():
@@ -817,17 +860,24 @@ def _apply_maintenance(
     *,
     seen_full: frozenset[str],
 ) -> dict[str, Any]:
-    _ensure_bundle(root)
     pages = proposal.get("pages") or []
     if not isinstance(pages, list):
         raise ValueError("proposal.pages must be a list")
-    written: list[str] = []
-    sizes: list[dict[str, Any]] = []
+    # Validate every page before writing any: a refusal halfway through used to leave earlier pages on disk, unlinked and unlogged, while the tool reported failure.
+    planned: list[tuple[str, str, Path]] = []
     skipped: list[dict[str, str]] = []
+    claimed: dict[str, str] = {}
     for raw_page in pages:
         if not isinstance(raw_page, dict):
             raise ValueError("each proposed page must be an object")
-        rel = _safe_rel_page(str(raw_page.get("path") or ""))
+        rel = _canonical_rel(root, _safe_rel_page(str(raw_page.get("path") or "")))
+        # Both checks belong after the fold: Index.md and a second new.md only become reserved or duplicate once they are resolved to the path they will really take.
+        if Path(rel).name.lower() in _REQUIRED_FILES:
+            raise ValueError(f"{Path(rel).name} is managed by knowledge(action='maintain')")
+        clash = claimed.get(rel.lower())
+        if clash is not None:
+            raise ValueError(f"{rel}: the proposal already writes {clash}")
+        claimed[rel.lower()] = rel
         page_type = str(raw_page.get("type") or "note")
         if page_type not in _ALLOWED_TYPES:
             raise ValueError(f"{rel}: invalid type {page_type!r}")
@@ -856,6 +906,12 @@ def _apply_maintenance(
         if target.is_file() and rel not in seen_full:
             skipped.append({"path": rel, "reason": _READ_ONLY_REASON})
             continue
+        planned.append((rel, rendered, target))
+
+    _ensure_bundle(root)
+    written: list[str] = []
+    sizes: list[dict[str, Any]] = []
+    for rel, rendered, target in planned:
         target.parent.mkdir(parents=True, exist_ok=True)
         bytes_before = target.stat().st_size if target.is_file() else 0
         target.write_text(rendered, encoding="utf-8")
@@ -875,7 +931,7 @@ def _apply_maintenance(
 
 def _orphan_pages(root: Path) -> list[str]:
     # Mirrors lint's orphan rule exactly, so indexing repairs what lint would report and nothing else.
-    pages = _iter_pages(root)
+    pages = _partition_pages(root)[0]
     inbound: set[str] = set()
     for path in pages:
         rel = _rel(root, path)

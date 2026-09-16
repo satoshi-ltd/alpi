@@ -48,3 +48,10 @@ def test_schema_topic_enum_matches_knowledge_topics() -> None:
 def test_tool_is_registered_in_the_tool_index() -> None:
     from alpi import tools
     assert tools.get("alpi_knowledge") is TOOL
+
+
+def test_topic_summaries_cover_exactly_the_packaged_topics() -> None:
+    from alpi import knowledge as knowledge_pack
+    from alpi.tools.knowledge import _TOPIC_SUMMARIES
+
+    assert set(_TOPIC_SUMMARIES) == set(knowledge_pack.TOPICS)

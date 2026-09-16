@@ -24,37 +24,38 @@ list targeting v0.14.x patch releases.
 
 | ID | Item | Status |
 |---|---|---|
-| COST.1 | Per-pipeline cost telemetry: attribute ledger spend and tokens to a pipeline run, replacing manual checkpoint arithmetic. | 🔵 |
+| COST.1 | Per-pipeline-run cost telemetry: roll the per-turn settlements already in the workgroup ledger up to the `pipeline_run` boundaries `fold_task_state` computes, so a run and each of its phases carry spend and tokens. Per-turn, per-workgroup, per-connection and per-peer attribution already ship; the run and phase dimension does not, and an operator still sums it by hand from the per-post costs the transcript prints. | 🔵 |
 | BG.1 | `alpi doctor` verifies the installed LiteLLM against the pinned version and hashes, catching a supply-chain swap locally (review cadence stays in [OPERATIONS.md](OPERATIONS.md)). | 🔵 |
 
 ### Knowledge subsystem
 
 Raised by the 2026-08-28 audit of `alpi/tools/knowledge_base.py`. Invariant
 for every item: **the Markdown tree stays the source of truth and SQLite a
-derived, rebuildable index.** Recommended order: KB.5 to KB.7 touch lint,
-links and frontmatter as one unit; KB.8 closes. Each fix lands with its own test.
+derived, rebuildable index.** Recommended order: KB.5 and KB.7 touch the link
+graph as one unit; KB.8 closes. Each fix lands with its own test.
 
 | ID | Item | Status |
 |---|---|---|
-| KB.5 | The synthesizer prompt stops steering toward broken links. It shows root-relative paths (`concepts/example.md`) while `_extract_links` resolves page-relative, so a page under `projects/` linking `concepts/x.md` lints as broken, the target as orphan, and `broken=1` rows drop out of search. Page-relative stays canonical (CommonMark, GitHub, Obsidian, VS Code); the prompt declares the convention with a subfolder example (`../concepts/x.md`) and each `related_pages` entry carries a precomputed href to copy rather than infer. Test: a proposal linking across two subfolders lints clean. | 🔵 |
-| KB.6 | Lint and apply robustness: normalize path case in the link graph (on APFS a proposed `Concepts/Example.md` lands in the existing `concepts/` and then reports false broken and orphan pages; case-sensitive systems fork a duplicate tree); validate every proposed page before writing any (`_apply_maintenance` stops mid-loop, leaving earlier pages on disk but unindexed and unlogged while the tool reports failure); a symlinked `.md` escaping the root becomes a per-page issue instead of an uncaught `ValueError` that aborts the whole `lint` or `index`; add the `_TOPIC_SUMMARIES` ↔ `TOPICS` symmetry test that `alpi/tools/knowledge.py` claims exists, or drop the claim. | 🔵 |
-| KB.7 | Round-trip with external editors. Export already works (opens as an Obsidian vault; GitHub and VS Code render clean); import only partly (an unquoted `updated_at` is accepted since v0.14.37). `_LINK_RE` only sees inline `[t](dest)`: recognize `[[wikilinks]]` and CommonMark reference links for the graph (never emit them, alpi keeps writing standard relative links) and skip fenced code blocks, which today yield real broken-link findings. Note in docs that `type` collides with Hugo's reserved layout key and that the no-orphans rule is alpi's own, the main reason an external vault fails lint. | 🔵 |
-| KB.8 | Cover the untested rules: the orphan rule, required `index.md`/`log.md` (every test bundle ships both), root drift across two roots, embedder drift without `force`, attachment resolution in ingest, `_parse_llm_json`, `_update_index`, `_append_log`, `k` bounds, the tool-level `index`/`lint` branches and the OCR paths. Separate PR from the fixes above. | 🔵 |
+| KB.5 | The synthesizer prompt stops steering toward broken links. It shows root-relative paths (`concepts/example.md`) while `_extract_links` resolves page-relative, so a page under `projects/` linking `concepts/x.md` lints as broken and loses that edge in every search result (`links` filters `broken=0`). The target also reads as an orphan in the lint `maintain` returns, but that half heals itself since v0.14.43: `maintain` links every page it writes and `index` repairs the rest. The broken link does not heal. Page-relative stays canonical (CommonMark, GitHub, Obsidian, VS Code); the prompt declares the convention with a subfolder example (`../concepts/x.md`) and each `related_pages` entry carries a precomputed href to copy rather than infer. Test: a proposal linking across two subfolders lints clean. | 🔵 |
+| KB.7 | Round-trip with external editors. Export already works (opens as an Obsidian vault; GitHub and VS Code render clean); import only partly. An unquoted `updated_at` is accepted since v0.14.37, and since v0.14.43 the link graph also reads angle-bracketed and percent-encoded destinations and link text carrying escaped or nested brackets. Three shapes stay invisible: `[[wikilinks]]` and CommonMark reference links (`[t][ref]`), whose targets lint as orphans, and links inside fenced code blocks, which lint as real broken links. Recognize the first two and skip the third; never emit either form, alpi keeps writing standard relative links. Note in docs that `type` collides with Hugo's reserved layout key and that the no-orphans rule is alpi's own, the main reason an external vault fails lint. | 🔵 |
+| KB.8 | Close the remaining knowledge test gaps (89% statement coverage on `alpi/tools/knowledge_base.py` today): attachment resolution in ingest, where `_resolve_source` is only exercised through `source_path`, so named, ambiguous, lone, zero and multiple attachments are all unrun; `_parse_llm_json` beyond clean JSON (code-fenced, unparseable, non-object replies); the `k` bounds and empty-query guards in the tool; embedder drift on `index` without `force`; the tool-level `lint`, unknown-action, `EmbedderMismatch` and `KnowledgeRootMismatch` branches, since every lint test calls `lint_knowledge` directly; lint's own `orphan page` finding, which only its `_orphan_pages` mirror covers today; and one `ocr=true` ingest end to end. Separate PR from the fixes above. | 🔵 |
 
 ### Production client exposure
 
 The public host channel already ships: WSS routes, one-time pairing,
-per-device revocation, role/profile scope, abuse bounds, Docker/Caddy topology,
-and attributed administrative activity. Beyond the token hardening above,
-this cycle does not add another security layer to that protocol. It proves
-the supplied design on the first definitive customer deployment.
+per-device revocation, role/profile scope, abuse bounds, device tokens hashed
+at rest with optional inactivity expiry, per-source authentication-failure
+throttling, Docker/Caddy topology, and attributed administrative activity. The
+token hardening shipped in v0.14.39 to v0.14.42; this cycle adds no further
+security layer to that protocol. It proves the supplied design on the first
+definitive customer deployment.
 
 | ID | Item | Status |
 |---|---|---|
 | ONLINE.1 | Deploy one isolated Alpi runtime and volume per mutually untrusted customer; profiles/connections remain an identity and RPC boundary, not tenant isolation. | 🔴 |
 | ONLINE.2 | Put the definitive hostname behind Caddy with a valid public certificate; publish only TCP 80/443 and verify the effective Compose config exposes neither 49200 nor 7423. | 🔴 |
 | ONLINE.3 | Run external Desktop/Mobile acceptance: authenticated WSS RPC succeeds, invalid certificates fail closed, live-stream revocation disconnects only the target device, and direct public probes to 49200/7423 fail. | 🔴 |
-| ONLINE.4 | Establish the operating checks: certificate-expiry monitoring and WebSocket capacity/rejection alerts (including `auth_rate_limited`). The daemon already throttles authentication failures per source address and reads the real client IP from the last `X-Forwarded-For` hop behind Caddy, so the edge needs no per-IP rule of its own. | 🔴 |
+| ONLINE.4 | Establish the operating checks: certificate-expiry monitoring and WebSocket capacity/rejection alerts (`handshakes_rejected`, `device_connections_rejected`, `auth_rate_limited` from `host.network.status`). The daemon already throttles authentication failures per source address; behind a proxy it keys them by the real client only when the proxy's address is listed in `ALPI_HOST_WS_TRUSTED_PROXIES`, which the shipped WSS overlay does by pinning Caddy to a fixed address. The edge needs no per-IP rule of its own as long as the deployment keeps those two in step. | 🔴 |
 
 The cycle is complete only after those checks pass against the real domain and
 firewall, not another local tunnel. Credential-loss and backup-exposure
@@ -80,7 +81,7 @@ usage or a concrete blocker; standing maintenance belongs in
 | SK.2 | Safe skill import (`alpi skill import <dir\|zip>` with preview, scan, and install). Promote when users repeatedly exchange skills outside their own profile. |
 | AI (3) | Structured entity memory with selective injection. Promote when keeping the markdown store coherent becomes a repeated source of defects or selective recall is required. |
 | TTS.1 | Host-served local TTS and a single voice catalog. Promote when voice becomes a sustained client surface. |
-| OKF.1 | Spreadsheet (`.xlsx`) to OKF conversion in the document-publishing path: one Markdown table per sheet, headers from the first row, `type: source`. The container ships neither `openpyxl` nor `pandas`, so this is either a stdlib zip+XML reader or a new image dependency. Promote when a real document set arrives as spreadsheets; the 2026-09 Confluence publishing skill covers Markdown, PDF and Word only. |
+| KB.9 | Spreadsheet (`.xlsx`) ingest into knowledge pages: one Markdown table per sheet, headers from the first row, `type: source`. The container ships neither `openpyxl` nor `pandas`, so this is either a stdlib zip+XML reader or a new image dependency. Promote when a real document set arrives as spreadsheets; the 2026-09 Confluence publishing skill covers Markdown, PDF and Word only. |
 | ATT.1 | Keep an attachment when the user asks to. The host already stages every chat attachment under `<home>/host/attachments/tmp/<id>/<name>` and lists those absolute paths in the message for skills to read, but the staging area is swept after 6 hours, so a file the user wants to keep working with across days has to be re-attached. Add an explicit "keep this file" path (a tool or a `save_attachment` skill hook) that copies a staged attachment into `<workspace>/attachments/` and returns the durable path. Promote when a real flow needs a file to outlive the turn; on 2026-09-14 the Confluence publishing flow did not, because it publishes in the same turn. |
 
 ### Watchlist
@@ -89,13 +90,12 @@ These ideas remain recorded without presenting them as likely next work.
 
 | ID | Revisit only when |
 |---|---|
-| BROWSER.1 | A vetted lightweight backend passes real acceptance and Chromium's measured disk or RAM footprint blocks a target host. |
-| ALP.8 | Users need guaranteed throughput, dynamic worker pools, or capacity negotiation. |
+| BROWSER.1 | A vetted lightweight backend passes real acceptance and the headless-shell footprint (344 MB since v0.14.9, down from 984 MB) still blocks a target host. |
+| ALP.8 | Per-profile capacity (`alp.max_active_workgroups`) and a durable admission queue already ship; users need dynamic worker pools or cross-peer capacity negotiation on top of them. |
 | ALP.3+ | Persistent workgroups demonstrate sustained parallel tasks that targeted tasks and pipeline continuation cannot cover. |
 | AY / BF-8 | A real skill author or import community needs a federated marketplace, versioning, or update flows. |
-| AJ | A concrete site requires browser realism beyond Playwright's current posture. |
-| AQ | A real voice surface needs continuous push-to-talk or hotword loops after host-served TTS exists. |
-| UX.6 / External secrets | Editing non-provider `.env` entries or central key rotation becomes repeated friction. |
+| AQ | A real voice surface needs continuous push-to-talk or hotword loops on top of the read-aloud path that already ships (host-served synthesis, per-profile voice, auto-read). |
+| UX.6 / External secrets | A masked, auditable editor for arbitrary `.env` keys (the RPC already writes any key; only provider keys are listed back), or central key rotation, becomes repeated friction. |
 
 ---
 
@@ -148,16 +148,16 @@ repo.
 | Separate conversation export schema | Host JSON-RPC session verbs are the contract; add export only for a second real consumer. |
 | Pending approval files / skill approval gate | Removed; scanner + inline tool flows are lower friction. |
 | Regex shell sandbox / workspace wall | False security without OS sandboxing; use real sandboxing and sensitive-path denylist. |
-| `.bak` sibling on every `write_file` | Too much workspace clutter; backups stay limited to memory files. |
-| `alpi setup → Identity` wizard / starter packs | Profiles are shaped through chat and examples, not binary templates. |
+| `.bak` sibling on every `write_file` | Too much workspace clutter; backups stay limited to memory and skill files. |
+| Profile identity wizard / starter packs | Profiles are shaped through chat and examples, not binary templates. Unrelated to the shipped `setup → Identity` screen, which only sets the ALP public bio. |
 | Default skills bundle | Runtime capabilities are first-class tools; skills are user-owned. |
 | `alpi run "<prompt>"` | Covered by `alpi chat --once "<prompt>"`. |
 | Auto-reflect on Ctrl+C / post-session `/reflect` | Unsafe or redundant; inline memory/skill updates are the path. |
 | TUI accessibility pass | Desktop is the right accessible surface; terminal APIs are weaker. |
 | `duckduckgo-search` | Deprecated; migrated to `ddgs`. |
-| True multi-root knowledge index | Partitioning the `knowledge.sqlite` tables by root is a large change for a use case nobody has; KB.4 makes the single-root API honest instead. |
-| Renaming the `okf_*` SQLite tables | Internal and never rendered, and the rename runs the drop+rebuild path that KB.3 fixes; revisit only after KB.3 and only with an observable benefit. |
+| True multi-root knowledge index | Partitioning the `knowledge.sqlite` tables by root is a large change for a use case nobody has; v0.14.44 made the single-root API honest instead: the index names the one bundle it holds, refuses to be replaced by another, and `force=true` retargets deliberately. |
+| Renaming the `okf_*` SQLite tables | Internal and never rendered; the rename runs the drop and rebuild path, which v0.14.44 made transactional, so the only bar left is an observable benefit and there is none. |
 | Hard-rejecting page shrinks in `maintain` | Consolidating is legitimate; `maintain` reports `bytes_before`/`bytes_after` per written page instead of blocking. |
 | Root-relative fallback in the knowledge link resolver | Would pass lint while breaking the links in Obsidian, GitHub and VS Code; page-relative stays canonical (KB.5). |
-| Renaming the `type` frontmatter key | Invalidates every existing page over a Hugo layout-key collision that will likely never matter; documented in KB.7. |
+| Renaming the `type` frontmatter key | Invalidates every existing page over a Hugo layout-key collision that will likely never matter; KB.7 will note the collision in the docs instead. |
 | Defining what "OKF" stands for | The acronym was coined without a referent; writing an expansion now would invent a retroactive justification. It is gone from every model- and user-facing string; only the `okf_*` table names keep it. |

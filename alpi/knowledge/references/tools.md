@@ -137,8 +137,15 @@ Output attachments (MM.2):
   body cut by the size caps), otherwise it lands in `skipped` with the reason and
   the file stays untouched. `pages` lists `bytes_before` / `bytes_after` per
   written page: a shrink is visible, tell the user instead of staying quiet.
+  Nothing is written unless every proposed page validates, so a rejected proposal
+  leaves the bundle exactly as it was and does not create one that was not there.
+  A proposed folder that differs only in case from one that exists lands in the
+  existing one, even when that structure is about to be created; two pages aiming at
+  the same file, or at `index.md` / `log.md` under any spelling or folder, are refused.
 - `knowledge(action="lint", path?)` validates required `index.md` / `log.md`,
-  minimal YAML frontmatter, relative Markdown links, and orphan pages.
+  minimal YAML frontmatter, relative Markdown links, and orphan pages. A page that
+  resolves outside the bundle (a symlink pointing away) is one finding on that
+  page, not an aborted run.
 - `knowledge(action="index", path?, force?)` indexes valid pages into separate
   `okf_*` tables with sqlite-vec embeddings plus SQLite FTS. Called without a
   `path` it also creates the required `index.md` / `log.md` and links any page
