@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import shutil
 from pathlib import Path
 
 import pytest
@@ -256,6 +257,214 @@ def test_an_explicit_path_is_read_only_even_when_it_is_the_workspace_bundle(
     assert kb.Knowledge().run(action="index").ok
     assert (root / "index.md").is_file() and (root / "log.md").is_file()
     assert kb.lint_knowledge(root)["issues"] == []
+
+
+class _ExplodingEmbedder:
+    name = "stub-test"
+    dim = 16
+
+    def __init__(self, fail_on_call: int) -> None:
+        self.fail_on_call = fail_on_call
+        self.calls = 0
+        self._real = StubEmbedder()
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        self.calls += 1
+        if self.calls >= self.fail_on_call:
+            raise RuntimeError("embedder exploded")
+        return self._real.embed(texts)
+
+
+def _two_bundles(tmp_home: Path, tmp_path: Path) -> tuple[Path, Path]:
+    primary = _workspace_root(tmp_home, tmp_path)
+    primary.mkdir(parents=True, exist_ok=True)
+    (primary / "concepts").mkdir()
+    (primary / "index.md").write_text(_page("Index", "# Index\n\n- [Polaris](concepts/polaris.md)", page_type="note"))
+    (primary / "log.md").write_text(_page("Log", "# Log", page_type="note"))
+    (primary / "concepts" / "polaris.md").write_text(_page("Polaris", "# Polaris\n\nThe unmistakable polaris marker."))
+
+    other = tmp_path / "other"
+    (other / "concepts").mkdir(parents=True)
+    (other / "index.md").write_text(_page("Index", "# Index\n\n- [Orion](concepts/orion.md)", page_type="note"))
+    (other / "log.md").write_text(_page("Log", "# Log", page_type="note"))
+    (other / "concepts" / "orion.md").write_text(_page("Orion", "# Orion\n\nThe unmistakable orion marker."))
+    return primary, other
+
+
+def test_a_failed_rebuild_leaves_the_previous_index_searchable(
+    tmp_home: Path, tmp_path: Path, stub_embedder,
+) -> None:
+    root = _bundle(tmp_path)
+    (root / "concepts" / "vega.md").write_text(_page("Vega", "# Vega\n\nSecond page body."))
+    (root / "concepts" / "rigel.md").write_text(_page("Rigel", "# Rigel\n\nThird page body."))
+    kb.index_knowledge(tmp_home, root, embedder=stub_embedder)
+    before = [r["path"] for r in kb.search_knowledge(tmp_home, "polaris", k=5)]
+    assert before
+
+    with pytest.raises(RuntimeError, match="embedder exploded"):
+        kb.index_knowledge(tmp_home, root, force=True, embedder=_ExplodingEmbedder(fail_on_call=2))
+
+    assert [r["path"] for r in kb.search_knowledge(tmp_home, "polaris", k=5)] == before
+    conn = kb.open_store(tmp_home)
+    try:
+        assert conn.execute("SELECT COUNT(*) AS n FROM okf_files").fetchone()["n"] == len(_iter_rel(root))
+        assert kb._get_meta(conn, "embedder") == "stub-test"
+    finally:
+        conn.close()
+
+
+def _iter_rel(root: Path) -> list[str]:
+    return [p.name for p in root.rglob("*.md")]
+
+
+def test_indexing_another_bundle_is_refused_instead_of_replacing_the_index(
+    tmp_home: Path, tmp_path: Path, stub_embedder,
+) -> None:
+    primary, other = _two_bundles(tmp_home, tmp_path)
+    kb.index_knowledge(tmp_home, primary, embedder=stub_embedder)
+    before = [r["path"] for r in kb.search_knowledge(tmp_home, "polaris marker", k=5)]
+    assert "concepts/polaris.md" in before
+    other_before = sorted(p.name for p in other.iterdir())
+
+    with pytest.raises(kb.KnowledgeRootMismatch) as refused:
+        kb.index_knowledge(tmp_home, other, embedder=stub_embedder)
+
+    assert str(primary) in str(refused.value)
+    assert "force=true" in str(refused.value)
+    assert [r["path"] for r in kb.search_knowledge(tmp_home, "polaris marker", k=5)] == before
+    assert sorted(p.name for p in other.iterdir()) == other_before
+
+
+def test_force_still_retargets_the_index_to_another_bundle(
+    tmp_home: Path, tmp_path: Path, stub_embedder,
+) -> None:
+    primary, other = _two_bundles(tmp_home, tmp_path)
+    kb.index_knowledge(tmp_home, primary, embedder=stub_embedder)
+
+    kb.index_knowledge(tmp_home, other, force=True, embedder=stub_embedder)
+
+    hits = [r["path"] for r in kb.search_knowledge(tmp_home, "orion marker", k=5)]
+    assert "concepts/orion.md" in hits
+
+
+def test_search_says_which_bundle_the_index_holds_instead_of_answering_from_it(
+    tmp_home: Path, tmp_path: Path, stub_embedder,
+) -> None:
+    primary, other = _two_bundles(tmp_home, tmp_path)
+    kb.index_knowledge(tmp_home, primary, embedder=stub_embedder)
+
+    result = kb.Knowledge().run(action="search", query="polaris marker", path=str(other))
+
+    assert result.ok, result.error
+    body = json.loads(result.output)
+    assert body["results"] == []
+    assert str(primary) in body["hint"]
+    # The same query against its own bundle still answers.
+    own = json.loads(kb.Knowledge().run(action="search", query="polaris marker").output)
+    assert [r["path"] for r in own["results"]]
+
+
+def test_an_index_whose_bundle_vanished_is_adopted_without_a_fight(
+    tmp_home: Path, tmp_path: Path, stub_embedder,
+) -> None:
+    primary, other = _two_bundles(tmp_home, tmp_path)
+    kb.index_knowledge(tmp_home, primary, embedder=stub_embedder)
+    shutil.rmtree(primary)
+
+    summary = kb.index_knowledge(tmp_home, other, embedder=stub_embedder)
+
+    assert summary["root"] == str(other)
+    assert "concepts/orion.md" in [r["path"] for r in kb.search_knowledge(tmp_home, "orion marker", k=5)]
+
+
+def test_search_never_answers_from_an_index_whose_bundle_moved_away(
+    tmp_home: Path, tmp_path: Path, stub_embedder,
+) -> None:
+    primary, other = _two_bundles(tmp_home, tmp_path)
+    kb.index_knowledge(tmp_home, primary, embedder=stub_embedder)
+    shutil.move(str(primary), str(tmp_path / "moved"))
+
+    body = json.loads(kb.Knowledge().run(action="search", query="polaris marker", path=str(other)).output)
+
+    assert body["results"] == []
+    assert str(primary) in body["hint"]
+    with pytest.raises(kb.KnowledgeRootMismatch):
+        kb.search_knowledge(tmp_home, "polaris marker", root=other)
+
+    # Re-indexing is what adopts the new bundle, and only then does search answer for it.
+    kb.index_knowledge(tmp_home, other, embedder=stub_embedder)
+    assert "concepts/orion.md" in [r["path"] for r in kb.search_knowledge(tmp_home, "orion marker", root=other)]
+
+
+def test_the_owner_check_runs_inside_the_rebuild_transaction_before_any_repair(
+    tmp_home: Path, tmp_path: Path, monkeypatch, stub_embedder,
+) -> None:
+    root = _workspace_root(tmp_home, tmp_path)
+    (root / "repos").mkdir(parents=True)
+    (root / "repos" / "card.md").write_text(_card("card"))
+    order: list[str] = []
+    real_stored, real_bundle = kb._stored_root, kb._ensure_bundle
+
+    def stored_spy(conn):
+        order.append(f"check:in_transaction={conn.in_transaction}")
+        return real_stored(conn)
+
+    def bundle_spy(target):
+        order.append("repair")
+        return real_bundle(target)
+
+    monkeypatch.setattr(kb, "_stored_root", stored_spy)
+    monkeypatch.setattr(kb, "_ensure_bundle", bundle_spy)
+
+    kb.index_knowledge(tmp_home, root, embedder=stub_embedder, repair=True)
+
+    assert order == ["check:in_transaction=True", "repair"]
+
+
+def test_search_checks_the_owner_and_reads_the_rows_in_one_snapshot(
+    tmp_home: Path, tmp_path: Path, monkeypatch, stub_embedder,
+) -> None:
+    primary, _other = _two_bundles(tmp_home, tmp_path)
+    kb.index_knowledge(tmp_home, primary, embedder=stub_embedder)
+    in_transaction: list[bool] = []
+    real_get_meta = kb._get_meta
+
+    def meta_spy(conn, key):
+        if key == "knowledge_root":
+            in_transaction.append(conn.in_transaction)
+        return real_get_meta(conn, key)
+
+    monkeypatch.setattr(kb, "_get_meta", meta_spy)
+
+    assert kb.search_knowledge(tmp_home, "polaris marker", root=primary)
+
+    assert in_transaction[-1] is True
+
+
+def test_maintain_on_another_bundle_reports_the_skip_and_spares_the_index(
+    tmp_home: Path, tmp_path: Path, monkeypatch, stub_embedder,
+) -> None:
+    primary, other = _two_bundles(tmp_home, tmp_path)
+    kb.index_knowledge(tmp_home, primary, embedder=stub_embedder)
+    before = [r["path"] for r in kb.search_knowledge(tmp_home, "polaris marker", k=5)]
+
+    proposal = {
+        "pages": [{
+            "path": "concepts/new.md", "type": "concept", "title": "New",
+            "tags": [], "sources": [], "body": "# New\n\nA page.",
+        }],
+        "log": "Added a page.",
+    }
+    monkeypatch.setattr(kb.llm, "complete", lambda **kwargs: _completion(proposal))
+
+    result = kb.Knowledge().run(action="maintain", topic="anything", path=str(other))
+
+    assert result.ok, result.error
+    body = json.loads(result.output)
+    assert body["applied"] is True
+    assert (other / "concepts" / "new.md").is_file()
+    assert str(primary) in body["index"]["skipped"]
+    assert [r["path"] for r in kb.search_knowledge(tmp_home, "polaris marker", k=5)] == before
 
 
 def test_knowledge_lint_reports_invalid_frontmatter(tmp_path: Path) -> None:

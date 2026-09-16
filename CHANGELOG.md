@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.14.44 — 2026-09-16 — the index survives a bad rebuild and knows whose it is
+
+- **A failed rebuild no longer empties the knowledge index.** Rebuilding dropped the
+  tables and committed before embedding a single page, so an embedder that failed
+  halfway through left a valid, permanently empty index with the old one already gone,
+  and search answered "index is empty" until someone re-ran it by hand. The drop,
+  recreate and embed now happen in one transaction: if anything fails, or the process
+  dies, the previous index stays searchable and the run reports the error. Incremental
+  runs were already safe and are unchanged.
+- **The index says whose bundle it holds.** It only ever holds one, but `path` was
+  accepted everywhere and honoured nowhere: searching with a `path` returned the other
+  bundle's pages as if they were yours, and indexing or maintaining a second bundle
+  silently replaced the first one's index. Now search returns no results and a hint
+  naming the bundle the index was built for, indexing another bundle is refused with
+  the command to retarget it, and `maintain` on another bundle still writes its pages
+  and reports that the index was left alone. `force=true` retargets deliberately. A
+  moved workspace, or a path that differs inside a container, is adopted by the next
+  index run without complaint; until that run, search keeps naming the bundle it holds
+  rather than answering with pages that have moved away. The owner check happens inside
+  the same transaction that guards the rebuild, so two indexers cannot interleave, and
+  search reads the owner and the rows it gates in one snapshot.
+
 ## v0.14.43 — 2026-09-15 — the journal keeps the transitions, not the stream
 
 - **Run journals keep `model_state` transitions, not every streamed fragment.** The

@@ -123,7 +123,9 @@ Output attachments (MM.2):
 - Knowledge pages live under `<workspace>/knowledge/`; Markdown is the source of
   truth and `<home>/knowledge.sqlite` is a rebuildable derived index.
 - `knowledge(action="search", query, k=5)` returns synthesized pages for
-  compiled durable concepts/projects/people/sources.
+  compiled durable concepts/projects/people/sources. One bundle is indexed at a
+  time: a `path` the index was not built for yields no results and a hint naming
+  the indexed bundle, never another bundle's pages.
 - `knowledge(action="ingest", source_path?|name?, topic?, ocr?)` reads a source
   file or current-turn attachment, synthesizes Markdown pages, updates
   `index.md` and `log.md`, lints, and refreshes the derived index. It does not
@@ -143,6 +145,8 @@ Output attachments (MM.2):
   nothing points at, so a page written with `write_file` still lints clean. Any
   explicit `path` is indexed read-only. Link destinations are percent-encoded and
   titles escaped, and the graph reads bare, angle-bracketed and encoded forms.
+  Indexing another bundle is refused unless `force=true`, and the rebuild runs in
+  one transaction, so a failure leaves the previous index searchable.
 - Text, HTML, PDF, DOCX, EPUB, and images are supported for ingest. Scanned
   PDF/image OCR requires `ocr=true`.
 

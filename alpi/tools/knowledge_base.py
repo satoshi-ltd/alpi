@@ -51,6 +51,40 @@ _SECRET_FINDING_TERMS = (
 )
 
 
+class KnowledgeRootMismatch(Exception):
+    pass
+
+
+def _stored_root(conn: sqlite3.Connection) -> str | None:
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS okf_meta "
+        "(key TEXT PRIMARY KEY, value TEXT NOT NULL)"
+    )
+    return _get_meta(conn, "knowledge_root")
+
+
+def _root_conflict(stored: str | None, root: Path, *, adopt_missing: bool) -> bool:
+    if not stored:
+        return False
+    previous = Path(stored)
+    if previous == root:
+        return False
+    # Only a rebuild may adopt a vanished root; the rows it left behind still belong to it, so searches keep saying so.
+    return not (adopt_missing and not previous.exists())
+
+
+def _mismatch_error(stored: str, root: Path, *, indexing: bool) -> KnowledgeRootMismatch:
+    fix = (
+        f'run knowledge(action="index", path="{root}", force=true) to rebuild it for this bundle'
+        if indexing
+        else f'run knowledge(action="index", path="{root}", force=true) first'
+    )
+    return KnowledgeRootMismatch(
+        f"Knowledge index was built for {stored}, not {root}. Indexing another bundle "
+        f"replaces it; {fix}."
+    )
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -236,10 +270,9 @@ def _set_meta(conn: sqlite3.Connection, key: str, value: str) -> None:
     )
 
 
-def _create_tables(conn: sqlite3.Connection, dim: int) -> None:
-    conn.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS okf_files (
+# One statement per execute: executescript() commits the open transaction, which would break the single-transaction rebuild.
+_TABLE_DDL = (
+    """CREATE TABLE IF NOT EXISTS okf_files (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           path TEXT NOT NULL UNIQUE,
           mtime REAL NOT NULL,
@@ -249,26 +282,31 @@ def _create_tables(conn: sqlite3.Connection, dim: int) -> None:
           tags TEXT NOT NULL,
           updated_at TEXT NOT NULL,
           sources TEXT NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS okf_chunks (
+        )""",
+    """CREATE TABLE IF NOT EXISTS okf_chunks (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           file_id INTEGER NOT NULL,
           path TEXT NOT NULL,
           chunk_index INTEGER NOT NULL,
           content TEXT NOT NULL,
           FOREIGN KEY(file_id) REFERENCES okf_files(id) ON DELETE CASCADE
-        );
-        CREATE INDEX IF NOT EXISTS okf_chunks_by_path ON okf_chunks(path);
-        CREATE TABLE IF NOT EXISTS okf_links (
+        )""",
+    "CREATE INDEX IF NOT EXISTS okf_chunks_by_path ON okf_chunks(path)",
+    """CREATE TABLE IF NOT EXISTS okf_links (
           source_path TEXT NOT NULL,
           target_path TEXT NOT NULL,
           raw_href TEXT NOT NULL,
           broken INTEGER NOT NULL DEFAULT 0
-        );
-        CREATE INDEX IF NOT EXISTS okf_links_by_source ON okf_links(source_path);
-        CREATE INDEX IF NOT EXISTS okf_links_by_target ON okf_links(target_path);
-        """
-    )
+        )""",
+    "CREATE INDEX IF NOT EXISTS okf_links_by_source ON okf_links(source_path)",
+    "CREATE INDEX IF NOT EXISTS okf_links_by_target ON okf_links(target_path)",
+)
+_DROP_ORDER = ("okf_vec", "okf_fts", "okf_links", "okf_chunks", "okf_files")
+
+
+def _create_tables(conn: sqlite3.Connection, dim: int) -> None:
+    for statement in _TABLE_DDL:
+        conn.execute(statement)
     conn.execute(
         f"CREATE VIRTUAL TABLE IF NOT EXISTS okf_vec USING vec0("
         f"chunk_id INTEGER PRIMARY KEY, embedding float[{dim}])"
@@ -280,15 +318,8 @@ def _create_tables(conn: sqlite3.Connection, dim: int) -> None:
 
 
 def _drop_tables(conn: sqlite3.Connection) -> None:
-    conn.executescript(
-        """
-        DROP TABLE IF EXISTS okf_vec;
-        DROP TABLE IF EXISTS okf_fts;
-        DROP TABLE IF EXISTS okf_links;
-        DROP TABLE IF EXISTS okf_chunks;
-        DROP TABLE IF EXISTS okf_files;
-        """
-    )
+    for table in _DROP_ORDER:
+        conn.execute(f"DROP TABLE IF EXISTS {table}")
 
 
 def _ensure_schema(
@@ -313,7 +344,8 @@ def _ensure_schema(
         _set_meta(conn, "embedder", embedder_name)
         if root is not None:
             _set_meta(conn, "knowledge_root", root)
-        conn.commit()
+        if not index_mode:
+            conn.commit()
         return False
     drift = int(stored_dim) != dim or stored_embedder != embedder_name
     if not index_mode:
@@ -330,7 +362,6 @@ def _ensure_schema(
         _create_tables(conn, dim)
         if root is not None and stored_root is None:
             _set_meta(conn, "knowledge_root", root)
-            conn.commit()
         return False
     _drop_tables(conn)
     conn.execute("DELETE FROM okf_meta")
@@ -339,7 +370,6 @@ def _ensure_schema(
     _set_meta(conn, "embedder", embedder_name)
     if root is not None:
         _set_meta(conn, "knowledge_root", root)
-    conn.commit()
     return True
 
 
@@ -375,12 +405,18 @@ def index_knowledge(
 ) -> dict[str, Any]:
     embedder = embedder or embed_mod.default()
     root = root.resolve()
-    # Repair only the default workspace bundle, and only when the caller asked for no other root: any explicit path may be someone else's vault.
-    if repair and root == _knowledge_root(home):
-        _ensure_bundle(root)
-        _update_index(root, _orphan_pages(root))
     conn = open_store(home)
     try:
+        # Everything the rebuild checks, drops, recreates and embeds lives in one write transaction: no other indexer can retarget the store between the owner check and the act, and a failure anywhere leaves the previous index searchable.
+        conn.isolation_level = None
+        conn.execute("BEGIN IMMEDIATE")
+        stored = _stored_root(conn)
+        if not force and _root_conflict(stored, root, adopt_missing=True):
+            raise _mismatch_error(str(stored), root, indexing=True)
+        # Repair only the default workspace bundle, and only when the caller asked for no other root: any explicit path may be someone else's vault.
+        if repair and root == _knowledge_root(home):
+            _ensure_bundle(root)
+            _update_index(root, _orphan_pages(root))
         _ensure_schema(
             conn,
             embedder.dim,
@@ -566,11 +602,17 @@ def search_knowledge(
     k: int = _DEFAULT_K,
     *,
     embedder: embed_mod.Embedder | None = None,
+    root: Path | None = None,
 ) -> list[dict[str, Any]]:
     embedder = embedder or embed_mod.default()
     conn = open_store(home)
     try:
         _ensure_schema(conn, embedder.dim, embedder.name, index_mode=False)
+        conn.isolation_level = None
+        conn.execute("BEGIN")
+        stored = _get_meta(conn, "knowledge_root")
+        if root is not None and _root_conflict(stored, root.resolve(), adopt_missing=False):
+            raise _mismatch_error(str(stored), root.resolve(), indexing=False)
         if conn.execute("SELECT COUNT(*) AS n FROM okf_chunks").fetchone()["n"] == 0:
             return []
         candidates: dict[str, dict[str, Any]] = {}
@@ -983,7 +1025,7 @@ def maintain_knowledge(
     related = []
     if topic.strip():
         try:
-            related = search_knowledge(home, topic.strip(), k=3)
+            related = search_knowledge(home, topic.strip(), k=3, root=root)
         except EmbedderMismatch:
             raise
         except Exception:  # noqa: BLE001
@@ -1046,7 +1088,10 @@ def ingest_knowledge(
 
 def _maybe_index_after_apply(home: Path, root: Path, result: dict[str, Any]) -> dict[str, Any]:
     if result.get("applied") is True:
-        result["index"] = index_knowledge(home, root)
+        try:
+            result["index"] = index_knowledge(home, root)
+        except KnowledgeRootMismatch as e:
+            result["index"] = {"skipped": str(e)}
     return result
 
 
@@ -1132,7 +1177,13 @@ class Knowledge(Tool):
                     return ToolResult(ok=False, output="", error="Empty query.")
                 if k < 1 or k > 50:
                     return ToolResult(ok=False, output="", error="k must be in [1, 50].")
-                results = search_knowledge(get_home(), query.strip(), k)
+                try:
+                    results = search_knowledge(get_home(), query.strip(), k, root=root)
+                except KnowledgeRootMismatch as e:
+                    return ToolResult(
+                        ok=True,
+                        output=json.dumps({"results": [], "hint": str(e)}),
+                    )
                 if not results:
                     return ToolResult(
                         ok=True,
@@ -1182,6 +1233,8 @@ class Knowledge(Tool):
                 )
             return ToolResult(ok=False, output="", error=f"unknown knowledge action: {action}")
         except EmbedderMismatch as e:
+            return ToolResult(ok=False, output="", error=str(e))
+        except KnowledgeRootMismatch as e:
             return ToolResult(ok=False, output="", error=str(e))
         except ValueError as e:
             return ToolResult(ok=False, output="", error=str(e))
