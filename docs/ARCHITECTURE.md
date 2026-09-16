@@ -227,7 +227,11 @@ an hour ago (`RUNS_SETTLE_SECONDS`): a workgroup child writes `run.finished`
 before the parent settles cost from `usage_summary()`, and the daemon's
 `active_ids()` does not know that child, so it stays as a second guard only for
 the window between `run.finished` and `unregister_active`. Cleanup only offers,
-under the label *Old and excess run journals*; nothing is deleted on its own.
+under the label *Old and excess run journals*; nothing is deleted on its own. `reconcile_stale` runs at
+profile start, closes any journal whose pid is gone as `interrupted`, and returns
+the rows it closed so the daemon can alert on each: a run that died with its
+daemon never reached the scheduler's own failure path, so this is the only place
+its death is reported.
 
 `ExecutionWorld` keeps filesystem resolution and terminal shell execution under one
 run-scoped abstraction. `local` preserves the previous behavior. `docker`
@@ -1094,7 +1098,7 @@ the agent calls `schedule(action='add', kind='once',
 after_hours=N)`, the engine resolves `now` from a single source so
 the agent doesn't drift.
 
-**Duplicate guard + in-place edits.** `add` rejects a job whose (`kind` + cron / `run_at` / `after_hours`) matches an existing one AND whose prompt fingerprint (lowercase + whitespace-collapsed first 80 chars) collides. Pass `force=true` to bypass when the second job is genuinely intentional. Use `update` to change prompt, cron, `notify`, or pause state without remove/recreate churn. A job carries a single delivery axis, `notify: bool` (default `false` = silent): `true` pushes the reply to the owner's apps. Legacy jobs with a `platform` field are migrated to `notify` on load (`platform` set → `notify: true`). Reaching a THIRD PARTY is an explicit `email` call in the prompt — that's now allowed (the old auto-delivery guard that rejected such prompts is gone).
+**Duplicate guard + in-place edits.** `add` rejects a job whose (`kind` + cron / `run_at` / `after_hours`) matches an existing one AND whose prompt fingerprint (lowercase + whitespace-collapsed first 80 chars) collides. Pass `force=true` to bypass when the second job is genuinely intentional. Use `update` to change prompt, cron, `notify`, or pause state without remove/recreate churn. A job carries a single delivery axis, `notify: bool` (default `false` = silent): `true` pushes the reply to the owner's apps. Failure is not on that axis: a failed job always files an error output and raises `schedule.failed` regardless of `notify`, and since 0.14.49 a run killed *with* the daemon does too — the scheduler dies before it can report, so `reconcile_stale` raises the same event for each orphaned journal it closes on the next start (see Runs). Legacy jobs with a `platform` field are migrated to `notify` on load (`platform` set → `notify: true`). Reaching a THIRD PARTY is an explicit `email` call in the prompt — that's now allowed (the old auto-delivery guard that rejected such prompts is gone).
 
 Scheduled jobs execute through `alpi chat --once --emit-events
 --no-save` with `ALPI_PLATFORM=cron`. The scheduler consumes stdout

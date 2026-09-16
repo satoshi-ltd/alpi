@@ -241,17 +241,22 @@ def usage_summary(home: Path, run_id: str) -> dict[str, Any]:
     return totals
 
 
-def reconcile_stale(home: Path, *, older_than_s: float = 3600.0) -> int:
-    """Close legacy journals that cannot still belong to a live process."""
+def reconcile_stale(home: Path, *, older_than_s: float = 3600.0) -> list[dict[str, Any]]:
+    """Close legacy journals that cannot still belong to a live process.
+
+    Returns one row per closed journal so the caller can alert: a run whose
+    daemon died never reaches the scheduler's own failure path, so this is the
+    only place its death can be reported.
+    """
     now = time.time()
-    closed = 0
+    closed: list[dict[str, Any]] = []
     directory = home / "runs"
     if not directory.exists() or directory.is_symlink():
-        return 0
+        return closed
     try:
         paths = list(directory.glob("*.jsonl"))
     except OSError:
-        return 0
+        return closed
     for path in paths:
         if path.is_symlink():
             continue
@@ -263,7 +268,8 @@ def reconcile_stale(home: Path, *, older_than_s: float = 3600.0) -> int:
             continue
         try:
             first = _first_record(path) or {}
-            pid = _safe_int((first.get("data") or {}).get("pid"))
+            started = first.get("data") or {}
+            pid = _safe_int(started.get("pid"))
             age = now - float(row.get("updated_at") or 0.0)
         except (OSError, TypeError, ValueError):
             continue
@@ -272,7 +278,12 @@ def reconcile_stale(home: Path, *, older_than_s: float = 3600.0) -> int:
         if pid <= 0 and age < older_than_s:
             continue
         if finish_if_running(home, str(row["id"]), "interrupted"):
-            closed += 1
+            closed.append({
+                "run_id": str(row["id"]),
+                "job_id": str(started.get("job_id") or ""),
+                "source": str(started.get("source") or ""),
+                "silent_for_s": round(age, 1),
+            })
     return closed
 
 

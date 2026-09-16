@@ -308,8 +308,9 @@ def _start_new_profiles(
             if reconciled:
                 log.info(
                     "profile %s: closed %d stale run journal(s)",
-                    profile, reconciled,
+                    profile, len(reconciled),
                 )
+                _alert_stale_runs(home, profile, reconciled)
         except Exception:  # noqa: BLE001
             log.exception("profile %s: stale run reconciliation failed", profile)
         task_map = _profile_tasks(home, profile)
@@ -356,6 +357,62 @@ async def _stop_task_group(rt: dict[str, Any], name: str) -> None:
         t.cancel()
     if tasks:
         await asyncio.gather(*tasks, return_exceptions=True)
+
+
+def _alert_stale_runs(home: Path, profile: str, closed: list[dict[str, Any]]) -> None:
+    # A run whose daemon died never reaches the scheduler's failure path, so without this its death is only a log line.
+    from alpi import outputs as outputs_mod
+    from alpi.host import events as host_events
+    from alpi.scheduler import jobs_store
+    # This runs before the host task registers the bus; without the persisted seq the alert lands under every client's cursor.
+    host_events.ensure_history_loaded()
+    titles: dict[str, str] = {}
+    try:
+        titles = {
+            str(j.get("id")): str(j.get("title") or "")
+            for j in jobs_store.read(home)
+        }
+    except Exception:  # noqa: BLE001
+        log.debug("profile %s: job titles unavailable for stale-run alert", profile)
+    for row in closed:
+        job_id = str(row.get("job_id") or "")
+        title = titles.get(job_id) or (f"job {job_id}" if job_id else "manual run")
+        body = (
+            f"The run ended without finishing and was closed on daemon start.\n"
+            f"run: {row.get('run_id')}\n"
+            f"job: {job_id or 'none'}\n"
+            f"source: {row.get('source') or 'unknown'}\n"
+            f"silent for: {row.get('silent_for_s')}s before it was closed"
+        )
+        output_id = ""
+        try:
+            output = outputs_mod.append(
+                home, profile=profile, body=body, type="error",
+                title=f"{title} did not finish", delivered_to=[],
+            )
+            output_id = str(output["id"])
+        except Exception:  # noqa: BLE001
+            log.exception("profile %s: cannot file stale-run alert", profile)
+        payload: dict[str, Any] = {
+            "profile": profile,
+            "job_id": job_id,
+            "title": title,
+            "kind": "cron" if job_id else "run",
+            "message": "run interrupted; closed by stale reconciliation",
+            "reply": "",
+            "delivered_to": "",
+            "silent": False,
+            "body": body,
+            "run_id": str(row.get("run_id") or ""),
+        }
+        if output_id:
+            payload["output_id"] = output_id
+            payload["deep_link"] = f"/outputs/{profile}/{output_id}"
+        host_events.emit("schedule.failed", payload)
+        if output_id:
+            host_events.emit("output.created", {
+                "profile": profile, "id": output_id, "type": "error",
+            })
 
 
 # In-place reload replaces "every settings save restarts the daemon" — on Docker that was a full container restart dropping both listeners.

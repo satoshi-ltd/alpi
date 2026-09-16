@@ -1,5 +1,32 @@
 # Changelog
 
+## v0.14.49 — 2026-09-17 — a run that dies with the daemon still files its alert
+
+- **A scheduled run whose daemon died was never reported to anyone.** When a job fails
+  normally the scheduler files an error and raises `schedule.failed`, which is what turns
+  into a push on the owner's apps. But that code runs *after* the job returns, so a run
+  killed with the daemon — a crash, an OOM, a container replaced mid-flight — took the
+  reporting path down with it. The journal stayed open, the next daemon start quietly
+  closed it as `interrupted`, and the only trace was one line in a log file. An agent
+  could be dead for a day and the first sign of it was noticing the work had stopped.
+- **The reconciliation now speaks.** Closing an orphaned journal files an error output and
+  raises `schedule.failed` for each one, the same event a live failure raises, so a dead
+  run reaches the apps through the path that already existed. The alert names the run, the
+  job behind it and how long the journal had been silent before it was closed. Runs with
+  no job — an interactive session cut off by the same crash — alert too, as a manual run.
+- **Why it took this long to see.** On a fleet running four agents, two scheduled runs died
+  eight days apart and their journals sat open for 20 and 30 hours. Both were found by
+  reading journals by hand, which is exactly the work this removes.
+- **The alert had to be taught where it sits in the stream.** It is emitted while profiles
+  are starting, which is before the host task registers the event bus and restores the
+  persisted sequence number. Filed then, it took seq 1 while a reconnecting client held a
+  cursor of, say, 100 — so `host.events.history(after_seq=100)` returned nothing and the
+  notification this release exists for was the one event it hid. The history is now
+  restored before those alerts are filed, and a regression test drives the real bus and
+  its backfill RPC rather than standing in for them.
+- `runs.reconcile_stale` returns the rows it closed instead of a count. The count is
+  `len()` of it; any caller that only logged the number keeps working with one edit.
+
 ## v0.14.48 — 2026-09-16 — doctor checks the dependency everything routes through
 
 - **`alpi doctor` now verifies LiteLLM itself, not just that it imports.** Every provider

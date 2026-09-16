@@ -112,7 +112,8 @@ def test_reconcile_stale_closes_legacy_run_but_not_live_pid(
     runs.start(live)
     monkeypatch.setattr(runs.time, "time", lambda: 5000.0)
 
-    assert runs.reconcile_stale(tmp_path, older_than_s=3600) == 1
+    closed = runs.reconcile_stale(tmp_path, older_than_s=3600)
+    assert [row["run_id"] for row in closed] == [legacy_id]
     assert runs.summary(tmp_path, legacy_id)["status"] == "interrupted"
     assert runs.summary(tmp_path, live.run_id)["status"] == "running"
 
@@ -130,8 +131,34 @@ def test_reconcile_stale_scans_beyond_the_public_list_limit(
         runs.finish(context, "completed")
     monkeypatch.setattr(runs.time, "time", lambda: 5000.0)
 
-    assert runs.reconcile_stale(tmp_path, older_than_s=3600) == 1
+    assert [row["run_id"] for row in runs.reconcile_stale(tmp_path, older_than_s=3600)] == ["buried"]
     assert runs.summary(tmp_path, "buried")["status"] == "interrupted"
+
+
+def test_reconcile_stale_reports_the_job_behind_each_closed_run(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    monkeypatch.setattr(runs.time, "time", lambda: 100.0)
+    runs.append(tmp_path, "dead", "run.started", {
+        "run_id": "dead", "profile": "default", "job_id": "35cbf2b8", "source": "schedule",
+    })
+    monkeypatch.setattr(runs.time, "time", lambda: 5000.0)
+
+    closed = runs.reconcile_stale(tmp_path, older_than_s=3600)
+
+    assert len(closed) == 1
+    assert closed[0]["run_id"] == "dead"
+    assert closed[0]["job_id"] == "35cbf2b8"
+    assert closed[0]["source"] == "schedule"
+    assert closed[0]["silent_for_s"] > 3600
+
+
+def test_reconcile_stale_reports_nothing_when_no_journal_is_orphaned(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    runs.start(context)
+    runs.finish(context, "completed")
+
+    assert runs.reconcile_stale(tmp_path, older_than_s=3600) == []
 
 
 def test_terminal_arguments_are_omitted_from_agent_events_and_workflows(tmp_path: Path) -> None:

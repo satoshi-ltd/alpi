@@ -58,6 +58,8 @@ _history: deque[dict[str, Any]] = deque(maxlen=HISTORY_MAX)
 _history_lock = threading.Lock()
 _history_path: Path | None = None
 _writes_since_compact = 0
+_load_lock = threading.Lock()
+_history_loaded = False
 
 
 def _history_file() -> Path:
@@ -150,10 +152,28 @@ def _append_history(payload: dict[str, Any]) -> None:
         pass
 
 
+def ensure_history_loaded() -> None:
+    """Restore the persisted seq before anything emits.
+
+    ``register`` does this too, but the daemon alerts on dead runs while it is
+    still starting profiles — before the host task exists. Emitting then would
+    take seq=1 while a reconnecting client holds a real cursor, and
+    ``host.events.history`` would filter the alert out of its own backfill.
+    """
+    global _history_loaded
+    with _load_lock:
+        if _history_loaded:
+            return
+        _load_history()
+        _history_loaded = True
+
+
 def register(server: host_server.Server) -> None:
-    global _history_path
+    global _history_path, _history_loaded
     _history_path = server.home / "host" / "events.jsonl"
+    # Re-read from the authoritative path: an earlier ensure_history_loaded() used the ALPI_HOME fallback.
     _load_history()
+    _history_loaded = True
     server.register_stream("host.events.subscribe", _subscribe_handler)
     server.register("host.events.history", _history_handler)
 
