@@ -104,6 +104,160 @@ def test_knowledge_lint_accepts_minimal_bundle(tmp_path: Path) -> None:
     assert report["issues"] == []
 
 
+def _workspace_root(tmp_home: Path, tmp_path: Path) -> Path:
+    workspace = tmp_path / "ws"
+    workspace.mkdir(exist_ok=True)
+    (tmp_home / "config.yaml").write_text(f"workspace: {workspace}\n")
+    return workspace / "knowledge"
+
+
+def _card(title: str) -> str:
+    return _page(title, f"# {title}\n\nExpress API behind JWT middleware.", page_type="source")
+
+
+def test_index_repairs_the_workspace_bundle_around_pages_written_to_disk(
+    tmp_home: Path, tmp_path: Path, stub_embedder,
+) -> None:
+    root = _workspace_root(tmp_home, tmp_path)
+    (root / "repos").mkdir(parents=True)
+    (root / "repos" / "lobby.md").write_text(_card("lobby — repository card"))
+
+    result = kb.index_knowledge(tmp_home, root, embedder=stub_embedder, repair=True)
+
+    assert result["indexed_pages"] >= 1
+    assert (root / "index.md").is_file() and (root / "log.md").is_file()
+    assert "](repos/lobby.md)" in (root / "index.md").read_text()
+    assert kb.lint_knowledge(root)["issues"] == []
+
+
+def test_index_never_touches_a_root_the_caller_merely_pointed_at(
+    tmp_home: Path, tmp_path: Path, stub_embedder,
+) -> None:
+    _workspace_root(tmp_home, tmp_path)
+    vault = tmp_path / "ObsidianVault"
+    (vault / "daily").mkdir(parents=True)
+    (vault / "index.md").write_text("# My Vault\n\n- [[Project Alpha]]\n")
+    (vault / "Project Alpha.md").write_text("# Project Alpha\n")
+    (vault / "daily" / "2026-09-15.md").write_text("# Monday\n")
+    before = {p.relative_to(vault).as_posix(): p.read_text() for p in vault.rglob("*") if p.is_file()}
+
+    kb.index_knowledge(tmp_home, vault, embedder=stub_embedder, repair=True)
+
+    after = {p.relative_to(vault).as_posix(): p.read_text() for p in vault.rglob("*") if p.is_file()}
+    assert after == before
+    assert sorted(p.name for p in vault.iterdir()) == ["Project Alpha.md", "daily", "index.md"]
+
+
+@pytest.mark.parametrize(
+    ("name", "title"),
+    [
+        ("my card (v2).md", "My Card"),
+        ("C#.md", "C sharp"),
+        ("card <v2>.md", "Card"),
+        ("100% done.md", "Percent"),
+        ("plain.md", "API [v2]"),
+    ],
+)
+def test_a_hostile_page_name_is_linked_in_a_form_the_graph_reads_back(
+    tmp_home: Path, tmp_path: Path, stub_embedder, name, title,
+) -> None:
+    root = _workspace_root(tmp_home, tmp_path)
+    (root / "repos").mkdir(parents=True)
+    (root / "repos" / name).write_text(_page(title, f"# {title}\n\nA card.", page_type="source"))
+
+    kb.index_knowledge(tmp_home, root, embedder=stub_embedder, repair=True)
+
+    index_text = (root / "index.md").read_text()
+    targets = [
+        link["target"]
+        for link in kb._extract_links(root, root / "index.md", index_text)
+        if not link["external"]
+    ]
+    assert f"repos/{name}" in targets
+    assert kb.lint_knowledge(root)["issues"] == []
+
+    # A second pass must recognise its own link and append nothing.
+    kb.index_knowledge(tmp_home, root, embedder=stub_embedder, repair=True)
+    assert (root / "index.md").read_text() == index_text
+
+
+def test_a_title_that_looks_like_a_link_cannot_forge_one(
+    tmp_home: Path, tmp_path: Path, stub_embedder,
+) -> None:
+    root = _workspace_root(tmp_home, tmp_path)
+    (root / "repos").mkdir(parents=True)
+    (root / "repos" / "card.md").write_text(
+        _page("Report](../../elsewhere.md) [x", "# Report\n\nA card.", page_type="source"),
+    )
+
+    kb.index_knowledge(tmp_home, root, embedder=stub_embedder, repair=True)
+
+    index_page = root / "index.md"
+    targets = [
+        link["target"]
+        for link in kb._extract_links(root, index_page, index_page.read_text())
+        if not link["external"]
+    ]
+    assert targets == ["repos/card.md"]
+    assert "elsewhere.md" not in str(targets)
+    assert kb.lint_knowledge(root)["issues"] == []
+
+
+def test_index_leaves_a_page_reachable_through_a_hub_page_alone(
+    tmp_home: Path, tmp_path: Path, stub_embedder,
+) -> None:
+    root = _workspace_root(tmp_home, tmp_path)
+    (root / "concepts").mkdir(parents=True)
+    (root / "index.md").write_text(_page("Knowledge Index", "# Index\n\n- [Hub](concepts/hub.md)", page_type="note"))
+    (root / "log.md").write_text(_page("Knowledge Log", "# Log", page_type="note"))
+    (root / "concepts" / "hub.md").write_text(_page("Hub", "# Hub\n\n- [Leaf](leaf.md)"))
+    (root / "concepts" / "leaf.md").write_text(_page("Leaf", "# Leaf"))
+    before = (root / "index.md").read_text()
+
+    kb.index_knowledge(tmp_home, root, embedder=stub_embedder, repair=True)
+
+    assert (root / "index.md").read_text() == before
+    assert kb.lint_knowledge(root)["issues"] == []
+
+
+def test_hand_written_link_forms_are_read_by_the_link_graph(tmp_path: Path) -> None:
+    root = _bundle(tmp_path)
+    for name in ("spaced name.md", "encoded name.md", "nested.md"):
+        (root / "concepts" / name).write_text(_page(name, f"# {name}"))
+    (root / "index.md").write_text(
+        _page(
+            "Knowledge Index",
+            "# Knowledge Index\n\n"
+            "- [Polaris](concepts/polaris.md)\n"
+            "- [Angle](<concepts/spaced name.md>)\n"
+            "- [Encoded](concepts/encoded%20name.md)\n"
+            "- [Nested [v2]](concepts/nested.md)",
+            page_type="note",
+        )
+    )
+
+    assert kb.lint_knowledge(root)["issues"] == []
+
+
+def test_an_explicit_path_is_read_only_even_when_it_is_the_workspace_bundle(
+    tmp_home: Path, tmp_path: Path, stub_embedder,
+) -> None:
+    root = _workspace_root(tmp_home, tmp_path)
+    (root / "repos").mkdir(parents=True)
+    (root / "repos" / "lobby.md").write_text(_card("lobby"))
+
+    result = kb.Knowledge().run(action="index", path=str(root))
+
+    assert result.ok, result.error
+    assert not (root / "index.md").exists()
+    assert not (root / "log.md").exists()
+
+    # The same bundle, asked for without a path, is the one alpi repairs.
+    assert kb.Knowledge().run(action="index").ok
+    assert (root / "index.md").is_file() and (root / "log.md").is_file()
+    assert kb.lint_knowledge(root)["issues"] == []
+
+
 def test_knowledge_lint_reports_invalid_frontmatter(tmp_path: Path) -> None:
     root = _bundle(tmp_path)
     (root / "concepts" / "broken.md").write_text(

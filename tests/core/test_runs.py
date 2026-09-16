@@ -221,6 +221,86 @@ def test_list_runs_tolerates_journal_deleted_during_scan(tmp_path: Path, monkeyp
     assert runs.list_runs(tmp_path) == []
 
 
+def test_model_state_is_journaled_only_on_transitions(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    runs.start(context)
+    for _ in range(500):
+        runs.record_agent_event(context, AgentEvent(kind="model_state"))
+    runs.record_agent_event(context, AgentEvent(kind="model_state", text="reasoning"))
+    runs.record_agent_event(context, AgentEvent(kind="model_state", text="reasoning"))
+    runs.record_agent_event(context, AgentEvent(kind="assistant_done", text="ok", final=True))
+    runs.finish(context, "completed")
+
+    kinds = [row["kind"] for row in runs.read(tmp_path, context.run_id)["events"]]
+    assert kinds == ["run.started", "agent.model_state", "agent.model_state", "agent.assistant_done", "run.finished"]
+    assert context.run_id not in runs._last_model_state
+
+
+def test_only_model_state_is_deduplicated(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    runs.start(context)
+    for _ in range(3):
+        runs.record_agent_event(context, AgentEvent(kind="tool_start", name="read_file"))
+        runs.record_agent_event(context, AgentEvent(kind="tool_end", name="read_file", output="ok"))
+        runs.record_agent_event(context, AgentEvent(kind="usage", tokens_in=10, tokens_out=5))
+        runs.record_agent_event(context, AgentEvent(kind="model_state"))
+    runs.finish(context, "completed")
+
+    kinds = [row["kind"] for row in runs.read(tmp_path, context.run_id)["events"]]
+    assert kinds.count("agent.tool_start") == 3
+    assert kinds.count("agent.tool_end") == 3
+    assert kinds.count("agent.usage") == 3
+    assert kinds.count("agent.model_state") == 1
+
+
+def test_model_state_memory_is_kept_per_run(tmp_path: Path) -> None:
+    first = _context(tmp_path)
+    second = _context(tmp_path, run_id="run-second")
+    runs.start(first)
+    runs.start(second)
+
+    runs.record_agent_event(first, AgentEvent(kind="model_state"))
+    runs.record_agent_event(second, AgentEvent(kind="model_state"))
+    runs.record_agent_event(first, AgentEvent(kind="model_state"))
+    runs.finish(first, "completed")
+    runs.finish(second, "completed")
+
+    for context in (first, second):
+        kinds = [row["kind"] for row in runs.read(tmp_path, context.run_id)["events"]]
+        assert kinds.count("agent.model_state") == 1, context.run_id
+    assert runs._last_model_state == {}
+
+
+def test_model_state_retries_after_failed_append(tmp_path: Path, monkeypatch) -> None:
+    context = _context(tmp_path)
+    runs.start(context)
+    real_append = runs.append
+    attempts = 0
+
+    def flaky_append(*args, **kwargs):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise OSError("temporary write failure")
+        return real_append(*args, **kwargs)
+
+    event = AgentEvent(kind="model_state", text="reasoning")
+    with monkeypatch.context() as patch:
+        patch.setattr(runs, "append", flaky_append)
+        with pytest.raises(OSError, match="temporary write failure"):
+            runs.record_agent_event(context, event)
+        runs.record_agent_event(context, event)
+        runs.record_agent_event(context, event)
+
+    runs.finish(context, "completed")
+    assert attempts == 2
+    events = runs.read(tmp_path, context.run_id)["events"]
+    states = [row for row in events if row["kind"] == "agent.model_state"]
+    assert len(states) == 1
+    assert states[0]["data"]["text"] == "reasoning"
+    assert context.run_id not in runs._last_model_state
+
+
 def test_streaming_deltas_never_reach_the_journal(tmp_path: Path) -> None:
     assert runs._TRANSIENT_KINDS == {"reasoning_delta", "assistant_delta"}
     context = _context(tmp_path)

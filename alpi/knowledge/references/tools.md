@@ -138,7 +138,11 @@ Output attachments (MM.2):
 - `knowledge(action="lint", path?)` validates required `index.md` / `log.md`,
   minimal YAML frontmatter, relative Markdown links, and orphan pages.
 - `knowledge(action="index", path?, force?)` indexes valid pages into separate
-  `okf_*` tables with sqlite-vec embeddings plus SQLite FTS.
+  `okf_*` tables with sqlite-vec embeddings plus SQLite FTS. Called without a
+  `path` it also creates the required `index.md` / `log.md` and links any page
+  nothing points at, so a page written with `write_file` still lints clean. Any
+  explicit `path` is indexed read-only. Link destinations are percent-encoded and
+  titles escaped, and the graph reads bare, angle-bracketed and encoded forms.
 - Text, HTML, PDF, DOCX, EPUB, and images are supported for ingest. Scanned
   PDF/image OCR requires `ocr=true`.
 

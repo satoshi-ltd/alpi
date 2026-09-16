@@ -181,6 +181,7 @@ def active_ids(profile: str) -> set[str]:
 
 
 def finish(context: RunContext, outcome: str) -> None:
+    _last_model_state.pop(context.run_id, None)
     path = run_path(context.home, context.run_id)
     try:
         append(context.home, context.run_id, "run.finished", {"outcome": outcome})
@@ -302,6 +303,9 @@ def _pid_alive(pid: int) -> bool:
     return True
 
 
+_last_model_state: dict[str, str] = {}
+
+
 def record_agent_event(context: RunContext, event: Any) -> None:
     kind_hint = event.get("kind") if isinstance(event, dict) else getattr(event, "kind", None)
     if str(kind_hint) in _TRANSIENT_KINDS:
@@ -313,9 +317,16 @@ def record_agent_event(context: RunContext, event: Any) -> None:
     else:
         data = {"value": str(event)}
     kind = str(data.pop("kind", "event"))
+    if kind == "model_state":
+        # The engine emits one per streamed tool-call fragment, every one with the same payload.
+        snapshot = json.dumps(data, sort_keys=True, default=str)
+        if _last_model_state.get(context.run_id) == snapshot:
+            return
     if kind in {"tool_start", "tool_end"} and isinstance(data.get("args"), dict):
         data["args"] = persisted_tool_arguments(str(data.get("name") or ""), data["args"])
     append(context.home, context.run_id, f"agent.{kind}", data)
+    if kind == "model_state":
+        _last_model_state[context.run_id] = snapshot
 
 
 def read(home: Path, run_id: str, *, after_seq: int = -1, limit: int = 1000) -> dict:

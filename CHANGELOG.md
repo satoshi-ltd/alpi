@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.14.43 — 2026-09-15 — the journal keeps the transitions, not the stream
+
+- **Run journals keep `model_state` transitions, not every streamed fragment.** The
+  engine emits a `model_state` event for each `tool_calls_delta` chunk, and since
+  v0.14.28 dropped the text deltas those events became the journal's bulk: one
+  41-minute audit run wrote 9,322 identical `agent.model_state` rows (12.3 MB of a
+  13.8 MB file), and one profile carried 77 MB of them across a day. The journal now
+  records a `model_state` only when its payload differs from the previous one of the
+  same run; the first one and every change stay, and the per-run memory is cleared when
+  the run finishes. Only successful writes advance the deduplication state, so a failed
+  append does not suppress the next identical event, and no other event kind is
+  deduplicated — tool calls, usage and replies are journaled in full as before.
+- **`knowledge(action="index")` leaves a valid bundle behind.** An agent that writes a
+  page with `write_file` and then indexes got a searchable page inside an invalid
+  bundle: `index.md` and `log.md` were only created by `ingest`, and nothing linked the
+  new page, so `lint` reported two missing files and an orphan for every card written
+  that way. Indexing without a `path` now creates the required files and links whatever
+  nothing points at, using the same reachability rule as `lint`, so a page already
+  reachable through another page is left alone. Generated links percent-encode the
+  destination and escape the title, so a page called `C#.md`, `my card (v2).md` or one
+  whose title contains brackets is linked in a form the link graph reads back and a
+  second pass adds nothing; the graph also reads hand-written angle-bracketed and
+  percent-encoded links. Any bundle given as an explicit `path` is only read: indexing
+  never writes into a tree you pointed it at.
+
 ## v0.14.42 — 2026-09-15 — a token nobody uses stops being a key
 
 - **Optional device-token expiry driven by inactivity.** `host.token_ttl_days` in

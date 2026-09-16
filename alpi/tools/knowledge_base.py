@@ -5,6 +5,7 @@ import re
 import sqlite3
 from datetime import date, datetime, timezone
 from pathlib import Path
+from urllib.parse import quote, unquote
 from typing import Any
 
 import yaml
@@ -35,7 +36,11 @@ _MAX_SNIPPET = 700
 _MAX_RELATED_PAGE = 12_000
 _MAX_RELATED_TOTAL = 30_000
 _DEFAULT_K = 5
-_LINK_RE = re.compile(r"(?<!!)\[[^\]]+\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
+_LINK_TEXT = r"(?:[^\[\]\\]|\\.|\[(?:[^\[\]\\]|\\.)*\])*"
+_LINK_RE = re.compile(
+    r"(?<!!)\[" + _LINK_TEXT + r"\]\(\s*(?:<([^>]*)>|([^)\s]+))(?:\s+\"[^\"]*\")?\s*\)"
+)
+_TEXT_ESCAPE_RE = re.compile(r"([\[\]\\])")
 _TOKEN_RE = re.compile(r"[A-Za-z0-9_]{2,}")
 _INVISIBLE_RE = re.compile("[\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]")
 _SECRET_FINDING_TERMS = (
@@ -148,10 +153,11 @@ def _skip_href(href: str) -> bool:
 def _extract_links(root: Path, page_path: Path, body: str) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for match in _LINK_RE.finditer(body):
-        raw = match.group(1).strip()
+        raw = (match.group(1) if match.group(1) is not None else match.group(2)).strip()
         if _skip_href(raw):
             continue
-        target_raw = raw.split("#", 1)[0].split("?", 1)[0]
+        # Split the fragment before decoding: a literal # in a filename arrives percent-encoded.
+        target_raw = unquote(raw.split("#", 1)[0].split("?", 1)[0])
         if not target_raw:
             continue
         target = (page_path.parent / target_raw).resolve()
@@ -365,9 +371,14 @@ def index_knowledge(
     *,
     force: bool = False,
     embedder: embed_mod.Embedder | None = None,
+    repair: bool = False,
 ) -> dict[str, Any]:
     embedder = embedder or embed_mod.default()
     root = root.resolve()
+    # Repair only the default workspace bundle, and only when the caller asked for no other root: any explicit path may be someone else's vault.
+    if repair and root == _knowledge_root(home):
+        _ensure_bundle(root)
+        _update_index(root, _orphan_pages(root))
     conn = open_store(home)
     try:
         _ensure_schema(
@@ -820,6 +831,25 @@ def _apply_maintenance(
     return {"written": written, "pages": sizes, "skipped": skipped}
 
 
+def _orphan_pages(root: Path) -> list[str]:
+    # Mirrors lint's orphan rule exactly, so indexing repairs what lint would report and nothing else.
+    pages = _iter_pages(root)
+    inbound: set[str] = set()
+    for path in pages:
+        rel = _rel(root, path)
+        try:
+            parsed = _parse_page(root, path)
+        except ValueError:
+            continue
+        for link in parsed["links"]:
+            if not link["external"] and link["target"] != rel:
+                inbound.add(link["target"])
+    return [
+        rel for rel in sorted(_rel(root, p) for p in pages)
+        if rel not in _REQUIRED_FILES and rel not in inbound
+    ]
+
+
 def _update_index(root: Path, pages: list[str]) -> None:
     index = root / "index.md"
     if not index.exists():
@@ -828,16 +858,20 @@ def _update_index(root: Path, pages: list[str]) -> None:
             encoding="utf-8",
         )
     text = index.read_text(encoding="utf-8")
+    linked = {
+        link["target"] for link in _extract_links(root, index, text) if not link["external"]
+    }
     additions: list[str] = []
     for rel in pages:
-        if f"]({rel})" in text:
+        if rel in linked:
             continue
         try:
             page = _parse_page(root, root / rel)
             title = page["meta"]["title"]
         except Exception:  # noqa: BLE001
             title = Path(rel).stem.replace("-", " ").title()
-        additions.append(f"- [{title}]({rel})")
+        label = _TEXT_ESCAPE_RE.sub(r"\\\1", title)
+        additions.append(f"- [{label}]({quote(rel, safe='/')})")
     if additions:
         index.write_text(text.rstrip() + "\n" + "\n".join(additions) + "\n", encoding="utf-8")
 
@@ -1113,7 +1147,9 @@ class Knowledge(Tool):
                     return ToolResult(ok=False, output="", error=f"Not a directory: {root}")
                 return ToolResult(
                     ok=True,
-                    output=json.dumps(index_knowledge(get_home(), root, force=force)),
+                    output=json.dumps(
+                        index_knowledge(get_home(), root, force=force, repair=not path.strip()),
+                    ),
                 )
             if action == "lint":
                 return ToolResult(ok=True, output=json.dumps(lint_knowledge(root)))

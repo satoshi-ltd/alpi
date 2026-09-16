@@ -203,8 +203,9 @@ states are replayed in original call order, preserving provider transcript
 determinism.
 
 Each turn writes `runs/<run_id>.jsonl` with bounded, redacted events: the
-start record (pid, model, input), tool starts, states and ends, `model_state`,
-`usage`, every `assistant_done` (preamble ones carry `final=False`; only the
+start record (pid, model, input), tool starts, states and ends, `model_state`
+(only when its payload changes — the engine emits one per streamed tool-call
+fragment and they are otherwise identical), `usage`, every `assistant_done` (preamble ones carry `final=False`; only the
 one closing the turn carries `final=True` — the deliverable, per the contract
 in AGENTS.md), errors and the finish outcome. Streaming
 deltas (`reasoning_delta`, `assistant_delta` — `runs._TRANSIENT_KINDS`) are
@@ -362,7 +363,7 @@ into a durable documents store.
 - `knowledge(action="ingest", source_path?|name?, topic?, apply=true, ocr=false)` — explicit learn path. Resolves an existing file or current-turn attachment, validates it with the same attachment allowlist/caps, extracts text (PDF/DOCX/EPUB/HTML/text, OCR for scanned PDF/images when requested), asks the LLM to synthesize durable Markdown pages, updates `index.md` and `log.md`, lints, and refreshes the derived index. The raw file is not copied.
 - `knowledge(action="maintain", source_path?, topic?, apply=true, ocr=false)` — explicit LLM-wiki maintenance for reorganizing or updating pages. The synthesizer receives the current full body of every related page (per-page and aggregate caps, `truncated` flagged). An existing page is replaced only when the synthesizer received its full body in that run; otherwise the proposal for it is reported under `skipped` and the file stays untouched. The result lists `bytes_before` / `bytes_after` for each written page so a legitimate shrink is visible.
 - `knowledge(action="lint", path?)` — validates required `index.md` / `log.md`, minimal YAML frontmatter (`type`, `title`, `tags`, `updated_at`, `sources`), relative Markdown links, and orphan pages.
-- `knowledge(action="index", path?, force?)` — chunks valid pages, writes `okf_*` tables, sqlite-vec rows, FTS rows, metadata, and outgoing links. Incremental by `mtime` + `size`; `force=true`, root drift, or embedder drift rebuilds only the `okf_*` table family.
+- `knowledge(action="index", path?, force?)` — chunks valid pages, writes `okf_*` tables, sqlite-vec rows, FTS rows, metadata, and outgoing links. Incremental by `mtime` + `size`; `force=true`, root drift, or embedder drift rebuilds only the `okf_*` table family. Asked for without a `path`, it first creates the required `index.md` / `log.md` and links any page nothing points at, so a page written straight to disk lands in a valid bundle. Any explicit `path` is only read, never repaired. Generated links percent-encode the destination and escape the title, so a page named `C#.md` or `my card (v2).md` is linked in a form the link graph reads back.
 
 Supported ingest formats: markdown / text / source / configs (stdlib read),
 HTML (`html2text`), PDF (`pypdf` for text-layer, RapidOCR fallback when
