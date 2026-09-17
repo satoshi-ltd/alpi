@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import os
+
 import pytest
 
 from alpi import runs
@@ -159,6 +161,268 @@ def test_reconcile_stale_reports_nothing_when_no_journal_is_orphaned(tmp_path: P
     runs.finish(context, "completed")
 
     assert runs.reconcile_stale(tmp_path, older_than_s=3600) == []
+
+
+def test_reconcile_stale_marks_its_rows_as_dead_and_says_whether_a_pid_was_recorded(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    monkeypatch.setattr(runs.time, "time", lambda: 100.0)
+    runs.append(tmp_path, "nopid", "run.started", {"run_id": "nopid", "profile": "default", "job_id": "j1"})
+    runs.append(tmp_path, "gone", "run.started", {"run_id": "gone", "profile": "default", "job_id": "j1", "pid": 999998})
+    monkeypatch.setattr(runs, "_pid_alive", lambda pid: False)
+    monkeypatch.setattr(runs.time, "time", lambda: 5000.0)
+
+    rows = {r["run_id"]: r for r in runs.reconcile_stale(tmp_path, older_than_s=3600)}
+
+    assert rows["nopid"]["reason"] == "dead" and rows["nopid"]["pid_recorded"] is False
+    assert rows["gone"]["reason"] == "dead" and rows["gone"]["pid_recorded"] is True
+    assert all(r["journal_closed"] for r in rows.values())
+
+
+def _scheduled_journal(home: Path, run_id: str, *, pid: int = 0, job_id: str = "j1", pid_start: str | None = None) -> None:
+    data = {"run_id": run_id, "profile": "default", "job_id": job_id, "source": "schedule", "pid": pid}
+    if pid_start is not None:
+        data["pid_start"] = pid_start
+    runs.append(home, run_id, "run.started", data)
+
+
+def _quiet(monkeypatch) -> None:
+    runs._silence_seen.clear()
+    monkeypatch.setattr(runs.time, "time", lambda: 1000.0)
+
+
+PAST = 1000.0 + 1700 + 300 + 1   # one second past timeout + grace for a 1700 s job
+
+
+def test_reconcile_silent_needs_to_watch_the_silence_itself_before_acting(tmp_path: Path, monkeypatch) -> None:
+    """A wall-clock age alone is not enough: a clock step or a wake from suspend must never kill a healthy child."""
+    _quiet(monkeypatch)
+    _scheduled_journal(tmp_path, "wedged")
+    kw = dict(timeout_for_job=lambda job_id: 1700, now=PAST)
+
+    first = runs.reconcile_silent(tmp_path, now_mono=0.0, **kw)
+    too_soon = runs.reconcile_silent(tmp_path, now_mono=299.0, **kw)
+    acted = runs.reconcile_silent(tmp_path, now_mono=300.0, **kw)
+
+    assert first == [] and too_soon == []
+    assert [r["run_id"] for r in acted] == ["wedged"]
+    assert acted[0]["reason"] == "silent" and acted[0]["timeout_s"] == 1700
+    assert acted[0]["journal_closed"] is True and acted[0]["pid_killed"] is False
+    assert runs.summary(tmp_path, "wedged")["status"] == "interrupted"
+    assert "wedged" not in runs._silence_seen
+
+
+def test_reconcile_silent_restarts_the_watch_when_the_run_writes_again(tmp_path: Path, monkeypatch) -> None:
+    _quiet(monkeypatch)
+    _scheduled_journal(tmp_path, "woke")
+    kw = dict(timeout_for_job=lambda job_id: 1700)
+
+    runs.reconcile_silent(tmp_path, now=PAST, now_mono=0.0, **kw)
+    monkeypatch.setattr(runs.time, "time", lambda: PAST)
+    runs.append(tmp_path, "woke", "agent.tool_end", {"name": "x"})
+
+    assert runs.reconcile_silent(tmp_path, now=PAST + 1, now_mono=400.0, **kw) == []
+    assert runs.summary(tmp_path, "woke")["status"] == "running"
+
+
+def test_reconcile_silent_leaves_a_run_inside_its_window_alone(tmp_path: Path, monkeypatch) -> None:
+    _quiet(monkeypatch)
+    _scheduled_journal(tmp_path, "busy")
+
+    out = runs.reconcile_silent(tmp_path, timeout_for_job=lambda job_id: 1700, now=1000.0 + 1700 + 300, now_mono=0.0)
+
+    assert out == [] and "busy" not in runs._silence_seen
+
+
+def test_reconcile_silent_ignores_runs_without_a_job(tmp_path: Path, monkeypatch) -> None:
+    _quiet(monkeypatch)
+    runs.append(tmp_path, "manual", "run.started", {"run_id": "manual", "profile": "default", "source": "user"})
+    kw = dict(timeout_for_job=lambda job_id: 60, now=99999.0)
+
+    runs.reconcile_silent(tmp_path, now_mono=0.0, **kw)
+    assert runs.reconcile_silent(tmp_path, now_mono=1000.0, **kw) == []
+    assert runs.summary(tmp_path, "manual")["status"] == "running"
+
+
+def test_reconcile_silent_ignores_a_job_it_cannot_size(tmp_path: Path, monkeypatch) -> None:
+    _quiet(monkeypatch)
+    _scheduled_journal(tmp_path, "orphan", job_id="deleted")
+    kw = dict(timeout_for_job=lambda job_id: None, now=99999.0)
+
+    runs.reconcile_silent(tmp_path, now_mono=0.0, **kw)
+    assert runs.reconcile_silent(tmp_path, now_mono=1000.0, **kw) == []
+
+
+def test_reconcile_silent_leaves_a_dead_pid_to_the_stale_rule(tmp_path: Path, monkeypatch) -> None:
+    _quiet(monkeypatch)
+    _scheduled_journal(tmp_path, "dead", pid=999998)
+    monkeypatch.setattr(runs, "_pid_alive", lambda pid: False)
+    kw = dict(timeout_for_job=lambda job_id: 60, now=99999.0)
+
+    runs.reconcile_silent(tmp_path, now_mono=0.0, **kw)
+    assert runs.reconcile_silent(tmp_path, now_mono=1000.0, **kw) == []
+    assert runs.summary(tmp_path, "dead")["status"] == "running"
+
+
+def _sleeping_child():
+    import subprocess
+    import sys
+    return subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)"])
+
+
+def test_reconcile_silent_kills_a_live_child_whose_start_time_matches(tmp_path: Path, monkeypatch) -> None:
+    proc = _sleeping_child()
+    try:
+        _quiet(monkeypatch)
+        _scheduled_journal(tmp_path, "ours", pid=proc.pid, pid_start="4242")
+        monkeypatch.setattr(runs, "proc_starttime", lambda pid: "4242" if pid == proc.pid else None)
+        kw = dict(timeout_for_job=lambda job_id: 60, now=1000.0 + 60 + 300 + 1)
+
+        runs.reconcile_silent(tmp_path, now_mono=0.0, **kw)
+        out = runs.reconcile_silent(tmp_path, now_mono=300.0, **kw)
+
+        assert out[0]["pid_killed"] is True and out[0]["journal_closed"] is True
+        assert proc.wait(timeout=5) == -9
+        assert runs.summary(tmp_path, "ours")["status"] == "interrupted"
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait()
+
+
+def test_reconcile_silent_reports_but_never_touches_a_live_pid_it_cannot_vouch_for(tmp_path: Path, monkeypatch) -> None:
+    """A recycled pid may be anything; without a matching start time the process AND the journal are left alone."""
+    proc = _sleeping_child()
+    try:
+        _quiet(monkeypatch)
+        _scheduled_journal(tmp_path, "stranger", pid=proc.pid, pid_start="4242")
+        monkeypatch.setattr(runs, "proc_starttime", lambda pid: "9999")
+        kw = dict(timeout_for_job=lambda job_id: 60, now=1000.0 + 60 + 300 + 1)
+
+        runs.reconcile_silent(tmp_path, now_mono=0.0, **kw)
+        out = runs.reconcile_silent(tmp_path, now_mono=300.0, **kw)
+
+        assert out[0]["journal_closed"] is False and out[0]["pid_killed"] is False
+        assert proc.poll() is None
+        assert runs.summary(tmp_path, "stranger")["status"] == "running"
+        # and it keeps being reported as open, so the caller can decide how often to say it
+        assert runs.reconcile_silent(tmp_path, now_mono=600.0, **kw)[0]["journal_closed"] is False
+    finally:
+        proc.kill()
+        proc.wait()
+
+
+def test_reconcile_silent_leaves_the_journal_open_when_the_kill_is_refused(tmp_path: Path, monkeypatch) -> None:
+    """A live process that will not die must not get a run.finished written under it."""
+    proc = _sleeping_child()
+    try:
+        _quiet(monkeypatch)
+        _scheduled_journal(tmp_path, "armoured", pid=proc.pid, pid_start="4242")
+        monkeypatch.setattr(runs, "proc_starttime", lambda pid: "4242" if pid == proc.pid else None)
+        def refuse(pid, sig):
+            raise PermissionError(pid)
+        monkeypatch.setattr(runs.os, "kill", refuse)
+        kw = dict(timeout_for_job=lambda job_id: 60, now=1000.0 + 60 + 300 + 1)
+
+        runs.reconcile_silent(tmp_path, now_mono=0.0, **kw)
+        out = runs.reconcile_silent(tmp_path, now_mono=300.0, **kw)
+
+        assert out[0]["journal_closed"] is False and out[0]["pid_killed"] is False
+        assert out[0]["kill_refused"] is True
+        assert runs.summary(tmp_path, "armoured")["status"] == "running"
+        assert proc.poll() is None
+    finally:
+        monkeypatch.undo()
+        proc.kill()
+        proc.wait()
+
+
+def test_reconcile_silent_closes_when_the_process_vanished_between_check_and_kill(tmp_path: Path, monkeypatch) -> None:
+    _quiet(monkeypatch)
+    _scheduled_journal(tmp_path, "vanished", pid=424242, pid_start="x")
+    monkeypatch.setattr(runs, "_pid_alive", lambda pid: True)
+    monkeypatch.setattr(runs, "proc_starttime", lambda pid: "x")
+    def gone(pid, sig):
+        raise ProcessLookupError(pid)
+    monkeypatch.setattr(runs.os, "kill", gone)
+    kw = dict(timeout_for_job=lambda job_id: 60, now=99999.0)
+
+    runs.reconcile_silent(tmp_path, now_mono=0.0, **kw)
+    out = runs.reconcile_silent(tmp_path, now_mono=300.0, **kw)
+
+    assert out[0]["journal_closed"] is True and out[0]["pid_killed"] is False
+    assert runs.summary(tmp_path, "vanished")["status"] == "interrupted"
+
+
+def test_reconcile_silent_never_kills_its_own_process_or_its_parent(tmp_path: Path, monkeypatch) -> None:
+    _quiet(monkeypatch)
+    for run_id, pid in (("self", os.getpid()), ("parent", os.getppid())):
+        _scheduled_journal(tmp_path, run_id, pid=pid, pid_start="same")
+    monkeypatch.setattr(runs, "proc_starttime", lambda pid: "same")   # every other check would pass
+    kw = dict(timeout_for_job=lambda job_id: 60, now=99999.0)
+
+    runs.reconcile_silent(tmp_path, now_mono=0.0, **kw)
+    out = {r["run_id"]: r for r in runs.reconcile_silent(tmp_path, now_mono=300.0, **kw)}
+
+    assert all(r["pid_killed"] is False and r["journal_closed"] is False for r in out.values())
+    assert set(out) == {"self", "parent"}
+
+
+def test_reconcile_silent_does_not_kill_when_the_journal_recorded_no_start_time(tmp_path: Path, monkeypatch) -> None:
+    """Journals written before 0.14.50 carry no pid_start; they are reported, never acted on."""
+    proc = _sleeping_child()
+    try:
+        _quiet(monkeypatch)
+        _scheduled_journal(tmp_path, "legacy", pid=proc.pid)
+        monkeypatch.setattr(runs, "proc_starttime", lambda pid: "anything")
+        kw = dict(timeout_for_job=lambda job_id: 60, now=99999.0)
+
+        runs.reconcile_silent(tmp_path, now_mono=0.0, **kw)
+        out = runs.reconcile_silent(tmp_path, now_mono=300.0, **kw)
+
+        assert out[0]["pid_killed"] is False and proc.poll() is None
+    finally:
+        proc.kill()
+        proc.wait()
+
+
+@pytest.mark.skipif(not Path("/proc").exists(), reason="the real start-time gate needs /proc")
+def test_reconcile_silent_real_proc_gate_kills_only_the_recorded_process(tmp_path: Path, monkeypatch) -> None:
+    import subprocess
+    ours = _sleeping_child()
+    stranger = subprocess.Popen(["sleep", "120"])
+    try:
+        runs._silence_seen.clear()
+        monkeypatch.setattr(runs.time, "time", lambda: 1000.0)
+        _scheduled_journal(tmp_path, "ours", pid=ours.pid, pid_start=runs.proc_starttime(ours.pid))
+        _scheduled_journal(tmp_path, "stranger", pid=stranger.pid, pid_start="1")
+        kw = dict(timeout_for_job=lambda job_id: 60, now=1000.0 + 60 + 300 + 1)
+
+        runs.reconcile_silent(tmp_path, now_mono=0.0, **kw)
+        out = {r["run_id"]: r for r in runs.reconcile_silent(tmp_path, now_mono=300.0, **kw)}
+
+        assert out["ours"]["pid_killed"] is True and ours.wait(timeout=5) == -9
+        assert out["stranger"]["pid_killed"] is False and stranger.poll() is None
+    finally:
+        for p in (ours, stranger):
+            if p.poll() is None:
+                p.kill()
+                p.wait()
+
+
+def test_run_started_records_the_process_start_time(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    runs.start(context)
+    started = runs.read(tmp_path, context.run_id, after_seq=-1, limit=1)["events"][0]["data"]
+    assert "pid_start" in started
+    assert started["pid_start"] == runs.proc_starttime(os.getpid())
+
+
+def test_reconcile_silent_skips_finished_journals(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    runs.start(context)
+    runs.finish(context, "completed")
+    assert runs.reconcile_silent(tmp_path, timeout_for_job=lambda job_id: 1, now=1e12, now_mono=1e9) == []
 
 
 def test_terminal_arguments_are_omitted_from_agent_events_and_workflows(tmp_path: Path) -> None:

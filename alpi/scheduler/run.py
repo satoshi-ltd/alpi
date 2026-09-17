@@ -10,6 +10,7 @@ import signal
 import subprocess
 import sys
 import time
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -325,6 +326,14 @@ def _run_script_only(job: dict, home: Path) -> JobOutcome:
     return JobOutcome(True, f"silent run ok: {summary}", reply=reply)
 
 
+def _close_supervised_journal(home: Path, run_id: str) -> None:
+    try:
+        from alpi import runs
+        runs.finish_if_running(home, run_id, "interrupted")
+    except Exception:  # noqa: BLE001
+        log.debug("could not close journal %s after the child was ended", run_id[:8])
+
+
 def run_job(job: dict, home: Path) -> JobOutcome:
     # `notify: false` (default) runs silent; `notify: true` pushes the reply to the owner's apps — unless the agent already notified itself, in which case the auto-notify is suppressed to avoid duplicates.
     if job.get("no_agent"):
@@ -360,9 +369,12 @@ def run_job(job: dict, home: Path) -> JobOutcome:
 
     from alpi.home import effective_profile_env as _effective_profile_env, workspace_env
     secs = job_run_timeout(job)
+    # The scheduler supervises this child, so it owns the journal: on a kill it closes it itself instead of leaving it for the sweep to find (and alert on) a second time.
+    run_id = uuid.uuid4().hex
     extra = {
         "ALPI_HOME": str(home),
         "ALPI_PLATFORM": "cron",
+        "ALPI_RUN_ID": run_id,
         "ALPI_SCHEDULE_CHILD": "1",
         # Stable cache-affinity scope: repeated runs of one job share a provider sticky key instead of minting one per run.
         "ALPI_SCHEDULE_ID": str(job.get("id") or ""),
@@ -395,8 +407,10 @@ def run_job(job: dict, home: Path) -> JobOutcome:
             env=env, capture_output=True, text=True, timeout=secs,
         )
     except subprocess.TimeoutExpired:
+        _close_supervised_journal(home, run_id)
         return JobOutcome(False, "agent timed out", timeout_reason=f"timeout_{secs}s")
     if proc.returncode != 0:
+        _close_supervised_journal(home, run_id)
         return JobOutcome(
             False, f"agent rc={proc.returncode}: {proc.stderr[:300]}",
             exit_code=proc.returncode,

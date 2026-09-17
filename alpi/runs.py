@@ -4,8 +4,10 @@ import json
 import math
 import os
 import re
+import signal
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any
@@ -155,6 +157,7 @@ def start(context: RunContext, *, model: str = "", input_text: str = "") -> None
         "workgroup_id": context.workgroup_id,
         "workspace": str(context.workspace),
         "pid": os.getpid(),
+        "pid_start": proc_starttime(os.getpid()),
         "model": model,
         "input": input_text,
     })
@@ -241,22 +244,42 @@ def usage_summary(home: Path, run_id: str) -> dict[str, Any]:
     return totals
 
 
-def reconcile_stale(home: Path, *, older_than_s: float = 3600.0) -> list[dict[str, Any]]:
-    """Close legacy journals that cannot still belong to a live process.
+SILENCE_GRACE_S = 300.0
 
-    Returns one row per closed journal so the caller can alert: a run whose
-    daemon died never reaches the scheduler's own failure path, so this is the
-    only place its death can be reported.
-    """
-    now = time.time()
-    closed: list[dict[str, Any]] = []
+# run_id -> (updated_at it went quiet at, monotonic time the sweep first saw it past threshold).
+# Silence is judged on the wall clock; a live pid is only killed once this process has also watched it stay quiet for a grace on the monotonic clock, so a clock step or a wake from suspend can never kill a healthy child on its own.
+_silence_seen: dict[str, tuple[float, float]] = {}
+
+
+def proc_starttime(pid: int) -> str | None:
+    # /proc/<pid>/stat field 22 — survives container PID reuse. None on non-Linux.
+    try:
+        with open(f"/proc/{pid}/stat", "rb") as f:
+            data = f.read()
+    except OSError:
+        return None
+    rparen = data.rfind(b")")
+    if rparen < 0:
+        return None
+    tail = data[rparen + 1:].split()
+    if len(tail) < 20:
+        return None
+    try:
+        return tail[19].decode("ascii")
+    except UnicodeDecodeError:
+        return None
+
+
+def running_journals(home: Path, now: float) -> list[tuple[dict, dict, int, float]]:
+    """Every journal still marked running, with its start data, pid and seconds since its last event."""
+    out: list[tuple[dict, dict, int, float]] = []
     directory = home / "runs"
     if not directory.exists() or directory.is_symlink():
-        return closed
+        return out
     try:
         paths = list(directory.glob("*.jsonl"))
     except OSError:
-        return closed
+        return out
     for path in paths:
         if path.is_symlink():
             continue
@@ -273,18 +296,129 @@ def reconcile_stale(home: Path, *, older_than_s: float = 3600.0) -> list[dict[st
             age = now - float(row.get("updated_at") or 0.0)
         except (OSError, TypeError, ValueError):
             continue
+        out.append((row, started, pid, age))
+    return out
+
+
+def _closed_row(row: dict, started: dict, age: float, reason: str, **extra: Any) -> dict[str, Any]:
+    return {
+        "run_id": str(row["id"]),
+        "job_id": str(started.get("job_id") or ""),
+        "source": str(started.get("source") or ""),
+        "silent_for_s": round(age, 1),
+        "reason": reason,
+        "journal_closed": True,
+        "pid_killed": False,
+        **extra,
+    }
+
+
+def reconcile_stale(
+    home: Path,
+    *,
+    older_than_s: float = 3600.0,
+    journals: list[tuple[dict, dict, int, float]] | None = None,
+) -> list[dict[str, Any]]:
+    """Close journals whose process is gone.
+
+    Returns one row per closed journal so the caller can alert: a run whose
+    daemon died never reaches the scheduler's own failure path, so this is the
+    only place its death can be reported.
+    """
+    now = time.time()
+    closed: list[dict[str, Any]] = []
+    rows = journals if journals is not None else running_journals(home, now)
+    for row, started, pid, age in rows:
         if pid > 0 and _pid_alive(pid):
             continue
         if pid <= 0 and age < older_than_s:
             continue
         if finish_if_running(home, str(row["id"]), "interrupted"):
-            closed.append({
-                "run_id": str(row["id"]),
-                "job_id": str(started.get("job_id") or ""),
-                "source": str(started.get("source") or ""),
-                "silent_for_s": round(age, 1),
-            })
+            _silence_seen.pop(str(row["id"]), None)
+            closed.append(_closed_row(row, started, age, "dead", pid_recorded=pid > 0))
     return closed
+
+
+def reconcile_silent(
+    home: Path,
+    *,
+    timeout_for_job: Callable[[str], int | None],
+    grace_s: float = SILENCE_GRACE_S,
+    now: float | None = None,
+    now_mono: float | None = None,
+    journals: list[tuple[dict, dict, int, float]] | None = None,
+) -> list[dict[str, Any]]:
+    """Report scheduled runs that have written nothing for longer than their job allows.
+
+    The pid check cannot see a child that is alive but wedged, and the
+    scheduler's own timeout did not end two such runs in production: they sat
+    in ``running`` for 20 and 30 hours. A healthy run emits an event on every
+    tool call and model step, so silence past the job timeout plus a grace has
+    no legitimate cause. Only runs with a job are judged — a job is the only
+    thing that says how long a run may take.
+
+    A live pid is killed only when it is provably this run's process: same
+    start time as the one the child recorded at run start. Anything else that
+    is alive is reported but left untouched, journal included — writing a
+    ``run.finished`` under a writer that may still append would corrupt it.
+    """
+    now = time.time() if now is None else now
+    now_mono = time.monotonic() if now_mono is None else now_mono
+    rows = journals if journals is not None else running_journals(home, now)
+    out: list[dict[str, Any]] = []
+    for row, started, pid, age in rows:
+        run_id = str(row["id"])
+        job_id = str(started.get("job_id") or "")
+        if not job_id:
+            continue
+        timeout = timeout_for_job(job_id)
+        if not timeout:
+            continue
+        updated_at = float(row.get("updated_at") or 0.0)
+        if age <= float(timeout) + grace_s:
+            _silence_seen.pop(run_id, None)
+            continue
+        seen = _silence_seen.get(run_id)
+        if seen is None or seen[0] != updated_at:
+            _silence_seen[run_id] = (updated_at, now_mono)
+            continue
+        if now_mono - seen[1] < grace_s:
+            continue
+        extra: dict[str, Any] = {"timeout_s": int(timeout)}
+        if pid > 0 and _pid_alive(pid):
+            if not _is_this_runs_process(pid, started):
+                out.append(_closed_row(row, started, age, "silent", journal_closed=False, **extra))
+                continue
+            try:
+                os.kill(pid, signal.SIGKILL)
+                extra["pid_killed"] = True
+            except ProcessLookupError:
+                extra["pid_killed"] = False   # gone between the liveness check and the kill: nothing left to conflict with the close
+            except PermissionError:
+                # Alive and untouchable: closing now would put a run.finished under a writer that may still append.
+                out.append(_closed_row(row, started, age, "silent", journal_closed=False, kill_refused=True, **extra))
+                continue
+            extra["journal_closed"] = finish_if_running(home, run_id, "interrupted")
+            _silence_seen.pop(run_id, None)
+            out.append(_closed_row(row, started, age, "silent", **extra))
+            continue
+        if pid > 0:
+            continue  # a dead pid belongs to reconcile_stale, which ran first
+        if finish_if_running(home, run_id, "interrupted"):
+            _silence_seen.pop(run_id, None)
+            out.append(_closed_row(row, started, age, "silent", **extra))
+    return out
+
+
+def _is_this_runs_process(pid: int, started: dict) -> bool:
+    # A recycled pid can be the daemon, another profile's child, or anything at all; only a matching start time proves it is the process that wrote run.started.
+    if pid in (os.getpid(), os.getppid()):
+        return False
+    expected = started.get("pid_start")
+    if not expected:
+        return False
+    return proc_starttime(pid) == str(expected)
+
 
 
 def _safe_int(value: Any) -> int:
@@ -312,7 +446,6 @@ def _pid_alive(pid: int) -> bool:
     except PermissionError:
         return True
     return True
-
 
 _last_model_state: dict[str, str] = {}
 
@@ -468,7 +601,7 @@ def list_runs(home: Path, *, limit: int = 50) -> list[dict]:
 
 __all__ = [
     "FORMAT_VERSION", "MAX_EVENT_BYTES", "MAX_LIST_LIMIT", "active", "active_ids", "append", "finish",
-    "finish_if_running", "reconcile_stale", "usage_summary",
+    "finish_if_running", "proc_starttime", "reconcile_stale", "reconcile_silent", "running_journals", "usage_summary",
     "persisted_tool_arguments",
     "list_runs", "read", "record_agent_event", "run_path", "start", "summary",
     "register_active", "unregister_active",

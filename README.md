@@ -45,48 +45,31 @@ The design goal is sovereignty:
 
 ## What ships today
 
-The current release ships the full local-to-network shape:
-
-- Textual TUI with streaming replies, slash commands, live tool cards,
-  interrupt, session resume, model switching, and cost/token display.
-- Multimodal chat input: attach images, PDFs, and text/source files to a
-  turn (TUI `/attach`, desktop/mobile paperclip). Attachments are per-turn
-  by default. When the user explicitly asks Alpi to learn a source,
-  `knowledge(action="ingest")` synthesizes durable Markdown knowledge under
-  the workspace knowledge bundle instead of storing the raw document.
-- Semantic recall over past conversations: `recall_sessions` finds an old
-  session by meaning (keyword `session_search` stays the quick first pass).
-  Opt-in (`index_sessions`), profile-local, and forgettable — deleting a
-  session drops it from recall.
-- Semantic search over workgroup history: `workgroup_search` finds old
-  decisions in a workgroup transcript by meaning. Hub-owned and profile-local
-  (no cross-peer search), opt-in (`index_workgroups`), and forgettable.
-- Docker image (`satoshiltd/alpi`) for an always-on home-server
-  deployment, with persistent profile storage under `/data/.alpi`.
-- On-demand email tool: read, search, send, and reply over IMAP or
-  Gmail, driven by the agent during a chat or a scheduled job. Configured
-  in `alpi setup -> Email`; not a poller or inbound channel.
-- Inline-learning memory: `USER.md`, `MEMORY.md`, and `AGENT.md`.
-- Live skills under `~/.alpi/skills/<category>/<name>/`, scanner-gated
-  and auto-injected into the system prompt.
-- Multi-provider LLM support through LiteLLM, plus first-class Ollama.
-- Read-only `research(brief, depth)` sub-agent with `fast`, `normal`,
-  and `deep` tiers.
-- Write-capable `delegate` sub-agent for focused file/web/terminal
-  tasks.
-- Cron + one-shot scheduler hosted by the unified service.
-- MCP client for user-configured local MCP servers.
-- ALP.1: intra-machine agent-to-agent links over Unix sockets.
-- ALP.2: inter-machine links over Noise_XK TCP, with per-peer rate
-  limits and the profile's daily USD budget enforced on inbound calls.
-- ALP.3: hub-anchored shared workgroups for multiple alpis and optional
-  human participants.
-- Host-plane access for paired desktop / mobile clients over Unix
-  socket locally and WebSocket remotely, with ten-minute one-time pairing
-  grants and independently revocable per-device tokens.
-- `alpi doctor`, `alpi logs`, a device-attributed host-RPC `alpi audit-log`, one launchd /
-  systemd user unit per machine, backup-friendly file layout, and security audit
-  logs.
+- **Chat surfaces.** A Textual TUI with streaming replies, slash commands,
+  live tool cards, interrupt and session resume; a desktop app and a mobile
+  app that pair with your own daemon over the host plane.
+- **Attachments and knowledge.** Attach images, PDFs and source files to a
+  turn. Ask alpi to learn a document and it synthesises durable Markdown
+  knowledge in your workspace instead of storing the raw file. Semantic
+  recall over past sessions and workgroup history is opt-in and forgettable.
+- **Memory.** Three plain-Markdown files — `USER.md`, `MEMORY.md`,
+  `AGENT.md` — updated inline during conversations.
+- **Skills.** Reusable recipes under the profile's own `skills/`,
+  scanner-gated and injected into the system prompt.
+- **Models.** Any provider through LiteLLM, first-class Ollama, per-profile
+  fast / deep tiers and fallbacks, and a daily USD cap enforced on every turn.
+- **Sub-agents.** Read-only `research` with three depth tiers, write-capable
+  `delegate`, and bounded tool workflows.
+- **Automation.** Cron and one-shot schedules hosted by the daemon; an
+  on-demand email tool (IMAP or Gmail) the agent reads and sends through — not
+  an inbound channel; a client for local MCP servers.
+- **ALP.** Same-machine links over Unix sockets, inter-machine links over
+  Noise_XK with per-peer rate limits and budgets, and hub-anchored workgroups
+  for teams of agents — see [docs/ALP.md](docs/ALP.md) and
+  [docs/WORKGROUPS.md](docs/WORKGROUPS.md).
+- **Operations.** `alpi doctor`, `alpi audit`, merged logs, an administrative
+  audit trail, encrypted backups, one launchd / systemd unit per machine, and
+  an official Docker image (`satoshiltd/alpi`) for always-on hosts.
 
 ## Quickstart
 
@@ -102,7 +85,7 @@ workspace. For local-only inference, install Ollama first and add it in
 `alpi setup -> Model`.
 
 The browser tool downloads the Chromium headless shell (~340 MB) on
-first use, cached at `~/.cache/ms-playwright/`. No manual step.
+first use, cached under your platform's Playwright directory. No manual step.
 
 Common commands:
 
@@ -111,7 +94,6 @@ alpi                         # interactive TUI
 alpi -c                      # resume last session
 alpi -p work                 # use named profile
 alpi chat --once "status?"   # one-shot stdout turn
-alpi -p smith chat --once "audit" --connection-id conn_x  # visible, live delegated chat
 
 alpi setup                   # model, email, MCPs, sandbox, daemon
 alpi doctor                  # live health checks
@@ -200,6 +182,8 @@ See [docs/SECURITY.md](docs/SECURITY.md) for the full model.
   isolation, state, memory, skills, peers, services, versioning.
 - [docs/ALP.md](docs/ALP.md) — wire protocol, identity, signatures,
   transports, methods, errors, workgroups.
+- [docs/WORKGROUPS.md](docs/WORKGROUPS.md) — workgroups in practice:
+  briefings, task markers, recipes, pipelines with gates, human steering.
 - [docs/SECURITY.md](docs/SECURITY.md) — threat model, approval gate,
   sandbox, injection/SSRF/path guards, dependency posture.
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — implementation

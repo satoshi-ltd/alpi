@@ -220,18 +220,35 @@ any active run. Terminal command text is omitted from the journal, saved turn
 metadata, and chat replay sidecar, including terminal steps nested in a
 workflow. Listing reads the first and last journal records rather than replaying
 the event stream. Cleanup offers completed journals — a valid `summary()` whose
-status is not `running`; a hung journal is `reconcile_stale`'s job and an
+status is not `running`; a hung journal is the run sweep's job and an
 unreadable one is kept — older than 30 days, plus the oldest completed ones
 beyond 200 MiB per profile. The size branch skips journals completed less than
 an hour ago (`RUNS_SETTLE_SECONDS`): a workgroup child writes `run.finished`
 before the parent settles cost from `usage_summary()`, and the daemon's
 `active_ids()` does not know that child, so it stays as a second guard only for
 the window between `run.finished` and `unregister_active`. Cleanup only offers,
-under the label *Old and excess run journals*; nothing is deleted on its own. `reconcile_stale` runs at
-profile start, closes any journal whose pid is gone as `interrupted`, and returns
-the rows it closed so the daemon can alert on each: a run that died with its
-daemon never reached the scheduler's own failure path, so this is the only place
-its death is reported.
+under the label *Old and excess run journals*; nothing is deleted on its own. The **run sweep** runs at
+profile start and then every 30 s from the daemon's maintenance loop (`_sweep_runs`,
+deliberately off the scheduler's thread pool — a worker wedged in `run_job` is the
+case it hunts — and wrapped so a failure in it can never end the loop). One scan of
+`runs/` feeds two rules, applied in order. `reconcile_stale` closes any journal whose
+pid is gone as `interrupted` (reason `dead`); a dead child is reported within about a
+minute. `reconcile_silent` judges every *scheduled* run whose journal has written
+nothing for longer than its job's timeout plus `SILENCE_GRACE_S` (a deleted job is
+judged by `MAX_RUN_TIMEOUT_SECONDS`); silence is wall-clock, but the sweep must also
+have watched it hold for the grace on the monotonic clock before acting, so a wedged
+child is reported roughly ten minutes past its timeout and a clock step alone never
+fires it. A live pid is killed only when it is provably the run's process: `run.started`
+records `pid_start` (`/proc/<pid>/stat` field 22), the sweep requires it to match, and
+never targets its own pid or its parent's. Anything alive it cannot vouch for — a
+recycled pid, a pre-0.14.50 journal, a host without `/proc` — or that refuses the kill,
+is reported once and left untouched, journal included: a `run.finished` written under
+a live writer would be followed by that writer's own records and the run would read as
+running again. Runs without a job are never judged by silence. The scheduler closes
+the journal of a child it ends itself (it hands the child `ALPI_RUN_ID`), so its own
+timeout yields one alert rather than one from the scheduler and one from the sweep.
+Each reported row files an error output and raises `schedule.failed`, the path a live
+failure already uses.
 
 `ExecutionWorld` keeps filesystem resolution and terminal shell execution under one
 run-scoped abstraction. `local` preserves the previous behavior. `docker`
@@ -1098,7 +1115,7 @@ the agent calls `schedule(action='add', kind='once',
 after_hours=N)`, the engine resolves `now` from a single source so
 the agent doesn't drift.
 
-**Duplicate guard + in-place edits.** `add` rejects a job whose (`kind` + cron / `run_at` / `after_hours`) matches an existing one AND whose prompt fingerprint (lowercase + whitespace-collapsed first 80 chars) collides. Pass `force=true` to bypass when the second job is genuinely intentional. Use `update` to change prompt, cron, `notify`, or pause state without remove/recreate churn. A job carries a single delivery axis, `notify: bool` (default `false` = silent): `true` pushes the reply to the owner's apps. Failure is not on that axis: a failed job always files an error output and raises `schedule.failed` regardless of `notify`, and since 0.14.49 a run killed *with* the daemon does too — the scheduler dies before it can report, so `reconcile_stale` raises the same event for each orphaned journal it closes on the next start (see Runs). Legacy jobs with a `platform` field are migrated to `notify` on load (`platform` set → `notify: true`). Reaching a THIRD PARTY is an explicit `email` call in the prompt — that's now allowed (the old auto-delivery guard that rejected such prompts is gone).
+**Duplicate guard + in-place edits.** `add` rejects a job whose (`kind` + cron / `run_at` / `after_hours`) matches an existing one AND whose prompt fingerprint (lowercase + whitespace-collapsed first 80 chars) collides. Pass `force=true` to bypass when the second job is genuinely intentional. Use `update` to change prompt, cron, `notify`, or pause state without remove/recreate churn. A job carries a single delivery axis, `notify: bool` (default `false` = silent): `true` pushes the reply to the owner's apps. Failure is not on that axis: a failed job always files an error output and raises `schedule.failed` regardless of `notify`, and a run the scheduler could not end does too — killed with the daemon (0.14.49), or wedged past its timeout inside a live one (0.14.50) — through the run sweep described under Runs: a dead child within about a minute, a wedged one roughly ten minutes past its timeout. Legacy jobs with a `platform` field are migrated to `notify` on load (`platform` set → `notify: true`). Reaching a THIRD PARTY is an explicit `email` call in the prompt — that's now allowed (the old auto-delivery guard that rejected such prompts is gone).
 
 Scheduled jobs execute through `alpi chat --once --emit-events
 --no-save` with `ALPI_PLATFORM=cron`. The scheduler consumes stdout

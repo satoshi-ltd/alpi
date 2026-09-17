@@ -1,5 +1,55 @@
 # Changelog
 
+## v0.14.50 — 2026-09-17 — a wedged run is found while the daemon still runs, and the log survives long enough to say why
+
+- **Two runs sat in limbo for 20 and 30 hours inside a healthy daemon.** 0.14.49 made a
+  dead run report itself, but only at the next daemon start. In production the daemon
+  never restarted on its own: both runs were closed by a human stopping the container for
+  an upgrade. The child's last event was a call that never came back — one to the
+  Bitbucket MCP server, one to a skill script — and the scheduler's own timeout, which
+  works and had fired before, produced nothing for either. Whether the child died
+  unreported or stayed alive and wedged is no longer knowable (see the last bullet), so
+  this release covers both.
+- **The run sweep now runs every 30 seconds, not once at start.** The daemon's own
+  maintenance loop calls it, off the scheduler's thread pool on purpose: a scheduler
+  worker stuck in a run is exactly the case being hunted, so the hunter cannot live
+  there. A child that died without reporting is closed and alerted within a minute.
+- **A silence watchdog catches the child that is still alive.** A scheduled run that has
+  written no event for longer than its job's timeout plus a five-minute grace is judged
+  wedged. A healthy run emits an event on every tool call and every model step; silence
+  past the whole allowance has no legitimate cause. Silence is measured on the wall clock,
+  but the sweep also has to watch it hold for the grace on the monotonic clock before it
+  acts, so a clock step or a wake from suspend can never on its own kill a healthy child.
+  Runs without a job are not judged — a job is the only thing that says how long a run may
+  take — and the pid sweep keeps owning them. A job deleted mid-run is judged by the
+  scheduler's own ceiling instead of never.
+- **A live process is killed only when it is provably the run's own.** Every run now
+  records its process start time next to its pid, and the watchdog kills only a pid whose
+  start time still matches — never the daemon, never its parent, never a recycled pid
+  that now belongs to something else. Anything alive it cannot vouch for, or that refuses
+  the kill, is reported once and left exactly as it is, journal included: writing a `run.finished` under a writer
+  that might still append would corrupt the journal and flip the run back to running.
+  Journals written before this release carry no start time and fall in that group.
+- **The scheduler now owns the journal of a child it ends.** Its own timeout already filed
+  an alert; the killed child never wrote `run.finished`, so the sweep found the journal
+  thirty seconds later and alerted again. The scheduler now hands the child its run id
+  and closes the journal itself on a timeout or a bad exit, so one event is one alert.
+- **The alert says which it was.** *did not finish* for a dead process, *went silent* for a
+  wedged one, with the seconds of silence, the timeout it overran, whether a process was
+  killed, and, when the journal had to be left open, that a person should look.
+- **Why the cause is unknowable: the daemon log held two hours.** `service.log` rotates at
+  1 MB with three backups. On the production box those 4 MB covered 21:53 to 00:00,
+  because 4,933 of 4,937 lines were `websockets.server connection closed` — the host
+  plane's health checks opening and closing a socket every second or two, logged at INFO
+  by a library nobody had quieted. Everything from the days of the incident had been
+  rotated away. That logger is now held at WARNING; the same 4 MB hold days.
+- Still open, on purpose: the kill reaches the child alone. The MCP server, skill script or
+  terminal command that caused the wedge runs in its own session and survives, as it
+  already did under the scheduler's own timeout. Reaping those is a separate change.
+- `runs.reconcile_stale` rows carry `reason: "dead"` and `pid_recorded`; the new
+  `runs.reconcile_silent` returns `reason: "silent"` with `timeout_s`, `pid_killed` and
+  `journal_closed`. `run.started` gains `pid_start`.
+
 ## v0.14.49 — 2026-09-17 — a run that dies with the daemon still files its alert
 
 - **A scheduled run whose daemon died was never reported to anyone.** When a job fails

@@ -24,6 +24,14 @@ generation. JSONL telemetry feeds are append-only, read with `jq` (or
 `alpi digest`) — `compaction.jsonl` is unbounded; `runs.jsonl` is capped
 and rolling.
 
+The daemon holds the third-party `websockets` logger at WARNING. A load
+balancer's health check opens and closes a socket on the host plane every
+second or two, and at INFO that one logger was 99.9% of `service.log` on a
+production box, rotating the whole 4 MB window out in about two hours — the
+days you would want to read were already gone. If a `service.log` ever fills
+that fast again, look for another library logging per connection before
+raising the cap.
+
 | File | Scope | Format | What it answers | Who writes it |
 |---|---|---|---|---|
 | `service.log` | **daemon-wide; ONE file at `~/.alpi/logs/service.log`, never duplicated per profile** | rotated text | Did the daemon start? Which services came up for which profile? Did a peer hit an ALP listener? Did a cron job fire? | the daemon supervisor + every per-profile service that logs through the root logger |

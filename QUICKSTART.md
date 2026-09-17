@@ -62,7 +62,7 @@ not for real use.
 alpi
 ```
 
-Type `hola` and press Enter. The TUI streams the model's reply.
+Type `hello` and press Enter. The TUI streams the model's reply.
 Useful first commands to try inside the TUI:
 
 - `/help` — list every slash command.

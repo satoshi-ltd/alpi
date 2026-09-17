@@ -85,7 +85,7 @@ def _old_sessions(h: Path) -> tuple[list[str] | None, int]:
     return ids, total
 
 
-# Only completed journals (valid summary, status != running) are ever offered: a hung journal is reconcile_stale's job, an unreadable one is kept.
+# Only completed journals (valid summary, status != running) are ever offered: a hung journal is the run sweep's job, an unreadable one is kept.
 def _run_journal_candidates(h: Path) -> list[Path]:
     from alpi import runs as runs_mod
     from alpi.home import profile_name

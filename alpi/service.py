@@ -27,6 +27,7 @@ from alpi._proc_io import drain_tail
 log = logging.getLogger("alpi.service")
 
 _PROFILE_RESCAN_SECONDS = 5.0
+_RUN_SWEEP_SECONDS = 30.0
 
 
 # Public — orchestration
@@ -58,23 +59,7 @@ def _acquire_singleton_lock(root: Path):
     return fd
 
 
-def _proc_starttime(pid: int) -> str | None:
-    # /proc/<pid>/stat field 22 — survives container PID reuse. None on non-Linux.
-    try:
-        with open(f"/proc/{pid}/stat", "rb") as f:
-            data = f.read()
-    except OSError:
-        return None
-    rparen = data.rfind(b")")
-    if rparen < 0:
-        return None
-    tail = data[rparen + 1:].split()
-    if len(tail) < 20:
-        return None
-    try:
-        return tail[19].decode("ascii")
-    except UnicodeDecodeError:
-        return None
+from alpi.runs import proc_starttime as _proc_starttime  # noqa: E402
 
 
 def _unlink_stale_pidfile(p: Path) -> None:
@@ -302,19 +287,9 @@ def _start_new_profiles(
                 "profile %s: cannot read config — retry next tick", profile,
             )
             continue
-        try:
-            from alpi import runs
-            reconciled = runs.reconcile_stale(home)
-            if reconciled:
-                log.info(
-                    "profile %s: closed %d stale run journal(s)",
-                    profile, len(reconciled),
-                )
-                _alert_stale_runs(home, profile, reconciled)
-        except Exception:  # noqa: BLE001
-            log.exception("profile %s: stale run reconciliation failed", profile)
+        _sweep_runs(home, profile)
         task_map = _profile_tasks(home, profile)
-        registry[profile] = {"tasks": task_map, "fps": fps}
+        registry[profile] = {"tasks": task_map, "fps": fps, "next_sweep_at": time.time() + _RUN_SWEEP_SECONDS}
         count = sum(len(ts) for ts in task_map.values())
         if count:
             log.info("profile %s: started %d daemon task(s)", profile, count)
@@ -359,6 +334,61 @@ async def _stop_task_group(rt: dict[str, Any], name: str) -> None:
         await asyncio.gather(*tasks, return_exceptions=True)
 
 
+# profile -> run_ids already reported as left open; per profile, so one profile's sweep never forgets another's.
+_reported_open: dict[str, set[str]] = {}
+
+
+def _sweep_runs(home: Path, profile: str) -> None:
+    """Close and report runs the scheduler could not: a child that died unreported, or one wedged past its job's timeout."""
+    from alpi import runs
+    from alpi.scheduler import jobs_store
+    from alpi.scheduler.run import MAX_RUN_TIMEOUT_SECONDS, job_run_timeout
+    try:
+        try:
+            jobs = {str(j.get("id")): j for j in jobs_store.read(home)}
+        except Exception:  # noqa: BLE001
+            jobs = {}
+
+        def timeout_for(job_id: str) -> int | None:
+            job = jobs.get(job_id)
+            # A deleted or unreadable job still capped its run at the scheduler's ceiling; judging by that beats never judging it.
+            return job_run_timeout(job) if job else MAX_RUN_TIMEOUT_SECONDS
+
+        journals = runs.running_journals(home, time.time())
+        # Order matters: a dead pid is reported as dead even when it is also silent; only a live or unknown pid reaches the silence rule.
+        rows = runs.reconcile_stale(home, journals=journals)
+        rows += runs.reconcile_silent(home, timeout_for_job=timeout_for, journals=journals)
+        still_running = {str(r[0]["id"]) for r in journals}
+        reported = _reported_open.setdefault(profile, set())
+        reported.intersection_update(still_running)
+        to_alert: list[dict[str, Any]] = []
+        for row in rows:
+            if row.get("journal_closed"):
+                to_alert.append(row)
+                continue
+            # Left open on purpose (alive, not provably ours, or refused the kill): say so once, not every 30 s.
+            if row["run_id"] in reported:
+                continue
+            reported.add(row["run_id"])
+            to_alert.append(row)
+        if not to_alert:
+            return
+        log.info(
+            "profile %s: run sweep — %s",
+            profile,
+            ", ".join(
+                f"{r['run_id'][:8]}:{r['reason']}"
+                + ("" if r.get("journal_closed") else ":left-open")
+                + (":killed" if r.get("pid_killed") else "")
+                for r in to_alert
+            ),
+        )
+        _alert_stale_runs(home, profile, to_alert)
+    except Exception:  # noqa: BLE001
+        # Journals are already closed by now; a failed alert is a log line, never a dead daemon.
+        log.exception("profile %s: run sweep failed", profile)
+
+
 def _alert_stale_runs(home: Path, profile: str, closed: list[dict[str, Any]]) -> None:
     # A run whose daemon died never reaches the scheduler's failure path, so without this its death is only a log line.
     from alpi import outputs as outputs_mod
@@ -377,18 +407,49 @@ def _alert_stale_runs(home: Path, profile: str, closed: list[dict[str, Any]]) ->
     for row in closed:
         job_id = str(row.get("job_id") or "")
         title = titles.get(job_id) or (f"job {job_id}" if job_id else "manual run")
+        silent = row.get("reason") == "silent"
+        if silent and not row.get("journal_closed"):
+            why = (
+                "its process refused the kill (permission denied)"
+                if row.get("kill_refused")
+                else "a process holds its pid but cannot be proven to be this run"
+            )
+            headline = (
+                f"The run has written nothing for {row.get('silent_for_s')}s, past its "
+                f"{row.get('timeout_s')}s timeout; {why}, so nothing was ended and the "
+                f"journal was left open. Check it by hand; this alert will not repeat."
+            )
+        elif silent:
+            headline = (
+                f"The run wrote nothing for {row.get('silent_for_s')}s, past its "
+                f"{row.get('timeout_s')}s timeout, and was closed as wedged."
+            )
+            if row.get("pid_killed"):
+                headline += " Its process was still alive and has been killed."
+            else:
+                headline += " No live process was found."
+        elif row.get("pid_recorded", True):
+            headline = (
+                f"The run ended without finishing; its process was gone and the "
+                f"journal was closed after {row.get('silent_for_s')}s of silence."
+            )
+        else:
+            headline = (
+                f"The run ended without finishing; it recorded no pid, and the "
+                f"journal was closed after {row.get('silent_for_s')}s of silence."
+            )
         body = (
-            f"The run ended without finishing and was closed on daemon start.\n"
+            f"{headline}\n"
             f"run: {row.get('run_id')}\n"
             f"job: {job_id or 'none'}\n"
-            f"source: {row.get('source') or 'unknown'}\n"
-            f"silent for: {row.get('silent_for_s')}s before it was closed"
+            f"source: {row.get('source') or 'unknown'}"
         )
         output_id = ""
         try:
             output = outputs_mod.append(
                 home, profile=profile, body=body, type="error",
-                title=f"{title} did not finish", delivered_to=[],
+                title=f"{title} {'went silent' if silent else 'did not finish'}",
+                delivered_to=[],
             )
             output_id = str(output["id"])
         except Exception:  # noqa: BLE001
@@ -398,7 +459,10 @@ def _alert_stale_runs(home: Path, profile: str, closed: list[dict[str, Any]]) ->
             "job_id": job_id,
             "title": title,
             "kind": "cron" if job_id else "run",
-            "message": "run interrupted; closed by stale reconciliation",
+            "message": (
+                "run wedged past its timeout; closed by the run sweep"
+                if silent else "run interrupted; closed by the run sweep"
+            ),
             "reply": "",
             "delivered_to": "",
             "silent": False,
@@ -427,6 +491,13 @@ async def _reconcile_profiles(
             del registry[profile]
             log.info("profile %s: home gone — daemon tasks stopped", profile)
             continue
+        # Off the scheduler's executor on purpose: a worker wedged in run_job is exactly the case the sweep exists to catch.
+        if time.time() >= rt.get("next_sweep_at", 0.0):
+            rt["next_sweep_at"] = time.time() + _RUN_SWEEP_SECONDS
+            try:
+                await asyncio.to_thread(_sweep_runs, home, profile)
+            except Exception:  # noqa: BLE001
+                log.exception("profile %s: run sweep raised — maintenance loop continues", profile)
         try:
             fps = _reload_fingerprints(home)
         except Exception:  # noqa: BLE001
@@ -4014,6 +4085,8 @@ def _configure_logging_daemon(root: Path) -> None:
     ]
     if sys.stderr.isatty():
         handlers.append(logging.StreamHandler())
+    # The host plane's health checks open and close a socket every second or two; at INFO that one logger was 99.9% of the daemon log and rotated everything else out in about two hours.
+    logging.getLogger("websockets").setLevel(logging.WARNING)
     logging.basicConfig(
         level=logging.INFO,
         format=FORMAT,
