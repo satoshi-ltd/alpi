@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.14.51 — 2026-09-17 — the sweep's one-line message says what it actually did
+
+- **A run the sweep deliberately left open was announced as closed.** `schedule.failed`
+  carries a long `body` and a one-line `message`; clients that show a list show the line.
+  Both wedged outcomes shared it, so a run whose process could not be vouched for — or
+  that refused the kill — arrived saying *closed by the run sweep* while its journal was
+  still open and its process still running. The body said so correctly; the line a person
+  reads first did not. It now reads *left open by the run sweep* for those, and the
+  `journal_closed` field on the row is what decides.
+- Found by running 0.14.50 against a real daemon rather than a test: four synthetic
+  journals, three live processes, and the two left-open alerts both claimed to be closed.
+
 ## v0.14.50 — 2026-09-17 — a wedged run is found while the daemon still runs, and the log survives long enough to say why
 
 - **Two runs sat in limbo for 20 and 30 hours inside a healthy daemon.** 0.14.49 made a

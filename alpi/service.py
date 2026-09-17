@@ -460,8 +460,9 @@ def _alert_stale_runs(home: Path, profile: str, closed: list[dict[str, Any]]) ->
             "title": title,
             "kind": "cron" if job_id else "run",
             "message": (
-                "run wedged past its timeout; closed by the run sweep"
-                if silent else "run interrupted; closed by the run sweep"
+                "run interrupted; closed by the run sweep" if not silent
+                else "run wedged past its timeout; closed by the run sweep" if row.get("journal_closed")
+                else "run wedged past its timeout; left open by the run sweep"
             ),
             "reply": "",
             "delivered_to": "",

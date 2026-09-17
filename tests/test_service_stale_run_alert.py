@@ -98,8 +98,9 @@ def test_a_silent_run_left_open_says_so_and_asks_for_a_human(tmp_path: Path, mon
         "run_id": "x", "job_id": "j", "source": "schedule", "silent_for_s": 5000.0,
         "reason": "silent", "timeout_s": 60, "pid_killed": False, "journal_closed": False,
     }])
-    body = _failed(seen)[0]["body"]
-    assert "left open" in body and "will not repeat" in body and "killed" not in body.split("nothing was killed")[0]
+    payload = _failed(seen)[0]
+    assert "left open" in payload["body"] and "will not repeat" in payload["body"]
+    assert payload["message"] == "run wedged past its timeout; left open by the run sweep"
 
 
 def test_unreadable_jobs_file_does_not_stop_the_alert(tmp_path: Path, monkeypatch) -> None:
@@ -169,8 +170,9 @@ def test_a_refused_kill_is_reported_as_such(tmp_path: Path, monkeypatch) -> None
         "run_id": "x", "job_id": "j", "source": "schedule", "silent_for_s": 5000.0,
         "reason": "silent", "timeout_s": 60, "pid_killed": False, "journal_closed": False, "kill_refused": True,
     }])
-    body = _failed(seen)[0]["body"]
-    assert "refused the kill" in body and "left open" in body
+    payload = _failed(seen)[0]
+    assert "refused the kill" in payload["body"] and "left open" in payload["body"]
+    assert "left open by the run sweep" in payload["message"]
 
 
 def test_sweep_is_quiet_when_nothing_is_wrong(tmp_path: Path, monkeypatch) -> None:
