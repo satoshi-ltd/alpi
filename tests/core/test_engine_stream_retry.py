@@ -418,19 +418,39 @@ def test_interrupt_during_primary_failure_never_dials_the_fallback(tmp_path, mon
     assert not any(e.kind == "error" for e in events)
 
 
+
+# A turn deadline these tests must still be inside when the first provider call starts:
+# run_turn does its prompt, memory and host-block work between reading the deadline and
+# the loop's first check, and on a loaded CI runner that took longer than the 0.1 s these
+# tests used to allow — the loop then broke early and the wrap-up was the only call.
+_DEADLINE_BUDGET_S = 2.0
+
+
+def _cross_deadline(deadline: dict, overshoot: float = 0.05) -> None:
+    """Spend exactly what is left of the turn budget, so the cost does not grow with the machine."""
+    import time as _time
+    _time.sleep(max(0.0, deadline["at"] - _time.monotonic()) + overshoot)
+
 def test_deadline_during_primary_failure_goes_to_time_limit_wrapup(tmp_path, monkeypatch) -> None:
     import time as _time
     eng = _mk_engine(tmp_path, monkeypatch, fallbacks=["gpt-5.4-pro"])
-    monkeypatch.setattr(
-        "alpi.engine._turn_deadline_from_env", lambda started: _time.monotonic() + 0.1,
-    )
+    # The budget must outlast run_turn's own setup, or the loop breaks before the primary
+    # call and the wrap-up becomes the only call. _cross_deadline then spends whatever is
+    # left, so the test costs about _DEADLINE_BUDGET_S however slow the machine is.
+    deadline: dict[str, float] = {}
+
+    def _set_deadline(started: float) -> float:
+        deadline["at"] = _time.monotonic() + _DEADLINE_BUDGET_S
+        return deadline["at"]
+
+    monkeypatch.setattr("alpi.engine._turn_deadline_from_env", _set_deadline)
     calls: list[dict] = []
 
     def fake_stream(messages, tools, **kwargs):
         calls.append({"n_tools": len(tools or []), "messages": list(messages)})
         if len(calls) == 1:
             yield {"reasoning_delta": "hmm"}
-            _time.sleep(0.25)
+            _cross_deadline(deadline)
             raise _wrapped_timeout()
         yield {"text_delta": "best effort"}
         yield {
@@ -507,10 +527,14 @@ def test_interrupt_during_backoff_prevents_the_second_provider_call(tmp_path, mo
 def test_deadline_during_backoff_goes_to_wrapup_not_retry(tmp_path, monkeypatch) -> None:
     import time as _time
     eng = _mk_engine(tmp_path, monkeypatch)
-    monkeypatch.setattr(
-        "alpi.engine._turn_deadline_from_env", lambda started: _time.monotonic() + 0.1,
-    )
-    monkeypatch.setattr("alpi.llm._backoff_sleep", lambda *_a: _time.sleep(0.2))
+    deadline: dict[str, float] = {}
+
+    def _set_deadline(started: float) -> float:
+        deadline["at"] = _time.monotonic() + _DEADLINE_BUDGET_S
+        return deadline["at"]
+
+    monkeypatch.setattr("alpi.engine._turn_deadline_from_env", _set_deadline)
+    monkeypatch.setattr("alpi.llm._backoff_sleep", lambda *_a: _cross_deadline(deadline))
     tooled_calls = {"n": 0}
     untooled_calls = {"n": 0}
 
