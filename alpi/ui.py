@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, NamedTuple, Sequence
 
 from rich.console import Console
-from rich.prompt import Confirm, Prompt
+from rich.prompt import Confirm
 from rich.text import Text
 from rich.theme import Theme
 

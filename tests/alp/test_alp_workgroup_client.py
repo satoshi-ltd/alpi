@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import datetime as _dt
 import json
 import os
 import shutil
@@ -658,8 +659,6 @@ async def test_join_propagates_tts_voice_to_hub(short_tmp: Path) -> None:
     assert bob_member is not None
     assert bob_member.voice == "en-US-GuyNeural"
 
-
-import datetime as _dt
 
 
 def _now_iso() -> str:

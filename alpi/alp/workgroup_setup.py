@@ -197,8 +197,6 @@ def _spend_per_member(home: Path, wg) -> dict[str, dict[str, Any]]:
     """Aggregate workgroup transcript by author. Each post may carry
     an optional ``cost: {usd, tokens}`` declaration; we sum them per
     pubkey to give the wizard a quick "who's burning what" view."""
-    kp = load_or_generate(home)
-    member = wg.member(kp.pubkey_b64())
     out: dict[str, dict[str, Any]] = {}
     for entry in _read_transcript(home, wg.meta.id):
         author = str(entry.get("from") or "")
@@ -218,7 +216,7 @@ def _show_transcript_hub(home: Path, wg) -> None:
     if member is None:
         ui.fail_and_wait("hub is not a member of its own workgroup — corrupt state")
         return
-    group_key = wg_mod.open_sealed_group_key(member.sealed_key, kp)
+    wg_mod.open_sealed_group_key(member.sealed_key, kp)
     posts = _read_transcript(home, wg.meta.id)
     _print_transcript(home, posts, _decrypter_for_version(home, wg, kp))
     ui.press_enter()

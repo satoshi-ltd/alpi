@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-import pytest
 
 from alpi.tools import _mutations
 from alpi.tools.edit_file import EditFile

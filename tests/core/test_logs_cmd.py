@@ -43,7 +43,7 @@ def test_tail_merges_by_timestamp(tmp_path: Path) -> None:
         "2026-04-23 10:00:01 INFO alpi.schedule second",
     ])
     out = logs.tail(tmp_path, source=None, n=10)
-    order = [l.text.split()[-1] for l in out]
+    order = [entry.text.split()[-1] for entry in out]
     assert order == ["first", "second", "third"]
 
 
@@ -62,7 +62,7 @@ def test_tail_carries_timestamp_across_continuation_lines(tmp_path: Path) -> Non
         "      File …",
     ])
     out = logs.tail(tmp_path, source=None, n=10)
-    assert all(l.ts == "2026-04-23 10:00:00" for l in out)
+    assert all(entry.ts == "2026-04-23 10:00:00" for entry in out)
 
 
 def test_logs_command_prints_tail(tmp_path, monkeypatch) -> None:

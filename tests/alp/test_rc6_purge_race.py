@@ -9,7 +9,6 @@ import pytest
 
 from alpi.alp import subscription as sub_mod
 from alpi.alp import workgroup as wg_mod
-from alpi.alp.keys import load_or_generate
 
 
 def _sub(wg_id: str, name: str = "site") -> sub_mod.Subscription:

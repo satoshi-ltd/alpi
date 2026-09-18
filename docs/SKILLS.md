@@ -63,12 +63,11 @@ All skills live under `{home}/skills/<category>/<name>/` and the
 self-describe (e.g. answering questions about alpi itself) are
 exposed as **first-class tools**, not as skills.
 
-The single example is the `alpi_knowledge` tool, which reads
-packaged Markdown from `alpi/knowledge/references/` (synced from
-`docs/` by `scripts/sync_knowledge.py`). It is available on every
-profile from the moment alpi is installed; the system prompt
-instructs the agent to call it before answering any question about
-alpi. See [ARCHITECTURE.md](ARCHITECTURE.md) for the tool layer.
+The single example is the `alpi_knowledge` tool, which reads the
+hand-maintained answer packs shipped under `alpi/knowledge/references/`.
+It is available on every profile from the moment alpi is installed; the
+system prompt instructs the agent to call it before answering any question
+about alpi. See [ARCHITECTURE.md](ARCHITECTURE.md) for the tool layer.
 
 ## Frontmatter
 
@@ -115,7 +114,7 @@ the current task to decide whether to load the skill.
 A skill is **active** only when every declared requirement resolves
 in the current profile. Four kinds of requirement can each gate a
 skill independently; missing requirements hide the skill from the
-system prompt and from `keyword_match_hint`, and surface in
+system prompt and from the per-turn keyword hint, and surface in
 `skill(action='list')` with `[inactive: missing …]`.
 
 The rule across surfaces: **explicit target → hard error; implicit
@@ -126,10 +125,9 @@ prompt or the keyword hint, so it cannot pick them by accident.
 
 #### `requires_env`
 
-Env vars the skill needs. Checked against `os.environ` at
-system-prompt build time (the profile's `~/.alpi/.env` is loaded
-into the process env at engine bootstrap, so anything there counts).
-Missing or empty value → inactive.
+Env vars the skill needs. Resolved per profile — the process
+environment overlaid with that profile's own `.env` — so a value in
+`<profile-home>/.env` counts. Missing or empty → inactive.
 
 ```yaml
 requires_env: [WHOOP_CLIENT_ID, WHOOP_CLIENT_SECRET]
@@ -172,16 +170,10 @@ feature flag specific to the user's setup). Do not use it to check
 alpi's own defaults — those always look "set" to the user but
 intentionally do not count here.
 
-Unlike `requires_env` / `requires_bins` / `platforms` (always
-checked), `requires_config` is an **opt-in gate**: it kicks in only
-when the caller passes the raw profile config to
-`skill_eligibility(... cfg_raw=...)`. The system-prompt skill index
-and `skill(action="run"|"test"|"invoke")` both load it
-automatically — those are the surfaces a user touches — but
-direct programmatic callers that omit `cfg_raw` skip this single
-gate to avoid hiding skills they have no profile context for.
-Treat it as a discovery filter for the agent, not a hard execution
-barrier the runtime applies everywhere.
+`requires_config` is checked wherever a user meets a skill — the
+system-prompt index and `skill(action="run"|"test"|"invoke")` — and is a
+discovery filter rather than an execution barrier the runtime applies
+everywhere.
 
 #### `platforms`
 
@@ -285,7 +277,7 @@ db(action="query", skill="whoop-tracker",
    sql="SELECT date, mins FROM workouts ORDER BY date DESC LIMIT 7")
 ```
 
-Backed by `~/.alpi/<profile>/skills/<cat>/<skill>/state/db.sqlite`.
+Backed by `<profile-home>/skills/<cat>/<skill>/state/db.sqlite`.
 Always parameterised — `params=[…]` binds to `?` placeholders;
 never string-interpolate user data into the SQL. Schema is owned
 by the skill body — the LLM runs `CREATE TABLE IF NOT EXISTS …`
@@ -297,14 +289,11 @@ on first invocation; idempotent.
   `skill(action='reset_state', name=…)` to nuke and start over.
 - 10 000 rows max per `query` result — tighten with `WHERE` /
   `LIMIT`.
-- 5 s busy / lock timeout (sqlite-level — query duration is not
-  killed mid-flight, but skill DBs are tiny so this hasn't bitten
-  in practice).
+- 5 s busy / lock timeout at the SQLite level.
 
 **Scope:** strictly per-skill. The `skill` argument resolves
-against the profile's installed skills. Backup-friendly: when AW
-ships, `db.sqlite` flows through the encrypted archive like any
-other file under the skill directory.
+against the profile's installed skills, and `alpi backup` includes
+`db.sqlite` like any other file under the skill directory.
 
 `skill(action='reset_state', name=…)` wipes everything under
 `<skill>/state/` (including `db.sqlite`, JSONL logs, anything
@@ -331,158 +320,46 @@ fixed.
 
 ## Actions on the `skill` tool
 
-Inspection / listing:
+| Action | What it does |
+|---|---|
+| `list` | Every installed skill with its status (`active`, `[inactive: missing …]`, invalid). |
+| `view` | SKILL.md, or one file under the skill (`file="scripts/foo.py"`), prefixed with its absolute path. |
+| `validate` | Schema findings plus runtime checks (syntax, imports, OAuth ordering, port coherence). |
+| `create` | Writes **only** `SKILL.md`; the skill is live immediately. |
+| `edit`, `patch`, `set_meta` | Replace the body, make a small edit to one file, or change frontmatter fields without touching prose. |
+| `add_file`, `remove_file` | Manage files under `scripts/`, `references/`, `assets/`, `secrets/`, `state/`. Flat names only; the scanner runs on everything except `secrets/` and `state/`. |
+| `delete` | Archives to `skills/.archive/<category>/<name>__<UTC>/` — recoverable. Refused while `pinned: true`. |
+| `reset_state` | Wipes `state/` (including `db.sqlite`) and nothing else. |
+| `run`, `test`, `invoke` | Execute the skill (below). |
 
-```
-skill(action="list")
-skill(action="view",     name=..., [file="scripts/foo.py"])
-skill(action="validate", name=...)
-```
+Mutations on a user-written skill (`origin: user`) require
+`confirm_user_skill=true`; agent-created skills are provisional and the agent
+may change them freely. The agent can hold at most **40** agent-created
+skills; beyond that `create` fails and asks you to prune with `/skills`. For
+bulk cleanup, `alpi curator review` flags stale skills and `alpi curator
+apply` archives the non-pinned ones after a preview.
 
-Mutating (require `confirm_user_skill=true` on user-origin
-skills):
+### Running a skill
 
-```
-skill(action="create", name=..., category=..., description=..., body=...,
-      [requires_env], [tools], [keywords], [output_schema])
-skill(action="edit",        name=..., body=..., [confirm_user_skill])
-skill(action="patch",       name=..., subdir=..., filename=...,
-                             old_string=..., new_string=...,
-                             [confirm_user_skill])
-skill(action="set_meta",    name=..., fields={...}, [confirm_user_skill])
-skill(action="add_file",    name=..., subdir=..., filename=..., content=...,
-                             [confirm_user_skill])
-skill(action="remove_file", name=..., subdir=..., filename=...,
-                             [confirm_user_skill])
-skill(action="delete",      name=..., [confirm_user_skill])
-skill(action="reset_state", name=..., [confirm_user_skill])
-```
+`skill(action="run", name=…)` is the canonical way to execute a skill. With
+a `scripts/run.py`, alpi spawns it with the skill directory as `cwd` and
+`ALPI_HOME`, `ALPI_WORKSPACE`, `ALPI_SKILL_NAME`, `ALPI_SKILL_DIR` in the
+environment — use `$ALPI_WORKSPACE` for project files and `$ALPI_SKILL_DIR`
+for files bundled with the skill. Stdout comes back as the tool result;
+the timeout is 600 s; a missing `requires_env` variable fails the call before
+the script starts. Scripts are plain Python and run in their own process, so they cannot call
+alpi's tools or MCP methods the way the agent does — validation refuses the
+obvious `from alpi import <tool>`, and a skill that needs a tool should say so
+in its prose and let the agent make the call. Without a script, `run` returns
+SKILL.md with a directive so the agent follows the prose with the real tools
+instead of improvising. Pass `args=[…]` to forward CLI arguments.
 
-Execution:
-
-```
-skill(action="run",    name=..., [args])
-skill(action="test",   name=..., [args])
-skill(action="invoke", name=..., [args])
-```
-
-`delete` archives to `skills/.archive/<category>/<name>__<UTC>/`
-(recoverable) instead of removing. Skills with `pinned: true` in
-their frontmatter refuse `delete` until unpinned via `set_meta`.
-For bulk cleanup, `alpi curator review` flags stale/cold skills and
-`alpi curator apply` moves the non-pinned ones to that same archive
-after a preview + confirmation (idempotent; pinned skills untouched).
-`reset_state` wipes everything under `<skill>/state/` (db.sqlite,
-JSONL logs, anything else) but preserves `SKILL.md`, `scripts/`,
-`references/`, `assets/`, and `secrets/`. `set_meta` surgically
-updates frontmatter (description, category, requires_env, tools,
-keywords, output_schema, or `pinned`) without touching the prose
-body. `patch` does the inverse: small edits to a file under
-`scripts/` / `references/` / `assets/` without rewriting the whole
-file.
-
-### Creating a skill
-
-`create` writes **only** `SKILL.md` and goes live immediately under
-`~/.alpi/skills/<category>/<name>/`. Subdirectories come later via
-`add_file`. A just-created skill has no scripts, no references, no
-assets, no secrets. If the skill later writes a file under `secrets/`,
-the tool creates that directory mode 0700 automatically.
-
-The agent is capped at 40 agent-created skills total (tweakable via
-`MAX_AGENT_SKILLS`). Beyond that, `create` errors and asks the user
-to prune with `/skills` first.
-
-### Adding files
-
-```
-skill(action="add_file",
-      name="whoop-integration",
-      subdir="scripts",          # scripts | references | assets | secrets | state
-      filename="fetch.py",       # flat, no '/' or '..'
-      content="<full file text>")
-```
-
-- `scripts/`, `references/`, `assets/` content is scanned for
-  dangerous patterns (rm -rf, curl|sh, eval(), hardcoded keys, etc).
-- `secrets/` content is not scanned (by design). Files written there
-  create the directory mode 0700 and are `chmod 0600`.
-- `state/` content is not scanned either — runtime data (SQLite
-  blobs, JSONL caches) is the skill's own working memory. Use
-  `skill(action="reset_state")` to wipe it.
-
-### Viewing and running skill files
-
-`skill(action="view", name=..., file="scripts/foo.py")` returns the
-file content prefixed with `absolute_path: ...`. Use that absolute
-path when executing a script. Do not run `scripts/foo.py` relative to
-the current workspace; skill files live under the active profile home.
-
-### Running a skill end-to-end
-
-`skill(action="run", name=...)` is the canonical way to execute a
-skill from the agent. Two paths:
-
-- **`scripts/run.py` exists** — alpi spawns it with `cwd` = the skill
-  directory and an env enriched with `ALPI_HOME`, `ALPI_WORKSPACE`,
-  `ALPI_SKILL_NAME`, `ALPI_SKILL_DIR`. Use `$ALPI_WORKSPACE` for
-  project/workspace files and `$ALPI_SKILL_DIR` for files bundled with the
-  skill — a bare relative path roots at the skill directory (the cwd), not
-  the workspace. Stdout (and stderr, if any) is returned as the
-  tool result. Timeout: 600 s. If the skill declares `requires_env:`
-  fields and any of those vars are missing from the process env, the
-  call fails up-front instead of half-running the script. Scripts are
-  normal Python; built-in tools and MCP methods are not importable
-  Python APIs. MCP-backed skills should stay prose-only until there is
-  an explicit runtime bridge.
-- **No script** — alpi returns SKILL.md prefixed with a directive so
-  the agent follows the prose and calls the tools it names instead of
-  improvising.
-
-Pass `args=["--foo", "bar"]` to forward extra CLI arguments to
-`scripts/run.py`. Scheduled jobs should invoke this action from their
-prompt when they need a skill result; the scheduler itself still runs
-through `alpi chat --once --emit-events --no-save`.
-
-If the skill declares `output_schema:` in frontmatter, it must be a
-one-line JSON object using a small JSON Schema subset
-(`type`/`properties`/`required`/`items`/`enum`). `skill(run)` validates
-**stdout** against that schema; invalid JSON or a shape mismatch fails
-the call.
-
-The agent should prefer `skill(action="run")` over manually chaining
-`view` + `terminal` calls. For scripted skills, `run` owns the script
-execution. For prose-only skills, `run` loads the instructions and the
-agent executes them with the real tools.
-
-### Testing a scripted skill
-
-`skill(action="test", name=...)` is the minimal harness for scripted
-skills. It runs `scripts/run.py` through the same runtime path as
-`skill(run)` and, when `output_schema:` is declared, checks that stdout
-matches it. Prose-only skills do not support `test`; exercise those in
-chat by running the real tools they mention.
-
-### Invoking one skill from another flow
-
-`skill(action="invoke", name=...)` is the strict composition surface.
-Use it when another skill or agent step needs a machine-readable result
-from a sub-skill. Unlike `run`, `invoke` only accepts scripted skills
-that declare `output_schema:`. That keeps composition explicit: the
-callee must return JSON and the caller can trust the contract.
-
-### Origin gate
-
-Every mutation on a user-owned skill (`origin: user` in frontmatter)
-requires `confirm_user_skill=true`. Agent-created skills (`origin:
-agent`) can be modified by the agent freely — they're provisional by
-nature.
-
-### Skill quota
-
-The agent can hold at most **40 agent-created skills** at a time
-(`MAX_AGENT_SKILLS`). User-created skills don't count. Beyond the cap,
-`create` errors and asks the user to prune with `/skills`.
+If the frontmatter declares `output_schema` (a one-line JSON object using
+`type` / `properties` / `required` / `items` / `enum`), `run` validates
+stdout against it. `test` runs the same path as a minimal harness for
+scripted skills. `invoke` is the strict composition surface: it accepts only
+scripted skills that declare `output_schema`, so a skill calling another
+skill always gets machine-readable JSON.
 
 ## Example skill: Whoop OAuth integration
 
@@ -505,22 +382,8 @@ skill(
 )
 ```
 
-Add the scripts:
-
-```python
-skill(action="add_file", name="whoop-integration",
-      subdir="scripts", filename="oauth.py", content="<OAuth flow>")
-skill(action="add_file", name="whoop-integration",
-      subdir="scripts", filename="fetch.py", content="<API call>")
-```
-
-Add a reference doc:
-
-```python
-skill(action="add_file", name="whoop-integration",
-      subdir="references", filename="api-endpoints.md",
-      content="# Whoop API\n- /cycles\n- /recovery\n- /sleep\n")
-```
+Then add scripts with `skill(action="add_file", subdir="scripts", …)` and a
+reference doc under `references/`.
 
 The resulting directory:
 
@@ -535,32 +398,33 @@ The resulting directory:
   secrets/              # empty until oauth.py runs
 ```
 
-When `oauth.py` runs, it writes `../secrets/auth.json` with the
-tokens. Next time the agent fetches metrics, `fetch.py` reads from
-the same path. The user knows **one place** to find or wipe
-credentials for this skill.
+When `oauth.py` runs it writes `secrets/auth.json`; `fetch.py` reads the
+same file. One place to find or wipe this skill's credentials, and deleting
+the skill removes the whole tree, secrets included.
 
-Deleting the skill removes the whole tree including secrets — no
-residue left behind.
+## Anti-patterns
 
-## Anti-patterns (enforced)
+Refused by the code:
 
-- Skills at the top of `skills/` with no category directory (e.g.
-  `skills/orphan-skill/`) — always inside a category.
-- `DESCRIPTION.md` at the category level (`skills/apple/DESCRIPTION.md`).
-  Category metadata lives in this doc; per-category annotation is
-  noise.
 - Nested subdirectories (`scripts/subfolder/foo.py`,
   `assets/templates/variant1/template.md`). Flat subdirs only.
-- Extensions outside the allowed 5 (`tools/`, `data/`, `cache/`,
-  `output/`, `logs/`, `templates/` at the skill root). Ephemeral
-  output is the workspace's job, not the skill's — and persistent
-  runtime data already has its home in `state/`.
-- Credentials anywhere outside `secrets/` (or `~/.alpi/.env` for
-  pre-provisioned ones).
-- Files in `scripts/` / `references/` / `assets/` that contain
-  hardcoded API keys, passwords, or tokens. Security scanner blocks.
-- Hidden files (`.foo`, `.secret`). Rejected by the filename regex.
+- Subdirectories outside the allowed five (`tools/`, `data/`,
+  `cache/`, `output/`, `logs/`, `templates/`). Ephemeral output is the
+  workspace's job; persistent runtime data has its home in `state/`.
+- Hidden files (`.foo`, `.secret`) and any name outside the filename
+  pattern.
+- Hardcoded API keys, passwords or tokens in `scripts/`,
+  `references/` or `assets/` — the security scanner blocks the write.
+
+Conventions the code does **not** police, so they are on you:
+
+- Every skill lives inside a category directory. A directory placed
+  straight under `skills/` is not rejected; it is simply read as a
+  category, and what sits inside it is read as a skill.
+- No `DESCRIPTION.md` at the category level — category metadata lives
+  in this document.
+- Credentials belong in the skill's `secrets/`, or in the profile's
+  `.env` when they are pre-provisioned and shared.
 
 ## Migration from other skill layouts
 

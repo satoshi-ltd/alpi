@@ -57,7 +57,7 @@ def test_memory_learned_is_recalled_next_session(tmp_home_with_real_env: Path) -
 def test_session_search_finds_past_topic(tmp_home_with_real_env: Path) -> None:
     _run_once(tmp_home_with_real_env, "Cuéntame brevemente qué es tailscale.")
     rc, out = _run_once(
-        tmp_home,
+        tmp_home_with_real_env,
         "¿Recuerdas lo que hablamos sobre tailscale? Usa session_search si hace falta.",
     )
     assert rc == 0
@@ -66,7 +66,7 @@ def test_session_search_finds_past_topic(tmp_home_with_real_env: Path) -> None:
 
 def test_style_rule_lands_in_agent(tmp_home_with_real_env: Path) -> None:
     _run_once(
-        tmp_home,
+        tmp_home_with_real_env,
         "A partir de ahora responde siempre en un solo bullet. Guárdalo como instrucción de estilo.",
     )
     agent_profile = (tmp_home_with_real_env / "memories" / "AGENT.md").read_text().lower()

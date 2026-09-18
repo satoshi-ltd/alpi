@@ -10,6 +10,7 @@ from typing import Any
 import yaml
 
 from alpi import yamlfast
+from alpi.secrets_io import safe_write_secret
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "model": "",
@@ -753,6 +754,7 @@ def seed_defaults(home: Path) -> None:
     """
     cfg_path = home / "config.yaml"
     if not cfg_path.exists():
-        cfg_path.write_text(
+        safe_write_secret(
+            cfg_path,
             yamlfast.safe_dump(seed_config_for(home), sort_keys=False, allow_unicode=True),
         )

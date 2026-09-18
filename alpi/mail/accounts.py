@@ -87,7 +87,7 @@ def get_account(home: Path, account_id: str) -> dict[str, Any] | None:
 
 
 def client_for(home: Path, account_id: str):
-    from alpi.mail.gmail import GmailClient, GmailError
+    from alpi.mail.gmail import GmailClient
     from alpi.mail.imap import ImapClient, ImapError
 
     if not valid_id(account_id):

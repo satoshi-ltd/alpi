@@ -23,7 +23,7 @@ calls the same `host.*` JSON-RPC methods the apps use.
 │                      │   ws:// + token  │                           │
 │  your node/java app  │───Tailscale/LAN─▶│  alpi daemon              │
 │  (host-plane client) │   host.chat.send │    ├─ profile "abby"      │
-│                      │◀──frames─────────│    └─ workgroup "casa-ops" │
+│                      │◀──frames─────────│    └─ workgroup "ci-ops" │
 └──────────────────────┘                  └───────────────────────────┘
 ```
 
@@ -93,9 +93,10 @@ You get a QR code and an
 after ten minutes and can be exchanged once. A normal Desktop/Mobile client
 does that automatically. A headless integration sends
 `host.connections.exchange_pairing` as its first unauthenticated WebSocket
-message with `pairing_token`, `client`, `name` and `app_version`, then stores
-the returned **device token before any probe or other fallible setup**, then
-uses it as `params.auth_token`. Add another
+message with `pairing_token`, `client`, `name` and `app_version`, and stores
+the device token it returns — the grant is consumed by that one exchange, so
+a token you fail to persist cannot be requested again. Every later request
+carries it as `params.auth_token`. Add another
 device from the connection detail when another client should share the same
 sessions and accounting; each exchange returns a separate token so either
 device can be revoked without affecting the other.
@@ -129,8 +130,9 @@ Request:
               "session_id": "<optional, to continue a conversation>" } }
 ```
 
-For file input, stage the file first with `host.attachments.stage` and
-pass the returned metadata as `params.attachments` (a list).
+For file input, stage the file first with `host.attachments.stage`. It
+returns `{ok, attachment: {path, name, mime, size}}` — put that single
+`attachment` object into a list and pass it as `params.attachments`.
 
 Frames (each is `{ "id": 1, "event": "...", ... }`):
 
@@ -141,15 +143,19 @@ Frames (each is `{ "id": 1, "event": "...", ... }`):
 | `assistant_delta` | `text` | a chunk of the answer — concatenate |
 | `tool_start` / `tool_state` / `tool_end` | `tool_id`, `name`, … | the agent ran a tool |
 | `auto_compact` | `text`, `tokens_before`, `tokens_after` | context was compacted |
-| `heartbeat` | — | keep-alive (every 5s); ignore |
+| `heartbeat` | — | keep-alive; every 2s while the session loads, 5s once the turn runs. Ignore it, but do use it to tell a slow turn from a dead socket |
 | `reply` | `text`, `session_id`, `attachments?` | the final answer text |
 | `done` | `session_id` | **terminal** — stream ends here |
 
-Errors: a JSON-RPC error (`{ "id":1, "error": { "code", "message" } }`)
-means the request was rejected (e.g. `-32000 auth-failed`,
-`-32001 forbidden` for an out-of-scope profile). A frame with
-`event: "error"` (carrying `text`) means the turn failed mid-stream; it
-arrives before `done`.
+Errors come in two shapes. A JSON-RPC error
+(`{ "id":1, "error": { "code", "message" } }`) means the request never
+started — `-32000 auth-failed`, `-32001 forbidden` for an out-of-scope
+profile. A frame with `event: "error"` carrying `text` means the turn itself
+failed; if it failed **during** the stream a `done` still follows, but a
+request rejected before the turn began (missing text or `request_id`, unknown
+session, or a turn already running on that session — the latter carries
+`code: "busy"`) ends with the error frame and no `done`. Treat either as
+terminal.
 
 To continue a conversation, pass the `session_id` you got back as
 `params.session_id` on the next `host.chat.send`.
@@ -268,22 +274,24 @@ const { workgroups } = await call(endpoint, 'host.workgroups.list', { profile: '
 
 // post a message
 await call(endpoint, 'host.workgroup.post', {
-  profile: 'abby', wg_id: 'casa-ops', text: 'CI: build 412 green ✅',
+  profile: 'abby', wg_id: 'ci-ops', text: 'CI: build 412 green ✅',
 });
 
 // read new posts incrementally
 let after = 0;
 const { posts, next_seq } = await call(endpoint, 'host.workgroup.transcript', {
-  profile: 'abby', wg_id: 'casa-ops', after_seq: after,
+  profile: 'abby', wg_id: 'ci-ops', after_seq: after,
 });
 after = next_seq;
 for (const p of posts) console.log(`#${p.seq} ${p.from}: ${p.body}`);
 
 // fold task state (active / closed / blocked)
-const tasks = await call(endpoint, 'host.workgroup.tasks', { profile: 'abby', wg_id: 'casa-ops' });
+const tasks = await call(endpoint, 'host.workgroup.tasks', { profile: 'abby', wg_id: 'ci-ops' });
 ```
 
-Member-callable workgroup methods (all take `profile`, scope-checked):
+Member-callable workgroup methods. All but the first require `profile` and
+are rejected out of scope; `host.workgroups.list` instead takes it optionally
+and filters the rows it returns to what your connection may see:
 
 | Method | Params | Returns |
 |---|---|---|

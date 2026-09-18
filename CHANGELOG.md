@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.14.52 — 2026-09-18 — a new profile passes its own audit
+
+- **A profile created by `alpi setup` failed `alpi audit` the first time it was run.**
+  The seeded `config.yaml` was written with whatever the process umask allowed, so on a
+  normal machine it landed group- and world-readable, and the audit — which warns on any
+  such bit on that file — was right to complain about a file alpi had just written
+  itself. It now goes through the same path as every other credential file: created 0600
+  and moved into place. A config that already exists is never rewritten, so nothing
+  changes for profiles that are already set up.
+- **The lint gate no longer changes its own verdict when Ruff updates.** The project
+  named no rules, so the effective set followed whichever Ruff happened to be installed
+  and a newer one reported 225 findings that no release had introduced — which left the
+  gate unable to tell a regression from a version bump. The rule selection is now written
+  down, the Ruff version is bounded, and the backlog that selection named is settled.
+  Settling it turned up two end-to-end chat tests that named a fixture that does not
+  exist and would have raised `NameError` the moment anyone ran them with `--llm`.
+- The user-facing documentation under `docs/` had a full pass: content, accuracy and
+  structure, with the ALP protocol reference split from the workgroup operations guide.
+
 ## v0.14.51 — 2026-09-17 — the sweep's one-line message says what it actually did
 
 - **A run the sweep deliberately left open was announced as closed.** `schedule.failed`

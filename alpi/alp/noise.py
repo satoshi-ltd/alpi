@@ -6,7 +6,6 @@ a single pubkey. Spec: https://noiseprotocol.org/noise.html (rev 34).
 
 from __future__ import annotations
 import hashlib
-import os
 from dataclasses import dataclass, field
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import (

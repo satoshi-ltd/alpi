@@ -25,7 +25,6 @@ list targeting v0.14.x patch releases.
 | ID | Item | Status |
 |---|---|---|
 | COST.1 | Per-pipeline-run cost telemetry: roll the per-turn settlements already in the workgroup ledger up to the `pipeline_run` boundaries `fold_task_state` computes, so a run and each of its phases carry spend and tokens. Per-turn, per-workgroup, per-connection and per-peer attribution already ship; the run and phase dimension does not, and an operator still sums it by hand from the per-post costs the transcript prints. | 🔵 |
-| LINT.1 | Pin the Ruff rule selection in `pyproject.toml`. The config sets only `line-length` and `target-version`, so the effective rule set moves with whatever Ruff version is installed: a newer one reports 225 findings across `alpi/` and `tests/` that no release introduced, which makes the lint gate unable to separate a regression from a version bump. Choose the selection, settle the backlog it names, and keep it its own change. | 🔵 |
 
 ### Production client exposure
 
@@ -108,11 +107,8 @@ bindable), we adopt it then.
 their own keys. That cost is honest and visible. Subscription
 routing is not on the roadmap.
 
-See the **Why alpi is built like this** section in
-[README.md](../README.md) for how the six Satoshi Ltd. principles
-(Privacy by Design, User Sovereignty, Security First, Open Source,
-Zero Knowledge, Digital Sovereignty) map to concrete choices in this
-repo.
+See **Why alpi exists** in [README.md](../README.md) for how the
+publisher's principles map to concrete choices in this repo.
 
 ---
 

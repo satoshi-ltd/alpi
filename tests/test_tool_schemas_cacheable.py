@@ -12,7 +12,6 @@ from __future__ import annotations
 import json
 import time
 
-import pytest
 
 from alpi import tools as tools_mod
 

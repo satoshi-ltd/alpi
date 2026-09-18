@@ -161,7 +161,7 @@ def test_skills_index_block_truncates_long_descriptions(tmp_home: Path) -> None:
     _write_skill(tmp_home, name="long-desc", description=long_desc.strip())
 
     index = skills_index_block(tmp_home)
-    line = next(l for l in index.splitlines() if "long-desc:" in l)
+    line = next(row for row in index.splitlines() if "long-desc:" in row)
 
     assert line.rstrip().endswith("…")
     assert len(line.split("long-desc: ", 1)[1]) <= _INDEX_DESC_MAX

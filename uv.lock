@@ -108,7 +108,7 @@ wheels = [
 
 [[package]]
 name = "alpi-agent"
-version = "0.14.51"
+version = "0.14.52"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
@@ -180,7 +180,7 @@ requires-dist = [
     { name = "qrcode", specifier = ">=7.4" },
     { name = "rapidocr-onnxruntime", specifier = ">=1.3" },
     { name = "rich", specifier = ">=13.7.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.3.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.15,<0.16" },
     { name = "setproctitle", specifier = ">=1.3" },
     { name = "sqlite-vec", specifier = ">=0.1.6" },
     { name = "textual", specifier = ">=0.86.0" },

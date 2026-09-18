@@ -152,7 +152,7 @@ def test_hub_owned_pipeline_task_wakes_the_hub_immediately() -> None:
 
 
 def test_hub_owned_recovery_task_wakes_the_hub_immediately() -> None:
-    meta = _types.SimpleNamespace(
+    meta = types.SimpleNamespace(
         pipelines={"review": ("review", "review-close")},
         pipeline_steps={"review-close": {"owner": "mira"}},
     )
@@ -755,7 +755,7 @@ async def test_dispatch_records_start_and_end_events(short_tmp: Path) -> None:
 
     p = service.turn_log_path(home)
     assert p.exists()
-    events = [json.loads(l) for l in p.read_text().strip().splitlines()]
+    events = [json.loads(line) for line in p.read_text().strip().splitlines()]
     assert len(events) == 2
     assert events[0]["event"] == "start"
     assert events[0]["wg_id"] == "wg_x"
@@ -1104,7 +1104,7 @@ async def test_dispatch_timeout_kills_and_records(
         service.asyncio.create_subprocess_exec = real_create
 
     p = service.turn_log_path(home)
-    events = [json.loads(l) for l in p.read_text().strip().splitlines()]
+    events = [json.loads(line) for line in p.read_text().strip().splitlines()]
     assert events[0]["event"] == "start"
     assert events[1]["event"] == "timeout"
     assert events[1]["killed"] is True
@@ -1209,7 +1209,6 @@ async def test_dispatch_installs_and_pops_inflight_under_tuple_key(
 
 # Pipeline continuation watchdog (ALP.3.H — workflow continuation).
 
-import types as _types
 
 
 def _pipe_wg(pipeline=True, hub: str = "HUB", dormant=None, steps=None):
@@ -1222,7 +1221,7 @@ def _pipe_wg(pipeline=True, hub: str = "HUB", dormant=None, steps=None):
     pipelines = {launch: tuple(pipeline)} if launch else {}
     for key, phases in (dormant or {}).items():
         pipelines[key] = tuple(phases)
-    return _types.SimpleNamespace(
+    return types.SimpleNamespace(
         meta=wg_mod.Meta(
             id="wg1", name="proj", hub_pubkey=hub, created_at="",
             pipelines=pipelines, launch_pipeline=launch,
@@ -1253,7 +1252,7 @@ def test_continuation_not_due_when_last_hub_post_not_done() -> None:
 
 def test_continuation_not_due_when_task_still_open() -> None:
     recent = [{"seq": 3, "from": "HUB", "text": "#done verified"}]
-    active = _types.SimpleNamespace()  # any non-None = a task is open
+    active = types.SimpleNamespace()  # any non-None = a task is open
     assert service._pipeline_continuation_due(_pipe_wg(True), recent, active) is False
 
 

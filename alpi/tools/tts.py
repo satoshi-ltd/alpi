@@ -123,8 +123,10 @@ class Tts(Tool):
                 ))
             except Exception as e:  # noqa: BLE001
                 if out_path.exists():
-                    try: out_path.unlink()
-                    except OSError: pass
+                    try:
+                        out_path.unlink()
+                    except OSError:
+                        pass
                 return ToolResult(ok=False, output="", error=f"edge-tts failed: {e}")
             if not out_path.exists() or out_path.stat().st_size == 0:
                 return ToolResult(ok=False, output="", error="edge-tts produced empty file")

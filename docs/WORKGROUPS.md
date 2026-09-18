@@ -304,11 +304,25 @@ pipelines:
   intake: [intake, content, translation, build, qa]
 launch: intake
 pipeline_steps:
-  intake:      { owner: scout,  task: "start {slug}",              gate: { argv: [python3, scripts/intake-check.py],  cwd: "projects/{slug}" } }
-  content:     { owner: quill,  task: "author the source locale",  gate: { argv: [python3, scripts/content-check.py], cwd: "projects/{slug}" } }
-  translation: { owner: lingua, task: "bring locales to parity",   gate: { argv: [python3, scripts/content-check.py], cwd: "projects/{slug}" } }
-  build:       { owner: pixel,  task: "build the site",            gate: { argv: [test, -d, dist],                    cwd: "projects/{slug}" } }
-  qa:          { owner: lens,   task: "audit and return a verdict" }
+  intake:
+    owner: scout
+    task: "start {slug}"
+    gate: { argv: [python3, scripts/intake-check.py], cwd: "projects/{slug}" }
+  content:
+    owner: quill
+    task: "author the source locale"
+    gate: { argv: [python3, scripts/content-check.py], cwd: "projects/{slug}" }
+  translation:
+    owner: lingua
+    task: "bring locales to parity"
+    gate: { argv: [python3, scripts/content-check.py], cwd: "projects/{slug}" }
+  build:
+    owner: pixel
+    task: "build the site"
+    gate: { argv: [test, -d, dist], cwd: "projects/{slug}" }
+  qa:
+    owner: lens
+    task: "audit and return a verdict"
 
 project:
   template_repo: git@github.com:acme/site-template.git

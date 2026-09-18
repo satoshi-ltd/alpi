@@ -11,7 +11,7 @@ On first install alpi only writes the sections you're likely to tweak
 visibility:
 
 ```yaml
-model: ""                          # empty on a fresh scaffold; pick via `alpi setup → Model` (see docs/MODELS.md)
+model: ""            # empty on a fresh scaffold; pick it in `alpi setup`
 providers:
   ollama: []
 mcp:
@@ -198,8 +198,8 @@ severities:
 
 - **safe** (default, no match) — runs without prompting.
 - **caution** — matches a pattern that's often legitimate but
-  sometimes destructive. Examples: `rm -rf <dir>`, `chmod 777`,
-  `sudo <cmd>`, `git push --force`, `git reset --hard`,
+  sometimes destructive. Examples: `rm -rf <dir>`, `chmod 777` or
+  `chmod a+w`, `sudo <cmd>`, `git push --force`, `git reset --hard`,
   `DROP TABLE`, `kill -9`. These pause for user approval in the TUI
   with four options: `Once` (this call only), `Session` (allowlist
   the pattern until restart), `Always` (persist the pattern
@@ -209,8 +209,8 @@ severities:
   user to rerun from the TUI or edit the config allowlist.
 - **dangerous** — matches a pattern that's almost never legitimate.
   Examples: `mkfs`, `dd of=/dev/…`, fork bomb, pipe-to-interpreter
-  from an unknown URL (`curl … | bash`), recursive chmod / chown on
-  `/`, reading SSH private keys, writes into `/etc` or `/var`. These
+  from an unknown URL (`curl … | bash`), `chown -R` on `/`, `~` or
+  `$HOME`, reading SSH private keys, writes into `/etc` or `/var`. These
   are **always blocked**. No override — if you genuinely need to run
   one of these, do it directly from your shell, not through the
   agent.
@@ -345,58 +345,19 @@ model_reasoning:
 |---|---|---|
 | `memory.review_interval` | `0` (off) | Post-turn reviewer cadence. `N > 0` fires a daemon-thread reviewer every `N` user turns that snapshots the conversation and writes durable facts via `memory(action="add")`. Append-only — the reviewer cannot `replace`/`remove`. Opt-in by design. |
 
-Internal-only constants (in `alpi/memory.py` and `alpi/compaction.py`, not user knobs):
-
-- `USER_CHAR_LIMIT = 3000`, `MEMORY_CHAR_LIMIT = 5000` — file-level caps.
-- Jaccard `0.7` max-containment — near-duplicate threshold.
-- `LOW_CONFIDENCE_MAX_AGE_DAYS = 30` — low-conf pruning age.
-- `trigger_ratio = 0.75`, `target_ratio = 0.40`, `keep_head = 2`, `keep_tail = 8` — auto-compaction policy.
-
-Calibration stays evidence-gated: these constants should not become user knobs unless real `logs/compaction.jsonl` / memory-review traces show repeated failures that a fixed default cannot solve.
+Memory file caps, duplicate thresholds, low-confidence pruning age and the
+auto-compaction ratios are product constants, not user knobs. They only
+become configurable if real `logs/compaction.jsonl` or memory-review traces
+show repeated failures a fixed default cannot solve.
 
 ### TUI
 
-alpi's TUI is built on [Textual](https://textual.textualize.io/) — a
-full widget-based framework with streaming, focus management, scroll
-anchoring, and responsive layout. It's the **primary surface** (not a
-fallback); schedule processes inherit the same engine
-behind the scenes but render through their own channel (log file).
-
-Design choices worth knowing before tweaking config:
-
-- **Single cohesive UI.** No separate "legacy CLI" to maintain. alpi has
-  one Textual app that covers every interactive use case.
-- **Streaming is the default.** Assistant text streams into a Markdown
-  widget char-by-char. No full-message reload; the widget knows how to
-  append deltas. On `assistant_done` the final text replaces the
-  streamed buffer so any post-processing (e.g. `_strip_cache_noise`)
-  takes effect without a flash.
-- **Tool cards, not log lines.** Each tool call gets a compact card
-  with an args preview on the left, a live state in the middle
-  (`synthesizing…`, `playing…`, `transcribing…` — tools push these
-  via `tool_state_mod.emit_state`), a result hint on the right, and a
-  duration badge. Cards are scroll-anchored so the chat follows new
-  activity without stealing focus from what you're reading above.
-- **Reasoning is inline, not modal.** For reasoning models
-  (DeepSeek-R1, OpenAI o-series, Claude extended thinking) the tail
-  of `reasoning_content` scrolls live inside the `thinking…`
-  indicator. Full history is persisted to `sessions/*.json` even when
-  `tui.show_reasoning=false`, so you can re-enable later and replay
-  gets the reasoning back.
-- **Slash commands auto-suggest.** `/help`, `/memory`, `/tools`,
-  `/mcps`, `/cost`, `/clear`, `/new`, `/compact`, `/skills`, `/model`,
-  `/exit`, `/quit`. Typing `/` opens a fuzzy prefix
-  suggester over that list.
-- **Responsive.** The top bar collapses labels when the terminal is
-  narrower than 60 columns; long paths are home-dir-abbreviated to
-  `~/…`. Nothing clips, nothing wraps weirdly.
-- **Theming.** Pick a `tui.accent` colour (CSS hex/name/rgb) and
-  `tui.theme: dark|light`. The accent recolours interactive
-  highlights and the profile name in the top bar.
-- **Scroll resilience under heavy streaming.** `VerticalScroll.anchor()`
-  is used during long tool outputs or streamed responses so the view
-  tracks the bottom without the user losing scroll position when they
-  were reading history.
+alpi's TUI is built on [Textual](https://textual.textualize.io/) and is
+the primary interactive surface. Replies stream into a Markdown widget, every
+tool call renders as a compact card with its live state and duration,
+reasoning models show their thinking inline, and the layout collapses labels
+below 60 columns. `tui.accent` recolours highlights and the profile name;
+`tui.theme` picks dark or light.
 
 **What the top bar shows (left to right):**
 
@@ -481,13 +442,13 @@ email:
       address: you@gmail.com
 ```
 
-Secrets live in `~/.alpi/<profile>/.env`, namespaced per account by
+Secrets live in `<profile-home>/.env`, namespaced per account by
 its id: an IMAP account's password is `EMAIL__<ID>__PASSWORD` (e.g.
 `EMAIL__YOU_AT_WORK_COM__PASSWORD`). Gmail accounts use OAuth — the
 client credentials `GMAIL_CLIENT_ID` / `GMAIL_CLIENT_SECRET` are
 **shared across every Gmail account** on the profile, while each
 account's refreshable token is stored per account at
-`~/.alpi/<profile>/secrets/gmail_tokens/<id>.json` after a one-off
+`<profile-home>/secrets/gmail_tokens/<id>.json` after a one-off
 consent.
 
 Add and manage accounts with `alpi setup → Email` (CLI) or the
@@ -517,8 +478,8 @@ sub-agent spawns (`research`, `delegate`, `read_image`), and inbound
 ALP calls from pinned peers. It is re-checked **before each step**
 within a turn, so a long multi-step turn aborts as soon as it crosses
 the ceiling rather than running to completion. Counters reset at UTC
-midnight; no carry-over. The ledger lives at `~/.alpi/<profile>/logs/ledger.json` and
-also records a per-peer breakdown for the `/cost` panel, though only
+midnight; no carry-over. The ledger lives at `<profile-home>/logs/ledger.json` and
+also records a per-peer breakdown shown by `/status`, though only
 the profile total gates new turns.
 
 | Key | Default | Notes |
@@ -570,7 +531,7 @@ no reachable address (no `network.host`, no Tailscale/LAN, not Docker) even
 | `alp.tcp_port` | `7423` (default profile only) | The ALP peer TCP port. Auto-exposed for the `default` profile; a named profile binds TCP only if it sets its own unique port here. The address is `network.host`. |
 | `alp.link_idle_timeout_s` | `60` | Cancel `link.ask` after this many seconds without a signed response or progress frame. `0` disables the idle watchdog. |
 | `alp.link_max_duration_s` | `0` | Optional absolute cap for one `link.ask`; `0` allows an active turn to run without a fixed wall-clock limit. |
-| `alp.max_active_workgroups` | `5` on the default profile | How many workgroups may be active at once: a running pipeline or a deliberation with an open task each hold a slot. Enforced at pipeline admission: excess pipeline launches and triggers wait in a persistent FIFO queue, while deliberation launches always open and count against the cap. Read from the hub's own `config.yaml` when set there, else from the default profile's (the daemon-wide setting, seeded at `5` on new installs), else unlimited; `0` is unlimited. Set it with `alpi workgroup limit N` (on the default profile for every hub, on a hub to override), remove a hub override with `alpi workgroup limit --inherit`, or edit it from any profile's settings in the desktop app; `workgroup list` shows the cap, its origin and the queue. |
+| `alp.max_active_workgroups` | `5` on the default profile | Workgroups that may be active at once (a running pipeline or a deliberation with an open task each hold a slot). Excess pipeline launches and triggers wait in a persistent FIFO queue; deliberations always open and count. A hub's own value overrides the default profile's daemon-wide one; `0` = unlimited. Set with `alpi workgroup limit N` (`--inherit` removes a hub override) or from the desktop; `workgroup list` shows the cap, its origin and the queue. |
 | `alp.working_after_s` | `30` | Post an automatic `#working` heartbeat when a member turn remains silent for this many seconds. `0` disables it. |
 
 ```yaml

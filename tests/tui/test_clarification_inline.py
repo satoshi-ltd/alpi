@@ -5,7 +5,6 @@ from __future__ import annotations
 import io
 import sys
 
-import pytest
 
 from alpi.tui.clarification_inline import inline_handler
 

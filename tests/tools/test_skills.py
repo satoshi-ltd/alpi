@@ -6,7 +6,6 @@ import pytest
 
 from alpi.tools.skill import (
     CATEGORIES,
-    MAX_AGENT_SKILLS,
     Skill,
     all_skills,
     scan_skill_body,
@@ -493,7 +492,7 @@ def test_skills_index_block_lists_existing(isolated_home: Path) -> None:
 
 
 def test_skills_index_block_works_under_profile_home(tmp_path) -> None:
-    from alpi.tools.skill import skills_index_block, all_skills
+    from alpi.tools.skill import skills_index_block
     profile_home = tmp_path / "profiles" / "work"
     skills_dir = profile_home / "skills" / "personal" / "demo"
     skills_dir.mkdir(parents=True)

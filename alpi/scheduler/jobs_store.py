@@ -90,8 +90,10 @@ def _write_inside_lock(p: Path, payload: list | dict) -> None:
             fh.flush()
             os.fsync(fh.fileno())
     except Exception:
-        try: tmp.unlink()
-        except OSError: pass
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
         raise
     os.replace(str(tmp), str(p))
 

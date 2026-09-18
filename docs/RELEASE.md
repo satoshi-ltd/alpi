@@ -119,3 +119,19 @@ removed for v0.3 because:
   `permissions: contents: write` (already set). If it still fails,
   the repo's branch protection might require status checks for
   push to refs/tags — exempt the workflow.
+
+## LiteLLM re-audit (quarterly)
+
+1. Read the [LiteLLM release notes](https://docs.litellm.ai/release_notes)
+   from the current pin to latest.
+2. Diff the surface alpi uses: `litellm.completion`, `litellm.completion_cost`,
+   `litellm.model_cost`, `litellm.get_llm_provider`, the suppress/telemetry
+   flags.
+3. Run the LLM-in-loop probe (`pytest tests/llm --llm`) against the model
+   matrix on the candidate version.
+4. Bump the floor in `pyproject.toml` to the tested version and keep the upper
+   bound one minor ahead (`>=1.83,<1.85` shape).
+5. `uv lock`, commit.
+
+Raw provider SDKs were rejected in favour of LiteLLM: one dependency and a
+quarterly changelog read cost less than N adapters maintained forever.

@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
-import pytest
 
 from alpi import compaction, promotion
 from alpi.config import Config, ToolsConfig

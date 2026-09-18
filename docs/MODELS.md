@@ -9,7 +9,7 @@ shell commands, browser calls, and user-specific state in context?"
 Use this page as a practical selector. Prices, context windows, and
 provider wrappers move quickly; re-check them every 2-3 months.
 
-Last updated: **2026-08-26**.
+Last updated: **2026-09-17**.
 
 ## What matters for alpi
 

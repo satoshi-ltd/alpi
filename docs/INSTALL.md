@@ -60,7 +60,7 @@ alpi setup
 alpi
 ```
 
-Pin a specific version with `uv tool install alpi-agent==0.3.0`.
+Pin a specific version with `uv tool install alpi-agent==<version>`.
 
 The first `alpi setup` auto-installs the alpi daemon — one launchd
 plist on macOS (`com.alpi.daemon`), one systemd-user unit on Linux
@@ -78,8 +78,9 @@ warning and you'll need to keep the daemon foregrounded under
 `tmux` / `screen`, or fix lingering by hand.
 
 The first time the agent runs the `browser` tool, alpi downloads
-the Chromium headless shell (~340 MB, one-time, cached at
-`~/.cache/ms-playwright/`). That shell is what `browser` launches;
+the Chromium headless shell (~340 MB, one-time, cached under
+Playwright's own directory — `~/Library/Caches/ms-playwright` on
+macOS, `~/.cache/ms-playwright` on Linux). That shell is what `browser` launches;
 the full Chromium build is never fetched. No separate install
 command. If you never use the browser tool, nothing is downloaded.
 
@@ -101,12 +102,12 @@ alpi update
 
 `alpi update` checks PyPI for a newer version, shows what changed,
 and runs `uv tool upgrade alpi-agent` (or `pipx upgrade
-alpi-agent`) on confirmation. There is no auto-update at launch —
-alpi never reaches the network unless you ask it to.
+alpi-agent`) on confirmation. **Nothing is ever installed without
+your confirmation.**
 
-You don't have to remember to run it: alpi already checks PyPI in
-the background once every eight hours and surfaces the result in
-two places —
+You don't have to remember to run it: on launch alpi checks PyPI in a
+background thread, at most once every eight hours, and surfaces the
+result in two places —
 
 - `alpi doctor` prints a `Version` row at the top with the new
   number when one is available.
@@ -114,12 +115,16 @@ two places —
   current version.
 
 `alpi update --check` does just the check and tells you whether
-an upgrade exists, without installing anything.
+an upgrade exists, without installing anything, and it queries
+PyPI whenever you run it. `ALPI_SKIP_UPDATE_CHECK=1` stops only
+the daemon's background refresh; a result already in the cache
+keeps showing in the version row and the badge, because both read
+the cache and never expire it.
 
 To pin an older version intentionally:
 
 ```bash
-uv tool install alpi-agent==0.2.99 --force
+uv tool install alpi-agent==<version> --force
 ```
 
 ## Uninstalling

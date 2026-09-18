@@ -165,7 +165,7 @@ def test_list_active_skill_has_no_tag(isolated_home: Path) -> None:
     r = Skill().run(action="list")
     assert r.ok, r.error
     # The line should NOT have either tag.
-    line = next(l for l in r.output.splitlines() if "happy" in l)
+    line = next(row for row in r.output.splitlines() if "happy" in row)
     assert "[invalid" not in line
     assert "[inactive" not in line
 

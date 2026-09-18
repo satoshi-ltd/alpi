@@ -19,28 +19,25 @@ Every profile writes to `{home}/logs/` with the same format so
 ~/.alpi/profiles/<name>/logs/     ← named profile
 ```
 
-Rotating text logs cap at **1 MB**; `.log.1` holds the previous
-generation. JSONL telemetry feeds are append-only, read with `jq` (or
+Rotating text logs cap at **1 MB**; `.log.1` to `.log.3` hold the previous
+three generations, 4 MB in all. JSONL telemetry feeds are append-only, read with `jq` (or
 `alpi digest`) — `compaction.jsonl` is unbounded; `runs.jsonl` is capped
 and rolling.
 
-The daemon holds the third-party `websockets` logger at WARNING. A load
-balancer's health check opens and closes a socket on the host plane every
-second or two, and at INFO that one logger was 99.9% of `service.log` on a
-production box, rotating the whole 4 MB window out in about two hours — the
-days you would want to read were already gone. If a `service.log` ever fills
-that fast again, look for another library logging per connection before
-raising the cap.
+The noisy `websockets` logger is held at WARNING inside the daemon; if
+`service.log` ever rotates through its whole window in hours, look for another
+library logging once per connection before raising the cap.
 
 | File | Scope | Format | What it answers | Who writes it |
 |---|---|---|---|---|
 | `service.log` | **daemon-wide; ONE file at `~/.alpi/logs/service.log`, never duplicated per profile** | rotated text | Did the daemon start? Which services came up for which profile? Did a peer hit an ALP listener? Did a cron job fire? | the daemon supervisor + every per-profile service that logs through the root logger |
-| `agent.log` | per profile | rotated text | What has the agent *been doing*? One line per **engine turn on every surface** (TUI, schedule, workgroup post, inbound ALP, research / delegate sub-agents): session id, elapsed, tools called, reply length, cost, user prompt preview. Cross-session grep index. | the engine (every turn on every surface) |
+| `agent.log` | per profile | rotated text | What has the agent *been doing*? One line per **engine turn on every surface** (TUI, schedule, workgroup post, inbound ALP): session id, elapsed, tools called, reply length, cost, user prompt preview. Sub-agents (`research`, `delegate`) run inside their caller's turn and add no line of their own. Cross-session grep index. | the engine |
+| `llm.log` | per profile | rotated text | What the provider call was doing: request start, first delta, stream end or error. The record that explains a turn killed by the idle watchdog. | the LLM transport |
 | `approval.log` | per profile | rotated text | Security audit of every non-safe shell command the LLM tried to run: caution (pending / once / session / always / deny) or dangerous (always denied). | the approval system |
 | `admin-audit.jsonl` | **daemon-wide; ONE bounded trail at `~/.alpi/logs/admin-audit.jsonl`** | rotated JSONL, 5 MB + 3 backups, 4 KB/row | Which connection/device attempted a sensitive host-RPC mutation, what safe target it affected, and whether it succeeded, failed, or was denied. It never stores credentials, config values, prompts, replies, or chat messages. Direct CLI/setup mutations do not enter this trail yet. | the host RPC dispatcher |
 | `compaction.jsonl` | per profile | append-only JSONL | Did auto-compact run this turn? Tokens before/after, summarized-message count, tool-truncation count, manual vs auto, `fired` (true when the LLM summarized; false when only oversized tool outputs were truncated). Use it as the evidence source before changing compaction/memory constants. | the engine (one line whenever compaction *or* tool truncation ran) |
-| `runs/<run_id>.jsonl` | per profile, under `runs/` not `logs/` | append-only JSONL, one file per turn | The operational timeline of one turn: start (pid, model, input), tool starts/states/ends, usage, model state, every `assistant_done` (the one with `final=True` is the deliverable; earlier ones are preamble) and the finish outcome. Streaming deltas are not journaled — the chat replay sidecar carries those. Cleanup (*Old and excess run journals*) offers completed journals older than 30 days plus the oldest ones beyond 200 MiB per profile, skipping anything completed in the last hour; running or unreadable journals are never offered. | the engine (`runs.record_agent_event`) |
-| `runs.jsonl` | per profile | capped rolling JSONL | What ran and where it stopped: one record per long-running turn (agent, schedule, workgroup, terminal) — outcome, exit code, timeout reason, pid, backend, last tool, secret-redacted output tail, raw cache counts, and request-shape diagnosis. Surfaced by `alpi digest`. | the engine, scheduler, and terminal tool (one line per finished run) |
+| `runs/<run_id>.jsonl` | per profile, under `runs/` not `logs/` | append-only JSONL, one file per turn | The operational timeline of one turn: start (pid, model, input), tool starts/states/ends, usage, model state, every `assistant_done` (the one with `final=True` is the deliverable; earlier ones are preamble) and the finish outcome. Streaming deltas are not journaled — the chat replay sidecar carries those. Cleanup (*Old and excess run journals*) offers completed journals older than 30 days plus the oldest ones beyond 200 MiB per profile, skipping anything completed in the last hour; running or unreadable journals are never offered. | the engine |
+| `runs.jsonl` | per profile | capped rolling JSONL | What ran and where it stopped: one record per finished run (agent turn, schedule, workgroup, terminal command — there is no duration threshold; the digest is what highlights the slow ones) — outcome, exit code, timeout reason, pid, backend, last tool, secret-redacted output tail, raw cache counts, and request-shape diagnosis. Surfaced by `alpi digest`. | the engine, scheduler, and terminal tool (one line per finished run) |
 | `ledger.json` | per profile | JSON | Daily USD spend ledger; live counters for the daily cap + 30-day per-day history, including raw cache counts, provider-reported cache discount, and the source of recorded cost. Not a log; never cleaned by `Subsystem logs`. | every turn that records cost |
 | `prefix_shapes.json` | per profile | bounded JSON | Hash-only request-shape history for up to 20 recently used conversation affinities. It diagnoses model, params, tools, system, or history changes without storing prompt text. Best-effort and safe to delete. | the engine before provider calls |
 
@@ -60,8 +57,8 @@ alpi logs -f                       # follow mode (poll every 1s)
 `compaction.jsonl` is read with `jq`, not `alpi logs`:
 
 ```bash
-jq -r '[.ts, .session_id[0:8], .trigger, .tokens_before, .tokens_after] | @tsv' \
-  ~/.alpi/logs/compaction.jsonl
+jq -r '[(.ts | todate), .session_id[0:8], .trigger, .tokens_before, .tokens_after] | @tsv' \
+  ~/.alpi/logs/compaction.jsonl     # .ts is a Unix epoch; todate makes it readable
 ```
 
 Per-record fields: `ts`, `trigger` (`auto`|`manual`), `session_id`,
@@ -96,8 +93,8 @@ provider caching.
 
 ## Daemon — one process per machine, every profile inside
 
-alpi runs a single `com.alpi.daemon` process (launchd plist on
-macOS, systemd-user unit on Linux) that supervises every profile
+alpi runs a single daemon process — the launchd job `com.alpi.daemon` on
+macOS, the systemd-user unit `alpi-daemon.service` on Linux — supervising every profile
 under `~/.alpi/` — default plus each `profiles/<name>/`. Each
 profile gets its own per-service supervised tasks named
 `<profile>/<service>` (e.g. `doc/schedule`, `builder/alp`); a crash
@@ -140,9 +137,10 @@ linger setup manually.
 
 ### When `stop` doesn't stop
 
-If you run `alpi daemon stop` while the unit is installed, the
-supervisor will respawn it within seconds (the plist declares
-`KeepAlive=true`). To permanently stop:
+On macOS the launchd plist declares `KeepAlive=true`, so `alpi daemon stop`
+is followed by a respawn within seconds. On Linux the systemd unit is
+`Restart=on-failure` and a clean stop stays stopped. To stop it permanently
+on macOS:
 
 ```bash
 alpi setup → Services → Daemon → Uninstall
@@ -154,7 +152,8 @@ After `uv tool install --reinstall`, the long-running daemon
 still holds the old binary's code. Use:
 
 ```bash
-alpi daemon restart      # stop + wait for the supervisor to respawn
+alpi daemon restart      # macOS: stop and let launchd respawn
+                         # Linux: start it again yourself if it stays down
 ```
 
 `alpi doctor` flags "stale binary — `alpi daemon restart` to
@@ -173,56 +172,32 @@ hand. Today's upgrade rule of thumb:
 2. `alpi doctor` — the Daemon row flags a stale binary.
 3. `alpi daemon restart` — one daemon supervises every profile,
    so a single restart picks up the new code for all of them.
-   (`launchctl list | grep com.alpi.daemon` confirms the unit.)
-4. If the CHANGELOG entry calls for file moves (e.g. the ALP
-   layout change in v0.2.68), follow them for **every profile**.
+   (`launchctl list | grep com.alpi.daemon` on macOS,
+   `systemctl --user status alpi-daemon` on Linux.)
+4. If the CHANGELOG entry calls for file moves, follow them for
+   **every profile**.
 5. Re-run `alpi doctor` — should be clean.
 
-## Dependencies — cadence + LiteLLM
+## Dependencies
 
-alpi pins a tight range on its hot-path deps so a silent SDK release
-can't break tool-calling, streaming, or cost reporting. The one to
-watch is **LiteLLM** — every provider (OpenAI, Anthropic, Ollama,
-OpenRouter, Gemini, Groq, Mistral, DeepSeek…) flows through it.
+Every provider (OpenAI, Anthropic, Ollama, OpenRouter, Gemini, Groq,
+Mistral, DeepSeek…) flows through **LiteLLM**, so alpi pins it to a tight
+range and re-audits it on a schedule; the procedure lives in
+[RELEASE.md](RELEASE.md).
 
-**Why LiteLLM and not raw provider SDKs.** alpi is single-maintainer.
-Writing and maintaining one adapter per provider is a maintenance
-trap. LiteLLM costs one dep + a quarterly changelog read; raw SDKs
-cost N adapters forever.
+**Every `alpi doctor` run verifies the install.** The Dependencies rows check
+the installed LiteLLM against the pin recorded in alpi's own package metadata,
+and every file of the distribution against the sha256 digests its installer
+wrote. A version outside the pin or a file that no longer matches its digest
+is a `fail`, so a cron'd doctor exits non-zero on a local swap. A missing
+`RECORD` warns instead of pretending to verify. This is a tamper check on
+what is installed, not an advisory scan.
 
-**Re-audit cadence — quarterly.** When the calendar hits the next
-review:
-
-1. Read [LiteLLM release notes](https://docs.litellm.ai/release_notes)
-   from our current pin to latest.
-2. Diff the surface alpi uses (5 entry points): ``litellm.completion``,
-   ``litellm.completion_cost``, ``litellm.model_cost``,
-   ``litellm.get_llm_provider``, the suppress/telemetry flags.
-3. Run the LLM-in-loop probe (``pytest tests/llm --llm``) against the
-   model matrix on the candidate version.
-4. Bump the floor in ``pyproject.toml`` to the new tested version,
-   keep the upper bound one minor ahead (``>=1.83,<1.85`` shape).
-5. ``uv lock``, commit.
-
-**Local verification — every `alpi doctor` run.** The Dependencies rows check the
-installed LiteLLM against the pin recorded in alpi's own package metadata, and every
-file of the distribution against the sha256 digests its installer wrote. A version
-outside the pin or a file that no longer matches its digest is a `fail`, so a cron'd
-doctor exits non-zero on a local swap. A missing `RECORD` warns instead: the check
-says it could not verify rather than pretending it did. This is a tamper check on
-what is already installed, not a substitute for the quarterly review above or for
-`alpi audit` — it knows nothing about advisories.
-
-**CVEs.** `alpi audit` checks installed Python packages against OSV with exact
-versions. Use `alpi audit --offline` on machines that must not make network
-calls; use plain `alpi audit` before releases or after dependency changes.
-Filter findings by surface: alpi uses the **SDK**, not the **Proxy** server.
-CVEs scoped to LiteLLM Proxy (e.g. CVE-2026-30623, MCP stdio RCE) don't apply.
-SDK CVEs do — bump promptly.
-
-**Alternatives evaluated.** Raw SDKs (rejected: maintenance cost,
-see above). [chuk-llm](https://github.com/chrishayuk/chuk-llm) on
-the radar but immature for our provider matrix at audit time.
+**CVEs.** `alpi audit` checks installed Python packages against OSV with
+exact versions; `alpi audit --offline` skips the lookup on machines that must
+not make network calls. Filter findings by surface: alpi uses the LiteLLM
+**SDK**, not the Proxy server, so Proxy-only CVEs do not apply and SDK CVEs
+do.
 
 ## Backup + restore
 
@@ -243,8 +218,10 @@ alpi restore alpi.alpi-backup --force      # overwrite a non-empty home
 profile (memories, sessions, skills with `state/` SQLite +
 `secrets/`), every named profile under `profiles/<name>/`,
 `config.yaml`, `.env`, ALP identity (`alp/secrets/alp_key.{pem,pub}`),
-peers, and host state. Excluded recursively at every depth:
-`cache/`, `logs/`, `.trash/`, sockets (`*.sock`), PIDs (`*.pid`).
+peers, and host state. Excluded recursively at every depth: `cache/`,
+`logs/`, `out/` (files the agent already delivered to you), `.trash/`,
+sockets (`*.sock`), PIDs (`*.pid`) and OS cruft. A restore brings back the
+profile, not the generated artifacts it already handed over.
 
 **Crypto.** Scrypt KDF (n=2¹⁷, r=8, p=1) → ChaCha20-Poly1305 over
 a gzipped tar. Same primitives as `age` with a passphrase
@@ -315,6 +292,10 @@ Rotating the Ed25519 keypair is a deliberate, disruptive act.
 Every peer who pinned your old pubkey must update their
 `peers.yaml` before you can reach them again.
 
+The keypair is per profile, so rotate the one that belongs to the identity
+you are replacing — `~/.alpi/alp/secrets/` for the default profile,
+`~/.alpi/profiles/<name>/alp/secrets/` for a named one.
+
 ```bash
 alpi daemon stop                       # or: alpi setup → Services → Daemon → Stop
 rm ~/.alpi/alp/secrets/alp_key.{pem,pub}
@@ -350,8 +331,7 @@ observability, the signals to watch:
   outage.
 - **Cost ceiling.** Set `budget.daily_usd` in the profile's
   `config.yaml` (or leave it unset for unlimited) —
-  see [CONFIG.md → Budget](CONFIG.md#budget). The ledger at
-  `~/.alpi/<profile>/logs/ledger.json` is the in-process gate;
+  see [CONFIG.md → Budget](CONFIG.md#budget). The ledger at the profile's own `logs/ledger.json` is the in-process gate;
   every interactive turn, scheduled job, sub-agent
   spawn, and inbound ALP call admits against it before running and
   records its actual spend after. The same file keeps a 30-day

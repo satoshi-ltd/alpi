@@ -282,3 +282,27 @@ def test_seed_caps_active_workgroups_only_on_the_default_home(tmp_path: Path) ->
     assert yamlfast.safe_load((root / "config.yaml").read_text())["alp"]["max_active_workgroups"] == 5
     assert "alp" not in yamlfast.safe_load((hub / "config.yaml").read_text())
     assert pipeline_queue.limit_origin(hub) == (5, "default")
+
+
+def test_seeded_config_is_not_group_readable(tmp_home_no_env: Path) -> None:
+    """A fresh profile used to fail its own ``alpi audit``: the seed was written
+    at the process umask while audit warns on any group/other bit."""
+    import os
+    import stat
+
+    from alpi import audit
+
+    config.seed_defaults(tmp_home_no_env)
+    mode = stat.S_IMODE(os.stat(tmp_home_no_env / "config.yaml").st_mode)
+    assert not mode & 0o077, f"seeded config.yaml is {oct(mode)}"
+
+    loose = [c for c in audit._audit_permissions(tmp_home_no_env) if c.status in {"warn", "fail"}]
+    assert loose == [], f"a freshly seeded profile reports {loose}"
+
+
+def test_seed_does_not_rewrite_an_existing_config(tmp_home_no_env: Path) -> None:
+    config.seed_defaults(tmp_home_no_env)
+    path = tmp_home_no_env / "config.yaml"
+    path.write_text("model: keep-me\n")
+    config.seed_defaults(tmp_home_no_env)
+    assert path.read_text() == "model: keep-me\n"

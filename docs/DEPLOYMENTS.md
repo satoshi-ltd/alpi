@@ -100,7 +100,8 @@ clients pair to it. No web terminal — reach the TUI with `docker exec`.
         ▼  bound to the host address clients dial
 ```
 
-- **Image / package:** `satoshiltd/alpi`, built from `docker/`.
+- **Image / package:** `satoshiltd/alpi`, built from `docker/Dockerfile`
+  with the repository root as the build context.
   Compose and full instructions in [docker/README.md](../docker/README.md)
   — including a Kubernetes section for running the same image as a
   single-writer stateful workload.

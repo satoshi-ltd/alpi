@@ -2,7 +2,7 @@
 # PyPI distribution name. The CLI binary, the import path, and
 # ``~/.alpi/`` all remain ``alpi`` (see ``[project.scripts]`` below).
 name = "alpi-agent"
-version = "0.14.51"
+version = "0.14.52"
 description = "A profile-based personal AI agent for terminal, desktop & mobile apps, and private ALP networks"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
@@ -67,7 +67,7 @@ Issues = "https://github.com/satoshi-ltd/alpi/issues"
 Changelog = "https://github.com/satoshi-ltd/alpi/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.3.0", "pip-audit>=2.7"]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.15,<0.16", "pip-audit>=2.7"]
 
 [project.scripts]
 alpi = "alpi.__main__:main"
@@ -83,8 +83,18 @@ include = ["alpi*"]
 alpi = ["prompts/*.md", "tui/*.tcss", "knowledge/references/*.md", "providers/*.yaml"]
 
 [tool.ruff]
+# Bounded so the gate cannot change its own verdict on a ruff upgrade: a new
+# minor may add rules to a selected family, which is a version bump, not a regression.
+required-version = ">=0.15,<0.16"
 line-length = 100
 target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "W"]
+
+[tool.ruff.lint.per-file-ignores]
+# Test setup uses `x = ...; x.mkdir()` deliberately; production code has zero.
+"tests/**" = ["E702"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

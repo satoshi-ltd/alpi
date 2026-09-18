@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import email as stdlib_email
 from email.message import EmailMessage
 from pathlib import Path
 from typing import Any

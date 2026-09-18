@@ -9,7 +9,7 @@ Audience: any developer (or LLM) reading this codebase from cold.
 ## What alpi is
 
 alpi is a local-first personal AI agent. It has a Textual TUI in the
-terminal, a Tauri desktop app (and a planned mobile client) that
+terminal, a Tauri desktop app and an Expo mobile app that
 talk to the daemon over the host plane (Unix socket locally,
 WebSocket remotely), an on-demand `email` tool (IMAP / Gmail) the
 agent calls to read and send mail,
@@ -27,9 +27,8 @@ agent suite, marketplace, or hosted router.
 alpi is published by [Satoshi Ltd.](https://www.satoshi-ltd.com/)
 and inherits the company's six operating principles (Privacy by
 Design, User Sovereignty, Security First, Open Source, Zero
-Knowledge, Digital Sovereignty). See the **Why alpi is built like
-this** section in `README.md` for the mapping between principle and
-code. The conventions below are the engineering expression of those
+Knowledge, Digital Sovereignty). See **Why alpi exists** in
+`README.md` for the mapping between principle and code. The conventions below are the engineering expression of those
 principles — not separate from them.
 
 - **Focused.** Every feature earns its keep. No over-engineering. Maps to Satoshi's "constraint breeds coherence" heuristic.
@@ -41,11 +40,8 @@ principles — not separate from them.
 
 ## Code conventions
 
-**No human-facing comments in `alpi/` source.** The reader is an LLM. Narrative prose, banner dividers, section labels, restatement docstrings — token tax. See `feedback_no_human_comments.md` in agent memory for the full rule. Tests, docs, and tool `description` strings are out of scope (those serve other audiences).
-
-**English only.** All text inside `alpi/` (code, docstrings, prompts, tool descriptions, error messages, seed comments) is English. The LLM reads these every turn; embedding Spanish nudges replies toward Spanish. User-facing runtime output follows the user's language.
-
-**No comments without "why".** A comment survives only if removing it would mislead a future reader into a wrong edit or waste their time re-deriving an external fact. `or`-chains and try/except blocks are self-evidently intentional; documenting them is fluff.
+Contributor rules — no human-facing comments inside `alpi/`, English only,
+every comment must carry a "why" — live in `AGENTS.md` at the repo root.
 
 ## CLI surface
 
@@ -84,9 +80,9 @@ alpi profile list              list profiles, mark the active one
 alpi profile create <name>     bootstrap a new profile tree
 alpi profile remove <name>     delete after safety checks + confirm
 
-alpi daemon install|uninstall                  register / unregister the launchd plist / systemd unit
+alpi daemon install|uninstall                  register / unregister the service unit
 alpi daemon start|stop|restart|status          lifecycle of the single per-machine daemon
-alpi schedule run-once|fire <id>                manual cron tick / ad-hoc job fire (operational, not lifecycle)
+alpi schedule run-once|fire <id>               manual cron tick / ad-hoc job fire
 
 alpi peers list                list pinned ALP peers for this profile
 alpi peers key                 print this profile's ALP public key
@@ -96,9 +92,9 @@ alpi peers ping <id>           live probe via link.ping
 
 alpi workgroup list                                list workgroups (hub-of + member-of)
 alpi workgroup show <wg_id>                        detail + decrypted transcript
-alpi workgroup create <name> --member <id|pubkey>  hub-side create (auto-grants verbs to invited peers)
+alpi workgroup create <name> --member <id>         hub-side create, granting the invited peers
 alpi workgroup join <hub_peer_id> <wg_id>          subscribe to a peer-hosted workgroup
-alpi workgroup post <wg_id> <text>                 encrypt + post; cost is auto-declared in PR 5
+alpi workgroup post <wg_id> <text>                 encrypt + post, declaring the turn's cost
 alpi workgroup pull <wg_id>                        fetch new posts and decrypt; cursor advances
 alpi workgroup pause|resume|leave <wg_id>          membership ops
 alpi workgroup kick <wg_id> <member-id|pubkey>     hub-only; rotates the group key
@@ -126,24 +122,24 @@ alpi/
 ├── home.py                 profile path resolution
 ├── config.py               YAML load/save, defaults, deep merge
 ├── ui.py                   shared wizard/menu primitives
-├── service.py              unified orchestrator — runs isolated daemon tasks on one asyncio loop; installs one launchd / systemd unit per machine
-├── ledger.py               daily spend ledger (logs/ledger.json: live counters + 30-day per-day history) + profile cap gate
+├── service.py              the one daemon: per-profile tasks, launchd / systemd unit
+├── ledger.py               daily spend ledger + the profile cap gate
 ├── outputs.py              persistent inbox JSONL store (notify + schedule failures)
 ├── status.py               canonical /status rows (TUI + apps share this)
 ├── prompts/
 │   ├── default_agent.md
 │   └── system_prompt.md
 ├── providers/              metadata for the model picker
-│   └── {anthropic,openai,google,groq,openrouter,custom}.py
+│   └── {anthropic,openai,google,groq,openrouter,ollama}.py + model catalogues
 ├── tools/
 │   ├── base.py             Tool ABC + ToolResult
-│   ├── _state.py           ContextVar-backed emit / interrupt / usage (per-thread isolated for batch sub-agents)
+│   ├── _state.py           per-turn emit / interrupt / usage, isolated per thread
 │   ├── _paths.py           resolve_path + sensitive-path denylist
 │   ├── _guards.py          terminal denylist, SSRF, prompt-injection scan
 │   ├── _budget.py          per-result char cap for LLM context (100K default, per-tool override)
 │   ├── _osv.py             OSV malware query for PyPI/npm names before skill/MCP install
 │   ├── _sandbox.py         OS-level sandbox wrapper (opt-in)
-│   ├── skill.py            create/edit/patch/add_file/remove_file/delete/list/view + scanner + quota
+│   ├── skill.py            the skill tool: mutations, scanner, quota
 │   ├── search.py           content + filename search (rg + stdlib fallback)
 │   ├── research.py         read-only sub-agent (depth: fast/normal/deep)
 │   ├── terminal.py         run/background/status/output/kill
@@ -153,7 +149,7 @@ alpi/
 │         memory, session_search, email, config)
 ├── tui/                    Textual app, widgets, screens, theme
 ├── scheduler/              cron + once jobs, hosted by the alpi daemon
-├── mail/                   multi-account email — accounts.py (account model + per-account env/token resolution); imap.py (IMAP+SMTP); gmail.py (Gmail API + OAuth)
+├── mail/                   multi-account email: accounts, IMAP+SMTP, Gmail + OAuth
 ├── mcp/                    MCP client (stdio JSON-RPC) + registry
 ├── alp/                    Alpi Link Protocol (spec: docs/ALP.md)
 │   ├── keys.py            Ed25519 identity at {home}/alp/secrets/alp_key.{pem,pub}
@@ -170,21 +166,21 @@ alpi/
 │   ├── handlers.py        read verbs (host.workgroup.transcript, host.sessions.*)
 │   ├── chat.py            host.chat.send/delegate (streaming) + host.chat.cancel
 │   ├── runs.py            host.runs.list + host.run.{read,cancel}
-│   ├── config.py          mutation verbs (host.providers.*, host.peers.*, host.profile.*, host.mcp.*, host.email.*, host.sandbox.*, host.voice.*)
-│   ├── connections.py     host.connections.* identities, device credentials and devices.yaml migration
+│   ├── config.py          config mutation verbs (providers, peers, mcp, email, …)
+│   ├── connections.py     connection identities, device credentials, migration
 │   ├── connection_context.py request-scoped connection/device attribution
-│   ├── admin_audit.py     bounded JSONL trail for attributable administrative mutations + host.audit.list
-│   ├── attachments_rpc.py host.attachments.{stage,fetch} — stage uploads in, fetch serves a tool-produced output attachment's bytes out (scoped to the profile's workspace/home/temp) so rich clients render images inline + other files as a metadata chip; text surfaces get a shared listing
-│   ├── network_rpc.py     host.network.{status,set_advertised,restart_host_server} — bind status plus ordered WS/WSS pairing-route configuration (parity with `alpi setup → Connections → Network`)
+│   ├── admin_audit.py     bounded audit trail for administrative mutations
+│   ├── attachments_rpc.py stage uploads in, serve produced files out (scoped)
+│   ├── network_rpc.py     bind status and the ordered WS/WSS pairing routes
 │   ├── probes.py          host.email.probe, host.peers.ping, host.model.ctx_window
 │   ├── schedule.py        host.schedule.{list,remove,set_paused,fire}
 │   ├── outputs.py         host.outputs.{list,read,mark_read,mark_all_read,delete}
 │   ├── daemon.py          host.daemon.{restart,update}
-│   ├── device_state.py    device-facing profile state (profiles, summaries, storage, email, skills, workgroups)
+│   ├── device_state.py    device-facing profile state for the apps
 │   ├── events.py          host.events.subscribe + thread-safe emit() for daemon-pushed updates
 │   ├── workgroup.py       transcript decryption (hub + member shapes)
 │   └── sessions.py        plaintext session list / read
-└── knowledge/              `alpi_knowledge` answer packs — Markdown the tool reads (see docs/SKILLS.md)
+└── knowledge/              `alpi_knowledge` answer packs (hand-maintained)
 ```
 
 ### Execution spine
@@ -203,52 +199,39 @@ states are replayed in original call order, preserving provider transcript
 determinism.
 
 Each turn writes `runs/<run_id>.jsonl` with bounded, redacted events: the
-start record (pid, model, input), tool starts, states and ends, `model_state`
-(only when its payload changes — the engine emits one per streamed tool-call
-fragment and they are otherwise identical), `usage`, every `assistant_done` (preamble ones carry `final=False`; only the
-one closing the turn carries `final=True` — the deliverable, per the contract
-in AGENTS.md), errors and the finish outcome. Streaming
-deltas (`reasoning_delta`, `assistant_delta` — `runs._TRANSIENT_KINDS`) are
-never journaled: they made one content turn a 20 MB file, and the reconnect
-replay is the sessions sidecar, so `alpi runs show` and `host.run.read` return
-an operational timeline, not a replay of the stream. The
-`run_id` is carried by host chat stream frames and the existing run ledger.
-Local operators use `alpi runs list|show|cancel` or `/runs`; paired clients use
-`host.runs.list`, `host.run.read`, and `host.run.cancel`. Reads and cancellation
-are connection-scoped like sessions, while the sovereign local socket can stop
-any active run. Terminal command text is omitted from the journal, saved turn
-metadata, and chat replay sidecar, including terminal steps nested in a
-workflow. Listing reads the first and last journal records rather than replaying
-the event stream. Cleanup offers completed journals — a valid `summary()` whose
-status is not `running`; a hung journal is the run sweep's job and an
-unreadable one is kept — older than 30 days, plus the oldest completed ones
-beyond 200 MiB per profile. The size branch skips journals completed less than
-an hour ago (`RUNS_SETTLE_SECONDS`): a workgroup child writes `run.finished`
-before the parent settles cost from `usage_summary()`, and the daemon's
-`active_ids()` does not know that child, so it stays as a second guard only for
-the window between `run.finished` and `unregister_active`. Cleanup only offers,
-under the label *Old and excess run journals*; nothing is deleted on its own. The **run sweep** runs at
-profile start and then every 30 s from the daemon's maintenance loop (`_sweep_runs`,
-deliberately off the scheduler's thread pool — a worker wedged in `run_job` is the
-case it hunts — and wrapped so a failure in it can never end the loop). One scan of
-`runs/` feeds two rules, applied in order. `reconcile_stale` closes any journal whose
-pid is gone as `interrupted` (reason `dead`); a dead child is reported within about a
-minute. `reconcile_silent` judges every *scheduled* run whose journal has written
-nothing for longer than its job's timeout plus `SILENCE_GRACE_S` (a deleted job is
-judged by `MAX_RUN_TIMEOUT_SECONDS`); silence is wall-clock, but the sweep must also
-have watched it hold for the grace on the monotonic clock before acting, so a wedged
-child is reported roughly ten minutes past its timeout and a clock step alone never
-fires it. A live pid is killed only when it is provably the run's process: `run.started`
-records `pid_start` (`/proc/<pid>/stat` field 22), the sweep requires it to match, and
-never targets its own pid or its parent's. Anything alive it cannot vouch for — a
-recycled pid, a pre-0.14.50 journal, a host without `/proc` — or that refuses the kill,
-is reported once and left untouched, journal included: a `run.finished` written under
-a live writer would be followed by that writer's own records and the run would read as
-running again. Runs without a job are never judged by silence. The scheduler closes
-the journal of a child it ends itself (it hands the child `ALPI_RUN_ID`), so its own
-timeout yields one alert rather than one from the scheduler and one from the sweep.
-Each reported row files an error output and raises `schedule.failed`, the path a live
-failure already uses.
+start record (pid, model, input), tool starts / states / ends, `model_state`
+when it changes, `usage`, every `assistant_done` (only the one closing the
+turn carries `final=True`), errors and the finish outcome. Streaming deltas
+are never journaled — the reconnect replay is the sessions sidecar — so
+`alpi runs show` and `host.run.read` return an operational timeline, not the
+stream. Terminal command text is omitted everywhere. Local operators use
+`alpi runs list|show|cancel` or `/runs`; paired clients use `host.runs.list`,
+`host.run.read`, `host.run.cancel`, connection-scoped like sessions.
+
+Cleanup offers completed journals older than 30 days plus the oldest beyond
+200 MiB per profile, skipping anything completed within the last hour;
+nothing is deleted on its own. A **run sweep** runs at profile start and
+every 30 s from the daemon's maintenance loop, off the scheduler's thread
+pool and wrapped so a failure in it never ends the loop. One scan of `runs/`
+feeds two rules in order. `reconcile_stale` closes journals whose pid is gone
+as `interrupted` (reason `dead`), so a dead child is reported within about a
+minute. `reconcile_silent` judges a *scheduled* run that has written nothing
+for longer than its job timeout plus `SILENCE_GRACE_S` (a deleted job is
+judged by `MAX_RUN_TIMEOUT_SECONDS`); silence is wall-clock, but the sweep must
+also have watched it hold for the grace on the monotonic clock before acting,
+so a wedged child is reported roughly ten minutes past its timeout and a clock
+step alone never fires it. A live pid is killed only when it is provably this
+run's process — `run.started` records `pid_start` from `/proc/<pid>/stat`, the
+sweep requires it to match, and never targets its own pid or its parent's.
+Anything alive it cannot vouch for (a recycled pid, a pre-0.14.50 journal, a
+host without `/proc`) is reported once and left untouched, journal included: a
+`run.finished` written under a live writer would be followed by that writer's
+own records and the run would read as running again. Runs without a job are
+never judged by silence. The scheduler closes the journal of a child it ends
+itself (it hands the child `ALPI_RUN_ID`), so its own timeout yields one alert
+rather than one from the scheduler and one from the sweep. Each reported row
+files an error output and raises `schedule.failed`, the path a live failure
+already uses.
 
 `ExecutionWorld` keeps filesystem resolution and terminal shell execution under one
 run-scoped abstraction. `local` preserves the previous behavior. `docker`
@@ -323,7 +306,7 @@ still carries accounting fields but cannot move a client's conversation meter.
 
 **Cross-turn resume.** A chat is not a long-lived object: each turn spins up a fresh `Engine` and rehydrates the session from disk (`_hydrate_from_path` in `cli.py`, shared by TUI `--continue` and the host chat; the desktop "edit message" rewrite path mirrors it in `host/chat.py`). The model context is rebuilt from the prior **replayable** turns — those that ended in a final reply or produced a file; a turn aborted before its reply (no assistant text, no output files) is dropped, so a resumed session never re-answers a dangling request. Each replayed turn contributes its user text (plus an input-attachment marker `[attached: name (mime)]`) and assistant text (plus a produced-file marker `[produced this turn — reuse the absolute path…: name → /abs/path]`). Tool calls and tool results are deliberately **not** replayed — they would blow the context budget — so an agent does not remember what it searched, read, or analyzed last turn, only its final reply and the absolute paths of the files it produced. A multi-turn edit ("now relight it at sunset") reuses the produced path surfaced by the marker, not a remembered tool output; an agent that needs an earlier tool's result across turns must re-run the tool or rely on a produced file.
 
-The system prompt for each turn is built from: `AGENT.md` (agent profile — voice, style, identity) → base prompt → environment block (workspace, profile home, path rule) → **platform hint** (`_platform_hint()` — injects per-surface guidance when `ALPI_PLATFORM` is set by the caller: `cron`; empty for TUI and the apps) → **skills index** (auto-injected by `alpi.tools.skill.skills_index_block`) → `USER.md` → `MEMORY.md`.
+The system prompt for each turn is assembled in a fixed order (`PART_ORDER` in `alpi/prompt_cache.py`): `AGENT.md` (agent profile — voice, style, identity) → base prompt → environment block (workspace, profile home, path rule) → system time → **platform hint** (per-surface guidance when `ALPI_PLATFORM` is set: `cron`; empty for TUI and the apps) → turn guidance → the self-knowledge rule pointing the model at `alpi_knowledge` (dropped when that tool is denied) → **skills index** → `USER.md` → `MEMORY.md`.
 
 The scheduler (`alpi/scheduler/run.py`) sets `ALPI_PLATFORM=cron` so scheduled jobs run knowing no user is present and they cannot ask for clarification. Each fire runs as a subprocess capped at `job_run_timeout(job)` seconds — `job.timeout` if set, else `DEFAULT_RUN_TIMEOUT_SECONDS` (900), clamped to `[30, MAX_RUN_TIMEOUT_SECONDS]` (3600). The cap is a stuck-process backstop for unattended runs, not the cost guard (`budget.daily_usd` is) and not a hint that jobs must be short; heavy jobs (deep research, multi-step publishing) opt into a longer budget via `schedule(add|update, timeout=…)`. The scheduler passes the child a soft budget via `ALPI_TURN_BUDGET_S` (the cap minus a ~10% reserve, floor 60s); when the engine crosses it, normal jobs get one tools-off best-effort reply and detached workgroup turns get one `workgroup_post`-only handoff. The hard subprocess timeout remains the last-resort kill if finalization itself stalls.
 
@@ -380,11 +363,11 @@ source of truth is Markdown under `<workspace>/knowledge/`; SQLite under
 and attachments are read only as inputs for synthesis; alpi does not copy them
 into a durable documents store.
 
-- `knowledge(action="search", query, k=5)` — hybrid sqlite-vec + FTS search over knowledge pages, returning page-level results (`path`, `title`, `type`, `tags`, `snippet`, `score`, `links`). The index holds one bundle: asked for a `path` the index was not built for, search returns no results and a hint naming the bundle it does hold, never results from the wrong one. Use `alpi_knowledge`, not this tool, for questions about alpi itself.
-- `knowledge(action="ingest", source_path?|name?, topic?, apply=true, ocr=false)` — explicit learn path. Resolves an existing file or current-turn attachment, validates it with the same attachment allowlist/caps, extracts text (PDF/DOCX/EPUB/HTML/text, OCR for scanned PDF/images when requested), asks the LLM to synthesize durable Markdown pages, updates `index.md` and `log.md`, lints, and refreshes the derived index. The raw file is not copied.
-- `knowledge(action="maintain", source_path?, topic?, apply=true, ocr=false)` — explicit LLM-wiki maintenance for reorganizing or updating pages. Every proposed page is validated before any is written, so a refusal leaves the bundle untouched rather than half-applied, and never creates one that did not exist. Proposed paths resolve to the file they will really take before being checked, so two entries cannot claim one file and `index.md` / `log.md` cannot be claimed under another spelling. The synthesizer receives the current full body of every related page (per-page and aggregate caps, `truncated` flagged). An existing page is replaced only when the synthesizer received its full body in that run; otherwise the proposal for it is reported under `skipped` and the file stays untouched. The result lists `bytes_before` / `bytes_after` for each written page so a legitimate shrink is visible.
-- `knowledge(action="lint", path?)` — validates required `index.md` / `log.md`, minimal YAML frontmatter (`type`, `title`, `tags`, `updated_at`, `sources`), relative Markdown links, and orphan pages. A page resolving outside the bundle is reported on its own line instead of aborting the run.
-- `knowledge(action="index", path?, force?)` — chunks valid pages, writes `okf_*` tables, sqlite-vec rows, FTS rows, metadata, and outgoing links. Incremental by `mtime` + `size`; `force=true` or embedder drift rebuilds only the `okf_*` table family, inside a single transaction, so a failure mid-rebuild leaves the previous index searchable. Pointed at a bundle the index was not built for, it refuses rather than replacing the index, unless `force=true` says to retarget; a stored root that no longer exists is adopted by this rebuild, though search keeps naming it until the rebuild runs. The owner check runs inside the rebuild's own transaction, so concurrent indexers serialize instead of interleaving. Asked for without a `path`, it first creates the required `index.md` / `log.md` and links any page nothing points at, so a page written straight to disk lands in a valid bundle. Any explicit `path` is only read, never repaired. Generated links percent-encode the destination and escape the title, so a page named `C#.md` or `my card (v2).md` is linked in a form the link graph reads back.
+- `knowledge(action="search", query, k=5)` — hybrid sqlite-vec + FTS search over knowledge pages; page-level results with `path`, `title`, `type`, `tags`, `snippet`, `score`, `links`. The index holds one bundle and says which. Use `alpi_knowledge` for questions about alpi itself.
+- `knowledge(action="ingest", …)` — the explicit learn path: resolve a file or a current-turn attachment, extract text (PDF / DOCX / EPUB / HTML / text, OCR on request), have the LLM synthesise durable Markdown pages, update `index.md` and `log.md`, lint, refresh the index. The raw file is not copied.
+- `knowledge(action="maintain", …)` — LLM-wiki maintenance: every proposed page is validated before any is written, an existing page is replaced only when the synthesiser saw its full body, and the result reports `bytes_before` / `bytes_after` so a legitimate shrink is visible.
+- `knowledge(action="lint", path?)` — required `index.md` / `log.md`, minimal frontmatter (`type`, `title`, `tags`, `updated_at`, `sources`), relative links, orphan pages.
+- `knowledge(action="index", path?, force?)` — incremental by mtime + size; `force=true` rebuilds the `okf_*` table family inside one transaction and is the only way to retarget the index at another bundle.
 
 Supported ingest formats: markdown / text / source / configs (stdlib read),
 HTML (`html2text`), PDF (`pypdf` for text-layer, RapidOCR fallback when
@@ -436,29 +419,26 @@ The third retrieval surface on the same store: semantic search over **hub-owned*
 **Forgettable.** Removing a workgroup purges its index in both delete paths — the host RPC (`host/workgroup_admin.py::_remove`) and the CLI (`alpi workgroup remove`) call `workgroup_search.forget_workgroup`; `index_workgroups` orphan-sweeps any tracked workgroup whose directory is gone. No auto-injection into workgroup turns. ALP encryption/transcript behaviour is untouched — this only reads through the existing decrypt path.
 
 **Removal tombstones (`alp/secrets/subscriptions.removed.d/`).** Removing a
-workgroup also touches an empty marker named by its id in every local home
-(each profile and the root), so `load()` hides and `save()` drops the id in
-any process still holding a stale copy — a write-back in flight or the
-hub-side auto-join heal cannot resurrect it. Markers never cross machines
-(a remote member retires by inference instead), so their useful life is the
-longest in-flight dispatch: they expire after `TOMBSTONES_KEEP_DAYS` (2).
-Every tombstone write prunes the expired markers of its home, provided the
-id is no longer in `subscriptions.yaml` nor under `alp/workgroups/` (an
-entry still hidden by its marker keeps it until `compact()` drops the
-entry); when `subscriptions.yaml` cannot be parsed or `alp/workgroups/`
-cannot be scanned, nothing is verifiable and no marker expires. `setup →
-Cleanup` / `host.cleanup.*` offer the same set, per home, under *Workgroup
-tombstones*. Before the expiry, the web factory's churn left
-one marker per removed workgroup per home forever — 12k empty files on a
-seven-profile machine, which per-file sync tools drag along one by one.
+workgroup writes an empty marker named by its id in every local home, so a
+stale in-memory copy or a hub-side auto-join heal cannot resurrect it.
+Markers never cross machines and expire after `TOMBSTONES_KEEP_DAYS` (2) once
+the id is gone from `subscriptions.yaml` and `alp/workgroups/`; `setup →
+Cleanup` offers the expired set under *Workgroup tombstones*.
 
-**Asset prefetch (`service.py::_prefetch_assets`)**. Scheduled by `_main_all` at boot+600 s — deliberately past the client-reconnection rush (at boot+5 s the Chromium unzip + ONNX load starved small Docker hosts, which read as "the machine is blocked"). Gated by `runtime.prefetch` on the root profile: `auto` (default) fetches the fastembed weights only when some profile has `knowledge.sqlite`, and Chromium only when some profile leaves the `browser` tool un-denied; `all` forces both; `off` — the default under `ALPI_PLATFORM=docker` — skips prefetch entirely. Every asset still fetches lazily on first use, so `off` costs latency, never functionality. `ensure_weights_cached()` downloads through a throwaway embedder and releases the ONNX session instead of leaving ~150 MB resident in every daemon; the first real `embed()` lazy-loads from the disk cache. `ensure_chromium()` warns and stays retryable when the install fails, and after a successful install prunes stale `chromium*` builds (each playwright bump orphans ~520 MB; firefox/webkit are never touched, and nothing is pruned unless the wanted build exists on disk). RapidOCR remains first-use. Concurrent loaders keep the double-checked locking (`_load`, `_ocr_reader`, `ensure_chromium`).
+**Asset prefetch (`service.py::_prefetch_assets`).** Scheduled at boot + 600 s,
+past the client-reconnection rush. Gated by `runtime.prefetch` on the root
+profile: `auto` (default) fetches the embedding weights only when some
+profile has `knowledge.sqlite` and Chromium only when some profile leaves
+`browser` un-denied; `all` forces both; `off` — the default in Docker —
+skips it. Every asset still loads lazily on first use, so `off` costs
+latency, never functionality. A successful Chromium install prunes stale
+builds of the headless shell.
 
 ### Skills
 
 Live under `<home>/skills/<category>/<name>/`. Required `SKILL.md` plus optional `scripts/`, `references/`, `assets/`, `secrets/` (mode 0700, gitignored, scanner skipped), `state/` (gitignored, scanner skipped, runtime persistence). `.gitignore` auto-written on create with `secrets/\nstate/\n`.
 
-**Live by default** — no `_pending/` approval stage (was tried in v0.1, removed in v0.2 as friction-without-benefit).
+**Live by default** — there is no pending-approval stage; the scanner and the sandbox are the guarantees.
 
 Frontmatter (auto-populated on `create`): `name`, `description`, `category`, `version`, `origin: agent|user`, `created_at`, `requires_env`, `tools`, `keywords`, optional `output_schema`. 13 fixed categories including `miscellaneous` as the fallback. `secrets/` is filesystem state, not frontmatter: it is created lazily when a skill writes a secret file. `output_schema` is one-line JSON and uses a deliberately small subset (`type`, `properties`, `required`, `items`, `enum`) so the runtime stays dependency-light.
 
@@ -486,7 +466,7 @@ Spawns a sub-agent with a read-only toolset (`web_search`, `web_fetch`, `web_ext
 
 **Interrupt**: polls `tool_state.is_interrupted()` between iterations and between tools; returns `[research: interrupted]` on the first hit. **State label** during execution: `<depth> · step N/M`; while an inner tool runs its own `emit_state` label gets auto-prefixed with `step N/M · …` via a wrapped `_emit` installed for the duration of each tool-call batch (restored in a `finally`).
 
-**Batch mode** (v0.2.18): `tasks: [{brief, depth}]` up to 3 runs concurrently — see the Delegate section below for the shared ThreadPoolExecutor design (same pattern applies here).
+**Batch mode**: `tasks: [{brief, depth}]` up to 3 runs concurrently — see the Delegate section below for the shared ThreadPoolExecutor design (same pattern applies here).
 
 ### Attachments (`alpi/attachments.py`)
 
@@ -512,7 +492,7 @@ unavailable, used main model]`. Clearing it restores main-model fallback. This
 route is deliberately tool-scoped: chat image attachments are multimodal parts
 of the main turn and are not silently moved to the override.
 
-Same usage / cost plumbing as research and delegate (`record_usage`). Auto-resize to cut tokens is tracked in [ROADMAP §S](ROADMAP.md) for v0.3.
+Same usage / cost plumbing as research and delegate. Images are auto-resized before upload (see CONFIG.md → `tools.browser.vision`).
 
 ### Delegate (write-capable sub-agent, `alpi/tools/delegate.py`)
 
@@ -538,7 +518,7 @@ providers receive no OpenRouter-only fields. `prefix_diag.py` compares bounded
 request-shape hashes per conversation and records causes, never prompt text.
 Caching and diagnostics are best-effort and cannot fail a provider call.
 
-**Batch parallel mode** (v0.2.18). Both `research` and `delegate` accept `tasks: [...]` (up to 3) and run them concurrently via `ThreadPoolExecutor(max_workers=3)`. Isolation is provided by `_state.py`: `_emit`, `_interrupt_getter`, `_usage_sink` are `contextvars.ContextVar`, so each worker thread sees its own values without racing on module globals. Workers re-seed `interrupt_getter` + `usage_sink` from the parent context (Python's `ThreadPoolExecutor` doesn't propagate ContextVars automatically) and install a per-task prefixed `emit` so TUI progress lines read `[i/N] <tag> · <msg>`. Results aggregate into one markdown report with per-task sections; per-task failures are captured inline as `[failed: <error>]` instead of aborting the batch. Cap is hardcoded at 3 — bumping would need a config knob *and* would multiply LLM cost linearly; not a default worth moving.
+**Batch parallel mode.** Both `research` and `delegate` accept `tasks: [...]` (up to 3) and run them concurrently via `ThreadPoolExecutor(max_workers=3)`. Isolation is provided by `_state.py`: `_emit`, `_interrupt_getter`, `_usage_sink` are `contextvars.ContextVar`, so each worker thread sees its own values without racing on module globals. Workers re-seed `interrupt_getter` + `usage_sink` from the parent context (Python's `ThreadPoolExecutor` doesn't propagate ContextVars automatically) and install a per-task prefixed `emit` so TUI progress lines read `[i/N] <tag> · <msg>`. Results aggregate into one markdown report with per-task sections; per-task failures are captured inline as `[failed: <error>]` instead of aborting the batch. Cap is hardcoded at 3 — bumping would need a config knob *and* would multiply LLM cost linearly; not a default worth moving.
 
 ### TUI (`alpi/tui/`)
 
@@ -578,8 +558,8 @@ readable. These are internal capabilities, not configurable services:
 - **schedule** — cron tick loop.
 - **alp** — ALP **listener** (inbound). Serves the full protocol
   on a Unix socket plus optional Noise_XK on TCP: `link.ping`,
-  `link.ask`, `link.cancel` **and** every `workgroup.*`
-  verb.
+  `link.ask`, `link.cancel`, `link.put_blob` / `link.get_blob`
+  **and** every `workgroup.*` verb.
 - **workgroups** — the **poller** (outbound). Holds `workgroup.pull` open
   for active subscriptions and uses staggered nonblocking probes for idle
   or paused mirrors, decrypts new posts, and dispatches an autonomous
@@ -661,8 +641,7 @@ auth models. ALP is peer-to-peer (Noise on TCP, envelope-signed,
 peers pinned in `peers.yaml`); host is client-to-daemon. JSON-RPC-shaped
 over `~/.alpi/host/host.sock` with filesystem permissions as the trust
 boundary; no peer identity, no envelope, no Noise handshake. Desktop
-and future mobile clients talk to this API; they do not read profile
-files directly.
+and mobile talk to this API; they do not read profile files directly.
 
 Only the `default` profile hosts this plane — the client
 always targets default's socket and reaches sibling profiles via
@@ -819,29 +798,14 @@ Lifecycle:
   device. `host.connections.delete` tombstones the parent and clears every
   linked token while retaining historical session/ledger attribution.
 
-The daemon migrates the credential store at startup, under the store locks
-and before it opens the WebSocket listener. A `devices.yaml` with no
-`connections.yaml` beside it becomes one connection per legacy row, tokens
-hashed, roles and profile scopes preserved; the destination is re-read and
-checked (every legacy token hash present, no cleartext, mode 0600) before the
-source is deleted, and no backup copy is written. No rows are merged because
-the old schema has no reliable grouping key. A `connections.yaml` from a
-release before 0.14.39 still carries cleartext `token` fields; the first read
-rewrites it with `token_hash`, once, and an already hashed store is never
-rewritten. When both files exist after an interrupted run, `connections.yaml`
-is the authority: the destination is hashed and verified first, and the
-legacy file is deleted only when it has the legacy device-list shape and every
-token in it is provably represented there; otherwise it stays, nothing is
-imported or revived, and the log carries an explicit pending-migration warning. An empty,
-`null` or corrupt active store is an explicit error, never zero connections,
-and is never overwritten; if the migration fails, the WebSocket listener does
-not start, whether the bind comes from `start()` or from the daemon's later
-`enable_tcp()`. Rolling back below 0.14.39 is not supported: earlier code cannot
-read `token_hash`. Copies left by earlier releases (`devices.yaml.migrated`,
-hand-made `.bak` files, `connections.yaml.damaged-*`) are not touched;
-`alpi doctor` lists them and [OPERATIONS.md](OPERATIONS.md) gives the explicit
-removal procedure. Sessions written before this contract lack an owner
-and remain under the synthetic `host` connection.
+The daemon migrates the credential store at startup, before it opens the
+WebSocket listener: a legacy `devices.yaml` becomes one connection per row
+with hashed tokens, a pre-0.14.39 `connections.yaml` is rewritten once with
+`token_hash`, and the source is deleted only after the destination has been
+re-read and verified. A corrupt or empty store is an explicit error, never
+zero connections, and a failed migration keeps the WebSocket listener down.
+Rolling back below 0.14.39 is not supported. Leftover copies are listed by
+`alpi doctor`; [OPERATIONS.md](OPERATIONS.md) has the removal procedure.
 
 `host.devices.*` remains as a compatibility RPC alias for older management
 clients; generated payloads use the new one-time grant contract. Desktop and
@@ -914,9 +878,8 @@ Verb namespaces in current shape:
 - **`host.workgroup.{create,update,add_member,kick,remove,action,post}`**
   — workgroup CRUD, hub-only for create/update/add_member/kick/remove,
   member-side for action (pause/resume/leave) and post. The desktop
-  Tauri layer used to shell out to `alpi workgroup …` for these;
-  v0.5 routes them through the host plane so mobile reuses the same
-  contract.
+  Tauri layer routes them through the host plane so mobile reuses the
+  same contract.
 - **`host.connections.{list,create,add_device,exchange_pairing,pairing_status,cancel_pairing,update,set_status,delete,revoke_device,register_device,summary,usage_daily}`**
   — connection/device management and 14-day aggregate usage for the
   WebSocket transport. The server requires
@@ -1092,7 +1055,7 @@ section; probe / remove a single account by id from the CLI with
 `alpi email probe <id>` and `alpi email remove <id>`. There are no
 `email.*` scalar `config.yaml` knobs beyond the `email.accounts` map.
 
-**Per-profile env snapshot (v0.4.52).** `alpi.home.effective_profile_env(home)`
+**Per-profile env snapshot.** `alpi.home.effective_profile_env(home)`
 overlays `os.environ` (process-level vars: PATH, HOME, TZ,
 ALPI_PLATFORM…) with `<home>/.env` (per-profile secrets, quotes
 stripped) and is the source of truth for **all credentials**:
@@ -1244,7 +1207,7 @@ Scheduled jobs do not persist session files. The scheduler uses
 delivery and audit; keeping a resumable transcript would make
 background jobs appear as user chats.
 
-**`@`-mention threads (`alpi/alp/mention_thread.py`).** When peer A `@`-mentions peer B over ALP (`link.ask`), the receiving side runs a fresh `Engine` per turn — but B persists a small per-sender thread at `<B-home>/mentions/<A>.json`, capped at 20 turns. Successive mentions from the same A→B pair carry conversational memory ("what I said before" resolves) without polluting B's local `--continue` (which only reads `sessions/`). Threads are isolated per remitente. Wipe via `setup → Cleanup → Mentions`.
+**`@`-mention threads (`alpi/alp/mention_thread.py`).** When peer A `@`-mentions peer B over ALP (`link.ask`), the receiving side runs a fresh `Engine` per turn — but B persists a small per-sender thread at `<B-home>/mentions/<A>.json`, capped at 20 turns. Successive mentions from the same A→B pair carry conversational memory ("what I said before" resolves) without polluting B's local `--continue` (which only reads `sessions/`). Threads are isolated per sender. Wipe via `setup → Cleanup → Mentions`.
 
 ### Security model
 
@@ -1272,7 +1235,7 @@ Hard runtime deps are kept tight — every line in `pyproject.toml`'s `dependenc
 - `litellm` — multi-provider LLM client; the one primitive the agent is built around.
 - `rich` — Text formatting primitives used across the CLI wizards, TUI rendering pipeline, and tool output.
 - `textual` — TUI framework.
-- `prompt_toolkit` — CLI wizard input (menus, text, password). Replaced `questionary` in v0.2.10.
+- `prompt_toolkit` — CLI wizard input (menus, text, password).
 - `httpx` — async HTTP; Gmail API, web_fetch, OAuth dance.
 - `click` — CLI command dispatch.
 - `pyyaml` — config.yaml + skill frontmatter.
@@ -1288,7 +1251,7 @@ Hard runtime deps are kept tight — every line in `pyproject.toml`'s `dependenc
 
 Optional `dev` extra: `pytest` + `pytest-asyncio` for the test suite, `ruff` for lint, `pip-audit` for CVE scans.
 
-Security posture: `uv run --with pip-audit pip-audit` ran clean against the full lockfile at the time of the v0.2.66 audit. Re-run before each release. Known-CVE deps are not allowed to accumulate — drop or upgrade.
+Security posture: `uv run --with pip-audit pip-audit` must run clean against the full lockfile before each release. Known-CVE deps are not allowed to accumulate — drop or upgrade.
 
 ## Testing
 

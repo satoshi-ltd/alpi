@@ -62,7 +62,7 @@ def tail(home: Path, source: str | None, n: int) -> list[LogLine]:
     merged: list[LogLine] = []
     for f in files:
         merged.extend(_read_lines(f))
-    merged.sort(key=lambda l: (l.ts, l.source))
+    merged.sort(key=lambda entry: (entry.ts, entry.source))
     if n > 0:
         merged = merged[-n:]
     return merged
@@ -121,5 +121,5 @@ def _print_line(console, line: LogLine) -> None:
 
 
 def print_tail(console, lines: list[LogLine]) -> None:
-    for l in lines:
-        _print_line(console, l)
+    for line in lines:
+        _print_line(console, line)

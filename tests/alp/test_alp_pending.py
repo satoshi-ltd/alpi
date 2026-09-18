@@ -187,7 +187,7 @@ async def test_host_pending_list_enriches_local_profile(
     default_kp = keys_mod.load_or_generate(root)
     mirai_home = root / "profiles" / "mirai"
     mirai_home.mkdir(parents=True)
-    mirai_kp = keys_mod.load_or_generate(mirai_home)
+    keys_mod.load_or_generate(mirai_home)
 
     pending.record(mirai_home, default_kp.pubkey_b64())
     pending.record(mirai_home, "STRANGER_PUBKEY_NOT_LOCAL")

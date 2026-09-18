@@ -20,7 +20,7 @@ import base64
 import email.utils
 import html
 import re
-from datetime import datetime, timezone
+from datetime import datetime
 from email.message import EmailMessage
 from pathlib import Path
 from typing import Any
@@ -234,8 +234,8 @@ class GmailClient:
         if self._label_cache is None:
             resp = self._get("labels")
             self._label_cache = {
-                l["name"].upper(): l["id"]
-                for l in resp.get("labels") or []
+                label["name"].upper(): label["id"]
+                for label in resp.get("labels") or []
             }
         return self._label_cache
 

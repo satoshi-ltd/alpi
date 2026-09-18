@@ -89,7 +89,6 @@ async def _peers_ping(
     from alpi.alp import client as alp_client
     from alpi.alp import peers as peers_mod
     from alpi.alp.keys import load_or_generate
-    from pathlib import Path
 
     peer = peers_mod.get_by_id(home, peer_id)
     if peer is None:

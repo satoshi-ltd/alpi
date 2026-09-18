@@ -37,39 +37,67 @@ Everything that represents state, identity, or cost:
 | `.env` | ✓ | API keys. A leak in one profile doesn't touch the other. |
 | `secrets/` | ✓ | Per-profile non-ALP credential files (OAuth tokens, Gmail tokens, etc.). Created `0o700` on bootstrap. The ALP keypair lives separately at `alp/secrets/alp_key.{pem,pub}`. |
 | `memories/` (USER.md, MEMORY.md, AGENT.md) | ✓ | Your identity and what alpi remembers. |
-| `sessions/<id>.json` | ✓ | Local human chat log (TUI / desktop / manual `chat --once`). |
+| `sessions/<id>.json` | ✓ | Local human chat log (TUI / desktop / manual `chat --once`), each with a `_events_<id>.jsonl` sidecar used to replay a turn after a dropped connection. |
 | `mentions/<sender>.json` | ✓ | Per-sender `@`-mention threads (capped at 20 turns). Receiving side only. |
 | `skills/` | ✓ | Installed skills (live under this profile's allowlist). |
 | `recipes/` | ✓ | Saved workgroup recipes owned by this profile when it acts as hub. The YAML filename stem is the recipe id. |
-| `alp/` (peers.yaml, socket, keypair under `alp/secrets/`) | ✓ | ALP identity + pinned peers. Two profiles on the same machine are two distinct peers. The ALP private key lives here, NOT under `secrets/`. |
-| `host/attachments/tmp/` | ✓ | Staged chat-attachment uploads from the paired apps. Per profile — the rest of `host/` (`host.sock`, `connections.yaml`, `events.jsonl`, `device_id`) is root-only (see below). |
-| `run/bg/` | ✓ | Background-terminal state — one combined `alpi-bg-*.log` (stdout+stderr capture) and one `<pid>.meta` file (key=value pairs: `log=…`, `started=…`) per job spawned with `terminal(action="background")`. |
-| `runs/<run_id>.jsonl` | ✓ | Bounded, redacted durable event journal for each engine turn; surfaced by `alpi runs`, `/runs`, and `host.run.*`. |
-| `schedule/jobs.json` | ✓ | Cron + one-shot jobs. Scheduled runs use `chat --once --no-save` and do not create chat sessions. Jobs flagged `no_agent: true` exec `prompt` as a `python [flags] <skill_script>` invocation directly, bypassing the LLM (allowlist restricts the script to `skills/<category>/<name>/scripts/`). |
+| `alp/` | ✓ | ALP identity and pinned peers (`peers.yaml`, socket, keypair under `alp/secrets/` — **not** under the profile's `secrets/`), plus the workgroups this profile hubs: transcripts, files and member state under `alp/workgroups/<id>/`. Two profiles on the same machine are two distinct peers. |
+| `host/attachments/tmp/` | ✓ | Staged chat-attachment uploads from the paired apps. The rest of `host/` is root-only (see below). |
+| `run/bg/` | ✓ | Output capture and metadata for background terminal jobs. |
+| `runs/<run_id>.jsonl` | ✓ | Bounded, redacted durable event journal for each engine turn; surfaced by `alpi runs`, `/runs`, `host.runs.list` and `host.run.read`. |
+| `schedule/jobs.json` | ✓ | Cron + one-shot jobs. Scheduled runs never create chat sessions; a job flagged `no_agent: true` runs one of this profile's skill scripts directly, without the LLM. |
 | `outputs/outputs.jsonl` | ✓ | Persistent inbox for proactive agent messages + schedule failures, capped at 500 rows. Surfaced by `host.outputs.*` to paired apps. |
+| `out/` | ✓ | Files the agent produces for you and the apps serve back. Kept ~30 days, then offered by the cleanup wizard; excluded from `alpi backup`. |
 | `knowledge.sqlite` | ✓ | Derived sqlite-vec indexes for workspace knowledge, session recall, and workgroup recall. |
-| `logs/` | ✓ | `agent.log` (one line per engine turn on every surface — TUI, schedule, workgroup, inbound ALP, research / delegate sub-agents — written by `engine.py::run_turn`), `llm.log` (provider request start / first delta / stream end-or-error breadcrumbs written by `llm.py` — the attribution record for idle-killed turns) and `approval.log` (one line per non-SAFE `terminal` classification, written by `tools/_approval.py`), plus JSONL telemetry `compaction.jsonl` and `runs.jsonl` (run ledger, surfaced by `alpi digest`). The daemon's root log lives outside the per-profile tree at `~/.alpi/logs/service.log` — there is ONE per installation, not one per profile, and `alpi logs --source service` always reads the root file regardless of `-p`. `alpi logs --source` still accepts `schedule` as a filter value for any standalone or legacy file on disk. |
+| `logs/` | ✓ | `agent.log` (one line per engine turn, on every surface), `llm.log` (provider request breadcrumbs — the record of what a stalled turn was waiting on), `approval.log` (every non-safe `terminal` classification), plus `compaction.jsonl` and `runs.jsonl` telemetry read by `alpi digest`. The daemon's own `service.log` is root-only at `~/.alpi/logs/` — one per installation, and `alpi logs --source service` always reads it regardless of `-p`. |
 | `logs/ledger.json` | ✓ | Daily spending ledger — the profile's USD cap is enforced from here across every turn (interactive, scheduled, sub-agent, inbound ALP). Resets at UTC midnight. |
-| `cache/` (tts, stt, inbound voice) | ✓ | Audio cache. |
+| `cache/` | ✓ | Audio cache — synthesised speech and inbound voice notes. Speech-to-text model weights are shared, not per profile. |
 
-**Eager vs lazy.** `home.ensure_home()` creates 10 subdirs eagerly with `0o700` permissions on first bootstrap: `memories/`, `secrets/`, `sessions/`, `skills/`, `recipes/`, `schedule/output/`, `logs/`, `host/`, `mentions/`, `outputs/`. The rest (`alp/`, `cache/`, `run/bg/`, `runs/`, `host/attachments/`) and `knowledge.sqlite` are created lazily on first use. `alpi audit` walks a fixed sensitive-path list and flags any group/other bits set (`st_mode & 0o077`); the fix is `chmod 700` for directories and `chmod 600` for files. The list: the profile home itself, `.env`, the ALP private key (`alp/secrets/alp_key.pem`), `alp/secrets/` (the ALP keypair directory — **not** the profile-level OAuth `secrets/`, which is not audited today), `config.yaml`, `peers.yaml`, `memories/`, `sessions/`, `skills/`, `schedule/output/`, `logs/`, `host/`, `mentions/`, `outputs/`. Lazily-created paths outside this list (`alp/` itself, `cache/`, `run/bg/`, `runs/`, `host/attachments/`) and the profile-level `secrets/` OAuth folder are not audited today.
+**Permissions.** The directories alpi creates at bootstrap are mode `0700`
+and the credential files it writes are `0600`. `alpi audit` then checks a
+fixed list for any group or other bit — the profile home, `.env`,
+`config.yaml`, `peers.yaml`, `alp/secrets/` and the ALP private key,
+`memories/`, `sessions/`, `skills/`, `logs/`, `host/`, `mentions/`,
+`outputs/`, `schedule/output/` — and the fix is `chmod 700` for directories,
+`chmod 600` for files. Paths created lazily on first use (caches, `run/bg/`,
+staged attachments) inherit your umask and are not on that list, so a
+hardened setup should check them too.
 
-**Profile creation.** `alpi -p <name>` auto-bootstraps any not-yet-existing profile on first use; `alpi profile create <name>` is the explicit pre-bootstrap. Both paths go through the same central validator (`home.validate_profile_name`): the name must match `^[A-Za-z0-9][A-Za-z0-9._-]*$`, so `-p ../escape`, `-p .hidden`, `-p a/b`, `-p ..`, and any name containing `..` are rejected with `InvalidProfileName` before the path is joined. `-p ""` is a no-op — empty falls through to the default profile (`~/.alpi/`), it does **not** resolve to `~/.alpi/profiles/`. Quote names containing zsh-glob characters (`*`, `?`, `[`); they're rejected by validation anyway but the shell expands them first.
+**Names.** A profile name starts with a letter or digit and may contain
+letters, digits, `.`, `_` and `-`; anything else (`../escape`, `a/b`, a
+leading dot, any name containing `..`) is rejected before any path is
+touched, as are the reserved names `default` and `alpi`. `alpi -p <name>`
+bootstraps a missing profile on first use; `alpi profile create <name>` does
+it explicitly. Quote names that contain shell-glob characters.
 
 Not isolated (shared globally by design):
 
 - The `alpi` binary itself (`~/.local/bin/alpi`).
-- Whisper model downloads (`~/.cache/huggingface/`).
+- Whisper model downloads (`~/.cache/huggingface/`) and the embedding
+  models and update-check cache under `~/.alpi/cache/`.
 - Chromium for the `browser` tool (Playwright's own cache).
 - The user's shell, git config, workspace contents.
-- **Host-plane root state.** `~/.alpi/host/host.sock` (control-plane socket), `~/.alpi/host/connections.yaml` (connection identities and hashed device tokens), `~/.alpi/host/events.jsonl` (host event stream), and `~/.alpi/host/device_id` are root-only — ONE instance per installation, not duplicated per profile. The desktop / mobile client always pairs against the root and reaches sibling profiles via the `profile` parameter on each verb. Named profiles still get their own `host/attachments/tmp/` (uploaded chat attachments) — that IS per profile and appears in the table above.
+- **Host-plane root state.** The control-plane socket, `connections.yaml` (connection identities and hashed device tokens), the host event stream and the device id live once under `~/.alpi/host/`. Paired apps always talk to the root and reach sibling profiles through the `profile` parameter on each call.
 
 ## Creating and removing profiles
 
 ```bash
 alpi profile create work       # bootstraps the tree with defaults
 alpi profile list              # shows all profiles, active one flagged
-alpi profile remove work       # deletes after safety checks + confirm
+alpi profile remove work       # archives to .trash after confirmation
+```
+
+`profile remove` archives the home under `~/.alpi/.trash/<name>-<timestamp>/`.
+There is no per-profile service to uninstall — the daemon is per-machine and
+picks up the removal on its next restart. `alpi -p <name> setup → Delete
+profile` is the same operation from the wizard.
+
+Every CLI command accepts `-p <name>` to scope to a profile:
+
+```bash
+alpi -p work                   # launch the TUI for the work profile
+alpi -p work setup             # configure the work profile
+alpi -p work peers list        # list the peers pinned by the work profile
 ```
 
 ## Versioning
@@ -136,7 +164,7 @@ Good candidates for Git:
 Do not commit:
 
 - `.env`, `secrets/`, `alp/secrets/`, or any skill `secrets/`.
-- `host/connections.yaml`, `host/devices.yaml.migrated`, or host pairing state.
+- `host/connections.yaml` or any other host pairing state.
 - `sessions/`, `mentions/`, `outputs/`, `logs/`, `cache/`, `run/`.
 - `knowledge.sqlite` or other derived indexes.
 - sockets, PID files, temporary attachments, skill `state/`.
@@ -193,67 +221,17 @@ Even with that ignore file, inspect `git status --ignored` and
 new runtime path, so a separate source repo plus allowlisted sync stays
 safer than committing the live home.
 
-### Docker
+### Containers
 
-For containers, keep the same split:
-
-- Mount the alpi home on a persistent volume, for example
-  `/home/alpi/.alpi`.
-- Mount or bake the profile-source repository separately and read-only,
-  for example `/profile-source`.
-- Inject `.env` and provider credentials through the container runtime,
-  not through the profile-source repository.
-- Run an entrypoint step that syncs allowlisted source files into the
-  live profile before starting the daemon.
-
-```bash
-rsync -a --delete \
-  --include='config.yaml' \
-  --include='memories/***' \
-  --include='skills/***' \
-  --include='schedule/' \
-  --include='schedule/jobs.json' \
-  --exclude='*' \
-  /profile-source/profiles/support/ \
-  /home/alpi/.alpi/profiles/support/
-
-exec alpi daemon
-```
-
-The container image should be disposable. The volume is operational
-state. The Git repository is desired profile source.
-
-### Kubernetes
-
-Use a `StatefulSet` with `replicas: 1` unless the daemon explicitly
-supports multi-writer operation for the same home. Mount a PVC at the
-alpi home and treat it as live runtime state.
-
-A typical layout:
-
-- Init container, or a `git-sync`-style checkout step, checks out the
-  profile-source repository into a read-only mount before the daemon
-  starts.
-- Init container copies allowlisted files from profile source into the
-  PVC before the daemon starts.
-- Secrets arrive through Kubernetes `Secret`, SOPS, External Secrets, or
-  a vault integration, not through Git.
-- ConfigMaps are fine for tiny deployment values, but profile trees with
-  skills, references, and assets should stay in Git.
-- Annotate the Pod or StatefulSet with the profile-source commit SHA so
-  runtime state can be traced back to reviewed source.
-
-```text
-profile-source Git
-  -> init checkout
-  -> allowlisted sync
-  -> PVC /home/alpi/.alpi
-  -> alpi daemon
-```
-
-Do not make the PVC itself the Git repository for normal operation. The
-daemon writes sessions, outputs, logs, ledgers, sockets, cache, and
-other runtime files there while Kubernetes keeps the process alive.
+Keep the same split in Docker or Kubernetes: the alpi home on a persistent
+volume, the profile-source checkout mounted read-only, secrets injected by
+the runtime rather than committed, and an entrypoint or init step that syncs
+the allowlisted files into the live profile before `alpi daemon` starts. On
+Kubernetes that is a `StatefulSet` with `replicas: 1` and a PVC at the alpi
+home; annotate the pod with the profile-source commit so runtime state traces
+back to reviewed source. Never make the volume itself the Git repository —
+the daemon writes sessions, ledgers, sockets and caches there while it runs.
+Container shapes and ports are in [DEPLOYMENTS.md](DEPLOYMENTS.md).
 
 ### Backups
 
@@ -261,21 +239,6 @@ Git does not replace `alpi backup`. Git captures desired profile source;
 backup captures operational recovery: ALP private identity, device
 pairings, OAuth tokens, sessions, outputs, ledgers, and other runtime
 state.
-
-`profile remove` archives the profile home under
-`~/.alpi/.trash/<name>-<timestamp>/`. There's no per-profile
-service to uninstall — the daemon is per-machine and picks up the
-removal on its next restart. **`alpi -p <name> setup → Delete
-profile`** is the same operation from the wizard.
-
-Every command in alpi's CLI accepts `-p <name>` to scope to a
-profile:
-
-```bash
-alpi -p work                   # launch TUI for the work profile
-alpi -p work setup             # configure the work profile (services + email)
-alpi -p work peers list        # list peers pinned by the work profile
-```
 
 ## Profile identity in ALP
 
@@ -326,22 +289,24 @@ Not a reason:
 
 ## Cost of a profile
 
-On disk: a fresh profile is ~10 KB (config + memory seeds + empty
-directory tree). After a few weeks of use, expect 5–50 MB
-depending on voice-cache and session-history retention. The TUI
+On disk: a fresh profile is about a kilobyte (a seed `config.yaml`, an
+`AGENT.md`, empty memory files and an empty directory tree). After a few
+weeks of use, expect 5–50 MB depending on voice-cache and session-history
+retention. The TUI
 top bar surfaces the live size next to the profile name; the
 cleanup wizard (`alpi setup → Cleanup`) reclaims audio cache, old
 sessions, rotated logs, schedule output, and knowledge index freelist
 bloat on demand.
 
-On CPU / memory: a profile not in active use costs *nothing*.
-Active surfaces collapse into two processes: the TUI instance
-(when you launch it) and the alpi daemon — one process per
-machine, hosting every profile's scheduler / ALP
-listener / workgroups poller as supervised tasks named
-`<profile>/<service>` on a single asyncio loop. The daemon is
-auto-installed on the first `alpi setup` and managed from `alpi
-setup → Services → Daemon` thereafter.
+On CPU / memory: adding a profile does not add a process. Everything
+collapses into the TUI instance you launch and the one alpi daemon per
+machine, which supervises each profile's scheduler, ALP listener, workgroup
+poller and preempt watcher as tasks named `<profile>/<service>`; the host
+plane exists once, on `default`. An idle profile is close to free but not
+free — its ALP listener holds a socket and its poller wakes on a timer — so
+dozens of profiles on one machine is a real cost, while a handful is not.
+The daemon is auto-installed on the first `alpi setup` and managed from
+`alpi setup → Services → Daemon`.
 
 ## Common patterns
 

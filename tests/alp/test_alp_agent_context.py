@@ -345,7 +345,7 @@ def test_roster_renders_bios_when_present(short_tmp: Path) -> None:
     ``@alice (online, "product engineer — velocity")``; members
     without a bio render with just the status."""
     home = short_tmp / "alice"; home.mkdir()
-    kp = load_or_generate(home)
+    load_or_generate(home)
     # Pin two peers so they alias to readable handles in the block.
     peers_mod.add(home, Peer(
         id="bob", pubkey="BOB_PK", allow=["link.ping"], address=None,
