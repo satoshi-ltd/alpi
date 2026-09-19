@@ -1,86 +1,111 @@
-@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400..700&family=Geist+Mono:wght@400..700&display=swap");
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
 
 :root{
-  --bg:#0a0a0a;
-  --fg:#f2f2f0;
-  --muted:#6a6a66;
-  --dim:#3a3a38;
-  --line:#1c1c1a;
-  --soft:#121210;
-  --veil:radial-gradient(ellipse at 50% 20%, transparent 0%, rgba(10,10,10,.6) 55%, rgba(10,10,10,.92) 100%);
-  --nav-bg:rgba(10,10,10,.55);
-  --ctrl-bg:rgba(10,10,10,.7);
+  --bg:#0c0b09;
+  --fg:#f3efe6;
+  --muted:#a39a8b;
+  --dim:#3d3830;
+  --line:#221f19;
+  --soft:#13110d;
+  --bg-rgb:12,11,9;
+  --veil:radial-gradient(ellipse at 50% 20%, transparent 0%, rgba(12,11,9,.6) 55%, rgba(12,11,9,.92) 100%);
+  --nav-bg:rgba(12,11,9,.55);
+  --ctrl-bg:rgba(12,11,9,.7);
+  --prose:#d6d0c4;
+  --prose-lead:#e6e0d4;
+  --code-fg:#f9e4b4;
+  --code-bg:rgba(240,180,71,.07);
+  --amber-soft:#f9e4b4;
+  --amber:#f0b447;
+  --amber-deep:#8f5e0c;
+  --umber:#4a3006;
+  --accent:var(--amber);
+  --warn:#e0604f;
+  --accent-deep:var(--amber-deep);
+  --accent-line:rgba(240,180,71,.22);
+  --space:clamp(24px, 5vw, 80px);
+  --radius:22px;
+  --term-bg:#100e0b;
+  --term-line:#2a251c;
+  --term-fg:#ddd7cb;
+  --term-muted:#8a8275;
+  --term-cmd:#f6f2e9;
+  --term-flag:#f0b447;
+  --term-string:#cfe0a8;
+  --radius-in:12px;
+  --radius-btn:10px;
+  --radius-sm:6px;
+  --hover:rgba(243,239,230,.04);
 }
-:root[data-theme="light"]{
-  --bg:#f5f4ef;
-  --fg:#10100f;
-  --muted:#696760;
-  --dim:#d4d1c8;
-  --line:#d9d6cd;
-  --soft:#ffffff;
-  --veil:radial-gradient(ellipse at 50% 20%, transparent 0%, rgba(245,244,239,.72) 55%, rgba(245,244,239,.94) 100%);
-  --nav-bg:rgba(245,244,239,.68);
-  --ctrl-bg:rgba(245,244,239,.78);
-}
+
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{background:var(--bg);color:var(--fg);font-family:"Space Grotesk",sans-serif;-webkit-font-smoothing:antialiased;min-height:100vh}
+html,body{background:var(--bg);color:var(--fg);font:17px/1.6 "Instrument Sans",system-ui,sans-serif;-webkit-font-smoothing:antialiased;min-height:100vh}
 body{overflow-x:hidden}
-.mono{font-family:"JetBrains Mono",ui-monospace,monospace}
+.mono{font-family:"Geist Mono",ui-monospace,monospace}
 .muted{color:var(--muted)}
 a{color:inherit;text-decoration:none}
 
 #ascii-bg{
-  position:fixed;inset:0;width:100vw;height:100vh;z-index:0;pointer-events:none;
-  font-family:"JetBrains Mono",ui-monospace,monospace;
+  position:fixed;inset:0;width:100vw;height:100vh;z-index:0;pointer-events:none;opacity:.3;
+  font-family:"Geist Mono",ui-monospace,monospace;
   font-size:12px;line-height:12px;letter-spacing:0;
   color:var(--dim);
   white-space:pre;
   overflow:hidden;
   user-select:none;
 }
-#ascii-bg pre{margin:0;padding:0;color:inherit;font:inherit;white-space:pre}
+/* Glyph-clipped gradient: amber under the aurora, warm neutral elsewhere — no blur (creator's call), no per-frame cost. */
+#ascii-bg pre{
+margin:0;padding:0;font:inherit;white-space:pre;
+background-image:linear-gradient(118deg,
+rgba(240,180,71,.26) 0%,
+rgba(240,180,71,.09) 32%,
+rgba(150,143,130,.13) 62%,
+rgba(150,143,130,.07) 100%);
+-webkit-background-clip:text;background-clip:text;color:transparent;
+}
 .veil{position:fixed;inset:0;z-index:1;pointer-events:none;
   background:var(--veil);}
 
 /* One wrapper width for nav + /docs + /docs/* so the logo, DOCS title,
    doc H1s, and card grid all share the same left edge. Prose legibility
    is protected below by capping .md, .dochead .sub, and .dochead h1. */
-.shell{position:relative;z-index:2;max-width:1240px;margin:0 auto;padding:0 clamp(24px, 5vw, 64px)}
+.shell{position:relative;z-index:2;width:min(1280px, 100% - var(--space) * 2);margin:0 auto}
 
 /* Nav — shared across landing + docs. The wrapper gives horizontal
    breathing room at every viewport; .shell-nav widens the cap so
    brand + crumbs + CTA never feel centred in a 980px column. */
 nav.top{
-  position:sticky;top:0;z-index:10;
-  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
-  background:var(--nav-bg);
-  border-bottom:1px solid var(--line);
+  position:sticky;top:0;z-index:20;
+  background:linear-gradient(to bottom,var(--bg) 42%,rgba(var(--bg-rgb),.86) 72%,rgba(var(--bg-rgb),0) 100%);
+  padding-bottom:18px;
 }
-nav.top .shell{max-width:1240px}
+
 nav.top .row{
   display:flex;align-items:center;justify-content:space-between;
-  padding-top:18px;padding-bottom:18px;gap:24px;
+  padding-top:30px;padding-bottom:30px;gap:24px;
 }
 /* The nav left side is a lockup: brand link + crumb tail as siblings.
    Nested <a> would be invalid, so the crumbs live outside .brand. */
 .brand-lockup{display:flex;align-items:center;gap:18px;min-width:0}
 .brand{display:inline-flex;align-items:center;color:var(--fg);text-decoration:none;line-height:1}
-.brand .logo{color:var(--fg);flex-shrink:0;display:inline-flex;align-items:center;gap:14px}
-.brand .logo-mark{width:35px;height:40px;display:block;transform:translateY(1px)}
-.brand .logo-word{font-family:"Space Grotesk",sans-serif;font-weight:700;font-size:24px;line-height:1;letter-spacing:-0.05em;color:var(--fg)}
-:root[data-theme="light"] .brand .logo-mark{filter:invert(1)}
+.brand .logo{color:var(--fg);flex-shrink:0;display:inline-flex;align-items:center;gap:12px}
+.brand .logo-mark{width:34px;height:34px;display:block;border-radius:9px}
+.brand .logo-word{font-family:"Instrument Sans",system-ui,sans-serif;font-weight:700;font-size:29px;line-height:1;letter-spacing:-1px;color:var(--fg)}
 /* Breadcrumb tail — matches the landing nav menu typography
-   (JetBrains Mono, 12px, uppercase) so the header reads as one system. */
+   (Geist Mono, 12px, uppercase) so the header reads as one system. */
 /* Nudged down ~4px so the crumbs sit on the baseline of the "alpi"
    wordmark inside the logo (the llama sits above it, so the logo's
    geometric centre is higher than the wordmark centre). */
 .bp-tail{display:inline-flex;align-items:center;gap:14px;line-height:1;margin-top:4px}
 .bp-sep,
 .bp-seg{
-  font-family:"JetBrains Mono",ui-monospace,monospace;
+  font-family:"Geist Mono",ui-monospace,monospace;
   font-size:12px;letter-spacing:.04em;text-transform:uppercase;font-weight:400;
 }
-.bp-sep{color:var(--dim)}
+.bp-sep{color:var(--muted)}
 .bp-seg{
   color:var(--muted);
   padding:4px 0;border-bottom:1px solid transparent;transition:.15s;
@@ -91,123 +116,205 @@ a.bp-seg:hover{color:var(--fg);border-bottom-color:var(--fg)}
 /* DOCS crumb — always bold + highlighted (the section label), whether
    current (on /docs/) or a link back to it (on /docs/*). */
 .bp-docs{color:var(--fg);font-weight:700}
-nav ul{list-style:none;display:flex;gap:22px;font-size:12px;color:var(--muted);font-family:"JetBrains Mono",ui-monospace,monospace;letter-spacing:.04em;text-transform:uppercase}
+nav ul{list-style:none;display:flex;gap:22px;font-size:12px;color:var(--muted);font-family:"Geist Mono",ui-monospace,monospace;letter-spacing:.04em;text-transform:uppercase}
 nav ul a{color:inherit;text-decoration:none;padding:6px 0;border-bottom:1px solid transparent;transition:.15s}
-nav ul a:hover{color:var(--fg);border-bottom-color:var(--fg)}
+nav ul a:hover{color:var(--accent);border-bottom-color:var(--accent-line)}
 .nav-actions{display:flex;align-items:center;gap:8px}
 .nav-github{
   width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;
-  color:var(--muted);border:1px solid var(--line);border-radius:3px;text-decoration:none;
+  color:var(--muted);border:1px solid var(--line);border-radius:var(--radius-btn);text-decoration:none;
   transition:border-color .2s,background .2s,color .2s;
 }
 .nav-github svg{width:16px;height:16px;display:block}
-.nav-github:hover{color:var(--fg);border-color:var(--fg);background:rgba(255,255,255,.03)}
+.nav-github:hover{color:var(--fg);border-color:var(--fg);background:var(--hover)}
 .nav-cta{
   display:inline-flex;align-items:center;gap:8px;
-  font-family:"JetBrains Mono",monospace;font-size:12px;
-  color:var(--fg);padding:8px 14px;border:1px solid var(--line);border-radius:3px;text-decoration:none;white-space:nowrap;
+  font-family:"Geist Mono",ui-monospace,monospace;font-size:12px;
+  color:var(--fg);padding:8px 14px;border:1px solid var(--line);border-radius:var(--radius-btn);text-decoration:none;white-space:nowrap;
   transition:border-color .2s,background .2s;
 }
-.nav-cta:hover{border-color:var(--fg);background:rgba(255,255,255,.03)}
+.nav-cta:hover{border-color:var(--fg);background:var(--hover)}
 @media (max-width:760px){
   nav ul{display:none}
-  .bp-seg:not(.bp-current){display:none}
+  /* Keep only the section crumb: it is the one that still navigates, and the
+     current-page crumb just repeats the H1 sitting right below it. */
+  .bp-seg:not(.bp-docs){display:none}
   .bp-sep{display:none}
-  .bp-current{display:inline}
-  /* GitHub icon adds clutter on a narrow nav (logo + breadcrumb +
-     install pill already eat the row). The pill stays; users can
-     reach the repo from the footer. */
+  /* The row cannot hold logo + crumb + install pill under ~430px, and the
+     landing drops the same two at this breakpoint. Footer keeps both. */
   .nav-github{display:none}
-  .nav-cta{font-size:11px;padding:7px 10px;gap:6px;letter-spacing:0}
+  nav.top > .row > .nav-actions{display:none}
 }
 
 /* Docs-index (wide shell for the landing-style card grid) */
-.shell.shell-wide, main.docs-index{max-width:1240px;padding-top:56px;padding-bottom:140px}
+.shell.shell-wide, main.docs-index{padding-top:56px;padding-bottom:140px}
 main.docs-index #docs{padding:0}
-main.docs-index .shell{padding:0;max-width:none}
+main.docs-index .shell{width:100%}
 .eyebrow{
-  font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;color:var(--muted);
+  font-family:"Geist Mono",ui-monospace,monospace;font-size:11px;color:var(--muted);
   letter-spacing:.14em;text-transform:uppercase;margin-bottom:24px;
   display:flex;align-items:center;gap:12px;
 }
 .eyebrow:before{content:"";width:24px;height:1px;background:var(--muted)}
 /* DOCS index title — matches the H1 scale of a single doc page so the
    landing/doc hierarchy stays consistent (72px, 600 weight, -.035em). */
-main.docs-index h2{font-weight:600;font-size:72px;line-height:.95;letter-spacing:-.035em;margin-bottom:24px;max-width:900px;text-wrap:balance}
-@media (max-width:760px){main.docs-index h2{font-size:clamp(44px, 10vw, 56px)}}
-main.docs-index p.sub{font-size:18px;color:var(--muted);max-width:680px;line-height:1.55;text-wrap:pretty}
-.docs{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);margin-top:48px;border:1px solid var(--line)}
-@media(max-width:1080px){.docs[style*="repeat(4,1fr)"]{grid-template-columns:repeat(3,1fr) !important}}
-@media(max-width:860px){.docs, .docs[style*="repeat(4,1fr)"]{grid-template-columns:repeat(2,1fr) !important}}
-@media(max-width:560px){.docs, .docs[style*="repeat(4,1fr)"]{grid-template-columns:1fr !important}}
-.docs .doc{background:var(--bg);padding:36px;text-decoration:none;color:var(--fg);display:flex;flex-direction:column;gap:14px;min-height:240px;transition:background .2s}
-.docs .doc:hover{background:rgba(255,255,255,.02)}
-.docs .doc .ix{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;color:var(--muted)}
-.docs .doc h4{font-weight:600;font-size:22px;letter-spacing:-0.01em;color:var(--fg)}
-.docs .doc p{color:var(--muted);font-size:14px;line-height:1.5}
-.docs .doc .go{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12px;color:var(--muted);margin-top:auto;display:flex;gap:8px;align-items:center}
+.index-title{font-size:clamp(34px,4vw,53px);font-weight:500;letter-spacing:-2px;line-height:1.12;margin:15px 0 25px;max-width:22ch;text-wrap:balance;text-transform:none}
+
+main.docs-index p.sub{font-size:17px;color:var(--muted);max-width:58ch;line-height:1.6}
+.docs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px;margin-top:45px}
+.docs-catalog{grid-template-columns:repeat(4,minmax(0,1fr))}
+.blog-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.docs-start{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;margin:36px 0 52px;padding:26px 0;border-block:1px solid var(--line)}
+.docs-start a{display:flex;flex-direction:column;gap:10px;padding:4px 0}
+.docs-start a>span{font:11px/1.5 "Geist Mono",ui-monospace,monospace;color:var(--accent)}
+.docs-start strong{font-size:16px;font-weight:500;line-height:1.5}
+.docs-start strong span{color:var(--accent)}
+.docs-start a:hover strong{color:var(--accent)}
+a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:5px}
+.docs .doc{background:var(--soft);border:1px solid var(--line);border-radius:var(--radius);padding:30px;text-decoration:none;color:var(--fg);display:flex;flex-direction:column;gap:12px;min-height:200px;min-width:0;overflow-wrap:anywhere;width:auto;margin:0;transition:border-color .18s,transform .18s}
+.docs .doc:hover{background:var(--hover)}
+.docs .doc .ix{font-family:"Geist Mono",ui-monospace,monospace;font-size:11px;color:var(--accent)}
+.docs .doc h2{font-weight:600;font-size:22px;letter-spacing:-0.01em;color:var(--fg)}
+.docs .doc p{color:var(--muted);font-size:14px;line-height:1.5;min-height:4.5em}
+.docs .doc .go{font-family:"Geist Mono",ui-monospace,monospace;font-size:12px;color:var(--muted);margin-top:auto;display:flex;gap:8px;align-items:center}
 .docs .doc:hover .go{color:var(--fg)}
 
 /* Doc head — only touch vertical padding; horizontal is owned by .shell. */
-.doc{padding-top:80px;padding-bottom:140px}
-.dochead{margin-bottom:72px;padding-bottom:48px;border-bottom:1px solid var(--line)}
+/* A doc is a reading surface: one measured column with a rail for the contents.
+   68ch is the comfortable measure at 17px; the rail only appears when there is one. */
+.doc{
+  padding-top:72px;padding-bottom:120px;
+  display:grid;grid-template-columns:minmax(0,68ch) 200px;gap:0 72px;justify-content:center;align-items:start;
+}
+.doc > .dochead,.doc > .md,.doc > .pager,.doc > .post-cta{grid-column:1;min-width:0}
+.doc:not(:has(.toc)){grid-template-columns:minmax(0,68ch);justify-content:center}
+
+.toc{
+  grid-column:2;grid-row:2;position:sticky;top:104px;
+  max-height:calc(100vh - 160px);overflow-y:auto;overscroll-behavior:contain;
+}
+.toc-h{font:11px/1.5 "Geist Mono",ui-monospace,monospace;letter-spacing:1.6px;text-transform:uppercase;color:var(--muted);margin:0 0 14px}
+.toc ol{list-style:none;margin:0;padding:0;border-left:1px solid var(--line)}
+.toc li{margin:0}
+.toc a{
+  display:block;padding:7px 0 7px 16px;margin-left:-1px;
+  border-left:1px solid transparent;
+  font-size:13.5px;line-height:1.45;color:var(--muted);
+  transition:color .15s,border-color .15s;
+}
+.toc a:hover{color:var(--fg);border-left-color:var(--accent-line)}
+.toc a.on{color:var(--fg);border-left-color:var(--accent)}
+.toc::-webkit-scrollbar{width:6px}
+.toc::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}
+@media(max-width:1180px){
+  .doc,.doc:not(:has(.toc)){grid-template-columns:minmax(0,68ch)}
+  .toc{display:none}
+}
+
+/* The ground is the same on every surface — a page without it reads as a different
+   site. On reading surfaces it is dimmer and masked away from the prose, so the head
+   keeps the atmosphere and the body keeps its contrast. */
+.aurora{
+  position:fixed;inset:0;z-index:3;pointer-events:none;mix-blend-mode:screen;
+  background:
+    radial-gradient(58% 40% at 8% 94%, rgba(240,180,71,.13) 0%, rgba(143,94,12,.07) 38%, transparent 70%),
+    radial-gradient(42% 32% at 94% 6%, rgba(143,94,12,.11) 0%, transparent 64%);
+  -webkit-mask-image:linear-gradient(to bottom,#000 0,#000 300px,rgba(0,0,0,.35) 620px,rgba(0,0,0,.35) 100%);
+  mask-image:linear-gradient(to bottom,#000 0,#000 300px,rgba(0,0,0,.35) 620px,rgba(0,0,0,.35) 100%);
+}
+.grain{
+  position:fixed;inset:0;z-index:4;pointer-events:none;opacity:.18;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.5'/%3E%3C/svg%3E");
+}
+.shell,main,footer{position:relative;z-index:5}
+
+/* The field frames the head and gets out of the way of the prose. doc.css only
+   loads on reading surfaces, so this never touches the landing. */
+#ascii-bg{
+  -webkit-mask-image:linear-gradient(to bottom,#000 0,#000 240px,transparent 520px);
+  mask-image:linear-gradient(to bottom,#000 0,#000 240px,transparent 520px);
+}
+.dochead{margin-bottom:56px;padding-bottom:36px;border-bottom:1px solid var(--line)}
 .crumbs{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:36px}
-.crumbs a:hover{color:var(--fg)}
-.crumbs .sep{margin:0 8px;color:var(--dim)}
+.crumbs a:hover{color:var(--accent)}
 .crumbs span:last-child{color:var(--fg)}
-.dochead h1{font-size:72px;font-weight:600;letter-spacing:-.035em;line-height:.95;margin-bottom:24px;max-width:900px;text-wrap:balance}
-.dochead .sub{font-size:19px;color:var(--muted);max-width:640px;line-height:1.55}
-.dochead .meta{margin-top:32px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);display:flex;gap:14px;align-items:center}
-.dochead .meta .d{color:var(--dim)}
+.dochead h1{font-size:clamp(34px,4vw,53px);font-weight:500;letter-spacing:-2px;line-height:1.12;margin:15px 0 25px;text-wrap:balance}
+.dochead .sub{font-size:20px;color:var(--muted);line-height:1.6}
+.dochead .meta{margin-top:24px;font:11px/1.5 "Geist Mono",ui-monospace,monospace;letter-spacing:1.6px;text-transform:uppercase;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center}
+.dochead .meta .ct{white-space:nowrap}
+.dochead .meta .d{color:var(--muted)}
 
 /* Markdown */
-.md{font-size:16px;line-height:1.75;color:#d8d8d4;max-width:720px}
-:root[data-theme="light"] .md{color:#292824}
-.md h1,.md h2,.md h3,.md h4{color:var(--fg);font-weight:600;letter-spacing:-.02em;margin-top:56px;margin-bottom:20px;line-height:1.2}
+.md{font-size:17px;line-height:1.7;color:var(--prose);max-width:none;overflow-wrap:break-word}
+
+.md h1,.md h2,.md h3,.md h4{color:var(--fg);font-weight:600;letter-spacing:-.7px;margin-top:52px;margin-bottom:16px;line-height:1.25}
 .md > h1:first-child,.md > h2:first-child,.md > h3:first-child{margin-top:0}
-.md h1{font-size:40px;padding-bottom:18px;border-bottom:1px solid var(--line);margin-top:72px}
-.md h2{font-size:30px;margin-top:72px}
-.md h3{font-size:22px;margin-top:48px}
+.md h1{font-size:34px;padding-bottom:18px;border-bottom:1px solid var(--line);margin-top:72px}
+.md h2{font-size:27px;margin-top:64px;padding-top:28px;border-top:1px solid var(--line)}
+.md h3{font-size:21px;margin-top:40px}
 .md h4{font-size:17px;margin-top:36px;color:var(--fg)}
-.md p{margin-bottom:20px}
-.md ul,.md ol{margin-bottom:20px;padding-left:22px}
-.md li{margin-bottom:8px}
-.md li::marker{color:var(--muted)}
+.md p{margin-bottom:22px}
+.md ul,.md ol{margin:0 0 22px;padding-left:0;list-style:none}
+.md ul li,.md ol li{position:relative;padding-left:26px;margin-bottom:10px}
+.md ul li:before{content:'';position:absolute;left:6px;top:.72em;width:5px;height:1px;background:var(--accent)}
+.md ol{counter-reset:md}
+.md ol li{counter-increment:md}
+.md ol li:before{content:counter(md);position:absolute;left:0;top:0;font:11px/1.9 "Geist Mono",ui-monospace,monospace;color:var(--accent)}
+.md li > ul,.md li > ol{margin:10px 0 0}
+
+
 .md strong{color:var(--fg);font-weight:600}
 .md em{font-style:italic;color:var(--fg)}
-.md a{color:var(--fg);border-bottom:1px solid var(--dim);transition:.15s}
-.md a:hover{border-bottom-color:var(--fg)}
-.md code{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:.86em;background:var(--soft);border:1px solid var(--line);padding:1px 6px;border-radius:3px;color:var(--fg)}
-.md pre{background:var(--soft);border:1px solid var(--line);border-radius:6px;padding:20px 22px;overflow-x:auto;margin:24px 0;font-size:13px;line-height:1.6}
-.md pre code{background:transparent;border:0;padding:0;font-size:inherit;color:inherit}
-.md blockquote{border-left:2px solid var(--fg);padding:6px 0 6px 22px;margin:24px 0;color:var(--muted);font-style:italic}
-.md hr{border:0;border-top:1px solid var(--line);margin:48px 0}
-.md table{width:100%;border-collapse:collapse;margin:24px 0;font-size:14px}
-.md table th,.md table td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+.md a{color:var(--fg);border-bottom:1px solid var(--accent-line);transition:.15s}
+.md a:hover{color:var(--accent);border-bottom-color:var(--accent)}
+.md code{font-family:"Geist Mono",ui-monospace,monospace;font-size:.84em;background:var(--code-bg);border:1px solid var(--line);padding:2px 6px;border-radius:var(--radius-sm);color:var(--code-fg);overflow-wrap:anywhere}
+.md pre{background:var(--term-bg);color:var(--term-fg);border:1px solid var(--term-line);border-radius:var(--radius-in);padding:20px 22px;overflow-x:auto;margin:26px 0;font-size:13px;line-height:1.7}
+.md pre code{background:transparent;border:0;padding:0;font-size:inherit;color:inherit;white-space:pre}
+.md pre .t-comment{color:var(--term-muted)}
+.md pre .t-cmd{color:var(--term-cmd)}
+.md pre .t-flag{color:var(--term-flag)}
+.md pre .t-string{color:var(--term-string)}
+/* Plain-text documents (LICENSE) rebuilt as prose. */
+.md dl.doc-terms{display:grid;grid-template-columns:auto 1fr;gap:10px 20px;margin:26px 0}
+.md dl.doc-terms dt{font-weight:600;color:var(--fg);white-space:nowrap}
+.md dl.doc-terms dd{margin:0}
+.md p.doc-clause{display:grid;grid-template-columns:1.6em 1fr;gap:0 4px}
+@media(max-width:620px){.md dl.doc-terms{grid-template-columns:1fr;gap:4px 0}.md dl.doc-terms dd{margin-bottom:12px}}
+.md blockquote{border-left:2px solid var(--amber-deep);padding:2px 0 2px 24px;margin:28px 0;color:var(--muted);font-style:normal}
+.md blockquote p:last-child{margin-bottom:0}
+.md hr{border:0;border-top:1px solid var(--line);margin:52px 0}
+/* A markdown `---` right before a heading doubles the rule the heading already draws. */
+.md hr:has(+ h2),.md hr:has(+ h3){display:none}
+.md .table-wrap{overflow-x:auto;margin:26px 0}
+.md-table{overflow-x:auto;margin:26px 0;max-width:100%}
+.md-table table{margin:0}
+.md table{width:100%;border-collapse:collapse;margin:26px 0;font-size:14px}
+.md table th,.md table td{text-align:left;padding:11px 16px 11px 0;border-bottom:1px solid var(--line);vertical-align:top}
+.md table tr:last-child td{border-bottom:0}
 .md table th{color:var(--muted);font-weight:500;font-size:11px;letter-spacing:.08em;text-transform:uppercase;border-bottom-color:var(--dim)}
 .md table code{font-size:.82em}
 
 /* Post CTA */
-.post-cta{margin-top:88px;padding:48px 44px;border:1px solid var(--line);border-radius:4px;background:var(--soft)}
+.post-cta{margin-top:88px;padding:48px 44px;border:1px solid var(--line);border-radius:var(--radius);background:var(--soft)}
 .post-cta .eyebrow{margin-bottom:20px}
-.post-cta-h{font-family:"Space Grotesk",sans-serif;font-weight:700;font-size:clamp(26px,3.4vw,38px);line-height:1.05;letter-spacing:-.03em;margin:0 0 14px;max-width:20ch;text-wrap:balance}
+.post-cta-h{font-family:"Instrument Sans",system-ui,sans-serif;font-weight:700;font-size:clamp(26px,3.4vw,38px);line-height:1.05;letter-spacing:-.03em;margin:0 0 14px;max-width:20ch;text-wrap:balance}
 .post-cta-sub{font-size:17px;color:var(--muted);line-height:1.5;margin:0 0 32px;max-width:52ch}
 .post-cta .cta-row{display:flex;gap:12px;flex-wrap:wrap}
-.post-cta .btn{display:inline-flex;align-items:center;gap:10px;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:13px;padding:14px 22px;border-radius:2px;text-decoration:none;transition:all .2s}
-.post-cta .btn-primary{background:var(--fg);color:var(--bg);border:1px solid var(--fg)}
-.post-cta .btn-primary:hover{background:transparent;color:var(--fg)}
+.post-cta .btn{display:inline-flex;align-items:center;gap:10px;font-family:"Geist Mono",ui-monospace,monospace;font-size:13px;padding:14px 22px;border-radius:var(--radius-btn);text-decoration:none;transition:all .2s}
+.post-cta .btn-primary{background:var(--accent);color:var(--bg);border:1px solid var(--accent)}
+.post-cta .btn-primary:hover{background:transparent;color:var(--accent)}
 .post-cta .btn-ghost{background:transparent;color:var(--fg);border:1px solid var(--line)}
-.post-cta .btn-ghost:hover{border-color:var(--fg)}
+.post-cta .btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
 .post-cta .btn .arr{transition:transform .2s}
 .post-cta .btn:hover .arr{transform:translateX(4px)}
-.post-cta-meta{margin-top:26px;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11.5px;letter-spacing:.04em;color:var(--muted)}
+.post-cta-meta{margin-top:26px;font-family:"Geist Mono",ui-monospace,monospace;font-size:11.5px;letter-spacing:.04em;color:var(--muted)}
 @media(max-width:560px){.post-cta{padding:36px 24px}.post-cta .btn{width:100%;justify-content:center}}
 
 /* Pager */
 .pager{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:96px;padding-top:32px;border-top:1px solid var(--line)}
-.pg{border:1px solid var(--line);padding:22px 24px;display:flex;flex-direction:column;gap:6px;transition:.2s;min-height:88px;justify-content:center}
-.pg:hover{border-color:var(--fg);background:rgba(255,255,255,.02)}
-.pg .lbl{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.pg{border:1px solid var(--line);border-radius:var(--radius);padding:22px 24px;display:flex;flex-direction:column;gap:6px;transition:.2s;min-height:88px;justify-content:center}
+.pg:hover{border-color:var(--fg);background:var(--hover)}
+.pg .lbl{font-family:"Geist Mono",ui-monospace,monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .pg:hover .lbl{color:var(--fg)}
 .pg .tt{font-size:17px;font-weight:500}
 .pg.next{text-align:right;align-items:flex-end}
@@ -216,29 +323,77 @@ main.docs-index p.sub{font-size:18px;color:var(--muted);max-width:680px;line-hei
 .idx{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:var(--line);margin-top:40px}
 .idx .card{background:var(--bg);padding:36px 34px;display:flex;flex-direction:column;gap:12px;transition:.2s;min-height:200px}
 .idx .card:hover{background:var(--soft)}
-.idx .ix{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.idx .ix{font-family:"Geist Mono",ui-monospace,monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .idx .card h3{font-size:26px;font-weight:600;letter-spacing:-.02em}
 .idx .card p{color:var(--muted);font-size:14px;line-height:1.55;flex:1}
-.idx .go{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12px;letter-spacing:.04em;color:var(--muted);margin-top:8px}
+.idx .go{font-family:"Geist Mono",ui-monospace,monospace;font-size:12px;letter-spacing:.04em;color:var(--muted);margin-top:8px}
 .idx .card:hover .go{color:var(--fg)}
 
-.bg-ctrl{
-  position:fixed;bottom:20px;right:20px;z-index:20;
-  display:flex;gap:6px;align-items:center;
-  font-family:"JetBrains Mono",monospace;font-size:10px;color:var(--muted);
-  background:var(--ctrl-bg);border:1px solid var(--line);padding:6px 8px;border-radius:2px;
-  backdrop-filter:blur(4px);
-}
-.bg-ctrl span{padding:2px 6px}
-.bg-ctrl button{
-  background:transparent;border:1px solid transparent;color:inherit;
-  font:inherit;cursor:pointer;padding:2px 6px;border-radius:2px;
-}
-.bg-ctrl button.on{border-color:var(--fg);color:var(--fg)}
-.bg-ctrl button:hover{color:var(--fg)}
 
 @media (max-width:720px){
-  .dochead h1{font-size:44px}
+  /* The longest title is one unbreakable word (ARCHITECTURE), so below ~370px
+     the size has to follow the column or it clips the page. */
+  .dochead h1{font-size:min(44px, calc((100vw - 52px) / 7.2))}
   .idx{grid-template-columns:1fr}
   .pager{grid-template-columns:1fr}
+}
+
+/* Cards lift on hover instead of filling — the ground stays one colour. */
+.docs .doc:hover{border-color:var(--accent-line);transform:translateY(-2px)}
+.docs .doc .ix{font:11px/1.5 "Geist Mono",ui-monospace,monospace;letter-spacing:1.6px;text-transform:uppercase;color:var(--accent)}
+.docs .doc h2{font-size:21px;font-weight:600;letter-spacing:-.7px;line-height:1.25;margin:0}
+.docs .doc p{font-size:15px;line-height:1.6;color:var(--muted);margin:0}
+.docs .doc .go{margin-top:auto;font:12px "Geist Mono",ui-monospace,monospace;color:var(--muted)}
+.docs .doc:hover .go{color:var(--accent)}
+@media(max-width:1080px){.docs{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:700px){.docs,.docs-start{grid-template-columns:1fr}.docs-start{gap:20px}.docs .doc{padding:24px}}
+
+/* The opening paragraph carries the reader in. */
+.md > p:first-of-type{font-size:19px;line-height:1.62;color:var(--prose-lead)}
+/* Anchors on hover, for citing a section. */
+.md h2,.md h3{scroll-margin-top:96px}
+.md h2 a.anchor,.md h3 a.anchor{opacity:0;margin-left:10px;color:var(--accent);border:0;font-weight:400}
+.md h2:hover a.anchor,.md h3:hover a.anchor{opacity:1}
+
+
+/* Light palette — the same arca ground the sibling product uses. */
+:root[data-theme="light"]{
+  --bg:#f6f3ec; --bg-rgb:246,243,236;
+  --fg:#1f1a12; --muted:#6f6759; --dim:#e6e0d3; --line:#e2dccf;
+  --soft:#fffdf8; --band:#efe9dc;
+  --accent:#8a5a0a; --accent-wash:rgba(143,94,12,.07); --accent-line:rgba(143,94,12,.24);
+  --warn:#b8392c;
+  --veil:radial-gradient(ellipse at 50% 30%, transparent 0%, rgba(246,243,236,.55) 55%, rgba(246,243,236,.85) 100%);
+  --nav-bg:rgba(246,243,236,.72); --panel-bg:rgba(255,253,248,.88); --panel-soft:rgba(255,253,248,.7);
+  --prose:#3f382d; --prose-lead:#2a241a; --code-fg:#7a4e06; --code-bg:rgba(143,94,12,.08);
+  --hover:rgba(143,94,12,.05);
+  --ctrl-bg:rgba(246,243,236,.78);
+}
+:root[data-theme="light"] .grain{opacity:.05}
+:root[data-theme="light"] #ascii-bg pre{background-image:linear-gradient(118deg, rgba(143,94,12,.34) 0%, rgba(143,94,12,.14) 32%, rgba(90,84,74,.18) 62%, rgba(90,84,74,.10) 100%)}
+:root[data-theme="light"] .aurora{mix-blend-mode:multiply}
+
+/* Sun/moon paths are lucide, copied from common/iconPaths.mjs — keep them identical to the desktop app. */
+.theme-btn{
+  position:fixed;right:20px;bottom:20px;z-index:30;
+  display:inline-flex;align-items:center;justify-content:center;
+  width:38px;height:38px;border-radius:var(--radius-btn);
+  border:1px solid var(--line);background:var(--nav-bg);color:var(--muted);
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  cursor:pointer;transition:color .15s,border-color .15s;
+}
+.theme-btn:hover{color:var(--accent);border-color:var(--accent-line)}
+.theme-btn svg{width:16px;height:16px;display:block}
+.theme-btn .moon{display:none}
+:root[data-theme="light"] .theme-btn .sun{display:none}
+:root[data-theme="light"] .theme-btn .moon{display:block}
+
+@media(max-width:720px){
+  .md-table{margin-left:calc(var(--space) * -0.5);margin-right:calc(var(--space) * -0.5);padding:0 calc(var(--space) * 0.5)}
+  /* Mono labels read larger than their nominal size on a desktop, not on a phone. */
+  .eyebrow,.pg .lbl,.idx .ix,.docs .doc .ix,.dochead .meta,.crumbs,.post-cta-meta{font-size:12.5px}
+  .md table{font-size:15px}
+  .md table th{font-size:12.5px}
+  .md table code,.md li code{font-size:13px}
+  .toc-h,footer h5{font-size:12.5px}
 }

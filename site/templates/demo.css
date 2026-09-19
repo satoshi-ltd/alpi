@@ -1,49 +1,33 @@
 .alpi-demo{
-  --t-bg:#0e0e0e;
-  --t-fg:#e8e8e6;
-  --t-muted:#7a7a76;
-  --t-dim:#3a3a37;
-  --t-acc:#c8a24e;
-  --t-bot:#d8d8d4;
-  --t-border:#1c1c1a;
-  --t-ok:#7fb069;
-  font-family:"JetBrains Mono",ui-monospace,monospace;
+  --t-bg:#100e0b;
+  --t-fg:#ebe6dc;
+  --t-muted:#827b70;
+  --t-dim:#3d3830;
+  --t-acc:#f0b447;
+  --t-bot:#d9d3c7;
+  --t-border:#221f19;
+  --t-ok:#f0b447;
+  font-family:"Geist Mono",ui-monospace,monospace;
   color:var(--t-fg);
   color-scheme:dark;
 }
 .alpi-demo[hidden]{display:none !important}
 
-.demo-toggle{
-  display:inline-flex;gap:0;padding:3px;
-  background:#1a1a18;
-  border:1px solid #2c2c2a;border-radius:4px;
-  font-family:"JetBrains Mono",ui-monospace,monospace;
-  font-size:12px;letter-spacing:.04em;
-  margin-top:32px;
-}
-.demo-toggle button{
-  appearance:none;background:transparent;color:#7a7a76;
-  border:0;padding:7px 16px;cursor:pointer;border-radius:3px;
-  font:inherit;letter-spacing:inherit;text-transform:lowercase;
-  transition:background .15s,color .15s;
-}
-.demo-toggle button[aria-pressed="true"]{background:#2c2c2a;color:#e8e8e6}
-.demo-toggle button:hover:not([aria-pressed="true"]){color:#e8e8e6}
 
 .demo-grid-wrap{margin-top:48px}
 .demo-console{margin-top:48px}
 
 .alpi-term{
   background:var(--t-bg);
-  border:1px solid var(--t-border);border-radius:8px;
-  overflow:hidden;display:flex;flex-direction:column;
+  border:1px solid var(--t-border);border-radius:var(--radius);
+  overflow:hidden;display:flex;flex-direction:column;height:560px;
   box-shadow:0 30px 80px -20px rgba(0,0,0,.32);
 }
 
 .alpi-term-top{
   display:flex;align-items:center;justify-content:space-between;
   gap:12px;padding:12px 18px;border-bottom:1px solid var(--t-border);
-  font-size:14px;color:var(--t-muted);
+  font-size:12px;color:var(--t-muted);
   flex-wrap:wrap;
 }
 .alpi-term-top .left{display:flex;gap:14px;align-items:center;flex-wrap:wrap;min-width:0}
@@ -57,13 +41,13 @@
 .alpi-term-top .topinfo .sep{color:var(--t-dim)}
 
 .alpi-term-body{
-  padding:20px 24px;font-size:14px;line-height:1.65;
+  padding:18px 20px;font-size:12.5px;line-height:1.7;
   color:var(--t-fg);
   /* ``pre-wrap`` preserves leading whitespace + newlines for the
      wizard/doctor layouts, but wraps long bot responses at word
      boundaries instead of overflowing horizontally. */
   white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere;
-  flex:1;min-height:340px;
+  flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;
 }
 
 .alpi-term-body .acc{color:var(--t-acc);font-weight:600}
@@ -89,7 +73,7 @@
 
 .alpi-term-status{
   padding:11px 18px;border-top:1px solid var(--t-border);
-  font-size:14px;color:var(--t-muted);
+  font-size:12px;color:var(--t-muted);
   display:flex;gap:14px;align-items:center;
   flex-wrap:wrap;
   background:rgba(255,255,255,.015);
@@ -101,27 +85,27 @@
 
 .alpi-term-input{
   padding:11px 18px;border-top:1px solid var(--t-border);
-  font-size:14px;color:var(--t-fg);
+  font-size:12.5px;color:var(--t-fg);
   display:flex;align-items:center;gap:8px;
-  font-family:"JetBrains Mono",ui-monospace,monospace;
+  font-family:"Geist Mono",ui-monospace,monospace;
 }
 .alpi-term-input[hidden]{display:none !important}
 .alpi-term-input .prompt{color:var(--t-acc);font-weight:600}
-.alpi-term-input .placeholder{color:var(--t-dim);font-style:italic}
+.alpi-term-input .placeholder{color:var(--t-muted);font-style:italic}
 .alpi-term-input .typed{color:var(--t-fg)}
 
 .alpi-term-foot{
   display:flex;align-items:center;justify-content:space-between;
   padding:11px 16px;border-top:1px solid var(--t-border);
-  font-size:14px;letter-spacing:.03em;
+  font-size:12px;letter-spacing:.03em;
   background:rgba(0,0,0,.18);
 }
 .alpi-term-foot[hidden]{display:none}
 .alpi-term-foot .nav{display:flex;gap:8px}
 .alpi-term-foot button{
   appearance:none;background:transparent;
-  border:1px solid var(--t-border);border-radius:3px;
-  color:var(--t-muted);font:inherit;font-family:"JetBrains Mono",monospace;
+  border:1px solid var(--t-border);border-radius:var(--radius-btn);
+  color:var(--t-muted);font:inherit;font-family:"Geist Mono",ui-monospace,monospace;
   font-size:14px;padding:6px 14px;cursor:pointer;text-transform:lowercase;
   transition:border-color .15s,color .15s;
 }
@@ -130,20 +114,24 @@
 
 .alpi-term-caption{
   color:var(--muted);
-  font-family:"Space Grotesk",sans-serif;
-  font-size:14px;line-height:1.6;
+  font-family:"Instrument Sans",system-ui,sans-serif;
+  font-size:12.5px;line-height:1.6;
   max-width:760px;margin:18px 4px 0;
 }
 
 @media (max-width:760px){
-  .alpi-term-body{font-size:11px;padding:14px 14px 18px;min-height:260px;line-height:1.6}
+  .alpi-term{height:420px}
+  .alpi-term-body{font-size:11px;padding:14px 14px 18px;line-height:1.6}
   .alpi-term-top,.alpi-term-foot,.alpi-term-input,.alpi-term-status{padding:9px 12px;font-size:11px;gap:8px}
   .alpi-term-top .step{font-size:10px;letter-spacing:.05em}
   .alpi-term-foot button{font-size:11px;padding:5px 10px}
-  .demo-toggle{font-size:11px}
-  .demo-toggle button{padding:6px 12px}
   /* Mirror the real TUI's narrow-mode behaviour: drop the label
      and keep the value (`profile alice` becomes `alice`). */
   .alpi-term-top .lbl,
   .alpi-term-status .lbl{display:none}
 }
+
+/* Quiet scrollbar — the console is a panel, not a document. */
+.alpi-term-body::-webkit-scrollbar{width:8px}
+.alpi-term-body::-webkit-scrollbar-thumb{background:#2e2a23;border-radius:4px}
+.alpi-term-body::-webkit-scrollbar-track{background:transparent}

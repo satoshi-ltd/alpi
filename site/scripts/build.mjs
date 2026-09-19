@@ -16,13 +16,12 @@ const TPL  = join(SITE, 'templates');
 // ── deploy metadata (override with env vars on CI if needed) ────────────────
 const SITE_URL    = (process.env.SITE_URL    || 'https://alpi.satoshi-ltd.com').replace(/\/+$/, '');
 const SITE_NAME   = process.env.SITE_NAME   || 'alpi';
-const SITE_TAGLINE = 'your private agent network';
-const SITE_DESCRIPTION = "alpi is a daemon you run, with terminal, desktop, and mobile clients on top. Profiles isolate memory, keys, models, skills, schedules, approvals, and trust. ALP links your alpis across machines without a registry, central account, or mandatory cloud.";
+const SITE_TAGLINE = 'agent infrastructure you run yourself';
+const SITE_DESCRIPTION = "alpi runs long-lived agents on machines you own. Every agent gets an Ed25519 identity, its own memory, a deny-by-default permission list and a daily spend ceiling the daemon enforces below the model. ALP links agents across machines with no registry, no central account and no mandatory cloud.";
 // 1200×630 — standard OG / Twitter card ratio. Crops cleanly on Twitter, Slack, LinkedIn and Discord previews.
 const OG_IMAGE = `${SITE_URL}/assets/alpi-social.png`;
 const OG_IMAGE_W = 1200;
 const OG_IMAGE_H = 630;
-const TWITTER     = '@soyjavi';
 
 // ── version (single source of truth: pyproject.toml) ─────────────────────────
 const pyproject = readFileSync(join(REPO, 'pyproject.toml'), 'utf8');
@@ -41,21 +40,21 @@ const DESKTOP_RELEASES_URL = `https://github.com/satoshi-ltd/alpi/releases/tag/d
 // Order drives prev/next pager and the docs index.
 const DOCS = [
   { slug: 'README',       src: 'README.md',             ix: '01', category: 'intro',     sub: "Start here. The public thesis: local-first, user-owned agent infrastructure." },
-  { slug: 'INSTALL',      src: 'docs/INSTALL.md',       ix: '02', category: 'guide',     sub: 'Install methods (uv, pipx, dev), update path, uninstall, troubleshooting, supported platforms.' },
+  { slug: 'INSTALL',      src: 'docs/INSTALL.md',       ix: '02', category: 'guide',     sub: "Install with uv or pipx, the update path, uninstall, supported platforms." },
   { slug: 'QUICKSTART',   src: 'QUICKSTART.md',         ix: '03', category: 'guide',     sub: 'Install, pick a model, pin a workspace, send a first message, and check health.' },
   { slug: 'PROFILES',     src: 'docs/PROFILES.md',      ix: '04', category: 'guide',     sub: 'The isolation primitive: identity, keys, memory, skills, peers, schedules, and cost.' },
-  { slug: 'SKILLS',       src: 'docs/SKILLS.md',        ix: '05', category: 'guide',     sub: 'Directory contract, frontmatter, scanner, validation, secrets, and bundled namespace.' },
+  { slug: 'SKILLS',       src: 'docs/SKILLS.md',        ix: '05', category: 'guide',     sub: "Directory contract, frontmatter, the scanner, eligibility gates, secrets." },
   { slug: 'MODELS',       src: 'docs/MODELS.md',        ix: '06', category: 'guide',     sub: 'Model tiers for tool-heavy agent use: quality, cost/service, and local Ollama.' },
   { slug: 'ALP',          src: 'docs/ALP.md',           ix: '07', category: 'reference', sub: 'Alpi Link Protocol: pinned identity, signed envelopes, peer capabilities, workgroups.' },
-  { slug: 'ARCHITECTURE', src: 'docs/ARCHITECTURE.md',  ix: '08', category: 'reference', sub: 'Code structure, turn loop, memory, sessions, email tool, scheduler, MCP, logging.' },
-  { slug: 'CONFIG',       src: 'docs/CONFIG.md',        ix: '09', category: 'reference', sub: 'Every YAML knob, its default, what it controls.' },
-  { slug: 'SECURITY',     src: 'docs/SECURITY.md',      ix: '10', category: 'reference', sub: 'Two-layer security model. Approval system, SSRF, prompt-injection, sensitive paths. Sandbox.' },
-  { slug: 'DEPLOYMENTS',  src: 'docs/DEPLOYMENTS.md',   ix: '11', category: 'ops',       sub: 'launchd on macOS, systemd on Linux. Per-machine daemon, scheduler, keep-alive, logs.' },
-  { slug: 'OPERATIONS',   src: 'docs/OPERATIONS.md',    ix: '12', category: 'ops',       sub: 'Day-2 runbook. Doctor, diagnostics, log rotation, backup, recovery, upgrade.' },
-  { slug: 'INTEGRATIONS', src: 'docs/INTEGRATIONS.md',  ix: '13', category: 'reference', sub: 'Talk to a profile or workgroup from your own code: a scoped device token over the host-plane WebSocket, host.chat.send frames, workgroup methods, and a Node example.' },
-  { slug: 'LICENSE',      src: 'LICENSE',               ix: '14', category: 'legal',     sub: 'Legal terms for Alpi\'s source-available code.', raw: true },
-  { slug: 'ROADMAP',      src: 'docs/ROADMAP.md',       ix: '15', category: 'planning',  sub: 'Open release gates, demand-gated candidates, and discarded decisions.' },
-  { slug: 'CHANGELOG',    src: 'CHANGELOG.md',          ix: '16', category: 'log',       sub: 'Version-by-version log of user-visible changes since v0.1.' },
+  { slug: 'WORKGROUPS',   src: 'docs/WORKGROUPS.md',    ix: '08', category: 'reference', sub: "Briefings, task markers, recipes, pipelines with gates, and how a human steers." },
+  { slug: 'ARCHITECTURE', src: 'docs/ARCHITECTURE.md',  ix: '09', category: 'reference', sub: 'Code structure, turn loop, memory, sessions, email tool, scheduler, MCP, logging.' },
+  { slug: 'CONFIG',       src: 'docs/CONFIG.md',        ix: '10', category: 'reference', sub: "Every YAML key, what it controls, its default, and when a change takes effect." },
+  { slug: 'SECURITY',     src: 'docs/SECURITY.md',      ix: '11', category: 'reference', sub: 'Two-layer security model. Approval system, SSRF, prompt-injection, sensitive paths. Sandbox.' },
+  { slug: 'DEPLOYMENTS',  src: 'docs/DEPLOYMENTS.md',   ix: '12', category: 'ops',       sub: "Reference topologies from one laptop to an enterprise mesh, Docker and WSS included." },
+  { slug: 'OPERATIONS',   src: 'docs/OPERATIONS.md',    ix: '13', category: 'ops',       sub: 'Day-2 runbook. Doctor, diagnostics, log rotation, backup, recovery, upgrade.' },
+  { slug: 'INTEGRATIONS', src: 'docs/INTEGRATIONS.md',  ix: '14', category: 'reference', sub: "Drive a profile or a workgroup from your own code, over the host-plane WebSocket." },
+  { slug: 'LICENSE',      src: 'LICENSE',               ix: '15', category: 'legal',     sub: "Source-available terms: what individuals get free, when a company needs a licence.", raw: true },
+  { slug: 'ROADMAP',      src: 'docs/ROADMAP.md',       ix: '16', category: 'planning',  sub: "Open release gates, demand-gated candidates, and decisions already discarded." },
 ];
 const TOTAL = DOCS.length;
 
@@ -100,12 +99,13 @@ function renderHead({ kind, title, description, path, iconPath, date }) {
 <title>${escapeHtml(title)}</title>
 <meta name="description" content="${escapeAttr(description)}" />
 <meta name="author" content="Satoshi Ltd." />
-<meta name="theme-color" content="#0a0a0a" />
+<meta name="theme-color" content="#0c0b09" />
+<script src="${kind === 'landing' ? '' : '../'}theme.js?v=${VERSION}"></script>
 <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
 <meta name="generator" content="${SITE_NAME} static build" />
 <link rel="canonical" href="${canonical}" />
 <link rel="icon" href="${iconPath}" type="image/svg+xml" />
-<link rel="mask-icon" href="${iconPath}" color="#0a0a0a" />
+<link rel="mask-icon" href="${iconPath.replace('alpi-icon.svg', 'alpi-black.svg')}" color="#f0b447" />
 
 <!-- Open Graph -->
 <meta property="og:type" content="${ogType}" />
@@ -127,8 +127,6 @@ function renderHead({ kind, title, description, path, iconPath, date }) {
 <meta name="twitter:description" content="${escapeAttr(description)}" />
 <meta name="twitter:image" content="${OG_IMAGE}" />
 <meta name="twitter:image:alt" content="alpi — your private agent network" />
-<meta name="twitter:creator" content="${TWITTER}" />
-<meta name="twitter:site" content="${TWITTER}" />
 
 ${structuredData}`;
 }
@@ -235,12 +233,9 @@ function inlineLogoPart(fileName, className, attrs = '') {
     .trim();
 }
 
-const logoSvg = `<span class="logo">${inlineLogoPart('alpi-white.svg', 'logo-mark', 'width="35" height="40"')}<span class="logo-word">alpi</span></span>`;
-const themeControlHtml = `<div class="bg-ctrl" role="group" aria-label="theme">
-  <span>theme</span>
-  <button data-theme="dark" class="on">dark</button>
-  <button data-theme="light">light</button>
-</div>`;
+// App-icon tile + wordmark, the lockup the sibling product uses. The tile is the one
+// place the mark sits on a ground; everywhere else the alpaca stays a bare silhouette.
+const logoSvg = `<span class="logo">${inlineLogoPart('alpi-icon.svg', 'logo-mark', 'width="36" height="36"')}<span class="logo-word">alpi</span></span>`;
 const GITHUB_URL = 'https://github.com/satoshi-ltd/alpi';
 const githubIcon = `<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path fill="currentColor" d="M8 0C3.58 0 0 3.67 0 8.2c0 3.62 2.29 6.69 5.47 7.78.4.08.55-.18.55-.4l-.01-1.52c-2.23.5-2.7-1.1-2.7-1.1-.36-.95-.89-1.2-.89-1.2-.73-.51.06-.5.06-.5.8.06 1.23.85 1.23.85.72 1.26 1.88.9 2.34.68.07-.53.28-.9.51-1.1-1.78-.21-3.64-.91-3.64-4.04 0-.9.31-1.62.82-2.2-.08-.21-.36-1.04.08-2.17 0 0 .68-.22 2.2.84A7.42 7.42 0 0 1 8 3.84c.68 0 1.36.09 1.99.28 1.52-1.06 2.2-.84 2.2-.84.44 1.13.16 1.96.08 2.17.51.58.82 1.31.82 2.2 0 3.14-1.87 3.83-3.65 4.03.29.26.54.76.54 1.53l-.01 2.37c0 .22.14.48.55.4A8.12 8.12 0 0 0 16 8.2C16 3.67 12.42 0 8 0Z"/></svg>`;
 
@@ -248,6 +243,52 @@ const githubIcon = `<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false
 // kind: 'landing' | 'docs-index' | 'doc'
 // opts.current (doc pages): the slug shown as current crumb
 // opts.brandHref: link for the brand chip (home-of-section)
+// A plain-text licence is hard-wrapped for a 72-column terminal. On the page that
+// reads as ragged prose, so rebuild it as a document: the words are untouched,
+// only the wrapping is handed back to the browser.
+// A reference table is wider than a phone; give it its own scroller instead of
+// letting it widen the whole page.
+function wrapTables(html) {
+  return html.replace(/<table>[\s\S]*?<\/table>/g, m => `<div class="md-table">${m}</div>`);
+}
+
+function renderPlainDocument(raw) {
+  const e = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const blocks = raw.replace(/\r\n/g, '\n').split(/\n{2,}/).map(b => b.replace(/\s+$/, '')).filter(Boolean);
+  const out = [];
+  blocks.forEach((block, idx) => {
+    const lines = block.split('\n');
+    if (/^-{3,}$/.test(lines[0].trim()) && lines.length === 1) { out.push('<hr />'); return; }
+    // "Key:   value" rows whose continuations are indented under the value column.
+    if (/^[A-Z][A-Za-z ]+:\s+\S/.test(lines[0])) {
+      const rows = [];
+      for (const line of lines) {
+        const m = /^\s/.test(line) ? null : line.match(/^([A-Z][A-Za-z ]+:)\s+(.*)$/);
+        if (m) rows.push([m[1].replace(/:$/, ''), [m[2]]]);
+        else if (rows.length) rows[rows.length - 1][1].push(line.trim());
+      }
+      out.push('<dl class="doc-terms">' + rows.map(([k, v]) =>
+        `<dt>${e(k)}</dt><dd>${e(v.join(' '))}</dd>`).join('') + '</dl>');
+      return;
+    }
+    // "1. …" clauses with a hanging indent.
+    if (/^\d+\.\s/.test(lines[0])) {
+      const text = lines.map(l => l.trim()).join(' ').replace(/^\d+\.\s*/, '');
+      const n = lines[0].match(/^(\d+)\./)[1];
+      out.push(`<p class="doc-clause"><span>${e(n)}.</span> ${e(text)}</p>`);
+      return;
+    }
+    const text = lines.map(l => l.trim()).join(' ');
+    // The first line, and any short standalone line, is a section title.
+    if (lines.length === 1 && text.length < 60 && !/[.:]$/.test(text)) {
+      out.push(`<h2>${e(text)}</h2>`);
+      return;
+    }
+    out.push(`<p>${e(text)}</p>`);
+  });
+  return out.join('\n');
+}
+
 function renderNav(kind, opts = {}) {
   const crumbs = [];
   let brandHref;
@@ -290,10 +331,8 @@ function renderNav(kind, opts = {}) {
 
   // Menu is only rendered on the landing — paths are relative to the site root.
   const menuLinks = [
-    ['#what', 'What'],
-    ['#quickstart', 'Quickstart'],
-    ['apps.html', 'Apps'],
-    ['#alp', 'ALP'],
+    ['#what', 'Profiles'],
+    ['#alp', 'Protocol'],
     ['docs/index.html', 'Docs'],
     ['blog/index.html', 'Blog'],
   ];
@@ -306,14 +345,12 @@ function renderNav(kind, opts = {}) {
   const drawerHtml = showMenu
     ? `<div class="nav-drawer" id="nav-drawer" hidden>
     <ul>${menuLinks.map(([h, l]) => `<li><a href="${h}">${l}</a></li>`).join('')}</ul>
-    <a href="#install" class="nav-cta">$ uv tool install alpi-agent →</a>
+    <a href="#apps" class="nav-cta">$ uv tool install alpi-agent →</a>
   </div>`
     : '';
 
   // CTA install anchor lives on the landing — point at it correctly from each surface.
-  const ctaHref = kind === 'landing' ? '#install'
-    : kind === 'apps' ? 'index.html#install'
-    : '../index.html#install';
+  const ctaHref = kind === 'landing' ? '#apps' : '../index.html#apps';
 
   return `<nav class="top">
   <div class="shell row">
@@ -324,13 +361,101 @@ function renderNav(kind, opts = {}) {
     </div>
     ${menuHtml}
     <div class="nav-actions">
-      <a href="${GITHUB_URL}" class="nav-github" aria-label="alpi on GitHub">${githubIcon}</a>
       <a href="${ctaHref}" class="nav-cta">$ uv tool install alpi-agent →</a>
     </div>
     ${burgerHtml}
   </div>
   ${drawerHtml}
-</nav>`;
+</nav>
+<script>
+document.addEventListener('click', function (e) {
+  var a = e.target.closest && e.target.closest('a.brand');
+  if (!a) return;
+  // Same page: the wordmark means "back to the top", not a reload.
+  if (new URL(a.href, location.href).pathname !== location.pathname) return;
+  e.preventDefault();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+</script>`;
+}
+
+// The footer is a shared component, so it carries its own styles — the landing
+// keeps them inline and doc.css never had them, which left 37 pages unstyled.
+const FOOTER_CSS = `<style>
+footer{border-top:1px solid var(--line);padding:64px 0 48px;margin-top:80px;position:relative;z-index:5}
+footer .row{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:40px}
+@media(max-width:760px){footer .row{grid-template-columns:1fr 1fr}}
+footer h5{font-family:"Geist Mono",ui-monospace,monospace;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;margin-bottom:16px}
+footer ul{list-style:none}
+footer li{margin-bottom:10px}
+footer a{color:var(--fg);text-decoration:none;font-size:14px}
+footer a:hover{color:var(--muted)}
+footer .sig{
+    margin-top:48px;padding-top:30px;border-top:1px solid var(--line);
+    display:flex;align-items:baseline;justify-content:space-between;gap:20px;flex-wrap:wrap;
+  }
+/* inline-block, not flex: a flex lockup takes its baseline from the icon, which
+   drops the version ~6px below the wordmark it is meant to sit next to. */
+footer .sig .brand{
+    display:inline-block;
+    font-family:"Instrument Sans",system-ui,sans-serif;font-size:23px;font-weight:700;
+    letter-spacing:-1px;color:var(--fg);line-height:1;
+  }
+footer .sig .brand .logo-mark{width:28px;height:28px;border-radius:8px;display:inline-block;vertical-align:middle;margin-right:12px}
+footer .sig .who{display:flex;align-items:baseline;gap:13px}
+footer .sig .ver{font-family:"Geist Mono",ui-monospace,monospace;font-size:11px;color:var(--muted);letter-spacing:.02em}
+footer .sig .attr{font-size:11px;color:var(--muted);font-family:"Geist Mono",ui-monospace,monospace}
+footer .sig .attr a{font-size:inherit}
+/* Last: a media query adds no specificity, so the base rules above would win. */
+@media(max-width:720px){footer h5,footer .sig .attr,footer .sig .attr a,footer .sig .ver{font-size:12.5px}}
+</style>`;
+
+// ── table of contents — built from the rendered h2s, shown only when a document
+// is long enough that scrolling blind is a real cost.
+function buildToc(bodyHtml) {
+  const heads = [...bodyHtml.matchAll(/<h2 id="([^"]+)">([\s\S]*?)<\/h2>/g)]
+    .map(m => ({ id: m[1], text: m[2].replace(/<[^>]+>/g, '').trim() }))
+    .filter(h => h.text);
+  if (heads.length < 4) return '';
+  return `<aside class="toc" aria-label="On this page">
+    <p class="toc-h">On this page</p>
+    <ol>${heads.map(h => `<li><a href="#${h.id}">${h.text}</a></li>`).join('')}</ol>
+  </aside>`;
+}
+
+// ── shared footer — one component for every surface. `base` is the path back
+// to the site root ('' on the landing, '../' from docs/ and blog/).
+function renderFooter(base = '') {
+  const abs = h => {
+    if (/^(https?:|mailto:)/.test(h)) return h;
+    // Landing-section anchors have to travel back to the landing from a sub-page.
+    if (h.startsWith('#')) return base ? base + 'index.html' + h : h;
+    return base + h;
+  };
+  const cols = [
+    ['Product', [['#what','What alpi is'], ['#how','How it works'], ['#alp','ALP protocol'], ['#apps','Get it'], ['blog/index.html','Writing']]],
+    ['Guides', [['docs/INSTALL.html','Install'], ['docs/QUICKSTART.html','Quickstart'], ['docs/PROFILES.html','Profiles'], ['docs/SKILLS.html','Skills'], ['docs/MODELS.html','Models'], ['docs/INTEGRATIONS.html','Integrations']]],
+    ['Reference', [['docs/ARCHITECTURE.html','Architecture'], ['docs/ALP.html','ALP protocol'], ['docs/CONFIG.html','Configuration'], ['docs/SECURITY.html','Security'], ['docs/OPERATIONS.html','Operations'], ['docs/DEPLOYMENTS.html','Deployments']]],
+    ['Meta', [['https://github.com/satoshi-ltd/alpi/blob/main/CHANGELOG.md','Changelog'], ['docs/ROADMAP.html','Roadmap'], ['https://github.com/satoshi-ltd/alpi/blob/main/LICENSE','Licence'], ['mailto:info@satoshi-ltd.com','Commercial use'], ['https://github.com/satoshi-ltd/alpi','GitHub']]],
+  ];
+  const colHtml = cols.map(([head, links]) => `<div>
+        <h5>${head}</h5>
+        <ul>${links.map(([h, l]) => `<li><a href="${abs(h)}">${l}</a></li>`).join('')}</ul>
+      </div>`).join('\n      ');
+  return `${FOOTER_CSS}<button class="theme-btn" type="button" aria-label="Switch theme"><svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></svg></button><footer>
+  <div class="shell">
+    <div class="row">
+      ${colHtml}
+    </div>
+    <div class="sig">
+      <div class="who">
+        <a class="brand" href="${base || ''}index.html">${inlineLogoPart('alpi-icon.svg', 'logo-mark', 'width="28" height="28"')}alpi</a>
+        <span class="ver">v${VERSION}</span>
+      </div>
+      <span class="attr">By <a href="https://www.satoshi-ltd.com/">Satoshi Ltd.</a> &middot; no telemetry</span>
+    </div>
+  </div>
+</footer>`;
 }
 
 // ── shared docs grid — used by the landing "docs" section and /docs/ ─────
@@ -342,13 +467,13 @@ function renderDocsGrid({ hrefPrefix = '', withSection = false, eyebrow, heading
   const cards = DOCS.map(d =>
     `      <a class="doc" href="${hrefPrefix}${d.slug}.html">
         <span class="ix">${d.ix} · ${d.category}</span>
-        <h4>${d.slug}.md</h4>
+        <h2>${d.slug}</h2>
         <p>${d.sub}</p>
         <span class="go">read →</span>
       </a>`
   ).join('\n');
 
-  const grid = `    <div class="docs" style="grid-template-columns:repeat(4,1fr)">
+  const grid = `    <div class="docs docs-catalog">
 ${cards}
     </div>`;
 
@@ -357,8 +482,13 @@ ${cards}
   return `<section id="docs">
   <div class="shell">
     <div class="eyebrow">${eyebrow}</div>
-    <h2>${heading}</h2>
+    <h1 class="index-title">${heading}</h1>
     <p class="sub">${sub}</p>
+    <nav class="docs-start" aria-label="Start using alpi">
+      <a href="${hrefPrefix}INSTALL.html"><span>01 / Install</span><strong>Put alpi on your machine <span aria-hidden="true">→</span></strong></a>
+      <a href="${hrefPrefix}QUICKSTART.html"><span>02 / First run</span><strong>Talk to your first agent <span aria-hidden="true">→</span></strong></a>
+      <a href="${hrefPrefix}PROFILES.html"><span>03 / Make it yours</span><strong>Give each agent a role <span aria-hidden="true">→</span></strong></a>
+    </nav>
 ${grid}
   </div>
 </section>`;
@@ -377,6 +507,13 @@ function copyTree(srcDir, destDir) {
 }
 
 // Rewrites intra-doc markdown links: .md → .html; keeps anchors; external untouched.
+// Files that live in the repo but are deliberately not built as pages.
+const REPO_FILES = {
+  'changelog': 'https://github.com/satoshi-ltd/alpi/blob/main/CHANGELOG.md',
+  'docker/readme': 'https://github.com/satoshi-ltd/alpi/blob/main/docker/README.md',
+  'release': 'https://github.com/satoshi-ltd/alpi/blob/main/docs/RELEASE.md',
+};
+
 function linkRewrite(url) {
   if (/^(https?:|mailto:|#|\/)/.test(url)) return url;
   // Strip leading ../ segments; keep just the basename.
@@ -385,6 +522,8 @@ function linkRewrite(url) {
   const base = path.replace(/\.md$/i, '');
   const known = DOCS.find(d => d.slug.toLowerCase() === base.toLowerCase());
   if (known) return known.slug + '.html' + (hash ? '#' + hash : '');
+  const repoFile = REPO_FILES[base.toLowerCase()];
+  if (repoFile) return repoFile + (hash ? '#' + hash : '');
   return url;
 }
 
@@ -412,27 +551,30 @@ ${renderHead({
   title: `${doc.slug} — alpi docs`,
   description: `${doc.sub} Part of the alpi documentation (${doc.ix}/${String(TOTAL).padStart(2,'0')}, ${doc.category}). v${VERSION}.`,
   path: `/docs/${doc.slug}.html`,
-  iconPath: '../assets/alpi-favicon.svg',
+  iconPath: '../assets/alpi-icon.svg',
 })}
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400..700&family=Geist+Mono:wght@400..700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../doc.css?v=${VERSION}" />
 <link rel="stylesheet" href="../demo.css" />
 </head>
 <body>
+<div class="aurora" aria-hidden="true"></div>
 <div id="ascii-bg" aria-hidden="true"><pre id="ascii-pre"></pre></div>
 <div class="veil"></div>
+<div class="grain" aria-hidden="true"></div>
 
 ${renderNav('doc', { current: doc.slug })}
 
 <main class="shell doc">
+${buildToc(bodyHtml)}
   <header class="dochead">
     <h1>${doc.slug}</h1>
     <p class="sub">${doc.sub}</p>
     <div class="meta mono">
-      <span>${doc.ix} / ${String(TOTAL).padStart(2, '0')}</span><span class="d">·</span><span>${doc.category}</span><span class="d">·</span><span>v${VERSION}</span>
+      <span class="ct">${doc.ix} / ${String(TOTAL).padStart(2, '0')}</span><span class="d">·</span><span>${doc.category}</span><span class="d">·</span><span>v${VERSION}</span>
     </div>
   </header>
 
@@ -450,7 +592,8 @@ ${bodyHtml}
   </nav>
 </main>
 
-${themeControlHtml}
+${renderFooter('../')}
+
 <script src="../doc.js?v=${VERSION}"></script>
 <script src="../demo.js?v=${VERSION}" defer></script>
 </body>
@@ -468,17 +611,19 @@ ${renderHead({
   title: 'alpi docs — documentation index',
   description: `Complete documentation for alpi v${VERSION}: ${TOTAL} references covering quickstart, skills, profiles, models, architecture, security, deployments, the Alpi Link Protocol, and more.`,
   path: '/docs/',
-  iconPath: '../assets/alpi-favicon.svg',
+  iconPath: '../assets/alpi-icon.svg',
 })}
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400..700&family=Geist+Mono:wght@400..700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../doc.css?v=${VERSION}" />
 </head>
 <body>
+<div class="aurora" aria-hidden="true"></div>
 <div id="ascii-bg" aria-hidden="true"><pre id="ascii-pre"></pre></div>
 <div class="veil"></div>
+<div class="grain" aria-hidden="true"></div>
 
 ${renderNav('docs-index')}
 
@@ -487,12 +632,13 @@ ${renderDocsGrid({
   hrefPrefix: '',
   withSection: true,
   eyebrow: `v${VERSION} · ${TOTAL} documents · updated ${new Date().toISOString().slice(0, 7)}`,
-  heading: 'DOCS',
-  sub: "Every doc is a reference of something that already ships. Read in order for the full picture, or jump to what you need — historical decisions live in commits, planned work in the ROADMAP.",
+  heading: 'Documentation.',
+  sub: "Start with installation and your first conversation. Come back for the guides and reference as your setup grows.",
 })}
 </main>
 
-${themeControlHtml}
+${renderFooter('../')}
+
 <script src="../doc.js?v=${VERSION}"></script>
 </body>
 </html>
@@ -532,12 +678,12 @@ function renderPostsGrid() {
   const cards = POSTS.map(p =>
     `      <a class="doc" href="${p.slug}.html">
         <span class="ix">${escapeHtml(postMetaLine(p))}</span>
-        <h4>${escapeHtml(p.title)}</h4>
+        <h2>${escapeHtml(p.title)}</h2>
         <p>${escapeHtml(p.description)}</p>
         <span class="go">read →</span>
       </a>`
   ).join('\n');
-  return `    <div class="docs" style="grid-template-columns:repeat(3,1fr)">
+  return `    <div class="docs blog-grid">
 ${cards}
     </div>`;
 }
@@ -551,17 +697,19 @@ ${renderHead({
   title: 'alpi blog — posts',
   description: `Writing from the alpi project: positioning, architecture, and how local-first agent infrastructure plays out in practice. ${POSTS.length} post${POSTS.length === 1 ? '' : 's'}.`,
   path: '/blog/',
-  iconPath: '../assets/alpi-favicon.svg',
+  iconPath: '../assets/alpi-icon.svg',
 })}
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400..700&family=Geist+Mono:wght@400..700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../doc.css?v=${VERSION}" />
 </head>
 <body>
+<div class="aurora" aria-hidden="true"></div>
 <div id="ascii-bg" aria-hidden="true"><pre id="ascii-pre"></pre></div>
 <div class="veil"></div>
+<div class="grain" aria-hidden="true"></div>
 
 ${renderNav('blog-index')}
 
@@ -569,14 +717,15 @@ ${renderNav('blog-index')}
 <section id="docs">
   <div class="shell">
     <div class="eyebrow">${POSTS.length} post${POSTS.length === 1 ? '' : 's'}</div>
-    <h2>BLOG</h2>
-    <p class="sub">Positioning, architecture, and field notes from the alpi project.</p>
+    <h1 class="index-title">Notes from the project.</h1>
+    <p class="sub">On building, running and keeping control of your own agents.</p>
 ${renderPostsGrid()}
   </div>
 </section>
 </main>
 
-${themeControlHtml}
+${renderFooter('../')}
+
 <script src="../doc.js?v=${VERSION}"></script>
 </body>
 </html>
@@ -593,18 +742,20 @@ ${renderHead({
   title: `${post.title} — alpi blog`,
   description: post.description || `A post from the alpi blog.`,
   path: `/blog/${post.slug}.html`,
-  iconPath: '../assets/alpi-favicon.svg',
+  iconPath: '../assets/alpi-icon.svg',
   date: post.date || undefined,
 })}
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400..700&family=Geist+Mono:wght@400..700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../doc.css?v=${VERSION}" />
 </head>
 <body>
+<div class="aurora" aria-hidden="true"></div>
 <div id="ascii-bg" aria-hidden="true"><pre id="ascii-pre"></pre></div>
 <div class="veil"></div>
+<div class="grain" aria-hidden="true"></div>
 
 ${renderNav('blog')}
 
@@ -624,7 +775,7 @@ ${bodyHtml}
     <h2 class="post-cta-h">Run your own private agent network.</h2>
     <p class="post-cta-sub">One command. Local-first, source-available, no telemetry — your agents run on the machines you already own.</p>
     <div class="cta-row">
-      <a class="btn btn-primary" href="../index.html#install">$ uv tool install alpi-agent <span class="arr">→</span></a>
+      <a class="btn btn-primary" href="../index.html#apps">$ uv tool install alpi-agent <span class="arr">→</span></a>
       <a class="btn btn-ghost" href="https://github.com/satoshi-ltd/alpi">View source <span class="arr">→</span></a>
     </div>
     <p class="post-cta-meta">BUSL-1.1 → Apache-2.0 (rolling)</p>
@@ -640,7 +791,8 @@ ${bodyHtml}
   </nav>
 </main>
 
-${themeControlHtml}
+${renderFooter('../')}
+
 <script src="../doc.js?v=${VERSION}"></script>
 </body>
 </html>
@@ -664,6 +816,8 @@ ensureDir(DIST);
 
 // Assets
 copyTree(join(SITE, 'assets'), join(DIST, 'assets'));
+
+copyFileSync(join(TPL, 'theme.js'), join(DIST, 'theme.js'));
 
 // Shared doc.css + baked doc.js
 copyFileSync(join(TPL, 'doc.css'), join(DIST, 'doc.css'));
@@ -690,12 +844,11 @@ const landingHead = renderHead({
   title: `alpi — ${SITE_TAGLINE}`,
   description: SITE_DESCRIPTION,
   path: '/',
-  iconPath: 'assets/alpi-favicon.svg',
+  iconPath: 'assets/alpi-icon.svg',
 });
 const landing = readFileSync(join(TPL, 'landing.html'), 'utf8')
   .replace('<meta charset="utf-8" />\n<!-- SEO_HEAD (injected by build.mjs) -->', landingHead)
   .replace('<!-- NAV (injected by build.mjs) -->', renderNav('landing'))
-  .replace('<!-- DOCS_GRID_PLACEHOLDER -->', renderDocsGrid({ hrefPrefix: 'docs/' }))
   // Match any v<semver> in the landing template so the hero, terminal
   // chrome, and footer all track pyproject.toml regardless of which
   // version the template was last saved with.
@@ -704,39 +857,12 @@ const landing = readFileSync(join(TPL, 'landing.html'), 'utf8')
   .replace('src="demo.js"', `src="demo.js?v=${VERSION}"`)
   // Desktop version goes AFTER the alpi-version sweep so the regex
   // above doesn't clobber it (desktop ships on its own track).
+  .replace('<!-- FOOTER (injected by build.mjs) -->', renderFooter(''))
   .replaceAll('<!-- DESKTOP_DOWNLOAD_URL -->', DESKTOP_DOWNLOAD_URL)
+  .replaceAll('<!-- DESKTOP_RELEASES_URL -->', DESKTOP_RELEASES_URL)
   .replaceAll('<!-- DESKTOP_RELEASES_URL -->', DESKTOP_RELEASES_URL)
   .replaceAll('<!-- DESKTOP_VERSION -->', `v${DESKTOP_VERSION}`);
 write(join(DIST, 'index.html'), landing);
-
-// Apps page — same head/nav infra as landing, but its own template + CSS
-const appsHead = renderHead({
-  kind: 'landing',
-  title: 'alpi apps — desktop + mobile',
-  description: 'Desktop and mobile clients for alpi. The agent stays in the daemon you run; the apps connect to it over Tailscale with QR-pair tokens, biometric unlock, and native approval modals for caution commands.',
-  path: '/apps.html',
-  iconPath: 'assets/alpi-favicon.svg',
-});
-copyFileSync(join(TPL, 'apps.css'), join(DIST, 'apps.css'));
-const apps = readFileSync(join(TPL, 'apps.html'), 'utf8')
-  .replace('<meta charset="utf-8" />\n<!-- SEO_HEAD (injected by build.mjs) -->', appsHead)
-  .replace('<!-- NAV (injected by build.mjs) -->', renderNav('apps'))
-  .replace('<!-- THEME_CONTROL (injected by build.mjs — same component used by docs) -->', themeControlHtml)
-  .replace(/\bv\d+\.\d+\.\d+\b/g, `v${VERSION}`)
-  .replaceAll('<!-- DESKTOP_DOWNLOAD_URL -->', DESKTOP_DOWNLOAD_URL)
-  .replaceAll('<!-- DESKTOP_RELEASES_URL -->', DESKTOP_RELEASES_URL)
-  .replaceAll('<!-- DESKTOP_VERSION -->', `v${DESKTOP_VERSION}`)
-  // cache-bust shared assets so a Cloudflare edge copy of an older bundle can't crash against new HTML markup.
-  .replace('href="doc.css"', `href="doc.css?v=${VERSION}"`)
-  .replace('href="apps.css"', `href="apps.css?v=${VERSION}"`)
-  .replace('src="doc.js"', `src="doc.js?v=${VERSION}"`);
-write(join(DIST, 'apps.html'), apps);
-
-// Live preview — copies the desktop prototype (the React+Babel one) into /preview/.
-// The /apps "see it live" CTA opens this in an iframe inside an overlay.
-// Heavy (~600KB of React+Babel from unpkg + 13 jsx files); lazy-loaded only when the overlay opens.
-const previewSrc = join(TPL, 'preview');
-if (existsSync(previewSrc)) copyTree(previewSrc, join(DIST, 'preview'));
 
 // Docs index
 write(join(DIST, 'docs', 'index.html'), docsIndexPage());
@@ -752,9 +878,10 @@ for (let k = 0; k < DOCS.length; k++) {
   const raw = readFileSync(srcPath, 'utf8');
   let body;
   if (doc.raw) {
-    body = `<pre><code>${raw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code></pre>`;
+    body = renderPlainDocument(raw);
   } else {
     body = renderMarkdown(stripFirstH1(stripFrontmatter(raw)), { linkRewrite });
+    body = wrapTables(body);
     // The ``<!-- alpi-demo -->`` marker survives Markdown rendering as
     // an escaped paragraph; swap it for the mount node the demo widget
     // hydrates on load.
@@ -773,7 +900,7 @@ for (let k = 0; k < DOCS.length; k++) {
 write(join(DIST, 'blog', 'index.html'), blogIndexPage());
 for (let k = 0; k < POSTS.length; k++) {
   const post = POSTS[k];
-  const body = renderMarkdown(stripFirstH1(post.body), { linkRewrite: postLinkRewrite });
+  const body = wrapTables(renderMarkdown(stripFirstH1(post.body), { linkRewrite: postLinkRewrite }));
   const prev = POSTS[k - 1] || null;   // newer
   const next = POSTS[k + 1] || null;   // older
   write(join(DIST, 'blog', `${post.slug}.html`), postPage(post, body, prev, next));
@@ -784,7 +911,6 @@ for (let k = 0; k < POSTS.length; k++) {
 const today = new Date().toISOString().slice(0, 10);
 const sitemapUrls = [
   { loc: `${SITE_URL}/`, priority: '1.0', changefreq: 'weekly' },
-  { loc: `${SITE_URL}/apps.html`, priority: '0.95', changefreq: 'weekly' },
   { loc: `${SITE_URL}/docs/`, priority: '0.9', changefreq: 'weekly' },
   ...DOCS.map(d => ({
     loc: `${SITE_URL}/docs/${d.slug}.html`,

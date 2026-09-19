@@ -8,11 +8,11 @@
   const TOPBAR = {
     fresh:'alpi v0.3.0 <span class="sep">·</span> <span class="lbl">profile </span><span class="acc">default</span> <span class="sep">·</span> sandbox off <span class="sep">·</span> ~/projects/alpi',
     work: 'alpi v0.3.0 <span class="sep">·</span> <span class="lbl">profile </span><span class="acc">work</span> <span class="sep">·</span> sandbox off <span class="sep">·</span> ~/projects/work',
-    personal:'alpi v0.3.0 <span class="sep">·</span> <span class="lbl">profile </span><span class="acc">doc</span> <span class="sep">·</span> sandbox on <span class="sep">·</span> ~/life/health',
+    personal:'alpi v0.3.0 <span class="sep">·</span> <span class="lbl">profile </span><span class="acc">reviewer</span> <span class="sep">·</span> sandbox on <span class="sep">·</span> /srv/agents',
   };
   const STATUS = {
-    fresh:'<span class="diamond">◆</span> openai/gpt-5.4-mini <span class="sep">·</span> ctx 1.2K/272K <span class="sep">·</span> $0.00',
-    hero: '<span class="diamond">◆</span> claude-sonnet-4.6 <span class="sep">·</span> ctx 24k <span class="sep">·</span> $0.01',
+    fresh:'<span class="diamond">◆</span> deepseek-v4.1-flash <span class="sep">·</span> ctx 8.4K/1M <span class="sep">·</span> $0.00',
+    hero: '<span class="diamond">◆</span> deepseek-v4.1-flash <span class="sep">·</span> ctx 24K/1M <span class="sep">·</span> $0.01',
   };
   const PLACEHOLDER = 'Type a message or /help for commands…';
 
@@ -35,15 +35,15 @@
       initialBody:"",
       turns:[
         {
-          input:"what should i do with dinner, training, and tomorrow's calls?",
+          input:"what landed overnight, and what needs me before standup?",
           lines:[
-            { d:300, t: tool("schedule", "list · today",         '<span class="muted">4 events</span>') },
-            { d:380, t: tool("memory",   "read · health notes",  '<span class="muted">sleep + training</span>') },
-            { d:360, t: tool("peer",     "link.ask · pantry",    '<span class="muted">meal options</span>') },
+            { d:300, t: tool("schedule", "list · today",          '<span class="muted">3 jobs ran</span>') },
+            { d:380, t: tool("memory",   "read · review notes",   '<span class="muted">2 open threads</span>') },
+            { d:360, t: tool("peer",     "link.ask · librarian",  '<span class="muted">changelog diff</span>') },
             { d:240, t:"" },
-            { d:320, t:'<span class="bot">Keep dinner light: rice, eggs, greens. Pantry has everything.</span>' },
-            { d:160, t:'<span class="bot">Move the tempo run to tomorrow morning; recovery is low today.</span>' },
-            { d:160, t:'<span class="bot">Your 09:30 call needs the budget note — I can draft it now.</span>' },
+            { d:320, t:'<span class="bot">Nightly pipeline finished clean. The migration job retried once and settled.</span>' },
+            { d:160, t:'<span class="bot">PR #412 needs you: the retry state is not reset after a timeout.</span>' },
+            { d:160, t:'<span class="bot">Spend is $6.10 of the $20 daily cap on this profile. The librarian bills its own.</span>' },
           ],
           postPause: 1400,
         },
@@ -51,7 +51,7 @@
           input:"ask builder to review the payment PR before standup",
           lines:[
             { d:320, t: tool("peer", "link.ask · builder", '<span class="muted">PR review</span>') },
-            { d:520, t: tool("todo", "track · 3 checks",   '<span class="muted">tests, copy, risk</span>') },
+            { d:520, t: tool("todo", "add Check the retry reset path", '<span class="muted">0. [ ] Check the retry reset path</span>') },
             { d:280, t:"" },
             { d:360, t:'<span class="bot">@builder found one real issue: retry state is not reset after timeout.</span>' },
             { d:160, t:'<span class="bot">It left a minimal patch and a focused test. Everything else is cosmetic.</span>' },
@@ -61,8 +61,8 @@
         {
           input:"post the decision to #launch and notify the phone if anyone blocks",
           lines:[
-            { d:480, t: tool("peer", "workgroup.post · launch", "5 members", "0.2s") },
-            { d:420, t: tool("schedule", "watch · blockers", '<span class="muted">next 2h</span>') },
+            { d:480, t: tool("workgroup_post", "wg_id=wg_7x2f9kq3", '<span class="muted">posted seq 184 · declared $0.0031</span>', "0.2s") },
+            { d:420, t: tool("notify", "text=Ping me if anyone blocks…", '<span class="muted">delivered: alpi</span>') },
             { d:420, t:'<span class="bot">posted. If a profile flags a blocker, desktop and mobile will show the same thread.</span>' },
           ],
           postPause: 1700,
@@ -81,7 +81,7 @@
       kind:"shell",
       output:`Resolved 89 packages in 1.2s
 <span class="ok">Installed</span> alpi-agent v0.3.0 <span class="muted">·</span> 1 executable: alpi`,
-      caption:"Single command. Python ≥ 3.10. The browser tool downloads Chromium (~200 MB) the first time it runs — no separate install step."
+      caption:"Single command. Python 3.11–3.13. The browser tool downloads the Chromium headless shell (~340 MB) the first time it runs — no separate install step."
     },
     {
       id:2, title:"Pick a model",
@@ -90,25 +90,32 @@
       topbar:'alpi <span class="muted">·</span> setup <span class="sep">·</span> <span class="lbl">profile </span><span class="acc">default</span>',
       output:`<span class="muted">  ↑↓ select   ⏎ confirm   esc back</span>
 
-  <span class="muted">AGENT</span>
+  <span class="muted">Agent</span>
   <span class="acc">› Model / Provider</span>        <span class="muted">(not set)</span>
-    Voice                       <span class="muted">—</span>
-    MCPs                        <span class="muted">0 servers</span>
+    Routing models              <span class="muted">(not set — everything runs on the main model)</span>
+    Voice                       <span class="muted">Aria (en-US)</span>
+    MCPs                        <span class="muted">none</span>
+    Emails                      <span class="muted">none</span>
 
-  <span class="muted">BOUNDARIES</span>
+  <span class="muted">Boundaries</span>
     Workspace                   <span class="muted">not set · falls back to cwd</span>
     Sandbox                     <span class="muted">off</span>
-    Budget                      <span class="muted">no cap</span>
+    Budget                      <span class="muted">unlimited</span>
 
   <span class="muted">ALP (Alpi Link Protocol)</span>
-    Identity                    <span class="muted">not set</span>
-    Peers                       <span class="muted">0 pinned</span>
-    Workgroups                  <span class="muted">0 hosting / 0 joined</span>
+    Identity                    <span class="muted">not set · peers see handle only</span>
+    Peers                       <span class="muted">none pinned</span>
+    Workgroups                  <span class="muted">none</span>
+    Peer TCP listener           <span class="muted">auto:7423 (Noise_XK)</span>
 
-  <span class="muted">MAINTENANCE</span>
-    Service                     <span class="muted">not installed</span>
-    Health check                <span class="muted">run alpi doctor</span>
-    Cleanup                     <span class="muted">sessions: 0 · logs: 0 KB</span>`,
+  <span class="muted">Services</span>
+    Daemon                      <span class="muted">not installed</span>
+    Schedules                   <span class="muted">no jobs</span>
+    Connections                 <span class="muted">ready</span>
+
+  <span class="muted">Maintenance</span>
+    Health check                <span class="muted">open to run checks</span>
+    Cleanup                     <span class="muted">nothing to clean</span>`,
       caption:"Fresh profiles ship with no default — pick provider, paste key, choose model. See MODELS for tiered guidance."
     },
     {
@@ -147,7 +154,7 @@
         {
           input:"remember that i prefer short direct answers",
           lines:[
-            { d:400, t: tool("memory", "append · USER.md", '<span class="muted">preference</span>') },
+            { d:400, t: tool("memory", "add USER.md  prefers short direct a…", '<span class="muted">Added 1 entry in USER.md.</span>') },
             { d:240, t:"" },
             { d:280, t:'<span class="bot">Noted. I\'ll keep replies concise unless the task needs detail.</span>' },
           ],
@@ -169,8 +176,8 @@
         {
           input:"what is ALP and how do peers stay private?",
           lines:[
-            { d:320, t: tool("skill", "view · @alpi/knowledge", '<span class="muted">routing table</span>') },
-            { d:520, t: tool("skill", "view · file=references/alp.md", '<span class="muted">protocol §</span>') },
+            { d:320, t: tool("alpi_knowledge", "action=index", '<span class="muted">15 topics</span>') },
+            { d:520, t: tool("alpi_knowledge", "action=view", '<span class="muted">alp — pinned identity, signed envelopes, w…</span>') },
             { d:280, t:"" },
             { d:340, t:'<span class="bot">ALP is the Alpi Link Protocol — how alpis talk to each other.</span>' },
             { d:160, t:'<span class="bot">  · ALP.1 over Unix sockets (same machine).</span>' },
@@ -183,7 +190,7 @@
         },
       ],
       loop:false,
-      caption:"alpi ships `@alpi/knowledge`. Ask about config, commands, profiles, skills, or ALP and it answers from the shipped docs without hitting the web."
+      caption:"alpi ships the `alpi_knowledge` tool. Ask about config, commands, profiles, skills, or ALP and it answers from the packaged references without hitting the web."
     },
     {
       id:6, title:"Connect email",
@@ -197,7 +204,7 @@
 
   <span class="muted">───────────────────────────────────────────────</span>
 
-  <span class="check">✓</span> Service installed: <span class="acc">com.alpi.service.default</span>
+  <span class="check">✓</span> Daemon installed: <span class="acc">com.alpi.daemon</span>
   <span class="check">✓</span> Listening · pid 86403`,
       caption:"Optional. Connect email (IMAP / Gmail) if you want the agent reading and sending mail. The primary surfaces are the terminal, desktop, and mobile apps over the daemon."
     },
@@ -211,8 +218,8 @@
   <span class="check">✓</span> alpi-agent           v0.3.0 <span class="muted">(latest)</span>
 
 <span class="muted">Model</span>
-  <span class="check">✓</span> configured           openai/gpt-5.4-mini
-  <span class="check">✓</span> API key              OPENAI_API_KEY set
+  <span class="check">✓</span> configured           openrouter/deepseek/deepseek-v4.1-flash
+  <span class="check">✓</span> API key              OPENROUTER_API_KEY set
 
 <span class="muted">Workspace</span>
   <span class="check">✓</span> ready                /Users/you/projects/alpi

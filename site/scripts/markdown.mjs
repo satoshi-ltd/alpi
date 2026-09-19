@@ -10,6 +10,36 @@ function esc(s) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+const SHELL_LANGS = new Set(['bash', 'sh', 'shell', 'zsh', 'console', 'shell-session']);
+
+// Deliberately small: comments, quoted strings, flags and the leading command.
+// Anything cleverer needs a real grammar, and these blocks are commands, not programs.
+function highlightShell(code) {
+  const wrap = (cls, s) => `<span class="t-${cls}">${esc(s)}</span>`;
+  return code.split('\n').map(line => {
+    let out = '';
+    let rest = line;
+    const indent = rest.match(/^\s*/)[0];
+    out += esc(indent);
+    rest = rest.slice(indent.length);
+    if (rest.startsWith('#')) return out + wrap('comment', rest);
+    let first = true;
+    while (rest) {
+      const m = rest.match(/^('[^']*'|"[^"]*")|^(\s+#.*$)|^(--?[A-Za-z][\w-]*)|^(\s+)|^([^\s'"]+)/);
+      if (!m) { out += esc(rest); break; }
+      const tok = m[0];
+      if (m[1]) out += wrap('string', tok);
+      else if (m[2]) out += wrap('comment', tok);
+      else if (m[3]) out += wrap('flag', tok);
+      else if (m[4]) out += esc(tok);
+      else { out += first ? wrap('cmd', tok) : esc(tok); first = false; }
+      if (m[1] || m[3] || m[5]) first = false;
+      rest = rest.slice(tok.length);
+    }
+    return out;
+  }).join('\n');
+}
+
 function escAttr(s) {
   return esc(s).replace(/"/g, '&quot;');
 }
@@ -175,7 +205,11 @@ export function renderMarkdown(src, opts = {}) {
       }
       if (i < lines.length) i += 1;
       const classAttr = lang ? ` class="language-${escAttr(lang)}"` : '';
-      out.push(`<pre><code${classAttr}>${esc(buf.join('\n'))}</code></pre>`);
+      const source = buf.join('\n');
+      const rendered = SHELL_LANGS.has((lang || '').toLowerCase())
+        ? highlightShell(source)
+        : esc(source);
+      out.push(`<pre><code${classAttr}>${rendered}</code></pre>`);
       continue;
     }
 
