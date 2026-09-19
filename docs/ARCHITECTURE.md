@@ -505,7 +505,7 @@ Sibling to `research`, but can mutate: spawn a focused sub-agent with a chosen t
 
 **Blocked for sub-agents**: `delegate` (no recursion), `memory`, `skill`, `schedule`, `notify`, `email`, `session_search`, `session_read`, `todo` (shared global state). `research` is not in any preset either — if you need deep investigation inside a delegate task today, do it in the main agent first and pass findings via `context`.
 
-**Budget**: hardcoded `MAX_STEPS = 30`. No config knob — it's a ceiling, not a target (sub-agent stops when done). If a real case needs more, bump the constant.
+**Budget**: `max_steps` is a per-call tool parameter, defaulting to 30 and clamped to `MAX_STEPS_CAP = 100`; a non-positive or unparseable value falls back to the default. It's a ceiling, not a target — the sub-agent stops when done.
 
 **System prompt** is built from a single template plus the workspace root (when set): relative paths resolve under workspace, absolute paths go where the goal says, and the sub-agent is explicitly warned not to invent `/workspace/...` style roots.
 
@@ -1102,7 +1102,7 @@ pins the contract.
 
 ### MCP client (`alpi/mcp/`)
 
-Spawns user-configured MCP servers (stdio JSON-RPC, SSE planned). Their tools are wrapped and registered as alpi tools. Servers configured in `config.yaml` under `mcp.servers.<name>` (command, args, env). Management lives in `alpi setup → MCPs`; `alpi mcp` itself is not exposed on the CLI surface.
+Spawns user-configured MCP servers (stdio JSON-RPC, SSE planned). Their tools are wrapped and registered as alpi tools. Servers configured in `config.yaml` under `mcp.servers.<name>` (command, args, env). Management lives in `alpi setup → MCPs` and in the `alpi mcp` command group (`add`, `remove`).
 
 **External orchestration frameworks.** Alpi does not embed LangGraph,
 CrewAI, AutoGen, or similar graph/supervisor runtimes in core. They
@@ -1248,6 +1248,16 @@ Hard runtime deps are kept tight — every line in `pyproject.toml`'s `dependenc
 - `ddgs` — DuckDuckGo search backend (replaced `duckduckgo-search` when that package was deprecated).
 - `edge-tts` — TTS tool (local-first, no API key).
 - `faster-whisper` — STT tool (local-first, no API key).
+- `cryptography` — ChaCha20-Poly1305 for encrypted backups.
+- `websockets` — the host plane's WSS server.
+- `httpcore` — pinned-DNS transport, so a resolved address cannot be swapped under an in-flight request.
+- `sqlite-vec` — vector search inside the knowledge SQLite store.
+- `fastembed` — local embeddings for that store; no embedding API key.
+- `pypdf` + `pypdfium2` — PDF text extraction, then page rasterisation when a page carries no text layer.
+- `rapidocr-onnxruntime` — OCR for those rasterised pages, local.
+- `python-docx` + `ebooklib` — Word and EPUB readers for the workspace tools.
+- `python-gnupg` — PGP sign/encrypt in the email tool.
+- `qrcode` — renders the pairing link as a scannable code in the terminal.
 
 Optional `dev` extra: `pytest` + `pytest-asyncio` for the test suite, `ruff` for lint, `pip-audit` for CVE scans.
 

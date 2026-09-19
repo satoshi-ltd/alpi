@@ -868,14 +868,48 @@ row. The full task response adds `pipeline_run`:
   "status": "running",
   "started_seq": 37,
   "current_phase": "media-build",
+  "cost": {"usd": 2.41, "tokens": 184320, "tokens_in": 171004, "tokens_out": 13316},
+  "cost_complete": true,
   "phases": [
-    {"slug": "media-update", "state": "completed", "seq": 40},
-    {"slug": "media-config", "state": "skipped", "seq": 42},
-    {"slug": "media-build", "state": "current", "seq": 43},
-    {"slug": "media-qa", "state": "pending", "seq": null}
+    {"slug": "media-update", "state": "completed", "seq": 40,
+     "cost": {"usd": 0.88, "tokens": 62110, "tokens_in": 58402, "tokens_out": 3708}},
+    {"slug": "media-config", "state": "skipped", "seq": 42,
+     "cost": {"usd": 0.0, "tokens": 0, "tokens_in": 0, "tokens_out": 0}},
+    {"slug": "media-build", "state": "current", "seq": 43,
+     "cost": {"usd": 1.53, "tokens": 122210, "tokens_in": 112602, "tokens_out": 9608}},
+    {"slug": "media-qa", "state": "pending", "seq": null,
+     "cost": {"usd": 0.0, "tokens": 0, "tokens_in": 0, "tokens_out": 0}}
   ]
 }
 ```
+
+Every phase carries what was spent while its task was open, and the run
+carries the sum. An attempt owns the seqs from its opener to its close, which
+is what stops an ad-hoc task opened between two phases from being billed to
+the phase before it. An attempt that was *preempted* stops one seq earlier,
+because a preemption has no closing post of its own: what closed it is the
+next task's opener, and that post belongs to the task it opened — which may
+be a task outside the chain. Spend outside the chain belongs to no phase and
+is not in the run total. A phase re-opened later in
+the same run keeps the spend of its earlier attempts — a rewind adds an
+attempt, it never erases one — while the phase *state* still resets, as it
+always has.
+
+The figures come from the per-post `cost` declarations plus the per-turn
+settlements in the workgroup ledger. A settlement is keyed the way the
+ledger keys it, by `(from, turn_id)`, and placed on that author's first
+post of the turn; keying on the turn alone would put two authors' residuals
+on whichever posted first. A turn that settled without ever posting cannot
+be placed on the timeline and is left out rather than guessed onto a phase,
+so a run total can sit slightly under the profile ledger.
+
+`cost_complete` says whether the settlements were available where the fold
+ran. They live only in the hub's home: a member posts its residual to the
+hub over ALP and keeps no copy, so a member's fold sees declared post costs
+and nothing else and reports `false`. A hub whose ledger cannot be read as
+an object — missing, truncated, or holding something else — also reports
+`false` rather than a confident zero. `alpi workgroup show` prints the run
+total on its pipeline line, marked `(declared only)` when it is partial.
 
 `status` is `running` (a mapped task is open), `between` (a
 non-terminal phase closed and its successor is not open yet),

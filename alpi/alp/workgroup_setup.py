@@ -611,7 +611,9 @@ def _show_pipelines(home: Path, wg) -> None:
             f"{p['slug']} {p['state']}" for p in run["phases"]
             if p["state"] != "pending"
         )
-        ui.dim(f"Active pipeline: {run['pipeline']} [{run['status']}] · {detail}")
+        line = f"Active pipeline: {run['pipeline']} [{run['status']}] · {detail}"
+        spend = host_wg.run_cost_label(run)
+        ui.dim(f"{line} · {spend}" if spend else line)
     ui.press_enter()
 
 

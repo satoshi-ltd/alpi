@@ -147,9 +147,10 @@ reads with a small explicit deny list (`~/.ssh`, `~/.aws`,
 those denies stays readable. Network is denied by default.
 
 **Status: stable, opt-in — with one exception.** A dispatched workgroup
-phase that declares write scopes forces `terminal` through the sandbox even
-when the profile has it off, so a phase owner cannot write outside its lane
-(see [WORKGROUPS.md](WORKGROUPS.md)). Everywhere else it defaults to off,
+phase that declares write scopes forces `terminal` through the sandbox on bare
+metal even when the profile has it off, so a phase owner cannot write outside
+its lane. In the official Docker runtime a scoped phase omits `terminal`
+altogether rather than sandboxing it (see [WORKGROUPS.md](WORKGROUPS.md)). Everywhere else it defaults to off,
 because real-world dev workflows vary too much to pick a profile that never
 breaks: `git
 push` over SSH relies on `~/.ssh`, Apple Silicon Homebrew lives in
@@ -191,10 +192,10 @@ tools:
 
 ### TUI feedback
 
-The top bar shows the current profile's sandbox state next to the
-workspace: `sandbox on` in green when active, `sandbox off` in muted
-grey when not. Quick visual confirmation you're in the posture you
-think you're in.
+The top bar carries a muted `sandbox` segment next to the workspace
+while the sandbox is on, reading `offline` instead when the network is
+also locked. There is no segment when the sandbox is off: absence is the
+off state, so read the bar for the badge, not for a word saying "off".
 
 ### Platform support
 
@@ -274,8 +275,9 @@ concatenates, in order:
    through the `memory` tool, with dedup + char limits + cross-file
    duplicate detection.
 3. The skills index from `~/.alpi/skills/**/SKILL.md` — every
-   mutation passes through `skills_guard.py`, which scans for
-   dangerous patterns (rm -rf, curl|sh, eval(), hardcoded keys).
+   mutation passes through the shared scanner (`_DANGER_PATTERNS`
+   in `alpi/scan.py`), which scans for dangerous patterns
+   (rm -rf, curl|sh, eval(), hardcoded keys).
 
 Workspace files — anything the user has on disk — are **data**, not
 context. The LLM reads them through the `read_file` tool, which

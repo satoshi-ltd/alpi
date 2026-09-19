@@ -15,6 +15,7 @@ TOPICS: dict[str, str] = {
     "tools": "tools.md",
     "models": "models.md",
     "alp": "alp.md",
+    "workgroups": "workgroups.md",
     "architecture": "architecture.md",
     "config": "config.md",
     "security": "security.md",

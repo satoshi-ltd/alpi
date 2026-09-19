@@ -102,8 +102,98 @@ def _attempt_state(task) -> str:
     return "completed"
 
 
+def _num(value: Any, cast, floor):
+    try:
+        return max(floor, cast(value))
+    except (TypeError, ValueError):
+        return floor
+
+
+def _zero_cost() -> dict[str, Any]:
+    return {"usd": 0.0, "tokens": 0, "tokens_in": 0, "tokens_out": 0}
+
+
+def _add_cost(into: dict[str, Any], cost: Any) -> None:
+    if not isinstance(cost, dict):
+        return
+    into["usd"] = round(into["usd"] + _num(cost.get("usd"), float, 0.0), 6)
+    for key in ("tokens", "tokens_in", "tokens_out"):
+        into[key] += _num(cost.get(key), int, 0)
+
+
+def _charges(posts: list[dict[str, Any]], settlements: Any) -> list[tuple[int, Any]]:
+    """Every cost in the transcript placed on a seq, so a phase span can own it.
+
+    A settlement carries the residual an author did not declare on its posts. The
+    ledger keys a turn by ``(from, turn_id)`` and so does this, or two authors that
+    happened to pick the same turn id would both land on whichever posted first. It
+    is placed on that author's first post of the turn; a turn that settled without
+    ever posting cannot be placed on the timeline and is left out rather than
+    guessed onto a phase.
+    """
+    out = [(int(p.get("seq", 0)), p.get("cost")) for p in posts]
+    first_seq: dict[tuple[str, str], int] = {}
+    for p in posts:
+        turn = str(p.get("turn_id") or "")
+        if not turn:
+            continue
+        key = (str(p.get("from_pubkey") or ""), turn)
+        seq = int(p.get("seq", 0))
+        if seq < first_seq.get(key, seq + 1):
+            first_seq[key] = seq
+    if isinstance(settlements, list):
+        for row in settlements:
+            if not isinstance(row, dict):
+                continue
+            seq = first_seq.get(
+                (str(row.get("from") or ""), str(row.get("turn_id") or "")),
+            )
+            if seq is not None:
+                out.append((seq, row.get("cost")))
+    return out
+
+
+def _span_costs(
+    charges: list[tuple[int, Any]], spans: list[tuple[str, int, int | None, bool]],
+) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
+    """Split the run's seq line at each attempt's opener so no charge is counted twice.
+
+    An attempt ends the seq before the next one opens — a preemption closes one phase
+    and opens the next on the SAME post, so an inclusive end would charge it to both.
+    The final attempt stops at its own close, or runs open-ended while it is still open.
+    """
+    per_phase: dict[str, dict[str, Any]] = {}
+    total = _zero_cost()
+    for i, (slug, start, closed, preempted) in enumerate(spans):
+        if closed is None:
+            # Only the last attempt is open in a well-formed ledger; cap a stray one at
+            # the next opener rather than let it swallow the rest of the transcript.
+            end = spans[i + 1][1] - 1 if i + 1 < len(spans) else None
+        else:
+            # A closed attempt owns nothing past its close, or an ad-hoc task opened
+            # between two phases would bill to the phase before it. A preempted attempt
+            # has no close post of its own — what closed it IS the next task's opener,
+            # which may be outside the chain and so absent from these spans entirely.
+            end = closed - 1 if preempted else closed
+        bucket = per_phase.setdefault(slug, _zero_cost())
+        for seq, cost in charges:
+            if seq >= start and (end is None or seq <= end):
+                _add_cost(bucket, cost)
+                _add_cost(total, cost)
+    return per_phase, total
+
+
+def _charges_and_basis(
+    home: Path, wg_id: str, posts: list[dict[str, Any]],
+) -> tuple[list[tuple[int, Any]], bool]:
+    rows, complete = _settlements(home, wg_id)
+    return _charges(posts, rows), complete
+
+
 def _fold_pipeline_run(
     defs: _Defs, ordered, trigger_seqs: set[int] | None = None,
+    charges: list[tuple[int, Any]] | None = None,
+    cost_complete: bool = True,
 ) -> dict[str, Any] | None:
     """Fold pipeline attempts, using explicit operator triggers as run boundaries."""
     if not defs.pipelines or not ordered:
@@ -133,6 +223,7 @@ def _fold_pipeline_run(
                 "current_phase": phase,
                 "states": {},
                 "seqs": {},
+                "spans": [],
             }
         for downstream in chain[chain.index(phase) + 1:]:
             run["states"].pop(downstream, None)
@@ -143,6 +234,12 @@ def _fold_pipeline_run(
         run["seqs"][phase] = int(
             (task.opened_seq if task.is_open else task.closed_seq) or 0,
         )
+        run["spans"].append((
+            phase,
+            int(task.opened_seq or 0),
+            None if task.is_open else int(task.closed_seq or 0),
+            state == "preempted",
+        ))
         if state == "current":
             run["status"] = "running"
         elif state == "blocked":
@@ -159,6 +256,7 @@ def _fold_pipeline_run(
     if wg_mod.canonical_pipeline_phase(defs, latest.slug) is None:
         return None
     chain = defs.pipelines[run["pipeline"]]
+    per_phase, total = _span_costs(charges or [], run["spans"])
     phases = []
     for slug in chain:
         state = run["states"].get(slug, "pending")
@@ -166,14 +264,32 @@ def _fold_pipeline_run(
             state = "current"
         elif state == "preempted":
             state = "pending"
-        phases.append({"slug": slug, "state": state, "seq": run["seqs"].get(slug)})
+        phases.append({
+            "slug": slug,
+            "state": state,
+            "seq": run["seqs"].get(slug),
+            "cost": per_phase.get(slug) or _zero_cost(),
+        })
     return {
         "pipeline": run["pipeline"],
         "status": run["status"],
         "started_seq": run["started_seq"],
         "current_phase": run["current_phase"],
         "phases": phases,
+        "cost": total,
+        "cost_complete": cost_complete,
     }
+
+
+def run_cost_label(run: dict[str, Any] | None) -> str:
+    """``$0.5500 · 550 tokens`` for a run that spent anything, else empty."""
+    cost = (run or {}).get("cost") or {}
+    usd = _num(cost.get("usd"), float, 0.0)
+    tokens = _num(cost.get("tokens"), int, 0)
+    if usd <= 0 and tokens <= 0:
+        return ""
+    label = f"${usd:.4f} · {tokens:,} tokens"
+    return label if (run or {}).get("cost_complete", True) else f"{label} (declared only)"
 
 
 _FOLD_CACHE: dict[str, tuple[tuple, dict[str, Any]]] = {}
@@ -181,16 +297,43 @@ _FOLD_CACHE_LOCK = threading.Lock()
 _FOLD_CACHE_CAP = 64
 
 
+def _settlements(home: Path, wg_id: str) -> tuple[list, bool]:
+    """The ledger rows and whether they are authoritative here.
+
+    Settlements live only in the hub's home: a member posts its residual to the hub
+    over ALP and never keeps a copy, so a member's fold can see declared post costs
+    and nothing else. The flag travels with the numbers so a partial total is never
+    rendered as a complete one.
+    """
+    d = home / "alp" / "workgroups" / wg_id
+    if not (d / "members.yaml").exists():
+        return [], False
+    try:
+        raw = json.loads((d / "ledger.json").read_text())
+    except (OSError, ValueError):
+        return [], False
+    # A hub writes the ledger at creation, so anything that is not a readable object
+    # is a ledger we cannot vouch for — partial, never a confident zero.
+    if not isinstance(raw, dict):
+        return [], False
+    rows = raw.get("settlements")
+    return (rows if isinstance(rows, list) else []), True
+
+
 def _fold_stamp(home: Path, wg_id: str, defs: _Defs) -> tuple:
     # Definitions join the stamp so a metadata edit can never serve a stale phase mapping.
-    p = home / "alp" / "workgroups" / wg_id / "transcript.jsonl"
-    try:
-        st = p.stat()
-        identity = (st.st_mtime_ns, st.st_size)
-    except OSError:
-        identity = (0, 0)
+    d = home / "alp" / "workgroups" / wg_id
+    # The ledger joins the stamp because a settlement lands after its posts: without it
+    # a run's cost would be served from the fold cached before the residual was known.
+    identity = []
+    for name in ("transcript.jsonl", "ledger.json"):
+        try:
+            st = (d / name).stat()
+            identity.append((st.st_mtime_ns, st.st_size))
+        except OSError:
+            identity.append((0, 0))
     return (
-        identity,
+        tuple(identity),
         json.dumps(
             [
                 {k: list(v) for k, v in sorted(defs.pipelines.items())},
@@ -253,6 +396,7 @@ def fold_task_state(home: Path, wg_id: str) -> dict[str, Any]:
         "pipeline_run": _fold_pipeline_run(
             defs, ordered,
             {int(p.get("seq", 0)) for p in posts if p.get("pipeline_trigger") is True},
+            *_charges_and_basis(home, wg_id, posts),
         ),
     }
     return _cache_fold(cache_key, stamp, out)

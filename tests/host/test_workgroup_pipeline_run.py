@@ -108,7 +108,7 @@ def test_pipeline_run_running_marks_current_and_pending(short_tmp: Path) -> None
     assert run["status"] == "running"
     assert run["current_phase"] == "intake"
     assert run["started_seq"] == 1
-    assert run["phases"] == [
+    assert [{k: v for k, v in p.items() if k != "cost"} for p in run["phases"]] == [
         {"slug": "intake", "state": "current", "seq": 1},
         {"slug": "content", "state": "pending", "seq": None},
         {"slug": "build", "state": "pending", "seq": None},

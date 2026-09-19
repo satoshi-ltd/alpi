@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 import tempfile
 from pathlib import Path
@@ -83,6 +84,16 @@ def test_show_reports_a_launchless_workgroup_as_such(short_tmp: Path, monkeypatc
     assert "deliberation" not in out
 
 
+def _charge(home: Path, wg_id: str, cost: dict) -> None:
+    """Stamp a cost onto the last transcript post, as a real author's post carries it."""
+    p = home / "alp" / "workgroups" / wg_id / "transcript.jsonl"
+    lines = [ln for ln in p.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    last = json.loads(lines[-1])
+    last["cost"] = cost
+    lines[-1] = json.dumps(last, separators=(",", ":"))
+    p.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def test_list_annotates_pipelines_and_the_selector(short_tmp: Path, monkeypatch) -> None:
     home = short_tmp / "profiles" / "hub"
     _hub(home, launch=None)
@@ -100,6 +111,27 @@ async def test_show_prints_the_transcript_selected_run_not_the_launch_chain(
     out = _run(monkeypatch, home, ["workgroup", "show", wg.meta.id]).output
     assert "Active pipeline: media-update [running]" in out
     assert "media-update current" in out
+
+
+@pytest.mark.asyncio
+async def test_show_prints_what_the_run_has_spent(short_tmp: Path, monkeypatch) -> None:
+    home = short_tmp / "profiles" / "hub"
+    wg = _hub(home)
+    await wc.trigger_pipeline(home, wg.meta.id, "media-update")
+    _charge(home, wg.meta.id, {"usd": 0.25, "tokens": 1234})
+    out = _run(monkeypatch, home, ["workgroup", "show", wg.meta.id]).output
+    assert "$0.2500 · 1,234 tokens" in out
+
+
+@pytest.mark.asyncio
+async def test_show_stays_quiet_about_a_run_that_has_spent_nothing(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    home = short_tmp / "profiles" / "hub"
+    wg = _hub(home)
+    await wc.trigger_pipeline(home, wg.meta.id, "media-update")
+    out = _run(monkeypatch, home, ["workgroup", "show", wg.meta.id]).output
+    assert "tokens" not in out
 
 
 def test_trigger_publishes_the_declared_opener(short_tmp: Path, monkeypatch) -> None:

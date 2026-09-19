@@ -12,21 +12,7 @@ Legend: 🔵 backlog · 🟡 next up · ⏸ blocked · 🔴 gate.
 
 ---
 
-## v0.14 — production exposure and runtime hardening
-
-v0.13 never shipped: its number was skipped when the runtime work landed
-first as v0.14.0, so its production-exposure gates carry over unchanged and
-remain the exit criterion for this cycle. The five-hotel web-factory
-validation that cleared v0.14.0 for release also left a short hardening
-list targeting v0.14.x patch releases.
-
-### Runtime hardening
-
-| ID | Item | Status |
-|---|---|---|
-| COST.1 | Per-pipeline-run cost telemetry: roll the per-turn settlements already in the workgroup ledger up to the `pipeline_run` boundaries `fold_task_state` computes, so a run and each of its phases carry spend and tokens. Per-turn, per-workgroup, per-connection and per-peer attribution already ship; the run and phase dimension does not, and an operator still sums it by hand from the per-post costs the transcript prints. | 🔵 |
-
-### Production client exposure
+## v0.16 — production client exposure
 
 The public host channel already ships: WSS routes, one-time pairing,
 per-device revocation, role/profile scope, abuse bounds, device tokens hashed
@@ -36,17 +22,39 @@ token hardening shipped in v0.14.39 to v0.14.42; this cycle adds no further
 security layer to that protocol. It proves the supplied design on the first
 definitive customer deployment.
 
+The deployment gates carried over from v0.14, which closed on runtime hardening
+alone. They are not blocked on code in this repo, only on a real customer
+deployment to prove them against. The runtime work below is: it is what a first
+external tenant would either be exposed to or read and act on, and every item is
+a defect confirmed in the shipped code.
+
+### Deployment gates
+
 | ID | Item | Status |
 |---|---|---|
 | ONLINE.1 | Deploy one isolated Alpi runtime and volume per mutually untrusted customer; profiles/connections remain an identity and RPC boundary, not tenant isolation. | 🔴 |
-| ONLINE.2 | Put the definitive hostname behind Caddy with a valid public certificate; publish only TCP 80/443 and verify the effective Compose config exposes neither 49200 nor 7423. | 🔴 |
+| ONLINE.2 | Put the definitive hostname behind a terminating proxy with a valid public certificate; publish only TCP 80/443 and verify the effective deployment exposes neither 49200 nor 7423. | 🔴 |
 | ONLINE.3 | Run external Desktop/Mobile acceptance: authenticated WSS RPC succeeds, invalid certificates fail closed, live-stream revocation disconnects only the target device, and direct public probes to 49200/7423 fail. | 🔴 |
-| ONLINE.4 | Establish the operating checks: certificate-expiry monitoring and WebSocket capacity/rejection alerts (`handshakes_rejected`, `device_connections_rejected`, `auth_rate_limited` from `host.network.status`). The daemon already throttles authentication failures per source address; behind a proxy it keys them by the real client only when the proxy's address is listed in `ALPI_HOST_WS_TRUSTED_PROXIES`, which the shipped WSS overlay does by pinning Caddy to a fixed address. The edge needs no per-IP rule of its own as long as the deployment keeps those two in step. | 🔴 |
+| ONLINE.4 | Establish the operating checks: certificate-expiry monitoring and WebSocket capacity/rejection alerts (`handshakes_rejected`, `device_connections_rejected`, `auth_rate_limited` from `host.network.status`). The daemon already throttles authentication failures per source address; behind a proxy it keys them by the real client only when the proxy's address is listed in `ALPI_HOST_WS_TRUSTED_PROXIES`, which the shipped WSS overlay does by pinning its proxy to a fixed address. The edge needs no per-IP rule of its own as long as the deployment keeps those two in step. | 🔴 |
 
-The cycle is complete only after those checks pass against the real domain and
-firewall, not another local tunnel. Credential-loss and backup-exposure
-response is already defined in [OPERATIONS.md](OPERATIONS.md);
-enterprise-grade external audit remains demand-gated as `AUDIT.2` below.
+### Runtime work
+
+| ID | Item | Status |
+|---|---|---|
+| SANDBOX.1 | Make the OS sandbox effective inside the managed Docker runtime. `tools.terminal.sandbox` defaults to false, the shipped image installs no `bubblewrap`, and the Linux wrapper refuses rather than isolates when `bwrap` is absent — so `terminal` there runs unwrapped with the whole container readable, and the `docker` execution backend is equally unavailable. [DEPLOYMENTS.md](DEPLOYMENTS.md) already tells an enterprise operator to push `tools.terminal.sandbox: true` into every profile at onboarding; on the shipped container that turns every `terminal` call into a refusal instead of a sandboxed run. The promotion condition has fired: a profile that denies neither `terminal` nor everything else, reached by a connection whose empty `profile_scope` the device store treats as unrestricted, already has the container as its only wall. | 🟡 |
+| MCP.2 | Bound the wait on an MCP server that answers nothing. The stdio client sets a deadline and then blocks on a plain `readline()`, so the deadline is only evaluated between lines: a server that neither replies nor closes its stdout holds the turn forever, and the per-call timeout the registry relies on can never fire. Nothing above the tool enforces a second bound. This is the shape of the v0.14.50 incident. The silence watchdog added there catches a scheduled run past its job timeout but skips any run without a job, so an interactive chat turn wedged the same way is never caught. Read with a real deadline, name the server that went silent, and stop it. | 🟡 |
+| COST.2 | `workgroup remove` must not drop the undeclared residual from the spend archive. The archiver sums the transcript only, while every live cost view — the run and phase fold added in v0.15.0, the workgroup detail, daily usage — also folds the settlements in `ledger.json`, which is where a turn's undeclared spend lands. Removal archives and then deletes the directory, so the residual is gone for good: the spend archive reads low by exactly the amount v0.15.0 made first-class, and the archiver's own stated contract — spend survives deletion, or nothing is deleted — is not met. | 🟡 |
+| DOC.1 | Pin the mechanically checkable claims in `docs/` to the code, the way model IDs already are. A full manual pass shipped in v0.14.52 and checkable claims are still wrong one release later, including one an operator acts on and is silently unprotected by: [CONFIG.md](CONFIG.md) lists `workgroup` among the canonical tool names for `tools.deny`, but nothing registers under that name (`workgroup_post`, `workgroup_file` and `workgroup_search` do), and the same page states an unknown deny name is a no-op. Also wrong today: `alpi mcp` described as absent from the CLI when it is a visible group; a scanner file named in [SECURITY.md](SECURITY.md) that does not exist; `delegate`'s step budget described as hardcoded with no knob when it is a per-call parameter; `out/` described as excluded from backup at every depth when it is pruned only at the home and profile roots; a TUI sandbox indicator described in colours the widget never emits; and seven runtime dependencies absent from both the dependency section and the risk table that `SECURITY.md` requires every one to carry. The durable half is a test over the lists that can be derived — registered tool names, `pyproject` dependencies, CLI groups — so the next drift fails the gate instead of the reader. | 🟡 |
+| PROC.2 | A run the watchdog kills should take its cause with it. The sweep signals the run's own pid; MCP servers, the terminal tool's background jobs and pipeline gate processes each start their own session, so the wrapper chain or the command that caused the wedge survives and keeps running in the container. The leak v0.14.21 closed for the clean stop path is still open on the hard-kill path. The foreground `terminal` timeout has the same shape: it kills the shell it spawned, not the process group under it. Best folded into MCP.2. | 🔵 |
+| ALP.9 | `alp.max_active_workgroups` is an admission threshold, not a cap. It is compared against the active count in exactly one place — the pipeline queue drain — so anything that re-enters the active set without going through a trigger bypasses it. Pausing a workgroup frees the slot, the drain admits a queued pipeline, and resuming brings the paused one back unchecked; so does the daemon's own QA rewind, and so does a plain `#task` re-opening a pipeline that closed `#done BLOCKED`. An operator who set the limit to bound provider concurrency gets N+1 running pipelines with no warning. Either re-check capacity on re-entry, or stop calling it a cap in [CONFIG.md](CONFIG.md). | 🔵 |
+
+The cycle is complete only after the deployment checks pass against the real
+domain and firewall, not another local tunnel. SANDBOX.1 is a precondition of
+ONLINE.1, not a parallel track: tenant isolation cannot be claimed while an
+unrestricted member connection reaches an unsandboxed `terminal`.
+Credential-loss and backup-exposure response is already defined in
+[OPERATIONS.md](OPERATIONS.md); enterprise-grade external audit remains
+demand-gated as `AUDIT.2` below.
 
 ---
 
@@ -61,7 +69,6 @@ usage or a concrete blocker; standing maintenance belongs in
 | ID | Candidate and promotion condition |
 |---|---|
 | TERM.2 | SSH terminal backend for remote command execution. Promote when an unattended profile needs to operate on a remote machine. |
-| SANDBOX.1 | OS sandbox effective inside the managed Docker runtime, so a `terminal`-enabled profile stays contained even when the container is the only wall. Promote before any member-scoped connection is granted a profile with `terminal` enabled (mirai: neo). |
 | AUDIT.2 | Enterprise audit and accountability: complete local mutation coverage, then add tamper-evident external records, provider policy, encryption, or RBAC only when a real fleet or compliance regime requires them. |
 | ALP.7 | Pinned shared memory per workgroup (`wiki.md`). Promote when sustained workgroup use shows that the transcript is no longer enough. |
 | SK.2 | Safe skill import (`alpi skill import <dir\|zip>` with preview, scan, and install). Promote when users repeatedly exchange skills outside their own profile. |

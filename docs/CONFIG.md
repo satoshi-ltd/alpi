@@ -143,7 +143,8 @@ prompt, so the model is never told to call a tool it cannot reach.
 Canonical names are the strings used at registration time —
 `write_file`, `edit_file`, `terminal`, `email`,
 `schedule`, `delegate`, `peer`, `knowledge`, `alpi_knowledge`,
-`research`, `browser`, `workgroup`, etc. See `alpi/tools/__init__.py`
+`research`, `browser`, `workgroup_post`, `workgroup_file`,
+`workgroup_search`, etc. See `alpi/tools/__init__.py`
 for the full registry. Note: `knowledge` is the user's workspace Markdown
 wiki; `alpi_knowledge` is the packaged docs tool for alpi itself.
 
@@ -531,7 +532,7 @@ no reachable address (no `network.host`, no Tailscale/LAN, not Docker) even
 | `alp.tcp_port` | `7423` (default profile only) | The ALP peer TCP port. Auto-exposed for the `default` profile; a named profile binds TCP only if it sets its own unique port here. The address is `network.host`. |
 | `alp.link_idle_timeout_s` | `60` | Cancel `link.ask` after this many seconds without a signed response or progress frame. `0` disables the idle watchdog. |
 | `alp.link_max_duration_s` | `0` | Optional absolute cap for one `link.ask`; `0` allows an active turn to run without a fixed wall-clock limit. |
-| `alp.max_active_workgroups` | `5` on the default profile | Workgroups that may be active at once (a running pipeline or a deliberation with an open task each hold a slot). Excess pipeline launches and triggers wait in a persistent FIFO queue; deliberations always open and count. A hub's own value overrides the default profile's daemon-wide one; `0` = unlimited. Set with `alpi workgroup limit N` (`--inherit` removes a hub override) or from the desktop; `workgroup list` shows the cap, its origin and the queue. |
+| `alp.max_active_workgroups` | `5` on the default profile | Admission threshold, not a hard cap: it is checked when a queued pipeline is admitted, so a workgroup that re-enters the active set another way (resume after a pause, a rewind, a `#task` re-opening a pipeline that closed `#done BLOCKED`) is not re-checked against it and the active count can exceed the number. A running pipeline or a deliberation with an open task each hold a slot. Excess pipeline launches and triggers wait in a persistent FIFO queue; deliberations always open and count. A hub's own value overrides the default profile's daemon-wide one; `0` = unlimited. Set with `alpi workgroup limit N` (`--inherit` removes a hub override) or from the desktop; `workgroup list` shows the cap, its origin and the queue. |
 | `alp.working_after_s` | `30` | Post an automatic `#working` heartbeat when a member turn remains silent for this many seconds. `0` disables it. |
 
 ```yaml

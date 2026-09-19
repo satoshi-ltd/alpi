@@ -219,8 +219,10 @@ profile (memories, sessions, skills with `state/` SQLite +
 `secrets/`), every named profile under `profiles/<name>/`,
 `config.yaml`, `.env`, ALP identity (`alp/secrets/alp_key.{pem,pub}`),
 peers, and host state. Excluded recursively at every depth: `cache/`,
-`logs/`, `out/` (files the agent already delivered to you), `.trash/`,
-sockets (`*.sock`), PIDs (`*.pid`) and OS cruft. A restore brings back the
+`logs/`, `.trash/`, sockets (`*.sock`), PIDs (`*.pid`) and OS cruft.
+`out/` (files the agent already delivered to you) is excluded only at the
+home root and at `profiles/<name>/`, so a skill directory that happens to
+be named `out` is still backed up. A restore brings back the
 profile, not the generated artifacts it already handed over.
 
 **Crypto.** Scrypt KDF (n=2¹⁷, r=8, p=1) → ChaCha20-Poly1305 over

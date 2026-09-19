@@ -1,5 +1,49 @@
 # Changelog
 
+## v0.15.0 — 2026-09-18 — a pipeline run says what it cost
+
+- **What a pipeline run spends is now counted for you, per run and per phase.**
+  Spend was already attributed per turn, per workgroup, per connection and per peer,
+  but never against the chain an operator actually thinks in, so answering *what did
+  that run cost* meant adding up the per-post figures the transcript prints, by hand.
+  Every phase now carries the spend of the seqs its task owned and the run carries the
+  sum, in the same `pipeline_run` the apps already read — so the desktop and mobile
+  clients get it without a change of their own. `alpi workgroup show` prints the run
+  total on its pipeline line.
+- **The figures include the residual a member never declared.** A turn's undeclared
+  usage is settled into the workgroup ledger after the fact; each settlement lands on
+  the phase that actually burned it, matched the way the ledger itself matches a turn —
+  by author and turn id, so two members that picked the same turn id are not merged. A
+  turn that settled without ever posting cannot be placed on the timeline and is left
+  out rather than guessed onto a phase, which can leave a run total slightly under the
+  profile ledger.
+- **A rewind adds an attempt, it never erases one.** Re-opening an earlier phase resets
+  that phase's state, as it always has, but its earlier attempts keep their spend, and a
+  preemption — one post that closes a phase and opens the next — is charged once, to the
+  phase it opened. A run re-triggered by an operator still counts only its own attempt.
+- **Only chain work is counted.** An attempt owns its own task and nothing after it
+  closes, so an ad-hoc task opened between two phases is not billed to the phase before
+  it, and spend after a run finishes is not billed to its last phase.
+- **The docs and the model's own reference pack were cured against the code.** A manual
+  pass shipped in v0.14.52 and several claims a reader acts on were still wrong. The worst
+  one: `CONFIG.md` offered `workgroup` as a name for `tools.deny`, but nothing registers
+  under it and the same page says an unknown deny name is a silent no-op — so an operator
+  hardening a profile that way got no enforcement and no warning. Also corrected: the
+  delegate step budget (a per-call parameter capped at 100, not a hardcoded 30), `alpi mcp`
+  (a visible command group), the mutation scanner's filename, the backup exclusion for
+  `out/` (two roots, not every depth), the TUI sandbox indicator, what a scoped phase does
+  to `terminal` inside Docker, and twelve runtime dependencies that carried no entry at all
+  where the security policy requires one. A test now derives those lists from the code, so
+  the next drift fails the suite instead of the reader.
+- **The knowledge tool gained a `workgroups` topic.** The workgroup material lived inside
+  the `alp` pack, which meant asking about a pipeline phase retrieved the whole protocol —
+  36 KB — and only if you already knew to ask for `alp`. The two are now separate packs;
+  `alp` is down to 8 KB.
+- **A partial total says it is partial.** Settlements live only in the hub, so a member
+  folding the same transcript can only see what was declared on the posts. That view now
+  reports itself as declared-only instead of showing a short number as if it were the
+  whole bill, as does a hub whose ledger cannot be read.
+
 ## v0.14.52 — 2026-09-18 — a new profile passes its own audit
 
 - **A profile created by `alpi setup` failed `alpi audit` the first time it was run.**

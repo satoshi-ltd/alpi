@@ -3981,7 +3981,10 @@ def _echo_active_pipeline(home: Path, wg_id: str) -> None:
         f"{p['slug']} {p['state']}" for p in run["phases"] if p["state"] != "pending"
     )
     line = f"Active pipeline: {run['pipeline']} [{run['status']}]"
-    click.echo(f"{line} · {detail}" if detail else line)
+    for part in (detail, host_wg.run_cost_label(run)):
+        if part:
+            line += f" · {part}"
+    click.echo(line)
 
 
 @workgroup.command("list")
