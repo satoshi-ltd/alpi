@@ -1,5 +1,5 @@
 export const ACCENTS = [
-  ["gold", "#b8954a"],
+  ["amber", "#f0b447"],
   ["terracotta", "#d97757"],
   ["brick", "#c14545"],
   ["magenta", "#c14580"],

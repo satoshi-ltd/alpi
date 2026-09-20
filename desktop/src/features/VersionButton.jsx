@@ -1,3 +1,5 @@
+import { useDismissOnOutside } from "../hooks/useDismissOnOutside.js";
+import Button from "../primitives/Button.jsx";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Dot, Tip, Mono, CheckIcon } from "../primitives/index.js";
 import {
@@ -37,21 +39,7 @@ export default function VersionButton() {
 
   useEffect(() => subscribeUpdater(setState), []);
 
-  useEffect(() => {
-    if (!open) return undefined;
-    function onDoc(e) {
-      if (!ref.current?.contains(e.target)) setOpen(false);
-    }
-    function onKey(e) {
-      if (e.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("mousedown", onDoc);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDoc);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
+  useDismissOnOutside({ open, onClose: () => setOpen(false), wrapRef: ref });
 
   const onClick = useCallback(() => {
     setOpen(true);
@@ -123,14 +111,15 @@ function VersionPanel({ state, current, onInstall, onClose }) {
           >
             Later
           </button>
-          <button
+          <Button
             type="button"
-            className={`ds-btn ds-btn-primary ${styles.installBtn}`}
+            variant="primary"
+            className={styles.installBtn}
             onClick={onInstall}
             disabled={state.installing}
           >
             {state.installing ? "Installing…" : "Restart & install"}
-          </button>
+          </Button>
         </div>
       </div>
     );

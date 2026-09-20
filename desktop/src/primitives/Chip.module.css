@@ -47,7 +47,7 @@
 
 .on {
   background: color-mix(in srgb, var(--c-success) 16%, var(--bg-pane));
-  color: color-mix(in srgb, var(--c-success) 70%, var(--ink));
+  color: var(--c-success-text);
 }
 
 .dot {
@@ -76,7 +76,7 @@
 
 .errorState {
   background: color-mix(in srgb, var(--c-danger) 16%, var(--bg-pane));
-  color: color-mix(in srgb, var(--c-danger) 70%, var(--ink));
+  color: var(--c-danger-text);
 }
 
 .errorState .dot {

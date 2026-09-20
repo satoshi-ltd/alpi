@@ -1,5 +1,22 @@
+export const fontFamilies = {
+  sans: "Geist",
+  mono: "Geist Mono",
+};
+
+export const fontStacks = {
+  sans: `"${fontFamilies.sans}", ui-sans-serif, system-ui, sans-serif`,
+  mono: `"${fontFamilies.mono}", ui-monospace, SFMono-Regular, Menlo, monospace`,
+};
+
+// React Native resolves one family per weight; the name is the family without spaces.
+export const nativeFace = (role, weight) =>
+  `${fontFamilies[role].replace(/ /g, "")}_${weight}`;
+
 export const fontSizes = {
   xxs: 9,
+  // The uppercase mono label — table heads, field labels, audit rows. Named for its role,
+  // not its rung; it sits between xxs and xs because that is where it measures.
+  label: 10,
   xs: 11,
   sm: 12,
   base: 13,
@@ -29,6 +46,21 @@ export const space = {
   s9: 24,
 };
 
+// Both apps extend the scale past s9 and picked different numbers — a desktop pane's
+// padding is not a phone's. Declared here so the shared name collision is visible.
+// Intra-component nudges below the layout rhythm: icon-to-label inside a control, stacked
+// meta lines. The numbered scale starts at 4 and these are not steps of it.
+export const spaceMicro = {
+  hair: 1,
+  tight: 2,
+  snug: 3,
+};
+
+export const spaceExtra = {
+  desktop: { s10: 32, s11: 40 },
+  mobile: { s10: 28, s11: 36 },
+};
+
 export const radii = {
   xs: 4,
   sm: 6,
@@ -53,11 +85,9 @@ export const glyphSizeMd = 14;
 
 export const status = {
   success: "#3fb37a",
-  warning: "#d4b443",
+  warning: "#e08a3c",
   danger: "#c14545",
 };
-
-const accent = "#b8954a";
 
 const light = {
   bg: "#eef0f2",
@@ -67,12 +97,17 @@ const light = {
   bgInput: "#ffffff",
   ink: "#0b1117",
   ink2: "#3d4955",
-  ink3: "#7c8896",
+  ink3: "#626e7d",
   ink4: "#b1bac4",
   line: "rgba(11,17,23,0.07)",
   line2: "rgba(11,17,23,0.14)",
   hover: "rgba(11,17,23,0.04)",
   selected: "rgba(11,17,23,0.06)",
+  accent: "#8a5a0a",
+  successText: "#217a45",
+  warningText: "#8a5a0a",
+  dangerText: "#b73737",
+  onDanger: "#ffffff",
 };
 
 const dark = {
@@ -83,15 +118,28 @@ const dark = {
   bgInput: "#11151a",
   ink: "#e6edf3",
   ink2: "#b1bac4",
-  ink3: "#7d8590",
+  ink3: "#828b97",
   ink4: "#484f58",
   line: "rgba(230,237,243,0.08)",
   line2: "rgba(230,237,243,0.16)",
   hover: "rgba(230,237,243,0.04)",
   selected: "rgba(230,237,243,0.07)",
+  accent: "#f0b447",
+  successText: "#70c592",
+  warningText: "#efb254",
+  dangerText: "#f08080",
+  onDanger: "#ffffff",
 };
 
 export const palettes = {
-  light: { ...light, ...status, accent },
-  dark: { ...dark, ...status, accent },
+  light: { ...light, ...status },
+  dark: { ...dark, ...status },
+};
+
+export const typography = {
+  chat: { size: "lg", leading: "relaxed" },
+  dialogTitle: { size: "xl", leading: "cozy" },
+  body: { size: "md", leading: "normal" },
+  caption: { size: "sm", leading: "cozy" },
+  metadata: { size: "xs", leading: "cozy" },
 };

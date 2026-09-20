@@ -211,7 +211,7 @@
 
 .footerKbds {
   display: flex;
-  gap: 2px;
+  gap: var(--space-tight);
 }
 
 .rowMeta {

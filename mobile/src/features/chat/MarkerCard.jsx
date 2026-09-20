@@ -1,3 +1,5 @@
+import { mixHex } from "../../../../common/color.mjs";
+import { formatCostLine } from "../../../../common/format.mjs";
 import { StyleSheet, Text, View } from 'react-native';
 import { radii, space, lineHeights, tracking } from '../../theme/tokens';
 
@@ -31,18 +33,6 @@ const S = StyleSheet.create({
   taskDot: { width: 6, height: 6, borderRadius: 3 },
 });
 
-function mixHex(hex, pct, base) {
-  const fromHex = (h) => {
-    const v = h.replace('#', '');
-    return [parseInt(v.slice(0, 2), 16), parseInt(v.slice(2, 4), 16), parseInt(v.slice(4, 6), 16)];
-  };
-  const [r1, g1, b1] = fromHex(hex);
-  const [r2, g2, b2] = fromHex(base);
-  const r = Math.round(r1 * pct + r2 * (1 - pct));
-  const g = Math.round(g1 * pct + g2 * (1 - pct));
-  const b = Math.round(b1 * pct + b2 * (1 - pct));
-  return `rgb(${r},${g},${b})`;
-}
 
 function MarkerIcon({ variant, color, stale }) {
   if (variant === 'working') {
@@ -73,17 +63,10 @@ export function MarkerCard({ variant = 'task', side = 'left', hubColor, speakerN
   const hasBody = Boolean(children);
   const compact = !title && !hasBody;
   const corner = isRight
-    ? { borderTopLeftRadius: 18, borderTopRightRadius: radii.xs, borderBottomRightRadius: 18, borderBottomLeftRadius: 18 }
-    : { borderTopLeftRadius: radii.xs, borderTopRightRadius: 18, borderBottomRightRadius: 18, borderBottomLeftRadius: 18 };
+    ? { borderTopLeftRadius: radii.bubble, borderTopRightRadius: radii.xs, borderBottomRightRadius: radii.bubble, borderBottomLeftRadius: radii.bubble }
+    : { borderTopLeftRadius: radii.xs, borderTopRightRadius: radii.bubble, borderBottomRightRadius: radii.bubble, borderBottomLeftRadius: radii.bubble };
 
-  let costStr = null;
-  const tok = typeof cost?.tokens === 'number' ? cost.tokens : 0;
-  const usd = typeof cost?.usd === 'number' ? cost.usd : 0;
-  if (tok > 0 || usd > 0) {
-    const tokFmt = tok >= 1000 ? `${(tok / 1000).toFixed(1)}K` : `${tok}`;
-    const usdFmt = usd >= 0.01 ? `$${usd.toFixed(2)}` : `$${usd.toFixed(4)}`;
-    costStr = `${tokFmt} · ${usdFmt}`;
-  }
+  const costStr = cost?.tokens > 0 || cost?.usd > 0 ? formatCostLine(cost) : null;
 
   const metaStyle = { fontFamily: fonts.monoMedium, fontSize: fontSizes.xs, lineHeight: fontSizes.xs * lineHeights.cozy, color: colors.ink3 };
 

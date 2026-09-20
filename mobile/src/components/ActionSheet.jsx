@@ -1,8 +1,9 @@
+import { sheetStyles } from './sheetStyles';
 import { Modal, Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
 import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { radii, space } from '../theme/tokens';
+import { alpha, radii, space, lineHeights, typography } from '../theme/tokens';
 
 import { usePane } from '../nav/PaneContext';
 import { useTheme } from '../theme/ThemeContext';
@@ -10,13 +11,7 @@ import { SheetClose } from './SheetClose';
 import { useExitSnapshot } from './useExitSnapshot';
 import { useSheetGesture } from './useSheetGesture';
 
-const CENTRED_DIALOG = {
-  alignSelf: 'center',
-  width: '100%',
-  maxWidth: 560,
-  borderBottomLeftRadius: radii.sheet,
-  borderBottomRightRadius: radii.sheet,
-};
+
 
 // Action list caps at 60vh, scrolls internally above the cap.
 export function ActionSheet({ open, onClose, title, subtitle, description, actions = [] }) {
@@ -26,7 +21,7 @@ export function ActionSheet({ open, onClose, title, subtitle, description, actio
   const { twoPane } = usePane();
   const { gesture, sheetStyle, backdropStyle, mounted } = useSheetGesture(open, onClose, height + 100);
   const maxListHeight = height * 0.6;
-  const dialog = twoPane ? { ...CENTRED_DIALOG, marginBottom: Math.max(insets.bottom, 24) } : null;
+  const dialog = twoPane ? { ...sheetStyles.dialog, marginBottom: Math.max(insets.bottom, 24) } : null;
   const view = useExitSnapshot(open, { title, subtitle, description, actions });
 
   return (
@@ -56,30 +51,22 @@ export function ActionSheet({ open, onClose, title, subtitle, description, actio
         >
           <GestureDetector gesture={gesture}>
             <View>
-              <View style={{ alignItems: 'center', paddingTop: space.s3 }}>
+              <View style={sheetStyles.grabberWrap}>
                 <View
-                  style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: colors.ink4, opacity: 0.6 }}
+                  style={[sheetStyles.grabber, { backgroundColor: colors.ink4 }]}
                 />
               </View>
               <View
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'flex-start',
-                  paddingLeft: space.s8,
-                  paddingRight: space.s5,
-                  paddingTop: space.s5,
-                  paddingBottom: space.s6,
-                  gap: space.s5,
-                }}
+                style={sheetStyles.header}
               >
                 <View style={{ flex: 1, gap: space.s2 }}>
                   {view.title ? (
-                    <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.lg, color: colors.ink }}>
+                    <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes[typography.dialogTitle.size], lineHeight: fontSizes[typography.dialogTitle.size] * lineHeights[typography.dialogTitle.leading], color: colors.ink }}>
                       {view.title}
                     </Text>
                   ) : null}
                   {view.subtitle ? (
-                    <Text style={{ fontFamily: fonts.monoMedium, fontSize: fontSizes.xs, color: colors.ink3 }}>
+                    <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes[typography.caption.size], color: colors.ink3 }}>
                       {view.subtitle}
                     </Text>
                   ) : null}
@@ -87,8 +74,8 @@ export function ActionSheet({ open, onClose, title, subtitle, description, actio
                     <Text
                       style={{
                         fontFamily: fonts.sans.regular,
-                        fontSize: fontSizes.sm,
-                        lineHeight: fontSizes.sm * 1.5,
+                        fontSize: fontSizes[typography.body.size],
+                        lineHeight: fontSizes[typography.body.size] * lineHeights[typography.body.leading],
                         color: colors.ink2,
                         marginTop: space.s1,
                       }}
@@ -114,7 +101,11 @@ export function ActionSheet({ open, onClose, title, subtitle, description, actio
               return (
                 <Pressable
                   key={a.id ?? i}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: !!a.disabled }}
+                  disabled={!!a.disabled}
                   onPress={() => {
+                    if (a.disabled) return;
                     onClose?.();
                     a.onPress?.();
                   }}
@@ -126,6 +117,7 @@ export function ActionSheet({ open, onClose, title, subtitle, description, actio
                     paddingHorizontal: space.s8,
                     paddingVertical: space.s6,
                     backgroundColor: pressed ? colors.selected : 'transparent',
+                    opacity: a.disabled ? alpha.disabled : 1,
                   })}
                 >
                   {a.icon ? <View style={{ width: 24 }}>{a.icon}</View> : null}
@@ -134,7 +126,7 @@ export function ActionSheet({ open, onClose, title, subtitle, description, actio
                       flex: 1,
                       fontFamily: fonts.sans.regular,
                       fontSize: fontSizes.lg,
-                      color: a.danger ? colors.danger : colors.ink,
+                      color: a.danger ? colors.dangerText : colors.ink,
                     }}
                   >
                     {a.label}

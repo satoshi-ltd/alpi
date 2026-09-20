@@ -39,7 +39,7 @@
   border-top: .5px solid var(--line);
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
-  color: var(--ink-4);
+  color: var(--ink-3);
   display: flex;
   align-items: center;
   gap: var(--space-3);
@@ -52,7 +52,7 @@
   padding: var(--space-1) var(--space-2);
   margin: calc(-1 * var(--space-1)) calc(-1 * var(--space-2));
   border-radius: var(--r-xs);
-  color: var(--ink-4);
+  color: var(--ink-3);
   cursor: pointer;
   font: inherit;
   letter-spacing: 0.01em;
@@ -281,9 +281,9 @@
 
 .scopeChipLan {
   composes: scopeChip;
-  color: var(--c-warn, var(--ink-2));
-  border-color: color-mix(in srgb, var(--c-warn, var(--ink)) 35%, transparent);
-  background: color-mix(in srgb, var(--c-warn, var(--ink)) 5%, var(--bg-pane));
+  color: var(--c-warning-text);
+  border-color: color-mix(in srgb, var(--c-warning) 35%, transparent);
+  background: color-mix(in srgb, var(--c-warning) 5%, var(--bg-pane));
 }
 
 .scopeChipConfigured {
@@ -305,7 +305,7 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
+  gap: var(--space-tight);
   padding: var(--space-2) var(--space-3);
   border-radius: var(--r-sm);
   border: 1px solid var(--line);
@@ -512,7 +512,7 @@
   font-weight: var(--fw-medium);
   letter-spacing: 0.02em;
   background: color-mix(in srgb, var(--c-warning) 18%, var(--bg-pane));
-  color: color-mix(in srgb, var(--c-warning) 80%, var(--ink));
+  color: var(--c-warning-text);
 }
 
 .draftRow {
@@ -600,7 +600,7 @@
 .error {
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
-  color: var(--c-danger);
+  color: var(--c-danger-text);
 }
 
 .muted {
@@ -661,7 +661,7 @@
 .warn {
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
-  color: var(--c-danger);
+  color: var(--c-danger-text);
   line-height: var(--lh-normal);
 }
 
@@ -814,7 +814,7 @@
 }
 
 .emailLabelHint {
-  color: var(--ink-4);
+  color: var(--ink-3);
 }
 
 .emailHostPort {
@@ -900,7 +900,7 @@
   font-size: var(--fs-xs);
   font-weight: var(--fw-medium);
   color: var(--ink-3);
-  background: var(--bg-1);
+  background: var(--hover);
   cursor: help;
 }
 .visuallyHidden {
@@ -954,7 +954,7 @@
 }
 
 .heroMetaLabel {
-  color: var(--ink-4);
+  color: var(--ink-3);
 }
 
 .heroMetaValue {
@@ -1020,7 +1020,7 @@
 .mcpTool {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-tight);
 }
 .mcpToolDesc {
   font-size: var(--fs-xs);

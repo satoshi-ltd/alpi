@@ -47,7 +47,7 @@
   width: var(--space-5);
   height: var(--space-5);
   color: var(--accent);
-  font-size: var(--space-5);
+  font-size: var(--fs-sm);
   line-height: var(--lh-tight);
   flex-shrink: 0;
 }

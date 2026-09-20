@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Btn,
+  Button,
   CheckIcon,
   ChevDownIcon,
   Dot,
@@ -131,7 +131,7 @@ export default function TasksButton({
   return (
     <span className={styles.root}>
       <Tip text={tipText} side="r">
-        <Btn variant="ghost" onClick={() => setOpen((o) => !o)} className={styles.trigger}>
+        <Button variant="ghost" onClick={() => setOpen((o) => !o)} className={styles.trigger}>
           {active ? (
             <Dot pulse color={hubColor} />
           ) : outcome ? (
@@ -149,7 +149,7 @@ export default function TasksButton({
             </Mono>
           )}
           <ChevDownIcon className={styles.chev} />
-        </Btn>
+        </Button>
       </Tip>
 
       <Popover open={open} onClose={() => setOpen(false)} width="var(--pop-lg)" align="right">

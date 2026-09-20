@@ -41,11 +41,11 @@
 }
 
 .hostOffline {
-  color: var(--c-danger);
+  color: var(--c-danger-text);
 }
 
 .hostProbing {
-  color: var(--c-warning);
+  color: var(--c-warning-text);
 }
 
 .chev {

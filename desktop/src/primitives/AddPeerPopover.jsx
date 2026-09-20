@@ -1,6 +1,6 @@
 import { useState } from "react";
 import Popover from "./Popover.jsx";
-import { ActionLink, Btn, Eyebrow, Field, Mono } from "./index.js";
+import { ActionLink, Button, Eyebrow, Field, Mono } from "./index.js";
 import styles from "./AddPeerPopover.module.css";
 
 export default function AddPeerPopover({ open, onClose, onPair }) {
@@ -23,7 +23,7 @@ export default function AddPeerPopover({ open, onClose, onPair }) {
         />
         <div className="row between">
           <ActionLink onClick={onClose}>Cancel</ActionLink>
-          <Btn
+          <Button
             variant="primary"
             disabled={!payload.trim()}
             onClick={() => {
@@ -35,7 +35,7 @@ export default function AddPeerPopover({ open, onClose, onPair }) {
             }}
           >
             Pair
-          </Btn>
+          </Button>
         </div>
       </div>
     </Popover>

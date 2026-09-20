@@ -61,6 +61,7 @@ export default function ScheduleModal({ open, onClose, profile, connectionId }) 
     if (!open || !profile) return undefined;
     genRef.current += 1;
     setJobs([]);
+    setBusy(false);
     setSelectedId(null);
     setError(null);
     setConfirm(false);

@@ -1,6 +1,7 @@
+import { scaleFontSizes } from '../theme/textScale';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 afterEach(cleanup);
 
@@ -8,13 +9,15 @@ const h = vi.hoisted(() => ({ window: { width: 834, height: 1194 }, insets: { bo
 
 vi.mock('react-native', () => {
   const View = ({ children, style, ...p }) => React.createElement('div', p, children);
-  const Text = ({ children, style, ...p }) => React.createElement('span', p, children);
-  const Pressable = ({ children, onPress, android_ripple, style, accessibilityLabel, accessibilityHint, hitSlop, ...p }) =>
+  const Text = ({ children, style, ...p }) => React.createElement('span', { ...p, 'data-text-style': JSON.stringify(style) }, children);
+  const Pressable = ({ children, onPress, android_ripple, style, accessibilityLabel, accessibilityHint, accessibilityState, accessibilityRole, disabled, hitSlop, ...p }) =>
     React.createElement(
       'button',
       {
         type: 'button',
         onClick: onPress,
+        disabled,
+        'aria-disabled': accessibilityState?.disabled,
         'aria-label': accessibilityLabel,
         'data-hint': accessibilityHint,
         'data-tap': JSON.stringify(style instanceof Function ? style({ pressed: false }) : style),
@@ -59,11 +62,11 @@ vi.mock('../theme/ThemeContext', () => ({
   useTheme: () => ({
     colors: { bgPane: '#fff', ink: '#000', ink2: '#333', ink3: '#666', ink4: '#999', line: '#ddd', danger: '#f00', selected: '#eee' },
     fonts: {
-      sans: { regular: 'Inter_400Regular', semibold: 'Inter_600SemiBold' },
-      mono: 'JetBrainsMono_400Regular',
-      monoMedium: 'JetBrainsMono_500Medium',
+      sans: { regular: 'Geist_400Regular', semibold: 'Geist_600SemiBold' },
+      mono: 'GeistMono_400Regular',
+      monoMedium: 'GeistMono_500Medium',
     },
-    fontSizes: { xs: 11, sm: 12, lg: 15 },
+    fontSizes: scaleFontSizes(h.textScale ?? 1),
   }),
 }));
 
@@ -93,6 +96,7 @@ const sheetStyleOf = (container) =>
   JSON.parse([...container.querySelectorAll('[data-style]')].at(-1).getAttribute('data-style'));
 
 beforeEach(() => {
+  h.textScale = 1;
   h.window = { width: 834, height: 1194 };
   h.insets = { bottom: 0 };
   h.mounted = null;
@@ -220,5 +224,41 @@ describe('ActionSheet exit', () => {
     h.mounted = false;
     rerender(<ActionSheet open={false} onClose={() => {}} title="@doc" actions={ACTIONS} />);
     expect(container.querySelector('[data-orientations]')).toBeNull();
+  });
+});
+
+
+describe('ActionSheet action availability', () => {
+  it('does not dismiss or invoke a disabled action', () => {
+    const onClose = vi.fn();
+    const onPress = vi.fn();
+    render(<ActionSheet open onClose={onClose} actions={[{ label: 'Delete', disabled: true, onPress }]} />);
+    const action = screen.getByRole('button', { name: 'Delete' });
+    expect(action.disabled).toBe(true);
+    expect(action.getAttribute('aria-disabled')).toBe('true');
+    fireEvent.click(action);
+    expect(onPress).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('dismisses before invoking an enabled action that may open another sheet', () => {
+    const calls = [];
+    render(<ActionSheet open onClose={() => calls.push('close')} actions={[{ label: 'Rename', onPress: () => calls.push('rename') }]} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Rename' }));
+    expect(calls).toEqual(['close', 'rename']);
+  });
+});
+
+
+describe('dialog title role', () => {
+  it('uses the same title size and scales it with the text preference', () => {
+    const { rerender } = render(<ActionSheet open onClose={() => {}} title="Preferences" />);
+    const titleStyle = () => JSON.parse(screen.getByText('Preferences').getAttribute('data-text-style'));
+    expect(titleStyle().fontSize).toBe(18);
+    expect(titleStyle().lineHeight).toBeCloseTo(23.4);
+    h.textScale = 1.3;
+    rerender(<ActionSheet open onClose={() => {}} title="Preferences" />);
+    expect(titleStyle().fontSize).toBe(23);
+    expect(titleStyle().lineHeight).toBeCloseTo(29.9);
   });
 });

@@ -1,3 +1,4 @@
+import { contrastText } from "../../../../common/color.mjs";
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 
@@ -203,7 +204,7 @@ function Checkbox({ checked, color, fonts }) {
       }}
     >
       {checked ? (
-        <Text style={{ fontFamily: fonts.sans.regular, color: '#fff', fontSize: fontSizes.md, lineHeight: fontSizes.md }}>✓</Text>
+        <Text style={{ fontFamily: fonts.sans.regular, color: contrastText(color), fontSize: fontSizes.md, lineHeight: fontSizes.md }}>✓</Text>
       ) : null}
     </View>
   );

@@ -16,7 +16,9 @@
   border-radius: var(--r-2xl);
   box-shadow: var(--shadow);
   width: var(--modal-w);
-  min-width: 720px;
+  min-width: 0;
+  max-width: calc(100vw - var(--space-10));
+  max-height: calc(100vh - var(--space-10));
   height: var(--modal-h);
   display: flex;
   flex-direction: column;
@@ -38,7 +40,7 @@
 }
 
 .title {
-  font-size: var(--fs-lg);
+  font-size: var(--text-dialog-title-size);
   font-weight: var(--fw-semibold);
   color: var(--ink);
 }

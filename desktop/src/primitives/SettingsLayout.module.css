@@ -85,7 +85,7 @@
 }
 
 .actionLinkDanger {
-  color: var(--c-danger);
+  color: var(--c-danger-text);
 }
 
 .actionLinkDanger:hover {
@@ -178,7 +178,7 @@
 .hexError {
   margin-top: 6px;
   font-size: var(--fs-xs);
-  color: var(--c-danger);
+  color: var(--c-danger-text);
   font-family: var(--font-mono);
 }
 

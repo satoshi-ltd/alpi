@@ -37,7 +37,7 @@ export function Row({ label, helper, value, leading, trailing, onPress, onLongPr
           style={{
             fontFamily: fonts.sans.regular,
             fontSize: fontSizes.lg,
-            color: danger ? colors.danger : colors.ink,
+            color: danger ? colors.dangerText : colors.ink,
             lineHeight: fontSizes.lg * 1.3,
           }}
         >
@@ -49,7 +49,7 @@ export function Row({ label, helper, value, leading, trailing, onPress, onLongPr
             style={{
               fontFamily: fonts.monoMedium,
               fontSize: fontSizes.xs,
-              color: colors.ink4,
+              color: colors.ink3,
             }}
           >
             {helper}

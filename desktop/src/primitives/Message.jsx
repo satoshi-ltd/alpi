@@ -95,7 +95,7 @@ function MessageImpl({
 const Message = memo(MessageImpl);
 export default Message;
 
-const DEFAULT_ACCENT_FALLBACK = "#b8954a";
+const DEFAULT_ACCENT_FALLBACK = "#f0b447";
 
 function readDefaultAccent() {
   if (typeof window === "undefined" || !document?.documentElement) {

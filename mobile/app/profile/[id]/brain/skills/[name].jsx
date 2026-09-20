@@ -110,7 +110,7 @@ export default function SkillDetail() {
               }}
               accessibilityRole="alert"
             >
-              <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.sm, color: status === 'invalid' ? colors.danger : colors.ink2 }}>
+              <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.sm, color: status === 'invalid' ? colors.dangerText : colors.ink2 }}>
                 {status === 'invalid' ? 'Invalid' : 'Inactive'}
               </Text>
               <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink3 }}>

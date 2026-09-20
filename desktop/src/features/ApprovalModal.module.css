@@ -41,10 +41,10 @@
   color: var(--ink-3);
 }
 
-.sev_caution   { color: var(--c-warning); }
-.sev_dangerous { color: var(--c-danger); }
+.sev_caution   { color: var(--c-warning-text); }
+.sev_dangerous { color: var(--c-danger-text); }
 .sev_safe      { color: var(--ink-3); }
-.alertLabel    { color: var(--c-danger); }
+.alertLabel    { color: var(--c-danger-text); }
 
 .title {
   font-family: var(--font-sans);
@@ -141,5 +141,5 @@
   margin-top: var(--space-3);
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
-  color: var(--c-danger);
+  color: var(--c-danger-text);
 }

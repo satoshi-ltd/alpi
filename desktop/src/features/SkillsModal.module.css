@@ -155,7 +155,7 @@
 .tree {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-tight);
   background: var(--bg-side);
   border-right: 0.5px solid var(--line);
   padding: var(--space-3);

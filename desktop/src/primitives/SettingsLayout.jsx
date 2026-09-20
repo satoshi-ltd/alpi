@@ -103,13 +103,13 @@ export function Popped({
 
 export function AccentPicker({ value, onChange }) {
   const [open, setOpen] = useState(false);
-  const [hex, setHex] = useState(value || "#b8954a");
+  const [hex, setHex] = useState(value || "#f0b447");
   const ref = useRef(null);
 
   useDismissOnOutside({ open, onClose: () => setOpen(false), wrapRef: ref });
 
   useEffect(() => {
-    setHex(value || "#b8954a");
+    setHex(value || "#f0b447");
   }, [value]);
 
   const isValidHex = /^#[0-9a-f]{6}$/i.test(hex);

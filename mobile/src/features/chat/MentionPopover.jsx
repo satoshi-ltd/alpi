@@ -55,7 +55,7 @@ export function MentionPopover({ candidates = [], onPick }) {
             </Text>
             {isHub ? <Pill tone="on">hub</Pill> : null}
             {profile?.model ? (
-              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4 }}>
+              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>
                 {modelLabel(profile.model)}
               </Text>
             ) : null}

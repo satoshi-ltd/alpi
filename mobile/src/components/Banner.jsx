@@ -8,11 +8,13 @@ const TONE = {
   danger: 'danger',
   warning: 'warning',
   info: 'ink3',
+  success: 'success',
 };
 
 export function Banner({ kind = 'info', children, action, onAction, pulse }) {
   const { colors, fonts, fontSizes } = useTheme();
   const tint = colors[TONE[kind]] ?? colors.ink3;
+  const textTint = colors[`${TONE[kind]}Text`] ?? colors.ink3;
   const showPulse = pulse ?? (kind === 'danger' || kind === 'warning');
   return (
     <View
@@ -38,7 +40,7 @@ export function Banner({ kind = 'info', children, action, onAction, pulse }) {
       </Text>
       {action ? (
         <Pressable onPress={onAction} hitSlop={6}>
-          <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.md, color: tint }}>
+          <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.md, color: textTint }}>
             {action}
           </Text>
         </Pressable>

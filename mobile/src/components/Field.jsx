@@ -1,5 +1,5 @@
 import { Text, TextInput, View } from 'react-native';
-import { radii, space } from '../theme/tokens';
+import { radii, space, lineHeights } from '../theme/tokens';
 
 import { Eyebrow } from './Eyebrow';
 import { useTheme } from '../theme/ThemeContext';
@@ -58,7 +58,7 @@ export function Field({
             paddingBottom: 0,
             fontFamily: mono ? fonts.mono : fonts.sans.regular,
             fontSize: mono ? fontSizes.sm : fontSizes.lg,
-            lineHeight: (mono ? fontSizes.sm : fontSizes.lg) * 1.4,
+            lineHeight: (mono ? fontSizes.sm : fontSizes.lg) * lineHeights.normal,
             color: editable ? colors.ink : colors.ink2,
             textAlignVertical: multiline ? 'top' : 'center',
           }}
@@ -66,7 +66,7 @@ export function Field({
         {rightSlot}
       </View>
       {helper ? (
-        <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4 }}>
+        <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>
           {helper}
         </Text>
       ) : null}

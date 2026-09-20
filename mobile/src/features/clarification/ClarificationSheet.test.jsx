@@ -24,8 +24,8 @@ vi.mock('../../theme/ThemeContext', async () => {
     useTheme: () => ({
       colors: { ink: '#000', ink2: '#333', ink3: '#666', line: '#ddd', bgInput: '#fafafa', danger: '#f00' },
       fonts: {
-        sans: { regular: 'Inter_400Regular', medium: 'Inter_500Medium', bold: 'Inter_700Bold' },
-        mono: 'JetBrainsMono_400Regular',
+        sans: { regular: 'Geist_400Regular', medium: 'Geist_500Medium', bold: 'Geist_700Bold' },
+        mono: 'GeistMono_400Regular',
       },
       fontSizes: tokens.fontSizes,
     }),
@@ -58,13 +58,13 @@ describe('ClarificationSheet typography', () => {
     render(<ClarificationSheet />);
     expect(screen.queryByText('✓')).toBeNull();
     fireEvent.click(screen.getByText('roma').closest('button'));
-    expect(screen.getByText('✓').getAttribute('data-font')).toBe('Inter_400Regular');
+    expect(screen.getByText('✓').getAttribute('data-font')).toBe('Geist_400Regular');
   });
 
   it('keeps the question and its choices on their own tokens', () => {
     render(<ClarificationSheet />);
-    expect(screen.getByText('Which hotels ship first?').getAttribute('data-font')).toBe('Inter_700Bold');
-    expect(screen.getByText('lisboa').getAttribute('data-font')).toBe('Inter_400Regular');
+    expect(screen.getByText('Which hotels ship first?').getAttribute('data-font')).toBe('Geist_700Bold');
+    expect(screen.getByText('lisboa').getAttribute('data-font')).toBe('Geist_400Regular');
   });
 });
 

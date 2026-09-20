@@ -57,8 +57,8 @@ vi.mock('../src/theme/ThemeContext', () => ({
       line: '#eee', selected: '#eee', danger: '#f00', warning: '#fa0', success: '#0a0',
     },
     fonts: {
-      sans: { regular: 'Inter_400Regular', medium: 'Inter_500Medium', semibold: 'Inter_600SemiBold' },
-      mono: 'JetBrainsMono_400Regular', monoMedium: 'JetBrainsMono_500Medium', monoSemibold: 'JetBrainsMono_600SemiBold',
+      sans: { regular: 'Geist_400Regular', medium: 'Geist_500Medium', semibold: 'Geist_600SemiBold' },
+      mono: 'GeistMono_400Regular', monoMedium: 'GeistMono_500Medium', monoSemibold: 'GeistMono_600SemiBold',
     },
     fontSizes: { xxs: 9, xs: 11, sm: 12, md: 14, lg: 15, xl: 18, '2xl': 22 },
     lineHeights: { normal: 1.5 },

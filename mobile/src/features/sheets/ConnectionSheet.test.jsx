@@ -18,7 +18,7 @@ vi.mock('react-native', () => {
 vi.mock('../../theme/ThemeContext', () => ({
   useTheme: () => ({
     colors: { ink: '#000', ink2: '#333', ink3: '#666', success: '#0a0', warning: '#c80', danger: '#c00' },
-    fonts: { sans: { regular: 'Inter_400Regular' }, mono: 'JetBrainsMono_400Regular' },
+    fonts: { sans: { regular: 'Geist_400Regular' }, mono: 'GeistMono_400Regular' },
     fontSizes: { xs: 11 },
   }),
 }));
@@ -59,6 +59,6 @@ import { ConnectionSheet } from './ConnectionSheet';
 describe('ConnectionSheet typography', () => {
   it('renders the unpaired notice in a theme font', () => {
     render(<ConnectionSheet open onClose={() => {}} />);
-    expect(screen.getByText('Not paired yet — tap below to scan a QR.').getAttribute('data-font')).toBe('Inter_400Regular');
+    expect(screen.getByText('Not paired yet — tap below to scan a QR.').getAttribute('data-font')).toBe('Geist_400Regular');
   });
 });

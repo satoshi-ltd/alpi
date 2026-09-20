@@ -3,7 +3,7 @@ import { profileLabel } from "../../lib/profile-display.js";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import {
-  Btn,
+  Button,
   Chip,
   ConfirmDelete,
   Dropdown,
@@ -250,14 +250,14 @@ export default function ManageSessionsModal({
 
   const headerActions = selectedCount === 0 ? null : (
     <>
-      <Btn variant="ghost" onClick={clearSelection}>Cancel</Btn>
-      <Btn
+      <Button variant="ghost" onClick={clearSelection}>Cancel</Button>
+      <Button
         variant="danger"
         onClick={() => setConfirmOpen(true)}
         disabled={deleting}
       >
         {deleting ? "Deleting…" : `Delete ${selectedCount}`}
-      </Btn>
+      </Button>
     </>
   );
 

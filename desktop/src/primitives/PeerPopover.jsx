@@ -1,3 +1,4 @@
+import Button from "./Button.jsx";
 // PeerPopover — peers list + drill-in detail in a single popover.
 import { useState } from "react";
 import Popover from "./Popover.jsx";
@@ -113,9 +114,9 @@ export default function PeerPopover({
             <div className={styles.footer}>
               <ActionLink onClick={onAdd}>+ Add peer</ActionLink>
               {triggerOnAdd && (
-                <Btn variant="ghost" onClick={triggerOnAdd}>
+                <Button variant="ghost" onClick={triggerOnAdd}>
                   Browse hub
-                </Btn>
+                </Button>
               )}
             </div>
           )}

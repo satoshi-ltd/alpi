@@ -6,7 +6,6 @@ export { default as AlpiSilhouette } from "./AlpiSilhouette.jsx";
 export { default as Banner } from "./Banner.jsx";
 export { default as BootSplash } from "./BootSplash.jsx";
 export { default as Bar } from "./Bar.jsx";
-export { default as Btn } from "./Btn.jsx";
 export { default as BudgetEdit } from "./BudgetEdit.jsx";
 export { default as Button } from "./Button.jsx";
 export { default as BrowseModal } from "./BrowseModal.jsx";

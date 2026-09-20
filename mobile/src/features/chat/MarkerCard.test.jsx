@@ -32,9 +32,9 @@ vi.mock('../../theme/ThemeContext', () => ({
   useTheme: () => ({
     colors: { ink: '#000000', ink3: '#666666', bgPane: '#ffffff', warning: '#cc8800' },
     fonts: {
-      sans: { regular: 'Inter_400Regular', semibold: 'Inter_600SemiBold' },
-      monoMedium: 'JetBrainsMono_500Medium',
-      monoSemibold: 'JetBrainsMono_600SemiBold',
+      sans: { regular: 'Geist_400Regular', semibold: 'Geist_600SemiBold' },
+      monoMedium: 'GeistMono_500Medium',
+      monoSemibold: 'GeistMono_600SemiBold',
     },
     shadow: { sm: { shadowOpacity: 0.06, shadowRadius: 2, elevation: 1 } },
     fontSizes: { md: 14, xs: 11 },
@@ -70,9 +70,9 @@ describe('MarkerCard typography', () => {
 
   it('keeps eyebrow, meta and title on their own tokens', () => {
     render(<MarkerCard variant="task" hubColor="#0af0af" seq={7} speakerName="scout" title="collect the brief" />);
-    expect(screen.getByText('TASK').getAttribute('data-font')).toBe('JetBrainsMono_600SemiBold');
-    expect(screen.getByText('#7').getAttribute('data-font')).toBe('JetBrainsMono_500Medium');
-    expect(screen.getByText('collect the brief').getAttribute('data-font')).toBe('Inter_600SemiBold');
+    expect(screen.getByText('TASK').getAttribute('data-font')).toBe('GeistMono_600SemiBold');
+    expect(screen.getByText('#7').getAttribute('data-font')).toBe('GeistMono_500Medium');
+    expect(screen.getByText('collect the brief').getAttribute('data-font')).toBe('Geist_600SemiBold');
   });
 });
 

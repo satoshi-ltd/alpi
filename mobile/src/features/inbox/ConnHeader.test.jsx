@@ -42,7 +42,7 @@ vi.mock('../../theme/ThemeContext', () => ({
       warning: '#ff0',
       danger: '#f00',
     },
-    fonts: { sans: { semibold: 'Inter_600SemiBold' }, mono: 'JetBrainsMono_400Regular' },
+    fonts: { sans: { semibold: 'Geist_600SemiBold' }, mono: 'GeistMono_400Regular' },
     fontSizes: { xxs: 9, xs: 11, base: 13 },
     mobile: { tap: 44 },
   }),

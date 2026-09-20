@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react";
+import { OverlayScope, useOverlay } from "../hooks/useOverlay.js";
+import { useId, useRef } from "react";
 import { createPortal } from "react-dom";
 
 import IconBtn from "./IconBtn.jsx";
@@ -10,6 +11,7 @@ export default function Modal({
   open,
   onClose,
   title,
+  "aria-label": ariaLabel,
   width,
   closeOnBackdrop = true,
   closeButton = false,
@@ -19,36 +21,8 @@ export default function Modal({
   const controlled = open !== undefined;
   const visible = !controlled || open;
 
-  useEffect(() => {
-    if (!visible) return undefined;
-    function onKey(e) {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        onClose?.();
-      }
-    }
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [visible, onClose]);
-
-  const openerRef = useRef(null);
-  const prevVisibleRef = useRef(false);
-  if (visible && !prevVisibleRef.current) {
-    openerRef.current = typeof document !== "undefined" ? document.activeElement : null;
-  }
-  prevVisibleRef.current = visible;
-
-  useEffect(() => {
-    if (!visible) return undefined;
-    return () => {
-      const opener = openerRef.current;
-      setTimeout(() => {
-        if (opener && document.contains(opener)) opener.focus?.();
-      }, 0);
-    };
-  }, [visible]);
+  const titleId = useId();
+  const isTop = useOverlay({ open: visible, onClose, ref: wrapRef, modal: true });
 
   if (!visible) return null;
 
@@ -56,17 +30,22 @@ export default function Modal({
     <div
       className={`anim-overlay ${styles.backdrop}`}
       onMouseDown={(e) => {
-        if (closeOnBackdrop && e.target === e.currentTarget) onClose?.();
+        if (isTop() && closeOnBackdrop && e.target === e.currentTarget) onClose?.();
       }}
     >
       <div
         ref={wrapRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={title ? titleId : undefined}
+        aria-label={ariaLabel}
+        tabIndex={-1}
         className={`anim-dialog ${styles.modal}`}
-        style={width ? { width, minWidth: width, maxWidth: width } : undefined}
+        style={width ? { "--dialog-width": typeof width === "number" ? `${width}px` : width } : undefined}
       >
         {(title || closeButton) && (
           <div className={styles.titleRow}>
-            {title && <div className={styles.title}>{title}</div>}
+            {title && <div id={titleId} className={styles.title}>{title}</div>}
             {closeButton && (
               <Tip text="Close" side="down">
                 <IconBtn
@@ -85,5 +64,5 @@ export default function Modal({
     </div>
   );
 
-  return createPortal(body, document.body);
+  return createPortal(<OverlayScope overlay={isTop}>{body}</OverlayScope>, document.body);
 }

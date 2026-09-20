@@ -1,3 +1,5 @@
+import { navigateMenu } from "../lib/menuNavigation.js";
+import { OverlayScope, useOverlay } from "../hooks/useOverlay.js";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import styles from "./ContextMenu.module.css";
@@ -29,6 +31,7 @@ export function ContextMenuMount() {
 export default function ContextMenu({ x, y, items, onClose }) {
   const ref = useRef(null);
   const [pos, setPos] = useState({ x, y });
+  const isTop = useOverlay({ open: true, onClose, ref });
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -40,58 +43,61 @@ export default function ContextMenu({ x, y, items, onClose }) {
     let ny = y;
     if (x + r.width + 8 > vw) nx = vw - r.width - 8;
     if (y + r.height + 8 > vh) ny = vh - r.height - 8;
-    setPos({ x: nx, y: ny });
+    setPos({ x: Math.max(8, nx), y: Math.max(8, ny) });
   }, [x, y]);
 
   useEffect(() => {
+    ref.current?.querySelector("button:not(:disabled)")?.focus();
+  }, []);
+
+  useEffect(() => {
     function onDoc(e) {
-      if (!ref.current?.contains(e.target)) onClose();
-    }
-    function onKey(e) {
-      if (e.key === "Escape") onClose();
+      if (isTop() && !ref.current?.contains(e.target)) onClose();
     }
     document.addEventListener("mousedown", onDoc);
-    document.addEventListener("keydown", onKey);
     return () => {
       document.removeEventListener("mousedown", onDoc);
-      document.removeEventListener("keydown", onKey);
     };
   }, [onClose]);
 
   return createPortal(
-    <div
-      ref={ref}
-      className={`anim-pop ${styles.root}`}
-      role="menu"
-      style={{ top: pos.y, left: pos.x }}
-    >
-      {items.map((it, i) => {
-        if (it.kind === "separator") {
-          return <div key={`sep-${i}`} role="separator" className={styles.sep} />;
-        }
-        const danger = it.kind === "danger";
-        return (
-          <button
-            key={it.label}
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              it.onClick?.();
-              onClose();
-            }}
-            className={`row ${styles.item} ${danger ? styles.itemDanger : ""}`}
-          >
-            <span className={`${styles.icon} ${danger ? styles.iconDanger : ""}`}>
-              {it.icon}
-            </span>
-            <span className={styles.label}>{it.label}</span>
-            {it.shortcut && (
-              <span className={`mono ${styles.shortcut}`}>{it.shortcut}</span>
-            )}
-          </button>
-        );
-      })}
-    </div>,
+    <OverlayScope overlay={isTop}>
+      <div
+        ref={ref}
+        className={`anim-pop ${styles.root}`}
+        role="menu"
+        onKeyDown={(event) => navigateMenu(event, ref.current)}
+        style={{ top: pos.y, left: pos.x }}
+      >
+        {items.map((it, i) => {
+          if (it.kind === "separator") {
+            return <div key={`sep-${i}`} role="separator" className={styles.sep} />;
+          }
+          const danger = it.kind === "danger";
+          return (
+            <button
+              key={it.label}
+              type="button"
+              role="menuitem"
+              disabled={it.disabled}
+              onClick={() => {
+                onClose();
+                it.onClick?.();
+              }}
+              className={`row ${styles.item} ${danger ? styles.itemDanger : ""}`}
+            >
+              <span className={`${styles.icon} ${danger ? styles.iconDanger : ""}`}>
+                {it.icon}
+              </span>
+              <span className={styles.label}>{it.label}</span>
+              {it.shortcut && (
+                <span className={`mono ${styles.shortcut}`}>{it.shortcut}</span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </OverlayScope>,
     document.body,
   );
 }

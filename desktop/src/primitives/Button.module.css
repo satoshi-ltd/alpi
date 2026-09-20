@@ -13,6 +13,7 @@
   font-size: var(--fs-base);
   font-weight: var(--fw-medium);
   line-height: var(--lh-tight);
+  white-space: nowrap;
   cursor: pointer;
   transition: background var(--dur-1) var(--ease),
     color var(--dur-1) var(--ease),
@@ -25,7 +26,8 @@
   cursor: not-allowed;
 }
 
-.button:focus-visible {
+.button:focus-visible,
+.button[aria-expanded="true"] {
   outline: 2px solid color-mix(in srgb, var(--ink) 45%, transparent);
   outline-offset: 2px;
 }
@@ -47,10 +49,6 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-}
-
-.label {
-  white-space: nowrap;
 }
 
 .withLabel {
@@ -86,14 +84,14 @@
   background: color-mix(in srgb, var(--ink) 85%, transparent);
 }
 
-.danger {
-  color: var(--c-danger);
+.danger-ghost {
+  color: var(--c-danger-text);
 }
 
-.danger.active,
-.danger:not(:disabled):hover {
+.danger-ghost.active,
+.danger-ghost:not(:disabled):hover {
   background: color-mix(in srgb, var(--c-danger) 18%, transparent);
-  color: var(--c-danger);
+  color: var(--c-danger-text);
 }
 
 .sm {
@@ -156,12 +154,32 @@
   width: var(--ctrl-lg);
 }
 
-.accent {
-  background: var(--accent);
-  color: #fff;
+.secondary {
+  background: var(--hover);
+  color: var(--ink);
 }
 
-.accent:not(:disabled).active,
-.accent:not(:disabled):hover {
-  background: color-mix(in srgb, var(--accent) 88%, var(--ink));
+.secondary:not(:disabled):hover {
+  background: var(--line);
+}
+
+.secondary:not(:disabled):active {
+  background: color-mix(in srgb, var(--ink) 10%, var(--hover));
+}
+
+.danger {
+  background: var(--c-danger);
+  color: var(--on-danger);
+}
+
+.danger:not(:disabled):hover {
+  background: color-mix(in srgb, var(--c-danger) 88%, black);
+}
+
+.danger:not(:disabled):active {
+  background: color-mix(in srgb, var(--c-danger) 80%, transparent);
+}
+
+.fullWidth {
+  width: 100%;
 }

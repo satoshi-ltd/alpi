@@ -1,3 +1,4 @@
+import Button from "./Button.jsx";
 import { useEffect, useRef, useState } from "react";
 
 import { useDismissOnOutside } from "../hooks/useDismissOnOutside.js";
@@ -35,9 +36,10 @@ export default function ModelPicker({
         text={picked}
         side="up"
       >
-        <button
+        <Button
           type="button"
-          className={`btn btn-ghost ${styles.modelPickerTrigger} ${variant === "field" ? styles.modelPickerTriggerField : ""}`.trim()}
+          variant="ghost"
+          className={`${styles.modelPickerTrigger} ${variant === "field" ? styles.modelPickerTriggerField : ""}`.trim()}
           onClick={() => setOpen((o) => !o)}
           aria-expanded={open}
         >
@@ -48,7 +50,7 @@ export default function ModelPicker({
           />
           <span className={styles.modelPickerLabel}>{label}</span>
           <I.ChevDown style={{ width: 12, height: 12 }} />
-        </button>
+        </Button>
       </Tip>
       {open && (
         <div

@@ -89,7 +89,7 @@ export default function EmailConfig() {
               onPress={() => setConfirmRemove(true)}
               style={{ alignSelf: 'flex-start', paddingVertical: space.s4 }}
             >
-              <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.md, color: colors.danger }}>
+              <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.md, color: colors.dangerText }}>
                 Remove account
               </Text>
             </Pressable>

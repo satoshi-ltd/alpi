@@ -14,6 +14,33 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.4.10 — 2026-09-20 — readable status, one palette with the desktop
+
+- **The accent is the brand's amber.** `#f0b447` in dark, darkened to `#8a5a0a` in light.
+  Mobile no longer darkens it further on its own — the shared value already clears contrast
+  on the light ground, so there is one accent across both apps again. The greys, grounds,
+  lines and splash screens are exactly the values they were.
+- **Your own messages are legible whatever colour the profile is.** They were a solid fill
+  in the profile's accent with white text, which a gold or pale accent made hard to read.
+  They now sit on a 12% tint of that accent with normal text, so the profile still colours
+  the message and the message still reads. Buttons, the send control and selected
+  clarification checks pick a foreground that contrasts with whatever accent they are given.
+- **Status labels stopped borrowing the colour of status dots.** A dot and a label do not
+  need the same contrast; success, warning and danger each gained a text tone that clears
+  4.5:1 in both themes, while the dots and tints keep the colour they had.
+- **Chat text matches the desktop app.** Same base size and line height for both your
+  messages and the agent's, and the same title size across sheets, action sheets and
+  confirmations. Sizes still come from your text-size preference, so larger text keeps
+  working.
+- **The text is Geist and Geist Mono, and the app loads four fewer font faces.** It was
+  loading Inter, Geist and JetBrains Mono at startup and drawing only two of the three.
+  It now loads the seven it uses, and the pair shares one set of vertical metrics.
+- **The home-screen icon is untouched.** The palette applies inside the app; the icon stays
+  a black alpaca on white.
+- Pipeline runs shown in the app carry their spend, with no change here: alpi 0.15.0 puts
+  it in the same payload the app already reads.
+  Client-only change: the minimum compatible alpi is unchanged.
+
 ## v0.4.9 — 2026-09-15 — a throttled connection says so
 
 - **A daemon that throttles this phone's IP is shown as a temporary block, not as

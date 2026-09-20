@@ -106,7 +106,7 @@
   align-items: flex-start;
   min-width: 0;
   flex: 1;
-  gap: 1px;
+  gap: var(--space-hair);
 }
 
 .labelStack .label {
@@ -245,7 +245,8 @@
   transition: background var(--dur-1) var(--ease);
 }
 
-.row:not(:disabled):hover {
+.row:not(:disabled):hover,
+.row:focus-visible {
   background: var(--hover);
 }
 

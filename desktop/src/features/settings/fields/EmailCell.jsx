@@ -10,7 +10,6 @@ import Dot from "../../../primitives/Dot.jsx";
 import Eyebrow from "../../../primitives/Eyebrow.jsx";
 import Modal from "../../../primitives/Modal.jsx";
 import { useNotify } from "../../../primitives/Notification.jsx";
-import { Btn } from "../../../primitives/index.js";
 import Field from "../../../primitives/Field.jsx";
 import { ConfirmDeleteAction } from "../../../primitives/index.js";
 import styles from "../Settings.module.css";
@@ -330,15 +329,15 @@ function AddAccountModal({ profile, connectionId = null, onClose, onSaved }) {
         : <GmailFields values={values} set={set} />}
       <div className={styles.popoverFooter}>
         <span className={styles.popoverFooterRight}>
-          <Btn variant="ghost" onClick={onClose} disabled={busy}>Cancel</Btn>
+          <Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
           {type === "imap" ? (
-            <Btn variant="primary" onClick={addImap} disabled={!canSubmit}>
+            <Button variant="primary" onClick={addImap} disabled={!canSubmit}>
               {busy ? "…" : "Add account"}
-            </Btn>
+            </Button>
           ) : (
-            <Btn variant="primary" onClick={authorizeGmail} disabled={!canSubmit}>
+            <Button variant="primary" onClick={authorizeGmail} disabled={!canSubmit}>
               {busy ? "…" : "Authorize"}
-            </Btn>
+            </Button>
           )}
         </span>
       </div>
@@ -516,17 +515,17 @@ function EmailEditorModal({ profile, account, connectionId = null, onClose, onSa
           onConfirm={remove}
         />
         <span className={styles.popoverFooterRight}>
-          <Btn
+          <Button
             variant="ghost"
             onClick={test}
             disabled={busy || testing || values === null}
           >
             {testing ? "Testing…" : "Test connection"}
-          </Btn>
-          <Btn variant="ghost" onClick={onClose} disabled={busy}>Cancel</Btn>
-          <Btn variant="primary" onClick={save} disabled={busy || values === null}>
+          </Button>
+          <Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button variant="primary" onClick={save} disabled={busy || values === null}>
             {busy ? "…" : "Save"}
-          </Btn>
+          </Button>
         </span>
       </div>
     </Modal>

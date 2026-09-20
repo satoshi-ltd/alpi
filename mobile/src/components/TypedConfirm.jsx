@@ -6,7 +6,7 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
-import { radii, space } from '../theme/tokens';
+import { radii, space, lineHeights, typography } from '../theme/tokens';
 
 import { useTheme } from '../theme/ThemeContext';
 import { Button } from './Button';
@@ -131,9 +131,9 @@ export function TypedConfirm({
           <Text
             style={{
               fontFamily: fonts.sans.semibold,
-              fontSize: fontSizes.xl,
-              color: colors.danger,
-              letterSpacing: -0.01 * fontSizes.xl,
+              fontSize: fontSizes[typography.dialogTitle.size],
+              color: colors.dangerText,
+              letterSpacing: -0.01 * fontSizes[typography.dialogTitle.size],
             }}
           >
             {view.title}
@@ -143,7 +143,7 @@ export function TypedConfirm({
               fontFamily: fonts.sans.regular,
               fontSize: fontSizes.md,
               color: colors.ink2,
-              lineHeight: fontSizes.md * 1.55,
+              lineHeight: fontSizes[typography.body.size] * lineHeights[typography.body.leading],
             }}
           >
             {view.body}

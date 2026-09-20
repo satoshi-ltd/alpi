@@ -35,8 +35,8 @@
 
 .t_keyword { color: var(--accent); }
 .t_decorator { color: var(--accent); }
-.t_string { color: var(--c-success); }
-.t_number { color: var(--c-warning); }
+.t_string { color: var(--c-success-text); }
+.t_number { color: var(--c-warning-text); }
 .t_comment { color: var(--ink-4); font-style: italic; }
 .t_def { color: var(--ink); font-weight: var(--fw-semibold); }
 .t_builtin { color: var(--ink-2); }

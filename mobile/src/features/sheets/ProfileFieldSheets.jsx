@@ -285,7 +285,7 @@ export function ModelSheet({
               {ollamaErrors.map((e) => (
                 <Text
                   key={e.name}
-                  style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.danger, lineHeight: fontSizes.xs * 1.5 }}
+                  style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.dangerText, lineHeight: fontSizes.xs * 1.5 }}
                 >
                   ollama/{e.name} · {e.url} — {e.detail}
                 </Text>
@@ -331,7 +331,7 @@ export function ModelSheet({
                   lineHeight: fontSizes.xs * 1.5,
                 }}
               >
-                <Text style={{ color: colors.danger }}>ollama/{e.name}</Text> · {e.url} — {e.detail}
+                <Text style={{ color: colors.dangerText }}>ollama/{e.name}</Text> · {e.url} — {e.detail}
               </Text>
             ))}
           </View>

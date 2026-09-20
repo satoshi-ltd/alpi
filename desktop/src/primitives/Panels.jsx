@@ -1,3 +1,5 @@
+import Button from "./Button.jsx";
+import { OverlayScope, useOverlay } from "../hooks/useOverlay.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { I } from "./icons.jsx";
@@ -5,27 +7,25 @@ import Tip from "./Tip.jsx";
 import styles from "./Panels.module.css";
 
 export function Scrim({ onClose, children, align = "flex-start", top = 96, dismissable = true }) {
-  useEffect(() => {
-    if (!dismissable) return;
-    const onKey = (e) => {
-      if (e.key === "Escape") onClose?.();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, dismissable]);
+  const ref = useRef(null);
+  const isTop = useOverlay({ open: true, onClose: dismissable ? onClose : undefined, ref, modal: true });
   return createPortal(
-    <div
-      className={`anim-fade ${styles.scrim}`}
-      onClick={(e) => {
-        if (dismissable && e.target === e.currentTarget) onClose();
-      }}
-      style={{
-        alignItems: align,
-        padding: `${top}px 60px 60px`,
-      }}
-    >
-      {children}
-    </div>,
+    <OverlayScope overlay={isTop}>
+      <div
+        ref={ref}
+        tabIndex={-1}
+        className={`anim-fade ${styles.scrim}`}
+        onClick={(e) => {
+          if (isTop() && dismissable && e.target === e.currentTarget) onClose();
+        }}
+        style={{
+          alignItems: align,
+          padding: `${top}px 60px 60px`,
+        }}
+      >
+        {children}
+      </div>
+    </OverlayScope>,
     document.body,
   );
 }
@@ -176,14 +176,15 @@ export function ConnectionPanel({
               onChange={(e) => setPairing(e.target.value)}
               placeholder="alpi://device?url=wss%3A%2F%2Fclient.example.com&name=home&pairing_token=…"
             />
-            <button
+            <Button
               type="button"
-              className={`btn btn-primary ${pairing.startsWith("alpi://") ? "" : styles.pairBtnDisabled}`}
+              variant="primary"
+          className={pairing.startsWith("alpi://") ? "" : styles.pairBtnDisabled}
               disabled={!pairing.startsWith("alpi://") || pairBusy}
               onClick={submitPair}
             >
               {pairBusy ? "Pairing…" : "Pair"}
-            </button>
+            </Button>
           </div>
         </div>
       </PanelShell>
@@ -229,7 +230,7 @@ export function Palette({ open, onClose, groups = [] }) {
   }
 
   function onKey(e) {
-    if (e.key === "ArrowDown" || e.key === "Tab") {
+    if (e.key === "ArrowDown" || (!e.shiftKey && e.key === "Tab")) {
       e.preventDefault();
       setIdx((i) => Math.min(actionableItems.length - 1, i + 1));
     } else if (e.key === "ArrowUp" || (e.shiftKey && e.key === "Tab")) {
@@ -238,8 +239,6 @@ export function Palette({ open, onClose, groups = [] }) {
     } else if (e.key === "Enter") {
       e.preventDefault();
       run(actionableItems[idx]);
-    } else if (e.key === "Escape") {
-      onClose?.();
     }
   }
 

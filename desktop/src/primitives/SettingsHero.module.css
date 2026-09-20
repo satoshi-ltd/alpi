@@ -22,7 +22,7 @@
 }
 
 .actions {
-  gap: 2px;
+  gap: var(--space-tight);
   flex-shrink: 0;
 }
 

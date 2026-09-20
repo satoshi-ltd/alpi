@@ -37,7 +37,7 @@ vi.mock('react-native-safe-area-context', () => ({
 vi.mock('../src/theme/ThemeContext', () => ({
   useTheme: () => ({
     colors: { bg: '#fff', ink: '#000', ink3: '#666', danger: '#f00', selected: '#eee' },
-    fonts: { sans: { regular: 'Inter_400Regular', semibold: 'Inter_600SemiBold' }, mono: 'JetBrainsMono_400Regular' },
+    fonts: { sans: { regular: 'Geist_400Regular', semibold: 'Geist_600SemiBold' }, mono: 'GeistMono_400Regular' },
     fontSizes: { xs: 11, sm: 12, lg: 15 },
   }),
 }));
@@ -79,28 +79,28 @@ describe('MCP server sheet typography', () => {
   it('renders the handshake notice in a theme font', () => {
     h.call.mockReturnValue(new Promise(() => {}));
     openServer();
-    expect(screen.getByText('handshaking with server…').getAttribute('data-font')).toBe('Inter_400Regular');
+    expect(screen.getByText('handshaking with server…').getAttribute('data-font')).toBe('Geist_400Regular');
   });
 
   it('renders the handshake failure in a theme font', async () => {
     h.call.mockRejectedValue(new Error('spawn failed'));
     openServer();
     await waitFor(() => expect(screen.getByText(/spawn failed/)).toBeTruthy());
-    expect(screen.getByText(/spawn failed/).getAttribute('data-font')).toBe('Inter_400Regular');
+    expect(screen.getByText(/spawn failed/).getAttribute('data-font')).toBe('Geist_400Regular');
   });
 
   it('renders the empty-tools notice in a theme font', async () => {
     h.call.mockResolvedValue({ tools: [] });
     openServer();
     await waitFor(() => expect(screen.getByText('no tools')).toBeTruthy());
-    expect(screen.getByText('no tools').getAttribute('data-font')).toBe('Inter_400Regular');
+    expect(screen.getByText('no tools').getAttribute('data-font')).toBe('Geist_400Regular');
   });
 
   it('renders a tool name in mono and its description in the sans token', async () => {
     h.call.mockResolvedValue({ tools: [{ name: 'search', description: 'find a page' }] });
     openServer();
     await waitFor(() => expect(screen.getByText('find a page')).toBeTruthy());
-    expect(screen.getByText('search').getAttribute('data-font')).toBe('JetBrainsMono_400Regular');
-    expect(screen.getByText('find a page').getAttribute('data-font')).toBe('Inter_400Regular');
+    expect(screen.getByText('search').getAttribute('data-font')).toBe('GeistMono_400Regular');
+    expect(screen.getByText('find a page').getAttribute('data-font')).toBe('Geist_400Regular');
   });
 });

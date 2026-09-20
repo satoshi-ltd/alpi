@@ -2,6 +2,8 @@
 // Build script for the alpi site. Zero runtime dependencies.
 // Reads docs at HEAD from the repo and bakes a static site into site/dist/.
 
+import { ALPI_PATHS } from '../../common/alpiMark.mjs';
+import { ICONS } from '../../common/iconPaths.mjs';
 import { readFileSync, writeFileSync, mkdirSync, rmSync, readdirSync, copyFileSync, existsSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -225,8 +227,29 @@ function renderJsonLd({ kind, title, description, canonical, date }) {
 }
 
 // ── alpi logo (llama + wordmark, inlined into the nav) ─────────────────────
+// The alpaca geometry has ONE source: common/alpiMark.mjs, the same module both apps
+// render. Written into dist so the favicon link resolves to a real file.
+const ALPI_ICON = 'alpi-icon.svg';
+function alpiIconSvg() {
+  const paths = ALPI_PATHS.map((d) => `<path d="${d}"/>`).join('');
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="alpi">`
+    + `<rect x="8" y="8" width="496" height="496" rx="116" fill="#f0b447"/>`
+    + `<g fill="#141006" transform="translate(97.70 40.61) scale(0.37072)">${paths}</g></svg>`;
+}
+
+// Same lucide source the desktop app renders, so the toggle can never drift from it.
+function lucide(name, className) {
+  const body = ICONS[name]
+    .map(([tag, attrs]) => `<${tag} ${Object.entries(attrs).map(([k, v]) => `${k}="${v}"`).join(' ')}/>`)
+    .join('');
+  return `<svg class="${className}" viewBox="0 0 24 24" fill="none" stroke="currentColor" `
+    + `stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
+}
+
 function inlineLogoPart(fileName, className, attrs = '') {
-  const src = readFileSync(join(SITE, 'assets', fileName), 'utf8');
+  const src = fileName === ALPI_ICON
+    ? alpiIconSvg()
+    : readFileSync(join(SITE, 'assets', fileName), 'utf8');
   return src
     .replace(/<\?xml[^?]*\?>\s*/i, '')
     .replace(/<svg\b/i, `<svg class="${className}" ${attrs} aria-hidden="true" focusable="false"`)
@@ -442,7 +465,7 @@ function renderFooter(base = '') {
         <h5>${head}</h5>
         <ul>${links.map(([h, l]) => `<li><a href="${abs(h)}">${l}</a></li>`).join('')}</ul>
       </div>`).join('\n      ');
-  return `${FOOTER_CSS}<button class="theme-btn" type="button" aria-label="Switch theme"><svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></svg></button><footer>
+  return `${FOOTER_CSS}<button class="theme-btn" type="button" aria-label="Switch theme">${lucide('sun', 'sun')}${lucide('moon', 'moon')}</button><footer>
   <div class="shell">
     <div class="row">
       ${colHtml}
@@ -816,6 +839,7 @@ ensureDir(DIST);
 
 // Assets
 copyTree(join(SITE, 'assets'), join(DIST, 'assets'));
+writeFileSync(join(DIST, 'assets', ALPI_ICON), alpiIconSvg());
 
 copyFileSync(join(TPL, 'theme.js'), join(DIST, 'theme.js'));
 

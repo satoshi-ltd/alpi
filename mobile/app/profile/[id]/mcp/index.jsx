@@ -161,7 +161,7 @@ export default function McpList() {
             <Text
               style={{
                 fontFamily: fonts.sans.regular,
-                color: colors.danger,
+                color: colors.dangerText,
                 fontSize: fontSizes.sm,
                 paddingHorizontal: space.s8,
                 paddingVertical: space.s3,

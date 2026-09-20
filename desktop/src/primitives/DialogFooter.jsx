@@ -23,11 +23,10 @@ export default function DialogFooter({
       )}
       {hasPrimary && (
         <Button
-          variant="primary"
+          variant={destructive ? "danger" : "primary"}
           onClick={onPrimary}
           disabled={primaryDisabled || primaryLoading}
           loading={primaryLoading}
-          className={destructive ? styles.destructive : ""}
         >
           {primaryLabel}
         </Button>

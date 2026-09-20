@@ -54,14 +54,14 @@ vi.mock('../../theme/ThemeContext', async () => {
       },
       fonts: {
         sans: {
-          regular: 'Inter_400Regular',
-          medium: 'Inter_500Medium',
-          semibold: 'Inter_600SemiBold',
-          bold: 'Inter_700Bold',
+          regular: 'Geist_400Regular',
+          medium: 'Geist_500Medium',
+          semibold: 'Geist_600SemiBold',
+          bold: 'Geist_700Bold',
         },
-        mono: 'JetBrainsMono_400Regular',
-        monoMedium: 'JetBrainsMono_500Medium',
-        monoSemibold: 'JetBrainsMono_600SemiBold',
+        mono: 'GeistMono_400Regular',
+        monoMedium: 'GeistMono_500Medium',
+        monoSemibold: 'GeistMono_600SemiBold',
       },
       alpha: { muted: 0.55 },
       fontSizes: tokens.fontSizes,
@@ -229,11 +229,11 @@ describe('InboxRow name weight ladder', () => {
 
   it('steps resting → selected → unread in the sidebar', () => {
     const pane = { twoPane: true, side: 'list' };
-    expect(nameFont({ item: WORKGROUP }, pane)).toBe('Inter_400Regular');
+    expect(nameFont({ item: WORKGROUP }, pane)).toBe('Geist_400Regular');
     cleanup();
-    expect(nameFont({ item: WORKGROUP, selected: true }, pane)).toBe('Inter_500Medium');
+    expect(nameFont({ item: WORKGROUP, selected: true }, pane)).toBe('Geist_500Medium');
     cleanup();
-    expect(nameFont({ item: { ...WORKGROUP, unread: true } }, pane)).toBe('Inter_600SemiBold');
+    expect(nameFont({ item: { ...WORKGROUP, unread: true } }, pane)).toBe('Geist_600SemiBold');
   });
 
   it('lifts the ink only off the resting step', () => {
@@ -248,9 +248,9 @@ describe('InboxRow name weight ladder', () => {
   });
 
   it('leaves the phone ladder as it was', () => {
-    expect(nameFont({ item: WORKGROUP })).toBe('Inter_600SemiBold');
+    expect(nameFont({ item: WORKGROUP })).toBe('Geist_600SemiBold');
     cleanup();
-    expect(nameFont({ item: { ...WORKGROUP, unread: true } })).toBe('Inter_700Bold');
+    expect(nameFont({ item: { ...WORKGROUP, unread: true } })).toBe('Geist_700Bold');
   });
 });
 
@@ -264,14 +264,14 @@ describe('InboxRow unread mark', () => {
 
   it('anchors unread at both ends — name weight on the left, timestamp on the right', () => {
     renderRow({ item: { ...WORKGROUP, unread: true } });
-    expect(styleOf(screen.getByText('alpha')).fontFamily).toBe('Inter_700Bold');
-    expect(styleOf(screen.getByText('3m')).fontFamily).toBe('JetBrainsMono_600SemiBold');
+    expect(styleOf(screen.getByText('alpha')).fontFamily).toBe('Geist_700Bold');
+    expect(styleOf(screen.getByText('3m')).fontFamily).toBe('GeistMono_600SemiBold');
     expect(styleOf(screen.getByText('3m')).color).toBe('#000');
   });
 
   it('rests the timestamp on a read row', () => {
     renderRow({ item: WORKGROUP });
-    expect(styleOf(screen.getByText('3m')).fontFamily).toBe('JetBrainsMono_500Medium');
+    expect(styleOf(screen.getByText('3m')).fontFamily).toBe('GeistMono_500Medium');
     expect(styleOf(screen.getByText('3m')).color).toBe('#666');
   });
 

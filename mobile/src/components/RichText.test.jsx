@@ -44,8 +44,8 @@ vi.mock('../theme/ThemeContext', async () => {
     useTheme: () => ({
       colors: { ink: '#000', ink2: '#333', ink3: '#666', line: '#ddd', hover: '#eee' },
       fonts: {
-        sans: { regular: 'Inter_400Regular', semibold: 'Inter_600SemiBold' },
-        mono: 'JetBrainsMono_400Regular',
+        sans: { regular: 'Geist_400Regular', semibold: 'Geist_600SemiBold' },
+        mono: 'GeistMono_400Regular',
       },
       fontSizes: tokens.fontSizes,
     }),
@@ -60,15 +60,15 @@ import { RichText } from './RichText';
 describe('RichText typography', () => {
   it('renders paragraphs, headings and list bullets in a theme font', () => {
     render(<RichText>{'# Title\n\n- first\n- second'}</RichText>);
-    expect(screen.getByText('Title').closest('[data-font]').getAttribute('data-font')).toBe('Inter_600SemiBold');
+    expect(screen.getByText('Title').closest('[data-font]').getAttribute('data-font')).toBe('Geist_600SemiBold');
     for (const bullet of screen.getAllByText('•')) {
-      expect(bullet.getAttribute('data-font')).toBe('Inter_400Regular');
+      expect(bullet.getAttribute('data-font')).toBe('Geist_400Regular');
     }
   });
 
   it('renders a quote in a theme font', () => {
     render(<RichText>{'> quoted line'}</RichText>);
-    expect(screen.getByText('quoted line').closest('[data-font]').getAttribute('data-font')).toBe('Inter_400Regular');
+    expect(screen.getByText('quoted line').closest('[data-font]').getAttribute('data-font')).toBe('Geist_400Regular');
   });
 });
 

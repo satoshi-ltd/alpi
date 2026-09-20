@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Image, Modal, Pressable, ScrollView, Text, View } from 'react-native';
-import { space, lineHeights, radii } from '../theme/tokens';
+import { space, lineHeights, radii, typography } from '../theme/tokens';
 
 import { SheetClose } from './SheetClose';
 import { segmentBlocks } from '../lib/markdownBlocks';
@@ -208,8 +208,8 @@ export function RichText({ children, color, size, imageProfile, codeColor, codeB
   const theme = useTheme();
   const { colors, fonts, fontSizes } = theme;
   const fg = color ?? colors.ink;
-  const fz = size ?? fontSizes.lg;
-  const lh = fz * 1.55;
+  const fz = size ?? fontSizes[typography.chat.size];
+  const lh = fz * lineHeights[typography.chat.leading];
   const blocks = useMemo(() => segmentBlocks(children), [children]);
   const inlineOpts = { color: fg, codeColor, codeBackground };
 

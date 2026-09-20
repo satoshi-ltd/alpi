@@ -1,9 +1,10 @@
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render } from '@testing-library/react';
-import { fontSizes, space } from '../../theme/tokens';
+import { cleanup, render, screen } from '@testing-library/react';
+import { fontSizes, space, palettes } from '../../theme/tokens';
 
-afterEach(cleanup);
+const themeState = vi.hoisted(() => ({ mode: 'light' }));
+afterEach(() => { cleanup(); themeState.mode = 'light'; });
 
 const { flatStyle } = vi.hoisted(() => ({
   flatStyle: (style) => Object.assign({}, ...[style].flat(Infinity).filter(Boolean)),
@@ -26,8 +27,8 @@ vi.mock('../../theme/ThemeContext', async () => {
   const tokens = await import('../../theme/tokens');
   return {
     useTheme: () => ({
-      colors: { ink: '#0b1117', ink3: '#7c8896', bgPane: '#ffffff' },
-      fonts: { sans: { regular: 'Inter_400Regular' }, monoMedium: 'JetBrainsMono_500Medium' },
+      colors: tokens.palettes[themeState.mode],
+      fonts: { sans: { regular: 'Geist_400Regular' }, monoMedium: 'GeistMono_500Medium' },
       fontSizes: tokens.fontSizes,
     }),
   };
@@ -36,7 +37,7 @@ vi.mock('../../theme/ThemeContext', async () => {
 vi.mock('../../components/Diamond', () => ({ Diamond: () => React.createElement('span', { 'data-diamond': 'true' }) }));
 vi.mock('./AttachmentCards', () => ({ AttachmentCards: () => React.createElement('span', { 'data-cards': 'true' }) }));
 vi.mock('../../components/RichText', () => ({
-  RichText: ({ children, size }) => React.createElement('span', { 'data-size': String(size) }, children),
+  RichText: ({ children, size, color }) => React.createElement('span', { 'data-size': String(size), 'data-color': color }, children),
 }));
 
 import { BUBBLE_MAX_PANE } from '../../lib/panes';
@@ -106,5 +107,17 @@ describe('bubble cap by pane mode', () => {
     const { container } = inTwoPane(Variant());
     expect(bubbleCap(container)).toBe(BUBBLE_MAX_PANE);
     expect(bubbleCap(container)).not.toBe(pct);
+  });
+});
+
+
+describe('user bubble palette', () => {
+  it.each([['light', 'rgb(253,246,233)'], ['dark', 'rgb(44,40,31)']])('uses a readable tint in %s', (mode, expected) => {
+    themeState.mode = mode;
+    const { container } = render(<ProfileUserMessage text="Readable message" accent="#f0b447" />);
+    const style = JSON.parse(container.querySelector('button').getAttribute('data-style'));
+    expect(style.backgroundColor).toBe(expected);
+    expect(screen.getByText('Readable message').getAttribute('data-color')).toBe(palettes[mode].ink);
+    expect(style.paddingHorizontal).toBe(space.s7);
   });
 });

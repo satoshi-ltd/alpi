@@ -19,6 +19,8 @@ const MODES = ['light', 'dark'];
 
 const MOBILE_ONLY = {
   radii: ['bubble', 'sheet'],
+  // Not mobile-only in name: desktop declares s10/s11 too, with its own values.
+  // common/tokens.mjs records both sides; this asserts mobile matches its own row.
   space: ['s10', 's11'],
 };
 
@@ -26,7 +28,6 @@ const EXPECTED_DIVERGENCES = {
   'light.bg': '#ffffff',
   'light.bgInput': '#f1f3f5',
   'dark.bgInput': '#1a1f26',
-  'light.accent': '#9c7a33',
 };
 
 function paletteMismatches() {
@@ -67,6 +68,14 @@ describe('shared design tokens', () => {
     const extra = (mine, base) => Object.keys(mine).filter((name) => !(name in base));
     expect(extra(space, shared.space).sort()).toEqual(MOBILE_ONLY.space);
     expect(extra(radii, shared.radii).sort()).toEqual(MOBILE_ONLY.radii);
+  });
+
+  it('takes its two extra spacing steps from the shared record, restated here so the record cannot vouch for itself', () => {
+    expect(shared.spaceExtra.mobile).toEqual({ s10: 28, s11: 36 });
+    for (const [name, value] of Object.entries(shared.spaceExtra.mobile)) {
+      expect(space[name], name).toBe(value);
+    }
+    expect(shared.spaceExtra.desktop).not.toEqual(shared.spaceExtra.mobile);
   });
 
   it('names the mobile-only steps so their absence from the shared module is deliberate', () => {

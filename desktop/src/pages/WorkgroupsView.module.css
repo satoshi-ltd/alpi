@@ -15,7 +15,7 @@
 .filters .filterActive { background: var(--selected); color: var(--ink); font-weight: var(--fw-medium); }
 .toolbarRight > :global(.mono) { flex-shrink: 0; font-size: var(--fs-xs); }
 .tableHead, .row { display: grid; grid-template-columns: minmax(240px, 1fr) 10.5rem 76px 112px 92px; align-items: center; gap: var(--space-5); padding: 0 var(--space-4); }
-.tableHead { min-height: 32px; color: var(--ink-4); font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; }
+.tableHead { min-height: 32px; color: var(--ink-4); font-family: var(--font-mono); font-size: var(--fs-label); text-transform: uppercase; }
 .tableHead span:nth-child(n + 3) { text-align: right; }
 .row { width: 100%; min-height: 64px; border: 0; border-bottom: .5px solid var(--line); background: transparent; color: inherit; text-align: left; cursor: pointer; }
 .row:hover { background: var(--hover); }

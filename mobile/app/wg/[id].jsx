@@ -129,7 +129,7 @@ const WgItem = memo(function WgItem({ m, hubPubkey, ownPubkey, workingStale, acc
         onLongPress={() => setActionTarget(makeTarget())}
       />
       {m.error ? (
-        <Text style={[WG_STYLES.error, { color: colors.danger, fontFamily: fonts.mono, fontSize: fontSizes.xs }]}>
+        <Text style={[WG_STYLES.error, { color: colors.dangerText, fontFamily: fonts.mono, fontSize: fontSizes.xs }]}>
           {m.error}
         </Text>
       ) : null}

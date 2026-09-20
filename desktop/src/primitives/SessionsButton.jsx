@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
-  Btn,
+  Button,
   ChevDownIcon,
   Eyebrow,
   Kbd,
@@ -122,10 +122,10 @@ export default function SessionsButton({
   return (
     <span className={styles.root}>
       <Tip text="Sessions — switch, start or browse" side="r">
-        <Btn variant="ghost" onClick={() => setOpen((o) => !o)}>
+        <Button variant="ghost" onClick={() => setOpen((o) => !o)}>
           <span>Sessions</span>
           <ChevDownIcon className={styles.chev} />
-        </Btn>
+        </Button>
       </Tip>
       <Popover open={open} onClose={() => setOpen(false)} width="var(--pop-lg)" align="right">
         <button
@@ -176,7 +176,7 @@ export default function SessionsButton({
             <Mono className={styles.popCount}>
               {sessions.length} session{sessions.length === 1 ? "" : "s"}
             </Mono>
-            <Btn
+            <Button
               variant="ghost"
               onClick={() => {
                 setOpen(false);
@@ -184,7 +184,7 @@ export default function SessionsButton({
               }}
             >
               Manage sessions →
-            </Btn>
+            </Button>
           </div>
         )}
       </Popover>

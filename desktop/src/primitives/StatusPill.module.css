@@ -12,7 +12,7 @@
 
 .on {
   background: color-mix(in srgb, var(--c-success) 14%, transparent);
-  color: color-mix(in srgb, var(--c-success) 70%, var(--ink));
+  color: var(--c-success-text);
 }
 .on .dot { background: var(--c-success); }
 
@@ -21,6 +21,6 @@
 
 .bad {
   background: color-mix(in srgb, var(--c-danger) 14%, transparent);
-  color: color-mix(in srgb, var(--c-danger) 75%, var(--ink));
+  color: var(--c-danger-text);
 }
 .bad .dot { background: var(--c-danger); }

@@ -180,7 +180,7 @@ export function PublicRouteField({ onLoadingChange = null }) {
             <span className={styles.confirmAnchor}>
               <Button
                 size="sm"
-                variant="danger"
+                variant="danger-ghost"
                 onClick={() => setConfirmRemove(true)}
                 loading={saving}
               >

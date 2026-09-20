@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useDismissOnOutside } from "../hooks/useDismissOnOutside.js";
+import Button from "../primitives/Button.jsx";
+import { useMemo, useRef, useState } from "react";
 import { Diamond, ChevDownIcon, Mono } from "../primitives/index.js";
 import ToPickerBar from "../primitives/ToPickerBar.jsx";
 import { profileLabel } from "../lib/profile-display.js";
@@ -11,21 +13,7 @@ export default function AlpiPicker({ profiles, activeAlpi, onChange, variant = "
 
   const active = profiles.find((p) => p.name === activeAlpi) ?? null;
 
-  useEffect(() => {
-    if (!open) return undefined;
-    function onDoc(e) {
-      if (!ref.current?.contains(e.target)) setOpen(false);
-    }
-    function onKey(e) {
-      if (e.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("mousedown", onDoc);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDoc);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
+  useDismissOnOutside({ open, onClose: () => setOpen(false), wrapRef: ref });
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase().trim();
@@ -48,15 +36,16 @@ export default function AlpiPicker({ profiles, activeAlpi, onChange, variant = "
           onClick={() => setOpen((o) => !o)}
         />
       ) : (
-        <button
+        <Button
           type="button"
-          className={`btn btn-ghost ${styles.trigger}`}
+          variant="ghost"
+          className={styles.trigger}
           onClick={() => setOpen((o) => !o)}
         >
           {active && <Diamond color={active.accent} />}
           <Mono>{active ? profileLabel(active.name) : "—"}</Mono>
           <ChevDownIcon style={{ width: 12, height: 12 }} />
-        </button>
+        </Button>
       )}
       {open && (
         <div className={`anim-pop ${styles.popover}`}>

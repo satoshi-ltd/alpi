@@ -1,9 +1,10 @@
+import { sheetStyles } from './sheetStyles';
 import { useEffect, useState } from 'react';
 import { Keyboard, Modal, Pressable, Text, useWindowDimensions, View } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
 import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { radii, space, lineHeights } from '../theme/tokens';
+import { radii, space, lineHeights, typography } from '../theme/tokens';
 
 import { usePane } from '../nav/PaneContext';
 import { useTheme } from '../theme/ThemeContext';
@@ -12,13 +13,7 @@ import { SheetClose } from './SheetClose';
 import { useExitSnapshot } from './useExitSnapshot';
 import { useSheetGesture } from './useSheetGesture';
 
-const CENTRED_DIALOG = {
-  alignSelf: 'center',
-  width: '100%',
-  maxWidth: 560,
-  borderBottomLeftRadius: radii.sheet,
-  borderBottomRightRadius: radii.sheet,
-};
+
 
 export function Sheet({
   open,
@@ -38,7 +33,7 @@ export function Sheet({
   const { twoPane } = usePane();
   const { gesture, sheetStyle, backdropStyle, mounted } = useSheetGesture(open, onClose, height + 100);
   const [kbHeight, setKbHeight] = useState(0);
-  const dialog = twoPane ? { ...CENTRED_DIALOG, marginBottom: Math.max(insets.bottom, 24) } : null;
+  const dialog = twoPane ? { ...sheetStyles.dialog, marginBottom: Math.max(insets.bottom, 24) } : null;
   const view = useExitSnapshot(open, {
     title,
     subtitle,
@@ -89,27 +84,13 @@ export function Sheet({
         >
           <GestureDetector gesture={gesture}>
             <View>
-              <View style={{ alignItems: 'center', paddingTop: space.s3 }}>
+              <View style={sheetStyles.grabberWrap}>
                 <View
-                  style={{
-                    width: 36,
-                    height: 4,
-                    borderRadius: 2,
-                    backgroundColor: colors.ink4,
-                    opacity: 0.6,
-                  }}
+                  style={[sheetStyles.grabber, { backgroundColor: colors.ink4 }]}
                 />
               </View>
               <View
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'flex-start',
-                  paddingLeft: space.s8,
-                  paddingRight: space.s5,
-                  paddingTop: space.s5,
-                  paddingBottom: view.hideHeader ? 0 : space.s6,
-                  gap: space.s5,
-                }}
+                style={[sheetStyles.header, view.hideHeader && { paddingBottom: 0 }]}
               >
                 <View style={{ flex: 1 }}>
                   {view.hideHeader ? null : (
@@ -117,8 +98,8 @@ export function Sheet({
                       <Text
                         style={{
                           fontFamily: fonts.sans.semibold,
-                          fontSize: fontSizes.xl,
-                          lineHeight: fontSizes.xl * lineHeights.cozy,
+                          fontSize: fontSizes[typography.dialogTitle.size],
+                          lineHeight: fontSizes[typography.dialogTitle.size] * lineHeights[typography.dialogTitle.leading],
                           letterSpacing: -0.18,
                           color: colors.ink,
                         }}

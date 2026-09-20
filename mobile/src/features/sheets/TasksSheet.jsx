@@ -27,7 +27,7 @@ function StatusIcon({ status, accent, colors, fontSizes }) {
   }
   if (status === 'blocked') {
     return (
-      <Text style={{ color: colors.danger, fontSize: fontSizes.xl, lineHeight: fontSizes.xl * lineHeights.tight, fontFamily: fonts.sans.bold }}>
+      <Text style={{ color: colors.dangerText, fontSize: fontSizes.xl, lineHeight: fontSizes.xl * lineHeights.tight, fontFamily: fonts.sans.bold }}>
         ⨯
       </Text>
     );

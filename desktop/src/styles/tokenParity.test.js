@@ -4,7 +4,11 @@ import { describe, expect, it } from "vitest";
 
 import { ACCENTS, ACCENT_HEXES } from "../../../common/accents.mjs";
 import {
+  typography,
   alpha,
+  fontStacks,
+  spaceExtra,
+  spaceMicro,
   dotSize,
   fontSizes,
   glyphSize,
@@ -73,6 +77,7 @@ function expectedNumbers() {
   for (const [name, value] of Object.entries(fontSizes)) out[`fs-${name}`] = value;
   for (const [name, value] of Object.entries(lineHeights)) out[`lh-${name}`] = value;
   for (const [name, value] of Object.entries(space)) out[`space-${name.slice(1)}`] = value;
+  for (const [name, value] of Object.entries(spaceMicro)) out[`space-${name}`] = value;
   for (const [name, value] of Object.entries(radii)) out[`r-${name}`] = value;
   for (const [name, value] of Object.entries(alpha)) out[`alpha-${name}`] = value;
   out["dot-size"] = dotSize;
@@ -86,6 +91,22 @@ describe("tokens.css against the shared token module", () => {
     expect(ROOT.length).toBeGreaterThan(1000);
     expect(Object.keys(numberVars(ROOT)).length).toBeGreaterThanOrEqual(40);
     expect(Object.keys(expectedNumbers()).length).toBeGreaterThanOrEqual(35);
+  });
+
+  it("declares its two extra spacing steps with the values common records for it", () => {
+    for (const [name, value] of Object.entries(spaceExtra.desktop)) {
+      const m = new RegExp(`--space-${name.slice(1)}:\\s*([0-9.]+)px;`).exec(CSS);
+      expect(m, `--space-${name.slice(1)} is not declared`).not.toBeNull();
+      expect(Number(m[1])).toBe(value);
+    }
+  });
+
+  it("declares the shared font stacks verbatim, since CSS cannot import them", () => {
+    for (const role of ["sans", "mono"]) {
+      const m = new RegExp(`--font-${role}:\\s*([^;]+);`).exec(CSS);
+      expect(m, `--font-${role} is not declared`).not.toBeNull();
+      expect(m[1].trim()).toBe(fontStacks[role]);
+    }
   });
 
   it("declares every shared numeric token with the shared value", () => {
@@ -144,7 +165,34 @@ describe("accent palette", () => {
   });
 
   it("keeps the --accent default inside the choosable set", () => {
-    const declared = colorVars(ROOT).accent;
-    expect(ACCENT_HEXES).toContain(normalizeColor(declared));
+    // The swatch is the dark-mode value; :root carries its darkened pair, which has to
+    // clear contrast on a light ground and so is deliberately not a choosable swatch.
+    for (const body of [DARK_MEDIA, DARK_TOGGLE]) {
+      expect(ACCENT_HEXES).toContain(normalizeColor(colorVars(body).accent));
+    }
+  });
+
+  it("darkens the light-mode accent rather than letting the two drift apart", () => {
+    const luma = (hex) => {
+      const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+        .map((v) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const light = normalizeColor(colorVars(ROOT).accent);
+    const dark = normalizeColor(colorVars(DARK_TOGGLE).accent);
+    expect(luma(light)).toBeLessThan(luma(dark));
+    // Readable as a link/label on the light ground it sits on.
+    expect((1.05) / (luma(light) + 0.05)).toBeGreaterThan(4.5);
+  });
+});
+
+
+describe("semantic typography roles", () => {
+  it("maps every role to the same size and leading as mobile", () => {
+    for (const [role, value] of Object.entries(typography)) {
+      const cssRole = role.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
+      expect(ROOT).toContain(`--text-${cssRole}-size: var(--fs-${value.size});`);
+      expect(ROOT).toContain(`--text-${cssRole}-leading: var(--lh-${value.leading});`);
+    }
   });
 });

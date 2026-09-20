@@ -74,7 +74,7 @@
 
 .modelPickerOptionBody {
   flex: 1;
-  gap: 1px;
+  gap: var(--space-hair);
 }
 .modelPickerOptionLabel {
   font-family: var(--font-mono);

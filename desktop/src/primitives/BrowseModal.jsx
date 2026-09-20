@@ -1,3 +1,4 @@
+import { OverlayScope, useOverlay } from "../hooks/useOverlay.js";
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { IconBtn, Mono, RefreshBar, SearchIcon, Tip, XIcon } from "./index.js";
@@ -21,11 +22,12 @@ export default function BrowseModal({
 }) {
   const wrapRef = useRef(null);
   const searchRef = useRef(null);
+  const isTop = useOverlay({ open, onClose, ref: wrapRef, modal: true });
 
   useEffect(() => {
     if (!open) return undefined;
     const onKey = (e) => {
-      if (e.key === "Escape") { e.preventDefault(); onClose?.(); return; }
+      if (!isTop()) return;
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         const active = document.activeElement;
         if (active !== searchRef.current && active?.getAttribute?.("role") !== "option") return;
@@ -41,7 +43,7 @@ export default function BrowseModal({
         next?.focus();
       }
     };
-    const onClick = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) onClose?.(); };
+    const onClick = (e) => { if (isTop() && wrapRef.current && !wrapRef.current.contains(e.target)) onClose?.(); };
     document.addEventListener("keydown", onKey);
     document.addEventListener("mousedown", onClick);
     return () => {
@@ -57,49 +59,51 @@ export default function BrowseModal({
   if (!open) return null;
 
   return createPortal(
-    <div className={`anim-overlay ${styles.backdrop}`}>
-      <div ref={wrapRef} className={`anim-dialog ${styles.modal}`} role="dialog" aria-modal="true" aria-label={title}>
-        <header className={styles.header}>
-          <span className={styles.headerLead}>
-            <span className={styles.title}>{title}</span>
-            {count != null ? <span className={styles.count}>{count}</span> : null}
-          </span>
-          {kicker ? <Mono className={styles.kicker}>· {kicker}</Mono> : null}
-          <span className={styles.headerSpacer} />
-          {actions}
-          <Tip text="Close" side="down">
-            <IconBtn aria-label="Close" onClick={() => onClose?.()}><XIcon /></IconBtn>
-          </Tip>
-        </header>
-        <div className={styles.syncSlot}>
-          <RefreshBar active={loading} accent={accent} controlled label={loadingLabel} />
-        </div>
-
-        <div className={styles.body}>
-          <div className={styles.sidebar}>
-            {search ? (
-              <div className={styles.searchWrap}>
-                <SearchIcon className={styles.searchIcon} />
-                <input
-                  ref={searchRef}
-                  type="text"
-                  className={styles.searchInput}
-                  placeholder={search.placeholder}
-                  value={search.value}
-                  onChange={(e) => search.onChange(e.target.value)}
-                  aria-label={search.label || search.placeholder}
-                />
-                {search.value ? (
-                  <IconBtn aria-label="Clear search" tip="Clear search" onClick={() => search.onChange("")}><XIcon /></IconBtn>
-                ) : null}
-              </div>
-            ) : null}
-            {list}
+    <OverlayScope overlay={isTop}>
+      <div className={`anim-overlay ${styles.backdrop}`}>
+        <div ref={wrapRef} tabIndex={-1} className={`anim-dialog ${styles.modal}`} role="dialog" aria-modal="true" aria-label={title}>
+          <header className={styles.header}>
+            <span className={styles.headerLead}>
+              <span className={styles.title}>{title}</span>
+              {count != null ? <span className={styles.count}>{count}</span> : null}
+            </span>
+            {kicker ? <Mono className={styles.kicker}>· {kicker}</Mono> : null}
+            <span className={styles.headerSpacer} />
+            {actions}
+            <Tip text="Close" side="down">
+              <IconBtn aria-label="Close" onClick={() => onClose?.()}><XIcon /></IconBtn>
+            </Tip>
+          </header>
+          <div className={styles.syncSlot}>
+            <RefreshBar active={loading} accent={accent} controlled label={loadingLabel} />
           </div>
-          <div className={styles.detail}>{children}</div>
+
+          <div className={styles.body}>
+            <div className={styles.sidebar}>
+              {search ? (
+                <div className={styles.searchWrap}>
+                  <SearchIcon className={styles.searchIcon} />
+                  <input
+                    ref={searchRef}
+                    type="text"
+                    className={styles.searchInput}
+                    placeholder={search.placeholder}
+                    value={search.value}
+                    onChange={(e) => search.onChange(e.target.value)}
+                    aria-label={search.label || search.placeholder}
+                  />
+                  {search.value ? (
+                    <IconBtn aria-label="Clear search" tip="Clear search" onClick={() => search.onChange("")}><XIcon /></IconBtn>
+                  ) : null}
+                </div>
+              ) : null}
+              {list}
+            </div>
+            <div className={styles.detail}>{children}</div>
+          </div>
         </div>
       </div>
-    </div>,
+    </OverlayScope>,
     document.body,
   );
 }

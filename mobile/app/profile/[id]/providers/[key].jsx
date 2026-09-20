@@ -296,7 +296,7 @@ function OllamaScreen({
               ) : myModels.length === 0 ? (
                 <View style={{ paddingHorizontal: space.s8, paddingVertical: space.s5, gap: space.s3 }}>
                   {myError ? (
-                    <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.danger, lineHeight: fontSizes.sm * 1.5 }}>
+                    <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.dangerText, lineHeight: fontSizes.sm * 1.5 }}>
                       {myError.detail}
                     </Text>
                   ) : null}

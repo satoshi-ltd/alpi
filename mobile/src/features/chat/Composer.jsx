@@ -1,3 +1,4 @@
+import { contrastText } from "../../../../common/color.mjs";
 import { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -87,7 +88,7 @@ export function Composer({
             style={{
               fontFamily: fonts.sans.regular,
               fontSize: fontSizes.xs,
-              color: colors.warning,
+              color: colors.warningText,
             }}
           >
             {taskShape.error}
@@ -180,7 +181,8 @@ export function Composer({
                 width: SEND_D,
                 height: SEND_D,
                 borderRadius: radii.lg,
-                backgroundColor: !stoppable && !canSend ? colors.line : pressed ? colors.ink2 : actionBg,
+                backgroundColor: !stoppable && !canSend ? colors.line : actionBg,
+                opacity: pressed ? 0.85 : 1,
                 alignItems: 'center',
                 justifyContent: 'center',
               })}
@@ -189,7 +191,7 @@ export function Composer({
               <Icon
                 name={stoppable ? 'square' : 'send'}
                 size="sm"
-                color={!stoppable && !canSend ? colors.ink3 : '#ffffff'}
+                color={!stoppable && !canSend ? colors.ink3 : contrastText(actionBg)}
               />
             </Pressable>
           </View>

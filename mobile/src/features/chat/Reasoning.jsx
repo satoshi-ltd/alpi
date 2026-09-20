@@ -80,13 +80,13 @@ function Thinking({ text, flat }) {
         <View style={{ transform: [{ rotate: open ? '0deg' : '-90deg' }] }}>
           <Icon name="chevron-down" size="xs" color={colors.ink3} />
         </View>
-        <Text style={{ color: flat ? colors.ink3 : colors.ink4, fontFamily: fonts.mono, fontSize: flat ? fontSizes.sm : fontSizes.xs }}>
+        <Text style={{ color: colors.ink3, fontFamily: fonts.mono, fontSize: flat ? fontSizes.sm : fontSizes.xs }}>
           {`thinking · ${elapsed}s`}
         </Text>
         {!open && lastLine ? (
           <Text
             numberOfLines={1}
-            style={{ flex: 1, color: colors.ink4, fontFamily: fonts.mono, fontSize: flat ? fontSizes.sm : fontSizes.xs, opacity: 0.7 }}
+            style={{ flex: 1, color: colors.ink3, fontFamily: fonts.mono, fontSize: flat ? fontSizes.sm : fontSizes.xs }}
           >
             {lastLine}
           </Text>
@@ -149,7 +149,7 @@ function Finished({ text, seconds, flat }) {
         {flat && !open && lastLine ? (
           <Text
             numberOfLines={1}
-            style={{ flex: 1, color: colors.ink4, fontFamily: fonts.mono, fontSize: fontSizes.sm, opacity: 0.7 }}
+            style={{ flex: 1, color: colors.ink3, fontFamily: fonts.mono, fontSize: fontSizes.sm }}
           >
             {lastLine}
           </Text>

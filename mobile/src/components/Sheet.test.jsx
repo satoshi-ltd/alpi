@@ -1,3 +1,4 @@
+import { scaleFontSizes } from '../theme/textScale';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, screen } from '@testing-library/react';
@@ -14,7 +15,7 @@ const h = vi.hoisted(() => ({
 
 vi.mock('react-native', () => {
   const View = ({ children, style, ...p }) => React.createElement('div', p, children);
-  const Text = ({ children, style, ...p }) => React.createElement('span', p, children);
+  const Text = ({ children, style, ...p }) => React.createElement('span', { ...p, 'data-text-style': JSON.stringify(style) }, children);
   const Pressable = ({ children, onPress, hitSlop, style, accessibilityLabel, accessibilityHint, ...p }) =>
     React.createElement(
       'button',
@@ -75,8 +76,8 @@ vi.mock('./useSheetGesture', () => ({
 vi.mock('../theme/ThemeContext', () => ({
   useTheme: () => ({
     colors: { bgPane: '#fff', ink: '#000', ink3: '#666', ink4: '#999', selected: '#eee' },
-    fonts: { sans: { medium: 'Inter_500Medium', semibold: 'Inter_600SemiBold' }, mono: 'JetBrainsMono_400Regular' },
-    fontSizes: { sm: 12, md: 14, xl: 18 },
+    fonts: { sans: { medium: 'Geist_500Medium', semibold: 'Geist_600SemiBold' }, mono: 'GeistMono_400Regular' },
+    fontSizes: scaleFontSizes(h.textScale ?? 1),
     shadow: { base: {} },
   }),
 }));
@@ -106,6 +107,7 @@ const backdropStyleOf = (container) =>
   JSON.parse(container.querySelector('[data-style]').getAttribute('data-style'));
 
 beforeEach(() => {
+  h.textScale = 1;
   h.window = { width: 834, height: 1194 };
   h.insets = { bottom: 0 };
   h.keyboard = {};
@@ -276,5 +278,19 @@ describe('Sheet exit', () => {
     h.mounted = false;
     rerender(<Sheet open={false} onClose={() => {}} title="Rename" />);
     expect(container.querySelector('[data-orientations]')).toBeNull();
+  });
+});
+
+
+describe('dialog title role', () => {
+  it('uses the same title size and scales it with the text preference', () => {
+    const { rerender } = render(<Sheet open onClose={() => {}} title="Preferences" />);
+    const titleStyle = () => JSON.parse(screen.getByText('Preferences').getAttribute('data-text-style'));
+    expect(titleStyle().fontSize).toBe(18);
+    expect(titleStyle().lineHeight).toBeCloseTo(23.4);
+    h.textScale = 1.3;
+    rerender(<Sheet open onClose={() => {}} title="Preferences" />);
+    expect(titleStyle().fontSize).toBe(23);
+    expect(titleStyle().lineHeight).toBeCloseTo(29.9);
   });
 });

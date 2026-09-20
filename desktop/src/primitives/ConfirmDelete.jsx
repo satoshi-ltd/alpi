@@ -1,3 +1,4 @@
+import Button from "./Button.jsx";
 import { useEffect, useState } from "react";
 import Modal from "./Modal.jsx";
 import Popover from "./Popover.jsx";
@@ -64,7 +65,7 @@ export default function ConfirmDelete({
 
   if (asModal) {
     return (
-      <Modal open={open} onClose={onClose} width={resolvedWidth}>
+      <Modal open={open} onClose={onClose} width={resolvedWidth} aria-label={title}>
         {body}
       </Modal>
     );
@@ -90,20 +91,21 @@ export function ConfirmDeleteAction({
   anchored = true,
 }) {
   const [open, setOpen] = useState(false);
+  const Trigger = triggerVariant === "ghost" ? Button : "button";
   const triggerClass =
     triggerVariant === "ghost"
-      ? `btn btn-ghost ${styles.triggerGhost}`
+      ? styles.triggerGhost
       : "alink danger";
   return (
     <span className={styles.trigger}>
-      <button
+      <Trigger
         type="button"
         className={triggerClass}
         onClick={() => setOpen(true)}
         disabled={disabled || loading}
       >
         {loading ? "Working…" : label}
-      </button>
+      </Trigger>
       <ConfirmDelete
         anchored={anchored}
         open={open}

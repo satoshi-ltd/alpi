@@ -39,7 +39,7 @@
 
 .skLineLg {
   height: 13px;
-  border-radius: 6px;
+  border-radius: var(--r-sm);
 }
 
 .skPara {

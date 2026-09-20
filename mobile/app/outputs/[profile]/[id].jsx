@@ -132,7 +132,7 @@ export default function OutputDetailScreen() {
         <ScrollView contentContainerStyle={{ padding: space.s7, gap: space.s5, paddingBottom: space.s10 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2, flexWrap: 'wrap' }}>
             {sev ? (
-              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: sev === 'WARNING' ? colors.warning : colors.danger, letterSpacing: 0.6 }}>
+              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: sev === 'WARNING' ? colors.warningText : colors.danger, letterSpacing: 0.6 }}>
                 {sev}
               </Text>
             ) : null}

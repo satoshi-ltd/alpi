@@ -22,7 +22,7 @@ vi.mock('react-native', () => {
 vi.mock('../theme/ThemeContext', () => ({
   useTheme: () => ({
     colors: { ink: '#000', ink2: '#333', ink3: '#666', bg: '#fff', line: '#eee' },
-    fonts: { sans: { semibold: 'Inter_600SemiBold' }, mono: 'JetBrainsMono_400Regular' },
+    fonts: { sans: { semibold: 'Geist_600SemiBold' }, mono: 'GeistMono_400Regular' },
     fontSizes: { xs: 11, lg: 15 },
   }),
 }));

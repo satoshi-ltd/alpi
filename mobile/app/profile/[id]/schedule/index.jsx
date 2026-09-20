@@ -83,7 +83,7 @@ export default function ScheduleList() {
           </View>
         ) : loadError ? (
           <View style={{ padding: space.s8, gap: space.s2 }}>
-            <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.md, color: colors.danger }}>
+            <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.md, color: colors.dangerText }}>
               Could not load schedule
             </Text>
             <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink3 }}>

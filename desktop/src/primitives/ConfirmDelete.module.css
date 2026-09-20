@@ -16,7 +16,7 @@
 }
 
 .title {
-  font-size: var(--fs-lg);
+  font-size: var(--text-dialog-title-size);
   font-weight: var(--fw-semibold);
   color: var(--ink);
   letter-spacing: -0.01em;
@@ -24,13 +24,13 @@
 }
 
 .body.inModal .title {
-  font-size: var(--fs-xl);
+  font-size: var(--text-dialog-title-size);
 }
 
 .consequence {
-  font-size: var(--fs-md);
+  font-size: var(--text-body-size);
   color: var(--ink);
-  line-height: var(--lh-normal);
+  line-height: var(--text-body-leading);
   text-wrap: pretty;
 }
 
@@ -72,5 +72,5 @@
 }
 
 .triggerGhost {
-  color: var(--c-danger);
+  color: var(--c-danger-text);
 }

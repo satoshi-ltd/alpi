@@ -1,4 +1,6 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { navigateMenu } from "../lib/menuNavigation.js";
+import { OverlayScope, useOverlay } from "../hooks/useOverlay.js";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CaretIcon } from "./icons.jsx";
 import Eyebrow from "./Eyebrow.jsx";
@@ -20,11 +22,13 @@ export default function Dropdown({
   children,
 }) {
   const [open, setOpen] = useState(false);
+  const menuId = useId();
   const [resolved, setResolved] = useState({ direction, align, ready: false });
   const ref = useRef(null);
   const triggerRef = useRef(null);
   const menuRef = useRef(null);
   const onOpenChangeRef = useRef(onOpenChange);
+  const isTop = useOverlay({ open, onClose: () => setOpen(false), ref: menuRef });
 
   useEffect(() => {
     onOpenChangeRef.current = onOpenChange;
@@ -34,21 +38,13 @@ export default function Dropdown({
     function onClick(e) {
       const inTrigger = ref.current && ref.current.contains(e.target);
       const inMenu = menuRef.current && menuRef.current.contains(e.target);
-      if (!inTrigger && !inMenu) {
-        setOpen(false);
-      }
-    }
-    function onKey(e) {
-      if (e.key === "Escape" && open) {
-        e.preventDefault();
+      if (isTop() && !inTrigger && !inMenu) {
         setOpen(false);
       }
     }
     document.addEventListener("mousedown", onClick);
-    document.addEventListener("keydown", onKey);
     return () => {
       document.removeEventListener("mousedown", onClick);
-      document.removeEventListener("keydown", onKey);
     };
   }, [open]);
 
@@ -90,6 +86,12 @@ export default function Dropdown({
     });
   }, [open, direction, align, portal]);
 
+  useEffect(() => {
+    if (open && resolved.ready) {
+      menuRef.current?.querySelector(searchable ? "input" : "button:not(:disabled)")?.focus();
+    }
+  }, [open, searchable, resolved.ready]);
+
   const close = () => setOpen(false);
   const dir = resolved.ready ? resolved.direction : direction;
   const al = resolved.ready ? resolved.align : align;
@@ -99,6 +101,8 @@ export default function Dropdown({
     open && (
       <div
         ref={menuRef}
+        id={menuId}
+        onKeyDown={(event) => navigateMenu(event, menuRef.current)}
         className={`anim-pop ${styles.menu} ${portal ? styles.menuPortal : ""}`}
         style={
           portal
@@ -121,9 +125,9 @@ export default function Dropdown({
             <input
               className={styles.search}
               placeholder={searchPlaceholder}
+              aria-label={searchPlaceholder}
               value={query}
               onChange={(e) => onQueryChange?.(e.target.value)}
-              autoFocus
             />
           </div>
         )}
@@ -136,9 +140,17 @@ export default function Dropdown({
   return (
     <div className={`${styles.wrap} ${fullWidth ? styles.wrapFull : ""}`.trim()} ref={ref}>
       <button
+        type="button"
         ref={triggerRef}
         className={`${styles.trigger} ${variantClass(variant)} ${open ? styles.triggerOpen : ""}`}
         aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault();
+            setOpen(true);
+          }
+        }}
         onClick={() => setOpen((v) => !v)}
       >
         {trigger.leading && (
@@ -158,7 +170,7 @@ export default function Dropdown({
         <CaretIcon className={styles.caret} />
       </button>
 
-      {portal ? createPortal(menu, document.body) : menu}
+      <OverlayScope overlay={isTop}>{portal ? createPortal(menu, document.body) : menu}</OverlayScope>
     </div>
   );
 }
@@ -183,6 +195,7 @@ function Row({
 }) {
   return (
     <button
+      type="button"
       className={`${styles.row} ${active ? styles.rowActive : ""}`}
       onClick={onClick}
       disabled={disabled}

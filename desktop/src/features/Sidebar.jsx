@@ -5,7 +5,7 @@ import { SidebarRow, SectionLabel, ContextMenu } from "../primitives/index.js";
 import {
   AutoIcon,
   BellIcon,
-  Btn,
+  Button,
   IconBtn,
   Kbd,
   MoonIcon,
@@ -555,11 +555,11 @@ function Sidebar({
               )}
               {hasAlpisOverflow && (
                 <div ref={showMoreRef} className={styles.showMoreWrap}>
-                  <Btn variant="ghost" onClick={() => setShowAllAlpis((v) => !v)}>
+                  <Button variant="ghost" onClick={() => setShowAllAlpis((v) => !v)}>
                     {showAllAlpis
                       ? "Show less"
                       : `Show ${hiddenAlpisCount} more`}
-                  </Btn>
+                  </Button>
                 </div>
               )}
             </Section>
@@ -582,9 +582,9 @@ function Sidebar({
               {visibleWorkgroups.map((w) => renderWorkgroupRow(w))}
               {hasWorkgroupOverflow && onViewAllWorkgroups && (
                 <div className={styles.showMoreWrap}>
-                  <Btn variant="ghost" onClick={onViewAllWorkgroups}>
+                  <Button variant="ghost" onClick={onViewAllWorkgroups}>
                     View all workgroups
-                  </Btn>
+                  </Button>
                 </div>
               )}
             </Section>

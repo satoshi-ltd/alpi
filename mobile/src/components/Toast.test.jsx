@@ -33,7 +33,7 @@ vi.mock('react-native-safe-area-context', () => ({
 vi.mock('../theme/ThemeContext', () => ({
   useTheme: () => ({
     colors: { bgPane: '#fff', ink: '#000', ink2: '#333', ink3: '#666', success: '#0a0', warning: '#fa0', danger: '#f00' },
-    fonts: { sans: { regular: 'Inter_400Regular', semibold: 'Inter_600SemiBold' } },
+    fonts: { sans: { regular: 'Geist_400Regular', semibold: 'Geist_600SemiBold' } },
     fontSizes: { md: 14 },
   }),
 }));

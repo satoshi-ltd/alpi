@@ -6,7 +6,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: var(--z-modal);
+  z-index: var(--z-overlay);
 }
 
 .modal {
@@ -18,8 +18,9 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  min-width: 460px;
-  max-width: min(560px, calc(100vw - var(--space-10)));
+  width: var(--dialog-width, 560px);
+  min-width: 0;
+  max-width: calc(100vw - var(--space-10));
   max-height: calc(100vh - var(--space-10));
 }
 
@@ -42,7 +43,8 @@
 }
 
 .title {
-  font-size: var(--fs-xl);
+  font-size: var(--text-dialog-title-size);
+  line-height: var(--text-dialog-title-leading);
   font-weight: var(--fw-semibold);
   color: var(--ink);
   letter-spacing: -0.005em;

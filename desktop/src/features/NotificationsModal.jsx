@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   BrowseModal,
-  Btn,
+  Button,
   Chip,
   CopyIcon,
   Diamond,
@@ -341,7 +341,7 @@ export default function NotificationsModal({
       loading={loading}
       loadingLabel="Syncing notifications"
       kicker={unreadCount > 0 ? `${unreadCount} unread` : null}
-      actions={unreadCount > 0 ? <Btn variant="ghost" onClick={onMarkAll}>Mark all read</Btn> : null}
+      actions={unreadCount > 0 ? <Button variant="ghost" onClick={onMarkAll}>Mark all read</Button> : null}
       search={{ value: query, onChange: setQuery, placeholder: "Search notifications…", label: "Search notifications" }}
       list={list}
     >
@@ -484,10 +484,10 @@ function DetailPane({ row, accent, connId, connectionName, voiceId, onCopy, onSe
 
       {action ? (
         <div className={styles.actions}>
-          <Btn variant="ghost" onClick={onAction}>
+          <Button variant="ghost" onClick={onAction}>
             <GearIcon />
             <span>{action.label}</span>
-          </Btn>
+          </Button>
         </div>
       ) : null}
     </article>

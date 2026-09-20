@@ -1,3 +1,4 @@
+import { OverlayScope, useOverlay } from "../hooks/useOverlay.js";
 import { useEffect, useRef } from "react";
 
 export default function Popover({
@@ -12,6 +13,7 @@ export default function Popover({
   style,
 }) {
   const ref = useRef(null);
+  const isTop = useOverlay({ open, onClose, ref });
 
   let resolvedAlign = align;
   let resolvedSide = side;
@@ -26,39 +28,36 @@ export default function Popover({
     const onDoc = (e) => {
       // Wrapper (trigger + panel), not just the panel — else a trigger click closes here and its own handler re-opens.
       const host = ref.current?.parentElement ?? ref.current;
-      if (host && !host.contains(e.target)) onClose?.();
-    };
-    const onKey = (e) => {
-      if (e.key === "Escape") onClose?.();
+      if (isTop() && host && !host.contains(e.target)) onClose?.();
     };
     document.addEventListener("mousedown", onDoc);
-    document.addEventListener("keydown", onKey);
     return () => {
       document.removeEventListener("mousedown", onDoc);
-      document.removeEventListener("keydown", onKey);
     };
   }, [open, onClose]);
 
   if (!open) return null;
   return (
-    <div
-      ref={ref}
-      className={`anim-pop ${className}`.trim()}
-      style={{
-        position: "absolute",
-        [resolvedSide === "top" ? "bottom" : "top"]: "calc(100% + 8px)",
-        [resolvedAlign]: 0,
-        width,
-        background: "var(--bg-elev)",
-        border: ".5px solid var(--line-2)",
-        borderRadius: "var(--r-xl)",
-        boxShadow: "var(--shadow)",
-        zIndex: 50,
-        overflow: "hidden",
-        ...style,
-      }}
-    >
-      {children}
-    </div>
+    <OverlayScope overlay={isTop}>
+      <div
+        ref={ref}
+        className={`anim-pop ${className}`.trim()}
+        style={{
+          position: "absolute",
+          [resolvedSide === "top" ? "bottom" : "top"]: "calc(100% + 8px)",
+          [resolvedAlign]: 0,
+          width,
+          background: "var(--bg-elev)",
+          border: ".5px solid var(--line-2)",
+          borderRadius: "var(--r-xl)",
+          boxShadow: "var(--shadow)",
+          zIndex: 50,
+          overflow: "hidden",
+          ...style,
+        }}
+      >
+        {children}
+      </div>
+    </OverlayScope>
   );
 }

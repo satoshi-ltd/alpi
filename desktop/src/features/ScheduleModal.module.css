@@ -8,11 +8,11 @@
   flex-shrink: 0;
   width: 8px;
   height: 8px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
 }
 
 .dot[data-on="on"] {
-  background: var(--ok, #3fb950);
+  background: var(--c-success);
 }
 
 .dot[data-on="off"] {
@@ -23,7 +23,7 @@
 .jobMain {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-tight);
   min-width: 0;
 }
 
@@ -67,7 +67,7 @@
 }
 
 .deleteBtn:hover {
-  color: var(--danger, #f85149);
+  color: var(--c-danger-text);
 }
 
 .fields {

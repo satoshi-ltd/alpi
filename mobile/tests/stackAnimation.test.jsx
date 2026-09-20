@@ -42,10 +42,10 @@ vi.mock('@expo-google-fonts/geist', () => ({
   Geist_400Regular: 'g400', Geist_500Medium: 'g500', Geist_600SemiBold: 'g600', Geist_700Bold: 'g700',
 }));
 vi.mock('@expo-google-fonts/inter', () => ({
-  Inter_400Regular: 'i400', Inter_500Medium: 'i500', Inter_600SemiBold: 'i600', Inter_700Bold: 'i700',
+  Geist_400Regular: 'i400', Geist_500Medium: 'i500', Geist_600SemiBold: 'i600', Geist_700Bold: 'i700',
 }));
 vi.mock('@expo-google-fonts/jetbrains-mono', () => ({
-  JetBrainsMono_400Regular: 'j400', JetBrainsMono_500Medium: 'j500', JetBrainsMono_600SemiBold: 'j600',
+  GeistMono_400Regular: 'j400', GeistMono_500Medium: 'j500', GeistMono_600SemiBold: 'j600',
 }));
 vi.mock('react-native-gesture-handler', () => ({
   GestureHandlerRootView: ({ children }) => React.createElement('div', {}, children),

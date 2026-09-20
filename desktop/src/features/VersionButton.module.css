@@ -22,11 +22,11 @@
 }
 
 .triggerAvailable {
-  color: var(--c-success);
+  color: var(--c-success-text);
 }
 
 .triggerAvailable:hover {
-  color: var(--c-success);
+  color: var(--c-success-text);
 }
 
 .popover {
@@ -96,7 +96,7 @@
 }
 
 .versionTo {
-  color: var(--c-success);
+  color: var(--c-success-text);
   font-weight: var(--fw-semibold);
 }
 
@@ -106,5 +106,5 @@
 }
 
 .checkIcon {
-  color: var(--c-success);
+  color: var(--c-success-text);
 }

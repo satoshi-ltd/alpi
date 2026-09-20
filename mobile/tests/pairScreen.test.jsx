@@ -44,8 +44,8 @@ vi.mock('../src/theme/ThemeContext', () => ({
   useTheme: () => ({
     colors: { bg: '#fff', ink: '#000', ink2: '#333', ink3: '#666', danger: '#f00', line: '#ddd', bgInput: '#fafafa' },
     fonts: {
-      sans: { regular: 'Inter_400Regular', medium: 'Inter_500Medium', semibold: 'Inter_600SemiBold' },
-      mono: 'JetBrainsMono_400Regular',
+      sans: { regular: 'Geist_400Regular', medium: 'Geist_500Medium', semibold: 'Geist_600SemiBold' },
+      mono: 'GeistMono_400Regular',
     },
     fontSizes: { xs: 11, md: 14, lg: 15, xl: 18, display: 28 },
     lineHeights: { normal: 1.5 },
@@ -63,6 +63,6 @@ describe('Pair screen typography', () => {
   it('draws the back chevron and the heading in theme fonts', () => {
     render(<Pair />);
     expect(document.querySelector('svg')).toBeTruthy();
-    expect(screen.getByText('Pair this phone').getAttribute('data-font')).toBe('Inter_600SemiBold');
+    expect(screen.getByText('Pair this phone').getAttribute('data-font')).toBe('Geist_600SemiBold');
   });
 });

@@ -69,7 +69,7 @@ export default function ToolDetail() {
               borderColor: `${colors.warning}66`,
             }}
           >
-            <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.warning, lineHeight: fontSizes.sm * 1.5 }}>
+            <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.warningText, lineHeight: fontSizes.sm * 1.5 }}>
               Denied for this profile via tools.deny in config.yaml. The agent does not see this tool.
             </Text>
           </View>

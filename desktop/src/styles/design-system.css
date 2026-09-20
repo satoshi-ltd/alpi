@@ -79,7 +79,7 @@
   font-weight: var(--fw-medium);
 }
 .ds-hash.md, .hash.md {
-  font-size: 28px;
+  font-size: var(--fs-display);
 }
 
 .eyebrow {
@@ -114,56 +114,17 @@
   gap: var(--space-2);
   height: var(--ctrl-xs);
   padding: 0 var(--space-3);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--hover);
   color: var(--ink-2);
   font-size: var(--fs-sm);
   font-family: var(--font-mono);
   line-height: var(--lh-tight);
 }
-.ds-pill.is-on,  .pill.is-on  { background: color-mix(in srgb, var(--c-success) 16%, var(--bg-pane)); color: color-mix(in srgb, var(--c-success) 70%, var(--ink)); }
-.ds-pill.is-err, .pill.is-err { background: color-mix(in srgb, var(--c-danger) 16%, var(--bg-pane)); color: color-mix(in srgb, var(--c-danger) 70%, var(--ink)); }
-.ds-pill.is-warn,.pill.is-warn{ background: color-mix(in srgb, var(--c-warning) 16%, var(--bg-pane)); color: color-mix(in srgb, var(--c-warning) 70%, var(--ink)); }
+.ds-pill.is-on,  .pill.is-on  { background: color-mix(in srgb, var(--c-success) 16%, var(--bg-pane)); color: var(--c-success-text); }
+.ds-pill.is-err, .pill.is-err { background: color-mix(in srgb, var(--c-danger) 16%, var(--bg-pane)); color: var(--c-danger-text); }
+.ds-pill.is-warn,.pill.is-warn{ background: color-mix(in srgb, var(--c-warning) 16%, var(--bg-pane)); color: var(--c-warning-text); }
 .ds-pill.is-off, .pill.is-off { opacity: var(--alpha-muted); }
-
-.ds-btn, .btn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  height: var(--ctrl-sm);
-  padding: 0 var(--space-5);
-  border-radius: var(--r-md);
-  background: var(--hover);
-  color: var(--ink);
-  font-size: var(--fs-base);
-  font-family: var(--font-sans);
-  font-weight: var(--fw-medium);
-  line-height: var(--lh-tight);
-  transition: background var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
-  border: 0;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.ds-btn:hover,  .btn:hover  { background: var(--line); }
-.ds-btn:active, .btn:active { background: color-mix(in srgb, var(--ink) 10%, var(--hover)); transform: translateY(0.5px); }
-.ds-btn:disabled, .btn:disabled { opacity: var(--alpha-disabled); cursor: default; pointer-events: none; }
-.ds-btn:focus-visible, .btn:focus-visible,
-.ds-btn[aria-expanded="true"], .btn[aria-expanded="true"] {
-  outline: 2px solid color-mix(in srgb, var(--ink) 45%, transparent);
-  outline-offset: 2px;
-}
-
-.ds-btn-primary, .btn-primary { background: var(--ink); color: var(--bg-pane); }
-.ds-btn-primary:hover,  .btn-primary:hover  { background: var(--ink-2); }
-.ds-btn-primary:active, .btn-primary:active { background: color-mix(in srgb, var(--ink) 85%, transparent); transform: translateY(0.5px); }
-
-.ds-btn-ghost, .btn-ghost { background: transparent; color: var(--ink-2); }
-.ds-btn-ghost:hover,  .btn-ghost:hover  { background: var(--hover); color: var(--ink); }
-.ds-btn-ghost:active, .btn-ghost:active { background: var(--line); transform: translateY(0.5px); }
-
-.ds-btn-danger, .btn-danger { background: var(--c-danger); color: var(--bg-pane); }
-.ds-btn-danger:hover,  .btn-danger:hover  { background: color-mix(in srgb, var(--c-danger) 88%, black); }
-.ds-btn-danger:active, .btn-danger:active { background: color-mix(in srgb, var(--c-danger) 80%, transparent); transform: translateY(0.5px); }
 
 .ds-iconbtn, .iconbtn {
   width: var(--ctrl-sm);
@@ -198,7 +159,7 @@
 }
 .ds-alink:hover,  .alink:hover  { background: var(--hover); color: var(--ink); }
 .ds-alink:active, .alink:active { background: var(--line); transform: translateY(0.5px); }
-.ds-alink.danger, .alink.danger { color: var(--c-danger); }
+.ds-alink.danger, .alink.danger { color: var(--c-danger-text); }
 .ds-alink.danger:hover, .alink.danger:hover { background: color-mix(in srgb, var(--c-danger) 10%, transparent); }
 
 .ds-selectish, .selectish {
@@ -314,7 +275,7 @@ textarea.ds-field, textarea.field { resize: vertical; min-height: 88px; height: 
 .ds-bar, .bar {
   position: relative;
   height: 3px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--line);
   overflow: hidden;
 }
@@ -324,7 +285,7 @@ textarea.ds-field, textarea.field { resize: vertical; min-height: 88px; height: 
   background: var(--c, var(--ink-2));
   border-radius: inherit;
   display: block;
-  width: var(--p, 0%);
+  width: 0%;
 }
 
 .ds-meter {
@@ -344,7 +305,7 @@ textarea.ds-field, textarea.field { resize: vertical; min-height: 88px; height: 
 .ds-meter .bar {
   width: 56px;
   height: 5px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--line);
   position: relative;
   overflow: hidden;
@@ -923,8 +884,8 @@ a:focus-visible,
 }
 
 .profmsg {
-  font-size: var(--fs-lg);
-  line-height: var(--lh-relaxed);
+  font-size: var(--text-chat-size);
+  line-height: var(--text-chat-leading);
   letter-spacing: -0.003em;
   color: var(--ink);
   text-wrap: pretty;

@@ -1,3 +1,4 @@
+export { scheduleSummary } from "../../../../common/schedule.mjs";
 export const HEX_RE = /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/;
 
 export const FIELD_KEYS = {
@@ -116,12 +117,7 @@ export function isValidEd25519Pubkey(s) {
   }
 }
 
-export function scheduleSummary(j) {
-  if (j.kind === "cron") return j.expression || "?";
-  if (j.kind === "once") return `once ${j.run_at || "?"}`;
-  if (j.kind === "inactivity") return `after ${j.after_hours ?? "?"}h`;
-  return j.kind || "?";
-}
+
 
 export function providerPills(profile, ollamaErrors = []) {
   const errByName = new Map((ollamaErrors ?? []).map((e) => [e.name, e]));

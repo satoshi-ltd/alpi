@@ -23,11 +23,11 @@
 .closeBlocked :global(.ds-marker.done) {
   background: color-mix(in srgb, var(--c-danger) 12%, var(--bg-pane));
 }
-.closeBlocked :global(.ds-marker.done) :global(.ey) { color: var(--c-danger); }
+.closeBlocked :global(.ds-marker.done) :global(.ey) { color: var(--c-danger-text); }
 .closeSkipped :global(.ds-marker.done) {
   background: color-mix(in srgb, var(--c-warning) 12%, var(--bg-pane));
 }
-.closeSkipped :global(.ds-marker.done) :global(.ey) { color: var(--c-warning); }
+.closeSkipped :global(.ds-marker.done) :global(.ey) { color: var(--c-warning-text); }
 
 .meta {
   display: flex;
@@ -50,7 +50,7 @@
   opacity: 0;
   transition: opacity var(--dur-1) var(--ease);
   display: flex;
-  gap: 2px;
+  gap: var(--space-tight);
   align-items: center;
   color: var(--ink-3);
   font-size: var(--fs-xs);

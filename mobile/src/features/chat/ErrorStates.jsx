@@ -11,7 +11,7 @@ export function FailedSend({ onRetry }) {
     <View style={{ paddingHorizontal: space.s7, flexDirection: 'row', justifyContent: 'flex-end' }}>
       <Pressable onPress={onRetry} hitSlop={6} style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2 }}>
         <Icon name="refresh" size="xs" color={colors.danger} />
-        <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.danger }}>
+        <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.dangerText }}>
           failed to send · Retry
         </Text>
       </Pressable>
@@ -47,11 +47,11 @@ export function FailedVoice({ duration, onRetry }) {
         }}
       >
         <Icon name="mic" size="sm" color={colors.danger} />
-        <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.danger }}>
+        <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.dangerText }}>
           {duration}s · voice upload failed
         </Text>
         <Pressable onPress={onRetry} hitSlop={6}>
-          <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.sm, color: colors.danger }}>
+          <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.sm, color: colors.dangerText }}>
             Retry
           </Text>
         </Pressable>
@@ -64,8 +64,8 @@ export function FailedToolCall({ name, reason }) {
   const { colors, fonts, fontSizes } = useTheme();
   return (
     <View style={{ paddingHorizontal: space.s7, flexDirection: 'row', alignItems: 'center', gap: space.s3 }}>
-      <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.danger }}>×</Text>
-      <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.danger }}>
+      <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.dangerText }}>×</Text>
+      <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.dangerText }}>
         {name} · {reason}
       </Text>
     </View>

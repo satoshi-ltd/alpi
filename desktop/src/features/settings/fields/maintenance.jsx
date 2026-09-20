@@ -7,7 +7,6 @@ import Chip from "../../../primitives/Chip.jsx";
 import { Row } from "../primitives.jsx";
 import { ConfirmDelete } from "../../../primitives/index.js";
 import { useNotify } from "../../../primitives/Notification.jsx";
-import { Btn } from "../../../primitives/index.js";
 import { STORAGE_GROUPS, RECLAIM_NOTES, formatBytes } from "../util.js";
 import styles from "../Settings.module.css";
 
@@ -173,7 +172,7 @@ export function StorageField({ profile, activeConnection, prefetched, onLoadingC
               <Chip size="sm">{countLabel(m.count ?? 0)}</Chip>
               <span className={styles.muted}>{note}</span>
               <span className={styles.confirmAnchor}>
-                <Button size="sm" variant="danger" disabled={busy} onClick={() => setConfirmKey(m.key)}>Delete</Button>
+                <Button size="sm" variant="danger-ghost" disabled={busy} onClick={() => setConfirmKey(m.key)}>Delete</Button>
                 <ConfirmDelete
                   open={confirmKey === m.key}
                   onClose={() => setConfirmKey(null)}
@@ -208,13 +207,12 @@ export function DeleteProfileAction({ profile, onDelete, autoConfirm = false, on
 
   return (
     <span className={styles.inlineRow}>
-      <Btn
-        variant="ghost"
-        style={{ color: "var(--c-danger)" }}
+      <Button
+        variant="danger-ghost"
         onClick={() => setOpen(true)}
       >
         Delete profile
-      </Btn>
+      </Button>
       <span className={styles.muted}>
         moves ~/.alpi/profiles/{profile.name}/ to ~/.alpi/.trash/ — daemon
         picks up the change on its next restart

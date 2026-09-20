@@ -1,6 +1,8 @@
+import { mixHex } from "../../../../common/color.mjs";
+import { formatCostLine } from "../../../../common/format.mjs";
 import { useCallback } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { radii, space } from '../../theme/tokens';
+import { radii, space, typography } from '../../theme/tokens';
 
 import { Diamond } from '../../components/Diamond';
 import { RichText } from '../../components/RichText';
@@ -10,30 +12,18 @@ import { useTheme } from '../../theme/ThemeContext';
 import { AttachmentCards } from './AttachmentCards';
 import { stripProducedImageMarkdown } from '../../../../common/producedAttachments.mjs';
 
-function mixHex(hex, pct, base) {
-  const fromHex = (h) => {
-    const v = h.replace('#', '');
-    return [parseInt(v.slice(0, 2), 16), parseInt(v.slice(2, 4), 16), parseInt(v.slice(4, 6), 16)];
-  };
-  const [r1, g1, b1] = fromHex(hex);
-  const [r2, g2, b2] = fromHex(base);
-  const r = Math.round(r1 * pct + r2 * (1 - pct));
-  const g = Math.round(g1 * pct + g2 * (1 - pct));
-  const b = Math.round(b1 * pct + b2 * (1 - pct));
-  return `rgb(${r},${g},${b})`;
-}
 
 const S = StyleSheet.create({
   userWrap: { alignItems: 'flex-end', paddingHorizontal: space.s7, gap: space.s1 },
   agentWrap: { paddingHorizontal: space.s7 },
   bubble: {
     maxWidth: '82%',
-    paddingHorizontal: space.s6,
+    paddingHorizontal: space.s7,
     paddingVertical: space.s5,
-    borderTopLeftRadius: 18,
+    borderTopLeftRadius: radii.bubble,
     borderTopRightRadius: radii.xs,
-    borderBottomRightRadius: 18,
-    borderBottomLeftRadius: 18,
+    borderBottomRightRadius: radii.bubble,
+    borderBottomLeftRadius: radii.bubble,
   },
   wgBubble: {
     maxWidth: '90%',
@@ -53,9 +43,9 @@ export function ProfileUserMessage({ text, ts, accent, attachments, onLongPress,
     ({ pressed }) => [
       S.bubble,
       twoPane ? S.paneCap : null,
-      { backgroundColor: accent ?? colors.ink, opacity: pressed ? 0.85 : 1 },
+      { backgroundColor: mixHex(accent ?? colors.accent, 0.12, colors.bgPane), opacity: pressed ? 0.85 : 1 },
     ],
-    [accent, colors.ink, twoPane],
+    [accent, colors.accent, colors.bgPane, twoPane],
   );
   return (
     <View style={S.userWrap}>
@@ -65,10 +55,8 @@ export function ProfileUserMessage({ text, ts, accent, attachments, onLongPress,
       {text ? (
         <Pressable onLongPress={onLongPress} delayLongPress={350} style={bubbleStyle}>
           <RichText
-            size={fontSizes.lg}
-            color="#ffffff"
-            codeColor="#ffffff"
-            codeBackground="rgba(255,255,255,0.18)"
+            size={fontSizes[typography.chat.size]}
+            color={colors.ink}
             imageProfile={profile}
           >
             {text}
@@ -92,7 +80,7 @@ export function ProfileAssistantMessage({ text, attachments, onLongPress, profil
   return (
     <Pressable onLongPress={onLongPress} delayLongPress={350} style={wrapStyle}>
       {body ? (
-        <RichText size={fontSizes.lg} color={colors.ink} imageProfile={profile}>
+        <RichText size={fontSizes[typography.chat.size]} color={colors.ink} imageProfile={profile}>
           {body}
         </RichText>
       ) : null}
@@ -110,14 +98,7 @@ export function WorkgroupMessage({ body, speakerName, speakerAccent, isFromHub, 
   const right = isFromHub;
 
   const seqStr = seq != null ? `#${seq}` : null;
-  let costStr = null;
-  if (cost) {
-    const tok = typeof cost.tokens === 'number' ? cost.tokens : 0;
-    const usd = typeof cost.usd === 'number' ? cost.usd : 0;
-    const tokFmt = tok >= 1000 ? `${(tok / 1000).toFixed(1)}K` : `${tok}`;
-    const usdFmt = usd >= 0.01 ? `$${usd.toFixed(2)}` : `$${usd.toFixed(4)}`;
-    costStr = `${tokFmt} · ${usdFmt}`;
-  }
+  const costStr = cost ? formatCostLine(cost) : null;
 
   const metaStyle = [S.meta, { fontFamily: fonts.monoMedium, fontSize: fontSizes.xs, lineHeight: fontSizes.xs, color: colors.ink3 }];
   const SpeakerEl = (
@@ -135,8 +116,8 @@ export function WorkgroupMessage({ body, speakerName, speakerAccent, isFromHub, 
       S.wgBubble,
       twoPane ? S.paneCap : null,
       right
-        ? { borderTopLeftRadius: 18, borderTopRightRadius: radii.xs, borderBottomRightRadius: 18, borderBottomLeftRadius: 18 }
-        : { borderTopLeftRadius: radii.xs, borderTopRightRadius: 18, borderBottomRightRadius: 18, borderBottomLeftRadius: 18 },
+        ? { borderTopLeftRadius: radii.bubble, borderTopRightRadius: radii.xs, borderBottomRightRadius: radii.bubble, borderBottomLeftRadius: radii.bubble }
+        : { borderTopLeftRadius: radii.xs, borderTopRightRadius: radii.bubble, borderBottomRightRadius: radii.bubble, borderBottomLeftRadius: radii.bubble },
       { backgroundColor: bg, opacity: pressed ? 0.85 : 1 },
     ],
     [bg, right, twoPane],
@@ -160,7 +141,7 @@ export function WorkgroupMessage({ body, speakerName, speakerAccent, isFromHub, 
         )}
       </View>
       <Pressable onLongPress={onLongPress} delayLongPress={350} style={bubbleStyle}>
-        <RichText size={fontSizes.lg} color={colors.ink} imageProfile={profile}>
+        <RichText size={fontSizes[typography.chat.size]} color={colors.ink} imageProfile={profile}>
           {body}
         </RichText>
       </Pressable>

@@ -38,7 +38,7 @@ vi.mock('./Button', () => ({ Button: ({ title }) => React.createElement('button'
 vi.mock('../theme/ThemeContext', () => ({
   useTheme: () => ({
     colors: { bgPane: '#fff', bgInput: '#fafafa', ink: '#000', ink2: '#333', ink3: '#666', ink4: '#999', line2: '#eee', danger: '#f00' },
-    fonts: { sans: { regular: 'Inter_400Regular', semibold: 'Inter_600SemiBold' }, mono: 'JetBrainsMono_400Regular', monoMedium: 'JetBrainsMono_500Medium' },
+    fonts: { sans: { regular: 'Geist_400Regular', semibold: 'Geist_600SemiBold' }, mono: 'GeistMono_400Regular', monoMedium: 'GeistMono_500Medium' },
     fontSizes: { xs: 11, sm: 12, md: 14, xl: 18 },
   }),
 }));

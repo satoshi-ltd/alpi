@@ -154,7 +154,7 @@ const TurnBlock = memo(function TurnBlock({ turn, turnIndex, profileName, profil
         </Text>
       ) : null}
       {turn.error ? (
-        <Text style={[TURN_STYLES.error, { color: colors.danger, fontFamily: fonts.mono, fontSize: fontSizes.xs }]}>
+        <Text style={[TURN_STYLES.error, { color: colors.dangerText, fontFamily: fonts.mono, fontSize: fontSizes.xs }]}>
           {turn.error}
         </Text>
       ) : null}

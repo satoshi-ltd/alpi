@@ -63,7 +63,7 @@ export function ToolCallRow({ name, status = 'success', args, accent, primary = 
         fontFamily: fonts.monoMedium,
         fontSize: fontSizes.sm,
         lineHeight: fontSizes.sm * lineHeights.cozy,
-        color: status === 'error' ? colors.danger : colors.ink,
+        color: status === 'error' ? colors.dangerText : colors.ink,
         includeFontPadding: false,
       }}>
         {name}
@@ -132,7 +132,7 @@ export function ToolModule({ tools, accent }) {
           {!expanded && failed > 0 ? (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
               <Icon name="triangle-alert" size="xs" color={colors.danger} />
-              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.danger }}>
+              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.dangerText }}>
                 {`${failed} failed`}
               </Text>
             </View>

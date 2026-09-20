@@ -25,7 +25,7 @@
 
 .emptyNote { color: var(--ink-3); }
 
-.over { color: var(--c-danger); }
+.over { color: var(--c-danger-text); }
 
 .detailInfo {
   display: inline-flex;

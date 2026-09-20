@@ -115,7 +115,7 @@ export default function ApprovalModal({ requests, onResolved }) {
 
       <div className={styles.footer}>
         <Button
-          variant="danger"
+          variant="danger-ghost"
           size="lg"
           className={styles.denyBtn}
           onClick={deny}

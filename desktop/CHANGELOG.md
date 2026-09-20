@@ -11,6 +11,43 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.6.0 — 2026-09-20 — one palette, one type, one way to close a window
+
+- **The accent is the brand's amber.** `#f0b447` in dark, darkened to `#8a5a0a` in light so
+  it stays readable on a light ground, replacing the old muted gold. The warning colour
+  moves off amber to orange so the two no longer collide. The greys, grounds, lines and
+  shadows are exactly the values they were: the chrome stays neutral and the accent is the
+  only colour with a job. Profile swatches keep their positions, so a profile that had a
+  colour still has it.
+- **Status colours are now split between what you read and what you glance at.** A 7px dot
+  and an 11px label do not need the same contrast, and treating them as one colour made the
+  labels hard to read. Success, warning and danger each gained a text tone that clears
+  4.5:1 on both themes, while the decorative dots and tints keep the colour they had.
+  Secondary text moved up a tier for the same reason; the faintest tier is now reserved for
+  decoration and disabled content, which is what it was always meant for.
+- **The app ships its own fonts instead of hoping the machine has them.** It asked for
+  Geist and JetBrains Mono in CSS and bundled neither, so on a machine without them
+  installed the whole UI silently fell back to the system face — the app looked different
+  depending on whose computer it ran on. Geist and Geist Mono are now bundled and loaded
+  locally, so it renders the same everywhere and never reaches the network to draw itself.
+  The two share one set of vertical metrics, so mono and text finally sit on one rhythm
+  when they share a line.
+- **Escape closes the thing you are looking at, not everything at once.** Every dialog,
+  popover, dropdown and context menu kept its own key listener, so a menu opened over a
+  modal closed both. They now share one overlay layer that knows which is on top, traps Tab
+  inside the frontmost dialog, and returns focus to whatever opened it.
+- **Colours that were never defined stopped silently rendering the wrong thing.** Seven
+  style variables referenced names that did not exist: with a fallback they drew an
+  off-palette colour — one dialog was rendering GitHub's green and red — and without one
+  the rule was dropped, so a focus ring was grey instead of amber, a help badge had no
+  background and a corner was square. CSS reports none of this, so a test now fails when a
+  style names something that is not there.
+- **The Dock icon is untouched.** The palette applies inside the app; the icon stays a
+  black alpaca on white.
+- Pipeline runs shown in the app carry their spend, with no change here: alpi 0.15.0 puts
+  it in the same payload the app already reads.
+  Client-only change: the minimum compatible alpi stays at 0.14.34, as pinned by v0.5.26.
+
 ## v0.5.30 — 2026-09-15 — a throttled connection says so
 
 - **A daemon that throttles this IP is shown as what it is, not as offline or

@@ -238,7 +238,7 @@ export default function Pair() {
               backgroundColor: `${colors.danger}1a`,
             }}
           >
-            <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.md, color: colors.danger }}>
+            <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.md, color: colors.dangerText }}>
               {error}
             </Text>
           </View>

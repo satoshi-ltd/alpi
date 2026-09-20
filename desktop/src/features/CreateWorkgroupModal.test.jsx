@@ -344,11 +344,11 @@ describe("CreateWorkgroupModal", () => {
       />,
     );
 
-    expect(document.querySelector(".anim-dialog").style.width).toBe("var(--modal-md)");
+    expect(document.querySelector(".anim-dialog").style.getPropertyValue("--dialog-width")).toBe("var(--modal-md)");
 
     fireEvent.click(screen.getByRole("button", { name: "Import recipe…" }));
     await screen.findByText("PIPELINES");
-    expect(document.querySelector(".anim-dialog").style.width).toBe("var(--modal-lg)");
+    expect(document.querySelector(".anim-dialog").style.getPropertyValue("--dialog-width")).toBe("var(--modal-lg)");
 
     const phases = screen.getAllByText(/^#[a-z0-9-]+$/).map((el) => el.textContent);
     expect(phases).toEqual(["#setup", "#enrich", "#media-update", "#media-qa"]);
@@ -363,7 +363,7 @@ describe("CreateWorkgroupModal", () => {
     fireEvent.click(screen.getByRole("button", { name: /hotel/ }));
     expect(screen.getByRole("button", { name: "Import recipe…" })).toBeInTheDocument();
     expect(screen.queryByText("PIPELINES")).toBeNull();
-    expect(document.querySelector(".anim-dialog").style.width).toBe("var(--modal-md)");
+    expect(document.querySelector(".anim-dialog").style.getPropertyValue("--dialog-width")).toBe("var(--modal-md)");
   });
 
   it("a launchless recipe previews as idle and creates instead of launching", async () => {

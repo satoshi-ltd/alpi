@@ -14,7 +14,6 @@ import useAutoPosition from "../../../primitives/useAutoPosition.js";
 import { useNotify } from "../../../primitives/Notification.jsx";
 import { useDismissOnOutside } from "../../../hooks/useDismissOnOutside.js";
 import { Row } from "../primitives.jsx";
-import { Btn } from "../../../primitives/index.js";
 import Field from "../../../primitives/Field.jsx";
 import { ConfirmDelete, DialogFooter } from "../../../primitives/index.js";
 import { formatLastSeen } from "../util.js";
@@ -278,7 +277,7 @@ function DeviceDetailPopover({
         <span>
           <Chip size="sm">{role}</Chip>
           {canManage && (
-            <Btn
+            <Button
               variant="ghost"
               size="sm"
               disabled={busy}
@@ -291,7 +290,7 @@ function DeviceDetailPopover({
               }}
             >
               {role === "admin" ? "Demote to member" : "Promote to admin"}
-            </Btn>
+            </Button>
           )}
         </span>
       </div>
@@ -313,9 +312,9 @@ function DeviceDetailPopover({
           Revoke device…
         </button>
         <span className={styles.popoverFooterRight}>
-          <Btn variant="ghost" onClick={onClose} disabled={busy}>Cancel</Btn>
+          <Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
           {dirty && (
-            <Btn
+            <Button
               variant="primary"
               disabled={busy}
               onClick={async () => {
@@ -325,7 +324,7 @@ function DeviceDetailPopover({
               }}
             >
               {busy ? "…" : "Save"}
-            </Btn>
+            </Button>
           )}
         </span>
       </div>

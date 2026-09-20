@@ -102,7 +102,7 @@
   flex-direction: column;
   flex: 1;
   min-width: 0;
-  gap: 3px;
+  gap: var(--space-snug);
 }
 
 .title {

@@ -5,16 +5,10 @@ import {
   Geist_700Bold,
 } from '@expo-google-fonts/geist';
 import {
-  Inter_400Regular,
-  Inter_500Medium,
-  Inter_600SemiBold,
-  Inter_700Bold,
-} from '@expo-google-fonts/inter';
-import {
-  JetBrainsMono_400Regular,
-  JetBrainsMono_500Medium,
-  JetBrainsMono_600SemiBold,
-} from '@expo-google-fonts/jetbrains-mono';
+  GeistMono_400Regular,
+  GeistMono_500Medium,
+  GeistMono_600SemiBold,
+} from '@expo-google-fonts/geist-mono';
 import { useFonts } from 'expo-font';
 import { Stack, usePathname, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -143,17 +137,13 @@ function Boot() {
 
 export default function RootLayout() {
   const [fontsReady] = useFonts({
-    Inter_400Regular,
-    Inter_500Medium,
-    Inter_600SemiBold,
-    Inter_700Bold,
     Geist_400Regular,
     Geist_500Medium,
     Geist_600SemiBold,
     Geist_700Bold,
-    JetBrainsMono_400Regular,
-    JetBrainsMono_500Medium,
-    JetBrainsMono_600SemiBold,
+    GeistMono_400Regular,
+    GeistMono_500Medium,
+    GeistMono_600SemiBold,
   });
 
   useEffect(() => {

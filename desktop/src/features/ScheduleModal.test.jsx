@@ -77,3 +77,23 @@ describe("ScheduleModal", () => {
     expect(invokeMock).toHaveBeenCalledWith("schedule_set_paused", { profile: "lens", id: "45188eab", paused: true });
   });
 });
+
+describe("ScheduleModal mutation scope", () => {
+  it("does not leave a new profile busy when an old profile's action is still pending", async () => {
+    let finishOld;
+    invokeMock.mockImplementation((method) => method === "schedule_fire"
+      ? new Promise((resolve) => { finishOld = resolve; })
+      : Promise.resolve(JOBS));
+    const { rerender } = render(<ScheduleModal open profile="first" onClose={() => {}} />);
+    await screen.findByText("Run the whoop skill");
+    fireEvent.click(screen.getByRole("button", { name: "Run now" }));
+    expect(screen.getByRole("button", { name: "Run now" })).toBeDisabled();
+    rerender(<ScheduleModal open profile="second" onClose={() => {}} />);
+    await screen.findByText("Run the whoop skill");
+    expect(screen.getByRole("button", { name: "Run now" })).not.toBeDisabled();
+    invokeMock.mockClear();
+    await act(async () => finishOld({ ok: true }));
+    expect(invokeMock).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Run now" })).not.toBeDisabled();
+  });
+});

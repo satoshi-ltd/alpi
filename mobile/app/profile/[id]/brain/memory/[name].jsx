@@ -71,7 +71,7 @@ export default function MemoryDetail() {
         </View>
       ) : mem.loadError ? (
         <View style={styles.center}>
-          <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.danger, textAlign: 'center', padding: space.s8 }}>
+          <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.dangerText, textAlign: 'center', padding: space.s8 }}>
             Couldn't load this file.{'\n'}{mem.loadError}
           </Text>
         </View>

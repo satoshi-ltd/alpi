@@ -67,7 +67,7 @@
   font-weight: var(--fw-medium);
   letter-spacing: .06em;
   text-transform: uppercase;
-  color: var(--c-danger);
+  color: var(--c-danger-text);
 }
 
 .errorMessage {

@@ -45,7 +45,7 @@
 
 .connList {
   padding: var(--space-3) var(--space-4);
-  gap: 1px;
+  gap: var(--space-hair);
 }
 
 .connRow {
@@ -94,7 +94,7 @@
 .connBody {
   flex: 1;
   min-width: 0;
-  gap: 2px;
+  gap: var(--space-tight);
 }
 
 .connBodyTop {
@@ -118,12 +118,12 @@
 }
 
 .tagOffline {
-  color: var(--c-danger);
+  color: var(--c-danger-text);
   background: color-mix(in srgb, var(--c-danger) 14%, var(--bg-elev));
 }
 
 .tagUpdate {
-  color: var(--c-warning);
+  color: var(--c-warning-text);
   background: color-mix(in srgb, var(--c-warning) 14%, var(--bg-elev));
 }
 
@@ -141,7 +141,7 @@
 
 .forgetBtn:hover {
   background: color-mix(in srgb, var(--c-danger) 10%, transparent);
-  color: var(--c-danger);
+  color: var(--c-danger-text);
 }
 
 .pairFoot {
@@ -241,7 +241,7 @@
 
 .paletteShortcut {
   display: inline-flex;
-  gap: 2px;
+  gap: var(--space-tight);
 }
 
 .mdBold {

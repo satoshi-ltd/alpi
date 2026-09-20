@@ -57,7 +57,7 @@ vi.mock('../../theme/ThemeContext', async () => {
         success: '#0a0', warning: '#c80', danger: '#c00',
         line2: '#eee', bgInput: '#fafafa',
       },
-      fonts: { sans: { regular: 'Inter_400Regular' }, mono: 'm', monoMedium: 'mm' },
+      fonts: { sans: { regular: 'Geist_400Regular' }, mono: 'm', monoMedium: 'mm' },
       fontSizes: tokens.fontSizes,
     }),
   };
@@ -135,7 +135,7 @@ describe('PipelineStrip', () => {
     strip();
     const separators = screen.getAllByText('›');
     expect(separators).toHaveLength(3);
-    for (const s of separators) expect(s.getAttribute('data-font')).toBe('Inter_400Regular');
+    for (const s of separators) expect(s.getAttribute('data-font')).toBe('Geist_400Regular');
   });
 
   it('keeps the separator out of the accessibility tree on both platforms, as desktop aria-hides it', () => {

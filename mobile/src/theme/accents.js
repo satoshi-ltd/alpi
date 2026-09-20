@@ -1,6 +1,6 @@
 
 export const profileAccents = {
-  alpi: '#b8954a',
+  alpi: '#f0b447',
   doc: '#3d7ea6',
   builder: '#c14545',
   vera: '#9d4dc6',

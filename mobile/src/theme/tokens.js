@@ -1,7 +1,9 @@
 import {
+  nativeFace,
   palettes as sharedPalettes,
   radii as sharedRadii,
   space as sharedSpace,
+  spaceExtra,
 } from '../../../common/tokens.mjs';
 
 // Runtime consumers must read useTheme().fontSizes — these raw values ignore the user's text-size setting.
@@ -13,19 +15,20 @@ export {
   glyphSizeMd,
   lineHeights,
   status,
+  typography,
 } from '../../../common/tokens.mjs';
 
 // In RN each weight is a separate font family — never use fontWeight on custom fonts.
 export const fonts = {
   sans: {
-    regular: 'Inter_400Regular',
-    medium: 'Inter_500Medium',
-    semibold: 'Inter_600SemiBold',
-    bold: 'Inter_700Bold',
+    regular: nativeFace('sans', '400Regular'),
+    medium: nativeFace('sans', '500Medium'),
+    semibold: nativeFace('sans', '600SemiBold'),
+    bold: nativeFace('sans', '700Bold'),
   },
-  mono: 'JetBrainsMono_400Regular',
-  monoMedium: 'JetBrainsMono_500Medium',
-  monoSemibold: 'JetBrainsMono_600SemiBold',
+  mono: nativeFace('mono', '400Regular'),
+  monoMedium: nativeFace('mono', '500Medium'),
+  monoSemibold: nativeFace('mono', '600SemiBold'),
 };
 
 // em multipliers — apply as fontSize * tracking.<tier>
@@ -47,11 +50,11 @@ export const iconSizes = {
 
 export const iconStroke = 2;
 
-export const space = { ...sharedSpace, s10: 28, s11: 36 };
+export const space = { ...sharedSpace, ...spaceExtra.mobile };
 
 export const pulseDuration = 1600;
 
-export const radii = { ...sharedRadii, bubble: 22, sheet: 28 };
+export const radii = { ...sharedRadii, bubble: 18, sheet: 28 };
 
 export const motion = {
   ease: 'easeInOut',
@@ -79,10 +82,6 @@ export const PALETTE_OVERRIDES = {
   'dark.bgInput': [
     '#1a1f26',
     'follows light.bgInput: mobile raises the input above bgElev where desktop recesses it below',
-  ],
-  'light.accent': [
-    '#9c7a33',
-    'the desktop gold is 2.44:1 on the SyncBar track over white, so mobile darkens it to clear 3:1',
   ],
 };
 

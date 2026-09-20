@@ -54,7 +54,7 @@
   flex-shrink: 0;
 }
 .rowSevError { background: var(--c-danger); }
-.rowSevWarning { background: #c8920f; }
+.rowSevWarning { background: var(--c-warning); }
 
 .rowTs { display: inline-flex; color: var(--ink-3); }
 .rowDelete { display: none !important; }

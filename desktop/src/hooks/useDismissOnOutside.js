@@ -1,25 +1,14 @@
 import { useEffect } from "react";
+import { useOverlay } from "./useOverlay.js";
 
-// Closes a popover on Esc or outside-click. Used by every dropdown popover
-// in Settings (TCP port editor, peer detail, budget editor, etc.) — Modal
-// has its own equivalent built in.
 export function useDismissOnOutside({ open, onClose, wrapRef }) {
+  const isTop = useOverlay({ open, onClose, ref: wrapRef });
   useEffect(() => {
     if (!open) return;
-    function onKey(e) {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        onClose?.();
-      }
-    }
     function onClick(e) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target)) onClose?.();
+      if (isTop() && wrapRef.current && !wrapRef.current.contains(e.target)) onClose?.();
     }
     document.addEventListener("mousedown", onClick);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onClick);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open, onClose, wrapRef]);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [open, onClose, wrapRef, isTop]);
 }
