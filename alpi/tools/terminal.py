@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+import signal
 import subprocess
 import sys
 import tempfile
@@ -168,6 +169,22 @@ def _remove_docker_container(container_name: str | None, env: dict[str, str]) ->
         pass
 
 
+def _kill_process_group(proc: subprocess.Popen | None) -> None:
+    if proc is None:
+        return
+    try:
+        group = os.getpgid(proc.pid)
+        # Only when the child leads its own group: otherwise this is OUR group and the
+        # signal would take the daemon down with it.
+        os.killpg(group, signal.SIGKILL) if group == proc.pid else proc.kill()
+    except (ProcessLookupError, PermissionError, OSError, AttributeError):
+        proc.kill()
+    try:
+        proc.wait(timeout=5)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _record_terminal_run(
     *, outcome: str, at: float, elapsed: float,
     exit_code: int | None = None, timeout_reason: str | None = None,
@@ -303,19 +320,31 @@ class Terminal(Tool):
         _started = time.time()
         subprocess_env = _build_subprocess_env()
         process_completed = False
+        child: subprocess.Popen | None = None
         try:
-            proc = subprocess.run(
-                popen_args, shell=use_shell, capture_output=True, text=True,
-                timeout=timeout, cwd=effective_cwd,
-                env=subprocess_env,
+            # Its own process group, so the timeout can reach what the shell spawned;
+            # that same session takes it out of the terminal's Ctrl+C, which is why every
+            # exceptional exit below has to do the killing itself.
+            child = subprocess.Popen(
+                popen_args, shell=use_shell,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                cwd=effective_cwd, env=subprocess_env, start_new_session=True,
+            )
+            stdout, stderr = child.communicate(timeout=timeout)
+            proc = subprocess.CompletedProcess(
+                popen_args, child.returncode, stdout=stdout, stderr=stderr,
             )
             process_completed = True
         except subprocess.TimeoutExpired:
+            _kill_process_group(child)
             _record_terminal_run(
                 outcome="timeout", at=_started,
                 elapsed=time.time() - _started, timeout_reason=f"timeout_{timeout}s",
             )
             return ToolResult(ok=False, output="", error=f"Timed out after {timeout}s")
+        except BaseException:
+            _kill_process_group(child)
+            raise
         finally:
             if docker_container_name is not None:
                 if not process_completed:

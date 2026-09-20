@@ -942,3 +942,88 @@ def test_terminal_default_timeout_grows_inside_pipeline_turns(monkeypatch):
     assert terminal_mod.default_run_timeout() == 120
     monkeypatch.setenv("ALPI_WORKGROUP_PIPELINE", "1")
     assert terminal_mod.default_run_timeout() == 900
+
+
+def test_a_timed_out_command_takes_its_children_with_it(tmp_path: Path) -> None:
+    import os
+    import signal
+    import time
+
+    marker = tmp_path / "orphan.pid"
+    # The shell exits immediately; the grandchild outlives the timeout unless the whole
+    # process group is signalled.
+    script = (
+        f"python3 -c \"import os,time;open('{marker}','w').write(str(os.getpid()));"
+        f"time.sleep(30)\" & sleep 30"
+    )
+    r = Terminal().run(command=script, timeout=2)
+    assert not r.ok and "Timed out" in (r.error or "")
+
+    deadline = time.time() + 5
+    while time.time() < deadline and not marker.exists():
+        time.sleep(0.05)
+    assert marker.exists(), "the grandchild never started, so the test proves nothing"
+    pid = int(marker.read_text())
+
+    for _ in range(50):
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return
+        time.sleep(0.1)
+    os.kill(pid, signal.SIGKILL)
+    raise AssertionError(f"pid {pid} survived the timeout as an orphan")
+
+
+def test_an_interrupted_command_is_killed_before_the_exception_travels(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import subprocess
+    from alpi.tools import terminal as terminal_mod
+
+    spawned = []
+    real_popen = subprocess.Popen
+
+    class Interrupting(real_popen):
+        def __init__(self, *a, **kw):
+            super().__init__(*a, **kw)
+            spawned.append(self)
+
+        def communicate(self, timeout=None):
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr(terminal_mod.subprocess, "Popen", Interrupting)
+    with pytest.raises(KeyboardInterrupt):
+        Terminal().run(command="sleep 30", timeout=30)
+
+    assert spawned, "nothing was spawned, so the test proves nothing"
+    child = spawned[0]
+    monkeypatch.setattr(terminal_mod.subprocess, "Popen", real_popen)
+    # Its own session takes it out of the terminal's Ctrl+C, so the tool must do the
+    # killing. A signalled child lingers as a zombie, so os.kill(pid, 0) still succeeds —
+    # the return code is what says it died.
+    try:
+        returncode = child.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        child.kill()
+        raise AssertionError("the command survived the interrupt") from None
+    assert returncode < 0, f"expected death by signal, got exit {returncode}"
+
+
+def test_a_command_that_never_starts_stops_the_heartbeat(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    import time
+    from alpi.tools import _state as state_mod
+    from alpi.tools import terminal as terminal_mod
+
+    monkeypatch.setattr(terminal_mod, "_FG_HEARTBEAT_SECONDS", 0.05)
+    beats: list[str] = []
+    monkeypatch.setattr(state_mod, "get_emit", lambda: lambda text, done: beats.append(text))
+
+    with pytest.raises(OSError):
+        Terminal().run(command="true", cwd=str(tmp_path / "does-not-exist"), timeout=30)
+
+    settled = len(beats)
+    time.sleep(0.3)
+    assert len(beats) == settled, "the heartbeat kept running after the spawn failed"

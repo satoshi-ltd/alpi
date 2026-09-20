@@ -92,6 +92,7 @@ def test_terminal_refuses_background_in_ephemeral_docker_world(tmp_path: Path) -
 def test_terminal_timeout_force_removes_docker_container(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    import os
     import subprocess
     from types import SimpleNamespace
     from alpi.tools import terminal as terminal_mod
@@ -107,13 +108,30 @@ def test_terminal_timeout_force_removes_docker_container(
     )
     calls = []
 
+    class FakeProc:
+        def __init__(self, args, **kwargs):
+            calls.append(args)
+            self.pid = os.getpid()
+            self.returncode = None
+            self.killed = False
+
+        def communicate(self, timeout=None):
+            if timeout is not None:
+                raise subprocess.TimeoutExpired(calls[-1], timeout)
+            return "", ""
+
+        def kill(self):
+            self.killed = True
+
     def fake_run(args, **kwargs):
         calls.append(args)
-        if args[:2] == ["docker", "run"]:
-            raise subprocess.TimeoutExpired(args, 1)
         return subprocess.CompletedProcess(args, 0, "", "")
 
+    # The foreground path spawns through Popen so its timeout can reach the whole group;
+    # the cleanup that this test is about still goes through run().
+    monkeypatch.setattr(terminal_mod.subprocess, "Popen", FakeProc)
     monkeypatch.setattr(terminal_mod.subprocess, "run", fake_run)
+    monkeypatch.setattr(terminal_mod.os, "killpg", lambda *a: None)
     with use(DockerExecutionWorld(context=context)):
         result = Terminal().run(
             command="sleep 30", timeout=1, cwd=str(context.workspace),

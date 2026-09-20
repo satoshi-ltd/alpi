@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.15.2 — 2026-09-21 — a timed-out command no longer leaves work running
+
+- **A command that hit its timeout could leave its own children running.** The timeout
+  killed the shell alpi spawned and nothing under it, so anything that shell had started
+  in the background — a build, a server, a script — kept running and kept consuming the
+  machine, invisible to the run that had already been reported as timed out. The command
+  now gets its own process group and the timeout signals the group, so what it started
+  goes with it.
+- **Interrupting a command kills it too.** The same process group that lets the timeout
+  reach the command's children also takes it out of the terminal's Ctrl+C, so an
+  interrupt that used to stop the command would have left it running. Any exceptional
+  exit now stops it before the interrupt travels on.
+- A command that fails to start — a working directory that does not exist, say — no
+  longer leaves its progress ticker running behind it.
+- The signal is sent only when the command genuinely leads its own group; otherwise it
+  falls back to killing the single process, because the group in that case would be the
+  daemon's own.
+
 ## v0.15.1 — 2026-09-20 — deleting a workgroup no longer loses part of its bill
 
 - **The spend archive was reading low by exactly the figure v0.15.0 made first-class.**
