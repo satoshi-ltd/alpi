@@ -13,9 +13,11 @@
     "eas:login": "npx -y eas-cli login",
     "eas:whoami": "npx -y eas-cli whoami",
     "eas:init": "npx -y eas-cli project:init",
-    "build:dev": "npx -y eas-cli build --platform android --profile development",
-    "build:preview": "npx -y eas-cli build --platform android --profile preview",
-    "build:prod": "npx -y eas-cli build --platform android --profile production --clear-cache"
+    "build:dev": "node scripts/android-build.mjs dev",
+    "build:prod": "node scripts/android-build.mjs prod",
+    "build:local:dev": "node scripts/android-build.mjs dev --local",
+    "build:local:prod": "node scripts/android-build.mjs prod --local",
+    "check:release": "node scripts/check-release.mjs"
   },
   "dependencies": {
     "@expo-google-fonts/geist": "^0.4.1",

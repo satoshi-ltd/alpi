@@ -1,5 +1,41 @@
 # Changelog
 
+## v0.15.1 — 2026-09-20 — deleting a workgroup no longer loses part of its bill
+
+- **The spend archive was reading low by exactly the figure v0.15.0 made first-class.**
+  `workgroup remove` archives what a workgroup cost and then deletes its directory, which
+  is the last moment that number exists. It summed the transcript only, but a turn's
+  undeclared usage is settled into the workgroup's own ledger *after* its posts, so every
+  residual went into the bin with the directory. The archive now folds both, and a
+  workgroup whose only spend was a residual reaches the archive instead of vanishing
+  silently.
+- **A ledger it cannot read now blocks the delete instead of undercounting.** The same
+  command's contract is that spend survives deletion or nothing is deleted; archiving a
+  number known to be short and then removing the evidence broke it. A missing ledger still
+  means no settlements, but anything else it cannot make sense of refuses the delete —
+  truncated, not an object, a settlement list that is not a list, or a row or cost of the
+  wrong shape. Reading a malformed ledger as "no spend" is the same loss with extra steps.
+- **A turn that produced no output tokens is no longer billed its whole token count.**
+  Where the input/output split was absent the figure fell back to the turn's total, which
+  is right for an older post that carries only a total and wrong for a settled residual of
+  100 in and 0 out — zero is a real value, not a missing field, and it was being read as
+  one.
+- **Docs that name a command now have to be right.** `alpi mcp` was described as absent
+  from the CLI while being a visible group; a test now derives the real command surface and
+  fails when a page shows one that does not exist, alongside the dependency and
+  `tools.deny` lists pinned in 0.15.0.
+- **A config knob cannot ship undocumented, and a row cannot outlive its knob.** The whole
+  typed config is now walked from `Config` itself rather than a hand-listed set of
+  sections, so a new typed section is covered the day it appears. Both directions fail the
+  suite: a field with no row, and a row whose field was deleted. Three documented keys are
+  read straight off the raw YAML past the dataclass; they are named as exceptions, and an
+  exception that outlives its row fails too.
+- **The sections that are bare dicts get the weaker check they can support.** `alp`, `host`,
+  `budget`, `network`, `relay`, `tui` and `providers` have no declaration reflection can
+  reach, so the test asks what the code can answer: does anything name this key? That
+  catches a row that outlived its knob. It cannot catch a knob nobody wrote down, and the
+  roadmap says so rather than implying the reference is fully pinned.
+
 ## v0.15.0 — 2026-09-18 — a pipeline run says what it cost
 
 - **What a pipeline run spends is now counted for you, per run and per phase.**

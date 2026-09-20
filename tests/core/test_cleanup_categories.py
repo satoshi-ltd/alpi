@@ -6,6 +6,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from alpi import home as home_mod
 from alpi.alp import mention_thread
 from alpi.cli import _cleanup_categories
@@ -674,3 +676,116 @@ def test_cleaning_workgroups_reports_removal_failure_without_purging(tmp_path, m
     assert turns.exists()
     assert "stuck" not in subscription.tombstones(tmp_path)
     assert purged == []
+
+
+def _wg_with_spend(root: Path, declared: dict, settlements: list) -> Path:
+    import json
+    wg = root / "alp" / "workgroups" / "wg_abcdefghijklmnop"
+    wg.mkdir(parents=True)
+    (wg / "transcript.jsonl").write_text(
+        json.dumps({"seq": 1, "ts": "2026-05-01T00:00:01Z", "cost": declared}) + "\n",
+    )
+    if settlements is not None:
+        (wg / "ledger.json").write_text(json.dumps({"settlements": settlements}))
+    return wg
+
+
+def test_archived_spend_includes_the_residual_a_member_never_declared(tmp_path, monkeypatch):
+    from alpi import cleanup, ledger
+
+    _wg_with_spend(
+        tmp_path,
+        {"usd": 0.10, "tokens_in": 100, "tokens_out": 10},
+        [{"ts": "2026-05-01T01:00:00Z", "from": "PK", "turn_id": "t1",
+          "cost": {"usd": 0.70, "tokens_in": 700, "tokens_out": 70}}],
+    )
+
+    assert cleanup.archive_workgroup_spend(
+        tmp_path, tmp_path / "alp" / "workgroups" / "wg_abcdefghijklmnop",
+    ) is None
+    row = ledger.read_archive(tmp_path)[-1]
+    assert row["cost_usd"] == 0.80
+    assert row["tokens_in"] == 800
+    assert row["tokens_out"] == 80
+
+
+def test_a_workgroup_whose_only_spend_is_a_residual_still_reaches_the_archive(
+    tmp_path, monkeypatch,
+):
+    from alpi import cleanup, ledger
+
+    _wg_with_spend(
+        tmp_path, {},
+        [{"ts": "2026-05-01T01:00:00Z", "from": "PK", "turn_id": "t1",
+          "cost": {"usd": 0.42, "tokens_in": 400, "tokens_out": 20}}],
+    )
+
+    cleanup.archive_workgroup_spend(
+        tmp_path, tmp_path / "alp" / "workgroups" / "wg_abcdefghijklmnop",
+    )
+    rows = ledger.read_archive(tmp_path)
+    assert len(rows) == 1 and rows[0]["cost_usd"] == 0.42
+
+
+@pytest.mark.parametrize("raw", ["{ not json", "null", "[]", '"a string"'])
+def test_a_ledger_it_cannot_read_refuses_to_archive_rather_than_undercount(tmp_path, raw):
+    from alpi import cleanup, ledger
+
+    wg = _wg_with_spend(tmp_path, {"usd": 0.10}, None)
+    (wg / "ledger.json").write_text(raw)
+
+    err = cleanup.archive_workgroup_spend(tmp_path, wg)
+    assert err and "ledger" in err.lower()
+    assert ledger.read_archive(tmp_path) == []
+
+
+@pytest.mark.parametrize("settlements", [
+    {"t1": {"cost": {"usd": 5}}},
+    [42],
+    "none",
+    [{"turn_id": "t1", "cost": "free"}],
+    [{"turn_id": "t1", "cost": []}],
+    [{"turn_id": "t1", "cost": 0}],
+    [{"turn_id": "t1", "cost": False}],
+    [{"turn_id": "t1", "cost": ""}],
+    [{"turn_id": "t1", "cost": None}],
+    [{"turn_id": "t1"}],
+])
+def test_a_ledger_shaped_wrong_refuses_rather_than_reading_it_as_no_spend(tmp_path, settlements):
+    import json
+    from alpi import cleanup, ledger
+
+    wg = _wg_with_spend(tmp_path, {"usd": 0.10}, None)
+    (wg / "ledger.json").write_text(json.dumps({"settlements": settlements}))
+
+    err = cleanup.archive_workgroup_spend(tmp_path, wg)
+    assert err and "ledger" in err.lower()
+    assert ledger.read_archive(tmp_path) == []
+
+
+def test_a_residual_with_no_output_tokens_is_not_counted_as_its_total(tmp_path):
+    from alpi import cleanup, ledger
+
+    _wg_with_spend(
+        tmp_path, {},
+        [{"ts": "2026-05-01T01:00:00Z", "from": "PK", "turn_id": "t1",
+          "cost": {"usd": 0.5, "tokens": 100, "tokens_in": 100, "tokens_out": 0}}],
+    )
+
+    cleanup.archive_workgroup_spend(
+        tmp_path, tmp_path / "alp" / "workgroups" / "wg_abcdefghijklmnop",
+    )
+    row = ledger.read_archive(tmp_path)[-1]
+    assert (row["tokens_in"], row["tokens_out"]) == (100, 0)
+
+
+def test_a_post_carrying_only_a_total_still_falls_back_to_it(tmp_path):
+    from alpi import cleanup, ledger
+
+    _wg_with_spend(tmp_path, {"usd": 0.2, "tokens": 90}, [])
+
+    cleanup.archive_workgroup_spend(
+        tmp_path, tmp_path / "alp" / "workgroups" / "wg_abcdefghijklmnop",
+    )
+    row = ledger.read_archive(tmp_path)[-1]
+    assert row["tokens_out"] == 90

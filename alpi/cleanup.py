@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import shutil
 import time
@@ -353,6 +354,32 @@ def plan(h: Path) -> list[dict[str, Any]]:
     ]
 
 
+def _settlement_costs(wg_dir: Path) -> list[dict[str, Any]]:
+    p = wg_dir / "ledger.json"
+    if not p.exists():
+        return []
+    try:
+        raw = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        raise ValueError(str(e)) from e
+    if not isinstance(raw, dict):
+        raise ValueError("ledger is not an object")
+    rows = raw.get("settlements", [])
+    if not isinstance(rows, list):
+        raise ValueError("settlements is not a list")
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            raise ValueError(f"settlement row is {type(row).__name__}, not an object")
+        # Validate before normalising: `or {}` would turn [], 0, False, "" and null into a
+        # valid empty cost and archive the row as free.
+        cost = row.get("cost")
+        if not isinstance(cost, dict):
+            raise ValueError(f"settlement cost is {type(cost).__name__}, not an object")
+        out.append(cost)
+    return out
+
+
 def archive_workgroup_spend(h: Path, wg_dir: Path) -> str | None:
     from alpi import ledger
     from alpi.alp import workgroup as alp_wg
@@ -361,12 +388,21 @@ def archive_workgroup_spend(h: Path, wg_dir: Path) -> str | None:
         entries = alp_wg._read_transcript(wg_dir)
     except Exception as e:  # noqa: BLE001
         return f"{wg_dir.name}: cannot read spend ({e})"
+    # A turn's undeclared usage is settled into ledger.json after its posts, so the
+    # transcript alone reads low by exactly that residual and the directory is about
+    # to be deleted. Refuse rather than archive a number we know is short.
+    try:
+        settlements = _settlement_costs(wg_dir)
+    except ValueError as e:
+        return f"{wg_dir.name}: cannot read spend ledger ({e})"
     cost = tin = tout = 0.0
-    for e in entries:
-        c = e.get("cost") or {}
+    for c in [e.get("cost") or {} for e in entries] + settlements:
         cost += float(c.get("usd") or 0.0)
         tin += int(c.get("tokens_in") or 0)
-        tout += int(c.get("tokens_out") or c.get("tokens") or 0)
+        # A settled residual may legitimately be 0 out; only an ABSENT split falls back
+        # to the total, or a turn that produced nothing is billed its whole token count.
+        out_tokens = c.get("tokens_out")
+        tout += int((c.get("tokens") if out_tokens is None else out_tokens) or 0)
     try:
         source_at = entries[0].get("ts") if entries else None
         ledger.archive_entity(
