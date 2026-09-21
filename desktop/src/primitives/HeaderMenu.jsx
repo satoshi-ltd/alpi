@@ -29,7 +29,7 @@ export default function HeaderMenu({
           <Icon name="ellipsis" />
         </IconBtn>
       </Tip>
-      <Popover open={open} onClose={() => setOpen(false)} width="var(--pop-sm)" align="right">
+      <Popover open={open} onClose={() => setOpen(false)} align="right">
         <div className={styles.menu}>
           {onOpenSettings && (
             <button type="button" className={styles.item} onClick={run(onOpenSettings)}>

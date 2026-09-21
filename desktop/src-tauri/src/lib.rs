@@ -361,6 +361,11 @@ async fn host_connection_forget(id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn host_connection_rename(id: String, name: String) -> Result<(), String> {
+    off_main(move || host_client::rename_connection(id, name)).await?
+}
+
+#[tauri::command]
 async fn host_connection_add_remote(
     name: String,
     url: String,
@@ -3785,6 +3790,7 @@ pub fn run() {
             host_connections,
             host_connection_set_active,
             host_connection_forget,
+            host_connection_rename,
             host_connection_add_remote,
             host_connections_probe_active,
             host_connections_probe_all,

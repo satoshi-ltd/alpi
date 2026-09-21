@@ -1,4 +1,7 @@
 import Button from "./Button.jsx";
+import ConfirmDelete from "./ConfirmDelete.jsx";
+import Icon from "./Icon.jsx";
+import IconBtn from "./IconBtn.jsx";
 import { OverlayScope, useOverlay } from "../hooks/useOverlay.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -45,11 +48,15 @@ export function ConnectionPanel({
   activeId,
   onPick,
   onForget,
+  onRename,
   onPair,
   locked = false,
 }) {
   const [pairing, setPairing] = useState("");
   const [pairBusy, setPairBusy] = useState(false);
+  const [renaming, setRenaming] = useState(null);
+  const [forgetFor, setForgetFor] = useState(null);
+  const renameCancelled = useRef(false);
   async function submitPair() {
     if (!pairing.startsWith("alpi://") || pairBusy) return;
     setPairBusy(true);
@@ -59,6 +66,27 @@ export function ConnectionPanel({
     } finally {
       setPairBusy(false);
     }
+  }
+  function beginRename(r) {
+    renameCancelled.current = false;
+    setRenaming({ id: r.id, value: r.name });
+  }
+  function cancelRename(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    // Escape blurs the field next; the blur must not commit what Escape just discarded.
+    renameCancelled.current = true;
+    setRenaming(null);
+  }
+  async function commitRename(r) {
+    if (renameCancelled.current) {
+      renameCancelled.current = false;
+      return;
+    }
+    const name = (renaming?.value ?? "").trim();
+    setRenaming(null);
+    if (!name || name === r.name) return;
+    await onRename?.(r, name);
   }
   if (!open) return null;
   return (
@@ -118,7 +146,27 @@ export function ConnectionPanel({
                 </span>
                 <div className={`col ${styles.connBody}`}>
                   <div className={`row row-gap ${styles.connBodyTop}`}>
-                    <span className={styles.connName}>{r.name}</span>
+                    {renaming?.id === r.id ? (
+                      <input
+                        autoFocus
+                        aria-label="Connection name"
+                        className={styles.renameInput}
+                        value={renaming.value}
+                        maxLength={64}
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                        onDoubleClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onChange={(e) => setRenaming({ id: r.id, value: e.target.value })}
+                        onBlur={() => commitRename(r)}
+                        onKeyDown={(e) => {
+                          e.stopPropagation();
+                          if (e.key === "Enter") commitRename(r);
+                          if (e.key === "Escape") cancelRename(e);
+                        }}
+                      />
+                    ) : (
+                      <span className={styles.connName}>{r.name}</span>
+                    )}
                     {active && <span className="tag">current</span>}
                     {r.status === "offline" && (
                       <span className={`tag ${styles.tagOffline}`}>
@@ -144,16 +192,34 @@ export function ConnectionPanel({
                   </span>
                 </div>
                 {!isLocal && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onForget?.(r);
-                    }}
-                    className={styles.forgetBtn}
+                  <span
+                    className={`${styles.rowActions} ${forgetFor === r.id ? styles.rowActionsOpen : ""}`}
+                    onClick={(e) => e.stopPropagation()}
                   >
-                    Forget
-                  </button>
+                    {onRename && (
+                      <IconBtn tip="Rename" tipSide="up" onClick={() => beginRename(r)}>
+                        <Icon name="pencil" />
+                      </IconBtn>
+                    )}
+                    <span className={styles.confirmAction}>
+                      <IconBtn
+                        tip="Forget"
+                        tipSide="up"
+                        className={styles.dangerAction}
+                        onClick={() => setForgetFor((cur) => (cur === r.id ? null : r.id))}
+                      >
+                        <Icon name="x" />
+                      </IconBtn>
+                      <ConfirmDelete
+                        open={forgetFor === r.id}
+                        title={`Forget ${r.name}?`}
+                        consequence="Only this computer forgets it. The host still lists the device until an admin removes it there."
+                        confirmLabel="Forget connection"
+                        onClose={() => setForgetFor(null)}
+                        onConfirm={() => onForget?.(r)}
+                      />
+                    </span>
+                  </span>
                 )}
               </div>
             );

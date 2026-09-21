@@ -14,6 +14,22 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.4.11 — 2026-09-21 — a daemon can be renamed on the phone
+
+- **Long-press a daemon → Rename.** The name shown for each daemon was whatever the pairing
+  QR carried and could not be changed afterwards without forgetting the daemon and scanning
+  again. The connection action sheet now has *Rename* next to *Forget*: a small prompt with
+  the current name, save disabled until it is non-empty and different, capped at 64
+  characters.
+- **Phone-only, like the name always was.** The alias lives in the phone's secure store and
+  is never sent to the daemon, which knows this phone by its device token. Renaming keeps
+  the token, the active daemon and the pooled socket exactly as they were; outputs and
+  notifications re-tag themselves with the new name on the next refresh.
+- **No `update` chip on the daemon list.** It sat next to `current` and `offline` without
+  being something you could act on from the row. An available update still shows where it
+  is acted on: long-press the daemon and the sheet offers *Update to vX*.
+  Client-only change: the minimum compatible alpi is unchanged.
+
 ## v0.4.10 — 2026-09-20 — readable status, one palette with the desktop
 
 - **The accent is the brand's amber.** `#f0b447` in dark, darkened to `#8a5a0a` in light.

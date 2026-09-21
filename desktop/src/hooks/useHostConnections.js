@@ -490,6 +490,14 @@ export function useHostConnections({
     [reload, reloadConnections],
   );
 
+  const onRenameHostConnection = useCallback(
+    async (id, name) => {
+      await invoke("host_connection_rename", { id, name });
+      await reloadConnections({ acceptActiveChange: false });
+    },
+    [reloadConnections],
+  );
+
   const onRefreshHostConnectionStatus = useCallback(async () => {
     await invoke("host_connections_probe_all");
   }, []);
@@ -510,6 +518,7 @@ export function useHostConnections({
     onSetHostConnection,
     onAddHostConnection,
     onForgetHostConnection,
+    onRenameHostConnection,
     onRefreshHostConnectionStatus,
   };
 }

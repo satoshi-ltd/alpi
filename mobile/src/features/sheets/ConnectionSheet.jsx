@@ -8,6 +8,7 @@ import { Dot } from '../../components/Dot';
 import { Icon } from '../../components/Icon';
 import { Row, RowSeparator } from '../../components/Row';
 import { Sheet } from '../../components/Sheet';
+import { TextPrompt } from '../../components/TextPrompt';
 import { useToast } from '../../components/Toast';
 import { Bold, Code, TypedConfirm } from '../../components/TypedConfirm';
 import { canUpdateConnection } from '../../lib/connectionUpdate';
@@ -38,9 +39,10 @@ export function ConnectionSheet({ open, onClose }) {
   const { colors, fonts } = useTheme();
   const router = useRouter();
   const toast = useToast();
-  const { connections, activeId, probeState, versionState, updateState, roleState, setActive, forget, probeAll } = useEndpoint();
+  const { connections, activeId, probeState, versionState, updateState, roleState, setActive, rename, forget, probeAll } = useEndpoint();
   const [target, setTarget] = useState(null);
   const [confirmForget, setConfirmForget] = useState(null);
+  const [renameTarget, setRenameTarget] = useState(null);
 
   useEffect(() => {
     if (!open) return;
@@ -88,7 +90,6 @@ export function ConnectionSheet({ open, onClose }) {
           sortConnectionsByRecency(connections).map((c, i) => {
             const status = probeState.get(c.id) ?? 'unknown';
             const version = versionState.get(c.id);
-            const upd = updateState.get(c.id);
             return (
               <View key={c.id}>
                 {i > 0 ? <RowSeparator indent={60} /> : null}
@@ -114,7 +115,6 @@ export function ConnectionSheet({ open, onClose }) {
                   helper={version ? `${c.url} · v${version}` : c.url}
                   value={
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2 }}>
-                      {upd ? <Tag label="update" tone="warn" /> : null}
                       {status === 'disabled' ? (
                         <Tag label="disabled" />
                       ) : c.id === activeId ? (
@@ -125,7 +125,6 @@ export function ConnectionSheet({ open, onClose }) {
                     </View>
                   }
                   chevron={false}
-                  // Tap = switch to this daemon. Long-press = open actions (only "Forget" lives there now, but that pattern leaves room for more later — same affordance schedule uses).
                   onPress={() => {
                     setActive(c.id);
                     onClose?.();
@@ -153,6 +152,16 @@ export function ConnectionSheet({ open, onClose }) {
                       onPress: () => doUpdate(target),
                     }]
                   : []),
+                {
+                  id: 'rename',
+                  label: 'Rename',
+                  icon: <Icon name="edit" size={20} color={colors.ink2} />,
+                  onPress: () => {
+                    const t = target;
+                    setTarget(null);
+                    setRenameTarget(t);
+                  },
+                },
                 {
                   id: 'forget',
                   label: 'Forget',
@@ -183,6 +192,24 @@ export function ConnectionSheet({ open, onClose }) {
           const id = confirmForget?.id;
           setConfirmForget(null);
           if (id) forget(id);
+        }}
+      />
+      <TextPrompt
+        open={!!renameTarget}
+        onClose={() => setRenameTarget(null)}
+        title="Rename connection"
+        label="NAME ON THIS PHONE ONLY"
+        initialValue={renameTarget?.name ?? ''}
+        placeholder={renameTarget?.name ?? ''}
+        onSubmit={async (name) => {
+          const id = renameTarget?.id;
+          setRenameTarget(null);
+          if (!id) return;
+          try {
+            await rename(id, name);
+          } catch (e) {
+            toast({ title: "Couldn't rename", message: e?.message ?? String(e), duration: 3000 });
+          }
         }}
       />
     </Sheet>

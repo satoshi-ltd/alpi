@@ -1,10 +1,11 @@
 import { OverlayScope, useOverlay } from "../hooks/useOverlay.js";
 import { useEffect, useRef } from "react";
 
+// Action menus size to their content; forms and pickers pass a --pop-* token because inputs stretch to fill.
 export default function Popover({
   open,
   onClose,
-  width = "var(--pop-md)",
+  width = "max-content",
   align = "left",
   side = "bottom",
   placement,
@@ -47,6 +48,7 @@ export default function Popover({
           [resolvedSide === "top" ? "bottom" : "top"]: "calc(100% + 8px)",
           [resolvedAlign]: 0,
           width,
+          maxWidth: "min(var(--pop-lg), calc(100vw - 16px))",
           background: "var(--bg-elev)",
           border: ".5px solid var(--line-2)",
           borderRadius: "var(--r-xl)",

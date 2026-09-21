@@ -1,8 +1,8 @@
 .root {
   position: fixed;
   z-index: var(--z-menu);
-  width: var(--pop-sm);
-  max-width: calc(100vw - 16px);
+  width: max-content;
+  max-width: min(var(--pop-lg), calc(100vw - 16px));
   max-height: calc(100vh - 16px);
   overflow-y: auto;
   background: var(--bg-elev);

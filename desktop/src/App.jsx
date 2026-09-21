@@ -386,6 +386,7 @@ export default function App() {
     onSetHostConnection,
     onAddHostConnection,
     onForgetHostConnection,
+    onRenameHostConnection,
     onRefreshHostConnectionStatus,
   } = useHostConnections({
     setSessionData,
@@ -1261,6 +1262,7 @@ export default function App() {
         onSetHostConnection={onSetHostConnection}
         onAddHostConnection={onAddHostConnection}
         onForgetHostConnection={onForgetHostConnection}
+        onRenameHostConnection={onRenameHostConnection}
         onRefreshHostConnectionStatus={onRefreshHostConnectionStatus}
         autoOpenConnectionSwitcher={autoOpenConnectionSwitcher}
         connectionLocked={connectionLocked}

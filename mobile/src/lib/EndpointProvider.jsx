@@ -5,7 +5,7 @@ import { clearImageCache } from '../hooks/useCachedImage';
 import { seedCache } from '../hooks/useDaemonData';
 import { probe, probeAll } from './probe';
 import { call as rpcCall, callStream as rpcCallStream, dropEndpointPool } from './rpc';
-import { clearAll, loadConnections, removeConnection, rolesFromConnections, saveConnection, setActiveConnection, setDeviceIds, setRoles } from './store';
+import { clearAll, loadConnections, removeConnection, renameConnection, rolesFromConnections, saveConnection, setActiveConnection, setDeviceIds, setRoles } from './store';
 import { RATE_LIMITED_REPROBE_MS, RATE_LIMITED_STATUS } from './rateLimit';
 
 const OFFLINE_REPROBE_MS = 4000;
@@ -141,6 +141,11 @@ export function EndpointProvider({ children }) {
     await refresh();
   }, [refresh]);
 
+  const rename = useCallback(async (id, name) => {
+    await renameConnection(id, name);
+    await refresh();
+  }, [refresh]);
+
   const forget = useCallback(async (id) => {
     const target = connections.find((c) => c.id === id);
     if (target) dropEndpointPool(target);
@@ -227,6 +232,7 @@ export function EndpointProvider({ children }) {
       activeRole,
       setActive,
       addConnection,
+      rename,
       forget,
       unpair,
       probeOne,
@@ -235,7 +241,7 @@ export function EndpointProvider({ children }) {
       call,
       callStream,
     }),
-    [ready, connections, activeId, activeEndpoint, probeState, versionState, updateState, roleState, activeRole, setActive, addConnection, forget, unpair, probeOne, markConnectionStatus, probeAllConnections, call, callStream],
+    [ready, connections, activeId, activeEndpoint, probeState, versionState, updateState, roleState, activeRole, setActive, addConnection, rename, forget, unpair, probeOne, markConnectionStatus, probeAllConnections, call, callStream],
   );
 
   return <EndpointContext.Provider value={value}>{children}</EndpointContext.Provider>;

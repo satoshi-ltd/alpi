@@ -11,6 +11,31 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.6.1 — 2026-09-21 — a connection can be renamed where it lives
+
+- **The name you gave a connection is editable.** The alias in the connection switcher
+  (`casa`, `mirai`, …) was fixed the moment you pasted the pairing link — it came from the
+  link's `name` and there was no way to change it short of forgetting the connection and
+  pairing again, which costs a new device token. Hovering a remote row in the connection
+  switcher now reveals **Rename** and **Forget**, the same gesture Settings → Connections
+  uses for the host's records. Rename turns the name into a field: Enter or leaving the
+  field saves, Escape discards, an empty or unchanged name is a no-op. Forget sits behind
+  the same hover and asks first, anchored to the row like the confirms in Settings, so a
+  destructive action is no longer one stray click away. The local daemon keeps its fixed
+  name.
+- **Action menus are as wide as their entries.** `Popover` used to open at a fixed
+  `--pop-md` unless told otherwise, so a two-item menu floated in 340px of surface. The
+  default is now the content's width, capped at `--pop-lg` and the viewport; the profile
+  `⋯` menu and the sidebar's right-click menu follow the same rule. Forms and pickers keep
+  passing a token, because their inputs stretch to whatever width they are given.
+- **Nothing leaves the machine.** This alias only exists in the app's own `connections.json`;
+  the daemon identifies the app by its device token and never sees it. The rename runs
+  through the same lock as add and forget, so a background probe writing its metadata can
+  neither interleave with it nor undo it. It is a different thing from the connection's
+  *label* in Settings → Connections, which is the host's record of who you are and needs
+  an admin device.
+  Client-only change: the minimum compatible alpi stays at 0.14.34, as pinned by v0.5.26.
+
 ## v0.6.0 — 2026-09-20 — one palette, one type, one way to close a window
 
 - **The accent is the brand's amber.** `#f0b447` in dark, darkened to `#8a5a0a` in light so

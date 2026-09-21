@@ -60,6 +60,6 @@ describe("android-build", () => {
     const dir = fixture("exit 0");
     const result = build(dir, "dev", "--install-only");
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain(path.join(dir, "release-assets/demo-1.2.3-android-dev.apk"));
+    expect(result.stderr).toContain(path.join("release-assets", "demo-1.2.3-android-dev.apk"));
   });
 });

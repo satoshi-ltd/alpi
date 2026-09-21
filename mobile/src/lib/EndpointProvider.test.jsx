@@ -32,6 +32,13 @@ vi.mock("./store", () => ({
     else storeState.connections.push(conn);
     if (!storeState.active_id) storeState.active_id = conn.id;
   },
+  renameConnection: async (id, name) => {
+    storeMutations.push({ op: "rename", id, name });
+    const conn = storeState.connections.find((c) => c.id === id);
+    if (!conn) throw new Error(`unknown connection: ${id}`);
+    conn.name = name;
+    return structuredClone(storeState);
+  },
   removeConnection: async (id) => {
     storeMutations.push({ op: "remove", id });
     storeState.connections = storeState.connections.filter((c) => c.id !== id);
@@ -209,6 +216,17 @@ describe("EndpointProvider lifecycle", () => {
     await act(async () => { await captureRef.current.setActive("gamma"); });
     expect(captureRef.current.activeId).toBe("gamma");
     await waitFor(() => expect(captureRef.current.probeState.get("gamma")).toBe("online"));
+  });
+
+  it("rename changes the alias in the store and the context, and touches no pool, token or active id", async () => {
+    const { captureRef } = await mount();
+    await act(async () => { await captureRef.current.rename("beta", "macbook-pro"); });
+    expect(storeMutations).toContainEqual({ op: "rename", id: "beta", name: "macbook-pro" });
+    expect(drops).toEqual([]);
+    const beta = captureRef.current.connections.find((c) => c.id === "beta");
+    expect(beta.name).toBe("macbook-pro");
+    expect(beta.token).toBe("b");
+    expect(captureRef.current.activeId).toBe("alpha");
   });
 
   it("forget drops only the targeted endpoint's pool", async () => {

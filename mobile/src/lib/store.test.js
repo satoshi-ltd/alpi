@@ -91,6 +91,41 @@ describe("store.loadConnections", () => {
   });
 });
 
+describe("store.renameConnection", () => {
+  async function seeded() {
+    const { saveConnection } = await import("./store");
+    await saveConnection(validConn({ id: "c-1", name: "umbrel" }));
+    await saveConnection(validConn({ id: "c-2", name: "casa", deviceId: "mac-uuid-2" }));
+    return import("./store");
+  }
+
+  it("changes only the alias, trimmed, and leaves token, active id and the other connections alone", async () => {
+    const { renameConnection, loadConnections } = await seeded();
+    const before = await loadConnections();
+    await renameConnection("c-1", "  macbook-pro  ");
+    const after = await loadConnections();
+    const renamed = after.connections.find((c) => c.id === "c-1");
+    expect(renamed.name).toBe("macbook-pro");
+    expect(renamed.token).toBe("tok");
+    expect(renamed.deviceId).toBe("mac-uuid");
+    expect(after.active_id).toBe(before.active_id);
+    expect(after.connections.find((c) => c.id === "c-2")).toEqual(before.connections.find((c) => c.id === "c-2"));
+  });
+
+  it("refuses an empty name and an unknown connection", async () => {
+    const { renameConnection, loadConnections } = await seeded();
+    await expect(renameConnection("c-1", "   ")).rejects.toThrow("cannot be empty");
+    await expect(renameConnection("c-9", "x")).rejects.toThrow("unknown connection");
+    expect((await loadConnections()).connections.find((c) => c.id === "c-1").name).toBe("umbrel");
+  });
+
+  it("caps the alias at 64 characters", async () => {
+    const { renameConnection, loadConnections } = await seeded();
+    await renameConnection("c-1", "x".repeat(80));
+    expect((await loadConnections()).connections.find((c) => c.id === "c-1").name).toHaveLength(64);
+  });
+});
+
 describe("store.saveConnection", () => {
   it("appends a new connection and marks it active", async () => {
     const { saveConnection } = await import("./store.js");
@@ -325,5 +360,40 @@ describe("store.setDeviceIds", () => {
     const before = memory.get(KEY);
     await setDeviceIds(new Map([["alpha", "same"]]));
     expect(memory.get(KEY)).toBe(before);
+  });
+});
+
+describe("store mutations", () => {
+  function slowSecureStore(secure) {
+    const slow = (fn) => async (...args) => {
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      return fn(...args);
+    };
+    secure.getItemAsync.mockImplementation(slow(async (k) => (memory.has(k) ? memory.get(k) : null)));
+    secure.setItemAsync.mockImplementation(slow(async (k, v) => { memory.set(k, v); }));
+  }
+
+  it("serialises concurrent writers so a probe's role update cannot drop a rename", async () => {
+    memory.set(KEY, JSON.stringify({ v: 1, active_id: "c-1", connections: [validConn()] }));
+    slowSecureStore(await import("expo-secure-store"));
+    const { renameConnection, setRoles, loadConnections } = await import("./store.js");
+    await Promise.all([
+      renameConnection("c-1", "casa"),
+      setRoles(new Map([["c-1", "admin"]])),
+    ]);
+    const conn = (await loadConnections()).connections[0];
+    expect(conn.name).toBe("casa");
+    expect(conn.role).toBe("admin");
+  });
+
+  it("a rejected mutation does not stall the ones queued behind it", async () => {
+    memory.set(KEY, JSON.stringify({ v: 1, active_id: "c-1", connections: [validConn(), validConn({ id: "c-2" })] }));
+    slowSecureStore(await import("expo-secure-store"));
+    const { renameConnection, setActiveConnection, loadConnections } = await import("./store.js");
+    const failed = renameConnection("c-1", "   ");
+    const activated = setActiveConnection("c-2");
+    await expect(failed).rejects.toThrow("connection name cannot be empty");
+    await activated;
+    expect((await loadConnections()).active_id).toBe("c-2");
   });
 });

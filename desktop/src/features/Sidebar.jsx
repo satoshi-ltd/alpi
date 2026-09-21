@@ -104,6 +104,7 @@ function Sidebar({
   onSetHostConnection,
   onAddHostConnection,
   onForgetHostConnection,
+  onRenameHostConnection,
   onRefreshHostConnectionStatus,
   autoOpenConnectionSwitcher = false,
   connectionLocked = false,
@@ -463,6 +464,7 @@ function Sidebar({
               onSetActive={onSetHostConnection}
               onAddRemote={onAddHostConnection}
               onForget={onForgetHostConnection}
+              onRename={onRenameHostConnection}
               onOpen={onRefreshHostConnectionStatus}
               autoOpenSignal={autoOpenConnectionSwitcher}
               locked={connectionLocked}

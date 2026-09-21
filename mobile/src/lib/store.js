@@ -56,6 +56,14 @@ async function writeRaw(state) {
   await SecureStore.setItemAsync(KEY, JSON.stringify(state), secureOpts());
 }
 
+let writes = Promise.resolve();
+// Every read-modify-write goes through here: a probe's setRoles racing a rename would otherwise persist the stale name.
+function mutate(fn) {
+  const run = writes.then(fn);
+  writes = run.catch(() => {});
+  return run;
+}
+
 export async function loadConnections() {
   const state = (await readRaw()) ?? { v: 1, active_id: null, connections: [] };
   return normalize(state);
@@ -76,99 +84,128 @@ export function rolesFromConnections(connections) {
   return map;
 }
 
-export async function setRoles(idToRole) {
-  const state = await loadConnections();
-  let changed = false;
-  for (const conn of state.connections) {
-    const next = idToRole.get(conn.id);
-    if (next && conn.role !== next) {
-      conn.role = next;
-      changed = true;
+export function setRoles(idToRole) {
+  return mutate(async () => {
+    const state = await loadConnections();
+    let changed = false;
+    for (const conn of state.connections) {
+      const next = idToRole.get(conn.id);
+      if (next && conn.role !== next) {
+        conn.role = next;
+        changed = true;
+      }
     }
-  }
-  if (changed) await writeRaw(state);
-  return state;
+    if (changed) await writeRaw(state);
+    return state;
+  });
 }
 
-export async function saveConnection(endpoint) {
-  if (!endpoint?.deviceId || typeof endpoint.deviceId !== 'string') {
-    throw new Error('saveConnection requires a deviceId — pair against an alpi daemon v0.6.6 or newer.');
-  }
-  const state = await loadConnections();
-  const connectionId = typeof endpoint.connectionId === 'string' && endpoint.connectionId
-    ? endpoint.connectionId
-    : null;
-  let existingIdx = endpoint.id
-    ? state.connections.findIndex((c) => c.id === endpoint.id)
-    : -1;
-  if (existingIdx < 0 && connectionId) {
-    existingIdx = state.connections.findIndex(
-      (c) => c.deviceId === endpoint.deviceId && c.connectionId === connectionId,
-    );
-  }
-  if (existingIdx < 0 && !endpoint.id) {
-    const sameDaemon = state.connections
-      .map((connection, index) => ({ connection, index }))
-      .filter(({ connection }) => (
-        connection.deviceId === endpoint.deviceId
-        && (!connectionId || !connection.connectionId)
-      ));
-    if (sameDaemon.length === 1) existingIdx = sameDaemon[0].index;
-  }
-  const existing = existingIdx >= 0 ? state.connections[existingIdx] : null;
-  const id = endpoint.id ?? existing?.id ?? genId();
-  const conn = {
-    id,
-    name: endpoint.name ?? 'alpi',
-    url: endpointUrl(endpoint),
-    token: endpoint.token,
-    kind: 'remote',
-    added_at: Date.now(),
-    last_connected: Date.now(),
-    deviceId: endpoint.deviceId,
-    connectionId: connectionId ?? existing?.connectionId ?? null,
-    role: endpoint.role ?? existing?.role ?? null,
-  };
-  if (existingIdx >= 0) state.connections[existingIdx] = conn;
-  else state.connections.push(conn);
-  state.active_id = id;
-  await writeRaw(state);
-  return state;
-}
-
-export async function removeConnection(id) {
-  const state = await loadConnections();
-  state.connections = state.connections.filter((c) => c.id !== id);
-  if (state.active_id === id) state.active_id = state.connections[0]?.id ?? null;
-  await writeRaw(state);
-  return state;
-}
-
-export async function setActiveConnection(id) {
-  const state = await loadConnections();
-  const conn = state.connections.find((c) => c.id === id);
-  if (!conn) return state;
-  conn.last_connected = Date.now();
-  state.active_id = id;
-  await writeRaw(state);
-  return state;
-}
-
-export async function clearAll() {
-  await SecureStore.deleteItemAsync(KEY);
-  await SecureStore.deleteItemAsync(LEGACY_ENDPOINT_KEY);
-}
-
-export async function setDeviceIds(idToDeviceId) {
-  const state = await loadConnections();
-  let changed = false;
-  for (const conn of state.connections) {
-    const next = idToDeviceId.get(conn.id);
-    if (next && conn.deviceId !== next) {
-      conn.deviceId = next;
-      changed = true;
+export function saveConnection(endpoint) {
+  return mutate(async () => {
+    if (!endpoint?.deviceId || typeof endpoint.deviceId !== 'string') {
+      throw new Error('saveConnection requires a deviceId — pair against an alpi daemon v0.6.6 or newer.');
     }
-  }
-  if (changed) await writeRaw(state);
-  return state;
+    const state = await loadConnections();
+    const connectionId = typeof endpoint.connectionId === 'string' && endpoint.connectionId
+      ? endpoint.connectionId
+      : null;
+    let existingIdx = endpoint.id
+      ? state.connections.findIndex((c) => c.id === endpoint.id)
+      : -1;
+    if (existingIdx < 0 && connectionId) {
+      existingIdx = state.connections.findIndex(
+        (c) => c.deviceId === endpoint.deviceId && c.connectionId === connectionId,
+      );
+    }
+    if (existingIdx < 0 && !endpoint.id) {
+      const sameDaemon = state.connections
+        .map((connection, index) => ({ connection, index }))
+        .filter(({ connection }) => (
+          connection.deviceId === endpoint.deviceId
+          && (!connectionId || !connection.connectionId)
+        ));
+      if (sameDaemon.length === 1) existingIdx = sameDaemon[0].index;
+    }
+    const existing = existingIdx >= 0 ? state.connections[existingIdx] : null;
+    const id = endpoint.id ?? existing?.id ?? genId();
+    const conn = {
+      id,
+      name: endpoint.name ?? 'alpi',
+      url: endpointUrl(endpoint),
+      token: endpoint.token,
+      kind: 'remote',
+      added_at: Date.now(),
+      last_connected: Date.now(),
+      deviceId: endpoint.deviceId,
+      connectionId: connectionId ?? existing?.connectionId ?? null,
+      role: endpoint.role ?? existing?.role ?? null,
+    };
+    if (existingIdx >= 0) state.connections[existingIdx] = conn;
+    else state.connections.push(conn);
+    state.active_id = id;
+    await writeRaw(state);
+    return state;
+  });
+}
+
+const CONNECTION_NAME_MAX_CHARS = 64;
+
+// The local alias only: the daemon identifies this phone by its device token and never sees this name.
+export function renameConnection(id, name) {
+  return mutate(async () => {
+    const clean = String(name ?? '').trim().slice(0, CONNECTION_NAME_MAX_CHARS);
+    if (!clean) throw new Error('connection name cannot be empty');
+    const state = await loadConnections();
+    const conn = state.connections.find((c) => c.id === id);
+    if (!conn) throw new Error(`unknown connection: ${id}`);
+    if (conn.name === clean) return state;
+    conn.name = clean;
+    await writeRaw(state);
+    return state;
+  });
+}
+
+export function removeConnection(id) {
+  return mutate(async () => {
+    const state = await loadConnections();
+    state.connections = state.connections.filter((c) => c.id !== id);
+    if (state.active_id === id) state.active_id = state.connections[0]?.id ?? null;
+    await writeRaw(state);
+    return state;
+  });
+}
+
+export function setActiveConnection(id) {
+  return mutate(async () => {
+    const state = await loadConnections();
+    const conn = state.connections.find((c) => c.id === id);
+    if (!conn) return state;
+    conn.last_connected = Date.now();
+    state.active_id = id;
+    await writeRaw(state);
+    return state;
+  });
+}
+
+export function clearAll() {
+  return mutate(async () => {
+    await SecureStore.deleteItemAsync(KEY);
+    await SecureStore.deleteItemAsync(LEGACY_ENDPOINT_KEY);
+  });
+}
+
+export function setDeviceIds(idToDeviceId) {
+  return mutate(async () => {
+    const state = await loadConnections();
+    let changed = false;
+    for (const conn of state.connections) {
+      const next = idToDeviceId.get(conn.id);
+      if (next && conn.deviceId !== next) {
+        conn.deviceId = next;
+        changed = true;
+      }
+    }
+    if (changed) await writeRaw(state);
+    return state;
+  });
 }

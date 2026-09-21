@@ -50,6 +50,7 @@ export default function ConnectionSwitcher({
   onSetActive,
   onAddRemote,
   onForget,
+  onRename,
   onOpen,
   autoOpenSignal = false,
   locked = false,
@@ -130,6 +131,17 @@ export default function ConnectionSwitcher({
           closePanel();
         }}
         onForget={(r) => onForget?.(r.id)}
+        onRename={
+          onRename
+            ? async (r, name) => {
+                try {
+                  await onRename(r.id, name);
+                } catch (e) {
+                  notify({ message: e?.message || String(e), variant: "danger" });
+                }
+              }
+            : undefined
+        }
         onPair={async (payload) => {
           try {
             const { name } = (await onAddRemote?.(payload)) ?? {};

@@ -871,6 +871,29 @@ pub fn forget_connection(id: String) -> Result<(), String> {
     Ok(())
 }
 
+const CONNECTION_NAME_MAX_CHARS: usize = 64;
+
+// The local alias only: the daemon identifies this client by its device token and never sees this name.
+pub fn rename_connection(id: String, name: String) -> Result<(), String> {
+    if id == LOCAL_ID {
+        return Err("local connection cannot be renamed".to_string());
+    }
+    let clean: String = name.trim().chars().take(CONNECTION_NAME_MAX_CHARS).collect();
+    if clean.is_empty() {
+        return Err("connection name cannot be empty".to_string());
+    }
+    try_mutate_connections(|state| {
+        match state.connections.iter_mut().find(|c| c.id() == id) {
+            Some(HostConnection::Remote { name, .. }) => {
+                *name = clean;
+                Ok(())
+            }
+            Some(HostConnection::Local { .. }) => Err("local connection cannot be renamed".to_string()),
+            None => Err(format!("unknown connection: {id}")),
+        }
+    })
+}
+
 pub fn add_remote_connection(
     name: String,
     url: String,
@@ -2798,6 +2821,52 @@ mod tests {
             !ids.contains(&"remote-b"),
             "a stale-snapshot metadata write must not resurrect forgotten remote-b: {ids:?}",
         );
+
+        *config_dir_override().lock().unwrap() = None;
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn rename_changes_only_the_local_alias_of_a_remote_connection() {
+        let _fs = TEST_FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = std::env::temp_dir().join(format!("alpi-conns-rename-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        *config_dir_override().lock().unwrap() = Some(dir.clone());
+
+        let seed = ConnectionsState {
+            active_id: "remote-a".to_string(),
+            connections: vec![
+                HostConnection::Local {
+                    id: LOCAL_ID.to_string(),
+                    name: "L".to_string(),
+                    device_id: None,
+                    last_connected: None,
+                    last_role: None,
+                },
+                remote_with_role("remote-a", Some("admin")),
+            ],
+        };
+        save_connections(&seed).unwrap();
+
+        rename_connection("remote-a".to_string(), "  macbook-pro  ".to_string()).unwrap();
+        assert!(rename_connection(LOCAL_ID.to_string(), "x".to_string()).is_err());
+        assert!(rename_connection("remote-a".to_string(), "   ".to_string()).is_err());
+        assert!(rename_connection("remote-zz".to_string(), "x".to_string()).is_err());
+
+        let text = std::fs::read_to_string(dir.join("connections.json")).unwrap();
+        let parsed = decode_connections(&text).expect("valid connections on disk");
+        let remote = parsed.connections.iter().find(|c| c.id() == "remote-a").unwrap();
+        match remote {
+            HostConnection::Remote { name, token, revoked, last_role, .. } => {
+                assert_eq!(name, "macbook-pro");
+                assert_eq!(token, "t");
+                assert!(!revoked);
+                assert_eq!(last_role.as_deref(), Some("admin"));
+            }
+            other => panic!("remote-a should stay remote: {other:?}"),
+        }
+        assert_eq!(parsed.active_id, "remote-a");
 
         *config_dir_override().lock().unwrap() = None;
         let _ = std::fs::remove_dir_all(&dir);

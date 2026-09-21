@@ -348,6 +348,39 @@ describe("useHostConnections.onAddHostConnection", () => {
   );
 });
 
+describe("useHostConnections.onRenameHostConnection", () => {
+  it("renames the local alias through the store command and reloads, without touching the active connection", async () => {
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "host_connections") return makeConnections("remote");
+      if (cmd === "profile_summaries" || cmd === "workgroups") return [];
+      return null;
+    });
+    const { result } = renderHostConnections();
+    await waitFor(() => expect(result.current.hostConnections.active_id).toBe("remote"));
+    invoke.mockClear();
+
+    await act(async () => { await result.current.onRenameHostConnection("remote", "macbook-pro"); });
+
+    expect(invoke).toHaveBeenCalledWith("host_connection_rename", { id: "remote", name: "macbook-pro" });
+    expect(invoke.mock.calls.map(([cmd]) => cmd)).toContain("host_connections");
+    expect(invoke).not.toHaveBeenCalledWith("host_connection_set_active", expect.anything());
+    expect(result.current.hostConnections.active_id).toBe("remote");
+  });
+
+  it("surfaces the store's refusal instead of swallowing it", async () => {
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "host_connections") return makeConnections("local");
+      if (cmd === "profile_summaries" || cmd === "workgroups") return [];
+      if (cmd === "host_connection_rename") throw new Error("local connection cannot be renamed");
+      return null;
+    });
+    const { result } = renderHostConnections();
+    await waitFor(() => expect(result.current.hostConnections.connections.length).toBe(2));
+
+    await expect(result.current.onRenameHostConnection("local", "x")).rejects.toThrow("cannot be renamed");
+  });
+});
+
 describe("useHostConnections.touchWorkgroup", () => {
   it("patches only the matching workgroup's mtime locally, without any RPC", async () => {
     invoke.mockImplementation(async (cmd) => {
