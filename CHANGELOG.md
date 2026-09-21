@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.15.3 — 2026-09-21 — a silent MCP server can no longer hold the turn
+
+- **An MCP server that took a request and answered nothing blocked the turn forever.**
+  The per-call timeout was set but never reachable: the client waited on a read that only
+  returns when a line arrives, so a server that neither replied nor closed its connection
+  was never given up on. The wait is now genuinely bounded — the call fails at its
+  timeout, the message names the server that went silent, and the server is stopped
+  instead of left running.
+- A server that disconnects mid-call is now reported to every call still waiting on it,
+  not only the first, and restarting it afterwards starts clean.
+- A call that lost its server while it was being made now fails like any other tool error,
+  naming the server, instead of crashing the turn with an empty assertion.
+
 ## v0.15.2 — 2026-09-21 — a timed-out command no longer leaves work running
 
 - **A command that hit its timeout could leave its own children running.** The timeout

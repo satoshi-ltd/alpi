@@ -17,6 +17,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import queue
 import signal
 import sys
 import threading
@@ -49,12 +50,16 @@ class _FakeServer:
         self._requests: list[dict] = []
         self._stdout_lines: list[str] = []
         self._lock = threading.Lock()
+        self.mute = False
+        self.flood: dict[str, int] = {}
 
     def handle(self, method: str, result: Any) -> None:
         self.handlers[method] = result
 
     def on_request(self, req: dict) -> dict | None:
         self._requests.append(req)
+        if self.mute:
+            return None   # takes the request, answers nothing, keeps stdout open
         method = req.get("method", "")
         if "id" not in req:
             # Notification — no response.
@@ -109,6 +114,10 @@ class _FakePopen:
         resp = self._server.on_request(req)
         if resp is not None:
             self._stdout.push(json.dumps(resp) + "\n")
+        for n in range(self._server.flood.pop(req.get("method", ""), 0)):
+            self._stdout.push(json.dumps({
+                "jsonrpc": "2.0", "method": "notifications/progress", "params": {"n": n},
+            }) + "\n")
 
     def poll(self):
         return self.returncode
@@ -150,22 +159,27 @@ class _BufferedStdin:
 
 
 class _BufferedStdout:
+    # A pipe, not a buffer: the client reads stdout on its own thread, so a readline() that
+    # returned "" while the queue is empty would read as EOF and fail every handshake.
+
     def __init__(self) -> None:
-        self._queue: list[str] = []
-        self._lock = threading.Lock()
+        self._queue: queue.Queue[str | None] = queue.Queue()
 
     def push(self, s: str) -> None:
-        with self._lock:
-            self._queue.append(s)
+        self._queue.put(s)
+
+    def close(self) -> None:
+        self._queue.put(None)
+
+    def pending(self) -> int:
+        return self._queue.qsize()
 
     def readline(self) -> str:
-        # Blocks until data is available — in our synchronous tests,
-        # the server writes before the client reads, so this always
-        # returns immediately.
-        with self._lock:
-            if self._queue:
-                return self._queue.pop(0)
-        return ""
+        line = self._queue.get()
+        if line is None:
+            self._queue.put(None)
+            return ""
+        return line
 
 
 @pytest.fixture
@@ -177,10 +191,13 @@ def server_and_patch(monkeypatch):
 
     def factory(args, **kwargs):
         server.spawn_kwargs = kwargs
-        return _FakePopen(server)
+        server.popen = _FakePopen(server)
+        return server.popen
 
     def fake_killpg(pgid, sig):
         server.killpg_calls.append((pgid, sig))
+        # The group dying closes the pipe; without it the reader thread outlives the test.
+        server.popen.stdout.close()
 
     monkeypatch.setattr(mcp_client.subprocess, "Popen", factory)
     monkeypatch.setattr(mcp_client.os, "killpg", fake_killpg)
@@ -336,6 +353,227 @@ def test_stop_gives_sigterm_grace_before_sigkill_when_wrapper_dies_first(server_
     assert stamps[signal.SIGKILL] - stamps[signal.SIGTERM] >= 0.2 * 0.9
 
 
+
+def test_call_tool_gives_up_on_a_server_that_goes_silent(server_and_patch) -> None:
+    server = server_and_patch
+    server.handle("tools/list", {"tools": [{"name": "ping", "description": ""}]})
+    c = mcp_client.MCPClient("mute", "echo")
+    c.start(timeout=5)
+    server.mute = True
+
+    started = time.monotonic()
+    with pytest.raises(mcp_client.MCPError) as excinfo:
+        c.call_tool("ping", {}, timeout=0.3)
+    elapsed = time.monotonic() - started
+
+    assert 0.3 <= elapsed < 3.0, f"the deadline did not bound the wait ({elapsed:.2f}s)"
+    message = str(excinfo.value)
+    assert "mute" in message and "timeout" in message
+    assert not c.is_running()
+    assert server.popen.stdin.closed, "the silent server was left running"
+
+
+def test_a_silent_server_is_not_reused_for_the_next_call(server_and_patch) -> None:
+    server = server_and_patch
+    server.handle("tools/list", {"tools": [{"name": "ping", "description": ""}]})
+    c = mcp_client.MCPClient("mute", "echo")
+    c.start(timeout=5)
+    server.mute = True
+    with pytest.raises(mcp_client.MCPError):
+        c.call_tool("ping", {}, timeout=0.3)
+
+    started = time.monotonic()
+    with pytest.raises(mcp_client.MCPError, match="not running"):
+        c.call_tool("ping", {}, timeout=30)
+    assert time.monotonic() - started < 1.0
+
+
+def test_a_flood_of_notifications_at_rest_stays_bounded(server_and_patch) -> None:
+    server = server_and_patch
+    server.handle("tools/list", {"tools": [{"name": "ping", "description": ""}]})
+    server.handle("tools/call", {"content": [{"type": "text", "text": "pong"}]})
+    c = mcp_client.MCPClient("chatty", "echo")
+    c.start(timeout=5)
+
+    flood = mcp_client._STDOUT_BUFFER_LINES * 3
+    for n in range(flood):
+        server.popen.stdout.push(json.dumps({
+            "jsonrpc": "2.0", "method": "notifications/progress", "params": {"n": n},
+        }) + "\n")
+
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline and server.popen.stdout.pending():
+        time.sleep(0.01)
+    # An empty pipe proves the reader never blocked for room; a bounded buffer proves it dropped.
+    assert server.popen.stdout.pending() == 0
+    assert c._lines.pending() <= mcp_client._STDOUT_BUFFER_LINES
+    assert c._lines.dropped >= flood - mcp_client._STDOUT_BUFFER_LINES
+
+    result = c.call_tool("ping", {}, timeout=5)
+    assert result["content"][0]["text"] == "pong"
+    c.stop()
+
+
+def test_the_buffer_never_evicts_the_reply_it_was_told_to_expect() -> None:
+    buf = mcp_client._LineBuffer(maxlen=8)
+    buf.expect(7)
+    buf.put(json.dumps({"jsonrpc": "2.0", "id": 7, "result": {"ok": True}}) + "\n")
+    for n in range(100):
+        buf.put(json.dumps({"jsonrpc": "2.0", "method": "notifications/progress",
+                            "params": {"n": n}}) + "\n")
+
+    drained = []
+    while True:
+        try:
+            drained.append(json.loads(buf.get(timeout=0)))
+        except queue.Empty:
+            break
+    assert any(m.get("id") == 7 for m in drained), "the reply was evicted by the notifications"
+    assert len(drained) <= 8 + 1, "the reply must not cost the ring its bound"
+
+
+def test_a_reply_survives_a_flood_that_arrives_behind_it(server_and_patch) -> None:
+    server = server_and_patch
+    server.handle("tools/list", {"tools": []})
+    c = mcp_client.MCPClient("chatty", "echo")
+    c.start(timeout=5)
+
+    # The dangerous order: the tool ran, the reply is on the wire, the server keeps talking.
+    c._lines.expect(99)
+    pipe = server.popen.stdout
+    pipe.push(json.dumps({"jsonrpc": "2.0", "id": 99, "result": {"ok": True}}) + "\n")
+    for n in range(mcp_client._STDOUT_BUFFER_LINES * 2):
+        pipe.push(json.dumps({"jsonrpc": "2.0", "method": "notifications/progress",
+                              "params": {"n": n}}) + "\n")
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline and pipe.pending():
+        time.sleep(0.01)
+    assert pipe.pending() == 0
+
+    assert c._wait_for(99, timeout=1) == {"ok": True}
+    c.stop()
+
+
+def test_a_server_repeating_an_answered_id_cannot_grow_the_reply_buffer() -> None:
+    buf = mcp_client._LineBuffer(maxlen=8)
+    buf.expect(7)
+    for n in range(500):
+        buf.put(json.dumps({"jsonrpc": "2.0", "id": 7, "result": {"n": n}}) + "\n")
+
+    assert buf.pending() <= mcp_client._REPLY_BUFFER_LINES
+    assert json.loads(buf.get(timeout=0))["result"]["n"] == 0, "the first reply is the real one"
+
+
+def test_a_malformed_id_cannot_classify_and_cannot_raise() -> None:
+    buf = mcp_client._LineBuffer(maxlen=8)
+    buf.expect(42)
+    for bad in ('{"jsonrpc": "2.0", "id": [], "result": {}}',
+                '{"jsonrpc": "2.0", "id": {}, "result": {}}',
+                '{"jsonrpc": "2.0", "id": null, "result": {}}',
+                '["id"]',
+                '{"id"'):
+        buf.put(bad + "\n")
+    assert buf.pending() == 5
+
+
+def test_a_malformed_id_does_not_cost_the_reply_behind_it(server_and_patch) -> None:
+    server = server_and_patch
+    server.handle("tools/list", {"tools": []})
+    c = mcp_client.MCPClient("rude", "echo")
+    c.start(timeout=5)
+
+    c._lines.expect(42)
+    pipe = server.popen.stdout
+    # A raise here kills the reader thread, and every line behind it is lost in silence.
+    pipe.push('{"jsonrpc": "2.0", "id": [], "result": {}}\n')
+    pipe.push('{"jsonrpc": "2.0", "id": {}, "result": {}}\n')
+    pipe.push(json.dumps({"jsonrpc": "2.0", "id": 42, "result": {"ok": True}}) + "\n")
+
+    assert c._wait_for(42, timeout=2) == {"ok": True}
+    c.stop()
+
+
+def test_call_tool_registers_its_id_before_sending(server_and_patch, monkeypatch) -> None:
+    server = server_and_patch
+    server.handle("tools/list", {"tools": [{"name": "ping", "description": ""}]})
+    server.handle("tools/call", {"content": [{"type": "text", "text": "pong"}]})
+    server.flood["tools/call"] = mcp_client._STDOUT_BUFFER_LINES * 2
+    c = mcp_client.MCPClient("chatty", "echo")
+    c.start(timeout=5)
+
+    original = mcp_client.MCPClient._wait_for
+
+    def late_wait(self, rid, timeout):
+        # Read only once the whole flood has landed — the scheduling that loses the reply.
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline and server.popen.stdout.pending():
+            time.sleep(0.01)
+        return original(self, rid, timeout)
+
+    monkeypatch.setattr(mcp_client.MCPClient, "_wait_for", late_wait)
+    assert c.call_tool("ping", {}, timeout=5)["content"][0]["text"] == "pong"
+    c.stop()
+
+
+def test_an_id_stops_being_protected_once_its_call_is_over(server_and_patch) -> None:
+    server = server_and_patch
+    server.handle("tools/list", {"tools": [{"name": "ping", "description": ""}]})
+    server.handle("tools/call", {"content": []})
+    c = mcp_client.MCPClient("chatty", "echo")
+    c.start(timeout=5)
+    for _ in range(5):
+        c.call_tool("ping", {}, timeout=5)
+
+    # Left registered, the set grows for the life of the daemon and stale replies stay protected.
+    assert c._lines._expected == set()
+    c.stop()
+
+
+def test_a_call_whose_server_was_stopped_mid_flight_fails_as_an_mcp_error(
+    server_and_patch, monkeypatch,
+) -> None:
+    server = server_and_patch
+    server.handle("tools/list", {"tools": [{"name": "ping", "description": ""}]})
+    c = mcp_client.MCPClient("shared", "echo")
+    c.start(timeout=5)
+    # Two turns share one client: this one's check passes, the other's timeout stops it.
+    monkeypatch.setattr(c, "is_running", lambda: True)
+    c.stop()
+
+    with pytest.raises(mcp_client.MCPError) as excinfo:
+        c.call_tool("ping", {}, timeout=5)
+    assert "shared" in str(excinfo.value) and "not running" in str(excinfo.value)
+
+
+def test_eof_reaches_every_waiter_not_only_the_first(server_and_patch) -> None:
+    server = server_and_patch
+    server.handle("tools/list", {"tools": []})
+    c = mcp_client.MCPClient("gone", "echo")
+    c.start(timeout=5)
+    server.popen.stdout.close()
+
+    started = time.monotonic()
+    for rid in (900, 901):
+        with pytest.raises(mcp_client.MCPError, match="closed stdout"):
+            c._wait_for(rid, timeout=30)
+    assert time.monotonic() - started < 3.0, "a later waiter sat out its whole timeout"
+
+
+def test_restart_does_not_inherit_the_previous_pipes_eof(server_and_patch) -> None:
+    server = server_and_patch
+    server.handle("tools/list", {"tools": [{"name": "ping", "description": ""}]})
+    c = mcp_client.MCPClient("flaky", "echo")
+    c.start(timeout=5)
+    server.popen.stdout.close()
+    with pytest.raises(mcp_client.MCPError, match="closed stdout"):
+        c.call_tool("ping", {}, timeout=5)
+
+    c.stop()
+    c.start(timeout=5)
+    assert [t.name for t in c.list_tools()] == ["ping"]
+    c.stop()
+
+
 _WRAPPER = """
 import subprocess, sys
 leaf = subprocess.Popen([sys.executable, "-c", sys.argv[1], *sys.argv[2:]])
@@ -408,6 +646,44 @@ def _stop_leaf(leaf: str, tmp_path, monkeypatch, *, grace: float, term_grace: fl
         except ProcessLookupError:
             pass
     return marker
+
+
+_SILENT_LEAF = """
+import os, sys, time
+open(sys.argv[1], "w").write(str(os.getpid()))
+sys.stdin.readline()
+time.sleep(300)
+"""
+
+
+@pytest.mark.integration
+def test_start_gives_up_on_a_real_server_that_never_answers(tmp_path, monkeypatch) -> None:
+    """The v0.14.50 shape: stdin is read, nothing is written, stdout stays open."""
+    monkeypatch.setattr(mcp_client, "_STOP_GRACE_SECONDS", 0.3)
+    monkeypatch.setattr(mcp_client, "_STOP_TERM_GRACE_SECONDS", 0.3)
+    pidfile = tmp_path / "leaf.pid"
+    c = mcp_client.MCPClient(
+        "mute", sys.executable, ["-c", _WRAPPER, _SILENT_LEAF, str(pidfile)],
+    )
+    started = time.monotonic()
+    with pytest.raises(mcp_client.MCPError) as excinfo:
+        c.start(timeout=1.0)
+    elapsed = time.monotonic() - started
+
+    assert 1.0 <= elapsed < 15.0, f"unbounded wait ({elapsed:.2f}s)"
+    assert "mute" in str(excinfo.value) and "timeout" in str(excinfo.value)
+
+    leaf_pid = int(pidfile.read_text())
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        try:
+            os.kill(leaf_pid, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.05)
+    else:
+        os.kill(leaf_pid, signal.SIGKILL)
+        pytest.fail(f"leaf {leaf_pid} survived the timeout")
 
 
 @pytest.mark.integration
@@ -731,6 +1007,29 @@ def test_drain_stderr_survives_proc_nulled_mid_loop() -> None:
     c._drain_stderr()
     assert seen["calls"] == 3
     assert "first" in c._stderr_buf and "second" in c._stderr_buf
+
+
+def test_drain_stdout_reports_eof_when_readline_raises() -> None:
+    class _Stdout:
+        def readline(self) -> str:
+            raise OSError("stream closed by stop()")
+
+    class _Proc:
+        stdout = _Stdout()
+
+    buf = mcp_client._LineBuffer()
+    mcp_client.MCPClient("x", "echo")._drain_stdout(_Proc(), buf)
+    # Without the EOF a waiter sits out its whole timeout on a pipe that is already gone.
+    assert buf.get(timeout=0) is None
+
+
+def test_drain_stdout_reports_eof_when_there_is_no_pipe() -> None:
+    class _Proc:
+        stdout = None
+
+    buf = mcp_client._LineBuffer()
+    mcp_client.MCPClient("x", "echo")._drain_stdout(_Proc(), buf)
+    assert buf.get(timeout=0) is None
 
 
 def test_drain_stderr_returns_when_readline_raises_oserror() -> None:

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import collections
 import json
 import logging
 import os
+import queue
 import signal
 import subprocess
 import threading
@@ -17,6 +19,83 @@ log = logging.getLogger("alpi.mcp")
 # Handshake uses the November 2024 MCP spec.
 _PROTOCOL_VERSION = "2024-11-05"
 _CLIENT_INFO = {"name": "alpi", "version": "0.2"}
+
+
+# Deep enough for any burst a real call answers through, shallow enough to bound the daemon.
+_STDOUT_BUFFER_LINES = 1024
+# One reply per in-flight request; the rest is a server repeating an id it already answered.
+_REPLY_BUFFER_LINES = 16
+
+
+class _LineBuffer:
+    # A ring, not a queue: notifications at rest must not grow memory, and put() must not block.
+
+    def __init__(self, maxlen: int = _STDOUT_BUFFER_LINES) -> None:
+        self._lines: collections.deque[str] = collections.deque(maxlen=maxlen)
+        self._replies: collections.deque[str] = collections.deque()
+        self._expected: set[int] = set()
+        self._cv = threading.Condition()
+        self._eof = False
+        self.dropped = 0
+
+    def expect(self, rid: int) -> None:
+        with self._cv:
+            self._expected.add(rid)
+
+    def stop_expecting(self, rid: int) -> None:
+        with self._cv:
+            self._expected.discard(rid)
+
+    def _is_expected_reply(self, line: str) -> bool:
+        # Total by construction: this runs on the reader thread, where a raise loses the pipe.
+        if not self._expected or '"id"' not in line:
+            return False
+        try:
+            msg = json.loads(line)
+        except (ValueError, RecursionError):
+            return False
+        if not isinstance(msg, dict):
+            return False
+        rid = msg.get("id")
+        # Request ids are the ints this client issues; a list or dict id is not even hashable.
+        return isinstance(rid, int) and rid in self._expected
+
+    def put(self, line: str) -> None:
+        with self._cv:
+            if self._is_expected_reply(line):
+                # Never evicted, and newest first if it must be: losing an awaited reply
+                # reports a tool that ran as failed and invites the caller to run it again.
+                if len(self._replies) < _REPLY_BUFFER_LINES:
+                    self._replies.append(line)
+                else:
+                    self.dropped += 1
+            else:
+                if len(self._lines) == self._lines.maxlen:
+                    self.dropped += 1
+                self._lines.append(line)
+            self._cv.notify()
+
+    def close(self) -> None:
+        with self._cv:
+            self._eof = True
+            self._cv.notify_all()
+
+    def pending(self) -> int:
+        with self._cv:
+            return len(self._lines) + len(self._replies)
+
+    def get(self, timeout: float) -> str | None:
+        """Next line, or None once the pipe is closed for good; raises queue.Empty on timeout."""
+        deadline = time.monotonic() + timeout
+        with self._cv:
+            while not self._replies and not self._lines:
+                if self._eof:
+                    return None
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise queue.Empty
+                self._cv.wait(remaining)
+            return self._replies.popleft() if self._replies else self._lines.popleft()
 
 
 class MCPError(Exception):
@@ -51,12 +130,16 @@ class MCPClient:
         # Buffer stderr so handshake failures can surface the real error.
         self._stderr_buf: list[str] = []
         self._stderr_lock = threading.Lock()
+        # A reader thread owns the blocking readline so _wait_for can hold a real deadline.
+        self._lines = _LineBuffer()
 
     def start(self, timeout: float = 45.0) -> None:
         """Spawn the subprocess, handshake, cache the tool list."""
         if self._proc is not None:
             return
         env = _build_env(self._env_spec, self._env_base)
+        # A fresh buffer per spawn: a restart must not inherit the previous pipe's EOF.
+        self._lines = _LineBuffer()
         try:
             self._proc = subprocess.Popen(
                 [self.command, *self.args],
@@ -78,9 +161,12 @@ class MCPClient:
         except OSError as e:
             raise MCPError(f"{self.name}: spawn failed: {e}") from e
 
-        # Drain stderr in the background so chatty servers don't block.
+        # Drain both pipes in the background so chatty servers don't block.
         threading.Thread(
             target=self._drain_stderr, daemon=True,
+        ).start()
+        threading.Thread(
+            target=self._drain_stdout, args=(self._proc, self._lines), daemon=True,
         ).start()
 
         try:
@@ -151,11 +237,17 @@ class MCPClient:
         with self._lock:
             self._req_id += 1
             rid = self._req_id
-            self._send({
-                "jsonrpc": "2.0", "id": rid,
-                "method": method, "params": params,
-            })
-            return self._wait_for(rid, timeout=timeout)
+            buf = self._lines
+            # Registered before the send: a reply can land before _wait_for is even reached.
+            buf.expect(rid)
+            try:
+                self._send({
+                    "jsonrpc": "2.0", "id": rid,
+                    "method": method, "params": params,
+                })
+                return self._wait_for(rid, timeout=timeout)
+            finally:
+                buf.stop_expecting(rid)
 
     def _notify(self, method: str, params: dict) -> None:
         self._send({
@@ -163,24 +255,32 @@ class MCPClient:
         })
 
     def _send(self, obj: dict) -> None:
-        assert self._proc is not None and self._proc.stdin is not None
+        # Under the caller's lock: another turn's timeout can stop a client after is_running().
+        proc = self._proc
+        if proc is None or proc.stdin is None:
+            raise MCPError(f"{self.name}: server is not running")
         try:
-            self._proc.stdin.write(json.dumps(obj) + "\n")
-            self._proc.stdin.flush()
+            proc.stdin.write(json.dumps(obj) + "\n")
+            proc.stdin.flush()
         except (BrokenPipeError, OSError) as e:
             raise MCPError(f"{self.name}: stdin write failed: {e}") from e
 
     def _wait_for(self, rid: int, timeout: float) -> dict:
-        assert self._proc is not None and self._proc.stdout is not None
         deadline = time.monotonic() + timeout
         while True:
-            if time.monotonic() > deadline:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                # A server silent past its deadline will not come back: never leave it wedged.
+                self.stop()
                 raise MCPError(self._wrap_failure(
                     f"timeout waiting for response to id {rid} "
                     f"(waited {timeout:.0f}s)"
                 ))
-            line = self._proc.stdout.readline()
-            if not line:
+            try:
+                line = self._lines.get(timeout=remaining)
+            except queue.Empty:
+                continue
+            if line is None:
                 # Let the stderr drainer flush the last error lines.
                 time.sleep(0.2)
                 raise MCPError(self._wrap_failure("server closed stdout"))
@@ -201,10 +301,28 @@ class MCPClient:
 
     def _wrap_failure(self, reason: str) -> str:
         base = f"{self.name}: {reason}"
+        if self._lines.dropped:
+            base += f" ({self._lines.dropped} unread lines dropped from the read buffer)"
         tail = self._stderr_tail()
         if tail:
             return f"{base}\nServer stderr:\n{tail}"
         return base + " (server wrote nothing to stderr)"
+
+    def _drain_stdout(self, proc: subprocess.Popen, buf: _LineBuffer) -> None:
+        # proc and buf are passed in: stop() nulls self._proc and a restart swaps the buffer.
+        if proc.stdout is None:
+            buf.close()
+            return
+        stdout = proc.stdout
+        while True:
+            try:
+                line = stdout.readline()
+            except (ValueError, OSError):
+                line = ""
+            if not line:
+                buf.close()
+                return
+            buf.put(line)
 
     def _drain_stderr(self) -> None:
         # Capture once: stop() may null self._proc while this loop is running.
