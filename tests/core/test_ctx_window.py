@@ -72,3 +72,56 @@ def test_committed_catalog_is_positive_int_map() -> None:
 
 def test_committed_catalog_includes_glm_5_3_flash_safe_input_limit() -> None:
     assert ctx_window._openrouter_limits()["z-ai/glm-5.3-flash"] == 1_015_808
+
+
+def test_a_same_model_suffix_does_not_cost_it_its_window(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(
+        ctx_window, "_openrouter_limits", lambda: {"z-ai/glm-5.3-flash": 1_015_808},
+    )
+    for suffix in ("nitro", "floor", "online", "exacto"):
+        got = ctx_window.resolve(tmp_path, _Cfg(), f"openrouter/z-ai/glm-5.3-flash:{suffix}")
+        assert got == 1_015_808, suffix
+
+
+def test_a_variant_the_catalog_carries_answers_for_itself(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(
+        ctx_window, "_openrouter_limits",
+        lambda: {"z-ai/glm-5.3-flash": 1_015_808, "z-ai/glm-5.3-flash:batch": 64_000},
+    )
+    got = ctx_window.resolve(tmp_path, _Cfg(), "openrouter/z-ai/glm-5.3-flash:batch")
+    assert got == 64_000
+
+
+def test_an_unknown_suffix_is_not_stripped(monkeypatch, tmp_path: Path) -> None:
+    # `:free` is a real variant that can serve a smaller window; guessing the paid one
+    # would overestimate, which is the direction that overflows a turn.
+    monkeypatch.setattr(
+        ctx_window, "_openrouter_limits", lambda: {"z-ai/glm-5.3-flash": 1_015_808},
+    )
+    fake = types.ModuleType("litellm")
+    fake.model_cost = {}
+    monkeypatch.setitem(sys.modules, "litellm", fake)
+    assert ctx_window.resolve(tmp_path, _Cfg(), "openrouter/z-ai/glm-5.3-flash:free") == 200_000
+
+
+def test_an_ollama_tag_is_never_mistaken_for_a_stripped_suffix(monkeypatch, tmp_path: Path) -> None:
+    seen: list[tuple[str, str]] = []
+
+    def fake_resolve_num_ctx(base_url: str, model: str) -> int:
+        seen.append((base_url, model))
+        return 8192
+
+    ollama_mod = importlib.import_module("alpi.providers.ollama")
+    monkeypatch.setattr(ollama_mod, "resolve_num_ctx", fake_resolve_num_ctx)
+    cfg = _Cfg({"ollama": [{"name": "local", "url": "http://localhost:11434"}]})
+    assert ctx_window.resolve(tmp_path, cfg, "local/llama3:8b") == 8192
+    assert seen == [("http://localhost:11434", "llama3:8b")]
+
+
+def test_the_committed_catalog_has_no_row_for_a_stripped_suffix() -> None:
+    # If one ever appears, the exact match wins and the strip becomes dead code.
+    bad = sorted(
+        k for k in ctx_window._openrouter_limits()
+        if k.rpartition(":")[2] in ctx_window._SAME_WINDOW_SUFFIXES
+    )
+    assert bad == []

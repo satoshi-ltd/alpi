@@ -6,6 +6,9 @@ from typing import Any
 
 _FALLBACK = 200_000
 _CATALOG_PATH = Path(__file__).parent / "providers" / "openrouter_models.yaml"
+# Same model behind each of these — a provider preference, or the web-search plugin — so
+# the base row's window still holds. Real variants (`:free`, `:batch`) have rows of their own.
+_SAME_WINDOW_SUFFIXES = frozenset({"nitro", "floor", "online", "exacto"})
 
 
 @lru_cache(maxsize=1)
@@ -61,6 +64,17 @@ def _from_litellm(model: str) -> int | None:
     return None
 
 
+def _without_same_window_suffix(model: str) -> str | None:
+    base, sep, suffix = model.rpartition(":")
+    return base if sep and suffix in _SAME_WINDOW_SUFFIXES else None
+
+
+def _lookup(model: str) -> int | None:
+    head, _, _ = model.partition("/")
+    val = _from_openrouter(model) if head == "openrouter" else None
+    return val if val is not None else _from_litellm(model)
+
+
 def resolve(home: Path, cfg: Any, model: str) -> int:
     if not model:
         return _FALLBACK
@@ -71,7 +85,9 @@ def resolve(home: Path, cfg: Any, model: str) -> int:
             from alpi.providers.ollama import resolve_num_ctx
 
             return resolve_num_ctx(entry.get("url", ""), rest)
-    val = _from_openrouter(model) if head == "openrouter" else None
+    # Exact id first, so a suffix the catalog does carry answers for itself.
+    val = _lookup(model)
     if val is None:
-        val = _from_litellm(model)
+        base = _without_same_window_suffix(model)
+        val = _lookup(base) if base else None
     return val or _FALLBACK

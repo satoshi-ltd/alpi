@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.15.4 — 2026-09-21 — an OpenRouter suffix no longer shrinks a model's context window
+
+- **A model picked with an OpenRouter suffix like `:nitro` reported 200,000 tokens of
+  context whatever its real size.** `:nitro`, `:floor` and `:exacto` pick which provider
+  serves a model and `:online` adds web search to it; none of them change the model, so none
+  of them change how much it can read. The lookup treated the whole string as an unknown
+  model and fell back to the default. A million-token model showed as 200,000 everywhere the
+  figure appears: the apps, the console, and the budget that decides when a conversation
+  gets compacted. Those four suffixes are now ignored when resolving the window, while real
+  variants like `:free` and `:batch` still answer for themselves.
+
 ## v0.15.3 — 2026-09-21 — a silent MCP server can no longer hold the turn
 
 - **An MCP server that took a request and answered nothing blocked the turn forever.**

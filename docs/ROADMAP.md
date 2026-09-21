@@ -19,25 +19,12 @@ per-device revocation, role/profile scope, abuse bounds, device tokens hashed
 at rest with optional inactivity expiry, per-source authentication-failure
 throttling, Docker/Caddy topology, and attributed administrative activity. The
 token hardening shipped in v0.14.39 to v0.14.42; this cycle adds no further
-security layer to that protocol. It proves the supplied design on the first
-definitive customer deployment.
+security layer to that protocol. The channel is live on a customer deployment
+behind a public terminating proxy, with the daemon's own ports unreachable from
+outside it.
 
-The deployment gates carried over from v0.14, which closed on runtime hardening
-alone. They are not blocked on code in this repo, only on a real customer
-deployment to prove them against. The runtime work below is: it is what a first
-external tenant would either be exposed to or read and act on, and every item is
-a defect confirmed in the shipped code.
-
-### Deployment gates
-
-| ID | Item | Status |
-|---|---|---|
-| ONLINE.1 | Deploy one isolated Alpi runtime and volume per mutually untrusted customer; profiles/connections remain an identity and RPC boundary, not tenant isolation. | 🔴 |
-| ONLINE.2 | Put the definitive hostname behind a terminating proxy with a valid public certificate; publish only TCP 80/443 and verify the effective deployment exposes neither 49200 nor 7423. | 🔴 |
-| ONLINE.3 | Run external Desktop/Mobile acceptance: authenticated WSS RPC succeeds, invalid certificates fail closed, live-stream revocation disconnects only the target device, and direct public probes to 49200/7423 fail. | 🔴 |
-| ONLINE.4 | Establish the operating checks: certificate-expiry monitoring and WebSocket capacity/rejection alerts (`handshakes_rejected`, `device_connections_rejected`, `auth_rate_limited` from `host.network.status`). The daemon already throttles authentication failures per source address; behind a proxy it keys them by the real client only when the proxy's address is listed in `ALPI_HOST_WS_TRUSTED_PROXIES`, which the shipped WSS overlay does by pinning its proxy to a fixed address. The edge needs no per-IP rule of its own as long as the deployment keeps those two in step. | 🔴 |
-
-### Runtime work
+What remains is runtime work: what an external tenant would either be exposed to
+or read and act on, and every item is a defect confirmed in the shipped code.
 
 | ID | Item | Status |
 |---|---|---|
@@ -45,10 +32,9 @@ a defect confirmed in the shipped code.
 | PROC.2 | A run the watchdog kills should take its cause with it. The foreground `terminal` timeout no longer leaks: the command gets its own process group and the timeout signals the group, so a shell that backgrounded work does not leave it running. What remains is the sweep, which signals the run's own pid while MCP servers, background terminal jobs and pipeline gate processes each start their own session — the wrapper chain that caused the wedge survives the kill. Needs the run to track what it spawned. | 🔵 |
 | ALP.9 | `alp.max_active_workgroups` is an admission threshold, not a cap. It is compared against the active count in exactly one place — the pipeline queue drain — so anything that re-enters the active set without going through a trigger bypasses it. Pausing a workgroup frees the slot, the drain admits a queued pipeline, and resuming brings the paused one back unchecked; so does the daemon's own QA rewind, and so does a plain `#task` re-opening a pipeline that closed `#done BLOCKED`. An operator who set the limit to bound provider concurrency gets N+1 running pipelines with no warning. Either re-check capacity on re-entry, or stop calling it a cap in [CONFIG.md](CONFIG.md). | 🔵 |
 
-The cycle is complete only after the deployment checks pass against the real
-domain and firewall, not another local tunnel. SANDBOX.1 is a precondition of
-ONLINE.1, not a parallel track: tenant isolation cannot be claimed while an
-unrestricted member connection reaches an unsandboxed `terminal`.
+SANDBOX.1 is the precondition for a second, mutually untrusted tenant: isolation
+cannot be claimed while an unrestricted member connection reaches an unsandboxed
+`terminal`.
 Credential-loss and backup-exposure response is already defined in
 [OPERATIONS.md](OPERATIONS.md); enterprise-grade external audit remains
 demand-gated as `AUDIT.2` below.
