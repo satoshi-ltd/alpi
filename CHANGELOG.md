@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.15.8 — 2026-09-22 — old run journals and sessions are swept once a day
+
+- **A busy profile filled its disk with history nothing ever deleted.** Every run left a
+  journal and every scheduled turn a session, and no setting named how long either should
+  live; on one production profile that came to about 310 MB a day, and thousands of files in
+  `runs/` and `sessions/` slowed listing, search and backups long before the volume filled. The
+  daemon can now sweep a profile once a day and delete finished run journals and idle sessions
+  older than a window the profile sets under `retention:` in `config.yaml`. Nothing changes
+  for a profile that sets none: the default keeps everything, as before.
+- The sweep never touches the run ledger that carries costs, a run still going, a session with
+  a turn in flight or a run still open — whether the daemon, the console or a scheduled job is
+  driving it — or a session that served a workgroup which still exists; a session's cost is
+  archived before its files go, and a file that cannot be deleted is reported and skipped.
+- Session deletion fails closed if the run inventory cannot be verified, including an unreadable
+  journal or a running journal without a session identity. Both automatic and manual cleanup
+  recheck under the shared file lock. Invalid retention values disable deletion, never shorten
+  the window through numeric coercion.
+- `alpi setup → Cleanup` remains the manual path with its own unchanged thresholds.
+- A session file that is not a JSON object no longer breaks the session list for everything
+  else in the profile; it is listed as empty and left alone.
+
 ## v0.15.7 — 2026-09-22 — a tool call cannot stall on a server that stops listening
 
 - **An MCP server that stopped reading froze the turn before the call's timeout began.** The

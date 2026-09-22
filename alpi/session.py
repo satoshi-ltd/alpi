@@ -2,16 +2,41 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
 import re
+import sys
 import tempfile
 import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
+
+_SWEEP_LOCK = ".sweep.lock"
+
+
+@contextlib.contextmanager
+def sessions_lock(sessions_dir: Path, *, exclusive: bool) -> Iterator[None]:
+    """Shared for a writer (a save, a run start), exclusive for a delete: the one primitive every
+    process touching this directory agrees on, so a sweep cannot undercut a write in flight."""
+    if sys.platform == "win32":
+        yield
+        return
+    import fcntl
+
+    sessions_dir.mkdir(parents=True, exist_ok=True)
+    fd = os.open(str(sessions_dir / _SWEEP_LOCK), os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH)
+        try:
+            yield
+        finally:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+    finally:
+        os.close(fd)
 
 
 # Per-tool log stored under each Turn. Short, human-friendly, JSON-safe.
@@ -173,19 +198,20 @@ class Session:
                 _serialize_turn_v2(t, redact=redact) for t in self.turns
             ],
         }
-        fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=f".{self.id}.", suffix=".tmp")
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                f.write(json.dumps(payload, indent=2, default=str))
-                f.flush()
-                os.fsync(f.fileno())
-            os.replace(tmp_name, path)
-        except Exception:
+        with sessions_lock(path.parent, exclusive=False):
+            fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=f".{self.id}.", suffix=".tmp")
             try:
-                Path(tmp_name).unlink()
-            except OSError:
-                pass
-            raise
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    f.write(json.dumps(payload, indent=2, default=str))
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(tmp_name, path)
+            except Exception:
+                try:
+                    Path(tmp_name).unlink()
+                except OSError:
+                    pass
+                raise
         return path
 
 

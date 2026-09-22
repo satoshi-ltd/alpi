@@ -1106,3 +1106,18 @@ def test_delete_session_retry_does_not_duplicate_spend(
         if row["kind"] == "session" and row["id"] == "sid-retry"
     ]
     assert len(rows) == 1
+
+
+def test_a_session_file_that_is_not_an_object_does_not_fail_the_listing(tmp_path) -> None:
+    from alpi.host import sessions as host_sessions
+
+    d = tmp_path / "sessions"
+    d.mkdir()
+    (d / "odd.json").write_text("[]")
+    (d / "fine.json").write_text('{"started_at": 1.0, "turns": []}')
+
+    rows = {r["id"]: r for r in host_sessions.list_sessions(tmp_path)}
+
+    # One bad file used to raise AttributeError out of the whole listing.
+    assert set(rows) == {"odd", "fine"}
+    assert rows["odd"]["kind"] == "empty" and rows["odd"]["turn_count"] == 0

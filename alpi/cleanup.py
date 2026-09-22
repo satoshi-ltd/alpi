@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 import shutil
+import stat
 import time
 from pathlib import Path
 from typing import Any
@@ -61,11 +62,12 @@ def _busy_session_ids(h: Path) -> set[str] | None:
         return None
 
 
-def _old_sessions(h: Path) -> tuple[list[str] | None, int]:
+def _old_sessions(h: Path, keep_days: int | None = None) -> tuple[list[str] | None, int]:
     """``(None, 0)`` propagates unknown busy state so ``apply`` can refuse instead of no-op succeeding."""
     from alpi.host import sessions as host_sessions
 
-    cutoff = time.time() - SESSIONS_KEEP_DAYS * 86_400
+    days = SESSIONS_KEEP_DAYS if keep_days is None else keep_days
+    cutoff = time.time() - days * 86_400
     busy = _busy_session_ids(h)
     if busy is None:
         return None, 0
@@ -87,7 +89,10 @@ def _old_sessions(h: Path) -> tuple[list[str] | None, int]:
 
 
 # Only completed journals (valid summary, status != running) are ever offered: a hung journal is the run sweep's job, an unreadable one is kept.
-def _run_journal_candidates(h: Path) -> list[Path]:
+def _run_journal_candidates(
+    h: Path, keep_days: int | None = None, *, size_cap: bool = True,
+) -> list[Path]:
+    # Module constants are read here, not in the signature, so tests and setup can still patch them.
     from alpi import runs as runs_mod
     from alpi.home import profile_name
 
@@ -112,9 +117,12 @@ def _run_journal_candidates(h: Path) -> list[Path]:
         completed.append((st.st_mtime, st.st_size, p))
     completed.sort()
     now = time.time()
-    cutoff = now - RUNS_KEEP_DAYS * 86_400
+    days = RUNS_KEEP_DAYS if keep_days is None else keep_days
+    cutoff = now - days * 86_400
     settled = now - RUNS_SETTLE_SECONDS
     selected = [p for mtime, _size, p in completed if mtime < cutoff]
+    if not size_cap:
+        return selected
     kept = [(mtime, size, p) for mtime, size, p in completed if mtime >= cutoff]
     total = sum(size for _mtime, size, _p in kept)
     for mtime, size, p in kept:
@@ -123,6 +131,150 @@ def _run_journal_candidates(h: Path) -> list[Path]:
         selected.append(p)
         total -= size
     return selected
+
+
+_WG_ID_IN_PROMPT = re.compile(r"wg_id=([A-Za-z0-9_-]+)")
+
+
+def _workgroup_of(first_user: str) -> str | None:
+    # `(wg_id=…)` in the dispatch prompt's first line is the only link a session keeps to its workgroup.
+    m = _WG_ID_IN_PROMPT.search(first_user or "")
+    return m.group(1) if m else None
+
+
+def _running_session_ids(h: Path) -> set[str]:
+    # Destructive callers need a complete inventory, not running_journals' best-effort view.
+    from alpi import runs as runs_mod
+
+    root = h / "runs"
+    try:
+        mode = root.lstat().st_mode
+    except FileNotFoundError:
+        return set()
+    if not stat.S_ISDIR(mode):
+        raise ValueError("cannot verify run journals: runs is not a regular directory")
+    out: set[str] = set()
+    for path in root.iterdir():
+        if path.suffix != ".jsonl":
+            continue
+        if not stat.S_ISREG(path.lstat().st_mode):
+            raise ValueError(f"cannot verify run journal: {path.name}")
+        row = runs_mod.summary(h, path.stem)
+        if row["status"] != "running":
+            continue
+        sid = row.get("session_id")
+        if not isinstance(sid, str) or not sid:
+            raise ValueError(f"cannot identify the session of running journal: {path.name}")
+        out.add(sid)
+    return out
+
+
+def _first_user_message(h: Path, sid: str) -> str | None:
+    # The listing truncates first_user to 140 chars, which a long workgroup name pushes the id past.
+    from alpi.host import sessions as host_sessions
+
+    try:
+        turns = host_sessions.read_session(h, sid).get("turns") or []
+        first = turns[0] if turns and isinstance(turns[0], dict) else {}
+        return str(first.get("user") or "")
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _keep_workgroup_session(h: Path, sid: str) -> bool:
+    from alpi.host import sessions as host_sessions
+
+    text = _first_user_message(h, sid)
+    if text is None:
+        return True
+    if host_sessions.classify_first_user(text) != "workgroup":
+        return False
+    wg_id = _workgroup_of(text)
+    if wg_id is None:
+        return True
+    try:
+        (h / "alp" / "workgroups" / wg_id).stat()
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return True
+    return True
+
+
+def _retention_sessions(h: Path, keep_days: int) -> tuple[list[str] | None, dict[str, list[str]]]:
+    from alpi.host import sessions as host_sessions
+
+    kept: dict[str, list[str]] = {"running": [], "workgroup": []}
+    ids, _size = _old_sessions(h, keep_days)
+    if ids is None:
+        return None, kept
+    running = _running_session_ids(h)
+    kinds = {str(r.get("id")): r.get("kind") for r in host_sessions.list_sessions(h, limit=None)}
+    selected: list[str] = []
+    for sid in ids:
+        if sid in running:
+            kept["running"].append(sid)
+            continue
+        if kinds.get(sid) == "workgroup":
+            if _keep_workgroup_session(h, sid):
+                kept["workgroup"].append(sid)
+                continue
+        selected.append(sid)
+    return selected, kept
+
+
+def retention_sweep(h: Path) -> dict[str, Any]:
+    """Delete run journals and sessions past the profile's window; never the run ledger."""
+    from alpi import config as cfg_mod
+    from alpi import runs as runs_mod
+
+    out: dict[str, Any] = {
+        "runs_removed": 0, "runs_freed": 0,
+        "sessions_removed": 0, "sessions_freed": 0,
+        "workgroup_sessions_kept": 0, "running_sessions_kept": 0, "sessions_kept_fresh": 0,
+        "errors": [],
+    }
+    try:
+        cfg = cfg_mod.load(h)
+    except Exception as e:  # noqa: BLE001
+        out["errors"].append(f"config: {e}")
+        return out
+
+    if cfg.retention.runs_days > 0:
+        for p in _run_journal_candidates(h, keep_days=cfg.retention.runs_days, size_cap=False):
+            try:
+                size = p.stat().st_size
+                p.unlink()
+            except OSError as e:
+                out["errors"].append(f"runs/{p.name}: {e}")
+                continue
+            runs_mod.forget_children(h, p.stem)
+            out["runs_removed"] += 1
+            out["runs_freed"] += size
+
+    if cfg.retention.sessions_days > 0:
+        try:
+            ids, kept = _retention_sessions(h, cfg.retention.sessions_days)
+        except (OSError, ValueError, TypeError) as e:
+            out["errors"].append(f"sessions: cannot verify retention candidates: {e}")
+            return out
+        out["workgroup_sessions_kept"] = len(kept["workgroup"])
+        out["running_sessions_kept"] = len(kept["running"])
+        if ids is None:
+            out["errors"].append("sessions: cannot verify busy sessions; skipped")
+        elif ids:
+            result = _apply_sessions(h, {
+                "key": "sessions", "session_ids": ids,
+                "cutoff": time.time() - cfg.retention.sessions_days * 86_400,
+                "protect_workgroups": True,
+            })
+            out["sessions_removed"] = result["removed"]
+            out["sessions_freed"] = result["freed_bytes"]
+            out["sessions_kept_fresh"] = len(result.get("skipped_fresh", []))
+            out["running_sessions_kept"] += len(result.get("skipped_running", []))
+            out["workgroup_sessions_kept"] += len(result.get("skipped_workgroup", []))
+            out["errors"].extend(f"sessions/{e}" for e in result["errors"])
+    return out
 
 
 def categories(h: Path) -> list[dict[str, Any]]:
@@ -251,6 +403,7 @@ def categories(h: Path) -> list[dict[str, Any]]:
             "desc": f"chat transcripts older than {SESSIONS_KEEP_DAYS} days in `sessions/`",
             "files": [],
             "session_ids": old_session_ids,
+            "cutoff": time.time() - SESSIONS_KEEP_DAYS * 86_400,
             "size": old_sessions_size,
             "destructive": True,
         },
@@ -520,9 +673,15 @@ def _apply_sessions(h: Path, target: dict[str, Any]) -> dict[str, Any]:
         return {"key": target["key"], "ok": False, "removed": 0, "freed_bytes": 0,
                 "errors": [f"cannot verify busy sessions ({e}); aborting"]}
 
+    from alpi.session import sessions_lock
+
     removed = 0
     freed = 0
     errors: list[str] = []
+    skipped_fresh: list[str] = []
+    skipped_running: list[str] = []
+    skipped_workgroup: list[str] = []
+    cutoff = target.get("cutoff")
     for sid in ids:
         key = host_chat.session_key(prof, sid)
         # Claim the slot so a turn starting mid-delete gets the same "busy" answer host.chat gives.
@@ -532,17 +691,32 @@ def _apply_sessions(h: Path, target: dict[str, Any]) -> dict[str, Any]:
                 continue
             host_chat._session_active[key] = _CLEANUP_CLAIM
         try:
-            size = 0
-            for p in host_sessions.session_paths(h, sid):
-                try:
-                    size += p.stat().st_size
-                except OSError:
-                    pass
-            if host_sessions.delete_session(h, sid):
-                removed += 1
-                freed += size
-            else:
-                errors.append(f"{sid}: delete failed")
+            # The in-process claim only covers host.chat; the file lock is what other processes
+            # (CLI, TUI, scheduled children) share, so every check that decides a delete runs under it.
+            with sessions_lock(h / "sessions", exclusive=True):
+                if cutoff is not None and _session_updated_at(h, sid) >= float(cutoff):
+                    skipped_fresh.append(sid)
+                    continue
+                if sid in _running_session_ids(h):
+                    skipped_running.append(sid)
+                    continue
+                if target.get("protect_workgroups") and _keep_workgroup_session(h, sid):
+                    skipped_workgroup.append(sid)
+                    continue
+                size = 0
+                for p in host_sessions.session_paths(h, sid):
+                    try:
+                        size += p.stat().st_size
+                    except OSError:
+                        pass
+                if host_sessions.delete_session(h, sid):
+                    removed += 1
+                    freed += size
+                else:
+                    errors.append(f"{sid}: delete failed")
+        except (OSError, ValueError, TypeError) as e:
+            errors.append(f"{sid}: cannot verify or delete session: {e}")
+            break
         finally:
             with host_chat._active_lock:
                 if host_chat._session_active.get(key) is _CLEANUP_CLAIM:
@@ -550,4 +724,21 @@ def _apply_sessions(h: Path, target: dict[str, Any]) -> dict[str, Any]:
     return {
         "key": target["key"], "ok": not errors, "removed": removed,
         "freed_bytes": freed, "errors": errors,
+        "skipped_fresh": skipped_fresh, "skipped_running": skipped_running,
+        "skipped_workgroup": skipped_workgroup,
     }
+
+
+def _session_updated_at(h: Path, sid: str) -> float:
+    # Strict on purpose: the listing's reader falls back to mtime on a bad read, which would let
+    # an unreadable session pass as old. Unreadable here means unknown, and unknown is not deleted.
+    from alpi.host import sessions as host_sessions
+
+    main, _sidecar = host_sessions.session_paths(h, sid)
+    try:
+        st = main.stat()
+        data = json.loads(main.read_text(encoding="utf-8"))
+        row = host_sessions._row_from_data(sid, data, mtime=int(st.st_mtime), size_bytes=st.st_size)
+        return float(row.get("updated_at") or 0.0)
+    except (OSError, ValueError, TypeError, AttributeError, KeyError, IndexError, OverflowError):
+        return float("inf")

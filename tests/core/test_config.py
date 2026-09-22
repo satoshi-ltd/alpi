@@ -306,3 +306,31 @@ def test_seed_does_not_rewrite_an_existing_config(tmp_home_no_env: Path) -> None
     path.write_text("model: keep-me\n")
     config.seed_defaults(tmp_home_no_env)
     assert path.read_text() == "model: keep-me\n"
+
+
+def test_retention_defaults_to_forever(tmp_home_no_env: Path) -> None:
+    config.seed_defaults(tmp_home_no_env)
+    cfg = config.load(tmp_home_no_env)
+    assert (cfg.retention.runs_days, cfg.retention.sessions_days) == (0, 0)
+
+
+def test_retention_round_trips_and_only_writes_what_differs(tmp_home_no_env: Path) -> None:
+    config.seed_defaults(tmp_home_no_env)
+    cfg = config.load(tmp_home_no_env)
+    config.save(cfg)
+    assert "retention" not in cfg.config_path.read_text()
+
+    cfg.retention.runs_days = 7
+    config.save(cfg)
+    text = cfg.config_path.read_text()
+    assert "runs_days: 7" in text and "sessions_days" not in text
+    assert config.load(tmp_home_no_env).retention == config.RetentionConfig(runs_days=7, sessions_days=0)
+
+
+def test_retention_rejects_negatives_and_garbage_back_to_the_default(tmp_home_no_env: Path) -> None:
+    config.seed_defaults(tmp_home_no_env)
+    with open(tmp_home_no_env / "config.yaml", "a", encoding="utf-8") as fh:
+        fh.write("retention:\n  runs_days: -5\n  sessions_days: soon\n")
+    cfg = config.load(tmp_home_no_env)
+    # A value the loader cannot honour must not turn into a sweep: it falls back to forever.
+    assert (cfg.retention.runs_days, cfg.retention.sessions_days) == (0, 0)

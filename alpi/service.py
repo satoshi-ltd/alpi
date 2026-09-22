@@ -28,6 +28,9 @@ log = logging.getLogger("alpi.service")
 
 _PROFILE_RESCAN_SECONDS = 5.0
 _RUN_SWEEP_SECONDS = 30.0
+_RETENTION_SWEEP_SECONDS = 86_400.0
+# Late enough that a restart's own startup work is not competing with deletions.
+_RETENTION_FIRST_DELAY_SECONDS = 120.0
 
 
 # Public — orchestration
@@ -289,7 +292,11 @@ def _start_new_profiles(
             continue
         _sweep_runs(home, profile)
         task_map = _profile_tasks(home, profile)
-        registry[profile] = {"tasks": task_map, "fps": fps, "next_sweep_at": time.time() + _RUN_SWEEP_SECONDS}
+        registry[profile] = {
+            "tasks": task_map, "fps": fps,
+            "next_sweep_at": time.time() + _RUN_SWEEP_SECONDS,
+            "next_retention_at": time.time() + _RETENTION_FIRST_DELAY_SECONDS,
+        }
         count = sum(len(ts) for ts in task_map.values())
         if count:
             log.info("profile %s: started %d daemon task(s)", profile, count)
@@ -336,6 +343,31 @@ async def _stop_task_group(rt: dict[str, Any], name: str) -> None:
 
 # profile -> run_ids already reported as left open; per profile, so one profile's sweep never forgets another's.
 _reported_open: dict[str, set[str]] = {}
+
+
+def _retention_due(rt: dict[str, Any], now: float) -> bool:
+    # Rescheduled before the sweep runs, so a sweep that raises cannot fire on every tick.
+    if now < rt.get("next_retention_at", 0.0):
+        return False
+    rt["next_retention_at"] = now + _RETENTION_SWEEP_SECONDS
+    return True
+
+
+def _sweep_retention(home: Path, profile: str) -> None:
+    from alpi import cleanup
+
+    result = cleanup.retention_sweep(home)
+    touched = result["runs_removed"] or result["sessions_removed"] or result["errors"]
+    if not touched:
+        return
+    log.info(
+        "profile %s: retention sweep — %d run journal(s) (%d KiB), %d session(s) (%d KiB)%s%s",
+        profile,
+        result["runs_removed"], result["runs_freed"] // 1024,
+        result["sessions_removed"], result["sessions_freed"] // 1024,
+        f", {result['workgroup_sessions_kept']} workgroup session(s) kept" if result["workgroup_sessions_kept"] else "",
+        f"; {len(result['errors'])} error(s): {'; '.join(result['errors'][:5])}" if result["errors"] else "",
+    )
 
 
 def _sweep_runs(home: Path, profile: str) -> None:
@@ -499,6 +531,11 @@ async def _reconcile_profiles(
                 await asyncio.to_thread(_sweep_runs, home, profile)
             except Exception:  # noqa: BLE001
                 log.exception("profile %s: run sweep raised — maintenance loop continues", profile)
+        if _retention_due(rt, time.time()):
+            try:
+                await asyncio.to_thread(_sweep_retention, home, profile)
+            except Exception:  # noqa: BLE001
+                log.exception("profile %s: retention sweep raised — maintenance loop continues", profile)
         try:
             fps = _reload_fingerprints(home)
         except Exception:  # noqa: BLE001

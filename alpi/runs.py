@@ -145,6 +145,15 @@ def append(home: Path, run_id: str, kind: str, data: dict[str, Any] | None = Non
 
 
 def start(context: RunContext, *, model: str = "", input_text: str = "") -> None:
+    from alpi.session import sessions_lock
+
+    # Shared with Session.save and the retention sweep: a run that names its session here cannot
+    # slip in between the sweep's check and its delete.
+    with sessions_lock(context.home / "sessions", exclusive=False):
+        _start(context, model=model, input_text=input_text)
+
+
+def _start(context: RunContext, *, model: str, input_text: str) -> None:
     append(context.home, context.run_id, "run.started", {
         "run_id": context.run_id,
         "profile": context.profile,

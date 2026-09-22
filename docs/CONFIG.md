@@ -355,6 +355,48 @@ auto-compaction ratios are product constants, not user knobs. They only
 become configurable if real `logs/compaction.jsonl` or memory-review traces
 show repeated failures a fixed default cannot solve.
 
+### Retention
+
+Off unless a profile asks for it: without this block nothing is ever deleted.
+With a window set, the daemon sweeps that profile once a day and deletes what
+has aged past it. `alpi setup → Cleanup` remains the manual path and keeps its
+own fixed thresholds.
+
+| Key | Default | Type | Takes effect |
+|---|---|---|---|
+| `retention.runs_days` | `0` (keep forever) | days | next daily sweep |
+| `retention.sessions_days` | `0` (keep forever) | days | next daily sweep |
+
+Windows must be non-negative YAML integers. Invalid values (including booleans,
+fractions and quoted numbers) disable that window rather than enabling deletion.
+
+The sweep removes finished run journals in `runs/` and idle sessions in
+`sessions/` whose last activity is older than the window. It never touches
+`logs/runs.jsonl` (the run ledger that carries costs), a run still running
+or registered as active, a session with a turn in flight or named by a run
+journal that is still open (that covers the CLI, the TUI and scheduled
+children, which never register with the daemon), or a session that served a
+workgroup whose directory still exists under `alp/workgroups/` — a dispatch
+turn names its workgroup as `(wg_id=…)` in its first message, and that name
+is the only link a session keeps; a workgroup session whose id cannot be read
+is kept rather than guessed about. Age and open runs are checked again under
+a file lock that every writer of `sessions/` shares (a session save, a run
+start), so a turn or a run that lands after selection saves its session, and
+a session that cannot be read at that moment is left alone rather than
+treated as old. If any run journal or its directory cannot be verified, session
+deletion stops and the daemon logs the error; an incomplete inventory never means
+there are no active sessions. Repairing the journal allows the next sweep to retry.
+A session's
+cost is archived to the ledger before its files go. A file that cannot be
+deleted is reported in the daemon log and the sweep continues. A busy profile — hundreds of
+scheduled runs a day, one session each — wants a short window:
+
+```yaml
+retention:
+  runs_days: 7
+  sessions_days: 7
+```
+
 ### TUI
 
 alpi's TUI is built on [Textual](https://textual.textualize.io/) and is
@@ -782,3 +824,5 @@ releases stay untouched; ``alpi doctor`` lists them.
 - **next session** — restart `alpi` to pick it up.
 - **next daemon restart** — `alpi daemon restart` (or reload
   through launchd / systemd if installed as an autorun).
+- **next daily sweep** — the daemon's per-profile maintenance pass, first
+  about two minutes after it starts and then every 24 hours.

@@ -70,6 +70,10 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "retry_backoff_s": 1.5,
         "prefetch": "",
     },
+    "retention": {
+        "runs_days": 0,
+        "sessions_days": 0,
+    },
 }
 
 
@@ -192,6 +196,18 @@ class RuntimeConfig:
 
 
 @dataclass
+class RetentionConfig:
+    # Days a finished run journal / an idle session stays on disk; 0 (the default) keeps it forever.
+    runs_days: int = 0
+    sessions_days: int = 0
+
+
+def _retention_days(value: Any) -> int:
+    # A malformed deletion policy must never coerce true or 1.5 into a one-day window.
+    return value if type(value) is int and value >= 0 else 0
+
+
+@dataclass
 class Config:
     home: Path
     model: str
@@ -202,6 +218,7 @@ class Config:
     memory: MemoryConfig = field(default_factory=MemoryConfig)
     model_reasoning: ModelReasoningConfig = field(default_factory=ModelReasoningConfig)
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
+    retention: RetentionConfig = field(default_factory=RetentionConfig)
     tui: dict[str, Any] = field(default_factory=dict)
     email: dict[str, Any] = field(default_factory=dict)
     alp: dict[str, Any] = field(default_factory=dict)
@@ -431,6 +448,14 @@ def load(home: Path) -> Config:
         ).strip().lower(),
     )
 
+    ret_raw = data.get("retention")
+    if not isinstance(ret_raw, dict):
+        ret_raw = {}
+    retention_cfg = RetentionConfig(
+        runs_days=_retention_days(ret_raw.get("runs_days")),
+        sessions_days=_retention_days(ret_raw.get("sessions_days")),
+    )
+
     return Config(
         home=home,
         model=data.get("model", DEFAULT_CONFIG["model"]),
@@ -441,6 +466,7 @@ def load(home: Path) -> Config:
         memory=memory_cfg,
         model_reasoning=reasoning_cfg,
         runtime=runtime_cfg,
+        retention=retention_cfg,
         tui=data.get("tui", DEFAULT_CONFIG["tui"]),
         email=data.get("email", DEFAULT_CONFIG["email"]),
         alp=dict(data.get("alp") or {}),
@@ -519,6 +545,15 @@ def save(cfg: Config) -> None:
     }
     if runtime_delta:
         data["runtime"] = runtime_delta
+
+    ret_defaults = RetentionConfig()
+    retention_delta = {
+        k: getattr(cfg.retention, k)
+        for k in ("runs_days", "sessions_days")
+        if getattr(cfg.retention, k) != getattr(ret_defaults, k)
+    }
+    if retention_delta:
+        data["retention"] = retention_delta
 
     atomic_write_yaml(cfg.config_path, data)
 

@@ -223,6 +223,9 @@ def _compute_row(p: Path, stats: _Stats) -> dict[str, Any]:
         data = json.loads(p.read_text(encoding="utf-8"))
     except Exception:  # noqa: BLE001
         data = {}
+    if not isinstance(data, dict):
+        # A non-object payload is as unreadable as bad JSON: one such file must not fail the listing.
+        data = {}
     return _row_from_data(p.stem, data, mtime=stats.mtime, size_bytes=stats.size_bytes)
 
 
