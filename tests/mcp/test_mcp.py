@@ -1296,3 +1296,51 @@ def test_failed_server_is_retried_next_call_without_config_change(monkeypatch, c
 
     m2 = mcp_registry.mcp_tools_for(cfg)
     assert "a__t" in m2 and "b__t" in m2
+
+
+def test_a_running_server_reports_the_group_it_leads(server_and_patch) -> None:
+    server = server_and_patch
+    server.handle("tools/list", {"tools": []})
+    c = mcp_client.MCPClient("gh", "echo")
+    assert c.pid is None
+
+    c.start(timeout=5)
+    assert c.pid == server.popen.pid
+
+    # Died on its own, with nobody to call stop(): the pid is reapable and may be reassigned.
+    server.popen.returncode = -9
+    assert c.pid is None
+
+    server.popen.returncode = None
+    c.stop()
+    assert c.pid is None, "a stopped server must not be offered up for signalling"
+
+
+def test_the_registry_lists_every_live_server_for_the_run_that_owns_it(monkeypatch) -> None:
+    server = _FakeServer()
+    server.handle("initialize", {"protocolVersion": "2024-11-05"})
+    server.handle("tools/list", {"tools": [{"name": "ok", "description": ""}]})
+    spawned: list[_FakePopen] = []
+
+    def factory(args, **kw):
+        popen = _FakePopen(server)
+        spawned.append(popen)
+        return popen
+
+    monkeypatch.setattr(mcp_client.subprocess, "Popen", factory)
+    cfg = _FakeConfig({"mcp": {"servers": {"one": {"command": "echo"}}}})
+    try:
+        mcp_registry.mcp_tools_for(cfg)
+        assert mcp_registry.live_server_pids() == [spawned[0].pid]
+    finally:
+        mcp_registry.shutdown_all()
+    assert mcp_registry.live_server_pids() == []
+
+
+def test_a_server_inherits_the_stamp_of_the_process_that_spawned_it(monkeypatch) -> None:
+    from alpi import runs
+
+    monkeypatch.setattr(runs, "proc_starttime", lambda pid: f"start-{pid}")
+    env = mcp_client._build_env({}, None)
+
+    assert env["ALPI_SPAWNED_BY"] == runs.owner_stamp()

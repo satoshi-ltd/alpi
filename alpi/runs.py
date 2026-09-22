@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from alpi._redact import redact
-from alpi.core.run_context import RunContext
+from alpi.core.run_context import RunContext, current as current_run
 
 
 FORMAT_VERSION = 1
@@ -186,6 +186,7 @@ def active_ids(profile: str) -> set[str]:
 def finish(context: RunContext, outcome: str) -> None:
     _last_model_state.pop(context.run_id, None)
     path = run_path(context.home, context.run_id)
+    forget_children(context.home, context.run_id)
     try:
         append(context.home, context.run_id, "run.finished", {"outcome": outcome})
     finally:
@@ -193,6 +194,171 @@ def finish(context: RunContext, outcome: str) -> None:
         with _locks_guard:
             _seq.pop(key, None)
             _locks.pop(key, None)
+
+
+_OWNER_ENV = "ALPI_SPAWNED_BY"
+
+
+def owner_stamp() -> str:
+    start = proc_starttime(os.getpid())
+    return f"{os.getpid()}-{start}" if start else ""
+
+
+def stamp_env(env: dict[str, str]) -> dict[str, str]:
+    # Inherited through every exec, so a survivor stays identifiable after its group loses its leader.
+    stamp = owner_stamp()
+    return {**env, _OWNER_ENV: stamp} if stamp else dict(env)
+
+
+def _all_pids() -> list[int]:
+    try:
+        return [int(name) for name in os.listdir("/proc") if name.isdigit()]
+    except OSError:
+        return []
+
+
+def _environ_of(pid: int) -> bytes:
+    try:
+        with open(f"/proc/{pid}/environ", "rb") as handle:
+            return handle.read()
+    except OSError:
+        return b""
+
+
+def _stamped_pids(needle: bytes) -> list[int]:
+    ours = {os.getpid(), os.getppid()}
+    return [
+        pid for pid in _all_pids()
+        if pid not in ours and needle in _environ_of(pid).split(b"\0")
+    ]
+
+
+def _open_pidfd(pid: int) -> int | None:
+    try:
+        return os.pidfd_open(pid)
+    except (AttributeError, OSError):
+        return None
+
+
+def _kill_pidfd(fd: int) -> bool:
+    try:
+        signal.pidfd_send_signal(fd, signal.SIGKILL)
+        return True
+    except (AttributeError, OSError):
+        return False
+
+
+def _close_pidfd(fd: int) -> None:
+    try:
+        os.close(fd)
+    except OSError:
+        pass
+
+
+def kill_stamped_survivors(pid: int, pid_start: str) -> int:
+    """Kill what outlived a run's process groups; the inherited stamp is the proof of ownership."""
+    if pid <= 0 or not pid_start:
+        return 0
+    needle = f"{_OWNER_ENV}={pid}-{pid_start}".encode()
+    killed = 0
+    for target in _stamped_pids(needle):
+        fd = _open_pidfd(target)
+        # A bare pid is a stale read by the time it is signalled; the handle is what makes the
+        # identity hold, so re-read the stamp only once it is bound and never signal without it.
+        if fd is None:
+            continue
+        try:
+            if needle in _environ_of(target).split(b"\0") and _kill_pidfd(fd):
+                killed += 1
+        finally:
+            _close_pidfd(fd)
+    return killed
+
+
+def children_path(home: Path, run_id: str) -> Path:
+    return run_path(home, run_id).with_suffix(".children")
+
+
+def record_child(context: RunContext, pid: int) -> None:
+    # A detached child outlives the signal that ends its run; this list is the only way back.
+    if pid <= 0:
+        return
+    start = proc_starttime(pid)
+    # No proof of identity later would mean signalling whoever inherits the pid instead.
+    if not start:
+        return
+    path = children_path(context.home, context.run_id)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
+        fd = os.open(str(path), flags, 0o600)
+        with os.fdopen(fd, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps({"pgid": int(pid), "start": start}) + "\n")
+    except (OSError, ValueError):
+        pass
+
+
+def record_current_child(pid: int) -> None:
+    context = current_run()
+    if context is not None:
+        record_child(context, pid)
+
+
+def _recorded_children(home: Path, run_id: str) -> list[tuple[int, str]]:
+    try:
+        raw = children_path(home, run_id).read_text(encoding="utf-8")
+    except (OSError, ValueError):
+        return []
+    out: list[tuple[int, str]] = []
+    for line in raw.splitlines():
+        try:
+            row = json.loads(line)
+            pgid, start = int(row["pgid"]), str(row["start"])
+        except (ValueError, TypeError, KeyError):
+            continue
+        if pgid > 0 and start:
+            out.append((pgid, start))
+    return out
+
+
+def kill_child_groups(home: Path, run_id: str, *, pid: int = 0, pid_start: str = "") -> int:
+    """Signal every process group this run detached, then whatever outlived a leaderless one."""
+    killed = 0
+    for pgid, start in _recorded_children(home, run_id):
+        if pgid in (os.getpid(), os.getppid()):
+            continue
+        if proc_starttime(pgid) != start:
+            continue
+        try:
+            # Only when it still leads its own group: anything else is a group we do not own.
+            if os.getpgid(pgid) != pgid:
+                continue
+            os.killpg(pgid, signal.SIGKILL)
+        except (OSError, AttributeError):
+            continue
+        killed += 1
+    # Groups first, always: signalling a marked leader reaps it, and an unmarked child left in
+    # its group then belongs to a group nothing can vouch for any more.
+    return killed + kill_stamped_survivors(pid, pid_start)
+
+
+def kill_run_leftovers(home: Path, run_id: str) -> int:
+    """Everything a run left running, for a supervisor closing its journal by hand."""
+    try:
+        started = (_first_record(run_path(home, run_id)) or {}).get("data") or {}
+    except (OSError, ValueError):
+        return 0
+    return kill_child_groups(
+        home, run_id,
+        pid=_safe_int(started.get("pid")), pid_start=str(started.get("pid_start") or ""),
+    )
+
+
+def forget_children(home: Path, run_id: str) -> None:
+    try:
+        children_path(home, run_id).unlink()
+    except (OSError, ValueError):
+        pass
 
 
 def finish_if_running(home: Path, run_id: str, outcome: str) -> bool:
@@ -211,6 +377,7 @@ def finish_if_running(home: Path, run_id: str, outcome: str) -> bool:
         with _locks_guard:
             _seq.pop(key, None)
             _locks.pop(key, None)
+    forget_children(home, run_id)
     return True
 
 
@@ -333,9 +500,15 @@ def reconcile_stale(
             continue
         if pid <= 0 and age < older_than_s:
             continue
-        if finish_if_running(home, str(row["id"]), "interrupted"):
-            _silence_seen.pop(str(row["id"]), None)
-            closed.append(_closed_row(row, started, age, "dead", pid_recorded=pid > 0))
+        run_id = str(row["id"])
+        # Before the close, which forgets them; a journal with no pid never recorded one.
+        killed = kill_child_groups(
+            home, run_id, pid=pid, pid_start=str(started.get("pid_start") or ""),
+        ) if pid > 0 else 0
+        if finish_if_running(home, run_id, "interrupted"):
+            _silence_seen.pop(run_id, None)
+            extra = {"child_groups_killed": killed} if killed else {}
+            closed.append(_closed_row(row, started, age, "dead", pid_recorded=pid > 0, **extra))
     return closed
 
 
@@ -398,6 +571,11 @@ def reconcile_silent(
                 # Alive and untouchable: closing now would put a run.finished under a writer that may still append.
                 out.append(_closed_row(row, started, age, "silent", journal_closed=False, kill_refused=True, **extra))
                 continue
+            killed = kill_child_groups(
+                home, run_id, pid=pid, pid_start=str(started.get("pid_start") or ""),
+            )
+            if killed:
+                extra["child_groups_killed"] = killed
             extra["journal_closed"] = finish_if_running(home, run_id, "interrupted")
             _silence_seen.pop(run_id, None)
             out.append(_closed_row(row, started, age, "silent", **extra))
@@ -602,6 +780,8 @@ def list_runs(home: Path, *, limit: int = 50) -> list[dict]:
 __all__ = [
     "FORMAT_VERSION", "MAX_EVENT_BYTES", "MAX_LIST_LIMIT", "active", "active_ids", "append", "finish",
     "finish_if_running", "proc_starttime", "reconcile_stale", "reconcile_silent", "running_journals", "usage_summary",
+    "children_path", "forget_children", "kill_child_groups", "kill_run_leftovers", "kill_stamped_survivors",
+    "owner_stamp", "record_child", "record_current_child", "stamp_env",
     "persisted_tool_arguments",
     "list_runs", "read", "record_agent_event", "run_path", "start", "summary",
     "register_active", "unregister_active",

@@ -169,6 +169,18 @@ def _remove_docker_container(container_name: str | None, env: dict[str, str]) ->
         pass
 
 
+def _record_detached_child(pid: int) -> None:
+    from alpi.runs import record_current_child
+
+    record_current_child(pid)
+
+
+def _stamped(env: dict[str, str]) -> dict[str, str]:
+    from alpi.runs import stamp_env
+
+    return stamp_env(env)
+
+
 def _kill_process_group(proc: subprocess.Popen | None) -> None:
     if proc is None:
         return
@@ -328,8 +340,9 @@ class Terminal(Tool):
             child = subprocess.Popen(
                 popen_args, shell=use_shell,
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-                cwd=effective_cwd, env=subprocess_env, start_new_session=True,
+                cwd=effective_cwd, env=_stamped(subprocess_env), start_new_session=True,
             )
+            _record_detached_child(child.pid)
             stdout, stderr = child.communicate(timeout=timeout)
             proc = subprocess.CompletedProcess(
                 popen_args, child.returncode, stdout=stdout, stderr=stderr,
@@ -403,8 +416,9 @@ class Terminal(Tool):
             proc = subprocess.Popen(
                 popen_args, shell=use_shell, cwd=effective_cwd,
                 stdout=out_fh, stderr=subprocess.STDOUT,
-                start_new_session=True, env=_build_subprocess_env(),
+                start_new_session=True, env=_stamped(_build_subprocess_env()),
             )
+        _record_detached_child(proc.pid)
         registry = _bg_dir() / f"{proc.pid}.meta"
         registry.write_text(
             f"log={log.name}\nstarted={int(time.time())}\n"

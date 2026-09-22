@@ -329,6 +329,8 @@ def _run_script_only(job: dict, home: Path) -> JobOutcome:
 def _close_supervised_journal(home: Path, run_id: str) -> None:
     try:
         from alpi import runs
+        # Before the close, which forgets the registry: after it no sweep sees this run again.
+        runs.kill_run_leftovers(home, run_id)
         runs.finish_if_running(home, run_id, "interrupted")
     except Exception:  # noqa: BLE001
         log.debug("could not close journal %s after the child was ended", run_id[:8])

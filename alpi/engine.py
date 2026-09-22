@@ -110,6 +110,11 @@ def _maybe_load_mcps(cfg: cfg_mod.Config) -> dict:
     return mcp_registry.mcp_tools_for(cfg)
 
 
+def _live_mcp_pids() -> list[int]:
+    from alpi.mcp import registry as mcp_registry
+    return mcp_registry.live_server_pids()
+
+
 def _profile_name(home: Path) -> str:
     from alpi.home import profile_name
     return profile_name(home)
@@ -346,6 +351,9 @@ class Engine:
             runs_mod.start(run_context, model=self.cfg.model, input_text=user_text)
         except OSError:
             pass
+        # Shared by every run in this process, and only ever killed once that process is gone.
+        for server_pid in _live_mcp_pids():
+            runs_mod.record_child(run_context, server_pid)
         runs_mod.register_active(run_context, self)
 
         saw_error = False

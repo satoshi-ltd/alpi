@@ -396,7 +396,9 @@ def _run_command(
         return False, f"{kind} cwd escapes the workspace: {cwd}"
     if not cwd.is_dir():
         return False, f"{kind} cwd missing: {cwd}"
-    env = {k: v for k, v in os.environ.items() if k in _GATE_ENV_KEYS}
+    from alpi.runs import stamp_env
+
+    env = stamp_env({k: v for k, v in os.environ.items() if k in _GATE_ENV_KEYS})
     tail = bytearray()
     try:
         proc = subprocess.Popen(
@@ -406,6 +408,9 @@ def _run_command(
         )
     except OSError as e:
         return False, f"{kind} failed to start: {e}"
+    from alpi.runs import record_current_child
+
+    record_current_child(proc.pid)
 
     def _drain() -> None:
         assert proc.stdout is not None

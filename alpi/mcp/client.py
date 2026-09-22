@@ -189,6 +189,12 @@ class MCPClient:
     def is_running(self) -> bool:
         return self._proc is not None and self._proc.poll() is None
 
+    @property
+    def pid(self) -> int | None:
+        # Also its process group: start() gives every server a session of its own.
+        proc = self._proc
+        return proc.pid if proc is not None and proc.poll() is None else None
+
     def list_tools(self) -> list[ToolSpec]:
         return list(self._tools)
 
@@ -464,6 +470,10 @@ def _build_env(
     # PATH gets augmented separately so launchd-started daemons can find
     # `npx` / `uvx` / etc that MCP servers need to spawn.
     out["PATH"] = _augmented_path()
+    # Identity of this process, inherited by the server and everything it execs.
+    from alpi.runs import stamp_env
+
+    out = stamp_env(out)
     for key in parent:
         if key.startswith("LC_") and key not in out:
             out[key] = parent[key]

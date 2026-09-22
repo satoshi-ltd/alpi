@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import json
 import os
+import signal
+import time
 
 import pytest
 
@@ -607,3 +610,420 @@ def test_streaming_deltas_never_reach_the_journal(tmp_path: Path) -> None:
     assert kinds == ["run.started", "agent.model_state", "agent.assistant_done", "run.finished"]
     text = runs.run_path(tmp_path, context.run_id).read_text()
     assert "thinking" not in text and "hel" not in text.replace("hello", "")
+
+
+# --------------------------------------------------------------------
+# PROC.2 — what a run detached must die with it
+# --------------------------------------------------------------------
+
+
+def _detached_child():
+    import subprocess
+    import sys
+    return subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(120)"], start_new_session=True,
+    )
+
+
+def _detached_context(home: Path, run_id: str) -> RunContext:
+    return RunContext.create(
+        home=home, workspace=home, profile="default", source="schedule",
+        session_id="s1", connection_id="host", run_id=run_id,
+    )
+
+
+def _stable_starttimes(monkeypatch) -> None:
+    monkeypatch.setattr(runs, "proc_starttime", lambda pid: f"start-{pid}")
+
+
+def test_a_swept_run_takes_the_group_it_detached_with_it(tmp_path: Path, monkeypatch) -> None:
+    run = _sleeping_child()
+    child = _detached_child()
+    try:
+        _stable_starttimes(monkeypatch)
+        runs.record_child(_detached_context(tmp_path, "ours"), child.pid)
+        _quiet(monkeypatch)
+        _scheduled_journal(tmp_path, "ours", pid=run.pid, pid_start=f"start-{run.pid}")
+        kw = dict(timeout_for_job=lambda job_id: 60, now=1000.0 + 60 + 300 + 1)
+
+        runs.reconcile_silent(tmp_path, now_mono=0.0, **kw)
+        out = runs.reconcile_silent(tmp_path, now_mono=300.0, **kw)
+
+        assert out[0]["pid_killed"] is True
+        assert out[0]["child_groups_killed"] == 1
+        assert run.wait(timeout=5) == -9
+        assert child.wait(timeout=5) == -9, "the detached child survived the sweep"
+    finally:
+        for proc in (run, child):
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait()
+
+
+def test_a_dead_runs_orphans_are_swept_too(tmp_path: Path, monkeypatch) -> None:
+    child = _detached_child()
+    try:
+        _stable_starttimes(monkeypatch)
+        runs.record_child(_detached_context(tmp_path, "gone"), child.pid)
+        monkeypatch.setattr(runs.time, "time", lambda: 100.0)
+        _scheduled_journal(tmp_path, "gone", pid=999998)
+        monkeypatch.setattr(runs, "_pid_alive", lambda pid: False)
+        monkeypatch.setattr(runs.time, "time", lambda: 5000.0)
+
+        rows = runs.reconcile_stale(tmp_path, older_than_s=3600)
+
+        assert rows[0]["child_groups_killed"] == 1
+        assert child.wait(timeout=5) == -9
+    finally:
+        if child.poll() is None:
+            child.kill()
+            child.wait()
+
+
+def test_a_group_whose_leader_was_replaced_is_left_alone(tmp_path: Path, monkeypatch) -> None:
+    child = _detached_child()
+    try:
+        monkeypatch.setattr(runs, "proc_starttime", lambda pid: "recorded")
+        runs.record_child(_detached_context(tmp_path, "stranger"), child.pid)
+        # The pid now belongs to somebody else: no proof, no signal.
+        monkeypatch.setattr(runs, "proc_starttime", lambda pid: "someone-else")
+
+        assert runs.kill_child_groups(tmp_path, "stranger") == 0
+        assert child.poll() is None
+    finally:
+        child.kill()
+        child.wait()
+
+
+def test_a_child_that_does_not_lead_its_own_group_is_never_signalled(tmp_path: Path, monkeypatch) -> None:
+    _stable_starttimes(monkeypatch)
+    runs.record_child(_detached_context(tmp_path, "attached"), 4242)
+    # Its pid is somebody else's group id: signalling it would reach a group this run never owned.
+    monkeypatch.setattr(runs.os, "getpgid", lambda pid: 1)
+    signalled: list[int] = []
+    monkeypatch.setattr(runs.os, "killpg", lambda pgid, sig: signalled.append(pgid))
+
+    assert runs.kill_child_groups(tmp_path, "attached") == 0
+    assert signalled == []
+
+
+def test_a_terminal_command_lands_in_the_registry_of_the_run_that_asked_for_it(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    from alpi.core.run_context import use as use_run_context
+    from alpi.tools.terminal import Terminal
+
+    _stable_starttimes(monkeypatch)
+    with use_run_context(_detached_context(tmp_path, "shellrun")):
+        assert Terminal().run(command="true").ok
+
+    assert len(runs._recorded_children(tmp_path, "shellrun")) == 1
+
+
+def test_a_background_job_lands_in_the_registry_of_the_run_that_started_it(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    from alpi.core.run_context import use as use_run_context
+    from alpi.tools.terminal import Terminal
+
+    _stable_starttimes(monkeypatch)
+    with use_run_context(_detached_context(tmp_path, "bgrun")):
+        result = Terminal().run(action="background", command="sleep 30")
+    assert result.ok
+    recorded = runs._recorded_children(tmp_path, "bgrun")
+    try:
+        assert len(recorded) == 1
+    finally:
+        os.killpg(recorded[0][0], signal.SIGKILL)
+
+
+def test_a_pipeline_gate_lands_in_the_registry_of_the_run_that_ran_it(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    import sys
+
+    from alpi.alp import pipeline_gates as gates
+    from alpi.core.run_context import use as use_run_context
+
+    _stable_starttimes(monkeypatch)
+    workspace = tmp_path / "ws"
+    (workspace / "proj").mkdir(parents=True)
+    step = gates.GateStep(
+        "content", "quill", "", "", "", (sys.executable, "-c", "print('ok')"), "proj",
+    )
+    with use_run_context(_detached_context(tmp_path, "gaterun")):
+        passed, _out = gates.run_gate(step, workspace)
+
+    assert passed
+    assert len(runs._recorded_children(tmp_path, "gaterun")) == 1
+
+
+def test_a_command_outside_any_run_is_recorded_nowhere(tmp_path: Path, monkeypatch) -> None:
+    from alpi.tools.terminal import Terminal
+
+    _stable_starttimes(monkeypatch)
+    recorded: list[int] = []
+    monkeypatch.setattr(runs, "record_child", lambda ctx, pid: recorded.append(pid))
+
+    assert Terminal().run(command="true").ok
+    assert recorded == []
+
+
+def test_a_child_with_no_provable_identity_is_never_recorded(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(runs, "proc_starttime", lambda pid: None)
+    runs.record_child(_detached_context(tmp_path, "unprovable"), 424242)
+    assert not runs.children_path(tmp_path, "unprovable").exists()
+
+
+def test_a_run_that_ends_well_forgets_what_it_spawned(tmp_path: Path, monkeypatch) -> None:
+    _stable_starttimes(monkeypatch)
+    context = _detached_context(tmp_path, "tidy")
+    runs.start(context)
+    runs.record_child(context, 4242)
+    assert runs.children_path(tmp_path, "tidy").exists()
+
+    runs.finish(context, "completed")
+
+    assert not runs.children_path(tmp_path, "tidy").exists()
+
+
+def test_closing_a_child_owned_journal_forgets_what_it_spawned(tmp_path: Path, monkeypatch) -> None:
+    _stable_starttimes(monkeypatch)
+    context = _detached_context(tmp_path, "abandoned")
+    runs.start(context)
+    runs.record_child(context, 4242)
+
+    assert runs.finish_if_running(tmp_path, "abandoned", "interrupted") is True
+    assert not runs.children_path(tmp_path, "abandoned").exists()
+
+
+def test_the_registry_survives_a_corrupt_line(tmp_path: Path, monkeypatch) -> None:
+    _stable_starttimes(monkeypatch)
+    context = _detached_context(tmp_path, "messy")
+    runs.record_child(context, 4242)
+    with runs.children_path(tmp_path, "messy").open("a", encoding="utf-8") as fh:
+        fh.write("not json\n{}\n" + json.dumps({"pgid": 0, "start": "x"}) + "\n")
+    runs.record_child(context, 4343)
+
+    assert runs._recorded_children(tmp_path, "messy") == [
+        (4242, "start-4242"), (4343, "start-4343"),
+    ]
+
+
+def test_the_registry_is_invisible_to_everything_that_scans_the_runs_directory(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    _stable_starttimes(monkeypatch)
+    context = _detached_context(tmp_path, "listed")
+    runs.start(context)
+    runs.record_child(context, 4242)
+
+    assert [row["id"] for row in runs.list_runs(tmp_path)] == ["listed"]
+    assert [row[0]["id"] for row in runs.running_journals(tmp_path, time.time())] == ["listed"]
+
+
+# --------------------------------------------------------------------
+# PROC.2 — survivors of a group that lost its leader
+# --------------------------------------------------------------------
+
+
+def _fake_proc(monkeypatch, table: dict[int, bytes], *, on_kill=None) -> list[int]:
+    """Stand in for /proc and pidfd, which this machine has neither of. Returns what got signalled."""
+    signalled: list[int] = []
+    monkeypatch.setattr(runs, "_all_pids", lambda: sorted(table))
+    monkeypatch.setattr(runs, "_environ_of", lambda pid: table.get(pid, b""))
+    monkeypatch.setattr(runs, "_open_pidfd", lambda pid: pid)
+    monkeypatch.setattr(runs, "_close_pidfd", lambda fd: None)
+
+    def kill(fd: int) -> bool:
+        signalled.append(fd)
+        if on_kill is not None:
+            on_kill(fd)
+        return True
+
+    monkeypatch.setattr(runs, "_kill_pidfd", kill)
+    return signalled
+
+
+def test_a_survivor_of_a_leaderless_group_is_killed_by_its_stamp(tmp_path: Path, monkeypatch) -> None:
+    import subprocess
+    # The exact shape: a shell that backgrounds work and exits, leaving its group leaderless.
+    # The background job must not inherit the pipe, or reading it waits for the survivor.
+    leader = subprocess.Popen(["/bin/sh", "-c", "sleep 300 >/dev/null 2>&1 & echo $!"],
+                              stdout=subprocess.PIPE, text=True, start_new_session=True)
+    survivor = int(leader.stdout.readline().strip())
+    leader.wait(timeout=10)
+    try:
+        _stable_starttimes(monkeypatch)
+        runs.record_child(_detached_context(tmp_path, "orphaned"), leader.pid)
+        _fake_proc(
+            monkeypatch,
+            {survivor: b"PATH=/bin\0ALPI_SPAWNED_BY=77-start-77\0"},
+            on_kill=lambda fd: os.kill(fd, signal.SIGKILL),
+        )
+
+        assert runs.kill_child_groups(tmp_path, "orphaned", pid=77, pid_start="start-77") == 1
+        for _ in range(50):
+            try:
+                os.kill(survivor, 0)
+            except ProcessLookupError:
+                break
+            time.sleep(0.05)
+        else:
+            pytest.fail(f"survivor {survivor} outlived the sweep")
+    finally:
+        try:
+            os.kill(survivor, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+
+def test_a_process_that_carries_no_stamp_of_ours_is_never_touched(monkeypatch) -> None:
+    signalled = _fake_proc(monkeypatch, {
+        4242: b"ALPI_SPAWNED_BY=99-other\0",
+        4243: b"PATH=/bin\0",
+        4244: b"ALPI_SPAWNED_BY=77-start-77-extra\0",
+    })
+
+    assert runs.kill_stamped_survivors(77, "start-77") == 0
+    assert signalled == []
+
+
+def test_a_run_with_no_provable_identity_sweeps_no_survivors(monkeypatch) -> None:
+    # An empty half would make the stamp a prefix that matches whatever carries the pid alone.
+    signalled = _fake_proc(
+        monkeypatch, {4242: b"ALPI_SPAWNED_BY=77-\0", 4243: b"ALPI_SPAWNED_BY=-start\0"},
+    )
+
+    assert runs.kill_stamped_survivors(77, "") == 0
+    assert runs.kill_stamped_survivors(0, "start") == 0
+    assert signalled == []
+
+
+def test_the_stamp_is_absent_when_the_start_time_cannot_be_read(monkeypatch) -> None:
+    monkeypatch.setattr(runs, "proc_starttime", lambda pid: None)
+    assert runs.owner_stamp() == ""
+    assert runs.stamp_env({"PATH": "/bin"}) == {"PATH": "/bin"}
+
+
+def test_a_terminal_command_actually_inherits_the_stamp(tmp_path: Path, monkeypatch) -> None:
+    from alpi.tools.terminal import Terminal
+
+    _stable_starttimes(monkeypatch)
+    result = Terminal().run(command="printf '%s' \"$ALPI_SPAWNED_BY\"")
+
+    assert result.ok
+    assert runs.owner_stamp() in result.output
+
+
+def test_a_pipeline_gate_actually_inherits_the_stamp(tmp_path: Path, monkeypatch) -> None:
+    import sys
+
+    from alpi.alp import pipeline_gates as gates
+
+    _stable_starttimes(monkeypatch)
+    workspace = tmp_path / "ws"
+    (workspace / "proj").mkdir(parents=True)
+    step = gates.GateStep(
+        "content", "quill", "", "", "",
+        (sys.executable, "-c", "import os; print(os.environ.get('ALPI_SPAWNED_BY', 'MISSING'))"),
+        "proj",
+    )
+
+    passed, out = gates.run_gate(step, workspace)
+
+    assert passed
+    assert runs.owner_stamp() in out
+
+
+def test_a_supervisor_closing_a_journal_kills_what_the_run_left_running(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    from alpi.scheduler.run import _close_supervised_journal
+
+    child = _detached_child()
+    try:
+        _stable_starttimes(monkeypatch)
+        context = _detached_context(tmp_path, "supervised")
+        runs.start(context)
+        runs.record_child(context, child.pid)
+
+        _close_supervised_journal(tmp_path, "supervised")
+
+        assert child.wait(timeout=5) == -9, "the registry was dropped before anything killed it"
+        assert runs.summary(tmp_path, "supervised")["status"] == "interrupted"
+    finally:
+        if child.poll() is None:
+            child.kill()
+            child.wait()
+
+
+def test_a_pid_replaced_between_the_scan_and_the_signal_is_never_hit(monkeypatch) -> None:
+    table = {4242: b"ALPI_SPAWNED_BY=77-start-77\0"}
+    signalled: list[int] = []
+    monkeypatch.setattr(runs, "_all_pids", lambda: sorted(table))
+    monkeypatch.setattr(runs, "_environ_of", lambda pid: table.get(pid, b""))
+    monkeypatch.setattr(runs, "_close_pidfd", lambda fd: None)
+    monkeypatch.setattr(runs, "_kill_pidfd", lambda fd: signalled.append(fd) or True)
+
+    def bind(pid: int) -> int:
+        # The scan is a stale read: by the time the handle binds, somebody else holds the pid.
+        table[pid] = b"PATH=/bin\0"
+        return pid
+
+    monkeypatch.setattr(runs, "_open_pidfd", bind)
+
+    assert runs.kill_stamped_survivors(77, "start-77") == 0
+    assert signalled == []
+
+
+def test_a_handle_that_cannot_be_bound_is_never_signalled_by_pid(monkeypatch) -> None:
+    signalled: list[int] = []
+    monkeypatch.setattr(runs, "_all_pids", lambda: [4242])
+    monkeypatch.setattr(runs, "_environ_of", lambda pid: b"ALPI_SPAWNED_BY=77-start-77\0")
+    monkeypatch.setattr(runs, "_open_pidfd", lambda pid: None)
+    monkeypatch.setattr(runs.os, "kill", lambda pid, sig: signalled.append(pid))
+
+    assert runs.kill_stamped_survivors(77, "start-77") == 0
+    assert signalled == []
+
+
+def test_a_verifiable_group_is_cleared_before_its_marked_leader_is_reaped(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    import subprocess
+
+    # A live leader holding an unmarked child in its group: only the group pass can reach it.
+    leader = subprocess.Popen(
+        ["/bin/sh", "-c", "env -i sleep 300 >/dev/null 2>&1 & echo $!; exec sleep 300"],
+        stdout=subprocess.PIPE, text=True, start_new_session=True,
+    )
+    unmarked = int(leader.stdout.readline().strip())
+    try:
+        _stable_starttimes(monkeypatch)
+        runs.record_child(_detached_context(tmp_path, "ordered"), leader.pid)
+        _fake_proc(
+            monkeypatch,
+            {leader.pid: b"ALPI_SPAWNED_BY=77-start-77\0"},
+            # Reaping is what destroys the proof the group pass needs.
+            on_kill=lambda fd: (os.kill(fd, signal.SIGKILL), leader.wait(timeout=5)),
+        )
+
+        runs.kill_child_groups(tmp_path, "ordered", pid=77, pid_start="start-77")
+
+        for _ in range(60):
+            try:
+                os.kill(unmarked, 0)
+            except ProcessLookupError:
+                break
+            time.sleep(0.05)
+        else:
+            pytest.fail(f"unmarked child {unmarked} in the group outlived the sweep")
+    finally:
+        for target in (unmarked, leader.pid):
+            try:
+                os.kill(target, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        if leader.poll() is None:
+            leader.wait(timeout=5)

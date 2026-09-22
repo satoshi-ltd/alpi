@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.15.5 — 2026-09-22 — killing a stuck run takes its leftovers with it
+
+- **A run the daemon killed for going quiet left its own processes running.** Anything a run
+  detaches — a shell command, a background job, a pipeline gate, an MCP server — is put in a
+  session of its own so its own timeout can reach it, and that is exactly what let it survive
+  the signal that ended the run. A build, a server or a wedged tool could go on consuming the
+  machine for hours after the run that started it had been reported as interrupted. Each run
+  now keeps a record of what it detached, and both sweeps — the one for a run gone quiet and
+  the one for a run whose process is already gone — use it to finish the job.
+- **Work whose own launcher had already exited survived anyway.** A shell that starts something
+  in the background and returns leaves that process with no launcher to signal, so the previous
+  rule could not reach it. Everything a run starts now carries the identity of the run that
+  started it, which is inherited by whatever it starts in turn, so a leftover is still
+  recognisable long after the process that created it is gone.
+- A process is only signalled when it can still be proved to be the one the run started, so a
+  reused process id is never mistaken for a leftover.
+- The scheduler's own cleanup, when it ends a job that overran or failed, now stops that job's
+  leftovers instead of discarding the record of them.
+
 ## v0.15.4 — 2026-09-21 — an OpenRouter suffix no longer shrinks a model's context window
 
 - **A model picked with an OpenRouter suffix like `:nitro` reported 200,000 tokens of

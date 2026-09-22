@@ -137,6 +137,19 @@ def prewarm(cfg: cfg_mod.Config) -> None:
         log.warning("mcp: prewarm failed", exc_info=True)
 
 
+def live_server_pids() -> list[int]:
+    """Every server running in this process, for the run registry that has to be able to kill it."""
+    with _CACHE_LOCK:
+        entries = list(_CACHE.values())
+    out: list[int] = []
+    for entry in entries:
+        for client in entry.get("clients", []) or []:
+            pid = client.pid
+            if pid:
+                out.append(pid)
+    return out
+
+
 def cached_clients(cfg: cfg_mod.Config) -> list[MCPClient]:
     servers = (cfg.raw.get("mcp") or {}).get("servers") or {}
     if not isinstance(servers, dict) or not servers:
