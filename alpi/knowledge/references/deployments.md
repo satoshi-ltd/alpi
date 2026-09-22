@@ -45,7 +45,7 @@ alpi daemon restart
 - Updates must retain both `-f` arguments for `pull` and `up -d`; using the base file alone republishes its direct ports.
 - Several Alpis on one public host share one Caddy: one hostname and private upstream port per Alpi, all public WSS URLs on 443. Do not start one Caddy per instance because they would compete for 80/443.
 - `!reset` affects only the named `alpi` service. Every added `alpi-2`-style service must reset/remove its own ports and get its own Caddy route.
-- Give every mutually untrusted customer a separate container, VM, or OS account with its own Alpi home/volume and credentials. `member` and `profile_scope` restrict host RPC; they do not sandbox agent tools or turn profiles in one daemon into tenants. A shared Caddy may route one hostname to each isolated runtime while all internal ports remain private.
+- Give every mutually untrusted scope a separate container, VM, or OS account with its own Alpi home/volume and credentials. `member` and `profile_scope` restrict host RPC; they do not sandbox agent tools or turn profiles in one daemon into tenants. Neither does the OS sandbox: in the supported Docker runtime `tools.terminal.sandbox: true` refuses every `terminal` call instead of isolating one, so a container and its volume hold exactly one trust scope — every profile, `.env` and secret in it is reachable from any shell command in it. A shared Caddy may route one hostname to each isolated runtime while all internal ports remain private.
 
 Caddy obtaining a certificate and Alpi advertising a route are separate. The
 proxy never creates a connection or credential, and `host.endpoints` never

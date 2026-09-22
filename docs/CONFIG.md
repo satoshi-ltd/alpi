@@ -171,7 +171,11 @@ power-user enough that raw names beat any UI we'd build right now.
 
 `tools.terminal.sandbox` enables OS-level isolation on shell commands
 (macOS `sandbox-exec`, Linux `bubblewrap`). Toggle via `alpi setup →
-Sandbox`, or directly in YAML. The TUI top bar shows the current
+Sandbox`, or directly in YAML. It has no working form in the supported
+Docker runtime — the container grants none of the namespaces `bubblewrap`
+needs — so there it refuses every `terminal` call rather than run one
+unsandboxed, and the container plus its volume is the isolation boundary
+instead (see [DEPLOYMENTS.md](DEPLOYMENTS.md)). The TUI top bar shows the current
 state (`sandbox on` / `off`). Most useful on profiles that run
 unattended (schedule, sub-agents) — see
 [SECURITY.md](SECURITY.md) for the recommended pattern + platform

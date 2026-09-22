@@ -291,9 +291,11 @@ def _run_script_only(job: dict, home: Path) -> JobOutcome:
         return JobOutcome(False, "empty command after parsing")
 
     from alpi.home import effective_profile_env as _effective_profile_env, workspace_env
+    from alpi.runtime import deploy_env
     env = _effective_profile_env(home, extra={
         "ALPI_HOME": str(home),
         "ALPI_PLATFORM": "cron",
+        **deploy_env(),
         **workspace_env(home),
     })
 
@@ -370,6 +372,7 @@ def run_job(job: dict, home: Path) -> JobOutcome:
     wrapped = wrap_header + "\n\n" + prompt
 
     from alpi.home import effective_profile_env as _effective_profile_env, workspace_env
+    from alpi.runtime import deploy_env as _deploy_env
     secs = job_run_timeout(job)
     # The scheduler supervises this child, so it owns the journal: on a kill it closes it itself instead of leaving it for the sweep to find (and alert on) a second time.
     run_id = uuid.uuid4().hex
@@ -381,6 +384,7 @@ def run_job(job: dict, home: Path) -> JobOutcome:
         # Stable cache-affinity scope: repeated runs of one job share a provider sticky key instead of minting one per run.
         "ALPI_SCHEDULE_ID": str(job.get("id") or ""),
         "ALPI_PARENT_EMITS_AGENT_MESSAGE": "1",
+        **_deploy_env(),
         **workspace_env(home),
     }
     # job.connection_id is provenance (who created it); the daemon owns every scheduled run, so accounting stays under host.

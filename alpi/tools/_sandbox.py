@@ -172,6 +172,19 @@ def _wrap_linux(
     write_rules: tuple[tuple[str, Path], ...] | None,
 ) -> list[str]:
     if shutil.which("bwrap") is None:
+        from alpi.runtime import is_docker
+
+        if is_docker():
+            # The shipped image ships no bwrap because the supported runtime grants none of the
+            # namespaces it needs; a custom image plus its own seccomp profile is the operator's call.
+            raise SandboxUnavailable(
+                "tools.terminal.sandbox is on, but the OS sandbox is not available in the "
+                "supported Docker runtime, so terminal is refused rather than run unsandboxed. "
+                "There the container and its volume are the isolation boundary, and they hold "
+                "one trust scope: every profile, secret and file inside one container is "
+                "reachable from any shell command in it. Set tools.terminal.sandbox=false only "
+                "once that is the intended scope — see DEPLOYMENTS.md."
+            )
         raise SandboxUnavailable(
             "bubblewrap (bwrap) not found. Install it (apt install bubblewrap, "
             "dnf install bubblewrap, pacman -S bubblewrap) or set "

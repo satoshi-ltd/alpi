@@ -1108,3 +1108,68 @@ def test_run_job_accounts_to_host_even_for_connection_created_jobs(
     assert scheduler.run_job(job, tmp_home_no_env).ok
     assert captured["env"].get("ALPI_CONNECTION_ID") == "host"
     assert captured["env"].get("ALPI_CONNECTION_SOURCE") == "schedule"
+
+
+def _capture_child_env(monkeypatch, tmp_home_no_env, job: dict) -> dict:
+    captured: dict = {}
+
+    class _Done:
+        returncode = 0
+        stdout = _events_stdout([{"kind": "reply", "text": "ok"}])
+        stderr = ""
+
+    def fake_run(*a, **kw):
+        captured["env"] = kw.get("env") or {}
+        return _Done()
+
+    monkeypatch.setattr(scheduler.subprocess, "run", fake_run)
+    scheduler.run_job(job, tmp_home_no_env)
+    return captured["env"]
+
+
+def test_a_job_in_docker_carries_the_runtime_past_the_cron_marker(
+    monkeypatch, tmp_home_no_env,
+) -> None:
+    monkeypatch.setenv("ALPI_PLATFORM", "docker")
+    monkeypatch.delenv("ALPI_DEPLOY_RUNTIME", raising=False)
+
+    env = _capture_child_env(
+        monkeypatch, tmp_home_no_env, {"id": "j", "kind": "cron", "prompt": "p"},
+    )
+
+    # The child must still read as Docker even though its ALPI_PLATFORM says cron.
+    assert env.get("ALPI_PLATFORM") == "cron"
+    assert env.get("ALPI_DEPLOY_RUNTIME") == "docker"
+
+
+def test_a_job_on_a_host_install_carries_no_runtime(monkeypatch, tmp_home_no_env) -> None:
+    monkeypatch.delenv("ALPI_PLATFORM", raising=False)
+    monkeypatch.delenv("ALPI_DEPLOY_RUNTIME", raising=False)
+
+    env = _capture_child_env(
+        monkeypatch, tmp_home_no_env, {"id": "j", "kind": "cron", "prompt": "p"},
+    )
+
+    assert "ALPI_DEPLOY_RUNTIME" not in env
+
+
+def test_a_script_only_job_in_docker_carries_the_runtime_too(
+    monkeypatch, tmp_home_no_env: Path,
+) -> None:
+    script = _stub_skill_path(tmp_home_no_env)
+    monkeypatch.setenv("ALPI_PLATFORM", "docker")
+    monkeypatch.delenv("ALPI_DEPLOY_RUNTIME", raising=False)
+    captured: dict = {}
+
+    def fake_run(argv, **kw):
+        captured["env"] = kw.get("env") or {}
+        return _fake_completed(rc=0, stdout="")
+
+    monkeypatch.setattr(scheduler.subprocess, "run", fake_run)
+    scheduler.run_job(
+        {"id": "j", "kind": "cron", "no_agent": True, "prompt": f"python3 {script}"},
+        tmp_home_no_env,
+    )
+
+    assert captured["env"].get("ALPI_PLATFORM") == "cron"
+    assert captured["env"].get("ALPI_DEPLOY_RUNTIME") == "docker"

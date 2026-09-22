@@ -53,6 +53,54 @@ def test_linux_missing_binary_raises(ws: Path, ah: Path) -> None:
         assert "bwrap" in str(ei.value)
 
 
+def test_linux_missing_binary_keeps_its_native_advice(ws: Path, ah: Path, monkeypatch) -> None:
+    monkeypatch.delenv("ALPI_PLATFORM", raising=False)
+    with patch.object(_sandbox, "sys") as sysmod, \
+         patch.object(_sandbox.shutil, "which", return_value=None):
+        sysmod.platform = "linux"
+        with pytest.raises(_sandbox.SandboxUnavailable) as ei:
+            _sandbox.wrap_command("ls", workspace=ws, alpi_home=ah, allow_network=False)
+
+    message = str(ei.value)
+    assert "apt install bubblewrap" in message
+    assert "Docker" not in message
+
+
+def test_docker_says_the_os_sandbox_is_unavailable_there(ws: Path, ah: Path, monkeypatch) -> None:
+    monkeypatch.setenv("ALPI_PLATFORM", "docker")
+    with patch.object(_sandbox, "sys") as sysmod, \
+         patch.object(_sandbox.shutil, "which", return_value=None):
+        sysmod.platform = "linux"
+        with pytest.raises(_sandbox.SandboxUnavailable) as ei:
+            _sandbox.wrap_command("ls", workspace=ws, alpi_home=ah, allow_network=False)
+
+    message = str(ei.value)
+    assert "not available in the supported Docker runtime" in message
+    assert "one trust scope" in message
+    # Installing it would not help there, and relaxing the container is not ours to advise.
+    assert "apt install" not in message
+    assert "unconfined" not in message
+
+
+def test_a_refused_sandbox_never_runs_the_command(monkeypatch, tmp_path: Path) -> None:
+    from alpi.tools import terminal
+
+    monkeypatch.setenv("ALPI_PLATFORM", "docker")
+    monkeypatch.setattr(terminal, "_sandbox_config", lambda: (True, False))
+    spawned: list[object] = []
+    monkeypatch.setattr(terminal.subprocess, "Popen", lambda *a, **kw: spawned.append(a))
+    monkeypatch.setattr(_sandbox.shutil, "which", lambda name: None)
+    monkeypatch.setattr(_sandbox.sys, "platform", "linux")
+
+    marker = tmp_path / "ran"
+    result = terminal.Terminal().run(command=f"touch {marker}")
+
+    assert result.ok is False
+    assert "supported Docker runtime" in result.error
+    assert spawned == [], "the refusal spawned a process anyway"
+    assert not marker.exists()
+
+
 def test_phase_write_rules_translate_only_exact_sandbox_shapes(ws: Path) -> None:
     project = ws / "projects" / "hotel"
     assets = project / "assets"
@@ -384,3 +432,34 @@ def test_linux_workspace_write_allowed_escape_blocked(ws: Path, ah: Path) -> Non
     proc = subprocess.run(args, capture_output=True, text=True, timeout=10)
     assert proc.returncode != 0
     assert not escape.exists()
+
+
+def test_a_scheduled_job_inside_docker_gets_the_docker_diagnosis(
+    ws: Path, ah: Path, monkeypatch,
+) -> None:
+    # The scheduler overwrites ALPI_PLATFORM with "cron", which used to read as a host install.
+    monkeypatch.setenv("ALPI_PLATFORM", "cron")
+    monkeypatch.setenv("ALPI_DEPLOY_RUNTIME", "docker")
+    with patch.object(_sandbox, "sys") as sysmod, \
+         patch.object(_sandbox.shutil, "which", return_value=None):
+        sysmod.platform = "linux"
+        with pytest.raises(_sandbox.SandboxUnavailable) as ei:
+            _sandbox.wrap_command("ls", workspace=ws, alpi_home=ah, allow_network=False)
+
+    message = str(ei.value)
+    assert "not available in the supported Docker runtime" in message
+    assert "apt install" not in message
+
+
+def test_a_scheduled_job_on_a_host_install_keeps_the_native_advice(
+    ws: Path, ah: Path, monkeypatch,
+) -> None:
+    monkeypatch.setenv("ALPI_PLATFORM", "cron")
+    monkeypatch.delenv("ALPI_DEPLOY_RUNTIME", raising=False)
+    with patch.object(_sandbox, "sys") as sysmod, \
+         patch.object(_sandbox.shutil, "which", return_value=None):
+        sysmod.platform = "linux"
+        with pytest.raises(_sandbox.SandboxUnavailable) as ei:
+            _sandbox.wrap_command("ls", workspace=ws, alpi_home=ah, allow_network=False)
+
+    assert "apt install bubblewrap" in str(ei.value)

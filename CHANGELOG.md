@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.15.6 — 2026-09-22 — the sandbox setting no longer bricks the shell in Docker
+
+- **Following the deployment guide made `terminal` refuse every command.** It told operators to
+  turn the OS sandbox on for every profile at onboarding; inside the supported container that
+  setting has no working form, so instead of isolating commands it rejected all of them, and the
+  error told the operator to install a package that would not have helped. The guide no longer
+  asks for it there, and the refusal now says plainly that the inner sandbox is unavailable in
+  that runtime. Commands are still never run unsandboxed when the sandbox was asked for.
+- **A scheduled job inside a container no longer mistakes itself for a host install.** The
+  scheduler marks a job's turn with the same setting that names the deployment runtime, so
+  anything a job asked about the runtime got the wrong answer — the sandbox refusal above
+  included, which sent the operator off to install a package that could not help. The two are
+  now separate: one says where alpi is deployed, the other says where the turn came from.
+- **The isolation boundary is now written down.** A container and its volume hold one trust
+  scope: every profile, secret and file inside one is reachable from any shell command in it.
+  Anything that must not be, belongs in its own container with its own volume.
+
 ## v0.15.5 — 2026-09-22 — killing a stuck run takes its leftovers with it
 
 - **A run the daemon killed for going quiet left its own processes running.** Anything a run

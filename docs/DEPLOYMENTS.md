@@ -352,11 +352,20 @@ with narrow capabilities. Audit trail centralised.
   `budget.daily_usd` cap — USD only, there is no token cap — against every
   turn, inbound ALP calls included, and each pinned peer carries its own
   per-minute rate limit.
-- **Sandbox + approval.** The company policy pushes
-  `tools.terminal.sandbox: true` into every profile's
-  `config.yaml` at onboarding. Dangerous commands are always denied,
-  with no override: no environment variable and no config key re-enables
-  them.
+- **Sandbox + approval.** On a host install, company policy pushes
+  `tools.terminal.sandbox: true` into every profile's `config.yaml` at
+  onboarding. **Do not push it into the Docker runtime:** the supported
+  container grants none of the namespaces `bubblewrap` needs, so there the
+  flag turns every `terminal` call into a refusal instead of a sandboxed run.
+  Dangerous commands are always denied, with no override: no environment
+  variable and no config key re-enables them.
+- **Trust scope of a container.** A container and its volume hold exactly one
+  trust scope. Alpi's profiles are an identity and RPC boundary, not an
+  isolation one: every profile, `.env`, skill secret and knowledge file inside
+  one container is reachable from any `terminal` command running in it, and no
+  OS sandbox is available to narrow that. Give each mutually untrusted scope
+  its own container and its own volume, and treat everything sharing one as
+  readable by everything else in it.
 - **Network posture.** ALP.2 speaks Noise_XK directly over
   Tailscale / WireGuard. No HTTPS, no cert management, no public
   endpoint. If Tailscale goes, alpis can't reach each other —

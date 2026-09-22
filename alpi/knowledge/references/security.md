@@ -46,6 +46,14 @@ a small explicit deny list (`~/.ssh`, `~/.aws`, `~/.gnupg`, profile
 confinement to the workspace; macOS prevents writes and credential
 reads but leaves unrelated user files readable.
 
+In the supported Docker runtime there is no OS sandbox at all: the container
+grants none of the namespaces `bubblewrap` needs, so `tools.terminal.sandbox:
+true` refuses every `terminal` call rather than run one unsandboxed. There the
+container and its volume are the boundary, and they hold ONE trust scope —
+every profile, `.env`, skill secret and knowledge file in a container is
+reachable from any shell command in it. Give each mutually untrusted scope its
+own container and volume.
+
 Pipe-to-interpreter is classified `dangerous` and blocked regardless of
 sandbox state via a `shlex.shlex(punctuation_chars=True)` detector that
 splits the command into shell-aware tokens — distinguishing `|` and `|&`

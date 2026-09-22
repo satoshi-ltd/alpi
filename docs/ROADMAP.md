@@ -28,12 +28,12 @@ or read and act on, and every item is a defect confirmed in the shipped code.
 
 | ID | Item | Status |
 |---|---|---|
-| SANDBOX.1 | Make the OS sandbox effective inside the managed Docker runtime. `tools.terminal.sandbox` defaults to false, the shipped image installs no `bubblewrap`, and the Linux wrapper refuses rather than isolates when `bwrap` is absent — so `terminal` there runs unwrapped with the whole container readable, and the `docker` execution backend is equally unavailable. [DEPLOYMENTS.md](DEPLOYMENTS.md) already tells an enterprise operator to push `tools.terminal.sandbox: true` into every profile at onboarding; on the shipped container that turns every `terminal` call into a refusal instead of a sandboxed run. The promotion condition has fired: a profile that denies neither `terminal` nor everything else, reached by a connection whose empty `profile_scope` the device store treats as unrestricted, already has the container as its only wall. | 🟡 |
 | ALP.9 | `alp.max_active_workgroups` is an admission threshold, not a cap. It is compared against the active count in exactly one place — the pipeline queue drain — so anything that re-enters the active set without going through a trigger bypasses it. Pausing a workgroup frees the slot, the drain admits a queued pipeline, and resuming brings the paused one back unchecked; so does the daemon's own QA rewind, and so does a plain `#task` re-opening a pipeline that closed `#done BLOCKED`. An operator who set the limit to bound provider concurrency gets N+1 running pipelines with no warning. Either re-check capacity on re-entry, or stop calling it a cap in [CONFIG.md](CONFIG.md). | 🔵 |
 
-SANDBOX.1 is the precondition for a second, mutually untrusted tenant: isolation
-cannot be claimed while an unrestricted member connection reaches an unsandboxed
-`terminal`.
+A container and its volume hold exactly one trust scope. No OS sandbox is
+available inside the supported Docker runtime, so a second mutually untrusted
+scope needs its own container and volume — a narrower profile or connection
+scope is an identity boundary, not an isolation one.
 Credential-loss and backup-exposure response is already defined in
 [OPERATIONS.md](OPERATIONS.md); enterprise-grade external audit remains
 demand-gated as `AUDIT.2` below.
