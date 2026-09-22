@@ -8,35 +8,151 @@ technical reference of what currently ships, see
 Audience: the creator ([@soyjavi](https://github.com/soyjavi)) and
 any future contributor reading the repo cold.
 
-Legend: 🔵 backlog · 🟡 next up · ⏸ blocked · 🔴 gate.
+Legend: 🟡 prioritized · 🔵 optional / demand-gated. Priority is impact,
+not permission to start implementation. Remove completed items; do not replace
+them with broader work unless a new, evidenced need exists.
 
 ---
 
-## v0.16 — production client exposure
+## v0.16 — trustworthy accounting, bounded I/O, recoverable indexes
 
-The public host channel already ships: WSS routes, one-time pairing,
-per-device revocation, role/profile scope, abuse bounds, device tokens hashed
-at rest with optional inactivity expiry, per-source authentication-failure
-throttling, Docker/Caddy topology, and attributed administrative activity. The
-token hardening shipped in v0.14.39 to v0.14.42; this cycle adds no further
-security layer to that protocol. The channel is live on a customer deployment
-behind a public terminating proxy, with the daemon's own ports unreachable from
-outside it.
+Reviewed against `31385983` (v0.15.6), 2026-09-22. This is a targeted source
+audit with local reproductions, not a claim that every path or deployment was
+verified. It covers the engine/tool boundary, shared persistence, MCP,
+workgroup admission, and the Python/Docker release path. Client UI and live
+infrastructure were not re-audited. No production data or external services
+were used in the reproductions below.
 
-What remains is runtime work: what an external tenant would either be exposed to
-or read and act on, and every item is a defect confirmed in the shipped code.
+The next cycle should repair observable failures, not add another orchestration
+layer or reopen settled product decisions. The four items below are bounded
+fixes; each can ship independently as a patch before v0.16.
 
-| ID | Item | Status |
-|---|---|---|
-| ALP.9 | `alp.max_active_workgroups` is an admission threshold, not a cap. It is compared against the active count in exactly one place — the pipeline queue drain — so anything that re-enters the active set without going through a trigger bypasses it. Pausing a workgroup frees the slot, the drain admits a queued pipeline, and resuming brings the paused one back unchecked; so does the daemon's own QA rewind, and so does a plain `#task` re-opening a pipeline that closed `#done BLOCKED`. An operator who set the limit to bound provider concurrency gets N+1 running pipelines with no warning. Either re-check capacity on re-entry, or stop calling it a cap in [CONFIG.md](CONFIG.md). | 🔵 |
+| Order | ID | Priority | Evidence | Outcome |
+|---|---|---|---|---|
+| 1 | LEDGER.1 | P1 · 🟡 | Reproduced with two writer processes | Every recorded charge survives concurrent writers. |
+| 2 | RELEASE.1 | P1 · 🟡 | Workflow inspection + documented event semantics | Docker publishes the revision whose parent release passed. |
+| 3 | INDEX.1 | P2 · 🟡 | Reproduced against real SQLite/vec0 stores | A failed rebuild retains the previous searchable index. |
 
-A container and its volume hold exactly one trust scope. No OS sandbox is
-available inside the supported Docker runtime, so a second mutually untrusted
-scope needs its own container and volume — a narrower profile or connection
-scope is an identity boundary, not an isolation one.
-Credential-loss and backup-exposure response is already defined in
-[OPERATIONS.md](OPERATIONS.md); enterprise-grade external audit remains
-demand-gated as `AUDIT.2` below.
+### LEDGER.1 — serialize accounting across processes
+
+**Evidence.** [ledger.py](../alpi/ledger.py) protects `record()` with a
+`threading.Lock`, then performs `load → update → save`. That lock is local to
+one process, while scheduled agents and the daemon can record against the
+same profile. `save()` also uses a shared `ledger.json.tmp` filename.
+Two real processes, synchronized after reading the old state, each recorded
+$1 and 10 tokens and exited successfully: the persisted result was **$1 and
+10 tokens instead of $2 and 20**. This is lost accounting, not merely the
+expected overshoot from two already-admitted calls.
+
+**Smallest change.** Reuse the repository's cross-process file-lock pattern
+around each ledger read-modify-write and a unique atomic temporary file.
+Audit the other ledger writers, including archive deduplication, against that
+same ownership rule. Keep the JSON format and public API; do not migrate the
+ledger to a database just to obtain a lock.
+
+**Acceptance.** Concurrent subprocess writers preserve profile, connection,
+peer and daily totals; no shared-temp collision loses a write. Cover rollover
+and an interrupted writer. A storage failure must remain visible without
+aborting an already-completed model call. Budget reservation and an exact
+upper bound on concurrent spending are separate product decisions, not part
+of this fix.
+
+### RELEASE.1 — bind the Docker release to its successful parent revision
+
+**Evidence.** [publish-docker.yml](../.github/workflows/publish-docker.yml)
+is triggered by `workflow_run`, but neither checkout selects the parent's
+`head_sha`. Both version discovery and the image build use the event's default
+checkout. For this event, GitHub defines `GITHUB_SHA` as the latest commit on
+the default branch, not the revision tested by the parent workflow
+([event contract](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_run)).
+A release of A can therefore trigger an image built from newer B. The success
+of A's Python publication does not validate B. This is a statically verified
+release-path defect; no remote publication was triggered during the audit.
+
+**Smallest change.** Resolve one immutable source SHA: the parent `head_sha`
+for automatic runs, the selected dispatch revision for manual runs. Use it
+for version discovery, all builds, and the Docker version tag. Check that
+the package version inside the image agrees with the version being published.
+Keep the existing release chain; do not introduce another release service.
+
+**Acceptance.** A fixture/event where A triggers the workflow after B reaches
+main still resolves to A in every job. Test the manual path separately. A
+version/revision mismatch fails before push. Define serialization or an
+explicit freshness check so an older, slower run cannot move `latest` backward.
+
+### INDEX.1 — preserve recall and workgroup indexes on rebuild failure
+
+**Evidence.** [recall.py](../alpi/tools/recall.py) and
+[workgroup_search.py](../alpi/tools/workgroup_search.py) still commit schema
+destruction before rebuilding. They use `executescript()` and intermediate
+commits. Against temporary SQLite/vec0 stores, injecting an embedder failure
+during `force=True` left session chunks **2 → 0** and workgroup chunks
+**1 → 0**. The source sessions/transcripts survived; the last usable derived
+index did not. The atomicity fix in `knowledge_base.py` does not cover these
+two independently implemented indexers.
+
+**Smallest change.** Apply the existing single-transaction rebuild pattern to
+these two paths, including embedder drift. Keep their distinct source/scoping
+rules. Do not build a generic indexing framework or rename the SQLite tables.
+
+**Acceptance.** A failure after processing part of a rebuild leaves old rows,
+metadata and search results usable. Successful rebuilds publish the new state
+together. Test `force`, embedder drift, scoped workgroup rebuilds and concurrent
+readers; unrelated tables in the shared `knowledge.sqlite` remain untouched.
+
+### Optional: CAP.1 — show admission pressure without changing admission
+
+The former ALP.9 alternative has already been chosen:
+[CONFIG.md](CONFIG.md) and the packaged config reference explicitly say
+**admission threshold, not a hard cap**. `_drain_pipeline_queue` recalculates
+the active set; QA rewind, hub tasks and resume are not new FIFO admissions.
+Do not silently queue resume, block QA recovery, or reinterpret a human task
+to make the number look strict.
+
+There is a narrower visibility gap: `workgroup list` prints the configured
+threshold/origin and queue but not the active count;
+[host.profile.detail](../alpi/host/device_state.py) exposes the threshold and
+queue count but no active count. If selected, expose `active_workgroups` and
+an advisory `over_threshold` in detail, the CLI, and the existing desktop
+settings surface. Extract the counting rule from
+[service._active_workgroup_ids](../alpi/service.py) into the workgroup domain
+so every consumer uses one definition; do not make the CLI import the daemon
+or add a persistent counter that can drift.
+
+Acceptance: active/paused/between-phase/deliberation cases agree across
+surfaces; `0` is unlimited and never over-threshold; inherited limits work;
+an unreadable state is not presented as a verified zero. This is **🔵 optional
+observability**, not a release gate and not a replacement hard-cap task.
+
+### Verification required to close this cycle
+
+- Add failing regressions for each item, then prove the fix. A green suite
+  without the reproduced interleaving/failure is not closure.
+- Run subprocess/pipe tests on Linux as well as macOS. Real `/proc` and pidfd
+  acceptance must remain distinguishable from mocked decision tests.
+- The current Python publish gate runs `pytest -q`; integration runs live in
+  the PR/manual workflow. Ensure the relevant real-process tests pass for the
+  exact release SHA before publishing, including direct-to-main releases.
+  Reuse the existing workflows rather than create a parallel test system.
+- No new runtime dependency, storage format, RPC framework or service is
+  presumed necessary for the four fixes. Clients are only in scope if a
+  selected item changes a user-visible contract.
+
+### Simplification boundaries
+
+Large files alone are not defects. `service.py`, `cli.py` and `engine.py`
+coordinate many existing features; splitting them wholesale would create
+review churn without proving an outcome. Extract a domain helper only when
+it removes an evidenced duplication or inappropriate dependency (CAP.1), and
+keep the indexers' atomicity rules consistent without generalizing their data
+models (INDEX.1).
+
+Do not revive full config typing, a second orchestration framework, multi-root
+knowledge storage, or nested Docker sandboxing just to populate a release.
+A container and volume remain one trust scope; mutually untrusted scopes need
+separate runtimes. Deployment acceptance is an operational responsibility, not
+something this source audit certifies. Credential-loss procedures remain in
+[OPERATIONS.md](OPERATIONS.md); enterprise audit is demand-gated below.
 
 ---
 
@@ -50,6 +166,7 @@ usage or a concrete blocker; standing maintenance belongs in
 
 | ID | Candidate and promotion condition |
 |---|---|
+| BUILD.1 | Align the reproducible test environment with the managed image. Local verification uses `uv.lock`, while Python CI installs `.[dev]` and Docker runs `pip install .`; the smoke image and published multi-architecture image are separate builds. Inspect the resolved dependency sets and artifact digests before choosing lock export, constraints or promotion of the tested artifact. Promote on demonstrated drift or a requirement for reproducible image rebuilds; keep a separate unlocked compatibility check rather than freezing library consumers to one environment. |
 | TERM.2 | SSH terminal backend for remote command execution. Promote when an unattended profile needs to operate on a remote machine. |
 | AUDIT.2 | Enterprise audit and accountability: complete local mutation coverage, then add tamper-evident external records, provider policy, encryption, or RBAC only when a real fleet or compliance regime requires them. |
 | ALP.7 | Pinned shared memory per workgroup (`wiki.md`). Promote when sustained workgroup use shows that the transcript is no longer enough. |

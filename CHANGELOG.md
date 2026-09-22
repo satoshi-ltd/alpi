@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.15.7 — 2026-09-22 — a tool call cannot stall on a server that stops listening
+
+- **An MCP server that stopped reading froze the turn before the call's timeout began.** The
+  timeout covered waiting for the answer, not delivering the request, so a large tool argument
+  sent to a server that had stopped listening simply blocked — the same unbounded wait
+  v0.15.3 closed on the other side of the pipe. Delivery and answer now share one budget, so
+  the wait ends at the timeout the caller asked for; shutting the wedged server down then adds
+  up to five seconds more before the call returns. The message names the server.
+- **A call that failed mid-delivery is never sent again, and says so.** It may have been
+  delivered in part and already acted on, so repeating it could repeat its effects.
+- Shutting a wedged server down can no longer block on its own full pipe, and a large request to
+  a server that is reading normally still goes through.
+- A server whose input cannot be bounded is refused at startup rather than started with the old
+  unbounded write, and a connection numbered past the system's select limit still works.
+
 ## v0.15.6 — 2026-09-22 — the sandbox setting no longer bricks the shell in Docker
 
 - **Following the deployment guide made `terminal` refuse every command.** It told operators to

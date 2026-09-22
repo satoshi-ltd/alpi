@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import queue
+import selectors
 import signal
 import subprocess
 import threading
@@ -168,6 +169,18 @@ class MCPClient:
         threading.Thread(
             target=self._drain_stdout, args=(self._proc, self._lines), daemon=True,
         ).start()
+        # Writes go straight to the fd under a deadline, so a server that stops reading cannot
+        # wedge a call; non-blocking also keeps stop()'s close from flushing into a full pipe.
+        try:
+            assert self._proc.stdin is not None
+            os.set_blocking(self._proc.stdin.fileno(), False)
+        except (AssertionError, OSError, ValueError) as e:
+            # Carrying on would restore the unbounded write this whole path exists to prevent.
+            self.stop()
+            raise MCPError(
+                f"{self.name}: cannot put the server's input in non-blocking mode ({e}); "
+                f"refusing to start rather than expose an unbounded write"
+            ) from e
 
         try:
             self._handshake(timeout=timeout)
@@ -221,7 +234,7 @@ class MCPClient:
             timeout=timeout,
         )
         # MCP expects notifications/initialized right after initialize.
-        self._notify("notifications/initialized", {})
+        self._notify("notifications/initialized", {}, timeout=timeout)
 
     def _fetch_tools(self, timeout: float) -> list[ToolSpec]:
         from alpi.tools._guards import scan_injection
@@ -246,33 +259,59 @@ class MCPClient:
             buf = self._lines
             # Registered before the send: a reply can land before _wait_for is even reached.
             buf.expect(rid)
+            # One deadline for the whole call: delivery and answer share the caller's budget.
+            deadline = time.monotonic() + timeout
             try:
                 self._send({
                     "jsonrpc": "2.0", "id": rid,
                     "method": method, "params": params,
-                })
-                return self._wait_for(rid, timeout=timeout)
+                }, deadline=deadline)
+                return self._wait_for(rid, timeout=timeout, deadline=deadline)
             finally:
                 buf.stop_expecting(rid)
 
-    def _notify(self, method: str, params: dict) -> None:
+    def _notify(self, method: str, params: dict, timeout: float = 30.0) -> None:
         self._send({
             "jsonrpc": "2.0", "method": method, "params": params,
-        })
+        }, deadline=time.monotonic() + timeout)
 
-    def _send(self, obj: dict) -> None:
+    def _send(self, obj: dict, deadline: float) -> None:
         # Under the caller's lock: another turn's timeout can stop a client after is_running().
         proc = self._proc
         if proc is None or proc.stdin is None:
             raise MCPError(f"{self.name}: server is not running")
         try:
-            proc.stdin.write(json.dumps(obj) + "\n")
-            proc.stdin.flush()
-        except (BrokenPipeError, OSError) as e:
+            fd = proc.stdin.fileno()
+        except (OSError, ValueError) as e:
             raise MCPError(f"{self.name}: stdin write failed: {e}") from e
+        view = memoryview((json.dumps(obj) + "\n").encode())
+        # selectors, not select(): a daemon with many connections hands out fds past FD_SETSIZE.
+        with selectors.DefaultSelector() as sel:
+            try:
+                sel.register(fd, selectors.EVENT_WRITE)
+            except (OSError, ValueError) as e:
+                raise MCPError(f"{self.name}: stdin write failed: {e}") from e
+            while view:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    # Partially delivered and not retried: the server may already have acted on it.
+                    self.stop()
+                    raise MCPError(self._wrap_failure(
+                        f"timeout sending {obj.get('method') or 'request'}: the server stopped "
+                        f"reading its input. It was delivered in part and is not retried, so the "
+                        f"call may already have taken effect"
+                    ))
+                try:
+                    if not sel.select(remaining):
+                        continue
+                    view = view[os.write(fd, view):]
+                except BlockingIOError:
+                    continue
+                except (BrokenPipeError, OSError, ValueError) as e:
+                    raise MCPError(f"{self.name}: stdin write failed: {e}") from e
 
-    def _wait_for(self, rid: int, timeout: float) -> dict:
-        deadline = time.monotonic() + timeout
+    def _wait_for(self, rid: int, timeout: float, deadline: float | None = None) -> dict:
+        deadline = time.monotonic() + timeout if deadline is None else deadline
         while True:
             remaining = deadline - time.monotonic()
             if remaining <= 0:

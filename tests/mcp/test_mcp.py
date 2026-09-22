@@ -132,30 +132,82 @@ class _FakePopen:
         return self.returncode or 0
 
 
+# Every fake pipe ever opened, so no test can leak a descriptor into the ones that count them.
+_OPEN_PIPES: list["_BufferedStdin"] = []
+
+
+@pytest.fixture(autouse=True)
+def _close_fake_pipes():
+    yield
+    while _OPEN_PIPES:
+        _OPEN_PIPES.pop().dispose()
+
+
 class _BufferedStdin:
+    """A real pipe: the client writes to the fd under its own deadline, as it does in production."""
+
     def __init__(self, server: _FakeServer, on_request) -> None:
         self._server = server
         self._on_request = on_request
-        self._buf = ""
+        self._read_fd, self._write_fd = os.pipe()
         self.closed = False
+        self.deaf = False
+        _OPEN_PIPES.append(self)
+        threading.Thread(target=self._pump, daemon=True).start()
 
-    def write(self, data: str) -> int:
-        self._buf += data
-        while "\n" in self._buf:
-            line, self._buf = self._buf.split("\n", 1)
-            if line.strip():
+    def fileno(self) -> int:
+        return self._write_fd
+
+    def _pump(self) -> None:
+        buf = b""
+        while True:
+            if self.deaf:                       # stops reading, exactly like a wedged server
+                time.sleep(0.02)
+                continue
+            try:
+                chunk = os.read(self._read_fd, 65536)
+            except OSError:
+                return
+            if self.closed and not chunk:
+                return
+            if not chunk:
+                return
+            buf += chunk
+            while b"\n" in buf:
+                line, buf = buf.split(b"\n", 1)
+                if not line.strip():
+                    continue
                 try:
                     req = json.loads(line)
                 except json.JSONDecodeError:
                     continue
                 self._on_request(req)
-        return len(data)
+
+    def write(self, data: str) -> int:
+        return os.write(self._write_fd, data.encode())
 
     def flush(self):
         pass
 
     def close(self):
         self.closed = True
+        self._shut("_write_fd")
+
+    def dispose(self) -> None:
+        self.deaf = False
+        self.close()
+        self._shut("_read_fd")
+
+    def _shut(self, attr: str) -> None:
+        # Invalidate before closing: a second close would land on whatever reused the number.
+        fd = getattr(self, attr)
+        if fd < 0:
+            return
+        setattr(self, attr, -1)
+        try:
+            os.close(fd)
+        except OSError:
+            pass
 
 
 class _BufferedStdout:
@@ -503,7 +555,7 @@ def test_call_tool_registers_its_id_before_sending(server_and_patch, monkeypatch
 
     original = mcp_client.MCPClient._wait_for
 
-    def late_wait(self, rid, timeout):
+    def late_wait(self, rid, timeout, deadline=None):
         # Read only once the whole flood has landed — the scheduling that loses the reply.
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline and server.popen.stdout.pending():
@@ -646,6 +698,115 @@ def _stop_leaf(leaf: str, tmp_path, monkeypatch, *, grace: float, term_grace: fl
         except ProcessLookupError:
             pass
     return marker
+
+
+_DEAF_LEAF = """
+import json, os, sys, time
+open(sys.argv[1], "w").write(str(os.getpid()))
+for _ in range(3):
+    req = json.loads(sys.stdin.readline())
+    if "id" not in req:
+        continue
+    result = {"protocolVersion": "2024-11-05"} if req["method"] == "initialize" else {"tools": []}
+    sys.stdout.write(json.dumps({"jsonrpc": "2.0", "id": req["id"], "result": result}) + "\\n")
+    sys.stdout.flush()
+time.sleep(300)
+"""
+
+
+@pytest.mark.integration
+def test_a_server_that_stops_reading_cannot_wedge_the_send(tmp_path, monkeypatch) -> None:
+    """The handshake completes, then the server never reads again and its input pipe fills."""
+    monkeypatch.setattr(mcp_client, "_STOP_GRACE_SECONDS", 0.3)
+    monkeypatch.setattr(mcp_client, "_STOP_TERM_GRACE_SECONDS", 0.3)
+    pidfile = tmp_path / "leaf.pid"
+    c = mcp_client.MCPClient(
+        "deaf", sys.executable, ["-c", _WRAPPER, _DEAF_LEAF, str(pidfile)],
+    )
+    c.start(timeout=10)
+    leaf_pid = int(pidfile.read_text())
+
+    started = time.monotonic()
+    with pytest.raises(mcp_client.MCPError) as excinfo:
+        # Larger than any pipe buffer, so the write cannot complete in one go.
+        c.call_tool("ping", {"blob": "x" * 4_000_000}, timeout=1.0)
+    elapsed = time.monotonic() - started
+
+    assert 1.0 <= elapsed < 15.0, f"the send was not bounded by the deadline ({elapsed:.2f}s)"
+    message = str(excinfo.value)
+    assert "deaf" in message and "stopped reading" in message
+    assert not c.is_running(), "the wedged server was left running"
+
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        try:
+            os.kill(leaf_pid, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.05)
+    else:
+        os.kill(leaf_pid, signal.SIGKILL)
+        pytest.fail(f"leaf {leaf_pid} survived the send timeout")
+
+
+def test_a_send_that_times_out_is_never_retried(server_and_patch) -> None:
+    server = server_and_patch
+    server.handle("tools/list", {"tools": [{"name": "ping", "description": ""}]})
+    c = mcp_client.MCPClient("deaf", "echo")
+    c.start(timeout=5)
+    server.popen.stdin.deaf = True   # accepts no more input from here on
+
+    with pytest.raises(mcp_client.MCPError, match="stopped reading"):
+        c.call_tool("ping", {"blob": "x" * 4_000_000}, timeout=0.5)
+
+    before = len(server._requests)
+    with pytest.raises(mcp_client.MCPError, match="not running"):
+        c.call_tool("ping", {}, timeout=5)
+    # A partially delivered call may already have run: it is never sent again.
+    assert len(server._requests) == before
+
+
+def test_stop_does_not_block_closing_a_stdin_nobody_is_reading(server_and_patch) -> None:
+    server = server_and_patch
+    server.handle("tools/list", {"tools": []})
+    c = mcp_client.MCPClient("deaf", "echo")
+    c.start(timeout=5)
+    server.popen.stdin.deaf = True
+
+    started = time.monotonic()
+    c.stop()
+    assert time.monotonic() - started < 5.0, "stop() blocked flushing into a full pipe"
+    assert server.popen.stdin.closed
+
+
+def test_a_second_caller_waits_instead_of_interleaving_its_write(server_and_patch) -> None:
+    server = server_and_patch
+    server.handle("tools/list", {"tools": [{"name": "ping", "description": ""}]})
+    server.handle("tools/call", {"content": [{"type": "text", "text": "pong"}]})
+    c = mcp_client.MCPClient("busy", "echo")
+    c.start(timeout=5)
+
+    results: list[str] = []
+    errors: list[str] = []
+
+    def call(n: int) -> None:
+        try:
+            out = c.call_tool("ping", {"n": n, "pad": "y" * 200_000}, timeout=20)
+            results.append(out["content"][0]["text"])
+        except Exception as e:  # noqa: BLE001
+            errors.append(str(e))
+
+    threads = [threading.Thread(target=call, args=(n,)) for n in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=30)
+
+    assert errors == []
+    assert results == ["pong"] * 4
+    ids = [r.get("id") for r in server._requests if "id" in r]
+    assert len(ids) == len(set(ids)), "two calls shared an id"
+    c.stop()
 
 
 _SILENT_LEAF = """
@@ -1344,3 +1505,136 @@ def test_a_server_inherits_the_stamp_of_the_process_that_spawned_it(monkeypatch)
     env = mcp_client._build_env({}, None)
 
     assert env["ALPI_SPAWNED_BY"] == runs.owner_stamp()
+
+
+def test_delivery_and_answer_share_one_deadline(server_and_patch, monkeypatch) -> None:
+    server = server_and_patch
+    server.handle("tools/list", {"tools": [{"name": "ping", "description": ""}]})
+    server.handle("tools/call", {"content": []})
+    c = mcp_client.MCPClient("slow", "echo")
+    c.start(timeout=5)
+
+    seen: dict = {}
+    original_send = mcp_client.MCPClient._send
+    original_wait = mcp_client.MCPClient._wait_for
+
+    def slow_send(self, obj, deadline):
+        time.sleep(0.2)                      # delivery spends part of the caller's budget
+        seen["send"] = deadline
+        return original_send(self, obj, deadline)
+
+    def record_wait(self, rid, timeout, deadline=None):
+        seen["wait"] = deadline
+        return original_wait(self, rid, timeout, deadline)
+
+    monkeypatch.setattr(mcp_client.MCPClient, "_send", slow_send)
+    monkeypatch.setattr(mcp_client.MCPClient, "_wait_for", record_wait)
+    c.call_tool("ping", {}, timeout=5)
+
+    # A fresh deadline for the answer would let one call outlive the timeout its caller asked for.
+    assert seen["wait"] == seen["send"]
+    c.stop()
+
+
+def test_a_large_request_to_a_server_that_reads_still_goes_through(server_and_patch) -> None:
+    server = server_and_patch
+    server.handle("tools/list", {"tools": [{"name": "ping", "description": ""}]})
+    server.handle("tools/call", {"content": [{"type": "text", "text": "pong"}]})
+    c = mcp_client.MCPClient("healthy", "echo")
+    c.start(timeout=5)
+
+    # Several times any pipe buffer: the write must loop, not fail.
+    out = c.call_tool("ping", {"blob": "x" * 4_000_000}, timeout=30)
+
+    assert out["content"][0]["text"] == "pong"
+    assert len(server._requests[-1]["params"]["arguments"]["blob"]) == 4_000_000
+    c.stop()
+
+
+def test_a_send_timeout_warns_that_the_call_may_have_taken_effect(server_and_patch) -> None:
+    server = server_and_patch
+    server.handle("tools/list", {"tools": [{"name": "ping", "description": ""}]})
+    c = mcp_client.MCPClient("deaf", "echo")
+    c.start(timeout=5)
+    server.popen.stdin.deaf = True
+
+    with pytest.raises(mcp_client.MCPError) as excinfo:
+        c.call_tool("ping", {"blob": "x" * 4_000_000}, timeout=0.5)
+
+    message = str(excinfo.value)
+    assert "deaf" in message
+    assert "may already have taken effect" in message
+    assert "not retried" in message
+
+
+def test_a_pipe_past_fd_setsize_is_still_writable() -> None:
+    import fcntl
+    import resource
+
+    floor = 1100         # select() cannot name a descriptor at or beyond FD_SETSIZE (1024)
+    soft, _hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    if soft <= floor:
+        pytest.skip(f"descriptor limit {soft} cannot reach {floor}")
+    read_fd, write_fd = os.pipe()
+    # F_DUPFD takes the lowest free number at or above the floor; dup2 would evict whoever holds it.
+    high = fcntl.fcntl(write_fd, fcntl.F_DUPFD, floor)
+    os.close(write_fd)
+    assert high >= floor
+    os.set_blocking(high, False)
+
+    class _Stdin:
+        def fileno(self) -> int:
+            return high
+
+    class _Proc:
+        stdin = _Stdin()
+
+        def poll(self):
+            return None
+
+    try:
+        c = mcp_client.MCPClient("high", "echo")
+        c._proc = _Proc()
+        c._send({"jsonrpc": "2.0", "id": 1, "method": "ping", "params": {}},
+                deadline=time.monotonic() + 5)
+        assert b'"ping"' in os.read(read_fd, 65536)
+    finally:
+        for fd in (high, read_fd):
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+
+
+def test_start_refuses_when_the_input_cannot_be_made_non_blocking(
+    server_and_patch, monkeypatch,
+) -> None:
+    server = server_and_patch
+    server.handle("tools/list", {"tools": []})
+
+    def refuse(fd, flag):
+        raise OSError("cannot set O_NONBLOCK")
+
+    monkeypatch.setattr(mcp_client.os, "set_blocking", refuse)
+    c = mcp_client.MCPClient("stuck", "echo")
+
+    # Starting anyway would restore the unbounded write this path exists to prevent.
+    with pytest.raises(mcp_client.MCPError, match="non-blocking"):
+        c.start(timeout=5)
+
+    assert not c.is_running()
+    assert server.popen.stdin.closed, "the server was left running behind the refusal"
+
+
+def test_disposing_a_fake_pipe_twice_cannot_close_a_reused_descriptor() -> None:
+    pipe = _BufferedStdin(_FakeServer(), lambda req: None)
+    pipe.close()
+    stand_in = os.open(os.devnull, os.O_RDONLY)   # may well land on the number just freed
+    try:
+        pipe.dispose()
+        os.fstat(stand_in)                        # still open: the second close missed it
+    finally:
+        try:
+            os.close(stand_in)
+        except OSError:
+            pass
