@@ -206,3 +206,201 @@ def test_tool_nonexistent_workgroup_errors(tmp_home, stub_embedder, monkeypatch)
     out = wgs.WorkgroupSearch().run(workgroup_id="wg_nope", query="x")
     assert not out.ok
     assert "not found" in out.error
+
+
+class _FailsMidRebuild(StubEmbedder):
+    def __init__(self, *, fail_on_call: int = 1, name: str | None = None, dim: int | None = None):
+        self.calls = 0
+        self.fail_on_call = fail_on_call
+        if name:
+            self.name = name
+        if dim:
+            self.dim = dim
+
+    def embed(self, texts):
+        self.calls += 1
+        if self.calls >= self.fail_on_call:
+            raise RuntimeError("embedder went away mid-rebuild")
+        return super().embed(texts) if self.dim == StubEmbedder.dim else [[0.1] * self.dim for _ in texts]
+
+
+def _wg_counts(home: Path) -> dict:
+    from alpi.core.store import open_store
+    conn = open_store(home)
+    try:
+        return {
+            "chunks": {r["workgroup_id"]: r["n"] for r in conn.execute(
+                "SELECT workgroup_id, COUNT(*) AS n FROM workgroup_chunks GROUP BY workgroup_id")},
+            "files": conn.execute("SELECT COUNT(*) AS n FROM workgroup_files").fetchone()["n"],
+            "meta": {r["key"]: r["value"] for r in conn.execute("SELECT key, value FROM workgroup_meta")},
+        }
+    finally:
+        conn.close()
+
+
+def _two_workgroups(home: Path, posts: dict) -> None:
+    _seed(home, posts, "wg_a", [_post(1, "alpha launch gate placeholders")])
+    _seed(home, posts, "wg_b", [_post(1, "bravo postgres backups nightly")])
+    wgs.index_workgroups(home)
+
+
+def test_a_failed_global_force_keeps_every_workgroup_searchable(tmp_home, stub_embedder, wg_env):
+    _two_workgroups(tmp_home, wg_env)
+    before = _wg_counts(tmp_home)
+    assert before["chunks"] == {"wg_a": 1, "wg_b": 1}
+
+    with pytest.raises(RuntimeError, match="mid-rebuild"):
+        wgs.index_workgroups(tmp_home, force=True, embedder=_FailsMidRebuild(fail_on_call=2))
+
+    assert _wg_counts(tmp_home) == before
+    assert wgs.workgroup_search(tmp_home, "wg_a", "launch gate", k=1)[0]["workgroup_id"] == "wg_a"
+    assert wgs.workgroup_search(tmp_home, "wg_b", "postgres backups", k=1)[0]["workgroup_id"] == "wg_b"
+
+
+def test_a_failed_scoped_force_keeps_that_workgroup_and_the_others(tmp_home, stub_embedder, wg_env):
+    _two_workgroups(tmp_home, wg_env)
+    before = _wg_counts(tmp_home)
+
+    with pytest.raises(RuntimeError, match="mid-rebuild"):
+        wgs.index_workgroups(tmp_home, workgroup_id="wg_a", force=True, embedder=_FailsMidRebuild())
+
+    assert _wg_counts(tmp_home) == before
+    assert wgs.workgroup_search(tmp_home, "wg_a", "launch gate", k=1)
+
+
+def test_a_failed_rebuild_after_embedder_drift_keeps_the_old_index_and_meta(tmp_home, stub_embedder, wg_env):
+    _two_workgroups(tmp_home, wg_env)
+    before = _wg_counts(tmp_home)
+
+    with pytest.raises(RuntimeError, match="mid-rebuild"):
+        wgs.index_workgroups(tmp_home, embedder=_FailsMidRebuild(name="drifted", dim=8))
+
+    assert _wg_counts(tmp_home) == before
+    assert before["meta"] == {"dim": "16", "embedder": "stub-test"}
+    assert wgs.workgroup_search(tmp_home, "wg_b", "postgres backups", k=1)
+
+
+def test_a_workgroup_rebuild_leaves_the_session_index_alone(tmp_home, stub_embedder, wg_env):
+    from alpi.core.store import open_store
+
+    _two_workgroups(tmp_home, wg_env)
+    conn = open_store(tmp_home)
+    conn.execute("CREATE TABLE unrelated_owner (v TEXT)")
+    conn.execute("INSERT INTO unrelated_owner VALUES ('keep me')")
+    conn.commit()
+    conn.close()
+
+    with pytest.raises(RuntimeError):
+        wgs.index_workgroups(tmp_home, force=True, embedder=_FailsMidRebuild())
+    wgs.index_workgroups(tmp_home, force=True)
+
+    conn = open_store(tmp_home)
+    try:
+        assert [r["v"] for r in conn.execute("SELECT v FROM unrelated_owner")] == ["keep me"]
+    finally:
+        conn.close()
+
+
+def test_readers_keep_searching_while_a_global_force_runs(tmp_home, stub_embedder, wg_env):
+    import threading
+
+    _two_workgroups(tmp_home, wg_env)
+    inside, release = threading.Event(), threading.Event()
+
+    class _Slow(StubEmbedder):
+        def embed(self, texts):
+            inside.set()
+            assert release.wait(10)
+            return super().embed(texts)
+
+    errors: list[BaseException] = []
+
+    def rebuild():
+        try:
+            wgs.index_workgroups(tmp_home, force=True, embedder=_Slow())
+        except BaseException as e:  # noqa: BLE001
+            errors.append(e)
+
+    worker = threading.Thread(target=rebuild)
+    worker.start()
+    try:
+        assert inside.wait(10)
+        hits = wgs.workgroup_search(tmp_home, "wg_b", "postgres backups", k=1)
+        assert hits and hits[0]["workgroup_id"] == "wg_b"
+    finally:
+        release.set()
+        worker.join(10)
+    assert not errors
+    assert _wg_counts(tmp_home)["chunks"] == {"wg_a": 1, "wg_b": 1}
+
+
+def test_a_first_workgroup_index_that_fails_leaves_nothing_half_built(tmp_home, stub_embedder, wg_env):
+    from alpi.core.store import open_store
+
+    _seed(tmp_home, wg_env, "wg_a", [_post(1, "alpha launch gate placeholders")])
+    _seed(tmp_home, wg_env, "wg_b", [_post(1, "bravo postgres backups nightly")])
+
+    with pytest.raises(RuntimeError):
+        wgs.index_workgroups(tmp_home, embedder=_FailsMidRebuild(fail_on_call=2))
+
+    conn = open_store(tmp_home)
+    try:
+        exists = conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'workgroup_chunks'").fetchone()
+        left = conn.execute("SELECT COUNT(*) AS n FROM workgroup_chunks").fetchone()["n"] if exists else 0
+    finally:
+        conn.close()
+    assert left == 0
+
+
+def _undecryptable(monkeypatch, posts: dict, broken: str) -> None:
+    def decrypt(home, wg_id, **kw):
+        if wg_id == broken:
+            raise RuntimeError("no key for this epoch")
+        return posts.get(wg_id, [])
+
+    monkeypatch.setattr("alpi.host.workgroup.decrypt_transcript", decrypt)
+
+
+def test_an_undecryptable_workgroup_is_skipped_by_an_incremental_pass(tmp_home, stub_embedder, wg_env, monkeypatch):
+    _two_workgroups(tmp_home, wg_env)
+    _seed(tmp_home, wg_env, "wg_b", [_post(1, "bravo postgres backups nightly"), _post(2, "more")], lines=6)
+    _undecryptable(monkeypatch, wg_env, "wg_b")
+
+    summary = wgs.index_workgroups(tmp_home)
+
+    assert summary["failed_workgroups"][0]["workgroup_id"] == "wg_b"
+    assert _wg_counts(tmp_home)["chunks"] == {"wg_a": 1, "wg_b": 1}
+
+
+@pytest.mark.parametrize("trigger", ["force", "drift"])
+def test_an_undecryptable_workgroup_stops_a_destructive_rebuild(tmp_home, stub_embedder, wg_env, monkeypatch, trigger):
+    _two_workgroups(tmp_home, wg_env)
+    before = _wg_counts(tmp_home)
+    _undecryptable(monkeypatch, wg_env, "wg_b")
+    kwargs = {"force": True} if trigger == "force" else {"embedder": _FailsMidRebuild(name="drifted", dim=8, fail_on_call=99)}
+
+    with pytest.raises(wgs.RebuildAborted, match=r"workgroup wg_b cannot be decrypted .*previous index was kept"):
+        wgs.index_workgroups(tmp_home, **kwargs)
+
+    assert _wg_counts(tmp_home) == before
+
+
+def test_a_scoped_force_is_not_stopped_by_another_broken_workgroup(tmp_home, stub_embedder, wg_env, monkeypatch):
+    _two_workgroups(tmp_home, wg_env)
+    _undecryptable(monkeypatch, wg_env, "wg_b")
+
+    summary = wgs.index_workgroups(tmp_home, workgroup_id="wg_a", force=True)
+
+    assert summary["indexed_workgroups"] == 1
+    assert _wg_counts(tmp_home)["chunks"] == {"wg_a": 1, "wg_b": 1}
+
+
+def test_the_index_tool_reports_an_aborted_rebuild(tmp_home, stub_embedder, wg_env, monkeypatch):
+    _two_workgroups(tmp_home, wg_env)
+    _undecryptable(monkeypatch, wg_env, "wg_b")
+
+    result = wgs.IndexWorkgroups().run(force=True)
+
+    assert not result.ok
+    assert "wg_b cannot be decrypted" in result.error
+    assert _wg_counts(tmp_home)["chunks"] == {"wg_a": 1, "wg_b": 1}

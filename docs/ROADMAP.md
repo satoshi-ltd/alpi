@@ -29,31 +29,9 @@ fixes; each can ship independently as a patch before v0.16.
 
 | Order | ID | Priority | Evidence | Outcome |
 |---|---|---|---|---|
-| 1 | INDEX.1 | P2 · 🟡 | Reproduced against real SQLite/vec0 stores | A failed rebuild retains the previous searchable index. |
-| 2 | TERM.3 | P3 · 🟡 | Observed in a Morpheus run on 2026-09-22: the agent could not find its JDK from `terminal` | A profile can hand `terminal` extra environment variables. |
-| 3 | SCHED.4 | P2 · 🟡 | A 5400 s job died at 59:46 on 2026-09-22; a stored timeout above 3600 is clamped at run time without a word | The timeout a job carries is the one the scheduler enforces, or the clamp is shown before it bites. |
-| 4 | DESK.1 | P3 · 🟡 | Production audit log: 2,418 `register_device` events in one day from three idle desktops, all named `Desktop` | An idle desktop adds nothing to the audit log and shows its machine name. |
-| 5 | DB.1 | P3 · 🟡 | 183 of 308 `db` failures in 945 production runs came from two statements in one `exec` or a row-returning `exec` | `db exec` runs what an agent naturally sends, or refuses it with the exact fix. |
-
-### INDEX.1 — preserve recall and workgroup indexes on rebuild failure
-
-**Evidence.** [recall.py](../alpi/tools/recall.py) and
-[workgroup_search.py](../alpi/tools/workgroup_search.py) still commit schema
-destruction before rebuilding. They use `executescript()` and intermediate
-commits. Against temporary SQLite/vec0 stores, injecting an embedder failure
-during `force=True` left session chunks **2 → 0** and workgroup chunks
-**1 → 0**. The source sessions/transcripts survived; the last usable derived
-index did not. The atomicity fix in `knowledge_base.py` does not cover these
-two independently implemented indexers.
-
-**Smallest change.** Apply the existing single-transaction rebuild pattern to
-these two paths, including embedder drift. Keep their distinct source/scoping
-rules. Do not build a generic indexing framework or rename the SQLite tables.
-
-**Acceptance.** A failure after processing part of a rebuild leaves old rows,
-metadata and search results usable. Successful rebuilds publish the new state
-together. Test `force`, embedder drift, scoped workgroup rebuilds and concurrent
-readers; unrelated tables in the shared `knowledge.sqlite` remain untouched.
+| 1 | TERM.3 | P3 · 🟡 | Observed in a Morpheus run on 2026-09-22: the agent could not find its JDK from `terminal` | A profile can hand `terminal` extra environment variables. |
+| 2 | SCHED.4 | P2 · 🟡 | A 5400 s job died at 59:46 on 2026-09-22; a stored timeout above 3600 is clamped at run time without a word | The timeout a job carries is the one the scheduler enforces, or the clamp is shown before it bites. |
+| 3 | DESK.1 | P3 · 🟡 | Production audit log: 2,418 `register_device` events in one day from three idle desktops, all named `Desktop` | An idle desktop adds nothing to the audit log and shows its machine name. |
 
 ### TERM.3 — let a profile hand `terminal` extra environment variables
 
@@ -138,29 +116,6 @@ name from the OS host-name API, keeping `HOSTNAME` as the fallback.
 app update registers once; paired devices list their machine names; the mobile
 path is unchanged.
 
-### DB.1 — make `db exec` accept what agents send
-
-**Evidence.** [db.py](../alpi/tools/db.py) runs `exec` as
-`conn.execute(sql, params)` followed by `commit()`. `sqlite3.execute` refuses
-more than one statement, and a statement that returns rows (a `SELECT` or a
-`RETURNING` sent as `exec`) leaves its cursor open, so the commit fails. On the
-mirai EC2, 945 `curator` runs between 2026-09-20 and 2026-09-22 produced 308
-`db` failures: 173 `You can only execute one statement at a time`, almost all
-two `CREATE TABLE IF NOT EXISTS` sent in one call, and 10 `cannot commit
-transaction - SQL statements in progress`. The rest were the agent's own
-mistakes (52 calls without `action`, 47 wrong binding counts). Each failure
-costs a model call, and the skill's audit trail loses the row it was writing.
-
-**Smallest change.** `exec` without `params` runs a multi-statement script in
-one transaction; `exec` with `params` and more than one statement is refused
-with a message that says to split it. `exec` drains the cursor before
-committing and returns the rows a `RETURNING` produced. `query` is unchanged.
-
-**Acceptance.** Two `CREATE TABLE IF NOT EXISTS` in one `exec` succeed; a
-`SELECT` sent as `exec` no longer fails the commit; a parameterised
-multi-statement call is refused with the fix in the error; the per-skill quota
-and path rules still apply.
-
 ### Optional: CAP.1 — show admission pressure without changing admission
 
 The former ALP.9 alternative has already been chosen:
@@ -206,7 +161,7 @@ coordinate many existing features; splitting them wholesale would create
 review churn without proving an outcome. Extract a domain helper only when
 it removes an evidenced duplication or inappropriate dependency (CAP.1), and
 keep the indexers' atomicity rules consistent without generalizing their data
-models (INDEX.1).
+models.
 
 Do not revive full config typing, a second orchestration framework, multi-root
 knowledge storage, or nested Docker sandboxing just to populate a release.

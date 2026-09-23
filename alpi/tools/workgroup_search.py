@@ -11,7 +11,7 @@ from alpi.core import embed as embed_mod
 from alpi.core.store import open_store, store_path
 from alpi.home import get_home
 from alpi.tools.base import Tool, ToolResult
-from alpi.tools.workspace import EmbedderMismatch, _vec_blob
+from alpi.tools.workspace import EmbedderMismatch, RebuildAborted, _vec_blob
 
 _CHUNK_CHARS = 2000
 _MAX_SNIPPET = 700
@@ -38,20 +38,16 @@ def _set_meta(conn: sqlite3.Connection, key: str, value: str) -> None:
     )
 
 
-def _recreate_tables(conn, dim) -> None:
-    conn.executescript(
-        """
-        DROP TABLE IF EXISTS workgroup_vec;
-        DROP TABLE IF EXISTS workgroup_chunks;
-        DROP TABLE IF EXISTS workgroup_files;
-        CREATE TABLE workgroup_files (
+# One statement per execute: executescript() commits the open transaction, which would break the single-transaction rebuild.
+_TABLE_DDL = (
+    """CREATE TABLE IF NOT EXISTS workgroup_files (
           workgroup_id TEXT PRIMARY KEY,
           transcript_path TEXT NOT NULL,
           mtime REAL NOT NULL,
           size INTEGER NOT NULL,
           head_seq INTEGER NOT NULL
-        );
-        CREATE TABLE workgroup_chunks (
+        )""",
+    """CREATE TABLE IF NOT EXISTS workgroup_chunks (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           workgroup_id TEXT NOT NULL,
           seq_start INTEGER NOT NULL,
@@ -60,68 +56,57 @@ def _recreate_tables(conn, dim) -> None:
           ts_end TEXT,
           authors TEXT NOT NULL,
           content TEXT NOT NULL
-        );
-        CREATE INDEX workgroup_chunks_by_wg ON workgroup_chunks(workgroup_id);
-        """
-    )
-    conn.execute(
-        f"CREATE VIRTUAL TABLE workgroup_vec USING vec0("
-        f"chunk_id INTEGER PRIMARY KEY, embedding float[{dim}])"
-    )
+        )""",
+    "CREATE INDEX IF NOT EXISTS workgroup_chunks_by_wg ON workgroup_chunks(workgroup_id)",
+)
+_DROP_ORDER = ("workgroup_vec", "workgroup_chunks", "workgroup_files")
 
 
-def _ensure_schema(conn, dim, embedder_name, *, index_mode) -> None:
-    conn.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS workgroup_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS workgroup_files (
-          workgroup_id TEXT PRIMARY KEY,
-          transcript_path TEXT NOT NULL,
-          mtime REAL NOT NULL,
-          size INTEGER NOT NULL,
-          head_seq INTEGER NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS workgroup_chunks (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          workgroup_id TEXT NOT NULL,
-          seq_start INTEGER NOT NULL,
-          seq_end INTEGER NOT NULL,
-          ts_start TEXT,
-          ts_end TEXT,
-          authors TEXT NOT NULL,
-          content TEXT NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS workgroup_chunks_by_wg ON workgroup_chunks(workgroup_id);
-        """
-    )
+def _create_tables(conn: sqlite3.Connection, dim: int) -> None:
+    for statement in _TABLE_DDL:
+        conn.execute(statement)
     conn.execute(
         f"CREATE VIRTUAL TABLE IF NOT EXISTS workgroup_vec USING vec0("
         f"chunk_id INTEGER PRIMARY KEY, embedding float[{dim}])"
     )
+
+
+def _recreate_tables(conn, dim) -> None:
+    for table in _DROP_ORDER:
+        conn.execute(f"DROP TABLE IF EXISTS {table}")
+    _create_tables(conn, dim)
+
+
+def _ensure_schema(conn, dim, embedder_name, *, index_mode) -> bool:
+    conn.execute("CREATE TABLE IF NOT EXISTS workgroup_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
     stored_dim = _get_meta(conn, "dim")
     stored_embedder = _get_meta(conn, "embedder")
     if stored_dim is None:
+        _create_tables(conn, dim)
         _set_meta(conn, "dim", str(dim))
         _set_meta(conn, "embedder", embedder_name)
-        conn.commit()
-        return
+        if not index_mode:
+            conn.commit()
+        return False
     drift = int(stored_dim) != dim or stored_embedder != embedder_name
     if not index_mode:
+        _create_tables(conn, int(stored_dim))
         if drift:
             raise EmbedderMismatch(
                 f"Workgroup index was built with {stored_embedder} (dim={stored_dim}) "
                 f"but current embedder is {embedder_name} (dim={dim}). "
                 f"Re-index: run index_workgroups to rebuild."
             )
-        return
+        return False
     if not drift:
-        return
+        _create_tables(conn, dim)
+        return False
     # Embedder/dim drift → the whole vec table is the wrong shape; only this forces a global rebuild.
     _recreate_tables(conn, dim)
     conn.execute("DELETE FROM workgroup_meta")
     _set_meta(conn, "dim", str(dim))
     _set_meta(conn, "embedder", embedder_name)
-    conn.commit()
+    return True
 
 
 def _delete_workgroup(conn: sqlite3.Connection, wg_id: str) -> None:
@@ -243,11 +228,14 @@ def index_workgroups(
     targets = _hub_targets(home, workgroup_id)
     conn = open_store(home)
     try:
-        _ensure_schema(conn, embedder.dim, embedder.name, index_mode=True)
+        # Drop, recreate and embed in one write transaction: a failure anywhere leaves the previous index searchable.
+        conn.isolation_level = None
+        conn.execute("BEGIN IMMEDIATE")
+        rebuilding = _ensure_schema(conn, embedder.dim, embedder.name, index_mode=True)
         # force is scoped: a global rebuild only when no workgroup_id was given.
         if force and not workgroup_id:
             _recreate_tables(conn, embedder.dim)
-            conn.commit()
+            rebuilding = True
         indexed = skipped = removed = added = 0
         failed: list[dict[str, str]] = []
         seen: set[str] = set()
@@ -267,6 +255,13 @@ def index_workgroups(
             try:
                 posts = host_wg.decrypt_transcript(home, wg_id)
             except Exception as e:  # noqa: BLE001
+                # The old rows are already dropped inside this transaction: skipping would publish an index missing this workgroup.
+                if rebuilding:
+                    raise RebuildAborted(
+                        f"workgroup {wg_id} cannot be decrypted ({str(e)[:200]}); the rebuild stopped and "
+                        "the previous index was kept. Rebuild the others one at a time with workgroup_id, "
+                        "or remove that workgroup."
+                    ) from e
                 failed.append({"workgroup_id": wg_id, "reason": str(e)[:200]})
                 continue
             chunks = _chunk_posts(posts)
@@ -412,7 +407,7 @@ class IndexWorkgroups(Tool):
             summary = index_workgroups(get_home(), workgroup_id, force=force)
         except ValueError as e:
             return ToolResult(ok=False, output="", error=str(e))
-        except EmbedderMismatch as e:
+        except (EmbedderMismatch, RebuildAborted) as e:
             return ToolResult(ok=False, output="", error=str(e))
         return ToolResult(ok=True, output=json.dumps(summary))
 

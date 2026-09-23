@@ -91,6 +91,8 @@ db(action="query", skill="whoop-tracker",
    sql="SELECT * FROM workouts ORDER BY date DESC LIMIT 7")
 ```
 
+`exec` without `params` runs several `;`-separated statements in one transaction (all or none; the error names the failing statement); with `params` it takes exactly one. A script with its own `BEGIN`/`COMMIT`/`ROLLBACK`/`SAVEPOINT`/`RELEASE` is refused by the SQLite authorizer, not by matching text. `RETURNING` rows (or a `SELECT` sent as `exec`) come back under `returned:`, drained in batches and capped at 10 000 shown. Attaching or writing another database file (`ATTACH '<file>'`, `VACUUM INTO '<file>'`) is refused on every action, including targets computed at run time or bound as a parameter (the authorizer allows only the anonymous `""` target), so a skill reaches only its own database; plain `VACUUM` (whose scratch database is anonymous) still works.
+
 ## Anti-patterns
 
 - Generic keywords (`run`, `fetch`, `do`, `data`).

@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.15.13 — 2026-09-23 — skill databases take whole scripts, and a failed reindex loses nothing
+
+- **`db exec` runs several statements in one call.** Without `params`, a whole schema or a batch of
+  writes separated by `;` runs in one transaction: all of it applies or none of it, and a failure
+  names the statement that broke. With `params`, it still takes exactly one statement and says so.
+- An `INSERT … RETURNING` or a `SELECT` sent as `exec` now returns its rows. Before, the write
+  could fail to commit and be lost. Large results are read in batches, never all at once.
+- A skill's database can no longer attach or copy itself into another database file, so one
+  skill cannot read or write another's data; `VACUUM` still compacts it.
+- **A reindex of past conversations or workgroups that fails part-way keeps the previous index.**
+  A forced rebuild, or one triggered by a new embedding model, used to leave the index empty when
+  it failed; searches keep working on the old index until the new one is complete.
+- Such a rebuild stops, keeping the previous index, when a conversation file cannot be read or a
+  workgroup cannot be decrypted, and the error names it.
+
 ## v0.15.12 — 2026-09-23 — each Docker image is built from its own release
 
 - **The Docker image for a release is built from that release's commit.** A newer commit

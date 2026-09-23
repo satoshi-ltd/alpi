@@ -283,6 +283,20 @@ never string-interpolate user data into the SQL. Schema is owned
 by the skill body — the LLM runs `CREATE TABLE IF NOT EXISTS …`
 on first invocation; idempotent.
 
+`exec` without `params` also takes several statements separated by
+`;` — a whole schema at once — and runs them in one transaction: all
+of them apply, or none, and a failure names the statement that broke.
+With `params` it takes exactly one statement. It leaves transaction
+control to the tool, so a script carrying its own `BEGIN` / `COMMIT` /
+`ROLLBACK` / `SAVEPOINT` / `RELEASE` is refused — SQLite itself vetoes
+them while the script runs, however they are spelled. Rows a
+`RETURNING` clause (or a `SELECT` sent as `exec`) produces come back
+under `returned:`, up to the 10 000-row cap, with a count of the rest.
+Attaching or writing another database file (`ATTACH '<file>'`,
+`VACUUM INTO '<file>'`) is refused on every action — whether the file is
+written out, computed, or bound as a parameter — so a skill reaches its
+own database and no other; a plain `VACUUM` still compacts it.
+
 **Quotas (enforced):**
 
 - 50 MB max file size — prune with `DELETE` or run

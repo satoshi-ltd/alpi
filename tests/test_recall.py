@@ -247,3 +247,199 @@ def test_recall_legacy_index_migrates_connection_column(tmp_home, stub_embedder)
     conn.close()
     assert "connection_id" in cols
     assert {r["session_id"] for r in rc.recall(tmp_home, "React migration", k=5, connection_id="c1")} == {"s1"}
+
+
+class _FailsMidRebuild(StubEmbedder):
+    def __init__(self, *, fail_on_call: int = 2, name: str | None = None, dim: int | None = None):
+        self.calls = 0
+        self.fail_on_call = fail_on_call
+        if name:
+            self.name = name
+        if dim:
+            self.dim = dim
+
+    def embed(self, texts):
+        self.calls += 1
+        if self.calls >= self.fail_on_call:
+            raise RuntimeError("embedder went away mid-rebuild")
+        return super().embed(texts) if self.dim == StubEmbedder.dim else [[0.1] * self.dim for _ in texts]
+
+
+def _counts(home: Path) -> dict:
+    from alpi.core.store import open_store
+    conn = open_store(home)
+    try:
+        return {
+            "chunks": conn.execute("SELECT COUNT(*) AS n FROM session_chunks").fetchone()["n"],
+            "files": conn.execute("SELECT COUNT(*) AS n FROM session_files").fetchone()["n"],
+            "meta": {r["key"]: r["value"] for r in conn.execute("SELECT key, value FROM session_meta")},
+        }
+    finally:
+        conn.close()
+
+
+def _unrelated_table(home: Path) -> None:
+    from alpi.core.store import open_store
+    conn = open_store(home)
+    conn.execute("CREATE TABLE IF NOT EXISTS unrelated_owner (v TEXT)")
+    conn.execute("INSERT INTO unrelated_owner VALUES ('keep me')")
+    conn.commit()
+    conn.close()
+
+
+def _unrelated_rows(home: Path) -> list:
+    from alpi.core.store import open_store
+    conn = open_store(home)
+    try:
+        return [r["v"] for r in conn.execute("SELECT v FROM unrelated_owner")]
+    finally:
+        conn.close()
+
+
+def test_a_failed_forced_rebuild_keeps_the_previous_index(tmp_home, stub_embedder):
+    _seed(tmp_home)
+    rc.index_sessions(tmp_home)
+    before = _counts(tmp_home)
+    assert before["chunks"] == 2
+
+    with pytest.raises(RuntimeError, match="mid-rebuild"):
+        rc.index_sessions(tmp_home, force=True, embedder=_FailsMidRebuild())
+
+    assert _counts(tmp_home) == before
+    hits = rc.recall(tmp_home, "React Router migration", k=1)
+    assert hits and hits[0]["session_id"] == "react"
+
+
+def test_a_failed_rebuild_after_embedder_drift_keeps_the_old_index_and_meta(tmp_home, stub_embedder):
+    _seed(tmp_home)
+    rc.index_sessions(tmp_home)
+    before = _counts(tmp_home)
+
+    with pytest.raises(RuntimeError, match="mid-rebuild"):
+        rc.index_sessions(tmp_home, embedder=_FailsMidRebuild(name="drifted", dim=8, fail_on_call=1))
+
+    assert _counts(tmp_home) == before
+    assert before["meta"] == {"dim": "16", "embedder": "stub-test"}
+    assert rc.recall(tmp_home, "the React migration to components", k=1)[0]["session_id"] == "react"
+
+
+def test_a_failed_incremental_pass_keeps_the_session_it_was_replacing(tmp_home, stub_embedder):
+    _seed(tmp_home)
+    rc.index_sessions(tmp_home)
+    _session(tmp_home, "react", [{"user": "the React work changed", "assistant": "now it is Vue"}], started_at=2000.0)
+
+    with pytest.raises(RuntimeError, match="mid-rebuild"):
+        rc.index_sessions(tmp_home, embedder=_FailsMidRebuild(fail_on_call=1))
+
+    hits = rc.recall(tmp_home, "React Router migration jQuery", k=2)
+    assert any(h["session_id"] == "react" and "jQuery" in h["snippet"] for h in hits)
+
+
+def test_a_rebuild_leaves_other_tables_in_the_store_alone(tmp_home, stub_embedder):
+    _seed(tmp_home)
+    rc.index_sessions(tmp_home)
+    _unrelated_table(tmp_home)
+
+    with pytest.raises(RuntimeError):
+        rc.index_sessions(tmp_home, force=True, embedder=_FailsMidRebuild())
+    rc.index_sessions(tmp_home, force=True)
+
+    assert _unrelated_rows(tmp_home) == ["keep me"]
+    assert _counts(tmp_home)["chunks"] == 2
+
+
+def _rows_left(home: Path, table: str) -> int:
+    from alpi.core.store import open_store
+    conn = open_store(home)
+    try:
+        exists = conn.execute("SELECT 1 FROM sqlite_master WHERE name = ?", (table,)).fetchone()
+        return conn.execute(f"SELECT COUNT(*) AS n FROM {table}").fetchone()["n"] if exists else 0
+    finally:
+        conn.close()
+
+
+def test_a_first_index_that_fails_leaves_nothing_half_built(tmp_home, stub_embedder):
+    _seed(tmp_home)
+
+    with pytest.raises(RuntimeError):
+        rc.index_sessions(tmp_home, embedder=_FailsMidRebuild())
+
+    assert _rows_left(tmp_home, "session_chunks") == 0
+    assert _rows_left(tmp_home, "session_files") == 0
+    rc.index_sessions(tmp_home)
+    assert _counts(tmp_home)["chunks"] == 2
+
+
+def test_readers_keep_searching_the_old_index_while_a_rebuild_runs(tmp_home, stub_embedder):
+    import threading
+
+    _seed(tmp_home)
+    rc.index_sessions(tmp_home)
+    inside, release = threading.Event(), threading.Event()
+
+    class _Slow(StubEmbedder):
+        def embed(self, texts):
+            inside.set()
+            assert release.wait(10)
+            return super().embed(texts)
+
+    errors: list[BaseException] = []
+
+    def rebuild():
+        try:
+            rc.index_sessions(tmp_home, force=True, embedder=_Slow())
+        except BaseException as e:  # noqa: BLE001
+            errors.append(e)
+
+    worker = threading.Thread(target=rebuild)
+    worker.start()
+    try:
+        assert inside.wait(10)
+        hits = rc.recall(tmp_home, "React Router migration", k=1)
+        assert hits and hits[0]["session_id"] == "react"
+    finally:
+        release.set()
+        worker.join(10)
+    assert not errors
+    assert _counts(tmp_home)["chunks"] == 2
+
+
+def _corrupt(home: Path, sid: str) -> None:
+    (home / "sessions" / f"{sid}.json").write_text('{"id": "' + sid + '", "turns": [')
+
+
+def test_an_unreadable_session_is_skipped_by_an_incremental_pass_and_keeps_its_rows(tmp_home, stub_embedder):
+    _seed(tmp_home)
+    rc.index_sessions(tmp_home)
+    _corrupt(tmp_home, "infra")
+
+    summary = rc.index_sessions(tmp_home)
+
+    assert summary["total_chunks"] == 2
+    assert rc.recall(tmp_home, "Postgres on RDS daily S3 snapshots database", k=2)
+
+
+@pytest.mark.parametrize("trigger", ["force", "drift"])
+def test_an_unreadable_session_stops_a_destructive_rebuild_and_keeps_the_index(tmp_home, stub_embedder, trigger):
+    _seed(tmp_home)
+    rc.index_sessions(tmp_home)
+    before = _counts(tmp_home)
+    _corrupt(tmp_home, "infra")
+    kwargs = {"force": True} if trigger == "force" else {"embedder": _FailsMidRebuild(name="drifted", dim=8, fail_on_call=99)}
+
+    with pytest.raises(rc.RebuildAborted, match=r"session infra\.json cannot be read .*previous index was kept"):
+        rc.index_sessions(tmp_home, **kwargs)
+
+    assert _counts(tmp_home) == before
+
+
+def test_the_index_tool_reports_an_aborted_rebuild(tmp_home, stub_embedder):
+    _seed(tmp_home)
+    rc.index_sessions(tmp_home)
+    _corrupt(tmp_home, "infra")
+
+    result = rc.IndexSessions().run(force=True)
+
+    assert not result.ok
+    assert "infra.json cannot be read" in result.error
+    assert _counts(tmp_home)["chunks"] == 2

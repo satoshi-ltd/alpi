@@ -10,7 +10,7 @@ from alpi.core import embed as embed_mod
 from alpi.core.store import open_store, store_path
 from alpi.home import get_home
 from alpi.tools.base import Tool, ToolResult
-from alpi.tools.workspace import EmbedderMismatch, _chunk_lines, _vec_blob
+from alpi.tools.workspace import EmbedderMismatch, RebuildAborted, _chunk_lines, _vec_blob
 
 _EMBED_BATCH = 64
 _MAX_SNIPPET = 600
@@ -29,84 +29,70 @@ def _set_meta(conn: sqlite3.Connection, key: str, value: str) -> None:
     )
 
 
-def _ensure_schema(conn, dim, embedder_name, *, index_mode, force=False) -> None:
-    conn.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS session_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS session_files (
+# One statement per execute: executescript() commits the open transaction, which would break the single-transaction rebuild.
+_TABLE_DDL = (
+    """CREATE TABLE IF NOT EXISTS session_files (
           session_id TEXT PRIMARY KEY,
           source_path TEXT NOT NULL,
           mtime REAL NOT NULL,
           size INTEGER NOT NULL,
           started_at REAL,
           connection_id TEXT NOT NULL DEFAULT 'host'
-        );
-        CREATE TABLE IF NOT EXISTS session_chunks (
+        )""",
+    """CREATE TABLE IF NOT EXISTS session_chunks (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           session_id TEXT NOT NULL,
           chunk_index INTEGER NOT NULL,
           content TEXT NOT NULL,
           started_at REAL,
           connection_id TEXT NOT NULL DEFAULT 'host'
-        );
-        CREATE INDEX IF NOT EXISTS session_chunks_by_session ON session_chunks(session_id);
-        """
-    )
+        )""",
+    "CREATE INDEX IF NOT EXISTS session_chunks_by_session ON session_chunks(session_id)",
+)
+_DROP_ORDER = ("session_vec", "session_chunks", "session_files")
+
+
+def _create_tables(conn: sqlite3.Connection, dim: int) -> None:
+    for statement in _TABLE_DDL:
+        conn.execute(statement)
     _migrate_connection_id(conn)
     conn.execute(
         f"CREATE VIRTUAL TABLE IF NOT EXISTS session_vec USING vec0("
         f"chunk_id INTEGER PRIMARY KEY, embedding float[{dim}])"
     )
+
+
+def _ensure_schema(conn, dim, embedder_name, *, index_mode, force=False) -> bool:
+    conn.execute("CREATE TABLE IF NOT EXISTS session_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
     stored_dim = _get_meta(conn, "dim")
     stored_embedder = _get_meta(conn, "embedder")
     if stored_dim is None:
+        _create_tables(conn, dim)
         _set_meta(conn, "dim", str(dim))
         _set_meta(conn, "embedder", embedder_name)
-        conn.commit()
-        return
+        if not index_mode:
+            conn.commit()
+        return False
     drift = int(stored_dim) != dim or stored_embedder != embedder_name
     if not index_mode:
+        _create_tables(conn, int(stored_dim))
         if drift:
             raise EmbedderMismatch(
                 f"Session index was built with {stored_embedder} (dim={stored_dim}) "
                 f"but current embedder is {embedder_name} (dim={dim}). "
                 f"Re-index: run index_sessions to rebuild."
             )
-        return
+        return False
     if not (force or drift):
-        return
-    conn.executescript(
-        """
-        DROP TABLE IF EXISTS session_vec;
-        DROP TABLE IF EXISTS session_chunks;
-        DROP TABLE IF EXISTS session_files;
-        DELETE FROM session_meta;
-        CREATE TABLE session_files (
-          session_id TEXT PRIMARY KEY,
-          source_path TEXT NOT NULL,
-          mtime REAL NOT NULL,
-          size INTEGER NOT NULL,
-          started_at REAL,
-          connection_id TEXT NOT NULL DEFAULT 'host'
-        );
-        CREATE TABLE session_chunks (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          session_id TEXT NOT NULL,
-          chunk_index INTEGER NOT NULL,
-          content TEXT NOT NULL,
-          started_at REAL,
-          connection_id TEXT NOT NULL DEFAULT 'host'
-        );
-        CREATE INDEX session_chunks_by_session ON session_chunks(session_id);
-        """
-    )
-    conn.execute(
-        f"CREATE VIRTUAL TABLE session_vec USING vec0("
-        f"chunk_id INTEGER PRIMARY KEY, embedding float[{dim}])"
-    )
+        _create_tables(conn, dim)
+        return False
+    for table in _DROP_ORDER:
+        conn.execute(f"DROP TABLE IF EXISTS {table}")
+    conn.execute("DELETE FROM session_meta")
+    _create_tables(conn, dim)
     _set_meta(conn, "dim", str(dim))
     _set_meta(conn, "embedder", embedder_name)
-    conn.commit()
+    return True
 
 
 def _migrate_connection_id(conn: sqlite3.Connection) -> None:
@@ -153,14 +139,23 @@ def index_sessions(
     sessions_dir = home / "sessions"
     conn = open_store(home)
     try:
-        _ensure_schema(conn, embedder.dim, embedder.name, index_mode=True, force=force)
+        # Drop, recreate and embed in one write transaction: a failure anywhere leaves the previous index searchable.
+        conn.isolation_level = None
+        conn.execute("BEGIN IMMEDIATE")
+        rebuilding = _ensure_schema(conn, embedder.dim, embedder.name, index_mode=True, force=force)
         indexed = skipped = removed = added = 0
         seen: set[str] = set()
         if sessions_dir.exists():
             for path in sessions_dir.glob("*.json"):
                 try:
                     data = json.loads(path.read_text())
-                except Exception:  # noqa: BLE001
+                except Exception as e:  # noqa: BLE001
+                    # The old rows are already dropped inside this transaction: skipping would publish an index missing this session.
+                    if rebuilding:
+                        raise RebuildAborted(
+                            f"session {path.name} cannot be read ({type(e).__name__}: {e}); the rebuild "
+                            "stopped and the previous index was kept. Fix or remove that file, then rebuild."
+                        ) from e
                     continue
                 sid = str(data.get("id") or path.stem)
                 if exclude_id and sid == exclude_id:
@@ -329,7 +324,7 @@ class IndexSessions(Tool):
     def run(self, force: bool = False) -> ToolResult:
         try:
             summary = index_sessions(get_home(), force=force, exclude_id=_active_session_id())
-        except EmbedderMismatch as e:
+        except (EmbedderMismatch, RebuildAborted) as e:
             return ToolResult(ok=False, output="", error=str(e))
         return ToolResult(ok=True, output=json.dumps(summary))
 
