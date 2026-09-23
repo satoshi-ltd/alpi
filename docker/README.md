@@ -378,6 +378,10 @@ constraints that matter when you write your own:
 
 ## Updating
 
+Every release is published as `satoshiltd/alpi:<version>`, built from the
+commit that release was tagged on; `latest` always points at the newest
+published version. Pin a version tag to hold a deployment still.
+
 For the normal private-network deployment, pull the latest image and recreate
 the containers whose image changed:
 

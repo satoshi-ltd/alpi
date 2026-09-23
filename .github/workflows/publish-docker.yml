@@ -24,9 +24,10 @@ on:
 permissions: {}
 
 jobs:
-  # Cheap probe: should we publish? Only on a successful parent release (or a
-  # manual run). Skip if `docker-v$version` already tagged on origin — that
-  # version's image is already out; force=true overrides.
+  # Cheap probe: should we publish? Only on a successful parent release that
+  # tagged this very revision `v$version` (or a manual run). Skip if
+  # `docker-v$version` already tagged on origin — that version's image is
+  # already out; force=true overrides on a manual run.
   check-version:
     name: should we publish?
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
@@ -34,20 +35,44 @@ jobs:
     permissions:
       contents: read
     outputs:
+      sha: ${{ steps.source.outputs.sha }}
       should_publish: ${{ steps.gate.outputs.should_publish }}
       version: ${{ steps.gate.outputs.version }}
     steps:
+      # On workflow_run, GITHUB_SHA is the newest commit on main, not the one the parent release tested and published.
+      - id: source
+        name: resolve the released revision
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          test -n "$SHA" || { echo "no source revision to publish"; exit 1; }
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "publishing revision $SHA"
       - uses: actions/checkout@v4
         with:
+          ref: ${{ steps.source.outputs.sha }}
           fetch-depth: 0
       - id: gate
+        env:
+          EVENT: ${{ github.event_name }}
+          FORCE: ${{ github.event.inputs.force }}
+          SHA: ${{ steps.source.outputs.sha }}
         run: |
           version=$(python3 -c "import tomllib, pathlib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")
           tag="docker-v$version"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "pyproject version: $version  implied tag: $tag"
 
-          if [ "${{ github.event.inputs.force }}" = "true" ]; then
+          if [ "$EVENT" = "workflow_run" ]; then
+            # A publish run that skipped releasing still ends green; only the commit its v-tag names was released.
+            released=$(git ls-remote origin "refs/tags/v$version^{}" | cut -f1)
+            [ -n "$released" ] || released=$(git ls-remote origin "refs/tags/v$version" | cut -f1)
+            if [ "$released" != "$SHA" ]; then
+              echo "should_publish=false" >> "$GITHUB_OUTPUT"
+              echo "v$version was released from ${released:-no commit}, not $SHA — nothing to publish"
+              exit 0
+            fi
+          elif [ "$FORCE" = "true" ]; then
             echo "should_publish=true" >> "$GITHUB_OUTPUT"
             echo "manual force=true — proceeding"
             exit 0
@@ -69,9 +94,19 @@ jobs:
       contents: write   # push the docker-v<version> tag
       packages: write   # push to ghcr
     env:
+      SHA: ${{ needs.check-version.outputs.sha }}
       VERSION: ${{ needs.check-version.outputs.version }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.check-version.outputs.sha }}
+
+      - name: source is the released revision
+        run: |
+          head=$(git rev-parse HEAD)
+          test "$head" = "$SHA" || { echo "checked out $head, releasing $SHA"; exit 1; }
+          found=$(python3 -c "import tomllib, pathlib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")
+          test "$found" = "$VERSION" || { echo "pyproject says $found, releasing $VERSION"; exit 1; }
 
       - uses: docker/setup-qemu-action@v4
 
@@ -97,6 +132,11 @@ jobs:
           platforms: linux/amd64
           load: true
           tags: alpi-smoke:${{ env.VERSION }}
+
+      - name: smoke — the image carries the version being published
+        run: |
+          found=$(docker run --rm --entrypoint python "alpi-smoke:$VERSION" -c 'import importlib.metadata as m; print(m.version("alpi-agent"))')
+          test "$found" = "$VERSION" || { echo "image carries alpi $found, publishing $VERSION"; exit 1; }
 
       - name: smoke — chromium headless shell must launch
         run: |
@@ -170,9 +210,7 @@ jobs:
           push: true
           tags: |
             satoshiltd/alpi:${{ env.VERSION }}
-            satoshiltd/alpi:latest
             ghcr.io/${{ github.repository_owner }}/alpi:${{ env.VERSION }}
-            ghcr.io/${{ github.repository_owner }}/alpi:latest
 
       # Mark this version as published so a later parent run for the same
       # version skips instead of rebuilding an identical image.
@@ -186,3 +224,50 @@ jobs:
             git tag -a "docker-v$VERSION" -m "docker-v$VERSION"
             git push origin "docker-v$VERSION"
           fi
+
+  # Serialized, and always to the newest docker-v tag: a slower run for an older release cannot pull latest backward.
+  latest:
+    name: point latest at the newest published image
+    needs: [check-version, docker]
+    runs-on: ubuntu-latest
+    concurrency:
+      group: publish-docker-latest
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.check-version.outputs.sha }}
+
+      - id: newest
+        name: pick the newest published version
+        run: |
+          newest=$(git ls-remote --tags origin 'refs/tags/docker-v*' \
+            | awk '{print $2}' | grep -v '\^{}$' | sed 's#^refs/tags/docker-v##' \
+            | sort -V | tail -n 1)
+          test -n "$newest" || { echo "no docker-v tag on origin"; exit 1; }
+          echo "version=$newest" >> "$GITHUB_OUTPUT"
+          echo "newest published image: $newest"
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: move latest
+        env:
+          NEWEST: ${{ steps.newest.outputs.version }}
+          GHCR: ghcr.io/${{ github.repository_owner }}/alpi
+        run: |
+          docker buildx imagetools create --tag satoshiltd/alpi:latest "satoshiltd/alpi:$NEWEST"
+          docker buildx imagetools create --tag "$GHCR:latest" "$GHCR:$NEWEST"

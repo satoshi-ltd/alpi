@@ -29,35 +29,11 @@ fixes; each can ship independently as a patch before v0.16.
 
 | Order | ID | Priority | Evidence | Outcome |
 |---|---|---|---|---|
-| 1 | RELEASE.1 | P1 · 🟡 | Workflow inspection + documented event semantics | Docker publishes the revision whose parent release passed. |
-| 2 | INDEX.1 | P2 · 🟡 | Reproduced against real SQLite/vec0 stores | A failed rebuild retains the previous searchable index. |
-| 3 | TERM.3 | P3 · 🟡 | Observed in a Morpheus run on 2026-09-22: the agent could not find its JDK from `terminal` | A profile can hand `terminal` extra environment variables. |
-| 4 | SCHED.4 | P2 · 🟡 | A 5400 s job died at 59:46 on 2026-09-22; a stored timeout above 3600 is clamped at run time without a word | The timeout a job carries is the one the scheduler enforces, or the clamp is shown before it bites. |
-| 5 | DESK.1 | P3 · 🟡 | Production audit log: 2,418 `register_device` events in one day from three idle desktops, all named `Desktop` | An idle desktop adds nothing to the audit log and shows its machine name. |
-| 6 | DB.1 | P3 · 🟡 | 183 of 308 `db` failures in 945 production runs came from two statements in one `exec` or a row-returning `exec` | `db exec` runs what an agent naturally sends, or refuses it with the exact fix. |
-
-### RELEASE.1 — bind the Docker release to its successful parent revision
-
-**Evidence.** [publish-docker.yml](../.github/workflows/publish-docker.yml)
-is triggered by `workflow_run`, but neither checkout selects the parent's
-`head_sha`. Both version discovery and the image build use the event's default
-checkout. For this event, GitHub defines `GITHUB_SHA` as the latest commit on
-the default branch, not the revision tested by the parent workflow
-([event contract](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_run)).
-A release of A can therefore trigger an image built from newer B. The success
-of A's Python publication does not validate B. This is a statically verified
-release-path defect; no remote publication was triggered during the audit.
-
-**Smallest change.** Resolve one immutable source SHA: the parent `head_sha`
-for automatic runs, the selected dispatch revision for manual runs. Use it
-for version discovery, all builds, and the Docker version tag. Check that
-the package version inside the image agrees with the version being published.
-Keep the existing release chain; do not introduce another release service.
-
-**Acceptance.** A fixture/event where A triggers the workflow after B reaches
-main still resolves to A in every job. Test the manual path separately. A
-version/revision mismatch fails before push. Define serialization or an
-explicit freshness check so an older, slower run cannot move `latest` backward.
+| 1 | INDEX.1 | P2 · 🟡 | Reproduced against real SQLite/vec0 stores | A failed rebuild retains the previous searchable index. |
+| 2 | TERM.3 | P3 · 🟡 | Observed in a Morpheus run on 2026-09-22: the agent could not find its JDK from `terminal` | A profile can hand `terminal` extra environment variables. |
+| 3 | SCHED.4 | P2 · 🟡 | A 5400 s job died at 59:46 on 2026-09-22; a stored timeout above 3600 is clamped at run time without a word | The timeout a job carries is the one the scheduler enforces, or the clamp is shown before it bites. |
+| 4 | DESK.1 | P3 · 🟡 | Production audit log: 2,418 `register_device` events in one day from three idle desktops, all named `Desktop` | An idle desktop adds nothing to the audit log and shows its machine name. |
+| 5 | DB.1 | P3 · 🟡 | 183 of 308 `db` failures in 945 production runs came from two statements in one `exec` or a row-returning `exec` | `db exec` runs what an agent naturally sends, or refuses it with the exact fix. |
 
 ### INDEX.1 — preserve recall and workgroup indexes on rebuild failure
 

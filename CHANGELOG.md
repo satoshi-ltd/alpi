@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.15.12 — 2026-09-23 — each Docker image is built from its own release
+
+- **The Docker image for a release is built from that release's commit.** A newer commit
+  landing on `main` while a release was still publishing could end up inside the older
+  release's image.
+- A commit on `main` that did not release a new version is no longer published as an image of
+  the previous one.
+- The image is checked to carry the version it is tagged with before it is pushed.
+- `latest` always points at the newest published version, even when an older release
+  finishes publishing last.
+
 ## v0.15.11 — 2026-09-23 — web search answers more often, still without a key
 
 - **`web_search` asks one search engine at a time and stops at the first that answers.**
