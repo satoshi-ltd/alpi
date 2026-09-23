@@ -1,762 +1,275 @@
 # Changelog
 
+## v0.15.9 — 2026-09-23 — the file tools accept multi-document YAML
+
+- **The file tools accept YAML files with several documents.** A file with `---`-separated
+  documents was refused by `edit_file` and `write_file`; each document is now checked, and a
+  broken one is still refused with its line.
+
 ## v0.15.8 — 2026-09-22 — old run journals and sessions are swept once a day
 
-- **A busy profile filled its disk with history nothing ever deleted.** Every run left a
-  journal and every scheduled turn a session, and no setting named how long either should
-  live; on one production profile that came to about 310 MB a day, and thousands of files in
-  `runs/` and `sessions/` slowed listing, search and backups long before the volume filled. The
-  daemon can now sweep a profile once a day and delete finished run journals and idle sessions
-  older than a window the profile sets under `retention:` in `config.yaml`. Nothing changes
-  for a profile that sets none: the default keeps everything, as before.
-- The sweep never touches the run ledger that carries costs, a run still going, a session with
-  a turn in flight or a run still open — whether the daemon, the console or a scheduled job is
-  driving it — or a session that served a workgroup which still exists; a session's cost is
-  archived before its files go, and a file that cannot be deleted is reported and skipped.
-- Session deletion fails closed if the run inventory cannot be verified, including an unreadable
-  journal or a running journal without a session identity. Both automatic and manual cleanup
-  recheck under the shared file lock. Invalid retention values disable deletion, never shorten
-  the window through numeric coercion.
-- `alpi setup → Cleanup` remains the manual path with its own unchanged thresholds.
-- A session file that is not a JSON object no longer breaks the session list for everything
-  else in the profile; it is listed as empty and left alone.
+- **Old run journals and sessions can be swept automatically.** Set `retention.runs_days` and
+  `retention.sessions_days` in a profile's `config.yaml` and the daemon deletes finished
+  journals and idle sessions older than that, once a day. Without the block nothing is deleted.
+- The sweep never touches the cost ledger, a running run, a session in use or with a run still
+  open, or a session of a workgroup that still exists; a session's cost is archived first.
+- Anything the sweep cannot verify is kept and reported. Invalid values disable deletion
+  instead of shortening the window.
+- A session file that is not a JSON object no longer breaks the session list.
 
 ## v0.15.7 — 2026-09-22 — a tool call cannot stall on a server that stops listening
 
-- **An MCP server that stopped reading froze the turn before the call's timeout began.** The
-  timeout covered waiting for the answer, not delivering the request, so a large tool argument
-  sent to a server that had stopped listening simply blocked — the same unbounded wait
-  v0.15.3 closed on the other side of the pipe. Delivery and answer now share one budget, so
-  the wait ends at the timeout the caller asked for; shutting the wedged server down then adds
-  up to five seconds more before the call returns. The message names the server.
-- **A call that failed mid-delivery is never sent again, and says so.** It may have been
-  delivered in part and already acted on, so repeating it could repeat its effects.
-- Shutting a wedged server down can no longer block on its own full pipe, and a large request to
-  a server that is reading normally still goes through.
-- A server whose input cannot be bounded is refused at startup rather than started with the old
-  unbounded write, and a connection numbered past the system's select limit still works.
+- **A tool call can no longer stall on an MCP server that stops reading.** Sending the request
+  and waiting for the answer now share the call's timeout; stopping the stuck server adds up
+  to five seconds, and the error names the server.
+- A call that failed mid-delivery is never resent, since it may already have taken effect, and
+  the error says so.
+- Large requests to a server that is reading normally still go through.
 
 ## v0.15.6 — 2026-09-22 — the sandbox setting no longer bricks the shell in Docker
 
-- **Following the deployment guide made `terminal` refuse every command.** It told operators to
-  turn the OS sandbox on for every profile at onboarding; inside the supported container that
-  setting has no working form, so instead of isolating commands it rejected all of them, and the
-  error told the operator to install a package that would not have helped. The guide no longer
-  asks for it there, and the refusal now says plainly that the inner sandbox is unavailable in
-  that runtime. Commands are still never run unsandboxed when the sandbox was asked for.
-- **A scheduled job inside a container no longer mistakes itself for a host install.** The
-  scheduler marks a job's turn with the same setting that names the deployment runtime, so
-  anything a job asked about the runtime got the wrong answer — the sandbox refusal above
-  included, which sent the operator off to install a package that could not help. The two are
-  now separate: one says where alpi is deployed, the other says where the turn came from.
-- **The isolation boundary is now written down.** A container and its volume hold one trust
-  scope: every profile, secret and file inside one is reachable from any shell command in it.
-  Anything that must not be, belongs in its own container with its own volume.
+- **`tools.terminal.sandbox` no longer disables the shell in Docker by accident.** The
+  deployment guide no longer asks for it in the container, where no OS sandbox is available;
+  enabled anyway, `terminal` still refuses every command and now says why.
+- Scheduled jobs inside a container are recognised as running in Docker.
+- The docs state the isolation boundary: a container and its volume hold one trust scope.
 
 ## v0.15.5 — 2026-09-22 — killing a stuck run takes its leftovers with it
 
-- **A run the daemon killed for going quiet left its own processes running.** Anything a run
-  detaches — a shell command, a background job, a pipeline gate, an MCP server — is put in a
-  session of its own so its own timeout can reach it, and that is exactly what let it survive
-  the signal that ended the run. A build, a server or a wedged tool could go on consuming the
-  machine for hours after the run that started it had been reported as interrupted. Each run
-  now keeps a record of what it detached, and both sweeps — the one for a run gone quiet and
-  the one for a run whose process is already gone — use it to finish the job.
-- **Work whose own launcher had already exited survived anyway.** A shell that starts something
-  in the background and returns leaves that process with no launcher to signal, so the previous
-  rule could not reach it. Everything a run starts now carries the identity of the run that
-  started it, which is inherited by whatever it starts in turn, so a leftover is still
-  recognisable long after the process that created it is gone.
-- A process is only signalled when it can still be proved to be the one the run started, so a
-  reused process id is never mistaken for a leftover.
-- The scheduler's own cleanup, when it ends a job that overran or failed, now stops that job's
-  leftovers instead of discarding the record of them.
+- **Stopping a stuck run also stops what it started.** Shell commands, background jobs,
+  pipeline gates and MCP servers launched by a run are tracked and stopped with it, including
+  work whose own launcher had already exited.
+- A process is signalled only when it provably belongs to the run, so a reused process id is
+  never hit.
+- The scheduler's cleanup of an overrun or failed job stops its leftovers too.
 
 ## v0.15.4 — 2026-09-21 — an OpenRouter suffix no longer shrinks a model's context window
 
-- **A model picked with an OpenRouter suffix like `:nitro` reported 200,000 tokens of
-  context whatever its real size.** `:nitro`, `:floor` and `:exacto` pick which provider
-  serves a model and `:online` adds web search to it; none of them change the model, so none
-  of them change how much it can read. The lookup treated the whole string as an unknown
-  model and fell back to the default. A million-token model showed as 200,000 everywhere the
-  figure appears: the apps, the console, and the budget that decides when a conversation
-  gets compacted. Those four suffixes are now ignored when resolving the window, while real
-  variants like `:free` and `:batch` still answer for themselves.
+- **OpenRouter suffixes no longer shrink a model's context window.** `:nitro`, `:floor`,
+  `:exacto` and `:online` are ignored when resolving the window, so a large model no longer
+  shows — or compacts — as 200k. Real variants such as `:free` and `:batch` keep their own
+  values.
 
 ## v0.15.3 — 2026-09-21 — a silent MCP server can no longer hold the turn
 
-- **An MCP server that took a request and answered nothing blocked the turn forever.**
-  The per-call timeout was set but never reachable: the client waited on a read that only
-  returns when a line arrives, so a server that neither replied nor closed its connection
-  was never given up on. The wait is now genuinely bounded — the call fails at its
-  timeout, the message names the server that went silent, and the server is stopped
-  instead of left running.
-- A server that disconnects mid-call is now reported to every call still waiting on it,
-  not only the first, and restarting it afterwards starts clean.
-- A call that lost its server while it was being made now fails like any other tool error,
-  naming the server, instead of crashing the turn with an empty assertion.
+- **A silent MCP server can no longer hold a turn forever.** The call fails at its timeout,
+  names the server and stops it.
+- A server that disconnects mid-call is reported to every waiting call and restarts cleanly.
+- A call whose server was stopped meanwhile fails as a normal tool error instead of crashing
+  the turn.
 
 ## v0.15.2 — 2026-09-21 — a timed-out command no longer leaves work running
 
-- **A command that hit its timeout could leave its own children running.** The timeout
-  killed the shell alpi spawned and nothing under it, so anything that shell had started
-  in the background — a build, a server, a script — kept running and kept consuming the
-  machine, invisible to the run that had already been reported as timed out. The command
-  now gets its own process group and the timeout signals the group, so what it started
-  goes with it.
-- **Interrupting a command kills it too.** The same process group that lets the timeout
-  reach the command's children also takes it out of the terminal's Ctrl+C, so an
-  interrupt that used to stop the command would have left it running. Any exceptional
-  exit now stops it before the interrupt travels on.
-- A command that fails to start — a working directory that does not exist, say — no
-  longer leaves its progress ticker running behind it.
-- The signal is sent only when the command genuinely leads its own group; otherwise it
-  falls back to killing the single process, because the group in that case would be the
-  daemon's own.
+- **A command that times out takes everything it started with it.** The whole process group
+  is stopped, so background work the command spawned no longer keeps running.
+- Interrupting a command stops it too, and a command that fails to start no longer leaves its
+  progress ticker behind.
 
 ## v0.15.1 — 2026-09-20 — deleting a workgroup no longer loses part of its bill
 
-- **The spend archive was reading low by exactly the figure v0.15.0 made first-class.**
-  `workgroup remove` archives what a workgroup cost and then deletes its directory, which
-  is the last moment that number exists. It summed the transcript only, but a turn's
-  undeclared usage is settled into the workgroup's own ledger *after* its posts, so every
-  residual went into the bin with the directory. The archive now folds both, and a
-  workgroup whose only spend was a residual reaches the archive instead of vanishing
-  silently.
-- **A ledger it cannot read now blocks the delete instead of undercounting.** The same
-  command's contract is that spend survives deletion or nothing is deleted; archiving a
-  number known to be short and then removing the evidence broke it. A missing ledger still
-  means no settlements, but anything else it cannot make sense of refuses the delete —
-  truncated, not an object, a settlement list that is not a list, or a row or cost of the
-  wrong shape. Reading a malformed ledger as "no spend" is the same loss with extra steps.
-- **A turn that produced no output tokens is no longer billed its whole token count.**
-  Where the input/output split was absent the figure fell back to the turn's total, which
-  is right for an older post that carries only a total and wrong for a settled residual of
-  100 in and 0 out — zero is a real value, not a missing field, and it was being read as
-  one.
-- **Docs that name a command now have to be right.** `alpi mcp` was described as absent
-  from the CLI while being a visible group; a test now derives the real command surface and
-  fails when a page shows one that does not exist, alongside the dependency and
-  `tools.deny` lists pinned in 0.15.0.
-- **A config knob cannot ship undocumented, and a row cannot outlive its knob.** The whole
-  typed config is now walked from `Config` itself rather than a hand-listed set of
-  sections, so a new typed section is covered the day it appears. Both directions fail the
-  suite: a field with no row, and a row whose field was deleted. Three documented keys are
-  read straight off the raw YAML past the dataclass; they are named as exceptions, and an
-  exception that outlives its row fails too.
-- **The sections that are bare dicts get the weaker check they can support.** `alp`, `host`,
-  `budget`, `network`, `relay`, `tui` and `providers` have no declaration reflection can
-  reach, so the test asks what the code can answer: does anything name this key? That
-  catches a row that outlived its knob. It cannot catch a knob nobody wrote down, and the
-  roadmap says so rather than implying the reference is fully pinned.
+- **Deleting a workgroup no longer loses part of its spend.** The archive now includes usage
+  settled after the posts, including a workgroup whose only spend was settled usage.
+- A ledger that cannot be read blocks the delete instead of archiving a short figure.
+- A turn with no output tokens is no longer billed its whole token count.
+- The docs are checked against the code: every documented command and config key must exist,
+  and every typed config key must be documented.
 
 ## v0.15.0 — 2026-09-18 — a pipeline run says what it cost
 
-- **What a pipeline run spends is now counted for you, per run and per phase.**
-  Spend was already attributed per turn, per workgroup, per connection and per peer,
-  but never against the chain an operator actually thinks in, so answering *what did
-  that run cost* meant adding up the per-post figures the transcript prints, by hand.
-  Every phase now carries the spend of the seqs its task owned and the run carries the
-  sum, in the same `pipeline_run` the apps already read — so the desktop and mobile
-  clients get it without a change of their own. `alpi workgroup show` prints the run
-  total on its pipeline line.
-- **The figures include the residual a member never declared.** A turn's undeclared
-  usage is settled into the workgroup ledger after the fact; each settlement lands on
-  the phase that actually burned it, matched the way the ledger itself matches a turn —
-  by author and turn id, so two members that picked the same turn id are not merged. A
-  turn that settled without ever posting cannot be placed on the timeline and is left
-  out rather than guessed onto a phase, which can leave a run total slightly under the
-  profile ledger.
-- **A rewind adds an attempt, it never erases one.** Re-opening an earlier phase resets
-  that phase's state, as it always has, but its earlier attempts keep their spend, and a
-  preemption — one post that closes a phase and opens the next — is charged once, to the
-  phase it opened. A run re-triggered by an operator still counts only its own attempt.
-- **Only chain work is counted.** An attempt owns its own task and nothing after it
-  closes, so an ad-hoc task opened between two phases is not billed to the phase before
-  it, and spend after a run finishes is not billed to its last phase.
-- **The docs and the model's own reference pack were cured against the code.** A manual
-  pass shipped in v0.14.52 and several claims a reader acts on were still wrong. The worst
-  one: `CONFIG.md` offered `workgroup` as a name for `tools.deny`, but nothing registers
-  under it and the same page says an unknown deny name is a silent no-op — so an operator
-  hardening a profile that way got no enforcement and no warning. Also corrected: the
-  delegate step budget (a per-call parameter capped at 100, not a hardcoded 30), `alpi mcp`
-  (a visible command group), the mutation scanner's filename, the backup exclusion for
-  `out/` (two roots, not every depth), the TUI sandbox indicator, what a scoped phase does
-  to `terminal` inside Docker, and twelve runtime dependencies that carried no entry at all
-  where the security policy requires one. A test now derives those lists from the code, so
-  the next drift fails the suite instead of the reader.
-- **The knowledge tool gained a `workgroups` topic.** The workgroup material lived inside
-  the `alp` pack, which meant asking about a pipeline phase retrieved the whole protocol —
-  36 KB — and only if you already knew to ask for `alp`. The two are now separate packs;
-  `alp` is down to 8 KB.
-- **A partial total says it is partial.** Settlements live only in the hub, so a member
-  folding the same transcript can only see what was declared on the posts. That view now
-  reports itself as declared-only instead of showing a short number as if it were the
-  whole bill, as does a hub whose ledger cannot be read.
+- **A pipeline run shows what it cost, per run and per phase.** Totals appear in the apps and
+  in `alpi workgroup show`, and include usage settled after the fact.
+- Re-opening a phase adds an attempt instead of erasing earlier spend; work outside the chain
+  is not counted against it.
+- A total that can only see declared spend says it is partial.
+- `tools.deny` no longer documents `workgroup`, which never matched anything; the docs and the
+  agent's reference pack were corrected against the code, and a test keeps them aligned.
+- The knowledge tool has its own `workgroups` topic, so asking about pipelines no longer loads
+  the whole protocol reference.
 
 ## v0.14.52 — 2026-09-18 — a new profile passes its own audit
 
-- **A profile created by `alpi setup` failed `alpi audit` the first time it was run.**
-  The seeded `config.yaml` was written with whatever the process umask allowed, so on a
-  normal machine it landed group- and world-readable, and the audit — which warns on any
-  such bit on that file — was right to complain about a file alpi had just written
-  itself. It now goes through the same path as every other credential file: created 0600
-  and moved into place. A config that already exists is never rewritten, so nothing
-  changes for profiles that are already set up.
-- **The lint gate no longer changes its own verdict when Ruff updates.** The project
-  named no rules, so the effective set followed whichever Ruff happened to be installed
-  and a newer one reported 225 findings that no release had introduced — which left the
-  gate unable to tell a regression from a version bump. The rule selection is now written
-  down, the Ruff version is bounded, and the backlog that selection named is settled.
-  Settling it turned up two end-to-end chat tests that named a fixture that does not
-  exist and would have raised `NameError` the moment anyone ran them with `--llm`.
+- **A profile created by `alpi setup` passes `alpi audit`.** Its `config.yaml` is created with
+  owner-only permissions; existing configs are never rewritten.
+- **The lint gate no longer changes its verdict when Ruff updates.** The rule selection is
+  written down and the Ruff version bounded, so a new Ruff release cannot fail a clean tree.
 - The user-facing documentation under `docs/` had a full pass: content, accuracy and
   structure, with the ALP protocol reference split from the workgroup operations guide.
 
 ## v0.14.51 — 2026-09-17 — the sweep's one-line message says what it actually did
 
-- **A run the sweep deliberately left open was announced as closed.** `schedule.failed`
-  carries a long `body` and a one-line `message`; clients that show a list show the line.
-  Both wedged outcomes shared it, so a run whose process could not be vouched for — or
-  that refused the kill — arrived saying *closed by the run sweep* while its journal was
-  still open and its process still running. The body said so correctly; the line a person
-  reads first did not. It now reads *left open by the run sweep* for those, and the
-  `journal_closed` field on the row is what decides.
+- **A run the sweep left open is no longer announced as closed.** The one-line `schedule.failed`
+  message now reads *left open by the run sweep* when the journal is still open.
 - Found by running 0.14.50 against a real daemon rather than a test: four synthetic
   journals, three live processes, and the two left-open alerts both claimed to be closed.
 
 ## v0.14.50 — 2026-09-17 — a wedged run is found while the daemon still runs, and the log survives long enough to say why
 
-- **Two runs sat in limbo for 20 and 30 hours inside a healthy daemon.** 0.14.49 made a
-  dead run report itself, but only at the next daemon start. In production the daemon
-  never restarted on its own: both runs were closed by a human stopping the container for
-  an upgrade. The child's last event was a call that never came back — one to the
-  Bitbucket MCP server, one to a skill script — and the scheduler's own timeout, which
-  works and had fired before, produced nothing for either. Whether the child died
-  unreported or stayed alive and wedged is no longer knowable (see the last bullet), so
-  this release covers both.
-- **The run sweep now runs every 30 seconds, not once at start.** The daemon's own
-  maintenance loop calls it, off the scheduler's thread pool on purpose: a scheduler
-  worker stuck in a run is exactly the case being hunted, so the hunter cannot live
-  there. A child that died without reporting is closed and alerted within a minute.
-- **A silence watchdog catches the child that is still alive.** A scheduled run that has
-  written no event for longer than its job's timeout plus a five-minute grace is judged
-  wedged. A healthy run emits an event on every tool call and every model step; silence
-  past the whole allowance has no legitimate cause. Silence is measured on the wall clock,
-  but the sweep also has to watch it hold for the grace on the monotonic clock before it
-  acts, so a clock step or a wake from suspend can never on its own kill a healthy child.
-  Runs without a job are not judged — a job is the only thing that says how long a run may
-  take — and the pid sweep keeps owning them. A job deleted mid-run is judged by the
-  scheduler's own ceiling instead of never.
-- **A live process is killed only when it is provably the run's own.** Every run now
-  records its process start time next to its pid, and the watchdog kills only a pid whose
-  start time still matches — never the daemon, never its parent, never a recycled pid
-  that now belongs to something else. Anything alive it cannot vouch for, or that refuses
-  the kill, is reported once and left exactly as it is, journal included: writing a `run.finished` under a writer
-  that might still append would corrupt the journal and flip the run back to running.
-  Journals written before this release carry no start time and fall in that group.
-- **The scheduler now owns the journal of a child it ends.** Its own timeout already filed
-  an alert; the killed child never wrote `run.finished`, so the sweep found the journal
-  thirty seconds later and alerted again. The scheduler now hands the child its run id
-  and closes the journal itself on a timeout or a bad exit, so one event is one alert.
-- **The alert says which it was.** *did not finish* for a dead process, *went silent* for a
-  wedged one, with the seconds of silence, the timeout it overran, whether a process was
-  killed, and, when the journal had to be left open, that a person should look.
-- **Why the cause is unknowable: the daemon log held two hours.** `service.log` rotates at
-  1 MB with three backups. On the production box those 4 MB covered 21:53 to 00:00,
-  because 4,933 of 4,937 lines were `websockets.server connection closed` — the host
-  plane's health checks opening and closing a socket every second or two, logged at INFO
-  by a library nobody had quieted. Everything from the days of the incident had been
-  rotated away. That logger is now held at WARNING; the same 4 MB hold days.
-- Still open, on purpose: the kill reaches the child alone. The MCP server, skill script or
-  terminal command that caused the wedge runs in its own session and survives, as it
-  already did under the scheduler's own timeout. Reaping those is a separate change.
-- `runs.reconcile_stale` rows carry `reason: "dead"` and `pid_recorded`; the new
-  `runs.reconcile_silent` returns `reason: "silent"` with `timeout_s`, `pid_killed` and
-  `journal_closed`. `run.started` gains `pid_start`.
+- **A dead or wedged scheduled run is caught while the daemon keeps running.** A sweep runs
+  every 30 seconds: a run whose process died is closed and alerted within a minute, and one
+  silent for longer than its job's timeout plus a grace is judged wedged.
+- A live process is killed only when its start time proves it is the run's own; anything else
+  is reported once and left alone.
+- When the scheduler ends a child itself it also closes its journal, so one event raises one
+  alert, and the alert says whether the run died or went silent.
+- The daemon log no longer fills with health-check noise, so it keeps days instead of hours.
 
 ## v0.14.49 — 2026-09-17 — a run that dies with the daemon still files its alert
 
-- **A scheduled run whose daemon died was never reported to anyone.** When a job fails
-  normally the scheduler files an error and raises `schedule.failed`, which is what turns
-  into a push on the owner's apps. But that code runs *after* the job returns, so a run
-  killed with the daemon — a crash, an OOM, a container replaced mid-flight — took the
-  reporting path down with it. The journal stayed open, the next daemon start quietly
-  closed it as `interrupted`, and the only trace was one line in a log file. An agent
-  could be dead for a day and the first sign of it was noticing the work had stopped.
-- **The reconciliation now speaks.** Closing an orphaned journal files an error output and
-  raises `schedule.failed` for each one, the same event a live failure raises, so a dead
-  run reaches the apps through the path that already existed. The alert names the run, the
-  job behind it and how long the journal had been silent before it was closed. Runs with
-  no job — an interactive session cut off by the same crash — alert too, as a manual run.
-- **Why it took this long to see.** On a fleet running four agents, two scheduled runs died
-  eight days apart and their journals sat open for 20 and 30 hours. Both were found by
-  reading journals by hand, which is exactly the work this removes.
-- **The alert had to be taught where it sits in the stream.** It is emitted while profiles
-  are starting, which is before the host task registers the event bus and restores the
-  persisted sequence number. Filed then, it took seq 1 while a reconnecting client held a
-  cursor of, say, 100 — so `host.events.history(after_seq=100)` returned nothing and the
-  notification this release exists for was the one event it hid. The history is now
-  restored before those alerts are filed, and a regression test drives the real bus and
-  its backfill RPC rather than standing in for them.
-- `runs.reconcile_stale` returns the rows it closed instead of a count. The count is
-  `len()` of it; any caller that only logged the number keeps working with one edit.
+- **A scheduled run that dies with the daemon now files its alert.** On the next start each
+  orphaned run raises `schedule.failed` and an error output naming the job and how long it had
+  been silent — the same path a live failure takes. Runs without a job alert as manual runs.
+- A client reconnecting after the restart receives those alerts in its event history.
 
 ## v0.14.48 — 2026-09-16 — doctor checks the dependency everything routes through
 
-- **`alpi doctor` now verifies LiteLLM itself, not just that it imports.** Every provider
-  call in alpi — OpenAI, Anthropic, Ollama, OpenRouter, Gemini, Groq, Mistral, DeepSeek —
-  goes through that one package, and nothing on the machine checked that the copy on disk
-  was the copy that was installed. Two new rows close that: the installed version against
-  the pin alpi's own package metadata records, and every file of the distribution against
-  the sha256 digests its installer wrote down. A version outside the pin, an edited file
-  or a deleted one is a failure, so a cron'd doctor exits non-zero on a local swap.
-- **It says what it could not check.** An install whose file record is absent warns rather
-  than claiming a clean bill of health, and a machine where no pin is recorded reports the
-  version without a verdict. The check needs no network and knows nothing about
-  advisories — `alpi audit` still owns those, and the quarterly LiteLLM review still owns
-  deciding which version to pin.
-- The file hashing runs alongside the network checks, so the report still paints its first
-  row immediately.
-- **The documentation now says what the licence actually grants.** The README, the
-  deployment guide and the site all read "non-production deployments are free", which
-  denied individuals the production right the licence gives them: a natural person running
-  alpi on machines they control is covered for any personal, research or non-commercial
-  purpose. Corrected everywhere it appeared.
-- Other documentation corrections a reader could have acted on and been wrong: the
-  uninstall command named the wrong package, the upgrade runbook opened with `git pull`
-  (impossible from a PyPI install), the deployment guide described an `ALPI_YOLO=1`
-  override that does not exist and contradicts the no-override rule, per-peer budgets were
-  advertised where only a per-profile daily cap ships, and the Python floor and Chromium
-  download size were both stale.
+- **`alpi doctor` verifies the LiteLLM install.** It checks the installed version against
+  alpi's pin and every file against the installer's digests; a mismatch is a failure, and
+  anything it cannot check is reported as such.
+- **The licence is described correctly**: an individual may run alpi in production on machines
+  they control for personal, research or non-commercial use.
+- Several documentation errors were corrected, including the uninstall and upgrade steps and
+  an override that does not exist.
 
 ## v0.14.47 — 2026-09-16 — the knowledge subsystem says what it does
 
-- **Every path through knowledge is now pinned by a test.** The subsystem carried the
-  daemon's densest logic on the thinnest cover: attachment resolution, the model's reply
-  parsing, the search guards and half the tool's own error branches had no test behind
-  them, so a refactor could change what `ingest`, `search` or `maintain` answer without a
-  single failure. Coverage of the module is complete, and the behaviour it fixes in place
-  is the behaviour that shipped — this release changes nothing a user can observe.
-- **What the new tests hold still.** `ingest` picks the lone attachment of a turn, takes
-  the one you name, and refuses rather than guesses when a name is absent, ambiguous or
-  missing among several. A model reply survives being fenced in backticks and is refused
-  when it is unparseable, not an object, or shaped wrong. `search` refuses an empty query
-  and a `k` outside its range, and keeps answering when the keyword side of the index is
-  damaged or the query has nothing to match on. `lint` names the frontmatter field that
-  is wrong instead of failing opaquely, and a page linking only to itself is still an
-  orphan. A page reached through a symlink out of the bundle is refused before anything
-  is written, and an image is ingested only when `ocr=true` is asked for.
+- **No user-visible change.** The knowledge subsystem is now fully covered by tests, so how
+  `ingest`, `search`, `lint` and `maintain` behave cannot drift unnoticed.
 
 ## v0.14.46 — 2026-09-16 — links survive the trip in both directions
 
-- **A link written from a subfolder stops lint-ing as broken.** The maintenance prompt
-  offered root-relative example paths while links resolve relative to the page holding
-  them, so a page under `projects/` linking `concepts/widget.md` pointed at
-  `projects/concepts/widget.md`: a broken-link finding that never healed, and a page
-  that lost that edge in every search result. The prompt now states the convention with
-  a subfolder example, and a proposed link that is written from the bundle root is
-  repointed at the page it plainly means before the page is written. A link that is
-  already correct, one that resolves nowhere and an external URL are left exactly as
-  written, and so is every line whose place in the page could be code: the rewrite
-  abstains rather than guess inside a container it does not fully model.
-- **An imported vault no longer reads as a wall of false findings.** The link graph saw
-  only inline `[text](dest)` links, so `[[wikilinks]]` and CommonMark reference links
-  were invisible and their targets were reported as orphans, while a link shown as an
-  example inside a fenced block or a code span was reported as a real broken link. All
-  four now behave: wikilinks resolve by path or by page name when the name is
-  unambiguous, keeping an alias, a leading slash or a file's own extension, while one
-  written with `./` or `../` still resolves from the page holding it; reference
-  links resolve through their definitions, matched the way CommonMark matches them, and
-  a definition with prose after it is prose. Code is read as code wherever it sits: a
-  fence closes only under CommonMark's rules, and a fence inside a blockquote or a list,
-  an indented block and a code span are all excluded. A bracketed phrase with no
-  definition behind it is still just prose, and an image is never an edge. alpi keeps
-  writing plain relative links; the extra forms are read, never emitted.
-- The docs now say which rules are alpi's own rather than Markdown's: every page needs
-  an inbound link, and `type` collides with Hugo's reserved layout key.
+- **Links written from a subfolder no longer lint as broken.** A root-relative link proposed
+  during maintenance is repointed to the page it means; correct links, external URLs and code
+  are left untouched.
+- **Imported vaults stop producing false findings.** `[[wikilinks]]` and reference-style links
+  are understood, and links shown inside code are no longer reported. alpi still writes plain
+  relative links.
+- The docs say which rules are alpi's own: every page needs an inbound link, and `type` is
+  reserved.
 
 ## v0.14.45 — 2026-09-16 — a refused page leaves the bundle as it was
 
-- **A maintenance run that refuses one page no longer half-writes the rest.** Pages
-  were validated and written in the same pass, so a proposal whose second page had a
-  bad path, an unknown type or a secret in it left the first page on disk while the
-  tool reported failure: unlinked, unlogged, and invisible to the index until someone
-  ran `index` again. The agent's natural retry then hit the read-only guard on the page
-  it had already written. Every page is now checked before any is written, so a
-  refusal leaves the bundle exactly as it was, with the same error naming the same
-  page, and a proposal that is refused before anything is written does not create the
-  bundle either: a brand-new knowledge root stays absent instead of being scaffolded
-  for a run that never happened. Two entries aiming at the same file, including two
-  spellings that differ only in case, are refused as well, rather than letting the
-  second quietly overwrite the first.
-- **A folder that differs only in case stops forking the bundle.** A proposed
-  `Concepts/Example.md` landed inside the existing `concepts/` on macOS but was
-  recorded under the proposed spelling, so the index linked a page that was not there:
-  a broken-link finding that never healed, a page counted as an orphan, a missing edge
-  in every search result, and since v0.14.43 a second index line on each run. Proposed
-  paths now fold onto the folders and pages that already exist, and an existing page
-  reached through another spelling is skipped rather than forked into a duplicate.
-  `index.md` and `log.md` stay off limits through every spelling and in every folder:
-  the check runs on the path a page will really take, and the bundle's own names count
-  even before the bundle exists, so `Index.md` proposed into a brand-new root can no
-  longer land on the index that the run itself is about to create.
-- **A page pointing out of the bundle is one finding, not the end of the run.** A
-  symlinked `.md` resolving outside the knowledge root raised a raw path error that
-  aborted the whole `lint` or `index` with zero findings and no clue which file caused
-  it. Both now report that page and carry on with the rest.
+- **A refused maintenance run no longer half-writes the bundle.** Every page is checked before
+  any is written, so a refusal leaves the bundle — or its absence — exactly as it was.
+- Paths that differ only in case land on the existing folder or page instead of forking it,
+  and `index.md` and `log.md` stay protected under any spelling.
+- A symlinked page pointing outside the bundle is reported as one finding instead of aborting
+  `lint` or `index`.
 
 ## v0.14.44 — 2026-09-16 — the index survives a bad rebuild and knows whose it is
 
-- **A failed rebuild no longer empties the knowledge index.** Rebuilding dropped the
-  tables and committed before embedding a single page, so an embedder that failed
-  halfway through left a valid, permanently empty index with the old one already gone,
-  and search answered "index is empty" until someone re-ran it by hand. The drop,
-  recreate and embed now happen in one transaction: if anything fails, or the process
-  dies, the previous index stays searchable and the run reports the error. Incremental
-  runs were already safe and are unchanged.
-- **The index says whose bundle it holds.** It only ever holds one, but `path` was
-  accepted everywhere and honoured nowhere: searching with a `path` returned the other
-  bundle's pages as if they were yours, and indexing or maintaining a second bundle
-  silently replaced the first one's index. Now search returns no results and a hint
-  naming the bundle the index was built for, indexing another bundle is refused with
-  the command to retarget it, and `maintain` on another bundle still writes its pages
-  and reports that the index was left alone. `force=true` retargets deliberately. A
-  moved workspace, or a path that differs inside a container, is adopted by the next
-  index run without complaint; until that run, search keeps naming the bundle it holds
-  rather than answering with pages that have moved away. The owner check happens inside
-  the same transaction that guards the rebuild, so two indexers cannot interleave, and
-  search reads the owner and the rows it gates in one snapshot.
+- **A failed rebuild no longer empties the knowledge index.** The rebuild is one transaction;
+  if it fails, the previous index stays searchable and the error is reported.
+- **The index knows which bundle it holds.** Searching another bundle returns a hint instead of
+  foreign pages, indexing another bundle is refused unless `force=true`, and a moved workspace
+  is adopted by the next index run.
 
 ## v0.14.43 — 2026-09-15 — the journal keeps the transitions, not the stream
 
-- **Run journals keep `model_state` transitions, not every streamed fragment.** The
-  engine emits a `model_state` event for each `tool_calls_delta` chunk, and since
-  v0.14.28 dropped the text deltas those events became the journal's bulk: one
-  41-minute audit run wrote 9,322 identical `agent.model_state` rows (12.3 MB of a
-  13.8 MB file), and one profile carried 77 MB of them across a day. The journal now
-  records a `model_state` only when its payload differs from the previous one of the
-  same run; the first one and every change stay, and the per-run memory is cleared when
-  the run finishes. Only successful writes advance the deduplication state, so a failed
-  append does not suppress the next identical event, and no other event kind is
-  deduplicated — tool calls, usage and replies are journaled in full as before.
-- **`knowledge(action="index")` leaves a valid bundle behind.** An agent that writes a
-  page with `write_file` and then indexes got a searchable page inside an invalid
-  bundle: `index.md` and `log.md` were only created by `ingest`, and nothing linked the
-  new page, so `lint` reported two missing files and an orphan for every card written
-  that way. Indexing without a `path` now creates the required files and links whatever
-  nothing points at, using the same reachability rule as `lint`, so a page already
-  reachable through another page is left alone. Generated links percent-encode the
-  destination and escape the title, so a page called `C#.md`, `my card (v2).md` or one
-  whose title contains brackets is linked in a form the link graph reads back and a
-  second pass adds nothing; the graph also reads hand-written angle-bracketed and
-  percent-encoded links. Any bundle given as an explicit `path` is only read: indexing
-  never writes into a tree you pointed it at.
+- **Run journals stop repeating identical model-state rows.** A state is recorded only when it
+  changes; tool calls, usage and replies are journaled in full as before.
+- **`knowledge(action="index")` leaves a valid bundle.** Without a `path` it creates `index.md`
+  and `log.md` and links pages nothing points to; a bundle given as an explicit `path` is only
+  read.
 
 ## v0.14.42 — 2026-09-15 — a token nobody uses stops being a key
 
-- **Optional device-token expiry driven by inactivity.** `host.token_ttl_days` in
-  `config.yaml` (absent by default, so nothing changes until an operator sets it)
-  expires a device token after that many days without use. It is measured against the
-  device's `last_seen`, or its creation time if it never connected, so a device in
-  regular use never expires no matter how old its token is, and every existing pairing
-  stays valid until the policy exists. An expired device fails authentication with
-  `token-expired`, reads as inactive to the WebSocket authorization watcher so its live
-  sockets drop, and must pair again. The judgement is made on read and never written
-  into the store: lowering, raising or removing the policy takes effect on the next
-  request without a restart, and lifting it brings the device straight back. An
-  unusable value is logged and ignored rather than locking everyone out: text, a
-  negative number, a boolean, `.inf` or `.nan`, and a value beyond a century is
-  clamped. The policy is read straight out of `config.yaml` instead of through the full
-  config parser, so an unrelated broken key cannot raise on every authenticated request,
-  and a file the parser cannot read — corrupt YAML, bytes that are not UTF-8, a number
-  too long for Python to convert — means *no expiry* rather than a silent mass
-  revocation — the same for a device row whose timestamp cannot be parsed.
-  `alpi doctor` reports the policy and how many devices are expired, saying so plainly
-  when a broken store makes that uncountable instead of claiming zero, and
-  `host.connections.list` carries an `expired` flag per device. The config read is
-  cached by file identity, so per-request authentication does not re-parse the file
-  and an edit still takes effect on the next request.
+- **Device tokens can expire after inactivity.** Set `host.token_ttl_days` and a device unused
+  for that many days must pair again; a device in regular use never expires. Unset by default.
+- Changing or removing the policy applies on the next request, and an unusable value is ignored
+  rather than locking devices out.
+- `alpi doctor` reports the policy and how many devices are expired; `host.connections.list`
+  flags them.
 
 ## v0.14.41 — 2026-09-15 — a source that keeps failing gets the door
 
-- **The WebSocket listener throttles authentication failures per source address.**
-  Ten failures per minute (`ALPI_HOST_WS_AUTH_FAILURES_PER_MINUTE`), counted on a
-  sliding window shared with the ALP peer limiter, and a source over budget has its
-  new sockets closed with 1013 before any token is read. Bad device tokens and bad
-  pairing codes both count; successful authentications, timeouts and protocol
-  errors and internal errors never do, so a busy legitimate client is never slowed
-  down. Behind a reverse proxy the socket peer is the proxy, so the client is read
-  from `X-Forwarded-For`, but only when the peer is listed in
-  `ALPI_HOST_WS_TRUSTED_PROXIES` (IPs or CIDRs, empty by default): a direct client
-  cannot relabel itself or charge its failures to another address, the client is the
-  rightmost hop not in the list, and an unparsable hop falls back to the peer. The WSS
-  Compose overlay pins Caddy to `172.30.250.10` and lists it. Per-source counters
-  expire with their window and are capped in number, so anonymous traffic cannot grow
-  the table without bound. `host.network.status` reports the limit, the trusted-proxy
-  count and the `auth_rate_limited` count. A throttled socket is closed with
-  WebSocket code 1013 and the stable reason `auth-rate-limited`, distinct from the
-  capacity closes, so desktop-v0.5.30 and mobile-v0.4.9 can show the block as
-  temporary instead of as an offline daemon or a rejected token, keep the credential
-  and the cache, wait a minute before trying again, and tell a refused socket apart
-  from a host that has actually gone away. Tests cover the
-  throttle, a direct client sending forged forwarded-for headers, a configured proxy,
-  rejected and internal pairing errors, the successful-auth exemption, the bounded
-  limiter and the close code and reason of both 1013 paths.
+- **The WebSocket listener throttles authentication failures per source address.** Ten a
+  minute by default (`ALPI_HOST_WS_AUTH_FAILURES_PER_MINUTE`); successful clients are never
+  slowed.
+- Behind a reverse proxy the client address is trusted only from proxies listed in
+  `ALPI_HOST_WS_TRUSTED_PROXIES`; the WSS Compose overlay sets it.
+- A throttled socket closes with code 1013 and reason `auth-rate-limited`, which desktop-v0.5.30
+  and mobile-v0.4.9 show as a temporary block. `host.network.status` reports the limit and count.
 
 ## v0.14.40 + desktop-v0.5.28 — 2026-09-15 — the pairing link stays on one line
 
-- **`alpi setup` prints the desktop pairing link without hard wrapping.** Rich broke
-  the long `alpi://device?…` link at the terminal width, so a copy from the terminal
-  carried a newline inside `pairing_token` and the desktop's exchange failed with
-  `pairing-invalid` while the code was still valid. The link is now printed with soft
-  wrapping: the terminal may still display it on two rows, but the copied text is one
-  line. A test pins the output on a narrow console. The desktop parser gained the
-  matching tolerance (desktop-v0.5.28).
+- **`alpi setup` prints the pairing link without hard wrapping**, so a copied link no longer
+  carries a newline that makes the exchange fail. The desktop tolerates it too (desktop-v0.5.28).
 
 ## v0.14.39 — 2026-09-15 — the store keeps a digest, the client keeps the token
 
-- **Device tokens are stored hashed at rest.** `connections.yaml` now holds the
-  SHA-256 digest of each device token (`token_hash`), the same treatment pairing
-  grants already had; the cleartext exists only on the paired desktop or mobile
-  client, and authentication hashes the presented token before the constant-time
-  compare. A copy of the file is no longer a usable credential.
-- **The active store migrates itself at startup, with no new backups.** Before the
-  WebSocket listener opens, a cleartext `connections.yaml` is rewritten with
-  digests once; a legacy `devices.yaml` becomes a hashed `connections.yaml` that is
-  re-read and verified before the source is deleted, and no `devices.yaml.migrated`
-  is written any more. Every paired client keeps its token, every `token_id`, revoke
-  and list operation behaves as before, and nothing is re-paired. If both files are
-  found after an interrupted run, `connections.yaml` is the authority, verified
-  first: the legacy file goes only when it has the expected shape and every token
-  in it is provably represented there, otherwise it stays with an explicit
-  pending-migration warning and nothing is imported or revived. An empty, `null` or corrupt store is an explicit error, never zero
-  connections, and a failed migration keeps remote access closed on every path the
-  daemon uses to open the WebSocket listener.
-- **Historical copies are an explicit cleanup, not an automatic one.** Files left by
-  earlier releases (`devices.yaml.migrated`, hand-made `.bak` copies,
-  `connections.yaml.damaged-*`) may still hold cleartext tokens; the daemon leaves
-  them alone, `alpi doctor` lists them, and `docs/OPERATIONS.md` says when to delete
-  them. Downgrading below 0.14.39 is not supported: earlier code cannot read
-  `token_hash`.
+- **Device tokens are stored hashed.** `connections.yaml` keeps only a SHA-256 digest, so a copy
+  of the file is no longer a usable credential.
+- Existing stores migrate on startup without re-pairing any client; a store that cannot be
+  migrated keeps remote access closed.
+- Older copies left by earlier releases are listed by `alpi doctor` for manual cleanup.
+  Downgrading below 0.14.39 is not supported.
 
 ## v0.14.38 — 2026-09-14 — maintain reads the whole page it rewrites
 
-- **`knowledge(action="maintain")` no longer truncates existing pages.** The
-  synthesizer used to see only a 700-character search snippet of each related page
-  and then overwrote the whole file with what it reconstructed, so any page longer
-  than a snippet shrank silently on every touch. It now receives the current full
-  body of each related page, read from disk under the requested root, with a
-  per-page and an aggregate size cap and a `truncated` flag when a cap applied; the
-  prompt states that a proposed body replaces the whole file. An existing page is
-  replaced only when the synthesizer received its full body in that run: a page cut
-  by a cap, or never retrieved, is reported under `skipped` with the reason and the
-  file stays untouched, while new pages in the same proposal still land. The result
-  lists `bytes_before` / `bytes_after` for every written page under `pages`, so a
-  legitimate consolidation is visible and can be reported to the user instead of
-  staying quiet. Regression tests: a multi-KB page survives a maintenance that
-  touches it, a shrink is reported, and a page cut by the per-page cap, cut by the
-  aggregate cap, or never retrieved keeps its bytes.
-- **"OKF" is gone from everything the model or the user reads.** The system
-  prompt, the `knowledge` tool description and parameters, the maintain prompt,
-  the lint message for a missing `index.md` / `log.md`, the packaged references and
-  the architecture and config docs now say "knowledge wiki" or "Markdown pages
-  under `knowledge/`". The acronym was never expanded anywhere and the model kept
-  repeating it into memories and replies because the prompt handed it over. The
-  `okf_*` SQLite table names are internal and stay. A test scans every model-facing
-  surface for the word.
+- **`knowledge(action="maintain")` no longer truncates the pages it rewrites.** It sees each
+  page's full body, skips a page it could not see whole, and reports the size of every page it
+  writes.
+- "OKF" no longer appears anywhere the model or the user reads; it is now "knowledge wiki".
 
 ## v0.14.37 + desktop-v0.5.27 — 2026-09-14 — an unquoted timestamp is still a timestamp
 
-- **Knowledge pages accept an unquoted `updated_at`.** YAML reads
-  `updated_at: 2026-09-14T04:19:00Z` as a datetime, and the frontmatter validator
-  rejected it with *must be a non-empty string*. Agents drop the quotes often enough
-  that every Confluence ingest on a busy profile ended with the same four `edit_file`
-  fixes and a second index run. The frontmatter reader now normalises a YAML datetime
-  or date back to its ISO string before validation; quoted values are untouched.
-  Regression tests cover both shapes through `lint_knowledge`.
-- **OpenRouter provider exclusions, opt-in.** `providers.openrouter.ignore: [together]`
-  in a profile's `config.yaml` sends `provider.ignore` with every request for that
-  profile's `openrouter/…` models — the main model, its tiers and its fallbacks alike.
-  It is an exclusion list, not a pin: OpenRouter keeps choosing freely among the other
-  endpoints, so `:nitro` throughput sorting and its fallbacks still apply. Slugs are
-  lower-cased and de-duplicated; a bare string is accepted as a one-item list; an
-  empty or absent list adds nothing to the request, and non-OpenRouter models never
-  see the field. The list is re-read from disk on every turn like `tools.deny`, so
-  adding, changing or removing an exclusion reaches the next request of a live engine
-  without a restart. Documented in `docs/CONFIG.md` and the config reference. Six
-  routing tests pin the request shape; five engine tests pin the live reload (first
-  turn, changed, added, removed, saved models untouched).
-- **Desktop: the Stop button no longer sticks after a failed run.** When a run died
-  mid-stream the daemon sent `error` then `done`; the client kept the errored turn on
-  screen — correct — but still treated it as running, so the composer showed *Stop*,
-  and pressing it sent `host.chat.cancel` for a request that no longer existed. Nothing
-  came back and the button stayed on *Stopping…* until the next turn. An errored turn
-  is now marked `ended` when `done` lands, the composer shows *Send* for it, and a
-  pending *Stopping…* clears the moment the turn ends whether or not the daemon answers
-  the cancel. Four regression tests, in the stream hook and the chat pane.
+- **Knowledge pages accept an unquoted `updated_at`.** YAML dates and datetimes are read back as
+  ISO strings.
+- **Opt-in OpenRouter provider exclusions.** `providers.openrouter.ignore: [together]` excludes
+  providers for a profile's OpenRouter models, tiers and fallbacks included; changes apply on
+  the next turn.
+- **Desktop: the Stop button no longer sticks after a failed run.**
 
 ## v0.14.36 — 2026-09-12 — doctor probes MCP servers with the profile's own env
 
-- **The interactive `doctor` spawned MCP servers without the profile `.env`.** The
-  daemon starts every MCP server with the profile's effective environment, and so did
-  `doctor.run_all`, but the spinner path the CLI actually runs handed the probe only the
-  server spec. Every `env:VAR` reference in that spec then resolved to an empty string,
-  so a healthy Bitbucket server reported `BITBUCKET_URL is required` and a healthy Lobby
-  server sent an empty `x-mcp-secret` header and surfaced as an OAuth 404. The same two
-  profiles were reviewing pull requests and producing reports all day; only the check
-  was wrong. Both paths now build the environment the same way. A regression test drives
-  `run_and_render` against a profile whose MCP spec references a `.env` key and asserts
-  the probe receives it. Runtime spawning, retries and cost accounting are untouched.
+- **`alpi doctor` probes MCP servers with the profile's own environment.** The interactive check
+  no longer reports a healthy server as misconfigured because its `env:` references came
+  through empty.
 
 ## v0.14.35 — 2026-09-12 — failed streams keep their generation identity
 
-- **Provider lifecycle logs retain the generation ID and provider when available.**
-  First-delta, stream-end and stream-error records now include the identity seen in
-  that attempt, even when a later chunk omits it. A stream that fails after answering
-  can be correlated with the provider's records; an OpenRouter generation ID can be
-  looked up separately when its provider is absent from the chunks. Logging makes no
-  metadata requests and does not change retries, timeouts or cost accounting.
+- **Provider lifecycle logs keep the generation id and provider** seen during an attempt, so a
+  failed stream can be matched with the provider's records. Retries, timeouts and cost are
+  unchanged.
 - **Retries start with a clean identity.** Regression tests cover failure after a
   partial response and a retry with either a new identity or none, so one attempt's
   generation and provider cannot be attributed to the next.
 
 ## v0.14.34 — 2026-09-11 — the model catalog stops lying
 
-- **Four curated entries carried wrong facts.** MiniMax M3 was labelled 512K flatly; its
-  announced ceiling is 1,048,576 and its endpoints range from 262,144 to that, with
-  several serving 524,288, so no single number is the context. GLM 5.3 Flash was labelled
-  1M when its ceiling is 1,310,720, and its note said nothing about reasoning being
-  mandatory — it cannot be switched off, and it defaults to `max`, though `low` and `high`
-  are accepted — which is the setting that most affects what a turn costs and how long it
-  takes. StepFun Step 3.7 Flash declared `reasoning: false` when the provider declares
-  reasoning mandatory. Claude Opus 4.8 is superseded by Opus 5 at exactly the same price
-  with a better score on every published index.
-
-- **The picker offered a floating id and the docs recommended it.** `~deepseek/…-latest`
-  redirects to whatever the vendor ships next, so a scheduled fleet changes model with
-  no config change and no notice; `MODELS.md` went further and told operators to prefer
-  it over the "obsolete" `-0731` snapshot, advice that is also self-contradictory
-  because the alias resolves to that very snapshot. The alias is gone from the catalog,
-  the docs now open with the rule that a profile is never pinned to a floating id, and
-  the test that used to require the alias now requires that no curated id carries the
-  `~` prefix. `deepseek/deepseek-v4-flash-0731` joins the list on its merits: the most
-  used model on OpenRouter, the cheapest with a published agentic score, 1.25M context.
-
-- **Notes follow one schema.** Every curated entry now reads
-  `<modalities> · <context> · <distinguishing trait>`, with the modalities taken from
-  the provider's own `input_modalities` rather than from memory. Raw benchmark indices
-  are out: a bare "agentic 56" in a dropdown carries no scale and informs nobody.
-
-- **`deepseek/deepseek-v4.1-flash` is listed**, and `deepseek/deepseek-v4-pro` stays with
-  a note recording that the bare id is pinned to the 2026-04 build — DeepSeek ships
-  refreshes as new ids, so a stable id is also a stale one.
-
-- **A greedy `max_completion_tokens` no longer eats the input budget.** The catalog
-  generator reserved a reply margin capped only at 32,768 and at the provider's declared
-  maximum output, so a 4K model advertising 3.6K of output was recorded as having 400
-  tokens of input and sent every short exchange straight into compaction. The reserve is
-  now also capped at a quarter of the window, and regenerating the catalog corrected 46
-  entries. `scripts/refresh_models.py` gains a test file covering small windows, large
-  windows, a modest declared output, and missing or malformed values.
-
-- **The docs stop overselling context.** An advertised window is the ceiling of a slug's
-  best endpoint — most of these models are also served at 256K — and alpi's own input
-  budget sits below that again because of the reply reserve. Both documents now say so,
-  separate a floating alias, which redirects and is detectable by `alias_target`, from an
-  experimental route, whose endpoint can be withdrawn, correct an inverted claim about
-  the two MiMo variants, and date their comparisons with the source they came from.
+- **Catalog entries corrected.** Context windows and reasoning notes for several models were
+  wrong and are fixed; Claude Opus 4.8 gives way to Opus 5 at the same price.
+- **No floating ids.** The `~…-latest` alias is gone from the picker, because it silently
+  changes the model behind a scheduled profile. `deepseek/deepseek-v4-flash-0731` and
+  `deepseek/deepseek-v4.1-flash` are listed.
+- Model notes follow one format — modalities, context, distinguishing trait — without bare
+  benchmark scores.
+- A model with a small window is no longer recorded with almost no input budget.
+- The docs explain that an advertised window is a ceiling, not what every endpoint serves.
 
 ## v0.14.33 — 2026-09-10 — a failed run says so, and the unused pin goes
 
-- **The scheduler no longer records a dead turn as `ok`.** The child process exits 0
-  whether its turn succeeded or died, and `_parse_events` had no branch for the `error`
-  event the child emits, so a turn that ended in a provider stall reached the operator as
-  `last_run_status: "ok"` with an output tail of "silent run ok". A real weekly job failed
-  this way twice in a row, three weeks apart, with the work written to disk and never
-  published, and nothing anywhere said so. The error event is now carried through and
-  turns the run into a failure, which is all the existing alert machinery needed. Presence
-  is tracked separately from the message because the engine builds that text from
-  `str(exc)`, which can be empty. A `notify: true` job that produces no reply is also a
-  failure now: its prompt header promises a delivered reply, so an empty one is a broken
-  contract rather than a quiet success. A `notify: false` job may still finish silently.
-
-- **A transient stall is retried when nobody is watching.** `llm.stream` refuses to retry
-  once visible text has been emitted, because replaying it would duplicate output in front
-  of a reader. Scheduled and workgroup-dispatched turns have no reader, and they were
-  bound to the workgroup case alone, so a cron run that stalled twelve seconds after its
-  first token died with two retries unspent and most of its budget unused. Both stream
-  paths, the main loop and the forced wrap-up close, now allow the replay for unattended
-  runs. Interactive turns are unchanged.
-
-- **OpenRouter endpoint pinning is removed.** `providers.openrouter.provider`, introduced
-  in v0.14.32, rested on the theory that pinning a provider would make weekly re-audits
-  comparable. Measured on one real auditor — a single agent, model and repository, so
-  read it as that case and not as a verdict on pinning in general — it did not pay: one
-  pinned endpoint (fp8) put the agent in a scan-and-reread loop that never produced a
-  report, and the other (bf16) delivered an equivalent verdict, the same two findings
-  with the same severities and classifications and no false positives, for 1.8x the cost
-  and 4x the wall time. Free routing produced the correct result in eleven minutes for
-  eight cents. A key nothing sets is a liability in the config surface, so it goes,
-  together with its plumbing in `resolve_model`, the per-turn refresh of `cfg.providers`
-  it required, and its documentation. The experiment was cheap and its answer is recorded
-  here; bringing the key back is a small change if another model behaves differently.
-
-- **The cost trail stays, because it is what settled the question.** `runs.jsonl` keeps
-  recording each turn's `usd`, its `cost_source`, the served `provider` and OpenRouter's
-  `generation_id`, collected across every path that books spend. Those fields are how
-  the two configurations above were compared at all: before them the run ledger carried
-  no cost figure, and the generation id is what proved which endpoint actually answered.
+- **A scheduled run that died is no longer recorded as `ok`.** An error inside the turn fails
+  the run and raises the usual alert, and a `notify: true` job that produces no reply is a
+  failure too.
+- **Unattended runs retry a transient stall** even after output has started; interactive turns
+  are unchanged.
+- **`providers.openrouter.provider` is removed.** Pinning an endpoint did not improve results in
+  practice; the per-turn cost trail it relied on stays.
 
 ## v0.14.32 — 2026-09-10 — pin the endpoint, record what answered
 
-- **OpenRouter routing can be pinned per profile.** `providers.openrouter.provider`
-  is passed through untouched as the request's `provider` object, so `order`,
-  `only`, `ignore`, `quantizations`, `sort`, `allow_fallbacks` and
-  `require_parameters` all reach the API. One slug is served by many upstream
-  endpoints that differ in quantization, tokenizer, context window and price;
-  without a pin OpenRouter balances across them and two runs of the same prompt
-  are not comparable. `allow_fallbacks: false` is the load-bearing field, because
-  otherwise a 429 on the chosen endpoint re-routes in silence. Naming a provider
-  narrows the choice without freezing it — one provider can publish several
-  endpoints for the same slug and change them over time — so this buys much less
-  variance, not a byte-identical runtime. The pin applies to the profile model, to
-  tier models and to explicit model overrides, it coexists with the reasoning block
-  already sent in `extra_body`, and a mid-session edit takes effect on the next
-  turn like the rest of the per-turn config.
+- **OpenRouter routing can be pinned per profile** with `providers.openrouter.provider`, passed
+  through as the request's `provider` object. (Removed again in v0.14.33.)
+- **The run ledger records the cost trail.** Each `runs.jsonl` row carries the turn's `usd`, its
+  `cost_source`, the served `provider` and OpenRouter's `generation_id`.
+- A Nitro cost estimated from the base tariff is labelled `table-base`, not `table`.
 
-- **The run ledger records the cost trail.** Each row in `runs.jsonl` now carries
-  the turn's `usd`, the `cost_source` that produced it, the served `provider` and
-  OpenRouter's `generation_id`. LiteLLM rebuilds streaming chunks without the
-  provider field, so agent turns record the generation id and a null provider;
-  the id is enough to recover provider, endpoint and the real charge afterwards.
-  Non-streaming calls record the provider directly. The identity is collected on
-  every path that also books spend — the main loop, the forced wrap-up close, tool
-  calls through the usage sink, and compaction side calls — so the row's `usd` and
-  its trail describe the same set of requests. The generation id never passes
-  through the output-tail redactor, which would mask it as a blob, and the field is
-  trimmed by whole ids so a surviving id is always one you can look up. The usage
-  sink that tools report through now carries the same two fields; it is invoked
-  exactly once per call, because retrying a callback that may already have written
-  to the session and the ledger would double-book the spend.
+## v0.14.31 — 2026-09-10 — project clones carry only what the project needs
 
-- **A Nitro cost estimated from the base tariff says so.** When the catalog has no
-  `:nitro` row the fallback still prices the call at the base rate, but tags it
-  `table-base` instead of `table`. The base rate is the cheapest endpoint's, and
-  measurements against live Nitro calls came in 1.45x to 6.5x below the real
-  charge, so the two estimates must not share a label in the cost-source
-  histogram. Reported provider cost is unaffected and still wins.
-
-## v0.14.31 — 2026-09-10 — project clones carry only what the hotel needs
-
-- **Recipes can exclude template paths from the clone.** A `project.exclude`
-  list of plain relative paths (test fixtures, contributor docs, example
-  configs) makes the project clone shallow and sparse: those paths are absent
-  from the working tree while the clone's `git status` stays clean, so
-  template boundary gates keep passing. Recipes without the field clone
-  exactly as before. Exclusions are validated after parameter interpolation
-  and reject control characters. Sparse checkout omits working-tree files;
-  it does not filter blobs from the fetched commit.
+- **Recipes can exclude template paths from the clone.** `project.exclude` lists plain relative
+  paths that stay out of the working tree while `git status` stays clean; recipes without it
+  clone as before.
 
 ## v0.14.30 — 2026-09-08 — repair the cited source before rebuilding
 
@@ -803,61 +316,23 @@
 
 ## v0.14.28 — 2026-09-07 — run journals stop recording the stream
 
-- **Run journals no longer store streaming deltas.** Every `reasoning_delta`
-  and `assistant_delta` frame used to be appended to `runs/<run_id>.jsonl`;
-  one content turn of the web factory was a 20 MB file of which 98% was
-  those frames, and a seven-profile machine held 6 GB after two weeks. The
-  two kinds are now dropped before anything is serialized, while the start
-  record, tool starts and ends, tool states, usage, model state, every
-  `assistant_done` (the one with `final=True` is the deliverable, the earlier
-  ones are preamble), errors and the finish outcome stay. `alpi runs show` and
-  `host.run.read` therefore return an operational timeline, not a replay of
-  the stream — the reconnect replay was always the sessions sidecar.
-- **Run journal retention has a size cap.** The *Old and excess run journals*
-  category offers completed journals older than 30 days plus, oldest first, the
-  completed ones beyond 200 MiB per profile. Only journals with a valid summary
-  whose status is not `running` qualify: a hung journal is left to stale
-  reconciliation, an unreadable one is kept, the size branch never touches a
-  journal completed in the last hour (a workgroup child finishes its journal
-  before the parent settles its cost), and the daemon's active set stays as a
-  second guard. Cleanup only offers; nothing is deleted on its own.
-- **Storage shows run journals.** `host.profile.storage` gains a `runs` row,
-  so the Logs group in the clients counts them.
+- **Run journals no longer store streaming deltas.** They keep an operational timeline — tool
+  calls, usage, replies, errors and the outcome — at a fraction of the size.
+- **Cleanup offers old and oversized run journals**: completed journals older than 30 days,
+  plus the oldest beyond 200 MiB per profile. Nothing is deleted on its own.
+- `host.profile.storage` counts run journals.
 
 ## v0.14.27 — 2026-09-07 — workgroup tombstones expire
 
-- **Removal markers no longer accumulate forever.** Removing a workgroup leaves
-  an empty tombstone file per local home under
-  `alp/secrets/subscriptions.removed.d/` so a stale write-back cannot
-  resurrect the subscription. They were kept for ever; with the web factory
-  removing a hundred pipelines a day across eight homes that was 12,000 empty
-  files on one machine, which per-file sync tools drag along one by one. A
-  marker now expires two days after the removal — longer than any in-flight
-  dispatch, and tombstones never cross machines — and every new tombstone
-  prunes the expired ones of its home. A marker still hiding an entry in
-  `subscriptions.yaml`, or whose workgroup directory still exists, is kept
-  until the entry is compacted away, and when either source cannot be read
-  or parsed no marker expires at all.
-- **`setup → Cleanup` sees them.** A *Workgroup tombstones* category (also on
-  `host.cleanup.plan` / `apply`) lists the expired markers of the selected
-  home so an installation upgraded from an earlier release reclaims its
-  backlog profile by profile, like every other category, and Cleanup's status
-  line, rows and confirmations now count items next to the bytes, so a set
-  that weighs nothing no longer reads as `0 B`.
+- **Workgroup removal markers expire** two days after the removal instead of accumulating
+  forever.
+- `setup → Cleanup` gains a *Workgroup tombstones* category and counts items next to bytes.
 
 ## v0.14.26 — 2026-09-06 — the container reaps its orphans
 
-- **The container reaps its orphans.** `alpi daemon start` used to be PID 1
-  inside the image, so every orphan in the container reparented to a daemon
-  that never waited for it: sentinel's PR-review cron left 38 zombies against
-  41 h of uptime on the mirai box. When the command finds itself as PID 1 it
-  now forks first: PID 1 stays a minimal init that forwards signals, reaps
-  every exited process the kernel hands it and exits with the daemon's code,
-  and the daemon runs as its only child. Exited MCP wrapper chains,
-  `docker exec` sessions and the grandchildren of a hard-killed turn no longer
-  accumulate; the restart policy sees the same exit codes as before. The
-  reaper lives outside the daemon on purpose — a `waitpid(-1)` in that process
-  would steal exit statuses from its own `Popen` and asyncio children.
+- **The container reaps its orphans.** When the daemon starts as PID 1 it runs behind a minimal
+  init that forwards signals and reaps exited processes, so zombies no longer accumulate. Exit
+  codes are unchanged.
 
 ## v0.14.25 — 2026-09-06 — a refused handoff still continues
 
@@ -904,97 +379,30 @@
   asked to state as resolved or persistent, instead of auditing from a blank
   page. The checklist follows both deterministic gate advances and hub-authored
   continuations through a single task-post boundary.
-- **How many workgroups are active at once is a daemon setting.** The cap is
-  now `alp.max_active_workgroups`: it counts every workgroup with live work,
-  a deliberation with an open task as much as a running pipeline, and it is
-  enforced where launches queue — pipelines wait for a slot, deliberations
-  always open and count against it. It lives on
-  the default profile and applies to every hub, a hub may still pin its own,
-  and new installs seed it at `5` instead of unlimited. `alpi workgroup
-  limit` shows or sets it (`0` = unlimited), `workgroup list` reports the cap,
-  its origin and the admission queue, and the profile detail exposes them so
-  clients can edit the value without touching `config.yaml`.
+- **The active-workgroup limit is a daemon setting.** `alp.max_active_workgroups` counts every
+  workgroup with live work; it lives on the default profile, a hub may pin its own, and new
+  installs seed it at `5`. `alpi workgroup limit` shows or sets it (`0` = unlimited).
 
 ## v0.14.21 — 2026-09-05 — MCP servers no longer survive stop()
 
-- **Stopping an MCP server now takes its whole wrapper chain down.** A stdio
-  server started through `npx` is a wrapper chain, and stopping only the
-  wrapper left the real server running, orphaned, on every turn — the source
-  of sentinel's leaked `bitbucket-mcp` servers on the mirai box. Each server
-  now runs in its own process group; `stop()` closes the server's stdin so a
-  well-behaved server exits on its own within the grace period, and only then
-  escalates to SIGTERM and, last, SIGKILL on the whole group. The terminal
-  client now runs that shutdown before it exits, so servers no longer outlive
-  the TUI. This ends live orphaned servers. Reaping the exited processes when
-  the daemon runs as PID 1 remains open as PROC.1 — until it lands, those
-  exits still show as zombies inside the container.
+- **Stopping an MCP server takes its whole process chain down.** A server started through `npx`
+  no longer survives as an orphan, and the terminal client stops its servers before exiting.
 
 ## v0.14.20 — 2026-09-04 — pipelines finish without an operator
 
-- **A turn that runs out of time or steps continues instead of failing.** The
-  worker posts a single `#working (continuation)` describing what is done and
-  what is next, and the daemon resumes the same task up to four times per
-  repair round. Partial or untouched artifacts are never gated as deliveries, an empty
-  final reply takes the same path, and only finalizer continuations count, so
-  a red gate after an earlier continuation can no longer strand a phase. When
-  the model cannot even write that status in time, the daemon posts it itself,
-  so the next dispatch follows within seconds instead of waiting for the
-  watchdog.
-- **A handoff that changed nothing is a continuation, not a repair.** When a
-  red gate finds the owned artifacts unchanged, or byte-identical to the
-  previous red delivery, the daemon re-dispatches the same task twice without
-  spending a repair round, then halts loudly.
-- **A `QA FAIL` reopens the phase it names.** Instead of stopping at
-  `#done BLOCKED`, the daemon closes the QA phase with the verdict and reopens
-  the phase whose declared paths own the file the verdict names (a
-  `src/config/site.json` defect goes back to intake, not to content), up to
-  twice per workgroup; the chain then re-walks translation, build and QA. A
-  green deterministic gate still cannot overrule an explicit `QA FAIL` or
-  `QA BLOCKED`.
-- **A red hub-routed gate repairs itself or stops.** When a verification gate
-  such as `check:audit` fails, the daemon reopens the phase that owns the
-  failing file before waking the hub; if no phase can own it, the hub is woken
-  at most three times and the daemon then closes `#done BLOCKED` itself, so a
-  hub with no legal move can no longer re-wake the auditor forever.
-- **Build phases start on a clean clone.** A declared output directory such as
-  `dist/` or `.astro/` is created when the phase opens instead of refusing the
-  terminal until it exists, so the first `npm run build` runs on the first
-  attempt and no worker has to invent placeholder files that later fail the
-  boundary audit.
-- **An exhausted repair ladder closes once and stops.** The hub's final move is
-  a durable `#done BLOCKED`; every accepted blocked close emits the same
-  structured event whether the model or the daemon wrote it, and expected QA
-  verdict rejections are informational in the daemon log.
-- **Dispatched workers always deliver to their own workgroup.** `workgroup_post`
-  defaults to the dispatch workgroup and corrects a mistyped id, pipeline
-  members no longer see the `peer` tool, a bare model-authored `#working` is
-  refused, and a handoff posted before any tool ran is refused too, so a
-  delivery cannot be lost to a typo, a side channel, a stray heartbeat or an
-  acknowledgement mistaken for a result. A worker that answers with nothing is
-  told to hand off or keep working, not to write prose that nobody reads.
-- **Pipeline workers receive a compact execution contract.** Targeted members
-  execute one active phase and deliver once; declared pipeline turns omit
-  cross-project memory and historical search tools while direct chats keep
-  their normal context, and a foreground `terminal` command may run for 15
-  minutes by default so a cold `npm ci` finishes. A repair round carries every
-  retained blocking finding with passing and informational noise removed.
-- **Idle and paused workgroups cost almost nothing.** Member mirrors derive
-  their cadence from task state: live work long-polls, idle work samples
-  nonblocking, paused work waits for a remote resume; empty pulls no longer
-  refresh presence or rewrite the mirror, and paused hubs skip transcript work
-  and admission slots.
-- **Recovery timing follows awake time and stays honest.** Watchdog age and
-  refire spacing use daemon-observed monotonic time, so a suspended laptop
-  cannot consume repair attempts; transient transport failures keep their flag
-  through peer and workgroup calls; the configured step ceiling is literal
-  again for budgeted, free and local models.
-- **Clients see exact workgroup state.** Inventories expose the active pipeline
-  phase, reopening an earlier phase clears downstream completion, deleting a
-  busy workgroup leaves no phantom row, and removing the last session prunes
-  its preview index.
+- **A turn that runs out of time or steps continues instead of failing.** The worker posts a
+  continuation status and the daemon resumes the same task, up to four times per repair round.
+- **An unchanged handoff is re-dispatched rather than counted as a repair**, and halts loudly
+  after two tries.
+- **A QA failure reopens the phase that owns the file it names**, and the chain re-walks from
+  there, up to twice per workgroup.
+- **A red verification gate repairs itself or stops.** The owning phase is reopened, or the hub
+  is woken at most three times before the daemon closes `#done BLOCKED`.
+- Declared output directories exist when a build phase opens, dispatched workers always deliver
+  to their own workgroup, and idle or paused workgroups cost almost nothing.
+- Recovery timing counts awake time, so a suspended laptop no longer burns repair attempts.
 
-Nothing to migrate. Queue admission, pipeline gates and the ALP wire protocol
-retain the v0.14.19 behavior.
+Nothing to migrate.
 
 ## v0.14.19 — 2026-09-01 — busy fleets stay responsive and observable
 
@@ -1027,10 +435,10 @@ are unchanged.
   Direct triggers return the stable `pipeline-prepare-failed` reason without
   appending to the transcript. Queued failures remove only their own entry,
   emit an admission-failed refresh and let the next FIFO item proceed.
-- **Media updates no longer depend on a stale hand-maintained inventory.** The
-  hotel recipe asks the cloned project to rebuild its own media inventory at
+- **Media updates no longer depend on a stale hand-maintained inventory.** A
+  recipe can ask the cloned project to rebuild its own media inventory at
   admission, so copying files into `assets/source/` and triggering
-  `media-update` is sufficient; Muse receives the exact current file set.
+  `media-update` is sufficient; the media phase receives the exact current file set.
 - **Read-only verification gates can return failures to orchestration.** A
   recipe may set `gate.repair: hub`; the first red result wakes the hub instead
   of exhausting repair rounds against an owner that cannot modify the failing
@@ -1041,130 +449,49 @@ relaunch them from a recipe declaring `prepare` to acquire this behavior.
 
 ## v0.14.17 — 2026-08-31 — workgroup pipelines queue without disappearing
 
-- **Hub profiles can cap whole active pipelines without serializing their
-  phases.** `alp.max_active_pipelines` defaults to unlimited; a positive value
-  admits that many running or between-phase workgroups and stores excess
-  launches and triggers in a persistent FIFO queue that survives daemon
-  restarts.
-- **Queued work remains observable and recoverable.** CLI launch, list, show and
-  trigger output expose queue admission and position; the opt-in host inventory
-  status reports queued, running, between, blocked and completed pipelines for
-  clients. Deleting a workgroup also removes its queue entry, while pausing it
-  leaves its place durable until it can run again.
-- **Slow member turns announce useful progress automatically.** A member that
-  has not posted after `alp.working_after_s` emits one phase-specific `#working`
-  heartbeat; an earlier post or process exit cancels it. The setting defaults
-  to 30 seconds and can be disabled with `0`.
-- **Pipeline admission replaces the temporary per-profile turn throttle.** Once
-  a workgroup is admitted, its existing profile dispatch and watchdog rules
-  operate normally; capacity is controlled at the maintainable pipeline
-  boundary instead of making individual profile turns appear starved.
-- **A red gate no longer poisons its phase boundary with its own generated
-  files.** After the pre-gate boundary check passes, Alpi records the trusted
-  gate command's filesystem effects as the next retry baseline; later agent
-  edits outside the declared paths remain blocked.
-- **Deleted workgroup history no longer starves active pipelines.** Member
-  profiles cache their tombstone inventory until its directory changes instead
-  of relisting every historical marker on every subscription pull. The
-  anti-resurrection guarantee is unchanged, while large local histories stop
-  consuming the daemon's dispatch loop.
+- **Hubs can cap how many pipelines run at once.** `alp.max_active_pipelines` (unlimited by
+  default) queues excess launches and triggers in a persistent FIFO that survives restarts.
+- Queue position shows in the CLI and the host inventory; deleting a workgroup removes its entry
+  and pausing keeps its place.
+- A member that has not posted after `alp.working_after_s` (30 s by default, `0` disables) posts
+  one `#working` heartbeat.
+- A red gate no longer blocks its phase on files the gate itself generated, and a long workgroup
+  history no longer slows dispatch.
 
-Nothing to migrate. The queue is disabled by default; set
-`alp.max_active_pipelines` on a hub profile and restart its daemon to enable
-bounded admission.
+Nothing to migrate; the queue stays off until `alp.max_active_pipelines` is set on a hub.
 
 ## v0.14.16 — 2026-08-28 — failed QA pipelines reach a durable close
 
-- **Automatic hubs can close a failed QA phase before the generic final
-  checkpoint.** The exception is deliberately narrow: the active phase must be
-  QA, its declared owner must have posted an exact `QA FAIL` or `QA BLOCKED`
-  verdict, and the hub must preserve that verdict in its blocked close. Other
-  automatic `BLOCKED` attempts remain rejected until the final checkpoint.
-- **Exhausted repair watchdogs no longer leave pipelines open forever.** When a
-  final repair request makes no transcript progress after all retries, the
-  daemon now records a machine-authored `#done BLOCKED` outcome with the last QA
-  verdict and stalled sequence. The folded workgroup state therefore agrees
-  with the watchdog instead of appearing active indefinitely.
-- **Project launches tolerate temporary clone contention.** Template clones now
-  have five minutes to complete instead of two, preventing parallel factory
-  launches and their dependency installs from turning a slow clone into an
-  orphan-free but unnecessary launch failure.
-- **Pipeline supervision no longer races the provider's first-token watchdog.**
-  The pipeline idle window now leaves a one-minute margin beyond the default
-  provider timeout, so the model layer can report or retry a stalled request
-  before the outer workgroup supervisor terminates its process.
-- **Large production phases have a thirty-minute active-runtime backstop.**
-  Image optimization and other active builds can exceed fifteen minutes on
-  supplied media sets; suspending the host no longer spends a turn's soft time
-  budget, while idle supervision still terminates genuinely stalled turns
-  after six minutes without progress.
-- **Parallel workgroups now apply backpressure per profile.** A profile runs at
-  most two automatic workgroup turns at once; additional ready workgroups stay
-  queued and are picked up by the normal poll cycle. A queued phase does not
-  spend watchdog recovery attempts while its owner is at capacity.
-
-Nothing to migrate. Existing workgroups acquire the stricter QA recovery and
-durable watchdog close when the daemon restarts on this version.
+- **A failed QA phase reaches a durable close.** The hub may close with the exact QA verdict,
+  and a repair watchdog that makes no progress closes `#done BLOCKED` itself instead of leaving
+  the pipeline open.
+- Template clones get five minutes instead of two.
+- Supervision leaves the provider's watchdog time to retry a stalled request, and long builds
+  get a thirty-minute active-runtime backstop; an idle turn still stops after six minutes.
+- A profile runs at most two automatic workgroup turns at once; the rest wait without spending
+  recovery attempts.
 
 ## v0.14.15 — 2026-08-28 — delegated chats and workgroup runs close cleanly
 
-- **Local operators can launch a chat for an existing paired connection.**
-  `alpi -p <profile> chat --once <prompt> --connection-id <id>` now enters the
-  running daemon through a local-only delegated stream instead of creating an
-  unrelated CLI engine. The saved session belongs to the selected connection,
-  while the ordinary `host.chat.send` path owns execution.
-- **Externally launched chats expose the same live state as client-originated
-  turns.** The daemon records `in_flight`, replay sidecar frames, heartbeats,
-  tool progress, the stable run id, completion, and cancellation in the
-  canonical host-chat lifecycle. Desktop and mobile can therefore reconstruct
-  activity for a delegated session without a second run-state protocol.
-- **Delegation cannot cross the remote trust boundary.** `host.chat.delegate`
-  is accepted only on the sovereign Unix socket, requires an active target
-  connection, and preserves member profile scopes. Paired WebSocket clients,
-  including admins, cannot impersonate another connection.
-- **Forced workgroup exits no longer leave durable runs open.** The daemon now
-  assigns the child run id before launch and records its terminal outcome when
-  the child is timed out, preempted, cancelled, or otherwise exits before its
-  own cleanup runs. On startup, stale journals left by older daemons are closed
-  as interrupted instead of remaining permanently `running`.
-- **Workgroup spend is complete even when no final post lands.** After each
-  supervised turn, the daemon compares the run's recorded usage with the cost
-  already declared by that turn's accepted posts and adds only the residual to
-  the lifetime workgroup ledger. The settlement is hidden from the transcript,
-  keyed by `turn_id`, and idempotent, so retries cannot double-charge it. Daily
-  workgroup usage includes the same residual records.
-
-Nothing to migrate. Existing `alpi chat --once` behavior is unchanged unless
-`--connection-id` is supplied; the daemon must already be running for a
-delegated launch. Stale run journals are reconciled automatically on daemon
-startup.
+- **A chat can be launched for an existing paired connection.** `alpi -p <profile> chat --once
+  <prompt> --connection-id <id>` runs through the daemon, and the session belongs to that
+  connection with the same live state as a client-originated turn.
+- Delegation is accepted only on the local Unix socket; paired clients cannot impersonate
+  another connection.
+- Forced workgroup exits close their run journals, and journals left by older daemons are
+  closed on startup.
+- Workgroup spend includes usage no post declared, settled once per turn.
 
 ## v0.14.14 — 2026-08-27 — workgroup ownership reaches the shell
 
-- **Pipeline write boundaries now cover or remove terminal subprocesses.** On
-  bare metal, a workgroup phase with declared `paths` forces the OS sandbox
-  even when the profile has disabled its ordinary terminal sandbox. The
-  workspace and `~/.alpi` remain readable but become read-only; only exact
-  files and trailing `/**` subtrees are writable. A scope-only sandbox keeps
-  the profile's previous network access, while an explicitly enabled sandbox
-  still applies its configured network policy. In the official Docker runtime,
-  scoped turns omit `terminal`; native file and search tools remain available
-  and daemon gates still run.
-- **Temporary phase restrictions identify themselves correctly.** A stale tool
-  call now tells the agent which phase owns the artifact and distinguishes that
-  boundary from permanent profile `tools.deny`. Dispatch prompts expose the
-  same ownership context, so a routing error produces an actionable handoff
-  instead of a false claim that the profile lacks writing capability.
-- **Quoted handles no longer acquire workgroup tasks.** Routing handles are
-  accepted before `#task` and immediately after its slug, while later mentions
-  in descriptions or QA evidence remain prose. Pipeline openers with invented
-  phase slugs are rejected before posting, preventing ownerless recovery tasks
-  from bypassing the declared chain.
+- **Pipeline write boundaries reach the shell.** On a host install a phase with declared `paths`
+  sandboxes `terminal` so only those paths are writable; in the Docker runtime scoped turns omit
+  `terminal`.
+- A blocked tool call names the phase that owns the file, quoted handles no longer pick up
+  tasks, and openers naming an unknown phase are refused.
 
-Nothing to migrate. Existing recipe `paths` declarations acquire terminal
-enforcement automatically. In bare-metal profiles, unsupported intermediate
-globs must be replaced by exact files or trailing `/**` subtrees before that
-phase can use `terminal`.
+On a host install, intermediate globs in `paths` must become exact files or trailing `/**` before
+that phase can use `terminal`.
 
 ## v0.14.13 — 2026-08-26 — content search respects secret boundaries
 
@@ -1210,13 +537,9 @@ active-turn duration automatically; the two `alp.*` keys are optional.
   existing `tools.read_image.model` contract. It powers `read_image` and
   opt-in browser screenshot analysis; clearing it returns both to the main
   model. Chat attachments deliberately stay on the main turn.
-- **Clients receive the vision route and a model they can actually select.**
-  `host.profile.detail` now returns `vision_model`, and profiles with an
-  OpenRouter key receive the curated OpenRouter choices alongside models they
-  saved manually. The catalog includes DeepSeek's experimental V4 Flash Vision
-  route and the context-window guard knows its 1M-class limit. New profiles see
-  the current `~deepseek/deepseek-v4-flash-latest` alias instead of the obsolete
-  `-0731` snapshot; historical configs remain resolvable.
+- **Clients receive the vision route and selectable models.** `host.profile.detail` returns
+  `vision_model`, and profiles with an OpenRouter key get the curated OpenRouter choices next to
+  their own saved models.
 - **Empty overrides leave no dead configuration behind.** Clearing Vision model
   through a client prunes the empty `tools.read_image` block instead of
   persisting a meaningless empty mapping.
@@ -1226,265 +549,86 @@ Vision model is selected.
 
 ## v0.14.10 — 2026-08-25 — a failing tool gets to say why
 
-- **A failed tool's own diagnosis reaches the model — on every path.** When a
-  tool failed, the relaying side forwarded only the error label and discarded
-  the tool's output — but that output is where skill runners print their
-  carefully written failure JSON. Observed in the field: an agent staring at
-  `script exited rc=1`, then reading its own runner's source code to guess
-  what went wrong, while the runner had already said `clone failed: could not
-  read Username` into the discarded stream. The engine, `delegate` and
-  `research` — the sub-agent most likely to iterate on failing commands — now
-  build the payload through one shared helper: error followed by output,
-  still capped by each path's budget; failures with no output stay as terse
-  as before. Each of the three paths carries its own regression test.
-- **Delegate's tool payloads arrive fenced as untrusted content.** The engine
-  and `research` already wrapped every relayed tool output in the
-  untrusted-content markers; `delegate` — the write-capable sub-agent that
-  runs terminal commands — inserted them raw, successes included. With failed
-  output now carrying repo-controlled stdout/stderr, that gap became a steering
-  vector: a hostile repository could print instructions into a failing build
-  and address the one sub-agent that can edit files. Delegate now sanitizes
-  after budgeting, exactly like research, and both sub-agent tests require the
-  markers around the diagnosis.
-- **ALP secrets directories are born private and heal themselves.** The
-  keypair bootstrap created `alp/secrets/` with the process umask — 0755 on
-  every deployment checked — leaving the directory around a 0600 private key
-  world-listable. It is now chmod'd to 0700 at creation and re-checked on
-  every daemon start, so directories left open by older versions repair
-  themselves without an operator.
-
-Nothing to migrate.
+- **A failing tool's own diagnosis reaches the model**, on the main loop and in `delegate` and
+  `research` alike.
+- **`delegate` fences tool output as untrusted content**, as the other paths already did.
+- **ALP secrets directories are private** (0700) and repair themselves on daemon start.
 
 ## v0.14.9 — 2026-08-24 — a tool that cannot run is no longer offered
 
-- **The browser tool works in Docker.** The image never installed the system
-  libraries Chromium loads at startup — not in any version of it since the
-  image was introduced — so the first `browser` call downloaded a browser into
-  the profile volume and then failed to launch, on every container, every time.
-  Measured on the maintainer's server: three containers holding 1.9 GB of a
-  browser that could not start, and the only `browser` call in months of
-  history died on a missing `libglib`. The image now installs those libraries
-  at build time, and it resolves them through its own playwright instead of a
-  hand-written list, because `pip install .` ignores the lock file and the
-  playwright inside the image outruns the one the tests import (observed: 1.62
-  against 1.58). No list to keep in sync, so none to forget. Its package layers
-  grow from 110 MB to 443 MB, which buys the fonts a screenshot needs to render
-  text instead of boxes — including Thai and CJK.
-- **The browser downloads a third of what it used to.** `browser` launches
-  `chrome-headless-shell`; the full Chromium build beside it was never used by
-  anything. Installing only the shell takes a profile's browser cache from
-  984 MB to 344 MB, and an existing profile reclaims the difference — about
-  640 MB — the next time the shell installs, because the stale full build is
-  no longer something alpi wants on disk.
-- **An unavailable tool is withheld, not advertised, and the repair works.**
-  The browser's availability probe only asked whether the Python package
-  imported, which is true on any slim Linux image and says nothing about
-  whether a browser can start — so the agent was offered a tool that could only
-  fail, and spent turns and a download finding out. The probe now tests the
-  libraries themselves and keeps the tool out of the model's list when they are
-  missing. `alpi doctor` names what is absent and gives a command that exists:
-  the previous advice ran a bare `playwright`, which is not on `PATH` for the
-  recommended `uv tool` install, so it could only answer command-not-found.
-- **Three groups of `alpi doctor` checks stop running only in tests.** The
-  command has two check paths and renders through one of them; the section that
-  reports cached downloads and stale browser builds, the outsized-store
-  warnings, and the ALP identity checks were all wired into the other. The last
-  one matters most: duplicate peer pubkeys and a peer carrying this agent's own
-  key — what a cloned `/data` volume looks like — were reported as a hard
-  failure to nobody. All three now render, `doctor` exits non-zero on them, and
-  a test holds the two paths to the same set of checks rather than the same set
-  of section headings, which is what let this hide.
-- **`web_search` stops racing itself into a rate limit.** One search fans out
-  to five or more upstream engines, so a batch of parallel searches multiplies
-  into dozens of requests and trips a block that covers the whole machine's IP
-  — measured at 16 minutes 47 seconds before it lifted. Searches are now
-  serialised and spaced, retried once with a backoff, and bounded per turn
-  (`tools.web_search.max_per_turn`). When they do fail the error carries the
-  real exception instead of "the ddgs backend raised", and tells the agent that
-  reformulating and searching again is the one thing that cannot help — which
-  is exactly what it did four times in a row before giving up.
+- **The browser tool works in Docker.** The image installs the libraries Chromium needs,
+  including fonts for Thai and CJK.
+- **The browser download is a third of the size**, and existing profiles reclaim the unused
+  full build.
+- **An unavailable tool is no longer offered to the model**, and `alpi doctor` names what is
+  missing with a command that works.
+- `alpi doctor` reports three groups of checks it had been skipping, including duplicate peer
+  identities.
+- **`web_search` stops racing itself into rate limits.** Searches are serialised, spaced, retried
+  once and bounded per turn (`tools.web_search.max_per_turn`).
 
-Nothing to migrate. Profiles that deny `browser` are unaffected, and the fix
-reaches a running container on the next image pull.
+Nothing to migrate.
 
 ## v0.14.8 — 2026-08-23 — every turn has a spine
 
-- **Runs are durable and operable.** Every engine turn now has a stable run id
-  and a journal of bounded, redacted events. Runs from chat, schedules,
-  workgroups, research and delegates can be inspected through `alpi runs`,
-  `/runs`, and the host API; an active daemon run can be interrupted by id
-  without guessing its request or session.
-- **Durability does not turn commands into a secret store.** Terminal command
-  text is omitted from run journals, saved turns and reconnect sidecars, even
-  when nested inside a workflow; derived previews are recomputed only after
-  sanitization. Run listings read only journal edges instead of replaying every
-  event, finished runs release their in-memory bookkeeping, and journals older
-  than 30 days are available through Cleanup.
-- **Stopping wins at the dispatch boundary.** An interrupt received after the
-  model returns a parallel-safe batch now skips the entire batch. The local
-  socket can also stop a run started by a paired client, while remote clients
-  remain scoped to their own connection.
-- **Safe work overlaps without changing the transcript.** Read-only tools can
-  execute concurrently when the whole model batch explicitly permits it.
-  Mutations, terminal calls and mixed batches remain serial, while results and
-  progress are replayed in the model's original order.
-- **All tool calls cross one policy boundary.** Direct calls, nested research or
-  delegate work, MCP tools and the new workflow DAG use the same run context,
-  denylist, role checks, availability checks and audit journal. A workflow can
-  no longer gain authority by moving a call into a nested step.
-- **Execution has a replaceable world.** Local execution remains the default.
-  Profiles may opt into an ephemeral Docker terminal backend that preserves the
-  workspace's absolute namespace and disables network unless explicitly
-  enabled. Docker foreground containers are removed on timeout, unsafe image
-  arguments and missing mount roots fail closed, and background terminal jobs
-  are refused instead of becoming orphaned containers. The execution settings
-  and denylist are refreshed before each turn constructs its policy boundary.
+- **Every turn has a durable run.** Runs from chat, schedules, workgroups, research and
+  delegates get a stable id and a bounded, redacted journal, inspectable with `alpi runs`,
+  `/runs` and the host API; an active run can be interrupted by id.
+- Terminal command text is never stored in journals, saved turns or reconnect sidecars.
+- Read-only tools may run concurrently when the whole batch allows it; results keep the
+  model's order.
+- Every tool call — direct, nested, MCP or workflow — crosses the same policy checks.
+- Profiles can opt into an ephemeral Docker terminal backend, with network off by default.
 
-Existing profiles need no migration. Local execution and exclusive-by-default
-tool ordering preserve the previous behavior until the new options are used;
-the next home bootstrap adds `runs/` to existing profile `.gitignore` files.
+Nothing to migrate; the new behavior is opt-in.
 
 ## v0.14.7 — 2026-08-23 — the daemon stops choking on its own bookkeeping
 
-- **The apps stop reporting the daemon as unreachable.** With a handful of
-  profiles subscribed to a handful of workgroups, the daemon froze in bursts of
-  up to 19 seconds at a time — long enough for the desktop app's requests to
-  time out and for it to declare the daemon gone. Measured on the maintainer's
-  machine over the same 150-second window: a request that should answer in
-  milliseconds took 17 seconds and every single probe was stalled; it now
-  answers in 5ms at the median, with 2% of probes still seeing a pause and the
-  worst one down from 19 seconds to 3.
-- **A poll that finds nothing almost never writes.** Each check for new
-  workgroup messages rewrote the profile's entire subscription file — hundreds
-  of kilobytes — even when the reply was empty, which it almost always is. An
-  unchanged poll now writes nothing at all; the exception is a periodic refresh
-  of who was last seen, at most once every two minutes per workgroup, which
-  keeps the roster from going stale.
-- **A finished workgroup stops costing as much as a live one.** Subscriptions
-  with nothing happening back off their polling instead of holding a permanent
-  open request, and one whose hub no longer recognises it retires locally after
-  a sustained streak of refusals — never on a single one, and its keys are kept
-  so re-joining restores it.
-- **A turn no longer starts without knowing what it was asked to do.** When a
-  burst of more than twenty messages arrived at once, the message that opened
-  the task was trimmed out of the cached window before the turn was launched,
-  so the agent woke up and found no task. The opening message is now kept for
-  as long as its task is open, however much chatter follows it.
-- **Saved settings can no longer silently lose a character.** One rare
-  character was dropped from anything written to a YAML file, and some text
-  could produce a file the reader then refused to load — including on
-  installations without the fast YAML library, where the loss came back.
-- **An interrupted save can no longer make a live workgroup look deleted.** The
-  hub's roster and workgroup files are written atomically, so a crash mid-write
-  leaves the previous version rather than a truncated one.
+- **The apps stop reporting the daemon as unreachable.** It no longer freezes for seconds at a
+  time with several profiles subscribed to several workgroups.
+- An empty workgroup poll no longer rewrites the subscription file, and idle workgroups back off
+  their polling.
+- A turn launched after a burst of messages still sees the message that opened its task.
+- YAML files can no longer lose a character on save, and the hub's roster and workgroup files
+  are written atomically.
 
 ## v0.14.6 — 2026-08-21 — a wedged hub always has a legal move
 
-- **A hub task cannot jump into a dormant chain.** Declared pipelines are
-  trigger-only by contract, but a hub `#task` naming a dormant chain's phase
-  was dispatched, ran its gates, and continuation walked the whole chain —
-  observed misrouting a QA finding into `review` without any work order,
-  burning ~25 posts before the review gates strangled the run honestly. The
-  post is now rejected with the legal moves named: route the work inside the
-  running chain, or have the operator trigger the other one. Only a virgin
-  transcript may open a chain by prose, and only the declared launch chain —
-  administrative opens elsewhere are operator actions. A recipe whose task
-  does not open its own launch phase is rejected at validation, and the
-  kickoff passes the same guard everyone else does.
-- **The owner's verdict is read exactly.** The verdict scan took the last
-  token by list order, so a delivery mentioning "cannot grant QA PASS" after
-  issuing QA FAIL read back as PASS and the close sailed through — while
-  "QA FAILURE" prose, quoted mentions and denials all counted as verdicts.
-  A token now counts only in verdict position (a `·`-segment's start, bare
-  or after a `label:`), the last one wins, word boundaries apply, and the
-  close must carry the owner's exact token: a FAIL may not stand in for a
-  BLOCKED.
-- **A wedged close now teaches its own way out.** A hub carrying a QA FAIL
-  mid-sentence had its close rejected while the sibling guards sealed
-  re-tasking, advancing and re-opening — observed wedging a hub for 858
-  seconds of machine-rejected posts until its final automatic wake guessed
-  the accepted format. The carry check keeps its strict shape — only a
-  `·`-segment starting with the verdict token carries it, because prose can
-  deny or hypothesise the token and no negation list survives "if this were
-  QA FAIL" — but leading emphasis no longer hides an asserted verdict
-  (quotes, parentheses and strikethrough stay mentions), a word boundary
-  keeps "QA FAILURE…" from carrying, and the rejection message now names the
-  exact accepted shape, so the wedge resolves in one corrected retry instead
-  of a repair ladder.
+- **A hub task cannot jump into a dormant chain**; the post is refused with the legal moves
+  named.
+- **An owner's QA verdict is read exactly.** Only a token in verdict position counts, and a
+  close must carry it verbatim.
+- A rejected close names the exact accepted shape, so a hub fixes it in one retry.
 
 ## v0.14.5 — 2026-08-20 — a busy member is not a dead member
 
-- **The stall watchdog no longer escalates over legitimate work.** The grace a
-  member's `#working` earns was hardcoded below the phase's declared
-  `turn_budget_s`, so a member legitimately using its 1800-second budget was
-  nudged as stalled at 900, and the repair that followed re-tasked over live
-  work — observed rewinding a healthy pipeline to its first phase. The grace
-  now covers the declared budget, and a turn that just delivered a post buys a
-  short settle window so the follow-up dispatch it earned can spawn before the
-  watchdog reads the gap as silence. A turn that ends without delivering buys
-  nothing: a silently failing member still walks the same
-  nudge → repair → final-repair ladder, so a genuinely dead member is still
-  escalated and closed.
-- **A turn's end is detected even when a descendant holds its pipes.** asyncio
-  resolves a child's wait only after every inherited pipe closes, so a spawned
-  grandchild that outlived the agent kept the turn "running": supervision
-  waited on a process already gone, the kill path could wait forever after the
-  SIGKILL, and the workgroup stayed busy to both the dispatcher and the
-  watchdog. The supervisor now trusts the reaped exit code, the post-exit pipe
-  drain is bounded, and a persistent descendant costs seconds, not the
-  workgroup.
+- **The stall watchdog respects a phase's declared `turn_budget_s`**, so a member using its full
+  budget is no longer treated as stalled; a genuinely dead member is still escalated.
+- A turn's end is detected even when a leftover child process holds its pipes.
 
 ## v0.14.4 — 2026-08-19 — the phase boundary has no side doors
 
-- **A delegated sub-agent obeys the phase write scope.** During a dispatched
-  pipeline turn, `delegate` rebuilt its sub-agent's toolset from the profile
-  config alone, so a member whose phase scope denied file mutations could
-  spawn a sub-agent that got `write_file`, `edit_file` and `delete_file`
-  back. The sub-agent now inherits the dispatch denies on both layers: the
-  denied tools are not advertised in its schema, and a hallucinated call is
-  refused at execution.
+- **A delegated sub-agent obeys the phase write scope.** During a pipeline turn it inherits the
+  dispatch's denied tools, both in its schema and at execution.
 - **Skill files cannot be modified mid-phase.** The `skill` tool wrote
   through its own atomic writer without consulting the write scope, so any
   member — owner included — could create, edit or delete skill files during
   a scoped pipeline turn. All eight mutating verbs are now refused while a
   phase scope is active, because skill files never sit inside a phase's
   declared paths; reading, listing and running skills still work.
-- **The workspace root fails closed instead of drifting to cwd.** A config
-  that failed to load silently anchored every file tool at the process
-  working directory — the daemon's, in dispatched turns — and the phase
-  write boundary was computed against that same accidental root. A broken
-  config now surfaces as an explicit tool error, and an active write scope
-  refuses all writes when no workspace is configured. The documented
-  interactive fallback (workspace unset → cwd as default root) is unchanged.
+- **The workspace root fails closed instead of drifting to the working directory.** A config that
+  fails to load surfaces as a tool error, and an active write scope refuses writes when no
+  workspace is configured.
 
 ## v0.14.3 — 2026-08-19 — a gate nobody can run is refused up front
 
-- **A recipe can no longer declare a gate the runtime would silently skip.**
-  Gate owners resolve through the hub's peer registry, and the hub is not its
-  own peer, so a gated phase owned by the hub never ran its check — the phase
-  advanced on the hub's own say-so, with the declared verification quietly
-  ignored. Such a recipe is now rejected when it is parsed, and again at
-  launch after parameter interpolation, since a `{param}` owner only takes
-  its final value there. The error says what to do: assign the phase to a
-  member, or drop the gate. Hub-owned phases without a gate are unaffected.
+- **A recipe can no longer declare a gate the runtime would skip.** A gated phase owned by the
+  hub is rejected at parse time and at launch; assign it to a member or drop the gate.
 
 ## v0.14.2 — 2026-08-18 — the preview belongs to its connection
 
-- **A host-plane client is no longer allowed to see another connection's chat
-  content.** `host.profile.summaries` built its `latest_session` preview from
-  the newest chat session on disk regardless of who opened it, so a paired
-  phone's first and last messages could appear in another device's profile
-  row — text that device was never allowed to open, since session read and
-  session list were already partitioned by connection. The lookup now skips
-  sessions the asking connection does not own, and the three-second summary
-  cache is keyed by connection and profile instead of profile alone, so one
-  poller's preview is no longer replayed to whoever polls next inside that
-  window; invalidating a profile clears every connection's copy. This
-  ownership check deliberately has no admin bypass: an admin connection is
-  scoped to its own sessions, because otherwise it would still leak previews
-  into its sibling devices. The local socket keeps host-created and
-  pre-connection sessions, so the console and the Desktop profile view are
-  unchanged.
+- **A client no longer sees another connection's chat preview.** `host.profile.summaries` shows
+  only sessions the asking connection owns, with no admin bypass; the local socket is unchanged.
 
 ## v0.14.1 — 2026-08-17 — the bind address follows the network
 
@@ -1497,198 +641,45 @@ the next home bootstrap adds `runs/` to existing profile `.gitignore` files.
 
 ## v0.14.0 — 2026-08-15 — profiles own the work they launch
 
-- **Recipes belong to the hub profile, without an organization layer.** A hub
-  stores reusable YAML recipes under its own home, and the console, host API
-  and desktop app list, describe and launch the same definitions. Dynamic
-  parameters and file inputs seed each isolated project before its kickoff;
-  invalid recipes no longer hide valid siblings. The versioned
-  `organizations/` bootstrap and its duplicated agents, skills, briefings and
-  workgroup scripts are removed: profiles and recipes are now the complete
-  runtime model.
-
-- **Concurrent workgroup pulls preserve completed dispatch cursors.** A delayed
-  long-poll now merges only fresh remote state instead of replacing the whole
-  subscription, preventing duplicate member turns. Delivery accounting counts
-  accepted posts from the exact workgroup, and hub prose cannot wake a
-  downstream member outside the active task.
-- **Pipeline authorship is enforced while work runs.** Declared phase paths
-  constrain native file writes; non-owners cannot use those mutation tools
-  during the phase, while shell availability remains a profile policy. Owners
-  can remove an invalid file with the new workspace-only `delete_file` tool,
-  and missing boundary baselines fail closed.
-- **A `#working` heartbeat no longer wakes the hub into an empty turn.** Direct
-  mentions and substantive deliveries still wake it immediately, while member
-  recovery and the stall watchdog preserve repair behavior when work stops.
-- **Pipeline workers receive pipeline-sized engagement rules.** Declared
-  production lines keep the same enforced marker, rotation and handoff
-  contracts without carrying discussion-only convergence guidance on every
-  turn; mixed workgroup contexts retain the complete rules.
-- **Provider stalls recover without discarding the turn.** Empty transport
-  keepalives no longer hide a silent stream: after the configured idle window,
-  Alpi retries the same model and step. A ten-minute per-request limit also
-  stops a model that keeps streaming without completing, and its expiry is
-  retried within the same turn instead of losing the workgroup delivery.
-  Pipeline turn budgets are enforced while deltas are still arriving, and a
-  successful owner turn without a delivery remains pending for immediate
-  retry. Detached workers
-  send a content-free progress heartbeat so their supervisor does not mistake
-  a healthy long tool call for a dead process, and pausing or removing a
-  workgroup cancels its running worker. Per-profile `llm.log` records the
-  correlated provider lifecycle without raw exception text.
-- **Pipeline recovery preserves honest phase outcomes.** A heartbeat carrying a
-  delivery counts as work, delivered phases cannot be relabeled as skipped
-  within the same pipeline run, unresolved owners fail closed, QA failures must
-  remain visible in the close, and mechanically opened hub-owned recovery
-  phases wake immediately. Automatic hub turns may halt with `BLOCKED` only on
-  the final repair wake, while transient provider failures without a delivery
-  return that wake to the recovery budget. Recovery rewinds remain in the same
-  run even at the first phase; only an explicit operator trigger starts a new
-  run. Completed provider calls are accounted before a turn deadline suppresses
-  their pending tool calls.
+- **Recipes belong to the hub profile.** The console, host API and desktop app list, describe and
+  launch the same recipes; the `organizations/` layer is removed.
+- Concurrent workgroup pulls no longer cause duplicate member turns.
+- Declared phase paths constrain file writes while a phase runs, and owners can remove a file
+  with the new `delete_file` tool.
+- A `#working` heartbeat no longer wakes the hub into an empty turn.
+- **Provider stalls recover without losing the turn.** A silent stream is retried after the idle
+  window, and a ten-minute per-request limit stops a stream that never completes.
+- Pipeline recovery keeps phase outcomes honest; only an operator trigger starts a new run.
 
 ## v0.12.13 — 2026-08-09 — every surface knows what the cache saved
 
-- **Workgroup cost accounting no longer counts early posts twice.** Each
-  accepted post declares only the usage accrued since the preceding post in
-  that turn; a rejected post keeps its delta for retry. Workgroup transcript
-  posts and daemon turn events now share a `turn_id`, so operational runs and
-  their exact declared spend can be joined without timestamp heuristics.
-  Background dispatches stop after an accepted substantive post instead of
-  paying for a final model reply that no workgroup consumer reads; `#working`
-  remains a continuation signal.
-- **Cache telemetry now covers every LLM call, not just the main loop.** The
-  tool-side usage sink carries cached tokens, provider discount and cost
-  source, so `web_extract`, `read_image`, `research`, `delegate` and knowledge
-  maintenance land the same accounting as the main turn. Research/delegate
-  parallel workers adopt the parent's turn tally (lock-guarded), so their
-  spend reaches per-run rows and workgroup cost declarations instead of
-  vanishing across threads. The max-steps wrap-up records its usage even when
-  the model returns empty text; the voice path records through the same
-  completion-shaped entry as everything else.
-- **The daily ledger and run ledger keep raw cache counts, tri-state.**
-  `tokens_cached`/`tokens_measured` accumulate in profile, peer, connection
-  and per-day history buckets — a completion whose provider reports nothing
-  stays out of the hit-rate denominator instead of counting as a miss.
-  Per-run rows store raw counts (never percentages); day rollover carries the
-  counters; corrupt persisted values degrade to zero instead of killing the
-  recording turn.
-- **Recorded dollars now say which arithmetic produced them.** Every
-  completion is tagged `provider` (the endpoint's own figure), `litellm` or
-  `table` (both cache-blind list-price math) or `none`, and the tag is only
-  `provider` when the usage payload actually carried a provider cost —
-  LiteLLM's self-stamped estimate no longer masquerades as a bill. Day
-  buckets also sum the provider-reported cache discount (signed: a negative
-  discount is a real cache-write premium). This is the instrument for
-  reconciling recorded spend against the real invoice.
-- **Cache reads surface where the operator already looks.** `/status` gains a
-  cache row (`hit 84.0% (11,760 of 14,000 measured in)`); `alpi digest` gains
-  a Prompt cache section with the window's hit rate, discount and cost-source
-  histogram — sourced from a ledger summary that covers exactly N calendar
-  days and counts cost sources even on days with no cache data. The host
-  usage window plots the same day columns from ledger history.
-- **Cache writes are captured but never counted.** `cache_write_tokens` and
-  `cache_discount` ride the completion for reporting only — writes are a
-  subset of uncached input and never enter a denominator.
-- **History is append-only now — the volatile context rides the user turn.**
-  The per-turn `# NOW` clock, workgroup context, skill hint and relay
-  directive no longer arrive as strippable system messages that rewrote
-  mid-history every turn (splitting the provider prefix and perturbing
-  OpenRouter's derived sticky key); they compose one host-context suffix on
-  the user message, persisted per turn and replayed byte-stable for textual
-  turns by every rehydrator — session resume, mention threads, and the
-  desktop's edit-and-resend, which also stopped dropping the entire system
-  prompt when rewriting from a turn. Multimodal turns replay as text markers
-  (attachments persist bytes-free by design) and secret-shaped content is
-  redacted at save; both surface as the expected `resume` rewrite in
-  diagnostics, never as corruption. The relay guardrail survives an oversized workgroup
-  block, and turning relay off plants an explicit revocation instead of
-  silently leaving stale directives as the last word. A background workgroup
-  turn injects only its exact workgroup, so older subscriptions cannot crowd
-  its briefing and active task out of the persisted context. Undirected chat
-  ranks joined and hosted workgroups together by real activity, includes only
-  complete blocks that fit the context budget and names every omitted group.
-  TUI `/clear` resets to a fresh session instead of filtering messages in place.
-- **Every OpenRouter conversation carries a sticky routing key.** A hashed
-  `session_id` per logical conversation — workgroup, peer thread, schedule
-  job, or interactive session — rides `extra_body` on every call in the
-  chain: main loop, model fallback, effort/deep escalation, wrap-up, and the
-  compaction side-calls under their own side key. No raw identifier ever
-  reaches the provider.
-- **A low-hit turn now names its cause.** Before each call the engine hashes
-  the request shape (model, params, tools, system, a bounded window of
-  message hashes) and compares against the previous call on the same
-  conversation — across processes for resumed sessions. Run rows carry
-  `cache_diag`: `tools`/`system`/`history_rewrite`/`first_contact`, with
-  engine-initiated rewrites labelled as what they are (`compaction`,
-  `resume`, `reset`, `rewrite_from_turn`) instead of masquerading as
-  corruption. Hashes only — no prompt text or secrets persist.
-- **The tool list can no longer invalidate the prefix by accident.** Wire
-  order is sorted by tool name, so registry or MCP insertion order never
-  reaches the provider; membership changes remain deliberate invalidations.
-- **Prompt building is read-only.** The low-confidence memory prune moved out
-  of the system-prompt builder into post-turn maintenance — building a
-  prompt can never again mutate its own input mid-build.
+- **Every LLM call records what the prompt cache saved.** Tool-side calls, sub-agents and
+  wrap-ups get the same cache and cost accounting as the main turn, and a provider that reports
+  nothing is left out of the hit rate instead of counting as a miss.
+- **Recorded spend says where the figure came from** — the provider's own cost, a price
+  estimate, or none — so it can be reconciled with the real invoice.
+- **Cache hit rates show in `/status` and `alpi digest`**, and the host usage window plots them.
+- **Conversation history is append-only**, so the provider cache is no longer broken every turn,
+  and OpenRouter conversations carry a hashed sticky routing key.
+- A turn with a low cache hit records why, without storing prompt text.
+- Workgroup posts no longer count earlier usage twice.
 
 ## v0.12.12 — 2026-08-08 — the change has an actor
 
-- **Sensitive host-plane mutations now leave a device-attributed trail.** The
-  dispatcher records the authenticated connection/device, source, role,
-  method, allowlisted target and stable success/error result after each
-  administrative change. Pairing exchange adopts the identity it creates;
-  local host-socket RPCs remain honestly labelled as the synthetic Local host.
-- **The audit boundary copies identifiers, never requests.** Device and
-  pairing tokens, provider/config values, RPC payloads/results, chat content
-  and error details never enter the file. Authenticated administrative denials
-  are included but repeated attempts are limited to one row per
-  device/method/minute; unauthenticated noise remains in operational counters.
-- **Untrusted traffic cannot evict useful history.** Target fields are allowed
-  per method, text is capped by UTF-8 bytes and each JSONL row has a hard 4 KB
-  ceiling. Failed bootstrap exchanges ignore caller-controlled params and
-  share a one-row-per-minute budget; invalid credentials leave the same
-  bounded `auth-failed` evidence regardless of the attempted method. Device
-  metadata registration is audited with a per-device budget, while the CLI
-  and Desktop render source, role and immutable IDs so a self-chosen “Local
-  host” label cannot impersonate the local trust boundary.
-- **History is useful and physically bounded.** `admin-audit.jsonl` is mode
-  0600 and rotates at 5 MB with three backups (about 20 MB maximum).
-  `host.audit.list` gives local/admin clients cursor pagination and actor/target
-  filters, while `alpi audit-log` provides the same evidence from the console.
-  Normal chat messages are not duplicated because sessions already retain
-  their owning connection.
-- **Damage stays local to one row.** The reader skips malformed or non-UTF-8
-  JSONL lines instead of making the complete trail unavailable, and actor
-  label lookup reuses the connection store's file-identity cache rather than
-  reparsing `connections.yaml` after every audited RPC.
+- **Administrative changes on the host plane are recorded with their actor.**
+  `admin-audit.jsonl` notes the device, role, method and result of each change — never tokens,
+  config values or chat content — and rotates at 5 MB.
+- `host.audit.list` and `alpi audit-log` page and filter the trail.
+- Untrusted traffic cannot flood it, and a damaged row is skipped instead of hiding the rest.
 
 ## v0.12.11 — 2026-08-07 — the QR is not the key
 
-- **Pairing links no longer contain the permanent device credential.** New
-  connection and Add device flows create a high-entropy one-time grant, store
-  only its SHA-256 digest and expire it after ten minutes. The first successful
-  exchange creates a separate permanent token; the file lock makes concurrent
-  scans atomic, so exactly one client can win.
-- **Remote bootstrap has one narrow door.** The WebSocket listener accepts
-  `host.connections.exchange_pairing` as the sole pre-authentication request,
-  returns the new device credential once and closes that bootstrap socket.
-  Reuse, expiry and invalid grants return distinct `-32011` errors. The grant
-  cannot create a connection or choose its role or profile scope. The handler
-  runs under an explicit bootstrap context, cannot be called again on an
-  authenticated socket, hides unexpected exception details and counts every
-  attempt in the local network diagnostics.
-- **Pairing state is visible and cancellable.** `alpi setup`, Desktop and the
-  host RPC expose pending, consumed, expired and cancelled state. Leaving a
-  pending pairing view cancels the grant; closing a brand-new unconsumed
-  connection also removes that empty connection. Existing paired devices and
-  migrated tokens remain valid, and updated Desktop/Mobile clients still read
-  legacy links emitted by older daemons. Terminal grant history is retained for
-  seven days, capped at 50 rows per connection and omitted from connection-list
-  payloads.
-- **The security boundary is intentionally a protocol cut.** Desktop/Mobile
-  versions from before this release cannot consume new grants and must be
-  updated before generating a new QR. Every QR generated by an older daemon
-  contains a permanent device token: upgrading cannot expire, consume or
-  revoke it. Review legacy device rows whose `last_seen` is still `never` and
-  revoke any that represent an unclaimed, shared or retained old QR.
+- **Pairing links no longer contain the permanent credential.** A QR carries a one-time grant
+  that expires in ten minutes; the first scan exchanges it for a separate device token.
+- Pending, used, expired and cancelled pairings are visible and cancellable in `alpi setup`,
+  Desktop and the host API.
+- **Update Desktop and Mobile before pairing with a new QR.** QRs generated by older daemons
+  still hold permanent tokens; revoke unclaimed devices whose `last_seen` is `never`.
 
 ## v0.12.10 — 2026-08-07 — WSS gets a front door
 
@@ -1713,134 +704,46 @@ the next home bootstrap adds `runs/` to existing profile `.gitignore` files.
 
 ## v0.12.9 — 2026-08-07 — a public socket has finite patience
 
-- **Unauthenticated WebSockets no longer get unlimited time or capacity.** The
-  daemon caps global connections, requires a valid first request within ten
-  seconds, uses a bounded receive queue with safe high/low-water hysteresis,
-  closes invalid authentication and protocol attempts, and limits concurrent
-  sockets and RPC streams per device. Plain HTTP requests cannot consume a
-  global handshake budget and lock out paired clients. Message size remains
-  aligned with the attachment contract.
-- **Revocation now cuts active work.** Every authenticated socket is registered
-  to its connection and device. Revoking a device closes its sockets and
-  cancels long streams while sibling devices remain active; disabling or
-  deleting a connection closes every device attached to it. Authorization is
-  rechecked against a file-identity cache on each message and against the
-  connection store once per second by default, so changes made outside the
-  running daemon are also enforced without reparsing YAML for every frame.
-  Revocations close devices concurrently, retry swallowed cancellation with a
-  guarded delay, and daemon shutdown closes transports before cancelling live
-  streams.
-- **Local network diagnostics expose the guardrails.** `host.network.status`
-  reports active and peak sockets, configured limits, rejected handshakes and
-  device requests, authentication/protocol failures, timeouts and revocation
-  closures. The verb remains local-only; remote clients cannot query the
-  daemon's operational counters. Deployment limits and timeouts can be adjusted
-  with `ALPI_HOST_WS_*` environment variables without editing source code.
+- **Unauthenticated WebSockets get finite time and capacity.** Connections are capped globally
+  and per device, and a socket must authenticate within ten seconds.
+- **Revoking a device closes its live sockets and streams**, including revocations made outside
+  the running daemon.
+- `host.network.status` reports the limits and rejections; limits are tunable with
+  `ALPI_HOST_WS_*` variables.
 
 ## v0.12.8 — 2026-08-06 — one connection, every safe route
 
-- **Pairing now advertises complete, ordered WebSocket routes.** A host can put
-  `wss://client.example.com` first for Internet access and keep a direct
-  `ws://100.x:49200` fallback on a private network. The selected URL is transport
-  metadata only: every device still receives its own token under the same
-  connection, role and profile scope.
-- **Old pairings keep working.** With no `host.endpoints`, Alpi synthesizes the
-  existing direct route. Desktop and mobile continue to read legacy `host +
-  port` links while new QR codes use the smaller `url` shape without a protocol
-  version flag.
-- **Client access settings now distinguish facts from controls.** `alpi setup →
-  Connections → Network` and the local Desktop profile show the detected
-  address without pretending it is a user choice. The port sits beside that
-  address and remains editable with an explicit daemon restart; the instance
-  name edits in place. The private WS route is derived from the address and
-  port, while one optional public WSS route can be added or removed. When
-  `ALPI_HOST_TCP_PORT` owns the port in Docker, setup reports
-  it as environment-managed instead of saving an ineffective config override.
-  URL validation rejects credentials, paths, duplicate routes, non-WebSocket
-  schemes and plaintext WS to public IPs.
-- **The public WSS topology is explicit.** A reverse proxy terminates the
-  certificate and forwards WebSocket traffic to the private Alpi listener;
-  ports `49200/7423` stay private and only `80/443` are public. The concrete
-  Docker/Caddy deployment remains separate until it has been tested on a real
-  host.
-- **Plaintext routes cannot hide behind hostnames.** `ws://` now requires a
-  private IP literal; hostnames (including `localhost` and alternate
-  numeric IPv4 forms) require certificate-validated `wss://`. Automatic direct
-  routes pass through the same validator and disappear when they are unsafe.
-  Pairing errors now identify this hostname/WSS requirement instead of blaming
-  private-address detection.
-- **A public route no longer replaces safe private access.** When
-  `host.endpoints` contains only WSS, Alpi appends the private WS route derived
-  from the current address and listen port. Explicit WS routes keep their
-  configured order for backward compatibility.
-- **The daemon no longer exposes fake subsystem switches.** Scheduler, ALP,
-  workgroups and the default host plane are fixed, independently guarded tasks;
-  jobs, workgroups, peer grants and connection scopes remain the real controls.
-  Generic host config verbs reject the removed `service.*` fields instead of
-  storing dead state. Legacy `service.prefetch` migrates to `runtime.prefetch`
-  when config is saved. Existing removed switches produce a startup warning and
-  an `alpi doctor` warning before a later save removes the obsolete block.
-- **Invalid endpoint configuration remains recoverable.** Network status now
-  reports a specific configuration error instead of collapsing into an internal
-  RPC failure. Generic config writes cannot store `host.endpoints`; clients must
-  use the validated network verb, while the local unset operation remains
-  available to repair configuration left by an older build.
-- **Pairing codes keep stable connection identity.** Desktop and console QR/link
-  payloads now include the connection id, allowing Mobile to refresh the same
-  scoped connection without adding duplicate rows. Different connection scopes
-  to the same daemon still remain independent.
-- **The WSS deployment review identified its update boundary.** Any future
-  Docker overlay must require Compose 2.24.4 or newer for `!reset`, verify the
-  effective compose output and retain both compose files in update commands so
-  a routine update cannot republish ports `49200` and `7423`.
+- **Pairing advertises an ordered list of routes.** `host.endpoints` can put a public `wss://`
+  address first and keep a private `ws://` fallback; every device still gets its own token and
+  scope.
+- Old pairings and links keep working, and new QR codes carry the connection id so Mobile
+  refreshes the same connection.
+- `ws://` requires a private IP literal and hostnames require certificate-validated `wss://`; a
+  WSS-only list keeps a private fallback.
+- Network settings in `alpi setup` and Desktop show the detected address and port, and an
+  invalid endpoint list reports a specific error.
+- The dead `service.*` switches are removed; `service.prefetch` migrates to `runtime.prefetch`,
+  and `alpi doctor` warns about leftovers.
 
 ## v0.12.7 — 2026-08-06 — an abandoned task stops shouting
 
 - **A terminally stalled task no longer spams the log and the poller state.**
   Once a task has spent every recovery wake, each poll tick was still counting
-  another "closure nudge", writing it to disk and logging a warning — 317 of
-  them in under an hour on one stalled hotel. The recovery ladder is untouched
+  another "closure nudge", writing it to disk and logging a warning, hundreds
+  an hour for a single stalled task. The recovery ladder is untouched
   and each of its steps still fires exactly once; past the last one, the poller
   goes quiet until a new post moves the task.
 
 ## v0.12.6 — 2026-08-06 — a red gate says what it found, and notices when it's fixed
 
-- **The hub no longer gets "unverified" when the gate actually has a verdict.**
-  A gate result is now tied to the exact delivery it judged, so closing a phase
-  either passes, or reports the real findings with the command that produced them
-  and what to do next. An owner delivered twice, was told only that its work was
-  unverified both times, and gave up with a skip on work that was correct.
-- **Gate findings reach the member who has to act on them.** The workgroup block
-  showed every post trimmed to a couple of lines, so a check that prints its
-  passing assertions before its failure delivered the header and nothing else. A
-  translator spent three repair rounds asking for output it had already been
-  sent, reconstructing the rules from the check script instead. A post that names
-  you now carries the full findings a gate can report; everything else stays
-  trimmed.
-- **A red gate no longer strands a run that was already fixed.** The verdict is
-  provisional: the workspace is re-checked on its own, without needing another
-  message from the owner, and a phase corrected in place closes by itself. One
-  run finished its work, went unnoticed for 28 minutes and was discarded. A
-  re-check that still fails stays quiet — it never repeats findings and never
-  spends one of the owner's repair rounds.
-- **Prefix-cache telemetry, end to end.** The share of a prompt the provider
-  served from its cache travels with the turn's usage event, accumulates on the
-  session, survives a session reload, and lands on each workgroup post and its
-  usage buckets beside the tokens it belongs to. Wrap-up, compaction and
-  tool-side LLM calls contribute their share too, instead of counting as
-  uncached. A provider that reports nothing is recorded as unmeasured — absent,
-  never a zero — and every total carries its own honest denominator, so a fleet
-  hit rate can no longer be biased down by silence. Measured on a five-hotel
-  run: 84% of input reused.
-- **A re-checked gate no longer re-runs against an unchanged project.** The
-  workspace is fingerprinted when a gate goes red, so the check is spawned again
-  only once something actually moved. Without it a permanently red gate whose
-  command runs near its timeout could keep a process alive almost continuously,
-  once per hotel.
-- **Shell runs say which workgroup they came from.** Commands were logged without
-  the workgroup and, deliberately, without the command line, which left no way to
-  tell whose turn touched a file. The workgroup id now travels with the record;
-  the command line still never does.
+- **A red gate reports what it found**, with the command and the next step, instead of calling
+  correct work "unverified".
+- A member named in a post receives the gate's full findings, not a trimmed line.
+- **A phase fixed in place closes by itself.** The workspace is re-checked after a red gate, but
+  only once something has changed.
+- Prompt-cache usage is recorded end to end, and a provider that reports nothing counts as
+  unmeasured, not as zero.
+- Shell runs record which workgroup they came from; the command line still never is.
 
 ## v0.12.5 — 2026-08-05 — a reply says when it landed
 
@@ -1863,7 +766,7 @@ as they did.
   recovers to its phase, and an opener that still maps nowhere is refused at
   post time naming the forms that work.
 - **A halt that names another member gets one wake.** Closing BLOCKED while
-  writing "this belongs to @quill" described a hand-off nobody opened; the hub
+  naming another member as the owner described a hand-off nobody opened; the hub
   is now woken once to open it or to say plainly that nobody can act.
 - **A boundary finding leads with the action its owner can take.** It used to
   say "restore each file" to owners with no way to restore anything, which
@@ -1897,8 +800,7 @@ as they did.
 ## v0.12.1 — 2026-08-03 — pipelines that recover on their own
 
 - **A removed workgroup stays removed.** Deleting one could race a member's
-  in-flight write and quietly resurrect its subscription — ten came back across
-  five profiles in one measured fleet teardown. Removals are now sticky, and a
+  in-flight write and quietly resurrect its subscription. Removals are now sticky, and a
   deliberate re-join still works.
 - **A stalled pipeline recovers without an operator.** If the owner fixed the
   files but never re-posted, the check re-runs before the hub is woken and a
@@ -1909,119 +811,41 @@ as they did.
   posting a fix note before the re-delivery, and after a blocked phase the hub
   may re-open any earlier phase — rewinding re-walks the chain forward.
 - **A recipe can declare which files each phase may touch.** Editing outside the
-  declared paths turns the check red naming each file, before the check runs —
-  measured twice, an agent editing another's files was how a red check got
-  forced green.
+  declared paths turns the check red naming each file, before the check runs,
+  because an agent editing another phase's files could force a red check green.
 - **Workgroup turns cache better.** The per-turn prompt now keeps its stable
   text first and the volatile lines last, so providers that price cached input
   can actually reuse the prefix between turns.
 
 ## v0.12.0 — 2026-07-31 — one map of named pipelines, declared only by a recipe
 
-**Breaking:** the old `pipeline` + `operations` recipe shape is gone. A recipe
-now declares `pipelines` (a map of named ordered chains) and `launch`. A recipe,
-workgroup or subscription still carrying the old keys is rejected rather than
-converted, so a workgroup created before this release stops loading. Relaunch it
-from the updated recipe — there is no migration, and only a recipe can supply the
-per-phase owners a chain needs anyway. Upgrade hubs and members together: a
-member on this release joined to an older hub degrades that workgroup to a
-deliberation one.
+**Breaking:** the old `pipeline` + `operations` recipe shape is gone; recipes declare `pipelines`
+(named ordered chains) and `launch`. Workgroups created with the old shape stop loading and must
+be relaunched from the updated recipe. Upgrade hubs and members together.
 
-- **One place declares the work, one place drives it.** `pipelines:` is a map of
-  named chains and `launch:` names the one the kickoff opens. There is no second
-  "operations" concept and no per-step `next` — the chain is the order, so a
-  phase can no longer advance one way after a green check and another way after
-  a quorum close.
-- **Only a recipe declares a pipeline.** Creating a workgroup by hand makes a
-  deliberation workgroup, and no surface edits a chain after launch. A phase
-  without a declared owner and task cannot be dispatched at all, and only a
-  recipe can supply those — so editing the phase list from a client was never
-  really editing the pipeline. Changing a chain means editing the recipe.
-- **Any declared chain can be started by name.** `alpi workgroup trigger <wg_id>
-  <pipeline>` publishes the recipe's own owner and task, verbatim. Starting the
-  media update no longer depends on somebody remembering how the first task was
-  worded, and a chain whose first phase declares no owner or task is rejected
-  instead of started with invented text.
-- **Pipelines run one at a time.** Starting a chain stops whatever was mid-flight
-  and says what it stopped — the console prints it, the apps warn before you
-  confirm. The displaced phase is recorded as preempted, never as done.
-- **A workgroup can now wait.** Declaring pipelines without a `launch` creates an
-  idle maintenance workgroup: nothing posts, nothing runs, and every declared
-  chain sits ready until you trigger it.
-- **Members are told what the workflow is.** Joining or polling a workgroup
-  returns its chains and each phase's owner, so an agent reads the workflow from
-  the daemon instead of from a briefing paragraph kept in sync by hand. Gate
-  commands still never leave the hub.
-- **The console and both apps show which chain is actually running.** Task state
-  carries the selected pipeline run, so a maintenance chain shows as itself
-  rather than as the launch pipeline, an ad-hoc task clears the strip instead of
-  leaving a finished chain on screen, and running the same chain twice starts
-  from the beginning again.
-- **A skipped phase reads as skipped.** A deliberate `#done skipped · <reason>`
-  still advances the chain but is no longer indistinguishable from work that was
-  actually done — in the phase strip and in the task list.
-- **A repair stays inside its phase.** Only `-fix` and `-recheck` map back to a
-  phase, so an operational chain like `content-update` can never be swallowed by
-  the `content` phase — which is what used to make post-QA behaviour depend on
-  the wording of the previous close.
-- **A recipe with a gap now fails loudly.** Every phase of every declared chain
-  needs an owner, every chain's first phase needs an owner and a task, and gate
-  specs without a chain to order them are rejected — previously a typo could
-  leave a check silently disarmed.
-- **A phase the hub owns is worked by the hub.** Turn rotation and closure quorum
-  used to make a hub-owned phase impossible to close, which is what the review
-  protocol needs.
-- **The web factory's three post-launch protocols are real chains.** Media
-  update, content update and review are declared pipelines with owners, tasks and
-  gates, so the review order no longer fans out from prose and an empty category
-  closes as skipped instead of disappearing.
+- **Only a recipe declares a pipeline**, and no surface edits a chain after launch; a workgroup
+  created by hand is a deliberation.
+- **Any declared chain can be started by name** with `alpi workgroup trigger <wg_id> <pipeline>`,
+  using the recipe's own owner and task.
+- **Pipelines run one at a time.** Starting one stops what was running and says so; without
+  `launch`, a workgroup waits idle until triggered.
+- Members read the workflow — chains and phase owners — from the daemon, and the console and apps
+  show which chain is running.
+- A deliberately skipped phase reads as skipped, repairs stay inside their phase, and a recipe
+  with a gap is rejected.
+- A phase the hub owns can be worked and closed by the hub.
 
 ## v0.11.19 — 2026-07-30 — declared post-launch chains, and gates that cannot be talked past
 
-- **A recipe can now declare `operations`: named chains of steps the daemon
-  advances on its own, exactly like the launch pipeline.** Post-launch work —
-  installing client photography, folding in new facts — no longer depends on the
-  hub remembering a multi-step sequence; the ordered list is read from the
-  recipe, so opening one task runs the whole chain.
-- **An operation runs only when asked.** Its steps stay out of `pipeline`, so
-  closing the launch pipeline still completes it; the operation waits for its
-  trigger and can run again for every later delivery.
-- **A step in no declared chain is still never guessed.** The core reports it as
-  unknown rather than inventing a successor, and a `#done BLOCKED` halts an
-  operation the same way it halts the launch pipeline.
-- **The desktop stops dropping its connection under load.** The per-profile
-  listing behind the sidebar was recomputed from disk on every request, so a
-  burst of them could tie up the daemon and leave every other call timing out.
-  A burst now produces one computation, and the requests waiting on it no longer
-  hold the daemon's worker threads while they wait.
-- **The sidebar still updates the moment something changes.** Sharing that
-  listing could have left it showing an old model, pause state or last chat for a
-  few seconds after a change; anything that alters it now refreshes it before the
-  desktop is told to reload.
-- **A phase that declares a check now closes on that check, not on a summary.**
-  Until now the check could veto the owner's handoff but not the close itself, so
-  a workgroup could be moved forward on an assurance that the check had passed.
-  Closing a checked phase now requires the check to have actually passed on the
-  owner's latest delivery.
-- **A checked phase cannot be left behind by renaming it.** Repairing a failed
-  check by opening a differently-named task abandoned the phase: it was never
-  closed, and the pipeline could not advance past it. The repair is to re-open
-  the same phase, which is allowed even when the hub spoke last, and the failure
-  message now says so.
-- **A heartbeat is not a delivery, and a later note cannot hide one.** A phase no
-  longer closes when its owner only said it was still working or that the phase
-  was not theirs; and a coordination note posted after a delivery no longer stops
-  the check from ever running on it.
-- **A stuck check says so.** When a phase's check never runs, the daemon warns
-  once naming the phase, the command and the delivery it was waiting on —
-  previously the work simply stopped with nothing in the log to explain it.
-- **Deliberate dead ends still close.** `#done BLOCKED · <reason>` and
-  `#done skipped · <reason>` are unchanged, and remain the honest way past a
-  check that cannot pass.
-- **Agents doing research read pages instead of downloading them.** The
-  per-turn guidance now points at the extracting reader first, which returns an
-  answer rather than a whole page — the previous wording steered every agent to
-  the most expensive option.
+- **Recipes can declare `operations`**: named post-launch chains the daemon advances on its own,
+  run only when triggered.
+- **The desktop keeps its connection under load.** The sidebar listing is computed once per
+  burst and still refreshes the moment something changes.
+- **A checked phase closes only when its check passed** on the owner's latest delivery; the
+  repair is to re-open the same phase.
+- A heartbeat is not a delivery, and a phase whose check never runs is reported once.
+- Research guidance points agents at the extracting reader first, which is far cheaper than
+  downloading whole pages.
 
 ## v0.11.18 — 2026-07-29 — a profile out of budget says so
 
@@ -2108,13 +932,8 @@ deliberation one.
 
 ## v0.11.9 — 2026-07-23 — provider hiccups no longer kill a turn
 
-- **A transient provider error mid-stream now retries instead of erroring the
-  chat.** When the model's upstream stalls while the agent is still thinking
-  (reasoning emitted, no visible text yet), the engine retries the step — same
-  model first, then the configured `fallback_models` — and the turn continues.
-  Wrapped provider errors (e.g. a timeout inside a mid-stream fallback error)
-  are now recognized as transient. Once visible text has streamed, a break
-  still surfaces rather than duplicating half-written output.
+- **A transient provider error mid-stream retries instead of failing the chat**, as long as no
+  visible text has streamed yet — same model first, then `fallback_models`.
 
 ## v0.11.8 — 2026-07-22 — workgroup dispatch survives daemon restarts
 
@@ -2145,15 +964,9 @@ deliberation one.
 
 ## v0.11.6 — 2026-07-22 — large attachments over remote connections
 
-- **Attaching files from a remote device no longer kills the session.** Sending
-  an attachment bigger than ~750 KB from a paired desktop/mobile app connected
-  over the network made the daemon drop the whole connection ("websocket closed")
-  before the file was even received. Both host-plane transports now accept
-  messages sized to the 20 MiB attachment contract; within that window, a
-  per-type cap violation (e.g. an over-cap text file) gets a structured error on
-  a connection that stays alive. Anything larger never leaves the device: paired
-  apps (desktop ≥ 0.4.49, mobile ≥ 0.2.19) check the cap before uploading, and
-  give large uploads a 60-second window.
+- **Attaching files from a remote device no longer drops the connection.** Messages up to the
+  20 MiB attachment limit are accepted, an over-cap file gets a structured error, and desktop
+  ≥ 0.4.49 and mobile ≥ 0.2.19 check the cap before uploading.
 
 ## v0.11.5 — 2026-07-21 — Node 24 in the container image
 
@@ -2167,15 +980,9 @@ deliberation one.
 
 ## v0.11.4 — 2026-07-21 — read-only knowledge relays
 
-- **A profile can be a read-only front door to another agent.** Point a profile
-  at a designated peer (`relay: {peer: <id>}`) and the engine makes it a pure
-  conduit: it is offered only the `peer` tool, must consult that designated peer
-  before it can answer, and fails closed rather than answer from its own
-  knowledge — enforced by the engine, not just a prompt. The relay locks down
-  the front door only; keeping the knowledge agent itself unwritable is its own
-  concern — its tool permissions, plus a paired device's `profile_scope` to limit
-  which profiles that device may address (admin and local daemon access stay
-  unrestricted). The relay does not police the peer.
+- **A profile can be a read-only front door to another agent.** With `relay: {peer: <id>}` it is
+  offered only the `peer` tool and must answer through that peer, enforced by the engine;
+  protecting the agent behind it stays with that agent's own permissions.
 - **Cross-agent spend is attributed to the caller.** When one agent answers
   another's question over ALP, that turn's cost is now recorded against the
   calling peer (`peer:<id>`) in the daily ledger's connection breakdown instead
@@ -2183,26 +990,19 @@ deliberation one.
 
 ## v0.11.3 — 2026-07-19 — workgroup recipes
 
-- **Launch a whole workgroup from a recipe file.** A recipe is a reusable,
-  git-tracked YAML file describing a workgroup — its hub, members, briefing, start
-  task, pipeline and gates, and an optional git project to clone and seed. It
-  declares the values a launch supplies: single-line `params` (interpolated into
-  the workgroup) and multiline `inputs` (written verbatim to files in the clone,
-  e.g. a raw client brief). `alpi workgroup launch --recipe <file> --param slug=…
-  --input brief=<file>` validates it, clones and seeds the project, writes the
-  inputs, creates the workgroup and posts the first task in one step — rolling
-  everything back if any part fails.
+- **Launch a whole workgroup from a recipe file.** `alpi workgroup launch --recipe <file> --param …
+  --input …` validates the recipe, clones and seeds the project, creates the workgroup and
+  posts the first task in one step, rolling everything back on failure.
 - **Recipes are plain files, not installed state.** The daemon keeps no
   catalogue; it reads a recipe's contents at launch and validates them
   (parameters, pipeline, hub ownership) before anything is created.
 - **Hardened peer workgroup access.** A malformed workgroup id from a paired
   peer can no longer reach another profile's workgroup data; ids are now strictly
   validated everywhere they arrive over the wire.
-- **Web Factory creates each hotel from a recipe.** Spinning up a project is now
-  a single `workgroup launch --recipe` against the web-factory `hotel` recipe; the
-  old per-project `new-project.py` / `sync-template.py` scripts and the bundled
-  `hotel-web` template are gone — the template lives in its own git base repo the
-  launch clones, and template updates reach a live project via `git pull`.
+- **Projects are created from a recipe.** Spinning up a project is now a single
+  `workgroup launch --recipe`; the old per-project setup scripts and the bundled
+  template are gone — the template lives in its own git base repo the launch clones,
+  and template updates reach a live project via `git pull`.
 - **Post-launch changes stay with the hub.** New locale, rebrand, content or a
   new section come in as a maintenance request; the hub classifies it, routes the
   owners, and closes only once the change is rebuilt into the live site.
@@ -2234,37 +1034,16 @@ deliberation one.
 
 ## v0.11.0 — 2026-07-17 — faster workgroups and verified artefacts
 
-- **Active workgroups now advance in seconds.** Remote subscriptions
-  hold `workgroup.pull` open and local hubs probe cached transcripts
-  every 5 seconds, so agent-to-agent handoffs no longer wait out a
-  30-second tick.
-- **Idle workgroups stay cheap without going deaf.** Each remote
-  subscription keeps one held pull open, concurrently with every other
-  workgroup, while local hubs use cached transcript probes. Empty groups
-  launch no turns; transport failures back off up to 15 minutes.
-- **Cross-machine workgroups reuse their encrypted TCP sessions.** Repeated
-  pulls and posts no longer pay a Noise handshake each time; independent
-  pull lanes keep one workgroup from blocking another, and idle sessions
-  expire automatically.
-- **Replay protection now survives daemon restarts.** Recent signed-envelope
-  nonces are kept in a bounded private journal for the full replay window.
-- **Tighter task protocol.** Duplicate `#task` re-opening the active slug
-  is rejected; watchdog "closure-only" wakes can only close or stay
-  silent; in pipeline workgroups a member's `@mentions` wake only the
-  hub, so blocker reports can't fan work out sideways.
-- The unused `auto_kickoff` setting was removed, and the workgroup
-  wizard can now edit the closure-quorum timeout per workgroup.
-- **Peers can transfer files without putting them inside ALP JSON messages.**
-  `link.put_blob` and `link.get_blob` move explicitly selected artefacts in
-  signed chunks (encrypted over Noise/TCP), address them by SHA-256, deduplicate
-  verified content and publish downloads only after complete size and hash
-  verification.
-- **Web-factory state follows its workgroup transcript.** `new-project.py
-  --sync-status` repairs `status.yaml` through an explicit, idempotent operation
-  instead of asking the hub to remember duplicate bookkeeping.
-- **Web-factory translations can fan out safely by locale.** Lingua uses up to
-  three bounded delegates with exclusive locale ownership, then validates the
-  complete target set before handing off.
+- **Active workgroups advance in seconds.** Remote subscriptions hold their pull open and local
+  hubs probe every 5 seconds, while idle groups stay cheap.
+- Cross-machine workgroups reuse their encrypted sessions, and replay protection survives daemon
+  restarts.
+- The task protocol is stricter: a duplicate `#task` opener is refused, and a pipeline member's
+  mentions wake only the hub.
+- **Peers can transfer files** with `link.put_blob` / `link.get_blob`, addressed and verified by
+  SHA-256.
+- Translation phases can fan out safely by locale with bounded delegates.
+- The unused `auto_kickoff` setting is removed.
 
 ## v0.10.36 — 2026-07-16 — the whole inbox in one call
 
@@ -2321,13 +1100,9 @@ deliberation one.
 
 ## v0.10.30 — 2026-07-15 — member connections stay members
 
-- **Management surfaces are admin-only over remote connections**: memory
-  files, skill listings/bodies, schedule listings and the notifications inbox
-  (list, read, mark-read, delete) reject member tokens. Raw profile reads are
-  limited for members to what chat needs — peer mentions and workgroup
-  transcripts — and that limit can no longer be slipped with `..` or symlinks.
-  Auto-read is a shared profile setting, so toggling it is admin-only too; the
-  generic tool catalog stays readable (the member UI just hides it).
+- **Management surfaces are admin-only over remote connections:** memory files, skills, schedules
+  and the notifications inbox refuse member tokens, and member profile reads are limited to what
+  chat needs, with no `..` or symlink escapes.
 - **The event stream respects the same boundary**: a member connection no
   longer receives notification, schedule or spend events — live or on
   reconnect — so nothing the admin-only verbs hide leaks back through the bus.
@@ -2531,13 +1306,8 @@ deliberation one.
 
 ## v0.10.13 — 2026-07-03 — chat history stops crying wolf
 
-- **A turn no longer shows "interrupted" just because it hasn't been read yet.**
-  Sending a message writes an in-progress placeholder to disk before the reply
-  streams in; a second device (or the same one, on reconnect) reading the
-  chat at that exact moment used to show it as interrupted, then "fix itself"
-  once the real reply landed. A turn is now only ever marked interrupted when
-  it genuinely was — via Stop, Ctrl+C, or a peer cancelling it — never
-  inferred from an answer that simply hasn't arrived yet.
+- **A turn is marked interrupted only when it really was** — by Stop, Ctrl+C or a peer cancel —
+  never just because its reply had not arrived yet when another device looked.
 - **A reply made only of tool actions, with no closing comment, is no longer
   mislabeled interrupted either** — the same fix applies to any turn that
   legitimately ends without final text.
@@ -2756,182 +1526,41 @@ deliberation one.
 
 ## v0.9.27 — 2026-06-22 — profile-name path traversal closed; profile docs reconciled
 
-- **Profile names are now validated centrally.** `alpi -p <name>`,
-  `ALPI_PROFILE`, `alpi profile create`, and the `host.profile.create` RPC
-  all go through `home.validate_profile_name`: names must match
-  `^[A-Za-z0-9][A-Za-z0-9._-]*$` and cannot be the reserved alias `alpi`
-  (which is the desktop display label for the default profile). Unsafe
-  selections — `-p ../escape`, `-p .hidden`, `-p a/b`, `-p ..`, `-p alpi`,
-  any name containing `..` — are rejected with a clear `invalid profile
-  name` error before the path is joined. `-p default` keeps selecting the
-  root profile as before; only **creation** (`profile create default`,
-  `host.profile.create({"name": "default"})`) refuses `default`, since the
-  root already exists. `-p ""` likewise keeps the historical no-op
-  behaviour (falls through to the default profile).
-- **PROFILES docs match the runtime.** The isolation table now lists the
-  per-profile rows that were previously missing — OAuth `secrets/`, the
-  `alp/secrets/` keypair distinction, `host/attachments/tmp/`, `run/bg/`
-  (one `alpi-bg-*.log` + one `<pid>.meta` per background terminal job),
-  `outputs/outputs.jsonl`, `rag/store.sqlite`. Eager-vs-lazy creation is
-  spelled out; `alpi audit`'s real check is described as "any group/other
-  bits set" with the chmod fix (`700` for dirs, `600` for files), and the
-  audited `secrets/` row is correctly identified as `alp/secrets/` (the
-  ALP keypair directory) — the profile-level OAuth `secrets/` is **not**
-  audited today and is flagged as such. Host-plane root state is named
-  explicitly (`host.sock`, `devices.yaml`, `events.jsonl`, `device_id`).
+- **Profile names are validated.** Names must match `^[A-Za-z0-9][A-Za-z0-9._-]*$`; path
+  traversal such as `-p ../escape` is refused, and `default` cannot be created because it
+  already exists.
+- The profile docs list every per-profile file and directory.
 
 ## v0.9.26 — 2026-06-22 — host plane hardening: atomic peers.yaml, constant-time token compare, no token suffix in auth-failure logs
 
-- **A daemon crash mid-write can no longer brick `peers.yaml`.** The
-  pinned-peer list now lands through the same `mkstemp + fsync +
-  replace` helper that `config.yaml` uses (temp name is unique per
-  writer via `tempfile.mkstemp`, so concurrent writers can't truncate
-  a shared sibling), so a power loss or hard kill leaves either the
-  previous full file or the new full file — never a half-written one
-  that silently empties the peer roster on next load. `peers.add` /
-  `peers.remove` / the workgroup verb-grant routine run under a
-  cross-platform file lock (`fcntl.flock` on Unix, `msvcrt.locking`
-  on Windows) via `peers.update(home, mutator)`, so the
-  load → mutate → save sequence can no longer drop a concurrent
-  update.
-- **Host-plane device token comparisons use `hmac.compare_digest`.**
-  Token equality everywhere in `host/devices.py` (validation, touch,
-  role / scope / label updates, revoke) goes through a single
-  `_tokens_match(stored, presented)` helper that delegates to
-  `hmac.compare_digest` on UTF-8-encoded bytes. Replaces direct
-  secret-string `==` so the per-token comparison no longer short-
-  circuits at the first differing byte; the lookup loop itself still
-  early-exits on first match (one constant-time compare per device
-  until a hit). Unicode tokens are rejected cleanly instead of raising
-  `TypeError`. A regression guard fails if `d["token"] == token`
-  reappears in the module.
-- **Failed-auth logs no longer leak the last 8 chars of the presented
-  token.** `host/server.py::_check_token_meta` used to write
-  `…XXXXXXXX not in store` to the warning log — useful for triage of
-  attacker-presented bytes, useless to the operator, and bad hygiene
-  for any log shipped off the box. The line is now `invalid token
-  (len=N, method=<verb>)`: the operator still gets enough to diagnose
-  (length + verb) without the log carrying a partial secret.
+- **`peers.yaml` is written atomically and under a file lock**, so a crash or a concurrent update
+  can no longer lose the peer roster.
+- Device tokens are compared in constant time.
+- A failed-authentication log no longer includes part of the presented token.
 
 ## v0.9.25 — 2026-06-22 — multi-profile organizations are first-class in alpi_knowledge
 
-- **`alpi_knowledge` answers questions about organizations.** A new
-  `organization` topic ships with the tool — `alpi_knowledge(action="view",
-  topic="organization")` returns the full schema for `org.yaml`,
-  `agent.md`, and `workgroup.md`, the peer-graph merge rules, and
-  every `setup.py` mode. The tool description, the prompt-injected
-  self-knowledge rule, and the per-topic summaries all mention
-  organizations so the agent reaches for the topic when a user asks
-  about multi-profile setups.
-- **`docs/ORGANIZATION.md` reconciled with `organizations/setup.py`.**
-  Every `org.yaml` key the bootstrap reads is now in the doc with its
-  real default (`display_name`, `workspace`, `workspace_scaffold`,
-  `sync`, `peer_edges`, `models.default`/`models.strong`,
-  `budgets.daily_default`/`daily_strong`/`workgroup`, `agent_voices`,
-  `common_skills`). `agent.md` and `workgroup.md` frontmatter tables
-  match the validator — `reasoning_effort` is the only field required
-  to be present; everything else has a default. The peer graph is
-  described as a deduped union of three sources (`org.yaml peer_edges`
-  preferred, `agent.md peers:` legacy back-compat, workgroup
-  membership), not a precedence chain. Workgroups are documented as
-  persistent, end-to-end.
-- **A guard test pins the doc to the code.** `tests/core/test_org_doc.py`
-  parses `setup.py` with `ast`, extracts the keys actually read inside
-  `init_org`, `_parse_agent_file`, and `load_workgroups`, and asserts
-  the `org.yaml` and `agent.md` tables in `ORGANIZATION.md` enumerate
-  exactly the same set — neither doc rows that don't exist in code,
-  nor code keys missing from the doc. `workgroup.md` fields are
-  documented in prose; the guard for that one is one-directional
-  (every field setup.py reads is documented). Two extra guards:
-  `TOPICS` and `_TOPIC_SUMMARIES` must stay symmetric, and the new
-  `organization` topic must be wired through the tool description
-  and the prompt rule, not only the enum.
+- **`alpi_knowledge` answers questions about organizations** through a new `organization` topic.
+- `docs/ORGANIZATION.md` matches the bootstrap code, and a test keeps them aligned.
 
 ## v0.9.24 — 2026-06-22 — pipe-to-interpreter detector rewritten on shlex.shlex
 
-- **`curl x|bash` and `curl x | tee … | bash` are now blocked;
-  `curl example.com || bash fallback.sh` no longer triggers a false
-  positive.** The previous regex-based classifier confused `||` /
-  `&&` / `;` with a pipe (false positives on fallback expressions)
-  and missed real bypasses: operators attached without spaces
-  (`curl x|bash`), redirections (`curl x 2>&1 | bash`),
-  multi-pipe chains (`curl x | tee /tmp/x | bash`), downloader under
-  a wrapper (`sudo curl x | bash`, `env FOO=1 curl x | bash`,
-  `FOO=1 curl x | bash`), wrappers with arity (`curl x | nice -n 5
-  bash`, `curl x | ionice -c 3 bash`, `curl x | timeout 10 bash`),
-  the `|&` operator, and group syntax (`curl x | (bash)`,
-  `curl x | { bash; }`). Replaced with
-  `alpi/tools/_pipe_to_interpreter.py` — a single shared helper
-  built on `shlex.shlex(punctuation_chars=True)` that tokenises
-  shell-aware operators, splits pipelines only on real `|` / `|&`,
-  resolves wrappers around both the downloader and the interpreter
-  (`sudo` with value flags including `-s` / `-i` / `--shell` /
-  `--login` which invoke the user shell directly, `env FOO=1`,
-  `env -S "bash -s"` and `env --split-string=…` whose argv is
-  re-tokenised and inspected, leading `FOO=1` assignments,
-  `command`, `exec`, `nice`, `ionice`, `nohup`, `stdbuf`,
-  `timeout`), strips shell redirections, and matches the supported
-  interpreter set: `sh / bash / zsh / ash / dash / ksh / fish /
-  python / python2 / python3 / perl / ruby / node / pwsh /
-  powershell`. Line continuations
-  (`\\<newline>`, `|<newline>`) are treated as one logical line
-  while real newlines act as command separators; Windows-style
-  executables are normalised when quoted (`curl.exe`,
-  `'C:\\path\\curl.exe'`, case-insensitive); subshell / group
-  syntax (`( cmd )`, `{ cmd; }`) is conservatively scanned for
-  downloaders. Used by both `_approval.classify` and
-  `_guards.check_command`, so the four duplicated regexes can no
-  longer drift apart.
-- **SECURITY.md and the knowledge reference describe the sandbox
-  truthfully.** Persistent writes are confined to `workspace` +
-  `~/.alpi/` + system temporary trees (`/tmp` everywhere; macOS also
-  exposes `/private/tmp` and `/private/var/folders`) — earlier
-  wording oversimplified this as just `/tmp` and "the same write
-  set" on Linux. Linux/`bubblewrap` actually makes only explicitly-
-  mounted paths readable: workspace and profile bind-mounted
-  writable, runtime system paths read-only, `/tmp` as an in-sandbox
-  tmpfs. macOS/`sandbox-exec` runs default-allow for reads with a
-  small explicit deny list (`~/.ssh`, `~/.aws`, `~/.gnupg`, profile
-  `.env`, skill `secrets/`).
+- **Piping a download into an interpreter is detected reliably.** `curl x|bash`, multi-pipe
+  chains, wrappers such as `sudo` or `env`, and redirections are all caught, while
+  `curl … || bash fallback.sh` is no longer a false positive.
+- SECURITY.md describes exactly what the sandbox confines on Linux and macOS.
 
 ## v0.9.23 — 2026-06-21 — ALP wire contract reconciled with the runtime
 
-- **`link.ask` result shape matches the daemon.** The doc used to
-  promise `tokens: { input, output }` and `cost_usd`. The runtime
-  returns flat `tokens_in`, `tokens_out`, `cost`, plus the
-  `interrupted` flag that flips when `link.cancel` lands mid-turn.
-  Callers building against the documented shape now actually parse
-  what arrives.
-- **Wire error table only lists wire errors.** Bad signature
-  (`-32002`), replay (`-32003`), and version-mismatch (`-32006`) are
-  envelope-level failures the server silently drops — they never
-  cross the wire, so listing them as wire codes invited callers to
-  match on a response that never arrives. Removed from the wire
-  table; the Envelope and Versioning sections describe the
-  silent-drop posture instead.
-- **Client-side diagnostics get their own section.** `target-offline`
-  is `alpi.alp.client.TargetOffline` raised when the peer socket is
-  missing or refused — the offline target cannot answer, so it never
-  travels on the wire. `task-missing-slug` is a plain `ValueError`
-  raised before encryption, since the hub stays zero-knowledge
-  against post bodies. Neither carries a JSON-RPC `code`; both used
-  to be listed as if they did.
-- **`-32005` documents both reasons.** The runtime uses it for
-  `budget-exceeded` (with `data.cap_kind=usd` / `workgroup_usd`) and
-  for `rate-limited` (with `data.window_seconds`). Same code, two
-  reasons; check `message` to tell them apart.
+- **The ALP wire documentation matches the daemon.** `link.ask` returns flat `tokens_in`,
+  `tokens_out`, `cost` and `interrupted`; the error table lists only errors that cross the wire,
+  and `-32005` documents both `budget-exceeded` and `rate-limited`.
 
 ## v0.9.22 — 2026-06-20 — skills + config docs reconciled with the runtime
 
-- **Skill frontmatter described honestly.** `tools:` is metadata used
-  by the curator and inventory — it has never been enforced at
-  runtime, despite the prior wording suggesting otherwise. `pinned`
-  is now in the frontmatter example with its own subsection (protects
-  the skill from `skill(delete)` and from `alpi curator apply`).
-  `requires_config` is described as an opt-in gate: it kicks in for
-  the system-prompt skill index and for explicit `skill(run|test|
-  invoke)` calls (both load profile config), not for every
-  programmatic resolver.
+- **Skill frontmatter is documented accurately.** `tools:` is inventory metadata and not enforced,
+  `pinned` protects a skill from deletion and curation, and `requires_config` gates the skill
+  index and explicit runs.
 - **CONFIG.md lists every key the code actually parses.** Added
   `tools.browser.allow_local`, `model_reasoning.effort`, `public_bio`,
   `paused`, and explicit `gateway.telegram` / `gateway.matrix`
@@ -2948,32 +1577,12 @@ deliberation one.
 
 ## v0.9.21 — 2026-06-20 — scheduler, filesystem, and outbound-HTTP hardening
 
-- **Scheduled jobs survive concurrent edits and corrupted files.** The
-  scheduler, the agent's `schedule` tool, and the desktop control plane
-  now share one locked store for `schedule/jobs.json` so a tick can't
-  clobber a job the desktop just removed and two clients can't lose
-  each other's changes. If the file is corrupt for any reason, every
-  caller refuses to write — the bytes on disk are preserved until you
-  fix or replace them.
-- **Profile state directories are owner-only on bootstrap.** Profile
-  home and the dirs holding memories, sessions, logs, secrets, host
-  pairing, ALP mentions, agent outputs, and skill state are tightened
-  to `0700` on bootstrap and re-tightened on upgrade. `alpi audit`
-  flags any drift. Closes a real exposure on shared hosts (docker
-  stacks, Umbrel) where another local user could list and read
-  conversation history or `AGENT.md` context.
-- **`web_fetch` and `read_image` are hardened against DNS rebinding.**
-  Each fetch resolves DNS once, validates every returned IP against
-  the private/cloud-metadata denylist, and pins the connection to that
-  validated set. The TLS layer still uses the original hostname for
-  SNI and certificate validation, and the client falls back across
-  multiple IPs under one shared deadline (a four-record host with
-  one-second budget still respects one second).
-- **`peers.yaml` rate-limit field matches what the daemon actually
-  reads.** The doc said `rate_limit.requests_per_minute` (default 10);
-  the runtime keys off `rate_limit.per_minute` (default 60). Doc
-  aligned to the runtime with no code rename — peer throttles you
-  configured per the published spec now take effect.
+- **Scheduled jobs survive concurrent edits and corrupt files.** Every writer of
+  `schedule/jobs.json` shares one locked store, and a corrupt file is never overwritten.
+- **Profile state directories are owner-only** (`0700`), and `alpi audit` flags drift.
+- **`web_fetch` and `read_image` resist DNS rebinding** by pinning connections to validated
+  addresses.
+- The documented peer rate-limit key is corrected to `rate_limit.per_minute`.
 
 ## v0.9.20 — 2026-06-20 — current model recommendations + safer org bootstrap
 
@@ -3193,26 +1802,17 @@ deliberation one.
 
 ## v0.8.23 — 2026-06-12 — daemon FD limit + clean stream disconnects
 
-- **The daemon no longer hits "too many open files."** Its service
-  definitions — launchd, systemd, and the Docker compose — now pin a
-  file-descriptor ceiling of 8192 instead of inheriting a low platform default
-  (256 on macOS launchd), which a machine running many profiles (each with
-  gateway/schedule/alp/workgroups/host) could exhaust under load, making
-  profile operations fail intermittently. Reinstall the daemon
-  (`alpi daemon install`), or recreate the container, to apply it.
+- **The daemon no longer runs out of file descriptors.** launchd, systemd and the Docker compose
+  pin a ceiling of 8192; reinstall the daemon (`alpi daemon install`) or recreate the container
+  to apply it.
 - **Quitting a client no longer logs a false daemon error.** When the desktop
   app or a paired device disconnects from the live event stream, the daemon now
   ends that stream cleanly instead of recording the normal disconnect as a crash.
 
 ## v0.8.22 — 2026-06-11 — MCP servers read the profile's own .env
 
-- **MCP servers now resolve `env:` credentials from the profile's `.env`.**
-  An `env:BITBUCKET_TOKEN`-style reference in an MCP server config is looked up
-  in the profile's `.env` first (then the daemon environment) — the same
-  precedence every other tool already uses. Before, these refs resolved only
-  from the daemon's process environment, so a server whose secrets lived in the
-  profile `.env` failed to start and its tools silently went missing. Servers
-  with no `env:` references were never affected.
+- **MCP servers resolve `env:` credentials from the profile's `.env`** first, then the daemon
+  environment — the same precedence as every other tool.
 
 ## v0.8.21 — 2026-06-11 — local-build browsing, Gemini-safe tools, security docs
 
@@ -3352,13 +1952,8 @@ deliberation one.
 
 ## v0.8.11 — 2026-06-09 — recalled memory is checked for injection
 
-- **What an agent remembers about you — your `USER.md` profile and `MEMORY.md`
-  notes — is now scanned for prompt-injection when loaded into context.** If a
-  note looks like it carries a hidden instruction, a system-prompt leak attempt,
-  or invisible-unicode trickery, it's flagged as untrusted data the model must
-  not obey — closing the one path that reached the prompt without a check (tool
-  results, web pages, and email were already scanned). Warning-first: genuine
-  notes are never blocked, only marked when they look suspicious.
+- **`USER.md` and `MEMORY.md` are scanned for prompt injection when loaded.** A suspicious note is
+  marked as untrusted data the model must not obey; genuine notes are never blocked.
 - **Your agent's persona is left untouched.** `AGENT.md` is instruction by
   design, not recalled data, so it's never marked untrusted.
 - **One shared scanner backs every check** — skills, memory, and inbound content
@@ -3507,13 +2102,10 @@ deliberation one.
 
 ## v0.7.2 — 2026-06-03 — attach files to chat
 
-- **A message can carry files now.** Attach images, PDFs, and text/source files
-  (`txt` / `md` / `csv` / `json` / `yaml` / `html`, plus `py` / `js` / `ts` /
-  `tsx` / `go` / `rs` / `sh` / `sql`) to a chat turn and the model sees them. In the TUI, `/attach <path>` stages a file for your next
-  message (`/attachments` lists pending, `/clear-attachments` drops them);
-  desktop and mobile get a paperclip and drag-and-drop. Text PDFs are read as
-  text, scanned PDFs are rendered to page images for vision models, and a model
-  without vision support fails with a clear message instead of silently.
+- **Messages can carry files.** Images, PDFs and text or source files reach the model; the TUI
+  stages them with `/attach <path>`, desktop and mobile with a paperclip or drag-and-drop.
+  Scanned PDFs are rendered as images for vision models, and a model without vision fails
+  clearly.
 - **Remote clients can upload attachments.** A new `host.attachments.stage`
   call lets a phone (or any remote client) hand the daemon a file's bytes and
   get back a path to send. Size caps and a type allowlist
@@ -3544,12 +2136,8 @@ deliberation one.
 
 ## v0.7.0 — 2026-06-03 — curator can apply its own cleanup
 
-- **`alpi curator apply` archives stale skills for you.** The curator already
-  flags skills that have gone stale or were never used; now it can act on that.
-  `alpi curator apply` previews the archive list, asks for confirmation, and
-  moves each skill to `skills/.archive/` (recoverable with a plain `mv`). Pinned
-  skills are never touched, and re-running is safe — already-archived skills are
-  skipped. Consolidating related skills into one is left for a later release.
+- **`alpi curator apply` archives stale skills.** It previews the list, asks for confirmation and
+  moves each skill to `skills/.archive/`; pinned skills are never touched.
 - **A workgroup phase can't silently half-transition anymore.** The hub could
   post a single message that both closed one task and opened the next (`#done …`
   + `#task …`); that post was treated as plain prose, so a phase looked
@@ -3605,44 +2193,20 @@ deliberation one.
 
 ## v0.6.33 — 2026-06-02 — workgroup turns die only when truly stuck
 
-- **A productive turn is no longer killed by the clock.** A workgroup turn
-  used to be capped at a fixed wall-clock budget, so an agent still working —
-  reading files, running a build, posting — could be cut off mid-task. Now a
-  turn is stopped only after it goes quiet (no activity for a while) or hits a
-  hard backstop; one that keeps making progress runs to completion. The turn
-  log tags each kill as idle vs backstop so a stuck producer is easy to spot.
-- **Pausing a workgroup actually stops it.** Pause used to reject new posts but
-  left the engine running — agents kept waking and burning budget against a
-  paused workgroup, only to have their work rejected. Now pause halts all
-  automatic turns (dispatch, watchdog, repair, continuation) on the hub and its
-  members. Resume re-evaluates cleanly: a workgroup left mid-task picks back up
-  on the next tick instead of staying silent on counters spent before the pause.
+- **A productive workgroup turn is no longer killed by the clock.** A turn stops only when it
+  goes idle or hits a hard backstop, and the log says which.
+- **Pausing a workgroup stops it.** All automatic turns on the hub and its members halt, and
+  resuming picks up a task left mid-way.
 
 ## v0.6.32 — 2026-06-01 — workgroup handoffs survive, blocks halt cleanly
 
-ALP workgroups got sturdier under autonomous, multi-phase pipelines.
-
-- **A member's handoff is never lost.** A non-hub member that ended a turn
-  with `#done <result>` used to have the whole post rejected; now the
-  hub-only marker is stripped and the substantive handoff text is kept and
-  delivered. Only the hub still closes the task — but the member's
-  deliverable always reaches it.
-- **A hub can stop cleanly.** Closing with `#done BLOCKED · <reason>` now
-  halts a pipeline (no auto-advance, no reopen) instead of leaving a task
-  open and the workgroup looking hung — the project waits, blocked, until a
-  human re-tasks it.
-- **Stuck tasks get one last deterministic repair.** Before the watchdog
-  abandons a stalled pipeline task, it wakes the hub once more to verify the
-  work and either close it or post a concrete `BLOCKED`.
-- **A working member isn't mistaken for a stalled one.** A `#working`
-  heartbeat earns the full turn timeout before silence counts as a stall, so
-  a long local job (writing many files, a build) isn't cut short.
-- **Assign a pipeline when you create a workgroup.** A workgroup can now
-  carry an ordered list of phase slugs (e.g. `intake → content → build →
-  qa`); the hub advances phases in order and a `#done BLOCKED` halts cleanly.
-  Set it from the CLI (`workgroup create --pipeline …`) or the new pipeline
-  field in the desktop + mobile create forms; empty = a normal deliberation
-  workgroup.
+- **A member's handoff is never lost.** A `#done` from a non-hub member keeps its text and
+  reaches the hub.
+- **A hub can halt a pipeline** with `#done BLOCKED · <reason>` until a human re-tasks it.
+- A stalled task gets one last repair wake before the watchdog gives up, and a `#working`
+  heartbeat earns the full turn timeout.
+- **A workgroup can carry an ordered pipeline of phases**, set with `workgroup create
+  --pipeline …` or in the desktop and mobile create forms.
 
 ## v0.6.31 — 2026-05-30 — Docker deployment, Umbrel retired
 
@@ -3663,14 +2227,8 @@ package is gone.
 
 Three protocol / catalog tweaks bundled together.
 
-- **Task slugs are mandatory.** Every `#task` opener must now carry a
-  stable kebab-case `#<slug>` identifier: `#task #<slug> <description>`.
-  Slug pattern `[A-Za-z0-9][A-Za-z0-9_-]{0,63}`, normalised to lowercase;
-  description is optional. The SDK rejects slug-less attempts with
-  `task-missing-slug` before encryption, and the parser treats them as
-  plain prose. New error code `-32011 task-missing-slug` documented;
-  the hub stays zero-knowledge and does not re-validate on the wire.
-  `WORKGROUP_GUARDRAILS` updated so hubs see the new shape.
+- **Task slugs are mandatory.** Every opener reads `#task #<slug> <description>`; a slug-less
+  attempt is refused with `-32011 task-missing-slug`.
 - **`tools.deny` shows up in introspection.** `host.tools.list` now
   reads the requested profile's `config.yaml` and emits `denied: true`
   on each entry listed under `tools.deny`. Apps render those rows
@@ -3697,44 +2255,13 @@ and every `workgroup_post` failed silently with
 
 ## v0.6.28 — 2026-05-28 — per-device profile scope
 
-Pairing a non-admin device can now restrict it to a subset of profiles
-instead of the whole host. A shared phone reaches `@home` only; a
-partner's laptop reaches `@finance` only.
-
-- New device field `profile_scope: list[str]`. Empty list means
-  unrestricted, so devices paired before this version keep their
-  current behavior on upgrade — no migration needed.
-- `host.devices.generate` accepts a `profiles` param; new
-  `host.devices.set_profiles` RPC tightens/loosens scope post-pairing
-  without re-issuing the token. Both reject invalid profile names
-  with `-32602 invalid-params` (strict on the wire; lenient `[]`
-  fallback stays for legacy YAML so a corrupt store can't widen
-  permissions).
-- Host server gates every profile-aware RPC against the calling
-  device's scope. Scoped members **must** pass `params.profile`
-  explicitly — missing/empty profile is rejected with `-32001
-  forbidden` instead of silently falling through to the daemon's
-  default profile. List-style responses (`host.profiles.list`,
-  `host.profile.summaries`, `host.workgroups.list`,
-  `host.approval.pending`, `host.clarification.pending`,
-  `host.events.history`) and the event-subscribe stream are filtered
-  to the device's scope before delivery. A small allowlist of
-  scope-free methods (`host.version`, the filtered list verbs, the
-  approval/clarification respond verbs) is exempt. Admin role
-  bypasses everything by design.
-- `host.devices.list` is now admin-only — listing other devices'
-  labels and scopes is admin-scoped information.
-- `alpi setup → Devices → add` and the desktop pair modal expose a
-  profile picker when the new device is not admin. The desktop modal
-  applies the final role and scope at "Pair" click and auto-revokes
-  the placeholder token if the admin cancels or closes the modal
-  before pairing completes; a 24h server-side TTL prunes any orphan
-  `pending` rows that bypass the client cleanup. Mobile keeps
-  receiving the `-32001` correctly; mobile admin parity lives in
-  `UX.5`.
-- Pairing URL drops the `v=2` placeholder — never had a `v=1` and no
-  parser validated it. Mobile/desktop parsers ignore the field if
-  present, so already-paired devices are unaffected.
+- **A non-admin device can be limited to some profiles.** Pairing takes a profile list and
+  `host.devices.set_profiles` changes it without re-pairing; devices paired before keep full
+  access.
+- Every profile-aware request and event stream is filtered to the device's scope; admins are
+  unrestricted.
+- `host.devices.list` is admin-only, and `alpi setup` and the desktop pairing dialog offer a
+  profile picker for non-admin devices.
 
 ## v0.6.27 — 2026-05-27 — local peer routing centralised
 
@@ -3767,16 +2294,9 @@ or any abnormal exit.
   it lands inside `~/.alpi/` next to every other daemon-managed
   artifact. The new path inherits the existing backup exclusion
   (`cache/` is already in `alpi.backup._EXCLUDE_DIRS`).
-- **Pidfile validates by process start time.** `daemon_running_pid`
-  used to trust any PID that answered `os.kill(pid, 0)`, so a stale
-  `service.pid` (e.g. PID `9`) on the persistent volume could match
-  an unrelated process in the new container — entrypoint then exited
-  `1`, restart-on-failure looped. The pidfile now stores
-  `<pid> <starttime>` (Linux `/proc/<pid>/stat` field 22); on read,
-  a starttime mismatch unlinks the file and reports "no daemon
-  running" so the new container starts fresh. The Umbrel entrypoint
-  also clears `service.pid` on boot as belt-and-braces — runtime
-  state has no meaning across container boundaries.
+- **A stale pidfile no longer stops a new container from starting.** The pidfile records the
+  process start time, so a reused PID is recognised as someone else's and the daemon starts
+  fresh.
 
 ## v0.6.25 — 2026-05-27 — device revoke is idempotent
 
@@ -3875,45 +2395,11 @@ TUI / desktop / mobile session.
 
 ## v0.6.18 — 2026-05-27 — ask_user (UX.1) + approval gets cwd context
 
-The agent can ask a closed question through a structured primitive
-that owned clients (desktop / mobile / TUI) render natively, while
-gateways degrade to a numbered text list. The approval modal also
-gains the working directory the command will run in.
-
-- New tool ``ask_user(question, choices, allow_other=True, multi=False)``.
-  Accepts 2-4 ``{label, description?}`` items for single-select and
-  2-8 for ``multi=True``; validates uniqueness and non-empty labels,
-  routes by surface, and returns the chosen string back to the model.
-  With ``multi=True`` the result is the picked labels joined by
-  ``", "`` and ``allow_other`` is ignored.
-- ``alpi/host/clarification.py`` mirrors the approval Future-bridge.
-  Two RPCs (``host.clarification.respond`` /
-  ``host.clarification.pending``), two events
-  (``clarification.request`` / ``clarification.resolved``), 5-minute
-  default timeout, idempotent late-response handling. Both RPCs accept
-  ``member`` tokens — any device that can chat with the agent must be
-  able to answer its questions; ``approval.respond`` stays admin-only
-  because it authorizes commands. For ``multi=True`` the wire protocol
-  is a JSON-array string of labels (``'["A","B"]'``); the server
-  validates every element against the offered labels, dedupes, and
-  joins to ``", "`` for the model — labels that contain commas survive
-  intact.
-- The TUI plugs an inline ``stdin/stdout`` handler for ``alpi chat
-  --once`` and a Textual ``ClarificationPanel`` for the full
-  ``alpi chat`` shell. Both reprompt on empty / unknown multi picks
-  instead of resolving to the empty string.
-- Gateway turns (``ALPI_PLATFORM`` set) short-circuit to a numbered
-  text block so the user can answer freely in their next inbound
-  message; no Future, no host plumbing.
-- The approval gate now receives the *effective* ``cwd`` (already
-  resolved through ``terminal._default_cwd()``) and forwards it in the
-  ``approval.request`` event so owned clients can show it under the
-  command. Path is collapsed to ``~`` on the daemon side.
-- System prompt is firmer about the boundary: the agent is **not** the
-  safety layer for shell commands — ``terminal`` has its own approval
-  modal and the user decides there. Refusing destructive commands in
-  prose, or pre-confirming them via ``ask_user(Continue, Cancel)``, is
-  flagged as wrong behaviour.
+- **New `ask_user` tool for closed questions.** Desktop, mobile and the TUI render the choices
+  natively; gateways fall back to a numbered list.
+- The approval prompt shows the directory a command will run in.
+- The agent no longer second-guesses shell commands in prose; `terminal`'s own approval is the
+  safety gate.
 
 ## v0.6.17 — 2026-05-27 — runtime-created profiles come online without a daemon restart
 
@@ -3966,41 +2452,10 @@ suggestions land in AC.2.
 
 ## v0.6.15 — 2026-05-26 — prompt caching (CL.1)
 
-Stable cacheable prefix + LiteLLM-native ``cache_control`` injection
-on supported models. No config, no audit logs, no provider table — the
-SDK's own capability check picks the right behaviour per model and
-provider.
-
-- The cacheable system prompt is now assembled by
-  ``alpi.prompt_cache.build_parts`` as a named map in a canonical
-  order (``agent_profile``, ``base_prompt``, ``env``, ``system_time``,
-  ``surface``, ``knowledge_rule``, ``skills_index``, ``user_md``,
-  ``memory_md``). The rendered text the LLM sees is byte-identical to
-  the previous build path, so any session pinned to the old prefix
-  keeps hitting cache.
-- Per-turn volatile context (``# NOW``, workgroup context, skill
-  keyword hints) is appended by the engine as separate system messages
-  and never enters the prefix builder — covered by a regression test.
-- For models that ``litellm.utils.supports_prompt_caching`` flags
-  (Anthropic Claude, Bedrock Claude, Vertex / AI Studio Gemini, and
-  the OpenRouter routes LiteLLM knows about), the engine forwards
-  ``cache_control_injection_points: [{location: "message", index: 0}]``
-  to ``litellm.completion``. The marker lands on ``messages[0]``, the
-  stable prefix — never on the volatile ``# NOW`` / workgroup / hint
-  messages at ``messages[1..N]``. Auto-cache providers (OpenAI,
-  DeepSeek, xAI) keep working through prefix stability alone.
-- Defensive fallback: a missing helper, a raised exception, or an
-  unknown model returns ``{}`` and the turn runs without the marker.
-  Caching is opt-in optimisation; it never breaks a call.
-- Tool definitions are now byte-stable across calls. ``Schedule.schema``
-  used to embed ``Current time: <datetime.now()>`` in its description
-  to ground relative phrases; the per-turn ``# NOW`` system block
-  already does that, and the timestamp was flipping the tools-defs
-  cache key on every request — Anthropic served zero cache reads. The
-  preamble is gone; live smoke against ``anthropic/claude-haiku-4-5``
-  now reports ~98% of the prefix coming from cache on the second turn
-  of an identical-prefix session. A regression test pins
-  ``tools.schemas()`` to byte-equality across consecutive calls.
+- **Prompt caching.** The system prompt is a stable prefix, and models that support explicit
+  cache markers get one on it automatically — no configuration needed.
+- Tool definitions are byte-stable between calls, so the cache is no longer broken on every
+  request.
 
 ## v0.6.14 — 2026-05-26 — storage hygiene
 
@@ -4046,236 +2501,57 @@ size / activity / turns / created. Bulk-select with checkboxes
 
 ## v0.6.12 / desktop-v0.3.21 / mobile-v0.1.17 — 2026-05-26 — tts stops trying to be a player
 
-The daemon no longer plays audio. The ``tts`` tool still synthesises
-through Microsoft Edge TTS and caches an MP3 — but local speaker
-playback, the per-profile autoplay toggle, and the gateway-specific
-voice-note conversion (mp3 → ogg via ``ffmpeg``) are all gone. The
-mobile and desktop apps already show a play button on each message,
-which is now the only delivery surface for free-form audio.
-
-- Always MP3 output. ``~/.alpi/cache/tts/<hash>.mp3`` regardless of
-  caller. The ``ALPI_GATEWAY`` env var is gone too — gateways no
-  longer need a special TTS code path.
-- ``tools.tts.autoplay`` removed from config. ``alpi voice
-  autoplay`` subcommand removed. Setup wizard ``voice`` section
-  drops the toggle. Desktop / mobile profile settings drop the
-  autoplay row.
-- ``host.voice.autoplay`` JSON-RPC verb removed. Paired clients
-  on older daemons that still call it get a clean
-  ``method-not-found``.
-- Telegram voice-note inline UX → audio attachment. To deliver TTS
-  to Telegram the agent now chains ``send_message(attachment=
-  <path>)``; the message shows as an MP3 attachment rather than
-  an inline voice waveform. ``ffmpeg`` is no longer a runtime
-  dependency for tts.
-
-Upgrade note: any ``tools.tts.autoplay`` line left in
-``config.yaml`` is harmless — the loader ignores unknown keys.
+- **The daemon no longer plays audio.** `tts` always writes an MP3 to the cache; the apps'
+  per-message play button is the way to listen.
+- `tools.tts.autoplay`, `alpi voice autoplay` and `host.voice.autoplay` are removed, and `ffmpeg`
+  is no longer needed.
+- TTS sent to Telegram arrives as an MP3 attachment instead of a voice note.
 
 ## v0.6.11 — 2026-05-25 — persistent inbox for proactive messages
 
-Notifications stop being one-shot. Every proactive ``send_message``
-and every schedule failure now files a durable row in a per-profile
-inbox at ``~/.alpi/[profiles/<name>/]outputs/``, capped at 500
-entries. Tapping the notification on a paired device deep-links to
-that row instead of dumping you into the chat window, so the
-context survives reboots, OS notification-tray clearing, and being
-offline when the message fired.
-
-- New ``outputs/`` store under each profile home, with a simple
-  ``unread`` / ``read`` lifecycle and per-row ``delivered_to``
-  (alpi, gateway, or both). No archive — the 500-row cap handles
-  retention, so the inbox stays a two-state surface.
-- Schedules that deliver to a real gateway channel
-  (``platform=telegram`` / email / matrix / …) now file an inbox
-  row with the reply body. Stdout-only maintenance jobs and
-  silent runs still write nothing — the inbox stays a surface
-  for things the user actually saw or could have seen.
-- Schedule failures still file ``important`` / ``alert`` rows.
-- Attachment-only ``send_message`` calls (TTS → Telegram voice
-  notes) no longer leave empty inbox rows — the audio lives in
-  the gateway and there's nothing displayable to keep.
-- ``agent.message`` and ``schedule.failed`` events now carry
-  ``output_id`` + a profile-scoped ``deep_link`` so future mobile
-  / desktop builds can route straight to the row.
-- A schedule or gateway turn that calls ``send_message`` produces
-  exactly one inbox row, with ``delivered_to`` reflecting every
-  channel the agent used (``alpi``, ``telegram``, or both).
-- New host verbs ``host.outputs.{list, read, mark_read,
-  mark_all_read}`` plus ``output.created`` / ``output.updated``
-  push events for inbox surfaces that want to refresh without
-  polling.
-
-Companion mobile / desktop releases will start consuming this
-foundation in the next builds; this release is the daemon-side
-contract that everything else builds on.
+- **Proactive messages land in a persistent inbox.** Every `send_message` and schedule failure
+  files a row under the profile's `outputs/`, kept up to 500, and notifications deep-link to it.
+- Rows track read state and which channels delivered them; silent runs write nothing.
+- New `host.outputs.*` verbs and `output.created` / `output.updated` events let clients show the
+  inbox without polling.
 
 ## v0.6.10 — 2026-05-25 — paired devices get a role (admin / member)
 
-Device tokens now carry a role on disk. The dispatcher checks it
-before sensitive host methods, so an admin device on Tailscale
-can do remote setup (create profiles, add gateways, mint other
-devices, restart the daemon) while a member device stays
-read-mostly. The local socket on the daemon's own machine is
-unchanged — sovereign authority for bootstrap and recovery.
+**Breaking:** re-pair every device after upgrading; a device without an explicit role becomes
+`member`.
 
-Re-pair every device after upgrading: this release **does not
-preserve backward compatibility** with pre-0.6.10 entries.
-Anything without an explicit role collapses to ``member`` at
-load time, so an old admin device becomes member until re-paired.
-
-- ``devices.yaml`` entries gain a ``role`` field; unknown
-  values fall back to ``member`` (least privilege).
-- ``_ADMIN_METHODS`` enforced in ``alpi/host/server.py`` over
-  WS, covering 35+ verbs across providers, profile CRUD,
-  config field writes, MCP add/remove, gateway config
-  (including Gmail OAuth ``begin``/``exchange``), sandbox,
-  peers, identity draft, schedule fire/remove/pause, workgroup
-  CRUD/action, voice config, approval respond, daemon restart,
-  and device CRUD. Local socket bypasses every check.
-- New host methods ``host.devices.promote`` and
-  ``host.devices.demote`` flip the role on an existing device
-  by ``token_id``. Admin-only.
-- ``host.devices.generate`` accepts an optional ``role`` param
-  (default ``member``); ``host.devices.list`` stays open to
-  members and now returns the role on each redacted row (the
-  full token still never leaves the daemon).
-- ``_LOCAL_ONLY_METHODS`` shrinks to the three
-  ``host.network.*`` verbs — only network admin still requires
-  sitting at the daemon's terminal.
-- ``host.profile.read_file`` rejects secret content for every
-  caller, admin or member. The check is by path *components* so
-  nested directories don't slip through: any ``secrets`` part of
-  the path (catches ``alp/secrets/``, ``skills/foo/secrets/``);
-  top-level ``host/`` / ``gateway/`` / ``cache/``; any basename
-  starting with ``.env`` (``.env``, ``.env.local``,
-  ``skills/foo/.env``, ``workspace/.env``); common private-key
-  extensions (``.pem``, ``.key``, ``.p12``, ``.pfx``,
-  ``.keystore``); symlinks that resolve into a denied subtree;
-  ``../`` escapes (now ``-32001 forbidden`` instead of the old
-  ``-32004 not-found``). Comparison is case-insensitive so
-  ``SECRETS/`` on macOS HFS+/APFS is caught too.
-- TUI ``alpi setup → devices → + Add device`` now asks
-  *"Grant admin access?"* before minting (defaults to No /
-  member). The device-detail screen shows the role and offers
-  Promote / Demote actions.
-- The device list (TUI) shows the role next to the
-  last-seen badge.
-- ``host.version`` now also returns the caller's ``role`` so
-  desktop / mobile clients can gate admin UI before the daemon
-  has to refuse a call.
-- Empty-store fail-closed for WS: previously a missing or empty
-  ``devices.yaml`` accepted any WS token as admin (open
-  "migration window"). With roles in play that's a remote
-  admin backdoor — closed. The local Unix socket is the only
-  way to mint the first device, exactly as the bootstrap docs
-  describe.
-- **Mobile policy.** The role applies to mobile clients the same
-  way it applies to desktop: the daemon enforces from `host.version`
-  and `_ADMIN_METHODS`. Mobile UI must gate admin actions for
-  member tokens — followed up separately. The pair copy on TUI
-  and desktop no longer singles out phones ("leave unchecked for
-  phones" → "leave unchecked for shared, lost-prone, or read-only
-  devices"); your primary phone can absolutely be admin.
-- **`member` is NOT a sandbox on the agent's tools.** The role
-  gates the host control plane (config, devices, gateways, MCP,
-  profile lifecycle, schedules, daemon restart). ``host.chat.send``
-  stays open to members, so the agent's own capabilities
-  (workspace writes, memory edits, network) remain reachable.
-  Use the OS sandbox flag or separate profiles for that boundary.
-  Documented in ``docs/SECURITY.md``, ``docs/ARCHITECTURE.md``,
-  and ``alpi/knowledge/references/security.md``.
+- **Paired devices carry a role, admin or member.** Admin devices can do remote setup —
+  profiles, gateways, devices, schedules, daemon restart — while members are read-mostly. The
+  local socket keeps full authority.
+- `host.devices.promote` / `demote` change a device's role, and `host.version` returns the
+  caller's role so clients can hide admin actions.
+- `host.profile.read_file` refuses secret files for every caller.
+- An empty device store no longer accepts any token; the first device is paired from the local
+  socket.
+- `member` limits the control plane, not the agent's tools; use the OS sandbox or separate
+  profiles for that.
 
 ## v0.6.9 — 2026-05-25 — Gmail OAuth works against remote daemons
 
-The Gmail OAuth wizard used to fail silently when the daemon
-wasn't on the same machine as your browser — the consent
-loopback ran inside the daemon, so on Umbrel (or any headless
-host) Google's redirect landed nowhere. Two ways out now:
-
-- **From the desktop app**: the loopback HTTP server moved
-  to the client side. The desktop binds the redirect port on
-  *your* machine, asks the daemon to prepare the consent URL,
-  opens your browser, captures the callback locally, and hands
-  the code back to the daemon for the token exchange. The
-  daemon never touches a browser. Works identically against a
-  local or remote daemon.
-- **From SSH / over the CLI wizard**: ``alpi setup`` falls back
-  to a paste flow when no browser is available — it prints the
-  consent URL, you open it on any device, and paste the failed
-  redirect URL (the one with ``?code=…``) back into the prompt.
-  Force this mode with ``ALPI_HEADLESS=1`` if browser detection
-  guesses wrong.
-- The streaming host method ``host.gateway.gmail_authorize``
-  is replaced by two non-streaming endpoints,
-  ``host.gateway.gmail.begin`` and ``host.gateway.gmail.exchange``.
-  Verifier state lives on the daemon for 5 minutes between the
-  two calls; restart the flow if it expires.
-- The desktop modal now shows the consent URL inline while
-  waiting — no more "Browser opened — complete the consent
-  flow…" when nothing actually opened.
+- **Gmail OAuth works against a remote daemon.** The desktop app runs the consent redirect on
+  your own machine, and `alpi setup` offers a paste flow when no browser is available
+  (`ALPI_HEADLESS=1` forces it).
+- `host.gateway.gmail_authorize` is replaced by `host.gateway.gmail.begin` and
+  `host.gateway.gmail.exchange`.
 
 ## v0.6.8 — 2026-05-25 — workspace index goes back to incremental, with safer corners
 
-The "always rebuild" semantics from v0.6.7's working tree got
-reverted: on a large vault (Obsidian-class or any repo with
-thousands of files), paying for a full re-embed on every call is
-expensive and forces every search-empty turn into minutes of
-blocked I/O. Restored incremental indexing as the default and
-closed the correctness gaps that made the original "always
-rebuild" tempting.
-
-- ``index_workspace`` is incremental by default again: files
-  whose mtime AND size both match the last index are skipped;
-  files removed from disk are purged from the index. Adding size
-  to the skip check catches tools that preserve mtime when
-  content changes (rsync --times, some sync clients).
-- The workspace root is now persisted in ``workspace_meta``.
-  Pointing ``index_workspace`` at a new path auto-triggers a full
-  rebuild — no zombie entries from the previous root. A 0.6.6
-  index that lacks the new meta row is migrated silently on the
-  first run (the field gets seeded, no rebuild) so the upgrade
-  doesn't force a minutes-long re-embed on large vaults.
-- Orphan purge now scans the whole index instead of only paths
-  under the current root, so leftover entries from a moved
-  workspace get cleaned on the next incremental run.
-- An embedder or vector-dim change auto-rebuilds at index time
-  (no need to pass ``force``). Search still raises
-  ``EmbedderMismatch`` so the user knows to re-run.
-- ``force=true`` is back on the tool surface as the explicit
-  "nuke and rebuild" escape hatch; the value also drives the
-  post-commit ``VACUUM`` so the SQLite freelist doesn't leave the
-  file inflated after a drop.
-- Embedding runs in batches of 64 chunks. A multi-MB file
-  chunked into thousands of pieces no longer loads the entire
-  body into the embedder at once — a real OOM risk with large
-  log files.
+- **Workspace indexing is incremental again.** Unchanged files are skipped, removed files are
+  purged, and a new workspace root, embedder or vector size triggers a full rebuild on its own.
+- `force=true` forces a full rebuild and compacts the database afterwards.
+- Embedding runs in batches, so a very large file no longer risks running out of memory.
 
 ## v0.6.7 — 2026-05-24 — alpi self-knowledge moves from skill to first-class tool
 
-The `@alpi/knowledge` bundled skill is gone. The capability that
-let alpi answer questions about itself is now an ordinary tool —
-``alpi_knowledge`` — backed by packaged Markdown under
-``alpi/knowledge/references/``. Skills become entirely user-owned;
-the whole "bundled skill" plumbing is removed.
-
-- ``alpi_knowledge`` tool with two actions: ``index`` lists the
-  available topics with one-line summaries; ``view topic=…``
-  returns the full answer pack. Topic enum lives in
-  ``alpi.knowledge.TOPICS`` and is exposed in the tool's JSON
-  schema so the model cannot submit an invalid topic.
-- A short ``# ALPI SELF-KNOWLEDGE`` rule injects into every system
-  prompt so the agent calls the tool before answering alpi
-  questions, instead of guessing from training data.
-- ``alpi/skills/`` package directory is deleted along with the
-  ``@alpi/`` prefix, ``bundled_skills()``, ``_bundled_skill()``,
-  ``_bundled_root()``, the read-only mutating-action guards on
-  ``@alpi/*`` names, and the ``origin: bundled`` schema value.
-  ``skill list`` and ``skills_index_block`` only show user skills.
-- ``scripts/sync_knowledge.py`` becomes a drift validator (no
-  copy) — the references are hand-tuned LLM answer packs, not
-  raw ``docs/`` dumps. Exit 2 if ``TOPICS`` and the on-disk file
-  set disagree.
+- **alpi's self-knowledge is a tool, not a skill.** `alpi_knowledge` lists topics and returns
+  packaged reference answers, and the system prompt tells the agent to use it before answering
+  questions about alpi.
+- Skills are now entirely user-owned; the bundled `@alpi/` skills are removed.
 
 ## v0.6.6 — 2026-05-24 — host.version exposes a stable device_id
 
@@ -4294,29 +2570,9 @@ duplicated notifications.
 
 ## v0.6.5 — 2026-05-22 — host.network.status no longer freezes the UI, agent notification deep link
 
-Opening the default profile's settings used to hang the desktop
-for ~5s while ``host.network.status`` ran the same expensive
-network probes (Tailscale CLI subprocess, ifconfig, UDP route)
-three to four times in series. The handler also blocked the host
-event loop, which queued every other RPC behind it.
-
-- Endpoint probes consolidated into a single ``_probe_endpoints``
-  call, dispatched off-loop via ``asyncio.to_thread``. Endpoint
-  resolution, candidates, and diagnosis all consume one shared
-  probe result instead of re-shelling for each field.
-- Resolution order preserved: configured → umbrel → tailscale →
-  lan. Umbrel deployments still advertise via
-  ``DEVICE_DOMAIN_NAME`` / ``ALPI_HOST_ADVERTISE_HOST`` (the
-  refactor briefly lost this branch — a regression test now
-  pins it).
-- New regression test pins the once-and-only-once probe contract
-  so the hang can't sneak back in.
-- ``send_message`` now emits ``deep_link`` as ``/chat/<profile>``
-  instead of ``/chat/<session_id>``. The mobile chat route reads
-  the URL segment as a profile name; the old session-id path
-  resolved to a broken "profile not found" state when users
-  tapped notifications. ``session_id`` still travels in the
-  payload for the chat screen to pre-select.
+- **Opening the default profile's settings no longer freezes the desktop.** Network probing runs
+  once per request, off the daemon's event loop.
+- Notification deep links from `send_message` open the right profile's chat.
 
 ## v0.6.4 — 2026-05-22 — daemon identifies itself on pair
 
@@ -4366,60 +2622,14 @@ replies to see what the user just said.
 
 ## v0.6.1 — 2026-05-22 — agent.message event + send_message default to alpi channel
 
-Strategic shift: alpi-native notification delivery becomes the
-default path for the agent reaching the user, gateways become
-explicit opt-in. This makes the owned mobile / desktop apps the
-primary notification surface and removes the implicit Telegram
-coupling that existed in the old ``send_message`` tool.
-
-- New host event ``agent.message`` (payload: profile, title, body,
-  severity, kind, optional session_id / deep_link). Persisted via
-  the existing ``host.events`` stream, picked up by mobile ALN
-  (background polling) and by desktop notifications (live subscribe
-  + native dispatch via the existing ``notifications.rs`` surface).
-  No new infrastructure — reuses ``host.events.emit``.
-- ``send_message`` tool reworked. New parameters: ``title``,
-  ``severity`` (``normal``/``important``/``urgent``), ``kind``
-  (``reminder``/``result``/``alert``/``ack``), and ``channel``
-  (``alpi`` default / ``telegram`` / ``imap`` / ``gmail`` /
-  ``matrix`` / ``webhook`` / ``both``). The default ``alpi`` channel
-  emits the host event; gateway channels keep the previous
-  ``delivery.send_to`` dispatch. ``both`` does alpi-native AND a
-  gateway redundantly. Old skills that explicitly pass
-  ``platform="telegram"`` need to migrate to ``channel="telegram"`` —
-  there's no implicit telegram default anymore.
-- Behavior when ``channel="both"`` is forgiving: a gateway dispatch
-  failure does NOT fail the call when the alpi event already fired
-  (the user got the notification on their paired app). Gateway-only
-  failures still propagate as ``ok=false``.
-- Tool description rewritten to teach the LLM: "default is alpi —
-  works without gateway config. Only pass a gateway channel when the
-  user explicitly asks for that platform." The previous
-  Telegram-centric description is gone.
-- Attachments stay gateway-only (local notifications carry text).
-  The ``tts → send_message(attachment=…)`` voice-note flow keeps
-  working when the agent passes ``channel="telegram"``.
-- ``host/events.jsonl`` history persists ``agent.message`` like any
-  other event; mobile ALN polls it through ``host.events.history``.
-- Scheduled jobs now use ``send_message(channel="alpi")`` as the
-  single explicit path for successful proactive notifications.
-  ``schedule.done`` remains activity/history only and does not wake
-  the user; ``schedule.failed`` still notifies automatically. The
-  scheduler re-emits ``agent.message`` from the daemon process when a
-  schedule child successfully calls ``send_message``, so desktop live
-  subscribers and mobile background polling see the notification even
-  though the scheduled agent ran in a subprocess.
-- Notification policy tightened on two surfaces:
-  - ``wg.mention`` is no longer a notifiable kind. Peer mentions
-    in a workgroup are intermediate activity, not an interrupt —
-    waking the human breaks the autonomy model between ``#task``
-    and ``#done``. The event still fires (inbox / activity / unread
-    counters can use it); only the native banner is gone.
-  - Desktop now surfaces ``approval.request`` as a native banner
-    when the window is NOT focused. When focused, the in-app
-    ApprovalSheet modal continues to handle it — no double-notify.
-    Mobile already had native notification for this kind.
-- Umbrel package + image tag bumped to ``0.6.1``.
+- **Notifications reach your own apps by default.** `send_message` delivers to paired desktop and
+  mobile apps through the new `agent.message` event; gateways are opt-in with `channel`
+  (`telegram`, `imap`, `gmail`, `matrix`, `webhook` or `both`).
+- Skills that pass `platform="telegram"` must switch to `channel="telegram"`.
+- Scheduled jobs notify through `send_message(channel="alpi")`; failures still notify
+  automatically.
+- Workgroup mentions no longer raise a native banner, and the desktop shows approval requests as
+  a banner when it is not focused.
 
 ## v0.6.0 — 2026-05-22 — evidence digest (OPS.1)
 
@@ -4447,136 +2657,36 @@ Minor bump closing the v0.6 reliability + operator-diagnostics cycle.
 
 ## v0.5.10 — 2026-05-22 — gateway containment (GW.1)
 
-Per profile + per platform circuit breaker for the gateway loop. A
-bad Telegram token, IMAP outage, Gmail refresh failure, or Matrix
-sync exception now degrades only that one platform; sibling
-platforms on the same profile keep ticking and other profiles are
-untouched.
-
-- ``alpi/gateway/breaker.py`` ships a thread-safe ``BreakerStore``
-  per profile, persisted to ``<home>/gateway/.breaker-state.json``.
-  Each platform reports ``record_success`` / ``record_failure`` per
-  tick. After 5 consecutive failures the platform flips to
-  ``disabled`` and the next tick is held with exponential backoff
-  (5min → 10 → 20 → 40 → 60min cap). A successful tick resets the
-  counter and restores ``healthy``.
-- Telegram, IMAP, Gmail, and Matrix listeners wrap their poll loops
-  with the breaker: ``should_skip`` bails before hitting the
-  upstream when the platform is in cooldown. Existing per-platform
-  state files (telegram-state.json, imap-state.json, …) are
-  unchanged. The Telegram 409 conflict path is intentionally
-  excluded — "another process is polling" is not an upstream
-  failure and shouldn't escalate the breaker.
-- ``gateway.state`` host event emitted on transitions
-  (``healthy`` ↔ ``degraded`` ↔ ``disabled``) with platform, reason,
-  and cooldown deadline. Desktop / mobile clients can subscribe and
-  render live state without polling. No-op transitions (e.g., second
-  failure while already degraded) do NOT emit, so the event stream
-  stays signal-only.
-- ``alpi doctor`` adds gateway-state rows: silent when every
-  platform is healthy, one ``warn`` per platform in degraded or
-  disabled state with last error + remaining cooldown. Warns don't
-  break exit code so a flaky upstream doesn't break operator
-  scripts or cron.
-- Atomic state writes use per-pid + per-thread tmp suffixes so two
-  daemons on the same profile dir can't clobber each other's
-  ``.breaker-state.json.tmp`` during the rename.
-- Umbrel package + image tag bumped to ``0.5.10``.
+- **A failing gateway platform no longer affects the others.** Each platform on each profile has
+  its own circuit breaker: after five consecutive failures it backs off, from 5 minutes up to an
+  hour, while sibling platforms and other profiles keep running.
+- A `gateway.state` event reports transitions, and `alpi doctor` lists any degraded or disabled
+  platform.
+- Umbrel package + image tag bumped to `0.5.10`.
 
 ## v0.5.9 — 2026-05-21 — skill telemetry (SK.1)
 
-Per-skill view / use / patch counters persisted to
-``<profile>/skills/.usage.json``. Pure measurement — no auto-curate,
-no archive, no pruning. The data feeds the future ``alpi digest``
-(OPS.1) and unblocks the v0.7 skill curator (AC.1) which will
-recommend pruning candidates from this history once it has months of
-real usage to look at.
-
-- ``alpi.skills_usage`` module: ``record_usage``, ``forget``,
-  ``load_all``, ``classify`` (active / stale / archived derived from
-  ``last_seen`` so the file never drifts out of sync), and
-  ``summary`` (aggregated stats: total, by-state counts, top-used,
-  pinned-but-cold candidates).
-- Every successful ``skill`` action dispatch now bumps the right
-  counter: ``view`` / ``validate`` → view_count;
-  ``run`` / ``invoke`` / ``test`` → use_count; ``create`` / ``edit``
-  / ``patch`` / ``add_file`` / ``remove_file`` / ``set_meta`` →
-  patch_count. ``delete`` removes the entry so usage doesn't outlive
-  the skill itself. The meta ``list`` action and failed dispatches
-  never touch telemetry — ``list`` has no target skill name to
-  attribute usage to.
-- ``pinned`` flag is snapshot from frontmatter on every touch so
-  curation downstream doesn't have to re-read every ``SKILL.md`` to
-  know which entries the user explicitly wants to keep.
-- ``alpi doctor`` adds a ``Skills`` group: a single ``ok`` summary
-  with active/stale/archived counts when there's telemetry, an
-  ``info`` row when the profile has no recorded usage yet, plus one
-  ``warn`` per pinned-but-cold skill (the highest-signal curation
-  candidate). State cutoffs: ``active`` < 30 days, ``stale`` 30–90
-  days, ``archived`` ≥ 90 days. Warns don't break exit code.
-- Umbrel package + image tag bumped to ``0.5.9``.
+- **Skills record how they are used.** View, use and patch counts are kept per skill in
+  `skills/.usage.json`, for measurement only — nothing is pruned.
+- `alpi doctor` gains a Skills group, including pinned skills that have gone unused.
+- Umbrel package + image tag bumped to `0.5.9`.
 
 ## v0.5.8 — 2026-05-21 — AX Local Notify (ALN) groundwork
 
-Two new host event kinds feeding the **AX Local Notify (ALN)** mobile
-notifications path:
-
-- ``wg.mention`` — emitted both client-side (``workgroup_client.pull``)
-  and hub-side (``workgroup.post`` handler decrypts incoming peer
-  ciphertext) whenever a workgroup post ``@``-mentions the local
-  profile. Self-posts suppressed; email-shaped strings excluded by the
-  whitespace-boundary anchor; re-pulls of historical posts do NOT
-  re-emit (``min_seq=cursor`` guard).
-- ``chat.turn_done`` — emitted at the end of a naturally-completed
-  ``Engine.run_turn`` when ``source="user"`` (i.e. the turn was
-  started from desktop / mobile / TUI / CLI, not a peer link). Gated
-  by a noise heuristic: at least one tool call OR ≥5s elapsed —
-  trivial ``hola → hola`` exchanges do not notify. Payload carries
-  profile, session_id, duration_s, tool_count, and a 200-char
-  summary of the final assistant reply.
-
-These join the existing event family (``wg.post``, ``wg.done``,
-``approval.request``, ``schedule.done``, ``budget.threshold``…)
-consumed via the ``host.events.subscribe`` / ``host.events.history``
-stream.
-
-**Architectural commitment baked in**: ALN deliberately avoids APNs /
-FCM and any Satoshi-operated relay. Mobile uses ``expo-background-task``
-to wake periodically, polls ``host.events.history`` over the user's
-own Tailscale, and renders local notifications on-device. No device
-tokens registered with Apple/Google, no central server, no telemetry.
-The trade-off is latency (15–60 min on iOS, system-paced) in exchange
-for the alpi promise of zero servers in the middle. Mobile-side
-wiring lands in ``mobile-v0.1.4``.
-
-- Umbrel package + image tag bumped to ``0.5.8``.
+- **New host events for mobile notifications:** `wg.mention` when a workgroup post mentions the
+  profile, and `chat.turn_done` when a substantial user turn completes.
+- Mobile notifications poll the daemon over your own network — no APNs, FCM or relay in between
+  — at the cost of system-paced latency. The mobile side lands in `mobile-v0.1.4`.
+- Umbrel package + image tag bumped to `0.5.8`.
 
 ## v0.5.7 — 2026-05-21 — memory audit CLI (CM.1) + reasoning capability fix
 
-Read-only operator surface for memory quality, and a fix for the
-reasoning effort dropdown that was silently hidden on direct
-openai/anthropic models.
-
-- ``alpi memory audit`` reports six categories without mutating
-  anything: usage pressure per file (USER.md, MEMORY.md, AGENT.md),
-  low-confidence entries eligible for expiry, near-duplicate clusters
-  at four overlap-coefficient thresholds (0.5 / 0.6 / 0.7 / 0.8 — the
-  sweep is the calibration tool for the dedup cutoff hard-coded at
-  0.7), operational-state-looking entries that probably belong in
-  sessions or logs, promotion-queue backlog, and compaction-log stats
-  for the last 7 / 30 days.
-- ``alpi memory audit --json`` emits the same report as machine-
-  readable JSON, ready for OPS.1 to fold into the future evidence
-  digest.
-- The audit never rewrites any file — including ``promotion_queue.jsonl``,
-  which the production ``list_pending`` would normally compact.
-- Reasoning effort dropdown now appears for every reasoning-capable
-  direct model: ``supports_reasoning`` consults the curated catalog
-  first, falls back to a regex (now including ``openai/gpt-5.*``) for
-  custom-typed model strings. The MC.1 dropdown was silently hidden on
-  ``openai/gpt-5.4-mini`` because the previous regex excluded the
-  GPT-5 family as "speculative", which OpenAI's docs in fact confirm.
-- Umbrel package + image tag bumped to ``0.5.7``.
+- **`alpi memory audit` reports memory quality without changing anything:** file pressure,
+  low-confidence entries, near-duplicates, misplaced operational state and the promotion
+  backlog; `--json` for scripts.
+- The reasoning-effort setting appears for every reasoning-capable model, `openai/gpt-5.*`
+  included.
+- Umbrel package + image tag bumped to `0.5.7`.
 
 ## v0.5.6 — 2026-05-21 — tool availability probes (TL.1)
 
@@ -4695,32 +2805,12 @@ daemon and any subscribed client are now equivalent surfaces.
 
 ## v0.5.0 — 2026-05-21 — v0.5 cycle close: mobile client shipped
 
-Milestone release. No new daemon contract vs. `v0.4.54`; this
-bumps the CLI / Python package to mark the close of the v0.5 cycle.
+Milestone release closing the v0.5 cycle; no new daemon contract since `v0.4.54`.
 
-What shipped during the cycle:
-
-- Capability hardening: skill eligibility fields, granular terminal
-  approval allowlists, memory promotion queue, compaction event log
-  guardrails, and profile-scoped env isolation.
-- Memory v2 quality pass: operational-state warnings, cross-file
-  dedup, usage hints, and safer promotion flows.
-- Host plane for owned clients: WebSocket pairing, per-device tokens,
-  lite/detail split, seq-only events, Tailscale-friendly payloads, and
-  remote desktop/mobile connection hardening.
-- Mobile client: chat, inbox, workgroups, profile settings, pairing,
-  sessions, activity, biometric unlock, skeleton loading states, and
-  endpoint-switch safety in `mobile-v0.1.0` / `mobile-v0.1.1`.
-
-Native mobile push notifications are deferred to v0.6. The in-app
-mobile surface is live; out-of-app APNs / FCM delivery now belongs to
-the reliability cycle.
-
-Desktop and mobile keep independent release tracks. `desktop-v0.3.6`
-and `mobile-v0.1.1` require `alpi v0.4.52` or newer and remain
-compatible with `v0.5.0`.
-
-- Bumped Umbrel package metadata and image tags to `0.5.0`.
+- The cycle delivered capability hardening, a memory quality pass, the host plane for owned
+  clients (pairing, per-device tokens, events) and the first mobile client.
+- `desktop-v0.3.6` and `mobile-v0.1.1` require `alpi v0.4.52` or newer.
+- Umbrel package + image tags bumped to `0.5.0`.
 
 ## v0.4.54 — 2026-05-20 — daemon: skill prose-mode env passthrough, terminal `ALPI_HOME`/`WORKSPACE`, `send_message` profile env
 
@@ -4739,88 +2829,40 @@ Patch on top of v0.4.52: that release promised per-profile env isolation but lef
 - `alpi/tools/skill.py`: `_run_or_test` (the dispatch for `skill(action='run' | 'test' | 'invoke')`), `_state_tag` (used by `skill(action='list')`), and `keyword_match_hint` (the per-turn skill hint injected into the prompt) now all pass `env=effective_profile_env(home)` to `skill_eligibility`. `_list` and `keyword_match_hint` build the env once per call and reuse it across rows.
 - `alpi/service.py`: workgroup-dispatch subprocess env is now `effective_profile_env(home, extra={ALPI_HOME, ALPI_WORKGROUP_DISPATCH, …})`. Was `dict(os.environ)` + manual extras.
 - `alpi/scheduler/run.py`: the three `subprocess` env builders (no-agent job dispatch, agent-mode `alpi chat --once`, schedule supervisor spawn) all go through `effective_profile_env(home, extra=…)`. The local `_load_profile_env` helper is removed — it duplicated the new helper.
-- `alpi/cli.py::_gateways_remove`, `alpi/mail/setup.py`, `alpi/mail/gmail_setup.py`, `alpi/gateway/setup.py` (Telegram), `alpi/gateway/matrix_setup.py`, `alpi/mcp/setup.py`: stop mutating `os.environ` on credential writes/deletes (the file write is authoritative; gateway listeners and `gmail_auth.first_run(home)` read it back from the profile's `.env`) and stop reading defaults from `os.environ` — wizards pre-fill from `effective_profile_env(home)` so multi-profile reruns surface the right account. Fixes a latent `NameError` in `mail/setup.py` left by a half-migration.
+- Credential wizards no longer write secrets into the process environment; they read and
+  pre-fill from the profile's own `.env`, so multi-profile setups show the right account.
 - Tests: 4 new in `tests/tools/test_skill_ch1_eligibility.py` pinning the contract — `requires_env` satisfied by the profile's `.env` (and only the profile's) must keep the skill eligible from `run`, `list`, the system-prompt skills block, and the per-turn keyword hint. Full suite **1841 passed, 76 skipped**.
 - Bumped Umbrel package metadata and image tags to `0.4.53`.
 
 ## v0.4.52 — 2026-05-20 — daemon: multi-profile isolation, seq-only events, lite/detail host plane, Tailscale perf
 
-Daemon-side contract release. Several `host.*` verbs and the
-gateway / tools / model-selector internals change at once. The
-in-repo desktop and mobile clients land their migrations in
-follow-up commits (`desktop-v0.2.20`, `mobile-v0.1.x`); the daemon
-keeps accepting legacy params silently for older external clients.
+Daemon-side contract release. The daemon keeps accepting legacy params for older clients;
+`desktop-v0.2.20` and the matching mobile builds adopt the new shapes.
 
-### Profile isolation — `.env` is per-profile, daemon never mutates `os.environ`
-
-- `alpi.home.effective_profile_env(home, *, base=None, extra=None)` is the new single entry for "give me the env a profile call should see": `base` (defaults to `os.environ` for process-level keys: PATH, HOME, TZ, ALPI_PLATFORM…) ∪ `<home>/.env` ∪ `extra`. The daemon supervises many profiles in one process, so blindly reading `os.environ` for a per-profile secret used to leak the first profile loaded across every other one.
-- Migrated to per-profile env: `alpi/tools/{skill,terminal,email}.py`, `alpi/gateway/{base,run,platforms/imap,platforms/matrix}.py`, `alpi/mail/{imap,gmail_auth}.py`, `alpi/model_selector.py`, `alpi/tui/{model_panel,app}.py`, `alpi/identity.py`.
-- `Provider.has_key(env=None)` now takes an explicit env map; callers (model selector, TUI provider gating) pass the profile's effective env so a missing key in `os.environ` no longer falsely greys out a provider whose key lives in `<home>/.env`.
-- `ImapClient.from_env_map(env)` companion to `from_env()` — gateway IMAP / `tools/email` now build clients from `self.env` (frozen per-profile snapshot at construction).
-- `alpi.identity.draft_bio_from_agent` and the LLM-override paths in `tools/{web_extract,read_image}` now route through `config.resolve_model(cfg)` — without that the override would silently bypass the profile's api_key and fall back to `os.environ`.
-- `host.providers.unset_key` and `host.gateway.gmail_authorize` no longer write to `os.environ` (they wrote a process-global shadow that leaked across profiles); the profile's `.env` is the only source of truth and `gmail_auth.first_run(home)` reads it on demand.
-
-### Config-merge no longer pollutes `DEFAULT_CONFIG`
-
-- `alpi/config.py::_deep_merge` deep-copies the defaults before merging user data. Pre-fix, a profile that called `cfg.providers.setdefault("ollama", []).append(...)` mutated the shared module-level default list, leaking that "ollama" entry into every subsequent `config.load()` (including other profiles in the same daemon process). The test suite caught the leak; this kills it at the root.
-- `alpi.config.atomic_write_yaml(path, data)` extracted as a public helper (was `_atomic_write_yaml`); `host/device_state.py::_write_user_yaml` now reuses it so `host.config.set_field` / `unset_field` get the same tmp+fsync+rename safety as `config.save`. Both verbs now emit `config_changed` after the write.
-
-### Events — seq-only contract, no more wall-clock pivots
-
-- `host.events.history({after_seq?, limit?, kinds?})` is now the canonical form. The legacy `since` (wall-clock float) is silently ignored: clock skew + suspend/resume let it drop or duplicate frames. Response carries `{events, next_seq}` so clients can advance the cursor monotonically.
-- `host.events.subscribe` handshake emits `{event: "subscribed", next_seq}` on connect.
-- `_load_history()` preserves JSONL append order instead of sorting by `at`; legacy entries without `seq` get one back-filled in file order.
-- Subscribe-then-backfill is now the documented contract: clients open the stream first, then on the `subscribed` handshake page from their previous cursor — history-then-subscribe leaves a race where a frame fired between the two calls is counted in the daemon's seq but never delivered.
-
-### Event invalidations — every mutator now emits something
-
-So clients can refresh without polling:
-- `config_changed` (scope=…) from `host.config.set_field`/`unset_field` and every cfg.save in `alpi/host/config.py` (providers / mcp / sandbox / voice / env).
-- `gateway_changed` (action=…) from `gateway.remove`, gmail OAuth success, and gateway-bundled `set_key`/`unset_key`.
-- `peers_changed` (action=added|removed|accepted|discarded) from peer add/remove/pending verbs.
-- `profile_changed` (action=created|deleted).
-- `workgroup_changed` (action=created|updated|removed|paused|resumed|left) — including `host.workgroup.action`.
-- `workgroup_members` from add_member/kick.
-- `schedule.changed` (action=removed|paused|resumed) from schedule mutators; the existing `schedule.done`/`schedule.failed` keep their shape.
-
-### Workgroup transcript — tail-first contract + group-key reuse
-
-- `host.workgroup.transcript` accepts `{after_seq?, limit?, tail?}` and returns `{posts, next_seq, limit}`. Without `after_seq`, default is now `tail=true` so first-paint of a 10k-post workgroup ships the recent window, not the oldest 200. With `after_seq`, paginates incrementally.
-- `decrypt_transcript` opens the hub sealed group key **once** outside the per-post loop (was O(N) Curve25519 unseals on every fetch). 1 unseal per call regardless of transcript length.
-
-### `host.chat.send` — `session_start` is the first frame
-
-- Daemon emits `{event: "session_start", session_id}` before any tool/delta, so the client can address the sidecar (`host.chat.events_since`) even on brand-new threads whose id it hasn't seen yet — replay after a silent stream now works on turn 1.
-
-### Lite/detail split on the hot path
-
-- `host.skills.list` no longer ships the SKILL.md body by default (~32KB/skill). Pass `include_body=true` if you really want it. `host.skill.read({name, category?})` returns one skill's full body on demand. `_counts.skills` uses `_count_skill_dirs` (no body reads).
-- `host.profile.summaries` now only carries inbox/sidebar fields: name, model, accent, latest_session, counts, budget, pubkey, plus `has_any_provider` (precomputed bool so empty-state branching doesn't need detail). `host.profile.detail({profile})` returns the heavy companion: peers, models, mcps, provider_keys, sandbox/voice, tcp_*, workspace.
-
-### Wire compression
-
-- `ws_serve(compression="deflate")` enables `permessage-deflate`. Highly compressible JSON-RPC payloads (transcripts, history backfill, profile detail) drop 50–80% in size over the link — clients that don't negotiate fall back to raw.
-
-### Devices store
-
-- `devices.validate_and_touch(token, min_interval=60)` collapses the 3-reads-+-1-write per remote RPC into a single 5s in-process cached lookup with throttled `last_seen` update.
-- Atomic `devices.save()` (tmp+fsync+rename) with `0o600` preserved.
-- New `_guard_pytest_isolation` blocks `devices.save()` from writing the developer's real `~/.alpi/host/devices.yaml` under `PYTEST_CURRENT_TEST` — a regression in `tests/host/test_network_rpc.py` was silently appending `label: seed` entries on every test run.
-
-### Heavy host handlers off the loop
-
-`host.profile.summaries`, `host.profile.storage`, `host.skills.list`, `host.workgroups.list`, `host.workgroup.transcript` all run their CPU/IO body via `asyncio.to_thread`. A 400ms `_profile_summary` no longer freezes every other coroutine on the host loop.
-
-### Tests + packaging
-
-`uv run pytest -q`: **1837 passed, 76 skipped** (`--integration` / `--llm` / Linux-only sandbox). Bumped Umbrel package metadata and image tags to `0.4.52`.
+- **Profiles no longer leak secrets into each other.** Each profile's `.env` is read on demand,
+  and the daemon never writes provider keys into the shared process environment.
+- **Events use a sequence cursor.** `host.events.history({after_seq, limit, kinds})` returns
+  `{events, next_seq}`; the wall-clock `since` is ignored, and clients subscribe first, then
+  backfill.
+- **Every mutation emits an invalidation event** (`config_changed`, `gateway_changed`,
+  `peers_changed`, `profile_changed`, `workgroup_changed`, `schedule.changed`…), so clients
+  refresh without polling.
+- **Lighter payloads.** `host.skills.list` omits skill bodies unless `include_body=true`,
+  `host.profile.summaries` carries only list fields with `host.profile.detail` for the rest,
+  workgroup transcripts load their recent tail first, and WebSocket traffic is compressed.
+- `host.chat.send` opens with a `session_start` frame, and heavy host handlers no longer block
+  the daemon's event loop.
+- Umbrel package + image tags bumped to `0.4.52`.
 
 ## v0.4.51 — 2026-05-19 — `host.network.*` RPCs for desktop/mobile pairing config
 
 Closes the parity gap between `alpi setup → devices → network` (CLI) and the desktop / mobile pairing UI. Previously the desktop's `PairDeviceModal` could only show whatever `host.devices.generate` returned and gave no way to switch between Tailscale and LAN or set a custom advertised host — the user had to drop to the terminal. Three new RPCs make the daemon's pairing endpoint queryable and editable over the host plane.
 
-- `host.network.status` returns the live pairing endpoint plus every candidate the daemon could detect: `{scope_in_use, host_in_use, is_override, port, device_name, candidates: {tailscale, lan, configured}, diagnosis}`. `scope_in_use` is normalised by `network.classify_scope` to the network character of the host — `tailscale | lan | custom | umbrel | None` — not the resolution path; `is_override` carries the "this came from `cfg.host.tcp_host`" bit separately. `candidates` lists every option in parallel so clients can render a picker even when one is missing. `diagnosis` is the same shape `diagnose_bind_ip()` already returned — useful for error UIs when no endpoint could be resolved.
-- `host.network.set_advertised({host?, device_name?})` writes `cfg.host.tcp_host` and `cfg.host.device_name`. Parameter semantics distinguish absent from empty: a missing key preserves the existing value (so a partial call with only `host` does not wipe `device_name`); an explicit `""` unsets that field. Validation rejects public IPs (token leak risk), loopback, multicast / link-local / reserved, and malformed hostnames. Accepts RFC1918, Tailscale CGNAT, and any valid hostname (`.local`, `.ts.net`, MagicDNS, custom domains). Returns `{ok, restart_needed}` so the client knows whether to call the next verb.
+- `host.network.status` returns the live pairing endpoint plus every detected candidate
+  (`tailscale`, `lan`, `configured`) and a diagnosis, so clients can offer a picker.
+- `host.network.set_advertised({host?, device_name?})` persists the advertised address and device
+  name; public, loopback and reserved addresses are rejected, and the result says whether a
+  restart is needed.
 - `host.network.restart_host_server` SIGTERMs the running daemon so the supervisor respawns it with the fresh config — same mechanism as `alpi setup`'s `_restart_daemon_for_apply`. Idempotent: returns `{ok: true, restarted: false}` when no daemon is running.
 - All three verbs are flagged `_LOCAL_ONLY_METHODS` in `alpi/host/server.py` — a paired remote client cannot mutate daemon config or restart the host server over WS. Handlers use `server.home` (not the module-level `_ROOT`) so the host plane contract holds for any daemon instance.
 - Wiring: registered in `alpi/service.py` alongside the rest of the host plane handlers. No changes to existing verbs; the new namespace is purely additive.
@@ -4842,7 +2884,8 @@ Adds two truncated fields to every row returned by `host.sessions.list`. The mob
 
 Closes a foot-gun in the `schedule` tool: a scheduled job whose prompt looked like a shell command (`python3 .../say.py "..."`) but omitted `no_agent=true` was accepted as a regular agent prompt — at fire time the daemon then fed the shell line to the LLM as user input instead of running the script. Caller-side mistakes (LLM forgetting the flag) now self-correct at `add` time.
 
-- `alpi/tools/schedule.py`: when `add` is called with `no_agent=None` and the prompt parses (via `shlex`) into `python` / `python3` / `python3.X` + a path-like first non-flag arg (`/`, `~`, `${ALPI_HOME}`, `$ALPI_HOME`), infer `no_agent=true`. Flags like `-u` / `-O` are skipped; quoted paths survive `shlex` correctly. Path validation still runs, so a mis-pointed script fails fast at `add` time instead of silently rotting in `jobs.json` until it fires. Explicit `no_agent=False` is respected without override.
+- `schedule(action="add")` infers `no_agent=true` when the prompt is a Python script path, and
+  validates the path at save time; an explicit `no_agent=False` is respected.
 - Output of `add` includes `· auto-inferred no_agent=true (prompt is a shell command)` when the inference triggered, so both the LLM and the user see the correction.
 - A legitimate LLM prompt that happens to begin with `python` (`python is a language, explain it`) is NOT inferred — the discriminator is the first non-flag token, not just the first word.
 - Bumped Umbrel package metadata and image tags to `0.4.49`.
@@ -4872,14 +2915,9 @@ Small compatibility release for desktop/mobile clients and real Umbrel smoke tes
 
 ## v0.4.46 — 2026-05-18 — agent date/time grounding
 
-Fix for "hoy es miércoles" hallucinations on long sessions: the agent had zero date/time context in its system prompt and was guessing from training data. New `alpi/clock.py` module ships two pieces — a cache-stable timezone section baked into the system prompt, and a fresh `# NOW` block injected as a transient system message before every user turn so the prompt cache never goes stale across midnight, compaction reuse, or 5-min Anthropic cache TTL.
-
-- `alpi.clock.user_timezone()` resolves IANA TZ: `$TZ` first, then `/etc/localtime` symlink target, then `time.tzname`, fallback UTC. Validated via `zoneinfo.ZoneInfo` at each step so an invalid value never propagates.
-- `alpi.clock.system_time_section()` returns the cache-stable block for `_build_system_prompt`: `Timezone: <iana>` + a directive pointing the agent at the `# NOW` block.
-- `alpi.clock.now_block()` returns the per-turn payload: `Local: <weekday>, YYYY-MM-DD HH:MM (<tz>)` + `UTC: YYYY-MM-DDTHH:MMZ`. `engine.run_turn` strips any prior `# NOW` system message from `session.messages` before appending the fresh one, so a multi-day session never accumulates stale timestamps (and the agent can't accidentally read an older `# NOW` instead of the current one). Composes cleanly with the existing workgroup-context / skill-hint injection pattern around cache boundaries and compaction.
-- Design pulled from hermes-agent (mandatory tool-use for `date` queries) and openclaw (TZ-in-prompt + tool for the actual time). The combination here is closer to openclaw but skips the tool round-trip for casual date references — the agent already has a fresh block in context every turn.
-
-Tests in `tests/core/test_clock.py` cover TZ env precedence, invalid-TZ fallback, format stability, naive-datetime safety, and DST transitions (Madrid CET/CEST round-trip). `tests/core/test_engine_clock.py` pins the engine wiring: system prompt carries the TZ section but no rendered local/UTC strings (cache safety), each `run_turn` appends exactly one `# NOW` block before the user message, multi-turn sessions keep only the latest block, and stale `# NOW` blocks planted in `session.messages` (simulating a reloaded long-running session) get replaced rather than stacked. Full suite **1721 passed / 75 skipped**.
+- **The agent knows the current date and time.** The system prompt carries the user's timezone
+  and every turn adds a fresh `# NOW` block, so long sessions no longer guess the day — without
+  breaking the prompt cache.
 
 ## v0.4.45 — 2026-05-18 — Telegram profile isolation
 
@@ -4894,27 +2932,19 @@ Docs: `docs/ARCHITECTURE.md` and the bundled knowledge reference document the on
 
 ## v0.4.44 — 2026-05-17 — daemon event bus: 4 new kinds for native desktop notifications
 
-The desktop tray needs daemon-side signals to surface OS-level banners for the moments worth interrupting the user. `alpi/host/events.py` previously published only `session_changed`; this release adds four new kinds at the right chokepoints. The desktop consumer ships with `desktop-v0.2.19`; this release is daemon-only.
-
-- **`wg.done`** — `alpi/alp/workgroup_client.py::post()` when a hub closes a task. Emitted at the SDK chokepoint so the host endpoint (`host.workgroup.post`) and the `workgroup_post` tool both fire consistently. Detection uses `tasks_mod.is_done()`, honouring the protocol grammar: line-anchored marker, optional `@handle` prefixes, non-empty payload. Hub-only.
-- **`schedule.done` / `schedule.failed`** — `alpi/scheduler/run.py::tick()` after every job dispatch (`job_id`, `kind`, `message`).
-- **`budget.threshold`** — `alpi/ledger.py::record()` on USD-cap crossing at 80% / 100%; highest threshold wins when a single record vaults past both. Engine now passes `cfg_budget` into the record callsite.
-- New `alpi/home.py::profile_name(home)` helper — single source for "`~/.alpi` → `default`" / "`~/.alpi/profiles/<n>` → `<n>`". `engine._profile_name` delegates; the ad-hoc `home.name` path (which returned `.alpi` for the root home) is gone from the bus emit sites.
-
-Tests in `tests/host/test_notification_events.py` cover all four kinds at unit level and via a real `wc.post()` integration that exercises substantive check, gating, encryption, transcript append, and ledger write. Regression test pins `profile_name("~/.alpi") == "default"`. Also fixed `test_prune_drops_old_low_confidence` which was UTC-vs-local-day flaky (memory writes `_today()` in UTC; the test used `date.today()` local).
-
-`docs/ARCHITECTURE.md` enumerates every wired event kind under the `host.events.subscribe` section.
+- **Four new daemon events for native desktop notifications:** `wg.done` when a hub closes a
+  task, `schedule.done` / `schedule.failed` after every job, and `budget.threshold` when spend
+  crosses 80% or 100% of the daily cap. The desktop consumer ships in `desktop-v0.2.19`.
 
 ## v0.4.43 — 2026-05-14 — resource-leak hygiene pass after the RAG bloat hunt
 
 Audit triggered by the v0.4.42 RAG freelist bug. Read-only sweep across SQLite handles, file opens, subprocess pipes, and the live daemon's FD table found a handful of small leaks and one latent deadlock — none catastrophic, but the same shape of slow accumulation that bit us on `rag/store.sqlite`. Fixed the actionable ones.
 
-- **Pipe-buffer deadlock latent in two daemon paths.** `alpi/gateway/run.py` and `alpi/service.py` both spawned `alpi chat --once` subprocesses with `stderr=PIPE` and only read stderr *after* the child exited — a chatty turn fills the ~64KB pipe buffer and the child blocks waiting for us to drain it while we block on `proc.wait()`. Both now drain stderr concurrently from spawn via a new `alpi/_proc_io.py::drain_tail()` helper that uses a `deque(maxlen=…)` so memory stays bounded regardless of output volume. `gateway/run.py` also wraps the stdout-event loop in `try/finally` with a bounded `proc.wait()` (kill on 10s timeout) so a `platform.send()` raising mid-loop can no longer leak zombies.
-- **File-handle leaks.** `alpi/tools/workspace.py::_read_image` opened PIL images without `with` (real leak in `index_workspace(ocr=true)` over many images); `alpi/tools/read_file.py` sniffed binaries via `p.open("rb").read(8192)` relying on refcount; `alpi/tools/terminal.py` background spawns passed `stdout=open(log.name, "ab")` inline — Popen dups the fd at spawn so wrapping in `with` is safe and closes the leak window if Popen ever raises. All three now use context managers.
+- **Daemon subprocesses can no longer deadlock on a full pipe.** Output is drained while the
+  child runs, with bounded memory, and a failing send no longer leaks zombie processes.
+- **File-handle leaks closed** in image reading, binary sniffing and background terminal
+  spawns.
 - **Dead state in `service.py`'s workgroup poller** — `cancelled` flag set but never read; removed.
-- 3 new tests cover `drain_tail` (truncation, no-deadlock with 256KB of output ≫ pipe buffer, None-stream). Full suite 1676 green.
-
-What's clean already (per the audit): `alpi/tools/db.py` uses `contextlib.closing` on every connection; `open_store()` callers in `workspace._index/_search` and `core.store.compact/reclaimable_bytes` all close in `finally`; gmail/httpx/Telegram and IMAP/SMTP all use context managers. RAG stores on disk are healthy after v0.4.42 (~23MB / ~2.6MB with negligible reclaimable). No more freelist surprises lurking.
 
 ## v0.4.42 — 2026-05-14 — whole-machine backup with pre-encrypt preview + RAG bloat fix
 
@@ -4933,7 +2963,6 @@ Per-profile backup was the wrong primitive: a typical user runs 2–3 profiles a
 - New `alpi/secrets_io.py::safe_write_secret(path, content, mode=0o600)`: writes via `tempfile.mkstemp` (O_EXCL + 0o600 at creation, random unique name in the target dir), then `os.replace` onto the target. Immune to a stale `<target>.tmp` sibling lingering at looser perms — the deterministic-tmp + O_CREAT approach from a draft of this release would have inherited that file's mode.
 - Refactored 4 callsites to use it: `model_selector._atomic_write_env` (.env writes), `mail/gmail_auth._save` (gmail token), `alp/pending.save` (pending peers yaml), and `alp/keys.create` (the worst case — was writing the private key directly to its final path and chmod'ing after).
 - Tests cover the helper directly (0o600 mode, no tmp left behind, custom mode, bytes input, parent-dir creation, umask resistance, tmp cleanup on write error); existing integration tests for the 4 callsites pass unchanged.
-- Inspired by Hermes Agent v0.13.0's TOCTOU-close work in credential writers (#21194, #21176).
 
 ## v0.4.40 — 2026-05-14 — pre-write lint refuses syntactically broken writes
 
@@ -4950,7 +2979,6 @@ Cron jobs whose work is deterministic (data sync, file processors) had no reason
 - `scheduler/run.py::_run_script_only` shlex-tokenizes the prompt (`shell=False`), expands `${ALPI_HOME}`, and merges the profile's `.env` over inherited env so the firing profile's `FOLDER` wins over a sibling's. Empty stdout = silent ok; non-empty + `platform` = delivered.
 - `validate_no_agent_command` form-based allowlist: only `python[3] [flags] <script>` or `<script>` directly, where `<script>` is under `${HOME}/skills/<category>/<name>/scripts/`. Blocks `-c`/`-m` and non-python executables even with a skills/ path in args. Enforced at `schedule(add|update)` and before exec.
 - `Schedule` tool gains a `no_agent` parameter; the on↔off transition re-runs the appropriate validators against the inherited prompt.
-- Inspired by Hermes Agent v0.13.0; multi-agent kanban, plugin lifecycle hooks, and i18n from the same release skipped per the no-overengineering filter.
 
 ## v0.4.38 — 2026-05-13 — todo as binding contract: engine re-prompts when the model closes early
 
@@ -4962,7 +2990,8 @@ The `todo` tool used to be advisory: a model could `add` + `start` a task list a
 - Premature `assistant_done` suppression: when the guard fires the text the model emitted to close early is no longer emitted as a final `assistant_done` event — only legitimate closes surface as final.
 - `todo` tool description now states the contract explicitly so well-behaved models avoid tripping the guard at all.
 - Tests cover per-session isolation, guard firing with open todos, no-guard when todos are completed or never opened, persistent-refusal bounded by `max_steps`, store-binding correctness, and cross-session non-leakage.
-- Skill docs (`docs/SKILLS.md`, `alpi/skills/knowledge/references/skills.md`, `alpi/prompts/create_skill_guide.md`) clarify the secrets split: shared/static profile secrets go in `~/.alpi/.env` via `requires_env`; per-skill credential files and runtime auth state (OAuth client files, access/refresh tokens, cookies, sessions) live under `<skill>/secrets/` with mode `0700` and credential files `0600`. Codifies the lesson from real OAuth skill integrations where `.env` is the wrong store.
+- Skill docs clarify where secrets live: shared profile secrets in `~/.alpi/.env` via
+  `requires_env`, and per-skill credentials and runtime auth state under `<skill>/secrets/`.
 - v0.6 roadmap: new `CL.1` item parks prompt caching across providers (OpenAI/Gemini automatic, Anthropic explicit markers) with the stable-prefix invariant as the cross-cutting precondition.
 
 ## v0.4.37 — 2026-05-13 — FD leak fix for skill DB calls
@@ -4987,7 +3016,8 @@ A scheduled job in one profile could freeze a live chat stream in another becaus
 
 - Fixed silent data loss: `config.save()` was dropping `tools.terminal.approval.allowlist` because `TerminalToolConfig` lacked an `approval` field and `_tools_delta()` never serialized it. New `ApprovalConfig` dataclass closes the round-trip; regression test added.
 - Fixed phantom config: `memory.low_confidence_max_age_days` was documented as configurable but never loaded from YAML. Now an honest constant (`alpi.memory.LOW_CONFIDENCE_MAX_AGE_DAYS = 30`); calibration is the v0.6 evidence-gated `AI(1.c)` item, not a user knob.
-- Suppressed 12 config keys that weren't real preferences (product definition or technical tuning). New homes: `tools.read_image.{auto_resize, max_edge}` → constants in `alpi/tools/read_image.py`; `tools.browser.{human_typing, typing_delay_ms}` → constants in `alpi/tools/browser.py`; `tools.research.{quick,normal,deep}_steps` → `DEPTH_STEPS_DEFAULTS`; `gateway.{telegram,imap,gmail}.typing_indicator` and `gateway.{imap,gmail}.show_tool_trace` → hardcoded per platform in `alpi/gateway/run.py` (Telegram on, email off for both).
+- Twelve config keys that were technical tuning rather than preferences became constants — image
+  resizing, browser typing, research step counts and gateway typing indicators among them.
 - `alpi logs --source` now accepts `service` (was missing despite `service.log` being a real file). `compaction.jsonl` description clarified to include `fired=false` cases (tool-truncation-only).
 
 ## v0.4.34 — 2026-05-13 — capability hardening v0.5 (CH.3): memory promotion queue
@@ -5013,7 +3043,9 @@ Auto-compaction must never write to `USER.md` / `MEMORY.md` / `AGENT.md` directl
 
 ## v0.4.32 — 2026-05-13 — capability hardening v0.5 (CH.1): skill eligibility fields
 
-- Three new frontmatter fields gate skill availability alongside the existing `requires_env`: `requires_bins` (executables on PATH, checked with `shutil.which`), `requires_config` (dotted paths the user must set explicitly in `~/.alpi/config.yaml` — alpi defaults do not satisfy this gate), and `platforms` (`macos` / `linux` / `windows`, checked against the current OS). Missing requirements hide the skill from `skills_index_block` and `keyword_match_hint`, and surface in `skill(action="list")` with a compound `[inactive: missing …]` reason.
+- **Skills can declare what they need:** `requires_bins`, `requires_config` and `platforms` join
+  `requires_env`. A skill whose requirements are missing is hidden from the index and listed as
+  inactive with the reason.
 - Explicit invocations (`skill(action="run" | "test" | "invoke")`) on an inactive skill fail fast with a clear "missing …" error instead of half-running and failing mid-turn.
 - `skill(action="create")` accepts the three new params directly; `set_meta` accepts them too. `skills_index_block` and `keyword_match_hint` also skip schema-invalid skills so malformed hand-edits never leak into the prompt.
 
@@ -5163,10 +3195,13 @@ call. Distilled from a real 35-turn session that ended up with a
 duplicate cron job, a fragmented memory write across 16 calls, and
 three "done — no, you didn't" exchanges.
 
-- `alpi/tools/skill.py` — new `skill(action="run", name=..., [args])`. If the skill ships `scripts/run.py`, alpi validates it, then spawns it with `cwd` = skill dir and an env enriched with `ALPI_HOME` / `ALPI_SKILL_NAME` / `ALPI_SKILL_DIR`; stdout/stderr come back as the tool result. No script → SKILL.md is returned with a directive prefix so the agent follows the prose instead of improvising. Scripts that try to import tools/MCP methods from `alpi` are blocked before execution.
+- **`skill(action="run")`** runs a skill's `scripts/run.py` with its own directory and
+  environment, and returns its output; a skill without a script returns its instructions
+  instead.
 - `alpi/tools/memory.py` — `memory(action="add", entries=[...])` batches multiple writes into one call. Each entry is duplicate-checked independently and the target file is written once, so a later duplicate/limit failure cannot leave a half-written batch. Partial successes return the kept entries plus per-skip notes. Works for `USER.md`, `MEMORY.md`, and `AGENT.md`. Backwards-compatible: `content=...` still works.
-- `alpi/tools/schedule.py` — `schedule(action="add")` rejects a near-duplicate of an existing job (same `kind` + cron / run_at / inactivity-window AND fingerprint of the first 80 chars of the prompt) unless `force=true`. `schedule(action="update", id=...)` edits an existing job in place, avoiding the remove/recreate loop that produced duplicate schedules. Prompts that explicitly say "send/post to Telegram" are rejected because scheduled replies are already auto-delivered to `platform` + `chat_id`.
-- `alpi/tools/_skill_schema.py` — `tools:` frontmatter validator now accepts MCP names (`name__methodCamelCase`) alongside snake_case built-ins. Stops the validator from flagging `bitbucket__getPullRequests` as a typo.
+- **`schedule` refuses near-duplicate jobs** unless `force=true`, and `schedule(action="update")`
+  edits a job in place.
+- `alpi/tools/_skill_schema.py` — `tools:` frontmatter validator now accepts MCP names (`name__methodCamelCase`) alongside snake_case built-ins. Stops the validator from flagging an MCP tool name as a typo.
 - `alpi/prompts/system_prompt.md` — four new rules in **Tool use** ("past tense ⇒ tool_call this turn", "list before create when state is involved", no trailing "if you'd like, the next step…", memory is for facts not runtime logic) and a "Running a skill" paragraph in **Skills** that names `skill(action="run", ...)` as the canonical execution path.
 - Docs — `docs/ROADMAP.md` marks BF as active and narrows Skills v2 to the remaining backlog now that the real-world skill stress test has shipped.
 - Tests — `tests/tools/test_skill_run.py` (9), `tests/tools/test_memory_batch.py` (9), `tests/core/test_schedule_dedup.py` (10), `tests/tools/test_skill_schema_mcp.py` (6).
@@ -5187,8 +3222,8 @@ three "done — no, you didn't" exchanges.
 
 Fixes MCP servers crashing silently when reached through the daemon
 (desktop client path): the daemon's launchd / systemd PATH did not see
-user-installed Node / Python tools, so `npx`-based servers (e.g.
-`bitbucket-mcp`) failed with `command not found`. The TUI was unaffected
+user-installed Node / Python tools, so `npx`-based servers failed with
+`command not found`. The TUI was unaffected
 — it inherits the user's shell PATH. Plus a docs sweep to match the
 per-machine daemon reality and a v0.5 roadmap pivot to "owned device
 access".
@@ -5224,8 +3259,10 @@ unchanged; ``alp.v`` stays at 1. The fixes align the implementation
 with the protocol description and update ALP.md where the description
 had drifted.
 
-- ``alpi/service.py`` — ``_INFLIGHT`` rekeyed from ``wg_id`` to ``(wg_id, profile)``. The "single-flight per profile" invariant in ALP.md → *Workgroups → Preemption* assumed per-profile state; with the unified daemon (``one supervisor per machine, every profile inside``) the old key let one profile's dispatch lock another profile's dispatch for the same workgroup. Concrete observed effect: 4 peers receiving the same ``#task`` would serialise behind one in-flight LLM instead of running in parallel.
-- ``alpi/service.py`` — preempt watcher now scopes to its own profile (``info["profile"] == profile`` filter). Previously every profile's watcher iterated the global table and called ``_active_task_seq_for(<own_home>, …)`` against another profile's dispatch; since each home only knows its own subscriptions / hub state, it read empty and incorrectly concluded the task was closed → SIGTERM 200 ms after dispatch. Each watcher now only manages dispatches it can actually evaluate.
+- Workgroup dispatch is single-flight per profile again, so peers receiving the same task run in
+  parallel instead of queueing behind one another.
+- Each profile's preempt watcher manages only its own dispatches, so one profile can no longer
+  stop another's turn moments after it starts.
 - ``alpi/service.py`` — ``_should_dispatch`` no longer fires ``collective #task opened`` when ``active_task()`` shows the task has been ``#done``-closed. Without this, a member whose poller saw the original ``#task`` after the hub had already closed it would dispatch a turn whose only legal outcome was ``#skip`` — burn budget for a noise post.
 - ``alpi/service.py`` — workgroup dispatch prompt grows a final ``LANGUAGE`` block: write every post (substantive, ``#working``, ``#skip``, ``#done``) in the language of the active ``#task``. Recency-biased placement at the end of the prompt (the trigger message is otherwise English-dominated, which leaked into ``#working`` reasons even when the ``#task`` was Spanish).
 - ``alpi/alp/agent_context.py`` — ``LANGUAGE`` rule in the system-prompt guardrails simplified to "match the language of the active ``#task``". Previous wording defaulted to English with a briefing override clause that was never wired (no parser, just a hint to the user); briefing is for problem framing, not configuration.
@@ -5240,7 +3277,9 @@ socket, every remote request carries a per-device pairing token,
 and the desktop Tauri layer routes its previously-shelled-out
 commands through the same JSON-RPC verbs.
 
-- ``alpi/host/server.py`` — second listener on ``ws://<bind>:49200`` (port configurable via ``host.tcp_port``). Bind validated up front: only Tailscale CGNAT (``100.64.0.0/10``) or RFC1918 private ranges (``10/8``, ``172.16/12``, ``192.168/16``) accepted; loopback, ``0.0.0.0``, and public IPs refused. Token middleware on the WS path requires ``params.auth_token``; Unix socket stays token-less (filesystem perms = trust). Empty device store keeps the listener open as a v0.4 → v0.4.1 migration window.
+- **A WebSocket listener for paired devices** on port 49200 (`host.tcp_port`), bound only to
+  Tailscale or private-network addresses and requiring a device token; the Unix socket stays
+  token-less.
 - ``alpi/host/devices.py`` — pairing-token store at ``~/.alpi/host/devices.yaml`` (mode 0600) with ``host.devices.{list,generate,revoke,rename}`` verbs. ``secrets.token_urlsafe(24)`` (192 bits, 32 chars). The full token escapes the daemon exactly once (in the QR returned by ``generate``); listing redacts to a ``token_id`` (last 8 chars).
 - ``alpi/host/network.py`` — ``detect_bind_ip()`` picks Tailscale first, falls back to the first private LAN address, returns ``None`` when neither exists (listener stays Unix-only). Tailscale lookup uses ``tailscale ip -4`` with a fallback to parsing ``ifconfig`` so the daemon works under launchd on macOS where the App Store binary refuses subcommands without a GUI/keychain context.
 - ``alpi/host/probes.py`` — new ``host.gateway.probe``, ``host.peers.ping``, and ``host.model.ctx_window`` verbs. Same logic the desktop used to shell out to via ``alpi gateway probe``, ``alpi peers ping``, and ``alpi ctx``; now reusable from any host-plane client.
@@ -5287,14 +3326,7 @@ live in `system_prompt.md` where they apply to every profile.
 - ``alpi/prompts/system_prompt.md`` — new ``## Conversation`` section consolidates operative rules that were scattered between ``default_agent.md`` and ``Tool use``: match user's language on replies (persist in English), quote paths verbatim, don't ask clarification on minor ambiguity, don't ask rhetorical permission. Deduplicated against the existing ``Tool use`` section.
 - ``alpi/prompts/system_prompt.md`` — skill-creation guidance retuned: "consider creating" instead of "call it proactively", with an explicit "create without asking only when the pattern is clearly recurring". Lowers the false-positive rate where a single one-off ask would trigger a skill.
 - Existing profiles untouched — ``~/.alpi/<profile>/memories/AGENT.md`` is user-owned content. Only new profiles seed with the slim shape.
-- ``tests/llm/`` — new LLM-in-loop test suite (engine-direct, parametrised across multiple providers). Runs with ``pytest tests/llm --llm``; skipped by default. Asserts on tool calls + filesystem state, never on prose. Covers skill create / set_meta / db usage / eligibility gate / memory routing / persona manifestation / don't-over-skill.
-
-Validation: full reshape via chat (rename to "Mira", add Basque-cuisine
-expertise, add responsibilities, populate USER + MEMORY) lands
-cleanly. State integration in follow-up turns works end-to-end —
-a recipe reply respects expertise, gluten intolerance, family
-size, the wine-pairing persona rule, and the Thermomix tool note
-all at once.
+- An opt-in suite of end-to-end tests with a real model (`pytest tests/llm --llm`).
 
 ## v0.3.11 — 2026-05-03 — skills overhaul
 
@@ -5326,45 +3358,20 @@ will follow once the desktop has a use for it.
 
 ## v0.3.9 — 2026-05-02 — daemon refactor + host plane
 
-The v0.4 cycle lands as a single 0.3.9 release on the alpi side:
-a unified per-machine daemon (replacing the per-profile service
-model), a new host-plane control API for visual / remote clients
-to talk to, and the cycle of alpi improvements (workgroups
-protocol overhaul, peer mention via ``link.ask``, mention thread
-fix, pending invites, gateway session isolation, budget-zone
-signal, test reorg). The first public Tauri desktop client ships
-on its own track as ``desktop-v0.1.0`` — see
-[desktop/CHANGELOG.md](desktop/CHANGELOG.md).
+The v0.4 cycle lands as one release: a single daemon per machine, a host-plane control API for
+visual and remote clients, and a round of workgroup and peer improvements. The first desktop
+client ships separately as `desktop-v0.1.0` — see [desktop/CHANGELOG.md](desktop/CHANGELOG.md).
 
-### alpi cycle
-
-- ALP.3 workgroups protocol overhaul — hub-anchored multi-party transcripts with per-workgroup budgets, single-task rotation, ``#task`` / ``#done`` markers, mention-based engagement triggers, key rotation on member change.
-- Peer mention via ``link.ask`` — ``@<peer>`` from TUI / gateway short-circuits the LLM and routes through the shared executor as the ``peer`` tool. Roster-gated by ``alp_mention.parse(text, home=home)`` so unknown ids fall through to the engine.
-- Mention thread fix — hydrated turns flagged as conversational context, not authoritative; re-read memory on memory-driven questions to avoid stale answers after the user edited memory between turns.
-- Pending invites — inbound from an unpinned peer leaves a pending entry under ``<home>/alp/pending/`` for explicit accept / discard from wizard / desktop.
-- Per-sender ``@``-mention threads + isolated gateway sessions — ``mentions/<sender>.json`` per peer; gateway sessions move to ``gateway/sessions/`` and stay invisible to local ``--continue``.
-- Budget-zone signal — workgroup turn context grows a one-line gradient nudge once the daily cap crosses 40% so the agent biases toward shorter posts before the cap actually trips.
-- Test reorg — ``tests/`` flat → ``tests/{alp,core,gateway,host,mail,mcp,tools,tui,manual}/``; CI runs ``pytest -q`` on PRs.
-- AGENTS.md hardening — comments rule sharpened: not for humans, one-line preferred.
-
-### Daemon
-
-- One ``com.alpi.daemon`` process per machine supervises every profile under ``~/.alpi/``, replacing the per-profile process model (N daemons + N plists). Per-(profile, service) tasks supervised independently.
-- ``alpi service`` group → ``alpi daemon``; ``com.alpi.service.<profile>.plist`` → ``com.alpi.daemon.plist``; ``alpi-service-<profile>.service`` → ``alpi-daemon.service``.
-- ``home.set_active_home`` ``ContextVar`` bound by ``Engine.run_turn`` — tools resolve to the right profile across concurrent turns in one process. Without this every profile's tools would write to default's home.
-- ``alpi setup`` auto-installs the daemon on first run; no opt-in step. Linux install runs ``loginctl enable-linger`` so the unit survives logout (long-standing bug).
-- Manual workgroup scripts updated for the post-refactor API (single ``svc.install_daemon`` instead of N per-profile installs).
-
-### Host plane
-
-- New Unix-socket control API (``~/.alpi/host/host.sock``, default profile only). JSON-RPC-shaped, auth via filesystem perms. Not ALP — different transport, different trust model.
-- Verb namespaces: reads (``host.sessions.*`` / ``host.session.read`` / ``host.workgroup.transcript``), chat (``host.chat.send`` streaming + ``host.chat.cancel`` with ``@<peer>`` shortcut parity with TUI), config mutations (``host.providers.*``, ``host.peers.*``, ``host.profile.*``, ``host.mcp.*``, ``host.gateway.remove``, ``host.sandbox.*``, ``host.voice.*``), schedule (``host.schedule.{list,remove,set_paused,fire}``), daemon (``host.daemon.restart``), events (``host.events.subscribe`` push channel).
-- Path-traversal-safe via shared ``_check_id`` regex; protected env keys (``HOME``, ``PATH``, ``ALPI_HOME``, etc.) refused at the verb layer.
-- Schedule creation stays in the agent (``schedule`` tool) so the threat-scan + skill rules continue to gate prompt content; the host-plane is a visibility + cleanup surface.
-
-### Desktop
-
-- First public Tauri client lands as ``desktop-v0.1.0`` on its own release track. See [desktop/CHANGELOG.md](desktop/CHANGELOG.md) for the per-release notes.
+- **One daemon supervises every profile.** `alpi service` becomes `alpi daemon`, with one
+  `com.alpi.daemon` / `alpi-daemon.service` per machine; `alpi setup` installs it on first run,
+  and on Linux it keeps running after logout.
+- **Host-plane control API** on `~/.alpi/host/host.sock` for reading sessions, chatting,
+  changing configuration, managing schedules and subscribing to events.
+- **Workgroups overhaul:** hub-anchored transcripts with per-workgroup budgets, `#task` /
+  `#done` markers, and key rotation when members change.
+- **Peers:** `@<peer>` mentions route straight to the peer, requests from unknown peers wait as
+  pending invites, and each sender keeps its own mention thread.
+- A budget nudge asks the agent for shorter posts once the daily cap passes 40%.
 
 ## v0.3.8 — 2026-04-28 — security audit hardening
 
@@ -5662,7 +3669,9 @@ new ones). Optional **lifetime** budget (USD or tokens,
 project-scoped, no daily reset) — posts double-gate on top of
 profile cap. Profile gate fires upstream of workgroup gate.
 
-- `alpi/alp/workgroup.py` — `Member.key_version` + `Meta.current_key_version`; `_rekey()` mints fresh 32-byte key, re-seals per remaining member; `workgroup.leave` (hub can't leave own wg, `-32602`); `pull` includes `current_key_version` + caller's sealed key for in-band rekey detect; `post` accepts `key_version` + optional `cost: {usd, tokens}`; `_validate_budget` enforces `max_usd` xor `max_tokens` positive; `ledger.json` accumulates `{usd, tokens, posts}`. `kick(home, wg_id, target_pubkey)` hub-side primitive. Cap hit returns `-32005` with `data.cap_kind = "workgroup_usd"`/`"workgroup_tokens"`.
+- **Workgroup keys rotate when a member leaves.** Remaining members get a fresh sealed key, the
+  hub can remove a member, posts may carry their cost, and a workgroup can cap spend in USD or
+  tokens (`-32005` when reached).
 - `docs/ALP.md` — `leave`, `key_version`/`cost` on `post`, rekey-via-pull, "Group-key versioning", project-lifetime cap with author-declared cost trust model.
 - `tests/test_alp_workgroup.py` — 15 new (forward-secrecy, hub-can't-leave, kick rotation, budget shape, USD/tokens admit-then-block, ledger init, v1→v2→v3 monotonic, concurrent post+leave, profile gate upstream). PR 1's 20 still green. Suite: 804 (was 789).
 
@@ -5676,7 +3685,9 @@ existing ALP transport (Unix or Noise_XK/TCP). End-to-end
 encrypted: hub stores ciphertext, group keys sealed per-member.
 Suite: 789 (was 769).
 
-- `alpi/alp/workgroup.py` (new, ~430 lines) — Crypto: ECIES seal X25519 (Ed25519→X25519 birational) + HKDF-SHA256 + ChaCha20-Poly1305 with AAD contexts (`b"seal"`, `b"post"`). Storage: `~/.alpi/<profile>/alp/workgroups/<wg_id>/` with `meta.yaml`, `members.yaml`, append-only `transcript.jsonl`; IDs `wg_<base32(16 random)>`. Verbs: `create()` local; `register()` wires `workgroup.join`/`post`/`pull`. New error codes `-32008 workgroup-not-member`, `-32009 workgroup-not-found`.
+- **Encrypted workgroups:** hub-anchored transcripts sealed per member, with `create`, `join`,
+  `post` and `pull`, and new error codes `-32008 workgroup-not-member` and
+  `-32009 workgroup-not-found`.
 - `alpi/cli.py` — `alpi alp start` registers handlers alongside `link.ask`.
 - `docs/ALP.md` — concrete signatures (`workgroup.post(wg_id, nonce, ciphertext)` — encryption client-side); sealing scheme.
 - `tests/test_alp_workgroup.py` — 20 new (crypto round-trip + isolation, end-to-end Unix + Noise/TCP, 3-alpi multi-member, `asyncio.gather` concurrent posts, restart persistence, error paths).
@@ -5992,7 +4003,9 @@ propagation through tool context; new send_message + schedule
 - **docs** — `MODELS.md` (tiered model recommendations) (`df29cfc`); identity-wizard rejected (`60122b7`); CONTEXT split into ARCHITECTURE + ROADMAP, bump to v0.2.0 (`6b946e4`).
 - **gateway / schedule** — stream tool traces + typing indicator (`fe3a3d4`); fail fast on bad workspace (`04bdaba`); fix immediate-fire + UTC vs local tz + duplicate delivery (`3dd4522`); kind=once + LLM time grounding (`1fc3610`); schedule daemon tool+CLI+rename from cron (`2245e42`); install/uninstall for gateway+schedule (`cd62da0`); email subsystem (`c67e618`); email gateway + per-platform config (`4691df8`).
 - **skills / tools / tui** — unified skill tool + subdir contract + path guards (`2e67830`); auto-inject skill index into system prompt (`4035327`); rename delegate → research + depth tiers (`d2ceb74`); level-2 comment cleanup (`a07e40a`); inter-tool prose + reasoning tokens in indicator (`62f7fa7`); reasoning persists across sessions + show_reasoning toggle (`fd1fec4`); skill tool patch/view + state subdir (`211c022`).
-- **misc** — fix profile propagation + memory prompt (`1470bdb`); send_message tool (`6e31ace`); profile CLI + drop migration (`630f97c`); mcp client (`0d376ac`); shared ui primitives (`7a81770`); memory description tightened (`b214ce6`); tool description compression (`19f1287`, `6be1685`); minimal config seed + /new session (`2dadc09`); security phase 1 — terminal denylist + SSRF + injection scan (`a54d99d`); security phase 2 — opt-in OS sandbox (`e78b428`); merge glob+grep into search (`2b73091`); file tools drop workspace wall (`3e2dc29`); web_search dedup by domain (`b04b394`); README layout (`56d1711`).
+- **Misc:** profile propagation and memory prompt fixes, the `send_message` tool, the profile CLI,
+  an MCP client, compressed tool descriptions, a terminal denylist with SSRF and injection
+  scanning, an opt-in OS sandbox, a merged file search, and web search deduplicated by domain.
 
 ## v0.1.0 — 2026-04-19
 

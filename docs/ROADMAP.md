@@ -24,7 +24,7 @@ infrastructure were not re-audited. No production data or external services
 were used in the reproductions below.
 
 The next cycle should repair observable failures, not add another orchestration
-layer or reopen settled product decisions. The four items below are bounded
+layer or reopen settled product decisions. The items below are bounded
 fixes; each can ship independently as a patch before v0.16.
 
 | Order | ID | Priority | Evidence | Outcome |
@@ -32,6 +32,8 @@ fixes; each can ship independently as a patch before v0.16.
 | 1 | LEDGER.1 | P1 · 🟡 | Reproduced with two writer processes | Every recorded charge survives concurrent writers. |
 | 2 | RELEASE.1 | P1 · 🟡 | Workflow inspection + documented event semantics | Docker publishes the revision whose parent release passed. |
 | 3 | INDEX.1 | P2 · 🟡 | Reproduced against real SQLite/vec0 stores | A failed rebuild retains the previous searchable index. |
+| 4 | TERM.3 | P3 · 🟡 | Observed in the same run: the agent could not find its JDK from `terminal` | A profile can hand `terminal` extra environment variables. |
+| 5 | SCHED.4 | P2 · 🟡 | A 5400 s job died at 59:46 on 2026-09-22; a stored timeout above 3600 is clamped at run time without a word | The timeout a job carries is the one the scheduler enforces, or the clamp is shown before it bites. |
 
 ### LEDGER.1 — serialize accounting across processes
 
@@ -99,6 +101,63 @@ rules. Do not build a generic indexing framework or rename the SQLite tables.
 metadata and search results usable. Successful rebuilds publish the new state
 together. Test `force`, embedder drift, scoped workgroup rebuilds and concurrent
 readers; unrelated tables in the shared `knowledge.sqlite` remain untouched.
+
+### TERM.3 — let a profile hand `terminal` extra environment variables
+
+**Evidence.** [terminal.py](../alpi/tools/terminal.py) builds the subprocess
+environment itself; [CONFIG.md](CONFIG.md#tools) exposes the backend, the
+sandbox, network and the approval allowlist, but no way to add variables.
+A skill runner that installs its own toolchain into the volume (the Java
+`repo-task` keeps JDKs and Maven under `/data/toolchains`) exports
+`JAVA_HOME` and a `PATH` prefix only to the subprocesses it spawns; the
+agent's own targeted commands through `terminal` see neither. In the same
+2026-09-22 run the agent tried to discover them and the sandbox refused the
+command as `dangerous pattern: dump environment`; it recovered by spelling
+absolute paths, which every future Java task would have to repeat.
+
+**Smallest change.** A `tools.terminal.env` map in the profile config
+(`JAVA_HOME`, `PATH` and the like), applied on top of the environment the
+tool already builds, with `PATH` prepended rather than replaced. Values are
+plain strings; no secret expansion, no reading of `.env` keys into the
+shell, and the existing sandbox and allowlist apply unchanged.
+
+**Acceptance.** A profile with the map runs `java -version` through
+`terminal` and finds the volume JDK; a profile without it is byte-for-byte
+unchanged; `PATH` keeps the original entries after the prefix; the map is
+listed in the takes-effect table and the packaged config reference.
+
+### SCHED.4 — stop clamping a stored job's timeout in silence
+
+**Evidence.** The save path already validates: `schedule(add|update,
+timeout=5400)` is refused with `'timeout' must be between 30 and 3600
+seconds`. The run path does not tell anyone: [scheduler/run.py](../alpi/scheduler/run.py)
+applies `max(30, min(MAX_RUN_TIMEOUT_SECONDS, secs))` to whatever the stored
+job carries, so a `jobs.json` holding `5400` runs for 3600 seconds without a
+word. That is how the fleet's values got in: the `neo` and `smith` weekend
+jobs were written straight into `profiles/<p>/schedule/jobs.json` in the
+fleet configuration repository, never through the tool. `write_file` and
+`edit_file` accept the same out-of-range value in `jobs.json`, so an agent
+can author one too. On 2026-09-22 a Morpheus pass on `mkto-worker` (a 510 MB
+Maven repository) had merged a concurrent `main`, resolved the conflict and
+was in its last verification when the subprocess was killed at 59:46 with
+`agent timed out`; the branch and baseline survived and a manual chat turn
+finished the pull request in 19 more minutes. The architecture reference
+calls the cap "a stuck-process backstop, not a hint that jobs must be short",
+yet the cap is what ended a healthy run.
+
+**Smallest change.** Make the stored value and the enforced value the same
+number. Either honour a declared timeout above 3600 for jobs everywhere it is
+checked (the tool, the scheduler, the silence watchdog), keeping the soft
+budget so the engine finalises first; or keep the ceiling and make the clamp
+visible where the operator looks — `schedule list` shows the effective
+timeout and marks a clamped job, and the clamp is logged when a run starts.
+Do not add a second timeout knob.
+
+**Acceptance.** A job stored with `timeout: 5400` either runs for 5400 s, or
+is shown as clamped to 3600 before it ever runs and says so when it does;
+`schedule list` shows the effective timeout; the existing `schedule.failed`
+payload keeps naming the reason. The neo, smith and morpheus job files in the
+fleet repository are corrected to whatever the scheduler will honour.
 
 ### Optional: CAP.1 — show admission pressure without changing admission
 

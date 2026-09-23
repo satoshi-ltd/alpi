@@ -32,7 +32,9 @@ def lint_content(path: Path | str, content: str) -> str | None:
         except ImportError:
             return None
         try:
-            yaml.safe_load(content)
+            # Spring and Kubernetes files carry several `---` documents; safe_load accepts only one.
+            for _ in yaml.safe_load_all(content):
+                pass
         except yaml.YAMLError as e:
             mark = getattr(e, "problem_mark", None)
             loc = f" at line {mark.line + 1}" if mark else ""

@@ -116,7 +116,7 @@ Each tool exposes `name`, `description`, JSON schema `parameters`, `run(...) -> 
 
 Every turn binds one `RunContext`, `ToolExecutor`, and `ExecutionWorld`. Tools are exclusive by default; only an all-`parallel_safe` model batch can overlap, with results replayed in original order. `tools.execution.backend` selects `local` or ephemeral `docker` terminal shell execution; Docker foreground containers are force-removed on timeout and background jobs are refused. Dedicated workers remain host-side, so this is not a whole-agent filesystem sandbox. The `workflow` tool runs a bounded dependency graph, shares `tools.max_parallel_tool_calls`, and routes every nested step back through `ToolExecutor`, so deny/member/availability policy cannot be bypassed.
 
-- `write_file` / `edit_file` — syntax-lint before writing supported formats.
+- `write_file` / `edit_file` — syntax-lint before writing supported formats. Multi-document YAML (`---`, as in Spring `application.yml` and Kubernetes manifests) is accepted; each document is checked.
 - `safe_write_secret(...)` — canonical path for credential files.
 - `knowledge(action="search", query, k=5)` — semantic + lexical recall over synthesized Markdown pages in `<workspace>/knowledge/`; one bundle is indexed at a time and a `path` the index was not built for returns a hint, not another bundle's pages.
 - `knowledge(action="ingest", source_path?|name?, topic?, ocr?)` — explicit learning from a source file or current-turn attachment. The source is read and summarized into Markdown; the raw file is not copied.

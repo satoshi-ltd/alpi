@@ -211,3 +211,35 @@ def test_diff_preview_is_bounded(tmp_home_no_env: Path) -> None:
     WriteFile().run(path=str(target), content="\n".join(f"row-{i}" for i in range(2000)))
     records = _mutations.end_batch(token)
     assert len(records[0].diff_preview) <= _mutations.DIFF_PREVIEW_MAX_CHARS + 20
+
+
+SPRING_DOCS = "server:\n  port: 8080\n---\nspring:\n  profiles: dev\n---\nspring:\n  profiles: prod\n"
+
+
+def test_write_file_accepts_a_multi_document_yaml(tmp_home_no_env: Path) -> None:
+    target = tmp_home_no_env / "src" / "main" / "resources" / "application.yml"
+
+    result = WriteFile().run(path=str(target), content=SPRING_DOCS)
+
+    assert result.ok, result.error
+    assert target.read_text() == SPRING_DOCS
+
+
+def test_edit_file_can_change_a_later_document_of_a_multi_document_yaml(tmp_home_no_env: Path) -> None:
+    target = tmp_home_no_env / "application.yml"
+    target.write_text(SPRING_DOCS)
+
+    result = EditFile().run(path=str(target), old_string="profiles: prod", new_string="profiles: production")
+
+    assert result.ok, result.error
+    assert "profiles: production" in target.read_text()
+
+
+def test_edit_file_still_refuses_to_break_a_multi_document_yaml(tmp_home_no_env: Path) -> None:
+    target = tmp_home_no_env / "application.yml"
+    target.write_text(SPRING_DOCS)
+
+    result = EditFile().run(path=str(target), old_string="  profiles: prod", new_string=" profiles: [prod")
+
+    assert not result.ok and "YAML parse error" in (result.error or "")
+    assert target.read_text() == SPRING_DOCS, "a refused edit must leave the file untouched"
