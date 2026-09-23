@@ -1,60 +1,55 @@
-"""Unit tests for ``alpi.tools.web_search``.
-
-We mock the ``ddgs`` backend so the tests don't hit the network and
-don't depend on DDG's current behaviour. The goal is to exercise our
-own plumbing:
-
-- safesearch is pinned to ``moderate`` (not left to the backend default)
-- dedup collapses multiple hits from the same host
-- zero-results returns a clean message instead of an error
-
-The "query in English by default" guidance lives in the tool
-description, not in code — it's instructions to the LLM. No unit test
-can exercise it without running an actual agent loop; it's covered in
-manual smoke tests.
-"""
-
 from __future__ import annotations
 
 import contextvars
 import sys
-import time
 import threading
+import time
 from types import SimpleNamespace
 
 import pytest
 
 from alpi.tools import web_search as ws
 
+HIT = {"title": "T", "href": "https://example.com", "body": "B"}
+SHIPPED_ORDER = ws.DEFAULT_BACKENDS
+ORDER = ("brave", "yahoo", "startpage", "mojeek", "duckduckgo", "google", "wikipedia", "grokipedia")
+WEB_ENGINES = list(ORDER[:6])
+
 
 @pytest.fixture(autouse=True)
 def _quiet_state(monkeypatch):
-    """``emit_state`` writes to the global event bus. Silence it so the
-    tests don't need to mount a fake event sink."""
     monkeypatch.setattr("alpi.tools._state.emit_state", lambda *_a, **_kw: None)
 
 
 @pytest.fixture(autouse=True)
-def _no_waiting(monkeypatch):
-    """Zero the pacing clock and the retry backoff, and drop the per-turn
-    tally — otherwise every test pays real seconds."""
+def _isolated(monkeypatch):
     from alpi.tools import _state
 
     monkeypatch.setattr(ws, "_MIN_INTERVAL_S", 0.0)
-    monkeypatch.setattr(ws, "_RETRY_BACKOFF_S", 0.0)
     monkeypatch.setattr(ws, "_last_started", 0.0)
+    monkeypatch.setattr(ws, "_raw_settings", lambda: {})
+    monkeypatch.setattr(ws, "_live", {})
+    monkeypatch.setattr(ws, "_cooldowns", {})
+    monkeypatch.setattr(ws, "DEFAULT_BACKENDS", ORDER)
     _state.reset_turn_usage()
 
 
-def _fake_ddgs(results):
-    """Build a context-manager class whose ``.text(...)`` returns ``results``.
+class _Timeout(Exception):
+    pass
 
-    Single call per test is enough now — the regional escalation that
-    needed multi-call sequencing is gone.
-    """
-    class _FakeContext:
-        def __init__(self):
-            self.calls: list[dict] = []
+
+_Timeout.__name__ = "TimeoutException"
+
+
+def _install(monkeypatch, behaviour=None, default=None):
+    """Fake ``ddgs``: per backend, rows, an exception, a callable, or None for its "No results found."."""
+    calls: list[dict] = []
+    constructed: list[dict] = []
+    behaviour = behaviour or {}
+
+    class _FakeDDGS:
+        def __init__(self, **kwargs):
+            constructed.append(kwargs)
 
         def __enter__(self):
             return self
@@ -63,58 +58,316 @@ def _fake_ddgs(results):
             return False
 
         def text(self, query, **kwargs):
-            self.calls.append({"query": query, **kwargs})
-            return list(results)
+            calls.append({"query": query, **kwargs})
+            answer = behaviour.get(kwargs.get("backend"), default)
+            if callable(answer) and not isinstance(answer, type):
+                answer = answer()
+            if isinstance(answer, BaseException):
+                raise answer
+            if answer is None:
+                raise Exception("No results found.")
+            return list(answer)
 
-    return _FakeContext
+    monkeypatch.setitem(sys.modules, "ddgs", SimpleNamespace(DDGS=_FakeDDGS))
+    monkeypatch.setattr(ws, "_installed_engines", lambda: set(ws.DEFAULT_BACKENDS))
+    return calls, constructed
 
 
-def test_safesearch_pinned(monkeypatch):
-    """Every DDG call must carry ``safesearch="moderate"`` explicitly.
+def _backends(calls):
+    return [c["backend"] for c in calls]
 
-    The backend default has drifted across ``ddgs`` releases; pinning
-    it here means a ``pip upgrade`` can't silently change what users
-    see.
-    """
-    fake = _fake_ddgs([{"title": "T", "href": "https://example.com", "body": "B"}])
-    instance = fake()
-    monkeypatch.setitem(sys.modules, "ddgs", SimpleNamespace(DDGS=lambda: instance))
 
-    tool = ws.WebSearch()
-    result = tool.run(query="anything")
+def test_the_shipped_default_is_the_provisional_three():
+    assert SHIPPED_ORDER == ("duckduckgo", "yahoo", "brave")
+
+
+def test_by_default_only_the_first_engine_is_asked_when_it_answers(monkeypatch):
+    monkeypatch.setattr(ws, "DEFAULT_BACKENDS", SHIPPED_ORDER)
+    calls, _ = _install(monkeypatch, {"duckduckgo": [HIT]})
+
+    assert ws.WebSearch().run(query="hotel").ok
+    assert _backends(calls) == ["duckduckgo"]
+
+
+def test_by_default_a_hanging_first_engine_is_skipped_after_one_timeout(monkeypatch):
+    monkeypatch.setattr(ws, "DEFAULT_BACKENDS", SHIPPED_ORDER)
+    calls, _ = _install(monkeypatch, {"duckduckgo": _Timeout("operation timed out"), "yahoo": [HIT]})
+
+    assert ws.WebSearch().run(query="first").ok
+    assert ws.WebSearch().run(query="second").ok
+
+    assert _backends(calls) == ["duckduckgo", "yahoo", "yahoo"]
+
+
+def test_every_call_pins_engine_timeout_and_safesearch(monkeypatch):
+    calls, constructed = _install(monkeypatch, default=[HIT])
+
+    result = ws.WebSearch().run(query="anything")
 
     assert result.ok
-    assert instance.calls[0]["safesearch"] == "moderate"
+    assert _backends(calls) == ["brave"]
+    assert calls[0]["safesearch"] == "moderate"
+    assert constructed == [{"timeout": ws._ENGINE_TIMEOUT_S}]
+    assert "auto" not in _backends(calls)
 
 
-def test_zero_results_is_ok_not_error(monkeypatch):
-    """An empty result set is a legitimate answer, not a tool error.
+def test_engines_are_asked_in_order_until_one_answers(monkeypatch):
+    calls, _ = _install(monkeypatch, {"mojeek": [HIT]})
 
-    If we returned ``ok=False`` here, the LLM would treat an obscure
-    query ("zzxyq") as a transient failure and loop reformulating —
-    burning turns for no reason. Empty is a signal, not a crash.
-    """
-    fake = _fake_ddgs([])
-    instance = fake()
-    monkeypatch.setitem(sys.modules, "ddgs", SimpleNamespace(DDGS=lambda: instance))
-
-    tool = ws.WebSearch()
-    result = tool.run(query="zzxyq nonsense")
+    result = ws.WebSearch().run(query="hotel booking")
 
     assert result.ok
-    assert "no results" in result.output
-    assert len(instance.calls) == 1
+    assert _backends(calls) == ["brave", "yahoo", "startpage", "mojeek"]
+    assert "(via mojeek)" in result.output
+    assert "example.com" in result.output
+
+
+def test_encyclopedias_are_only_asked_after_every_web_engine(monkeypatch):
+    calls, _ = _install(monkeypatch, {"wikipedia": [HIT]})
+
+    result = ws.WebSearch().run(query="anything")
+
+    assert result.ok
+    assert _backends(calls) == WEB_ENGINES + ["wikipedia"]
+
+
+def test_a_failure_names_every_engine_and_what_it_did(monkeypatch):
+    _install(monkeypatch, {"yahoo": _Timeout("operation timed out"), "mojeek": RuntimeError("403 Forbidden")})
+
+    result = ws.WebSearch().run(query="anything")
+
+    assert not result.ok
+    assert "search failed" in result.error
+    assert "brave: empty" in result.error
+    assert "yahoo: timeout" in result.error
+    assert "mojeek: error (RuntimeError: 403 Forbidden)" in result.error
+    assert "grokipedia: empty" in result.error
+    assert "rarely gets past" in result.error
+
+
+@pytest.mark.parametrize("failure", [_Timeout("timed out"), OSError("Name or service not known"), ValueError("bad html")])
+def test_a_failure_reports_what_happened_without_inventing_a_cause(monkeypatch, failure):
+    _install(monkeypatch, default=failure)
+
+    error = ws.WebSearch().run(query="anything").error
+
+    for claim in ("IP", "rate limit", "limited", "refus", "block"):
+        assert claim not in error
+
+
+def test_each_engine_is_asked_at_most_once_per_search(monkeypatch):
+    calls, _ = _install(monkeypatch, default=RuntimeError("down"))
+
+    assert not ws.WebSearch().run(query="anything").ok
+    assert sorted(_backends(calls)) == sorted(ws.DEFAULT_BACKENDS)
+
+
+def test_a_timed_out_engine_cools_down_across_searches(monkeypatch):
+    calls, _ = _install(monkeypatch, {"brave": _Timeout("timed out"), "yahoo": [HIT]})
+
+    assert ws.WebSearch().run(query="first").ok
+    assert set(ws._cooldowns) == {"brave"}
+
+    calls.clear()
+    assert ws.WebSearch().run(query="second").ok
+    assert _backends(calls) == ["yahoo"]
+
+
+def test_an_empty_answer_never_sidelines_an_engine_for_other_queries(monkeypatch):
+    only_brave_knows = {"title": "B", "href": "https://b.example", "body": "b"}
+    calls, _ = _install(monkeypatch, {"yahoo": [HIT]})
+    assert ws.WebSearch().run(query="a").ok
+
+    calls.clear()
+    _install(monkeypatch, {"brave": [only_brave_knows]})
+    result = ws.WebSearch().run(query="b")
+
+    assert result.ok
+    assert "(via brave)" in result.output
+    assert ws._cooldowns == {}
+
+
+def test_every_engine_empty_is_no_results_not_a_blocked_machine(monkeypatch):
+    _install(monkeypatch)
+
+    result = ws.WebSearch().run(query="zzxyq nonsense")
+
+    assert result.ok
+    assert "no results for 'zzxyq nonsense'" in result.output
+    assert "brave: empty" in result.output and "grokipedia: empty" in result.output
+    assert "broaden it once" in result.output
+    assert "do NOT" not in result.output
+    assert ws._cooldowns == {}
+
+
+def test_skipped_engines_never_turn_no_results_into_a_failure(monkeypatch):
+    _install(monkeypatch, {"brave": _Timeout("timed out")})
+
+    assert not ws.WebSearch().run(query="first").ok
+    result = ws.WebSearch().run(query="second")
+
+    assert result.ok
+    assert "no results for 'second'" in result.output
+    assert "not asked brave (cooling down)" in result.output
+
+
+def _all_cooling(soonest, second=None):
+    now = time.monotonic()
+    ws._cooldowns.update({name: now + 600 for name in ws.DEFAULT_BACKENDS})
+    ws._cooldowns[soonest] = now + 60
+    if second:
+        ws._cooldowns[second] = now + 120
+
+
+def test_when_every_engine_is_cooling_only_the_one_due_first_is_asked(monkeypatch):
+    _all_cooling("mojeek")
+    calls, _ = _install(monkeypatch, default=_Timeout("timed out"))
+
+    result = ws.WebSearch().run(query="anything")
+
+    assert not result.ok
+    assert _backends(calls) == ["mojeek"]
+    assert "asked mojeek: timeout" in result.error
+    assert "brave (cooling down)" in result.error
+
+
+def _running(stop: threading.Event) -> threading.Thread:
+    worker = threading.Thread(target=stop.wait, daemon=True)
+    worker.start()
+    return worker
+
+
+def test_the_probe_never_picks_an_engine_still_busy(monkeypatch):
+    _all_cooling("mojeek", second="yahoo")
+    stop = threading.Event()
+    monkeypatch.setattr(ws, "_live", {"mojeek": _running(stop)})
+    calls, _ = _install(monkeypatch, {"yahoo": [HIT]})
+
+    try:
+        result = ws.WebSearch().run(query="anything")
+    finally:
+        stop.set()
+
+    assert result.ok
+    assert _backends(calls) == ["yahoo"]
+
+
+def test_an_engine_with_a_request_still_running_is_not_asked_again(monkeypatch):
+    stop = threading.Event()
+    monkeypatch.setattr(ws, "_live", {"brave": _running(stop)})
+    calls, _ = _install(monkeypatch, {"yahoo": [HIT]})
+
+    try:
+        result = ws.WebSearch().run(query="anything")
+    finally:
+        stop.set()
+
+    assert result.ok
+    assert _backends(calls) == ["yahoo"]
+
+
+def test_no_new_request_starts_while_the_cap_is_running(monkeypatch):
+    stop = threading.Event()
+    monkeypatch.setattr(ws, "_live", {"brave": _running(stop), "yahoo": _running(stop)})
+    calls, _ = _install(monkeypatch, default=[HIT])
+
+    try:
+        result = ws.WebSearch().run(query="anything")
+    finally:
+        stop.set()
+
+    assert calls == []
+    assert not result.ok
+    assert "could not ask any engine" in result.error
+    assert "brave (still busy with an earlier search)" in result.error
+    assert "startpage (earlier requests still running)" in result.error
+
+
+def test_the_engine_due_first_that_answers_ends_the_outage(monkeypatch):
+    _all_cooling("mojeek")
+    calls, _ = _install(monkeypatch, {"mojeek": [HIT]})
+
+    assert ws.WebSearch().run(query="anything").ok
+    assert _backends(calls) == ["mojeek"]
+    assert "mojeek" not in ws._cooldowns
+
+
+def test_a_cooldown_expires(monkeypatch):
+    ws._cooldowns["brave"] = time.monotonic() - 1
+    calls, _ = _install(monkeypatch, {"brave": [HIT]})
+
+    assert ws.WebSearch().run(query="anything").ok
+    assert _backends(calls) == ["brave"]
+    assert ws._cooldowns == {}
+
+
+def test_the_search_stops_asking_once_its_time_is_spent(monkeypatch):
+    monkeypatch.setattr(ws, "_CALL_BUDGET_S", 0.15)
+
+    def slow():
+        time.sleep(0.1)
+        return []
+
+    calls, _ = _install(monkeypatch, default=slow)
+    result = ws.WebSearch().run(query="anything")
+
+    assert not result.ok
+    assert len(calls) == 2
+    assert "grokipedia (out of time)" in result.error
+
+
+def test_configured_backends_set_the_order_and_drop_unknown_names(monkeypatch):
+    monkeypatch.setattr(ws, "_raw_settings", lambda: {"backends": ["Mojeek", "bogus", "brave", "mojeek"]})
+    calls, _ = _install(monkeypatch)
+
+    ws.WebSearch().run(query="anything")
+
+    assert _backends(calls) == ["mojeek", "brave"]
+
+
+@pytest.mark.parametrize("configured", [["bogus"], "brave,yahoo", [], None, 7])
+def test_unusable_backends_fall_back_to_the_default_order(monkeypatch, configured):
+    monkeypatch.setattr(ws, "_raw_settings", lambda: {"backends": configured})
+    calls, _ = _install(monkeypatch)
+
+    ws.WebSearch().run(query="anything")
+
+    assert _backends(calls) == list(ws.DEFAULT_BACKENDS)
+
+
+def test_defaults_skip_engines_this_ddgs_does_not_ship(monkeypatch):
+    calls, _ = _install(monkeypatch)
+    monkeypatch.setattr(ws, "_installed_engines", lambda: {"brave", "mojeek", "wikipedia"})
+
+    ws.WebSearch().run(query="anything")
+
+    assert _backends(calls) == ["brave", "mojeek", "wikipedia"]
+
+
+@pytest.mark.parametrize(("exc", "elapsed", "expected"), [
+    (_Timeout("error sending request > operation timed out"), 0.1, "timeout"),
+    (Exception("No results found."), 0.1, "empty"),
+    (Exception("No results found."), ws._ENGINE_TIMEOUT_S, "timeout"),
+    (type("RatelimitException", (Exception,), {})("429"), 0.1, "rate-limited"),
+    (type("NoResultsException", (Exception,), {})(""), 0.1, "empty"),
+    (RuntimeError("connection reset"), 0.1, "error (RuntimeError: connection reset)"),
+])
+def test_outcomes_are_classified(exc, elapsed, expected):
+    assert ws._outcome(exc, elapsed) == expected
+
+
+def test_missing_ddgs_is_reported_as_missing_not_as_a_blocked_ip(monkeypatch):
+    monkeypatch.setitem(sys.modules, "ddgs", None)
+
+    result = ws.WebSearch().run(query="anything")
+
+    assert not result.ok
+    assert "ddgs package is not installed" in result.error
+    assert "limited" not in result.error
 
 
 def test_dedup_caps_per_domain(monkeypatch):
-    """Four Reddit hits collapse to two; other domains preserved.
-
-    DDG routinely floods the first page with 3-5 Reddit threads or
-    StackOverflow questions when the query matches a popular thread
-    pattern. Those later hits rarely add signal and push genuinely
-    diverse sources off the list the LLM sees.
-    """
-    results = [
+    rows = [
         {"title": "r1", "href": "https://reddit.com/a", "body": "b1"},
         {"title": "r2", "href": "https://reddit.com/b", "body": "b2"},
         {"title": "r3", "href": "https://www.reddit.com/c", "body": "b3"},
@@ -122,105 +375,22 @@ def test_dedup_caps_per_domain(monkeypatch):
         {"title": "so", "href": "https://stackoverflow.com/q/1", "body": "b"},
         {"title": "wiki", "href": "https://en.wikipedia.org/wiki/X", "body": "b"},
     ]
-    fake = _fake_ddgs(results)
-    instance = fake()
-    monkeypatch.setitem(sys.modules, "ddgs", SimpleNamespace(DDGS=lambda: instance))
+    _install(monkeypatch, default=rows)
 
-    tool = ws.WebSearch()
-    result = tool.run(query="anything", max_results=10)
-    out = result.output
+    out = ws.WebSearch().run(query="anything", max_results=10).output
 
-    assert result.ok
-    # First two Reddit hits kept, the next two dropped (cap=2). ``www.``
-    # normalisation means the third reddit hit counts against the same
-    # bucket as the first two.
     assert "r1" in out and "r2" in out
     assert "r3" not in out and "r4" not in out
-    # Unrelated domains untouched.
     assert "so" in out and "wiki" in out
 
 
-def test_backend_exception_becomes_error(monkeypatch):
-    """When ``ddgs`` raises (network blip, quota, whatever), the tool
-    surfaces an ``ok=False`` so the LLM can react — retry, give up,
-    tell the user — instead of getting a silent empty page that looks
-    identical to "nothing matches your query"."""
-    class _Raising:
-        def __enter__(self): return self
-        def __exit__(self, *_a): return False
-        def text(self, *_a, **_kw):
-            raise RuntimeError("ddgs exploded")
-
-    monkeypatch.setitem(sys.modules, "ddgs", SimpleNamespace(DDGS=_Raising))
-
-    tool = ws.WebSearch()
-    result = tool.run(query="anything")
-
-    assert not result.ok
-    assert "search failed" in result.error
-
-
-def test_retry_runs_once_then_reports_the_real_exception(monkeypatch):
-    """The old code swallowed the exception and said "the ddgs backend
-    raised", so the model retried blindly into an IP-wide block and the
-    logs carried nothing to diagnose. One retry, then the exception type
-    and message reach both."""
-    calls = {"n": 0}
-
-    class _Raising:
-        def __enter__(self): return self
-        def __exit__(self, *_a): return False
-        def text(self, *_a, **_kw):
-            calls["n"] += 1
-            raise RuntimeError("Ratelimit 429")
-
-    monkeypatch.setitem(sys.modules, "ddgs", SimpleNamespace(DDGS=_Raising))
-
-    result = ws.WebSearch().run(query="anything")
-
-    assert not result.ok
-    assert calls["n"] == 2
-    assert "RuntimeError: Ratelimit 429" in result.error
-    assert "do NOT reformulate" in result.error
-
-
-def test_retry_recovers_when_the_second_attempt_succeeds(monkeypatch):
-    calls = {"n": 0}
-
-    class _FlakyOnce:
-        def __enter__(self): return self
-        def __exit__(self, *_a): return False
-        def text(self, *_a, **_kw):
-            calls["n"] += 1
-            if calls["n"] == 1:
-                raise RuntimeError("transient")
-            return [{"title": "T", "href": "https://example.com", "body": "B"}]
-
-    monkeypatch.setitem(sys.modules, "ddgs", SimpleNamespace(DDGS=_FlakyOnce))
-
-    result = ws.WebSearch().run(query="anything")
-
-    assert result.ok
-    assert calls["n"] == 2
-    assert "example.com" in result.output
-
-
 def test_turn_budget_stops_calling_the_backend(monkeypatch):
-    calls = {"n": 0}
-
-    class _Counting:
-        def __enter__(self): return self
-        def __exit__(self, *_a): return False
-        def text(self, *_a, **_kw):
-            calls["n"] += 1
-            return []
-
-    monkeypatch.setitem(sys.modules, "ddgs", SimpleNamespace(DDGS=_Counting))
+    calls, _ = _install(monkeypatch, default=[HIT])
     monkeypatch.setattr(ws, "_max_per_turn", lambda: 3)
 
     outcomes = [ws.WebSearch().run(query=f"q{i}") for i in range(5)]
 
-    assert calls["n"] == 3
+    assert len(calls) == 3
     assert all(r.ok for r in outcomes[:3])
     assert all(not r.ok for r in outcomes[3:])
     assert "budget for this turn is spent" in outcomes[4].error
@@ -228,12 +398,7 @@ def test_turn_budget_stops_calling_the_backend(monkeypatch):
 
 
 def test_budget_is_per_turn_not_per_process(monkeypatch):
-    class _Empty:
-        def __enter__(self): return self
-        def __exit__(self, *_a): return False
-        def text(self, *_a, **_kw): return []
-
-    monkeypatch.setitem(sys.modules, "ddgs", SimpleNamespace(DDGS=_Empty))
+    _install(monkeypatch, default=[HIT])
     monkeypatch.setattr(ws, "_max_per_turn", lambda: 1)
     from alpi.tools import _state
 
@@ -295,27 +460,19 @@ def test_parallel_calls_in_one_turn_share_the_budget() -> None:
 
 
 def test_searches_never_overlap(monkeypatch):
-    """ddgs fans one query out to several engines, so overlapping calls
-    multiply upstream requests and are what tips the shared IP into a
-    rate limit that lasts minutes."""
-    import threading
-
     live = {"now": 0, "max": 0}
     seen = threading.Lock()
 
-    class _Slow:
-        def __enter__(self): return self
-        def __exit__(self, *_a): return False
-        def text(self, *_a, **_kw):
-            with seen:
-                live["now"] += 1
-                live["max"] = max(live["max"], live["now"])
-            time.sleep(0.05)
-            with seen:
-                live["now"] -= 1
-            return []
+    def slow():
+        with seen:
+            live["now"] += 1
+            live["max"] = max(live["max"], live["now"])
+        time.sleep(0.02)
+        with seen:
+            live["now"] -= 1
+        return [HIT]
 
-    monkeypatch.setitem(sys.modules, "ddgs", SimpleNamespace(DDGS=_Slow))
+    _install(monkeypatch, default=slow)
 
     threads = [
         threading.Thread(target=lambda i=i: ws.WebSearch().run(query=f"q{i}"))
@@ -329,39 +486,131 @@ def test_searches_never_overlap(monkeypatch):
     assert live["max"] == 1
 
 
-def test_calls_are_spaced_apart(monkeypatch):
-    class _Empty:
-        def __enter__(self): return self
-        def __exit__(self, *_a): return False
-        def text(self, *_a, **_kw): return []
-
-    monkeypatch.setitem(sys.modules, "ddgs", SimpleNamespace(DDGS=_Empty))
+def test_searches_are_spaced_but_engines_within_one_are_not(monkeypatch):
+    _install(monkeypatch, {"startpage": [HIT]})
     monkeypatch.setattr(ws, "_MIN_INTERVAL_S", 0.2)
 
     started = time.monotonic()
-    for i in range(3):
-        ws.WebSearch().run(query=f"q{i}")
-    assert time.monotonic() - started >= 0.4
-
-
-def test_retry_and_following_search_are_each_spaced(monkeypatch):
-    attempts = {"n": 0}
-
-    class _FailsOnce:
-        def __enter__(self): return self
-        def __exit__(self, *_a): return False
-        def text(self, *_a, **_kw):
-            attempts["n"] += 1
-            if attempts["n"] == 1:
-                raise RuntimeError("transient")
-            return []
-
-    monkeypatch.setitem(sys.modules, "ddgs", SimpleNamespace(DDGS=_FailsOnce))
-    monkeypatch.setattr(ws, "_MIN_INTERVAL_S", 0.1)
-
-    started = time.monotonic()
     assert ws.WebSearch().run(query="first").ok
+    first = time.monotonic() - started
     assert ws.WebSearch().run(query="second").ok
 
-    assert attempts["n"] == 3
+    assert first < 0.2
     assert time.monotonic() - started >= 0.2
+
+
+class TestAgainstTheRealDdgs:
+    @pytest.fixture(autouse=True)
+    def _real(self, monkeypatch):
+        import ddgs
+        from ddgs.engines import ENGINES
+        from ddgs.results import TextResult
+
+        monkeypatch.setitem(sys.modules, "ddgs", ddgs)
+        monkeypatch.setattr(ws, "_ENGINE_TIMEOUT_S", 1)
+        asked: list[str] = []
+
+        def stub(name, answer):
+            def search(self, query, **_kwargs):
+                asked.append(name)
+                if isinstance(answer, float):
+                    time.sleep(answer)
+                    return None
+                if isinstance(answer, BaseException):
+                    raise answer
+                return [TextResult(title=f"{query} {name}", href=f"https://{name}.example/r", body="b")] if answer else None
+            return search
+
+        for name, cls in ENGINES["text"].items():
+            monkeypatch.setattr(cls, "search", stub(name, False))
+        self.engines = ENGINES["text"]
+        self.stub = stub
+        self.asked = asked
+        self.monkeypatch = monkeypatch
+
+    def answer(self, name, value):
+        self.monkeypatch.setattr(self.engines[name], "search", self.stub(name, value))
+
+    def test_ships_every_default_engine(self):
+        assert set(SHIPPED_ORDER) <= set(self.engines)
+
+    def test_one_engine_per_ddgs_call_and_the_first_answer_wins(self):
+        self.answer("yahoo", True)
+
+        result = ws.WebSearch().run(query="hotel")
+
+        assert result.ok
+        assert "(via yahoo)" in result.output
+        assert "yahoo.example" in result.output
+        assert self.asked == ["brave", "yahoo"]
+
+    def test_an_empty_page_and_a_raised_timeout_are_told_apart(self):
+        from ddgs.exceptions import TimeoutException
+
+        self.answer("yahoo", TimeoutException("operation timed out"))
+        self.answer("mojeek", True)
+
+        result = ws.WebSearch().run(query="hotel")
+
+        assert result.ok
+        assert self.asked == ["brave", "yahoo", "startpage", "mojeek"]
+        assert set(ws._cooldowns) == {"yahoo"}
+
+    def test_an_engine_that_outlives_the_deadline_counts_as_a_timeout(self):
+        self.answer("brave", 1.3)
+        self.answer("yahoo", True)
+
+        result = ws.WebSearch().run(query="hotel")
+
+        assert result.ok
+        assert set(ws._cooldowns) == {"brave"}
+
+    def test_the_search_budget_holds_even_though_ddgs_joins_its_threads(self):
+        self.monkeypatch.setattr(ws, "_CALL_BUDGET_S", 0.3)
+        for name in self.engines:
+            self.answer(name, 3.0)
+
+        started = time.monotonic()
+        result = ws.WebSearch().run(query="hotel")
+
+        assert time.monotonic() - started < 1.0
+        assert "asked brave: timeout" in result.error
+        assert "yahoo (out of time)" in result.error
+
+    def test_abandoned_requests_stay_bounded_across_searches(self):
+        self.monkeypatch.setattr(ws, "_CALL_BUDGET_S", 0.3)
+        self.monkeypatch.setattr(ws, "_raw_settings", lambda: {"backends": ["brave", "yahoo", "mojeek"]})
+        live = {"now": 0, "max": 0, "per_engine": {}}
+        guard = threading.Lock()
+        release = threading.Event()
+
+        def hanging(name):
+            def search(_self, query, **_kwargs):
+                with guard:
+                    live["now"] += 1
+                    live["max"] = max(live["max"], live["now"])
+                    live["per_engine"][name] = live["per_engine"].get(name, 0) + 1
+                release.wait(5)
+                with guard:
+                    live["now"] -= 1
+                return None
+            return search
+
+        for name in ("brave", "yahoo", "mojeek"):
+            self.monkeypatch.setattr(self.engines[name], "search", hanging(name))
+        try:
+            outcomes = [ws.WebSearch().run(query=f"q{i}") for i in range(4)]
+        finally:
+            release.set()
+
+        assert live["max"] <= ws._MAX_LIVE_REQUESTS
+        assert all(n == 1 for n in live["per_engine"].values())
+        assert not any(r.ok for r in outcomes)
+        assert "could not ask any engine" in outcomes[-1].error
+
+    def test_a_failure_lists_the_real_outcomes(self):
+        result = ws.WebSearch().run(query="hotel")
+
+        assert result.ok
+        assert "brave: empty" in result.output
+        assert "wikipedia: empty" in result.output

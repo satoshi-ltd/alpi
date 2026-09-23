@@ -85,6 +85,7 @@ Three options:
 | `tools.terminal.approval.allowlist` | `[]` | list of pattern descriptions and/or command globs (see below) | next turn |
 | `tools.browser.vision` | `false` | bool | next turn |
 | `tools.web_search.max_per_turn` | `25` | int | next turn |
+| `tools.web_search.backends` | `[duckduckgo, yahoo, brave]` | list of `ddgs` text engines, in the order `web_search` asks them; names the installed `ddgs` does not ship are dropped, and an empty or unusable list means the default | next search |
 | `tools.browser.allow_local` | `false` | bool — let the `browser` tool navigate **loopback** only (`127.0.0.1`, `::1`, and hostnames that resolve to loopback such as `localhost`). RFC1918 / CGNAT / Tailscale stay blocked even when this is on; the exemption is loopback-only, matching `_guards._is_loopback`. Off blocks every local target; on is for hitting a local dev server you trust. | next turn |
 | `tools.budget.per_result_chars` | `100_000` | int (-1 = unlimited) | next turn |
 | `tools.tts.voice` | `"en-US-AriaNeural"` | Edge TTS voice id | next turn |
@@ -95,6 +96,19 @@ Three options:
 | `tools.stt.language` | `""` (auto) | ISO code (`en`, `es`, ...) | next turn |
 | `tools.attachments.max_text_tokens` | `0` (auto) | int (tokens) | next turn |
 | `tools.<name>.max_result_chars` | `—` (unset) | int (-1 = unlimited) | next turn |
+
+`web_search` needs no API key. It asks one engine at a time, in the
+`tools.web_search.backends` order, and stops at the first that answers. The
+default of three is provisional: it comes from the one measurement available,
+from a residential connection, and is not a claim that the other engines
+`ddgs` ships are broken. Which engines answer depends on the machine's IP, so
+a host can list others. A search gives up after 25 seconds, and at most two
+engine requests are ever in flight. An engine that times out, is rate-limited
+or errors is skipped for the next 15 minutes by the running process; an empty
+answer never sidelines an engine. When every engine is cooling down, a search
+asks only the one due back first. A search where every engine asked came back
+empty reports no results; one that met timeouts or errors fails and names each
+engine and what it did.
 
 `tools.read_image.model` is a dedicated override for image inspection, not a
 second conversational model. Set it from `alpi setup → Routing models`, or the

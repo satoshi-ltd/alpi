@@ -93,6 +93,7 @@ RAW_READ_KEYS = {
     "mcp.servers",
     "tools.budget.per_result_chars",
     "tools.web_search.max_per_turn",
+    "tools.web_search.backends",
 }
 
 

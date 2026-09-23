@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.15.11 — 2026-09-23 — web search answers more often, still without a key
+
+- **`web_search` asks one search engine at a time and stops at the first that answers.**
+  Before, every search went to several engines at once, starting with two encyclopedias, and a
+  slow or refusing engine could throw away another engine's results.
+- An engine that times out or errors is skipped for 15 minutes, so searches stop waiting on
+  it; when every engine is, a search asks only the one due back first. A search
+  stops asking after 25 seconds.
+- A failed search names each engine and what it did, and a search where every engine simply
+  found nothing says so, instead of always blaming a rate limit.
+- By default it asks DuckDuckGo, Yahoo and Brave, in that order. Which engines answer depends on
+  the machine, so `tools.web_search.backends` can list others. No API key is needed.
+
 ## v0.15.10 — 2026-09-23 — charges recorded at the same moment all count
 
 - **Spend recorded by two processes at once is no longer lost.** When the daemon, a scheduled

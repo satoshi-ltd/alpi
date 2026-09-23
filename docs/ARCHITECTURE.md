@@ -1245,7 +1245,7 @@ Hard runtime deps are kept tight — every line in `pyproject.toml`'s `dependenc
 - `playwright` + `playwright-stealth` — interactive browser tool.
 - `pillow` — image pre-processing for `read_image` (auto-resize).
 - `html2text` — strip HTML to markdown in `web_fetch` / `web_extract`.
-- `ddgs` — DuckDuckGo search backend (replaced `duckduckgo-search` when that package was deprecated).
+- `ddgs` — keyless search across public engines; `web_search` asks one engine at a time in a configured order (replaced `duckduckgo-search` when that package was deprecated).
 - `edge-tts` — TTS tool (local-first, no API key).
 - `faster-whisper` — STT tool (local-first, no API key).
 - `cryptography` — ChaCha20-Poly1305 for encrypted backups.

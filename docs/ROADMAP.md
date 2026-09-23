@@ -31,9 +31,10 @@ fixes; each can ship independently as a patch before v0.16.
 |---|---|---|---|---|
 | 1 | RELEASE.1 | P1 · 🟡 | Workflow inspection + documented event semantics | Docker publishes the revision whose parent release passed. |
 | 2 | INDEX.1 | P2 · 🟡 | Reproduced against real SQLite/vec0 stores | A failed rebuild retains the previous searchable index. |
-| 3 | TERM.3 | P3 · 🟡 | Observed in the same run: the agent could not find its JDK from `terminal` | A profile can hand `terminal` extra environment variables. |
+| 3 | TERM.3 | P3 · 🟡 | Observed in a Morpheus run on 2026-09-22: the agent could not find its JDK from `terminal` | A profile can hand `terminal` extra environment variables. |
 | 4 | SCHED.4 | P2 · 🟡 | A 5400 s job died at 59:46 on 2026-09-22; a stored timeout above 3600 is clamped at run time without a word | The timeout a job carries is the one the scheduler enforces, or the clamp is shown before it bites. |
-| 5 | SEARCH.1 | P2 · 🟡 | 689 of 3,372 `web_search` calls failed on one production profile in three days (20%); the only backend is keyless `ddgs` behind a shared-IP lockout the code itself documents | A profile can point `web_search` at an API-keyed provider; `ddgs` stays the default. |
+| 5 | DESK.1 | P3 · 🟡 | Production audit log: 2,418 `register_device` events in one day from three idle desktops, all named `Desktop` | An idle desktop adds nothing to the audit log and shows its machine name. |
+| 6 | DB.1 | P3 · 🟡 | 183 of 308 `db` failures in 945 production runs came from two statements in one `exec` or a row-returning `exec` | `db exec` runs what an agent naturally sends, or refuses it with the exact fix. |
 
 ### RELEASE.1 — bind the Docker release to its successful parent revision
 
@@ -86,8 +87,8 @@ sandbox, network and the approval allowlist, but no way to add variables.
 A skill runner that installs its own toolchain into the volume (the Java
 `repo-task` keeps JDKs and Maven under `/data/toolchains`) exports
 `JAVA_HOME` and a `PATH` prefix only to the subprocesses it spawns; the
-agent's own targeted commands through `terminal` see neither. In the same
-2026-09-22 run the agent tried to discover them and the sandbox refused the
+agent's own targeted commands through `terminal` see neither. In a
+2026-09-22 Morpheus run the agent tried to discover them and the sandbox refused the
 command as `dangerous pattern: dump environment`; it recovered by spelling
 absolute paths, which every future Java task would have to repeat.
 
@@ -135,34 +136,54 @@ is shown as clamped to 3600 before it ever runs and says so when it does;
 payload keeps naming the reason. The neo, smith and morpheus job files in the
 fleet repository are corrected to whatever the scheduler will honour.
 
-### SEARCH.1 — let a profile back `web_search` with an API-keyed provider
+### DESK.1 — register a desktop once, not on every probe
 
-**Evidence.** [web_search.py](../alpi/tools/web_search.py) has one backend,
-the keyless `ddgs` package, serialised behind a module lock because, as its
-own comment says, two calls in flight reach the shared-IP rate limit and lock
-the host out for about 17 minutes. On the mirai EC2 the `curator` profile
-answers one hotel per run, eight to ten searches each. Over 945 runs between
-2026-09-20 and 2026-09-22 it made 3,372 `web_search` calls and 689 failed
-(20%, between 18% and 22% every day), all with the same text: *search failed
-after one retry — every backend refused or errored*, 391 `TimeoutException`
-and 293 `DDGSException`. Each failure costs the two attempts (about 11 s) plus
-a model turn to choose another query, and the fact it was looking for is
-found later or not at all. The only knob is `tools.web_search.max_per_turn`;
-there is no way to give the tool a paid endpoint the profile already pays for
-elsewhere.
+**Evidence.** After every successful probe of a remote connection,
+[host_client.rs](../desktop/src-tauri/src/host_client.rs) calls
+`host.connections.register_device` again. The mobile client does it once per
+endpoint and token ([probe.js](../mobile/src/lib/probe.js) keeps a
+`registeredMetadata` set). The host writes nothing when the metadata is
+unchanged ([connections.py](../alpi/host/connections.py) `register_device`),
+but [admin_audit.py](../alpi/host/admin_audit.py) records the call, rate-limited
+by `DENIED_REPEAT_SECONDS = 60`, so every open desktop appends one audit event a
+minute. On the mirai EC2 on 2026-09-22, 2,418 of that day's audit events were
+`register_device` from three desktops (1,154, 848 and 416), and the log had
+already rotated at 5 MB on 2026-09-17. Every one names the device `Desktop`:
+the name comes from `HOSTNAME`, which a macOS GUI app does not inherit. Real
+administrative actions of that day, such as two `host.cleanup.apply` calls,
+sit among thousands of heartbeats.
 
-**Smallest change.** A `tools.web_search.provider` setting (`ddgs` by
-default) plus one API-keyed provider whose key is read from the profile's
-`.env`, returning the same `{title, URL, snippet}` rows through the same
-per-domain dedup and per-turn budget. When the keyed provider errors, fall
-back to `ddgs` once and name the provider in the failure text. No new
-dependency beyond `urllib`; no change to `web_fetch` or `web_extract`.
+**Smallest change.** The desktop registers once per connection and token per
+app session and again only when its version changes, as mobile does. The host
+audits `register_device` only when it changed something. The desktop takes its
+name from the OS host-name API, keeping `HOSTNAME` as the fallback.
 
-**Acceptance.** A profile with the key configured never touches `ddgs` while
-the provider answers; a profile without it is byte-for-byte unchanged; the
-failure text names which backend refused; the setting is listed in
-[CONFIG.md](CONFIG.md) and the takes-effect table. Measured on the same
-profile, the failed-search share drops below 2% over a full day.
+**Acceptance.** An idle desktop left open for an hour adds no audit event; an
+app update registers once; paired devices list their machine names; the mobile
+path is unchanged.
+
+### DB.1 — make `db exec` accept what agents send
+
+**Evidence.** [db.py](../alpi/tools/db.py) runs `exec` as
+`conn.execute(sql, params)` followed by `commit()`. `sqlite3.execute` refuses
+more than one statement, and a statement that returns rows (a `SELECT` or a
+`RETURNING` sent as `exec`) leaves its cursor open, so the commit fails. On the
+mirai EC2, 945 `curator` runs between 2026-09-20 and 2026-09-22 produced 308
+`db` failures: 173 `You can only execute one statement at a time`, almost all
+two `CREATE TABLE IF NOT EXISTS` sent in one call, and 10 `cannot commit
+transaction - SQL statements in progress`. The rest were the agent's own
+mistakes (52 calls without `action`, 47 wrong binding counts). Each failure
+costs a model call, and the skill's audit trail loses the row it was writing.
+
+**Smallest change.** `exec` without `params` runs a multi-statement script in
+one transaction; `exec` with `params` and more than one statement is refused
+with a message that says to split it. `exec` drains the cursor before
+committing and returns the rows a `RETURNING` produced. `query` is unchanged.
+
+**Acceptance.** Two `CREATE TABLE IF NOT EXISTS` in one `exec` succeed; a
+`SELECT` sent as `exec` no longer fails the commit; a parameterised
+multi-statement call is refused with the fix in the error; the per-skill quota
+and path rules still apply.
 
 ### Optional: CAP.1 — show admission pressure without changing admission
 
@@ -235,6 +256,7 @@ usage or a concrete blocker; standing maintenance belongs in
 | AUDIT.2 | Enterprise audit and accountability: complete local mutation coverage, then add tamper-evident external records, provider policy, encryption, or RBAC only when a real fleet or compliance regime requires them. |
 | ALP.7 | Pinned shared memory per workgroup (`wiki.md`). Promote when sustained workgroup use shows that the transcript is no longer enough. |
 | SK.2 | Safe skill import (`alpi skill import <dir\|zip>` with preview, scan, and install). Promote when users repeatedly exchange skills outside their own profile. |
+| SK.3 | Let a profile lock its own skills against its file tools. The denylist in [_paths.py](../alpi/tools/_paths.py) protects `config.yaml`, `.env` and skill `secrets/`, and keeps `skills/` away from members, but the profile itself can rewrite the scripts that enforce its own gates. On 2026-09-22 a scheduled Morpheus pass edited its `repo-task` runner mid-run, left a `run.py.bak`, fixed a real toolchain gap and broke one of the skill's tests; the live copy diverged from the fleet repository. Today the only guard is a sentence in `AGENT.md`. Opt-in only (inline skill updates are a product choice): a profile setting under which `write_file`, `edit_file` and the skill tool's write actions refuse the profile's own `skills/`. Promote when a second unattended profile edits its own skill, or when a fleet needs that guarantee enforced rather than asked for. |
 | AI (3) | Structured entity memory with selective injection. Promote when keeping the markdown store coherent becomes a repeated source of defects or selective recall is required. |
 | TTS.1 | Host-served local TTS and a single voice catalog. Promote when voice becomes a sustained client surface. |
 | KB.9 | Spreadsheet (`.xlsx`) ingest into knowledge pages: one Markdown table per sheet, headers from the first row, `type: source`. The container ships neither `openpyxl` nor `pandas`, so this is either a stdlib zip+XML reader or a new image dependency. Promote when a real document set arrives as spreadsheets; the 2026-09 Confluence publishing skill covers Markdown, PDF and Word only. |

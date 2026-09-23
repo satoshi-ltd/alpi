@@ -203,10 +203,15 @@ Output attachments (MM.2):
 - `web_search` refuses with "budget for this turn is spent": the per-turn
   ceiling (`tools.web_search.max_per_turn`, default 25) was hit. Answer from
   what you have or read a known URL; do not loop.
-- `web_search` says every backend refused: an IP-wide rate limit, typically
-  minutes long — it already retried once. Do not reformulate and search again;
-  switch to `web_fetch` / `web_extract` on a known URL, `browser`, or say
-  search is unavailable.
+- `web_search` fails with "no engine returned results": it already asked every
+  engine not cooling down, once each (only the one due back first when all are),
+  and the error names what each did (`timeout`, `rate-limited`, `error`,
+  `cooling down`, `empty`). Timeouts and errors across engines mean this
+  machine's IP is being limited, usually for minutes. Do not reformulate and
+  search again; switch to `web_fetch` / `web_extract` on a known URL, `browser`,
+  or say search is unavailable.
+- `web_search` returns "no results" with every engine `empty`: broaden a narrow
+  query once; for an ordinary query, read a known URL instead of repeating it.
 - Model keeps using a denied tool: executor still refuses denied names even if a
   stale context mentions them.
 - Search returns stale/no results: run the matching indexer
