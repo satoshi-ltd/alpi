@@ -273,7 +273,9 @@ no tamper-evident or external compliance sink. What is recorded:
   values, RPC payloads/results, chats or error details. Five MB plus three
   rotations caps it near 20 MB; rows are capped at 4 KB and untrusted
   bootstrap/auth failures share a separate one-row/minute budget. Authorization
-  denials collapse per device/method regardless of target to resist scans. Query with
+  denials collapse per device/method regardless of target to resist scans. A
+  `register_device` that changes nothing leaves no row; one that changes the device
+  is audited at most once per device per minute. Query with
   `alpi audit-log` or Desktop Connections →
   Activity; `host.audit.list` is local/admin-only and paginated.
 - **ALP peer calls are attributed** — dispatch logs the calling `peer.id` on

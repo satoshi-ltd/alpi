@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.15.14 — 2026-09-23 — the audit log keeps only registrations that changed something
+
+- **A device repeating its registration no longer fills the administrative audit log.** Clients
+  report their name and app version to the daemon; when nothing changed, nothing is written to
+  the log, so real administrative actions are no longer buried among repeats.
+- A registration that does change a device (a new name or app version) is still audited, and
+  failed registrations are too.
+
 ## v0.15.13 — 2026-09-23 — skill databases take whole scripts, and a failed reindex loses nothing
 
 - **`db exec` runs several statements in one call.** Without `params`, a whole schema or a batch of

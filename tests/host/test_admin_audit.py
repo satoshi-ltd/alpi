@@ -325,7 +325,7 @@ async def test_member_device_registration_is_audited_without_allowing_log_flood(
     server = host_server.Server(home=tmp_path)
 
     async def register(_params, _server):
-        return {"ok": True}
+        return {"ok": True, "changed": True}
 
     server.register("host.connections.register_device", register)
     body = {
@@ -511,3 +511,82 @@ def test_audited_methods_are_admin_local_or_pairing_only() -> None:
         "host.connections.register_device",
     }
     assert admin_audit.AUDITED_METHODS <= allowed
+
+
+def _registering_server(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, handler) -> tuple:
+    monkeypatch.setattr(
+        host_server,
+        "_check_token_meta",
+        lambda _body: host_server.AuthMeta(True, "admin", [], "conn_desk", "dev_desk"),
+    )
+    server = host_server.Server(home=tmp_path)
+    server.register("host.connections.register_device", handler)
+    body = {
+        "id": "r",
+        "method": "host.connections.register_device",
+        "params": {"auth_token": "t", "name": "MacBook", "client": "desktop", "app_version": "0.3.99"},
+    }
+    return server, body
+
+
+@pytest.mark.asyncio
+async def test_an_idle_desktop_re_registering_leaves_no_trace(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def unchanged(_params, _server):
+        return {"ok": True, "changed": False}
+
+    server, body = _registering_server(tmp_path, monkeypatch, unchanged)
+    for _ in range(60):
+        await _request(server, body, require_token=True)
+
+    assert _entries(tmp_path) == []
+
+
+@pytest.mark.asyncio
+async def test_a_registration_that_changed_the_device_is_audited(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    changes = iter([True, False, False])
+
+    async def first_changes(_params, _server):
+        return {"ok": True, "changed": next(changes)}
+
+    server, body = _registering_server(tmp_path, monkeypatch, first_changes)
+    for _ in range(3):
+        await _request(server, body, require_token=True)
+
+    entries = _entries(tmp_path)
+    assert len(entries) == 1
+    assert entries[0]["target"] == {"name": "MacBook"}
+
+
+@pytest.mark.asyncio
+async def test_a_failed_registration_is_still_audited(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def broken(_params, _server):
+        raise host_server.HandlerError(-32602, "invalid-params")
+
+    server, body = _registering_server(tmp_path, monkeypatch, broken)
+    await _request(server, body, require_token=True)
+
+    entries = _entries(tmp_path)
+    assert len(entries) == 1
+    assert entries[0]["result"] != "ok"
+
+
+@pytest.mark.asyncio
+async def test_a_registration_the_handler_rejects_is_audited(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def rejected(_params, _server):
+        return {"ok": False, "changed": False}
+
+    server, body = _registering_server(tmp_path, monkeypatch, rejected)
+    await _request(server, body, require_token=True)
+
+    entries = _entries(tmp_path)
+    assert len(entries) == 1
+    assert entries[0]["method"] == "host.connections.register_device"
+    assert entries[0]["result"] == "error"

@@ -373,28 +373,21 @@ async fn host_connection_add_remote(
     pairing_token: Option<String>,
 ) -> Result<String, String> {
     off_main(move || {
-        let device_name = std::env::var("HOSTNAME").unwrap_or_else(|_| "Desktop".into());
         let id = if let Some(grant) = pairing_token.filter(|value| !value.trim().is_empty()) {
             host_client::exchange_and_add_remote_connection(
                 name,
                 url,
                 grant,
-                device_name,
+                host_client::device_name(),
                 env!("CARGO_PKG_VERSION").to_string(),
             )?
         } else {
             let token = token.filter(|value| !value.trim().is_empty())
                 .ok_or_else(|| "pairing payload needs a token".to_string())?;
-            let id = host_client::add_remote_connection(name, url, token)?;
-            let _ = host_client::call_for(
-                &id,
-                "host.connections.register_device",
-                serde_json::json!({
-                    "client": "desktop",
-                    "name": device_name,
-                    "app_version": env!("CARGO_PKG_VERSION"),
-                }),
-            );
+            let id = host_client::add_remote_connection(name, url, token.clone())?;
+            host_client::register_device_once(&id, &token, |params| {
+                host_client::call_for(&id, "host.connections.register_device", params)
+            });
             id
         };
         Ok(id)

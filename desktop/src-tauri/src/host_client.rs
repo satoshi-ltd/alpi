@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{IpAddr, SocketAddr, TcpStream, ToSocketAddrs};
@@ -126,6 +126,72 @@ fn status_map() -> &'static Mutex<HashMap<String, StatusEntry>> {
 }
 
 type StatusListener = Box<dyn Fn(&str, ConnectionStatus, Option<&str>) + Send + Sync>;
+
+// Once per connection and token per app session: registering on every probe floods the host's audit log.
+fn registered_devices() -> &'static Mutex<HashSet<String>> {
+    static REGISTERED: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+    REGISTERED.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+fn registration_key(connection_id: &str, token: &str) -> String {
+    format!("{connection_id}|{:x}", Sha1::digest(token.as_bytes()))
+}
+
+pub fn register_device_once(
+    connection_id: &str,
+    token: &str,
+    call: impl FnOnce(Value) -> Result<Value, String>,
+) {
+    let key = registration_key(connection_id, token);
+    let claimed = registered_devices()
+        .lock()
+        .map(|mut set| set.insert(key.clone()))
+        .unwrap_or(false);
+    if !claimed {
+        return;
+    }
+    let params = json!({
+        "client": "desktop",
+        "name": device_name(),
+        "app_version": env!("CARGO_PKG_VERSION"),
+    });
+    let registered = matches!(call(params), Ok(reply) if reply.get("ok").and_then(Value::as_bool) == Some(true));
+    if !registered {
+        if let Ok(mut set) = registered_devices().lock() {
+            set.remove(&key);
+        }
+    }
+}
+
+pub fn device_name() -> String {
+    clean_device_name(os_hostname(), std::env::var("HOSTNAME").ok())
+}
+
+fn clean_device_name(os: Option<String>, env: Option<String>) -> String {
+    [os, env]
+        .into_iter()
+        .flatten()
+        .map(|name| name.trim().trim_end_matches(".local").trim().to_string())
+        .find(|name| !name.is_empty())
+        .unwrap_or_else(|| "Desktop".to_string())
+}
+
+#[cfg(unix)]
+fn os_hostname() -> Option<String> {
+    let mut buf = [0u8; 256];
+    // SAFETY: gethostname writes at most buf.len() bytes into a buffer this frame owns.
+    let rc = unsafe { libc::gethostname(buf.as_mut_ptr().cast(), buf.len()) };
+    if rc != 0 {
+        return None;
+    }
+    let end = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
+    String::from_utf8(buf[..end].to_vec()).ok()
+}
+
+#[cfg(not(unix))]
+fn os_hostname() -> Option<String> {
+    std::env::var("COMPUTERNAME").ok()
+}
 
 fn listeners() -> &'static Mutex<Vec<StatusListener>> {
     static LISTENERS: OnceLock<Mutex<Vec<StatusListener>>> = OnceLock::new();
@@ -2284,20 +2350,17 @@ pub fn probe_connection(conn: &HostConnection) {
                 persist_device_id(&id, &did);
             }
             if let HostConnection::Remote { host, port, token, .. } = conn {
-                let device_name = std::env::var("HOSTNAME").unwrap_or_else(|_| "Desktop".into());
-                let _ = call_remote_once(
-                    &id,
-                    host,
-                    *port,
-                    token,
-                    "host.connections.register_device",
-                    json!({
-                        "client": "desktop",
-                        "name": device_name,
-                        "app_version": env!("CARGO_PKG_VERSION"),
-                    }),
-                    timeout,
-                );
+                register_device_once(&id, token, |params| {
+                    call_remote_once(
+                        &id,
+                        host,
+                        *port,
+                        token,
+                        "host.connections.register_device",
+                        params,
+                        timeout,
+                    )
+                });
             }
         }
         Err(e) => {
@@ -3515,6 +3578,96 @@ mod tests {
         pool.purge("casa");
         assert!(pool.checkout("casa", &ep("t"), now).is_none());
         assert_eq!(pool.checkout("mirai", &ep("t"), now), Some(3));
+    }
+
+    #[test]
+    fn device_name_prefers_the_os_name_without_its_local_suffix() {
+        assert_eq!(
+            clean_device_name(Some("Javis-MacBook-Pro.local".into()), Some("shell".into())),
+            "Javis-MacBook-Pro",
+        );
+        assert_eq!(clean_device_name(Some("build-box\n".into()), None), "build-box");
+    }
+
+    #[test]
+    fn device_name_falls_back_to_hostname_then_desktop() {
+        assert_eq!(clean_device_name(None, Some("from-env".into())), "from-env");
+        assert_eq!(clean_device_name(Some("  ".into()), Some("from-env".into())), "from-env");
+        assert_eq!(clean_device_name(Some(".local".into()), None), "Desktop");
+        assert_eq!(clean_device_name(None, None), "Desktop");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_device_is_named_after_the_machine_even_without_hostname_in_the_environment() {
+        let name = os_hostname().expect("gethostname");
+        assert!(!name.trim().is_empty());
+        assert_eq!(device_name(), clean_device_name(Some(name), None));
+        assert_ne!(device_name(), "Desktop");
+    }
+
+    #[test]
+    fn a_device_registers_once_per_connection_and_token() {
+        let calls = std::cell::Cell::new(0);
+        let ok = |_: Value| {
+            calls.set(calls.get() + 1);
+            Ok(json!({"ok": true}))
+        };
+        register_device_once("conn-once", "token-a", ok);
+        register_device_once("conn-once", "token-a", ok);
+        register_device_once("conn-once", "token-a", ok);
+        assert_eq!(calls.get(), 1);
+
+        register_device_once("conn-once", "token-b", ok);
+        register_device_once("conn-once-elsewhere", "token-a", ok);
+        assert_eq!(calls.get(), 3);
+    }
+
+    #[test]
+    fn a_failed_registration_is_tried_again_on_the_next_probe() {
+        let calls = std::cell::Cell::new(0);
+        register_device_once("conn-retry", "t", |_| {
+            calls.set(calls.get() + 1);
+            Err("daemon unreachable".into())
+        });
+        register_device_once("conn-retry", "t", |_| {
+            calls.set(calls.get() + 1);
+            Ok(json!({"ok": true}))
+        });
+        register_device_once("conn-retry", "t", |_| {
+            calls.set(calls.get() + 1);
+            Ok(json!({"ok": true}))
+        });
+        assert_eq!(calls.get(), 2);
+    }
+
+    #[test]
+    fn a_registration_the_daemon_rejects_is_tried_again() {
+        let calls = std::cell::Cell::new(0);
+        for reply in [json!({"ok": false, "changed": false}), json!({}), json!({"ok": true})] {
+            register_device_once("conn-rejected", "t", |_| {
+                calls.set(calls.get() + 1);
+                Ok(reply)
+            });
+        }
+        register_device_once("conn-rejected", "t", |_| {
+            calls.set(calls.get() + 1);
+            Ok(json!({"ok": true}))
+        });
+        assert_eq!(calls.get(), 3);
+    }
+
+    #[test]
+    fn registration_sends_the_desktop_metadata_and_machine_name() {
+        let mut sent = None;
+        register_device_once("conn-meta", "t", |params| {
+            sent = Some(params);
+            Ok(json!({"ok": true}))
+        });
+        let params = sent.expect("registered");
+        assert_eq!(params["client"], "desktop");
+        assert_eq!(params["name"], device_name());
+        assert_eq!(params["app_version"], env!("CARGO_PKG_VERSION"));
     }
 
     #[test]

@@ -355,6 +355,10 @@ def record_request(
             if not _allow_rate_limited(home, "bootstrap", "", method):
                 return False
         if method == "host.connections.register_device":
+            result = (response or {}).get("result")
+            # Only a successful re-send of metadata already registered is silent; a rejected registration is audited.
+            if isinstance(result, dict) and result.get("ok") is True and not result.get("changed"):
+                return False
             if not _allow_rate_limited(
                 home, context.connection_id, context.device_id or "", method,
             ):

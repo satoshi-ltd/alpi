@@ -11,6 +11,16 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.6.2 — 2026-09-23 — an open app stops re-registering, and devices get their real name
+
+- **An idle desktop no longer registers itself with a daemon every minute.** The app now tells a
+  remote daemon its name and version once per connection each time it starts, as the mobile app
+  already did, and tries again only if that call failed. An update registers once more, because
+  it restarts the app.
+- **Paired devices show the machine's name instead of `Desktop`.** The name comes from the
+  operating system rather than an environment variable a macOS app never receives.
+  Client-only change: the minimum compatible alpi stays at 0.14.34, as pinned by v0.5.26.
+
 ## v0.6.1 — 2026-09-21 — a connection can be renamed where it lives
 
 - **The name you gave a connection is editable.** The alias in the connection switcher

@@ -1226,12 +1226,28 @@ def test_register_device_only_writes_changed_metadata(monkeypatch, tmp_path: Pat
 
     assert connections.register_device(
         device["token"], client="desktop", name="MacBook", app_version="0.4.39",
-    )
+    ) == (True, True)
     assert writes == 1
     assert connections.register_device(
         device["token"], client="desktop", name="MacBook", app_version="0.4.39",
-    )
+    ) == (True, False)
     assert writes == 1
+    assert connections.register_device(
+        device["token"], client="desktop", name="MacBook", app_version="0.4.40",
+    ) == (True, True)
+    assert connections.register_device(
+        "not-a-device-token", client="desktop", name="MacBook", app_version="0.4.40",
+    ) == (False, False)
+
+
+@pytest.mark.asyncio
+async def test_the_register_verb_says_whether_it_changed_anything(monkeypatch, tmp_path: Path) -> None:
+    _root(monkeypatch, tmp_path)
+    _row, device = connections.create_connection("Javi")
+    params = {"auth_token": device["token"], "client": "desktop", "name": "MacBook", "app_version": "0.4.39"}
+
+    assert await connections._register_device(params, None) == {"ok": True, "changed": True}
+    assert await connections._register_device(params, None) == {"ok": True, "changed": False}
 
 
 def test_concurrent_authentication_coalesces_last_seen_write(

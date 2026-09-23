@@ -34,13 +34,14 @@ dependencies = [
 
 [[package]]
 name = "alpi-desktop"
-version = "0.6.1"
+version = "0.6.2"
 dependencies = [
  "base64 0.22.1",
  "chrono",
  "dirs 5.0.1",
  "flate2",
  "futures-util",
+ "libc",
  "notify",
  "notify-debouncer-mini",
  "rustls 0.23.40",

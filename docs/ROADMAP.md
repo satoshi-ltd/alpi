@@ -31,7 +31,6 @@ fixes; each can ship independently as a patch before v0.16.
 |---|---|---|---|---|
 | 1 | TERM.3 | P3 · 🟡 | Observed in a Morpheus run on 2026-09-22: the agent could not find its JDK from `terminal` | A profile can hand `terminal` extra environment variables. |
 | 2 | SCHED.4 | P2 · 🟡 | A 5400 s job died at 59:46 on 2026-09-22; a stored timeout above 3600 is clamped at run time without a word | The timeout a job carries is the one the scheduler enforces, or the clamp is shown before it bites. |
-| 3 | DESK.1 | P3 · 🟡 | Production audit log: 2,418 `register_device` events in one day from three idle desktops, all named `Desktop` | An idle desktop adds nothing to the audit log and shows its machine name. |
 
 ### TERM.3 — let a profile hand `terminal` extra environment variables
 
@@ -89,32 +88,6 @@ is shown as clamped to 3600 before it ever runs and says so when it does;
 `schedule list` shows the effective timeout; the existing `schedule.failed`
 payload keeps naming the reason. The neo, smith and morpheus job files in the
 fleet repository are corrected to whatever the scheduler will honour.
-
-### DESK.1 — register a desktop once, not on every probe
-
-**Evidence.** After every successful probe of a remote connection,
-[host_client.rs](../desktop/src-tauri/src/host_client.rs) calls
-`host.connections.register_device` again. The mobile client does it once per
-endpoint and token ([probe.js](../mobile/src/lib/probe.js) keeps a
-`registeredMetadata` set). The host writes nothing when the metadata is
-unchanged ([connections.py](../alpi/host/connections.py) `register_device`),
-but [admin_audit.py](../alpi/host/admin_audit.py) records the call, rate-limited
-by `DENIED_REPEAT_SECONDS = 60`, so every open desktop appends one audit event a
-minute. On the mirai EC2 on 2026-09-22, 2,418 of that day's audit events were
-`register_device` from three desktops (1,154, 848 and 416), and the log had
-already rotated at 5 MB on 2026-09-17. Every one names the device `Desktop`:
-the name comes from `HOSTNAME`, which a macOS GUI app does not inherit. Real
-administrative actions of that day, such as two `host.cleanup.apply` calls,
-sit among thousands of heartbeats.
-
-**Smallest change.** The desktop registers once per connection and token per
-app session and again only when its version changes, as mobile does. The host
-audits `register_device` only when it changed something. The desktop takes its
-name from the OS host-name API, keeping `HOSTNAME` as the fallback.
-
-**Acceptance.** An idle desktop left open for an hour adds no audit event; an
-app update registers once; paired devices list their machine names; the mobile
-path is unchanged.
 
 ### Optional: CAP.1 — show admission pressure without changing admission
 

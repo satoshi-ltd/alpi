@@ -969,7 +969,7 @@ def revoke_by_token_id(token_id: str) -> bool:
         return False
 
 
-def register_device(token: str, *, client: str, name: str, app_version: str) -> bool:
+def register_device(token: str, *, client: str, name: str, app_version: str) -> tuple[bool, bool]:
     client = client if client in _VALID_CLIENTS else "unknown"
     clean_name = name.strip()
     clean_version = app_version.strip()
@@ -990,8 +990,8 @@ def register_device(token: str, *, client: str, name: str, app_version: str) -> 
                         changed = True
                     if changed:
                         _atomic_write(data)
-                    return True
-    return False
+                    return True, changed
+    return False, False
 
 
 def authenticate(token: str, min_interval: float = 60.0) -> AuthResult:
@@ -1249,13 +1249,13 @@ async def _revoke_device(params: dict[str, Any], _server: host_server.Server) ->
 
 async def _register_device(params: dict[str, Any], _server: host_server.Server) -> dict[str, Any]:
     token = str((params or {}).get("auth_token") or "")
-    ok = register_device(
+    ok, changed = register_device(
         token,
         client=str((params or {}).get("client") or "unknown"),
         name=str((params or {}).get("name") or ""),
         app_version=str((params or {}).get("app_version") or ""),
     )
-    return {"ok": ok}
+    return {"ok": ok, "changed": changed}
 
 
 def _find_token_id(token_id: str) -> tuple[dict[str, Any], dict[str, Any]] | None:
