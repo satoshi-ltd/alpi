@@ -12,12 +12,19 @@ from __future__ import annotations
 import json
 import logging
 import os
+import tempfile
 import threading
-from contextlib import contextmanager
+from collections.abc import Iterator
+from contextlib import contextmanager, suppress
 from contextvars import ContextVar
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover
+    fcntl = None
 
 
 log = logging.getLogger("alpi.ledger")
@@ -72,6 +79,25 @@ def _float(value: Any, default: float = 0.0) -> float:
 
 def _path(home: Path) -> Path:
     return home / "logs" / "ledger.json"
+
+
+_TMP_PREFIX = ".ledger.json."
+
+
+@contextmanager
+def _locked(home: Path) -> Iterator[None]:
+    with _lock:
+        if fcntl is None:
+            yield
+            return
+        lock = _path(home).with_name("ledger.lock")
+        lock.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(str(lock), os.O_RDWR | os.O_CREAT, 0o600)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            yield
+        finally:
+            os.close(fd)
 
 
 def _blank(day: str) -> dict[str, Any]:
@@ -146,20 +172,30 @@ def load(home: Path) -> dict[str, Any]:
     return data
 
 
-def save(home: Path, data: dict[str, Any]) -> None:
+def _write_inside_lock(home: Path, data: dict[str, Any]) -> None:
     p = _path(home)
     p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_suffix(".json.tmp")
+    if fcntl is not None:
+        # Every live writer holds the flock, so a temp seen here belongs to a killed one.
+        for orphan in p.parent.glob(_TMP_PREFIX + "*.tmp"):
+            orphan.unlink(missing_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=str(p.parent), prefix=_TMP_PREFIX, suffix=".tmp")
     try:
-        tmp.write_text(json.dumps(data, separators=(",", ":"), sort_keys=True))
-        tmp.replace(p)
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps(data, separators=(",", ":"), sort_keys=True))
+        os.replace(tmp, p)
+    except BaseException:
+        with suppress(OSError):
+            os.unlink(tmp)
+        raise
+
+
+def save(home: Path, data: dict[str, Any]) -> None:
+    try:
+        with _locked(home):
+            _write_inside_lock(home, data)
     except OSError as e:
-        # Budget accounting must not crash a live turn under FD pressure.
         log.warning("ledger save dropped: %s", e)
-        try:
-            tmp.unlink()
-        except OSError:
-            pass
 
 
 def archive_path(home: Path) -> Path:
@@ -196,7 +232,7 @@ def archive_entity(
         rec["source_at"] = source_at
     p = archive_path(home)
     try:
-        with _lock:
+        with _locked(home):
             p.parent.mkdir(parents=True, exist_ok=True)
             if p.exists():
                 for line in p.read_text(encoding="utf-8").splitlines():
@@ -320,46 +356,51 @@ def record(
                 _float(entry.get("cache_discount_usd")) + discount_add, 6,
             )
 
-    with _lock:
-        data = load(home)
-        profile = data.setdefault("profile", {"usd": 0.0, "tokens": 0})
-        before_usd = float(profile.get("usd", 0))
-        profile["usd"] = before_usd + max(0.0, float(usd))
-        profile["tokens"] = int(profile.get("tokens", 0)) + max(0, int(tokens))
-        _bump_cache(profile)
-        buckets = data.setdefault("by_peer", {})
-        bucket = buckets.setdefault(peer_id, {"usd": 0.0, "tokens": 0})
-        bucket["usd"] = float(bucket.get("usd", 0)) + max(0.0, float(usd))
-        bucket["tokens"] = int(bucket.get("tokens", 0)) + max(0, int(tokens))
-        _bump_cache(bucket)
-        connections = data.setdefault("by_connection", {})
-        connection = connections.setdefault(
-            connection_id,
-            {"usd": 0.0, "tokens": 0, "tokens_in": 0, "tokens_out": 0},
-        )
-        connection["usd"] = float(connection.get("usd", 0)) + max(0.0, float(usd))
-        connection["tokens"] = int(connection.get("tokens", 0)) + max(0, int(tokens))
-        connection["tokens_in"] = int(connection.get("tokens_in", 0)) + max(0, int(tokens_in))
-        connection["tokens_out"] = int(connection.get("tokens_out", 0)) + max(0, int(tokens_out))
-        _bump_cache(connection)
-        today = str(data.get("day"))
-        history = data.setdefault("history", {})
-        hentry = history.setdefault(
-            today, {"usd": 0.0, "tokens": 0, "tokens_in": 0, "tokens_out": 0},
-        )
-        hentry["usd"] = float(profile["usd"])
-        hentry["tokens"] = int(profile["tokens"])
-        hentry["tokens_in"] = int(hentry.get("tokens_in", 0)) + max(0, int(tokens_in))
-        hentry["tokens_out"] = int(hentry.get("tokens_out", 0)) + max(0, int(tokens_out))
-        _bump_cache(hentry)
-        if cost_source:
-            sources = hentry.setdefault("cost_sources", {})
-            sources[str(cost_source)] = int(sources.get(str(cost_source), 0)) + 1
-        daily_connections = hentry.setdefault("by_connection", {})
-        daily_connections[connection_id] = dict(connection)
-        data["history"] = _prune_history(history, today)
-        save(home, data)
-        after_usd = profile["usd"]
+    try:
+        with _locked(home):
+            data = load(home)
+            profile = data.setdefault("profile", {"usd": 0.0, "tokens": 0})
+            before_usd = float(profile.get("usd", 0))
+            profile["usd"] = before_usd + max(0.0, float(usd))
+            profile["tokens"] = int(profile.get("tokens", 0)) + max(0, int(tokens))
+            _bump_cache(profile)
+            buckets = data.setdefault("by_peer", {})
+            bucket = buckets.setdefault(peer_id, {"usd": 0.0, "tokens": 0})
+            bucket["usd"] = float(bucket.get("usd", 0)) + max(0.0, float(usd))
+            bucket["tokens"] = int(bucket.get("tokens", 0)) + max(0, int(tokens))
+            _bump_cache(bucket)
+            connections = data.setdefault("by_connection", {})
+            connection = connections.setdefault(
+                connection_id,
+                {"usd": 0.0, "tokens": 0, "tokens_in": 0, "tokens_out": 0},
+            )
+            connection["usd"] = float(connection.get("usd", 0)) + max(0.0, float(usd))
+            connection["tokens"] = int(connection.get("tokens", 0)) + max(0, int(tokens))
+            connection["tokens_in"] = int(connection.get("tokens_in", 0)) + max(0, int(tokens_in))
+            connection["tokens_out"] = int(connection.get("tokens_out", 0)) + max(0, int(tokens_out))
+            _bump_cache(connection)
+            today = str(data.get("day"))
+            history = data.setdefault("history", {})
+            hentry = history.setdefault(
+                today, {"usd": 0.0, "tokens": 0, "tokens_in": 0, "tokens_out": 0},
+            )
+            hentry["usd"] = float(profile["usd"])
+            hentry["tokens"] = int(profile["tokens"])
+            hentry["tokens_in"] = int(hentry.get("tokens_in", 0)) + max(0, int(tokens_in))
+            hentry["tokens_out"] = int(hentry.get("tokens_out", 0)) + max(0, int(tokens_out))
+            _bump_cache(hentry)
+            if cost_source:
+                sources = hentry.setdefault("cost_sources", {})
+                sources[str(cost_source)] = int(sources.get(str(cost_source), 0)) + 1
+            daily_connections = hentry.setdefault("by_connection", {})
+            daily_connections[connection_id] = dict(connection)
+            data["history"] = _prune_history(history, today)
+            _write_inside_lock(home, data)
+            after_usd = profile["usd"]
+    except OSError as e:
+        # Budget accounting must not crash a live turn under FD pressure.
+        log.warning("ledger record dropped: %s", e)
+        return
     if cfg_budget is None:
         return
     kind, cap = _budget(cfg_budget)

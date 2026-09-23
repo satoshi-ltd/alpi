@@ -527,7 +527,9 @@ within a turn, so a long multi-step turn aborts as soon as it crosses
 the ceiling rather than running to completion. Counters reset at UTC
 midnight; no carry-over. The ledger lives at `<profile-home>/logs/ledger.json` and
 also records a per-peer breakdown shown by `/status`, though only
-the profile total gates new turns.
+the profile total gates new turns. The daemon, scheduled jobs and the console
+all record into it under one file lock, so charges made at the same moment add
+up instead of overwriting each other.
 
 | Key | Default | Notes |
 |---|---|---|

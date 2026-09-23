@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.15.10 — 2026-09-23 — charges recorded at the same moment all count
+
+- **Spend recorded by two processes at once is no longer lost.** When the daemon, a scheduled
+  job and the console charged the same profile together, one charge could overwrite the other
+  and the daily total came out short; every charge now counts, across midnight too.
+- A process killed while saving no longer blocks later charges or damages the ledger.
+- A charge that cannot be written is dropped with a warning in the log, and the turn it
+  belongs to still finishes.
+- The spend archive of deleted sessions and workgroups keeps one row per item, even when two
+  processes archive it at once.
+
 ## v0.15.9 — 2026-09-23 — the file tools accept multi-document YAML
 
 - **The file tools accept YAML files with several documents.** A file with `---`-separated

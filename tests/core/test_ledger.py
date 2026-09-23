@@ -260,15 +260,12 @@ def test_save_swallows_oserror_so_record_does_not_kill_the_turn(
     a tool-heavy turn dies mid-stream and the desktop never gets reply/done."""
     import alpi.ledger as ledger_mod
 
-    original_write_text = Path.write_text
+    def no_fds(*_args, **_kwargs):
+        raise OSError(24, "Too many open files")
 
-    def fail_on_tmp(self, *args, **kwargs):
-        if self.name.endswith(".json.tmp"):
-            raise OSError(24, "Too many open files")
-        return original_write_text(self, *args, **kwargs)
-
-    monkeypatch.setattr(Path, "write_text", fail_on_tmp)
+    monkeypatch.setattr(ledger_mod.tempfile, "mkstemp", no_fds)
     ledger_mod.record(home, usd=0.10, tokens=50)
+    assert not ledger_mod._path(home).exists()
 
 
 def test_spend_archive_deduplicates_retries_but_keeps_recreated_entities(

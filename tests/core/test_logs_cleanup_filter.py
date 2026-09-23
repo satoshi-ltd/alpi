@@ -13,6 +13,7 @@ def fake_profile_home(tmp_path: Path) -> Path:
     (logs / "agent.log.1").write_text("rotated agent gen\n")
     (logs / "approval.log").write_text("approval line\n")
     (logs / "ledger.json").write_text('{"daily_usd": 0.0}')
+    (logs / "ledger.lock").touch()
     (logs / "runs.jsonl").write_text('{"id": "x"}\n')
     (logs / "compaction.jsonl").write_text('{"trigger": "auto"}\n')
     (logs / "curator").mkdir()
@@ -37,7 +38,7 @@ def test_cleanup_logs_category_includes_rotated_logs(fake_profile_home: Path):
 def test_cleanup_logs_category_excludes_state_files(fake_profile_home: Path):
     category = _logs_category(fake_profile_home)
     names = {p.name for p in category["files"]}
-    forbidden = {"ledger.json", "runs.jsonl", "compaction.jsonl"}
+    forbidden = {"ledger.json", "ledger.lock", "runs.jsonl", "compaction.jsonl"}
     leaked = names & forbidden
     assert not leaked, (
         f"Subsystem logs cleanup must NOT include budget / telemetry state files; "

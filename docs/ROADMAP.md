@@ -29,35 +29,11 @@ fixes; each can ship independently as a patch before v0.16.
 
 | Order | ID | Priority | Evidence | Outcome |
 |---|---|---|---|---|
-| 1 | LEDGER.1 | P1 · 🟡 | Reproduced with two writer processes | Every recorded charge survives concurrent writers. |
-| 2 | RELEASE.1 | P1 · 🟡 | Workflow inspection + documented event semantics | Docker publishes the revision whose parent release passed. |
-| 3 | INDEX.1 | P2 · 🟡 | Reproduced against real SQLite/vec0 stores | A failed rebuild retains the previous searchable index. |
-| 4 | TERM.3 | P3 · 🟡 | Observed in the same run: the agent could not find its JDK from `terminal` | A profile can hand `terminal` extra environment variables. |
-| 5 | SCHED.4 | P2 · 🟡 | A 5400 s job died at 59:46 on 2026-09-22; a stored timeout above 3600 is clamped at run time without a word | The timeout a job carries is the one the scheduler enforces, or the clamp is shown before it bites. |
-
-### LEDGER.1 — serialize accounting across processes
-
-**Evidence.** [ledger.py](../alpi/ledger.py) protects `record()` with a
-`threading.Lock`, then performs `load → update → save`. That lock is local to
-one process, while scheduled agents and the daemon can record against the
-same profile. `save()` also uses a shared `ledger.json.tmp` filename.
-Two real processes, synchronized after reading the old state, each recorded
-$1 and 10 tokens and exited successfully: the persisted result was **$1 and
-10 tokens instead of $2 and 20**. This is lost accounting, not merely the
-expected overshoot from two already-admitted calls.
-
-**Smallest change.** Reuse the repository's cross-process file-lock pattern
-around each ledger read-modify-write and a unique atomic temporary file.
-Audit the other ledger writers, including archive deduplication, against that
-same ownership rule. Keep the JSON format and public API; do not migrate the
-ledger to a database just to obtain a lock.
-
-**Acceptance.** Concurrent subprocess writers preserve profile, connection,
-peer and daily totals; no shared-temp collision loses a write. Cover rollover
-and an interrupted writer. A storage failure must remain visible without
-aborting an already-completed model call. Budget reservation and an exact
-upper bound on concurrent spending are separate product decisions, not part
-of this fix.
+| 1 | RELEASE.1 | P1 · 🟡 | Workflow inspection + documented event semantics | Docker publishes the revision whose parent release passed. |
+| 2 | INDEX.1 | P2 · 🟡 | Reproduced against real SQLite/vec0 stores | A failed rebuild retains the previous searchable index. |
+| 3 | TERM.3 | P3 · 🟡 | Observed in the same run: the agent could not find its JDK from `terminal` | A profile can hand `terminal` extra environment variables. |
+| 4 | SCHED.4 | P2 · 🟡 | A 5400 s job died at 59:46 on 2026-09-22; a stored timeout above 3600 is clamped at run time without a word | The timeout a job carries is the one the scheduler enforces, or the clamp is shown before it bites. |
+| 5 | SEARCH.1 | P2 · 🟡 | 689 of 3,372 `web_search` calls failed on one production profile in three days (20%); the only backend is keyless `ddgs` behind a shared-IP lockout the code itself documents | A profile can point `web_search` at an API-keyed provider; `ddgs` stays the default. |
 
 ### RELEASE.1 — bind the Docker release to its successful parent revision
 
@@ -158,6 +134,35 @@ is shown as clamped to 3600 before it ever runs and says so when it does;
 `schedule list` shows the effective timeout; the existing `schedule.failed`
 payload keeps naming the reason. The neo, smith and morpheus job files in the
 fleet repository are corrected to whatever the scheduler will honour.
+
+### SEARCH.1 — let a profile back `web_search` with an API-keyed provider
+
+**Evidence.** [web_search.py](../alpi/tools/web_search.py) has one backend,
+the keyless `ddgs` package, serialised behind a module lock because, as its
+own comment says, two calls in flight reach the shared-IP rate limit and lock
+the host out for about 17 minutes. On the mirai EC2 the `curator` profile
+answers one hotel per run, eight to ten searches each. Over 945 runs between
+2026-09-20 and 2026-09-22 it made 3,372 `web_search` calls and 689 failed
+(20%, between 18% and 22% every day), all with the same text: *search failed
+after one retry — every backend refused or errored*, 391 `TimeoutException`
+and 293 `DDGSException`. Each failure costs the two attempts (about 11 s) plus
+a model turn to choose another query, and the fact it was looking for is
+found later or not at all. The only knob is `tools.web_search.max_per_turn`;
+there is no way to give the tool a paid endpoint the profile already pays for
+elsewhere.
+
+**Smallest change.** A `tools.web_search.provider` setting (`ddgs` by
+default) plus one API-keyed provider whose key is read from the profile's
+`.env`, returning the same `{title, URL, snippet}` rows through the same
+per-domain dedup and per-turn budget. When the keyed provider errors, fall
+back to `ddgs` once and name the provider in the failure text. No new
+dependency beyond `urllib`; no change to `web_fetch` or `web_extract`.
+
+**Acceptance.** A profile with the key configured never touches `ddgs` while
+the provider answers; a profile without it is byte-for-byte unchanged; the
+failure text names which backend refused; the setting is listed in
+[CONFIG.md](CONFIG.md) and the takes-effect table. Measured on the same
+profile, the failed-search share drops below 2% over a full day.
 
 ### Optional: CAP.1 — show admission pressure without changing admission
 
