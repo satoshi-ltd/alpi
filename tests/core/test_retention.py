@@ -440,7 +440,7 @@ def test_a_session_whose_file_cannot_be_read_under_the_claim_is_kept(tmp_path: P
 def test_a_run_that_starts_after_the_scan_still_saves_its_session(tmp_path: Path, monkeypatch) -> None:
     _write_config(tmp_path, "retention:\n  sessions_days: 7\n")
     path = _session(tmp_path, "late", days=30)
-    original_running = cleanup._running_session_ids
+    original_running = runs.running_session_ids
     calls = {"n": 0}
 
     def scan_then_a_run_starts(h):
@@ -450,7 +450,7 @@ def test_a_run_that_starts_after_the_scan_still_saves_its_session(tmp_path: Path
             runs.start(RunContext("r-late", h, h, "default", "user", "late", "host"))
         return seen
 
-    monkeypatch.setattr(cleanup, "_running_session_ids", scan_then_a_run_starts)
+    monkeypatch.setattr(runs, "running_session_ids", scan_then_a_run_starts)
 
     result = cleanup.retention_sweep(tmp_path)
 

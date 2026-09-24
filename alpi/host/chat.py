@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import threading
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +24,23 @@ _CLAIMING = object()  # placeholder in _session_active while an existing session
 
 def session_key(profile: str, session_id: str) -> tuple[str, str]:
     return (profile, session_id)
+
+
+@contextmanager
+def claim_idle_session(profile: str, session_id: str) -> Iterator[bool]:
+    key = session_key(profile, session_id)
+    claim = object()
+    with _active_lock:
+        claimed = key not in _session_active
+        if claimed:
+            _session_active[key] = claim
+    try:
+        yield claimed
+    finally:
+        if claimed:
+            with _active_lock:
+                if _session_active.get(key) is claim:
+                    del _session_active[key]
 
 
 def _get_session_lock(key: tuple[str, str]) -> asyncio.Lock:

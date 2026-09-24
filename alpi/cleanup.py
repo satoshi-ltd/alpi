@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import re
 import shutil
-import stat
 import time
 from pathlib import Path
 from typing import Any
@@ -45,9 +44,6 @@ GROUPS = [
     ("files", "Files"),
     ("conversations", "Conversations"),
 ]
-
-
-_CLEANUP_CLAIM = object()
 
 
 def _busy_session_ids(h: Path) -> set[str] | None:
@@ -142,33 +138,6 @@ def _workgroup_of(first_user: str) -> str | None:
     return m.group(1) if m else None
 
 
-def _running_session_ids(h: Path) -> set[str]:
-    # Destructive callers need a complete inventory, not running_journals' best-effort view.
-    from alpi import runs as runs_mod
-
-    root = h / "runs"
-    try:
-        mode = root.lstat().st_mode
-    except FileNotFoundError:
-        return set()
-    if not stat.S_ISDIR(mode):
-        raise ValueError("cannot verify run journals: runs is not a regular directory")
-    out: set[str] = set()
-    for path in root.iterdir():
-        if path.suffix != ".jsonl":
-            continue
-        if not stat.S_ISREG(path.lstat().st_mode):
-            raise ValueError(f"cannot verify run journal: {path.name}")
-        row = runs_mod.summary(h, path.stem)
-        if row["status"] != "running":
-            continue
-        sid = row.get("session_id")
-        if not isinstance(sid, str) or not sid:
-            raise ValueError(f"cannot identify the session of running journal: {path.name}")
-        out.add(sid)
-    return out
-
-
 def _first_user_message(h: Path, sid: str) -> str | None:
     # The listing truncates first_user to 140 chars, which a long workgroup name pushes the id past.
     from alpi.host import sessions as host_sessions
@@ -202,13 +171,14 @@ def _keep_workgroup_session(h: Path, sid: str) -> bool:
 
 
 def _retention_sessions(h: Path, keep_days: int) -> tuple[list[str] | None, dict[str, list[str]]]:
+    from alpi import runs as runs_mod
     from alpi.host import sessions as host_sessions
 
     kept: dict[str, list[str]] = {"running": [], "workgroup": []}
     ids, _size = _old_sessions(h, keep_days)
     if ids is None:
         return None, kept
-    running = _running_session_ids(h)
+    running = runs_mod.running_session_ids(h)
     kinds = {str(r.get("id")): r.get("kind") for r in host_sessions.list_sessions(h, limit=None)}
     selected: list[str] = []
     for sid in ids:
@@ -673,6 +643,7 @@ def _apply_sessions(h: Path, target: dict[str, Any]) -> dict[str, Any]:
         return {"key": target["key"], "ok": False, "removed": 0, "freed_bytes": 0,
                 "errors": [f"cannot verify busy sessions ({e}); aborting"]}
 
+    from alpi import runs as runs_mod
     from alpi.session import sessions_lock
 
     removed = 0
@@ -683,44 +654,36 @@ def _apply_sessions(h: Path, target: dict[str, Any]) -> dict[str, Any]:
     skipped_workgroup: list[str] = []
     cutoff = target.get("cutoff")
     for sid in ids:
-        key = host_chat.session_key(prof, sid)
-        # Claim the slot so a turn starting mid-delete gets the same "busy" answer host.chat gives.
-        with host_chat._active_lock:
-            if key in host_chat._session_active:
+        with host_chat.claim_idle_session(prof, sid) as claimed:
+            if not claimed:
                 errors.append(f"{sid}: session-busy")
                 continue
-            host_chat._session_active[key] = _CLEANUP_CLAIM
-        try:
-            # The in-process claim only covers host.chat; the file lock is what other processes
-            # (CLI, TUI, scheduled children) share, so every check that decides a delete runs under it.
-            with sessions_lock(h / "sessions", exclusive=True):
-                if cutoff is not None and _session_updated_at(h, sid) >= float(cutoff):
-                    skipped_fresh.append(sid)
-                    continue
-                if sid in _running_session_ids(h):
-                    skipped_running.append(sid)
-                    continue
-                if target.get("protect_workgroups") and _keep_workgroup_session(h, sid):
-                    skipped_workgroup.append(sid)
-                    continue
-                size = 0
-                for p in host_sessions.session_paths(h, sid):
-                    try:
-                        size += p.stat().st_size
-                    except OSError:
-                        pass
-                if host_sessions.delete_session(h, sid):
-                    removed += 1
-                    freed += size
-                else:
-                    errors.append(f"{sid}: delete failed")
-        except (OSError, ValueError, TypeError) as e:
-            errors.append(f"{sid}: cannot verify or delete session: {e}")
-            break
-        finally:
-            with host_chat._active_lock:
-                if host_chat._session_active.get(key) is _CLEANUP_CLAIM:
-                    del host_chat._session_active[key]
+            try:
+                # The claim covers only host.chat; the file lock is what CLI/TUI/scheduled processes share.
+                with sessions_lock(h / "sessions", exclusive=True):
+                    if cutoff is not None and _session_updated_at(h, sid) >= float(cutoff):
+                        skipped_fresh.append(sid)
+                        continue
+                    if sid in runs_mod.running_session_ids(h):
+                        skipped_running.append(sid)
+                        continue
+                    if target.get("protect_workgroups") and _keep_workgroup_session(h, sid):
+                        skipped_workgroup.append(sid)
+                        continue
+                    size = 0
+                    for p in host_sessions.session_paths(h, sid):
+                        try:
+                            size += p.stat().st_size
+                        except OSError:
+                            pass
+                    if host_sessions.delete_session(h, sid):
+                        removed += 1
+                        freed += size
+                    else:
+                        errors.append(f"{sid}: delete failed")
+            except (OSError, ValueError, TypeError) as e:
+                errors.append(f"{sid}: cannot verify or delete session: {e}")
+                break
     return {
         "key": target["key"], "ok": not errors, "removed": removed,
         "freed_bytes": freed, "errors": errors,

@@ -104,8 +104,9 @@ not reach.
   [CONFIG.md → Host](CONFIG.md#host-control-plane).
 
   **Connections carry a role.** `admin` has full control-plane CRUD;
-  `member` gets chat, events, read-only views and workgroup post/read, and
-  every sensitive mutation answers `-32001 forbidden`. The local socket is
+  `member` gets chat, events, read-only views, workgroup post/read and
+  deletion of the chats its own connection created, and every sensitive
+  mutation answers `-32001 forbidden`. The local socket is
   sovereign and always `admin`. What `member` does **not** restrict is the
   agent: a member device can still send chat turns, and a turn can do
   anything the profile's tools can do. Bound agent capability with the OS

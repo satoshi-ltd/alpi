@@ -152,11 +152,27 @@ async def _session_read(
 _MAX_DELETE_IDS = 200
 
 
+def _delete_owned_session(profile: str, home: Path, session_id: str) -> str:
+    from alpi import runs as runs_mod
+    from alpi.host import chat as host_chat
+    from alpi.session import sessions_lock
+    with host_chat.claim_idle_session(profile, session_id) as claimed:
+        if not claimed:
+            return "session-busy"
+        with sessions_lock(home / "sessions", exclusive=True):
+            try:
+                running = runs_mod.running_session_ids(home)
+            except (OSError, ValueError):
+                return "cannot-verify"
+            if session_id in running:
+                return "session-busy"
+            return "deleted" if host_sessions.delete_session(home, session_id) else "not-found"
+
+
 async def _sessions_delete(
     params: dict[str, Any], _server: host_server.Server,
 ) -> dict[str, Any]:
     """Bulk-delete sessions. Per-id outcome: skipped (busy or missing) goes to ``errors``; removed goes to ``deleted``."""
-    from alpi.host import chat as host_chat
     profile = str((params or {}).get("profile") or "")
     raw_ids = (params or {}).get("ids")
     if not isinstance(raw_ids, list) or not raw_ids:
@@ -178,9 +194,6 @@ async def _sessions_delete(
         if not sid or not _SAFE_ID.match(sid):
             errors.append({"id": sid, "code": "invalid-id"})
             continue
-        if host_chat.session_key(profile, sid) in host_chat._session_active:
-            errors.append({"id": sid, "code": "session-busy"})
-            continue
         try:
             owner = await asyncio.to_thread(host_sessions.session_connection_id, home, sid)
         except FileNotFoundError:
@@ -189,11 +202,11 @@ async def _sessions_delete(
         if owner != connection_id:
             errors.append({"id": sid, "code": "not-found"})
             continue
-        existed = await asyncio.to_thread(host_sessions.delete_session, home, sid)
-        if existed:
+        outcome = await asyncio.to_thread(_delete_owned_session, profile, home, sid)
+        if outcome == "deleted":
             deleted.append(sid)
         else:
-            errors.append({"id": sid, "code": "not-found"})
+            errors.append({"id": sid, "code": outcome})
     if deleted:
         from alpi.host import device_state
         # Keyed by profile NAME: the raw param is "" for the default profile, which matches nothing.

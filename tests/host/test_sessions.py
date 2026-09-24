@@ -1121,3 +1121,255 @@ def test_a_session_file_that_is_not_an_object_does_not_fail_the_listing(tmp_path
     # One bad file used to raise AttributeError out of the whole listing.
     assert set(rows) == {"odd", "fine"}
     assert rows["odd"]["kind"] == "empty" and rows["odd"]["turn_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_sessions_delete_rpc_lets_a_member_delete_only_its_own_sessions(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    _seed_session(home, "mine", "hi", connection_id="conn_phone")
+    _seed_session(home, "theirs", "hi", connection_id="conn_laptop")
+    _seed_session(home, "local", "hi")
+    srv = host_server.Server(home=home)
+    data_handlers.register(srv)
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+    monkeypatch.setattr(
+        host_server, "_check_token_meta",
+        lambda _body: host_server.AuthMeta(True, "member", [], "conn_phone", "dev_phone"),
+    )
+    sent: list[dict] = []
+
+    async def send(p):
+        sent.append(p)
+
+    body = {
+        "id": "r", "method": "host.sessions.delete",
+        "params": {"auth_token": "t", "profile": "default", "ids": ["mine", "theirs", "local"]},
+    }
+    await srv._handle_request(json.dumps(body), send, require_token=True)
+
+    assert "host.sessions.delete" not in host_server._ADMIN_METHODS
+    assert sent[-1]["result"] == {
+        "deleted": ["mine"],
+        "errors": [
+            {"id": "theirs", "code": "not-found"},
+            {"id": "local", "code": "not-found"},
+        ],
+    }
+    assert not (home / "sessions" / "mine.json").exists()
+    assert (home / "sessions" / "theirs.json").exists()
+    assert (home / "sessions" / "local.json").exists()
+
+    from alpi.host import admin_audit
+    rows = [
+        json.loads(line)
+        for line in admin_audit.audit_path(home).read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert [(r["method"], r["role"], r["connection_id"], r["result"]) for r in rows] == [
+        ("host.sessions.delete", "member", "conn_phone", "success"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_sessions_delete_rpc_answers_not_found_for_a_busy_foreign_session(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    from alpi.host import chat as host_chat
+
+    home = tmp_path / "home"
+    home.mkdir()
+    _seed_session(home, "theirs", "hi", connection_id="conn_laptop")
+    srv = host_server.Server(home=home)
+    data_handlers.register(srv)
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+    monkeypatch.setattr(
+        host_server, "_check_token_meta",
+        lambda _body: host_server.AuthMeta(True, "member", [], "conn_phone", "dev_phone"),
+    )
+    monkeypatch.setitem(host_chat._session_active, host_chat.session_key("default", "theirs"), object())
+    sent: list[dict] = []
+
+    async def send(p):
+        sent.append(p)
+
+    body = {
+        "id": "r", "method": "host.sessions.delete",
+        "params": {"auth_token": "t", "profile": "default", "ids": ["theirs"]},
+    }
+    await srv._handle_request(json.dumps(body), send, require_token=True)
+
+    assert sent[-1]["result"] == {"deleted": [], "errors": [{"id": "theirs", "code": "not-found"}]}
+    assert (home / "sessions" / "theirs.json").exists()
+
+
+@pytest.mark.asyncio
+async def test_sessions_delete_rpc_refuses_a_turn_that_starts_during_the_owner_read(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    from alpi.host import chat as host_chat
+
+    home = tmp_path / "home"
+    home.mkdir()
+    _seed_session(home, "racing", "hi")
+    srv = host_server.Server(home=home)
+    data_handlers.register(srv)
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+    real_owner = data_sessions.session_connection_id
+
+    def owner_read_while_a_turn_starts(home_: Path, sid: str) -> str:
+        owner = real_owner(home_, sid)
+        monkeypatch.setitem(host_chat._session_active, host_chat.session_key("default", sid), object())
+        return owner
+
+    monkeypatch.setattr(data_sessions, "session_connection_id", owner_read_while_a_turn_starts)
+
+    response = await srv._dispatch({
+        "id": "r", "method": "host.sessions.delete",
+        "params": {"profile": "default", "ids": ["racing"]},
+    })
+
+    assert response["result"] == {"deleted": [], "errors": [{"id": "racing", "code": "session-busy"}]}
+    assert (home / "sessions" / "racing.json").exists()
+
+
+@pytest.mark.asyncio
+async def test_sessions_delete_rpc_holds_the_session_slot_while_deleting_and_releases_it(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    from alpi.host import chat as host_chat
+
+    home = tmp_path / "home"
+    home.mkdir()
+    _seed_session(home, "held", "hi")
+    srv = host_server.Server(home=home)
+    data_handlers.register(srv)
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+    key = host_chat.session_key("default", "held")
+    real_delete = data_sessions.delete_session
+    seen: dict[str, bool] = {}
+
+    def delete_and_record_claim(home_: Path, sid: str) -> bool:
+        seen["claimed"] = key in host_chat._session_active
+        return real_delete(home_, sid)
+
+    monkeypatch.setattr(data_sessions, "delete_session", delete_and_record_claim)
+
+    response = await srv._dispatch({
+        "id": "r", "method": "host.sessions.delete",
+        "params": {"profile": "default", "ids": ["held"]},
+    })
+
+    assert response["result"] == {"deleted": ["held"], "errors": []}
+    assert seen == {"claimed": True}
+    assert key not in host_chat._session_active
+    assert not (home / "sessions" / "held.json").exists()
+
+
+def test_claim_idle_session_blocks_a_second_claim_and_releases_only_its_own() -> None:
+    from alpi.host import chat as host_chat
+
+    key = host_chat.session_key("p", "s")
+    with host_chat.claim_idle_session("p", "s") as first:
+        assert first is True
+        with host_chat.claim_idle_session("p", "s") as second:
+            assert second is False
+        assert key in host_chat._session_active
+    assert key not in host_chat._session_active
+
+
+@pytest.mark.asyncio
+async def test_sessions_delete_rpc_refuses_a_session_with_an_open_run_journal(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    from alpi import runs
+    from alpi.core.run_context import RunContext
+
+    home = tmp_path / "home"
+    home.mkdir()
+    _seed_session(home, "external", "hi")
+    runs.start(RunContext("r-ext", home, home, "default", "user", "external", "host"))
+    srv = host_server.Server(home=home)
+    data_handlers.register(srv)
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+
+    response = await srv._dispatch({
+        "id": "r", "method": "host.sessions.delete",
+        "params": {"profile": "default", "ids": ["external"]},
+    })
+
+    assert response["result"] == {"deleted": [], "errors": [{"id": "external", "code": "session-busy"}]}
+    assert (home / "sessions" / "external.json").exists()
+
+
+@pytest.mark.asyncio
+async def test_sessions_delete_rpc_fails_closed_when_run_journals_cannot_be_verified(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    _seed_session(home, "kept", "hi")
+    (home / "runs").write_text("not a directory", encoding="utf-8")
+    srv = host_server.Server(home=home)
+    data_handlers.register(srv)
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+
+    response = await srv._dispatch({
+        "id": "r", "method": "host.sessions.delete",
+        "params": {"profile": "default", "ids": ["kept"]},
+    })
+
+    assert response["result"] == {"deleted": [], "errors": [{"id": "kept", "code": "cannot-verify"}]}
+    assert (home / "sessions" / "kept.json").exists()
+
+
+@pytest.mark.asyncio
+async def test_sessions_delete_rpc_keeps_the_claim_until_the_worker_finishes_after_a_cancel(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    import asyncio
+    import threading
+
+    from alpi.host import chat as host_chat
+
+    home = tmp_path / "home"
+    home.mkdir()
+    _seed_session(home, "slow", "hi")
+    srv = host_server.Server(home=home)
+    data_handlers.register(srv)
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+    key = host_chat.session_key("default", "slow")
+    entered = threading.Event()
+    release = threading.Event()
+    real_delete = data_sessions.delete_session
+
+    def delete_once_released(home_: Path, sid: str) -> bool:
+        entered.set()
+        assert release.wait(5)
+        return real_delete(home_, sid)
+
+    monkeypatch.setattr(data_sessions, "delete_session", delete_once_released)
+
+    task = asyncio.ensure_future(srv._dispatch({
+        "id": "r", "method": "host.sessions.delete",
+        "params": {"profile": "default", "ids": ["slow"]},
+    }))
+    assert await asyncio.to_thread(entered.wait, 5)
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+    assert key in host_chat._session_active
+    assert (home / "sessions" / "slow.json").exists()
+
+    release.set()
+    for _ in range(250):
+        if key not in host_chat._session_active:
+            break
+        await asyncio.sleep(0.02)
+    assert key not in host_chat._session_active
+    assert not (home / "sessions" / "slow.json").exists()

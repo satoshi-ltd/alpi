@@ -765,7 +765,9 @@ Three trust tiers gate every WS call:
 - **WS admin** — full app-level CRUD + connection/device management
   (`host.connections.*`).
 - **WS member** — chat, events, read-only views, schedule listing,
-  workgroup post/read, voice preview. Admin verbs reject with
+  workgroup post/read, voice preview, deleting its own chats
+  (`host.sessions.delete` only removes sessions owned by the calling
+  connection; any other id answers `not-found`). Admin verbs reject with
   `-32001 forbidden / "admin role required"`.
 
 The admin set lives in `_ADMIN_METHODS`; the strictly-local set

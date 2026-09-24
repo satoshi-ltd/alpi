@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.15.17 — 2026-09-24 — a paired device can delete its own chats
+
+- **A member device can now delete the conversations it started.** Deleting a chat used to need
+  the admin role, so on a member device the action failed or was never offered. The daemon only
+  ever removes conversations that belong to the calling connection: a member still cannot touch
+  chats from the terminal, from the desktop or from another paired connection. Devices paired
+  under the same connection already share their chats, so they share the delete too. Every
+  deletion is still recorded in the administrative audit log.
+- **A conversation can no longer be deleted while a turn is running or starting in it.** The
+  delete reserves the conversation the same way a chat turn does, so whichever arrives second is
+  refused, and a turn started from the terminal or by a scheduled job is respected too. The
+  reservation holds until the delete has really finished, even if the request is cancelled
+  midway. A conversation that belongs to someone else answers "not found" whether or not it is
+  in use, so a member learns nothing about other people's activity.
+
 ## v0.15.16 — 2026-09-24 — a flaky download no longer breaks a release, and clearer time notes
 
 - **The release pipeline retries the download of its installer** and, if the network keeps

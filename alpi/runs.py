@@ -5,6 +5,7 @@ import math
 import os
 import re
 import signal
+import stat
 import threading
 import time
 from collections.abc import Callable
@@ -797,3 +798,28 @@ __all__ = [
     "list_runs", "read", "record_agent_event", "run_path", "start", "summary",
     "register_active", "unregister_active",
 ]
+
+
+def running_session_ids(home: Path) -> set[str]:
+    # Destructive callers need a complete inventory, not running_journals' best-effort view.
+    root = home / "runs"
+    try:
+        mode = root.lstat().st_mode
+    except FileNotFoundError:
+        return set()
+    if not stat.S_ISDIR(mode):
+        raise ValueError("cannot verify run journals: runs is not a regular directory")
+    out: set[str] = set()
+    for path in root.iterdir():
+        if path.suffix != ".jsonl":
+            continue
+        if not stat.S_ISREG(path.lstat().st_mode):
+            raise ValueError(f"cannot verify run journal: {path.name}")
+        row = summary(home, path.stem)
+        if row["status"] != "running":
+            continue
+        sid = row.get("session_id")
+        if not isinstance(sid, str) or not sid:
+            raise ValueError(f"cannot identify the session of running journal: {path.name}")
+        out.add(sid)
+    return out

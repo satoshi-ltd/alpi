@@ -505,12 +505,15 @@ def test_audit_failure_never_breaks_the_admin_operation(
     ) is False
 
 
-def test_audited_methods_are_admin_local_or_pairing_only() -> None:
+def test_audited_methods_are_admin_local_pairing_or_destructive_self_service() -> None:
     allowed = host_server._ADMIN_METHODS | host_server._LOCAL_ONLY_METHODS | {
         "host.connections.exchange_pairing",
         "host.connections.register_device",
+        "host.sessions.delete",
     }
     assert admin_audit.AUDITED_METHODS <= allowed
+    assert "host.sessions.delete" not in host_server._ADMIN_METHODS
+    assert "host.sessions.delete" in admin_audit.AUDITED_METHODS
 
 
 def _registering_server(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, handler) -> tuple:

@@ -114,7 +114,9 @@ Three trust tiers:
   peers, sandbox, schedules, daemon restart, connections and devices. Always
   bypasses `profile_scope`.
 - **WS member** — chat, events, read-only views, schedule listing,
-  workgroup post/read, voice preview. Sensitive **host control plane**
+  workgroup post/read, voice preview, deleting its own chats
+  (`host.sessions.delete` is bound to the calling connection; other ids answer
+  `not-found`). Sensitive **host control plane**
   mutations reject `-32001 forbidden / admin role required`. The role does
   NOT sandbox the agent's own tools — `host.chat.send` is open to members,
   so anything the agent can do (workspace writes, memory edits, network
