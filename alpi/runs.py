@@ -128,7 +128,9 @@ def append(home: Path, run_id: str, kind: str, data: dict[str, Any] | None = Non
         }
         encoded = json.dumps(record, ensure_ascii=False, default=str)
         if len(encoded.encode()) > MAX_EVENT_BYTES:
-            record["data"] = {"truncated": True, "preview": _clip_text(encoded)}
+            # tool_id and name survive so a huge tool_end still closes its tool_start in the timeout diagnosis.
+            kept = {k: payload[k] for k in ("tool_id", "name") if isinstance(payload.get(k), str)}
+            record["data"] = {"truncated": True, "preview": _clip_text(encoded), **kept}
             encoded = json.dumps(record, ensure_ascii=False)
         flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
         fd = os.open(str(path), flags, 0o600)

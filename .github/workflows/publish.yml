@@ -162,8 +162,10 @@ jobs:
             curl ca-certificates python3 python3-venv
 
       - name: install uv
+        # Two steps, not a pipe: a reset download must fail here, not surface later as "uv: not found".
         run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
+          curl -LsSf --retry 5 --retry-all-errors --retry-delay 3 -o /tmp/uv-install.sh https://astral.sh/uv/install.sh
+          sh /tmp/uv-install.sh
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: install alpi from local wheel

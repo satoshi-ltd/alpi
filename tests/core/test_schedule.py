@@ -1217,9 +1217,9 @@ def test_a_timed_out_run_reports_what_it_was_doing(tmp_home_no_env: Path, monkey
     assert outcome.run_id == captured["run_id"]
     assert outcome.last_tool == "skill"
     assert outcome.tool_count == 3
-    assert outcome.message.startswith("agent timed out after 1700s — 3 tool calls made; killed 3m1")
-    assert "`skill` " in outcome.message and "reconcile-verdicts" in outcome.message
-    assert "last message: 'Coverage is clean. Running the final reconcile. Next step.'" in outcome.message
+    assert outcome.message.startswith("agent timed out after 1700s — 3 tool calls made; last message: 'Coverage is clean.")
+    assert "Next step.'; killed 3m1" in outcome.message
+    assert outcome.message.endswith("reconcile-verdicts\"]}") and "`skill` " in outcome.message
     assert runs.summary(tmp_home_no_env, captured["run_id"])["status"] == "interrupted"
 
 
@@ -1323,6 +1323,48 @@ def test_a_damaged_journal_still_yields_the_timeout_outcome_end_to_end(tmp_home_
     assert outcome.timeout_reason == "timeout_60s"
     assert outcome.message.startswith("agent timed out after 60s")
     assert outcome.run_id
+
+
+def test_the_ledger_tail_of_a_long_timeout_message_keeps_the_in_flight_step(tmp_home_no_env: Path) -> None:
+    import time as _time
+
+    from alpi import runs
+
+    now = _time.time()
+    path = runs.run_path(tmp_home_no_env, "long-tail")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    args = {"action": "run", "name": "repo-intelligence", "args": ["reconcile-verdicts", "engine-payments", "very-long-argument-value"]}
+    path.write_text("\n".join(json.dumps(e) for e in [
+        {"version": 1, "seq": 0, "at": now - 1700, "kind": "run.started", "data": {"run_id": "long-tail", "pid": 999_999}},
+        {"version": 1, "seq": 1, "at": now - 400, "kind": "agent.assistant_done", "data": {"text": "x" * 200}},
+        {"version": 1, "seq": 2, "at": now - 190, "kind": "agent.tool_start", "data": {"name": "skill", "tool_id": "c", "args": args}},
+        {"version": 1, "seq": 3, "at": now, "kind": "run.finished", "data": {"outcome": "interrupted"}},
+    ]) + "\n")
+    message, last_tool, tool_count = scheduler._timeout_detail(tmp_home_no_env, "long-tail", 1700)
+    assert len(message) > 356
+    outcome = scheduler.JobOutcome(False, message, timeout_reason="timeout_1700s", run_id="long-tail", last_tool=last_tool, tool_count=tool_count)
+
+    scheduler._record_schedule_run(tmp_home_no_env, {"id": "j1"}, outcome, started=now - 1700, elapsed=1700.0)
+
+    row = json.loads((tmp_home_no_env / "logs" / "runs.jsonl").read_text().splitlines()[-1])
+    assert "killed 3m10s into `skill`" in row["output_tail"]
+    assert row["last_tool"] == "skill"
+
+
+def test_a_truncated_tool_end_still_closes_its_tool_start(tmp_home_no_env: Path) -> None:
+    from alpi import runs
+
+    run_id = "big-tool"
+    runs.append(tmp_home_no_env, run_id, "run.started", {"run_id": run_id, "pid": 999_999})
+    runs.append(tmp_home_no_env, run_id, "agent.tool_start", {"name": "edit_file", "tool_id": "e1", "args": {"path": "a.py", "old": "x" * 11_000, "new": "y" * 11_000}})
+    ended = runs.append(tmp_home_no_env, run_id, "agent.tool_end", {"name": "edit_file", "tool_id": "e1", "args": {"path": "a.py", "old": "x" * 11_000, "new": "y" * 11_000}, "output": "z" * 12_000})
+    runs.append(tmp_home_no_env, run_id, "run.finished", {"outcome": "interrupted"})
+
+    assert ended["data"]["truncated"] is True
+    assert ended["data"]["tool_id"] == "e1" and ended["data"]["name"] == "edit_file"
+    message, last_tool, tool_count = scheduler._timeout_detail(tmp_home_no_env, run_id, 900)
+    assert "into `" not in message
+    assert (last_tool, tool_count) == (None, 1)
 
 
 def test_a_timed_out_run_without_a_journal_still_reports_the_timeout(tmp_home_no_env: Path) -> None:

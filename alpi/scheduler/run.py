@@ -373,14 +373,15 @@ def _timeout_detail_from_journal(home: Path, run_id: str, message: str) -> tuple
         elif ev.get("kind") == "agent.assistant_done" and isinstance(data.get("text"), str) and data["text"].strip():
             last_words = data["text"].strip().replace("\n", " ")[:160]
     parts = [f"{tool_count} tool calls made"]
+    if last_words:
+        parts.append(f"last message: {last_words!r}")
     last_tool = None
     if open_tools:
         started_at, label = max(open_tools.values())
         last_tool = label.split("`")[1] if "`" in label else None
         running = max(0, int(ended_at - started_at))
+        # Last, on purpose: the run ledger keeps only the tail of this message.
         parts.append(f"killed {running // 60}m{running % 60:02d}s into {label}")
-    if last_words:
-        parts.append(f"last message: {last_words!r}")
     return f"{message} — " + "; ".join(parts), last_tool, tool_count
 
 

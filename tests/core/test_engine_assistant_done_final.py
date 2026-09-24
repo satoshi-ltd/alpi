@@ -1410,9 +1410,12 @@ def test_time_notes_fire_once_at_half_and_at_eighty_percent() -> None:
     assert notes.note(100) is None
     half = notes.note(500)
     assert half and "50% used" in half and "about 8 minutes" in half
+    assert half.endswith("used).") and "Wrap up" not in half and "do not start" not in half
     assert notes.note(600) is None
     late = notes.note(800)
     assert late and "80% used" in late and "about 3 minutes" in late
+    assert "Wrap up" in late and "do not start a step" in late
+    assert "report" not in late and "post" not in late
     assert notes.note(950) is None
 
     jumped = _TimeNotes(1000.0, started=0.0)

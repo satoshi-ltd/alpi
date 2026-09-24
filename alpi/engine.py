@@ -68,10 +68,13 @@ class _TimeNotes:
         self._fired.update(due)
         remaining = max(0.0, self._budget - (now - self._started))
         left = "less than a minute" if remaining < 60 else f"about {round(remaining / 60)} minutes"
+        head = f"[engine] Time check: {left} of this run's time budget remain ({int(max(due) * 100)}% used)."
+        if max(due) < 0.8:
+            return head
         return (
-            f"[engine] Time check: {left} of this run's time budget remain "
-            f"({int(max(due) * 100)}% used). Finish and report; do not start a step "
-            "that may not complete in time."
+            f"{head} Wrap up: finish what is in progress and close the turn the way this "
+            "task expects (final answer or handoff); do not start a step that may not "
+            "complete in time."
         )
 
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.15.16 — 2026-09-24 — a flaky download no longer breaks a release, and clearer time notes
+
+- **The release pipeline retries the download of its installer** and, if the network keeps
+  resetting it, stops right there with the network error instead of carrying on without the tool
+  and failing a step later with a misleading message.
+- The half-time note a scheduled job receives now only says how much time is left; the request to
+  wrap up arrives at 80%, so a job that normally needs most of its budget is not told to stop early.
+- When a job is killed at its time limit, the step it was running and for how long now survive in
+  the run ledger too, and a step whose journal record had to be truncated is no longer reported as
+  still running.
+
 ## v0.15.15 — 2026-09-24 — a scheduled job knows how much time it has left
 
 - **A scheduled job is told its time budget and warned when it runs low.** The prompt states how
