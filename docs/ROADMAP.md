@@ -14,24 +14,51 @@ them with broader work unless a new, evidenced need exists.
 
 ---
 
-## v0.16 — trustworthy accounting, bounded I/O, recoverable indexes
+## Next cycle — isolated conversations, explicit limits, faithful ingest
 
-Reviewed against `31385983` (v0.15.6), 2026-09-22. This is a targeted source
-audit with local reproductions, not a claim that every path or deployment was
-verified. It covers the engine/tool boundary, shared persistence, MCP,
-workgroup admission, and the Python/Docker release path. Client UI and live
-infrastructure were not re-audited. No production data or external services
-were used in the reproductions below.
+Priorities reviewed against the local v0.15.17 code on 2026-09-24. Local
+reproductions confirmed the timeout clamp, Word-table loss and history reuse
+within one peer; the other findings below are source inspection. Fleet
+incidents are operator-reported evidence, not independently replayed here.
+No production data or external services were used in this review.
 
 The next cycle should repair observable failures, not add another orchestration
 layer or reopen settled product decisions. The items below are bounded
-fixes; each can ship independently as a patch before v0.16.
+fixes; each can ship independently. The order below is also the commit plan:
+five commits, with only KB.11 and KB.13 grouped. Each implementation includes
+its tests, relevant docs, bump and changelog. UX.7 releases desktop; the other
+groups release alpi unless their implementation also changes a client.
+Do not bundle unrelated work just because it is ready at the same time.
 
 | Order | ID | Priority | Evidence | Outcome |
 |---|---|---|---|---|
-| 1 | TERM.3 | P3 · 🟡 | Observed in a Morpheus run on 2026-09-22: the agent could not find its JDK from `terminal` | A profile can hand `terminal` extra environment variables. |
-| 2 | SCHED.4 | P2 · 🟡 | A 5400 s job died at 59:46 on 2026-09-22; a stored timeout above 3600 is clamped at run time without a word | The timeout a job carries is the one the scheduler enforces, or the clamp is shown before it bites. |
-| 3 | UX.7 | P3 · 🟡 | The desktop Storage field on 2026-09-24: nine rows, two of them labelled `delete`, plus a `reclaim` row re-counting bytes already shown above it | Storage is one inventory; whatever can be reclaimed is offered on the row it belongs to. |
+| 1 | SCHED.4 | P2 · 🟡 | A stored timeout of 5400 resolves to 3600 | The declared valid timeout is honoured consistently, including above one hour. |
+| 2 | TERM.3 | P3 · 🟡 | A Morpheus terminal command could not find the skill's volume JDK | Explicit profile environment reaches foreground, background and Docker commands. |
+| 3 | KB.11 + KB.13 | P2 · 🟡 | Source text is silently cut at 12000 characters; Word tables are discarded | Ingest reports its cut and preserves ordinary Word tables in document order. |
+| 4 | UX.7 | P3 · 🟡 | Storage repeats inventory bytes under separate reclaim/delete rows | One inventory with safe and individually confirmed destructive actions on each group. |
+| 5 | KB.14 | P3 · 🟡 | The index uses mtime/size to decide whether to embed again | Unchanged content does not cause another paid embedding. |
+
+### SCHED.4 — honour the timeout a job declares
+
+**Evidence.** `schedule(add|update, timeout=5400)` rejects the value, while
+[scheduler/run.py](../alpi/scheduler/run.py) silently clamps a directly stored
+5400 to 3600. The fleet reported a healthy Maven run killed near one hour,
+then completed manually. The local reproduction confirms the clamp, not the
+production timing.
+
+**Decision.** Honour valid declared durations above 3600. Keep the current
+default, minimum and soft-budget reserve; do not add a second knob or another
+arbitrary one-hour ceiling. Use one duration contract for add/update,
+execution, listing and the silence watchdog. Validate malformed, boolean,
+non-finite and unrepresentable durations explicitly; a bad stored value must
+not silently become an apparently valid timeout or crash the scheduler.
+
+**Acceptance.** A stored or tool-created 5400 s job reports and enforces 5400
+in agent and script paths; the watchdog uses the same duration and the engine
+receives the corresponding soft budget. Exercise the boundary with a fake
+clock rather than an actual 90-minute test. Existing timeout failure details
+and process cleanup survive. Updating neo/smith/morpheus jobs in the fleet is
+a separate operational change, not permission to edit that repository here.
 
 ### TERM.3 — let a profile hand `terminal` extra environment variables
 
@@ -51,44 +78,38 @@ absolute paths, which every future Java task would have to repeat.
 tool already builds, with `PATH` prepended rather than replaced. Values are
 plain strings; no secret expansion, no reading of `.env` keys into the
 shell, and the existing sandbox and allowlist apply unchanged.
+Do not let the map override Alpi's internal execution/ownership markers.
+Docker has an explicit environment forwarding list: changing only the parent
+`Popen` environment is not sufficient for that backend.
 
 **Acceptance.** A profile with the map runs `java -version` through
 `terminal` and finds the volume JDK; a profile without it is byte-for-byte
 unchanged; `PATH` keeps the original entries after the prefix; the map is
-listed in the takes-effect table and the packaged config reference.
+listed in the takes-effect table and the packaged config reference. Test
+foreground/background, native sandbox and Docker forwarding, invalid map
+values, and protected internal variables. Preserve the backend's own PATH
+when adding its prefix, not a host PATH that may not exist inside the image.
 
-### SCHED.4 — stop clamping a stored job's timeout in silence
+### KB.11 + KB.13 — preserve source content and report deliberate cuts
 
-**Evidence.** The save path already validates: `schedule(add|update,
-timeout=5400)` is refused with `'timeout' must be between 30 and 3600
-seconds`. The run path does not tell anyone: [scheduler/run.py](../alpi/scheduler/run.py)
-applies `max(30, min(MAX_RUN_TIMEOUT_SECONDS, secs))` to whatever the stored
-job carries, so a `jobs.json` holding `5400` runs for 3600 seconds without a
-word. That is how the fleet's values got in: the `neo` and `smith` weekend
-jobs were written straight into `profiles/<p>/schedule/jobs.json` in the
-fleet configuration repository, never through the tool. `write_file` and
-`edit_file` accept the same out-of-range value in `jobs.json`, so an agent
-can author one too. On 2026-09-22 a Morpheus pass on `mkto-worker` (a 510 MB
-Maven repository) had merged a concurrent `main`, resolved the conflict and
-was in its last verification when the subprocess was killed at 59:46 with
-`agent timed out`; the branch and baseline survived and a manual chat turn
-finished the pull request in 19 more minutes. The architecture reference
-calls the cap "a stuck-process backstop, not a hint that jobs must be short",
-yet the cap is what ended a healthy run.
+**Evidence.** [knowledge_base.py](../alpi/tools/knowledge_base.py) sends
+`source_text[:12000]` without truncation metadata. The shared Word reader in
+[workspace.py](../alpi/tools/workspace.py) reads `doc.paragraphs` only; a local
+DOCX with a paragraph and a table loses the table. These are two small source
+fidelity fixes, not new knowledge capabilities, and belong in one commit.
 
-**Smallest change.** Make the stored value and the enforced value the same
-number. Either honour a declared timeout above 3600 for jobs everywhere it is
-checked (the tool, the scheduler, the silence watchdog), keeping the soft
-budget so the engine finalises first; or keep the ceiling and make the clamp
-visible where the operator looks — `schedule list` shows the effective
-timeout and marks a clamped job, and the clamp is logged when a run starts.
-Do not add a second timeout knob.
+**Smallest change.** Keep the existing source budget, but tell both the
+synthesizer and the tool caller whether it was cut, how many characters were
+available and how many were used. Preserve ordinary Word tables and their
+order relative to paragraphs using the existing `python-docx` dependency.
+Do not add chunked synthesis, vision, translation or another document library.
 
-**Acceptance.** A job stored with `timeout: 5400` either runs for 5400 s, or
-is shown as clamped to 3600 before it ever runs and says so when it does;
-`schedule list` shows the effective timeout; the existing `schedule.failed`
-payload keeps naming the reason. The neo, smith and morpheus job files in the
-fleet repository are corrected to whatever the scheduler will honour.
+**Acceptance.** Sources below, at and above the limit report accurate counts
+in preview and apply results; the model sees the cut too. A paragraph/table/
+paragraph fixture retains text in order, with explicit handling of empty and
+merged cells and no claim of full Word layout fidelity. Exercise the shared
+reader and the ingest path, plus regressions for its other consumers. The
+existing protection of truncated related pages against overwrite remains.
 
 ### UX.7 — make the desktop Storage field one inventory again
 
@@ -136,12 +157,33 @@ prose; the chip placement says it. No new component library, no new verb.
 
 **Acceptance.** With every category populated the field renders no more rows
 than there are non-empty storage groups plus at most one summary line; no two
-rows share a label. Every plan member with something to reclaim stays
-individually actionable, on the row of its group, and the per-row amounts sum
+rows share a label. Every destructive plan member with something to reclaim
+stays individually actionable; safe members are grouped per inventory row.
+The per-row amounts sum
 to the sweep total. Destructive actions still open `ConfirmDelete`; the safe
 members of one group are one click; the admin-only gate (`canClean`) is
 unchanged. `maintenance.test.jsx` covers the folded layout with a mixed group
 and the desktop changelog entry pins no new alpi minimum.
+
+### KB.14 — avoid re-embedding unchanged content
+
+**Evidence.** [knowledge_base.py](../alpi/tools/knowledge_base.py) compares
+mtime and size before deciding to skip a file. A metadata-only change therefore
+re-embeds unchanged text. The fleet reports 274 pages taking 444 seconds after
+a move; that timing was not independently reproduced.
+
+**Smallest change.** Compare a content fingerprint before paying for another
+embedding. Cover all content that affects the indexed page, not just its body;
+an embedder change or explicit force still follows its existing rebuild
+contract. Keep the single-root store and transactional rebuild. Limit schema
+work to the metadata needed for this decision; no generalized index framework.
+
+**Acceptance.** A touched unchanged page does not call the embedder; changed
+text with the same size and restored mtime is not silently skipped. Metadata
+changes update the index correctly. Existing indexes without a fingerprint
+remain usable and acquire it on indexing without dropping unrelated tables.
+Failure still rolls back the pass. Test with a counting embedder and real
+SQLite, not timing or external API calls. Keep this separate from ingest fixes.
 
 ### Optional: CAP.1 — show admission pressure without changing admission
 
@@ -177,9 +219,10 @@ observability**, not a release gate and not a replacement hard-cap task.
   the PR/manual workflow. Ensure the relevant real-process tests pass for the
   exact release SHA before publishing, including direct-to-main releases.
   Reuse the existing workflows rather than create a parallel test system.
-- No new runtime dependency, storage format, RPC framework or service is
-  presumed necessary for the four fixes. Clients are only in scope if a
-  selected item changes a user-visible contract.
+- No new runtime dependency, RPC framework or service is presumed necessary.
+  KB.14 may need an index metadata field; that does not authorize a general
+  persistence redesign. Run both client suites
+  for UX.7 and verify destructive confirmations in the rendered desktop UI.
 
 ### Simplification boundaries
 
@@ -220,10 +263,8 @@ usage or a concrete blocker; standing maintenance belongs in
 | KB.9 | Spreadsheet (`.xlsx`) ingest into knowledge pages: one Markdown table per sheet, headers from the first row, `type: source`. The container ships neither `openpyxl` nor `pandas`, so this is either a stdlib zip+XML reader or a new image dependency. Promote when a real document set arrives as spreadsheets; the 2026-09 Confluence publishing skill covers Markdown, PDF and Word only. |
 | ATT.1 | Keep an attachment when the user asks to. The host already stages every chat attachment under `<home>/host/attachments/tmp/<id>/<name>` and lists those absolute paths in the message for skills to read, but the staging area is swept after 6 hours, so a file the user wants to keep working with across days has to be re-attached. Add an explicit "keep this file" path (a tool or a `save_attachment` skill hook) that copies a staged attachment into `<workspace>/attachments/` and returns the durable path. Promote when a real flow needs a file to outlive the turn; on 2026-09-14 the Confluence publishing flow did not, because it publishes in the same turn. |
 | KB.10 | A language policy for `knowledge(action="ingest"\|"maintain")`. `_MAINTAIN_PROMPT` in [knowledge_base.py](../alpi/tools/knowledge_base.py) says nothing about language, so a synthesized page follows its source; a profile whose knowledge must be English cannot get that from the tool. On 2026-09-24 agora's audit found 239 Spanish titles and 152 pages with Spanish lines, and the fleet now routes every agora write through a skill gate instead of the tool. A `knowledge.language` setting passed to the prompt and checked on the proposal would do. Promote when a second profile needs a fixed knowledge language, or agora goes back to the tool for curation. |
-| KB.11 | Say when `maintain_knowledge` truncates its source. It sends `source_text[:12000]` to the model without a word, so a long PDF becomes a page about its first pages and the result never mentions the cut. Chunk the source, or at least return `truncated: true` with the characters used. Promote when a long document is ingested through the tool rather than a skill. |
 | KB.12 | Vision in knowledge ingest. An image reaches `knowledge(action="ingest")` only with `ocr=true`, which keeps its text and loses everything a diagram or screenshot shows; `tools.read_image.model` is never used there. On 2026-09-24 agora needed a skill (read the image with `read_image`, store it as an asset, write an OKF page that embeds it) to keep diagrams. Promote when a second profile wants images kept as knowledge. |
-| KB.13 | Keep Word tables in knowledge ingest. The daemon's `.docx` reader keeps paragraphs only, so every table is lost; agora's publishing skill converts the same files with their tables. Promote with the next change to the attachment readers. |
-| KB.14 | Reindex by content, not by mtime. The index keys files on mtime and size, so a copy that truncates mtimes (a `tar` to another host) re-embeds every page it touched: 274 pages took 444 s on casa on 2026-09-24. Compare a content hash before re-embedding. Promote when a profile's knowledge moves between hosts routinely. |
+| TIER.1 | A model tier per task, not only per job. A job's `tier` sets `ALPI_TIER` for its whole turn ([scheduler/run.py](../alpi/scheduler/run.py), read in `engine.py`), but a chat turn always runs on the main model. agora's nightly Confluence ingest runs on `deep` (`:nitro`, effort high), while the same writes asked from chat (a PDF, "add", "fix", "remove" through the `okf` and `confluence-ingest` skills) run on the default model. A skill-level `tier` that raises the rest of the turn once that skill runs would separate knowledge writes from questions. Promote when a second profile mixes cheap questions with quality-sensitive writes in chat. |
 
 ### Watchlist
 

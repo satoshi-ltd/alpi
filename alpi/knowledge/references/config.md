@@ -156,14 +156,14 @@ per-char iteration.
 
 ## Relay (read-only front door to one peer)
 
-`relay.peer` makes a profile a pure conduit to one pinned peer. The engine then offers only the `peer` tool and hard-gates every turn: it must consult that exact peer via `link.ask` before answering; a wrong peer id is rejected pre-execute, an empty reply doesn't count, and a turn that ends (or hits the step/time limit) with no valid reply fails closed with a fixed message instead of answering from the model's own knowledge. The peer's reply is surfaced verbatim. Just pin the peer in `peers.yaml` with `link.ask` — no separate `tools.deny` needed.
+`relay.peer` makes a profile a pure conduit to one pinned peer. The engine then offers only the `peer` and `decline` tools and hard-gates every turn: it must consult that exact peer via `link.ask` before answering; a wrong peer id is rejected pre-execute, an empty reply doesn't count, and a turn that ends (or hits the step/time limit) with no valid reply fails closed with a fixed message instead of answering from the model's own knowledge. The peer's reply is surfaced verbatim. `decline(reason)` is the one other exit: for a request the relay must not forward (a change, an action) the reason, in the user's language, becomes the answer and the peer is never consulted; an empty reason does not count. Just pin the peer in `peers.yaml` with `link.ask` — no separate `tools.deny` needed.
 
 ```yaml
 relay:
   peer: agora
 ```
 
-This locks down the relay side only. It does NOT make the target immutable — an inbound `link.ask` runs a full turn on the target with the target's own tools. Keep the source unwritable via the target profile's own tool denies, and restrict which paired devices can address it with a member connection's `profile_scope`. The `default` host socket serves sibling profiles, and admin/local access ignore scoping.
+This locks down the relay side only. It does NOT make the target immutable — an inbound `link.ask` runs a full turn on the target with the target's own tools. Keep the source unwritable via the target profile's own tool denies, or per peer with `tools.deny` on the relay's record in the target's `peers.yaml` (names or `*` patterns; enforced at schema and execution, including sub-agents and workflow steps; only ever narrows the profile's own denies), and restrict which paired devices can address it with a member connection's `profile_scope`. The `default` host socket serves sibling profiles, and admin/local access ignore scoping.
 
 ## Network (shared accessible address)
 

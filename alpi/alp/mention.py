@@ -32,6 +32,8 @@ Detection rules (relaxed in v0.2.96 as ALP.3.1):
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import logging
 import re
 import time
 from dataclasses import dataclass
@@ -46,6 +48,8 @@ from alpi.alp.keys import Keypair, load_or_generate
 # Boundary ``(?:^|\s)`` excludes ``email@example.com``; trailing
 # ``\b`` keeps ``@alice,`` from greedily eating the comma into the id.
 _MENTION_RE = re.compile(r"(?:^|\s)@([A-Za-z0-9_-]+)\b")
+
+log = logging.getLogger("alpi.alp.mention")
 
 
 @dataclass
@@ -63,6 +67,39 @@ class Result:
     tokens_out: int = 0
     cost: float = 0.0
     transient: bool = False
+    history: str = ""
+    history_shared: bool = False
+
+
+def conversation_id(session_id: str) -> str:
+    return hashlib.sha256(session_id.encode("utf-8")).hexdigest()[:32]
+
+
+def _source_conversation(source_session: str | None) -> str:
+    if source_session is None:
+        from alpi.core.run_context import current as current_run
+        ctx = current_run()
+        source_session = ctx.session_id if ctx is not None else ""
+    return conversation_id(source_session) if source_session else ""
+
+
+def shared_history_note(peer_id: str) -> str:
+    return (
+        f"note: peer '{peer_id}' runs an older alpi and keeps one @-mention history for all "
+        "your conversations, so this reply may carry context from other conversations."
+    )
+
+
+def annotate_reply(reply: str, peer_id: str, *, history_shared: bool) -> str:
+    if not history_shared:
+        return reply
+    return "\n\n".join(part for part in (reply, shared_history_note(peer_id)) if part)
+
+
+def reply_text(peer_id: str, final: dict | None, parts: list[str]) -> str:
+    final = final or {}
+    text = str(final.get("text") or "").strip() or "".join(parts).strip()
+    return annotate_reply(text, peer_id, history_shared=final.get("history_shared") is True)
 
 
 def _link_timeouts(
@@ -156,6 +193,7 @@ async def execute(
     *,
     timeout: float | None = None,
     max_duration: float | None = None,
+    source_session: str | None = None,
 ) -> Result:
     """Run a single ``link.ask`` against a pinned peer.
 
@@ -173,6 +211,7 @@ async def execute(
         prompt,
         timeout=timeout,
         max_duration=max_duration,
+        source_session=source_session,
     ):
         if frame.get("kind") == "error":
             return Result(
@@ -195,6 +234,8 @@ async def execute(
         tokens_out=int(final.get("tokens_out") or 0),
         cost=float(final.get("cost") or 0.0),
         transient=final.get("transient") is True,
+        history=str(final.get("history") or ""),
+        history_shared=final.get("history_shared") is True,
     )
 
 
@@ -205,6 +246,7 @@ async def execute_stream(
     *,
     timeout: float | None = None,
     max_duration: float | None = None,
+    source_session: str | None = None,
 ):
     """Streaming variant of ``execute``. Async generator that yields:
 
@@ -222,7 +264,8 @@ async def execute_stream(
 
     sender = load_or_generate(home)
     idle_timeout, max_seconds = _link_timeouts(home, timeout, max_duration)
-    params = {"prompt": prompt, "stream": True}
+    conversation = _source_conversation(source_session)
+    params = {"prompt": prompt, "stream": True, "conversation": conversation}
     session_id = ""
     started = time.monotonic()
     agen = None
@@ -281,6 +324,14 @@ async def execute_stream(
             kind = "final" if stream != "chunk" else "chunk"
             payload = dict(result or {})
             payload["kind"] = kind
+            if kind == "final":
+                shared = bool(conversation) and str(payload.get("history") or "") != "conversation"
+                payload["history_shared"] = shared
+                if shared:
+                    log.warning(
+                        "peer %s ignored the conversation identity; its @-mention history is shared across conversations",
+                        peer_id,
+                    )
             yield payload
             if kind == "final":
                 return

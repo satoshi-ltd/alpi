@@ -25,7 +25,7 @@ def _capture_engine(captured: dict):
 
 
 def _patch_threads(monkeypatch) -> None:
-    monkeypatch.setattr("alpi.alp.mention_thread.load", lambda home, pid: [])
+    monkeypatch.setattr("alpi.alp.mention_thread.load", lambda home, pid, conversation=None: [])
     monkeypatch.setattr("alpi.alp.mention_thread.hydrate", lambda msgs, thread: None)
     monkeypatch.setattr("alpi.alp.mention_thread.append", lambda *a, **kw: None)
 

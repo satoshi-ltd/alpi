@@ -248,7 +248,7 @@ def test_execute_routes_remote_peer_over_tcp(
     assert captured["host"] == "100.1.2.3"
     assert captured["port"] == 7425
     assert captured["method"] == "link.ask"
-    assert captured["params"] == {"prompt": "ping", "stream": True}
+    assert captured["params"] == {"prompt": "ping", "stream": True, "conversation": ""}
     assert captured["timeout"] == 60
 
 

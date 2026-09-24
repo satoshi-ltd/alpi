@@ -25,6 +25,8 @@ Peers are explicit; a peer record binds identity and reachability. Don't treat a
 
 Peer `id` is a **local label** for human/UI use only — never on the wire, never used to locate a co-located peer. Intra-machine peers resolve by `pubkey` against other local profiles' keypairs, so a peer pinned under any alias still routes; the `id`-only fallback applies when the pubkey matches no local profile.
 
+`allow` gates ALP methods; `tools.deny` on the same record gates what that peer's inbound `link.ask` turns may run here (tool names or `*` patterns such as `github__*`). Denied tools leave the schema and are refused at execution, in both transport paths and in nested paths (delegate sub-agents, workflow steps, parallel calls); the policy is bound to the authenticated peer and the single turn, only narrows the profile's own `tools.deny`, and never touches local chat or other peers. It is a denylist: a read-only intent must deny `terminal`, `skill`, `schedule`, `peer`, MCP servers and every writing tool, not only the file tools. Console: `alpi peers add --deny-tools`, `alpi peers tools <id> --deny …`, setup → Peers.
+
 ## Transports
 
 - Same machine: Unix-domain socket.
@@ -39,7 +41,7 @@ Transport internals are implementation detail unless debugging ALP itself.
 | Method | Purpose |
 |---|---|
 | `link.ping` | Check peer reachability/identity. Answers immediately (5s timeout), independent of engine/turn state; does NOT feed the workgroup roster. |
-| `link.ask` | Run a full agent turn on a peer (its memory/skills/tools). Sole read path into a peer. Alpi callers use streaming internally: a start frame plus signed progress heartbeats keep an active turn alive, while only the final frame becomes the `peer` tool result. |
+| `link.ask` | Run a full agent turn on a peer (its memory/skills/tools). Sole read path into a peer. Alpi callers use streaming internally: a start frame plus signed progress heartbeats keep an active turn alive, while only the final frame becomes the `peer` tool result. `params.conversation` (opaque, derived from the caller's source session, never model-written) scopes the target's @-mention history to sender + conversation: a new conversation starts clean, another peer's identical value selects nothing, an unestablishable one runs with no history, and a missing key keeps the legacy per-sender thread. The result's `history` (`conversation` / `peer` / `none`) says which applied; a sender that sent one and got anything else knows the target predates isolation. |
 | `link.cancel` | Cancel an in-flight peer task. Only the peer that started the active turn may cancel it. |
 | `link.put_blob` | Send an explicitly selected file in verified content-addressed chunks. |
 | `link.get_blob` | Retrieve a previously stored blob by SHA-256. |
@@ -73,6 +75,7 @@ ALP/workgroup tasks respect profile budget settings (`budget.daily_usd`, CONFIG.
 | `-32010` | `workgroup-paused` | Paused; `post` rejected (`pull`/`join`/`leave` still work). |
 | `-32011` | `file-not-found` | Requested workgroup file is absent. |
 | `-32012` | `blob-not-found` / `file-quota-exceeded` | Generic link blob absent, or workgroup file store would exceed 200 MiB. |
+| `-32013` | `peer-policy-invalid` | The caller's `tools` block in the target's `peers.yaml` is malformed (`data.detail` says how); every `link.ask` from that peer is refused until fixed — never run unrestricted. |
 
 Client-side diagnostics (SDK Python exceptions, no JSON-RPC code, never on wire):
 

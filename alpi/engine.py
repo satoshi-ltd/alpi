@@ -13,11 +13,9 @@ from typing import Any, Callable
 
 from alpi import clock, config as cfg_mod
 from alpi import llm, session, tools
+from alpi.tools import _policy as _tool_policy
 from alpi.tools._budget import apply as _budget_apply
-from alpi.tools._paths import (
-    dispatch_tool_denies as _dispatch_tool_denies,
-    dispatch_tool_deny_reasons as _dispatch_tool_deny_reasons,
-)
+from alpi.tools._paths import dispatch_tool_deny_reasons as _dispatch_tool_deny_reasons
 from alpi.tools._sanitizer import sanitize_tool_payload
 from alpi.tools.base import ToolResult, failure_payload as _failure_payload
 from alpi.session import ASSISTANT_CAP, ToolLog, truncate_result
@@ -371,7 +369,7 @@ class Engine:
         profile_denies = frozenset(self.cfg.tools.deny)
         executor = ToolExecutor(
             run_context,
-            deny=profile_denies | _dispatch_tool_denies(),
+            deny=_tool_policy.effective_denies(profile_denies),
             deny_reasons=_dispatch_tool_deny_reasons(profile_denies),
             max_workers=self.cfg.tools.max_parallel_tool_calls,
         )
@@ -507,13 +505,18 @@ class Engine:
         relay_peer = str((self.cfg.relay or {}).get("peer") or "").strip()
         relay_consulted = False
         relay_retry_done = False
+        relay_declined = ""
+        relay_forwarded = False
         relay_part = ""
         if relay_peer:
             relay_part = (
                 f"[relay] You are a read-only relay for peer '{relay_peer}' and hold no knowledge "
                 f"of your own. Before any final answer you MUST consult '{relay_peer}' via "
                 f"peer(peer_id='{relay_peer}', prompt=...) and answer only from its reply — never "
-                "from your own or general knowledge."
+                "from your own or general knowledge. If the request asks for anything other than "
+                f"an answer '{relay_peer}' can give (a change, an action, something out of scope), "
+                "call decline(reason=...) instead of consulting it: a short reason in the user's "
+                "language that does not answer the question."
             )
         elif self._last_relay_peer:
             relay_part = (
@@ -627,10 +630,12 @@ class Engine:
             except Exception:  # noqa: BLE001
                 pass
 
-        deny_tools = frozenset(self.cfg.tools.deny) | _dispatch_tool_denies()
+        deny_tools = _tool_policy.effective_denies(self.cfg.tools.deny)
         schemas = tools.schemas(deny=deny_tools)
         if relay_peer:
-            schemas = [s for s in schemas if _schema_name(s) == "peer"]
+            schemas = [s for s in schemas if _schema_name(s) in ("peer", "decline")]
+        else:
+            schemas = [s for s in schemas if _schema_name(s) != "decline"]
         route_tier = _route_tier_from_env()
         routed_model = cfg_mod.tier_model(self.cfg, route_tier)
         call_kwargs = cfg_mod.resolve_model(self.cfg, tier=route_tier)
@@ -1145,7 +1150,30 @@ class Engine:
                         tool_state_mod.set_emit(_relay)
                         tool_started = time.time()
                         try:
-                            if relay_peer and (
+                            if relay_peer and relay_declined:
+                                result = ToolResult(
+                                    ok=False, output="",
+                                    error="relay mode: the request was declined; no further tool calls run this turn",
+                                )
+                            elif relay_peer and name == "decline":
+                                if relay_forwarded:
+                                    result = ToolResult(
+                                        ok=False, output="",
+                                        error=(
+                                            f"relay mode: decline is not allowed after consulting "
+                                            f"'{relay_peer}' in this turn"
+                                        ),
+                                    )
+                                else:
+                                    result = tools.execute(name, args, deny=deny_tools)
+                                    if result.ok and result.output.strip():
+                                        relay_declined = result.output.strip()
+                            elif name == "decline":
+                                result = ToolResult(
+                                    ok=False, output="",
+                                    error="decline is only available in relay mode",
+                                )
+                            elif relay_peer and (
                                 name != "peer"
                                 or str(args.get("peer_id") or "").strip() != relay_peer
                             ):
@@ -1154,6 +1182,8 @@ class Engine:
                                     error=f"relay mode: only peer '{relay_peer}' may be consulted",
                                 )
                             else:
+                                if relay_peer:
+                                    relay_forwarded = True
                                 tool_state_mod.set_turn_tools_run(len(turn_tools))
                                 result = tools.execute(name, args, deny=deny_tools)
                         finally:
@@ -1235,6 +1265,17 @@ class Engine:
 
                 if self.interrupt_requested:
                     self._finalize_interrupt(emit)
+                    return
+
+                if relay_declined:
+                    if dispatch_wg_id:
+                        turn_error = f"relay: declined: {relay_declined}"
+                        emit(AgentEvent(kind="error", text=turn_error))
+                        return
+                    final_assistant = relay_declined
+                    turn_completed = True
+                    emit(AgentEvent(kind="assistant_done", text=relay_declined, final=True))
+                    emit(AgentEvent(kind="done"))
                     return
 
                 if dispatch_delivered:

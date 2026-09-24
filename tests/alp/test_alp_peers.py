@@ -200,3 +200,113 @@ def test_local_socket_path_when_alpi_home_is_a_profile(
     # Fallback (unknown pubkey) also resolves to the sibling, not nested under self.
     peer_unknown = Peer(id="zeta", pubkey="UNKNOWN", allow=["link.ping"])
     assert peers_mod.local_socket_path(peer_unknown) == root / "profiles" / "zeta" / "alp" / "alp.sock"
+
+
+def test_tool_policy_round_trips_and_normalises(tmp_path: Path) -> None:
+    p = Peer(
+        id="alexandra", pubkey="AAA=", allow=["link.ask"],
+        tools={"deny": [" write_file ", "write_file", "github__*"]},
+    )
+    peers_mod.save(tmp_path, [p])
+
+    loaded = peers_mod.load(tmp_path)[0]
+    assert loaded.tools == {"deny": [" write_file ", "write_file", "github__*"]}
+    assert loaded.denied_tools() == frozenset({"write_file", "github__*"})
+    assert "tools:" in peers_mod.path(tmp_path).read_text()
+
+
+def test_peers_without_a_tool_policy_save_no_tools_key(tmp_path: Path) -> None:
+    peers_mod.save(tmp_path, [Peer(id="x", pubkey="AAA=", allow=["link.ping"])])
+    assert "tools" not in peers_mod.path(tmp_path).read_text()
+    assert peers_mod.load(tmp_path)[0].denied_tools() == frozenset()
+
+
+@pytest.mark.parametrize("tools_yaml", [
+    "tools: terminal",
+    "tools: false",
+    "tools:\n    deny: terminal",
+    "tools:\n    deny:\n      a: b",
+    "tools:\n    deny:",
+    "tools:\n    denny: [terminal]",
+    "tools:\n    deny: [terminal, 'bad name!']",
+    "tools:\n    deny: [terminal, 7]",
+])
+def test_a_malformed_tool_policy_is_an_error_not_an_empty_policy(tmp_path: Path, tools_yaml: str) -> None:
+    peers_mod.path(tmp_path).parent.mkdir(parents=True, exist_ok=True)
+    peers_mod.path(tmp_path).write_text(
+        f"- id: a\n  pubkey: AAA=\n  allow: [link.ask]\n  {tools_yaml}\n",
+    )
+    loaded = peers_mod.load(tmp_path)[0]
+    with pytest.raises(peers_mod.PolicyError) as err:
+        loaded.denied_tools()
+    assert "peer 'a'" in str(err.value)
+
+
+def test_absent_or_empty_tool_policy_means_no_policy(tmp_path: Path) -> None:
+    peers_mod.path(tmp_path).parent.mkdir(parents=True, exist_ok=True)
+    peers_mod.path(tmp_path).write_text(
+        "- id: a\n  pubkey: AAA=\n  allow: [link.ask]\n"
+        "- id: b\n  pubkey: BBB=\n  allow: [link.ask]\n  tools: {}\n"
+        "- id: c\n  pubkey: CCC=\n  allow: [link.ask]\n  tools:\n    deny: []\n",
+    )
+    assert [p.denied_tools() for p in peers_mod.load(tmp_path)] == [frozenset()] * 3
+
+
+def test_saving_keeps_a_malformed_policy_so_the_diagnostic_survives(tmp_path: Path) -> None:
+    peers_mod.path(tmp_path).parent.mkdir(parents=True, exist_ok=True)
+    peers_mod.path(tmp_path).write_text(
+        "- id: a\n  pubkey: AAA=\n  allow: [link.ask]\n  tools: terminal\n"
+        "- id: b\n  pubkey: BBB=\n  allow: [link.ask]\n",
+    )
+    assert peers_mod.remove(tmp_path, "b") is True
+    with pytest.raises(peers_mod.PolicyError):
+        peers_mod.load(tmp_path)[0].denied_tools()
+
+
+def test_set_denied_tools_rejects_entries_that_are_not_tool_names(tmp_path: Path) -> None:
+    peers_mod.save(tmp_path, [Peer(id="a", pubkey="AAA=", allow=["link.ask"])])
+    with pytest.raises(peers_mod.PolicyError):
+        peers_mod.set_denied_tools(tmp_path, "a", ["terminal", "rm -rf /"])
+    assert peers_mod.get_by_id(tmp_path, "a").denied_tools() == frozenset()
+
+
+def test_set_denied_tools_updates_and_clears(tmp_path: Path) -> None:
+    peers_mod.save(tmp_path, [Peer(id="a", pubkey="AAA=", allow=["link.ask"])])
+
+    assert peers_mod.set_denied_tools(tmp_path, "a", ["terminal", "write_file"]) is True
+    assert peers_mod.get_by_id(tmp_path, "a").denied_tools() == frozenset({"terminal", "write_file"})
+    assert peers_mod.set_denied_tools(tmp_path, "a", []) is True
+    assert peers_mod.get_by_id(tmp_path, "a").denied_tools() == frozenset()
+    assert "tools" not in peers_mod.path(tmp_path).read_text()
+    assert peers_mod.set_denied_tools(tmp_path, "ghost", ["x"]) is False
+
+
+def test_updating_another_peer_keeps_an_invalid_policy_with_an_empty_deny_invalid(tmp_path: Path) -> None:
+    peers_mod.path(tmp_path).parent.mkdir(parents=True, exist_ok=True)
+    peers_mod.path(tmp_path).write_text(
+        "- id: a\n  pubkey: AAA=\n  allow: [link.ask]\n  tools:\n    deny: []\n    denny: [terminal]\n"
+        "- id: b\n  pubkey: BBB=\n  allow: [link.ask]\n",
+    )
+    with pytest.raises(peers_mod.PolicyError):
+        peers_mod.get_by_id(tmp_path, "a").denied_tools()
+
+    assert peers_mod.set_denied_tools(tmp_path, "b", ["terminal"]) is True
+
+    with pytest.raises(peers_mod.PolicyError) as err:
+        peers_mod.get_by_id(tmp_path, "a").denied_tools()
+    assert "denny" in str(err.value)
+    assert peers_mod.get_by_id(tmp_path, "b").denied_tools() == frozenset({"terminal"})
+    assert "denny" in peers_mod.path(tmp_path).read_text()
+
+
+def test_only_the_exact_empty_policy_is_trimmed_on_save(tmp_path: Path) -> None:
+    peers_mod.save(tmp_path, [
+        Peer(id="empty", pubkey="AAA=", allow=["link.ask"], tools={"deny": []}),
+        Peer(id="bare", pubkey="BBB=", allow=["link.ask"], tools={}),
+        Peer(id="kept", pubkey="CCC=", allow=["link.ask"], tools={"deny": ["terminal"]}),
+    ])
+    text = peers_mod.path(tmp_path).read_text()
+    assert text.count("tools:") == 1
+    assert [p.denied_tools() for p in peers_mod.load(tmp_path)] == [
+        frozenset(), frozenset(), frozenset({"terminal"}),
+    ]

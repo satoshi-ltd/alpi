@@ -23,7 +23,7 @@
 | `secrets/` | Per-profile non-ALP credential files (OAuth / Gmail tokens, etc.). `0o700`. The ALP keypair lives at `alp/secrets/alp_key.{pem,pub}`, not here. |
 | `memories/` (USER.md, MEMORY.md, AGENT.md) | Persistent user/project memory + identity. |
 | `sessions/<id>.json` | Local human chat log only (TUI / desktop / `chat --once`). Schedule, workgroup, system-prefixed turns stay out of resume/history. |
-| `mentions/<sender>.json` | Per-sender `@`-mention threads, capped 20 turns, receiving side only. |
+| `mentions/<sender>@<conversation>.json` | `@`-mention threads per sender and originating conversation, capped 20 turns, receiving side only; `<sender>.json` is the legacy thread for callers that send no `conversation`. |
 | `skills/` | Installed/user skills, under this profile's allowlist. |
 | `recipes/` | Saved workgroup recipes owned by this profile when it acts as hub. The YAML filename stem is the recipe id. |
 | `knowledge.sqlite` | Derived sqlite-vec indexes for workspace knowledge, session recall, and workgroup recall. |

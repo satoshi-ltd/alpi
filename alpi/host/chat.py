@@ -494,7 +494,9 @@ async def _send_mention(
     final_payload: dict = {}
     ok = True
     error_text = ""
-    async for frame in alp_mention.execute_stream(home, parsed.peer_id, parsed.prompt):
+    async for frame in alp_mention.execute_stream(
+        home, parsed.peer_id, parsed.prompt, source_session=engine.session.id,
+    ):
         kind = frame.get("kind")
         if kind == "chunk":
             delta = str(frame.get("text") or "")
@@ -509,7 +511,7 @@ async def _send_mention(
             break
 
     if ok:
-        reply = str(final_payload.get("text") or "").strip() or "".join(parts).strip()
+        reply = alp_mention.reply_text(parsed.peer_id, final_payload, parts)
     else:
         reply = f"error: {error_text}"
     await send_frame({

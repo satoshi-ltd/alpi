@@ -79,3 +79,33 @@ def test_host_context_absent_for_legacy_entries(tmp_path) -> None:
     mention_thread.hydrate(msgs, mention_thread.load(tmp_path, "quill"))
     user = next(m for m in msgs if m["role"] == "user")
     assert user["content"] == "hola"
+
+
+def test_conversation_from_params_distinguishes_legacy_missing_and_malformed() -> None:
+    assert mention_thread.conversation_from_params({"prompt": "x"}) is None
+    assert mention_thread.conversation_from_params(None) is None
+    assert mention_thread.conversation_from_params({"conversation": "abc-DEF_09"}) == "abc-DEF_09"
+    assert mention_thread.conversation_from_params({"conversation": ""}) == ""
+    assert mention_thread.conversation_from_params({"conversation": None}) == ""
+    assert mention_thread.conversation_from_params({"conversation": "../x"}) == ""
+    assert mention_thread.conversation_from_params({"conversation": "a" * 65}) == ""
+    assert mention_thread.conversation_from_params({"conversation": 7}) == ""
+
+
+def test_history_kind_names_the_three_cases() -> None:
+    assert mention_thread.history_kind(None) == "peer"
+    assert mention_thread.history_kind("") == "none"
+    assert mention_thread.history_kind("c1") == "conversation"
+
+
+def test_conversation_threads_live_beside_the_legacy_file(tmp_path: Path) -> None:
+    mention_thread.append(tmp_path, "alice", "legacy", "a")
+    mention_thread.append(tmp_path, "alice", "scoped", "b", conversation="c1")
+    mention_thread.append(tmp_path, "alice", "dropped", "c", conversation="")
+    mention_thread.append(tmp_path, "alice", "dropped", "c", conversation="../c1")
+
+    assert sorted(p.name for p in (tmp_path / "mentions").iterdir()) == ["alice.json", "alice@c1.json"]
+    assert [t.user for t in mention_thread.load(tmp_path, "alice").turns] == ["legacy"]
+    assert [t.user for t in mention_thread.load(tmp_path, "alice", "c1").turns] == ["scoped"]
+    assert mention_thread.load(tmp_path, "alice", "").turns == []
+    assert mention_thread.load(tmp_path, "alice", "../c1").turns == []

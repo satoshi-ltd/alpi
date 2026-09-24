@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import Any
 
 from alpi.host import server as host_server
+from alpi.tools import _policy as _tool_policy
 
 
 # UI-side categorisation. Tool names are stable identifiers, so a
@@ -22,7 +23,7 @@ _CATEGORIES: list[tuple[str, tuple[str, ...]]] = [
     ("Knowledge", ("knowledge",)),
     ("Web", ("web_search", "web_fetch", "web_extract", "browser")),
     ("Memory", ("memory", "session_search", "session_read", "recall_sessions", "index_sessions")),
-    ("Comms", ("email", "peer", "notify", "ask_user")),
+    ("Comms", ("email", "peer", "decline", "notify", "ask_user")),
     ("Agent", ("skill", "schedule", "delegate", "research", "todo", "alpi_knowledge", "workflow")),
     ("Media", ("tts", "stt")),
     ("System", ("terminal", "db")),
@@ -69,6 +70,6 @@ async def _tools_list(
             "category": _category_for(cls.name),
             "description": cls.description,
             "parameters": cls.parameters,
-            "denied": cls.name in deny,
+            "denied": _tool_policy.is_denied(cls.name, deny),
         })
     return {"tools": items}

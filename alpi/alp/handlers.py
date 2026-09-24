@@ -8,6 +8,7 @@ Turn handlers: ``link.ask`` + ``link.cancel``. Wiring happens from
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,8 @@ from alpi import config as cfg_mod
 from alpi.alp import peers as peers_mod
 from alpi.alp import server as alp_server
 from alpi.engine import AgentEvent, Engine
+
+log = logging.getLogger("alpi.alp.handlers")
 
 
 @dataclass
@@ -58,10 +61,20 @@ def register_link_ask(server: alp_server.Server, home: Path) -> None:
                 data={"detail": "another turn is already in flight"},
             )
 
+        from alpi.alp import mention_thread
+        conversation = mention_thread.conversation_from_params(params)
+        try:
+            tool_deny = peer.denied_tools()
+        except peers_mod.PolicyError as e:
+            log.warning("link.ask from %s refused: %s", peer.id, e)
+            raise alp_server.HandlerError(
+                -32013, "peer-policy-invalid", data={"detail": str(e)},
+            )
         stream = bool((params or {}).get("stream"))
         if stream:
             return _run_turn_stream(
                 home, prompt, peer.id, active, lock, peer.pubkey,
+                conversation=conversation, tool_deny=tool_deny,
             )
 
         async def _solo() -> dict[str, Any]:
@@ -69,6 +82,7 @@ def register_link_ask(server: alp_server.Server, home: Path) -> None:
                 loop = asyncio.get_running_loop()
                 return await loop.run_in_executor(
                     None, _run_turn, home, prompt, peer.id, active, peer.pubkey,
+                    conversation, tool_deny,
                 )
 
         return _solo()
@@ -104,6 +118,8 @@ async def _run_turn_stream(
     active: _ActiveTurn,
     lock: asyncio.Lock,
     peer_pubkey: str = "",
+    conversation: str | None = None,
+    tool_deny: frozenset[str] = frozenset(),
 ):
     """Streaming variant: runs the engine in a thread, yields one
     chunk per ``assistant_delta`` event, ends with a ``final`` chunk
@@ -124,7 +140,7 @@ async def _run_turn_stream(
         engine.connection_context = conn_ctx.ConnectionContext(
             connection_id=f"peer:{peer_id}", source="peer",
         )
-        thread = mention_thread.load(home, peer_id)
+        thread = mention_thread.load(home, peer_id, conversation)
         mention_thread.hydrate(engine.session.messages, thread)
         _prior = getattr(thread, "turns", None)
         if _prior:
@@ -165,8 +181,9 @@ async def _run_turn_stream(
                 state["interrupted"] = True
 
         def worker() -> None:
+            from alpi.tools import _policy as tool_policy
             try:
-                with ledger.peer_context(peer_id):
+                with ledger.peer_context(peer_id), tool_policy.use(tool_deny, f"peer '{peer_id}'"):
                     engine.run_turn(
                         prompt, emit=sink, source="peer",
                         persist_inflight=False,
@@ -219,6 +236,7 @@ async def _run_turn_stream(
             mention_thread.append(
                 home, peer_id, prompt, full,
                 host_context=getattr(engine, "last_host_context", ""),
+                conversation=conversation,
             )
         yield {
             "kind": "final",
@@ -229,6 +247,7 @@ async def _run_turn_stream(
             "session_id": engine.session.id,
             "interrupted": state["interrupted"],
             "transient": state["transient"],
+            "history": mention_thread.history_kind(conversation),
         }
 
 
@@ -238,6 +257,8 @@ def _run_turn(
     peer_id: str,
     active: _ActiveTurn,
     peer_pubkey: str = "",
+    conversation: str | None = None,
+    tool_deny: frozenset[str] = frozenset(),
 ) -> dict[str, Any]:
     """Synchronous turn — runs in a thread so the ALP server event
     loop stays responsive while the engine blocks on LLM calls."""
@@ -250,7 +271,7 @@ def _run_turn(
         connection_id=f"peer:{peer_id}", source="peer",
     )
 
-    thread = mention_thread.load(home, peer_id)
+    thread = mention_thread.load(home, peer_id, conversation)
     mention_thread.hydrate(engine.session.messages, thread)
     _prior = getattr(thread, "turns", None)
     if _prior:
@@ -292,8 +313,9 @@ def _run_turn(
 
     try:
         from alpi import ledger
+        from alpi.tools import _policy as tool_policy
 
-        with ledger.peer_context(peer_id):
+        with ledger.peer_context(peer_id), tool_policy.use(tool_deny, f"peer '{peer_id}'"):
             engine.run_turn(
                 prompt, emit=sink, source="peer",
                 persist_inflight=False,
@@ -311,11 +333,12 @@ def _run_turn(
             text = "\n\n".join(x for x in (text, listing) if x)
     if interrupted and not text:
         text = "[cancelled]"
-    # Mention threads live in ``mentions/<sender>.json``, not ``sessions/``.
+    # Mention threads live in ``mentions/``, not ``sessions/``.
     if text and not interrupted:
         mention_thread.append(
             home, peer_id, prompt, text,
             host_context=getattr(engine, "last_host_context", ""),
+            conversation=conversation,
         )
 
     return {
@@ -326,4 +349,5 @@ def _run_turn(
         "session_id": engine.session.id,
         "interrupted": interrupted,
         "transient": transient,
+        "history": mention_thread.history_kind(conversation),
     }

@@ -11,8 +11,8 @@ from typing import Any
 from alpi import config as cfg_mod
 from alpi import llm
 from alpi.home import get_home
+from alpi.tools import _policy as _tool_policy
 from alpi.tools._budget import apply as _budget_apply
-from alpi.tools._paths import dispatch_tool_denies
 from alpi.tools.base import Tool, ToolResult, failure_payload
 from alpi.tools import _state as tool_state_mod
 
@@ -70,6 +70,11 @@ def _system_prompt(workspace: Path | None) -> str:
         "- Return a concise final summary — the parent only sees your last\n"
         "  reply, not your tool trace.\n"
     )
+
+
+def _turn_denies(cfg: Any) -> frozenset[str]:
+    # The sub-agent runs inside the calling turn: phase write denies and the peer tool policy apply to it too.
+    return _tool_policy.effective_denies(cfg.tools.deny)
 
 
 def _resolve_tools(toolsets: list[str] | None) -> tuple[set[str], list[str]]:
@@ -311,8 +316,7 @@ class Delegate(Tool):
 
         cfg = cfg_mod.load(get_home())
         call_kwargs = cfg_mod.resolve_model(cfg, tier=tier)
-        # The sub-agent runs inside the dispatched turn: phase write denies apply to it too.
-        deny_tools = frozenset(cfg.tools.deny) | dispatch_tool_denies()
+        deny_tools = _turn_denies(cfg)
 
         tools_schema = [
             s for s in all_schemas(deny=deny_tools)

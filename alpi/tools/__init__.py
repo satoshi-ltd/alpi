@@ -9,6 +9,7 @@ from typing import Iterator
 
 from alpi.host.connection_context import current
 from alpi.tools.base import Tool, ToolResult
+from alpi.tools import _policy
 from alpi.tools._availability import is_available, invalidate as _invalidate_availability
 from alpi.tools import (
     peer,
@@ -16,6 +17,7 @@ from alpi.tools import (
     attach_file as attach_file_tool,
     browser,
     db as db_tool,
+    decline as decline_tool,
     delegate,
     delete_file,
     research,
@@ -93,7 +95,7 @@ def schemas(deny: frozenset[str] | set[str] | None = None) -> list[dict]:
     schemas = sorted(
         (
             cls.schema() for cls in _current_tools().values()
-            if is_available(cls)[0] and cls.name not in deny
+            if is_available(cls)[0] and not _policy.is_denied(cls.name, deny)
         ),
         key=_schema_sort_key,
     )
@@ -144,8 +146,8 @@ def _execute_registered(
             output="",
             error=f"unknown tool: {name}. Available tools: {available}",
         )
-    if deny and name in deny:
-        reason = (deny_reasons or {}).get(name)
+    if deny and _policy.is_denied(name, deny):
+        reason = (deny_reasons or {}).get(name) or _policy.reason_for(name)
         return ToolResult(
             ok=False, output="",
             error=reason or f"tool denied for this profile: {name} (see tools.deny in config.yaml)",
@@ -235,6 +237,7 @@ for _mod in (
     workflow_tool,
     ask_user_tool,
     attach_file_tool,
+    decline_tool,
 ):
     _cls = getattr(_mod, "TOOL", None)
     if _cls is not None:

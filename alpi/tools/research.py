@@ -10,6 +10,7 @@ from typing import Any
 from alpi import config as cfg_mod
 from alpi import llm
 from alpi.home import get_home
+from alpi.tools import _policy as _tool_policy
 from alpi.tools._budget import apply as _budget_apply
 from alpi.tools.base import Tool, ToolResult, failure_payload
 from alpi.tools import _state as tool_state_mod
@@ -192,7 +193,7 @@ class Research(Tool):
         cfg = cfg_mod.load(get_home())
         call_kwargs = cfg_mod.resolve_model(cfg, tier=depth)
         max_steps = _resolve_depth(cfg, depth)
-        deny_tools = frozenset(cfg.tools.deny)
+        deny_tools = _tool_policy.effective_denies(cfg.tools.deny)
 
         tools_schema = [
             s for s in all_schemas(deny=deny_tools)

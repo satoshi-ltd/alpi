@@ -47,8 +47,9 @@ class PeerTool(Tool):
                 "type": "string",
                 "description": (
                     "The prompt to send. The receiver hydrates up to 20 "
-                    "prior @-mention turns from you, so follow-ups have "
-                    "context. This is not session resume: each call starts "
+                    "prior @-mention turns from this same conversation, so "
+                    "follow-ups have context and a new conversation starts "
+                    "clean. This is not session resume: each call starts "
                     "a fresh Engine, live tool state/todos do not carry "
                     "over, and only the final reply text comes back."
                 ),
@@ -74,8 +75,11 @@ class PeerTool(Tool):
             f"\n\n---\ntokens: in={result.tokens_in} out={result.tokens_out} · "
             f"cost=${result.cost:.4f}"
         )
+        reply = alp_mention.annotate_reply(
+            result.reply, str(peer_id), history_shared=getattr(result, "history_shared", False),
+        )
         return ToolResult(
-            ok=True, output=result.reply + usage,
+            ok=True, output=reply + usage,
             transient=getattr(result, "transient", False),
         )
 

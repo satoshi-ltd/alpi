@@ -88,6 +88,7 @@ alpi peers list                list pinned ALP peers for this profile
 alpi peers key                 print this profile's ALP public key
 alpi peers add <id> <pubkey>   pin a peer (prefer the wizard for capability selection)
 alpi peers remove <id>         unpin a peer
+alpi peers tools <id> [--deny …]  show or set the tools an inbound turn from that peer may never run
 alpi peers ping <id>           live probe via link.ping
 
 alpi workgroup list                                list workgroups (hub-of + member-of)
@@ -272,7 +273,7 @@ that live at `{home}/skills/<category>/<name>/`.
 ├── sessions/<id>.json      compact turn-based session log (TUI / desktop / `--once`)
 ├── knowledge.sqlite        sqlite-vec derived indexes for knowledge,
 │                            session recall, and workgroup recall
-├── mentions/<sender>.json  per-sender @-mention threads (cap 20 turns), receiving side
+├── mentions/<sender>@<conversation>.json  @-mention threads per sender and originating conversation (cap 20 turns), receiving side; <sender>.json for callers that send no conversation
 ├── run/                    background process registry, schedule pids
 ├── alp/                    ALP state — keypair, peer list, socket, pid
 │   ├── peers.yaml         pinned peers (pubkey + allow + optional address)
@@ -1209,7 +1210,7 @@ Scheduled jobs do not persist session files. The scheduler uses
 delivery and audit; keeping a resumable transcript would make
 background jobs appear as user chats.
 
-**`@`-mention threads (`alpi/alp/mention_thread.py`).** When peer A `@`-mentions peer B over ALP (`link.ask`), the receiving side runs a fresh `Engine` per turn — but B persists a small per-sender thread at `<B-home>/mentions/<A>.json`, capped at 20 turns. Successive mentions from the same A→B pair carry conversational memory ("what I said before" resolves) without polluting B's local `--continue` (which only reads `sessions/`). Threads are isolated per sender. Wipe via `setup → Cleanup → Mentions`.
+**`@`-mention threads (`alpi/alp/mention_thread.py`).** When peer A `@`-mentions peer B over ALP (`link.ask`), the receiving side runs a fresh `Engine` per turn — but B persists a small thread at `<B-home>/mentions/<A>@<conversation>.json`, capped at 20 turns, where `conversation` is an opaque id A derives from its own source session (the `peer` tool reads it from the run context; the host chat, TUI and `--once` pass their session explicitly). Successive mentions from the same A conversation carry conversational memory ("what I said before" resolves) without polluting B's local `--continue` (which only reads `sessions/`); a new A conversation starts clean, and the same `conversation` value from peer C selects nothing. A request whose conversation cannot be established runs with no history and writes none; a caller that sends no `conversation` at all predates the identity and keeps the legacy `<A>.json` thread, which is never imported into conversation threads. The result's `history` field says which applied, so a sender can tell when a target ignored the identity. Wipe via `setup → Cleanup → Mentions`.
 
 ### Security model
 

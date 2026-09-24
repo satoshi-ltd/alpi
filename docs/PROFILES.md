@@ -38,7 +38,7 @@ Everything that represents state, identity, or cost:
 | `secrets/` | ✓ | Per-profile non-ALP credential files (OAuth tokens, Gmail tokens, etc.). Created `0o700` on bootstrap. The ALP keypair lives separately at `alp/secrets/alp_key.{pem,pub}`. |
 | `memories/` (USER.md, MEMORY.md, AGENT.md) | ✓ | Your identity and what alpi remembers. |
 | `sessions/<id>.json` | ✓ | Local human chat log (TUI / desktop / manual `chat --once`), each with a `_events_<id>.jsonl` sidecar used to replay a turn after a dropped connection. |
-| `mentions/<sender>.json` | ✓ | Per-sender `@`-mention threads (capped at 20 turns). Receiving side only. |
+| `mentions/<sender>@<conversation>.json` | ✓ | `@`-mention threads per sender and originating conversation (capped at 20 turns); `<sender>.json` serves callers that send no conversation. Receiving side only. |
 | `skills/` | ✓ | Installed skills (live under this profile's allowlist). |
 | `recipes/` | ✓ | Saved workgroup recipes owned by this profile when it acts as hub. The YAML filename stem is the recipe id. |
 | `alp/` | ✓ | ALP identity and pinned peers (`peers.yaml`, socket, keypair under `alp/secrets/` — **not** under the profile's `secrets/`), plus the workgroups this profile hubs: transcripts, files and member state under `alp/workgroups/<id>/`. Two profiles on the same machine are two distinct peers. |

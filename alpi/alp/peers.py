@@ -10,6 +10,7 @@ rejected with ``-32001 capability-denied``.
 from __future__ import annotations
 
 import contextlib
+import re
 import sys
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field, asdict
@@ -72,6 +73,25 @@ class Peer:
     allow: list[str] = field(default_factory=list)
     budget: dict[str, Any] = field(default_factory=dict)
     rate_limit: dict[str, Any] = field(default_factory=dict)
+    tools: Any = field(default_factory=dict)
+
+    def denied_tools(self) -> frozenset[str]:
+        # Absent or empty = no policy (legacy peers). Present but malformed raises: the handler refuses the turn instead of running it unrestricted.
+        raw = self.tools
+        if raw is None or raw == {}:
+            return frozenset()
+        if not isinstance(raw, dict):
+            raise PolicyError(
+                f"peer {self.id!r}: `tools` must be a mapping with a `deny` list, "
+                f"got {type(raw).__name__}",
+            )
+        unknown = sorted(str(k) for k in raw if k != "deny")
+        if unknown:
+            raise PolicyError(
+                f"peer {self.id!r}: unknown key(s) under `tools`: {', '.join(unknown)} "
+                "(only `deny` is supported)",
+            )
+        return frozenset(validate_deny_entries(raw.get("deny"), peer_id=self.id))
 
     def may_call(self, method: str) -> bool:
         """Capability check — empty allow list denies everything.
@@ -82,6 +102,31 @@ class Peer:
         if method.startswith("workgroup."):
             return True
         return method in self.allow
+
+
+class PolicyError(ValueError):
+    pass
+
+
+_TOOL_ENTRY = re.compile(r"[A-Za-z0-9_.*-]+")
+
+
+def validate_deny_entries(deny: Any, *, peer_id: str = "") -> list[str]:
+    who = f"peer {peer_id!r}: " if peer_id else ""
+    if not isinstance(deny, list):
+        raise PolicyError(
+            f"{who}`tools.deny` must be a list of tool names, got {type(deny).__name__}",
+        )
+    names: list[str] = []
+    for item in deny:
+        name = item.strip() if isinstance(item, str) else ""
+        if not name or not _TOOL_ENTRY.fullmatch(name):
+            raise PolicyError(
+                f"{who}`tools.deny` entry {item!r} is not a tool name or `*` pattern",
+            )
+        if name not in names:
+            names.append(name)
+    return names
 
 
 def path(home: Path) -> Path:
@@ -116,6 +161,7 @@ def load(home: Path) -> list[Peer]:
             allow=[str(m) for m in (entry.get("allow") or [])],
             budget=dict(entry.get("budget") or {}),
             rate_limit=dict(entry.get("rate_limit") or {}),
+            tools=entry.get("tools") if "tools" in entry else {},
         ))
     return out
 
@@ -133,6 +179,9 @@ def save_unsafe(home: Path, peers: list[Peer]) -> None:
             entry.pop("budget", None)
         if not entry.get("rate_limit"):
             entry.pop("rate_limit", None)
+        tools = entry.get("tools")
+        if tools is None or tools == {} or tools == {"deny": []}:
+            entry.pop("tools", None)
     atomic_write_yaml(p, data)
 
 
@@ -164,6 +213,21 @@ def add(home: Path, peer: Peer) -> None:
         peers.append(peer)
         return peers
     update(home, _mutate)
+
+
+def set_denied_tools(home: Path, peer_id: str, deny: list[str]) -> bool:
+    names = validate_deny_entries(deny, peer_id=peer_id)
+    found = [False]
+
+    def _mutate(peers: list[Peer]) -> list[Peer] | None:
+        for p in peers:
+            if p.id == peer_id:
+                found[0] = True
+                p.tools = {"deny": names} if names else {}
+                return peers
+        return None
+    update(home, _mutate)
+    return found[0]
 
 
 def remove(home: Path, peer_id: str) -> bool:

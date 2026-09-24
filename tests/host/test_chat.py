@@ -1283,3 +1283,77 @@ async def test_concurrent_sends_same_session_second_gets_busy(
 
     assert any(e.get("event") == "error" and e.get("code") == "busy" for e in b_events), b_events
     assert builds["n"] == 1
+
+
+@pytest.mark.asyncio
+async def test_send_mention_scopes_the_peer_history_to_the_chat_session(monkeypatch, tmp_path: Path) -> None:
+    from types import SimpleNamespace
+
+    import alpi.engine
+    from alpi import config as cfg_mod
+    from alpi.alp import mention as alp_mention
+    from alpi.host import chat as dc
+
+    seen: dict = {}
+
+    async def fake_stream(home, peer_id, prompt, **kwargs):
+        seen["kwargs"] = kwargs
+        yield {"kind": "final", "text": "pong"}
+
+    monkeypatch.setattr(alp_mention, "execute_stream", fake_stream)
+    monkeypatch.setattr(cfg_mod, "load", lambda h: SimpleNamespace(model="x"))
+    session = SimpleNamespace(id="chat-sess-1", log_turn=lambda **kw: None, save=lambda: None)
+    monkeypatch.setattr(
+        alpi.engine, "Engine", lambda *, home, cfg: SimpleNamespace(home=home, session=session),
+    )
+    frames: list[dict] = []
+
+    async def send_frame(frame: dict) -> None:
+        frames.append(frame)
+
+    await dc._send_mention(
+        tmp_path, SimpleNamespace(peer_id="bob", prompt="ping"), "req-1", None, send_frame,
+    )
+
+    assert seen["kwargs"] == {"source_session": "chat-sess-1"}
+    assert frames[-1] == {"event": "done", "session_id": "chat-sess-1"}
+
+
+@pytest.mark.asyncio
+async def test_send_mention_tells_the_client_when_the_peer_shares_history(monkeypatch, tmp_path: Path) -> None:
+    from types import SimpleNamespace
+
+    import alpi.engine
+    from alpi import config as cfg_mod
+    from alpi.alp import mention as alp_mention
+    from alpi.host import chat as dc
+
+    async def fake_stream(home, peer_id, prompt, **kwargs):
+        yield {"kind": "chunk", "text": "po"}
+        yield {"kind": "final", "text": "pong", "history": "peer", "history_shared": True}
+
+    monkeypatch.setattr(alp_mention, "execute_stream", fake_stream)
+    monkeypatch.setattr(cfg_mod, "load", lambda h: SimpleNamespace(model="x"))
+    logged: dict = {}
+    session = SimpleNamespace(
+        id="chat-sess-1", log_turn=lambda **kw: logged.update(kw), save=lambda: None,
+    )
+    monkeypatch.setattr(
+        alpi.engine, "Engine", lambda *, home, cfg: SimpleNamespace(home=home, session=session),
+    )
+    frames: list[dict] = []
+
+    async def send_frame(frame: dict) -> None:
+        frames.append(frame)
+
+    await dc._send_mention(
+        tmp_path, SimpleNamespace(peer_id="bob", prompt="ping"), "req-1", None, send_frame,
+    )
+
+    note = alp_mention.shared_history_note("bob")
+    expected = f"pong\n\n{note}"
+    tool_end = next(f for f in frames if f.get("event") == "tool_end")
+    reply = next(f for f in frames if f.get("event") == "reply")
+    assert tool_end["ok"] is True and tool_end["output"] == expected
+    assert reply["text"] == expected
+    assert logged["assistant"] == expected

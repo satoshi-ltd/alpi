@@ -260,8 +260,15 @@ def _run_once(
                 }),
             }) + "\n")
             sys.stdout.flush()
-        result = _aio.run(alp_mention.execute(h, parsed.peer_id, parsed.prompt))
-        reply = result.reply if result.ok else f"[error] {result.error}"
+        result = _aio.run(alp_mention.execute(
+            h, parsed.peer_id, parsed.prompt, source_session=engine.session.id,
+        ))
+        reply = (
+            alp_mention.annotate_reply(
+                result.reply, parsed.peer_id, history_shared=result.history_shared,
+            )
+            if result.ok else f"[error] {result.error}"
+        )
         if emit_events:
             payload = {
                 "kind": "tool_end", "name": "peer", "ok": result.ok,
@@ -3745,7 +3752,11 @@ def peers_list(ctx: click.Context) -> None:
     for p in entries:
         addr = p.address or "local"
         allow = ", ".join(p.allow) or "—"
-        rows.append([p.id, p.pubkey[:12] + "…", addr, allow])
+        try:
+            denied = ", ".join(sorted(p.denied_tools())) or "—"
+        except peers_mod.PolicyError as e:
+            denied = f"INVALID — {e}"
+        rows.append([p.id, p.pubkey[:12] + "…", addr, allow, denied])
     click.echo(f"{len(entries)} peer(s):")
     ui.columns(rows)
 
@@ -3762,6 +3773,10 @@ def peers_list(ctx: click.Context) -> None:
     "--address", default=None, help="host:port for inter-machine peers; omit for intra-machine."
 )
 @click.option("--alias", default="", help="Optional display label.")
+@click.option(
+    "--deny-tools", default="",
+    help="Comma-separated tool names or `*` patterns an inbound link.ask from this peer may never run.",
+)
 @click.pass_context
 def peers_add(
     ctx: click.Context,
@@ -3770,6 +3785,7 @@ def peers_add(
     allow: str,
     address: str | None,
     alias: str,
+    deny_tools: str,
 ) -> None:
     """Pin a peer's pubkey + capabilities."""
     import base64
@@ -3795,18 +3811,63 @@ def peers_add(
         )
 
     h: Path = ctx.obj["home"]
+    denied = [m.strip() for m in deny_tools.split(",") if m.strip()]
+    try:
+        denied = peers_mod.validate_deny_entries(denied, peer_id=peer_id) if denied else []
+    except peers_mod.PolicyError as e:
+        raise click.ClickException(str(e))
     peer = peers_mod.Peer(
         id=peer_id,
         pubkey=pk,
         alias=alias,
         address=address,
         allow=[m.strip() for m in allow.split(",") if m.strip()],
+        tools={"deny": denied} if denied else {},
     )
     try:
         peers_mod.add(h, peer)
     except ValueError as e:
         raise click.ClickException(str(e))
-    click.echo(f"added peer {peer_id!r} ({len(peer.allow)} method(s) allowed)")
+    policy = f", {len(denied)} tool(s) denied" if denied else ""
+    click.echo(f"added peer {peer_id!r} ({len(peer.allow)} method(s) allowed{policy})")
+
+
+@peers.command("tools")
+@click.argument("peer_id")
+@click.option(
+    "--deny", default=None,
+    help="Comma-separated tool names or `*` patterns this peer may never run; an empty value clears the policy.",
+)
+@click.pass_context
+def peers_tools(ctx: click.Context, peer_id: str, deny: str | None) -> None:
+    """Show or set the tools an inbound link.ask from PEER_ID may never run."""
+    from alpi.alp import peers as peers_mod
+
+    h: Path = ctx.obj["home"]
+    peer = peers_mod.get_by_id(h, peer_id)
+    if peer is None:
+        raise click.ClickException(f"unknown peer {peer_id!r}")
+    if deny is None:
+        try:
+            denied = sorted(peer.denied_tools())
+        except peers_mod.PolicyError as e:
+            raise click.ClickException(
+                f"invalid tool policy — link.ask from {peer_id!r} is refused until fixed: {e}",
+            )
+        click.echo(
+            ", ".join(denied) if denied
+            else f"no tool policy — {peer_id!r} gets this profile's own tools",
+        )
+        return
+    names = [m.strip() for m in deny.split(",") if m.strip()]
+    try:
+        peers_mod.set_denied_tools(h, peer_id, names)
+    except peers_mod.PolicyError as e:
+        raise click.ClickException(str(e))
+    if names:
+        click.echo(f"peer {peer_id!r} may never run {len(names)} tool(s): {', '.join(names)}")
+    else:
+        click.echo(f"cleared the tool policy for {peer_id!r}")
 
 
 @peers.command("remove")

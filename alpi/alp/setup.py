@@ -331,6 +331,12 @@ def _inspect(
     if peer.address:
         ui._console.print(f"  address  {peer.address}")
     ui._console.print(f"  allow    {', '.join(peer.allow) or '(none)'}")
+    try:
+        denied = sorted(peer.denied_tools())
+        policy = "deny: " + ", ".join(denied) if denied else "profile tools (no policy)"
+    except peers_mod.PolicyError as e:
+        policy = f"INVALID — {e} — link.ask from this peer is refused until fixed"
+    ui._console.print(f"  tools    {policy}")
     ui._console.print("")
     if status == "unverified":
         ui.dim(
@@ -412,6 +418,15 @@ def _add(home: Path) -> None:
         return
 
     allow = _pick_capabilities()
+    deny_raw = ui.text(
+        "Tools this peer may never run here (comma-separated names or `*` patterns, ENTER for none):",
+    ) or ""
+    denied = [m.strip() for m in deny_raw.split(",") if m.strip()]
+    try:
+        denied = peers_mod.validate_deny_entries(denied, peer_id=peer_id) if denied else []
+    except peers_mod.PolicyError as e:
+        ui.fail_and_wait(str(e))
+        return
     alias = ui.text("Alias (optional display label, ENTER to skip):") or ""
 
     peer = Peer(
@@ -420,6 +435,7 @@ def _add(home: Path) -> None:
         alias=alias.strip(),
         address=address,
         allow=allow,
+        tools={"deny": denied} if denied else {},
     )
     try:
         peers_mod.add(home, peer)

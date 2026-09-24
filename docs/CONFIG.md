@@ -153,6 +153,11 @@ the call returns `tool denied for this profile: <name>` instead of
 running. Unknown names are no-ops, so typos are harmless. Denying
 `alpi_knowledge` also drops the self-knowledge rule from the system
 prompt, so the model is never told to call a tool it cannot reach.
+An entry may end in `*` to cover a family — `github__*` denies every
+tool of the `github` MCP server. The same list shape, under `tools.deny`
+in a `peers.yaml` record, narrows what one peer's inbound `link.ask` turns
+may run on this profile; see
+[ALP.md → Per-peer tool policy](ALP.md#per-peer-tool-policy).
 
 Canonical names are the strings used at registration time —
 `write_file`, `edit_file`, `terminal`, `email`,
@@ -623,9 +628,9 @@ updated process before it can enforce them.
 
 ### Relay
 
-Turns a profile into a **read-only front door** to one designated peer. When set, the engine offers the profile **only the `peer` tool** and hard-gates every turn: the agent MUST consult that pinned peer via `peer` before it can produce a final answer — a call to any other peer id is rejected before it runs, an empty reply does not count, and if the turn ends (or hits the step/time limit) without a valid reply it fails closed with a fixed message rather than answer from the model's own knowledge. The peer's reply is surfaced as the answer. So you only pin that peer in `peers.yaml` with `link.ask` — no separate `tools.deny` needed.
+Turns a profile into a **read-only front door** to one designated peer. When set, the engine offers the profile **only the `peer` and `decline` tools** and hard-gates every turn: the agent MUST consult that pinned peer via `peer` before it can produce a final answer — a call to any other peer id is rejected before it runs, an empty reply does not count, and if the turn ends (or hits the step/time limit) without a valid reply it fails closed with a fixed message rather than answer from the model's own knowledge. The peer's reply is surfaced as the answer. A request the relay must not forward (a change, an action, something out of scope) can be refused with `decline(reason)`: the reason, written in the user's language, becomes the answer and the peer is never consulted; an empty reason does not count, and everything else still has to go through the peer. So you only pin that peer in `peers.yaml` with `link.ask` — no separate `tools.deny` needed.
 
-This makes the **relay side** read-only, structurally. It does **not** make the target agent immutable: an inbound `link.ask` runs a full turn on the target with the target's own tools, so keeping the knowledge source unwritable is the target profile's responsibility — deny its mutating tools there, and restrict which paired devices may address it via a member connection's `profile_scope` (see *Host* below). The relay does not police the peer.
+This makes the **relay side** read-only, structurally. It does **not** make the target agent immutable: an inbound `link.ask` runs a full turn on the target with the target's own tools, so keeping the knowledge source unwritable is the target profile's responsibility — deny its mutating tools there for everyone with `tools.deny`, or for that relay alone with a `tools.deny` list on the relay's record in the target's `peers.yaml` ([ALP.md → Per-peer tool policy](ALP.md#per-peer-tool-policy)), and restrict which paired devices may address it via a member connection's `profile_scope` (see *Host* below). The relay does not police the peer; the target polices the relay.
 
 | Key | Default | Notes |
 |---|---|---|

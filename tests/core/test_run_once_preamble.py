@@ -316,3 +316,46 @@ def test_run_once_prints_attachment_listing_without_text(tmp_home: Path, monkeyp
     output = buf.getvalue().strip()
     assert output.startswith("Attachments:")
     assert "image/jpeg hero.jpg /p/out/hero.jpg" in output
+
+
+def test_once_mention_reply_tells_the_user_when_the_peer_shares_history(
+    tmp_home: Path, monkeypatch,
+) -> None:
+    import json
+
+    from alpi.alp import mention as alp_mention
+    from alpi.alp.mention import Mention, Result
+
+    monkeypatch.setattr(_cli_mod, "_bootstrap", lambda _h: None)
+    monkeypatch.setattr(
+        "alpi.config.load",
+        lambda _h: Config(home=tmp_home, model="stub", raw={}),
+    )
+    monkeypatch.setattr("alpi.engine.Engine.save_session", lambda self: None)
+    monkeypatch.setattr("alpi.engine._maybe_load_mcps", lambda _cfg: [])
+    monkeypatch.setattr("alpi.engine.Engine._build_system_prompt", lambda self: "stub")
+    monkeypatch.setattr("alpi.ctx_window.resolve", lambda _h, _c, _m: 200_000)
+    monkeypatch.setattr("alpi.ledger.check", lambda *a, **kw: None)
+    monkeypatch.setattr("alpi.ledger.record", lambda *a, **kw: None)
+    monkeypatch.delenv("ALPI_WORKGROUP_DISPATCH", raising=False)
+    monkeypatch.setattr(
+        "alpi.alp.mention.parse", lambda *a, **k: Mention("bob", "ping"),
+    )
+    seen: dict = {}
+
+    async def fake_execute(*args, **kwargs):
+        seen["kwargs"] = kwargs
+        return Result(ok=True, reply="pong", history="peer", history_shared=True)
+
+    monkeypatch.setattr("alpi.alp.mention.execute", fake_execute)
+
+    buf = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", buf)
+    _cli_mod._run_once(
+        tmp_home, "@bob ping", emit_events=True, persist=False,
+    )
+
+    events = [json.loads(line) for line in buf.getvalue().splitlines()]
+    reply = next(event for event in events if event.get("kind") == "reply")
+    assert reply["text"] == f"pong\n\n{alp_mention.shared_history_note('bob')}"
+    assert isinstance(seen["kwargs"].get("source_session"), str) and seen["kwargs"]["source_session"]

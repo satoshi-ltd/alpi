@@ -147,6 +147,12 @@ before any `id`-based routing occurs.
     - link.cancel
   rate_limit:
     per_minute: 30
+  tools:
+    deny:                              # what this peer's link.ask turns may never run here
+      - write_file
+      - edit_file
+      - delete_file
+      - terminal
 ```
 
 | Field | Required | Meaning |
@@ -157,6 +163,7 @@ before any `id`-based routing occurs.
 | `address` | for inter-machine | `host:port`, opaque to ALP — resolved by the OS at dial time. Any reachable host works: a LAN IP, a private hostname, a Docker/compose DNS name, a VPN / Tailscale / WireGuard address, or a public IP. ALP does no discovery, NAT traversal, or relay — you supply the address. Omit for intra-profile peers (the local Unix socket is resolved by `pubkey`). |
 | `allow` | yes | Fail-closed list of methods the peer may invoke. `workgroup.*` methods bypass this list — workgroup membership (enforced per-handler with `-32008 workgroup-not-member`) is the real gate. |
 | `rate_limit.per_minute` | no | Throttle. Default `60` requests/min/peer, enforced before handler dispatch; over-cap requests get JSON-RPC `-32005`. It governs ordinary calls only: a held `workgroup.pull` and the chunk streams of the blob and file verbs run on their own fixed, much higher budget, so a long transfer cannot be starved by a tight per-peer limit. |
+| `tools.deny` | no | Tool names or `*` patterns an inbound `link.ask` from this peer may never run on this profile. See *Per-peer tool policy* below. |
 
 Spending is not configured here. Every inbound call from every peer
 draws from the same daily ledger that interactive turns, scheduled
@@ -172,6 +179,67 @@ sub-caps are deliberately absent — capabilities and rate limits are
 the trust lever. Budget pressure at the profile level has a useful
 secondary effect: a tight cap forces callers to be concise, which
 keeps inter-peer traffic goal-directed instead of chatty.
+
+### Per-peer tool policy
+
+`allow` decides which ALP methods a peer may call; it says nothing about
+what the target agent may *do* once `link.ask` runs a turn with the
+profile's own tools. `tools.deny` on a peer record closes that gap: every
+tool it names — exact names or `*` patterns such as `github__*` for a whole
+MCP server — is removed from what that peer's turns can see and refused if
+the model calls it anyway, in both transport paths and in nested execution
+(sub-agents from `delegate`, `workflow` steps, parallel calls). The policy
+is bound to the authenticated peer and the individual turn: it never edits
+the profile's `tools.deny`, two peers with different policies cannot affect
+one another, and local chat is untouched. A peer without `tools` keeps
+today's behaviour. Set it with `alpi peers add --deny-tools …`, `alpi peers
+tools <id> --deny …`, or the setup wizard when pinning.
+
+A policy only narrows: it is combined with the profile's `tools.deny`, so a
+peer can never reach a tool the profile itself denies. It is a denylist, so
+a tool added later is allowed until you deny it, and it stops at this
+profile's tool boundary: `terminal` can write anything, an executable skill
+can run scripts, a `schedule` job runs later with the profile's full tools,
+`peer` can ask another agent to act, and an MCP server does whatever its
+tools do. A policy meant to keep a relay's users read-only therefore has to
+deny all of them:
+
+```yaml
+- id: alexandra
+  pubkey: <base64>
+  allow: [link.ping, link.ask]
+  tools:
+    deny:
+      - write_file
+      - edit_file
+      - delete_file
+      - terminal
+      - skill
+      - schedule
+      - memory
+      - db
+      - knowledge
+      - email
+      - notify
+      - attach_file
+      - browser
+      - workgroup_post
+      - workgroup_file
+      - peer
+      - github__*        # one line per MCP server this profile mounts
+```
+
+Reading tools (`read_file`, `search`, `recall`, `session_search`, `research`,
+the web tools) stay available, and `delegate` may stay too because a
+sub-agent inherits the same policy. Anything not on the list runs.
+
+A `tools` block that is present but malformed — not a mapping, a `deny` that
+is not a list, a key other than `deny`, an entry that is not a tool name or
+`*` pattern — is a configuration error, not an empty policy: every
+`link.ask` from that peer is refused with `-32013 peer-policy-invalid` and
+the detail names the problem, until the record is fixed. `alpi peers list`,
+`alpi peers tools <id>` and the setup detail show the same diagnostic. Only
+an absent `tools` key means "no policy".
 
 Workgroups (the multi-party extension below) carry a separate,
 optional **lifetime** budget that double-gates `workgroup.post` on
@@ -362,6 +430,7 @@ the human alias the responder advertises for itself.
 params:
   prompt: string
   stream?: bool
+  conversation?: string         # opaque id of the caller's conversation, [A-Za-z0-9_-]{1,64}
   budget?:
     tokens?: int
     usd?: float
@@ -373,6 +442,7 @@ result:                         # when stream is false (default)
   cost: float                   # USD; matches the per-turn ledger entry
   interrupted: bool             # true when link.cancel landed mid-turn
   transient: bool               # true when failure is safe to retry
+  history: string               # "conversation" | "peer" | "none" — which @-mention thread was used
 ```
 
 Runs a **full agent turn** on the target profile with `prompt`
@@ -426,13 +496,28 @@ agent's own judgement instead of exposing them over the wire.
 turn. It is fresh on every call — the receiving side spins up a
 new `Engine` (and a new `Session`) per turn, so `link.ask` is
 **stateless at the session level**. Memory across successive
-mentions from the same origin is provided by a separate
-per-sender thread at `<target-home>/mentions/<from-id>.json`,
-capped at the most recent 20 turns and hydrated into the engine
-prompt before the turn runs. That thread is invisible to the
-target's local `--continue` (which only reads `sessions/`) and
-isolated per sender, so two different origins never see each
-other's context. See `alpi/alp/mention_thread.py`.
+mentions from the same origin is provided by a separate thread at
+`<target-home>/mentions/<from-id>@<conversation>.json`, capped at
+the most recent 20 turns and hydrated into the engine prompt
+before the turn runs. `conversation` is an opaque, stable
+identifier the caller derives from its own source session (Alpi
+hashes the session id; it is never a model-written argument), so
+repeated asks from one conversation keep their context and a new
+conversation starts clean. The thread is keyed by the
+authenticated sender **and** the conversation together: the same
+`conversation` value sent by another peer selects nothing. A
+request that carries `conversation` but cannot establish one
+(empty, malformed, too long) runs with no history and writes
+none. A request without the key comes from a caller that predates
+the identity and keeps the legacy per-sender thread
+`mentions/<from-id>.json`; that file is never imported into a
+conversation thread and never deleted by this change. `history`
+in the result names which of the three applied. An Alpi caller
+that sent a `conversation` and did not get `history:
+"conversation"` back knows the target predates isolation: the
+`peer` tool says so in its output and the sender logs a warning.
+Every thread is invisible to the target's local `--continue`
+(which only reads `sessions/`). See `alpi/alp/mention_thread.py`.
 
 The call is rejected under any of:
 
@@ -538,6 +623,7 @@ reserved space:
 | `-32010` | `workgroup-paused` | Workgroup is paused; `post` rejected. `pull` / `join` / `leave` still work. |
 | `-32011` | `file-not-found` | Requested workgroup file is absent. |
 | `-32012` | `blob-not-found` / `file-quota-exceeded` | Generic link blob absent, or a workgroup file upload would exceed its 200 MiB store. Distinguish via `message`. |
+| `-32013` | `peer-policy-invalid` | The caller's record in the target's `peers.yaml` has a malformed `tools` block; `data.detail` names the problem. The target refuses every `link.ask` from that peer until the record is fixed. |
 
 The standard JSON-RPC codes (`-32600` through `-32603`) retain
 their standard meaning and apply to malformed requests, unknown

@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.15.18 — 2026-09-24 — conversations kept apart, relays that can say no, peers that keep their limits
+
+- **Asking a peer no longer mixes conversations.** The context a peer keeps for your follow-up
+  questions is now scoped to the conversation the question came from: a new conversation starts
+  clean, follow-ups in the same conversation still remember earlier turns, and two profiles can
+  never share a context by using the same conversation name. Before, every conversation routed
+  through the same profile fed one shared history on the peer, so an answer could reuse material
+  from an unrelated conversation.
+- A peer running an older version still answers, and the reply says its history is shared, so the
+  isolation is never assumed. Existing history files are kept untouched; they are not copied into
+  the new per-conversation context.
+- **A relay can decline a request without bothering its peer.** A relay profile now has a
+  `decline` tool beside `peer`: when a request asks for something it must not forward, such as a
+  change or an action, it answers with a short refusal in the user's language instead of
+  consulting the peer or inventing an answer. Once a request is declined nothing else runs in
+  that turn, a request already forwarded to the peer cannot be declined afterwards, and an empty
+  refusal does not count. Every other request still has to go through the peer.
+- **A profile can limit what each peer may do on it.** A peer record in `peers.yaml` takes a
+  `tools.deny` list, set with `alpi peers add --deny-tools`, `alpi peers tools <id> --deny`, or
+  the setup wizard. Denied tools disappear from what that peer's turns can see and are refused if
+  called anyway, including inside sub-agents, research helpers, workflow steps and parallel calls,
+  and a pattern such as `github__*` covers a whole MCP server. A policy only narrows the profile's
+  own tool limits and applies to that peer's turns alone; peers without one keep today's
+  behaviour, and a peer whose policy is written wrong is refused with a clear error rather than
+  served without limits.
+
 ## v0.15.17 — 2026-09-24 — a paired device can delete its own chats
 
 - **A member device can now delete the conversations it started.** Deleting a chat used to need

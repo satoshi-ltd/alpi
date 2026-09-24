@@ -72,6 +72,7 @@ class MentionDone(Message):
         peer_id: str = "",
         prompt: str = "",
         started: float = 0.0,
+        bubble: "AssistantMessage | None" = None,
     ) -> None:
         super().__init__()
         self.card = card
@@ -81,6 +82,7 @@ class MentionDone(Message):
         self.prompt = prompt
         self.started = started
         self.reply = reply
+        self.bubble = bubble
 
 
 def _copy_to_os_clipboard(text: str) -> str:
@@ -536,8 +538,10 @@ class AlpiApp(App):
             parts: list[str] = []
             ok = True
             error_text = ""
-            final_text = ""
-            async for frame in alp_mention.execute_stream(self.home, peer_id, prompt):
+            final_payload: dict = {}
+            async for frame in alp_mention.execute_stream(
+                self.home, peer_id, prompt, source_session=self.engine.session.id,
+            ):
                 kind = frame.get("kind")
                 if kind == "chunk":
                     delta = str(frame.get("text") or "")
@@ -545,25 +549,25 @@ class AlpiApp(App):
                         parts.append(delta)
                         self.post_message(MentionChunk(asst, delta))
                 elif kind == "final":
-                    final_text = str(frame.get("text") or "")
+                    final_payload = frame
                 elif kind == "error":
                     ok = False
                     error_text = str(frame.get("text") or "unknown")
                     break
-            reply = final_text.strip() or "".join(parts).strip()
+            reply = alp_mention.reply_text(peer_id, final_payload, parts)
             return ok, reply, error_text
 
         ok, reply, error_text = asyncio.run(consume())
         if not ok:
             self.post_message(MentionDone(
                 card, ok=False, output=error_text, reply="",
-                peer_id=peer_id, prompt=prompt, started=started,
+                peer_id=peer_id, prompt=prompt, started=started, bubble=asst,
             ))
             return
         summary = (f"{reply[:60]}…" if len(reply) > 60 else reply) or "(empty reply)"
         self.post_message(MentionDone(
             card, ok=True, output=summary, reply=reply,
-            peer_id=peer_id, prompt=prompt, started=started,
+            peer_id=peer_id, prompt=prompt, started=started, bubble=asst,
         ))
 
     def on_mention_chunk(self, message: MentionChunk) -> None:
@@ -571,6 +575,8 @@ class AlpiApp(App):
 
     def on_mention_done(self, message: MentionDone) -> None:
         message.card.finish(message.output, ok=message.ok)
+        if message.ok and message.reply and message.bubble is not None:
+            message.bubble.replace(message.reply)
         if not message.ok or not message.reply or not message.peer_id:
             return
         # Mirror cli.py:224-239 — session write makes the host watcher fire.
