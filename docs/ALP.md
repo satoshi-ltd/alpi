@@ -148,11 +148,9 @@ before any `id`-based routing occurs.
   rate_limit:
     per_minute: 30
   tools:
-    deny:                              # what this peer's link.ask turns may never run here
-      - write_file
-      - edit_file
-      - delete_file
-      - terminal
+    allow:                             # the only tools this peer's link.ask turns may run here
+      - knowledge:search
+      - read_file
 ```
 
 | Field | Required | Meaning |
@@ -163,7 +161,7 @@ before any `id`-based routing occurs.
 | `address` | for inter-machine | `host:port`, opaque to ALP — resolved by the OS at dial time. Any reachable host works: a LAN IP, a private hostname, a Docker/compose DNS name, a VPN / Tailscale / WireGuard address, or a public IP. ALP does no discovery, NAT traversal, or relay — you supply the address. Omit for intra-profile peers (the local Unix socket is resolved by `pubkey`). |
 | `allow` | yes | Fail-closed list of methods the peer may invoke. `workgroup.*` methods bypass this list — workgroup membership (enforced per-handler with `-32008 workgroup-not-member`) is the real gate. |
 | `rate_limit.per_minute` | no | Throttle. Default `60` requests/min/peer, enforced before handler dispatch; over-cap requests get JSON-RPC `-32005`. It governs ordinary calls only: a held `workgroup.pull` and the chunk streams of the blob and file verbs run on their own fixed, much higher budget, so a long transfer cannot be starved by a tight per-peer limit. |
-| `tools.deny` | no | Tool names or `*` patterns an inbound `link.ask` from this peer may never run on this profile. See *Per-peer tool policy* below. |
+| `tools.allow` | no | The only tools an inbound `link.ask` from this peer may run on this profile: names, `*` patterns or `tool:action`. See *Per-peer tool policy* below. |
 
 Spending is not configured here. Every inbound call from every peer
 draws from the same daily ledger that interactive turns, scheduled
@@ -184,66 +182,61 @@ keeps inter-peer traffic goal-directed instead of chatty.
 
 `allow` decides which ALP methods a peer may call; it says nothing about
 what the target agent may *do* once `link.ask` runs a turn with the
-profile's own tools. `tools.deny` on a peer record closes that gap: every
-tool it names — exact names or `*` patterns such as `github__*` for a whole
-MCP server — is removed from what that peer's turns can see and refused if
-the model calls it anyway, in both transport paths and in nested execution
-(sub-agents from `delegate`, `workflow` steps, parallel calls). The policy
-is bound to the authenticated peer and the individual turn: it never edits
-the profile's `tools.deny`, two peers with different policies cannot affect
-one another, and local chat is untouched. A peer without `tools` keeps
-today's behaviour. Set it with `alpi peers add --deny-tools …`, `alpi peers
-tools <id> --deny …`, or the setup wizard when pinning.
+profile's own tools. `tools.allow` on a peer record closes that gap: it
+lists the only tools that peer's turns may run on this profile, and every
+other tool is removed from what the model sees and refused if called
+anyway, in both transport paths and in nested execution (sub-agents from
+`delegate`, `research` helpers, `workflow` steps, parallel calls). A tool
+added later, a skill runner or a new MCP server is refused until you list it.
 
-A policy only narrows: it is combined with the profile's `tools.deny`, so a
-peer can never reach a tool the profile itself denies. It is a denylist, so
-a tool added later is allowed until you deny it, and it stops at this
-profile's tool boundary: `terminal` can write anything, an executable skill
-can run scripts, a `schedule` job runs later with the profile's full tools,
-`peer` can ask another agent to act, and an MCP server does whatever its
-tools do. A policy meant to keep a relay's users read-only therefore has to
-deny all of them:
+An entry is one of:
+
+- a tool name: `alpi_knowledge`;
+- a `*` pattern: `github__get_*` for part of an MCP server;
+- `tool:action` for a single action of a tool that declares an `action`
+  argument: `knowledge:search` allows the knowledge search and refuses
+  `ingest` and `maintain`. The model sees `action` as required, limited to
+  the allowed actions, and a call with any other action, or none, is
+  refused. On a tool that declares no `action` argument such an entry
+  allows nothing.
+
+A read-only knowledge relay needs nothing else:
 
 ```yaml
 - id: alexandra
   pubkey: <base64>
   allow: [link.ping, link.ask]
   tools:
-    deny:
-      - write_file
-      - edit_file
-      - delete_file
-      - terminal
-      - skill
-      - schedule
-      - memory
-      - db
-      - knowledge
-      - email
-      - notify
-      - attach_file
-      - browser
-      - workgroup_post
-      - workgroup_file
-      - peer
-      - github__*        # one line per MCP server this profile mounts
+    allow:
+      - knowledge:search
+      - alpi_knowledge
 ```
 
-Reading tools (`read_file`, `search`, `recall`, `session_search`, `research`,
-the web tools) stay available, and `delegate` may stay too because a
-sub-agent inherits the same policy. Anything not on the list runs.
+List only what the peer needs. `read_file`, `search` and the session tools
+(`session_search`, `session_read`, `recall_sessions`) read the profile's own
+stores too, where `sessions/`, `mentions/`, `runs/` and `logs/` hold every
+other conversation, so allowing them lets that peer read those.
 
-A `tools` block that is present but malformed — not a mapping, a `deny` that
-is not a list, a key other than `deny`, an entry that is not a tool name or
-`*` pattern — is a configuration error, not an empty policy: every
-`link.ask` from that peer is refused with `-32013 peer-policy-invalid` and
-the detail names the problem, until the record is fixed. `alpi peers list`,
-`alpi peers tools <id>` and the setup detail show the same diagnostic. Only
-an absent `tools` key means "no policy".
+The policy is bound to the authenticated peer and the individual turn: two
+peers with different policies cannot affect one another, and local chat is
+untouched. It only narrows: the profile's own `tools.deny` still applies, so
+a peer can never reach a tool the profile itself denies. A peer without
+`tools` keeps today's behaviour, the profile's full tool set. `allow: []`
+lets the peer run no tool at all. Set it with `alpi peers add --allow-tools …`,
+`alpi peers tools <id> --allow …` (`--clear` removes it), or the setup
+wizard when pinning. An empty value, on the command line or in the wizard
+once you choose to limit the tools, allows no tool; only leaving the policy
+out gives the full tool set.
 
-Workgroups (the multi-party extension below) carry a separate,
-optional **lifetime** budget that double-gates `workgroup.post` on
-top of this daily profile cap. See *Workgroups → Budget*.
+A `tools` block that is present but malformed — not a mapping, an `allow`
+that is not a list, a key other than `allow`, an entry that is not a tool
+name, `*` pattern or `tool:action` — is a configuration error, not an empty
+policy: every `link.ask` from that peer is refused with `-32013
+peer-policy-invalid` and the detail names the problem, until the record is
+fixed. That includes a `tools.deny` list written by alpi 0.15.18, which
+`alpi peers tools <id> --allow …` replaces. `alpi peers list`, `alpi peers
+tools <id>` and the setup detail show the same diagnostic. Only an absent
+`tools` key means "no policy".
 
 ### Pending invites
 

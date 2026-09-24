@@ -75,23 +75,28 @@ class Peer:
     rate_limit: dict[str, Any] = field(default_factory=dict)
     tools: Any = field(default_factory=dict)
 
-    def denied_tools(self) -> frozenset[str]:
-        # Absent or empty = no policy (legacy peers). Present but malformed raises: the handler refuses the turn instead of running it unrestricted.
+    def allowed_tools(self) -> frozenset[str] | None:
+        # Absent = no policy (None). Present but malformed raises: the handler refuses the turn instead of running it unrestricted.
         raw = self.tools
-        if raw is None or raw == {}:
-            return frozenset()
+        if raw == {}:
+            return None
         if not isinstance(raw, dict):
             raise PolicyError(
-                f"peer {self.id!r}: `tools` must be a mapping with a `deny` list, "
+                f"peer {self.id!r}: `tools` must be a mapping with an `allow` list, "
                 f"got {type(raw).__name__}",
             )
-        unknown = sorted(str(k) for k in raw if k != "deny")
+        if "deny" in raw:
+            raise PolicyError(
+                f"peer {self.id!r}: `tools.deny` is no longer supported; list the tools "
+                "this peer may run under `tools.allow`",
+            )
+        unknown = sorted(str(k) for k in raw if k != "allow")
         if unknown:
             raise PolicyError(
                 f"peer {self.id!r}: unknown key(s) under `tools`: {', '.join(unknown)} "
-                "(only `deny` is supported)",
+                "(only `allow` is supported)",
             )
-        return frozenset(validate_deny_entries(raw.get("deny"), peer_id=self.id))
+        return frozenset(validate_allow_entries(raw.get("allow"), peer_id=self.id))
 
     def may_call(self, method: str) -> bool:
         """Capability check — empty allow list denies everything.
@@ -108,21 +113,21 @@ class PolicyError(ValueError):
     pass
 
 
-_TOOL_ENTRY = re.compile(r"[A-Za-z0-9_.*-]+")
+_TOOL_ENTRY = re.compile(r"[A-Za-z0-9_.*-]+(?::[A-Za-z0-9_.-]+)?")
 
 
-def validate_deny_entries(deny: Any, *, peer_id: str = "") -> list[str]:
+def validate_allow_entries(allow: Any, *, peer_id: str = "") -> list[str]:
     who = f"peer {peer_id!r}: " if peer_id else ""
-    if not isinstance(deny, list):
+    if not isinstance(allow, list):
         raise PolicyError(
-            f"{who}`tools.deny` must be a list of tool names, got {type(deny).__name__}",
+            f"{who}`tools.allow` must be a list of tool names, got {type(allow).__name__}",
         )
     names: list[str] = []
-    for item in deny:
+    for item in allow:
         name = item.strip() if isinstance(item, str) else ""
         if not name or not _TOOL_ENTRY.fullmatch(name):
             raise PolicyError(
-                f"{who}`tools.deny` entry {item!r} is not a tool name or `*` pattern",
+                f"{who}`tools.allow` entry {item!r} is not a tool name, `*` pattern or `tool:action`",
             )
         if name not in names:
             names.append(name)
@@ -179,8 +184,7 @@ def save_unsafe(home: Path, peers: list[Peer]) -> None:
             entry.pop("budget", None)
         if not entry.get("rate_limit"):
             entry.pop("rate_limit", None)
-        tools = entry.get("tools")
-        if tools is None or tools == {} or tools == {"deny": []}:
+        if entry.get("tools") == {}:
             entry.pop("tools", None)
     atomic_write_yaml(p, data)
 
@@ -215,15 +219,21 @@ def add(home: Path, peer: Peer) -> None:
     update(home, _mutate)
 
 
-def set_denied_tools(home: Path, peer_id: str, deny: list[str]) -> bool:
-    names = validate_deny_entries(deny, peer_id=peer_id)
+def parse_allow_arg(raw: str | None, *, peer_id: str = "") -> list[str] | None:
+    if raw is None:
+        return None
+    return validate_allow_entries([m.strip() for m in raw.split(",") if m.strip()], peer_id=peer_id)
+
+
+def set_allowed_tools(home: Path, peer_id: str, allow: list[str] | None) -> bool:
+    names = None if allow is None else validate_allow_entries(allow, peer_id=peer_id)
     found = [False]
 
     def _mutate(peers: list[Peer]) -> list[Peer] | None:
         for p in peers:
             if p.id == peer_id:
                 found[0] = True
-                p.tools = {"deny": names} if names else {}
+                p.tools = {} if names is None else {"allow": names}
                 return peers
         return None
     update(home, _mutate)

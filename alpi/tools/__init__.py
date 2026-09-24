@@ -94,8 +94,11 @@ def schemas(deny: frozenset[str] | set[str] | None = None) -> list[dict]:
     # Wire order is part of the provider's cache prefix — sort so registry/MCP insertion order can never invalidate it.
     schemas = sorted(
         (
-            cls.schema() for cls in _current_tools().values()
-            if is_available(cls)[0] and not _policy.is_denied(cls.name, deny)
+            schema for schema in (
+                _policy.allowed_schema(cls.schema()) for cls in _current_tools().values()
+                if is_available(cls)[0] and not _policy.is_denied(cls.name, deny)
+            )
+            if schema is not None
         ),
         key=_schema_sort_key,
     )
@@ -147,11 +150,13 @@ def _execute_registered(
             error=f"unknown tool: {name}. Available tools: {available}",
         )
     if deny and _policy.is_denied(name, deny):
-        reason = (deny_reasons or {}).get(name) or _policy.reason_for(name)
+        reason = (deny_reasons or {}).get(name)
         return ToolResult(
             ok=False, output="",
             error=reason or f"tool denied for this profile: {name} (see tools.deny in config.yaml)",
         )
+    if _policy.allowed() is not None and not _policy.permits(cls.schema(), arguments):
+        return ToolResult(ok=False, output="", error=_policy.refusal(name, arguments))
     member_refusal = _member_mutation_refusal(name, arguments)
     if member_refusal is not None:
         return member_refusal

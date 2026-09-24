@@ -332,8 +332,11 @@ def _inspect(
         ui._console.print(f"  address  {peer.address}")
     ui._console.print(f"  allow    {', '.join(peer.allow) or '(none)'}")
     try:
-        denied = sorted(peer.denied_tools())
-        policy = "deny: " + ", ".join(denied) if denied else "profile tools (no policy)"
+        allowed = peer.allowed_tools()
+        if allowed is None:
+            policy = "profile tools (no policy)"
+        else:
+            policy = "allow: " + (", ".join(sorted(allowed)) or "(none)")
     except peers_mod.PolicyError as e:
         policy = f"INVALID — {e} — link.ask from this peer is refused until fixed"
     ui._console.print(f"  tools    {policy}")
@@ -418,15 +421,16 @@ def _add(home: Path) -> None:
         return
 
     allow = _pick_capabilities()
-    deny_raw = ui.text(
-        "Tools this peer may never run here (comma-separated names or `*` patterns, ENTER for none):",
-    ) or ""
-    denied = [m.strip() for m in deny_raw.split(",") if m.strip()]
-    try:
-        denied = peers_mod.validate_deny_entries(denied, peer_id=peer_id) if denied else []
-    except peers_mod.PolicyError as e:
-        ui.fail_and_wait(str(e))
-        return
+    allowed: list[str] | None = None
+    if ui.confirm("Limit the tools this peer may run here?", default=False):
+        allow_raw = ui.text(
+            "The only tools it may run (comma-separated names, `*` patterns or tool:action; ENTER for none):",
+        ) or ""
+        try:
+            allowed = peers_mod.parse_allow_arg(allow_raw, peer_id=peer_id)
+        except peers_mod.PolicyError as e:
+            ui.fail_and_wait(str(e))
+            return
     alias = ui.text("Alias (optional display label, ENTER to skip):") or ""
 
     peer = Peer(
@@ -435,7 +439,7 @@ def _add(home: Path) -> None:
         alias=alias.strip(),
         address=address,
         allow=allow,
-        tools={"deny": denied} if denied else {},
+        tools={} if allowed is None else {"allow": allowed},
     )
     try:
         peers_mod.add(home, peer)

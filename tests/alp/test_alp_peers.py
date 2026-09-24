@@ -205,31 +205,39 @@ def test_local_socket_path_when_alpi_home_is_a_profile(
 def test_tool_policy_round_trips_and_normalises(tmp_path: Path) -> None:
     p = Peer(
         id="alexandra", pubkey="AAA=", allow=["link.ask"],
-        tools={"deny": [" write_file ", "write_file", "github__*"]},
+        tools={"allow": [" knowledge:search ", "knowledge:search", "github__*", "alpi_knowledge"]},
     )
     peers_mod.save(tmp_path, [p])
 
     loaded = peers_mod.load(tmp_path)[0]
-    assert loaded.tools == {"deny": [" write_file ", "write_file", "github__*"]}
-    assert loaded.denied_tools() == frozenset({"write_file", "github__*"})
+    assert loaded.tools == {"allow": [" knowledge:search ", "knowledge:search", "github__*", "alpi_knowledge"]}
+    assert loaded.allowed_tools() == frozenset({"knowledge:search", "github__*", "alpi_knowledge"})
     assert "tools:" in peers_mod.path(tmp_path).read_text()
 
 
 def test_peers_without_a_tool_policy_save_no_tools_key(tmp_path: Path) -> None:
     peers_mod.save(tmp_path, [Peer(id="x", pubkey="AAA=", allow=["link.ping"])])
     assert "tools" not in peers_mod.path(tmp_path).read_text()
-    assert peers_mod.load(tmp_path)[0].denied_tools() == frozenset()
+    assert peers_mod.load(tmp_path)[0].allowed_tools() is None
 
 
 @pytest.mark.parametrize("tools_yaml", [
     "tools: terminal",
     "tools: false",
-    "tools:\n    deny: terminal",
-    "tools:\n    deny:\n      a: b",
-    "tools:\n    deny:",
-    "tools:\n    denny: [terminal]",
-    "tools:\n    deny: [terminal, 'bad name!']",
-    "tools:\n    deny: [terminal, 7]",
+    "tools:",
+    "tools:\n    allow: terminal",
+    "tools:\n    allow:\n      a: b",
+    "tools:\n    allow:",
+    "tools:\n    alow: [read_file]",
+    "tools:\n    allow: [read_file, 'bad name!']",
+    "tools:\n    allow: [read_file, 7]",
+    "tools:\n    allow: ['knowledge:']",
+    "tools:\n    allow: ['knowledge:search:x']",
+    "tools:\n    allow: ['knowledge:sea*']",
+    "tools:\n    allow:\n      - knowledge: search",
+    "tools:\n    deny: [terminal]",
+    "tools:\n    deny: []",
+    "tools:\n    allow: [read_file]\n    deny: [terminal]",
 ])
 def test_a_malformed_tool_policy_is_an_error_not_an_empty_policy(tmp_path: Path, tools_yaml: str) -> None:
     peers_mod.path(tmp_path).parent.mkdir(parents=True, exist_ok=True)
@@ -238,75 +246,157 @@ def test_a_malformed_tool_policy_is_an_error_not_an_empty_policy(tmp_path: Path,
     )
     loaded = peers_mod.load(tmp_path)[0]
     with pytest.raises(peers_mod.PolicyError) as err:
-        loaded.denied_tools()
+        loaded.allowed_tools()
     assert "peer 'a'" in str(err.value)
 
 
-def test_absent_or_empty_tool_policy_means_no_policy(tmp_path: Path) -> None:
+def test_a_deny_list_from_0_15_18_says_what_replaced_it(tmp_path: Path) -> None:
+    p = Peer(id="a", pubkey="AAA=", allow=["link.ask"], tools={"deny": ["write_file"]})
+    with pytest.raises(peers_mod.PolicyError) as err:
+        p.allowed_tools()
+    assert "tools.allow" in str(err.value)
+
+
+def test_absent_policy_means_no_policy_and_an_empty_allow_means_no_tool(tmp_path: Path) -> None:
     peers_mod.path(tmp_path).parent.mkdir(parents=True, exist_ok=True)
     peers_mod.path(tmp_path).write_text(
         "- id: a\n  pubkey: AAA=\n  allow: [link.ask]\n"
         "- id: b\n  pubkey: BBB=\n  allow: [link.ask]\n  tools: {}\n"
-        "- id: c\n  pubkey: CCC=\n  allow: [link.ask]\n  tools:\n    deny: []\n",
+        "- id: c\n  pubkey: CCC=\n  allow: [link.ask]\n  tools:\n    allow: []\n",
     )
-    assert [p.denied_tools() for p in peers_mod.load(tmp_path)] == [frozenset()] * 3
+    assert [p.allowed_tools() for p in peers_mod.load(tmp_path)] == [None, None, frozenset()]
 
 
 def test_saving_keeps_a_malformed_policy_so_the_diagnostic_survives(tmp_path: Path) -> None:
     peers_mod.path(tmp_path).parent.mkdir(parents=True, exist_ok=True)
     peers_mod.path(tmp_path).write_text(
         "- id: a\n  pubkey: AAA=\n  allow: [link.ask]\n  tools: terminal\n"
+        "- id: n\n  pubkey: NNN=\n  allow: [link.ask]\n  tools:\n"
         "- id: b\n  pubkey: BBB=\n  allow: [link.ask]\n",
     )
     assert peers_mod.remove(tmp_path, "b") is True
-    with pytest.raises(peers_mod.PolicyError):
-        peers_mod.load(tmp_path)[0].denied_tools()
+    for peer_id in ("a", "n"):
+        with pytest.raises(peers_mod.PolicyError):
+            peers_mod.get_by_id(tmp_path, peer_id).allowed_tools()
 
 
-def test_set_denied_tools_rejects_entries_that_are_not_tool_names(tmp_path: Path) -> None:
+def test_set_allowed_tools_rejects_entries_that_are_not_tool_names(tmp_path: Path) -> None:
     peers_mod.save(tmp_path, [Peer(id="a", pubkey="AAA=", allow=["link.ask"])])
     with pytest.raises(peers_mod.PolicyError):
-        peers_mod.set_denied_tools(tmp_path, "a", ["terminal", "rm -rf /"])
-    assert peers_mod.get_by_id(tmp_path, "a").denied_tools() == frozenset()
+        peers_mod.set_allowed_tools(tmp_path, "a", ["read_file", "rm -rf /"])
+    assert peers_mod.get_by_id(tmp_path, "a").allowed_tools() is None
 
 
-def test_set_denied_tools_updates_and_clears(tmp_path: Path) -> None:
+def test_set_allowed_tools_sets_empties_and_clears(tmp_path: Path) -> None:
     peers_mod.save(tmp_path, [Peer(id="a", pubkey="AAA=", allow=["link.ask"])])
 
-    assert peers_mod.set_denied_tools(tmp_path, "a", ["terminal", "write_file"]) is True
-    assert peers_mod.get_by_id(tmp_path, "a").denied_tools() == frozenset({"terminal", "write_file"})
-    assert peers_mod.set_denied_tools(tmp_path, "a", []) is True
-    assert peers_mod.get_by_id(tmp_path, "a").denied_tools() == frozenset()
+    assert peers_mod.set_allowed_tools(tmp_path, "a", ["knowledge:search", "alpi_knowledge"]) is True
+    assert peers_mod.get_by_id(tmp_path, "a").allowed_tools() == frozenset({"knowledge:search", "alpi_knowledge"})
+    assert peers_mod.set_allowed_tools(tmp_path, "a", []) is True
+    assert peers_mod.get_by_id(tmp_path, "a").allowed_tools() == frozenset()
+    assert "allow: []" in peers_mod.path(tmp_path).read_text()
+    assert peers_mod.set_allowed_tools(tmp_path, "a", None) is True
+    assert peers_mod.get_by_id(tmp_path, "a").allowed_tools() is None
     assert "tools" not in peers_mod.path(tmp_path).read_text()
-    assert peers_mod.set_denied_tools(tmp_path, "ghost", ["x"]) is False
+    assert peers_mod.set_allowed_tools(tmp_path, "ghost", ["x"]) is False
 
 
-def test_updating_another_peer_keeps_an_invalid_policy_with_an_empty_deny_invalid(tmp_path: Path) -> None:
+def test_setting_one_peers_policy_replaces_a_legacy_deny_and_keeps_the_others(tmp_path: Path) -> None:
     peers_mod.path(tmp_path).parent.mkdir(parents=True, exist_ok=True)
     peers_mod.path(tmp_path).write_text(
-        "- id: a\n  pubkey: AAA=\n  allow: [link.ask]\n  tools:\n    deny: []\n    denny: [terminal]\n"
-        "- id: b\n  pubkey: BBB=\n  allow: [link.ask]\n",
+        "- id: a\n  pubkey: AAA=\n  allow: [link.ask]\n  tools:\n    deny: [terminal]\n"
+        "- id: b\n  pubkey: BBB=\n  allow: [link.ask]\n  tools:\n    alow: [read_file]\n",
     )
-    with pytest.raises(peers_mod.PolicyError):
-        peers_mod.get_by_id(tmp_path, "a").denied_tools()
+    assert peers_mod.set_allowed_tools(tmp_path, "a", ["knowledge:search"]) is True
 
-    assert peers_mod.set_denied_tools(tmp_path, "b", ["terminal"]) is True
-
+    assert peers_mod.get_by_id(tmp_path, "a").allowed_tools() == frozenset({"knowledge:search"})
     with pytest.raises(peers_mod.PolicyError) as err:
-        peers_mod.get_by_id(tmp_path, "a").denied_tools()
-    assert "denny" in str(err.value)
-    assert peers_mod.get_by_id(tmp_path, "b").denied_tools() == frozenset({"terminal"})
-    assert "denny" in peers_mod.path(tmp_path).read_text()
+        peers_mod.get_by_id(tmp_path, "b").allowed_tools()
+    assert "alow" in str(err.value)
+    assert "alow" in peers_mod.path(tmp_path).read_text()
 
 
-def test_only_the_exact_empty_policy_is_trimmed_on_save(tmp_path: Path) -> None:
-    peers_mod.save(tmp_path, [
-        Peer(id="empty", pubkey="AAA=", allow=["link.ask"], tools={"deny": []}),
-        Peer(id="bare", pubkey="BBB=", allow=["link.ask"], tools={}),
-        Peer(id="kept", pubkey="CCC=", allow=["link.ask"], tools={"deny": ["terminal"]}),
-    ])
-    text = peers_mod.path(tmp_path).read_text()
-    assert text.count("tools:") == 1
-    assert [p.denied_tools() for p in peers_mod.load(tmp_path)] == [
-        frozenset(), frozenset(), frozenset({"terminal"}),
-    ]
+def test_peers_cli_sets_shows_empties_and_clears_the_allowlist(tmp_path: Path, monkeypatch) -> None:
+    import base64
+
+    from click.testing import CliRunner
+
+    from alpi import cli
+
+    monkeypatch.setenv("ALPI_HOME", str(tmp_path))
+    run = lambda *args: CliRunner().invoke(cli.main, ["peers", *args])  # noqa: E731
+    key = base64.b64encode(b"k" * 32).decode()
+
+    added = run("add", "alexandra", key, "--allow-tools", "knowledge:search, alpi_knowledge")
+    assert added.exit_code == 0, added.output
+    assert "may run only 2 tool(s)" in added.output
+    assert peers_mod.get_by_id(tmp_path, "alexandra").allowed_tools() == frozenset({"knowledge:search", "alpi_knowledge"})
+    assert "alpi_knowledge, knowledge:search" in run("tools", "alexandra").output
+    assert "knowledge:search" in run("list").output
+
+    assert "may run no tool" in run("tools", "alexandra", "--allow", "").output
+    assert peers_mod.get_by_id(tmp_path, "alexandra").allowed_tools() == frozenset()
+    assert "may run no tool" in run("tools", "alexandra", "--allow", " , ").output
+    assert peers_mod.get_by_id(tmp_path, "alexandra").allowed_tools() == frozenset()
+    assert "may run no tool" in run("tools", "alexandra").output
+
+    assert run("tools", "alexandra", "--allow", "x", "--clear").exit_code != 0
+    assert "cleared" in run("tools", "alexandra", "--clear").output
+    assert peers_mod.get_by_id(tmp_path, "alexandra").allowed_tools() is None
+    assert "no tool policy" in run("tools", "alexandra").output
+
+    bad = run("tools", "alexandra", "--allow", "rm -rf /")
+    assert bad.exit_code != 0 and "tools.allow" in bad.output
+    assert peers_mod.get_by_id(tmp_path, "alexandra").allowed_tools() is None
+
+
+@pytest.mark.parametrize("given, expected", [
+    (None, None),
+    ("", frozenset()),
+    ("   ", frozenset()),
+    (" , ,, ", frozenset()),
+    ("knowledge:search, ,alpi_knowledge", frozenset({"knowledge:search", "alpi_knowledge"})),
+])
+def test_peers_add_never_widens_access_for_an_explicitly_empty_allowlist(
+    tmp_path: Path, monkeypatch, given: str | None, expected: frozenset[str] | None,
+) -> None:
+    import base64
+
+    from click.testing import CliRunner
+
+    from alpi import cli
+
+    monkeypatch.setenv("ALPI_HOME", str(tmp_path))
+    args = ["peers", "add", "a", base64.b64encode(b"k" * 32).decode()]
+    if given is not None:
+        args += ["--allow-tools", given]
+    added = CliRunner().invoke(cli.main, args)
+
+    assert added.exit_code == 0, added.output
+    assert peers_mod.get_by_id(tmp_path, "a").allowed_tools() == expected
+    if expected == frozenset():
+        assert "may run no tool" in added.output
+    if expected is None:
+        assert "tool" not in added.output
+
+
+def test_parse_allow_arg_keeps_absent_apart_from_empty() -> None:
+    assert peers_mod.parse_allow_arg(None) is None
+    assert peers_mod.parse_allow_arg("") == []
+    assert peers_mod.parse_allow_arg(" , ") == []
+    assert peers_mod.parse_allow_arg("a, b:c ,a") == ["a", "b:c"]
+    with pytest.raises(peers_mod.PolicyError):
+        peers_mod.parse_allow_arg("a, b c")
+
+
+def test_peers_cli_reports_a_legacy_deny_list_as_invalid(tmp_path: Path, monkeypatch) -> None:
+    from click.testing import CliRunner
+
+    from alpi import cli
+
+    monkeypatch.setenv("ALPI_HOME", str(tmp_path))
+    peers_mod.save(tmp_path, [Peer(id="a", pubkey="AAA=", allow=["link.ask"], tools={"deny": ["terminal"]})])
+
+    shown = CliRunner().invoke(cli.main, ["peers", "tools", "a"])
+    assert shown.exit_code != 0 and "refused until fixed" in shown.output and "tools.allow" in shown.output
+    assert "INVALID" in CliRunner().invoke(cli.main, ["peers", "list"]).output

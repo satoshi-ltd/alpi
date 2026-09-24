@@ -499,31 +499,33 @@ async def test_link_ask_handler_resolves_the_conversation_from_params(monkeypatc
 
 
 def test_link_ask_binds_each_peers_tool_policy_to_its_own_turn(monkeypatch, tmp_path: Path) -> None:
+    from alpi import tools
     from alpi.tools import _policy
 
     home = tmp_path / "bob"
     home.mkdir()
-    seen: list[tuple[frozenset[str], str]] = []
+    seen: list[tuple[frozenset[str] | None, bool, str]] = []
 
     class PolicyEngine(_FakeEngine):
         def run_turn(self, prompt, emit, *, source="user", persist_inflight=True):
-            seen.append((_policy.denies(), _policy.reason_for("terminal")))
+            terminal = tools.get("terminal").schema()
+            seen.append((_policy.allowed(), _policy.permits(terminal), _policy.refusal("terminal")))
             super().run_turn(prompt, emit, source=source, persist_inflight=persist_inflight)
 
     monkeypatch.setattr(alp_handlers, "Engine", lambda *, home, cfg: PolicyEngine(home=home, cfg=cfg))
     active = alp_handlers._ActiveTurn()
 
     alp_handlers._run_turn(
-        home, "a", "alexandra", active, tool_deny=frozenset({"terminal", "write_file"}),
+        home, "a", "alexandra", active, tool_allow=frozenset({"knowledge:search"}),
     )
-    alp_handlers._run_turn(home, "b", "carol", active, tool_deny=frozenset({"email"}))
+    alp_handlers._run_turn(home, "b", "carol", active, tool_allow=frozenset({"terminal"}))
     alp_handlers._run_turn(home, "c", "dave", active)
 
-    assert seen[0][0] == frozenset({"terminal", "write_file"})
-    assert "peer 'alexandra'" in seen[0][1]
-    assert seen[1] == (frozenset({"email"}), "")
-    assert seen[2] == (frozenset(), "")
-    assert _policy.denies() == frozenset()
+    assert seen[0][:2] == (frozenset({"knowledge:search"}), False)
+    assert "peer 'alexandra'" in seen[0][2]
+    assert seen[1][:2] == (frozenset({"terminal"}), True)
+    assert seen[2][:2] == (None, True)
+    assert _policy.allowed() is None
 
 
 @pytest.mark.asyncio
@@ -536,11 +538,11 @@ async def test_link_ask_handler_applies_the_pinned_peers_tool_policy_on_both_pat
 
     home = tmp_path / "bob"
     home.mkdir()
-    seen: list[frozenset[str]] = []
+    seen: list[frozenset[str] | None] = []
 
     class PolicyEngine(_FakeEngine):
         def run_turn(self, prompt, emit, *, source="user", persist_inflight=True):
-            seen.append(_policy.denies())
+            seen.append(_policy.allowed())
             super().run_turn(prompt, emit, source=source, persist_inflight=persist_inflight)
 
     factory = lambda *, home, cfg: PolicyEngine(home=home, cfg=cfg)  # noqa: E731
@@ -554,7 +556,7 @@ async def test_link_ask_handler_applies_the_pinned_peers_tool_policy_on_both_pat
     ask = server.handlers["link.ask"]
     alexandra = peers_mod.Peer(
         id="alexandra", pubkey="a", allow=["link.ask"],
-        tools={"deny": ["write_file", "terminal"]},
+        tools={"allow": ["knowledge:search", "alpi_knowledge"]},
     )
     carol = peers_mod.Peer(id="carol", pubkey="c", allow=["link.ask"])
 
@@ -563,11 +565,11 @@ async def test_link_ask_handler_applies_the_pinned_peers_tool_policy_on_both_pat
     await ask({"prompt": "z"}, carol, server)
 
     assert seen == [
-        frozenset({"write_file", "terminal"}),
-        frozenset({"write_file", "terminal"}),
-        frozenset(),
+        frozenset({"knowledge:search", "alpi_knowledge"}),
+        frozenset({"knowledge:search", "alpi_knowledge"}),
+        None,
     ]
-    assert _policy.denies() == frozenset()
+    assert _policy.allowed() is None
 
 
 @pytest.mark.asyncio
@@ -592,10 +594,12 @@ async def test_link_ask_refuses_a_peer_whose_tool_policy_is_malformed(monkeypatc
     alp_handlers.register_link_ask(server, home)
     ask = server.handlers["link.ask"]
     broken = peers_mod.Peer(id="alexandra", pubkey="a", allow=["link.ask"], tools="terminal")
+    legacy = peers_mod.Peer(id="bea", pubkey="b", allow=["link.ask"], tools={"deny": ["write_file"]})
 
-    for params in ({"prompt": "x"}, {"prompt": "y", "stream": True}):
-        with pytest.raises(alp_server.HandlerError) as err:
-            ask(params, broken, server)
-        assert err.value.code == -32013 and err.value.message == "peer-policy-invalid"
-        assert "peer 'alexandra'" in err.value.data["detail"]
+    for peer, detail in ((broken, "peer 'alexandra'"), (legacy, "tools.allow")):
+        for params in ({"prompt": "x"}, {"prompt": "y", "stream": True}):
+            with pytest.raises(alp_server.HandlerError) as err:
+                ask(params, peer, server)
+            assert err.value.code == -32013 and err.value.message == "peer-policy-invalid"
+            assert detail in err.value.data["detail"]
     assert created == []

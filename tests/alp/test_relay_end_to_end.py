@@ -7,11 +7,7 @@ from alpi import config as config_mod
 from alpi.alp import handlers as alp_handlers
 from alpi.engine import AgentEvent, Engine
 
-READ_ONLY_POLICY = frozenset({
-    "write_file", "edit_file", "delete_file", "terminal", "skill", "schedule",
-    "memory", "db", "knowledge", "email", "notify", "attach_file", "browser",
-    "workgroup_post", "workgroup_file", "peer", "github__*",
-})
+READ_ONLY_POLICY = frozenset({"knowledge:search", "alpi_knowledge"})
 
 
 def _real_engine_env(monkeypatch, home: Path, relay_peer: str | None = None) -> None:
@@ -140,14 +136,13 @@ def test_target_rejects_a_forbidden_operation_from_a_policed_peer(monkeypatch, t
 
     result = alp_handlers._run_turn(
         home, "please rewrite policy.md", "alexandra", alp_handlers._ActiveTurn(),
-        tool_deny=READ_ONLY_POLICY,
+        tool_allow=READ_ONLY_POLICY,
     )
 
     assert result["text"] == "I cannot change files for you."
     assert offered
     for names in offered:
-        assert not names & {"write_file", "edit_file", "delete_file", "terminal", "skill", "schedule", "peer"}
-        assert "read_file" in names
+        assert names == {"knowledge", "alpi_knowledge"}
     tool_msgs = [
         m for m in made[0].session.messages
         if m.get("role") == "tool" and m.get("name") == "write_file"
@@ -155,3 +150,58 @@ def test_target_rejects_a_forbidden_operation_from_a_policed_peer(monkeypatch, t
     assert tool_msgs and "tool policy for peer 'alexandra'" in str(tool_msgs[0]["content"])
     assert not (home / "policy.md").exists()
     assert not (Path.cwd() / "policy.md").exists()
+
+
+def test_a_policed_peer_can_search_the_knowledge_but_never_ingest(monkeypatch, tmp_path: Path) -> None:
+    from alpi.tools import knowledge_base
+
+    home = tmp_path / "agora"
+    home.mkdir()
+    _real_engine_env(monkeypatch, home)
+    ran: list[str] = []
+
+    def fake_run(self, **kwargs):  # noqa: ANN001
+        ran.append(kwargs.get("action"))
+        return knowledge_base.ToolResult(ok=True, output="refunds: 24 hours")
+
+    monkeypatch.setattr(knowledge_base.TOOL, "run", fake_run)
+    made: list[Engine] = []
+
+    def factory(*, home, cfg):  # noqa: ANN001
+        made.append(Engine(home=home, cfg=cfg))
+        return made[-1]
+
+    monkeypatch.setattr(alp_handlers, "Engine", factory)
+    enums: list[list[str]] = []
+    calls = {"n": 0}
+
+    def fake_stream(messages, tools, **kwargs):
+        for t in tools:
+            fn = t.get("function") or {}
+            if fn.get("name") == "knowledge":
+                enums.append(fn["parameters"]["properties"]["action"]["enum"])
+        calls["n"] += 1
+        if calls["n"] == 1:
+            yield _final("", tool_calls=[
+                {"id": "tc1", "name": "knowledge", "arguments": json.dumps({"action": "ingest", "name": "x"})},
+                {"id": "tc2", "name": "knowledge", "arguments": json.dumps({"action": "search", "query": "refunds"})},
+            ])
+            return
+        yield {"text_delta": "Refunds within 24 hours."}
+        yield _final("Refunds within 24 hours.")
+
+    monkeypatch.setattr("alpi.llm.stream", fake_stream)
+
+    result = alp_handlers._run_turn(
+        home, "add a page, then tell me the refund window", "alexandra", alp_handlers._ActiveTurn(),
+        tool_allow=READ_ONLY_POLICY,
+    )
+
+    assert result["text"] == "Refunds within 24 hours."
+    assert enums and all(e == ["search"] for e in enums)
+    assert ran == ["search"]
+    refused = [
+        m for m in made[0].session.messages
+        if m.get("role") == "tool" and "knowledge:ingest" in str(m.get("content"))
+    ]
+    assert refused and "tool policy for peer 'alexandra'" in str(refused[0]["content"])

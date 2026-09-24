@@ -163,7 +163,7 @@ relay:
   peer: agora
 ```
 
-This locks down the relay side only. It does NOT make the target immutable — an inbound `link.ask` runs a full turn on the target with the target's own tools. Keep the source unwritable via the target profile's own tool denies, or per peer with `tools.deny` on the relay's record in the target's `peers.yaml` (names or `*` patterns; enforced at schema and execution, including sub-agents and workflow steps; only ever narrows the profile's own denies), and restrict which paired devices can address it with a member connection's `profile_scope`. The `default` host socket serves sibling profiles, and admin/local access ignore scoping.
+This locks down the relay side only. It does NOT make the target immutable — an inbound `link.ask` runs a full turn on the target with the target's own tools. Keep the source unwritable via the target profile's own tool denies, or per peer with `tools.allow` on the relay's record in the target's `peers.yaml`: the only tools that relay may use there (names, `*` patterns or `tool:action` such as `knowledge:search`; enforced at schema and execution, including sub-agents and workflow steps; only ever narrows the profile's own denies), and restrict which paired devices can address it with a member connection's `profile_scope`. The `default` host socket serves sibling profiles, and admin/local access ignore scoping.
 
 ## Network (shared accessible address)
 

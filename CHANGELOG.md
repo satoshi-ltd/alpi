@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.15.19 — 2026-09-24 — a peer runs only the tools you list
+
+- **A peer's tool policy now lists what it may run, not what it may not.** `tools.allow` on a
+  peer record in `peers.yaml` replaces `tools.deny`: an inbound `link.ask` from that peer sees and
+  runs only the listed tools, so a tool added later, a skill runner or a new MCP server stays
+  refused until you list it, in sub-agents, research helpers, workflow steps and parallel calls
+  too. Entries are tool names, `*` patterns such as `github__get_*`, or `tool:action` for a single
+  action of a tool that declares one: `knowledge:search` lets a relay search the knowledge base
+  while `ingest` and `maintain` stay refused, and the model is shown `action` as required and
+  limited to the allowed actions. On a tool without an `action` argument such an entry allows
+  nothing, so an invented action cannot reach a tool that would ignore it. Set it with
+  `alpi peers add --allow-tools`, `alpi peers tools <id> --allow` (`--clear` removes it), or the
+  setup wizard; an empty value allows no tool, and only leaving the policy out gives the full
+  tool set.
+- The profile's own `tools.deny` still applies on top, and `allow: []` in `peers.yaml` leaves a
+  peer no tool at all. The docs now warn that `read_file`, `search` and the session tools also
+  read the profile's other conversations, so a peer allowed them can read those.
+- **A `tools.deny` list from 0.15.18 is refused, not ignored.** Every `link.ask` from that peer
+  answers `-32013 peer-policy-invalid`, with a detail that says to list the allowed tools instead,
+  until `alpi peers tools <id> --allow …` rewrites the record. An empty `tools:` key is refused the
+  same way instead of meaning no policy.
+
 ## v0.15.18 — 2026-09-24 — conversations kept apart, relays that can say no, peers that keep their limits
 
 - **Asking a peer no longer mixes conversations.** The context a peer keeps for your follow-up

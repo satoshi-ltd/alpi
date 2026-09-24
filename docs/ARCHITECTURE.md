@@ -88,7 +88,7 @@ alpi peers list                list pinned ALP peers for this profile
 alpi peers key                 print this profile's ALP public key
 alpi peers add <id> <pubkey>   pin a peer (prefer the wizard for capability selection)
 alpi peers remove <id>         unpin a peer
-alpi peers tools <id> [--deny …]  show or set the tools an inbound turn from that peer may never run
+alpi peers tools <id> [--allow …|--clear]  show or set the only tools an inbound turn from that peer may run
 alpi peers ping <id>           live probe via link.ping
 
 alpi workgroup list                                list workgroups (hub-of + member-of)

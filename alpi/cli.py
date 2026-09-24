@@ -3753,10 +3753,11 @@ def peers_list(ctx: click.Context) -> None:
         addr = p.address or "local"
         allow = ", ".join(p.allow) or "—"
         try:
-            denied = ", ".join(sorted(p.denied_tools())) or "—"
+            allowed = p.allowed_tools()
+            tools_col = "—" if allowed is None else (", ".join(sorted(allowed)) or "no tools")
         except peers_mod.PolicyError as e:
-            denied = f"INVALID — {e}"
-        rows.append([p.id, p.pubkey[:12] + "…", addr, allow, denied])
+            tools_col = f"INVALID — {e}"
+        rows.append([p.id, p.pubkey[:12] + "…", addr, allow, tools_col])
     click.echo(f"{len(entries)} peer(s):")
     ui.columns(rows)
 
@@ -3774,8 +3775,8 @@ def peers_list(ctx: click.Context) -> None:
 )
 @click.option("--alias", default="", help="Optional display label.")
 @click.option(
-    "--deny-tools", default="",
-    help="Comma-separated tool names or `*` patterns an inbound link.ask from this peer may never run.",
+    "--allow-tools", default=None,
+    help="Comma-separated tool names, `*` patterns or `tool:action` entries an inbound link.ask from this peer may run; everything else is refused. An empty value allows no tool; omit it for no policy.",
 )
 @click.pass_context
 def peers_add(
@@ -3785,7 +3786,7 @@ def peers_add(
     allow: str,
     address: str | None,
     alias: str,
-    deny_tools: str,
+    allow_tools: str | None,
 ) -> None:
     """Pin a peer's pubkey + capabilities."""
     import base64
@@ -3811,9 +3812,8 @@ def peers_add(
         )
 
     h: Path = ctx.obj["home"]
-    denied = [m.strip() for m in deny_tools.split(",") if m.strip()]
     try:
-        denied = peers_mod.validate_deny_entries(denied, peer_id=peer_id) if denied else []
+        allowed = peers_mod.parse_allow_arg(allow_tools, peer_id=peer_id)
     except peers_mod.PolicyError as e:
         raise click.ClickException(str(e))
     peer = peers_mod.Peer(
@@ -3822,52 +3822,62 @@ def peers_add(
         alias=alias,
         address=address,
         allow=[m.strip() for m in allow.split(",") if m.strip()],
-        tools={"deny": denied} if denied else {},
+        tools={} if allowed is None else {"allow": allowed},
     )
     try:
         peers_mod.add(h, peer)
     except ValueError as e:
         raise click.ClickException(str(e))
-    policy = f", {len(denied)} tool(s) denied" if denied else ""
+    if allowed is None:
+        policy = ""
+    else:
+        policy = f", may run only {len(allowed)} tool(s)" if allowed else ", may run no tool"
     click.echo(f"added peer {peer_id!r} ({len(peer.allow)} method(s) allowed{policy})")
 
 
 @peers.command("tools")
 @click.argument("peer_id")
 @click.option(
-    "--deny", default=None,
-    help="Comma-separated tool names or `*` patterns this peer may never run; an empty value clears the policy.",
+    "--allow", default=None,
+    help="Comma-separated tool names, `*` patterns or `tool:action` entries this peer may run; everything else is refused. An empty value allows no tool.",
 )
+@click.option("--clear", is_flag=True, help="Remove the policy: the peer gets this profile's own tools.")
 @click.pass_context
-def peers_tools(ctx: click.Context, peer_id: str, deny: str | None) -> None:
-    """Show or set the tools an inbound link.ask from PEER_ID may never run."""
+def peers_tools(ctx: click.Context, peer_id: str, allow: str | None, clear: bool) -> None:
+    """Show or set the only tools an inbound link.ask from PEER_ID may run."""
     from alpi.alp import peers as peers_mod
 
     h: Path = ctx.obj["home"]
     peer = peers_mod.get_by_id(h, peer_id)
     if peer is None:
         raise click.ClickException(f"unknown peer {peer_id!r}")
-    if deny is None:
+    if clear and allow is not None:
+        raise click.ClickException("use either --allow or --clear")
+    if clear:
+        peers_mod.set_allowed_tools(h, peer_id, None)
+        click.echo(f"cleared the tool policy for {peer_id!r}")
+        return
+    if allow is None:
         try:
-            denied = sorted(peer.denied_tools())
+            allowed = peer.allowed_tools()
         except peers_mod.PolicyError as e:
             raise click.ClickException(
                 f"invalid tool policy — link.ask from {peer_id!r} is refused until fixed: {e}",
             )
-        click.echo(
-            ", ".join(denied) if denied
-            else f"no tool policy — {peer_id!r} gets this profile's own tools",
-        )
+        if allowed is None:
+            click.echo(f"no tool policy — {peer_id!r} gets this profile's own tools")
+        else:
+            click.echo(", ".join(sorted(allowed)) or f"{peer_id!r} may run no tool")
         return
-    names = [m.strip() for m in deny.split(",") if m.strip()]
     try:
-        peers_mod.set_denied_tools(h, peer_id, names)
+        names = peers_mod.parse_allow_arg(allow, peer_id=peer_id) or []
+        peers_mod.set_allowed_tools(h, peer_id, names)
     except peers_mod.PolicyError as e:
         raise click.ClickException(str(e))
-    if names:
-        click.echo(f"peer {peer_id!r} may never run {len(names)} tool(s): {', '.join(names)}")
-    else:
-        click.echo(f"cleared the tool policy for {peer_id!r}")
+    click.echo(
+        f"peer {peer_id!r} may run only {len(names)} tool(s): {', '.join(names)}" if names
+        else f"peer {peer_id!r} may run no tool",
+    )
 
 
 @peers.command("remove")

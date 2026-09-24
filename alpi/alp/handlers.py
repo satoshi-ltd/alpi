@@ -64,7 +64,7 @@ def register_link_ask(server: alp_server.Server, home: Path) -> None:
         from alpi.alp import mention_thread
         conversation = mention_thread.conversation_from_params(params)
         try:
-            tool_deny = peer.denied_tools()
+            tool_allow = peer.allowed_tools()
         except peers_mod.PolicyError as e:
             log.warning("link.ask from %s refused: %s", peer.id, e)
             raise alp_server.HandlerError(
@@ -74,7 +74,7 @@ def register_link_ask(server: alp_server.Server, home: Path) -> None:
         if stream:
             return _run_turn_stream(
                 home, prompt, peer.id, active, lock, peer.pubkey,
-                conversation=conversation, tool_deny=tool_deny,
+                conversation=conversation, tool_allow=tool_allow,
             )
 
         async def _solo() -> dict[str, Any]:
@@ -82,7 +82,7 @@ def register_link_ask(server: alp_server.Server, home: Path) -> None:
                 loop = asyncio.get_running_loop()
                 return await loop.run_in_executor(
                     None, _run_turn, home, prompt, peer.id, active, peer.pubkey,
-                    conversation, tool_deny,
+                    conversation, tool_allow,
                 )
 
         return _solo()
@@ -119,7 +119,7 @@ async def _run_turn_stream(
     lock: asyncio.Lock,
     peer_pubkey: str = "",
     conversation: str | None = None,
-    tool_deny: frozenset[str] = frozenset(),
+    tool_allow: frozenset[str] | None = None,
 ):
     """Streaming variant: runs the engine in a thread, yields one
     chunk per ``assistant_delta`` event, ends with a ``final`` chunk
@@ -183,7 +183,7 @@ async def _run_turn_stream(
         def worker() -> None:
             from alpi.tools import _policy as tool_policy
             try:
-                with ledger.peer_context(peer_id), tool_policy.use(tool_deny, f"peer '{peer_id}'"):
+                with ledger.peer_context(peer_id), tool_policy.use(tool_allow, f"peer '{peer_id}'"):
                     engine.run_turn(
                         prompt, emit=sink, source="peer",
                         persist_inflight=False,
@@ -258,7 +258,7 @@ def _run_turn(
     active: _ActiveTurn,
     peer_pubkey: str = "",
     conversation: str | None = None,
-    tool_deny: frozenset[str] = frozenset(),
+    tool_allow: frozenset[str] | None = None,
 ) -> dict[str, Any]:
     """Synchronous turn — runs in a thread so the ALP server event
     loop stays responsive while the engine blocks on LLM calls."""
@@ -315,7 +315,7 @@ def _run_turn(
         from alpi import ledger
         from alpi.tools import _policy as tool_policy
 
-        with ledger.peer_context(peer_id), tool_policy.use(tool_deny, f"peer '{peer_id}'"):
+        with ledger.peer_context(peer_id), tool_policy.use(tool_allow, f"peer '{peer_id}'"):
             engine.run_turn(
                 prompt, emit=sink, source="peer",
                 persist_inflight=False,
