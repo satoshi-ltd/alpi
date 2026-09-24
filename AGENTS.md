@@ -153,7 +153,9 @@ every ``host.*`` verb the UI calls.
   `"external"` (the agent called `notify` itself → no duplicate). Failures
   always file an `error` inbox row and emit `schedule.failed`, regardless of
   `notify`; the failed event and row carry the job `title` and an enriched
-  `body` (reason + timeout/exit), and `schedule.failed` is the single failure
+  `body` (reason + timeout/exit; a timeout also says which tool was in flight
+  and for how long, how many tool calls ran, and the agent's last message), and
+  `schedule.failed` is the single failure
   notification — it is NOT also re-emitted as `agent.message`. `silent` means a
   successful job produced no user-facing output.
   Do not parse `message` in clients when an explicit field exists. When

@@ -1401,3 +1401,67 @@ def test_deepseek_tool_round_preserves_reasoning(patched_engine, monkeypatch, re
     assert assistant['reasoning_content'] == reasoning
     assert assistant['tool_calls'][0]['id'] == 'tc1'
     assert any(m['role'] == 'tool' for m in requests[1])
+
+
+def test_time_notes_fire_once_at_half_and_at_eighty_percent() -> None:
+    from alpi.engine import _TimeNotes
+
+    notes = _TimeNotes(1000.0, started=0.0)
+    assert notes.note(100) is None
+    half = notes.note(500)
+    assert half and "50% used" in half and "about 8 minutes" in half
+    assert notes.note(600) is None
+    late = notes.note(800)
+    assert late and "80% used" in late and "about 3 minutes" in late
+    assert notes.note(950) is None
+
+    jumped = _TimeNotes(1000.0, started=0.0)
+    only = jumped.note(970)
+    assert only and "80% used" in only and "less than a minute" in only
+    assert jumped.note(990) is None
+
+
+def test_the_model_hears_the_time_check_before_its_next_step(
+    patched_engine: Engine, monkeypatch,
+) -> None:
+    from alpi import engine as engine_mod
+
+    monkeypatch.setenv("ALPI_TURN_BUDGET_S", "9999")
+    ticks = {"n": 0}
+
+    def scripted_note(self, now):
+        ticks["n"] += 1
+        return "[engine] Time check: about 4 minutes of this run's time budget remain (80% used)." if ticks["n"] == 2 else None
+
+    monkeypatch.setattr(engine_mod._TimeNotes, "note", scripted_note)
+    seen: list[list[str]] = []
+
+    def fake_stream(messages, tools, **kwargs):
+        seen.append([m["content"] for m in messages if m.get("role") == "user" and str(m.get("content", "")).startswith("[engine] Time check")])
+        if len(seen) == 1:
+            yield _final_chunk("", tool_calls=[{"id": "tc", "name": "todo", "arguments": '{"action": "list"}'}])
+            return
+        yield {"text_delta": "done"}
+        yield _final_chunk("done")
+
+    monkeypatch.setattr("alpi.llm.stream", fake_stream)
+    events = []
+    patched_engine.run_turn("do work", emit=lambda e: events.append(e))
+
+    assert seen[0] == []
+    assert len(seen[1]) == 1 and "80% used" in seen[1][0]
+    assert not any(e.kind == "error" for e in events)
+
+
+def test_no_time_budget_means_no_time_notes(patched_engine: Engine, monkeypatch) -> None:
+    monkeypatch.delenv("ALPI_TURN_BUDGET_S", raising=False)
+    seen: list[str] = []
+
+    def fake_stream(messages, tools, **kwargs):
+        seen.extend(str(m.get("content", "")) for m in messages if m.get("role") == "user")
+        yield _final_chunk("hi")
+
+    monkeypatch.setattr("alpi.llm.stream", fake_stream)
+    patched_engine.run_turn("hello", emit=lambda e: None)
+
+    assert not any(s.startswith("[engine] Time check") for s in seen)

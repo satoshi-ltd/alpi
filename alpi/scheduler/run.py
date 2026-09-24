@@ -32,6 +32,9 @@ class JobOutcome:
     silent: bool = False
     exit_code: int | None = None
     timeout_reason: str | None = None
+    run_id: str | None = None
+    last_tool: str | None = None
+    tool_count: int | None = None
 
     def __iter__(self):
         # Back-compat tuple unpack `ok, msg, reply = run_job(...)`.
@@ -328,6 +331,59 @@ def _run_script_only(job: dict, home: Path) -> JobOutcome:
     return JobOutcome(True, f"silent run ok: {summary}", reply=reply)
 
 
+def _timeout_detail(home: Path, run_id: str, secs: int) -> tuple[str, str | None, int | None]:
+    """What a killed run was doing, from its journal: the step in flight and for how long, calls made, last words."""
+    message = f"agent timed out after {secs}s"
+    try:
+        return _timeout_detail_from_journal(home, run_id, message)
+    except Exception:  # noqa: BLE001
+        # A diagnostic read of a journal the killed child may have left half-written must never replace the timeout itself.
+        log.debug("could not read the journal of timed-out run %s", run_id[:8], exc_info=True)
+        return message, None, None
+
+
+def _timeout_detail_from_journal(home: Path, run_id: str, message: str) -> tuple[str, str | None, int | None]:
+    from alpi import runs
+    lines = runs.run_path(home, run_id).read_text(encoding="utf-8", errors="replace").splitlines()
+    open_tools: dict[str, tuple[float, str]] = {}
+    tool_count = 0
+    last_words = ""
+    ended_at = 0.0
+    for line in lines:
+        try:
+            ev = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(ev, dict):
+            continue
+        data = ev.get("data") if isinstance(ev.get("data"), dict) else {}
+        try:
+            at = float(ev.get("at") or 0)
+        except (TypeError, ValueError):
+            at = 0.0
+        ended_at = max(ended_at, at)
+        name = data.get("name")
+        if ev.get("kind") == "agent.tool_start" and isinstance(name, str) and name:
+            tool_count += 1
+            args = json.dumps(data.get("args") or {}, ensure_ascii=False)
+            label = f"`{name}` {args[:120]}"
+            open_tools[str(data.get("tool_id"))] = (at, label)
+        elif ev.get("kind") == "agent.tool_end":
+            open_tools.pop(str(data.get("tool_id")), None)
+        elif ev.get("kind") == "agent.assistant_done" and isinstance(data.get("text"), str) and data["text"].strip():
+            last_words = data["text"].strip().replace("\n", " ")[:160]
+    parts = [f"{tool_count} tool calls made"]
+    last_tool = None
+    if open_tools:
+        started_at, label = max(open_tools.values())
+        last_tool = label.split("`")[1] if "`" in label else None
+        running = max(0, int(ended_at - started_at))
+        parts.append(f"killed {running // 60}m{running % 60:02d}s into {label}")
+    if last_words:
+        parts.append(f"last message: {last_words!r}")
+    return f"{message} — " + "; ".join(parts), last_tool, tool_count
+
+
 def _close_supervised_journal(home: Path, run_id: str) -> None:
     try:
         from alpi import runs
@@ -353,12 +409,18 @@ def run_job(job: dict, home: Path) -> JobOutcome:
         return JobOutcome(False, f"threat scan blocked fire: {', '.join(flags)}")
 
     notify_user = _job_notifies(job)
+    secs = job_run_timeout(job)
+    soft = soft_turn_budget(secs)
+    time_line = (
+        f" This run has about {soft // 60} minutes before it is stopped; plan the work to finish inside them."
+        if soft is not None else ""
+    )
     if notify_user:
         wrap_header = (
             "[SCHEDULED: running from cron; the user is not watching live. "
             "Answer concisely — your reply is auto-delivered to the user's "
             "Alpi apps as a native notification. Do NOT also call `notify` "
-            "with the same content; that would notify twice.]"
+            f"with the same content; that would notify twice.{time_line}]"
         )
     else:
         wrap_header = (
@@ -367,13 +429,12 @@ def run_job(job: dict, home: Path) -> JobOutcome:
             "interrupt. To alert the user, call `notify(text=…, title=…)` "
             "explicitly (native push to their apps). To reach a third "
             "party, use the `email` tool. If there is nothing to report, "
-            "finish with an empty reply.]"
+            f"finish with an empty reply.{time_line}]"
         )
     wrapped = wrap_header + "\n\n" + prompt
 
     from alpi.home import effective_profile_env as _effective_profile_env, workspace_env
     from alpi.runtime import deploy_env as _deploy_env
-    secs = job_run_timeout(job)
     # The scheduler supervises this child, so it owns the journal: on a kill it closes it itself instead of leaving it for the sweep to find (and alert on) a second time.
     run_id = uuid.uuid4().hex
     extra = {
@@ -394,7 +455,6 @@ def run_job(job: dict, home: Path) -> JobOutcome:
     job_tier = str(job.get("tier") or "").strip().lower()
     if job_tier in TIER_NAMES:
         extra["ALPI_TIER"] = job_tier
-    soft = soft_turn_budget(secs)
     if soft is not None:
         extra["ALPI_TURN_BUDGET_S"] = str(soft)
     env = _effective_profile_env(home, extra=extra)
@@ -414,12 +474,16 @@ def run_job(job: dict, home: Path) -> JobOutcome:
         )
     except subprocess.TimeoutExpired:
         _close_supervised_journal(home, run_id)
-        return JobOutcome(False, "agent timed out", timeout_reason=f"timeout_{secs}s")
+        message, last_tool, tool_count = _timeout_detail(home, run_id, secs)
+        return JobOutcome(
+            False, message, timeout_reason=f"timeout_{secs}s",
+            run_id=run_id, last_tool=last_tool, tool_count=tool_count,
+        )
     if proc.returncode != 0:
         _close_supervised_journal(home, run_id)
         return JobOutcome(
             False, f"agent rc={proc.returncode}: {proc.stderr[:300]}",
-            exit_code=proc.returncode,
+            exit_code=proc.returncode, run_id=run_id,
         )
 
     parsed = _parse_events(proc.stdout or "")
@@ -428,23 +492,23 @@ def run_job(job: dict, home: Path) -> JobOutcome:
 
     # The child exits 0 whether the turn succeeded or died, so its error event is the only failure signal.
     if parsed.errored:
-        return JobOutcome(False, f"agent error: {parsed.error or 'no message'}")
+        return JobOutcome(False, f"agent error: {parsed.error or 'no message'}", run_id=run_id)
 
     if parsed.notified_natively:
         # The agent already notified the user (called notify) — don't double-notify the reply.
         return JobOutcome(
-            True, "agent notified the user; no duplicate", delivered_to="external",
+            True, "agent notified the user; no duplicate", delivered_to="external", run_id=run_id,
         )
 
     if notify_user and not reply:
-        return JobOutcome(False, "agent produced no reply")
+        return JobOutcome(False, "agent produced no reply", run_id=run_id)
     if notify_user:
-        return JobOutcome(True, "notified", reply=reply, delivered_to="alpi")
+        return JobOutcome(True, "notified", reply=reply, delivered_to="alpi", run_id=run_id)
 
     summary = (reply[:120] + "…") if len(reply) > 120 else reply
     return JobOutcome(
         True, f"silent run ok{(': ' + summary) if summary else ''}",
-        reply=reply, silent=(not reply),
+        reply=reply, silent=(not reply), run_id=run_id,
     )
 
 
@@ -647,6 +711,7 @@ def _record_schedule_run(
                 job_id=str(job.get("id") or "") or None,
                 backend=("script" if job.get("no_agent") else "agent-subprocess"),
                 exit_code=outcome.exit_code, timeout_reason=outcome.timeout_reason,
+                run_id=outcome.run_id, last_tool=outcome.last_tool, tool_count=outcome.tool_count,
                 output_tail=(outcome.reply or outcome.message),
             )
     except Exception:  # noqa: BLE001

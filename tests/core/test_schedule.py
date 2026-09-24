@@ -8,6 +8,8 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import pytest
+
 from alpi.scheduler import jobs_store
 from alpi.scheduler import run as scheduler
 from alpi.host.connection_context import ConnectionContext, use
@@ -1173,3 +1175,188 @@ def test_a_script_only_job_in_docker_carries_the_runtime_too(
 
     assert captured["env"].get("ALPI_PLATFORM") == "cron"
     assert captured["env"].get("ALPI_DEPLOY_RUNTIME") == "docker"
+
+
+def _journal_of_a_busy_run(home: Path, run_id: str, now: float) -> None:
+    from alpi import runs
+
+    def ev(seq, at, kind, data):
+        return json.dumps({"version": 1, "seq": seq, "at": at, "kind": kind, "data": data})
+
+    path = runs.run_path(home, run_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join([
+        ev(0, now - 1700, "run.started", {"run_id": run_id, "profile": "p", "pid": 999_999, "pid_start": "0"}),
+        ev(1, now - 1690, "agent.tool_start", {"name": "skill", "tool_id": "a", "args": {"action": "run", "name": "repo-intelligence", "args": ["discover"]}}),
+        ev(2, now - 1600, "agent.tool_end", {"name": "skill", "tool_id": "a"}),
+        ev(3, now - 900, "agent.tool_start", {"name": "bitbucket__getPullRequest", "tool_id": "b", "args": {"id": 7}}),
+        ev(4, now - 880, "agent.tool_end", {"name": "bitbucket__getPullRequest", "tool_id": "b"}),
+        ev(5, now - 200, "agent.assistant_done", {"text": "Coverage is clean. Running the final reconcile.\nNext step."}),
+        ev(6, now - 190, "agent.tool_start", {"name": "skill", "tool_id": "c", "args": {"action": "run", "name": "repo-intelligence", "args": ["reconcile-verdicts"]}}),
+    ]) + "\n")
+
+
+def test_a_timed_out_run_reports_what_it_was_doing(tmp_home_no_env: Path, monkeypatch) -> None:
+    import subprocess as _sp
+    import time as _time
+
+    from alpi import runs
+
+    captured: dict = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["run_id"] = kwargs["env"]["ALPI_RUN_ID"]
+        _journal_of_a_busy_run(tmp_home_no_env, captured["run_id"], _time.time())
+        raise _sp.TimeoutExpired(cmd, 1700)
+
+    monkeypatch.setattr(scheduler.subprocess, "run", fake_run)
+    outcome = scheduler.run_job({"id": "j1", "kind": "cron", "prompt": "scan", "timeout": 1700}, tmp_home_no_env)
+
+    assert not outcome.ok
+    assert outcome.timeout_reason == "timeout_1700s"
+    assert outcome.run_id == captured["run_id"]
+    assert outcome.last_tool == "skill"
+    assert outcome.tool_count == 3
+    assert outcome.message.startswith("agent timed out after 1700s — 3 tool calls made; killed 3m1")
+    assert "`skill` " in outcome.message and "reconcile-verdicts" in outcome.message
+    assert "last message: 'Coverage is clean. Running the final reconcile. Next step.'" in outcome.message
+    assert runs.summary(tmp_home_no_env, captured["run_id"])["status"] == "interrupted"
+
+
+def test_the_ledger_row_of_a_timed_out_run_names_its_run_and_tool(tmp_home_no_env: Path) -> None:
+    from alpi import run_ledger
+
+    outcome = scheduler.JobOutcome(
+        False, "agent timed out after 1700s — 3 tool calls made", timeout_reason="timeout_1700s",
+        run_id="run-1", last_tool="skill", tool_count=3,
+    )
+    scheduler._record_schedule_run(tmp_home_no_env, {"id": "j1"}, outcome, started=1.0, elapsed=1700.0)
+
+    rows = [json.loads(line) for line in (tmp_home_no_env / "logs" / "runs.jsonl").read_text().splitlines()]
+    row = rows[-1]
+    assert row["outcome"] == "timeout"
+    assert row["run_id"] == "run-1"
+    assert row["last_tool"] == "skill"
+    assert row["tool_count"] == 3
+    assert run_ledger  # the module wrote the row above
+
+
+def test_a_run_killed_between_steps_names_no_tool_in_flight(tmp_home_no_env: Path) -> None:
+    import time as _time
+
+    from alpi import runs
+
+    now = _time.time()
+    path = runs.run_path(tmp_home_no_env, "between-steps")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(json.dumps(e) for e in [
+        {"version": 1, "seq": 0, "at": now - 900, "kind": "run.started", "data": {"run_id": "between-steps", "pid": 999_999}},
+        {"version": 1, "seq": 1, "at": now - 800, "kind": "agent.tool_start", "data": {"name": "skill", "tool_id": "a", "args": {}}},
+        {"version": 1, "seq": 2, "at": now - 700, "kind": "agent.tool_end", "data": {"name": "skill", "tool_id": "a"}},
+        {"version": 1, "seq": 3, "at": now - 10, "kind": "run.finished", "data": {"outcome": "interrupted"}},
+    ]) + "\n")
+
+    message, last_tool, tool_count = scheduler._timeout_detail(tmp_home_no_env, "between-steps", 900)
+
+    assert message == "agent timed out after 900s — 1 tool calls made"
+    assert last_tool is None
+    assert tool_count == 1
+
+
+@pytest.mark.parametrize("journal", [
+    "[]\n",
+    '{"version": 1, "seq": 0, "at": "bad", "kind": "run.started", "data": {}}\n',
+    '{"version": 1, "seq": 0, "at": 1.0, "kind": "agent.tool_start", "data": [1]}\n',
+    '{"version": 1, "seq": 0, "at": 1.0, "kind": "agent.assistant_done", "data": {"text": 7}}\n',
+    "null\n42\n",
+])
+def test_a_damaged_journal_never_turns_the_timeout_into_another_error(tmp_home_no_env: Path, journal: str) -> None:
+    from alpi import runs
+
+    path = runs.run_path(tmp_home_no_env, "damaged")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(journal)
+
+    message, last_tool, tool_count = scheduler._timeout_detail(tmp_home_no_env, "damaged", 60)
+
+    assert message.startswith("agent timed out after 60s")
+    assert last_tool is None
+
+
+def test_damaged_lines_are_skipped_without_losing_the_rest_of_the_diagnosis(tmp_home_no_env: Path) -> None:
+    import time as _time
+
+    from alpi import runs
+
+    now = _time.time()
+    path = runs.run_path(tmp_home_no_env, "partly-damaged")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join([
+        json.dumps({"version": 1, "seq": 0, "at": now - 300, "kind": "run.started", "data": {"run_id": "partly-damaged"}}),
+        json.dumps({"version": 1, "seq": 1, "at": now - 120, "kind": "agent.tool_start", "data": {"name": "skill", "tool_id": "a", "args": {"action": "run"}}}),
+        "[]",
+        "null",
+        json.dumps({"version": 1, "seq": 2, "at": now, "kind": "run.finished", "data": {"outcome": "interrupted"}}),
+    ]) + "\n")
+
+    message, last_tool, tool_count = scheduler._timeout_detail(tmp_home_no_env, "partly-damaged", 300)
+
+    assert "1 tool calls made; killed 2m00s into `skill`" in message
+    assert (last_tool, tool_count) == ("skill", 1)
+
+
+def test_a_damaged_journal_still_yields_the_timeout_outcome_end_to_end(tmp_home_no_env: Path, monkeypatch) -> None:
+    import subprocess as _sp
+
+    from alpi import runs
+
+    def fake_run(cmd, **kwargs):
+        path = runs.run_path(tmp_home_no_env, kwargs["env"]["ALPI_RUN_ID"])
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('{"version": 1, "seq": 0, "at": "bad", "kind": "run.started", "data": [1]}\n[]\n')
+        raise _sp.TimeoutExpired(cmd, 60)
+
+    monkeypatch.setattr(scheduler.subprocess, "run", fake_run)
+    outcome = scheduler.run_job({"id": "j2", "kind": "cron", "prompt": "scan", "timeout": 60}, tmp_home_no_env)
+
+    assert not outcome.ok
+    assert outcome.timeout_reason == "timeout_60s"
+    assert outcome.message.startswith("agent timed out after 60s")
+    assert outcome.run_id
+
+
+def test_a_timed_out_run_without_a_journal_still_reports_the_timeout(tmp_home_no_env: Path) -> None:
+    assert scheduler._timeout_detail(tmp_home_no_env, "no-such-run", 60) == ("agent timed out after 60s", None, None)
+
+
+def test_a_finished_run_carries_its_run_id(tmp_home_no_env: Path, monkeypatch) -> None:
+    import subprocess as _sp
+
+    captured: dict = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["run_id"] = kwargs["env"]["ALPI_RUN_ID"]
+        return _sp.CompletedProcess(cmd, 0, stdout='{"kind":"reply","text":"all good"}\n', stderr="")
+
+    monkeypatch.setattr(scheduler.subprocess, "run", fake_run)
+    outcome = scheduler.run_job({"id": "x", "kind": "cron", "prompt": "do a thing"}, tmp_home_no_env)
+
+    assert outcome.ok
+    assert outcome.run_id == captured["run_id"]
+
+
+def test_the_scheduled_prompt_states_its_time_budget(tmp_home_no_env: Path, monkeypatch) -> None:
+    import subprocess as _sp
+
+    prompts: list[str] = []
+
+    def fake_run(cmd, **kwargs):
+        prompts.append(cmd[cmd.index("--once") + 1])
+        return _sp.CompletedProcess(cmd, 0, stdout='{"kind":"reply","text":""}\n', stderr="")
+
+    monkeypatch.setattr(scheduler.subprocess, "run", fake_run)
+    scheduler.run_job({"id": "x", "kind": "cron", "prompt": "do a thing", "timeout": 1700}, tmp_home_no_env)
+    scheduler.run_job({"id": "y", "kind": "cron", "prompt": "do a thing", "timeout": 30}, tmp_home_no_env)
+
+    assert "This run has about 25 minutes before it is stopped" in prompts[0]
+    assert "before it is stopped" not in prompts[1]

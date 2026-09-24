@@ -33,7 +33,7 @@ def _strip_cache_noise(text: str) -> str:
     return _CACHE_NOISE_RE.sub("", text).strip()
 
 
-def _turn_deadline_from_env(started: float) -> float | None:
+def _turn_budget_from_env() -> float | None:
     import os
     raw = os.environ.get("ALPI_TURN_BUDGET_S")
     if not raw:
@@ -42,7 +42,37 @@ def _turn_deadline_from_env(started: float) -> float | None:
         budget = float(raw)
     except ValueError:
         return None
-    return started + budget if budget > 0 else None
+    return budget if budget > 0 else None
+
+
+def _turn_deadline_from_env(started: float) -> float | None:
+    budget = _turn_budget_from_env()
+    return started + budget if budget else None
+
+
+class _TimeNotes:
+    """The model cannot see the clock: one nudge at half the budget and one at 80% let it skip a long last step."""
+
+    _MARKS = (0.5, 0.8)
+
+    def __init__(self, budget_s: float, started: float) -> None:
+        self._budget = budget_s
+        self._started = started
+        self._fired: set[float] = set()
+
+    def note(self, now: float) -> str | None:
+        used = (now - self._started) / self._budget
+        due = [m for m in self._MARKS if used >= m and m not in self._fired]
+        if not due:
+            return None
+        self._fired.update(due)
+        remaining = max(0.0, self._budget - (now - self._started))
+        left = "less than a minute" if remaining < 60 else f"about {round(remaining / 60)} minutes"
+        return (
+            f"[engine] Time check: {left} of this run's time budget remain "
+            f"({int(max(due) * 100)}% used). Finish and report; do not start a step "
+            "that may not complete in time."
+        )
 
 
 _PEER_USAGE_MARKER = "\n\n---\ntokens:"
@@ -453,6 +483,8 @@ class Engine:
         # Accumulate this turn's state for the persistent log.
         turn_started = time.time()
         turn_deadline = _turn_deadline_from_env(time.monotonic())
+        turn_budget = _turn_budget_from_env()
+        time_notes = _TimeNotes(turn_budget, time.monotonic()) if turn_budget else None
         turn_tools: list[ToolLog] = []
         turn_produced: list[dict] = []
         turn_reasoning_parts: list[str] = []
@@ -680,6 +712,10 @@ class Engine:
                 if turn_deadline is not None and time.monotonic() >= turn_deadline:
                     deadline_hit = True
                     break
+                if time_notes is not None:
+                    time_note = time_notes.note(time.monotonic())
+                    if time_note:
+                        self.session.messages.append({"role": "user", "content": time_note})
                 # step 0 included: auto-compaction may have spent past the cap after the turn-start check.
                 try:
                     ledger.check(self.home, self.cfg.budget)

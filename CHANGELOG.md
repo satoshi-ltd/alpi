@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.15.15 — 2026-09-24 — a scheduled job knows how much time it has left
+
+- **A scheduled job is told its time budget and warned when it runs low.** The prompt states how
+  many minutes the run has, and the agent gets a note at half of it and at 80%, so it can wrap up
+  or skip a long final step instead of being killed in the middle of one.
+- **A job killed at its time limit says what it was doing.** The failure names the step that was
+  running and for how long, how many tool calls the run had made and the agent's last message,
+  instead of a bare "agent timed out". The run ledger row now carries the run id too.
+
 ## v0.15.14 — 2026-09-23 — the audit log keeps only registrations that changed something
 
 - **A device repeating its registration no longer fills the administrative audit log.** Clients
