@@ -235,6 +235,9 @@ authorised for a profile can fetch any image under those roots by path (broader
 than "an image in this chat"); intentional but a real read surface. Documents
 are served only from the profile's `out/`, the workspace and the upload staging
 area, and only those are offered as attachments; `attach_file` refuses the rest.
+A remote device's chat attachments must be files uploaded to the profile's
+staging area with `host.attachments.stage`; `host.chat.send` refuses any other
+path from it.
 
 ## Prompt injection
 

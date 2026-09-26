@@ -126,6 +126,25 @@ def _persistable_frame(frame: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _unstaged_attachment(home: Path, attachments: Any) -> str | None:
+    from alpi.host.attachments_rpc import _stage_root
+    if not isinstance(attachments, list):
+        return "(attachments must be a list)"
+    try:
+        root = _stage_root(home).resolve()
+    except OSError:
+        return "(no staging area)"
+    for item in attachments:
+        raw = str(item.get("path") or "") if isinstance(item, dict) else ""
+        try:
+            real = Path(raw).expanduser().resolve(strict=True) if raw else None
+        except (OSError, RuntimeError, ValueError):
+            real = None
+        if real is None or not real.is_relative_to(root) or not real.is_file():
+            return raw or "(no path)"
+    return None
+
+
 async def _data_chat_send(
     params: dict[str, Any],
     server: host_server.Server,
@@ -148,6 +167,20 @@ async def _data_chat_send(
     home = _resolve_home(profile)
     from alpi.home import profile_name as resolved_profile_name
     run_profile = resolved_profile_name(home)
+
+    if attachments:
+        from alpi.host.connection_context import current
+        if current().source == "remote":
+            unstaged = _unstaged_attachment(home, attachments)
+            if unstaged is not None:
+                await send_frame({
+                    "event": "error",
+                    "text": (
+                        "a remote device must upload each attachment with "
+                        f"host.attachments.stage first: {unstaged}"
+                    ),
+                })
+                return
 
     if isinstance(session_id, str) and session_id:
         from alpi.host.connection_context import owns_session

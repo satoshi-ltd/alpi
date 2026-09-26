@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.15.24 — 2026-09-26 — a remote device attaches only files from the staging area
+
+- **`host.chat.send` no longer reads an arbitrary path for a remote device.** The attachments of a
+  chat message were checked only for being an absolute path to an existing file, and the client
+  could declare the type, so any paired device, member or admin, could name a file it never
+  uploaded — a profile's `.env` declared as `text/plain`, another profile's sessions or memories —
+  and the agent received its contents, while its own file tools refuse a `.env` to everyone and
+  those areas to members. A remote call now accepts an attachment only when its path resolves,
+  symlinks followed, to a file in that profile's staging area, which `host.attachments.stage`
+  fills and which the desktop and phone apps already use for every remote upload; anything else
+  refuses the message before the turn starts. The local socket and `host.chat.delegate` are unchanged, so the desktop on
+  the same machine still attaches files straight from the disk.
+
 ## v0.15.23 — 2026-09-26 — documents offered in chat are documents every client can download
 
 - **The chat offers a document only where the app can fetch it.** The engine offered any file a

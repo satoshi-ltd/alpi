@@ -397,6 +397,13 @@ longer offered, and `attach_file` refuses it, naming the `out/` folder to use.
 The daemon still refuses, on top, any path with a `secrets` folder or a `.env`
 file name.
 
+Inbound, a remote device attaches only uploaded files: `host.chat.send` from a
+remote connection (member or admin) accepts an attachment path only when it
+resolves, symlinks followed, to a file in that profile's staging area
+(`host/attachments/tmp/`, filled by `host.attachments.stage` and shared by
+every device of the profile), and refuses the whole message otherwise. The local socket and `host.chat.delegate` still pass
+local paths, which is how the desktop on the same machine attaches a file.
+
 ## Audit trail & accountability
 
 alpi records what the agent and its operators do across several local
