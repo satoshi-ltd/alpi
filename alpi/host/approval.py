@@ -124,6 +124,7 @@ def host_approval_callback(
         "profile": profile,
         "cwd": cwd_display,
         "ts": time.time(),
+        **_owner(),
         "timeout_s": PROMPT_TIMEOUT_S,
     }
 
@@ -160,6 +161,8 @@ def host_approval_callback(
 
     host_events.emit("approval.resolved", {
         "request_id": request_id,
+        "connection_id": payload["connection_id"],
+        "device_id": payload["device_id"],
         "choice": choice,
         "pattern": pattern,
         "severity": payload["severity"],
@@ -167,6 +170,17 @@ def host_approval_callback(
         "ts": time.time(),
     })
     return choice
+
+
+def _owner() -> dict[str, str]:
+    from alpi.host.connection_context import current
+    ctx = current()
+    return {"connection_id": ctx.connection_id, "device_id": ctx.device_id or ""}
+
+
+def _visible(meta: dict[str, Any]) -> bool:
+    from alpi.host.connection_context import can_handle_prompt
+    return can_handle_prompt(meta.get("connection_id"), meta.get("device_id"))
 
 
 async def _arm_coro(arm_fn) -> None:
@@ -196,6 +210,9 @@ async def _respond_handler(
     if choice not in _VALID_CHOICES:
         return {"ok": False, "reason": f"choice must be one of {sorted(_VALID_CHOICES)}"}
     with _pending_lock:
+        meta = _pending_meta.get(request_id)
+        if meta is not None and not _visible(meta):
+            return {"ok": False, "reason": "unknown or already resolved"}
         fut = _pending.pop(request_id, None)
         _pending_meta.pop(request_id, None)
     if fut is None:
@@ -219,7 +236,7 @@ async def _pending_handler(
     active client just auto-denies invisibly.
     """
     with _pending_lock:
-        items = list(_pending_meta.values())
+        items = [m for m in _pending_meta.values() if _visible(m)]
     return {"requests": items}
 
 

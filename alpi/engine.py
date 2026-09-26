@@ -204,6 +204,7 @@ class Engine:
             home=home,
             model=cfg.model,
             connection_id=self.connection_context.connection_id,
+            device_id=self.connection_context.device_id or "",
         )
         from alpi import _timing
         self._mcp_tools = _maybe_load_mcps(cfg)
@@ -307,6 +308,7 @@ class Engine:
             home=self.home,
             model=self.cfg.model,
             connection_id=self.connection_context.connection_id,
+            device_id=self.connection_context.device_id or "",
         )
         self.session.messages.append({"role": "system", "content": self._system_prompt})
         self.interrupt_requested = False
@@ -1936,6 +1938,8 @@ class Engine:
                         "profile": profile,
                         "id": self.session.id,
                         "subdir": self.session.subdir,
+                        "connection_id": self.session.connection_id,
+                        "device_id": self.session.device_id,
                     },
                 )
             except Exception:  # noqa: BLE001

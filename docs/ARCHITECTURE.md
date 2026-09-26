@@ -744,6 +744,26 @@ delete reject sessions owned by another connection. The daily ledger records
 input/output tokens and USD under `by_connection`; the run ledger records both
 IDs. Local Unix/TUI/CLI activity uses the synthetic `host` connection.
 
+Sessions also persist `device_id`. A connection's `session_scope` decides
+whether that matters: `connection` (the default) shares every session among the
+connection's devices; `device` lets a remote device list, read, continue,
+cancel and delete only the sessions it created, drops other devices'
+`session_changed` frames from its event stream and history, and narrows the
+agent's `session_read` / `session_search` tools the same way. Every session
+records its device whatever the scope, so switching to `device` also hides a
+device's earlier sessions from its siblings; sessions without a `device_id`
+(saved by alpi before 0.15.20, or started by the daemon itself through the
+scheduler or `host.chat.delegate`) stay visible to every device of the
+connection. `ask_user` clarifications and command approvals carry the owner of
+the turn that raised them: `host.clarification.pending` / `host.approval.pending`,
+their `respond` verbs and the `clarification.*` / `approval.*` events follow the
+same rule for member devices. The local socket and admin-role reads are
+unaffected. A device
+flagged `provisioner` (minted from a pairing grant that carried the flag) may
+call `add_device`, `pairing_status`, `cancel_pairing` and `revoke_device` for
+its own connection without the admin role; it cannot grant provisioning, revoke
+itself, or reach any other admin verb.
+
 Sensitive mutations pass through one dispatcher audit boundary after their
 handler returns. `admin_audit.py` writes only allowlisted identifiers and the
 stable error envelope; it never serializes request params or handler results.
@@ -777,12 +797,15 @@ those over WS).
 
 Lifecycle:
 
-- **Create connection**: `host.connections.create(label, role, profiles)`
-  creates the parent identity and a ten-minute one-time grant. The grant is
-  embedded in the QR/link shown by `alpi setup → Connections → New connection`.
-  The default role is `member`.
-- **Add device**: `host.connections.add_device(connection_id)` creates another
-  one-time grant under the same parent identity.
+- **Create connection**: `host.connections.create(label, role, profiles,
+  session_scope?)` creates the parent identity and a ten-minute one-time grant.
+  The grant is embedded in the QR/link shown by `alpi setup → Connections → New
+  connection`. The default role is `member`; the default scope is `connection`.
+- **Add device**: `host.connections.add_device(connection_id, provisioner?)`
+  creates another one-time grant under the same parent identity. `provisioner:
+  true` needs the admin role and marks the device the grant mints; a
+  provisioner device may call this verb, `pairing_status`, `cancel_pairing`
+  and `revoke_device` for its own connection.
 - **Exchange**: the client sends `host.connections.exchange_pairing` as its
   first unauthenticated WS message. The daemon atomically consumes the grant,
   creates the permanent device credential with its client/name/version
@@ -790,8 +813,8 @@ Lifecycle:
   `-32011 pairing-used`; expiry returns `-32011 pairing-expired`.
 - **Observe / cancel**: local/admin callers use
   `host.connections.pairing_status` and `host.connections.cancel_pairing`.
-- **Update / disable**: `host.connections.update` changes label, role or
-  profile scope. `host.connections.set_status` disables or enables every
+- **Update / disable**: `host.connections.update` changes label, role,
+  profile scope or session scope. `host.connections.set_status` disables or enables every
   linked credential without deleting sessions or usage.
 - **Use**: every WS request carries `auth_token`. Fail =
   JSON-RPC `{code: -32000, message: "auth-failed"}` and the

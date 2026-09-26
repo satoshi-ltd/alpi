@@ -107,6 +107,7 @@ class Session:
     home: Path
     model: str
     connection_id: str = "host"
+    device_id: str = ""
     # Subdirectory under ``home`` where ``save()`` lands.
     subdir: str = "sessions"
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
@@ -186,6 +187,7 @@ class Session:
             "id": self.id,
             "model": self.model,
             "connection_id": self.connection_id,
+            "device_id": self.device_id,
             "started_at": self.started_at,
             "elapsed": self.elapsed,
             "input_tokens": self.input_tokens,

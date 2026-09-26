@@ -20,9 +20,9 @@ def _home(params: dict[str, Any]):  # noqa: ANN202
 
 
 def _visible(row: dict[str, Any]) -> bool:
-    from alpi.host.connection_context import owns_connection
+    from alpi.host.connection_context import owns_session
 
-    return owns_connection(row.get("connection_id"))
+    return owns_session(row.get("connection_id"), row.get("device_id"))
 
 
 async def _list(params: dict[str, Any], _server: host_server.Server) -> dict[str, Any]:
@@ -68,7 +68,7 @@ async def _read(params: dict[str, Any], _server: host_server.Server) -> dict[str
 
 async def _cancel(params: dict[str, Any], _server: host_server.Server) -> dict[str, Any]:
     from alpi.host.handlers import _check_id
-    from alpi.host.connection_context import HOST_CONNECTION_ID, current, owns_connection
+    from alpi.host.connection_context import HOST_CONNECTION_ID, current, owns_session
 
     profile = str((params or {}).get("profile") or "")
     run_id = str((params or {}).get("id") or "").strip()
@@ -76,16 +76,19 @@ async def _cancel(params: dict[str, Any], _server: host_server.Server) -> dict[s
     _home(params)
     from alpi.host.chat import active_run
 
+    def _owned(candidate) -> bool:  # noqa: ANN001
+        session = getattr(candidate, "session", None)
+        return owns_session(
+            getattr(session, "connection_id", None), getattr(session, "device_id", None),
+        )
+
     local_operator = current().connection_id == HOST_CONNECTION_ID
     engine = active_run(profile, run_id)
-    session = getattr(engine, "session", None)
-    if engine is not None and (
-        local_operator or owns_connection(getattr(session, "connection_id", None))
-    ):
+    if engine is not None and (local_operator or _owned(engine)):
         engine.request_interrupt("run-cancel-rpc")
         return {"cancelled": True}
     entry = runs.active(profile, run_id)
-    if entry is not None and (local_operator or owns_connection(entry[0])):
+    if entry is not None and (local_operator or _owned(entry[1])):
         entry[1].request_interrupt("run-cancel-rpc")
         return {"cancelled": True}
     await _owned_summary(params)

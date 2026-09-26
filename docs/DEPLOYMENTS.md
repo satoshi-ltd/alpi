@@ -175,6 +175,21 @@ the same underlying trust owner. Runtime isolation lets a customer profile keep
 the terminal, skills, and network access it genuinely needs without granting
 that runtime access to another customer's volume or credentials.
 
+One connection shared by several people can keep their conversations apart:
+set its session scope to **per device** in the connection detail (or
+`session_scope: device` on `host.connections.create` / `update`) and each
+device lists, continues, cancels and deletes only the sessions it created.
+Every session records its device, so the switch also hides earlier sessions
+from sibling devices; only sessions saved by alpi before 0.15.20, or started by
+the daemon itself, carry no device and stay visible to the whole connection.
+Questions the agent asks (`ask_user`) and command approvals reach only the
+device, or with the default scope the connection, whose turn raised them. Profile memory, workspace
+files and skill state remain per profile and are not separated by this
+setting. A server that enrols people on the connection's behalf needs one
+device minted from a provisioning grant (**Add device → Grant provisioning**,
+admin only); that device may add, watch, cancel and revoke sibling devices on
+its own connection and nothing else.
+
 Existing clients keep the URL selected at their original pairing. A device
 stored as `ws://HOST_IP:PORT` does not automatically adopt the new Public
 route and goes offline when the overlay removes that mapping. Re-pair each

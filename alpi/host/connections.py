@@ -35,7 +35,8 @@ PAIRING_HISTORY_RETENTION_SECONDS = 7 * 24 * 60 * 60
 PAIRING_HISTORY_LIMIT = 50
 _VALID_ROLES = frozenset({"member", "admin"})
 _VALID_STATUSES = frozenset({"active", "disabled", "deleted"})
-_VALID_CLIENTS = frozenset({"desktop", "mobile", "unknown"})
+_VALID_CLIENTS = frozenset({"desktop", "mobile", "web", "unknown"})
+_VALID_SESSION_SCOPES = frozenset({"connection", "device"})
 _SAFE_PROFILE = re.compile(r"^[A-Za-z0-9_-]+$")
 log = logging.getLogger(__name__)
 _CORRUPT_SCOPE = "<corrupt>"
@@ -68,6 +69,8 @@ class AuthResult:
     connection_id: str = ""
     device_id: str = ""
     reason: str = ""
+    session_scope: str = "connection"
+    provisioner: bool = False
 
     @property
     def context(self) -> ConnectionContext:
@@ -76,6 +79,8 @@ class AuthResult:
             device_id=self.device_id or None,
             source="remote",
             role=self.role or "member",
+            session_scope=self.session_scope,
+            provisioner=self.provisioner,
         )
 
 
@@ -214,6 +219,11 @@ def _status(value: Any) -> str:
     return value if value in _VALID_STATUSES else "disabled"
 
 
+def _session_scope(value: Any) -> str:
+    value = str(value or "connection").strip().lower()
+    return value if value in _VALID_SESSION_SCOPES else "device"
+
+
 def _scope(value: Any) -> list[str]:
     if value is None:
         return []
@@ -265,6 +275,7 @@ def _normalise_device(row: Any, fallback_label: str = "") -> dict[str, Any] | No
         "created": int(row.get("created") or time.time()),
         "last_seen": int(row["last_seen"]) if row.get("last_seen") else None,
         "status": _status(row.get("status")),
+        "provisioner": bool(row.get("provisioner")),
     }
 
 
@@ -285,6 +296,7 @@ def _normalise_pairing(row: Any) -> dict[str, Any] | None:
         "status": status,
         "consumed_at": int(row["consumed_at"]) if row.get("consumed_at") else None,
         "device_id": str(row.get("device_id") or ""),
+        "provisioner": bool(row.get("provisioner")),
     }
 
 
@@ -324,6 +336,7 @@ def _normalise_connection(row: Any) -> dict[str, Any] | None:
         "status": _status(row.get("status")),
         "role": _role(row.get("role")),
         "profile_scope": _scope(row.get("profile_scope")),
+        "session_scope": _session_scope(row.get("session_scope")),
         "devices": devices,
         "pairings": pairings,
         "deleted_at": int(row["deleted_at"]) if row.get("deleted_at") else None,
@@ -649,6 +662,7 @@ def _device_payload(device: dict[str, Any]) -> dict[str, Any]:
         "last_seen": device.get("last_seen"),
         "status": device.get("status") or "active",
         "expired": device.get("status") == "active" and device_expired(device, token_ttl_seconds()),
+        "provisioner": bool(device.get("provisioner")),
     }
 
 
@@ -667,6 +681,7 @@ def public_connection(row: dict[str, Any]) -> dict[str, Any]:
         "status": row.get("status") or "active",
         "role": row.get("role") or "member",
         "profile_scope": list(row.get("profile_scope") or []),
+        "session_scope": _session_scope(row.get("session_scope")),
         "devices": devices,
     }
 
@@ -682,10 +697,11 @@ def _public_pairing(pairing: dict[str, Any]) -> dict[str, Any]:
         "status": status,
         "consumed_at": pairing.get("consumed_at"),
         "device_id": pairing.get("device_id") or "",
+        "provisioner": bool(pairing.get("provisioner")),
     }
 
 
-def _new_pairing(now: int) -> tuple[dict[str, Any], dict[str, Any]]:
+def _new_pairing(now: int, provisioner: bool = False) -> tuple[dict[str, Any], dict[str, Any]]:
     secret = secrets.token_urlsafe(32)
     stored = {
         "id": _new_id("pair"),
@@ -695,12 +711,14 @@ def _new_pairing(now: int) -> tuple[dict[str, Any], dict[str, Any]]:
         "status": "pending",
         "consumed_at": None,
         "device_id": "",
+        "provisioner": bool(provisioner),
     }
     return stored, {**_public_pairing(stored), "token": secret}
 
 
 def create_pairing_connection(
     label: str, *, role: str = "member", profile_scope: list[str] | None = None,
+    session_scope: str = "connection",
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     with _locked():
         data = _load_inside_lock()
@@ -713,6 +731,7 @@ def create_pairing_connection(
             "status": "active",
             "role": role,
             "profile_scope": [] if _role(role) == "admin" else list(profile_scope or []),
+            "session_scope": _session_scope(session_scope),
             "devices": [],
             "pairings": [stored_pairing],
         })
@@ -721,7 +740,9 @@ def create_pairing_connection(
         return connection, pairing
 
 
-def create_device_pairing(connection_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
+def create_device_pairing(
+    connection_id: str, provisioner: bool = False,
+) -> tuple[dict[str, Any], dict[str, Any]]:
     with _locked():
         data = _load_inside_lock()
         connection = next(
@@ -730,7 +751,7 @@ def create_device_pairing(connection_id: str) -> tuple[dict[str, Any], dict[str,
         )
         if connection is None:
             raise KeyError(connection_id)
-        stored_pairing, pairing = _new_pairing(int(time.time()))
+        stored_pairing, pairing = _new_pairing(int(time.time()), provisioner=provisioner)
         connection["pairings"].append(stored_pairing)
         _atomic_write(data)
         return connection, pairing
@@ -793,6 +814,7 @@ def exchange_pairing(
                     app_version=app_version.strip()[:64],
                     created=now,
                     status="active",
+                    provisioner=bool(pairing.get("provisioner")),
                 )
                 connection["devices"].append(device)
                 pairing["status"] = "consumed"
@@ -848,6 +870,7 @@ def cancel_pairing(connection_id: str, pairing_id: str) -> bool:
 
 def create_connection(
     label: str, *, role: str = "member", profile_scope: list[str] | None = None,
+    session_scope: str = "connection",
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     with _locked():
         data = _load_inside_lock()
@@ -860,6 +883,7 @@ def create_connection(
             "status": "active",
             "role": role,
             "profile_scope": [] if _role(role) == "admin" else list(profile_scope or []),
+            "session_scope": _session_scope(session_scope),
             "devices": [device],
         })
         data["connections"].append(connection)
@@ -885,6 +909,7 @@ def add_device(connection_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
 def update_connection(
     connection_id: str, *, label: str | None = None, role: str | None = None,
     profile_scope: list[str] | None = None, status: str | None = None,
+    session_scope: str | None = None,
 ) -> bool:
     with _locked():
         clean_label = None
@@ -892,12 +917,16 @@ def update_connection(
             clean_label = label.strip()
             if not clean_label:
                 return False
+        if session_scope is not None and session_scope not in _VALID_SESSION_SCOPES:
+            return False
         data = _load_inside_lock()
         row = next((c for c in data["connections"] if c["id"] == connection_id), None)
         if row is None:
             return False
         if clean_label is not None:
             row["label"] = clean_label
+        if session_scope is not None:
+            row["session_scope"] = session_scope
         if role is not None:
             if role not in _VALID_ROLES:
                 return False
@@ -1026,6 +1055,8 @@ def authenticate(token: str, min_interval: float = 60.0) -> AuthResult:
                 tuple(connection["profile_scope"]),
                 connection["id"],
                 device["id"],
+                session_scope=_session_scope(connection.get("session_scope")),
+                provisioner=bool(device.get("provisioner")),
             )
             if now - int(device.get("last_seen") or 0) >= min_interval:
                 _touch(presented, now, min_interval)
@@ -1096,6 +1127,8 @@ def _pairing_payload(
         "label": connection["label"],
         "role": connection["role"],
         "profile_scope": connection["profile_scope"],
+        "session_scope": _session_scope(connection.get("session_scope")),
+        "provisioner": bool(pairing.get("provisioner")),
         **network,
     }
 
@@ -1133,18 +1166,37 @@ async def _create(params: dict[str, Any], _server: host_server.Server) -> dict[s
     if role not in _VALID_ROLES:
         raise host_server.HandlerError(-32602, "invalid-params", data={"detail": "invalid role"})
     profiles = validate_profiles((params or {}).get("profiles") or [])
+    session_scope = _session_scope_param(params)
     network = _pairing_network()
-    connection, pairing = create_pairing_connection(label, role=role, profile_scope=profiles)
+    connection, pairing = create_pairing_connection(
+        label, role=role, profile_scope=profiles, session_scope=session_scope,
+    )
     return _pairing_payload(connection, pairing, network)
+
+
+def _session_scope_param(params: dict[str, Any]) -> str:
+    raw = (params or {}).get("session_scope")
+    if raw is None:
+        return "connection"
+    value = str(raw).strip().lower()
+    if value not in _VALID_SESSION_SCOPES:
+        raise host_server.HandlerError(-32602, "invalid-params", data={"detail": "invalid session_scope"})
+    return value
 
 
 async def _add_device(params: dict[str, Any], _server: host_server.Server) -> dict[str, Any]:
     connection_id = str((params or {}).get("connection_id") or "")
     if not any(row["id"] == connection_id for row in list_connections()):
         raise host_server.HandlerError(-32004, "not-found", data={"detail": "connection not found"})
+    provisioner = bool((params or {}).get("provisioner"))
+    from alpi.host.connection_context import current
+    if provisioner and current().role != "admin":
+        raise host_server.HandlerError(
+            -32001, "forbidden", data={"detail": "admin role required to grant provisioning"},
+        )
     network = _pairing_network()
     try:
-        connection, pairing = create_device_pairing(connection_id)
+        connection, pairing = create_device_pairing(connection_id, provisioner=provisioner)
     except KeyError:
         raise host_server.HandlerError(-32004, "not-found", data={"detail": "connection not found"})
     return _pairing_payload(connection, pairing, network)
@@ -1214,11 +1266,13 @@ async def _update(params: dict[str, Any], _server: host_server.Server) -> dict[s
     if role is not None and role not in _VALID_ROLES:
         raise host_server.HandlerError(-32602, "invalid-params", data={"detail": "invalid role"})
     profiles = validate_profiles(params["profiles"]) if "profiles" in params else None
+    session_scope = _session_scope_param(params) if "session_scope" in params else None
     ok = update_connection(
         connection_id,
         label=label,
         role=str(role) if role is not None else None,
         profile_scope=profiles,
+        session_scope=session_scope,
     )
     if not ok:
         raise host_server.HandlerError(-32004, "not-found", data={"detail": "connection not found"})
@@ -1240,10 +1294,15 @@ async def _delete(params: dict[str, Any], _server: host_server.Server) -> dict[s
 
 
 async def _revoke_device(params: dict[str, Any], _server: host_server.Server) -> dict[str, Any]:
-    existed = revoke_device(
-        str((params or {}).get("connection_id") or ""),
-        str((params or {}).get("device_id") or ""),
-    )
+    connection_id = str((params or {}).get("connection_id") or "")
+    device_id = str((params or {}).get("device_id") or "")
+    from alpi.host.connection_context import current
+    ctx = current()
+    if ctx.source == "remote" and ctx.role != "admin" and device_id and device_id == ctx.device_id:
+        raise host_server.HandlerError(
+            -32602, "invalid-params", data={"detail": "a provisioner cannot revoke itself"},
+        )
+    existed = revoke_device(connection_id, device_id)
     return {"ok": True, "existed": existed}
 
 

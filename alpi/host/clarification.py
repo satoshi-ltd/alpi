@@ -93,6 +93,7 @@ def host_clarification_handler(
         "allow_other": bool(allow_other),
         "multi": bool(multi),
         "ts": time.time(),
+        **_owner(),
         "timeout_s": CLARIFICATION_TIMEOUT_S,
     }
 
@@ -134,11 +135,24 @@ def host_clarification_handler(
     host_events.emit("clarification.resolved", {
         "request_id": request_id,
         "profile": profile,
+        "connection_id": payload["connection_id"],
+        "device_id": payload["device_id"],
         "choice": choice,
         "timed_out": timed_out,
         "ts": time.time(),
     })
     return choice
+
+
+def _owner() -> dict[str, str]:
+    from alpi.host.connection_context import current
+    ctx = current()
+    return {"connection_id": ctx.connection_id, "device_id": ctx.device_id or ""}
+
+
+def _visible(meta: dict[str, Any]) -> bool:
+    from alpi.host.connection_context import can_handle_prompt
+    return can_handle_prompt(meta.get("connection_id"), meta.get("device_id"))
 
 
 async def _arm_coro(arm_fn) -> None:
@@ -176,7 +190,7 @@ async def _respond_handler(
     choice = choice.strip()
     with _pending_lock:
         meta = _pending_meta.get(request_id)
-        if meta is None:
+        if meta is None or not _visible(meta):
             return {"ok": False, "reason": "unknown or already resolved"}
         allow_other = bool(meta.get("allow_other"))
         multi = bool(meta.get("multi"))
@@ -227,7 +241,7 @@ async def _pending_handler(
 ) -> dict[str, Any]:
     """``host.clarification.pending`` — cold-start recovery. Clients call on mount/reconnect to fetch requests whose ``clarification.request`` event fired before the live subscription anchored."""
     with _pending_lock:
-        items = list(_pending_meta.values())
+        items = [m for m in _pending_meta.values() if _visible(m)]
     return {"requests": items}
 
 

@@ -158,6 +158,21 @@ _ADMIN_METHODS = frozenset({
     "host.usage.workgroup.daily",
 })
 
+# Admin verbs a provisioner device may call on its OWN connection; the connection_id match is the whole guard.
+_SELF_SERVICE_METHODS = frozenset({
+    "host.connections.add_device",
+    "host.connections.pairing_status",
+    "host.connections.cancel_pairing",
+    "host.connections.revoke_device",
+})
+
+
+def _self_service_allowed(method: str, meta: "AuthMeta | None", params: dict[str, Any]) -> bool:
+    if meta is None or not meta.provisioner or method not in _SELF_SERVICE_METHODS:
+        return False
+    return bool(meta.connection_id) and params.get("connection_id") == meta.connection_id
+
+
 # host.profile.detail leaks Settings-only fields (providers, mcps, peers, sandbox, workspace path…) inside its result blob. Members hit it from ChatPane for `models` + `voice_id`, so we can't gate the whole verb — instead redact the result down to the chat-essential fields when role != admin.
 _MEMBER_DETAIL_KEEP = frozenset({"models", "voice_id", "voice_auto_read"})
 
@@ -191,6 +206,10 @@ _SCOPE_FREE_METHODS = frozenset({
     "host.clarification.pending",
     "host.approval.respond",
     "host.connections.register_device",
+    "host.connections.add_device",
+    "host.connections.pairing_status",
+    "host.connections.cancel_pairing",
+    "host.connections.revoke_device",
     "host.workgroup.recipes.describe",
 })
 
@@ -782,6 +801,8 @@ class Server:
                     device_id=meta.device_id,
                     source="remote",
                     role=meta.role or "member",
+                    session_scope=meta.session_scope,
+                    provisioner=meta.provisioner,
                 )
                 remote_meta = meta
         if bootstrap and method != "host.connections.exchange_pairing":
@@ -848,7 +869,10 @@ class Server:
                     },
                 })
                 return
-        if require_token and method in _ADMIN_METHODS and role != "admin":
+        if (
+            require_token and method in _ADMIN_METHODS and role != "admin"
+            and not _self_service_allowed(method, remote_meta, audit_params)
+        ):
             log.warning("host forbidden: %s blocked for role=%s", method, role)
             from alpi.host import admin_audit
             await asyncio.to_thread(
@@ -930,6 +954,9 @@ class Server:
                         return
                 if member:
                     out = _redact_payload_by_role(method, out)
+                    if out is None:
+                        return
+                    out = _filter_session_events(method, out, request_context)
                     if out is None:
                         return
                 await send(out)
@@ -1151,6 +1178,40 @@ def _redact_payload_by_role(method: str, payload: dict[str, Any]) -> dict[str, A
     return payload
 
 
+def _session_event_visible(data: Any, ctx: Any) -> bool:
+    if not isinstance(data, dict) or not data.get("connection_id"):
+        return True
+    if data["connection_id"] != ctx.connection_id:
+        return False
+    if ctx.session_scope != "device" or not data.get("device_id"):
+        return True
+    return data["device_id"] == ctx.device_id
+
+
+_OWNED_EVENTS = frozenset({
+    "session_changed",
+    "clarification.request", "clarification.resolved",
+    "approval.request", "approval.resolved",
+})
+
+
+def _filter_session_events(method: str, payload: dict[str, Any], ctx: Any) -> dict[str, Any] | None:
+    if not isinstance(payload, dict):
+        return payload
+    if "data" in payload and payload.get("event") in _OWNED_EVENTS:
+        return payload if _session_event_visible(payload.get("data"), ctx) else None
+    if method == "host.events.history":
+        result = payload.get("result")
+        events = result.get("events") if isinstance(result, dict) else None
+        if isinstance(events, list):
+            result["events"] = [
+                ev for ev in events
+                if not isinstance(ev, dict) or ev.get("event") not in _OWNED_EVENTS
+                or _session_event_visible(ev.get("data"), ctx)
+            ]
+    return payload
+
+
 def _filter_payload_by_scope(
     method: str, payload: dict[str, Any], scope: list[str],
 ) -> dict[str, Any] | None:
@@ -1270,6 +1331,8 @@ class AuthMeta:
     connection_id: str = ""
     device_id: str = ""
     reason: str = ""
+    session_scope: str = "connection"
+    provisioner: bool = False
 
     def __iter__(self):
         yield self.valid
@@ -1326,4 +1389,6 @@ def _check_token_meta(body: dict[str, Any]) -> AuthMeta:
         list(auth.profile_scope),
         auth.connection_id,
         auth.device_id,
+        session_scope=auth.session_scope,
+        provisioner=auth.provisioner,
     )

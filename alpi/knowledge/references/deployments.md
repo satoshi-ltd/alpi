@@ -40,6 +40,7 @@ alpi daemon restart
 - Render first: `docker compose -f docker-compose.yml -f docker-compose.wss.yml config`. Alpi must have no published ports; only Caddy publishes 80/443.
 - Start: `docker compose -f docker-compose.yml -f docker-compose.wss.yml up -d`.
 - Configure `wss://your.domain.com` at `alpi setup -> Connections -> Network -> Public route`; then create a member connection scoped to the profiles that client needs and generate one pairing credential per device.
+- One connection shared by several people: set its `session_scope` to `device` (connection detail in setup, or `host.connections.create` / `host.connections.update`) so each device sees only the sessions it created, earlier ones included; only sessions from before alpi 0.15.20 stay shared, and questions and approvals reach only the device whose turn raised them. A server that enrols people itself gets one device minted from a provisioning grant (Add device -> Grant provisioning, admin only); that device may add, watch, cancel and revoke sibling devices on its own connection and nothing else.
 - Existing clients retain their original URL. After enabling WSS, re-pair every client that stored direct `ws://` through Add device on its existing connection, verify WSS, then revoke the old device row; role/scope stay on the connection.
 - Test from an external network, validate the certificate hostname, and confirm the daemon port is closed externally.
 - Updates must retain both `-f` arguments for `pull` and `up -d`; using the base file alone republishes its direct ports.

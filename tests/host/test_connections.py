@@ -1868,3 +1868,70 @@ def test_rewrite_from_turn_resets_the_cache_counters(monkeypatch, tmp_path: Path
         "the discarded branch's share must not pollute the surviving hit rate"
     )
     assert engine.session.messages[0]["content"] == "sys"
+
+
+def test_session_scope_defaults_to_connection_and_round_trips(monkeypatch, tmp_path: Path) -> None:
+    _root(monkeypatch, tmp_path)
+    row, _device = connections.create_connection("Web")
+    assert connections.public_connection(row)["session_scope"] == "connection"
+    assert connections.update_connection(row["id"], session_scope="device")
+    stored = next(c for c in connections.list_connections() if c["id"] == row["id"])
+    assert connections.public_connection(stored)["session_scope"] == "device"
+    assert not connections.update_connection(row["id"], session_scope="team")
+    assert connections._normalise_connection({"id": "c", "label": "x", "session_scope": "weird"})[
+        "session_scope"
+    ] == "device"
+    assert connections._normalise_connection({"id": "c", "label": "x"})["session_scope"] == "connection"
+
+
+def test_a_provisioner_grant_mints_a_provisioner_device(monkeypatch, tmp_path: Path) -> None:
+    _root(monkeypatch, tmp_path)
+    row, _first = connections.create_connection("Web", session_scope="device")
+    _row, grant = connections.create_device_pairing(row["id"], provisioner=True)
+    _row, plain = connections.create_device_pairing(row["id"])
+    assert grant["provisioner"] is True and plain["provisioner"] is False
+
+    _row, provisioner = connections.exchange_pairing(
+        grant["token"], client="web", name="server", app_version="1",
+    )
+    _row, normal = connections.exchange_pairing(
+        plain["token"], client="web", name="browser", app_version="1",
+    )
+
+    assert provisioner["provisioner"] is True and normal["provisioner"] is False
+    assert provisioner["client"] == "web"
+    auth = connections.authenticate(provisioner["token"])
+    assert (auth.valid, auth.session_scope, auth.provisioner) == (True, "device", True)
+    assert (auth.context.session_scope, auth.context.provisioner) == ("device", True)
+    assert connections.authenticate(normal["token"]).provisioner is False
+    stored = next(c for c in connections.list_connections() if c["id"] == row["id"])
+    flags = {d["id"]: d["provisioner"] for d in connections.public_connection(stored)["devices"]}
+    assert flags[provisioner["id"]] is True and flags[normal["id"]] is False
+
+
+@pytest.mark.asyncio
+async def test_a_provisioner_cannot_grant_provisioning_nor_revoke_itself(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    root = _root(monkeypatch, tmp_path)
+    row, sibling = connections.create_connection("Web")
+    _row, grant = connections.create_device_pairing(row["id"], provisioner=True)
+    _row, device = connections.exchange_pairing(
+        grant["token"], client="web", name="server", app_version="1",
+    )
+    server = Server(root)
+    with use(connections.authenticate(device["token"]).context):
+        with pytest.raises(HandlerError) as error:
+            await connections._add_device({"connection_id": row["id"], "provisioner": True}, server)
+        assert error.value.message == "forbidden"
+        with pytest.raises(HandlerError) as error:
+            await connections._revoke_device(
+                {"connection_id": row["id"], "device_id": device["id"]}, server,
+            )
+        assert error.value.message == "invalid-params"
+        revoked = await connections._revoke_device(
+            {"connection_id": row["id"], "device_id": sibling["id"]}, server,
+        )
+    assert revoked == {"ok": True, "existed": True}
+    assert connections.authenticate(sibling["token"]).valid is False
+    assert connections.authenticate(device["token"]).valid is True

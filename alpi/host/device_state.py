@@ -19,7 +19,7 @@ from alpi import config as cfg_mod
 from alpi import home as home_mod
 from alpi.host import sessions as host_sessions
 from alpi.host import server as host_server
-from alpi.host.connection_context import current as current_connection, owns_connection
+from alpi.host.connection_context import current as current_connection, owns_session_row
 
 READ_MAX_BYTES = 256 * 1024
 KNOWN_PROVIDER_KEYS = (
@@ -1105,7 +1105,7 @@ def _installed_via() -> str | None:
 
 def _latest_chat_for(home: Path) -> dict[str, Any] | None:
     """Chat kind only: the profile view must never reopen a workgroup session as normal chat history."""
-    row = host_sessions.latest_chat_summary(home, can_read=owns_connection)
+    row = host_sessions.latest_chat_summary(home, can_read=owns_session_row)
     if not row:
         return None
     return {

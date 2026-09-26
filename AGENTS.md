@@ -189,6 +189,23 @@ every ``host.*`` verb the UI calls.
   but the daemon won't be listening on it — clients should compare
   `host_in_use` against `candidates` to detect this and warn.
 
+- **Session ownership is `(connection_id, device_id)`, gated by the
+  connection's `session_scope`.** `Session` persists both ids; every host verb
+  that lists, reads, continues, cancels or deletes a session goes through
+  `connection_context.owns_session(connection_id, device_id)` (row form:
+  `owns_session_row`; agent tools use `can_read_session`, which keeps the admin
+  bypass). Under `session_scope: connection` (default) the device clause is a
+  no-op; under `device` a remote device sees only sessions carrying its own
+  `device_id`, and sessions with no `device_id` (pre-flag, scheduler,
+  `host.chat.delegate`) stay visible to the whole connection. The local socket
+  never applies the device clause. `session_changed` events carry both ids and
+  `server._filter_session_events` drops foreign ones for members, next to the
+  role redaction. Never filter by `owns_connection` alone in a new session
+  verb. A device with `provisioner: true` may call the `_SELF_SERVICE_METHODS`
+  (`add_device`, `pairing_status`, `cancel_pairing`, `revoke_device`) on its own
+  `connection_id` without the admin role; those verbs are `_SCOPE_FREE_METHODS`
+  because they carry no profile.
+
 ## Testing
 
 ```bash

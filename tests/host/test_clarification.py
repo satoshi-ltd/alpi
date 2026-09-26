@@ -501,3 +501,47 @@ def test_pending_profile_resolves_and_fails_closed(monkeypatch):
         assert clar.pending_profile(None) is None
     finally:
         clar._reset_for_tests()
+
+
+@pytest.mark.asyncio
+async def test_pending_and_respond_follow_the_turn_owner(tmp_path: Path, monkeypatch) -> None:
+    from alpi.host import events as host_events
+    from alpi.host.connection_context import ConnectionContext, use
+    srv = host_server.Server(home=tmp_path)
+    host_clar.register(srv)
+    emitted: list[tuple[str, dict]] = []
+    monkeypatch.setattr(host_events, "emit", lambda kind, data=None: emitted.append((kind, data or {})))
+    owner = ConnectionContext("conn", "dev_a", "remote", "member", session_scope="device")
+    sibling = ConnectionContext("conn", "dev_b", "remote", "member", session_scope="device")
+    shared_sibling = ConnectionContext("conn", "dev_b", "remote", "member", session_scope="connection")
+    stranger = ConnectionContext("conn_other", "dev_x", "remote", "member")
+    admin = ConnectionContext("conn_admin", "dev_admin", "remote", "admin")
+    loop = asyncio.get_running_loop()
+
+    def _run_handler() -> str:
+        with use(owner):
+            return host_clar.host_clarification_handler("Pick", [{"label": "X"}], allow_other=False)
+
+    handler_future = loop.run_in_executor(None, _run_handler)
+    await asyncio.sleep(0.05)
+
+    async def pending_as(ctx):
+        with use(ctx):
+            return (await host_clar._pending_handler({}, srv))["requests"]
+
+    rid = (await pending_as(owner))[0]["request_id"]
+    assert (await pending_as(sibling)) == [] and (await pending_as(stranger)) == []
+    assert len(await pending_as(shared_sibling)) == 1 and len(await pending_as(admin)) == 1
+    assert len((await host_clar._pending_handler({}, srv))["requests"]) == 1
+    for ctx in (sibling, stranger):
+        with use(ctx):
+            refused = await host_clar._respond_handler({"request_id": rid, "choice": "X"}, srv)
+        assert refused == {"ok": False, "reason": "unknown or already resolved"}
+    with use(owner):
+        assert (await host_clar._respond_handler({"request_id": rid, "choice": "X"}, srv))["ok"] is True
+    assert await asyncio.wait_for(handler_future, timeout=5.0) == "X"
+    request = next(d for k, d in emitted if k == "clarification.request")
+    resolved = next(d for k, d in emitted if k == "clarification.resolved")
+    assert (request["connection_id"], request["device_id"]) == ("conn", "dev_a")
+    assert (resolved["connection_id"], resolved["device_id"]) == ("conn", "dev_a")
+

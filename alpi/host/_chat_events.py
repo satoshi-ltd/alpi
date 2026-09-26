@@ -39,6 +39,7 @@ def _lock_for(home: Path, session_id: str) -> threading.Lock:
 
 def reset_for_turn(
     home: Path, session_id: str, request_id: str, connection_id: str = "host",
+    device_id: str = "",
 ) -> None:
     """Truncate sidecar so a new turn starts fresh.
 
@@ -57,6 +58,7 @@ def reset_for_turn(
                     "ts": time.time(),
                     "request_id": request_id,
                     "connection_id": connection_id,
+                    "device_id": device_id,
                 }) + "\n",
                 encoding="utf-8",
             )
@@ -153,7 +155,7 @@ def read_since(
     return {"events": events, "next_seq": last_seq, "exists": True}
 
 
-def connection_id(home: Path, session_id: str) -> str | None:
+def owner(home: Path, session_id: str) -> tuple[str, str] | None:
     path = _file_for(home, session_id)
     try:
         with path.open("r", encoding="utf-8") as fh:
@@ -161,7 +163,14 @@ def connection_id(home: Path, session_id: str) -> str | None:
     except (OSError, ValueError):
         return None
     value = first.get("connection_id") if isinstance(first, dict) else None
-    return str(value) if value else None
+    if not value:
+        return None
+    return str(value), str(first.get("device_id") or "")
+
+
+def connection_id(home: Path, session_id: str) -> str | None:
+    found = owner(home, session_id)
+    return found[0] if found else None
 
 
 def purge(home: Path, session_id: str) -> None:
@@ -176,4 +185,4 @@ def purge(home: Path, session_id: str) -> None:
             pass
 
 
-__all__ = ["append", "connection_id", "heartbeat", "read_since", "reset_for_turn", "purge"]
+__all__ = ["append", "connection_id", "heartbeat", "owner", "read_since", "reset_for_turn", "purge"]

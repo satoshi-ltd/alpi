@@ -60,14 +60,14 @@ class SessionSearch(Tool):
         if not terms:
             return ToolResult(ok=False, output="", error="query too short — give at least one 3+ char term")
 
-        from alpi.host.connection_context import can_read_connection
+        from alpi.host.connection_context import can_read_session
         scored: list[tuple[int, Path, dict]] = []
         for path in sessions_dir.glob("*.json"):
             try:
                 data = json.loads(path.read_text())
             except Exception:
                 continue
-            if not can_read_connection(data.get("connection_id")):
+            if not can_read_session(data):
                 continue
             if data.get("id") == _CURRENT_SESSION_ID:
                 continue  # never match the currently-active session

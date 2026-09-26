@@ -1,5 +1,32 @@
 # Changelog
 
+## v0.15.20 — 2026-09-25 — sessions private per device, devices that enrol their siblings
+
+- **A connection can keep each device's sessions private.** A new per-connection setting,
+  `session_scope`, defaults to `connection` and keeps today's behaviour: every device paired to a
+  connection sees every conversation of that connection. Set it to `device` and each device sees,
+  continues, cancels and deletes only the conversations it created; a conversation started by
+  another device answers not found, its live replay and `session_changed` events stay with the
+  device that owns it, and the agent's session tools search only that device's history.
+  Every conversation now records the device that started it, so switching to `device` makes each
+  device's earlier conversations private too; conversations saved by an older alpi carry no device
+  and stay visible to every device of the connection, as do conversations the daemon starts on its
+  own. A question `ask_user` puts to the person and a command approval follow the turn that raised
+  them: a member device sees and answers only those of its own connection, and with `device` only
+  its own device's; the local socket and admin devices still see them all. Set it when creating a connection
+  with `host.connections.create`, change it with `host.connections.update`, or from
+  `alpi setup → Connections`, where the connection detail shows the scope and toggles it.
+- **A device can enrol and revoke its siblings without an admin token.** A pairing link can carry
+  a provisioning grant, and the device it mints may call `add_device`, `pairing_status`,
+  `cancel_pairing` and `revoke_device` on its own connection only. It cannot grant provisioning,
+  list or edit connections, change roles or profiles, or revoke itself; an admin still can. Grant
+  it from the Add device prompt in the setup wizard, or with `provisioner: true` on
+  `host.connections.add_device` from the local socket or an admin device. Every enrolment and
+  revocation is written to the audit log with the acting device.
+- Sessions now record the device that created them beside the connection, connection listings
+  expose the scope and each device's provisioning flag, and a pairing exchange accepts `web` as a
+  client kind. Desktop and mobile need no update; older clients ignore the new fields.
+
 ## v0.15.19 — 2026-09-24 — a peer runs only the tools you list
 
 - **A peer's tool policy now lists what it may run, not what it may not.** `tools.allow` on a

@@ -542,28 +542,28 @@ def test_latest_chat_summary_without_a_scope_sees_every_connection(tmp_path: Pat
 
 @pytest.mark.parametrize("role", ["member", "admin"])
 def test_latest_chat_summary_skips_past_a_newer_foreign_session(tmp_path: Path, role: str) -> None:
-    from alpi.host.connection_context import ConnectionContext, owns_connection, use
+    from alpi.host.connection_context import ConnectionContext, owns_session_row, use
 
     _seed_session(tmp_path, "mine", "mine", started_at=1.0, connection_id="conn_a")
     _seed_session(tmp_path, "theirs", "theirs", started_at=2.0, connection_id="conn_b")
 
     with use(ConnectionContext("conn_a", "dev_a", "remote", role)):
-        row = data_sessions.latest_chat_summary(tmp_path, can_read=owns_connection)
+        row = data_sessions.latest_chat_summary(tmp_path, can_read=owns_session_row)
 
     assert row is not None and row["id"] == "mine"
 
 
 def test_latest_chat_summary_is_none_when_every_session_is_foreign(tmp_path: Path) -> None:
-    from alpi.host.connection_context import ConnectionContext, owns_connection, use
+    from alpi.host.connection_context import ConnectionContext, owns_session_row, use
 
     _seed_session(tmp_path, "theirs", "theirs", connection_id="conn_b")
 
     with use(ConnectionContext("conn_a", "dev_a", "remote", "member")):
-        assert data_sessions.latest_chat_summary(tmp_path, can_read=owns_connection) is None
+        assert data_sessions.latest_chat_summary(tmp_path, can_read=owns_session_row) is None
 
 
 def test_latest_chat_summary_gives_the_local_socket_host_and_legacy_sessions(tmp_path: Path) -> None:
-    from alpi.host.connection_context import owns_connection
+    from alpi.host.connection_context import owns_session_row
 
     (tmp_path / "sessions").mkdir(parents=True, exist_ok=True)
     (tmp_path / "sessions" / "legacy.json").write_text(json.dumps({
@@ -572,7 +572,7 @@ def test_latest_chat_summary_gives_the_local_socket_host_and_legacy_sessions(tmp
     }), encoding="utf-8")
     _seed_session(tmp_path, "paired", "from a phone", started_at=3.0, connection_id="conn_b")
 
-    row = data_sessions.latest_chat_summary(tmp_path, can_read=owns_connection)
+    row = data_sessions.latest_chat_summary(tmp_path, can_read=owns_session_row)
 
     assert row is not None and row["id"] == "legacy"
 
@@ -1217,14 +1217,14 @@ async def test_sessions_delete_rpc_refuses_a_turn_that_starts_during_the_owner_r
     srv = host_server.Server(home=home)
     data_handlers.register(srv)
     monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
-    real_owner = data_sessions.session_connection_id
+    real_owner = data_sessions.session_owner
 
-    def owner_read_while_a_turn_starts(home_: Path, sid: str) -> str:
+    def owner_read_while_a_turn_starts(home_: Path, sid: str) -> tuple[str, str]:
         owner = real_owner(home_, sid)
         monkeypatch.setitem(host_chat._session_active, host_chat.session_key("default", sid), object())
         return owner
 
-    monkeypatch.setattr(data_sessions, "session_connection_id", owner_read_while_a_turn_starts)
+    monkeypatch.setattr(data_sessions, "session_owner", owner_read_while_a_turn_starts)
 
     response = await srv._dispatch({
         "id": "r", "method": "host.sessions.delete",
@@ -1373,3 +1373,36 @@ async def test_sessions_delete_rpc_keeps_the_claim_until_the_worker_finishes_aft
         await asyncio.sleep(0.02)
     assert key not in host_chat._session_active
     assert not (home / "sessions" / "slow.json").exists()
+
+
+def test_session_save_persists_the_device_id_beside_the_connection(tmp_path: Path) -> None:
+    from alpi.session import Session, Turn
+
+    session = Session(tmp_path, "m", connection_id="conn", device_id="dev_a")
+    session.turns.append(Turn(1, "hi", [], "ok"))
+    text = session.save().read_text(encoding="utf-8")
+
+    assert text.index('"connection_id"') < text.index('"device_id"') < text.index('"turns"')
+    assert data_sessions.session_owner(tmp_path, session.id) == ("conn", "dev_a")
+    assert data_sessions.list_sessions(tmp_path)[0]["device_id"] == "dev_a"
+
+
+def test_session_owner_of_a_legacy_session_is_host_without_device(tmp_path: Path) -> None:
+    _seed_session(tmp_path, "legacy", "hi")
+    assert data_sessions.session_owner(tmp_path, "legacy") == ("host", "")
+    assert data_sessions.session_connection_id(tmp_path, "legacy") == "host"
+
+
+def test_large_session_header_exposes_the_device_id(tmp_path: Path) -> None:
+    p = tmp_path / "sessions" / "big.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({
+        "id": "big", "model": "m", "connection_id": "conn", "device_id": "dev_a",
+        "started_at": 1.0,
+        "turns": [{"at": 1.0, "user": "x" * (data_sessions._LARGE_SESSION_BYTES + 1), "assistant": "ok"}],
+    }), encoding="utf-8")
+
+    row = data_sessions.list_sessions(tmp_path)[0]
+
+    assert row["turn_count"] == 0
+    assert (row["connection_id"], row["device_id"]) == ("conn", "dev_a")

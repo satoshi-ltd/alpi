@@ -356,3 +356,65 @@ async def test_member_denied_on_management_reads(
     await srv._handle_request(body, send, require_token=True)
     assert reached["n"] == 0
     assert sent[0]["error"]["message"] == "forbidden"
+
+
+def _device_meta(*, role: str = "member", scope=None, connection_id: str = "conn_1", provisioner: bool = False):
+    def _fake(_body):
+        return host_server.AuthMeta(
+            True, role, list(scope or []), connection_id, "dev_1", provisioner=provisioner,
+        )
+    return _fake
+
+
+async def _call_gated(srv, method: str, params: dict) -> tuple[int, dict]:
+    reached = {"n": 0}
+
+    async def stub(_params, _server):
+        reached["n"] += 1
+        return {"ok": True}
+
+    srv.register(method, stub)
+    sent: list[dict] = []
+
+    async def send(p):
+        sent.append(p)
+
+    body = json.dumps({"id": "r", "method": method, "params": {"auth_token": "t", **params}})
+    await srv._handle_request(body, send, require_token=True)
+    return reached["n"], sent[0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method", sorted(host_server._SELF_SERVICE_METHODS))
+async def test_a_scoped_provisioner_reaches_self_service_verbs_on_its_own_connection(
+    method: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(host_server, "_check_token_meta", _device_meta(provisioner=True, scope=["abby"]))
+    srv = host_server.Server(home=tmp_path)
+
+    reached, reply = await _call_gated(srv, method, {"connection_id": "conn_1"})
+
+    assert reached == 1 and reply["result"] == {"ok": True}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "method,target,provisioner",
+    [
+        ("host.connections.add_device", "conn_2", True),
+        ("host.connections.add_device", "conn_1", False),
+        ("host.connections.list", "conn_1", True),
+        ("host.connections.update", "conn_1", True),
+    ],
+)
+async def test_self_service_gate_keeps_denying_everything_else(
+    method: str, target: str, provisioner: bool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(host_server, "_check_token_meta", _device_meta(provisioner=provisioner))
+    srv = host_server.Server(home=tmp_path)
+
+    reached, reply = await _call_gated(srv, method, {"connection_id": target})
+
+    assert reached == 0
+    assert reply["error"]["message"] == "forbidden"
+    assert reply["error"]["data"]["detail"] == "admin role required"

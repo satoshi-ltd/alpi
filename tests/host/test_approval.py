@@ -431,3 +431,43 @@ async def test_safe_command_skips_the_prompt_entirely(short_tmp: Path) -> None:
         await writer.wait_closed()
     finally:
         await srv.stop()
+
+
+@pytest.mark.asyncio
+async def test_pending_and_respond_follow_the_turn_owner(short_tmp: Path, monkeypatch) -> None:
+    from alpi.host.connection_context import ConnectionContext, use
+    srv = host_server.Server(home=short_tmp)
+    host_approval.register(srv)
+    emitted: list[tuple[str, dict]] = []
+    monkeypatch.setattr(host_events, "emit", lambda kind, data=None: emitted.append((kind, data or {})))
+    owner = ConnectionContext("conn", "dev_a", "remote", "member", session_scope="device")
+    sibling = ConnectionContext("conn", "dev_b", "remote", "member", session_scope="device")
+    stranger = ConnectionContext("conn_other", "dev_x", "remote", "member")
+    admin = ConnectionContext("conn_admin", "dev_admin", "remote", "admin")
+    loop = asyncio.get_running_loop()
+
+    def _run_callback() -> str:
+        with use(owner):
+            return host_approval.host_approval_callback("rm -rf build", "recursive rm", _approval.Severity.CAUTION)
+
+    callback_future = loop.run_in_executor(None, _run_callback)
+    await asyncio.sleep(0.05)
+
+    async def pending_as(ctx):
+        with use(ctx):
+            return (await host_approval._pending_handler({}, srv))["requests"]
+
+    rid = (await pending_as(owner))[0]["request_id"]
+    assert (await pending_as(sibling)) == [] and (await pending_as(stranger)) == []
+    assert len(await pending_as(admin)) == 1
+    for ctx in (sibling, stranger):
+        with use(ctx):
+            refused = await host_approval._respond_handler({"request_id": rid, "choice": "once"}, srv)
+        assert refused == {"ok": False, "reason": "unknown or already resolved"}
+    with use(owner):
+        assert await host_approval._respond_handler({"request_id": rid, "choice": "deny"}, srv) == {"ok": True}
+    assert await asyncio.wait_for(callback_future, timeout=5.0) == "deny"
+    for kind in ("approval.request", "approval.resolved"):
+        data = next(d for k, d in emitted if k == kind)
+        assert (data["connection_id"], data["device_id"]) == ("conn", "dev_a")
+

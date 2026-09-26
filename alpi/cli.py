@@ -187,6 +187,7 @@ def _hydrate_from_path(engine: Engine, path: Path, console=None) -> bool:
             getattr(turns[-1], "host_context", "") or "",
         )
     engine.session.connection_id = str(data.get("connection_id") or "host")
+    engine.session.device_id = str(data.get("device_id") or "")
     engine.session.input_tokens = int(data.get("input_tokens", 0))
     engine.session.cached_input_tokens = int(data.get("cached_input_tokens", 0))
     engine.session.cache_measured_input_tokens = int(
@@ -2522,14 +2523,21 @@ def _device_add(h: Path, endpoints: list[dict[str, str]]) -> None:
     role = "admin" if grant_admin else "member"
 
     profile_scope: list[str] = []
+    session_scope = "connection"
     if role == "member":
         selected = _connection_profile_scope(h)
         if selected is None:
             return ui.cancelled()
         profile_scope = selected
+        if ui.confirm(
+            "Keep each device's sessions private? — for one connection shared by several people",
+            default=False,
+        ):
+            session_scope = "device"
 
     connection, pairing = connections_mod.create_pairing_connection(
         label=label or "connection", role=role, profile_scope=profile_scope,
+        session_scope=session_scope,
     )
 
     import io
@@ -2755,9 +2763,11 @@ def _device_detail(h: Path, connection_id: str) -> None:
         )
         scope = public.get("profile_scope") or []
         profiles_display = "all" if public["role"] == "admin" or not scope else ", ".join(scope)
+        session_scope = public.get("session_scope") or "connection"
         entries: list = [
             ("Role", "noop", public["role"]),
             ("Profiles", "noop", profiles_display),
+            ("Session scope", "session_scope", "per device" if session_scope == "device" else "per connection"),
             ("Status", "noop", public["status"]),
             ("Last seen", "noop", _format_last_seen(public.get("last_seen"))),
             ("Sessions", "noop", str(int(summary.get("sessions") or 0))),
@@ -2777,6 +2787,7 @@ def _device_detail(h: Path, connection_id: str) -> None:
                         device.get("client", "unknown"),
                         device.get("app_version"),
                         _format_last_seen(device.get("last_seen")),
+                        "provisioner" if device.get("provisioner") else "",
                     ))),
                 )
                 for device in public["devices"]
@@ -2815,8 +2826,25 @@ def _device_detail(h: Path, connection_id: str) -> None:
             endpoint = _choose_pairing_endpoint(h, endpoints)
             if endpoint is None:
                 continue
-            connection, pairing = connections_mod.create_device_pairing(connection_id)
+            provisioner = ui.confirm(
+                "Grant provisioning? — this device can add and revoke sibling devices",
+                default=False,
+            )
+            connection, pairing = connections_mod.create_device_pairing(
+                connection_id, provisioner=provisioner,
+            )
             _show_connection_pairing(h, endpoint, connection, pairing)
+        elif choice == "session_scope":
+            target_scope = "connection" if session_scope == "device" else "device"
+            prompt = (
+                "Keep each device's sessions private? Devices stop seeing each other's "
+                "conversations, earlier ones included; only sessions from before alpi 0.15.20 stay shared."
+                if target_scope == "device"
+                else "Share sessions across devices? Every device of this connection "
+                "sees every conversation, including ones created while private."
+            )
+            if ui.confirm(prompt, default=False):
+                connections_mod.update_connection(connection_id, session_scope=target_scope)
         elif isinstance(choice, tuple) and choice[0] == "revoke_device":
             device = next(
                 (row for row in public["devices"] if row["id"] == choice[1]),
