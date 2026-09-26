@@ -81,7 +81,7 @@ def test_schedule_list_cli(tmp_home_no_env: Path) -> None:
 
     result = CliRunner().invoke(cli.main, ["schedule", "list", "--json"])
     rows = json.loads(result.output)
-    assert rows[0]["status"] == "due"
+    assert rows[0]["status"] == "scheduled"
     from datetime import datetime
     assert datetime.fromisoformat(rows[0]["next_fire"]).tzinfo is not None
     assert rows[1]["status"] == "paused" and rows[1]["next_fire"] is None
@@ -249,7 +249,8 @@ def test_schedule_list_marks_due_jobs(tmp_home_no_env: Path) -> None:
     from alpi.scheduler import jobs_store
 
     jobs_store.update(tmp_home_no_env, lambda _old: [
-        {"id": "due1", "kind": "cron", "expression": "0 9 * * *", "prompt": "never ran"},
+        {"id": "due1", "kind": "cron", "expression": "0 9 * * *", "prompt": "overdue",
+         "last_run_at": "2000-01-01T00:00:00+00:00"},
     ])
     result = CliRunner().invoke(cli.main, ["schedule", "list"])
     assert result.exit_code == 0

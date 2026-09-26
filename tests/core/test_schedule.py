@@ -155,7 +155,7 @@ def test_is_due_cron_skips_when_not_due(tmp_home_no_env: Path) -> None:
 
 
 def test_is_due_cron_bad_expression(tmp_home_no_env: Path) -> None:
-    job = {"kind": "cron", "expression": "not-a-cron"}
+    job = {"kind": "cron", "expression": "not-a-cron", "last_run_at": "2000-01-01T00:00:00+00:00"}
     assert not scheduler.is_due(job, home=tmp_home_no_env)
 
 
@@ -240,12 +240,15 @@ def test_is_due_inactivity_user_is_active(tmp_home_no_env: Path) -> None:
 # --------------------------------------------------------------------
 
 
+_PAST = "2000-01-01T00:00:00+00:00"
+
+
 def test_tick_fires_due_jobs_and_updates_last_run(monkeypatch, tmp_home_no_env: Path) -> None:
     # Set up one always-due cron job.
     jobs = [{
         "id": "abc123", "kind": "cron", "expression": "* * * * *",
         "prompt": "ping",
-        "last_run_at": None,
+        "last_run_at": _PAST,
     }]
     scheduler._save_jobs(tmp_home_no_env, jobs)
 
@@ -262,7 +265,7 @@ def test_tick_fires_due_jobs_and_updates_last_run(monkeypatch, tmp_home_no_env: 
     saved = json.loads((tmp_home_no_env / "schedule" / "jobs.json").read_text())
     assert "last_run_at" not in saved[0]
     merged = jobs_store.read(tmp_home_no_env)
-    assert merged[0]["last_run_at"] is not None
+    assert merged[0]["last_run_at"] != _PAST
     assert merged[0]["last_run_status"] == "ok"
 
 
@@ -270,7 +273,7 @@ def test_tick_fires_nothing_while_profile_paused(monkeypatch, tmp_home_no_env: P
     jobs = [{
         "id": "abc123", "kind": "cron", "expression": "* * * * *",
         "prompt": "ping",
-        "last_run_at": None,
+        "last_run_at": _PAST,
     }]
     scheduler._save_jobs(tmp_home_no_env, jobs)
     fired = []
@@ -291,8 +294,8 @@ def test_tick_fires_nothing_while_profile_paused(monkeypatch, tmp_home_no_env: P
 
 def test_pause_mid_tick_stops_remaining_jobs(monkeypatch, tmp_home_no_env: Path) -> None:
     jobs = [
-        {"id": "first", "kind": "cron", "expression": "* * * * *", "prompt": "a", "last_run_at": None},
-        {"id": "second", "kind": "cron", "expression": "* * * * *", "prompt": "b", "last_run_at": None},
+        {"id": "first", "kind": "cron", "expression": "* * * * *", "prompt": "a", "last_run_at": _PAST},
+        {"id": "second", "kind": "cron", "expression": "* * * * *", "prompt": "b", "last_run_at": _PAST},
     ]
     scheduler._save_jobs(tmp_home_no_env, jobs)
     ran = []
@@ -308,8 +311,8 @@ def test_pause_mid_tick_stops_remaining_jobs(monkeypatch, tmp_home_no_env: Path)
     assert ran == ["first"], ran
     assert results == [("first", True, "ok")]
     merged = {j["id"]: j for j in jobs_store.read(tmp_home_no_env)}
-    assert merged["first"]["last_run_at"] is not None
-    assert merged["second"].get("last_run_at") is None
+    assert merged["first"]["last_run_at"] != _PAST
+    assert merged["second"]["last_run_at"] == _PAST
 
 
 def test_fire_by_id_bypasses_profile_pause(monkeypatch, tmp_home_no_env: Path) -> None:
@@ -350,7 +353,7 @@ def test_tick_failure_still_updates_last_run(monkeypatch, tmp_home_no_env: Path)
     jobs = [{
         "id": "x", "kind": "cron", "expression": "* * * * *",
         "prompt": "boom",
-        "last_run_at": None,
+        "last_run_at": _PAST,
     }]
     scheduler._save_jobs(tmp_home_no_env, jobs)
     monkeypatch.setattr(scheduler, "run_job",
@@ -358,10 +361,109 @@ def test_tick_failure_still_updates_last_run(monkeypatch, tmp_home_no_env: Path)
     results = scheduler.tick(tmp_home_no_env)
     assert results == [("x", False, "boom")]
     merged = jobs_store.read(tmp_home_no_env)
-    assert merged[0]["last_run_at"] is not None
+    assert merged[0]["last_run_at"] != _PAST
     assert merged[0]["last_run_status"] == "error"
     assert "last_run_at" not in json.loads(
         (tmp_home_no_env / "schedule" / "jobs.json").read_text())[0]
+
+
+def _deploy_by_file(home: Path, jobs: list[dict], runs: dict | None = None) -> None:
+    jobs_store.jobs_path(home).parent.mkdir(parents=True, exist_ok=True)
+    jobs_store.jobs_path(home).write_text(json.dumps(jobs))
+    if runs is not None:
+        jobs_store.runs_path(home).write_text(json.dumps(runs))
+
+
+def _record_fires(monkeypatch) -> list[str]:
+    fired: list[str] = []
+    monkeypatch.setattr(
+        scheduler, "run_job",
+        lambda job, home: (fired.append(job["id"]) or scheduler.JobOutcome(True, "ok")),
+    )
+    return fired
+
+
+def test_a_cron_job_deployed_without_state_waits_for_its_next_occurrence(monkeypatch, tmp_home_no_env: Path) -> None:
+    _deploy_by_file(tmp_home_no_env, [
+        {"id": "weekly", "kind": "cron", "expression": "25 17 * * 0", "prompt": "report"},
+    ])
+    fired = _record_fires(monkeypatch)
+    thursday = datetime(2026, 9, 24, 15, 0, tzinfo=timezone.utc)
+
+    assert scheduler.tick(tmp_home_no_env, now=thursday) == []
+    assert scheduler.tick(tmp_home_no_env, now=thursday + timedelta(minutes=1)) == []
+    assert fired == []
+    assert json.loads(jobs_store.runs_path(tmp_home_no_env).read_text()) == {
+        "weekly": {"first_seen_at": thursday.isoformat()},
+    }
+    assert "first_seen_at" not in json.loads(jobs_store.jobs_path(tmp_home_no_env).read_text())[0]
+    assert scheduler.next_fire(jobs_store.read(tmp_home_no_env)[0], thursday) == datetime(
+        2026, 9, 27, 17, 25, tzinfo=timezone.utc)
+
+    sunday = datetime(2026, 9, 27, 17, 25, 30, tzinfo=timezone.utc)
+    assert scheduler.tick(tmp_home_no_env, now=sunday) == [("weekly", True, "ok")]
+    assert fired == ["weekly"]
+
+
+def test_a_paused_job_is_anchored_when_resumed_not_when_deployed(monkeypatch, tmp_home_no_env: Path) -> None:
+    _deploy_by_file(tmp_home_no_env, [
+        {"id": "daily", "kind": "cron", "expression": "0 9 * * *", "prompt": "x", "paused": True},
+    ])
+    fired = _record_fires(monkeypatch)
+    monday = datetime(2026, 9, 21, 8, 0, tzinfo=timezone.utc)
+    assert scheduler.tick(tmp_home_no_env, now=monday) == []
+    assert "daily" not in jobs_store._load_json(jobs_store.runs_path(tmp_home_no_env), dict)
+
+    jobs_store.update(tmp_home_no_env, lambda jobs: [{**j, "paused": False} for j in jobs])
+    friday = datetime(2026, 9, 25, 10, 0, tzinfo=timezone.utc)
+    assert scheduler.tick(tmp_home_no_env, now=friday) == []
+    assert fired == []
+    assert jobs_store.read(tmp_home_no_env)[0]["first_seen_at"] == friday.isoformat()
+
+
+def test_an_unparsable_last_run_at_is_anchored_instead_of_stranding_the_job(monkeypatch, tmp_home_no_env: Path) -> None:
+    _deploy_by_file(
+        tmp_home_no_env,
+        [{"id": "j", "kind": "cron", "expression": "* * * * *", "prompt": "x"}],
+        {"j": {"last_run_at": "not-a-date"}},
+    )
+    fired = _record_fires(monkeypatch)
+    now = datetime(2026, 9, 25, 10, 0, 10, tzinfo=timezone.utc)
+    assert scheduler.tick(tmp_home_no_env, now=now) == []
+    assert scheduler.tick(tmp_home_no_env, now=now + timedelta(minutes=1)) == [("j", True, "ok")]
+    assert fired == ["j"]
+
+
+def test_a_job_paused_while_the_tick_runs_is_not_anchored(monkeypatch, tmp_home_no_env: Path) -> None:
+    _deploy_by_file(
+        tmp_home_no_env,
+        [{"id": "due", "kind": "cron", "expression": "* * * * *", "prompt": "a"},
+         {"id": "new", "kind": "cron", "expression": "0 9 * * *", "prompt": "b"}],
+        {"due": {"last_run_at": _PAST}},
+    )
+
+    def run_and_pause_new(job, home):
+        jobs_store.update(home, lambda jobs: [{**j, "paused": True} if j["id"] == "new" else j for j in jobs])
+        return scheduler.JobOutcome(True, "ok")
+
+    monkeypatch.setattr(scheduler, "run_job", run_and_pause_new)
+    assert scheduler.tick(tmp_home_no_env) == [("due", True, "ok")]
+    assert "first_seen_at" not in {j["id"]: j for j in jobs_store.read(tmp_home_no_env)}["new"]
+
+
+def test_a_numeric_id_or_timestamp_from_a_deploy_neither_crashes_nor_refires(monkeypatch, tmp_home_no_env: Path) -> None:
+    _deploy_by_file(
+        tmp_home_no_env,
+        [{"id": 5, "kind": "cron", "expression": "* * * * *", "prompt": "x"},
+         {"id": "epoch", "kind": "cron", "expression": "* * * * *", "prompt": "y"}],
+        {"5": {"last_run_at": _PAST}, "epoch": {"last_run_at": 1790000000}},
+    )
+    fired = _record_fires(monkeypatch)
+    now = datetime(2026, 9, 25, 10, 0, 10, tzinfo=timezone.utc)
+    assert scheduler.tick(tmp_home_no_env, now=now) == [("5", True, "ok")]
+    assert scheduler.tick(tmp_home_no_env, now=now + timedelta(seconds=30)) == []
+    assert scheduler.tick(tmp_home_no_env, now=now + timedelta(minutes=1)) == [("5", True, "ok"), ("epoch", True, "ok")]
+    assert fired == [5, 5, "epoch"]
 
 
 # --------------------------------------------------------------------

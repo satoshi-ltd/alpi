@@ -69,7 +69,7 @@ def test_scheduler_failed_creates_output(
     sched_dir = home / "schedule"
     sched_dir.mkdir()
     (sched_dir / "jobs.json").write_text(
-        '[{"id":"j-fail","kind":"cron","expression":"* * * * *","prompt":"x"}]'
+        '[{"id":"j-fail","kind":"cron","expression":"* * * * *","prompt":"x","last_run_at":"2000-01-01T00:00:00+00:00"}]'
     )
     events = _capture(monkeypatch)
     monkeypatch.setattr(
@@ -103,7 +103,7 @@ def test_scheduler_done_silent_maintenance_creates_no_output(
     sched_dir = home / "schedule"
     sched_dir.mkdir()
     (sched_dir / "jobs.json").write_text(
-        '[{"id":"j-ok","kind":"cron","expression":"* * * * *","prompt":"x"}]'
+        '[{"id":"j-ok","kind":"cron","expression":"* * * * *","prompt":"x","last_run_at":"2000-01-01T00:00:00+00:00"}]'
     )
     events = _capture(monkeypatch)
     monkeypatch.setattr(
@@ -126,7 +126,7 @@ def test_scheduler_done_notify_creates_output(
     sched_dir = home / "schedule"
     sched_dir.mkdir()
     (sched_dir / "jobs.json").write_text(
-        '[{"id":"daily","kind":"cron","expression":"* * * * *","prompt":"x","notify":true}]'
+        '[{"id":"daily","kind":"cron","expression":"* * * * *","prompt":"x","notify":true,"last_run_at":"2000-01-01T00:00:00+00:00"}]'
     )
     events = _capture(monkeypatch)
     monkeypatch.setattr(
@@ -164,7 +164,7 @@ def test_scheduler_done_stdout_only_creates_no_output(
     sched_dir = home / "schedule"
     sched_dir.mkdir()
     (sched_dir / "jobs.json").write_text(
-        '[{"id":"reindex","kind":"cron","expression":"* * * * *","prompt":"x"}]'
+        '[{"id":"reindex","kind":"cron","expression":"* * * * *","prompt":"x","last_run_at":"2000-01-01T00:00:00+00:00"}]'
     )
     events = _capture(monkeypatch)
     monkeypatch.setattr(
@@ -191,7 +191,7 @@ def test_scheduler_emits_event_even_when_outputs_append_fails(
     sched_dir = home / "schedule"
     sched_dir.mkdir()
     (sched_dir / "jobs.json").write_text(
-        '[{"id":"j-x","kind":"cron","expression":"* * * * *","prompt":"x"}]'
+        '[{"id":"j-x","kind":"cron","expression":"* * * * *","prompt":"x","last_run_at":"2000-01-01T00:00:00+00:00"}]'
     )
     events = _capture(monkeypatch)
     monkeypatch.setattr(
@@ -218,7 +218,7 @@ def test_scheduler_done_external_path_does_not_duplicate_output(
     sched_dir = home / "schedule"
     sched_dir.mkdir()
     (sched_dir / "jobs.json").write_text(
-        '[{"id":"brief","kind":"cron","expression":"* * * * *","prompt":"x"}]'
+        '[{"id":"brief","kind":"cron","expression":"* * * * *","prompt":"x","last_run_at":"2000-01-01T00:00:00+00:00"}]'
     )
     events = _capture(monkeypatch)
     monkeypatch.setattr(
@@ -245,7 +245,7 @@ def test_scheduler_child_notify_creates_one_output(
     sched_dir = home / "schedule"
     sched_dir.mkdir()
     (sched_dir / "jobs.json").write_text(
-        '[{"id":"j-msg","kind":"cron","expression":"* * * * *","prompt":"x"}]'
+        '[{"id":"j-msg","kind":"cron","expression":"* * * * *","prompt":"x","last_run_at":"2000-01-01T00:00:00+00:00"}]'
     )
     events = _capture(monkeypatch)
 
@@ -300,7 +300,7 @@ def test_every_output_id_event_carries_profile_in_deep_link(
     sched_dir = home / "schedule"
     sched_dir.mkdir()
     (sched_dir / "jobs.json").write_text(
-        '[{"id":"j-bad","kind":"cron","expression":"* * * * *","prompt":"x"}]'
+        '[{"id":"j-bad","kind":"cron","expression":"* * * * *","prompt":"x","last_run_at":"2000-01-01T00:00:00+00:00"}]'
     )
     events = _capture(monkeypatch)
 

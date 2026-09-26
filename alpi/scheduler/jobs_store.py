@@ -20,7 +20,7 @@ class CorruptJobsFile(RuntimeError):
 
 
 # jobs.json holds definitions only; runs.json holds per-id run state. Merged on read, split on write.
-STATE_FIELDS = ("last_run_at", "last_run_status")
+STATE_FIELDS = ("last_run_at", "last_run_status", "first_seen_at")
 
 
 def jobs_path(home: Path) -> Path:
@@ -142,7 +142,7 @@ def update(
         if result is None:
             return jobs
         new_defs, new_runs = _split(result)
-        # Crash-safe order: state lands before the definitions needing it (a def without last_run_at re-fires); orphans pruned last.
+        # Crash-safe order: state lands before the definitions needing it; orphans pruned last.
         union_runs = {**old_runs, **new_runs}
         if union_runs != old_runs:
             _write_inside_lock(runs_path(home), union_runs)

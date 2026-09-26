@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.15.22 — 2026-09-26 — a cron job waits for its time
+
+- **A cron job no longer runs on the first tick after it appears.** A job with no run state ran
+  as soon as the scheduler saw it, whatever its expression: jobs written into `jobs.json` by a
+  deploy, and every job whose `schedule/runs.json` entry was lost, ran at once (a weekly report
+  arrived three days early), so a fleet had to seed `last_run_at` by hand. The first tick that
+  sees such a job now records `first_seen_at` in `schedule/runs.json`, and the job runs at the
+  next occurrence after it; `alpi schedule run-once` leaves it for that time too. A job that
+  arrives with `paused: true` gets it when resumed, so resuming it does not run it at once
+  either. The agent's `schedule` tool already recorded the creation time, so jobs it adds behave
+  as before; `schedule(action="fire")`, `alpi schedule fire` and the app's run button still run a
+  job now. `alpi schedule list` shows such a job as scheduled at its next occurrence, not due.
+- A job whose id a deploy wrote as a number no longer runs on every tick, and a `last_run_at`
+  written as a number no longer crashes every tick of its profile.
+
 ## v0.15.21 — 2026-09-26 — member devices cannot read run journals or agent threads
 
 - **The agent's file tools no longer open `runs/` or `mentions/` for a member device.** A turn

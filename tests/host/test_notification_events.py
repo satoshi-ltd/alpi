@@ -94,7 +94,7 @@ def test_schedule_tick_emits_done(tmp_path: Path, captured: list, monkeypatch) -
     sched_dir = home / "schedule"
     sched_dir.mkdir()
     (sched_dir / "jobs.json").write_text(
-        '[{"id":"j1","kind":"cron","expression":"* * * * *","argv":["true"]}]'
+        '[{"id":"j1","kind":"cron","expression":"* * * * *","argv":["true"],"last_run_at":"2000-01-01T00:00:00+00:00"}]'
     )
     monkeypatch.setattr(
         sched_run, "run_job",
@@ -112,7 +112,7 @@ def test_schedule_tick_emits_failed(tmp_path: Path, captured: list, monkeypatch)
     sched_dir = home / "schedule"
     sched_dir.mkdir()
     (sched_dir / "jobs.json").write_text(
-        '[{"id":"j2","kind":"cron","expression":"* * * * *","argv":["false"]}]'
+        '[{"id":"j2","kind":"cron","expression":"* * * * *","argv":["false"],"last_run_at":"2000-01-01T00:00:00+00:00"}]'
     )
     monkeypatch.setattr(sched_run, "run_job", lambda job, h: sched_run.JobOutcome(False, "boom"))
     sched_run.tick(home)

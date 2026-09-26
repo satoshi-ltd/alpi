@@ -49,7 +49,7 @@ def test_event_carries_agent_reply_when_no_platform(
     emits = _capture_emit(monkeypatch)
     _seed_job(tmp_home_no_env, {
         "id": "reindex", "kind": "cron", "expression": "* * * * *",
-        "prompt": "reindex", "last_run_at": None,
+        "prompt": "reindex", "last_run_at": "2000-01-01T00:00:00+00:00",
     })
 
     scheduler.tick(tmp_home_no_env)
@@ -78,7 +78,7 @@ def test_event_carries_agent_reply_when_notify_true(
 
     _seed_job(tmp_home_no_env, {
         "id": "greet", "kind": "cron", "expression": "* * * * *",
-        "prompt": "say hi", "notify": True, "last_run_at": None,
+        "prompt": "say hi", "notify": True, "last_run_at": "2000-01-01T00:00:00+00:00",
     })
     scheduler.tick(tmp_home_no_env)
 
@@ -108,7 +108,7 @@ def test_event_reply_empty_when_agent_notified(
 
     _seed_job(tmp_home_no_env, {
         "id": "self", "kind": "cron", "expression": "* * * * *",
-        "prompt": "post", "notify": True, "last_run_at": None,
+        "prompt": "post", "notify": True, "last_run_at": "2000-01-01T00:00:00+00:00",
     })
     scheduler.tick(tmp_home_no_env)
 
@@ -147,7 +147,7 @@ def test_notify_from_schedule_reemits_agent_message_in_daemon(
     _seed_job(tmp_home_no_env, {
         "id": "research", "kind": "cron", "expression": "* * * * *",
         "prompt": "notify when done",
-        "last_run_at": None,
+        "last_run_at": "2000-01-01T00:00:00+00:00",
     })
     scheduler.tick(tmp_home_no_env)
 
@@ -189,7 +189,7 @@ def test_failed_notify_does_not_count_as_delivered(
     _seed_job(tmp_home_no_env, {
         "id": "fallback", "kind": "cron", "expression": "* * * * *",
         "prompt": "notify when done",
-        "last_run_at": None,
+        "last_run_at": "2000-01-01T00:00:00+00:00",
     })
     scheduler.tick(tmp_home_no_env)
 
@@ -214,7 +214,7 @@ def test_event_reply_empty_on_failure(
 
     _seed_job(tmp_home_no_env, {
         "id": "bad", "kind": "cron", "expression": "* * * * *",
-        "prompt": "fail", "last_run_at": None,
+        "prompt": "fail", "last_run_at": "2000-01-01T00:00:00+00:00",
     })
     scheduler.tick(tmp_home_no_env)
 
@@ -240,7 +240,7 @@ def test_failed_job_enriches_schedule_failed_no_duplicate(
 
     _seed_job(tmp_home_no_env, {
         "id": "bad", "kind": "cron", "expression": "* * * * *",
-        "title": "Nightly sync", "prompt": "fail", "last_run_at": None,
+        "title": "Nightly sync", "prompt": "fail", "last_run_at": "2000-01-01T00:00:00+00:00",
     })
     scheduler.tick(tmp_home_no_env)
 
@@ -267,7 +267,7 @@ def test_timed_out_job_enriches_schedule_failed_no_duplicate(
 
     _seed_job(tmp_home_no_env, {
         "id": "slow", "kind": "cron", "expression": "* * * * *",
-        "title": "Heavy report", "prompt": "work", "last_run_at": None,
+        "title": "Heavy report", "prompt": "work", "last_run_at": "2000-01-01T00:00:00+00:00",
     })
     scheduler.tick(tmp_home_no_env)
 
@@ -296,7 +296,7 @@ def test_event_reply_truncated_at_2000_chars(
 
     _seed_job(tmp_home_no_env, {
         "id": "big", "kind": "cron", "expression": "* * * * *",
-        "prompt": "verbose", "last_run_at": None,
+        "prompt": "verbose", "last_run_at": "2000-01-01T00:00:00+00:00",
     })
     scheduler.tick(tmp_home_no_env)
 
@@ -339,7 +339,7 @@ def test_event_carries_script_stdout_as_reply(
         "id": "rem", "kind": "cron", "expression": "* * * * *",
         "no_agent": True,
         "prompt": f"python3 {_trivial_skill_script}",
-        "last_run_at": None,
+        "last_run_at": "2000-01-01T00:00:00+00:00",
     })
     scheduler.tick(tmp_home_no_env)
 
@@ -365,7 +365,7 @@ def test_event_reply_empty_for_silent_script_with_no_stdout(
         "id": "rem", "kind": "cron", "expression": "* * * * *",
         "no_agent": True,
         "prompt": f"python3 {_trivial_skill_script}",
-        "last_run_at": None,
+        "last_run_at": "2000-01-01T00:00:00+00:00",
     })
     scheduler.tick(tmp_home_no_env)
 
@@ -391,7 +391,7 @@ def test_notify_true_delivers_native_inbox_without_gateway(
     emits = _capture_emit(monkeypatch)
     _seed_job(tmp_home_no_env, {
         "id": "remind", "kind": "cron", "expression": "* * * * *",
-        "prompt": "remind me", "notify": True, "last_run_at": None,
+        "prompt": "remind me", "notify": True, "last_run_at": "2000-01-01T00:00:00+00:00",
     })
 
     scheduler.tick(tmp_home_no_env)
@@ -425,7 +425,7 @@ def test_agent_error_event_fails_the_job_even_with_rc_zero(
     emits = _capture_emit(monkeypatch)
     _seed_job(tmp_home_no_env, {
         "id": "stalled", "kind": "cron", "expression": "* * * * *",
-        "prompt": "write the weekly post", "last_run_at": None,
+        "prompt": "write the weekly post", "last_run_at": "2000-01-01T00:00:00+00:00",
     })
 
     scheduler.tick(tmp_home_no_env)
@@ -449,7 +449,7 @@ def test_agent_error_without_text_still_fails_the_job(
     emits = _capture_emit(monkeypatch)
     _seed_job(tmp_home_no_env, {
         "id": "quiet", "kind": "cron", "expression": "* * * * *",
-        "prompt": "do the thing", "last_run_at": None,
+        "prompt": "do the thing", "last_run_at": "2000-01-01T00:00:00+00:00",
     })
 
     scheduler.tick(tmp_home_no_env)
@@ -470,7 +470,7 @@ def test_notify_job_with_no_reply_is_a_failure(
     emits = _capture_emit(monkeypatch)
     _seed_job(tmp_home_no_env, {
         "id": "chatty", "kind": "cron", "expression": "* * * * *",
-        "prompt": "report status", "notify": True, "last_run_at": None,
+        "prompt": "report status", "notify": True, "last_run_at": "2000-01-01T00:00:00+00:00",
     })
 
     scheduler.tick(tmp_home_no_env)
@@ -490,7 +490,7 @@ def test_silent_job_with_no_reply_is_still_ok(
     emits = _capture_emit(monkeypatch)
     _seed_job(tmp_home_no_env, {
         "id": "quietly", "kind": "cron", "expression": "* * * * *",
-        "prompt": "tidy up", "last_run_at": None,
+        "prompt": "tidy up", "last_run_at": "2000-01-01T00:00:00+00:00",
     })
 
     scheduler.tick(tmp_home_no_env)

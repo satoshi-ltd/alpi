@@ -154,7 +154,7 @@ async def test_paused_jobs_skip_tick(tmp_path: Path) -> None:
     from alpi.scheduler.run import is_due
 
     job = {"id": "x", "kind": "cron", "expression": "* * * * *",
-           "paused": True}
+           "last_run_at": "2000-01-01T00:00:00+00:00", "paused": True}
     assert is_due(job) is False
     job["paused"] = False
     assert is_due(job) is True
@@ -519,8 +519,7 @@ def test_next_fire_shares_due_semantics() -> None:
     now = datetime(2026, 6, 17, 12, 0).astimezone()
     # paused → no next fire
     assert next_fire({"kind": "cron", "expression": "0 7 * * *", "paused": True}, now) is None
-    # never run → due on the next tick (now), not tomorrow's slot
-    assert next_fire({"kind": "cron", "expression": "0 7 * * *"}, now) == now
+    assert next_fire({"kind": "cron", "expression": "0 7 * * *"}, now) == (now + timedelta(days=1)).replace(hour=7)
     # overdue (last ran 2 days ago on a daily 7am cron) → still due now
     overdue = {"kind": "cron", "expression": "0 7 * * *",
                "last_run_at": (now - timedelta(days=2)).isoformat()}

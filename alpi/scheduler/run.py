@@ -113,8 +113,25 @@ def _parse_iso(s: str | None) -> datetime | None:
         return None
     try:
         return datetime.fromisoformat(s)
-    except ValueError:
+    except (TypeError, ValueError):
         return None
+
+
+def _cron_anchor(job: dict, now: datetime) -> datetime | None:
+    at = _parse_iso(job.get("last_run_at")) or _parse_iso(job.get("first_seen_at"))
+    if at is None:
+        return None
+    return at.astimezone(now.tzinfo) if at.tzinfo else at.replace(tzinfo=now.tzinfo)
+
+
+def _needs_first_seen(job: dict) -> bool:
+    return (
+        job.get("kind", "cron") == "cron"
+        and bool(job.get("id"))
+        and not job.get("paused")
+        and _parse_iso(job.get("last_run_at")) is None
+        and _parse_iso(job.get("first_seen_at")) is None
+    )
 
 
 def is_due(job: dict, now: datetime | None = None, home: Path | None = None) -> bool:
@@ -132,17 +149,13 @@ def is_due(job: dict, now: datetime | None = None, home: Path | None = None) -> 
         if not expr:
             return False
         try:
-            # Validate the expression once regardless of first-run shortcut.
             croniter(expr)
         except Exception as e:  # noqa: BLE001
             log.warning("bad cron expression for %s: %s", job.get("id"), e)
             return False
-        # No prior run → fire on the first tick so the user sees activity
-        # right after adding a job. Subsequent runs use croniter from the
-        # last run as the anchor.
-        if last is None:
-            return True
-        anchor = last.astimezone(now.tzinfo) if last.tzinfo else last.replace(tzinfo=now.tzinfo)
+        anchor = _cron_anchor(job, now)
+        if anchor is None:
+            return False
         next_run = croniter(expr, anchor).get_next(datetime)
         if next_run.tzinfo is None:
             next_run = next_run.replace(tzinfo=now.tzinfo)
@@ -186,10 +199,9 @@ def next_fire(job: dict, now: datetime | None = None, home: Path | None = None) 
     kind = job.get("kind", "cron")
     if kind == "cron":
         expr = job.get("expression", "")
-        last = _parse_iso(job.get("last_run_at"))
-        if not expr or last is None:
+        if not expr:
             return None
-        anchor = last.astimezone(now.tzinfo) if last.tzinfo else last.replace(tzinfo=now.tzinfo)
+        anchor = _cron_anchor(job, now) or now
         try:
             nxt = croniter(expr, anchor).get_next(datetime)
         except Exception:  # noqa: BLE001
@@ -738,6 +750,7 @@ def tick(home: Path, now: datetime | None = None) -> list[tuple[str, bool, str]]
         return []
     fired: dict[str, tuple[str, bool]] = {}
     results: list[tuple[str, bool, str]] = []
+    unseen = {str(j["id"]) for j in jobs if _needs_first_seen(j)}
 
     for job in jobs:
         if not is_due(job, now=now, home=home):
@@ -757,7 +770,7 @@ def tick(home: Path, now: datetime | None = None) -> list[tuple[str, bool, str]]
         fired[job_id] = (str(job.get("kind", "cron")), outcome.ok)
         results.append((job_id, outcome.ok, outcome.message))
 
-    if not fired:
+    if not fired and not unseen:
         return results
 
     stamp_at = now.isoformat()
@@ -765,8 +778,10 @@ def tick(home: Path, now: datetime | None = None) -> list[tuple[str, bool, str]]
         kept: list[dict] = []
         for j in current:
             jid = j.get("id")
-            if jid in fired:
-                kind, ok = fired[jid]
+            if str(jid) in unseen and _needs_first_seen(j):
+                j["first_seen_at"] = stamp_at
+            if str(jid) in fired:
+                kind, ok = fired[str(jid)]
                 # Stamp last_run_at even on failure to avoid a tight re-fire loop.
                 j["last_run_at"] = stamp_at
                 j["last_run_status"] = "ok" if ok else "error"

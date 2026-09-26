@@ -1124,6 +1124,8 @@ default-executor turns. A regression test in
 `tests/core/test_schedule.py::test_serve_runs_tick_off_loop_so_chat_can_progress`
 pins the contract.
 
+**First run.** A cron job runs at its next occurrence, never on the tick it appears. The `schedule` tool records `last_run_at` when it adds a job; a job that arrives without run state (written into `jobs.json` by hand or by a deploy, or whose `schedule/runs.json` entry was lost) gets `first_seen_at` in `runs.json` from the first tick that sees it, or, if it arrives paused, from the first tick after it is resumed. `schedule(action="fire")` runs a job now.
+
 **Timezone.** Cron expressions evaluate against the **machine's system timezone** (`datetime.now().astimezone()` in `scheduler/run.py`). Jobs are stored with UTC `last_run_at` but fire according to local wall-clock time. Practical consequence: if you specify `10 12 * * *` because you want a 12:10 reminder in Bangkok, the Mac must be set to `Asia/Bangkok`. Move the machine to a different timezone and the cron fires at 12:10 there, not in Bangkok. No in-job timezone override today — add it via `TZ=…` in the launchd plist / systemd unit if cross-timezone stability is required.
 
 ### MCP client (`alpi/mcp/`)
