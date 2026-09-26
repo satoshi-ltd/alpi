@@ -388,6 +388,15 @@ already trusted for the profile), but it is a real read surface. A future
 tightening would restrict reads to paths that appear in the session
 transcript or an output manifest; not implemented today.
 
+Documents (every attachment that is not an image) are narrower: the daemon
+serves them only from the profile's `out/`, its workspace and the upload
+staging area. The engine offers a produced file as an attachment only under
+the roots the daemon serves for its kind (`servable_roots` in
+`alpi/attachments.py`), so a document in `/tmp` or elsewhere in the home is no
+longer offered, and `attach_file` refuses it, naming the `out/` folder to use.
+The daemon still refuses, on top, any path with a `secrets` folder or a `.env`
+file name.
+
 ## Audit trail & accountability
 
 alpi records what the agent and its operators do across several local

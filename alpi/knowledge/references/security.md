@@ -232,7 +232,9 @@ Agent-made images render inline in chat. Their bytes are read by path, scoped
 to the active profile's workspace, its home (`~/.alpi/...`), and temp dirs —
 desktop reads directly, mobile via `host.attachments.fetch`. A client
 authorised for a profile can fetch any image under those roots by path (broader
-than "an image in this chat"); intentional but a real read surface.
+than "an image in this chat"); intentional but a real read surface. Documents
+are served only from the profile's `out/`, the workspace and the upload staging
+area, and only those are offered as attachments; `attach_file` refuses the rest.
 
 ## Prompt injection
 

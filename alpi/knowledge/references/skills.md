@@ -58,7 +58,7 @@ Never put secret values in `SKILL.md`, scripts, references, assets, or the skill
 | `<home>/out/` | Chat-delivered artifacts (generated images, documents) — print `{"out": "<abs path>"}` so the file attaches to the reply | Downloadable for ~30 days (`GENERATED_KEEP_DAYS`), then offered by cleanup; excluded from backups and from newly bootstrapped Alpi `.gitignore` files (existing/custom profiles should ignore `out/` themselves) |
 | workspace path | Project deliverables that belong to ongoing work | The workspace's own lifecycle (git/sync/backup) |
 
-Never deliver from shared tmp: sessions retain absolute paths, but tmp has no retention guarantee and the producing skill owns cleanup — `out/` is the delivery surface with retention.
+Never deliver from shared tmp: sessions retain absolute paths, but tmp has no retention guarantee and the producing skill owns cleanup — `out/` is the delivery surface with retention. A document printed from tmp or from elsewhere in the home is not attached at all (images still are).
 
 ## Tool actions
 

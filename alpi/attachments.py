@@ -74,7 +74,24 @@ _PRODUCED_KIND = {
 _OFFICE_MIMES = frozenset(m for m in _PRODUCED_KIND if m != "application/pdf")
 
 
-def produced_attachment(producer: str, output: str, *, roots: list) -> dict | None:
+def servable_roots(home: Path, workspace: Path | None, *, image: bool) -> list[Path]:
+    import tempfile
+    from alpi.home import out_root
+    if image:
+        roots = [Path("/tmp"), Path("/private/tmp"), Path(tempfile.gettempdir()), home]
+    else:
+        roots = [home / "host" / "attachments" / "tmp"]
+        orp = out_root(home)
+        if orp is not None:
+            roots.append(orp)
+    if workspace:
+        roots.append(Path(workspace))
+    return roots
+
+
+def produced_attachment(
+    producer: str, output: str, *, roots: list, doc_roots: list | None = None,
+) -> dict | None:
     import json
     if not isinstance(output, str):
         return None
@@ -96,7 +113,7 @@ def produced_attachment(producer: str, output: str, *, roots: list) -> dict | No
     except OSError:
         return None
     allowed = []
-    for r in roots or []:
+    for r in (roots if doc_roots is None or mime in IMAGE_MIMES else doc_roots) or []:
         try:
             allowed.append(Path(r).resolve())
         except (OSError, TypeError):

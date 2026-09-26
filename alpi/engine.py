@@ -1228,12 +1228,12 @@ class Engine:
                             or not _wg_tasks.is_working_only(str(args.get("text") or ""))
                         )
                     if result.ok and name in ("skill", "attach_file"):
-                        import tempfile as _tempfile
                         from alpi import attachments as _att
-                        _roots = [self.home, self.cfg.workspace_path,
-                                  _tempfile.gettempdir(), "/tmp", "/private/tmp"]
+                        _ws = self.cfg.workspace_path
                         produced = _att.produced_attachment(
-                            args.get("name") or name, result.output, roots=_roots,
+                            args.get("name") or name, result.output,
+                            roots=_att.servable_roots(self.home, _ws, image=True),
+                            doc_roots=_att.servable_roots(self.home, _ws, image=False),
                         )
                         if produced and not any(a["path"] == produced["path"] for a in turn_produced):
                             turn_produced.append(produced)

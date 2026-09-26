@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.15.23 — 2026-09-26 — documents offered in chat are documents every client can download
+
+- **The chat offers a document only where the app can fetch it.** The engine offered any file a
+  skill or `attach_file` produced under the profile home, the workspace or the temp directory,
+  while the daemon serves documents only from `out/`, the workspace and the upload staging
+  area: a report written to `/tmp` or to another folder of the home showed up as an attachment
+  that neither the app nor the phone could download. Both now follow one rule, `servable_roots`
+  in `alpi/attachments.py`: images keep every root they had, and a document outside `out/`, the
+  workspace and the staging area is no longer offered, so the CLI's attachment listing no longer
+  names it either. `attach_file` refuses such a document with an error that names the profile's `out/`
+  folder, and its description tells the agent to write new documents there.
+
 ## v0.15.22 — 2026-09-26 — a cron job waits for its time
 
 - **A cron job no longer runs on the first tick after it appears.** A job with no run state ran

@@ -22,12 +22,39 @@ def test_attach_file_scopes_to_deliverables_not_project_files() -> None:
     assert "project file" in desc
 
 
-def test_attach_file_returns_out_json(tmp_path: Path) -> None:
-    p = tmp_path / "report.md"
+def test_attach_file_returns_out_json(tmp_home_no_env: Path) -> None:
+    p = tmp_home_no_env / "out" / "report.md"
+    p.parent.mkdir(exist_ok=True)
     p.write_text("# Report\n\nbody\n")
     res = AttachFile().run(str(p))
     assert res.ok
     assert json.loads(res.output) == {"out": str(p.resolve())}
+
+
+def test_attach_file_refuses_a_document_the_app_cannot_serve(tmp_home_no_env: Path, tmp_path_factory) -> None:
+    elsewhere = tmp_path_factory.mktemp("tmp-docs")
+    for doc in (elsewhere / "report.md", tmp_home_no_env / "cache" / "report.pdf"):
+        doc.parent.mkdir(parents=True, exist_ok=True)
+        doc.write_text("x")
+        res = AttachFile().run(str(doc))
+        assert not res.ok
+        assert str(tmp_home_no_env / "out") in res.error
+
+
+def test_attach_file_keeps_images_in_tmp_and_documents_in_the_workspace(tmp_home_no_env: Path, tmp_path_factory) -> None:
+    elsewhere = tmp_path_factory.mktemp("tmp-images")
+    img = elsewhere / "chart.png"
+    img.write_bytes(b"\x89PNG\r\n\x1a\n")
+    assert AttachFile().run(str(img)).ok
+    workspace = tmp_path_factory.mktemp("workspace")
+    (tmp_home_no_env / "config.yaml").write_text(f"workspace: {workspace}\n")
+    doc = workspace / "notes.md"
+    doc.write_text("x")
+    assert AttachFile().run(str(doc)).ok
+
+
+def test_attach_file_names_the_out_folder() -> None:
+    assert "`out/`" in AttachFile.description and "/tmp" in AttachFile.description
 
 
 def test_attach_file_missing_file(tmp_path: Path) -> None:

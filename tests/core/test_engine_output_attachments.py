@@ -77,7 +77,7 @@ def test_skill_out_becomes_output_attachment(bootstrapped_home, monkeypatch):
 
 
 def test_attach_file_out_becomes_output_attachment(bootstrapped_home, monkeypatch):
-    md = bootstrapped_home / "report.md"
+    md = bootstrapped_home / "out" / "report.md"
     md.write_text("# Report\n\nHello.\n")
     engine, events = _run(
         bootstrapped_home, monkeypatch, "attach_file",
@@ -87,6 +87,49 @@ def test_attach_file_out_becomes_output_attachment(bootstrapped_home, monkeypatc
     assert final and len(final[-1].attachments) == 1
     att = final[-1].attachments[0]
     assert att["path"] == str(md) and att["kind"] == "text" and att["producer"] == "attach_file"
+
+
+@pytest.mark.parametrize("where", ("elsewhere", "home-root"))
+def test_a_document_the_app_cannot_serve_is_not_announced(bootstrapped_home, monkeypatch, tmp_path_factory, where):
+    from alpi.host import attachments_rpc
+    folder = tmp_path_factory.mktemp("tmp-out") if where == "elsewhere" else bootstrapped_home
+    md = folder / "report.md"
+    md.write_text("# Report\n")
+    _engine, events = _run(
+        bootstrapped_home, monkeypatch, "skill", '{"action": "run", "name": "report"}', md,
+    )
+    final = [e for e in events if e.kind == "assistant_done" and e.final]
+    assert final and final[-1].attachments == []
+    assert not attachments_rpc._fetch_nonimage_allowed(bootstrapped_home, md.resolve())
+
+
+def test_a_document_in_the_workspace_or_staging_is_still_announced(bootstrapped_home, monkeypatch, tmp_path_factory):
+    from alpi import yamlfast
+    workspace = tmp_path_factory.mktemp("workspace")
+    cfg_path = bootstrapped_home / "config.yaml"
+    data = yamlfast.safe_load(cfg_path.read_text())
+    data["workspace"] = str(workspace)
+    cfg_path.write_text(yamlfast.safe_dump(data, sort_keys=False))
+    staged = bootstrapped_home / "host" / "attachments" / "tmp" / "abc" / "brief.md"
+    staged.parent.mkdir(parents=True)
+    for doc in (workspace / "notes.md", staged):
+        doc.write_text("# Notes\n")
+        _engine, events = _run(
+            bootstrapped_home, monkeypatch, "skill", '{"action": "run", "name": "report"}', doc,
+        )
+        final = [e for e in events if e.kind == "assistant_done" and e.final]
+        assert final and [a["path"] for a in final[-1].attachments] == [str(doc.resolve())]
+
+
+def test_an_image_outside_out_is_still_announced_and_served(bootstrapped_home, monkeypatch, tmp_path_factory):
+    from alpi.host import attachments_rpc
+    img = _jpeg(tmp_path_factory.mktemp("tmp-img"))
+    _engine, events = _run(
+        bootstrapped_home, monkeypatch, "skill", '{"action": "run", "name": "generate-image"}', img,
+    )
+    final = [e for e in events if e.kind == "assistant_done" and e.final]
+    assert final and len(final[-1].attachments) == 1
+    assert attachments_rpc._fetch_allowed(bootstrapped_home, img.resolve())
 
 
 def test_non_skill_tool_does_not_promote(bootstrapped_home, monkeypatch):

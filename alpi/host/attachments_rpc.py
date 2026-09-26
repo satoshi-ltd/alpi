@@ -103,35 +103,20 @@ async def _stage(params: dict[str, Any], server: host_server.Server) -> dict[str
     }
 
 
-# Allowed read roots for serving image bytes to remote clients: workspace + home + temp.
-def _fetch_allowed(home: Path, real: Path) -> bool:
-    import tempfile
-
-    roots = [Path("/tmp"), Path("/private/tmp"), Path(tempfile.gettempdir()), home]
+def _workspace(home: Path) -> Path | None:
     try:
         from alpi import config as cfg_mod
-        ws = cfg_mod.load(home).workspace_path
-        if ws:
-            roots.append(ws)
+        return cfg_mod.load(home).workspace_path
     except Exception:  # noqa: BLE001
-        pass
-    return _under_any(real, roots)
+        return None
+
+
+def _fetch_allowed(home: Path, real: Path) -> bool:
+    return _under_any(real, att.servable_roots(home, _workspace(home), image=True))
 
 
 def _fetch_nonimage_allowed(home: Path, real: Path) -> bool:
-    from alpi.home import out_root
-    roots = [home / "host" / "attachments" / "tmp"]
-    orp = out_root(home)
-    if orp is not None:
-        roots.append(orp)
-    try:
-        from alpi import config as cfg_mod
-        ws = cfg_mod.load(home).workspace_path
-        if ws:
-            roots.append(ws)
-    except Exception:  # noqa: BLE001
-        pass
-    return _under_any(real, roots)
+    return _under_any(real, att.servable_roots(home, _workspace(home), image=False))
 
 
 def _under_any(real: Path, roots: list[Path]) -> bool:
