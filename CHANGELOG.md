@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.15.21 — 2026-09-26 — member devices cannot read run journals or agent threads
+
+- **The agent's file tools no longer open `runs/` or `mentions/` for a member device.** A turn
+  started from a member device already could not read or write any profile's sessions, memories,
+  secrets, logs, schedule, skills or host state; run journals (`runs/`, each run's prompts and
+  redacted tool calls) and the threads other agents keep over ALP (`mentions/`) were missing from
+  that list, so a member turn with `read_file` could open another person's questions or another
+  agent's conversations by path. Both are now refused like the rest, for this profile and every
+  other one under `.alpi`, and `search` drops every refused path from its results, which it did
+  not before for any of these areas. Turns that run as admin (admin devices, the CLI, scheduled
+  jobs, ALP turns) are unaffected; the session tools and the app's run views do not go through
+  the file tools and work as before.
+
 ## v0.15.20 — 2026-09-25 — sessions private per device, devices that enrol their siblings
 
 - **A connection can keep each device's sessions private.** A new per-connection setting,

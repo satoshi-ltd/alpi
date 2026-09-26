@@ -9,7 +9,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from alpi.tools._paths import is_sensitive_path, resolve_path, suggest_similar_paths
+from alpi.tools._paths import is_read_denied, resolve_path, suggest_similar_paths
 from alpi.tools.base import Tool, ToolResult
 
 
@@ -178,7 +178,10 @@ def _search_filenames_rg(
         return None
     if proc.returncode not in (0, 1):
         return ToolResult(ok=False, output=proc.stdout, error=proc.stderr.strip())
-    lines = [ln for ln in proc.stdout.splitlines() if ln]
+    lines = [
+        ln for ln in proc.stdout.splitlines()
+        if ln and not is_read_denied(Path(ln) if Path(ln).is_absolute() else root / ln)
+    ]
     lines.sort()
     lines = lines[:limit]
     return ToolResult(ok=True, output="\n".join(lines) or "(no matches)")
@@ -205,7 +208,7 @@ def _search_filenames_stdlib(
             rel = p.relative_to(root)
         except ValueError:
             rel = p
-        if name_regex.match(p.name) or path_regex.match(str(rel)):
+        if (name_regex.match(p.name) or path_regex.match(str(rel))) and not is_read_denied(p):
             matches.append(str(p))
             if len(matches) >= limit:
                 break
@@ -271,7 +274,7 @@ def _search_content_rg(
         if not candidate.is_absolute():
             candidate = root / candidate
         key = str(candidate)
-        denied = checked.setdefault(key, is_sensitive_path(candidate))
+        denied = checked.setdefault(key, is_read_denied(candidate))
         if denied:
             continue
         line_text = str((data.get("lines") or {}).get("text") or "").rstrip("\r\n")
@@ -309,7 +312,7 @@ def _search_content_stdlib(
     for p in candidates:
         if not include_noise and _is_excluded(p, root):
             continue
-        if is_sensitive_path(p):
+        if is_read_denied(p):
             continue
         if file_regex and not file_regex.match(p.name):
             continue

@@ -66,6 +66,13 @@ not reach.
   depth, including one in your own project, exempting only the obvious
   templates (`.env.example`, `.sample`, `.template`, `.dist`). Everything else
   — `$HOME`, `/tmp`, directories outside the workspace — is allowed.
+  For a turn started from a member device, file tools also refuse every
+  profile's `host/`, `secrets/`, `gateway/`, `cache/`, `logs/`, `outputs/`,
+  `sessions/`, `memories/`, `schedule/`, `skills/`, `runs/` and `mentions/`,
+  for reads and writes, and `search` leaves them out of its results; `alp/`
+  transcripts stay readable (its `secrets/` never). Turns that run as admin
+  (admin devices, the CLI, jobs, ALP turns) are not fenced, and the session
+  tools do not use file paths.
   Workspace-only isolation is Layer 2.
 
 - **Phase write boundary in pipelines.** A dispatched phase owner can

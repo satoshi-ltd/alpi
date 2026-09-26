@@ -117,8 +117,11 @@ Three trust tiers:
   workgroup post/read, voice preview, deleting its own chats
   (`host.sessions.delete` is bound to the calling connection; other ids answer
   `not-found`). Sensitive **host control plane**
-  mutations reject `-32001 forbidden / admin role required`. The role does
-  NOT sandbox the agent's own tools — `host.chat.send` is open to members,
+  mutations reject `-32001 forbidden / admin role required`. For a member turn
+  the file tools refuse every profile's `host/`, `secrets/`, `gateway/`,
+  `cache/`, `logs/`, `outputs/`, `sessions/`, `memories/`, `schedule/`,
+  `skills/`, `runs/` and `mentions/` (read, write and `search` results;
+  `alp/` transcripts readable). The role does NOT otherwise sandbox the agent's own tools — `host.chat.send` is open to members,
   so anything the agent can do (workspace writes, memory edits, network
   calls) stays reachable. Use the OS sandbox flag and a dedicated profile for
   capability confinement, not the device role. Profiles share one daemon/OS

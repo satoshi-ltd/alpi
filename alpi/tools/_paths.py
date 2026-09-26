@@ -43,11 +43,11 @@ _SENSITIVE_PATH_REGEX: tuple[re.Pattern[str], ...] = (
 # Off-limits to members for READ as well as write — reading host/ would leak an admin token and escalate.
 _MEMBER_HOME_AREA: frozenset[str] = frozenset({
     "host", "secrets", "gateway", "cache", "logs", "outputs",
-    "sessions", "memories", "schedule", "skills", "alp",
+    "sessions", "memories", "schedule", "skills", "alp", "runs", "mentions",
 })
 _MEMBER_HOME_REGEX = re.compile(
     r"(?:^|/)\.alpi(?:/profiles/[^/]+)?/"
-    r"(host|secrets|gateway|cache|logs|outputs|sessions|memories|schedule|skills|alp)(?:/|$)"
+    r"(host|secrets|gateway|cache|logs|outputs|sessions|memories|schedule|skills|alp|runs|mentions)(?:/|$)"
 )
 _ALP_SECRETS_RE = re.compile(r"(?:^|/)alp/secrets(?:/|$)")
 
@@ -211,6 +211,18 @@ def is_sensitive_path(path: Path | str) -> bool:
     except OSError:
         resolved = typed
     return _is_sensitive(typed, resolved) is not None
+
+
+def is_read_denied(path: Path | str) -> bool:
+    typed = Path(path).expanduser()
+    try:
+        resolved = typed.resolve()
+    except OSError:
+        resolved = typed
+    if _is_sensitive(typed, resolved) is not None:
+        return True
+    from alpi.host.connection_context import current
+    return current().role != "admin" and _member_denied_area(typed, resolved, for_write=False) is not None
 
 
 def resolve_path(path: str, *, for_write: bool = False) -> Path:

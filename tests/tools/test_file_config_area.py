@@ -6,7 +6,9 @@ import pytest
 
 from alpi import home as home_mod
 from alpi.host.connection_context import ConnectionContext, use
+from alpi.tools import search as search_mod
 from alpi.tools._paths import resolve_path
+from alpi.tools.search import Search
 
 MEMBER = ConnectionContext(connection_id="c1", device_id="d1", source="remote", role="member")
 
@@ -18,6 +20,9 @@ PRIVATE_AREA = (
     "memories/MEMORY.md",
     "schedule/jobs.json",
     "sessions/other.json",
+    "runs/0123456789abcdef0123456789abcdef.jsonl",
+    "mentions/alexandra.json",
+    "mentions/alexandra@c0ffee.json",
 )
 WRITE_ONLY_DENIED = ("alp/peers.yaml", "logs/ledger.json", "outputs/outputs.jsonl")
 
@@ -94,3 +99,35 @@ def test_member_cross_profile_escalation_refused(home):
             resolve_path(str(other), for_write=False)
         with pytest.raises(ValueError, match="member"):
             resolve_path(str(other), for_write=True)
+
+
+@pytest.mark.parametrize("rel", ("profiles/agora/mentions/alexandra.json", "profiles/sentinel/runs/abc.jsonl"))
+def test_member_cannot_read_another_profiles_runs_or_mentions(home, rel):
+    with use(MEMBER):
+        with pytest.raises(ValueError, match="member"):
+            resolve_path(str(home / rel), for_write=False)
+    assert resolve_path(str(home / rel), for_write=False) == (home / rel).resolve()
+
+
+@pytest.mark.parametrize("rel", ("runs/report.md", "mentions/notes.md"))
+def test_member_workspace_folders_named_runs_or_mentions_stay_open(home, rel):
+    work = home.parent / "work" / rel
+    with use(MEMBER):
+        assert resolve_path(str(work), for_write=True) == work.resolve()
+
+
+@pytest.mark.parametrize("use_rg", (True, False))
+@pytest.mark.parametrize("target", ("content", "files"))
+def test_member_search_from_the_home_skips_private_areas(home, monkeypatch, use_rg, target):
+    monkeypatch.setattr(search_mod, "_can_use_local_rg", lambda: use_rg)
+    for rel in ("runs/abc.jsonl", "profiles/agora/mentions/alexandra.json", "profiles/agora/sessions/s.json"):
+        (home / rel).parent.mkdir(parents=True, exist_ok=True)
+        (home / rel).write_text("needle-private\n")
+    (home / "profiles/agora/notes.md").write_text("needle-open\n")
+    pattern = "needle" if target == "content" else "*"
+    with use(MEMBER):
+        out = Search().run(pattern=pattern, path=str(home), target=target).output
+    assert "notes.md" in out
+    assert "abc.jsonl" not in out and "alexandra.json" not in out and "s.json" not in out
+    admin = Search().run(pattern=pattern, path=str(home), target=target).output
+    assert "abc.jsonl" in admin and "alexandra.json" in admin
