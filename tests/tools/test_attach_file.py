@@ -57,6 +57,23 @@ def test_attach_file_names_the_out_folder() -> None:
     assert "`out/`" in AttachFile.description and "/tmp" in AttachFile.description
 
 
+def test_write_file_sends_produced_files_to_the_out_folder() -> None:
+    from alpi.tools.write_file import WriteFile
+    assert "generated-files folder (`out/`" in WriteFile.description
+    assert "generated-files folder (`out/`" in AttachFile.description
+
+
+def test_the_folder_the_prompt_names_is_one_attach_file_accepts(tmp_home_no_env: Path) -> None:
+    from alpi import config, prompt_cache
+    config.seed_defaults(tmp_home_no_env)
+    env = prompt_cache.build_parts(tmp_home_no_env, config.load(tmp_home_no_env))["env"]
+    line = next(ln for ln in env.splitlines() if ln.startswith("- **generated files**"))
+    doc = Path(line.split("`")[1]) / "report.md"
+    doc.parent.mkdir(parents=True, exist_ok=True)
+    doc.write_text("# Report\n")
+    assert AttachFile().run(str(doc)).ok
+
+
 def test_attach_file_missing_file(tmp_path: Path) -> None:
     res = AttachFile().run(str(tmp_path / "nope.md"))
     assert not res.ok

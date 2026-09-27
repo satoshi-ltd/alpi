@@ -13,6 +13,8 @@ import os
 import sys
 from pathlib import Path
 
+import pytest
+
 from alpi import config as cfg_mod
 from alpi import prompt_cache as pc
 
@@ -26,6 +28,19 @@ def test_env_block_states_host_python_version() -> None:
     block = pc._env_block(Path("/tmp/home"), Path("/tmp/ws"))
     assert "host Python" in block
     assert f"{sys.version_info.major}.{sys.version_info.minor}" in block
+
+
+@pytest.mark.parametrize("workspace", (Path("/tmp/ws"), None))
+def test_env_block_names_the_profile_out_folder_for_generated_files(workspace) -> None:
+    block = pc._env_block(Path("/tmp/home"), workspace)
+    line = next(ln for ln in block.splitlines() if ln.startswith("- **generated files**"))
+    assert "`/tmp/home/out/`" in line
+    assert "attach_file" in line and "/tmp`" in line
+
+
+def test_a_scheduled_run_is_told_attachments_are_not_delivered(monkeypatch) -> None:
+    monkeypatch.setenv("ALPI_PLATFORM", "cron")
+    assert "carries only your reply text, not attachments" in pc._platform_hint()
 
 
 def test_part_order_is_stable_contract() -> None:

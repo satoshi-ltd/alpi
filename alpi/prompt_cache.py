@@ -46,7 +46,10 @@ PLATFORM_HINTS: dict[str, str] = {
         "follow-up. Execute the task fully and autonomously, making "
         "reasonable decisions where needed. Your reply is "
         "auto-delivered to the job's configured destination; put the "
-        "primary content directly in your response."
+        "primary content directly in your response. The scheduled run's "
+        "automatic delivery carries only your reply text, not "
+        "attachments: do not write a report to a file to attach it, and "
+        "write files only where the job says."
     ),
 }
 
@@ -54,6 +57,17 @@ PLATFORM_HINTS: dict[str, str] = {
 def _platform_hint() -> str:
     platform = (os.environ.get("ALPI_PLATFORM") or "").strip().lower()
     return PLATFORM_HINTS.get(platform, "")
+
+
+def _generated_files_line(home: Path) -> str:
+    return (
+        f"- **generated files** (a document, report, export or image you make for the user, "
+        f"unless the user or the job names another place): `{home / 'out'}/` — write it there "
+        "under a new, descriptive name and `attach_file` it; the app downloads from it, and the "
+        "storage cleanup offers files older than about 30 days for deletion. Keep such files out "
+        "of the workspace root and out of `/tmp`: the workspace is for the project's own files "
+        "(its code and its documents stay there), and the app cannot download documents from `/tmp`."
+    )
 
 
 def _env_block(home: Path, workspace) -> str:
@@ -67,14 +81,16 @@ def _env_block(home: Path, workspace) -> str:
     if workspace is not None:
         parts.append(f"- **workspace** (default root for relative paths): `{workspace}`")
         parts.append(f"- **profile home** (memory/skills/config): `{home}`")
+        parts.append(_generated_files_line(home))
         parts.append(
             "- **Path rule**: relative paths (`foo/`, `my-project`) "
             f"resolve from the workspace (`{workspace}/foo/`). Absolute "
             "paths work anywhere the OS lets you read/write — including "
             "`~/Documents`, `/tmp`, other project dirs — except sensitive "
             "system locations (`/etc`, SSH keys, credentials) which are "
-            "denied. Prefer the workspace for the user's main context; "
-            "reach outside only when they ask for a specific path."
+            "denied. Prefer the workspace for the user's main context and "
+            "the generated-files folder for files you make for the user; "
+            "reach outside both only when they ask for a specific path."
         )
     else:
         cwd = os.getcwd()
@@ -86,6 +102,7 @@ def _env_block(home: Path, workspace) -> str:
             "if they want a stable root."
         )
         parts.append(f"- **profile home** (memory/skills/config): `{home}`")
+        parts.append(_generated_files_line(home))
     return "\n".join(parts)
 
 

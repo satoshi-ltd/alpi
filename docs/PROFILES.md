@@ -47,7 +47,7 @@ Everything that represents state, identity, or cost:
 | `runs/<run_id>.jsonl` | ✓ | Bounded, redacted durable event journal for each engine turn; surfaced by `alpi runs`, `/runs`, `host.runs.list` and `host.run.read`. |
 | `schedule/jobs.json` | ✓ | Cron + one-shot jobs. Scheduled runs never create chat sessions; a job flagged `no_agent: true` runs one of this profile's skill scripts directly, without the LLM. |
 | `outputs/outputs.jsonl` | ✓ | Persistent inbox for proactive agent messages + schedule failures, capped at 500 rows. Surfaced by `host.outputs.*` to paired apps. |
-| `out/` | ✓ | Files the agent produces for you and the apps serve back. Kept ~30 days, then offered by the cleanup wizard; excluded from `alpi backup`. |
+| `out/` | ✓ | Files the agent produces for you and the apps serve back; the system prompt names its absolute path as the place for them. Kept ~30 days, then offered by the cleanup wizard; excluded from `alpi backup`. |
 | `knowledge.sqlite` | ✓ | Derived sqlite-vec indexes for workspace knowledge, session recall, and workgroup recall. |
 | `logs/` | ✓ | `agent.log` (one line per engine turn, on every surface), `llm.log` (provider request breadcrumbs — the record of what a stalled turn was waiting on), `approval.log` (every non-safe `terminal` classification), plus `compaction.jsonl` and `runs.jsonl` telemetry read by `alpi digest`. The daemon's own `service.log` is root-only at `~/.alpi/logs/` — one per installation, and `alpi logs --source service` always reads it regardless of `-p`. |
 | `logs/ledger.json` | ✓ | Daily spending ledger — the profile's USD cap is enforced from here across every turn (interactive, scheduled, sub-agent, inbound ALP). Resets at UTC midnight. |

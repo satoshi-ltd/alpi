@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.15.25 — 2026-09-27 — every profile knows where its generated files go
+
+- **The system prompt names the profile's `out/` folder for the files the agent makes for the
+  user.** `out/` is where alpi keeps generated files: the apps download documents from it and
+  the storage cleanup offers what is older than about 30 days for deletion. The agent was not
+  told so: its environment named the profile home only as the place for memory, skills and
+  config, the path rule said to prefer the workspace, and `attach_file` named a bare `out/` (which,
+  written as a relative path, lands in the workspace) with the workspace as an equal choice, so a
+  report, a translation or a manual asked for in chat landed in the workspace root, next to the
+  project's own files, and stayed there. The environment block now carries a generated-files line
+  with the absolute `<home>/out/` path, for every profile and with or without a workspace, the
+  path rule and `write_file` and `attach_file` point there, and the workspace stays the place for
+  the project's own files unless the user or the job names another place.
+- A scheduled run is told that its automatic delivery carries only the reply text, not
+  attachments, so a job puts its report in the reply instead of a file nobody receives.
+
 ## v0.15.24 — 2026-09-26 — a remote device attaches only files from the staging area
 
 - **`host.chat.send` no longer reads an arbitrary path for a remote device.** The attachments of a
