@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.15.26 — 2026-09-28 — a memory replace changes only what it matched
+
+- **`memory replace` and `remove` no longer wipe a hand-written `USER.md` or `MEMORY.md`.** Both
+  files are lists of entries split by `§`, and an edit swapped or dropped the whole entry that
+  contained the match. A profile written by hand, with headings and bullets and no `§`, is one
+  entry, so an agent that matched one bullet to update it, as the tool describes for `AGENT.md`,
+  replaced the whole profile with that one line: a biographer profile lost its subject's family,
+  values and threads that way. Inside a multi-line entry the edit now changes only the matched
+  text: a match found in more than one place refuses and asks for a more unique one, a removed
+  line goes with its line break and bullet, and the hidden `alpi-meta` marker cannot be edited. A
+  one-line entry is still replaced or removed whole.
+- **A case- or accent-insensitive match edits the text it matched.** The match was found in a
+  folded copy of the file and cut from the original at the same offset, but folding changes
+  length (`ß` becomes `ss`, `ﬁ` becomes `fi`, Hangul decomposes, Devanagari loses its virama),
+  so any such character before the match shifted the edit onto the wrong characters, in
+  `AGENT.md` too. Each folded character now maps back to its original position, and the text
+  around the match keeps its exact characters instead of being normalized.
+
 ## v0.15.25 — 2026-09-27 — every profile knows where its generated files go
 
 - **The system prompt names the profile's `out/` folder for the files the agent makes for the

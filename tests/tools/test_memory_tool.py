@@ -224,3 +224,97 @@ def test_agent_replace_accent_insensitive(isolated_home: Path) -> None:
     )
     assert r.ok, r.error
     assert "siempre" in (isolated_home / "memories" / "AGENT.md").read_text()
+
+
+_HANDWRITTEN_PROFILE = (
+    "# Subject profile\n"
+    "## Family\n"
+    "- Wife: Yuri.\n"
+    "- Sons: Eki and Benji.\n"
+    "## Work\n"
+    "- Now: engineer at Mirai.\n"
+)
+
+
+def test_replace_inside_a_handwritten_profile_changes_only_the_matched_line(isolated_home: Path) -> None:
+    (isolated_home / "memories" / "USER.md").write_text(_HANDWRITTEN_PROFILE)
+    r = Memory().run(
+        action="replace", target="USER.md",
+        match="- Now: engineer at Mirai.", content="- Now: frontend lead at Mirai.",
+    )
+    assert r.ok, r.error
+    text = (isolated_home / "memories" / "USER.md").read_text()
+    assert "- Now: frontend lead at Mirai." in text
+    assert "- Sons: Eki and Benji." in text
+    assert "engineer at Mirai" not in text
+
+
+def test_remove_inside_a_handwritten_profile_keeps_the_rest(isolated_home: Path) -> None:
+    (isolated_home / "memories" / "USER.md").write_text(_HANDWRITTEN_PROFILE)
+    r = Memory().run(action="remove", target="USER.md", match="- Sons: Eki and Benji.")
+    assert r.ok, r.error
+    text = (isolated_home / "memories" / "USER.md").read_text()
+    assert "Eki" not in text
+    assert "- Wife: Yuri." in text
+    assert "## Work" in text
+
+
+def test_replace_inside_a_multi_line_entry_matches_without_accent(isolated_home: Path) -> None:
+    (isolated_home / "memories" / "USER.md").write_text("Perfil\n- Bebe té verde.\n- Corre a diario.\n")
+    r = Memory().run(action="replace", target="USER.md", match="te verde", content="café negro")
+    assert r.ok, r.error
+    text = (isolated_home / "memories" / "USER.md").read_text()
+    assert "- Bebe café negro." in text
+    assert "- Corre a diario." in text
+
+
+@pytest.mark.parametrize("prefix", ("Lives on Hauptstraße", "Büro: ﬁnance", "이름: 하비", "नाम: हवि", "Q̃uim"))
+def test_replace_inside_an_entry_hits_the_matched_text_after_folding_changes_length(isolated_home: Path, prefix: str) -> None:
+    (isolated_home / "memories" / "USER.md").write_text(f"{prefix}\n- Job: engineer at Mirai.\n")
+    r = Memory().run(action="replace", target="USER.md", match="engineer at Mirai", content="lead at Mirai")
+    assert r.ok, r.error
+    assert (isolated_home / "memories" / "USER.md").read_text() == f"{prefix}\n- Job: lead at Mirai.\n"
+
+
+def test_replace_inside_an_entry_refuses_an_ambiguous_match(isolated_home: Path) -> None:
+    original = "- Now: engineer at Mirai.\n- Before: engineer at Acme.\n"
+    (isolated_home / "memories" / "USER.md").write_text(original)
+    r = Memory().run(action="replace", target="USER.md", match="engineer", content="manager")
+    assert not r.ok
+    assert (isolated_home / "memories" / "USER.md").read_text() == original
+
+
+def test_replace_inside_an_entry_keeps_line_breaks_copied_with_the_match(isolated_home: Path) -> None:
+    (isolated_home / "memories" / "USER.md").write_text("- Wife: Yuri.\n- Sons: Eki.\n- Job: x.\n")
+    r = Memory().run(action="replace", target="USER.md", match="- Wife: Yuri.\n", content="- Wife: Yuri N.\n")
+    assert r.ok, r.error
+    assert (isolated_home / "memories" / "USER.md").read_text() == "- Wife: Yuri N.\n- Sons: Eki.\n- Job: x.\n"
+
+
+def test_remove_inside_an_entry_drops_the_whole_line(isolated_home: Path) -> None:
+    (isolated_home / "memories" / "USER.md").write_text("- A\n- B\n- C\n")
+    r = Memory().run(action="remove", target="USER.md", match="B")
+    assert r.ok, r.error
+    assert (isolated_home / "memories" / "USER.md").read_text() == "- A\n- C\n"
+
+
+def test_an_edit_inside_an_entry_cannot_touch_its_meta_marker(isolated_home: Path) -> None:
+    original = "line one\nline two\n<!-- alpi-meta conf=normal captured=2026-09-01 reinforced=0 -->\n"
+    (isolated_home / "memories" / "USER.md").write_text(original)
+    r = Memory().run(action="remove", target="USER.md", match="reinforced=0")
+    assert not r.ok
+    assert (isolated_home / "memories" / "USER.md").read_text() == original
+
+
+def test_agent_replace_after_a_sharp_s_hits_the_matched_text(isolated_home: Path) -> None:
+    (isolated_home / "memories" / "AGENT.md").write_text("Straße rule.\nTone: formal.\n")
+    r = Memory().run(action="replace", target="AGENT.md", match="Tone: formal.", content="Tone: warm.")
+    assert r.ok, r.error
+    assert (isolated_home / "memories" / "AGENT.md").read_text() == "Straße rule.\nTone: warm.\n"
+
+
+def test_remove_matches_the_last_line_copied_with_its_line_break(isolated_home: Path) -> None:
+    (isolated_home / "memories" / "USER.md").write_text("- A\n- B\n")
+    r = Memory().run(action="remove", target="USER.md", match="- B\n")
+    assert r.ok, r.error
+    assert (isolated_home / "memories" / "USER.md").read_text() == "- A\n"

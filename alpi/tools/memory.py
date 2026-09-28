@@ -173,7 +173,8 @@ class Memory(Tool):
         "`replace` / `remove` match must be verbatim from a prior `read` "
         "or the frozen snapshot — never invent one. Do not include the "
         "`§` entry delimiter in the match; match only content inside an "
-        "entry. If unsure, use `add`."
+        "entry. A one-line entry is replaced whole; inside a multi-line "
+        "entry only the matched text changes. If unsure, use `add`."
     )
     parameters = {
         "type": "object",
@@ -383,21 +384,30 @@ class Memory(Tool):
         )
 
 
-def _locate_literal(text: str, match: str) -> str | None:
-    import unicodedata
+def _folded_spans(text: str, match: str) -> list[tuple[int, int]]:
     from alpi.memory import _fold
 
-    text_nfc = unicodedata.normalize("NFC", text)
-    folded_text = _fold(text_nfc)
-    folded_match = _fold(match)
-    if not folded_match:
-        return None
-    pos = folded_text.find(folded_match)
-    if pos < 0:
-        return None
-    # NFC + accent-stripping preserves 1-char-per-char for Latin scripts.
-    end = pos + len(folded_match)
-    return text_nfc[pos:end] if end <= len(text_nfc) else None
+    needle = _fold(match)
+    if not needle:
+        return []
+    origin: list[int] = []
+    folded: list[str] = []
+    for i, ch in enumerate(text):
+        f = _fold(ch)
+        folded.append(f)
+        origin.extend([i] * len(f))
+    haystack = "".join(folded)
+    spans: list[tuple[int, int]] = []
+    pos = haystack.find(needle)
+    while pos >= 0:
+        spans.append((origin[pos], origin[pos + len(needle) - 1] + 1))
+        pos = haystack.find(needle, pos + 1)
+    return spans
+
+
+def _locate_literal(text: str, match: str) -> str | None:
+    spans = _folded_spans(text, match)
+    return text[spans[0][0]:spans[0][1]] if spans else None
 
 
 def _agent_state(text: str) -> str:
@@ -578,13 +588,40 @@ def _notify_changed(home) -> None:
 
 
 def _rewrite_entry(text: str, match: str, replacement: str | None) -> str:
-    entries = [e for e in text.split(ENTRY_DELIMITER) if e.strip()]
-    idx = fuzzy_find_unique_entry(entries, match)
-    if replacement is None:
+    entries = [e.strip("\n") for e in text.split(ENTRY_DELIMITER) if e.strip()]
+    idx = fuzzy_find_unique_entry(entries, match.strip())
+    if strip_meta(entries[idx]).strip().count("\n"):
+        entries[idx] = _rewrite_inside(entries[idx], match, replacement)
+        if not strip_meta(entries[idx]).strip():
+            entries.pop(idx)
+    elif replacement is None:
         entries.pop(idx)
     else:
         entries[idx] = replacement.strip()
     return ENTRY_DELIMITER.join(entries) + ("\n" if entries else "")
+
+
+def _rewrite_inside(entry: str, match: str, replacement: str | None) -> str:
+    from alpi.memory import _META_RE
+
+    meta = [m.span() for m in _META_RE.finditer(entry)]
+    spans = [
+        (s, e) for s, e in _folded_spans(entry, match.strip())
+        if not any(s < me and ms < e for ms, me in meta)
+    ]
+    if not spans:
+        raise ValueError(f"no verbatim match for {match!r} inside a multi-line entry; copy it from a read")
+    if len(spans) > 1:
+        raise ValueError(f"{len(spans)} places in the entry match {match!r}; use a more unique substring")
+    start, end = spans[0]
+    if replacement is not None and replacement.strip():
+        return entry[:start] + replacement.strip() + entry[end:]
+    line_start = entry.rfind("\n", 0, start) + 1
+    line_end = entry.find("\n", end)
+    line_end = len(entry) if line_end < 0 else line_end
+    if not entry[line_start:start].strip(" \t-*") and not entry[end:line_end].strip():
+        start, end = line_start, min(line_end + 1, len(entry))
+    return (entry[:start] + entry[end:]).strip()
 
 
 def _format_candidate(c, *, with_warnings: bool = True) -> str:
