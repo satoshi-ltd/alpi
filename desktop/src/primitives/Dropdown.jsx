@@ -1,5 +1,5 @@
 import { navigateMenu } from "../lib/menuNavigation.js";
-import { OverlayScope, useOverlay } from "../hooks/useOverlay.js";
+import { OverlayScope, useInsideOverlay, useOverlay } from "../hooks/useOverlay.js";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CaretIcon } from "./icons.jsx";
@@ -24,6 +24,8 @@ export default function Dropdown({
   children,
 }) {
   const [open, setOpen] = useState(false);
+  // A modal body scrolls and clips, so a menu inside any overlay always escapes through the portal.
+  const portaled = portal || useInsideOverlay();
   const menuId = useId();
   const [resolved, setResolved] = useState({ direction, align, ready: false });
   const ref = useRef(null);
@@ -86,7 +88,7 @@ export default function Dropdown({
       left,
       triggerWidth: t.width,
     });
-  }, [open, direction, align, portal]);
+  }, [open, direction, align, portaled]);
 
   useEffect(() => {
     if (open && resolved.ready) {
@@ -105,9 +107,9 @@ export default function Dropdown({
         ref={menuRef}
         id={menuId}
         onKeyDown={(event) => navigateMenu(event, menuRef.current)}
-        className={`anim-pop ${styles.menu} ${portal ? styles.menuPortal : ""}`}
+        className={`anim-pop ${styles.menu} ${portaled ? styles.menuPortal : ""}`}
         style={
-          portal
+          portaled
             ? {
                 width: fullWidth ? (resolved.triggerWidth ?? width) : width,
                 top: resolved.top ?? 0,
@@ -174,7 +176,7 @@ export default function Dropdown({
         <CaretIcon className={styles.caret} />
       </button>
 
-      <OverlayScope overlay={isTop}>{portal ? createPortal(menu, document.body) : menu}</OverlayScope>
+      <OverlayScope overlay={isTop}>{portaled ? createPortal(menu, document.body) : menu}</OverlayScope>
     </div>
   );
 }

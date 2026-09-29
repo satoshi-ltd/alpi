@@ -46,11 +46,11 @@ describe("ConfirmDeleteAction", () => {
     expect(screen.queryByRole("button", { name: "Remove" })).toBeNull();
   });
 
-  it("keeps the confirm reachable from inside a modal", () => {
+  it("keeps the confirm reachable from inside a modal even when it asks to be anchored", () => {
     render(
       <Modal title="Account">
         <ConfirmDeleteAction
-          anchored={false}
+          anchored
           label="Remove account"
           title="Remove it?"
           confirmLabel="Remove"

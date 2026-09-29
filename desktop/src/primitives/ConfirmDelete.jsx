@@ -1,5 +1,6 @@
 import Button from "./Button.jsx";
 import { useEffect, useState } from "react";
+import { useInsideOverlay } from "../hooks/useOverlay.js";
 import Modal from "./Modal.jsx";
 import Popover from "./Popover.jsx";
 import DialogFooter from "./DialogFooter.jsx";
@@ -28,7 +29,8 @@ export default function ConfirmDelete({
   }, [open]);
 
   const needsTyping = !!typeToConfirm;
-  const asModal = !anchored || needsTyping;
+  // A modal body scrolls and clips, so an anchored popover inside any overlay becomes the centered dialog.
+  const asModal = !anchored || needsTyping || useInsideOverlay();
   const armed = needsTyping ? typed === typeToConfirm : true;
   const resolvedWidth = width ?? (asModal ? "var(--pop-xl)" : "var(--pop-md)");
 

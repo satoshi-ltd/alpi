@@ -11,6 +11,15 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.6.7 — 2026-09-29 — confirms and menus escape the dialog
+
+- **"Remove" inside a dialog asks for confirmation again.** The confirm used to open as a small
+  popover under the button, which the dialog's scrolling body cut off, so the MCP detail dialog looked
+  like it removed nothing. Inside any dialog the confirm now opens as its own centred dialog.
+- **Dropdown menus inside dialogs are never clipped**: they always float above the dialog body.
+
+  Requires alpi 0.15.20, as v0.6.4.
+
 ## v0.6.6 — 2026-09-29 — every dialog behaves like the others
 
 - **One look for every choice.** Role, session scope, pairing route and the activity filters use

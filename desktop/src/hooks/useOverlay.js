@@ -41,6 +41,10 @@ function onKey(event) {
   }
 }
 
+export function useInsideOverlay() {
+  return useContext(OverlayAncestors).length > 0;
+}
+
 export function useOverlay({ open, onClose, ref, modal = false }) {
   const ancestors = useContext(OverlayAncestors);
   // Capture the opener before child autofocus runs during commit.

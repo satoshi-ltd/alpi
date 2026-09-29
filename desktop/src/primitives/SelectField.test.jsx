@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import SelectField from "./SelectField.jsx";
+import Modal from "./Modal.jsx";
 
 const OPTIONS = [
   { value: "connection", label: "Shared across its devices" },
@@ -31,5 +32,17 @@ describe("SelectField", () => {
     render(<SelectField aria-label="Session scope" value="connection" options={OPTIONS} disabled />);
     const trigger = screen.getByRole("button", { name: "Session scope" });
     expect(trigger).toBeDisabled();
+  });
+
+  it("escapes a modal body through the portal so the scrolling content cannot clip it", () => {
+    render(
+      <Modal title="Edit">
+        <SelectField aria-label="Session scope" value="connection" options={OPTIONS} onChange={() => {}} />
+      </Modal>,
+    );
+    const trigger = screen.getByRole("button", { name: "Session scope" });
+    fireEvent.click(trigger);
+    const row = screen.getByText("Private to each device");
+    expect(trigger.closest("div[class*='content']").contains(row)).toBe(false);
   });
 });
