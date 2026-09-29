@@ -1,43 +1,72 @@
 ---
 title: You can't roll back an agent
-date: 2026-08-20
-description: Rollback restores code, not state. A morning of Claude Code and OpenCode debugging showed why the recovery primitive for a stateful agent is different from the one for a service.
-tags: [agents, infrastructure, reliability]
+date: 2026-09-24
+description: Rollback undoes code, not consequences. An agent's value is acting outside your systems, so recovery has to be designed in before the action, not after.
+tags: [agents, operations, reliability]
 ---
 
-I spent the morning debugging agent sessions in Claude Code and OpenCode, and the same lesson kept surfacing in different clothes. Both tools give you rollback, and in both cases rollback is the wrong mental model for what actually went wrong.
+# You can't roll back an agent
 
-The concrete version first. An agent session had accumulated a working state: a checked-out worktree, a long conversation history, a set of files it had edited, a plan it was midway through executing. Something downstream broke. The instinct — the DevOps instinct, the one CI/CD drilled into all of us — was to roll back to the last good revision and try again.
+Continuous delivery taught a generation of engineers that a bad change is temporary. Ship it, watch the graphs, and if something breaks, revert and redeploy. The service goes back to how it was, and the damage is usually a window of wrong answers you can explain in a postmortem.
 
-That works for a service. A service is stateless by construction. Its state lives outside it, in a database or a queue, and redeploying an old image is a clean operation because you are replacing the code and nothing else. The database didn't get un-updated; the schema didn't quietly drift backward; nothing external mutated while you weren't looking.
+Agents inherit the deploy pipeline but not the guarantee. You can revert an agent's code, prompt or model in a minute. You cannot revert what it did while it was wrong: the email it sent, the ticket it filed, the comment it posted, the payment it started. Those actions live in systems you do not own, and they stay done.
 
-An agent is the opposite. The agent *is* the state.
+So "can we roll this agent back?" is the wrong question. The useful one is "which of its actions can be undone, and what stops the ones that can't?"
 
-When you roll back the code, you don't roll back the conversation. The context window still holds the failed plan, the half-finished edits, the tool outputs from a world that no longer exists. You have reinstalled the interpreter and left the program in memory. The next thing the agent does is try to reconcile a history that describes one world with a filesystem that now describes another.
+## Why rollback works for services
 
-This is where it goes wrong quietly, and this is the part worth writing down, because it is not obvious from the outside.
+Rollback works because most of what a conventional service does stays inside its own boundary. A request arrives, logic runs, a row changes in a database you control. When the logic is wrong you fix the logic, repair the rows, and the outside world mostly never noticed.
 
-## The reconciliation is where the damage happens
+An agent is built to cross that boundary. Its whole point is to act: send, file, post, book, pay, update someone else's system. The moment an action leaves your perimeter, reversibility stops being a property of your code and becomes a property of the other system. Some of them offer an undo. Many offer only a new action that tries to compensate, like a refund, a correction or an apology, and that new action has consequences of its own.
 
-Give a model a stale plan and a fresh filesystem and it does the reasonable thing: it tries to make them agree. It re-applies the edits that were evidently intended. It re-runs the commands whose effects are visibly missing. It is not malfunctioning. It is being *helpful*, in exactly the way you want it to be helpful, against a premise that is now false.
+## A kill switch only stops the next action
 
-The failure is not the model being dumb. The failure is that the model has no way to know it has been transported. Nothing in the transcript says "the world changed underneath you." So it infers the only explanation consistent with its training: the work simply wasn't done yet.
+The first control teams reach for is a kill switch, and it is worth having. It is not recovery. Stopping an agent prevents its next action; it does nothing about the ones already delivered. By the time a human notices a problem, the agent has usually done the damaging thing several times.
 
-I have now watched this happen with file edits that got re-applied on top of already-edited files, producing duplicated blocks. With commands re-run against a service that had already been acted upon once. With plans that had been superseded being resumed as if they were still live.
+Scheduled and event-driven agents make this sharper. There is often no long-running process to stop, only a job that fired, did its work and exited. The first sign of trouble is a reply from a customer.
 
-## What actually works
+That leaves one place to put the safety: before the action runs.
 
-The recovery primitive is not revert-with-state-preserved. It is one of two things, and you have to pick deliberately:
+## Sort actions by what it takes to undo them
 
-- **Discard the session.** Start clean, with the current filesystem as the new ground truth, and re-state the goal in fresh words. You lose the accumulated context, which is the point — that context is the contaminated artifact.
-- **Snapshot the session.** Capture the full state — history, files, plan, tool results — and resume *from* the snapshot, so the model's world model and the world move together. The snapshot is not a rollback target. It is a checkpoint you always resume from, never rewind to.
+The design move that pays off is to classify what an agent can do by how reversible it is, and to gate each class differently.
 
-The reason the first is often the right call and not a cop-out: the transcript's value degrades once the premise is false. A long history that describes a world that no longer exists is worse than no history. It is a source of confident, well-formed, wrong actions.
+- **Reads** — searching, fetching, reading files, querying. Nothing changes, so they can run freely; the controls that matter are scope and data access.
+- **Compensable writes** — drafts, internal records, tickets that can be closed, changes with a cheap and honest inverse. They can run unattended if the inverse exists before the tool ships and every write is logged.
+- **Irreversible actions** — external email, payments, deletions, public posts, anything whose inverse is only an apology. These need a human looking at the exact thing that will go out, or they should not be available to an unattended agent at all.
 
-## The general shape
+The common mistake is one approval flow for everything. When most requests are harmless reads, reviewers learn to approve without reading, and the one irreversible action that mattered goes through on habit. A gate that fires constantly is no longer a gate.
 
-Stateless systems can be rolled back because state and code are separable. Stateful systems can't be, because there is no state-free position to roll back to. The moment your system accumulates context that affects its future behavior, the recovery primitive changes from *revert* to *fork* or *discard* — never rewind-in-place.
+## Gates that hold for irreversible actions
 
-The practical rule I keep arriving at: before you hit rollback, ask what survives it. If the answer is "the state that made this go wrong," rollback will re-create the failure, sometimes faster, because now the agent has a plan it believes in.
+**Review the artifact, not a summary.** The person approving should see the exact email body, the exact payment amount and recipient, the exact diff. A summary written by the same agent that wants to act is the weakest possible evidence.
 
-That last sentence is the one that cost me the morning. The second attempt is not a retry. It is the first attempt, plus a story about why it deserves to happen.
+**Stage by scope.** Failures in agents are rarely spread evenly; they cluster around a customer, a language, a kind of request. Widening an irreversible capability one scope at a time, a single account or team first, exposes that kind of failure while it is still small.
+
+**Build the compensation first.** If an action can have a correction path, write it before the action exists. If it cannot, the action is not a candidate for autonomy.
+
+**Deny by default for unattended runs.** A scheduled job has nobody to ask. Anything that would need a human's yes should fail closed there, with an error that says why, instead of silently proceeding.
+
+**Keep the record.** When something goes wrong, the first questions are what the agent did, in what order, with what input. If that record does not exist, the incident becomes guesswork.
+
+## What alpi does today, and where it stops
+
+alpi applies these ideas where it can enforce them, and it is worth being precise about where that is.
+
+- **Shell commands are classified before they run.** Every `terminal` command is sorted into safe, caution or dangerous. Safe commands run. Caution commands, such as recursive deletes, force pushes, `git reset --hard` or SQL `DROP`, pause for approval in an interactive session and are refused automatically on unattended surfaces. Dangerous commands are always blocked, with no configuration switch to re-enable them.
+- **Every approval decision is logged.** Caution and dangerous decisions go to the profile's `approval.log`, and every turn leaves a run journal with its tool calls and outcome, so "what did it do" has an answer.
+- **Capabilities are removed per agent, not trusted.** `tools.deny` takes a tool away from a profile entirely. An agent that only writes documents does not need a shell, so it does not get one.
+- **Spend is capped.** Each profile has a `budget.daily_usd` limit checked on every turn, so a runaway loop ends at a number you chose rather than at the invoice.
+- **Tool output is data, not instructions.** Results from web pages, email and other tools reach the model wrapped as untrusted data, which narrows the path from an injected instruction to an action.
+
+The honest limit: alpi does not yet label every tool by reversibility. The command classifier covers the shell; for other tools the controls are coarser. You can deny the tool for that agent, or keep it behind a skill whose contract requires an explicit instruction before anything is sent. That is enough to keep irreversible actions out of unattended runs, but it is not the per-action, artifact-level review described above, and it would be misleading to call it that.
+
+## The takeaway
+
+Stop treating revert as your recovery plan for agents. Recovery for an agent is designed in before the action: classify what it can do, let reads and compensable writes flow with a log, and put irreversible actions behind a human who sees the exact artifact, or out of the agent's reach entirely.
+
+If you want to see where your own agents stand, list every tool they can call and write next to each one how you would undo it. The tools where that line is blank are where the gates go.
+
+```
+uv tool install alpi-agent
+```
