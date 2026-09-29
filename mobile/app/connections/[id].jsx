@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { radii, space } from '../../src/theme/tokens';
 
@@ -22,6 +22,7 @@ import { PairingSheet } from '../../src/features/connections/PairingSheet';
 import { ProfilesScopeSheet } from '../../src/features/connections/ProfilesScopeSheet';
 import { deviceMeta, deviceTitle, relativeSeen, scopeLabel, sessionScopeLabel } from '../../src/features/connections/format';
 import { useBack } from '../../src/hooks/useBack';
+import { usePullRefresh } from '../../src/hooks/usePullRefresh';
 import { useConnectionsSummary } from '../../src/hooks/useDaemonData';
 import { useEndpoint } from '../../src/lib/EndpointContext';
 import { usePane } from '../../src/nav/PaneContext';
@@ -69,6 +70,7 @@ function ConnectionDetail() {
   const { colors } = useTheme();
   const { twoPane } = usePane();
   const summary = useConnectionsSummary();
+  const pull = usePullRefresh(summary.refresh);
   const [prompt, setPrompt] = useState(null);
   const [confirm, setConfirm] = useState(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -131,7 +133,10 @@ function ConnectionDetail() {
       />
       <SyncBar syncing={summary.loading} />
       <SettingsSurface>
-      <ScrollView contentContainerStyle={contentStyle}>
+      <ScrollView
+        contentContainerStyle={contentStyle}
+        refreshControl={<RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={colors.ink3} />}
+      >
         <SectionHeader first>Overview</SectionHeader>
         {isHost ? (
           <Row label="Local host" helper="alpi setup, the TUI and the CLI on the daemon's machine" chevron={false} />

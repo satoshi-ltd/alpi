@@ -14,6 +14,19 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.5.3 — 2026-09-29 — settings that load, refresh and answer the hand
+
+Client-only change; the minimum compatible alpi stays 0.15.20.
+
+- **Settings screens draw a skeleton while the first snapshot arrives** instead of a lone spinner,
+  and pull down to refresh a profile, a workgroup, the connections list or a connection.
+- **Empty counts say what to do next.** No providers, peers or workgroups reads as an invitation
+  with the action in the row instead of a bare zero.
+- **The phone answers the hand.** A switch ticks, and a typed confirmation buzzes before it
+  deletes, revokes or restarts.
+- On a narrow screen the usage tiles drop their units so the daily cap and what is left of it
+  stay whole instead of being cut off.
+
 ## v0.5.2 — 2026-09-29 — a switch where the desktop has a button
 
 Client-only change; the minimum compatible alpi stays 0.15.20.

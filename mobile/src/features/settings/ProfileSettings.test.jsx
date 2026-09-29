@@ -36,7 +36,8 @@ vi.mock('react-native', () => {
     View,
     Text,
     Pressable,
-    ScrollView: View,
+    ScrollView: ({ children, refreshControl, ...p }) => React.createElement(View, { ...p, 'data-refresh': refreshControl ? 'true' : 'false' }, children),
+    RefreshControl: () => null,
     ActivityIndicator: () => React.createElement('span', { 'data-testid': 'activity' }),
     StyleSheet: { create: (s) => s, absoluteFillObject: {} },
     useColorScheme: () => 'light',
@@ -90,6 +91,8 @@ vi.mock('../../components/Toggle', () => ({
     </button>
   ),
 }));
+
+vi.mock('../../components/SettingsSkeleton', () => ({ SettingsSkeleton: () => <div data-skeleton="true" /> }));
 
 vi.mock('./IdentityEditor', () => ({
   IdentityEditor: ({ profileId }) => <div data-identity-editor={profileId}>Draft</div>,
@@ -468,6 +471,18 @@ describe('ProfileSettings vocabulary', () => {
     expect(meta.textContent).toMatch('$0.50');
     expect(meta.textContent).toMatch('/$2.00');
     expect(container.querySelector('[data-identity-editor="doc"]')).toBeTruthy();
+  });
+
+  it('wires pull-to-refresh into the settings scroll view', async () => {
+    const call = vi.fn(async (method) => {
+      if (method === 'host.profile.summaries') return { profiles: [{ name: 'doc', counts: {} }] };
+      if (method === 'host.settings.profile_snapshot') {
+        return { detail: { name: 'doc' }, usage: { days: [] }, schedules: { jobs: [] }, workgroups: { workgroups: [] }, email: { accounts: [] }, storage: { storage: [] } };
+      }
+      throw new Error(`unexpected ${method}`);
+    });
+    const { container } = render(<ProfileSettings />, { wrapper: wrapper(call) });
+    await waitFor(() => expect(container.querySelector('[data-refresh="true"]')).toBeTruthy());
   });
 
   it('flips a boolean through its switch and never through the row', async () => {

@@ -59,7 +59,7 @@ function Swatch({ color }) {
   return <View style={{ width: 9, height: 9, borderRadius: 2, backgroundColor: color }} />;
 }
 
-export const NARROW_TILES_W = 380;
+export const NARROW_TILES_W = 520;
 
 export function UsageChart({ days = [], accent, capLine = null, total30 = null, height = CHART_H }) {
   const { colors, fonts, fontSizes } = useTheme();

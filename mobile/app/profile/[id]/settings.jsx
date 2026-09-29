@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { radii, space } from '../../../src/theme/tokens';
 
@@ -13,10 +13,12 @@ import { Toggle } from '../../../src/components/Toggle';
 import { Pill } from '../../../src/components/Pill';
 import { Row, RowSeparator, SectionHeader, SettingsBand } from '../../../src/components/Row';
 import { ScreenHeader } from '../../../src/components/ScreenHeader';
+import { SettingsSkeleton } from '../../../src/components/SettingsSkeleton';
 import { SyncBar } from '../../../src/components/SyncBar';
 import { TextPrompt } from '../../../src/components/TextPrompt';
 import { UsageChart } from '../../../src/components/UsageChart';
 import { useBack } from '../../../src/hooks/useBack';
+import { usePullRefresh } from '../../../src/hooks/usePullRefresh';
 import { modelLabel } from '../../../src/lib/modelLabel';
 import { profileLabel } from '../../../src/lib/profileName';
 import { copyText } from '../../../src/lib/clipboard';
@@ -129,11 +131,12 @@ export default function ProfileSettings() {
     if (intent === 'model') setSheet('model');
   }, [intent]);
 
-  const refreshSettings = async () => {
+  const refreshSettings = useCallback(async () => {
     await refresh();
     const next = await snap.refresh();
     if (!next && snap.unsupported) await refreshDetail();
-  };
+  }, [refresh, snap.refresh, snap.unsupported, refreshDetail]);
+  const pull = usePullRefresh(refreshSettings);
 
   const handleRestart = async () => {
     setConfirmRestart(false);
@@ -165,9 +168,7 @@ export default function ProfileSettings() {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
         <ScreenHeader title={`@${profileLabel(id)}`} subtitle="PROFILE · LOADING" onBack={goBack} />
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator color={colors.ink3} />
-        </View>
+        <SettingsSkeleton wide={twoPane} />
       </SafeAreaView>
     );
   }
@@ -299,7 +300,11 @@ export default function ProfileSettings() {
       />
       <SyncBar syncing={settingsSyncing} />
       <SettingsSurface>
-      <ScrollView contentContainerStyle={contentStyle} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={contentStyle}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={<RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={colors.ink3} />}
+      >
         <SectionHeader first>Overview</SectionHeader>
         <Row
           label="Paused"
@@ -317,8 +322,8 @@ export default function ProfileSettings() {
         <RowSeparator />
         <Row
           label="Providers"
-          helper={twoPane || !providers.length ? 'API keys + local Ollama' : providers.join(' · ')}
-          value={twoPane && providers.length ? <ChipRow items={providers} /> : String(providers.length)}
+          helper={providers.length ? (twoPane ? 'API keys + local Ollama' : providers.join(' · ')) : 'add an API key or a local Ollama to pick a model'}
+          value={twoPane && providers.length ? <ChipRow items={providers} /> : providers.length ? String(providers.length) : 'none'}
           onPress={() => router.push(`/profile/${id}/providers`)}
         />
         <RowSeparator />
@@ -560,13 +565,14 @@ export default function ProfileSettings() {
         <RowSeparator />
         <Row
           label="Peers"
-          value={String(peerCount)}
+          helper={peerCount ? undefined : 'pair a peer to chat across daemons'}
+          value={peerCount ? String(peerCount) : 'none'}
           onPress={() => router.push(`/profile/${id}/peers`)}
         />
         {workgroups.length === 0 ? (
           <>
             <RowSeparator />
-            <Row label="Workgroups" value={String(workgroupCount)} chevron={false} />
+            <Row label="Workgroups" helper={workgroupCount ? undefined : 'none yet · tap + beside Workgroups on the home screen'} value={String(workgroupCount)} chevron={false} />
           </>
         ) : (
           workgroups.map((wg) => (

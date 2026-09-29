@@ -52,7 +52,8 @@ vi.mock('react-native', () => {
     Pressable,
     TextInput,
     Modal,
-    ScrollView: View,
+    ScrollView: ({ children, refreshControl, ...p }) => React.createElement(View, p, children),
+    RefreshControl: () => null,
     ActivityIndicator: () => React.createElement('span', { 'data-testid': 'spinner' }),
     Platform: { OS: 'ios', select: (s) => s?.ios ?? s?.default },
     StyleSheet: { create: (s) => s },
@@ -106,6 +107,7 @@ vi.mock('../src/components/Icon', () => ({ Icon: ({ name }) => React.createEleme
 vi.mock('../src/components/OnOff', () => ({ OnOff: ({ on }) => React.createElement('span', {}, on ? 'on' : 'off') }));
 vi.mock('../src/components/Toggle', () => ({ Toggle: ({ on, label }) => React.createElement('span', { 'aria-label': label }, on ? 'on' : 'off') }));
 vi.mock('../src/features/settings/IdentityEditor', () => ({ IdentityEditor: () => null }));
+vi.mock('../src/components/SettingsSkeleton', () => ({ SettingsSkeleton: () => null }));
 vi.mock('../src/components/Pill', () => ({ Pill: ({ children }) => React.createElement('span', {}, children) }));
 vi.mock('../src/components/ScreenHeader', () => ({
   ScreenHeader: ({ title, subtitle }) => React.createElement('header', { 'data-subtitle': subtitle }, title),

@@ -33,6 +33,7 @@ vi.mock('react-native-reanimated', () => ({
   },
 }));
 
+vi.mock('../lib/haptics', () => ({ tapFeedback: vi.fn(), warnFeedback: vi.fn() }));
 vi.mock('./Button', () => ({ Button: ({ title }) => React.createElement('button', { type: 'button' }, title) }));
 
 vi.mock('../theme/ThemeContext', () => ({

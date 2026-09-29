@@ -2,7 +2,7 @@
 
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { radii, space, tracking } from '../../../src/theme/tokens';
 
@@ -16,10 +16,12 @@ import { Toggle } from '../../../src/components/Toggle';
 import { Pill } from '../../../src/components/Pill';
 import { Row, RowSeparator, SectionHeader, SettingsBand } from '../../../src/components/Row';
 import { ScreenHeader } from '../../../src/components/ScreenHeader';
+import { SettingsSkeleton } from '../../../src/components/SettingsSkeleton';
 import { UsageChart } from '../../../src/components/UsageChart';
 import { useToast } from '../../../src/components/Toast';
 import { Bold, Code, TypedConfirm } from '../../../src/components/TypedConfirm';
 import { useBack } from '../../../src/hooks/useBack';
+import { usePullRefresh } from '../../../src/hooks/usePullRefresh';
 import { useProfileSummaries, useWorkgroupMembers, useWorkgroupUsage } from '../../../src/hooks/useDaemonData';
 import { useProfile, useWorkgroup } from '../../../src/hooks/useSubject';
 import { copyText } from '../../../src/lib/clipboard';
@@ -84,6 +86,9 @@ function WorkgroupSettings() {
   const { workgroup: wg, loading, refresh } = useWorkgroup(id);
   const memberQuery = useWorkgroupMembers(wg?.profile, wg?.id);
   const usage = useWorkgroupUsage(wg?.profile, wg?.id);
+  const pull = usePullRefresh(async () => {
+    await Promise.all([refresh(), memberQuery.refresh?.(), usage.refresh?.()]);
+  });
   const summaries = useProfileSummaries();
   const { profile: hub } = useProfile(wg?.hub_id ?? null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -111,9 +116,7 @@ function WorkgroupSettings() {
     return (
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
         <ScreenHeader title={`#${id}`} subtitle="WORKGROUP · LOADING" onBack={goBack} />
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator color={colors.ink3} />
-        </View>
+        <SettingsSkeleton wide={twoPane} />
       </SafeAreaView>
     );
   }
@@ -249,7 +252,11 @@ function WorkgroupSettings() {
         }
       />
       <SettingsSurface>
-      <ScrollView contentContainerStyle={contentStyle} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={contentStyle}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={<RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={colors.ink3} />}
+      >
         <SectionHeader first>Overview</SectionHeader>
         <Row
           label="Hub"

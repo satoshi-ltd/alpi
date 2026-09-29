@@ -1,6 +1,6 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, ScrollView, View } from 'react-native';
+import { ActivityIndicator, RefreshControl, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { space } from '../../src/theme/tokens';
 
@@ -15,6 +15,7 @@ import { NewConnectionSheet } from '../../src/features/connections/NewConnection
 import { PairingSheet } from '../../src/features/connections/PairingSheet';
 import { connectionMeta, relativeSeen } from '../../src/features/connections/format';
 import { useBack } from '../../src/hooks/useBack';
+import { usePullRefresh } from '../../src/hooks/usePullRefresh';
 import { useConnectionsSummary } from '../../src/hooks/useDaemonData';
 import { usePane } from '../../src/nav/PaneContext';
 import { SettingsSurface } from '../../src/nav/SettingsSurface';
@@ -40,6 +41,7 @@ function ConnectionsScreen() {
   const [pairing, setPairing] = useState(null);
 
   useFocusEffect(useCallback(() => { summary.refresh(); }, [summary.refresh]));
+  const pull = usePullRefresh(summary.refresh);
 
   const rows = summary.data?.connections ?? [];
   const host = rows.find((r) => r.id === 'host');
@@ -64,7 +66,10 @@ function ConnectionsScreen() {
         </View>
       ) : (
         <SettingsSurface>
-        <ScrollView contentContainerStyle={contentStyle}>
+        <ScrollView
+          contentContainerStyle={contentStyle}
+          refreshControl={<RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={colors.ink3} />}
+        >
           {host ? (
             <>
               <SectionHeader first kicker="local socket · setup, TUI, CLI">Host</SectionHeader>

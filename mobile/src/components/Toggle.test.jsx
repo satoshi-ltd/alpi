@@ -17,6 +17,8 @@ vi.mock('react-native', () => ({
     }),
 }));
 
+vi.mock('../lib/haptics', () => ({ tapFeedback: vi.fn(), warnFeedback: vi.fn() }));
+
 vi.mock('../theme/ThemeContext', () => ({
   useTheme: () => ({ colors: { line2: '#ddd', accent: '#c90', bgPane: '#fff' } }),
 }));

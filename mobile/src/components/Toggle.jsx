@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Switch } from 'react-native';
 
+import { tapFeedback } from '../lib/haptics';
 import { useTheme } from '../theme/ThemeContext';
 
 // The thumb follows the finger at once; the prop catches up when the daemon round-trip lands.
@@ -12,6 +13,7 @@ export function Toggle({ on, onChange, disabled = false, label, color }) {
   }, [on]);
   const flip = (next) => {
     setShown(next);
+    tapFeedback();
     onChange?.(next);
   };
   return (

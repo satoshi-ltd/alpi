@@ -8,6 +8,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { radii, space, lineHeights, typography } from '../theme/tokens';
 
+import { warnFeedback } from '../lib/haptics';
 import { useTheme } from '../theme/ThemeContext';
 import { Button } from './Button';
 import { useExitSnapshot } from './useExitSnapshot';
@@ -186,6 +187,7 @@ export function TypedConfirm({
               variant="danger"
               onPress={() => {
                 setValue('');
+                warnFeedback();
                 onConfirm?.();
               }}
               disabled={!ready}
