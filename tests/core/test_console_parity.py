@@ -245,6 +245,24 @@ def test_setup_schedule_pause_does_not_invent_last_run_at(
     assert "last_run_at" not in job
 
 
+def test_schedule_list_cli_shows_the_timeout_contract(tmp_home_no_env: Path) -> None:
+    from alpi.scheduler import jobs_store
+
+    jobs_store.update(tmp_home_no_env, lambda _old: [
+        {"id": "long", "kind": "cron", "expression": "0 4 * * 6", "prompt": "audit", "timeout": 5400},
+        {"id": "plain", "kind": "cron", "expression": "0 9 * * 1", "prompt": "digest"},
+        {"id": "bad", "kind": "cron", "expression": "0 9 * * 1", "prompt": "digest", "timeout": 99999},
+    ])
+    result = CliRunner().invoke(cli.main, ["schedule", "list"])
+    assert result.exit_code == 0
+    assert "timeout:5400s" in result.output and "timeout:invalid" in result.output
+    assert result.output.count("timeout:") == 2
+
+    rows = {r["id"]: r for r in json.loads(CliRunner().invoke(cli.main, ["schedule", "list", "--json"]).output)}
+    assert rows["long"]["run_timeout"] == 5400 and rows["plain"]["run_timeout"] == 900
+    assert rows["bad"]["run_timeout"] is None and "86400" in rows["bad"]["timeout_error"]
+
+
 def test_schedule_list_marks_due_jobs(tmp_home_no_env: Path) -> None:
     from alpi.scheduler import jobs_store
 

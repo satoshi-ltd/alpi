@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
+import re
 import shlex
 import signal
 import subprocess
@@ -58,18 +60,42 @@ class ParsedEvents:
 TICK_SECONDS = 30
 
 DEFAULT_RUN_TIMEOUT_SECONDS = 900
-MAX_RUN_TIMEOUT_SECONDS = 3600
+MIN_RUN_TIMEOUT_SECONDS = 30
+# One fire holds its profile's serial tick, so a day is the longest a run may keep every other job of the profile waiting.
+MAX_RUN_TIMEOUT_SECONDS = 86400
+
+
+class InvalidTimeout(ValueError):
+    pass
+
+
+def parse_run_timeout(raw: object) -> int:
+    if raw is None:
+        return DEFAULT_RUN_TIMEOUT_SECONDS
+    secs: int | None = None
+    if isinstance(raw, int) and not isinstance(raw, bool):
+        secs = raw
+    elif isinstance(raw, float) and math.isfinite(raw) and raw.is_integer():
+        secs = int(raw)
+    elif isinstance(raw, str) and re.fullmatch(r"[0-9]{1,6}", raw.strip()):
+        secs = int(raw.strip())
+    if secs is None or not MIN_RUN_TIMEOUT_SECONDS <= secs <= MAX_RUN_TIMEOUT_SECONDS:
+        raise InvalidTimeout(
+            f"'timeout' must be a whole number of seconds between {MIN_RUN_TIMEOUT_SECONDS} "
+            f"and {MAX_RUN_TIMEOUT_SECONDS}, got {repr(raw)[:80]}"
+        )
+    return secs
 
 
 def job_run_timeout(job: dict) -> int:
-    raw = job.get("timeout")
-    if raw is None:
-        return DEFAULT_RUN_TIMEOUT_SECONDS
+    return parse_run_timeout(job.get("timeout"))
+
+
+def describe_run_timeout(job: dict) -> dict:
     try:
-        secs = int(raw)
-    except (TypeError, ValueError):
-        return DEFAULT_RUN_TIMEOUT_SECONDS
-    return max(30, min(MAX_RUN_TIMEOUT_SECONDS, secs))
+        return {"run_timeout": job_run_timeout(job)}
+    except InvalidTimeout as e:
+        return {"run_timeout": None, "timeout_error": str(e)}
 
 
 def soft_turn_budget(secs: int) -> int | None:
@@ -285,7 +311,7 @@ def validate_no_agent_command(prompt: str, home: Path) -> str | None:
     return f"no_agent python invocation needs a script under {home}/skills/"
 
 
-def _run_script_only(job: dict, home: Path) -> JobOutcome:
+def _run_script_only(job: dict, home: Path, secs: int) -> JobOutcome:
     # Threat scan intentionally skipped: validator restricts the prompt to skill scripts on disk, so prompt-injection heuristics don't apply.
     cmd_str = (job.get("prompt") or "").strip()
     if not cmd_str:
@@ -314,7 +340,6 @@ def _run_script_only(job: dict, home: Path) -> JobOutcome:
         **workspace_env(home),
     })
 
-    secs = job_run_timeout(job)
     try:
         proc = subprocess.run(
             argv, env=env, capture_output=True, text=True, timeout=secs,
@@ -409,8 +434,12 @@ def _close_supervised_journal(home: Path, run_id: str) -> None:
 
 def run_job(job: dict, home: Path) -> JobOutcome:
     # `notify: false` (default) runs silent; `notify: true` pushes the reply to the owner's apps — unless the agent already notified itself, in which case the auto-notify is suppressed to avoid duplicates.
+    try:
+        secs = job_run_timeout(job)
+    except InvalidTimeout as e:
+        return JobOutcome(False, f"invalid stored timeout: {e}")
     if job.get("no_agent"):
-        return _run_script_only(job, home)
+        return _run_script_only(job, home, secs)
 
     prompt = job.get("prompt", "").strip()
     if not prompt:
@@ -422,7 +451,6 @@ def run_job(job: dict, home: Path) -> JobOutcome:
         return JobOutcome(False, f"threat scan blocked fire: {', '.join(flags)}")
 
     notify_user = _job_notifies(job)
-    secs = job_run_timeout(job)
     soft = soft_turn_budget(secs)
     time_line = (
         f" This run has about {soft // 60} minutes before it is stopped; plan the work to finish inside them."
@@ -464,6 +492,7 @@ def run_job(job: dict, home: Path) -> JobOutcome:
     # job.connection_id is provenance (who created it); the daemon owns every scheduled run, so accounting stays under host.
     extra["ALPI_CONNECTION_ID"] = "host"
     extra["ALPI_CONNECTION_SOURCE"] = "schedule"
+    extra["ALPI_RUN_TIMEOUT_S"] = str(secs)
     from alpi.config import TIER_NAMES
     job_tier = str(job.get("tier") or "").strip().lower()
     if job_tier in TIER_NAMES:
@@ -755,7 +784,7 @@ def tick(home: Path, now: datetime | None = None) -> list[tuple[str, bool, str]]
     for job in jobs:
         if not is_due(job, now=now, home=home):
             continue
-        # per-job re-check (jobs run up to 1h; pause can land mid-tick); break, not return — finished jobs must keep their stamp
+        # per-job re-check (a job may run for hours; pause can land mid-tick); break, not return — finished jobs must keep their stamp
         if _profile_paused(home):
             break
         job_id = str(job.get("id", "?"))
@@ -800,7 +829,7 @@ async def serve(home: Path) -> None:
 
     ``tick`` runs in a dedicated thread executor so a long-running
     ``subprocess.run`` (up to the per-job ``timeout``, default 900s,
-    max 3600s) can't starve host.chat streaming or other coroutines.
+    max 86400s) can't starve host.chat streaming or other coroutines.
     """
     import asyncio
     import concurrent.futures

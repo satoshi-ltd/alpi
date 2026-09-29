@@ -8,7 +8,13 @@ import uuid
 
 from alpi.home import get_home
 from alpi.scheduler import jobs_store
-from alpi.scheduler.run import DEFAULT_RUN_TIMEOUT_SECONDS, MAX_RUN_TIMEOUT_SECONDS
+from alpi.scheduler.run import (
+    DEFAULT_RUN_TIMEOUT_SECONDS,
+    MAX_RUN_TIMEOUT_SECONDS,
+    InvalidTimeout,
+    describe_run_timeout,
+    parse_run_timeout,
+)
 from alpi.tools.base import Tool, ToolResult
 
 
@@ -194,7 +200,8 @@ class Schedule(Tool):
                 jobs = jobs_store.read(home)
             except jobs_store.CorruptJobsFile as e:
                 return ToolResult(ok=False, output="", error=f"jobs.json corrupt: {e}")
-            return ToolResult(ok=True, output=json.dumps(jobs, indent=2))
+            listed = [{**j, **describe_run_timeout(j)} if isinstance(j, dict) else j for j in jobs]
+            return ToolResult(ok=True, output=json.dumps(listed, indent=2))
 
         if action == "add":
             if not prompt:
@@ -233,7 +240,7 @@ class Schedule(Tool):
                 err = _validate_timeout(timeout)
                 if err:
                     return ToolResult(ok=False, output="", error=err)
-                job["timeout"] = int(timeout)
+                job["timeout"] = parse_run_timeout(timeout)
             if job["kind"] == "cron":
                 if not expression:
                     return ToolResult(
@@ -403,7 +410,7 @@ class Schedule(Tool):
                     if err:
                         outcome.append(ToolResult(ok=False, output="", error=err))
                         return None
-                    job["timeout"] = int(timeout)
+                    job["timeout"] = parse_run_timeout(timeout)
                     changes.append("timeout")
 
                 err = _validate_job_shape(job)
@@ -490,11 +497,9 @@ def _validate_prompt(prompt: str) -> str | None:
 
 def _validate_timeout(timeout) -> str | None:
     try:
-        secs = int(timeout)
-    except (TypeError, ValueError):
-        return f"'timeout' must be an integer number of seconds, got {timeout!r}"
-    if not (30 <= secs <= MAX_RUN_TIMEOUT_SECONDS):
-        return f"'timeout' must be between 30 and {MAX_RUN_TIMEOUT_SECONDS} seconds"
+        parse_run_timeout(timeout)
+    except InvalidTimeout as e:
+        return str(e)
     return None
 
 

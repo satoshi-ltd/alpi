@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.15.27 — 2026-09-29 — a job runs for as long as it declares
+
+- **A scheduled job's `timeout` above one hour is honoured.** `schedule(add|update)` refused
+  anything over 3600 seconds while the scheduler silently cut a stored larger value to 3600, so a
+  weekend audit job declaring 5400 would be killed at the hour, and its prompt was told it had 54
+  minutes. The declared value now applies everywhere: the agent and script subprocess timeouts,
+  the soft budget and the minutes the scheduled prompt states, and the silence watchdog. The
+  scheduler records the duration a run was spawned with in its `run.started` event
+  (`timeout_s`), and the watchdog judges the run by that value, so editing or deleting the job
+  mid-run no longer moves the judgement; runs started before this release are judged as before. The ceiling is now 86400 seconds; the default (900) and
+  the minimum (30) are unchanged. Fires of one profile still run one after another, so a long
+  job also delays that profile's other due jobs.
+- **A bad timeout is refused, never reinterpreted.** One parser now serves the tool, execution,
+  the listings and the watchdog: a whole number of seconds from 30 to 86400, given as an integer,
+  an integral float or a digit string. Booleans (which Python counts as integers), fractions,
+  non-finite and out-of-range values are rejected by `schedule`, and a job whose stored value is
+  invalid fails its fire with `invalid stored timeout: …` instead of being clamped to a limit it
+  never asked for. A stored value below 30 or above 86400, or one that is not a whole number of
+  seconds (previously clamped, truncated or defaulted to 900), now fails its fire until it is
+  corrected.
+- **Listings show the timeout that applies.** `schedule(action="list")`, `host.schedule.list`
+  and `alpi schedule list --json` add `run_timeout` (seconds, or `null` with `timeout_error`), and
+  `alpi schedule list` shows `timeout:<n>s` for a declared value or `timeout:invalid`.
+
 ## v0.15.26 — 2026-09-28 — a memory replace changes only what it matched
 
 - **`memory replace` and `remove` no longer wipe a hand-written `USER.md` or `MEMORY.md`.** Both

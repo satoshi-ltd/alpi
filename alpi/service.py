@@ -374,7 +374,7 @@ def _sweep_runs(home: Path, profile: str) -> None:
     """Close and report runs the scheduler could not: a child that died unreported, or one wedged past its job's timeout."""
     from alpi import runs
     from alpi.scheduler import jobs_store
-    from alpi.scheduler.run import MAX_RUN_TIMEOUT_SECONDS, job_run_timeout
+    from alpi.scheduler.run import MAX_RUN_TIMEOUT_SECONDS, InvalidTimeout, job_run_timeout
     try:
         try:
             jobs = {str(j.get("id")): j for j in jobs_store.read(home)}
@@ -383,8 +383,13 @@ def _sweep_runs(home: Path, profile: str) -> None:
 
         def timeout_for(job_id: str) -> int | None:
             job = jobs.get(job_id)
-            # A deleted or unreadable job still capped its run at the scheduler's ceiling; judging by that beats never judging it.
-            return job_run_timeout(job) if job else MAX_RUN_TIMEOUT_SECONDS
+            # A deleted job, or one whose stored timeout is invalid, is judged by the scheduler's ceiling; that beats never judging it.
+            if not job:
+                return MAX_RUN_TIMEOUT_SECONDS
+            try:
+                return job_run_timeout(job)
+            except InvalidTimeout:
+                return MAX_RUN_TIMEOUT_SECONDS
 
         journals = runs.running_journals(home, time.time())
         # Order matters: a dead pid is reported as dead even when it is also silent; only a live or unknown pid reaches the silence rule.

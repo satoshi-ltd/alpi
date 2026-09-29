@@ -1087,6 +1087,7 @@ def schedule_list(ctx: click.Context, as_json: bool) -> None:
             status, nxt = _fire_state(j)
             rows.append({
                 **j,
+                **scheduler_run.describe_run_timeout(j),
                 "status": status,
                 "next_fire": nxt.isoformat() if nxt is not None else None,
             })
@@ -1109,6 +1110,11 @@ def schedule_list(ctx: click.Context, as_json: bool) -> None:
             flags.append(f"tier:{j['tier']}")
         if j.get("no_agent"):
             flags.append("no_agent")
+        run_timeout = scheduler_run.describe_run_timeout(j)["run_timeout"]
+        if run_timeout is None:
+            flags.append("timeout:invalid")
+        elif j.get("timeout") is not None:
+            flags.append(f"timeout:{run_timeout}s")
         last = j.get("last_run_status") or "never ran"
         click.echo(f"{jid}  [{kind}] {when}  → next {_next_fire(j)}")
         click.echo(f"        {title}")

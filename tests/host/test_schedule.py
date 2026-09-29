@@ -553,3 +553,24 @@ async def test_list_next_fire_uses_home_for_due_inactivity(tmp_path: Path, monke
     # No sessions yet → is_due(inactivity, home) is True; next_fire must delegate
     # to it (needs home) and report "now", not null.
     assert resp["result"]["jobs"][0]["next_fire"] is not None
+
+
+@pytest.mark.asyncio
+async def test_list_reports_the_effective_timeout_and_a_bad_one(tmp_path: Path, monkeypatch) -> None:
+    home = tmp_path / "h"
+    home.mkdir()
+    monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
+    _seed_jobs(
+        home,
+        {"id": "long", "kind": "cron", "expression": "0 4 * * 6", "prompt": "audit", "timeout": 5400},
+        {"id": "plain", "kind": "cron", "expression": "0 9 * * 1", "prompt": "digest"},
+        {"id": "bad", "kind": "cron", "expression": "0 9 * * 1", "prompt": "digest", "timeout": True},
+    )
+    srv = host_server.Server(home=home)
+    data_schedule.register(srv)
+
+    resp = await srv._dispatch({"id": "r", "method": "host.schedule.list", "params": {"profile": "default"}})
+    rows = {r["id"]: r for r in resp["result"]["jobs"]}
+    assert rows["long"]["run_timeout"] == 5400 and "timeout_error" not in rows["long"]
+    assert rows["plain"]["run_timeout"] == 900
+    assert rows["bad"]["run_timeout"] is None and "timeout_error" in rows["bad"]

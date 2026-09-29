@@ -1001,14 +1001,33 @@ def test_job_run_timeout_honors_explicit_value() -> None:
     assert scheduler.job_run_timeout({"timeout": 1800}) == 1800
 
 
-def test_job_run_timeout_clamps_to_bounds() -> None:
-    assert scheduler.job_run_timeout({"timeout": 10}) == 30
-    assert scheduler.job_run_timeout({"timeout": 99999}) == scheduler.MAX_RUN_TIMEOUT_SECONDS
+def test_job_run_timeout_honours_a_declared_value_above_one_hour() -> None:
+    assert scheduler.job_run_timeout({"timeout": 5400}) == 5400
 
 
-def test_job_run_timeout_ignores_garbage() -> None:
-    assert scheduler.job_run_timeout({"timeout": "nope"}) == 900
-    assert scheduler.job_run_timeout({"timeout": None}) == 900
+@pytest.mark.parametrize("raw, secs", [
+    (None, 900), (30, 30), (5400, 5400), (86400, 86400), (5400.0, 5400), ("5400", 5400), (" 5400 ", 5400),
+])
+def test_parse_run_timeout_accepts_whole_seconds_in_range(raw, secs) -> None:
+    assert scheduler.parse_run_timeout(raw) == secs
+
+
+@pytest.mark.parametrize("raw", [
+    True, False, 29, 0, -5, 86401, 10 ** 40, 5400.5, float("nan"), float("inf"), float("-inf"),
+    "5400.5", "nope", "", "\uff15\uff14\uff10\uff10", "9" * 400, [5400], {"s": 5400},
+])
+def test_parse_run_timeout_refuses_anything_else(raw) -> None:
+    with pytest.raises(scheduler.InvalidTimeout):
+        scheduler.parse_run_timeout(raw)
+
+
+def test_a_bad_stored_timeout_is_never_turned_into_a_valid_one() -> None:
+    for raw in (10, 99999, "nope", True, float("inf")):
+        with pytest.raises(scheduler.InvalidTimeout):
+            scheduler.job_run_timeout({"timeout": raw})
+    assert scheduler.describe_run_timeout({"timeout": 99999})["run_timeout"] is None
+    assert "99999" in scheduler.describe_run_timeout({"timeout": 99999})["timeout_error"]
+    assert scheduler.describe_run_timeout({}) == {"run_timeout": 900}
 
 
 def test_schedule_timeout_schema_matches_runtime_default() -> None:
@@ -1045,6 +1064,100 @@ def test_run_job_passes_soft_budget_to_child(tmp_home_no_env: Path, monkeypatch)
     assert captured["env"]["ALPI_TURN_BUDGET_S"] == "810"
 
 
+def test_run_job_enforces_a_timeout_above_one_hour_in_the_agent_path(tmp_home_no_env: Path, monkeypatch) -> None:
+    import subprocess as _sp
+
+    captured: dict = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        captured["env"] = kwargs.get("env", {})
+        captured["timeout"] = kwargs.get("timeout")
+        return _sp.CompletedProcess(cmd, 0, stdout='{"kind":"reply","text":""}\n', stderr="")
+
+    monkeypatch.setattr(scheduler.subprocess, "run", fake_run)
+    scheduler.run_job({"id": "x", "kind": "cron", "prompt": "audit the portfolio", "timeout": 5400}, tmp_home_no_env)
+    assert captured["timeout"] == 5400
+    assert captured["env"]["ALPI_TURN_BUDGET_S"] == "4860"
+    assert captured["env"]["ALPI_RUN_TIMEOUT_S"] == "5400"
+    assert "about 81 minutes" in " ".join(map(str, captured["cmd"]))
+
+
+def test_run_job_enforces_a_timeout_above_one_hour_in_the_script_path(tmp_home_no_env: Path, monkeypatch) -> None:
+    script = _stub_skill_path(tmp_home_no_env)
+    captured: dict = {}
+
+    def fake_run(argv, **kw):
+        captured["timeout"] = kw.get("timeout")
+        return _fake_completed(rc=0, stdout="")
+
+    monkeypatch.setattr(scheduler.subprocess, "run", fake_run)
+    ok, _msg, _reply = scheduler.run_job(
+        {"id": "j", "kind": "cron", "no_agent": True, "prompt": f"python3 {script}", "timeout": 5400},
+        tmp_home_no_env,
+    )
+    assert ok and captured["timeout"] == 5400
+
+
+def test_a_run_past_a_declared_timeout_above_one_hour_is_killed_and_reported(tmp_home_no_env: Path, monkeypatch) -> None:
+    import subprocess as _sp
+
+    def fake_run(cmd, **kwargs):
+        raise _sp.TimeoutExpired(cmd, kwargs["timeout"])
+
+    monkeypatch.setattr(scheduler.subprocess, "run", fake_run)
+    outcome = scheduler.run_job({"id": "j", "kind": "cron", "prompt": "audit", "timeout": 5400}, tmp_home_no_env)
+    assert not outcome.ok
+    assert outcome.timeout_reason == "timeout_5400s"
+    assert outcome.message.startswith("agent timed out after 5400s")
+
+
+def test_a_script_past_a_declared_timeout_above_one_hour_is_killed_and_reported(tmp_home_no_env: Path, monkeypatch) -> None:
+    import subprocess as _sp
+    script = _stub_skill_path(tmp_home_no_env)
+
+    def fake_run(argv, **kw):
+        raise _sp.TimeoutExpired(argv, kw["timeout"])
+
+    monkeypatch.setattr(scheduler.subprocess, "run", fake_run)
+    outcome = scheduler.run_job(
+        {"id": "j", "kind": "cron", "no_agent": True, "prompt": f"python3 {script}", "timeout": 5400},
+        tmp_home_no_env,
+    )
+    assert not outcome.ok and outcome.timeout_reason == "timeout_5400s"
+
+
+def test_an_invalid_timeout_error_does_not_carry_a_huge_stored_value() -> None:
+    err = scheduler.describe_run_timeout({"timeout": "x" * 5000})["timeout_error"]
+    assert len(err) < 200
+
+
+@pytest.mark.parametrize("no_agent", [False, True])
+def test_run_job_fails_a_bad_stored_timeout_without_spawning(tmp_home_no_env: Path, monkeypatch, no_agent) -> None:
+    script = _stub_skill_path(tmp_home_no_env)
+    spawned: list = []
+    monkeypatch.setattr(scheduler.subprocess, "run", lambda *a, **k: spawned.append(a))
+    job = {"id": "j", "kind": "cron", "prompt": f"python3 {script}" if no_agent else "do a thing", "timeout": 99999}
+    if no_agent:
+        job["no_agent"] = True
+    outcome = scheduler.run_job(job, tmp_home_no_env)
+    assert not outcome.ok and "invalid stored timeout" in outcome.message
+    assert spawned == []
+
+
+def test_a_bad_stored_timeout_fails_the_fire_through_the_tick(tmp_home_no_env: Path, monkeypatch) -> None:
+    jobs_store.update(tmp_home_no_env, lambda _old: [{
+        "id": "bad", "kind": "cron", "expression": "* * * * *", "prompt": "do a thing",
+        "timeout": True, "last_run_at": "2020-01-01T00:00:00+00:00",
+    }])
+    monkeypatch.setattr(scheduler.subprocess, "run", lambda *a, **k: pytest.fail("must not spawn"))
+    results = scheduler.tick(tmp_home_no_env)
+    assert results and results[0][0] == "bad" and not results[0][1]
+    assert "invalid stored timeout" in results[0][2]
+    stored = jobs_store.read(tmp_home_no_env)[0]
+    assert stored["last_run_status"] == "error" and stored["timeout"] is True
+
+
 def test_run_job_omits_soft_budget_when_timeout_tiny(tmp_home_no_env: Path, monkeypatch) -> None:
     import subprocess as _sp
 
@@ -1072,6 +1185,34 @@ def test_cron_tool_add_rejects_out_of_range_timeout(tmp_home_no_env: Path) -> No
                      prompt="weekly research post", timeout=99999)
     assert not out.ok
     assert "timeout" in (out.error or "")
+
+
+def test_cron_tool_add_accepts_and_lists_a_timeout_above_one_hour(tmp_home_no_env: Path) -> None:
+    out = Schedule().run(action="add", kind="cron", expression="0 4-15 * * 6,0",
+                     prompt="weekend security audit", timeout="5400")
+    assert out.ok
+    job = json.loads((tmp_home_no_env / "schedule" / "jobs.json").read_text())[0]
+    assert job["timeout"] == 5400
+    listed = json.loads(Schedule().run(action="list").output)
+    assert listed[0]["run_timeout"] == 5400
+
+
+@pytest.mark.parametrize("bad", [True, 5400.5, 86401, 29])
+def test_cron_tool_add_refuses_a_timeout_outside_the_contract(tmp_home_no_env: Path, bad) -> None:
+    out = Schedule().run(action="add", kind="cron", expression="0 9 * * 4",
+                     prompt="weekly research post", timeout=bad)
+    assert not out.ok and "between 30 and 86400" in (out.error or "")
+    assert not (tmp_home_no_env / "schedule" / "jobs.json").exists() or \
+        json.loads((tmp_home_no_env / "schedule" / "jobs.json").read_text()) == []
+
+
+def test_cron_tool_list_flags_a_bad_stored_timeout(tmp_home_no_env: Path) -> None:
+    jobs_store.update(tmp_home_no_env, lambda _old: [
+        {"id": "bad", "kind": "cron", "expression": "0 9 * * *", "prompt": "x", "timeout": 99999},
+    ])
+    listed = json.loads(Schedule().run(action="list").output)
+    assert listed[0]["timeout"] == 99999 and listed[0]["run_timeout"] is None
+    assert "between 30 and 86400" in listed[0]["timeout_error"]
 
 
 def test_cron_tool_update_sets_timeout(tmp_home_no_env: Path) -> None:

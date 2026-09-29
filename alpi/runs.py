@@ -156,6 +156,11 @@ def start(context: RunContext, *, model: str = "", input_text: str = "") -> None
         _start(context, model=model, input_text=input_text)
 
 
+def _spawn_timeout() -> int | None:
+    raw = os.environ.get("ALPI_RUN_TIMEOUT_S", "")
+    return int(raw) if raw.isascii() and raw.isdigit() else None
+
+
 def _start(context: RunContext, *, model: str, input_text: str) -> None:
     append(context.home, context.run_id, "run.started", {
         "run_id": context.run_id,
@@ -170,6 +175,7 @@ def _start(context: RunContext, *, model: str, input_text: str) -> None:
         "workspace": str(context.workspace),
         "pid": os.getpid(),
         "pid_start": proc_starttime(os.getpid()),
+        "timeout_s": _spawn_timeout(),
         "model": model,
         "input": input_text,
     })
@@ -556,7 +562,9 @@ def reconcile_silent(
         job_id = str(started.get("job_id") or "")
         if not job_id:
             continue
-        timeout = timeout_for_job(job_id)
+        # The duration the scheduler spawned the run with wins over the job's current one: an edit or a deleted job must not move the judgement.
+        recorded = started.get("timeout_s")
+        timeout = recorded if isinstance(recorded, int) and not isinstance(recorded, bool) and recorded > 0 else timeout_for_job(job_id)
         if not timeout:
             continue
         updated_at = float(row.get("updated_at") or 0.0)

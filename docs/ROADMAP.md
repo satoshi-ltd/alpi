@@ -16,49 +16,30 @@ them with broader work unless a new, evidenced need exists.
 
 ## Next cycle — isolated conversations, explicit limits, faithful ingest
 
-Priorities reviewed against the local v0.15.17 code on 2026-09-24. Local
-reproductions confirmed the timeout clamp, Word-table loss and history reuse
-within one peer; the other findings below are source inspection. Fleet
-incidents are operator-reported evidence, not independently replayed here.
-No production data or external services were used in this review.
+Every item below was re-checked against the v0.15.26 source on 2026-09-29 and
+is still open. A local reproduction confirmed the Word-table loss; the other
+findings are source inspection. Fleet incidents are
+operator-reported evidence, not independently replayed here.
 
 The next cycle should repair observable failures, not add another orchestration
 layer or reopen settled product decisions. The items below are bounded
 fixes; each can ship independently. The order below is also the commit plan:
-five commits, with only KB.11 and KB.13 grouped. Each implementation includes
-its tests, relevant docs, bump and changelog. UX.7 releases desktop; the other
-groups release alpi unless their implementation also changes a client.
+nine commits, with only KB.11 and KB.13 grouped. Each implementation includes
+its tests, relevant docs, bump and changelog. UX.7 and UX.8 release desktop; the
+other groups release alpi unless their implementation also changes a client.
 Do not bundle unrelated work just because it is ready at the same time.
 
 | Order | ID | Priority | Evidence | Outcome |
 |---|---|---|---|---|
-| 1 | SCHED.4 | P2 · 🟡 | A stored timeout of 5400 resolves to 3600 | The declared valid timeout is honoured consistently, including above one hour. |
-| 2 | TERM.3 | P3 · 🟡 | A Morpheus terminal command could not find the skill's volume JDK | Explicit profile environment reaches foreground, background and Docker commands. |
-| 3 | KB.11 + KB.13 | P2 · 🟡 | Source text is silently cut at 12000 characters; Word tables are discarded | Ingest reports its cut and preserves ordinary Word tables in document order. |
-| 4 | UX.7 | P3 · 🟡 | Storage repeats inventory bytes under separate reclaim/delete rows | One inventory with safe and individually confirmed destructive actions on each group. |
-| 5 | KB.14 | P3 · 🟡 | The index uses mtime/size to decide whether to embed again | Unchanged content does not cause another paid embedding. |
-
-### SCHED.4 — honour the timeout a job declares
-
-**Evidence.** `schedule(add|update, timeout=5400)` rejects the value, while
-[scheduler/run.py](../alpi/scheduler/run.py) silently clamps a directly stored
-5400 to 3600. The fleet reported a healthy Maven run killed near one hour,
-then completed manually. The local reproduction confirms the clamp, not the
-production timing.
-
-**Decision.** Honour valid declared durations above 3600. Keep the current
-default, minimum and soft-budget reserve; do not add a second knob or another
-arbitrary one-hour ceiling. Use one duration contract for add/update,
-execution, listing and the silence watchdog. Validate malformed, boolean,
-non-finite and unrepresentable durations explicitly; a bad stored value must
-not silently become an apparently valid timeout or crash the scheduler.
-
-**Acceptance.** A stored or tool-created 5400 s job reports and enforces 5400
-in agent and script paths; the watchdog uses the same duration and the engine
-receives the corresponding soft budget. Exercise the boundary with a fake
-clock rather than an actual 90-minute test. Existing timeout failure details
-and process cleanup survive. Updating neo/smith/morpheus jobs in the fleet is
-a separate operational change, not permission to edit that repository here.
+| 1 | TERM.3 | P3 · 🟡 | A Morpheus terminal command could not find the skill's volume JDK | Explicit profile environment reaches foreground, background and Docker commands. |
+| 2 | KB.11 + KB.13 | P2 · 🟡 | Source text is silently cut at 12000 characters; Word tables are discarded | Ingest reports its cut and preserves ordinary Word tables in document order. |
+| 3 | UX.7 | P3 · 🟡 | Storage repeats inventory bytes under separate reclaim/delete rows | One inventory with safe and individually confirmed destructive actions on each group. |
+| 4 | KB.14 | P3 · 🟡 | The index uses mtime/size to decide whether to embed again | Unchanged content does not cause another paid embedding. |
+| 5 | ATT.2 | P2 · 🟡 | `host.attachments.fetch` checks roots, never the caller; agora filters on its side | On a `session_scope: device` connection a device fetches only files it produced or staged. |
+| 6 | AUTH.1 | P3 · 🟡 | One revoked device retrying from agora's address spends the auth budget of every agora user | A failure that names a device is throttled per device; anonymous failures stay per address. |
+| 7 | UPD.1 | P3 · 🟡 | Desktop offers **Update alpi** on a Docker daemon that can never self-update, then prints a hint that is wrong for a pinned image tag | Clients know before the click whether a daemon can self-update and show the one correct manual step when it cannot. |
+| 8 | UX.8 | P3 · 🟡 | The Usage bars are sized by tokens while the headline and the cap are in dollars | The chart shows the number the owner watches: cost when there is any, tokens otherwise. |
+| 9 | SCHED.6 | P3 · 🟡 | `tick` stamps `last_run_at` for every job it fired only after the whole pass, with the pass's start time | A job that finished is stamped at once; a daemon restart during a later long job does not fire it again. |
 
 ### TERM.3 — let a profile hand `terminal` extra environment variables
 
@@ -185,60 +166,174 @@ remain usable and acquire it on indexing without dropping unrelated tables.
 Failure still rolls back the pass. Test with a counting embedder and real
 SQLite, not timing or external API calls. Keep this separate from ingest fixes.
 
-### Optional: CAP.1 — show admission pressure without changing admission
+### ATT.2 — scope `host.attachments.fetch` to the device that owns the file
 
-The former ALP.9 alternative has already been chosen:
-[CONFIG.md](CONFIG.md) and the packaged config reference explicitly say
-**admission threshold, not a hard cap**. `_drain_pipeline_queue` recalculates
-the active set; QA rewind, hub tasks and resume are not new FIFO admissions.
-Do not silently queue resume, block QA recovery, or reinterpret a human task
-to make the number look strict.
+**Evidence.** `_fetch` in [attachments_rpc.py](../alpi/host/attachments_rpc.py)
+checks only that the resolved path sits under `servable_roots` (images anywhere
+under the profile home, `/tmp` or the workspace; documents under the staging
+area, `out/` or the workspace) plus the secrets denylist; it never checks who
+asks. Since 0.15.20 sessions are private per device when a connection runs
+`session_scope: device` ([connection_context.py](../alpi/host/connection_context.py),
+`_device_clause`), but produced files are not: any device of the connection that
+learns or guesses a path such as `<workspace>/summary.md` downloads another
+user's file. agora (one device per person on `agora-server` and
+`alexandra-server`) closes the gap on its side by relaying only paths the daemon
+already sent to that user; other clients get no such barrier.
 
-There is a narrower visibility gap: `workgroup list` prints the configured
-threshold/origin and queue but not the active count;
-[host.profile.detail](../alpi/host/device_state.py) exposes the threshold and
-queue count but no active count. If selected, expose `active_workgroups` and
-an advisory `over_threshold` in detail, the CLI, and the existing desktop
-settings surface. Extract the counting rule from
-[service._active_workgroup_ids](../alpi/service.py) into the workgroup domain
-so every consumer uses one definition; do not make the CLI import the daemon
-or add a persistent counter that can drift.
+**Decision.** For a remote caller on a `session_scope: device` connection,
+`host.attachments.fetch` serves a path only if that device may see it: the path
+appears in a session the device owns (`owns_session`) as a turn's
+`attachments`, `output_attachments`, tool result or assistant text (so inline
+images keep working), or the device staged it itself (`_stage` records the
+owning `device_id` next to the staged file and `_fetch` reads it back). Admin,
+local callers and `session_scope: connection` keep today's behaviour. Keep the
+existing roots and the secrets denylist as the first barrier, and answer a
+refused path with the same `-32001 forbidden` / `path not readable` as today, so
+the error does not reveal whether the file exists. Do not rescan transcripts on
+every call: keep a per-device index of offered paths, updated when a session is
+saved and rebuilt lazily.
 
-Acceptance: active/paused/between-phase/deliberation cases agree across
-surfaces; `0` is unlimited and never over-threshold; inherited limits work;
-an unreadable state is not presented as a verified zero. This is **🔵 optional
-observability**, not a release gate and not a replacement hard-cap task.
+**Acceptance.** Two devices of one `session_scope: device` connection: A
+produces `out/report.md` and can fetch it; B gets `forbidden` for that path and
+for A's staged upload. On a `session_scope: connection` connection both fetch it,
+as today. An image an assistant turn referenced stays fetchable for the device
+that owns the session. Sessions saved before 0.15.20 (no `device_id`) stay
+fetchable for every device of the connection, like the sessions themselves.
+Admin and the Unix socket are unaffected.
+
+### AUTH.1 — count a rejected known device against that device, not the shared address
+
+**Evidence.** `_handle_websocket` in [server.py](../alpi/host/server.py) closes
+every new socket from a source with 1013 once it records
+`WS_AUTH_FAILURES_PER_MINUTE` (10) failures in a minute; the source is the socket
+peer, or the `X-Forwarded-For` client when the peer is listed in
+`ALPI_HOST_WS_TRUSTED_PROXIES`. A multi-user front end such as agora reaches alpi
+from one address for all its users, so one person whose device was revoked or
+whose token expired, with a client that keeps retrying, spends the budget of
+that address and locks every other user out for a minute. `authenticate` in
+[connections.py](../alpi/host/connections.py) already names the device for
+`token-expired` and `connection-disabled`, but skips revoked devices
+(`status != "active"`) and returns an anonymous failure, so a revoked known
+device cannot be told from a stranger's guess. agora holds a rejected user back
+on its side (1 min doubling to 15), which every front end would have to copy.
+
+**Decision.** `authenticate` also matches the presented hash against revoked
+devices and returns `reason="device-revoked"` with its `device_id` (still a
+failure; the answer to the client does not change). The auth-failure limiter
+counts a failure that names a device against that device, with the same limit
+and window; only anonymous failures (unknown or missing token, malformed frame)
+count against the source address as today. A device over its limit is closed
+with the existing `auth-rate-limited` reason without spending the address
+budget. Log `device-revoked` in the audit trail like the other reasons. Leave
+`ALPI_HOST_WS_TRUSTED_PROXIES` as it is; it stays the fix for front ends that
+can forward a real client address.
+
+**Acceptance.** From one address, a revoked device retried 30 times in a minute
+is throttled while a second, valid device from the same address keeps
+connecting; ten unknown tokens from that address still close the address as
+today; `token-expired` and `connection-disabled` also count per device; the
+error sent to the client stays `auth-failed` with its existing reasons plus
+`device-revoked`.
+
+### UPD.1 — say before the click whether a daemon can update itself
+
+**Evidence.** On 2026-09-29 the creator pressed **Update alpi** in desktop
+Settings → Service against the mirai EC2 daemon (Docker, compose pinned to
+`satoshiltd/alpi:0.15.25`, PyPI already at 0.15.26) and got *"Can't self-update
+this installation. Docker: run docker compose pull, then docker compose up -d."*
+The path: `host.daemon.update` ([daemon.py](../alpi/host/daemon.py)) calls
+`updater.update_now()`; `_detect_installer()` in
+[updater.py](../alpi/updater.py) returns `uv` or `pipx` only when `uv tool
+list` / `pipx list` names the package, otherwise `dev`, and `dev` has no upgrade
+command, so the answer is `reason: "manual"`. The image runs `pip install .` as
+root ([Dockerfile](../docker/Dockerfile)) and the daemon runs as uid 1000, so a
+container always lands there. Refusing is correct (an in-container upgrade
+would be lost on the next recreate); the defects are around it:
+
+- Nothing tells the client in advance: `host.version`
+  ([device_state.py](../alpi/host/device_state.py)) reports `update_available`
+  but not whether the daemon can act on it, so desktop shows the button and the
+  connections list shows an update badge on every Docker daemon.
+- The hint is wrong for a pinned tag: `docker compose pull` re-fetches the same
+  version; the tag in `docker-compose.yml` has to change first.
+- `dev` lumps a Docker image, a source checkout and a plain pip install
+  together, although the image already sets `ALPI_PLATFORM=docker`.
+- Three different texts for the same answer: desktop
+  [DaemonField.jsx](../desktop/src/features/settings/fields/DaemonField.jsx),
+  mobile [daemonUpdate.js](../mobile/src/features/settings/daemonUpdate.js) and
+  mobile [ConnectionSheet.jsx](../mobile/src/features/sheets/ConnectionSheet.jsx)
+  ("Image-pinned (Docker) — repull the image").
+- The comment in `_daemon_update` says a restart keeps the container's writable
+  layer, implying an in-container upgrade the updater never performs.
+
+**Smallest change.** The updater names the install kind (`uv | pipx | docker |
+source`, `docker` from `ALPI_PLATFORM`) and `host.version` adds `self_update:
+bool` next to `update_available`. Clients show **Update alpi** only when
+`self_update` is true; otherwise the same row (and the badge tooltip) shows one
+shared manual step from `common/`: for `docker`, "set the image tag to
+`X.Y.Z` in docker-compose.yml, then `docker compose up -d`"; for `source`,
+"git pull and restart the daemon". `alpi update` in the console prints the same
+text. No in-container upgrade, no compose editing from the daemon.
+
+**Acceptance.** A Docker daemon reports `self_update: false` and
+`installer: docker`; desktop and mobile hide the button and show the tag step
+with the latest version filled in; a uv/pipx daemon keeps today's one-click
+flow; a daemon older than this change (no `self_update` field) keeps today's
+behaviour. One hint string, covered by both client suites; updater tests cover
+each install kind with the environment and subprocess stubbed.
+
+### UX.8 — chart usage by money when the profile pays for it
+
+**Evidence.** The desktop Usage panel
+([Usage.jsx](../desktop/src/features/settings/Usage.jsx)) sizes each day's bar
+by tokens (`maxTok`) and shows the cost only in the tooltip, while the headline
+and the daily cap are in dollars. With prompt caching the two diverge: on
+2026-09-25 curator's day was 276M input tokens for $24.88 of a $40 cap, so the
+bars say nothing about the number the owner watches. The ledger already keeps
+cost and tokens per day ([ledger.py](../alpi/ledger.py)). Requested by the
+creator on 2026-09-26.
+
+**Smallest change.** Scale the bars by cost when the window has any cost, and by
+tokens when every day costs nothing (free or local models). Desktop only; no new
+verb.
+
+**Acceptance.** A window with costs draws bars proportional to dollars and the
+tooltip still shows both numbers; an all-free window draws tokens as today; the
+desktop changelog entry pins no new alpi minimum.
+
+### SCHED.6 — stamp each fired job when it finishes, not when the pass ends
+
+**Evidence.** `tick` in [scheduler/run.py](../alpi/scheduler/run.py) runs the
+due jobs of a profile one after another, collects them in `fired`, and writes
+`last_run_at` / `last_run_status` for all of them in one `jobs_store.update`
+after the loop, stamped with the time the pass started. Since v0.15.27 one fire
+may run for up to 86400 s. If the daemon restarts while a later job of the same
+pass is still running, the jobs that already finished never get their stamp and
+fire again on the next start (a second delivery), and listings show them as due
+until the pass ends. Found in the SCHED.4 review; source inspection, not
+reproduced in production.
+
+**Smallest change.** Stamp each job right after its `run_job` returns, with the
+same `jobs_store.update` rules (first-seen, one-shot removal on success, stamp
+on failure). Keep the serial pass; no new state.
+
+**Acceptance.** With two due jobs where the second is still running, the first
+is already stamped in `jobs.json`; a simulated restart after the first job does
+not fire it again; one-shot and failure semantics are unchanged.
 
 ### Verification required to close this cycle
 
-- Add failing regressions for each item, then prove the fix. A green suite
-  without the reproduced interleaving/failure is not closure.
-- Run subprocess/pipe tests on Linux as well as macOS. Real `/proc` and pidfd
-  acceptance must remain distinguishable from mocked decision tests.
-- The current Python publish gate runs `pytest -q`; integration runs live in
-  the PR/manual workflow. Ensure the relevant real-process tests pass for the
+- Add a failing regression for each item, then prove the fix; a green suite
+  without the reproduced failure is not closure.
+- `publish.yml` runs only `pytest -q`: run the relevant integration tests for the
   exact release SHA before publishing, including direct-to-main releases.
-  Reuse the existing workflows rather than create a parallel test system.
-- No new runtime dependency, RPC framework or service is presumed necessary.
-  KB.14 may need an index metadata field; that does not authorize a general
-  persistence redesign. Run both client suites
-  for UX.7 and verify destructive confirmations in the rendered desktop UI.
-
-### Simplification boundaries
-
-Large files alone are not defects. `service.py`, `cli.py` and `engine.py`
-coordinate many existing features; splitting them wholesale would create
-review churn without proving an outcome. Extract a domain helper only when
-it removes an evidenced duplication or inappropriate dependency (CAP.1), and
-keep the indexers' atomicity rules consistent without generalizing their data
-models.
-
-Do not revive full config typing, a second orchestration framework, multi-root
-knowledge storage, or nested Docker sandboxing just to populate a release.
-A container and volume remain one trust scope; mutually untrusted scopes need
-separate runtimes. Deployment acceptance is an operational responsibility, not
-something this source audit certifies. Credential-loss procedures remain in
-[OPERATIONS.md](OPERATIONS.md); enterprise audit is demand-gated below.
+- ATT.2 and AUTH.1 are proven over real WebSockets with two devices of one
+  connection, not only through handler calls; UX.7 and UX.8 run both client
+  suites and check the rendered desktop.
+- No new runtime dependency, RPC framework or persisted state is presumed
+  necessary; KB.14's index field does not authorize a persistence redesign.
+- Large files alone are not defects: extract a helper only when it removes an
+  evidenced duplication.
 
 ---
 
@@ -252,60 +347,11 @@ usage or a concrete blocker; standing maintenance belongs in
 
 | ID | Candidate and promotion condition |
 |---|---|
-| BUILD.1 | Align the reproducible test environment with the managed image. Local verification uses `uv.lock`, while Python CI installs `.[dev]` and Docker runs `pip install .`; the smoke image and published multi-architecture image are separate builds. Inspect the resolved dependency sets and artifact digests before choosing lock export, constraints or promotion of the tested artifact. Promote on demonstrated drift or a requirement for reproducible image rebuilds; keep a separate unlocked compatibility check rather than freezing library consumers to one environment. |
-| TERM.2 | SSH terminal backend for remote command execution. Promote when an unattended profile needs to operate on a remote machine. |
-| AUDIT.2 | Enterprise audit and accountability: complete local mutation coverage, then add tamper-evident external records, provider policy, encryption, or RBAC only when a real fleet or compliance regime requires them. |
-| ALP.7 | Pinned shared memory per workgroup (`wiki.md`). Promote when sustained workgroup use shows that the transcript is no longer enough. |
 | SK.2 | Safe skill import (`alpi skill import <dir\|zip>` with preview, scan, and install). Promote when users repeatedly exchange skills outside their own profile. |
 | SK.3 | Let a profile lock its own skills against its file tools. The denylist in [_paths.py](../alpi/tools/_paths.py) protects `config.yaml`, `.env` and skill `secrets/`, and keeps `skills/` away from members, but the profile itself can rewrite the scripts that enforce its own gates. On 2026-09-22 a scheduled Morpheus pass edited its `repo-task` runner mid-run, left a `run.py.bak`, fixed a real toolchain gap and broke one of the skill's tests; the live copy diverged from the fleet repository. Today the only guard is a sentence in `AGENT.md`. Opt-in only (inline skill updates are a product choice): a profile setting under which `write_file`, `edit_file` and the skill tool's write actions refuse the profile's own `skills/`. Promote when a second unattended profile edits its own skill, or when a fleet needs that guarantee enforced rather than asked for. |
-| AI (3) | Structured entity memory with selective injection. Promote when keeping the markdown store coherent becomes a repeated source of defects or selective recall is required. |
-| TTS.1 | Host-served local TTS and a single voice catalog. Promote when voice becomes a sustained client surface. |
-| KB.9 | Spreadsheet (`.xlsx`) ingest into knowledge pages: one Markdown table per sheet, headers from the first row, `type: source`. The container ships neither `openpyxl` nor `pandas`, so this is either a stdlib zip+XML reader or a new image dependency. Promote when a real document set arrives as spreadsheets; the 2026-09 Confluence publishing skill covers Markdown, PDF and Word only. |
-| ATT.1 | Keep an attachment when the user asks to. The host already stages every chat attachment under `<home>/host/attachments/tmp/<id>/<name>` and lists those absolute paths in the message for skills to read, but the staging area is swept after 6 hours, so a file the user wants to keep working with across days has to be re-attached. Add an explicit "keep this file" path (a tool or a `save_attachment` skill hook) that copies a staged attachment into `<workspace>/attachments/` and returns the durable path. Promote when a real flow needs a file to outlive the turn; on 2026-09-14 the Confluence publishing flow did not, because it publishes in the same turn. |
 | KB.10 | A language policy for `knowledge(action="ingest"\|"maintain")`. `_MAINTAIN_PROMPT` in [knowledge_base.py](../alpi/tools/knowledge_base.py) says nothing about language, so a synthesized page follows its source; a profile whose knowledge must be English cannot get that from the tool. On 2026-09-24 agora's audit found 239 Spanish titles and 152 pages with Spanish lines, and the fleet now routes every agora write through a skill gate instead of the tool. A `knowledge.language` setting passed to the prompt and checked on the proposal would do. Promote when a second profile needs a fixed knowledge language, or agora goes back to the tool for curation. |
 | KB.12 | Vision in knowledge ingest. An image reaches `knowledge(action="ingest")` only with `ocr=true`, which keeps its text and loses everything a diagram or screenshot shows; `tools.read_image.model` is never used there. On 2026-09-24 agora needed a skill (read the image with `read_image`, store it as an asset, write an OKF page that embeds it) to keep diagrams. Promote when a second profile wants images kept as knowledge. |
 | TIER.1 | A model tier per task, not only per job. A job's `tier` sets `ALPI_TIER` for its whole turn ([scheduler/run.py](../alpi/scheduler/run.py), read in `engine.py`), but a chat turn always runs on the main model. agora's nightly Confluence ingest runs on `deep` (`:nitro`, effort high), while the same writes asked from chat (a PDF, "add", "fix", "remove" through the `okf` and `confluence-ingest` skills) run on the default model. A skill-level `tier` that raises the rest of the turn once that skill runs would separate knowledge writes from questions. Promote when a second profile mixes cheap questions with quality-sensitive writes in chat. |
-| UX.8 | Chart usage by money when the profile pays for it. The desktop Usage panel ([Usage.jsx](../desktop/src/features/settings/Usage.jsx)) sizes each day's bar by tokens (`maxTok`) and shows the cost only in the tooltip, while the headline and the daily cap are in dollars. With prompt caching the two diverge: on 2026-09-25 curator's day was 276M input tokens for $24.88 of a $40 cap, so the bars say nothing about the number the owner watches. The ledger already keeps cost and tokens per day ([ledger.py](../alpi/ledger.py)). Scale the bars by cost when the window has any cost, and by tokens when every day costs nothing (free or local models); two charts or a toggle are the alternatives. Requested by the creator on 2026-09-26. |
-
-### Watchlist
-
-These ideas remain recorded without presenting them as likely next work.
-
-| ID | Revisit only when |
-|---|---|
-| BROWSER.1 | A vetted lightweight backend passes real acceptance and the headless-shell footprint (344 MB since v0.14.9, down from 984 MB) still blocks a target host. |
-| ALP.8 | Per-profile capacity (`alp.max_active_workgroups`) and a durable admission queue already ship; users need dynamic worker pools or cross-peer capacity negotiation on top of them. |
-| ALP.3+ | Persistent workgroups demonstrate sustained parallel tasks that targeted tasks and pipeline continuation cannot cover. |
-| AY / BF-8 | A real skill author or import community needs a federated marketplace, versioning, or update flows. |
-| AQ | A real voice surface needs continuous push-to-talk or hotword loops on top of the read-aloud path that already ships (host-served synthesis, per-profile voice, auto-read). |
-| UX.6 / External secrets | A masked, auditable editor for arbitrary `.env` keys (the RPC already writes any key; only provider keys are listed back), or central key rotation, becomes repeated friction. |
-
----
-
-## Principles
-
-alpi **respects the ToS of every provider it integrates with**. When
-an LLM vendor offers a paid subscription tied to a specific first-party
-client (the vendor's own chat app, IDE, or CLI), that subscription is
-for THAT client. Reverse-engineering the private OAuth flow of the
-official CLI to route a third-party agent against the same quota is:
-
-- A clear ToS violation.
-- Disrespectful to the vendor's product boundaries.
-- Unsafe for users (accounts can be banned; the reversed flow can
-  break any time).
-
-Private subscription routing is not part of alpi's product shape. If
-a vendor publishes an official
-OAuth-for-third-parties flow in the future (documented, stable,
-bindable), we adopt it then.
-
-**Practical consequence:** users pay per-token API access through
-their own keys. That cost is honest and visible. Subscription
-routing is not on the roadmap.
-
-See **Why alpi exists** in [README.md](../README.md) for how the
-publisher's principles map to concrete choices in this repo.
 
 ---
 
@@ -313,7 +359,7 @@ publisher's principles map to concrete choices in this repo.
 
 | Decision | Reason |
 |---|---|
-| Vendor subscription OAuth | ToS violation and account-risk surface; users bring normal API keys. |
+| Vendor subscription OAuth | alpi respects every provider's ToS: a subscription tied to a vendor's own client is for that client, and reversing its private OAuth flow is a ToS violation and an account-ban risk. Users pay per token with their own keys; an official, documented third-party OAuth flow would be adopted. |
 | Chat-app gateways (Telegram, Matrix, Signal, WhatsApp, Discord, …) | Retired in v0.10 — third-party chat bridges add attack surface and upkeep; the desktop/mobile/terminal apps are the surface, and email is an on-demand tool. |
 | Smart-home orchestration | Device protocols and physical-world policy belong in Home Assistant / MCP / user skills, not core. |
 | LangGraph / CrewAI / AutoGen as core | Graph frameworks do not match Alpi's profile/workgroup runtime and pull toward hosted observability. |
@@ -341,3 +387,4 @@ publisher's principles map to concrete choices in this repo.
 | Root-relative fallback in the knowledge link resolver | Would pass lint while breaking the links in Obsidian, GitHub and VS Code; page-relative stays canonical (KB.5). |
 | Renaming the `type` frontmatter key | Invalidates every existing page over a Hugo layout-key collision that will likely never matter; the docs note the collision instead (KB.7). |
 | Defining what "OKF" stands for | The acronym was coined without a referent; writing an expansion now would invent a retroactive justification. It is gone from every model- and user-facing string; only the `okf_*` table names keep it. |
+| Longer-context embedder or smaller chunks (KB.15) | Measured 2026-09-26 on agora (13.5K chunks, 81 queries): all-MiniLM-L6-v2's 128-token cut loses no answers because hybrid search (bm25 over the full chunk) finds the page and the agent reads the file; 12-line chunks cost +39% index size, bge-small 10x indexing CPU. |

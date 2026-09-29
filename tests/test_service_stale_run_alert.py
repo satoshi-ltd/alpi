@@ -296,3 +296,75 @@ def test_the_daemon_quiets_the_websockets_logger(tmp_path: Path, monkeypatch) ->
             h.close()
         root.handlers, root.level = saved[0], saved[1]
         ws.setLevel(saved[2])
+
+
+@pytest.mark.parametrize("silent_for, reported", [(5400 + 300 - 5, False), (5400 + 300 + 5, True)])
+def test_sweep_judges_a_long_job_by_its_declared_timeout(tmp_path: Path, monkeypatch, silent_for, reported) -> None:
+    home = _home(tmp_path, [{"id": "audit", "title": "weekend audit", "timeout": 5400}])
+    seen = _capture_events(monkeypatch)
+    monkeypatch.setattr(runs.time, "time", lambda: 1000.0)
+    runs.append(home, "long", "run.started", {"run_id": "long", "profile": "smith", "job_id": "audit", "pid": 999999})
+    monkeypatch.setattr(runs, "_pid_alive", lambda pid: True)
+    monkeypatch.setattr(runs.time, "time", lambda: 1000.0 + silent_for)
+    _mono(monkeypatch, [0.0, 300.0])
+
+    service._sweep_runs(home, "smith")
+    service._sweep_runs(home, "smith")
+
+    failed = _failed(seen)
+    assert bool(failed) is reported
+    if reported:
+        assert "5400" in failed[0]["body"]
+
+
+def test_sweep_judges_a_job_with_a_bad_stored_timeout_by_the_ceiling(tmp_path: Path, monkeypatch) -> None:
+    from alpi.scheduler.run import MAX_RUN_TIMEOUT_SECONDS
+    home = _home(tmp_path, [{"id": "bad", "title": "bad", "timeout": "nope"}])
+    seen = _capture_events(monkeypatch)
+    monkeypatch.setattr(runs.time, "time", lambda: 1000.0)
+    runs.append(home, "r", "run.started", {"run_id": "r", "profile": "sentinel", "job_id": "bad", "pid": 999999})
+    monkeypatch.setattr(runs, "_pid_alive", lambda pid: True)
+    monkeypatch.setattr(runs.time, "time", lambda: 1000.0 + 900 + 300 + 5)
+    _mono(monkeypatch, [0.0, 300.0, 600.0, 900.0])
+
+    service._sweep_runs(home, "sentinel")
+    service._sweep_runs(home, "sentinel")
+    assert _failed(seen) == []
+
+    monkeypatch.setattr(runs.time, "time", lambda: 1000.0 + MAX_RUN_TIMEOUT_SECONDS + 300 + 5)
+    service._sweep_runs(home, "sentinel")
+    service._sweep_runs(home, "sentinel")
+    assert _failed(seen)[0]["run_id"] == "r"
+
+
+@pytest.mark.parametrize("jobs", [[], [{"id": "audit", "title": "weekend audit", "timeout": 60}]])
+def test_sweep_judges_a_run_by_the_timeout_it_was_spawned_with(tmp_path: Path, monkeypatch, jobs) -> None:
+    home = _home(tmp_path, jobs)
+    seen = _capture_events(monkeypatch)
+    monkeypatch.setattr(runs.time, "time", lambda: 1000.0)
+    runs.append(home, "long", "run.started", {
+        "run_id": "long", "profile": "smith", "job_id": "audit", "pid": 999999, "timeout_s": 5400,
+    })
+    monkeypatch.setattr(runs, "_pid_alive", lambda pid: True)
+    _mono(monkeypatch, [0.0, 300.0, 600.0, 900.0])
+
+    monkeypatch.setattr(runs.time, "time", lambda: 1000.0 + 5400 + 300 - 5)
+    service._sweep_runs(home, "smith")
+    service._sweep_runs(home, "smith")
+    assert _failed(seen) == []
+
+    monkeypatch.setattr(runs.time, "time", lambda: 1000.0 + 5400 + 300 + 5)
+    service._sweep_runs(home, "smith")
+    service._sweep_runs(home, "smith")
+    assert _failed(seen)[0]["run_id"] == "long" and "5400" in _failed(seen)[0]["body"]
+
+
+def test_run_started_records_the_timeout_the_scheduler_spawned_with(tmp_path: Path, monkeypatch) -> None:
+    from alpi.core.run_context import RunContext
+    monkeypatch.setenv("ALPI_RUN_TIMEOUT_S", "5400")
+    runs.start(RunContext("r1", tmp_path, tmp_path, "smith", "schedule", "s", "host", job_id="audit"))
+    monkeypatch.setenv("ALPI_RUN_TIMEOUT_S", "garbage")
+    runs.start(RunContext("r2", tmp_path, tmp_path, "smith", "user", "s", "host"))
+    started = {rid: next(e for e in runs.read(tmp_path, rid)["events"] if e["kind"] == "run.started") for rid in ("r1", "r2")}
+    assert started["r1"]["data"]["timeout_s"] == 5400
+    assert started["r2"]["data"]["timeout_s"] is None

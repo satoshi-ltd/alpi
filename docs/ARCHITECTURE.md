@@ -217,8 +217,9 @@ pool and wrapped so a failure in it never ends the loop. One scan of `runs/`
 feeds two rules in order. `reconcile_stale` closes journals whose pid is gone
 as `interrupted` (reason `dead`), so a dead child is reported within about a
 minute. `reconcile_silent` judges a *scheduled* run that has written nothing
-for longer than its job timeout plus `SILENCE_GRACE_S` (a deleted job is
-judged by `MAX_RUN_TIMEOUT_SECONDS`); silence is wall-clock, but the sweep must
+for longer than its timeout plus `SILENCE_GRACE_S`: the `timeout_s` the scheduler
+recorded in `run.started` (from `ALPI_RUN_TIMEOUT_S`), else the job's current
+timeout, else `MAX_RUN_TIMEOUT_SECONDS` for a deleted job or an invalid value; silence is wall-clock, but the sweep must
 also have watched it hold for the grace on the monotonic clock before acting,
 so a wedged child is reported roughly ten minutes past its timeout and a clock
 step alone never fires it. A live pid is killed only when it is provably this
@@ -309,7 +310,7 @@ still carries accounting fields but cannot move a client's conversation meter.
 
 The system prompt for each turn is assembled in a fixed order (`PART_ORDER` in `alpi/prompt_cache.py`): `AGENT.md` (agent profile — voice, style, identity) → base prompt → environment block (workspace, profile home, path rule) → system time → **platform hint** (per-surface guidance when `ALPI_PLATFORM` is set: `cron`; empty for TUI and the apps) → turn guidance → the self-knowledge rule pointing the model at `alpi_knowledge` (dropped when that tool is denied) → **skills index** → `USER.md` → `MEMORY.md`.
 
-The scheduler (`alpi/scheduler/run.py`) sets `ALPI_PLATFORM=cron` so scheduled jobs run knowing no user is present and they cannot ask for clarification. That overwrite would otherwise erase the deployment runtime, so it also carries `ALPI_DEPLOY_RUNTIME`, which `alpi/runtime.py` prefers: `ALPI_PLATFORM` is the turn origin, `platform_id()` is the runtime, and a job inside a container still reads as Docker. Each fire runs as a subprocess capped at `job_run_timeout(job)` seconds — `job.timeout` if set, else `DEFAULT_RUN_TIMEOUT_SECONDS` (900), clamped to `[30, MAX_RUN_TIMEOUT_SECONDS]` (3600). The cap is a stuck-process backstop for unattended runs, not the cost guard (`budget.daily_usd` is) and not a hint that jobs must be short; heavy jobs (deep research, multi-step publishing) opt into a longer budget via `schedule(add|update, timeout=…)`. The scheduler passes the child a soft budget via `ALPI_TURN_BUDGET_S` (the cap minus a ~10% reserve, floor 60s); when the engine crosses it, normal jobs get one tools-off best-effort reply and detached workgroup turns get one `workgroup_post`-only handoff. The hard subprocess timeout remains the last-resort kill if finalization itself stalls.
+The scheduler (`alpi/scheduler/run.py`) sets `ALPI_PLATFORM=cron` so scheduled jobs run knowing no user is present and they cannot ask for clarification. That overwrite would otherwise erase the deployment runtime, so it also carries `ALPI_DEPLOY_RUNTIME`, which `alpi/runtime.py` prefers: `ALPI_PLATFORM` is the turn origin, `platform_id()` is the runtime, and a job inside a container still reads as Docker. Each fire runs as a subprocess capped at `job_run_timeout(job)` seconds — `job.timeout` if set, else `DEFAULT_RUN_TIMEOUT_SECONDS` (900). `parse_run_timeout` is the one duration contract for `schedule(add|update)`, execution, `schedule list` / `host.schedule.list` (`run_timeout`, or `null` plus `timeout_error`) and the silence watchdog: a whole number of seconds in `[30, 86400]`; booleans, fractions, non-finite and out-of-range values are refused, and a bad stored value fails the fire with `invalid stored timeout` instead of being clamped. Fires of one profile run serially, so a long timeout also delays that profile's other due jobs. The cap is a stuck-process backstop for unattended runs, not the cost guard (`budget.daily_usd` is) and not a hint that jobs must be short; heavy jobs (deep research, multi-step publishing) opt into a longer budget via `schedule(add|update, timeout=…)`. The scheduler passes the child a soft budget via `ALPI_TURN_BUDGET_S` (the cap minus a ~10% reserve, floor 60s); when the engine crosses it, normal jobs get one tools-off best-effort reply and detached workgroup turns get one `workgroup_post`-only handoff. The hard subprocess timeout remains the last-resort kill if finalization itself stalls.
 
 Cron jobs with `no_agent: true` skip the LLM entirely. The `prompt` is shlex-tokenized and exec'd directly (`shell=False`); `${ALPI_HOME}` expands to the profile home and the profile's `.env` overrides inherited env keys so skills find their declared `requires_env`. A form-based allowlist enforces that the command is `python[3] [flags] <script>` or `<script>` invoked directly, where `<script>` resolves to `<home>/skills/<category>/<name>/scripts/…`; non-python executables and `-c`/`-m` inline-code flags are rejected at both `schedule(add)` time and inside the scheduler before exec. Use this for deterministic skills (sync, file processors) — saves both tokens and the agent boot latency per fire.
 
@@ -1115,7 +1116,7 @@ schedule delivery/logging, not to local TUI / desktop chat history.
 **Loop isolation.** `serve()` runs `tick()` in a dedicated
 `ThreadPoolExecutor(max_workers=2)`, and `host.schedule.fire` wraps
 `fire_by_id` in `run_in_executor` before awaiting. Both paths
-ultimately call `subprocess.run(timeout=job_run_timeout(job))` (default 900s, per-job up to 3600s); running them inline
+ultimately call `subprocess.run(timeout=job_run_timeout(job))` (default 900s, per-job up to 86400s); running them inline
 would block every other coroutine on the daemon's asyncio loop —
 ALP responders and `host.chat.send` streams in
 sibling profiles all stall for the duration of the scheduled job.
