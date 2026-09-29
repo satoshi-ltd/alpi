@@ -14,6 +14,11 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.5.6 — 2026-09-29 — the unread badge fits its number
+
+- **The bell badge grows with the count** instead of cutting a two-digit number in half; it still
+  caps at 99+.
+
 ## v0.5.5 — 2026-09-29 — every screen says what happened
 
 - **A chat or workgroup that fails to load says so**, with the reason and a Retry, instead of a

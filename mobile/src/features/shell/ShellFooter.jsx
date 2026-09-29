@@ -61,11 +61,12 @@ export function ShellFooter({ unread = 0, onNotificationsPress, onSettingsPress 
               <View
                 style={{
                   position: 'absolute',
-                  top: -space.s1,
-                  right: -space.s2,
-                  minWidth: space.s7,
-                  height: space.s7,
-                  paddingHorizontal: space.s1,
+                  top: -space.s2,
+                  right: -space.s3,
+                  minWidth: 18,
+                  height: 18,
+                  paddingHorizontal: space.s2,
+                  flexDirection: 'row',
                   borderRadius: radii.pill,
                   borderWidth: 1.5,
                   borderColor: twoPane ? colors.bgSide : colors.bg,
@@ -75,10 +76,12 @@ export function ShellFooter({ unread = 0, onNotificationsPress, onSettingsPress 
                 }}
               >
                 <Text
+                  numberOfLines={1}
                   style={{
                     fontFamily: fonts.sans.semibold,
-                    fontSize: fontSizes.xxs,
-                    lineHeight: fontSizes.xxs * lineHeights.cozy,
+                    fontSize: fontSizes.label,
+                    lineHeight: fontSizes.label * lineHeights.cozy,
+                    includeFontPadding: false,
                     color: colors.onDanger ?? '#fff',
                   }}
                 >

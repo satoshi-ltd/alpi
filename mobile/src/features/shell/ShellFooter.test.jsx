@@ -77,6 +77,11 @@ describe('ShellFooter entries', () => {
     expect(wrap.querySelector('[data-icon="bell"]')).toBeTruthy();
     expect(wrap.querySelector('[data-pos="absolute"]').textContent).toBe('7');
 
+    rerender(<ShellFooter unread={13} onNotificationsPress={() => {}} onSettingsPress={() => {}} />);
+    const two = bell(13).querySelector('[data-pos="absolute"]');
+    expect(two.textContent).toBe('13');
+    expect(two.querySelector('[data-lines="1"]') ?? two.querySelector('span')).toBeTruthy();
+
     rerender(<ShellFooter unread={150} onNotificationsPress={() => {}} onSettingsPress={() => {}} />);
     expect(bell(150).querySelector('[data-pos="absolute"]').textContent).toBe('99+');
   });
