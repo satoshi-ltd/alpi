@@ -47,6 +47,12 @@ this repository. Hard constraints, not suggestions.
   auth, routing, or interop, it stays; if it's brag/credit/decorative,
   it goes.
 
+- **`design/` is the visual reference, generated.** `python3 design/build.py`
+  rewrites `design/*.html` (System, Desktop, Mobile, Audit) and the canvas
+  artboards under `design/canvas/` from `design/src/`. After changing a token
+  or a primitive, update the matching board and regenerate; never edit the
+  HTML by hand. `tests/test_design_kit.py` keeps the pages on the shipped tokens.
+
 - **Console parity is mandatory.** The console (`alpi setup`, the TUI,
   the CLI) is the core product; desktop/mobile are siblings, not the
   primary surface. Any new host verb that gets UI in the apps ships its

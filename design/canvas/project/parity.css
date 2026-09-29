@@ -1,0 +1,4 @@
+
+.m-chrome{width:28px;height:28px;border:0;border-radius:8px;background:transparent;display:inline-flex;align-items:center;justify-content:center;padding:0;cursor:pointer;color:#3d4955}
+.m-chrome:hover{background:rgba(11,17,23,0.06)}
+button,input{font-family:inherit}

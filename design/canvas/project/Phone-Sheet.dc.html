@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Phone · sheet with picker rows</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap">
+<link rel="stylesheet" href="parity.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0;background:#ffffff;font-family:"Geist",ui-sans-serif,system-ui,sans-serif;color:#0b1117}
+a{color:#8a5a0a}a:hover{color:#6b4608}
+</style>
+</helmet>
+<div style="position: relative; width: 390px; height: 844px; box-sizing: border-box; overflow: hidden; background: #ffffff; font-family: Geist, ui-sans-serif, system-ui, sans-serif; color: #0b1117">
+<div style="display: flex; flex-direction: column"><div style="position: relative; display: flex; align-items: center; gap: 10px; padding: 8px 20px 12px; background: #ffffff; border-bottom: 0.5px solid rgba(11,17,23,0.07)">
+<button aria-label="Back" class="m-chrome" style="width: 28px; height: 36px; margin-left: -6px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3d4955" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0; display: block"><path d="M15 18l-6-6 6-6"/></svg></button>
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+<div style="display: flex; align-items: center; gap: 6px"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" style="flex-shrink: 0; display: block"><rect x="4" y="4" width="16" height="16" rx="3" transform="rotate(45 12 12)" fill="#3d7ea6"/></svg><span style="font-weight: 600; font-size: 18px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">doc</span></div>
+<span style="font-family: 'Geist Mono', monospace; font-weight: 400; font-size: 11px; line-height: 1.3; letter-spacing: 0.06em; text-transform: uppercase; color: #626e7d; ">Profile · settings</span>
+</div>
+
+</div>
+<div style="padding: 24px 20px 8px"><span style="font-family: 'Geist Mono', monospace; font-weight: 500; font-size: 11px; line-height: 1.3; letter-spacing: 0.06em; text-transform: uppercase; color: #626e7d; ">Model</span></div>
+<div style="display: flex; align-items: center; gap: 12px; padding: 14px 20px; background: #ffffff">
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 15px; line-height: 1.3; color: #0b1117">Default model</span></div>
+<span style="font-size: 14px; color: #626e7d; text-align: right; max-width: 55%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">deepseek-v4.1-flash</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#b1bac4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0; display: block"><path d="M9 18l6-6-6-6"/></svg>
+</div><div style="height: 0.5px; background: rgba(11,17,23,0.07); margin-left: 20px"></div>
+<div style="display: flex; align-items: center; gap: 12px; padding: 14px 20px; background: #ffffff">
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 15px; line-height: 1.3; color: #0b1117">Reasoning effort</span><span style="font-family: 'Geist Mono', monospace; font-weight: 500; font-size: 11px; line-height: 1.3; color: #626e7d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">how hard the model thinks</span></div>
+<span style="font-size: 14px; color: #626e7d; text-align: right; max-width: 55%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Medium</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#b1bac4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0; display: block"><path d="M9 18l6-6-6-6"/></svg>
+</div><div style="height: 0.5px; background: rgba(11,17,23,0.07); margin-left: 20px"></div>
+<div style="display: flex; align-items: center; gap: 12px; padding: 14px 20px; background: #ffffff">
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 15px; line-height: 1.3; color: #0b1117">Fast model</span></div>
+<span style="font-size: 14px; color: #626e7d; text-align: right; max-width: 55%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">deepseek-v4.1-flash</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#b1bac4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0; display: block"><path d="M9 18l6-6-6-6"/></svg>
+</div>
+<div style="padding: 24px 20px 8px"><span style="font-family: 'Geist Mono', monospace; font-weight: 500; font-size: 11px; line-height: 1.3; letter-spacing: 0.06em; text-transform: uppercase; color: #626e7d; ">Budget</span></div>
+<div style="display: flex; align-items: center; gap: 12px; padding: 14px 20px; background: #ffffff">
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 15px; line-height: 1.3; color: #0b1117">Daily cap</span><span style="font-family: 'Geist Mono', monospace; font-weight: 500; font-size: 11px; line-height: 1.3; color: #626e7d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">$0.00 of $1.00 today</span></div>
+<span style="font-size: 14px; color: #626e7d; text-align: right; max-width: 55%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">$1.00</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#b1bac4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0; display: block"><path d="M9 18l6-6-6-6"/></svg>
+</div>
+<div style="padding: 24px 20px 8px"><span style="font-family: 'Geist Mono', monospace; font-weight: 500; font-size: 11px; line-height: 1.3; letter-spacing: 0.06em; text-transform: uppercase; color: #626e7d; ">Danger zone</span></div>
+<div style="display: flex; align-items: center; gap: 12px; padding: 14px 20px; background: #ffffff">
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 15px; line-height: 1.3; color: #b73737">Delete profile</span><span style="font-family: 'Geist Mono', monospace; font-weight: 500; font-size: 11px; line-height: 1.3; color: #626e7d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">removes everything under ~/.alpi/profiles/doc</span></div>
+
+</div></div>
+<div style="position: absolute; inset: 0; width: 390px; height: 844px; background: rgba(0,0,0,0.45)"></div>
+<div style="position: absolute; left: 0; right: 0; bottom: 0; border-radius: 28px 28px 0 0; background: #ffffff; box-shadow: 0 8px 24px rgba(11,17,23,0.08); overflow: hidden; display: flex; flex-direction: column">
+<div style="display: flex; justify-content: center; padding-top: 8px"><span style="width: 36px; height: 4px; border-radius: 2px; background: #b1bac4; opacity: 0.6"></span></div>
+<div style="display: flex; align-items: flex-start; gap: 12px; padding: 12px 12px 14px 20px">
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column"><span style="font-weight: 600; font-size: 18px; line-height: 1.3; letter-spacing: -0.01em; color: #0b1117">Reasoning effort</span><span style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #626e7d; margin-top: 4px">how hard the model thinks before answering</span></div>
+<button aria-label="Close" style="width: 44px; height: 44px; border: 0; border-radius: 999px; background: transparent; display: inline-flex; align-items: center; justify-content: center; margin-top: -8px; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#626e7d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0; display: block"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+</div>
+<div style="padding: 12px 0 0"><div style="display: flex; align-items: center; gap: 12px; padding: 14px 20px; background: transparent">
+<span style="width: 14px; display: inline-flex; justify-content: center"></span>
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px"><span style="font-weight: 500; font-size: 14px; color: #0b1117">Default</span><span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #626e7d">use provider default</span></div>
+
+</div><div style="height: 0.5px; background: rgba(11,17,23,0.07); margin-left: 20px"></div><div style="display: flex; align-items: center; gap: 12px; padding: 14px 20px; background: transparent">
+<span style="width: 14px; display: inline-flex; justify-content: center"></span>
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px"><span style="font-weight: 500; font-size: 14px; color: #0b1117">Low</span><span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #626e7d">fastest, cheapest</span></div>
+
+</div><div style="height: 0.5px; background: rgba(11,17,23,0.07); margin-left: 20px"></div><div style="display: flex; align-items: center; gap: 12px; padding: 14px 20px; background: rgba(11,17,23,0.06)">
+<span style="width: 14px; display: inline-flex; justify-content: center"><span style="width: 7px; height: 7px; border-radius: 999px; background: #3d7ea6"></span></span>
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px"><span style="font-weight: 500; font-size: 14px; color: #0b1117">Medium</span><span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #626e7d">balanced</span></div>
+
+</div><div style="height: 0.5px; background: rgba(11,17,23,0.07); margin-left: 20px"></div><div style="display: flex; align-items: center; gap: 12px; padding: 14px 20px; background: transparent">
+<span style="width: 14px; display: inline-flex; justify-content: center"></span>
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px"><span style="font-weight: 500; font-size: 14px; color: #0b1117">High</span><span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #626e7d">slower, more thorough</span></div>
+
+</div></div>
+<div style="display: flex; gap: 10px; padding: 20px 16px 24px; background: #ffffff"><span style="flex: 1; display: flex"><button style="min-height: 48px; padding: 6px 18px; border: 0; border-radius: 14px; width: 100%; background: #0b1117; color: #ffffff; font-family: Geist, sans-serif; font-weight: 600; font-size: 15px; cursor: pointer">Save</button></span></div>
+</div>
+<div style="position: absolute; left: 330px; top: 646px; width: 22px; height: 22px; border-radius: 999px; background: #b73737; color: #ffffff; font: 600 12px/22px Geist, sans-serif; text-align: center; box-shadow: 0 0 0 2px #ffffff; z-index: 5">1</div><div style="position: absolute; left: 330px; top: 772px; width: 22px; height: 22px; border-radius: 999px; background: #b73737; color: #ffffff; font: 600 12px/22px Geist, sans-serif; text-align: center; box-shadow: 0 0 0 2px #ffffff; z-index: 5">3</div><div style="position: absolute; left: 300px; top: 412px; width: 22px; height: 22px; border-radius: 999px; background: #b73737; color: #ffffff; font: 600 12px/22px Geist, sans-serif; text-align: center; box-shadow: 0 0 0 2px #ffffff; z-index: 5">4</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
