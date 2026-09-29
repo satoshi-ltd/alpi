@@ -28,6 +28,8 @@ import { profileLabel } from '../../src/lib/profileName';
 import { mergeStreamingTurn, isInterruptedTurn, isLastTurnInFlight, consumeAutoRead, routedModelFor, baselineModelFor, turnFrontier, turnLandedSince } from '../../src/features/chat/chatTurns';
 import { ChatSkeleton } from '../../src/features/chat/ChatSkeleton';
 import { EmptyThread } from '../../src/features/chat/EmptyThread';
+import { JumpToLatest, JUMP_THRESHOLD } from '../../src/features/chat/JumpToLatest';
+import { LoadFailed } from '../../src/components/LoadFailed';
 import { ToolModule } from '../../src/features/chat/ToolCallRow';
 import { askUserNoAnswerTag } from '../../src/features/chat/askUserAnswer';
 import { Diamond } from '../../src/components/Diamond';
@@ -208,8 +210,10 @@ function AskUserAnswer({ result, question, accent, colors, fonts, fontSizes }) {
   );
 }
 
-function ChatList({ turns, pendingTurn, hydrating, profileName, model, accent, onActionTarget, colors, fonts, fontSizes, turnsBase = 0, hasMoreRemote = false, onLoadOlder, sessionInFlight = false }) {
+function ChatList({ turns, pendingTurn, hydrating, profileName, model, accent, onActionTarget, colors, fonts, fontSizes, turnsBase = 0, hasMoreRemote = false, onLoadOlder, sessionInFlight = false, loadError = null, onRetryLoad }) {
   const [pageSize, setPageSize] = useState(INITIAL_PAGE);
+  const [farFromLatest, setFarFromLatest] = useState(false);
+  const listRef = useRef(null);
   const { twoPane } = usePane();
 
   const full = useMemo(
@@ -249,6 +253,9 @@ function ChatList({ turns, pendingTurn, hydrating, profileName, model, accent, o
   if (hydrating && full.length === 0) {
     return <ChatSkeleton kind="profile" accent={accent} />;
   }
+  if (full.length === 0 && loadError) {
+    return <LoadFailed label="this conversation" error={loadError} onRetry={onRetryLoad} />;
+  }
   if (full.length === 0) {
     return (
       <EmptyThread
@@ -260,11 +267,15 @@ function ChatList({ turns, pendingTurn, hydrating, profileName, model, accent, o
   }
 
   return (
+    <View style={{ flex: 1 }}>
     <FlatList
+      ref={listRef}
       inverted
       data={visible}
       keyExtractor={(item) => String(item.turnIndex)}
       renderItem={renderItem}
+      onScroll={(e) => setFarFromLatest(e.nativeEvent.contentOffset.y > JUMP_THRESHOLD)}
+      scrollEventThrottle={200}
       contentContainerStyle={twoPane ? [TURN_STYLES.listContent, TURN_STYLES.contentColumn] : TURN_STYLES.listContent}
       onEndReached={hasMore ? () => {
         if (full.length <= pageSize && hasMoreRemote) onLoadOlder?.();
@@ -283,6 +294,8 @@ function ChatList({ turns, pendingTurn, hydrating, profileName, model, accent, o
         ) : null
       }
     />
+    <JumpToLatest visible={farFromLatest} onPress={() => listRef.current?.scrollToOffset?.({ offset: 0, animated: true })} />
+    </View>
   );
 }
 
@@ -444,7 +457,7 @@ function ProfileChatInner() {
       sessionsList.refresh();
       const snap = await session.refresh(streamSid || sessionId);
       if (turnLandedSince(snap, baseline)) return true;
-      toast({ title: 'Answer saved, not shown', message: 'The transcript did not load — pull to refresh.', duration: 2600 });
+      toast({ title: 'Answer saved, not shown', message: 'The transcript did not load — refresh from the ··· menu.', duration: 2600 });
       return false;
     },
   });
@@ -723,12 +736,15 @@ function ProfileChatInner() {
             hasMoreRemote={hasMoreRemote}
             onLoadOlder={loadOlder}
             sessionInFlight={sessionInFlight}
+            loadError={sessionId && session.settled && session.error && !isMissingSession(session.error) ? session.error : null}
+            onRetryLoad={() => session.refresh(sessionId)}
           />
           <PaneColumn>
             <Composer
               placeholder={`Message @${profileLabel(profile.name)}…`}
               accent={accent}
               disabled={paused || daemonDown}
+              offline={daemonDown}
               busy={isStreaming}
               onStop={streamCancel}
               onSend={onComposerSend}

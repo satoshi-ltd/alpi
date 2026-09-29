@@ -14,6 +14,19 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.5.5 — 2026-09-29 — every screen says what happened
+
+- **A chat or workgroup that fails to load says so**, with the reason and a Retry, instead of a
+  false "start a thread" or "no posts yet".
+- **Offline reads as offline.** The composer says the daemon is unreachable instead of "paused",
+  and the home roster says so too instead of claiming the daemon has no profiles; a failed roster
+  load shows the reason with a Retry.
+- **Jump to latest** appears once you scroll far back in a chat or workgroup.
+- **Pull to refresh** on email, MCP, memories, skills, tools and schedule, and a failed pull now
+  says so. Email accounts, memories and connections show "couldn't load" with a Retry when the
+  read fails.
+- **A crash shows a reload screen** instead of a blank app.
+
 ## v0.5.4 — 2026-09-29 — sheets that tell the truth
 
 - **A failed save says so.** Model, reasoning, budget, workspace and accent sheets stay open and

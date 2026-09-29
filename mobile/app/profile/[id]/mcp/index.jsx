@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { space } from '../../../../src/theme/tokens';
 
@@ -15,6 +15,7 @@ import { useBack } from '../../../../src/hooks/useBack';
 import { useProfile } from '../../../../src/hooks/useSubject';
 import { useEndpoint } from '../../../../src/lib/EndpointContext';
 import { useTheme } from '../../../../src/theme/ThemeContext';
+import { usePullRefresh } from '../../../../src/hooks/usePullRefresh';
 
 export default function McpList() {
   const { id } = useLocalSearchParams();
@@ -23,6 +24,7 @@ export default function McpList() {
   const toast = useToast();
   const { call } = useEndpoint();
   const { colors, fonts, fontSizes } = useTheme();
+  const pull = usePullRefresh(() => refresh?.());
   const { profile, loading, refresh } = useProfile(id);
   const [target, setTarget] = useState(null);
   const [confirmRemove, setConfirmRemove] = useState(null);
@@ -62,7 +64,7 @@ export default function McpList() {
         onBack={goBack}
         right={<Button title="+ Add" size="md" variant="ghost" onPress={() => router.push(`/profile/${id}/mcp/new`)} />}
       />
-      <ScrollView>
+      <ScrollView refreshControl={<RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={colors.ink3} />}>
         {loading && servers.length === 0 ? (
           <View style={{ padding: space.s10, alignItems: 'center' }}>
             <ActivityIndicator color={colors.ink3} />

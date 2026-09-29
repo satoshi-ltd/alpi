@@ -324,4 +324,16 @@ describe('Roster creation reachability', () => {
     expect(screen.queryByText('Nothing here yet')).toBeNull();
     expect(screen.getByLabelText('New workgroup')).toBeTruthy();
   });
+
+  it('tells the truth while the daemon is down and when the roster failed to load', () => {
+    const onRefresh = vi.fn();
+    const { rerender } = render(<Roster items={[]} paired daemonDown onRefresh={onRefresh} />);
+    expect(screen.getByText('Daemon unreachable')).toBeTruthy();
+    expect(screen.queryByText('Nothing here yet')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+    rerender(<Roster items={[]} paired error={new Error('read timeout')} onRefresh={onRefresh} />);
+    expect(screen.getByText("Couldn't load the roster")).toBeTruthy();
+    expect(screen.getByText('read timeout')).toBeTruthy();
+  });
 });

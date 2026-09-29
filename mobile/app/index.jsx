@@ -27,7 +27,7 @@ import { useLaunchRestore } from '../src/features/shell/launchRestore';
 import { NEW_PROFILE, NEW_WORKGROUP, useCreateGate } from '../src/features/shell/useCreateGate';
 import { usePane } from '../src/nav/PaneContext';
 
-function InboxScreen({ items, loading, refresh }) {
+function InboxScreen({ items, loading, refresh, error = null }) {
   const { colors } = useTheme();
   const router = useRouter();
   const pathname = usePathname();
@@ -169,6 +169,8 @@ function InboxScreen({ items, loading, refresh }) {
         paired={!!endpoint}
         device="phone"
         addActions={addActions}
+        daemonDown={activeFailed}
+        error={error}
       />
       <ShellFooter
         unread={unreadCount}
@@ -197,7 +199,7 @@ function InboxScreen({ items, loading, refresh }) {
 
 export default function Index() {
   const { twoPane } = usePane();
-  const { items, loading, refresh } = useInbox();
+  const { items, loading, refresh, error } = useInbox();
   useLaunchRestore({ items, twoPane });
-  return twoPane ? <HomePane /> : <InboxScreen items={items} loading={loading} refresh={refresh} />;
+  return twoPane ? <HomePane /> : <InboxScreen items={items} loading={loading} refresh={refresh} error={error} />;
 }

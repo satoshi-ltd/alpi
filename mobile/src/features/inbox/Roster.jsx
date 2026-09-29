@@ -65,14 +65,19 @@ function SectionAdd({ label, onPress }) {
   );
 }
 
-function EmptyState({ paired, query, device }) {
+function EmptyState({ paired, query, device, daemonDown = false, error = null, onRetry }) {
   const { colors, fonts, fontSizes } = useTheme();
   const needle = String(query ?? '').trim();
   const [title, body] = !paired
     ? ['Not paired', `Pair this ${device} to a daemon and its profiles show up here.`]
     : needle
       ? ['No matches', `Nothing matches “${needle}”.`]
-      : ['Nothing here yet', 'This daemon has no profiles or workgroups yet.'];
+      : daemonDown
+        ? ['Daemon unreachable', 'Profiles and workgroups show up again once the connection is back.']
+        : error
+          ? ['Couldn\'t load the roster', String(error?.message ?? error)]
+          : ['Nothing here yet', 'This daemon has no profiles or workgroups yet.'];
+  const retry = paired && !needle && (daemonDown || error) && onRetry;
   return (
     <View
       style={{
@@ -90,6 +95,11 @@ function EmptyState({ paired, query, device }) {
       <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.md, color: colors.ink3, textAlign: 'center' }}>
         {body}
       </Text>
+      {retry ? (
+        <Pressable onPress={onRetry} accessibilityRole="button" accessibilityLabel="Retry" hitSlop={8} style={{ paddingVertical: space.s4 }}>
+          <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.md, color: colors.ink2 }}>Retry</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -107,13 +117,15 @@ export function Roster({
   gutter = space.s7,
   addActions = null,
   searchOpen = false,
+  daemonDown = false,
+  error = null,
 }) {
   const { colors, fonts, fontSizes } = useTheme();
   const { twoPane } = usePane();
   const keepEmpty = useMemo(() => Object.keys(addActions ?? {}), [addActions]);
   const sections = useMemo(() => rosterSections(items, query, { keepEmpty }), [items, query, keepEmpty]);
   const empty = rosterIsEmpty(sections);
-  const placeholder = loading ? <InboxSkeleton /> : <EmptyState paired={paired} query={query} device={device} />;
+  const placeholder = loading ? <InboxSkeleton /> : <EmptyState paired={paired} query={query} device={device} daemonDown={daemonDown} error={error} onRetry={onRefresh} />;
 
   const renderSectionHeader = useCallback(
     ({ section }) => {

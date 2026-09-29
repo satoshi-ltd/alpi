@@ -16,6 +16,12 @@ import { validateTaskShape } from './parseMarkers';
 const HAIRLINE = 0.5;
 const SEND_D = 30;
 
+export function composerPlaceholder({ offline = false, disabled = false, placeholder }) {
+  if (offline) return 'Daemon unreachable — sending paused';
+  if (disabled) return 'Paused — resume to chat';
+  return placeholder;
+}
+
 export function Composer({
   placeholder = 'Message…',
   accent,
@@ -29,6 +35,7 @@ export function Composer({
   disabled = false,
   busy = false,
   onStop,
+  offline = false,
 }) {
   const { colors, fonts , fontSizes} = useTheme();
   const insets = useSafeAreaInsets();
@@ -124,7 +131,7 @@ export function Composer({
             value={text}
             onChangeText={setText}
             editable={!disabled}
-            placeholder={disabled ? 'Paused — resume to chat' : placeholder}
+            placeholder={composerPlaceholder({ offline, disabled, placeholder })}
             placeholderTextColor={colors.ink3}
             multiline
             autoCapitalize="sentences"

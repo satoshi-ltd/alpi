@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ActionSheet } from '../../../../src/components/ActionSheet';
@@ -11,16 +11,19 @@ import { Row, RowSeparator } from '../../../../src/components/Row';
 import { ScreenHeader } from '../../../../src/components/ScreenHeader';
 import { useBack } from '../../../../src/hooks/useBack';
 import { useEmailAccounts } from '../../../../src/hooks/useDaemonData';
+import { usePullRefresh } from '../../../../src/hooks/usePullRefresh';
 import { useEventEffect } from '../../../../src/hooks/useEvents';
 import { EMAIL_TYPE_LABELS } from '../../../../src/lib/emailAccounts';
 import { space } from '../../../../src/theme/tokens';
 import { useTheme } from '../../../../src/theme/ThemeContext';
+import { LoadFailed } from '../../../../src/components/LoadFailed';
 
 export default function EmailList() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const goBack = useBack();
   const { colors, fonts, fontSizes } = useTheme();
+  const pull = usePullRefresh(() => accounts.refresh?.());
   const accounts = useEmailAccounts(id);
   const [chooser, setChooser] = useState(false);
 
@@ -39,11 +42,13 @@ export default function EmailList() {
         onBack={goBack}
         right={<Button title="+ Add" size="md" variant="ghost" onPress={() => setChooser(true)} />}
       />
-      <ScrollView>
+      <ScrollView refreshControl={<RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={colors.ink3} />}>
         {accounts.loading && !accounts.data ? (
           <View style={{ padding: space.s11, alignItems: 'center' }}>
             <ActivityIndicator color={colors.ink3} />
           </View>
+        ) : accounts.error && !accounts.data ? (
+          <LoadFailed inline label="email accounts" error={accounts.error} onRetry={() => accounts.refresh?.()} />
         ) : list.length === 0 ? (
           <Row label="No email accounts configured" helper="tap + Add to connect one" chevron={false} />
         ) : (

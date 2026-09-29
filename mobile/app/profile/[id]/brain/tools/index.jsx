@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { space } from '../../../../../src/theme/tokens';
 
@@ -8,6 +8,7 @@ import { Eyebrow } from '../../../../../src/components/Eyebrow';
 import { ScreenHeader } from '../../../../../src/components/ScreenHeader';
 import { useBack } from '../../../../../src/hooks/useBack';
 import { useTools } from '../../../../../src/hooks/useDaemonData';
+import { usePullRefresh } from '../../../../../src/hooks/usePullRefresh';
 import { useTheme } from '../../../../../src/theme/ThemeContext';
 
 // Same category order as desktop ToolsPanel.
@@ -28,6 +29,7 @@ export default function ToolsList() {
   const router = useRouter();
   const goBack = useBack();
   const { colors, fonts, fontSizes } = useTheme();
+  const pull = usePullRefresh(() => tools.refresh?.());
   const tools = useTools(id);
   const rows = tools.data?.tools ?? [];
 
@@ -49,7 +51,7 @@ export default function ToolsList() {
         subtitle={`@${id} · ${rows.length} CALLABLE`}
         onBack={goBack}
       />
-      <ScrollView contentContainerStyle={{ paddingBottom: space.s9 }}>
+      <ScrollView refreshControl={<RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={colors.ink3} />} contentContainerStyle={{ paddingBottom: space.s9 }}>
         {tools.loading && rows.length === 0 ? (
           <View style={{ padding: space.s10, alignItems: 'center' }}>
             <ActivityIndicator color={colors.ink3} />

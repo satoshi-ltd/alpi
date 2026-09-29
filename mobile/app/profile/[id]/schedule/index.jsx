@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { space } from '../../../../src/theme/tokens';
 
@@ -12,6 +12,7 @@ import { useToast } from '../../../../src/components/Toast';
 import { Bold, Code, TypedConfirm } from '../../../../src/components/TypedConfirm';
 import { useBack } from '../../../../src/hooks/useBack';
 import { useScheduleList } from '../../../../src/hooks/useDaemonData';
+import { usePullRefresh } from '../../../../src/hooks/usePullRefresh';
 import { useEventEffect } from '../../../../src/hooks/useEvents';
 import { useEndpoint } from '../../../../src/lib/EndpointContext';
 import { scheduleSummary, formatLastRun } from '../../../../src/lib/scheduleFormat';
@@ -23,6 +24,7 @@ export default function ScheduleList() {
   const toast = useToast();
   const { call } = useEndpoint();
   const { colors, fonts, fontSizes } = useTheme();
+  const pull = usePullRefresh(() => schedule.refresh?.());
   const schedule = useScheduleList(id);
   const [target, setTarget] = useState(null);
   const [busyId, setBusyId] = useState(null);
@@ -76,7 +78,7 @@ export default function ScheduleList() {
         onBack={goBack}
         // Schedules are created via chat (ask the agent to set one up) — no in-app "New" affordance. List + manage (fire/pause/delete) live here, creation does not.
       />
-      <ScrollView contentContainerStyle={{ paddingBottom: space.s9 }}>
+      <ScrollView refreshControl={<RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={colors.ink3} />} contentContainerStyle={{ paddingBottom: space.s9 }}>
         {schedule.loading && jobs.length === 0 && !loadError ? (
           <View style={{ padding: space.s10, alignItems: 'center' }}>
             <ActivityIndicator color={colors.ink3} />

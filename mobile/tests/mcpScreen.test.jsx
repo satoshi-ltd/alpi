@@ -20,6 +20,7 @@ vi.mock('react-native', () => {
     Text,
     Pressable,
     ScrollView: ({ children }) => React.createElement('div', {}, children),
+    RefreshControl: () => null,
     ActivityIndicator: () => React.createElement('span', { 'data-testid': 'spinner' }),
   };
 });

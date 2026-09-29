@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { useToast } from '../components/Toast';
+
 export function usePullRefresh(refresh) {
+  const toast = useToast();
   const [refreshing, setRefreshing] = useState(false);
   const alive = useRef(true);
   useEffect(() => {
@@ -13,8 +16,8 @@ export function usePullRefresh(refresh) {
     setRefreshing(true);
     try {
       await refresh?.();
-    } catch {
-      return;
+    } catch (e) {
+      toast({ title: 'Refresh failed', message: String(e?.message ?? e), duration: 2600 });
     } finally {
       if (alive.current) setRefreshing(false);
     }

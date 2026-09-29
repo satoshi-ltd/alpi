@@ -2,6 +2,9 @@ import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, screen } from '@testing-library/react';
 
+const h = vi.hoisted(() => ({ toast: vi.fn() }));
+vi.mock('../components/Toast', () => ({ useToast: () => h.toast }));
+
 import { usePullRefresh } from './usePullRefresh';
 
 afterEach(cleanup);
@@ -27,5 +30,13 @@ describe('usePullRefresh', () => {
     render(<Probe refresh={failing} />);
     await act(async () => { screen.getByText('pull').click(); });
     expect(screen.getByText('pull').getAttribute('data-refreshing')).toBe('false');
+  });
+
+  it('tells the reader when a pull fails instead of hiding the spinner in silence', async () => {
+    h.toast.mockClear();
+    const failing = vi.fn(async () => { throw new Error('offline'); });
+    render(<Probe refresh={failing} />);
+    await act(async () => { screen.getByText('pull').click(); });
+    expect(h.toast).toHaveBeenCalledWith(expect.objectContaining({ title: 'Refresh failed', message: 'offline' }));
   });
 });

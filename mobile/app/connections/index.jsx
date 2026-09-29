@@ -20,6 +20,7 @@ import { useConnectionsSummary } from '../../src/hooks/useDaemonData';
 import { usePane } from '../../src/nav/PaneContext';
 import { SettingsSurface } from '../../src/nav/SettingsSurface';
 import { useTheme } from '../../src/theme/ThemeContext';
+import { LoadFailed } from '../../src/components/LoadFailed';
 
 const WIDE_BODY_MAX_W = 968;
 
@@ -64,6 +65,8 @@ function ConnectionsScreen() {
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator color={colors.ink3} />
         </View>
+      ) : !summary.data && summary.error ? (
+        <LoadFailed label="connections" error={summary.error} onRetry={() => summary.refresh?.()} />
       ) : (
         <SettingsSurface>
         <ScrollView

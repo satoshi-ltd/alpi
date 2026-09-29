@@ -71,7 +71,7 @@ vi.mock('../src/features/chat/MentionPopover', () => ({ MentionPopover: () => nu
 import { CHROME_BTN, CHROME_H, COMPOSER_CTRL, COMPOSER_PAD_Y, PANE_PAD_X, tapSlop } from '../src/lib/panes';
 import * as tokens from '../src/theme/tokens';
 import { mobile, space } from '../src/theme/tokens';
-import { Composer } from '../src/features/chat/Composer';
+import { Composer, composerPlaceholder } from '../src/features/chat/Composer';
 import { ShellFooter } from '../src/features/shell/ShellFooter';
 import { PaneContext } from '../src/nav/PaneContext';
 
@@ -252,5 +252,11 @@ describe('composer bottom clearance', () => {
     cleanup();
     h.bottom = 0;
     expect(styleOf(composerRow()).paddingBottom).toBe(COMPOSER_PAD_Y);
+  });
+
+  it('names the daemon outage in the placeholder instead of calling the profile paused', () => {
+    expect(composerPlaceholder({ offline: true, disabled: true, placeholder: 'Message @doc…' })).toBe('Daemon unreachable — sending paused');
+    expect(composerPlaceholder({ disabled: true, placeholder: 'Message @doc…' })).toBe('Paused — resume to chat');
+    expect(composerPlaceholder({ placeholder: 'Message @doc…' })).toBe('Message @doc…');
   });
 });

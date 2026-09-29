@@ -1,6 +1,6 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useRef } from 'react';
-import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { space } from '../../../../../src/theme/tokens';
 
@@ -8,7 +8,9 @@ import { Row, RowSeparator } from '../../../../../src/components/Row';
 import { ScreenHeader } from '../../../../../src/components/ScreenHeader';
 import { useBack } from '../../../../../src/hooks/useBack';
 import { useProfileMemory } from '../../../../../src/hooks/useDaemonData';
+import { usePullRefresh } from '../../../../../src/hooks/usePullRefresh';
 import { useTheme } from '../../../../../src/theme/ThemeContext';
+import { LoadFailed } from '../../../../../src/components/LoadFailed';
 
 // Same three files the desktop MemoryPanel loads (USER.md, MEMORY.md, AGENT.md) — files alpi reads on every turn.
 const FILES = [
@@ -28,6 +30,7 @@ export default function MemoryList() {
   const router = useRouter();
   const goBack = useBack();
   const { colors } = useTheme();
+  const pull = usePullRefresh(() => mem.refresh?.());
   const mem = useProfileMemory(id);
   const refresh = mem.refresh;
   const settled = useRef(false);
@@ -43,11 +46,13 @@ export default function MemoryList() {
         subtitle={`@${id} · LOADED EVERY TURN`}
         onBack={goBack}
       />
-      <ScrollView contentContainerStyle={{ paddingBottom: space.s9 }}>
+      <ScrollView refreshControl={<RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={colors.ink3} />} contentContainerStyle={{ paddingBottom: space.s9 }}>
         {mem.loading && !mem.data ? (
           <View style={{ padding: space.s10, alignItems: 'center' }}>
             <ActivityIndicator color={colors.ink3} />
           </View>
+        ) : mem.error && !mem.data ? (
+          <LoadFailed inline label="memories" error={mem.error} onRetry={() => mem.refresh?.()} />
         ) : (
           FILES.map((f, i) => {
             const text = mem.data?.[f.name] ?? '';

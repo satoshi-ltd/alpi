@@ -42,7 +42,7 @@ export function SidebarPane({ onCollapse }) {
   const pathname = usePathname();
   const canAdmin = useCanAdminEarly();
   const { endpoint, probeState } = useEndpoint();
-  const { items, loading, refresh } = useInbox();
+  const { items, loading, refresh, error: inboxError } = useInbox();
   const pins = usePins(endpoint?.id);
   const { rows: unreadOutputs } = useUnifiedOutputs({ status: 'unread' });
   const unreadCount = unreadOutputs.length;
@@ -208,6 +208,8 @@ export function SidebarPane({ onCollapse }) {
           device="tablet"
           gutter={space.s5}
           addActions={addActions}
+          daemonDown={activeFailed}
+          error={inboxError}
         />
         <ShellFooter
           unread={unreadCount}

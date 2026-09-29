@@ -21,6 +21,8 @@ import { useCanAdminEarly } from '../../src/hooks/useActiveRole';
 import { ChatSkeleton } from '../../src/features/chat/ChatSkeleton';
 import { Composer } from '../../src/features/chat/Composer';
 import { EmptyThread } from '../../src/features/chat/EmptyThread';
+import { JumpToLatest, JUMP_THRESHOLD } from '../../src/features/chat/JumpToLatest';
+import { LoadFailed } from '../../src/components/LoadFailed';
 import { MarkerCard } from '../../src/features/chat/MarkerCard';
 import { MessageActionsSheet } from '../../src/features/chat/MessageActionsSheet';
 import { postsOf, unlandedPosts } from '../../src/features/chat/optimisticPosts';
@@ -139,9 +141,10 @@ const WgItem = memo(function WgItem({ m, hubPubkey, ownPubkey, workingStale, acc
 });
 
 const WgList = forwardRef(function WgList(
-  { messages, hubPubkey, ownPubkey, workingStale, accent, accentFor, setActionTarget, hubLabel, colors, fonts, fontSizes, hydrating, imageProfile },
+  { messages, hubPubkey, ownPubkey, workingStale, accent, accentFor, setActionTarget, hubLabel, colors, fonts, fontSizes, hydrating, imageProfile, loadError = null, onRetryLoad },
   ref,
 ) {
+  const [farFromLatest, setFarFromLatest] = useState(false);
   const [pageSize, setPageSize] = useState(INITIAL_PAGE);
   const { twoPane } = usePane();
   const visible = useMemo(() => messages.slice(-pageSize).slice().reverse(), [messages, pageSize]);
@@ -188,6 +191,9 @@ const WgList = forwardRef(function WgList(
   if (hydrating && messages.length === 0) {
     return <ChatSkeleton kind="workgroup" accent={accent} />;
   }
+  if (messages.length === 0 && loadError) {
+    return <LoadFailed label="this workgroup" error={loadError} onRetry={onRetryLoad} />;
+  }
   if (messages.length === 0) {
     return (
       <EmptyThread
@@ -199,12 +205,15 @@ const WgList = forwardRef(function WgList(
   }
 
   return (
+    <View style={{ flex: 1 }}>
     <FlatList
       ref={listRef}
       inverted
       data={visible}
       keyExtractor={(m, idx) => String(m.seq ?? `i-${idx}`)}
       renderItem={renderItem}
+      onScroll={(e) => setFarFromLatest(e.nativeEvent.contentOffset.y > JUMP_THRESHOLD)}
+      scrollEventThrottle={200}
       contentContainerStyle={twoPane ? [WG_STYLES.listContent, WG_STYLES.contentColumn] : WG_STYLES.listContent}
       onEndReached={hasMore ? () => setPageSize((n) => n + PAGE_STEP) : undefined}
       onEndReachedThreshold={0.5}
@@ -225,6 +234,8 @@ const WgList = forwardRef(function WgList(
         ) : null
       }
     />
+    <JumpToLatest visible={farFromLatest} onPress={() => listRef.current?.scrollToOffset?.({ offset: 0, animated: true })} />
+    </View>
   );
 });
 
@@ -622,12 +633,15 @@ function WorkgroupChatInner() {
           fontSizes={fontSizes}
           hydrating={transcript.loading && !transcript.data}
           imageProfile={profile}
+          loadError={transcript.error && !transcript.data ? transcript.error : null}
+          onRetryLoad={() => transcript.refresh()}
         />
         <PaneColumn>
           <Composer
             placeholder={`Direct @${wg.hub_id} — your input becomes a #task`}
             accent={accent}
             disabled={!!paused || daemonDown}
+            offline={daemonDown}
             onSend={sendMessage}
             mentionSource={mentionSource}
             seedText={composerSeed?.text}

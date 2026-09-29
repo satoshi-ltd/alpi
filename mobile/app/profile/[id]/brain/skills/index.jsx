@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { space } from '../../../../../src/theme/tokens';
 
@@ -7,6 +7,7 @@ import { Row, RowSeparator, SectionHeader } from '../../../../../src/components/
 import { ScreenHeader } from '../../../../../src/components/ScreenHeader';
 import { useBack } from '../../../../../src/hooks/useBack';
 import { useSkills } from '../../../../../src/hooks/useDaemonData';
+import { usePullRefresh } from '../../../../../src/hooks/usePullRefresh';
 import { useTheme } from '../../../../../src/theme/ThemeContext';
 
 function formatCategory(raw) {
@@ -19,6 +20,7 @@ export default function SkillsList() {
   const router = useRouter();
   const goBack = useBack();
   const { colors, fonts, fontSizes } = useTheme();
+  const pull = usePullRefresh(() => skills.refresh?.());
   const skills = useSkills(id);
 
   const rows = (skills.data?.skills ?? []).map((s) => ({
@@ -44,7 +46,7 @@ export default function SkillsList() {
         subtitle={`@${id} · ${rows.length} INSTALLED`}
         onBack={goBack}
       />
-      <ScrollView contentContainerStyle={{ paddingBottom: space.s9 }}>
+      <ScrollView refreshControl={<RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={colors.ink3} />} contentContainerStyle={{ paddingBottom: space.s9 }}>
         {skills.loading && rows.length === 0 ? (
           <View style={{ padding: space.s10, alignItems: 'center' }}>
             <ActivityIndicator color={colors.ink3} />
