@@ -107,8 +107,30 @@ body.kit {
   flex-shrink: 0;
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 0 0 0.5px rgba(11, 17, 23, 0.14), 0 18px 50px rgba(11, 17, 23, 0.08);
-  background: #ffffff;
+  box-shadow: 0 0 0 0.5px var(--line-2), 0 18px 50px rgba(0, 0, 0, 0.08);
+  background: var(--bg-pane);
+  color: var(--ink);
+}
+.kit-seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--selected);
+}
+.kit-seg button {
+  height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-3);
+  font: 500 12px "Geist", ui-sans-serif, system-ui, sans-serif;
+  cursor: pointer;
+}
+.kit-seg button[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--bg-pane);
 }
 .kit-board > div {
   font-family: "Geist", ui-sans-serif, system-ui, sans-serif;
@@ -119,4 +141,13 @@ body.kit {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--ink-3, #626e7d);
+}
+.kit-header .logo-dark {
+  display: none;
+}
+[data-mode="dark"] .kit-header .logo-light {
+  display: none;
+}
+[data-mode="dark"] .kit-header .logo-dark {
+  display: block;
 }

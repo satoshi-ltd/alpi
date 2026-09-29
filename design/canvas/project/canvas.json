@@ -2,7 +2,7 @@
  "v": 3,
  "createdOnFiles": {
   "v": 1,
-  "at": "2026-09-29T14:10:12Z"
+  "at": "2026-09-29T14:19:23Z"
  },
  "title": "Alpi desktop and mobile parity",
  "launch": {
@@ -24,7 +24,7 @@
   },
   {
    "id": "audit",
-   "name": "Audit"
+   "name": "Open work"
   }
  ],
  "boards": {
@@ -216,16 +216,8 @@
    "x": 0,
    "y": 0,
    "w": 1280,
-   "h": 2200,
-   "title": "Parity audit",
-   "page": "audit"
-  },
-  "Audit-Round2.dc.html": {
-   "x": 1360,
-   "y": 0,
-   "w": 1280,
-   "h": 2900,
-   "title": "Round 2 \u00b7 overlays and view states",
+   "h": 800,
+   "title": "Open work",
    "page": "audit"
   }
  },
@@ -253,8 +245,7 @@
   "Phone-Sheet.dc.html",
   "Phone-ActionSheet.dc.html",
   "Phone-TypedConfirm.dc.html",
-  "Main.dc.html",
-  "Audit-Round2.dc.html"
+  "Main.dc.html"
  ],
  "notes": {
   "d-Chat": {

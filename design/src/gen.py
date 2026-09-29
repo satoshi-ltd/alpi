@@ -270,13 +270,8 @@ def usage_chart(accent=DOC_ACCENT, today="$0.00", tin="102K", tout="831", cap="$
 </div>"""
 
 
-def mix(hexcolor, amount, over="#ffffff"):
-    h = hexcolor.lstrip("#")
-    o = over.lstrip("#")
-    r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
-    r2, g2, b2 = (int(o[i:i + 2], 16) for i in (0, 2, 4))
-    m = lambda a, c: round(c + (a - c) * amount)
-    return "#%02x%02x%02x" % (m(r, r2), m(g, g2), m(b, b2))
+def mix(color, amount, over="var(--bg-pane, #ffffff)"):
+    return f"color-mix(in srgb, {color} {round(amount * 100)}%, {over})"
 
 
 
@@ -717,8 +712,7 @@ def build(desktop_boards):
             place(name, html, x, y, w, h, t, "mobile")
         y += max(h for _, _, _, _, h, _ in items)
 
-    place("Main.dc.html", desktop_boards["audit"], 0, 0, 1280, 2200, "Parity audit", "audit")
-    place("Audit-Round2.dc.html", audit2_board(), 1360, 0, 1280, 2900, "Round 2 · overlays and view states", "audit")
+    place("Main.dc.html", audit2_board(), 0, 0, 1280, 140 + 90 * 6 + 120, "Open work", "audit")
 
     live_path = os.path.join(os.path.dirname(ROOT), "live", "project", "canvas.json")
     index = {
@@ -726,7 +720,7 @@ def build(desktop_boards):
         "createdOnFiles": {"v": 1, "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")},
         "title": "Alpi desktop and mobile parity",
         "launch": {"view": "canvas", "page": "system"},
-        "pages": [{"id": "system", "name": "System"}, {"id": "desktop", "name": "Desktop"}, {"id": "mobile", "name": "Mobile"}, {"id": "audit", "name": "Audit"}],
+        "pages": [{"id": "system", "name": "System"}, {"id": "desktop", "name": "Desktop"}, {"id": "mobile", "name": "Mobile"}, {"id": "audit", "name": "Open work"}],
         "boards": boards,
         "order": order,
         "notes": notes,

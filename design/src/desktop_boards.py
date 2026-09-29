@@ -403,77 +403,7 @@ def desktop_app_settings():
     return page("Desktop · app-level settings", 1280, 800, body, bg=BG)
 
 
-FINDINGS = [
-    (1, "Chat header meta", "Model · context · budget with 1×10 rules and a % after each bar.", "Phone: no rules, % hidden (fits the cover). Fold: rules and % since 0.5.1.", "Phone keeps the compact form.", "mobile", "done 0.5.1"),
-    (2, "Sidebar metrics", "248 wide · rows 30 · names 13 · connection card 38.", "280 wide · rows 44 (touch floor) · names 14 since 0.5.1.", "Rows stay 44: a finger, not a pointer.", "mobile", "done 0.5.1"),
-    (3, "Sidebar footer", "Settings · bell · theme toggle · version.", "Settings · bell · theme toggle · version on two panes since 0.5.1; phone keeps theme in Settings.", "", "mobile", "done 0.5.1"),
-    (4, "Boolean fields", "State chip + explicit sm button (Pause, Enable, Allow).", "State chip only; the whole row toggles on tap.", "Switches since 0.5.2: Paused, sandbox, network, auto-read, connection Enabled; row taps no longer toggle.", "mobile", "done 0.5.2"),
-    (5, "Identity", "Inline textarea, Draft from AGENT.md, Save / Discard.", "Phone: own screen with Draft (already there). Fold: read-only row that opens that screen.", "Inline editor with Draft / Save / Discard on two panes since 0.5.2; the phone screen shares the same helpers.", "mobile", "done 0.5.2"),
-    (6, "Composer", "Hints, attach, model picker, accent send.", "Attach + send; since 0.5.1 the model in the header opens the picker.", "", "mobile", "done 0.5.1"),
-    (7, "Providers / MCP / Email", "Chips inline per item + sm add button.", "Count + push to a list screen.", "Providers and MCP servers as chips on two panes since 0.5.2; email already had them; phone keeps the count.", "mobile", "done 0.5.2"),
-    (8, "Settings hero", "Title + eyebrow on one line, meta row (model · budget) under it, back on the right.", "Same two lines on two panes since 0.5.1: title · SETTINGS, then model · budget; Back on the right. Phone keeps the stacked subtitle.", "", "mobile", "done 0.5.1"),
-    (9, "Wide rows", "96 label, control left-aligned, no chevrons.", "Flexible label + helper, control right-aligned; every row reserves the chevron gutter since 0.5.1, entity rows keep their own case.", "", "mobile", "done 0.5.1"),
-    (10, "Daemon actions", "One row: ghost sm 'Update alpi' · 'Restart daemon'.", "One row with both buttons on two panes, two rows on the phone, same words, since 0.5.1.", "", "mobile", "done 0.5.1"),
-    (11, "Workgroup budget", "$0.40 + 'of $5.00 · 8%' + Edit on one line, 6 px bar.", "$0.40 / $5.00 + 5 px bar, then a separate 'Daily cap' row.", "Hub's Edit / Set cap sits on the amount line since 0.5.2; the extra row is gone.", "mobile", "done 0.5.2"),
-    (12, "Members", "130 px identity column, bio, HUB tag, X to remove.", "Name + bio (when the peer carries one) + joined/invited pill + X. Already close.", "Nothing to change; the canvas was wrong here.", "keep", "corrected"),
-    (13, "Pipelines", "'launch' chip + stage chips joined by →.", "Chain name + launch/on-demand pill + numbered stage chips. Already there.", "Nothing to change; the canvas was wrong here.", "keep", "corrected"),
-    (14, "Connections list", "Table: label + 'N devices · role', last seen, sessions, 14-day; host first.", "Host first with sessions in every helper since 0.5.1; the desktop sub-line names the profiles scope since 0.6.4.", "", "both", "done"),
-    (15, "Connection detail", "Expanded row: usage + devices. Edit modal without session scope.", "Full screen with session scope, disable, sessions, last seen, usage, devices, danger.", "Edit and pairing dialogs choose shared or per-device sessions; Add device can mint a provisioner grant, since 0.6.4.", "desktop", "done 0.6.4"),
-    (16, "App-level settings", "No page: theme in the footer, zoom in ⌘ palette, notifications modal, updater popover.", "One Settings screen: re-pair, biometrics, notifications, theme, text size, sign out.", "Acceptable split; the palette lists the theme switch under Preferences since 0.6.4.", "keep", "done 0.6.4"),
-]
-
-IMPROVEMENTS = [
-    ("both", "Usage empty state", "An empty range collapses the track to one line on both clients (mobile 0.5.1, desktop 0.6.4).", "done"),
-    ("both", "Same on/off grammar", "Chip = state, switch = action on mobile since 0.5.2; desktop keeps chip + button.", "done 0.5.2"),
-    ("desktop", "Collapsible sidebar", "Shipped in 0.6.4, removed in 0.6.5 by the creator: the desktop has room for the roster and the footer button broke the footer. Mobile keeps its toggle.", "dropped 0.6.5"),
-    ("desktop", "Session scope + provisioner", "Session scope in both dialogs and a provisioner checkbox beside Add device since 0.6.4.", "done 0.6.4"),
-    ("desktop", "Connections sub-line", "The sub-line reads devices · role · profiles since 0.6.4.", "done 0.6.4"),
-    ("mobile", "Fold sidebar at desktop metrics", "280 wide, 14 px names, rows at the 44 px touch floor.", "done 0.5.1"),
-    ("mobile", "Skeletons + pull-to-refresh", "Settings and lists show 'Loading…' rows; skeleton bands and pull-to-refresh are the missing F5 items.", "0.5.3"),
-    ("mobile", "Empty states with an action", "No providers, no peers, no workgroups: one line + the primary action instead of a bare count.", "0.5.3"),
-    ("mobile", "Draft identity on the fold", "Both the phone screen and the fold inline editor draft from AGENT.md through one helper.", "done 0.5.2"),
-    ("mobile", "Haptics", "Toggles and destructive confirms give no haptic feedback (expo-haptics is already a dependency).", "0.5.3"),
-]
-
-
-def audit_board():
-    tone = {"mobile": (mix(DOC_ACCENT, 0.16), "#2a5f80"), "desktop": (mix(ALPI_ACCENT, 0.18), ALPI_ACCENT), "both": (mix("#9d4dc6", 0.16), "#6b2f8f"), "keep": (HOVER, INK3)}
-    tag = lambda who: f'<span style="display: inline-flex; align-items: center; height: 18px; padding: 0 8px; border-radius: 16px; background: {tone[who][0]}; color: {tone[who][1]}; font-family: {MONO}; font-size: 11px; white-space: nowrap">fix {who}</span>' if who != "keep" else f'<span style="display: inline-flex; align-items: center; height: 18px; padding: 0 8px; border-radius: 16px; background: {HOVER}; color: {INK3}; font-family: {MONO}; font-size: 11px">keep</span>'
-    rows = []
-    status = lambda t: f'<span style="font-family: {MONO}; font-size: 11px; color: {"#217a45" if t.startswith("done") or t == "corrected" else INK3}; white-space: nowrap">{t}</span>'
-    for n, title, d, m, rec, who, st in FINDINGS:
-        rows.append(f"""<div style="display: grid; grid-template-columns: 34px 150px 1fr 1fr 1fr 96px 120px; gap: 14px; align-items: start; padding: 10px 0; border-top: 0.5px solid {LINE}">
-<span style="width: 22px; height: 22px; border-radius: 999px; background: {DANGER}; color: #fff; font-size: 12px; font-weight: 600; line-height: 22px; text-align: center">{n}</span>
-<span style="font-size: 13px; font-weight: 600; line-height: 1.4; color: {INK}">{title}</span>
-<span style="font-size: 12px; line-height: 1.5; color: {INK2}">{d}</span>
-<span style="font-size: 12px; line-height: 1.5; color: {INK2}">{m}</span>
-<span style="font-size: 12px; line-height: 1.5; color: {INK}">{rec}</span>
-{tag(who)}
-{status(st)}
-</div>""")
-    imps = []
-    for who, title, text, st in IMPROVEMENTS:
-        imps.append(f'<div style="display: grid; grid-template-columns: 96px 190px 1fr 120px; gap: 14px; align-items: start; padding: 10px 0; border-top: 0.5px solid {LINE}">{tag(who) if who != "keep" else ""}<span style="font-size: 13px; font-weight: 600; line-height: 1.4">{title}</span><span style="font-size: 12px; line-height: 1.5; color: {INK2}">{text}</span>{status(st)}</div>')
-    body = f"""<div style="padding: 48px 56px; display: flex; flex-direction: column; gap: 28px; height: 100%; box-sizing: border-box">
-<div style="display: flex; flex-direction: column; gap: 8px">
-{eyebrow("Alpi · desktop 0.6.4 · mobile 0.5.3 · 2026-09-29", INK3, 500, 0.06, 11)}
-<span style="font-size: 28px; font-weight: 600; letter-spacing: -0.018em; line-height: 1.1">Desktop ↔ mobile parity audit</span>
-<span style="font-size: 13px; line-height: 1.5; color: {INK3}; max-width: 820px">Numbered badges on the artboards below point at each row. Desktop is drawn from its CSS modules; phone and fold from the mobile code as of 0.5.3; desktop from 0.6.5. The status column tracks what shipped and what is scheduled.</span>
-</div>
-<div style="display: flex; flex-direction: column">
-<div style="display: grid; grid-template-columns: 34px 150px 1fr 1fr 1fr 96px 120px; gap: 14px; padding-bottom: 8px">{eyebrow("#", INK4, 400, 0.1, 10)}{eyebrow("Incongruence", INK4, 400, 0.1, 10)}{eyebrow("Desktop", INK4, 400, 0.1, 10)}{eyebrow("Mobile", INK4, 400, 0.1, 10)}{eyebrow("Recommendation", INK4, 400, 0.1, 10)}{eyebrow("Owner", INK4, 400, 0.1, 10)}{eyebrow("Status", INK4, 400, 0.1, 10)}</div>
-{''.join(rows)}
-</div>
-<div style="display: flex; flex-direction: column; margin-top: 12px">
-<div style="display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px">{eyebrow("Improvements", INK2, 600, 0.1, 11)}<span style="font-size: 11px; color: {INK4}">beyond parity · both clients</span></div>
-{''.join(imps)}
-</div>
-</div>"""
-    return page("Parity audit", 1280, 2200, body, bg=PANE)
-
-
 DESKTOP = {
-    "audit": audit_board(),
     "chat": desktop_chat(),
     "profile": desktop_profile_settings(),
     "wg": desktop_wg_settings(),

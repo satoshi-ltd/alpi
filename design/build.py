@@ -16,7 +16,7 @@ PAGES = (
     ("index.html", "system", "System", "Design system", "One token file feeds both clients. Colour, type, space, radius and every primitive of desktop and mobile, drawn from the values that ship."),
     ("desktop.html", "desktop", "Desktop", "Desktop", "Tauri client, 1280 wide. Every screen as the code paints it, with the sidebar it shares."),
     ("mobile.html", "mobile", "Mobile", "Phone and Fold", "Expo client. The phone keeps its own grammar; a fold or tablet renders the desktop layout at scale."),
-    ("audit.html", "audit", "Audit", "Audits", "Parity round 1 and the overlays / view-states round 2, with the status of every row."),
+    ("audit.html", "audit", "Open work", "Open work", "What is still pending between the two clients. Shipped rows leave the table; the changelogs keep the history."),
 )
 
 
@@ -25,12 +25,37 @@ def version(rel):
         return json.load(f)["version"]
 
 
+# Boards are drawn in the light palette; the kit rewrites those literals to the token sheet so the theme switch reaches them.
+THEMED = (
+    ("rgba(11,17,23,0.07)", "var(--line)"),
+    ("rgba(11,17,23,0.14)", "var(--line-2)"),
+    ("rgba(11,17,23,0.04)", "var(--hover)"),
+    ("rgba(11,17,23,0.06)", "var(--selected)"),
+    ("#ffffff", "var(--bg-pane)"),
+    ("#eef0f2", "var(--bg)"),
+    ("#f5f6f8", "var(--bg-side)"),
+    ("#f1f3f5", "var(--bg-side)"),
+    ("#0b1117", "var(--ink)"),
+    ("#3d4955", "var(--ink-2)"),
+    ("#626e7d", "var(--ink-3)"),
+    ("#b1bac4", "var(--ink-4)"),
+    ("#8a5a0a", "var(--accent)"),
+    ("#b73737", "var(--c-danger-text)"),
+)
+LITERAL_BOARDS = {"System-Tokens.dc.html"}
+
+
 def board_root(path):
     with open(path) as f:
         html = f.read()
     start = html.index("</helmet>\n") + len("</helmet>\n")
     end = html.index("\n</x-dc>")
-    return html[start:end]
+    root = html[start:end]
+    if os.path.basename(path) in LITERAL_BOARDS:
+        return root
+    for literal, token in THEMED:
+        root = root.replace(literal, token)
+    return root
 
 
 def shell(current, heading, intro, sections, versions):
@@ -48,13 +73,16 @@ def shell(current, heading, intro, sections, versions):
 <link rel="icon" href="../site/assets/alpi-favicon.svg" type="image/svg+xml">
 {FONT_LINK}
 <link rel="stylesheet" href="../desktop/src/styles/tokens.css">
+<link rel="stylesheet" href="boards.css">
 <link rel="stylesheet" href="kit.css">
+<script src="kit.js" defer></script>
 </head>
 <body class="kit">
 <header class="kit-header">
-<div class="brand-lockup"><img src="../site/assets/alpi-black.svg" alt="">alpi</div>
+<div class="brand-lockup"><img class="logo-light" src="../site/assets/alpi-black.svg" alt=""><img class="logo-dark" src="../site/assets/alpi-white.svg" alt="">alpi</div>
 <nav aria-label="Design kit">{nav}</nav>
 <span class="kit-version">desktop {versions["desktop"]} · mobile {versions["mobile"]}</span>
+<div class="kit-seg" role="group" aria-label="Theme"><button type="button" data-kit-theme="light">Light</button><button type="button" data-kit-theme="dark">Dark</button></div>
 </header>
 <main class="kit-main">
 <section class="kit-intro"><h1>{heading}</h1><p>{intro}</p>
@@ -74,6 +102,12 @@ def build(out):
     with open(os.path.join(canvas_root, "canvas.json")) as f:
         index = json.load(f)
     versions = {"desktop": version("desktop/package.json"), "mobile": version("mobile/package.json")}
+    with open(os.path.join(canvas_root, "parity.css")) as f:
+        boards_css = f.read()
+    for literal, token in THEMED:
+        boards_css = boards_css.replace(literal, token)
+    with open(os.path.join(out, "boards.css"), "w") as f:
+        f.write(boards_css)
     boards = index["boards"]
     notes = index["notes"]
     for file, page, _label, heading, intro in PAGES:
