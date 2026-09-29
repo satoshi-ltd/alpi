@@ -31,6 +31,17 @@ import { profileLabel } from "../../lib/profile-display.js";
 import styles from "./ConnectionsPage.module.css";
 
 
+export function deviceCount(row) {
+  const n = row?.devices?.length || 0;
+  return `${n} device${n === 1 ? "" : "s"}`;
+}
+
+export function scopeLabel(row) {
+  if (row?.role === "admin") return "all profiles";
+  const scope = row?.profile_scope ?? [];
+  return scope.length ? scope.map((name) => `@${profileLabel(name)}`).join(", ") : "all profiles";
+}
+
 function since(value) {
   if (!value) return "never";
   const seconds = Math.max(0, Math.floor(Date.now() / 1000 - value));
@@ -225,7 +236,7 @@ export default function ConnectionsPage({
                         <Mono>host.sock</Mono>
                       ) : (
                         <span className={styles.identityMeta}>
-                          <Mono>{row.devices?.length || 0} devices · {row.role}</Mono>
+                          <Mono>{deviceCount(row)} · {row.role} · {scopeLabel(row)}</Mono>
                           {row.status === "disabled" && <Chip size="sm" state="off">disabled</Chip>}
                         </span>
                       )}
@@ -568,12 +579,16 @@ function ConnectionDetail({
 }) {
   const notify = useNotify();
 
+  const [provisioner, setProvisioner] = useState(false);
+
   async function addDevice() {
     try {
       const payload = await invoke("connections_add_device", {
         targetId: row.id,
+        provisioner,
         ...connectionArg,
       });
+      setProvisioner(false);
       onPair(payload);
     } catch (error) {
       notify({ message: String(error), variant: "error" });
@@ -604,7 +619,13 @@ function ConnectionDetail({
         <section className={styles.devicesSection}>
           <div className={styles.sectionHead}>
             <h2>Devices</h2>
-            <Button size="sm" icon={<Icon name="plus" />} onClick={addDevice}>Add device</Button>
+            <span className={`row row-gap ${styles.addDevice}`}>
+              <label className={styles.provisioner}>
+                <input type="checkbox" checked={provisioner} onChange={(event) => setProvisioner(event.target.checked)} />
+                <Checkbox on={provisioner} /> may add and revoke devices
+              </label>
+              <Button size="sm" icon={<Icon name="plus" />} onClick={addDevice}>Add device</Button>
+            </span>
           </div>
           <div className={styles.devices}>
             {(row.devices || []).map((device) => (
@@ -636,6 +657,7 @@ function EditConnectionModal({ row, profiles, connectionArg, onClose, onSaved })
   const [role, setRole] = useState(row.role || "member");
   const [scope, setScope] = useState(row.profile_scope || []);
   const [allProfiles, setAllProfiles] = useState(!(row.profile_scope || []).length);
+  const [sessionScope, setSessionScope] = useState(row.session_scope === "device" ? "device" : "connection");
   const [busy, setBusy] = useState(false);
 
   async function save() {
@@ -647,6 +669,7 @@ function EditConnectionModal({ row, profiles, connectionArg, onClose, onSaved })
         label: label.trim(),
         role,
         profiles: role === "admin" || allProfiles ? [] : scope,
+        sessionScope,
         ...connectionArg,
       });
       notify({ message: "Connection updated", variant: "success" });
@@ -670,6 +693,13 @@ function EditConnectionModal({ row, profiles, connectionArg, onClose, onSaved })
           <select value={role} onChange={(event) => setRole(event.target.value)} className={styles.select}>
             <option value="member">Member</option>
             <option value="admin">Admin</option>
+          </select>
+        </label>
+        <label className={styles.manageField}>
+          <span className={styles.fieldLabel}>Sessions</span>
+          <select value={sessionScope} onChange={(event) => setSessionScope(event.target.value)} className={styles.select} aria-label="Session scope">
+            <option value="connection">Shared across its devices</option>
+            <option value="device">Private to each device</option>
           </select>
         </label>
         {role !== "admin" && (
@@ -769,7 +799,7 @@ function PairingModal({ payload, connectionArg, onClose }) {
               {endpoints.map((endpoint) => <option key={endpoint.url} value={endpoint.url}>{endpoint.url}</option>)}
             </select>
           )}
-          <Mono>{endpointUrl}</Mono><p>Scan from desktop or mobile. Pairing: {pairingExpiryText(payload.expires_at, status, clock)}.</p>
+          <Mono>{endpointUrl}</Mono><p>Scan from desktop or mobile. Pairing: {pairingExpiryText(payload.expires_at, status, clock)}.{payload.provisioner ? " This device may add and revoke its siblings." : ""}</p>
           <Chip state={displayStatus === "consumed" ? "on" : displayStatus === "pending" ? "warn" : "off"}>{displayStatus}</Chip>
         </div>
       </div>

@@ -76,7 +76,7 @@ describe("ConnectionsPage", () => {
     fireEvent.click(screen.getByText("Add device"));
 
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("connections_add_device", {
-      targetId: "conn_javi", connectionId: "local",
+      targetId: "conn_javi", provisioner: false, connectionId: "local",
     }));
     expect(await screen.findByText("Pair a device with Javi")).toBeInTheDocument();
     expect(screen.getByText(/alpi:\/\/device/).textContent).toContain("name=Atlas+daemon");
@@ -119,8 +119,53 @@ describe("ConnectionsPage", () => {
       label: "Javi",
       role: "member",
       profiles: [],
+      sessionScope: "connection",
       connectionId: "local",
     }));
+  });
+
+  it("names the profiles a member connection can reach next to its devices and role", async () => {
+    render(<ConnectionsPage profiles={[{ name: "atlas" }]} activeConnection={{ id: "local" }} />);
+    await screen.findByText("Javi");
+    expect(screen.getByText("1 device · member · @atlas")).toBeInTheDocument();
+  });
+
+  it("switches a connection to private per-device sessions from the edit modal", async () => {
+    render(<ConnectionsPage profiles={[{ name: "atlas" }]} activeConnection={{ id: "local" }} />);
+    await screen.findByText("Javi");
+    fireEvent.click(screen.getByRole("button", { name: "Edit connection" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Session scope" }), { target: { value: "device" } });
+    fireEvent.click(screen.getByText("Save changes"));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("connections_update", expect.objectContaining({
+      targetId: "conn_javi",
+      sessionScope: "device",
+    })));
+  });
+
+  it("mints a provisioning grant when the box beside Add device is ticked", async () => {
+    invoke.mockImplementation((command) => {
+      if (command === "connections_summary") return Promise.resolve(summary);
+      if (command === "connections_add_device") return Promise.resolve({
+        connection_id: "conn_javi", pairing_id: "pair_2", pairing_status: "pending", provisioner: true,
+        pairing_token: "grant", expires_at: 1_800_000_000,
+        label: "Javi", pairing_name: "Atlas daemon", url: "wss://client.example.com",
+      });
+      if (command === "connections_pairing_status") return Promise.resolve({ status: "pending" });
+      return Promise.resolve({ ok: true });
+    });
+    render(<ConnectionsPage profiles={[{ name: "atlas" }]} activeConnection={{ id: "local" }} />);
+    await screen.findByText("Javi");
+    fireEvent.click(screen.getByText("Javi"));
+    const box = await screen.findByRole("checkbox", { name: /may add and revoke devices/ });
+    fireEvent.click(box);
+    fireEvent.click(screen.getByRole("button", { name: "Add device" }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("connections_add_device", {
+      targetId: "conn_javi",
+      provisioner: true,
+      connectionId: "local",
+    }));
+    expect(await screen.findByText(/may add and revoke its siblings/)).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: /may add and revoke devices/ }).checked).toBe(false);
   });
 
   it("keeps row actions outside the expanded panel and dims other rows", async () => {

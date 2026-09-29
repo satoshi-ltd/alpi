@@ -23,6 +23,7 @@ const Copy = (p) => <Icon name="copy" {...p} />;
 const Cpu = (p) => <Icon name="cpu" {...p} />;
 const Server = (p) => <Icon name="server" {...p} />;
 const Globe = (p) => <Icon name="globe" {...p} />;
+const PanelLeft = (p) => <Icon name="panel-left" {...p} />;
 const Sun = (p) => <Icon name="sun" {...p} />;
 const Moon = (p) => <Icon name="moon" {...p} />;
 const Auto = (p) => <Icon name="sun-moon" {...p} />;
@@ -47,6 +48,7 @@ const Archive = (p) => <Icon name="archive" {...p} />;
 const Bell = (p) => <Icon name="bell" {...p} />;
 
 export const SearchIcon = Search;
+export const PanelLeftIcon = PanelLeft;
 export const PlusIcon = Plus;
 export const ArrowUpIcon = Arrow;
 export const ArrowLeftIcon = ArrowLeft;
@@ -173,7 +175,7 @@ const Alpaca = (p) => (
 export const AlpacaIcon = Alpaca;
 
 export const I = {
-  Search, Plus, Arrow, ArrowLeft, Refresh,
+  Search, Plus, Arrow, ArrowLeft, Refresh, PanelLeft,
   Gear, Check, X, Pause, Play, Power, Copy, Cpu, Server, Globe, Sun, Moon,
   Trash, ChevDown, ChevRight, Send, Blocks, Sparkle, Wrench,
   MuteIcon: Mute, Volume, Archive, Bell, Alpaca,

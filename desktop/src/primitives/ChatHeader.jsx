@@ -1,4 +1,5 @@
-import { Diamond, DiamondStack, Tip } from "./index.js";
+import { Diamond, DiamondStack, IconBtn, PanelLeftIcon, Tip } from "./index.js";
+import { useSidebar } from "../lib/sidebar.js";
 import styles from "./ChatHeader.module.css";
 
 export default function ChatHeader({
@@ -11,6 +12,7 @@ export default function ChatHeader({
 }) {
   const isWg = kind === "workgroup";
   const trimmedBio = (bio || "").trim();
+  const sidebar = useSidebar();
   const glyph = isWg
     ? <DiamondStack color={accent} size="md" className={styles.stackGlyph} />
     : <Diamond color={accent} size="md" />;
@@ -22,6 +24,7 @@ export default function ChatHeader({
       <div className={`row between ${styles.topRow}`}>
         <div className={`col ${styles.titleCol}`}>
           <div className="title-row">
+            {!sidebar.open && <ShowSidebarButton onClick={sidebar.toggle} />}
             {titleGlyph}
             <h1>{id}</h1>
           </div>
@@ -31,5 +34,15 @@ export default function ChatHeader({
       </div>
       <span className="stripe" aria-hidden />
     </header>
+  );
+}
+
+export function ShowSidebarButton({ onClick }) {
+  return (
+    <Tip text="Show sidebar" side="r">
+      <IconBtn aria-label="Show sidebar" onClick={onClick}>
+        <PanelLeftIcon />
+      </IconBtn>
+    </Tip>
   );
 }

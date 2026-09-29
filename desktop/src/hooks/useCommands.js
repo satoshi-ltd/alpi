@@ -10,6 +10,9 @@ export function useCommands({
   onToggleSearch,
   onToggleSidebarSearch,
   sidebarSearchOpen = false,
+  sidebarOpen = true,
+  onToggleSidebar = null,
+  onCycleTheme = null,
   onNewProfile,
   onNewWorkgroup,
   onNewChat,
@@ -215,6 +218,24 @@ export function useCommands({
       });
     }
 
+    if (onToggleSidebar) {
+      cmds.push({
+        id: "pref:sidebar",
+        group: "Preferences",
+        label: sidebarOpen ? "Hide sidebar" : "Show sidebar",
+        action: () => onToggleSidebar(),
+      });
+    }
+    if (onCycleTheme) {
+      cmds.push({
+        id: "pref:theme",
+        group: "Preferences",
+        label: "Switch theme",
+        hint: "light · dark · system",
+        action: () => onCycleTheme(),
+      });
+    }
+
     [
       ["help:send", "Chat", "Send message", "⌘↵"],
       ["help:zoom-in", "View", "Zoom in", "⌘+"],
@@ -234,6 +255,9 @@ export function useCommands({
   }, [
     view,
     searchOpen,
+    sidebarOpen,
+    onToggleSidebar,
+    onCycleTheme,
     activeProfileName,
     historyKind,
     onOpenSettings,

@@ -22,6 +22,20 @@ function renderCommands(overrides = {}) {
 }
 
 describe("useCommands", () => {
+  it("lists the sidebar and theme preferences when the shell provides them", () => {
+    const onToggleSidebar = vi.fn();
+    const onCycleTheme = vi.fn();
+    const cmds = renderCommands({ sidebarOpen: false, onToggleSidebar, onCycleTheme });
+    const prefs = cmds.filter((c) => c.group === "Preferences");
+    expect(prefs.map((c) => c.label)).toEqual(["Show sidebar", "Switch theme"]);
+    prefs[0].action();
+    prefs[1].action();
+    expect(onToggleSidebar).toHaveBeenCalledTimes(1);
+    expect(onCycleTheme).toHaveBeenCalledTimes(1);
+    expect(renderCommands({ sidebarOpen: true, onToggleSidebar }).find((c) => c.id === "pref:sidebar").label).toBe("Hide sidebar");
+    expect(renderCommands().some((c) => c.group === "Preferences")).toBe(false);
+  });
+
   it("shows profile browse commands while settings has an active profile", () => {
     const commands = renderCommands();
 

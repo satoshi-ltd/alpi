@@ -30,6 +30,7 @@ export default function Usage({ days = [], accent = "var(--accent)", capLine = n
   const maxTok = Math.max(0, ...days.map(tokensOf));
   const scale = (maxTok || 1) * SCALE_HEADROOM;
 
+  const empty = !days.some((d) => tokensOf(d) > 0 || costOf(d) > 0);
   const capNum = typeof capLine === "number" && capLine > 0 ? capLine : null;
   const todayCost = costOf(today);
   const pctLeft =
@@ -65,6 +66,9 @@ export default function Usage({ days = [], accent = "var(--accent)", capLine = n
         </div>
       </div>
 
+      {empty ? (
+        <p className={styles.empty}>no usage in the last {days.length} days</p>
+      ) : (
       <div className={styles.chart}>
         <div className={styles.track}>
           {days.map((d, i) => {
@@ -124,7 +128,9 @@ export default function Usage({ days = [], accent = "var(--accent)", capLine = n
           ))}
         </div>
       </div>
+      )}
 
+      {empty ? null : (
       <div className={styles.foot}>
         <div className={styles.legend}>
           <span className={`${styles.swatch} ${styles.swatchIn}`} />
@@ -139,6 +145,7 @@ export default function Usage({ days = [], accent = "var(--accent)", capLine = n
             : <>14-day total {usd(totCost)} · {fmtTok(totIn)} in / {fmtTok(totOut)} out</>}
         </div>
       </div>
+      )}
     </div>
   );
 }

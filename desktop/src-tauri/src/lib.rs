@@ -947,14 +947,18 @@ async fn devices_generate(
     label: String,
     role: Option<String>,
     profiles: Option<Vec<String>>,
+    session_scope: Option<String>,
     connection_id: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let role = role.unwrap_or_else(|| "member".into());
     let profiles = profiles.unwrap_or_default();
     let value = tauri::async_runtime::spawn_blocking(move || {
-        let params = serde_json::json!({
+        let mut params = serde_json::json!({
             "label": label, "role": role, "profiles": profiles,
         });
+        if let Some(scope) = session_scope {
+            params["session_scope"] = serde_json::Value::String(scope);
+        }
         match connection_id {
             Some(cid) => host_client::call_for(&cid, "host.devices.generate", params),
             None => host_client::call("host.devices.generate", params),
@@ -1061,23 +1065,26 @@ async fn connections_summary(connection_id: Option<String>) -> Result<serde_json
 
 #[tauri::command]
 async fn connections_create(
-    label: String, role: String, profiles: Vec<String>, connection_id: Option<String>,
+    label: String, role: String, profiles: Vec<String>, session_scope: Option<String>,
+    connection_id: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    tauri::async_runtime::spawn_blocking(move || connections_call(
-        connection_id.as_deref(),
-        "host.connections.create",
-        serde_json::json!({"label": label, "role": role, "profiles": profiles}),
-    )).await.map_err(|e| format!("join: {e}"))?
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut params = serde_json::json!({"label": label, "role": role, "profiles": profiles});
+        if let Some(scope) = session_scope {
+            params["session_scope"] = serde_json::Value::String(scope);
+        }
+        connections_call(connection_id.as_deref(), "host.connections.create", params)
+    }).await.map_err(|e| format!("join: {e}"))?
 }
 
 #[tauri::command]
 async fn connections_add_device(
-    target_id: String, connection_id: Option<String>,
+    target_id: String, provisioner: Option<bool>, connection_id: Option<String>,
 ) -> Result<serde_json::Value, String> {
     tauri::async_runtime::spawn_blocking(move || connections_call(
         connection_id.as_deref(),
         "host.connections.add_device",
-        serde_json::json!({"connection_id": target_id}),
+        serde_json::json!({"connection_id": target_id, "provisioner": provisioner.unwrap_or(false)}),
     )).await.map_err(|e| format!("join: {e}"))?
 }
 
@@ -1106,16 +1113,18 @@ async fn connections_cancel_pairing(
 #[tauri::command]
 async fn connections_update(
     target_id: String, label: String, role: String, profiles: Vec<String>,
-    connection_id: Option<String>,
+    session_scope: Option<String>, connection_id: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    tauri::async_runtime::spawn_blocking(move || connections_call(
-        connection_id.as_deref(),
-        "host.connections.update",
-        serde_json::json!({
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut params = serde_json::json!({
             "connection_id": target_id, "label": label,
             "role": role, "profiles": profiles,
-        }),
-    )).await.map_err(|e| format!("join: {e}"))?
+        });
+        if let Some(scope) = session_scope {
+            params["session_scope"] = serde_json::Value::String(scope);
+        }
+        connections_call(connection_id.as_deref(), "host.connections.update", params)
+    }).await.map_err(|e| format!("join: {e}"))?
 }
 
 #[tauri::command]

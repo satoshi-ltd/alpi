@@ -11,6 +11,21 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.6.4 — 2026-09-29 — the sidebar folds away, connections say what they share
+
+- **Hide the sidebar.** A button in its footer folds the roster out of the way and a button in
+  every chat and settings header brings it back; the choice is remembered, and the command
+  palette lists it under Preferences next to the theme switch. Same gesture as on the phone.
+- **Sessions per device, from the desktop too.** The edit-connection dialog and the pairing
+  dialog choose whether a connection's devices share one thread or each keep their own, and
+  "Add device" can mint a provisioning grant that lets that device enrol and revoke its siblings.
+- **The connections table shows the profiles each member can reach** next to its devices and
+  role.
+- **An empty usage range says so in one line** instead of drawing a blank chart.
+
+  Requires alpi 0.15.20 for per-device session scope and provisioning grants; everything else
+  works with the 0.14.34 floor pinned by v0.5.26.
+
 ## v0.6.3 — 2026-09-29 — the updater downloads what it announces
 
 - **"Restart & install" installs again.** The update manifest pointed every platform at the

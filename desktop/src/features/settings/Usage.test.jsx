@@ -159,3 +159,17 @@ describe("30-day footer total", () => {
     expect(screen.getByText(/14-day total/)).toBeTruthy();
   });
 });
+
+describe("Usage empty range", () => {
+  it("collapses the track to one line when nothing was used", () => {
+    const days = [
+      { iso: "2026-07-13", label: "M", day: "7/13", tokIn: 0, tokOut: 0, cost: 0, today: false },
+      { iso: "2026-07-14", label: "T", day: "7/14", tokIn: 0, tokOut: 0, cost: 0, today: true },
+    ];
+    const { container } = render(<Usage days={days} />);
+    expect(screen.getByText("no usage in the last 2 days")).toBeInTheDocument();
+    expect(container.querySelectorAll("[data-day]")).toHaveLength(0);
+    expect(screen.queryByText(/day total/)).toBeNull();
+    expect(screen.getByText("Avg / day")).toBeInTheDocument();
+  });
+});

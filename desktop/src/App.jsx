@@ -24,6 +24,8 @@ import { useCommands } from "./hooks/useCommands.js";
 import { orderedJumpTargets } from "./lib/profile-order.js";
 import { profileLabel } from "./lib/profile-display.js";
 import { installUpdater } from "./lib/updater.js";
+import { SidebarContext, useSidebarPref } from "./lib/sidebar.js";
+import { cycleTheme } from "./lib/theme.js";
 import { findLatestTask } from "./lib/workgroup-tasks.js";
 import { saveCachedMessages } from "./lib/workgroup-cache.js";
 import { fetchWorkgroupTranscript, invalidateTranscriptCache } from "./lib/workgroup-fetch.js";
@@ -596,6 +598,7 @@ export default function App() {
   }, [reload]);
 
   useEffect(() => installUpdater(), []);
+  const sidebar = useSidebarPref();
 
   // A deleted/forbidden session must not survive as a cached ghost transcript.
   const { refresh: refreshSessionData, dropDeadSession } = useMemo(
@@ -1131,7 +1134,7 @@ export default function App() {
       activeConnection.status === "auth-failed" ||
       activeConnection.status === RATE_LIMITED);
 
-  const sidebarSearchAvailable = !daemonOffline && view.kind !== "settings";
+  const sidebarSearchAvailable = !daemonOffline && view.kind !== "settings" && sidebar.open;
   useEffect(() => {
     sidebarSearchAvailableRef.current = sidebarSearchAvailable;
     if (!sidebarSearchAvailable) setSidebarSearchOpen(false);
@@ -1163,6 +1166,9 @@ export default function App() {
       connectionDisabled ||
       (activeStatus === "offline" &&
         (activeConnection?.kind !== "local" || autostartPhase === "gave-up")));
+  // A hidden roster must never hide the only way to re-pair, and the empty view has no header to bring it back.
+  const sidebarShown = sidebar.open || autoOpenConnectionSwitcher || view.kind === "empty";
+  const sidebarValue = useMemo(() => ({ open: sidebarShown, toggle: sidebar.toggle }), [sidebarShown, sidebar.toggle]);
 
   const connectionLocked =
     autoOpenConnectionSwitcher &&
@@ -1200,6 +1206,9 @@ export default function App() {
   const paletteCommands = useCommands({
     view,
     searchOpen,
+    sidebarOpen: sidebarShown,
+    onToggleSidebar: sidebar.toggle,
+    onCycleTheme: () => cycleTheme(),
     activeProfileName,
     historyKind,
     onOpenSettings: adminOnOpenSettings,
@@ -1232,8 +1241,9 @@ export default function App() {
   });
 
   return (
-    <div className={styles.app}>
-      <Sidebar
+    <SidebarContext.Provider value={sidebarValue}>
+    <div className={`${styles.app} ${sidebarShown ? "" : styles.appNoSidebar}`}>
+      {sidebarShown && <Sidebar
         profiles={profiles}
         workgroups={workgroups}
         taskByWorkgroup={taskByWorkgroup}
@@ -1270,7 +1280,7 @@ export default function App() {
         notificationsUnread={canManageProfileSurfaces ? notificationsUnread : 0}
         searchOpen={sidebarSearchOpen}
         onCloseSearch={onCloseSidebarSearch}
-      />
+      />}
       <main className={styles.main}>
           {view.kind === "settings" && canAdminEarly ? (
             <Settings
@@ -1496,5 +1506,6 @@ export default function App() {
         }}
       />}
     </div>
+    </SidebarContext.Provider>
   );
 }

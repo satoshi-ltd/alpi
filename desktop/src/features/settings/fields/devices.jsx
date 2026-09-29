@@ -345,6 +345,7 @@ export function PairDeviceModal({ connectionId, onClose, onPaired }) {
   const [warn, setWarn] = useState(null);
   const [busy, setBusy] = useState(false);
   const [grantAdmin, setGrantAdmin] = useState(false);
+  const [sessionScope, setSessionScope] = useState("connection");
   const [profiles, setProfiles] = useState([]);
   const [scope, setScope] = useState([]);
   const [scopeMode, setScopeMode] = useState("all");
@@ -448,6 +449,7 @@ export function PairDeviceModal({ connectionId, onClose, onPaired }) {
         label: label.trim(),
         role: grantAdmin ? "admin" : "member",
         profiles: grantAdmin ? [] : (scopeMode === "restrict" ? scope : []),
+        sessionScope,
         ...connectionArg,
       });
       pendingPairingRef.current = p.pairing_id
@@ -597,6 +599,21 @@ export function PairDeviceModal({ connectionId, onClose, onPaired }) {
           spellCheck={false}
           disabled={busy || Boolean(payload)}
         />
+      </div>
+
+      <div className={styles.field}>
+        <Eyebrow as="label" htmlFor="pair-session-scope">Sessions</Eyebrow>
+        <select
+          id="pair-session-scope"
+          className={styles.selectField}
+          value={sessionScope}
+          onChange={(e) => setSessionScope(e.target.value)}
+          disabled={busy || Boolean(payload)}
+          aria-label="Session scope"
+        >
+          <option value="connection">Shared across its devices</option>
+          <option value="device">Private to each device</option>
+        </select>
       </div>
 
       <label className={styles.adminBanner}>
