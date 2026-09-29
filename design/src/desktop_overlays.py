@@ -1,4 +1,4 @@
-from gen import DANGER, DOC_ACCENT, callout, diamond, ic, page
+from gen import DANGER, DOC_ACCENT, diamond, ic, page
 from desktop_boards import HOVER, INK, INK2, INK3, INK4, LINE, LINE2, MONO, PANE, SELECTED, SIDE, button, d_sidebar, field_input, selectish
 
 SHADOW = "0 0 0 0.5px rgba(11,17,23,0.08), 0 18px 50px rgba(11,17,23,0.10)"
@@ -60,7 +60,7 @@ def edit_connection_panel():
             f'{label_row("Profiles", profiles_row)}'
             f'</div>')
     inner = modal("Edit connection", body, dialog_footer("Save"))
-    return panel("Modal · edit connection (Dropdown field for role and sessions)", inner + callout(1, 244, 132) + callout(4, 566, 8), 600, 360)
+    return panel("Modal · edit connection (Dropdown field for role and sessions)", inner, 600, 360)
 
 
 def dropdown_row(label, caption="", active=False):
@@ -78,7 +78,7 @@ def dropdown_panel():
              f'<div style="position: relative">{dropdown_trigger("medium")}'
              f'<div style="position: absolute; left: 0; top: 38px; width: 280px; padding: 6px; box-sizing: border-box; border-radius: 12px; background: {PANE}; border: 0.5px solid {LINE2}; box-shadow: {SHADOW}">{menu}</div>'
              f'</div></div></div>')
-    return panel("Dropdown field · open, current choice highlighted, beside a ModelPicker", inner + callout(1, 372, 214) + callout(1, 372, 40), 600, 360)
+    return panel("Dropdown field · open, current choice highlighted, beside a ModelPicker", inner, 600, 360)
 
 
 def menu_item(icon, label, danger=False):
@@ -91,14 +91,14 @@ def context_menu_panel():
             f'{menu_item("gear", "Workgroup settings")}'
             f'<div style="height: 1px; background: {LINE}; margin: 4px 6px"></div>{menu_item("x", "Delete workgroup…", danger=True)}</div>')
     inner = f'<div style="display: flex; height: 100%">{d_sidebar(300, selected="", wg_selected=True)}<div style="flex: 1; background: {PANE}"></div></div>{menu}'
-    return panel("Context menu · sidebar workgroup (archive item removed)", inner + callout(5, 330, 146), 356, 300)
+    return panel("Context menu · sidebar workgroup (archive item removed)", inner, 356, 300)
 
 
 def confirm_panel():
     body = (f'<span style="font-size: 13px; line-height: 1.5; color: {INK2}">Permanently removes <span style="font-family: {MONO}">~/.alpi/profiles/doc/</span> — identity, memory, skills, schedule and chat history. This cannot be undone.</span>'
             f'<div style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px"><span style="font-family: {MONO}; font-size: 11px; letter-spacing: 0.06em; color: {INK3}">TYPE <b style="color: {INK}">doc</b> TO CONFIRM</span>{ds_field("d", 392)}</div>')
     inner = modal("Delete profile @doc", body, dialog_footer("Delete profile", variant="danger"), w=400, x=28, y=24)
-    return panel("ConfirmDelete · typed (waits for the delete, submits on Enter)", inner + callout(2, 368, 252), 456, 300)
+    return panel("ConfirmDelete · typed (waits for the delete, submits on Enter)", inner, 456, 300)
 
 
 def controls_panel():
@@ -106,7 +106,7 @@ def controls_panel():
              ("was: raw .select", raw_select("member", 130)), ("was: native", native_select("shared")))
     rows = "".join(f'<div style="display: flex; align-items: center; gap: 12px"><span style="width: 96px; font-family: {MONO}; font-size: 11px; color: {INK3}">{k}</span>{v}</div>' for k, v in items)
     inner = f'<div style="padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; background: {PANE}; height: 100%; box-sizing: border-box">{rows}</div>'
-    return panel("Two looks left (voice and budget keep Selectish); the raw selects are gone", inner + callout(1, 340, 14) + callout(9, 340, 250), 376, 300)
+    return panel("Two looks left (voice and budget keep Selectish); the raw selects are gone", inner, 376, 300)
 
 
 def desktop_overlays():

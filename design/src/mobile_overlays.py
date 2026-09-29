@@ -1,4 +1,4 @@
-from gen import DANGER, DOC_ACCENT, callout, diamond, ic, m_button, m_row, m_screen_header, m_section, page, pill
+from gen import DANGER, DOC_ACCENT, diamond, ic, m_button, m_row, m_screen_header, m_section, page, pill
 
 INK, INK2, INK3, INK4 = "#0b1117", "#3d4955", "#626e7d", "#b1bac4"
 LINE, LINE2, SELECTED, INPUT = "rgba(11,17,23,0.07)", "rgba(11,17,23,0.14)", "rgba(11,17,23,0.06)", "#f1f3f5"
@@ -88,7 +88,7 @@ def phone_sheet():
     body = f"""<div style="padding: 12px 0 0">{picker_row("Default", "use provider default")}{separator()}{picker_row("Low", "fastest, cheapest")}{separator()}{picker_row("Medium", "balanced", selected=True)}{separator()}{picker_row("High", "slower, more thorough")}</div>"""
     page_body = f"""<div style="display: flex; flex-direction: column">{settings_backdrop_rows()}</div>
 {sheet(390, 844, "Reasoning effort", "how hard the model thinks before answering", body, primary="Save")}
-{callout(1, 330, 646)}{callout(3, 330, 772)}{callout(4, 300, 412)}"""
+"""
     return page("Phone · sheet with picker rows", 390, 844, page_body)
 
 
@@ -100,14 +100,14 @@ def phone_action_sheet():
     body = f'<div style="height: 0.5px; background: {LINE}"></div><div style="padding-bottom: 24px">{items}</div>'
     page_body = f"""<div style="display: flex; flex-direction: column">{settings_backdrop_rows()}</div>
 {sheet(390, 844, "doc", "profile · deepseek-v4.1-flash", body)}
-{callout(5, 330, 530)}"""
+"""
     return page("Phone · action sheet", 390, 844, page_body)
 
 
 def phone_typed_confirm():
     page_body = f"""<div style="display: flex; flex-direction: column">{settings_backdrop_rows()}</div>
 {typed_confirm(390, 844, "Delete profile @doc", "Permanently removes <span style='font-family: " + MONO + "'>~/.alpi/profiles/doc/</span> — identity, memory, skills, schedule and chat history. <b>This action cannot be undone.</b>", "doc", "Delete profile")}
-{callout(2, 330, 246)}{callout(6, 330, 404)}"""
+"""
     return page("Phone · typed confirm", 390, 844, page_body)
 
 
@@ -120,7 +120,7 @@ def fold_sheet():
     body = f"""<div style="padding: 12px 0 0">{picker_row("Default", "use provider default")}{separator()}{picker_row("Low", "fastest, cheapest")}{separator()}{picker_row("Medium", "balanced", selected=True)}{separator()}{picker_row("High", "slower, more thorough")}</div>"""
     page_body = f"""<div style="display: flex; height: 100%">{m_sidebar(884)}{detail}</div>
 {sheet(852, 884, "Reasoning effort", "how hard the model thinks before answering", body, primary="Save", dialog=True)}
-{callout(7, 700, 300)}{callout(3, 690, 660)}"""
+"""
     return page("Fold · sheet as a centred dialog", 852, 884, page_body)
 
 

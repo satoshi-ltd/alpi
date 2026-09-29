@@ -33,6 +33,8 @@ PATHS = {
     "copy": '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
     "check": '<path d="M20 6L9 17l-5-5"/>',
     "refresh": '<path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/>',
+    "pencil": '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+    "volume": '<path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/>',
     "qr": '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM20 14v3M17 20h3"/>',
 }
 
@@ -51,15 +53,6 @@ def diamond(color, size=16):
         f'<svg width="{size}" height="{size}" viewBox="0 0 24 24" aria-hidden="true" style="flex-shrink: 0; display: block">'
         f'<rect x="4" y="4" width="16" height="16" rx="{r}" transform="rotate(45 12 12)" fill="{color}"/></svg>'
     )
-
-
-def callout(n, x, y):
-    return (
-        f'<div style="position: absolute; left: {x}px; top: {y}px; width: 22px; height: 22px; border-radius: 999px; '
-        f'background: {DANGER}; color: #ffffff; font: 600 12px/22px Geist, sans-serif; text-align: center; '
-        f'box-shadow: 0 0 0 2px #ffffff; z-index: 5">{n}</div>'
-    )
-
 
 
 def page(title, w, h, body, bg="#ffffff", lang="en"):
@@ -358,7 +351,7 @@ def phone_chat():
 {m_thread(DOC_ACCENT)}
 {m_composer()}
 </div>
-{callout(1, 300, 34)}{callout(6, 330, 780)}"""
+"""
     return page("Phone · chat", 390, 844, body)
 
 
@@ -375,7 +368,7 @@ def fold_chat():
 <div style="max-width: 720px; width: 100%; align-self: center; box-sizing: border-box">{m_composer()}</div>
 </div>
 </div>
-{callout(2, 300, 8)}{callout(3, 300, 640)}{callout(1, 700, 34)}"""
+"""
     return page("Fold · chat, two panes", 852, 884, body)
 
 
@@ -420,7 +413,7 @@ def phone_profile_settings():
 {m_section("Danger zone")}
 {m_row("Delete profile", "removes identity, memory, skills, schedule from disk. Cannot be undone.", danger=True, sep=False)}
 </div>
-{callout(4, 340, 168)}{callout(5, 300, 1210)}{callout(7, 300, 1690)}"""
+"""
     return page("Phone · profile settings", 390, 2360, body)
 
 
@@ -470,7 +463,7 @@ def fold_profile_settings():
 {inner}
 </div>
 </div>
-{callout(2, 300, 8)}{callout(8, 800, 130)}{callout(9, 810, 720)}{callout(10, 810, 1040)}"""
+"""
     return page("Fold · profile settings", 852, 2000, body)
 
 
@@ -504,7 +497,7 @@ def phone_wg_settings():
 {m_row("Leave workgroup", "drops this profile's membership", danger=True)}
 {m_row("Delete workgroup", "removes it for every member. Cannot be undone.", danger=True, sep=False)}
 </div>
-{callout(11, 330, 500)}{callout(12, 330, 1000)}"""
+"""
     return page("Phone · workgroup settings", 390, 1700, body)
 
 
@@ -538,7 +531,7 @@ def fold_wg_settings():
 {inner}
 </div>
 </div>
-{callout(13, 810, 700)}"""
+"""
     return page("Fold · workgroup settings", 852, 1300, body)
 
 
@@ -556,7 +549,7 @@ def phone_connections():
 {m_row("emulator-android", "admin · all profiles · 2 devices · 4 sessions · seen now", "$0.00")}
 {m_row("remote", "admin · all profiles · 2 devices · 4 sessions · seen now", "$0.44", sep=False)}
 </div>
-{callout(14, 330, 250)}"""
+"""
     return page("Phone · connections", 390, 844, body)
 
 
@@ -585,7 +578,7 @@ def phone_connection_detail():
 {m_section("Danger zone")}
 {m_row("Delete connection", "revokes every device and its sessions. Cannot be undone.", danger=True, sep=False)}
 </div>
-{callout(15, 330, 690)}"""
+"""
     return page("Phone · connection detail", 390, 1500, body)
 
 
@@ -615,7 +608,7 @@ def fold_connection_detail():
 {inner}
 </div>
 </div>
-{callout(15, 810, 560)}"""
+"""
     return page("Fold · connection detail", 852, 1300, body)
 
 
@@ -639,7 +632,7 @@ def phone_settings():
 {m_row("Sign out", "forgets the pairing on this phone", danger=True, sep=False)}
 <div style="padding: 24px 20px; display: flex; justify-content: space-between; align-items: center">{m_eyebrow("About")}<span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #b1bac4">Alpi mobile · v0.5.0</span></div>
 </div>
-{callout(16, 330, 640)}"""
+"""
     return page("Phone · app settings", 390, 1100, body)
 
 
@@ -677,9 +670,20 @@ def build(desktop_boards):
     from mobile_overlays import MOBILE_OVERLAYS
     from system_boards import SYSTEM
 
-    place("System-Tokens.dc.html", SYSTEM["tokens"](), 0, 0, 1280, 2000, "System · tokens", "system")
-    place("System-DesktopComponents.dc.html", SYSTEM["desktop"](), 1360, 0, 1280, 1900, "System · desktop components", "system")
-    place("System-MobileComponents.dc.html", SYSTEM["mobile"](), 2720, 0, 1280, 2300, "System · mobile components", "system")
+    from conversation_boards import CONVERSATION
+
+    y = 0
+    for label, items in (
+        ("Foundations", [("System-Tokens.dc.html", SYSTEM["tokens"](), 2000, "System · tokens")]),
+        ("Controls and feedback", [("System-DesktopComponents.dc.html", SYSTEM["desktop"](), 1900, "Desktop · controls and feedback"), ("System-MobileComponents.dc.html", SYSTEM["mobile"](), 2300, "Mobile · controls and feedback")]),
+        ("Conversation", [("System-DesktopConversation.dc.html", CONVERSATION["desktop"](), 2560, "Desktop · conversation"), ("System-MobileConversation.dc.html", CONVERSATION["mobile"](), 1340, "Mobile · conversation")]),
+        ("Workgroups", [("System-DesktopWorkgroup.dc.html", CONVERSATION["desktop_wg"](), 1200, "Desktop · workgroups"), ("System-MobileWorkgroup.dc.html", CONVERSATION["mobile_wg"](), 760, "Mobile · workgroups")]),
+    ):
+        y += 240
+        title(f"s-{label}", label, y - 223, "system")
+        for i, (name, html, h, t) in enumerate(items):
+            place(name, html, i * 1360, y, 1280, h, t, "system")
+        y += max(h for _, _, h, _ in items)
 
     y = 0
     for name, html, h, label in (

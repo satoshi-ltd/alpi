@@ -1,4 +1,4 @@
-from gen import ALPI_ACCENT, DANGER, DOC_ACCENT, PROFILES, callout, diamond, ic, mix, page, usage_chart
+from gen import ALPI_ACCENT, DANGER, DOC_ACCENT, PROFILES, diamond, ic, mix, page, usage_chart
 
 INK, INK2, INK3, INK4 = "#0b1117", "#3d4955", "#626e7d", "#b1bac4"
 LINE, LINE2, HOVER, SELECTED = "rgba(11,17,23,0.07)", "rgba(11,17,23,0.14)", "rgba(11,17,23,0.04)", "rgba(11,17,23,0.06)"
@@ -233,7 +233,7 @@ def desktop_chat():
 {header}{transcript}{composer}
 </div>
 </div>
-{callout(1, 640, 78)}{callout(2, 232, 300)}{callout(3, 232, 752)}{callout(6, 1230, 730)}"""
+"""
     return page("Desktop · chat", 1280, 800, body, bg=BG)
 
 
@@ -278,7 +278,7 @@ def desktop_profile_settings():
 {hero}{d_body(inner)}
 </div>
 </div>
-{callout(8, 640, 60)}{callout(9, 300, 240)}{callout(4, 300, 350)}{callout(10, 300, 940)}{callout(5, 300, 1100)}{callout(7, 300, 1330)}"""
+"""
     return page("Desktop · profile settings", 1280, 2600, body, bg=BG)
 
 
@@ -321,7 +321,7 @@ def desktop_wg_settings():
 {hero}{d_body(inner)}
 </div>
 </div>
-{callout(8, 640, 60)}{callout(11, 300, 400)}{callout(13, 300, 1020)}{callout(12, 300, 1130)}"""
+"""
     return page("Desktop · workgroup settings", 1280, 1900, body, bg=BG)
 
 
@@ -366,7 +366,7 @@ def desktop_connections():
 {hero}{d_body(table)}
 </div>
 </div>
-{callout(14, 300, 300)}{callout(15, 300, 470)}"""
+"""
     return page("Desktop · connections", 1280, 1300, body, bg=BG)
 
 
@@ -398,7 +398,7 @@ def desktop_app_settings():
 {card("Notifications modal · from the bell", modal, 460)}
 {card("Command palette · Preferences: theme, text size", palette, 460)}
 </div>
-{callout(16, 1230, 110)}{callout(3, 300, 210)}
+
 </div>"""
     return page("Desktop · app-level settings", 1280, 800, body, bg=BG)
 

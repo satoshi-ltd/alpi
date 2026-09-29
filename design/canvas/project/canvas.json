@@ -2,7 +2,7 @@
  "v": 3,
  "createdOnFiles": {
   "v": 1,
-  "at": "2026-09-29T14:19:23Z"
+  "at": "2026-09-29T14:34:34Z"
  },
  "title": "Alpi desktop and mobile parity",
  "launch": {
@@ -30,26 +30,58 @@
  "boards": {
   "System-Tokens.dc.html": {
    "x": 0,
-   "y": 0,
+   "y": 240,
    "w": 1280,
    "h": 2000,
    "title": "System \u00b7 tokens",
    "page": "system"
   },
   "System-DesktopComponents.dc.html": {
-   "x": 1360,
-   "y": 0,
+   "x": 0,
+   "y": 2480,
    "w": 1280,
    "h": 1900,
-   "title": "System \u00b7 desktop components",
+   "title": "Desktop \u00b7 controls and feedback",
    "page": "system"
   },
   "System-MobileComponents.dc.html": {
-   "x": 2720,
-   "y": 0,
+   "x": 1360,
+   "y": 2480,
    "w": 1280,
    "h": 2300,
-   "title": "System \u00b7 mobile components",
+   "title": "Mobile \u00b7 controls and feedback",
+   "page": "system"
+  },
+  "System-DesktopConversation.dc.html": {
+   "x": 0,
+   "y": 5020,
+   "w": 1280,
+   "h": 2560,
+   "title": "Desktop \u00b7 conversation",
+   "page": "system"
+  },
+  "System-MobileConversation.dc.html": {
+   "x": 1360,
+   "y": 5020,
+   "w": 1280,
+   "h": 1340,
+   "title": "Mobile \u00b7 conversation",
+   "page": "system"
+  },
+  "System-DesktopWorkgroup.dc.html": {
+   "x": 0,
+   "y": 7820,
+   "w": 1280,
+   "h": 1200,
+   "title": "Desktop \u00b7 workgroups",
+   "page": "system"
+  },
+  "System-MobileWorkgroup.dc.html": {
+   "x": 1360,
+   "y": 7820,
+   "w": 1280,
+   "h": 760,
+   "title": "Mobile \u00b7 workgroups",
    "page": "system"
   },
   "Desktop-Chat.dc.html": {
@@ -225,6 +257,10 @@
   "System-Tokens.dc.html",
   "System-DesktopComponents.dc.html",
   "System-MobileComponents.dc.html",
+  "System-DesktopConversation.dc.html",
+  "System-MobileConversation.dc.html",
+  "System-DesktopWorkgroup.dc.html",
+  "System-MobileWorkgroup.dc.html",
   "Desktop-Chat.dc.html",
   "Desktop-ProfileSettings.dc.html",
   "Desktop-WorkgroupSettings.dc.html",
@@ -248,6 +284,38 @@
   "Main.dc.html"
  ],
  "notes": {
+  "s-Foundations": {
+   "x": 0,
+   "y": 17,
+   "text": "Foundations",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "system"
+  },
+  "s-Controls and feedback": {
+   "x": 0,
+   "y": 2257,
+   "text": "Controls and feedback",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "system"
+  },
+  "s-Conversation": {
+   "x": 0,
+   "y": 4797,
+   "text": "Conversation",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "system"
+  },
+  "s-Workgroups": {
+   "x": 0,
+   "y": 7597,
+   "text": "Workgroups",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "system"
+  },
   "d-Chat": {
    "x": 0,
    "y": 17,

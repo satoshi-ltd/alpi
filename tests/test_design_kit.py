@@ -35,3 +35,15 @@ def test_design_boards_follow_the_theme_except_the_literal_swatches(tmp_path):
     assert "#0b1117" in system
     assert 'class="logo-dark"' in system and (tmp_path / "boards.css").read_text().count("var(--") >= 2
 
+
+
+def test_design_system_covers_conversation_and_workgroups_on_both_clients(tmp_path):
+    subprocess.run([sys.executable, str(REPO / "design" / "build.py"), "--out", str(tmp_path)], check=True, capture_output=True)
+    boards = json.loads((tmp_path / "canvas" / "project" / "canvas.json").read_text())["boards"]
+    system = {name for name, frame in boards.items() if frame["page"] == "system"}
+    for client in ("Desktop", "Mobile"):
+        assert {f"System-{client}Components.dc.html", f"System-{client}Conversation.dc.html", f"System-{client}Workgroup.dc.html"} <= system
+    conversation = (tmp_path / "canvas" / "project" / "System-DesktopConversation.dc.html").read_text()
+    assert all(label in conversation for label in ("User message", "Alpi message", "Peer reply", "Tool calls", "Composer"))
+    workgroup = (tmp_path / "canvas" / "project" / "System-DesktopWorkgroup.dc.html").read_text()
+    assert all(f"Marker · {state}" in workgroup for state in ("task", "working", "done", "skip"))
