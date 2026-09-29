@@ -15,7 +15,8 @@ vi.mock('react-native', () => {
   const Pressable = ({ children, onPress, disabled, hitSlop, style, ...p }) =>
     React.createElement('button', { type: 'button', onClick: onPress, disabled, ...p }, children);
   const TextInput = ({ style, ...p }) => React.createElement('input', {});
-  return { View, Text, TextInput, Pressable };
+  const ScrollView = ({ children, contentContainerStyle, keyboardShouldPersistTaps }) => React.createElement('div', { 'data-scroll': keyboardShouldPersistTaps ?? 'never' }, children);
+  return { View, Text, TextInput, Pressable, ScrollView };
 });
 
 vi.mock('../../theme/ThemeContext', async () => {
@@ -34,7 +35,7 @@ vi.mock('../../theme/ThemeContext', async () => {
 
 vi.mock('../../components/Icon', () => ({ Icon: ({ name }) => React.createElement('span', { 'data-icon': name }) }));
 vi.mock('../../components/Sheet', () => ({
-  Sheet: ({ open, children }) => (open ? React.createElement('div', { 'data-sheet': 'true' }, children) : null),
+  Sheet: ({ open, children, dismissible }) => (open ? React.createElement('div', { 'data-sheet': 'true', 'data-dismissible': String(dismissible ?? true) }, children) : null),
 }));
 vi.mock('./useClarificationQueue', () => ({
   useClarificationQueue: () => ({
@@ -78,5 +79,10 @@ describe('ClarificationSheet dismissal contract', () => {
     render(<ClarificationSheet />);
     expect(screen.getByText('roma')).toBeTruthy();
     expect(screen.getByText('lisboa')).toBeTruthy();
+  });
+
+  it('cannot be swiped or tapped away: a stray gesture is not an answer', () => {
+    const { container } = render(<ClarificationSheet />);
+    expect(container.querySelector('[data-sheet]').getAttribute('data-dismissible')).toBe('false');
   });
 });

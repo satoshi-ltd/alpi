@@ -118,10 +118,10 @@ function Routes() {
         <PaneShell>
           <NotificationBridge />
           <Stack screenOptions={screenOptions} />
+          <ApprovalSheet />
+          <ClarificationSheet />
         </PaneShell>
       </AppBootstrap>
-      <ApprovalSheet />
-      <ClarificationSheet />
     </>
   );
 }

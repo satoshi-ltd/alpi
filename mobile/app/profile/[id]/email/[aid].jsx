@@ -108,7 +108,8 @@ export default function EmailConfig() {
             longer use this account. <Bold>You can re-add it any time.</Bold>
           </>
         }
-        expected={address}
+        tone="neutral"
+        typed={false}
         confirmLabel="Remove"
         onConfirm={() => {
           setConfirmRemove(false);

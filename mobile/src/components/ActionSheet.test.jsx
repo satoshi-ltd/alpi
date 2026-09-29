@@ -150,14 +150,21 @@ describe('ActionSheet wide form', () => {
       alignSelf: 'center',
       width: '100%',
       maxWidth: 560,
-      marginBottom: 24,
     });
   });
 
-  it('clears the home indicator when the inset is taller than the floor', () => {
+  it('floats the dialog without stacking the inset twice', () => {
     h.insets = { bottom: 34 };
     const { container } = renderInTwoPane();
-    expect(sheetStyleOf(container).marginBottom).toBe(34);
+    expect(sheetStyleOf(container).marginBottom).toBeUndefined();
+  });
+
+  it('marks the current choice when it is used as a picker', () => {
+    h.offScreen.length = 0;
+    render(<ActionSheet open onClose={() => {}} title="Hub" actions={[{ id: 'a', label: 'doc', selected: true }, { id: 'b', label: 'abby', selected: false }]} />);
+    const tap = (name) => JSON.parse(screen.getByRole('button', { name }).getAttribute('data-tap'));
+    expect(tap('doc').backgroundColor).toBe('#eee');
+    expect(tap('abby').backgroundColor).toBe('transparent');
   });
 });
 

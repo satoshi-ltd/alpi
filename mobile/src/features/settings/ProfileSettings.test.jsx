@@ -86,7 +86,7 @@ vi.mock('../../components/Pill', () => ({
 
 vi.mock('../../components/Toggle', () => ({
   Toggle: ({ on, label, onChange, disabled }) => (
-    <button type="button" aria-label={label} aria-pressed={!!on} disabled={disabled} onClick={() => onChange?.(!on)}>
+    <button type="button" aria-label={label} aria-pressed={!!on} disabled={disabled} onClick={() => { h.lastToggle = onChange?.(!on); }}>
       {on ? 'on' : 'off'}
     </button>
   ),
@@ -511,6 +511,25 @@ describe('ProfileSettings vocabulary', () => {
     await waitFor(() => expect(call).toHaveBeenCalledWith('host.config.set_field', { profile: 'doc', key: 'paused', value: 'true' }));
     expect(scope.getByLabelText('Sandbox network').getAttribute('disabled')).not.toBeNull();
     expect(container.querySelector('[data-identity-editor]')).toBeNull();
+  });
+
+  it('hands a failed save back to the switch so it can snap back', async () => {
+    const call = vi.fn(async (method) => {
+      if (method === 'host.profile.summaries') return { profiles: [{ name: 'doc', counts: {} }] };
+      if (method === 'host.settings.profile_snapshot') {
+        return {
+          detail: { name: 'doc', model: 'openrouter/example', paused: false, sandbox: false },
+          usage: { days: [] }, schedules: { jobs: [] }, workgroups: { workgroups: [] }, email: { accounts: [] }, storage: { storage: [] },
+        };
+      }
+      if (method === 'host.config.set_field') throw new Error('daemon said no');
+      throw new Error(`unexpected ${method}`);
+    });
+    const { container } = render(<ProfileSettings />, { wrapper: wrapper(call) });
+    const scope = within(container);
+    await waitFor(() => expect(scope.getByLabelText('Paused')).toBeTruthy());
+    scope.getByLabelText('Paused').click();
+    await expect(h.lastToggle).rejects.toThrow('daemon said no');
   });
 
   it('offers the daemon restart and update as buttons, like desktop', async () => {

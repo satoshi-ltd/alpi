@@ -26,14 +26,18 @@ export function Sheet({
   children,
   maxHeight = '88%',
   hideHeader = false,
+  dismissible = true,
 }) {
   const { colors, fonts, shadow , fontSizes} = useTheme();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const { twoPane } = usePane();
-  const { gesture, sheetStyle, backdropStyle, mounted } = useSheetGesture(open, onClose, height + 100);
+  const dismiss = dismissible ? onClose : undefined;
+  const { gesture, sheetStyle, backdropStyle, mounted } = useSheetGesture(open, dismiss, height + 100);
   const [kbHeight, setKbHeight] = useState(0);
-  const dialog = twoPane ? { ...sheetStyles.dialog, marginBottom: Math.max(insets.bottom, 24) } : null;
+  const [barHeight, setBarHeight] = useState(0);
+  const dialog = twoPane ? sheetStyles.dialog : null;
+  const bottomPad = kbHeight > 0 || twoPane ? 16 : Math.max(16, insets.bottom);
   const view = useExitSnapshot(open, {
     title,
     subtitle,
@@ -52,38 +56,8 @@ export function Sheet({
     return () => { showSub.remove(); hideSub.remove(); };
   }, []);
 
-  return (
-    <Modal
-      visible={mounted}
-      transparent
-      animationType="none"
-      supportedOrientations={['portrait', 'landscape-left', 'landscape-right']}
-      onRequestClose={onClose}
-    >
-      <Animated.View
-        pointerEvents={open ? 'auto' : 'none'}
-        style={[
-          { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', paddingBottom: kbHeight },
-          backdropStyle,
-        ]}
-      >
-        <Pressable style={{ flex: 1 }} onPress={onClose} />
-        <Animated.View
-          style={[
-            {
-              maxHeight: view.maxHeight,
-              backgroundColor: colors.bgPane,
-              borderTopLeftRadius: radii.sheet,
-              borderTopRightRadius: radii.sheet,
-              overflow: 'hidden',
-              ...shadow.base,
-              ...dialog,
-            },
-            sheetStyle,
-          ]}
-        >
-          <GestureDetector gesture={gesture}>
-            <View>
+  const header = (
+    <View>
               <View style={sheetStyles.grabberWrap}>
                 <View
                   style={[sheetStyles.grabber, { backgroundColor: colors.ink4 }]}
@@ -125,12 +99,44 @@ export function Sheet({
                 {view.headerRight}
                 <SheetClose onPress={onClose} />
               </View>
-            </View>
-          </GestureDetector>
+    </View>
+  );
+
+  return (
+    <Modal
+      visible={mounted}
+      transparent
+      animationType="none"
+      supportedOrientations={['portrait', 'landscape-left', 'landscape-right']}
+      onRequestClose={dismiss ?? (() => {})}
+    >
+      <Animated.View
+        pointerEvents={open ? 'auto' : 'none'}
+        style={[
+          { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', paddingBottom: kbHeight, justifyContent: twoPane ? 'center' : 'flex-end' },
+          backdropStyle,
+        ]}
+      >
+        <Pressable style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} onPress={dismiss} />
+        <Animated.View
+          style={[
+            {
+              maxHeight: view.maxHeight,
+              backgroundColor: colors.bgPane,
+              borderTopLeftRadius: radii.sheet,
+              borderTopRightRadius: radii.sheet,
+              overflow: 'hidden',
+              ...shadow.base,
+              ...dialog,
+            },
+            sheetStyle,
+          ]}
+        >
+          {dismissible ? <GestureDetector gesture={gesture}>{header}</GestureDetector> : header}
           <View
             style={{
               flexShrink: 1,
-              paddingBottom: view.primaryAction ? 20 + 44 + (kbHeight > 0 ? 16 : Math.max(16, insets.bottom)) + 12 : 0,
+              paddingBottom: view.primaryAction ? (barHeight || 20 + 48 + bottomPad) + 12 : 0,
             }}
           >
             {view.children}
@@ -138,44 +144,47 @@ export function Sheet({
           {view.primaryAction ? (
             <View
               pointerEvents="box-none"
+              onLayout={(e) => setBarHeight(e.nativeEvent.layout.height)}
               style={{
                 position: 'absolute',
                 left: 0,
                 right: 0,
                 bottom: 0,
-                flexDirection: 'row',
                 gap: space.s4,
                 paddingHorizontal: space.s7,
                 paddingTop: space.s8,
-                paddingBottom: kbHeight > 0 ? 16 : Math.max(16, insets.bottom),
+                paddingBottom: bottomPad,
                 backgroundColor: colors.bgPane,
               }}
             >
-              {(Array.isArray(view.primaryAction) ? view.primaryAction : [view.primaryAction]).map((a, i) => (
-                <View key={a.id ?? i} style={{ flex: 1 }}>
-                  <Button
-                    title={a.label}
-                    variant={a.variant ?? 'primary'}
-                    onPress={a.onPress}
-                    disabled={!!a.disabled}
-                    loading={!!a.loading}
-                    fullWidth
-                  />
-                </View>
-              ))}
+              <View style={{ flexDirection: 'row', gap: space.s4 }}>
+                {(Array.isArray(view.primaryAction) ? view.primaryAction : [view.primaryAction]).map((a, i) => (
+                  <View key={a.id ?? i} style={{ flex: 1 }}>
+                    <Button
+                      title={a.label}
+                      variant={a.variant ?? 'primary'}
+                      onPress={a.onPress}
+                      disabled={!!a.disabled}
+                      loading={!!a.loading}
+                      fullWidth
+                    />
+                  </View>
+                ))}
+              </View>
+              {view.footer ?? null}
             </View>
           ) : view.footer ? (
             <View
               style={{
                 paddingHorizontal: space.s8,
                 paddingTop: space.s5,
-                paddingBottom: Math.max(8, insets.bottom),
+                paddingBottom: twoPane ? 8 : Math.max(8, insets.bottom),
               }}
             >
               {view.footer}
             </View>
           ) : (
-            <View style={{ paddingBottom: insets.bottom }} />
+            <View style={{ paddingBottom: twoPane ? 0 : insets.bottom }} />
           )}
         </Animated.View>
       </Animated.View>

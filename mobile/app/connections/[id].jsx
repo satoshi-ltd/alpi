@@ -178,11 +178,14 @@ function ConnectionDetail() {
                 <Toggle
                   on={!disabled}
                   label="Enabled"
-                  onChange={(next) =>
-                    !next && isSelf
-                      ? setConfirm('disable')
-                      : act('host.connections.set_status', { status: next ? 'active' : 'disabled' }, next ? 'Connection enabled' : 'Connection disabled')
-                  }
+                  onChange={async (next) => {
+                    if (!next && isSelf) {
+                      setConfirm('disable');
+                      return false;
+                    }
+                    const result = await act('host.connections.set_status', { status: next ? 'active' : 'disabled' }, next ? 'Connection enabled' : 'Connection disabled');
+                    return result !== null;
+                  }}
                 />
               }
               chevron={false}
@@ -289,14 +292,14 @@ function ConnectionDetail() {
           row.role === 'admin' ? (
             <>
               Its devices lose profile management, connections and daemon controls.{' '}
-              {isSelf ? <Bold>This phone is one of them and loses this screen. </Bold> : null}
-              <Bold>Type member to confirm.</Bold>
+              {isSelf ? <Bold>This phone is one of them and loses this screen.</Bold> : null}
             </>
           ) : (
-            <>Its devices can manage every profile, connection and the daemon. <Bold>Type admin to confirm.</Bold></>
+            <>Its devices can manage every profile, connection and the daemon.</>
           )
         }
-        expected={row.role === 'admin' ? 'member' : 'admin'}
+        tone="neutral"
+        typed={false}
         confirmLabel={row.role === 'admin' ? 'Demote' : 'Promote'}
         onConfirm={() => {
           setConfirm(null);
@@ -309,12 +312,13 @@ function ConnectionDetail() {
         title={perDevice ? 'Share sessions across devices' : 'Keep sessions private per device'}
         body={
           perDevice ? (
-            <>Every device of this connection sees every chat, including ones created while private. <Bold>Type shared to confirm.</Bold></>
+            <>Every device of this connection sees every chat, including ones created while private.</>
           ) : (
-            <>Devices stop seeing each other's chats; chats created before this change stay shared. <Bold>Type private to confirm.</Bold></>
+            <>Devices stop seeing each other's chats; chats created before this change stay shared.</>
           )
         }
-        expected={perDevice ? 'shared' : 'private'}
+        tone="neutral"
+        typed={false}
         confirmLabel={perDevice ? 'Share' : 'Make private'}
         onConfirm={() => {
           setConfirm(null);

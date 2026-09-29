@@ -13,6 +13,7 @@ vi.mock('react-native', () => {
       onKeyDown: onSubmitEditing ? (e) => { if (e.key === 'Enter') onSubmitEditing(); } : undefined,
     }, children);
   return {
+    Keyboard: { addListener: () => ({ remove() {} }) },
     Modal: ({ visible, children }) => (visible ? R.createElement('div', { 'data-modal': 'true' }, children) : null),
     Pressable: host('div'),
     Text: host('span'),
@@ -64,5 +65,13 @@ describe('TextPrompt', () => {
     rerender(<TextPrompt open title="Rename" initialValue="casa" onClose={onClose} />);
     fireEvent.click(screen.getByText('Cancel'));
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets a value be cleared when empty is meaningful', () => {
+    const onSubmit = vi.fn();
+    render(<TextPrompt open onClose={() => {}} title="Concurrency" initialValue="3" allowEmpty onSubmit={onSubmit} />);
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '' } });
+    fireEvent.click(screen.getByText('Save'));
+    expect(onSubmit).toHaveBeenCalledWith('');
   });
 });

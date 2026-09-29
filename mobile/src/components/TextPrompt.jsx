@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, Text, TextInput, View } from 'react-native';
+import { Keyboard, Modal, Pressable, Text, TextInput, View } from 'react-native';
 import { radii, space, tracking, typography } from '../theme/tokens';
 
 import { useTheme } from '../theme/ThemeContext';
@@ -15,14 +15,22 @@ export function TextPrompt({
   maxLength = 64,
   confirmLabel = 'Save',
   onSubmit,
+  allowEmpty = false,
+  keyboardType = 'default',
 }) {
   const { colors, fonts, fontSizes } = useTheme();
   const [value, setValue] = useState(initialValue);
+  const [kbHeight, setKbHeight] = useState(0);
   useEffect(() => {
     if (open) setValue(initialValue);
   }, [open, initialValue]);
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', (e) => setKbHeight(e.endCoordinates.height));
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => setKbHeight(0));
+    return () => { showSub.remove(); hideSub.remove(); };
+  }, []);
   const clean = value.trim();
-  const ready = clean.length > 0 && clean !== String(initialValue ?? '').trim();
+  const ready = (allowEmpty || clean.length > 0) && clean !== String(initialValue ?? '').trim();
 
   return (
     <Modal
@@ -35,7 +43,7 @@ export function TextPrompt({
     >
       <Pressable
         onPress={onClose}
-        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', padding: space.s9 }}
+        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', padding: space.s9, paddingBottom: space.s9 + kbHeight }}
       >
         <Pressable
           onPress={() => {}}
@@ -70,6 +78,7 @@ export function TextPrompt({
               placeholder={placeholder}
               placeholderTextColor={colors.ink4}
               maxLength={maxLength}
+              keyboardType={keyboardType}
               autoFocus
               autoCapitalize="none"
               autoCorrect={false}

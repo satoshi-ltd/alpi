@@ -90,6 +90,7 @@ export function PairingSheet({ open, onClose, payload, onSettled }) {
     <Sheet
       open={open}
       onClose={close}
+      dismissible={status !== 'pending'}
       title="Pair a device"
       subtitle={payload?.label ? `${payload.label} · ${payload.role ?? 'member'}` : undefined}
       primaryAction={

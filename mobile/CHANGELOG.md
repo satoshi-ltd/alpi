@@ -14,6 +14,19 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.5.4 — 2026-09-29 — sheets that tell the truth
+
+- **A failed save says so.** Model, reasoning, budget, workspace and accent sheets stay open and
+  report the error instead of announcing "saved"; every Save shows a spinner while it works.
+- **Switches snap back** when the daemon refuses the change or a confirmation is cancelled.
+- **The notifications primer shows "Not now" again**, and approvals, questions, pairing and the
+  primer no longer treat a stray swipe or a tap outside as an answer.
+- **Confirmations match the stakes.** Reversible actions (role, session scope, restart, update,
+  email removal) get a plain confirm; only irreversible deletes ask you to type.
+- **Budgets validate** and the daily cap can be cleared; the custom accent checks its hex.
+- **On the fold and tablets** sheets open as centred dialogs, approvals and questions follow the
+  wide layout, and toasts keep a readable width.
+
 ## v0.5.3 — 2026-09-29 — settings that load, refresh and answer the hand
 
 Client-only change; the minimum compatible alpi stays 0.15.20.

@@ -47,7 +47,7 @@ export function ProfilesScopeSheet({ open, onClose, connection, onSaved }) {
       onClose={onClose}
       title="Profiles"
       subtitle={connection?.label}
-      primaryAction={{ label: busy ? 'Saving…' : 'Save', onPress: save, disabled: busy }}
+      primaryAction={{ label: 'Save', onPress: save, loading: busy }}
     >
       <ScrollView contentContainerStyle={{ paddingHorizontal: space.s8, paddingVertical: space.s5, gap: space.s5 }}>
         <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>

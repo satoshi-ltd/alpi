@@ -46,7 +46,7 @@ export function ApprovalSheet() {
   const deny = () => respond('deny');
 
   return (
-    <Sheet open={!!current} onClose={deny} maxHeight="78%" hideHeader>
+    <Sheet open={!!current} onClose={deny} maxHeight="78%" hideHeader dismissible={false}>
       {current ? (
         <View style={{ paddingHorizontal: space.s8, paddingTop: space.s1, paddingBottom: space.s8, gap: space.s6 }}>
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space.s5 }}>

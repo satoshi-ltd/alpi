@@ -22,6 +22,7 @@ export function Field({
   editable = true,
   rows = 3,
   rightSlot,
+  error,
 }) {
   const { colors, fonts, fontSizes, mobile } = useTheme();
   return (
@@ -32,7 +33,7 @@ export function Field({
           backgroundColor: editable ? colors.bgInput : colors.bgPane,
           borderRadius: radii.xl,
           borderWidth: 0.5,
-          borderColor: colors.line2,
+          borderColor: error ? colors.dangerText : colors.line2,
           paddingHorizontal: space.s5,
           paddingVertical: multiline ? 12 : 0,
           minHeight: multiline ? rows * 22 + 24 : mobile.inputH,
@@ -65,7 +66,11 @@ export function Field({
         />
         {rightSlot}
       </View>
-      {helper ? (
+      {error ? (
+        <Text accessibilityRole="alert" style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.dangerText }}>
+          {error}
+        </Text>
+      ) : helper ? (
         <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>
           {helper}
         </Text>

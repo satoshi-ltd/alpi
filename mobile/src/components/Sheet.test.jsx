@@ -61,7 +61,10 @@ vi.mock('react-native-reanimated', () => ({
   },
 }));
 vi.mock('react-native-gesture-handler', () => ({
-  GestureDetector: ({ children }) => React.createElement('div', { 'data-gesture': 'pan' }, children),
+  GestureDetector: ({ children, gesture }) => {
+    if (!gesture) throw new Error('GestureDetector must have a gesture prop provided.');
+    return React.createElement('div', { 'data-gesture': 'pan' }, children);
+  },
 }));
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => h.insets }));
 vi.mock('./Button', () => ({ Button: ({ title }) => React.createElement('button', { type: 'button' }, title) }));
@@ -158,14 +161,15 @@ describe('Sheet wide form', () => {
       alignSelf: 'center',
       width: '100%',
       maxWidth: 560,
-      marginBottom: 24,
     });
+    expect(backdropStyleOf(container).justifyContent).toBe('center');
   });
 
-  it('clears the home indicator when the inset is taller than the floor', () => {
+  it('floats the dialog clear of the home indicator without stacking the inset twice', () => {
     h.insets = { bottom: 34 };
     const { container } = renderInTwoPane();
-    expect(sheetStyleOf(container).marginBottom).toBe(34);
+    expect(sheetStyleOf(container).marginBottom).toBeUndefined();
+    expect(backdropStyleOf(container).justifyContent).toBe('center');
   });
 });
 
@@ -194,6 +198,27 @@ describe('Sheet keyboard', () => {
 
 describe('Sheet dismissal contract', () => {
   const closeButton = () => screen.getByRole('button', { name: 'Close' });
+
+  it('keeps the footer when a primary action is set', () => {
+    renderSheet({
+      primaryAction: [{ id: 'later', label: 'Not now', variant: 'ghost', onPress: () => {} }, { id: 'go', label: 'Enable', onPress: () => {} }],
+      footer: React.createElement('span', null, 'fine print'),
+    });
+    expect(screen.getByRole('button', { name: 'Not now' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Enable' })).toBeTruthy();
+    expect(screen.getByText('fine print')).toBeTruthy();
+  });
+
+  it('a non-dismissible sheet ignores the backdrop but still closes from its icon', () => {
+    const onClose = vi.fn();
+    h.offScreen.length = 0;
+    render(<Sheet open onClose={onClose} title="Allow?" dismissible={false} />);
+    const backdrop = screen.getAllByRole('button')[0];
+    backdrop.click();
+    expect(onClose).not.toHaveBeenCalled();
+    closeButton().click();
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
 
   it('dismisses through an icon, never the word Cancel', () => {
     renderSheet();

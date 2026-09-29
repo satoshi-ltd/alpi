@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, Text, TextInput, View } from 'react-native';
+import { Keyboard, Modal, Pressable, Text, TextInput, View } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -8,7 +8,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { radii, space, lineHeights, typography } from '../theme/tokens';
 
-import { warnFeedback } from '../lib/haptics';
+import { tapFeedback, warnFeedback } from '../lib/haptics';
 import { useTheme } from '../theme/ThemeContext';
 import { Button } from './Button';
 import { useExitSnapshot } from './useExitSnapshot';
@@ -54,10 +54,27 @@ export function TypedConfirm({
   expected,
   confirmLabel = 'Delete',
   onConfirm,
+  tone = 'danger',
+  typed = true,
 }) {
   const { colors, fonts, fontSizes } = useTheme();
   const [value, setValue] = useState('');
-  const ready = value.trim() === String(expected ?? '').trim();
+  const [kbHeight, setKbHeight] = useState(0);
+  const danger = tone === 'danger';
+  const ready = typed ? value.trim() === String(expected ?? '').trim() : true;
+  const confirm = () => {
+    if (!ready) return;
+    setValue('');
+    if (danger) warnFeedback();
+    else tapFeedback();
+    onConfirm?.();
+  };
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', (e) => setKbHeight(e.endCoordinates.height));
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => setKbHeight(0));
+    return () => { showSub.remove(); hideSub.remove(); };
+  }, []);
   const view = useExitSnapshot(open, { title, body, expected, confirmLabel });
 
   // mounted lags `open` by DURATION_OUT so the exit animation can play before <Modal> unmounts.
@@ -95,7 +112,7 @@ export function TypedConfirm({
       supportedOrientations={['portrait', 'landscape-left', 'landscape-right']}
       onRequestClose={onClose}
     >
-      <Animated.View style={[{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' }, backdropStyle]}>
+      <Animated.View style={[{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', paddingBottom: kbHeight }, backdropStyle]}>
         <Pressable
           onPress={onClose}
           style={{
@@ -133,7 +150,7 @@ export function TypedConfirm({
             style={{
               fontFamily: fonts.sans.semibold,
               fontSize: fontSizes[typography.dialogTitle.size],
-              color: colors.dangerText,
+              color: danger ? colors.dangerText : colors.ink,
               letterSpacing: -0.01 * fontSizes[typography.dialogTitle.size],
             }}
           >
@@ -149,7 +166,7 @@ export function TypedConfirm({
           >
             {view.body}
           </Text>
-          <View style={{ gap: space.s3 }}>
+          {typed ? <View style={{ gap: space.s3 }}>
             <Text
               style={{
                 fontFamily: fonts.mono,
@@ -165,6 +182,9 @@ export function TypedConfirm({
               onChangeText={setValue}
               placeholder={String(view.expected ?? '')}
               placeholderTextColor={colors.ink4}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={confirm}
               autoCapitalize="none"
               autoCorrect={false}
               spellCheck={false}
@@ -180,16 +200,12 @@ export function TypedConfirm({
                 color: colors.ink,
               }}
             />
-          </View>
+          </View> : null}
           <View style={{ gap: space.s3, marginTop: space.s1 }}>
             <Button
               title={view.confirmLabel}
-              variant="danger"
-              onPress={() => {
-                setValue('');
-                warnFeedback();
-                onConfirm?.();
-              }}
+              variant={danger ? 'danger' : 'primary'}
+              onPress={confirm}
               disabled={!ready}
               fullWidth
             />

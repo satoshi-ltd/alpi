@@ -1,6 +1,6 @@
 import { contrastText } from "../../../../common/color.mjs";
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
 import { Icon } from '../../components/Icon';
 import { Sheet } from '../../components/Sheet';
@@ -68,9 +68,10 @@ export function ClarificationSheet() {
       onClose={cancel}
       maxHeight="78%"
       hideHeader
+      dismissible={false}
     >
       {current ? (
-        <View style={{ paddingHorizontal: space.s8, paddingTop: space.s1, paddingBottom: space.s8, gap: space.s6 }}>
+        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: space.s8, paddingTop: space.s1, paddingBottom: space.s8, gap: space.s6 }}>
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space.s5 }}>
             <View style={{ flex: 1, gap: space.s2 }}>
               <Text
@@ -143,7 +144,7 @@ export function ClarificationSheet() {
               {error}
             </Text>
           ) : null}
-        </View>
+        </ScrollView>
       ) : null}
     </Sheet>
   );

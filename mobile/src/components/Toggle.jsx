@@ -4,7 +4,7 @@ import { Switch } from 'react-native';
 import { tapFeedback } from '../lib/haptics';
 import { useTheme } from '../theme/ThemeContext';
 
-// The thumb follows the finger at once; the prop catches up when the daemon round-trip lands.
+// The thumb follows the finger at once; onChange returning false, or rejecting, snaps it back.
 export function Toggle({ on, onChange, disabled = false, label, color }) {
   const { colors } = useTheme();
   const [shown, setShown] = useState(!!on);
@@ -14,7 +14,16 @@ export function Toggle({ on, onChange, disabled = false, label, color }) {
   const flip = (next) => {
     setShown(next);
     tapFeedback();
-    onChange?.(next);
+    const revert = () => setShown(!next);
+    let result;
+    try {
+      result = onChange?.(next);
+    } catch {
+      revert();
+      return;
+    }
+    if (result === false) revert();
+    else if (result && typeof result.then === 'function') result.then((ok) => { if (ok === false) revert(); }, revert);
   };
   return (
     <Switch

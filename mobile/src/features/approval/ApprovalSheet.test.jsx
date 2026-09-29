@@ -21,7 +21,7 @@ vi.mock('react-native', () => {
 
 vi.mock('../../components/Diamond', () => ({ Diamond: () => React.createElement('span', { 'data-diamond': 'true' }) }));
 vi.mock('../../components/Sheet', () => ({
-  Sheet: ({ open, children }) => (open ? React.createElement('div', { 'data-sheet': 'true' }, children) : null),
+  Sheet: ({ open, children, dismissible }) => (open ? React.createElement('div', { 'data-sheet': 'true', 'data-dismissible': String(dismissible ?? true) }, children) : null),
 }));
 vi.mock('../../theme/ThemeContext', async () => {
   const tokens = await import('../../theme/tokens');
@@ -62,5 +62,10 @@ describe('ApprovalSheet dismissal contract', () => {
     expect(screen.getByText('Allow once')).toBeTruthy();
     expect(screen.getByText('Allow this session')).toBeTruthy();
     expect(screen.getByText('Always allow')).toBeTruthy();
+  });
+
+  it('cannot be swiped or tapped away: a stray gesture is not a denial', () => {
+    const { container } = render(<ApprovalSheet />);
+    expect(container.querySelector('[data-sheet]').getAttribute('data-dismissible')).toBe('false');
   });
 });

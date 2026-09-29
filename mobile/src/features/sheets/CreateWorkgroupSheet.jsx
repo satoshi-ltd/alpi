@@ -237,6 +237,7 @@ export function CreateWorkgroupSheet({ open, onClose }) {
           icon: <Diamond color={p.accent ?? accentForProfile(p.name)} size="md" />,
           label: `@${p.name}`,
           detail: p.model || undefined,
+          selected: hub === p.name,
           onPress: () => setHub(p.name),
         }))}
       />

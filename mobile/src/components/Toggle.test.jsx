@@ -1,6 +1,6 @@
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 afterEach(cleanup);
 
@@ -55,5 +55,19 @@ describe('Toggle', () => {
     fireEvent.click(sw);
     expect(onChange).not.toHaveBeenCalled();
     expect(sw.getAttribute('data-track-on')).toBe('#3d7ea6');
+  });
+
+  it('snaps back when the change is refused or the daemon call fails', async () => {
+    render(<Toggle on={false} label="Enabled" onChange={() => false} />);
+    const sw = screen.getByLabelText('Enabled');
+    fireEvent.click(sw);
+    expect(sw.getAttribute('aria-checked')).toBe('false');
+
+    cleanup();
+    render(<Toggle on={false} label="Paused" onChange={() => Promise.reject(new Error('nope'))} />);
+    const paused = screen.getByLabelText('Paused');
+    fireEvent.click(paused);
+    expect(paused.getAttribute('aria-checked')).toBe('true');
+    await waitFor(() => expect(paused.getAttribute('aria-checked')).toBe('false'));
   });
 });

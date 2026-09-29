@@ -89,7 +89,7 @@ export function NewConnectionSheet({ open, onClose, onCreated }) {
       onClose={onClose}
       title="New connection"
       subtitle="one identity · several devices"
-      primaryAction={{ label: busy ? 'Creating…' : 'Create + pair', onPress: create, disabled: !ready }}
+      primaryAction={{ label: 'Create + pair', onPress: create, disabled: !ready, loading: busy }}
     >
       <ScrollView contentContainerStyle={{ paddingHorizontal: space.s8, paddingVertical: space.s5, gap: space.s7 }} keyboardShouldPersistTaps="handled">
         <Field label="Label" value={label} onChangeText={setLabel} placeholder="Javi, Support, agora-web…" autoCapitalize="none" autoCorrect={false} />

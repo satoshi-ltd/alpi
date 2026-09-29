@@ -165,6 +165,7 @@ function WorkgroupSettings() {
       refresh();
     } catch (e) {
       toast({ title: 'auto-read failed', message: String(e) });
+      throw e;
     }
   };
 

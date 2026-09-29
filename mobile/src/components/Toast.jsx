@@ -96,12 +96,14 @@ function ToastView({ toast, slide, fade }) {
         <SafeAreaView
           pointerEvents="box-none"
           edges={['top']}
-          style={{ position: 'absolute', left: 0, right: 0, top: 0 }}
+          style={{ position: 'absolute', left: 0, right: 0, top: 0, alignItems: 'center', paddingHorizontal: space.s7 }}
         >
           <Animated.View
             pointerEvents="none"
             style={{
-              margin: space.s7,
+              marginVertical: space.s7,
+              width: '100%',
+              maxWidth: 560,
               padding: space.s6,
               backgroundColor: colors.bgPane,
               borderRadius: radii.xl,

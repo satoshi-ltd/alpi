@@ -1,8 +1,8 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { Sheet } from '../../components/Sheet';
 import { useTheme } from '../../theme/ThemeContext';
-import { radii, space } from '../../theme/tokens';
+import { space } from '../../theme/tokens';
 
 const STYLES = StyleSheet.create({
   body: {
@@ -10,11 +10,6 @@ const STYLES = StyleSheet.create({
     paddingTop: space.s3,
     paddingBottom: space.s5,
     gap: space.s5,
-  },
-  decline: {
-    paddingVertical: space.s6,
-    alignItems: 'center',
-    borderRadius: radii.lg,
   },
 });
 
@@ -27,14 +22,11 @@ export function NotificationPrimer({ open, onEnable, onDecline }) {
       onClose={onDecline}
       title="Stay in the loop"
       subtitle="notifications · straight from your daemon"
-      primaryAction={{ label: 'Enable notifications', onPress: onEnable }}
-      footer={(
-        <Pressable accessibilityLabel="Not now" onPress={onDecline} style={STYLES.decline}>
-          <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.md, color: colors.ink2 }}>
-            Not now
-          </Text>
-        </Pressable>
-      )}
+      dismissible={false}
+      primaryAction={[
+        { id: 'later', label: 'Not now', variant: 'ghost', onPress: onDecline },
+        { id: 'enable', label: 'Enable notifications', onPress: onEnable },
+      ]}
     >
       <View style={STYLES.body}>
         <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.md, color: colors.ink2 }}>

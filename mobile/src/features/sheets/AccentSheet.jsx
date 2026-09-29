@@ -11,19 +11,25 @@ import { useTheme } from '../../theme/ThemeContext';
 export function AccentSheet({ open, onClose, profileName, initialValue, onSave }) {
   const { colors, fonts, fontSizes } = useTheme();
   const toast = useToast();
-  const [picked, setPicked] = useState(initialValue ?? ACCENTS[2][1]);
+  const [picked, setPicked] = useState(String(initialValue ?? ACCENTS[2][1]));
+  const [saving, setSaving] = useState(false);
+  const error = /^#[0-9a-f]{6}$/i.test(picked.trim()) ? null : 'Use a 6-digit #hex colour';
 
   useEffect(() => {
-    if (open && initialValue) setPicked(initialValue);
+    if (open && initialValue) setPicked(String(initialValue));
   }, [open, initialValue]);
 
   const handleSave = async () => {
+    if (error) return;
+    setSaving(true);
     try {
-      await onSave?.(picked);
+      await onSave?.(picked.trim());
       toast({ title: 'Accent saved', duration: 1400 });
       onClose?.();
     } catch (e) {
       toast({ title: 'Save failed', message: String(e), duration: 2400 });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -33,7 +39,7 @@ export function AccentSheet({ open, onClose, profileName, initialValue, onSave }
       onClose={onClose}
       title="Accent"
       subtitle={`@${profileName ?? ''} · identity color`}
-      primaryAction={{ label: 'Save accent', onPress: handleSave }}
+      primaryAction={{ label: 'Save accent', onPress: handleSave, disabled: !!error, loading: saving }}
     >
       <View
         style={{
@@ -95,6 +101,7 @@ export function AccentSheet({ open, onClose, profileName, initialValue, onSave }
           mono
           autoCapitalize="none"
           autoCorrect={false}
+          error={error}
         />
       </View>
     </Sheet>

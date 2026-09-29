@@ -16,7 +16,8 @@ vi.mock('react-native', () => {
     visible
       ? React.createElement('div', { 'data-orientations': (supportedOrientations ?? []).join(',') }, children)
       : null;
-  return { Modal, Pressable, Text, TextInput, View };
+  const Keyboard = { addListener: () => ({ remove() {} }) };
+  return { Keyboard, Modal, Pressable, Text, TextInput, View };
 });
 
 vi.mock('react-native-reanimated', () => ({
@@ -34,7 +35,7 @@ vi.mock('react-native-reanimated', () => ({
 }));
 
 vi.mock('../lib/haptics', () => ({ tapFeedback: vi.fn(), warnFeedback: vi.fn() }));
-vi.mock('./Button', () => ({ Button: ({ title }) => React.createElement('button', { type: 'button' }, title) }));
+vi.mock('./Button', () => ({ Button: ({ title, disabled, variant }) => React.createElement('button', { type: 'button', disabled, 'data-variant': variant ?? 'primary' }, title) }));
 
 vi.mock('../theme/ThemeContext', () => ({
   useTheme: () => ({
@@ -104,5 +105,13 @@ describe('TypedConfirm exit', () => {
     expect([...container.querySelectorAll('[data-pe]')].map((n) => n.getAttribute('data-pe'))).toContain('auto');
     rerender(<TypedConfirm open={false} onClose={() => {}} title="Delete profile" body="Permanent." expected="roma" />);
     expect([...container.querySelectorAll('[data-pe]')].map((n) => n.getAttribute('data-pe'))).toContain('none');
+  });
+
+  it('offers a plain neutral confirm for reversible actions: no typing, no red', () => {
+    render(<TypedConfirm open onClose={() => {}} title="Promote to admin" body="ok" confirmLabel="Promote" tone="neutral" typed={false} onConfirm={() => {}} />);
+    expect(screen.queryByText(/TO CONFIRM/)).toBeNull();
+    const btn = screen.getByText('Promote');
+    expect(btn.disabled).toBe(false);
+    expect(btn.getAttribute('data-variant')).toBe('primary');
   });
 });

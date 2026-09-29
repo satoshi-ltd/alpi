@@ -21,8 +21,9 @@ export function ActionSheet({ open, onClose, title, subtitle, description, actio
   const { twoPane } = usePane();
   const { gesture, sheetStyle, backdropStyle, mounted } = useSheetGesture(open, onClose, height + 100);
   const maxListHeight = height * 0.6;
-  const dialog = twoPane ? { ...sheetStyles.dialog, marginBottom: Math.max(insets.bottom, 24) } : null;
+  const dialog = twoPane ? sheetStyles.dialog : null;
   const view = useExitSnapshot(open, { title, subtitle, description, actions });
+  const pickable = view.actions.some((a) => 'selected' in a);
 
   return (
     <Modal
@@ -34,9 +35,9 @@ export function ActionSheet({ open, onClose, title, subtitle, description, actio
     >
       <Animated.View
         pointerEvents={open ? 'auto' : 'none'}
-        style={[{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' }, backdropStyle]}
+        style={[{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: twoPane ? 'center' : 'flex-end' }, backdropStyle]}
       >
-        <Pressable style={{ flex: 1 }} onPress={onClose} />
+        <Pressable style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} onPress={onClose} />
         <Animated.View
           style={[
             {
@@ -102,7 +103,6 @@ export function ActionSheet({ open, onClose, title, subtitle, description, actio
                 <Pressable
                   key={a.id ?? i}
                   accessibilityRole="button"
-                  accessibilityState={{ disabled: !!a.disabled }}
                   disabled={!!a.disabled}
                   onPress={() => {
                     if (a.disabled) return;
@@ -110,16 +110,22 @@ export function ActionSheet({ open, onClose, title, subtitle, description, actio
                     a.onPress?.();
                   }}
                   android_ripple={{ color: colors.selected }}
+                  accessibilityState={{ disabled: !!a.disabled, selected: !!a.selected }}
                   style={({ pressed }) => ({
                     flexDirection: 'row',
                     alignItems: 'center',
                     gap: space.s6,
                     paddingHorizontal: space.s8,
                     paddingVertical: space.s6,
-                    backgroundColor: pressed ? colors.selected : 'transparent',
+                    backgroundColor: pressed || a.selected ? colors.selected : 'transparent',
                     opacity: a.disabled ? alpha.disabled : 1,
                   })}
                 >
+                  {pickable ? (
+                    <View style={{ width: 14, alignItems: 'center' }}>
+                      {a.selected ? <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: colors.accent }} /> : null}
+                    </View>
+                  ) : null}
                   {a.icon ? <View style={{ width: 24 }}>{a.icon}</View> : null}
                   <Text
                     style={{
@@ -140,7 +146,7 @@ export function ActionSheet({ open, onClose, title, subtitle, description, actio
               );
             })}
           </ScrollView>
-          <View style={{ paddingBottom: insets.bottom }} />
+          <View style={{ paddingBottom: twoPane ? 0 : insets.bottom }} />
         </Animated.View>
       </Animated.View>
     </Modal>

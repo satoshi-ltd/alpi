@@ -203,9 +203,11 @@ export default function ProfileSettings() {
 
   // Field keys are dotted paths into user.yaml (e.g. `tui.accent`); voice uses a dedicated RPC.
   const saveField = (key, value) =>
-    call('host.config.set_field', { profile: id, key, value })
-      .then(() => refreshSettings())
-      .catch((e) => toast({ title: 'Save failed', message: String(e), duration: 3200 }));
+    call('host.config.set_field', { profile: id, key, value }).then(() => refreshSettings());
+  const failing = (title) => (e) => {
+    toast({ title, message: String(e), duration: 3200 });
+    throw e;
+  };
   const saveOrUnsetField = (key, value) =>
     (String(value ?? '').trim()
       ? call('host.config.set_field', { profile: id, key, value: String(value).trim() })
@@ -215,7 +217,7 @@ export default function ProfileSettings() {
   const setVoice = (voiceId) =>
     call('host.voice.set_voice', { profile: id, voice_id: voiceId }).then(() => refreshSettings());
   const toggleAutoRead = () =>
-    call('host.voice.set_auto_read', { profile: id, enabled: !profile.voice_auto_read }).then(() => refreshSettings());
+    call('host.voice.set_auto_read', { profile: id, enabled: !profile.voice_auto_read }).then(() => refreshSettings()).catch(failing('Auto-read failed'));
 
   // host.sandbox.network requires sandbox on (daemon returns -32008 otherwise).
   const toggleSandbox = async () => {
@@ -224,6 +226,7 @@ export default function ProfileSettings() {
       refreshSettings();
     } catch (e) {
       toast({ title: 'Sandbox failed', message: String(e) });
+      throw e;
     }
   };
 
@@ -237,6 +240,7 @@ export default function ProfileSettings() {
       refreshSettings();
     } catch (e) {
       toast({ title: 'Network failed', message: String(e) });
+      throw e;
     }
   };
 
@@ -314,7 +318,7 @@ export default function ProfileSettings() {
               on={!!profile.paused}
               label="Paused"
               color={accent}
-              onChange={(next) => saveField('paused', next ? 'true' : 'false')}
+              onChange={(next) => saveField('paused', next ? 'true' : 'false').catch(failing('Save failed'))}
             />
           }
           chevron={false}
@@ -793,7 +797,7 @@ export default function ProfileSettings() {
         onClose={() => setSheet(null)}
         profileName={profile.name}
         initialValue={profile.budget_daily_usd}
-        onSave={(value) => saveField('budget.daily_usd', value)}
+        onSave={(value) => saveOrUnsetField('budget.daily_usd', value)}
       />
       <WorkspaceSheet
         open={sheet === 'workspace'}
@@ -825,6 +829,8 @@ export default function ProfileSettings() {
         initialValue={profile.max_active_workgroups ? String(profile.max_active_workgroups) : ''}
         placeholder="unlimited"
         maxLength={3}
+        allowEmpty
+        keyboardType="number-pad"
         confirmLabel="Save"
         onSubmit={(value) => {
           const n = Number(String(value ?? '').trim());
@@ -860,13 +866,9 @@ export default function ProfileSettings() {
         open={confirmRestart}
         onClose={() => setConfirmRestart(false)}
         title="Restart the daemon"
-        body={
-          <>
-            Every connected client briefly loses its socket. Agent loops mid-turn stop and
-            resume on the next request. <Bold>Type restart to confirm.</Bold>
-          </>
-        }
-        expected="restart"
+        body="Every connected client briefly loses its socket. Agent loops mid-turn stop and resume on the next request."
+        tone="neutral"
+        typed={false}
         confirmLabel="Restart"
         onConfirm={handleRestart}
       />
@@ -875,13 +877,9 @@ export default function ProfileSettings() {
         open={confirmUpdate}
         onClose={() => setConfirmUpdate(false)}
         title="Update the daemon"
-        body={
-          <>
-            Installs the newest alpi release and restarts the daemon. Every connected client
-            reconnects on its own. <Bold>Type update to confirm.</Bold>
-          </>
-        }
-        expected="update"
+        body="Installs the newest alpi release and restarts the daemon. Every connected client reconnects on its own."
+        tone="neutral"
+        typed={false}
         confirmLabel="Update"
         onConfirm={handleUpdate}
       />

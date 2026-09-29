@@ -21,19 +21,32 @@ import {
 } from '../../lib/voicePreview';
 import { useTheme } from '../../theme/ThemeContext';
 
+export function budgetError(value) {
+  const text = String(value ?? '').trim();
+  if (!text) return null;
+  const n = Number(text);
+  return Number.isFinite(n) && n >= 0 ? null : 'Enter a number, or leave it empty for no cap';
+}
+
 export function BudgetSheet({ open, onClose, profileName, initialValue, onSave }) {
   const toast = useToast();
-  const [value, setValue] = useState(initialValue ?? '');
+  const [value, setValue] = useState(initialValue != null ? String(initialValue) : '');
+  const [saving, setSaving] = useState(false);
   useEffect(() => {
     if (open) setValue(initialValue != null ? String(initialValue) : '');
   }, [open, initialValue]);
+  const error = budgetError(value);
   const save = async () => {
+    if (error) return;
+    setSaving(true);
     try {
-      await onSave?.(value);
-      toast({ title: 'Budget saved', duration: 1400 });
+      await onSave?.(value.trim());
+      toast({ title: value.trim() ? 'Budget saved' : 'Budget cap removed', duration: 1400 });
       onClose?.();
     } catch (e) {
       toast({ title: 'Save failed', message: String(e), duration: 2400 });
+    } finally {
+      setSaving(false);
     }
   };
   return (
@@ -42,10 +55,10 @@ export function BudgetSheet({ open, onClose, profileName, initialValue, onSave }
       onClose={onClose}
       title="Daily budget"
       subtitle={`@${profileName ?? ''} · per-day spend cap`}
-      primaryAction={{ label: 'Save cap', onPress: save, disabled: !value }}
+      primaryAction={{ label: value.trim() ? 'Save cap' : 'Remove cap', onPress: save, disabled: !!error, loading: saving }}
     >
       <View style={{ padding: space.s8, gap: space.s7 }}>
-        <Field label="USD per day" value={value} onChangeText={setValue} keyboardType="decimal-pad" mono helper="Cost stops the agent at this number" />
+        <Field label="USD per day" value={value} onChangeText={setValue} keyboardType="decimal-pad" mono helper="Cost stops the agent at this number · empty = no cap" error={error} />
       </View>
     </Sheet>
   );
@@ -61,14 +74,18 @@ const REASONING_OPTIONS = [
 export function ReasoningEffortSheet({ open, onClose, initialValue, onSave }) {
   const toast = useToast();
   const [value, setValue] = useState(initialValue ?? '');
+  const [saving, setSaving] = useState(false);
   useEffect(() => { if (open) setValue(initialValue ?? ''); }, [open, initialValue]);
   const save = async () => {
+    setSaving(true);
     try {
       await onSave?.(value);
       toast({ title: 'Reasoning saved', duration: 1400 });
       onClose?.();
     } catch (e) {
       toast({ title: 'Save failed', message: String(e), duration: 2400 });
+    } finally {
+      setSaving(false);
     }
   };
   return (
@@ -77,7 +94,7 @@ export function ReasoningEffortSheet({ open, onClose, initialValue, onSave }) {
       onClose={onClose}
       title="Reasoning effort"
       subtitle="how hard the model thinks before answering"
-      primaryAction={{ label: 'Save', onPress: save }}
+      primaryAction={{ label: 'Save', onPress: save, loading: saving }}
     >
       <View style={{ paddingVertical: space.s5 }}>
         {REASONING_OPTIONS.map((opt, i) => (
@@ -111,13 +128,17 @@ export function WorkspaceSheet({ open, onClose, profileName, initialValue, onSav
     }));
     prevInitRef.current = newInit;
   }, [open, initialValue]);
+  const [saving, setSaving] = useState(false);
   const save = async () => {
+    setSaving(true);
     try {
       await onSave?.(value);
       toast({ title: 'Workspace saved', duration: 1400 });
       onClose?.();
     } catch (e) {
       toast({ title: 'Save failed', message: String(e), duration: 2400 });
+    } finally {
+      setSaving(false);
     }
   };
   return (
@@ -126,7 +147,7 @@ export function WorkspaceSheet({ open, onClose, profileName, initialValue, onSav
       onClose={onClose}
       title="Workspace"
       subtitle={`@${profileName ?? ''} · root path`}
-      primaryAction={{ label: 'Save workspace', onPress: save }}
+      primaryAction={{ label: 'Save workspace', onPress: save, loading: saving }}
     >
       <View style={{ padding: space.s8, gap: space.s7 }}>
         <Field
@@ -177,14 +198,18 @@ export function ModelSheet({
     if (open) setPicked(initialValue ?? '');
   }, [open, initialValue]);
 
+  const [saving, setSaving] = useState(false);
   const save = async () => {
     if (!picked && !allowClear) return;
+    setSaving(true);
     try {
       await onSave?.(picked);
       toast({ title: `${title} saved`, message: picked || 'main model' });
       onClose?.();
     } catch (e) {
       toast({ title: 'Save failed', message: String(e) });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -245,6 +270,7 @@ export function ModelSheet({
         label: allowClear ? 'Save' : 'Set default',
         onPress: save,
         disabled: allowClear ? false : !picked,
+        loading: saving,
       }}
     >
       <ScrollView contentContainerStyle={{ paddingBottom: space.s7 }}>
@@ -491,13 +517,17 @@ export function VoiceSheet({ open, onClose, profileName, accent, initialValue, o
     return () => stopVoicePreview();
   }, [open]);
 
+  const [saving, setSaving] = useState(false);
   const save = async () => {
+    setSaving(true);
     try {
       await onSave?.(picked);
       toast({ title: 'Voice saved' });
       onClose?.();
     } catch (e) {
       toast({ title: 'Save failed', message: String(e) });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -513,7 +543,7 @@ export function VoiceSheet({ open, onClose, profileName, accent, initialValue, o
       onClose={onClose}
       title="Voice"
       subtitle="Voice used for read-aloud"
-      primaryAction={{ label: 'Save', onPress: save, disabled: !picked }}
+      primaryAction={{ label: 'Save', onPress: save, disabled: !picked, loading: saving }}
     >
       <ScrollView contentContainerStyle={{ paddingBottom: space.s7 }}>
         {VOICE_SHORTLIST.map((v, i) => {
