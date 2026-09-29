@@ -21,6 +21,7 @@ import { createSwrCache } from "../../lib/swr-cache.js";
 import Usage from "./Usage.jsx";
 import styles from "./Settings.module.css";
 import { shortPubkey } from "../../lib/pubkey.js";
+import { emptyLine } from "../../../../common/emptyCopy.mjs";
 
 function renderMemberRow(m, profiles, workgroup, hubPubkey, onRemove) {
   const local = profiles.find((p) => p.pubkey_b64 === m.pubkey);
@@ -505,7 +506,7 @@ export default function WorkgroupDetail({
               <Skeleton width="180px" />
             </>
           ) : members.filter((m) => m.joined).length === 0 ? (
-            <span className={styles.muted}>none</span>
+            <span className={styles.muted}>{emptyLine("members")}</span>
           ) : (
             members
               .filter((m) => m.joined)

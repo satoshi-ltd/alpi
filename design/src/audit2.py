@@ -35,7 +35,7 @@ STATES = [
     (5, "Connections", "no zero state; stuck on “Loading connections…” after an error; no refresh", "“No paired apps yet” and pull-to-refresh; the error is never shown", "error with Retry, a zero state and a refresh button on desktop; the error on mobile", "both", "done 0.6.9 / 0.5.5"),
     (6, "Notifications", "“Inbox zero” while still syncing; unreachable daemons are dropped silently", "spinner while loading; unreachable copy with pull to retry", "hide the empty state while loading; unreachable copy on desktop", "desktop", "partial 0.6.9"),
     (7, "Failed loads shown as “none”", "email, storage, workgroup members", "email, memory, MCP, skills, tools, connections, usage", "an inline error row with Retry", "both", "done 0.6.9 / 0.5.5 (email, memory)"),
-    (8, "Empty copy", "lowercase “none” / “nothing yet”", "sentence case with a hint", "one voice on both: sentence case with a hint", "both", "proposed"),
+    (8, "Empty copy", "lowercase “none” / “nothing yet”", "sentence case with a hint", "one voice on both: sentence case with a hint", "both", "done 0.6.10 / 0.5.7"),
     (9, "Crash screen", "root ErrorBoundary: “Something broke on screen”, Reload", "none", "expo-router ErrorBoundary with the desktop copy", "mobile", "done 0.5.5"),
     (10, "Refresh", "no refresh in settings, connections, workgroups or sessions; onSettingsRefresh is unwired", "a failed pull is silent; MCP, skills, tools, schedule and email cannot refresh; the chat toast says “pull to refresh”", "refresh buttons on desktop lists; pull-to-refresh with a failure toast on mobile", "both", "done 0.6.9 / 0.5.5"),
 ]
@@ -73,7 +73,7 @@ def audit2_board():
     body = f"""<div style="padding: 40px 48px; display: flex; flex-direction: column; gap: 8px; height: 100%; box-sizing: border-box; overflow: hidden">
 <span style="font-family: {MONO}; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: {INK3}">Round 2 · 2026-09-29</span>
 <span style="font-size: 30px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15">Overlays and view states</span>
-<span style="font-size: 13px; line-height: 1.5; color: {INK3}; max-width: 900px">Three read-only audits over desktop 0.6.5 and mobile 0.5.3: modals and dropdowns, sheets and pickers, and the empty / loading / error / offline states of every view. The status column tracks what each cycle shipped; desktop 0.6.6 and mobile 0.5.4 closed the overlay rows; 0.6.7 and 0.6.8 are hotfixes the creator reported on the way; desktop 0.6.9 and mobile 0.5.5 closed the view-state rows; the empty-copy voice (row 8) is the one item still open. Badges on the overlay artboards point at the overlay rows.</span>
+<span style="font-size: 13px; line-height: 1.5; color: {INK3}; max-width: 900px">Three read-only audits over desktop 0.6.5 and mobile 0.5.3: modals and dropdowns, sheets and pickers, and the empty / loading / error / offline states of every view. The status column tracks what each cycle shipped; desktop 0.6.6 and mobile 0.5.4 closed the overlay rows; 0.6.7 and 0.6.8 are hotfixes the creator reported on the way; desktop 0.6.9 and mobile 0.5.5 closed the view-state rows; the empty-copy voice (row 8) followed in 0.6.10 / 0.5.7 through common/emptyCopy.mjs. Badges on the overlay artboards point at the overlay rows.</span>
 {h2("Bugs, verified in the code", "Each one reproduces from the lines cited; none needs a device to confirm.")}
 {bugs}
 {h2("Overlays: desktop against mobile", "Where the same interaction is built two ways, and the one way to keep.")}

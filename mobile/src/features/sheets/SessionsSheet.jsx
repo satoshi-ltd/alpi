@@ -8,6 +8,7 @@ import { Sheet } from '../../components/Sheet';
 import { useSessionsList } from '../../hooks/useDaemonData';
 import { useTheme } from '../../theme/ThemeContext';
 import { SessionsSkeleton } from './SessionsSkeleton';
+import { EMPTY } from '../../../../common/emptyCopy.mjs';
 
 const DAY_MS = 86400000;
 
@@ -77,7 +78,7 @@ export function SessionsSheet({ open, onClose, profile, accent, activeSessionId,
         {sessions.loading && rows.length === 0 ? (
           <SessionsSkeleton />
         ) : rows.length === 0 ? (
-          <Row label="No previous sessions" helper="start one to fill the list" chevron={false} />
+          <Row label={EMPTY.sessions.title} helper={EMPTY.sessions.hint} chevron={false} />
         ) : (
           buckets.map((b) => (
             <View key={b}>

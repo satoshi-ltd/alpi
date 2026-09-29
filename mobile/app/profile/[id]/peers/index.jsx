@@ -16,6 +16,7 @@ import { useProfile } from '../../../../src/hooks/useSubject';
 import { useEndpoint } from '../../../../src/lib/EndpointContext';
 import { accentForProfile } from '../../../../src/theme/accents';
 import { useTheme } from '../../../../src/theme/ThemeContext';
+import { EMPTY } from '../../../../../common/emptyCopy.mjs';
 
 function shortPubkey(pk) {
   if (!pk) return '—';
@@ -133,7 +134,7 @@ export default function PeersList() {
             <ActivityIndicator color={colors.ink3} />
           </View>
         ) : peers.length === 0 ? (
-          <Row label="No peers yet" helper="tap + Add to trust another alpi" chevron={false} />
+          <Row label={EMPTY.peers.title} helper={EMPTY.peers.hint} chevron={false} />
         ) : (
           peers.map((p, i) => (
             <View key={p.id ?? i}>

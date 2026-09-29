@@ -16,6 +16,7 @@ import {
 import { alpha, lineHeights, space, tracking } from '../theme/tokens';
 import { Eyebrow } from './Eyebrow';
 import { useTheme } from '../theme/ThemeContext';
+import { usageRangeEmpty } from '../../../common/emptyCopy.mjs';
 
 export const CHART_H = 104;
 const BAR_MAX_W = 20;
@@ -130,7 +131,7 @@ export function UsageChart({ days = [], accent, capLine = null, total30 = null, 
           accessibilityLabel="No usage"
           style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4, marginTop: space.s6 }}
         >
-          {`no usage in the last ${days.length} days`}
+          {usageRangeEmpty(days.length)}
         </Text>
       ) : null}
       {empty ? null : (

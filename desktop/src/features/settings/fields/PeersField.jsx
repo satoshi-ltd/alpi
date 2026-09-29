@@ -14,6 +14,7 @@ import { ConfirmDeleteAction, DialogFooter } from "../../../primitives/index.js"
 import { ALLOW_METHODS, isValidEd25519Pubkey } from "../util.js";
 import styles from "../Settings.module.css";
 import { shortPubkey } from "../../../lib/pubkey.js";
+import { emptyLine } from "../../../../../common/emptyCopy.mjs";
 
 function renderPeerStatusChip(status, reason) {
   if (status === "on") {
@@ -174,7 +175,7 @@ export function PeersField({ profile, profiles, onSaved, onRefresh, onLoadingCha
   return (
     <span ref={wrapRef} className={styles.inlineRow}>
       {peers.length === 0 ? (
-        <span className={styles.muted}>none</span>
+        <span className={styles.muted}>{emptyLine("peers")}</span>
       ) : (
         <span ref={detailAnchorRef} className={styles.popoverAnchor}>
           <Dropdown

@@ -167,7 +167,7 @@ describe("Usage empty range", () => {
       { iso: "2026-07-14", label: "T", day: "7/14", tokIn: 0, tokOut: 0, cost: 0, today: true },
     ];
     const { container } = render(<Usage days={days} />);
-    expect(screen.getByText("no usage in the last 2 days")).toBeInTheDocument();
+    expect(screen.getByText("No usage in the last 2 days")).toBeInTheDocument();
     expect(container.querySelectorAll("[data-day]")).toHaveLength(0);
     expect(screen.queryByText(/day total/)).toBeNull();
     expect(screen.getByText("Avg / day")).toBeInTheDocument();

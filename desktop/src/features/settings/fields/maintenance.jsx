@@ -9,6 +9,7 @@ import { ConfirmDelete, LoadFailed } from "../../../primitives/index.js";
 import { useNotify } from "../../../primitives/Notification.jsx";
 import { STORAGE_GROUPS, RECLAIM_NOTES, formatBytes } from "../util.js";
 import styles from "../Settings.module.css";
+import { emptyLine } from "../../../../../common/emptyCopy.mjs";
 
 function storageCacheKey(connectionId, profileName) {
   return `${connectionId || "local"}|${profileName}`;
@@ -141,7 +142,7 @@ export function StorageField({ profile, activeConnection, prefetched, onLoadingC
     return <Row label="storage"><LoadFailed inline label="storage" onRetry={refreshUsage} /></Row>;
   }
   if (groups.length === 0) {
-    return <Row label="storage"><span className={styles.muted}>nothing yet</span></Row>;
+    return <Row label="storage"><span className={styles.muted}>{emptyLine("storage")}</span></Row>;
   }
 
   return (

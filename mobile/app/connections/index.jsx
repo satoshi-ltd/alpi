@@ -21,6 +21,7 @@ import { usePane } from '../../src/nav/PaneContext';
 import { SettingsSurface } from '../../src/nav/SettingsSurface';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { LoadFailed } from '../../src/components/LoadFailed';
+import { EMPTY } from '../../../common/emptyCopy.mjs';
 
 const WIDE_BODY_MAX_W = 968;
 
@@ -88,8 +89,8 @@ function ConnectionsScreen() {
           <SectionHeader first={!host} kicker={`${paired.length} paired`}>Connections</SectionHeader>
           {paired.length === 0 ? (
             <Row
-              label="No paired apps yet"
-              helper="create a connection and share its pairing link with a phone or desktop"
+              label={EMPTY.connections.title}
+              helper={EMPTY.connections.hint}
               chevron={false}
             />
           ) : (

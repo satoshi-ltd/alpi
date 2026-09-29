@@ -16,6 +16,7 @@ import { useProfile } from '../../../../src/hooks/useSubject';
 import { useEndpoint } from '../../../../src/lib/EndpointContext';
 import { useTheme } from '../../../../src/theme/ThemeContext';
 import { usePullRefresh } from '../../../../src/hooks/usePullRefresh';
+import { EMPTY } from '../../../../../common/emptyCopy.mjs';
 
 export default function McpList() {
   const { id } = useLocalSearchParams();
@@ -70,7 +71,7 @@ export default function McpList() {
             <ActivityIndicator color={colors.ink3} />
           </View>
         ) : servers.length === 0 ? (
-          <Row label="No MCP servers configured" helper="tap + Add to connect one" chevron={false} />
+          <Row label={EMPTY.mcp.title} helper={EMPTY.mcp.hint} chevron={false} />
         ) : (
           servers.map((s, i) => {
             const argLine = (s.args ?? []).join(' ');
@@ -181,7 +182,7 @@ export default function McpList() {
                 paddingVertical: space.s3,
               }}
             >
-              no tools
+              {EMPTY.mcpTools.title}
             </Text>
           ) : (
             tools.map((t) => (

@@ -17,6 +17,7 @@ import { useEventEffect } from '../../../../src/hooks/useEvents';
 import { useEndpoint } from '../../../../src/lib/EndpointContext';
 import { scheduleSummary, formatLastRun } from '../../../../src/lib/scheduleFormat';
 import { useTheme } from '../../../../src/theme/ThemeContext';
+import { EMPTY } from '../../../../../common/emptyCopy.mjs';
 
 export default function ScheduleList() {
   const { id } = useLocalSearchParams();
@@ -93,7 +94,7 @@ export default function ScheduleList() {
             </Text>
           </View>
         ) : jobs.length === 0 ? (
-          <Row label="No scheduled jobs" helper="ask the agent to set one up" chevron={false} />
+          <Row label={EMPTY.schedule.title} helper={EMPTY.schedule.hint} chevron={false} />
         ) : (
           jobs.map((j, i) => {
             const summary = scheduleSummary(j);

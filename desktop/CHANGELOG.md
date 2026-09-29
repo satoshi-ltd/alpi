@@ -11,6 +11,14 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.6.10 — 2026-09-29 — empty says the same thing everywhere
+
+- **Empty settings speak in one voice with the phone.** "none" and "nothing yet" become a short
+  sentence with a hint (No email accounts yet · connect one so the agent can read and send mail),
+  and the wording matches the mobile app word for word.
+
+  Requires alpi 0.15.20, as v0.6.4.
+
 ## v0.6.9 — 2026-09-29 — every view says what happened
 
 - **A conversation or workgroup that fails to load says so**, with the reason and a Retry, instead

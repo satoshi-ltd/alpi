@@ -48,6 +48,7 @@ import { SettingsSurface } from '../../../src/nav/SettingsSurface';
 import { accentForProfile } from '../../../src/theme/accents';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { voiceLabel } from '../../../src/lib/voices';
+import { EMPTY } from '../../../../common/emptyCopy.mjs';
 
 const DEFAULT_ALP_PORT = 7423;
 const WIDE_BODY_MAX_W = 968;
@@ -327,7 +328,7 @@ export default function ProfileSettings() {
         <Row
           label="Providers"
           helper={providers.length ? (twoPane ? 'API keys + local Ollama' : providers.join(' · ')) : 'add an API key or a local Ollama to pick a model'}
-          value={twoPane && providers.length ? <ChipRow items={providers} /> : providers.length ? String(providers.length) : 'none'}
+          value={twoPane && providers.length ? <ChipRow items={providers} /> : providers.length ? String(providers.length) : EMPTY.providers.title}
           onPress={() => router.push(`/profile/${id}/providers`)}
         />
         <RowSeparator />
@@ -429,7 +430,7 @@ export default function ProfileSettings() {
         {usageDays.length === 0 && snap.loading ? (
           <Row label="Loading usage…" chevron={false} />
         ) : usageDays.length === 0 ? (
-          <Row label="No usage yet" helper="tokens and spend appear after the first turn" chevron={false} />
+          <Row label={EMPTY.usage.title} helper={EMPTY.usage.hint} chevron={false} />
         ) : (
           <SettingsBand>
             <UsageChart
@@ -570,13 +571,13 @@ export default function ProfileSettings() {
         <Row
           label="Peers"
           helper={peerCount ? undefined : 'pair a peer to chat across daemons'}
-          value={peerCount ? String(peerCount) : 'none'}
+          value={peerCount ? String(peerCount) : EMPTY.peers.title}
           onPress={() => router.push(`/profile/${id}/peers`)}
         />
         {workgroups.length === 0 ? (
           <>
             <RowSeparator />
-            <Row label="Workgroups" helper={workgroupCount ? undefined : 'none yet · tap + beside Workgroups on the home screen'} value={String(workgroupCount)} chevron={false} />
+            <Row label="Workgroups" helper={workgroupCount ? undefined : EMPTY.workgroups.hint} value={String(workgroupCount)} chevron={false} />
           </>
         ) : (
           workgroups.map((wg) => (
@@ -671,8 +672,8 @@ export default function ProfileSettings() {
         <SectionHeader kicker="disk footprint">Storage</SectionHeader>
         {storageRows.filter((it) => it.size_bytes > 0 || it.file_count > 0).length === 0 ? (
           <Row
-            label={snap.loading || storage.loading ? 'Loading storage…' : 'Nothing yet'}
-            helper={snap.loading || storage.loading ? undefined : 'storage shows up once this profile starts using disk'}
+            label={snap.loading || storage.loading ? 'Loading storage…' : EMPTY.storage.title}
+            helper={snap.loading || storage.loading ? undefined : EMPTY.storage.hint}
             chevron={false}
           />
         ) : (

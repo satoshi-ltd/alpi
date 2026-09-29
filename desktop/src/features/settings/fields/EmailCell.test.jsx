@@ -46,13 +46,13 @@ describe("EmailCell multi-account", () => {
     expect(invoke).not.toHaveBeenCalledWith("probe_email", expect.anything());
   });
 
-  it("shows 'none' when there are no accounts", async () => {
+  it("says there are no accounts yet, with a hint", async () => {
     invoke.mockImplementation(async (command) => {
       if (command === "email_status") return [];
       return null;
     });
     render(<EmailCell profile={profile} connectionId="casa" />);
-    expect(await screen.findByText("none")).toBeInTheDocument();
+    expect(await screen.findByText(/No email accounts yet/)).toBeInTheDocument();
   });
 
   it("renders cached accounts immediately while refreshing the selected daemon", async () => {
@@ -532,7 +532,7 @@ describe("EmailCell — removing an account with a real click sequence", () => {
     render(<EmailCell profile={profile} connectionId="casa" />);
     await screen.findByRole("alert");
     expect(screen.getByRole("alert")).toHaveTextContent("Couldn't load email accounts");
-    expect(screen.queryByText("none")).toBeNull();
+    expect(screen.queryByText(/No email accounts yet/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(await screen.findByRole("button", { name: "me@work.com" })).toBeInTheDocument();
   });

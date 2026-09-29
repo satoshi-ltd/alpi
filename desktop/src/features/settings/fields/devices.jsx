@@ -21,6 +21,7 @@ import { formatLastSeen } from "../util.js";
 import styles from "../Settings.module.css";
 import { copyText } from "../../../lib/clipboard.js";
 import { pairingDisplayStatus, pairingExpiryText } from "../../../lib/pairing-expiry.js";
+import { emptyLine } from "../../../../../common/emptyCopy.mjs";
 
 function cacheKey(connectionId) {
   return connectionId || "local";
@@ -121,7 +122,7 @@ export function DevicesField({
     <Row label="paired">
       <span className={styles.inlineRow}>
         {devices.length === 0 ? (
-          <span className={styles.muted}>none</span>
+          <span className={styles.muted}>{emptyLine("devices")}</span>
         ) : (
           <span ref={detailAnchorRef} className={styles.popoverAnchor}>
             <Dropdown

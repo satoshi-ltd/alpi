@@ -93,8 +93,8 @@ describe('MCP server sheet typography', () => {
   it('renders the empty-tools notice in a theme font', async () => {
     h.call.mockResolvedValue({ tools: [] });
     openServer();
-    await waitFor(() => expect(screen.getByText('no tools')).toBeTruthy());
-    expect(screen.getByText('no tools').getAttribute('data-font')).toBe('Geist_400Regular');
+    await waitFor(() => expect(screen.getByText('No tools exposed')).toBeTruthy());
+    expect(screen.getByText('No tools exposed').getAttribute('data-font')).toBe('Geist_400Regular');
   });
 
   it('renders a tool name in mono and its description in the sans token', async () => {

@@ -58,6 +58,7 @@ import {
 } from "./fields/maintenance.jsx";
 import styles from "./Settings.module.css";
 import { copyText } from "../../lib/clipboard.js";
+import { emptyLine } from "../../../../common/emptyCopy.mjs";
 
 // storage stays out: its os.walk dominates snapshot latency, so StorageField fetches it independently.
 const SNAPSHOT_SECTIONS = ["detail", "usage", "workgroups", "email"];
@@ -290,7 +291,7 @@ export default function ProfileDetail({
                   </Chip>
                 ))
               ) : (
-                <span className={styles.muted}>none — add one to pick models</span>
+                <span className={styles.muted}>{emptyLine("providers")}</span>
               )}
               <AddProviderField profile={profile} onSaved={onSaved} />
             </span>
@@ -306,9 +307,7 @@ export default function ProfileDetail({
                   onOllamaErrors={setOllamaErrors}
                 />
               ) : (
-                <span className={styles.muted}>
-                  no models — add a provider first
-                </span>
+                <span className={styles.muted}>{emptyLine("models")}</span>
               )}
               {profile.model_reasoning_supported && (
                 <ReasoningEffortField

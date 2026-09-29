@@ -10,6 +10,7 @@ import { useBack } from '../../../../../src/hooks/useBack';
 import { useTools } from '../../../../../src/hooks/useDaemonData';
 import { usePullRefresh } from '../../../../../src/hooks/usePullRefresh';
 import { useTheme } from '../../../../../src/theme/ThemeContext';
+import { EMPTY } from '../../../../../../common/emptyCopy.mjs';
 
 // Same category order as desktop ToolsPanel.
 const CATEGORY_ORDER = [
@@ -57,7 +58,7 @@ export default function ToolsList() {
             <ActivityIndicator color={colors.ink3} />
           </View>
         ) : rows.length === 0 ? (
-          <Row label="No tools registered" chevron={false} />
+          <Row label={EMPTY.tools.title} helper={EMPTY.tools.hint} chevron={false} />
         ) : (
           cats.map((cat) => (
             <View key={cat}>

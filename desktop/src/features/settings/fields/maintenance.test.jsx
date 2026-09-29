@@ -240,6 +240,6 @@ describe("StorageField — the destructive confirm has a positioned anchor", () 
     render(<StorageField profile={{ name: "doc" }} activeConnection={local} />);
     await screen.findByRole("alert");
     expect(screen.getByRole("alert")).toHaveTextContent("Couldn't load storage");
-    expect(screen.queryByText("nothing yet")).toBeNull();
+    expect(screen.queryByText(/Nothing stored yet/)).toBeNull();
   });
 });

@@ -17,6 +17,7 @@ import { EMAIL_TYPE_LABELS } from '../../../../src/lib/emailAccounts';
 import { space } from '../../../../src/theme/tokens';
 import { useTheme } from '../../../../src/theme/ThemeContext';
 import { LoadFailed } from '../../../../src/components/LoadFailed';
+import { EMPTY } from '../../../../../common/emptyCopy.mjs';
 
 export default function EmailList() {
   const { id } = useLocalSearchParams();
@@ -50,7 +51,7 @@ export default function EmailList() {
         ) : accounts.error && !accounts.data ? (
           <LoadFailed inline label="email accounts" error={accounts.error} onRetry={() => accounts.refresh?.()} />
         ) : list.length === 0 ? (
-          <Row label="No email accounts configured" helper="tap + Add to connect one" chevron={false} />
+          <Row label={EMPTY.email.title} helper={EMPTY.email.hint} chevron={false} />
         ) : (
           list.map((a, i) => {
             const type = EMAIL_TYPE_LABELS[a.type] ?? a.type;

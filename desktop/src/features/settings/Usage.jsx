@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { fmtTok, formatUsd as usd } from "../../lib/format.js";
 import styles from "./Usage.module.css";
+import { usageRangeEmpty } from "../../../../common/emptyCopy.mjs";
 
 export { fmtTok };
 
@@ -67,7 +68,7 @@ export default function Usage({ days = [], accent = "var(--accent)", capLine = n
       </div>
 
       {empty ? (
-        <p className={styles.empty}>no usage in the last {days.length} days</p>
+        <p className={styles.empty}>{usageRangeEmpty(days.length)}</p>
       ) : (
       <div className={styles.chart}>
         <div className={styles.track}>

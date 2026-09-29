@@ -10,6 +10,7 @@ import { Row } from "../primitives.jsx";
 import Field from "../../../primitives/Field.jsx";
 import { ConfirmDeleteAction, DialogFooter } from "../../../primitives/index.js";
 import styles from "../Settings.module.css";
+import { EMPTY, emptyLine } from "../../../../../common/emptyCopy.mjs";
 
 export function McpField({ profile, connectionId, onSaved }) {
   const [adding, setAdding] = useState(false);
@@ -19,7 +20,7 @@ export function McpField({ profile, connectionId, onSaved }) {
   return (
     <Row label="mcps">
       <span className={styles.chipRow}>
-        {mcps.length === 0 && <span className={styles.muted}>none</span>}
+        {mcps.length === 0 && <span className={styles.muted}>{emptyLine("mcp")}</span>}
         {mcps.map((m) => (
           <Chip
             key={m.name}
@@ -120,7 +121,7 @@ function McpDetailModal({ profile, connectionId, mcp, onClose, onRemoved }) {
         ) : toolsError ? (
           <span className={styles.error}>{toolsError}</span>
         ) : tools.length === 0 ? (
-          <span className={styles.muted}>no tools</span>
+          <span className={styles.muted}>{EMPTY.mcpTools.title}</span>
         ) : (
           <div className={styles.mcpToolList}>
             {tools.map((t) => (

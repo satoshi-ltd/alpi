@@ -60,7 +60,7 @@ describe('UsageChart', () => {
       { iso: '2026-06-29', tokIn: 0, tokOut: 0, cost: 0 },
     ]);
     render(<UsageChart days={empty} />);
-    expect(screen.getByText('no usage in the last 3 days')).toBeTruthy();
+    expect(screen.getByText('No usage in the last 3 days')).toBeTruthy();
     expect(screen.queryAllByLabelText(/ usage$/).length).toBe(0);
     expect(screen.queryByText(/day total/)).toBeNull();
     expect(screen.getByText('Avg / day')).toBeTruthy();
@@ -76,7 +76,7 @@ describe('UsageChart', () => {
     ]);
     rerender(<UsageChart days={empty} />);
     expect(screen.queryByLabelText('Selected day')).toBeNull();
-    expect(screen.getByText('no usage in the last 2 days')).toBeTruthy();
+    expect(screen.getByText('No usage in the last 2 days')).toBeTruthy();
   });
 
   it('turns the last tile into the daily cap with what is left', () => {

@@ -33,6 +33,7 @@ import { SettingsSurface } from '../../../src/nav/SettingsSurface';
 import { accentForProfile } from '../../../src/theme/accents';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { AdminGuard } from '../../../src/components/AdminGuard';
+import { EMPTY } from '../../../../common/emptyCopy.mjs';
 
 const WIDE_BODY_MAX_W = 968;
 
@@ -345,7 +346,7 @@ function WorkgroupSettings() {
         {usageDays.length === 0 && usage.loading ? (
           <Row label="Loading usage…" chevron={false} />
         ) : usageDays.length === 0 ? (
-          <Row label="No usage yet" helper="spend appears once the hub posts or settles a task" chevron={false} />
+          <Row label={EMPTY.workgroupUsage.title} helper={EMPTY.workgroupUsage.hint} chevron={false} />
         ) : (
           <SettingsBand>
             <UsageChart days={usageDays} accent={accent} />

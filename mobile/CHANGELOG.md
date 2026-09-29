@@ -14,6 +14,11 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.5.7 — 2026-09-29 — empty says the same thing everywhere
+
+- **Empty lists and settings use the desktop's wording**, a short sentence with a hint, so both
+  apps say the same thing when there is nothing yet.
+
 ## v0.5.6 — 2026-09-29 — the unread badge fits its number
 
 - **The bell badge grows with the count** instead of cutting a two-digit number in half; it still

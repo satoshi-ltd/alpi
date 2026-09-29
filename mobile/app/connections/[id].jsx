@@ -28,6 +28,7 @@ import { useEndpoint } from '../../src/lib/EndpointContext';
 import { usePane } from '../../src/nav/PaneContext';
 import { SettingsSurface } from '../../src/nav/SettingsSurface';
 import { useTheme } from '../../src/theme/ThemeContext';
+import { EMPTY } from '../../../common/emptyCopy.mjs';
 
 const WIDE_BODY_MAX_W = 968;
 
@@ -210,7 +211,7 @@ function ConnectionDetail() {
           <>
             <SectionHeader kicker={`${devices.length} paired`}>Devices</SectionHeader>
             {devices.length === 0 ? (
-              <Row label="No devices yet" helper="add one to get a pairing link" chevron={false} />
+              <Row label={EMPTY.devices.title} helper={EMPTY.devices.hint} chevron={false} />
             ) : (
               devices.map((d, i) => (
                 <View key={d.id}>

@@ -9,6 +9,7 @@ import { useBack } from '../../../../../src/hooks/useBack';
 import { useSkills } from '../../../../../src/hooks/useDaemonData';
 import { usePullRefresh } from '../../../../../src/hooks/usePullRefresh';
 import { useTheme } from '../../../../../src/theme/ThemeContext';
+import { EMPTY } from '../../../../../../common/emptyCopy.mjs';
 
 function formatCategory(raw) {
   if (!raw) return 'Uncategorized';
@@ -52,7 +53,7 @@ export default function SkillsList() {
             <ActivityIndicator color={colors.ink3} />
           </View>
         ) : rows.length === 0 ? (
-          <Row label="No skills installed" helper="drop a SKILL.md under ~/.alpi/profiles/<name>/skills/" chevron={false} />
+          <Row label={EMPTY.skills.title} helper={EMPTY.skills.hint} chevron={false} />
         ) : (
           categoryOrder.map((cat) => (
             <View key={cat}>
