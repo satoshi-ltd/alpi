@@ -1,4 +1,5 @@
 import { OverlayScope, useOverlay } from "../hooks/useOverlay.js";
+import { navigateMenu } from "../lib/menuNavigation.js";
 import { useEffect, useRef } from "react";
 
 // Action menus size to their content; forms and pickers pass a --pop-* token because inputs stretch to fill.
@@ -12,6 +13,8 @@ export default function Popover({
   children,
   className = "",
   style,
+  navigable = false,
+  role,
 }) {
   const ref = useRef(null);
   const isTop = useOverlay({ open, onClose, ref });
@@ -37,11 +40,17 @@ export default function Popover({
     };
   }, [open, onClose]);
 
+  useEffect(() => {
+    if (open && navigable) ref.current?.querySelector("button:not(:disabled)")?.focus();
+  }, [open, navigable]);
+
   if (!open) return null;
   return (
     <OverlayScope overlay={isTop}>
       <div
         ref={ref}
+        role={role}
+        onKeyDown={navigable ? (event) => navigateMenu(event, ref.current) : undefined}
         className={`anim-pop ${className}`.trim()}
         style={{
           position: "absolute",

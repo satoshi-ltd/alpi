@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
-import { Button, Eyebrow, IconBtn, Modal, Textarea, Tip } from "../primitives/index.js";
+import { Button, DialogFooter, Eyebrow, IconBtn, Modal, Textarea, Tip } from "../primitives/index.js";
 import { CheckIcon, EditIcon, XIcon } from "../primitives/icons.jsx";
 import styles from "./ClarificationModal.module.css";
 
@@ -85,7 +85,7 @@ export default function ClarificationModal({ requests, onResolved }) {
   }
 
   return (
-    <Modal open closeOnBackdrop={false} width="var(--modal-md)">
+    <Modal open onClose={busy ? undefined : cancel} closeOnBackdrop={false} width="var(--modal-md)" aria-label={current.question}>
       <div className={styles.head}>
         <div className={styles.headText}>
           <Eyebrow>{eyebrow}</Eyebrow>
@@ -114,25 +114,20 @@ export default function ClarificationModal({ requests, onResolved }) {
       )}
 
       {mode === "multi" ? (
-        <div className={styles.footer}>
-          <Button
-            variant="primary"
-            size="lg"
-            onClick={() => respond(JSON.stringify(picked))}
-            disabled={busy || picked.length === 0}
-          >
-            {picked.length > 0 ? `Continue · ${picked.length}` : "Continue"}
-          </Button>
-        </div>
+        <DialogFooter
+          primaryLabel={picked.length > 0 ? `Continue · ${picked.length}` : "Continue"}
+          primaryDisabled={picked.length === 0}
+          primaryLoading={busy}
+          onPrimary={() => respond(JSON.stringify(picked))}
+        />
       ) : mode === "confirm" ? (
-        <div className={styles.footer}>
-          <Button variant="ghost" size="lg" onClick={() => respond(current.choices[1].label)} disabled={busy}>
-            {current.choices[1].label}
-          </Button>
-          <Button variant="primary" size="lg" onClick={() => respond(current.choices[0].label)} disabled={busy}>
-            {current.choices[0].label}
-          </Button>
-        </div>
+        <DialogFooter
+          onCancel={() => respond(current.choices[1].label)}
+          cancelLabel={current.choices[1].label}
+          primaryLabel={current.choices[0].label}
+          primaryLoading={busy}
+          onPrimary={() => respond(current.choices[0].label)}
+        />
       ) : null}
 
       {err ? <div className={styles.error}>{err}</div> : null}
@@ -191,6 +186,8 @@ function SingleBody({
                 onPick(otherText);
               }
               if (e.key === "Escape") {
+                e.preventDefault();
+                e.stopPropagation();
                 setOtherMode(false);
                 setOtherText("");
               }

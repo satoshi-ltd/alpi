@@ -36,4 +36,27 @@ describe("Popover", () => {
     fireEvent.mouseDown(document.body);
     expect(screen.queryByText("panel")).toBeNull();
   });
+
+  it("moves focus into a navigable menu and walks it with the arrow keys", () => {
+    render(
+      <span>
+        <button type="button">trigger</button>
+        <Popover open onClose={() => {}} navigable role="menu">
+          <button type="button" role="menuitem">first</button>
+          <button type="button" role="menuitem" disabled>skipped</button>
+          <button type="button" role="menuitem">last</button>
+        </Popover>
+      </span>,
+    );
+    const first = screen.getByRole("menuitem", { name: "first" });
+    const last = screen.getByRole("menuitem", { name: "last" });
+    expect(document.activeElement).toBe(first);
+    fireEvent.keyDown(first, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(last);
+    fireEvent.keyDown(last, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(first);
+    fireEvent.keyDown(first, { key: "End" });
+    expect(document.activeElement).toBe(last);
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+  });
 });

@@ -9,5 +9,8 @@
 
 /* Pushes everything else right, so a destructive action sits opposite the confirm pair. */
 .leading {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
   margin-right: auto;
 }

@@ -52,6 +52,7 @@ export { default as RefreshButton } from "./RefreshButton.jsx";
 export { default as SearchBar } from "./SearchBar.jsx";
 export { default as Section } from "./Section.jsx";
 export { default as SectionLabel } from "./SectionLabel.jsx";
+export { default as SelectField } from "./SelectField.jsx";
 export { default as Selectish } from "./Selectish.jsx";
 export { default as SendButton } from "./SendButton.jsx";
 export { default as SessionsButton } from "./SessionsButton.jsx";

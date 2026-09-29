@@ -153,7 +153,7 @@ export default function ProviderPickerForm({
                   ollamaModelCount,
                   ollamaEndpointCount,
                 })}
-                selected={p.id === v.id}
+                active={p.id === v.id}
               >
                 {p.label}
               </Dropdown.Row>
@@ -247,7 +247,7 @@ export default function ProviderPickerForm({
                               patch({ model: m });
                               close?.();
                             }}
-                            selected={v.model === m}
+                            active={v.model === m}
                           >
                             {m}
                           </Dropdown.Row>

@@ -145,15 +145,16 @@ describe("PairDeviceModal", () => {
       { label: "LAN", url: "ws://192.168.1.199:49200" },
     ]));
     await openModal();
-    const picker = screen.getByRole("combobox", { name: "Pairing route" });
-    expect(picker.value).toBe("ws://100.114.140.25:49200");
-    const shown = screen.getAllByText("ws://100.114.140.25:49200");
-    expect(shown.map((node) => node.tagName)).toEqual(["OPTION"]);
+    const picker = screen.getByRole("button", { name: "Pairing route" });
+    expect(picker).toHaveTextContent("ws://100.114.140.25:49200");
+    fireEvent.click(picker);
+    fireEvent.click(screen.getByText("ws://192.168.1.199:49200"));
+    expect(picker).toHaveTextContent("ws://192.168.1.199:49200");
 
     cleanup();
     invoke.mockImplementation(generate([{ label: "LAN", url: "ws://192.168.1.199:49200" }]));
     await openModal();
-    expect(screen.queryByRole("combobox", { name: "Pairing route" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Pairing route" })).not.toBeInTheDocument();
     expect(screen.getByText("ws://192.168.1.199:49200")).toBeInTheDocument();
   });
 

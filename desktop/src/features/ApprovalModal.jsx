@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { profileLabel } from "../lib/profile-display.js";
 import { invoke } from "@tauri-apps/api/core";
 
-import { Button, Diamond, IconBtn, Modal, Tip } from "../primitives/index.js";
+import { DialogFooter, Diamond, IconBtn, Modal, Tip } from "../primitives/index.js";
 import { XIcon } from "../primitives/icons.jsx";
 import styles from "./ApprovalModal.module.css";
 
@@ -65,7 +65,7 @@ export default function ApprovalModal({ requests, onResolved }) {
   const deny = () => choose("deny");
 
   return (
-    <Modal open closeOnBackdrop={false} width="var(--modal-md)">
+    <Modal open onClose={busy ? undefined : deny} closeOnBackdrop={false} width="var(--modal-md)" aria-label="Allow this command?">
       <div className={styles.head}>
         <div className={styles.headText}>
           <div className={styles.eyebrow}>
@@ -113,17 +113,7 @@ export default function ApprovalModal({ requests, onResolved }) {
         ))}
       </div>
 
-      <div className={styles.footer}>
-        <Button
-          variant="danger-ghost"
-          size="lg"
-          className={styles.denyBtn}
-          onClick={deny}
-          disabled={busy}
-        >
-          Deny
-        </Button>
-      </div>
+      <DialogFooter primaryLabel="Deny" destructive primaryLoading={busy} onPrimary={deny} />
 
       {err ? <div className={styles.error}>{err}</div> : null}
     </Modal>

@@ -4,6 +4,7 @@ import Button from "../../primitives/Button.jsx";
 import ConfirmDelete, { ConfirmDeleteAction } from "../../primitives/ConfirmDelete.jsx";
 import Field from "../../primitives/Field.jsx";
 import Modal from "../../primitives/Modal.jsx";
+import SelectField from "../../primitives/SelectField.jsx";
 import {
   ArrowLeftIcon,
   Checkbox,
@@ -490,39 +491,38 @@ function AuditActivity({ sourceConnectionId, connections }) {
             aria-label="Search activity"
           />
         </label>
-        <select
-          className={styles.auditSelect}
-          value={connectionFilter}
-          onChange={(event) => setConnectionFilter(event.target.value)}
+        <SelectField
           aria-label="Filter activity by connection"
-        >
-          <option value="">All connections</option>
-          {connections.filter((row) => row.id !== "host").map((row) => (
-            <option key={row.id} value={row.id}>{row.label || row.id}</option>
-          ))}
-        </select>
-        <select
-          className={styles.auditSelect}
-          value={deviceFilter}
-          onChange={(event) => setDeviceFilter(event.target.value)}
+          value={connectionFilter}
+          onChange={setConnectionFilter}
+          fullWidth
+          options={[
+            { value: "", label: "All connections" },
+            ...connections.filter((row) => row.id !== "host").map((row) => ({ value: row.id, label: row.label || row.id })),
+          ]}
+        />
+        <SelectField
           aria-label="Filter activity by device"
-        >
-          <option value="">All devices</option>
-          {devices.map((device) => (
-            <option key={device.id} value={device.id}>{device.label} · {device.connectionLabel}</option>
-          ))}
-        </select>
-        <select
-          className={styles.auditSelect}
-          value={resultFilter}
-          onChange={(event) => setResultFilter(event.target.value)}
+          value={deviceFilter}
+          onChange={setDeviceFilter}
+          fullWidth
+          options={[
+            { value: "", label: "All devices" },
+            ...devices.map((device) => ({ value: device.id, label: `${device.label} · ${device.connectionLabel}` })),
+          ]}
+        />
+        <SelectField
           aria-label="Filter activity by result"
-        >
-          <option value="">Every result</option>
-          <option value="success">Success</option>
-          <option value="denied">Denied</option>
-          <option value="error">Error</option>
-        </select>
+          value={resultFilter}
+          onChange={setResultFilter}
+          fullWidth
+          options={[
+            { value: "", label: "Every result" },
+            { value: "success", label: "Success" },
+            { value: "denied", label: "Denied" },
+            { value: "error", label: "Error" },
+          ]}
+        />
         <IconBtn tip="Refresh activity" tipSide="up" onClick={() => load()}>
           <Icon name="refresh" />
         </IconBtn>
@@ -688,20 +688,31 @@ function EditConnectionModal({ row, profiles, connectionArg, onClose, onSaved })
           <span className={styles.fieldLabel}>Label</span>
           <Field autoFocus value={label} onChange={(event) => setLabel(event.target.value)} aria-label="Connection label" />
         </label>
-        <label className={styles.manageField}>
+        <div className={styles.manageField}>
           <span className={styles.fieldLabel}>Role</span>
-          <select value={role} onChange={(event) => setRole(event.target.value)} className={styles.select}>
-            <option value="member">Member</option>
-            <option value="admin">Admin</option>
-          </select>
-        </label>
-        <label className={styles.manageField}>
+          <SelectField
+            aria-label="Role"
+            value={role}
+            onChange={setRole}
+            fullWidth
+            portal
+            options={[{ value: "member", label: "Member" }, { value: "admin", label: "Admin" }]}
+          />
+        </div>
+        <div className={styles.manageField}>
           <span className={styles.fieldLabel}>Sessions</span>
-          <select value={sessionScope} onChange={(event) => setSessionScope(event.target.value)} className={styles.select} aria-label="Session scope">
-            <option value="connection">Shared across its devices</option>
-            <option value="device">Private to each device</option>
-          </select>
-        </label>
+          <SelectField
+            aria-label="Session scope"
+            value={sessionScope}
+            onChange={setSessionScope}
+            fullWidth
+            portal
+            options={[
+              { value: "connection", label: "Shared across its devices" },
+              { value: "device", label: "Private to each device" },
+            ]}
+          />
+        </div>
         {role !== "admin" && (
           <div className={styles.manageField}>
             <span className={styles.fieldLabel}>Profiles access</span>
@@ -795,16 +806,21 @@ function PairingModal({ payload, connectionArg, onClose }) {
         <div className={styles.qr} dangerouslySetInnerHTML={{ __html: qr }} />
         <div>
           {endpoints.length > 1 && (
-            <select value={endpointUrl} onChange={(event) => setEndpointUrl(event.target.value)} className={styles.select} aria-label="Pairing route">
-              {endpoints.map((endpoint) => <option key={endpoint.url} value={endpoint.url}>{endpoint.url}</option>)}
-            </select>
+            <SelectField
+              aria-label="Pairing route"
+              value={endpointUrl}
+              onChange={setEndpointUrl}
+              fullWidth
+              portal
+              options={endpoints.map((endpoint) => ({ value: endpoint.url, label: endpoint.url }))}
+            />
           )}
           <Mono>{endpointUrl}</Mono><p>Scan from desktop or mobile. Pairing: {pairingExpiryText(payload.expires_at, status, clock)}.{payload.provisioner ? " This device may add and revoke its siblings." : ""}</p>
           <Chip state={displayStatus === "consumed" ? "on" : displayStatus === "pending" ? "warn" : "off"}>{displayStatus}</Chip>
         </div>
       </div>
       <div className={styles.link}><Mono>{link}</Mono><Button icon={<CopyIcon />} onClick={copy} title="Copy pairing link" /></div>
-      <div className={styles.modalActions}><Button onClick={close}>Done</Button></div>
+      <DialogFooter onCancel={close} cancelLabel="Done" />
     </Modal>
   );
 }

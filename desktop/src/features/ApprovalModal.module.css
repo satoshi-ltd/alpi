@@ -116,27 +116,6 @@
   color: var(--ink-3);
 }
 
-.footer {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  margin-top: var(--space-7);
-}
-
-.denyBtn {
-  background: var(--c-danger);
-  color: var(--bg-pane);
-}
-
-.denyBtn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--c-danger) 85%, var(--ink));
-  color: var(--bg-pane);
-}
-
-.denyBtn:disabled {
-  opacity: 0.4;
-}
-
 .error {
   margin-top: var(--space-3);
   font-family: var(--font-mono);

@@ -29,24 +29,24 @@ export default function HeaderMenu({
           <Icon name="ellipsis" />
         </IconBtn>
       </Tip>
-      <Popover open={open} onClose={() => setOpen(false)} align="right">
+      <Popover open={open} onClose={() => setOpen(false)} align="right" navigable role="menu">
         <div className={styles.menu}>
           {onOpenSettings && (
-            <button type="button" className={styles.item} onClick={run(onOpenSettings)}>
+            <button type="button" role="menuitem" className={styles.item} onClick={run(onOpenSettings)}>
               <Icon name="settings" size="lg" className={styles.icon} />
               <span className={styles.label}>{Noun} settings</span>
               <span className={styles.kbd}><Kbd>⌘</Kbd><Kbd>,</Kbd></span>
             </button>
           )}
           {onTogglePause && (
-            <button type="button" className={styles.item} onClick={run(onTogglePause)}>
+            <button type="button" role="menuitem" className={styles.item} onClick={run(onTogglePause)}>
               <Icon name={paused ? "play" : "pause"} size="lg" className={styles.icon} />
               <span className={styles.label}>{paused ? "Resume" : "Pause"} {noun}</span>
               <span className={styles.kbd}><Kbd>⇧</Kbd><Kbd>⌘</Kbd><Kbd>P</Kbd></span>
             </button>
           )}
           {onToggleAutoRead && (
-            <button type="button" className={styles.item} onClick={() => onToggleAutoRead()}>
+            <button type="button" role="menuitem" className={styles.item} onClick={() => onToggleAutoRead()}>
               <Icon name="volume" size="lg" className={styles.icon} />
               <span className={styles.label}>Auto-read replies</span>
               <Pill state={autoRead ? "on" : "off"} className={styles.statePill}>{autoRead ? "on" : "off"}</Pill>
@@ -54,28 +54,28 @@ export default function HeaderMenu({
           )}
           {(onOpenSkills || onOpenMemory || onOpenTools || onOpenSchedule) && <div className={styles.sep} aria-hidden />}
           {onOpenSkills && (
-            <button type="button" className={styles.item} onClick={run(onOpenSkills)}>
+            <button type="button" role="menuitem" className={styles.item} onClick={run(onOpenSkills)}>
               <Icon name="sparkle" size="lg" className={styles.icon} />
               <span className={styles.label}>Skills</span>
               <span className={styles.kbd}><Kbd>⇧</Kbd><Kbd>⌘</Kbd><Kbd>S</Kbd></span>
             </button>
           )}
           {onOpenMemory && (
-            <button type="button" className={styles.item} onClick={run(onOpenMemory)}>
+            <button type="button" role="menuitem" className={styles.item} onClick={run(onOpenMemory)}>
               <Icon name="folder" size="lg" className={styles.icon} />
               <span className={styles.label}>Memory</span>
               <span className={styles.kbd}><Kbd>⇧</Kbd><Kbd>⌘</Kbd><Kbd>M</Kbd></span>
             </button>
           )}
           {onOpenTools && (
-            <button type="button" className={styles.item} onClick={run(onOpenTools)}>
+            <button type="button" role="menuitem" className={styles.item} onClick={run(onOpenTools)}>
               <Icon name="cpu" size="lg" className={styles.icon} />
               <span className={styles.label}>Tools</span>
               <span className={styles.kbd}><Kbd>⇧</Kbd><Kbd>⌘</Kbd><Kbd>T</Kbd></span>
             </button>
           )}
           {onOpenSchedule && (
-            <button type="button" className={styles.item} onClick={run(onOpenSchedule)}>
+            <button type="button" role="menuitem" className={styles.item} onClick={run(onOpenSchedule)}>
               <Icon name="clock" size="lg" className={styles.icon} />
               <span className={styles.label}>Schedule</span>
               <span className={styles.kbd}><Kbd>⇧</Kbd><Kbd>⌘</Kbd><Kbd>E</Kbd></span>
@@ -84,7 +84,7 @@ export default function HeaderMenu({
           {onRefresh && canRefresh && (
             <>
               <div className={styles.sep} aria-hidden />
-              <button type="button" className={styles.item} onClick={run(onRefresh)}>
+              <button type="button" role="menuitem" className={styles.item} onClick={run(onRefresh)}>
                 <Icon name="refresh" size="lg" className={styles.icon} />
                 <span className={styles.label}>Refresh thread</span>
                 <span className={styles.kbd}><Kbd>⇧</Kbd><Kbd>⌘</Kbd><Kbd>R</Kbd></span>

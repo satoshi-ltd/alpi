@@ -211,4 +211,28 @@ describe("ManageSessionsModal", () => {
 
     await waitFor(() => expect(getSessionTitle("conn-a", "doc", "stub")).toBe(""));
   });
+
+  it("selects every visible session on ⌘A, but never while typing in a field", async () => {
+    render(<ManageSessionsModal open profile="doc" currentSessionId="live" onClose={() => {}} />);
+    await screen.findByText("stub");
+    fireEvent.keyDown(document.body, { key: "a", metaKey: true });
+    expect(screen.getByRole("button", { name: /Delete 2/ })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("button", { name: /Delete/ })).not.toBeInTheDocument();
+    const stubRow = screen.getByText("stub").closest("tr");
+    fireEvent.click(stubRow.querySelector('input[type="checkbox"]'));
+    fireEvent.click(screen.getByRole("button", { name: /Delete 1/ }));
+    const typedInput = await screen.findByRole("textbox");
+    fireEvent.keyDown(typedInput, { key: "a", metaKey: true });
+    expect(screen.getByRole("button", { name: "Delete 1 session" })).toBeInTheDocument();
+  });
+
+  it("closes on Escape like every other dialog", async () => {
+    const onClose = vi.fn();
+    render(<ManageSessionsModal open profile="doc" currentSessionId="live" onClose={onClose} />);
+    await screen.findByText("stub");
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
 });

@@ -16,7 +16,7 @@ export default function VoicePicker({
       <Selectish onClick={() => setOpen((o) => !o)}>
         {selected ? `${selected.name} · ${selected.desc}` : "—"}
       </Selectish>
-      <Popover open={open} onClose={() => setOpen(false)} width="var(--pop-sm)">
+      <Popover open={open} onClose={() => setOpen(false)} width="var(--pop-sm)" navigable role="listbox">
         <div className={styles.list}>
           {voices.map((v) => {
             const sel = v.id === current;
@@ -24,6 +24,8 @@ export default function VoicePicker({
               <button
                 key={v.id}
                 type="button"
+                role="option"
+                aria-selected={sel}
                 onClick={() => {
                   onChange?.(v.id);
                   setOpen(false);

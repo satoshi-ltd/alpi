@@ -94,4 +94,26 @@ describe("ClarificationModal", () => {
       });
     });
   });
+
+  it("cancels the question on Escape and names the dialog after it", async () => {
+    invoke.mockResolvedValue({ ok: true });
+    render(<ClarificationModal requests={[SAMPLE_SINGLE]} onResolved={() => {}} />);
+    expect(screen.getByRole("dialog", { name: "Pick one?" })).toBeInTheDocument();
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("clarification_respond", {
+      requestId: "r1",
+      choice: "User cancelled clarification.",
+    }));
+  });
+
+  it("leaves free-text mode on Escape without cancelling the question", async () => {
+    invoke.mockResolvedValue({ ok: true });
+    render(<ClarificationModal requests={[SAMPLE_SINGLE]} onResolved={() => {}} />);
+    fireEvent.click(screen.getByText("Type your own…"));
+    const box = screen.getByPlaceholderText("Type your answer…");
+    fireEvent.keyDown(box, { key: "Escape" });
+    expect(screen.queryByPlaceholderText("Type your answer…")).not.toBeInTheDocument();
+    expect(screen.getByText("Type your own…")).toBeInTheDocument();
+    expect(invoke).not.toHaveBeenCalled();
+  });
 });

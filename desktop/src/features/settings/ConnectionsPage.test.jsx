@@ -134,7 +134,8 @@ describe("ConnectionsPage", () => {
     render(<ConnectionsPage profiles={[{ name: "atlas" }]} activeConnection={{ id: "local" }} />);
     await screen.findByText("Javi");
     fireEvent.click(screen.getByRole("button", { name: "Edit connection" }));
-    fireEvent.change(screen.getByRole("combobox", { name: "Session scope" }), { target: { value: "device" } });
+    fireEvent.click(screen.getByRole("button", { name: "Session scope" }));
+    fireEvent.click(screen.getByText("Private to each device"));
     fireEvent.click(screen.getByText("Save changes"));
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("connections_update", expect.objectContaining({
       targetId: "conn_javi",

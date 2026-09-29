@@ -30,7 +30,7 @@ export function ReasoningEffortField({ value, onChange }) {
                 close?.();
               }}
               caption={opt.caption}
-              selected={opt.value === current}
+              active={opt.value === current}
             >
               {opt.label}
             </Dropdown.Row>

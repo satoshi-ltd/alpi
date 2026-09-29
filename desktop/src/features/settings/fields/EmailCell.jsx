@@ -11,7 +11,7 @@ import Eyebrow from "../../../primitives/Eyebrow.jsx";
 import Modal from "../../../primitives/Modal.jsx";
 import { useNotify } from "../../../primitives/Notification.jsx";
 import Field from "../../../primitives/Field.jsx";
-import { ConfirmDeleteAction } from "../../../primitives/index.js";
+import { ConfirmDeleteAction, DialogFooter } from "../../../primitives/index.js";
 import styles from "../Settings.module.css";
 
 function cacheKey(connectionId, profileName) {
@@ -327,20 +327,13 @@ function AddAccountModal({ profile, connectionId = null, onClose, onSaved }) {
       {type === "imap"
         ? <ImapFields values={values} set={set} />
         : <GmailFields values={values} set={set} />}
-      <div className={styles.popoverFooter}>
-        <span className={styles.popoverFooterRight}>
-          <Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
-          {type === "imap" ? (
-            <Button variant="primary" onClick={addImap} disabled={!canSubmit}>
-              {busy ? "…" : "Add account"}
-            </Button>
-          ) : (
-            <Button variant="primary" onClick={authorizeGmail} disabled={!canSubmit}>
-              {busy ? "…" : "Authorize"}
-            </Button>
-          )}
-        </span>
-      </div>
+      <DialogFooter
+        onCancel={onClose}
+        primaryLabel={type === "imap" ? "Add account" : "Authorize"}
+        primaryDisabled={!canSubmit}
+        primaryLoading={busy}
+        onPrimary={type === "imap" ? addImap : authorizeGmail}
+      />
     </Modal>
   );
 }
@@ -500,34 +493,37 @@ function EmailEditorModal({ profile, account, connectionId = null, onClose, onSa
       ) : (
         <ImapFields values={values} set={set} disabledAddress />
       )}
-      <div className={styles.popoverFooter}>
-        <ConfirmDeleteAction
-          anchored={false}
-          label="Remove account"
-          title={`Remove ${account.address || account.id}?`}
-          consequence={
-            isGmail
-              ? "The OAuth token is wiped. You can re-add it later."
-              : "The account row and its IMAP password are wiped. You can re-add it later."
-          }
-          confirmLabel="Remove"
-          loading={busy}
-          onConfirm={remove}
-        />
-        <span className={styles.popoverFooterRight}>
-          <Button
-            variant="ghost"
-            onClick={test}
-            disabled={busy || testing || values === null}
-          >
-            {testing ? "Testing…" : "Test connection"}
-          </Button>
-          <Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
-          <Button variant="primary" onClick={save} disabled={busy || values === null}>
-            {busy ? "…" : "Save"}
-          </Button>
-        </span>
-      </div>
+      <DialogFooter
+        leading={(
+          <>
+            <ConfirmDeleteAction
+              anchored={false}
+              label="Remove account"
+              title={`Remove ${account.address || account.id}?`}
+              consequence={
+                isGmail
+                  ? "The OAuth token is wiped. You can re-add it later."
+                  : "The account row and its IMAP password are wiped. You can re-add it later."
+              }
+              confirmLabel="Remove"
+              loading={busy}
+              onConfirm={remove}
+            />
+            <Button
+              variant="ghost"
+              onClick={test}
+              disabled={busy || testing || values === null}
+            >
+              {testing ? "Testing…" : "Test connection"}
+            </Button>
+          </>
+        )}
+        onCancel={onClose}
+        primaryLabel="Save"
+        primaryDisabled={values === null}
+        primaryLoading={busy}
+        onPrimary={save}
+      />
     </Modal>
   );
 }

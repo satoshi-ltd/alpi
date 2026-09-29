@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { profileLabel } from "../../lib/profile-display.js";
+import { OverlayScope, useOverlay } from "../../hooks/useOverlay.js";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import {
@@ -188,22 +189,25 @@ export default function ManageSessionsModal({
     });
   }, [allVisibleSelected, selectableIds]);
 
+  const dialogRef = useRef(null);
+  const isTop = useOverlay({ open, onClose, ref: dialogRef, modal: true });
+
   useEffect(() => {
     if (!open) return undefined;
     function onKey(e) {
       const meta = e.metaKey || e.ctrlKey;
-      if (meta && (e.key === "a" || e.key === "A")) {
-        e.preventDefault();
-        setSelected((prev) => {
-          const next = new Set(prev);
-          for (const id of selectableIds) next.add(id);
-          return next;
-        });
-      }
+      if (!meta || (e.key !== "a" && e.key !== "A")) return;
+      if (!isTop() || e.target.closest?.("input, textarea, [contenteditable]")) return;
+      e.preventDefault();
+      setSelected((prev) => {
+        const next = new Set(prev);
+        for (const id of selectableIds) next.add(id);
+        return next;
+      });
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open, selectableIds]);
+  }, [open, selectableIds, isTop]);
 
   const clearSelection = useCallback(() => {
     setSelected(new Set());
@@ -267,10 +271,10 @@ export default function ManageSessionsModal({
     <div
       className={`anim-overlay ${styles.backdrop}`}
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose?.();
+        if (isTop() && e.target === e.currentTarget) onClose?.();
       }}
     >
-      <div className={`anim-dialog ${styles.modal}`} role="dialog" aria-modal="true" aria-label="Manage sessions">
+      <div ref={dialogRef} className={`anim-dialog ${styles.modal}`} role="dialog" aria-modal="true" aria-label="Manage sessions">
         <header className={styles.header}>
           <div className={styles.headerLead}>
             <div className={styles.titleRow}>
@@ -432,5 +436,5 @@ export default function ManageSessionsModal({
     </div>
   );
 
-  return createPortal(body, document.body);
+  return createPortal(<OverlayScope overlay={isTop}>{body}</OverlayScope>, document.body);
 }

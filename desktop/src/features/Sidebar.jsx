@@ -21,7 +21,6 @@ import {
   SearchIcon,
   TrashIcon,
   XIcon,
-  ArchiveIcon,
 } from "../primitives/index.js";
 import RelativeTime from "../primitives/RelativeTime.jsx";
 import { cycleTheme, nextTheme, useTheme } from "../lib/theme.js";
@@ -398,11 +397,6 @@ function Sidebar({
           icon: <GearIcon />,
           shortcut: "⌘,",
           onClick: () => onOpenSettingsTarget(wgTarget),
-        },
-        {
-          label: "Archive workgroup",
-          icon: <ArchiveIcon />,
-          onClick: () => window.notify?.(`#${workgroup.id} archived`, { kind: "info" }),
         },
         { kind: "separator" },
         {

@@ -152,7 +152,7 @@ export default function TasksButton({
         </Button>
       </Tip>
 
-      <Popover open={open} onClose={() => setOpen(false)} width="var(--pop-lg)" align="right">
+      <Popover open={open} onClose={() => setOpen(false)} width="var(--pop-lg)" align="right" navigable role="menu">
         <div className={styles.head}>
           <div className={styles.headTitle}>
             <Eyebrow>{headEyebrow}</Eyebrow>
@@ -166,6 +166,7 @@ export default function TasksButton({
             <button
               key={t.seq}
               type="button"
+              role="menuitem"
               className={styles.row}
               onClick={() => {
                 onJump?.(t.seq);

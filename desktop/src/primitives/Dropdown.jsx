@@ -19,6 +19,8 @@ export default function Dropdown({
   onOpenChange,
   portal = false,
   fullWidth = false,
+  disabled = false,
+  "aria-label": ariaLabel,
   children,
 }) {
   const [open, setOpen] = useState(false);
@@ -145,6 +147,8 @@ export default function Dropdown({
         className={`${styles.trigger} ${variantClass(variant)} ${open ? styles.triggerOpen : ""}`}
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
+        aria-label={ariaLabel}
+        disabled={disabled}
         onKeyDown={(event) => {
           if (event.key === "ArrowDown" || event.key === "ArrowUp") {
             event.preventDefault();

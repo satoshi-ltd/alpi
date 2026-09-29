@@ -19,14 +19,33 @@ export default function ConfirmDelete({
   width,
 }) {
   const [typed, setTyped] = useState("");
+  const [busy, setBusy] = useState(false);
   useEffect(() => {
-    if (!open) setTyped("");
+    if (!open) {
+      setTyped("");
+      setBusy(false);
+    }
   }, [open]);
 
   const needsTyping = !!typeToConfirm;
   const asModal = !anchored || needsTyping;
   const armed = needsTyping ? typed === typeToConfirm : true;
   const resolvedWidth = width ?? (asModal ? "var(--pop-xl)" : "var(--pop-md)");
+
+  async function confirm() {
+    if (!armed || busy) return;
+    const result = onConfirm?.();
+    if (result && typeof result.then === "function") {
+      setBusy(true);
+      try {
+        await result;
+      } catch {
+        setBusy(false);
+        return;
+      }
+    }
+    onClose?.();
+  }
 
   const body = (
     <div className={`${styles.body} ${asModal ? styles.inModal : ""}`}>
@@ -45,6 +64,9 @@ export default function ConfirmDelete({
             mono
             value={typed}
             onChange={(e) => setTyped(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") confirm();
+            }}
             autoFocus
           />
         </div>
@@ -54,11 +76,9 @@ export default function ConfirmDelete({
         cancelLabel={cancelLabel}
         primaryLabel={confirmLabel}
         primaryDisabled={!armed}
+        primaryLoading={busy}
         destructive
-        onPrimary={() => {
-          onConfirm?.();
-          onClose?.();
-        }}
+        onPrimary={confirm}
       />
     </div>
   );

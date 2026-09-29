@@ -801,12 +801,6 @@
   gap: var(--space-1);
 }
 
-.popoverFooter {
-  display: flex;
-  align-items: center;
-  margin-top: var(--space-4);
-}
-
 .emailTypeToggle {
   flex-direction: row;
   gap: var(--space-3);
@@ -938,13 +932,6 @@
   align-items: center;
   gap: var(--space-3);
   padding-left: var(--space-1);
-}
-
-.popoverFooterRight {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
 }
 
 .heroMetaGroup {

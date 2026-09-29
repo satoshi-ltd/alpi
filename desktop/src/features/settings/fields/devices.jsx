@@ -5,6 +5,7 @@ import Button from "../../../primitives/Button.jsx";
 import Eyebrow from "../../../primitives/Eyebrow.jsx";
 import Chip from "../../../primitives/Chip.jsx";
 import Dropdown from "../../../primitives/Dropdown.jsx";
+import SelectField from "../../../primitives/SelectField.jsx";
 import Modal from "../../../primitives/Modal.jsx";
 import Skeleton from "../../../primitives/Skeleton.jsx";
 import { CopyIcon } from "../../../primitives/icons.jsx";
@@ -302,32 +303,26 @@ function DeviceDetailPopover({
         <Eyebrow as="label">last seen</Eyebrow>
         <span>{formatLastSeen(device.last_seen)}</span>
       </div>
-      <div className={styles.popoverFooter}>
-        <button
-          type="button"
-          className="alink danger"
-          onClick={onRequestRevoke}
-          disabled={busy || !canManage}
-        >
-          Revoke device…
-        </button>
-        <span className={styles.popoverFooterRight}>
-          <Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
-          {dirty && (
-            <Button
-              variant="primary"
-              disabled={busy}
-              onClick={async () => {
-                setBusy(true);
-                try { await onRename(label.trim()); onClose(); }
-                finally { setBusy(false); }
-              }}
-            >
-              {busy ? "…" : "Save"}
-            </Button>
-          )}
-        </span>
-      </div>
+      <DialogFooter
+        leading={(
+          <button
+            type="button"
+            className="alink danger"
+            onClick={onRequestRevoke}
+            disabled={busy || !canManage}
+          >
+            Revoke device…
+          </button>
+        )}
+        onCancel={onClose}
+        primaryLabel={dirty ? "Save" : undefined}
+        primaryLoading={busy}
+        onPrimary={async () => {
+          setBusy(true);
+          try { await onRename(label.trim()); onClose(); }
+          finally { setBusy(false); }
+        }}
+      />
     </div>
   );
 }
@@ -602,18 +597,19 @@ export function PairDeviceModal({ connectionId, onClose, onPaired }) {
       </div>
 
       <div className={styles.field}>
-        <Eyebrow as="label" htmlFor="pair-session-scope">Sessions</Eyebrow>
-        <select
-          id="pair-session-scope"
-          className={styles.selectField}
-          value={sessionScope}
-          onChange={(e) => setSessionScope(e.target.value)}
-          disabled={busy || Boolean(payload)}
+        <Eyebrow as="label">Sessions</Eyebrow>
+        <SelectField
           aria-label="Session scope"
-        >
-          <option value="connection">Shared across its devices</option>
-          <option value="device">Private to each device</option>
-        </select>
+          value={sessionScope}
+          onChange={setSessionScope}
+          disabled={busy || Boolean(payload)}
+          fullWidth
+          portal
+          options={[
+            { value: "connection", label: "Shared across its devices" },
+            { value: "device", label: "Private to each device" },
+          ]}
+        />
       </div>
 
       <label className={styles.adminBanner}>
@@ -726,16 +722,14 @@ export function PairDeviceModal({ connectionId, onClose, onPaired }) {
             <div className={styles.devicePairMeta}>
               <Eyebrow as="div">Host</Eyebrow>
               {(payload.endpoints?.length || 0) > 1 ? (
-                <select
-                  className={styles.input}
-                  value={endpointUrl}
-                  onChange={(event) => setEndpointUrl(event.target.value)}
+                <SelectField
                   aria-label="Pairing route"
-                >
-                  {payload.endpoints.map((endpoint) => (
-                    <option key={endpoint.url} value={endpoint.url}>{endpoint.url}</option>
-                  ))}
-                </select>
+                  value={endpointUrl}
+                  onChange={setEndpointUrl}
+                  fullWidth
+                  portal
+                  options={payload.endpoints.map((endpoint) => ({ value: endpoint.url, label: endpoint.url }))}
+                />
               ) : (
                 <div className={styles.mono}>
                   {ready ? endpointUrl : "…"}

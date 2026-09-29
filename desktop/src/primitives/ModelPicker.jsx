@@ -2,6 +2,7 @@ import Button from "./Button.jsx";
 import { useEffect, useRef, useState } from "react";
 
 import { useDismissOnOutside } from "../hooks/useDismissOnOutside.js";
+import { navigateMenu } from "../lib/menuNavigation.js";
 import { I } from "./icons.jsx";
 import Tip from "./Tip.jsx";
 import { fmtTok } from "../lib/format.js";
@@ -21,8 +22,15 @@ export default function ModelPicker({
   const [open, setOpen] = useState(false);
   const [picked, setPicked] = useState(currentModel);
   const ref = useRef(null);
+  const popRef = useRef(null);
+  const triggerRef = useRef(null);
 
   useDismissOnOutside({ open, onClose: () => setOpen(false), wrapRef: ref });
+
+  useEffect(() => {
+    if (open) popRef.current?.querySelector("button:not(:disabled)")?.focus();
+    else if (ref.current?.contains(document.activeElement) || document.activeElement === document.body) triggerRef.current?.focus();
+  }, [open]);
 
   useEffect(() => {
     setPicked(currentModel);
@@ -37,6 +45,7 @@ export default function ModelPicker({
         side="up"
       >
         <Button
+          ref={triggerRef}
           type="button"
           variant="ghost"
           className={`${styles.modelPickerTrigger} ${variant === "field" ? styles.modelPickerTriggerField : ""}`.trim()}
@@ -54,6 +63,9 @@ export default function ModelPicker({
       </Tip>
       {open && (
         <div
+          ref={popRef}
+          role="listbox"
+          onKeyDown={(event) => navigateMenu(event, popRef.current)}
           className={`anim-pop ${styles.modelPickerPop} ${
             mode === "default" ? styles.modelPickerPopDown : styles.modelPickerPopUp
           }`}
@@ -70,6 +82,8 @@ export default function ModelPicker({
                     <button
                       key={m.id}
                       type="button"
+                      role="option"
+                      aria-selected={sel}
                       onClick={() => {
                         setPicked(m.id);
                         onPick?.(m.id);

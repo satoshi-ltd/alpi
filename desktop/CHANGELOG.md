@@ -11,6 +11,21 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.6.6 — 2026-09-29 — every dialog behaves like the others
+
+- **One look for every choice.** Role, session scope, pairing route and the activity filters use
+  the same dropdown as the rest of the settings, and the current choice is highlighted again in the
+  reasoning and provider pickers.
+- **Dialogs share a footer.** Email, MCP, pairing, device, approval and question dialogs use the same
+  Cancel / primary pair, with a spinner while they work. A typed delete confirm waits for the delete
+  to finish and submits on Enter.
+- **Keyboard everywhere.** Escape closes Manage sessions and denies or cancels an agent's approval
+  or question; the header menu, sessions, tasks, voice and model pickers move focus with the arrow
+  keys. ⌘A in Manage sessions no longer selects every session while you type in a field.
+- **The workgroup "Archive" menu item is gone**: it never archived anything.
+
+  Requires alpi 0.15.20, as v0.6.4.
+
 ## v0.6.5 — 2026-09-29 — the sidebar stays put
 
 - **The sidebar no longer folds away.** The hide/show toggle shipped in v0.6.4 is gone: the desktop

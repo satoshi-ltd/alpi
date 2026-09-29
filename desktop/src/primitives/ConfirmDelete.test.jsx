@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
-import { ConfirmDeleteAction } from "./ConfirmDelete.jsx";
+import ConfirmDelete, { ConfirmDeleteAction } from "./ConfirmDelete.jsx";
 import Modal from "./Modal.jsx";
 
 function renderAction(props = {}) {
@@ -101,5 +101,41 @@ describe("ConfirmDelete surfaces", () => {
     openConfirm();
     expect(screen.getByText("Remove it?").closest("div[class*='body']").className)
       .toMatch(/inModal/);
+  });
+
+  it("keeps the dialog open and busy until an async confirm settles, then closes", async () => {
+    let finish;
+    const onConfirm = vi.fn(() => new Promise((resolve) => { finish = resolve; }));
+    const onClose = vi.fn();
+    render(<ConfirmDelete open onClose={onClose} onConfirm={onConfirm} title="Delete it" anchored={false} />);
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Delete" })).toBeDisabled();
+    finish();
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  });
+
+  it("stays open for another try when the async confirm fails", async () => {
+    const onConfirm = vi.fn(() => Promise.reject(new Error("nope")));
+    const onClose = vi.fn();
+    render(<ConfirmDelete open onClose={onClose} onConfirm={onConfirm} title="Delete it" anchored={false} />);
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Delete" })).not.toBeDisabled());
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("submits the typed confirm on Enter once the text matches", () => {
+    const onConfirm = vi.fn();
+    const onClose = vi.fn();
+    render(<ConfirmDelete open onClose={onClose} onConfirm={onConfirm} title="Delete it" typeToConfirm="DELETE" />);
+    const field = screen.getByRole("textbox");
+    fireEvent.change(field, { target: { value: "DEL" } });
+    fireEvent.keyDown(field, { key: "Enter" });
+    expect(onConfirm).not.toHaveBeenCalled();
+    fireEvent.change(field, { target: { value: "DELETE" } });
+    fireEvent.keyDown(field, { key: "Enter" });
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

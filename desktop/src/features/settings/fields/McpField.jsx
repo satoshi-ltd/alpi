@@ -137,16 +137,18 @@ function McpDetailModal({ profile, connectionId, mcp, onClose, onRemoved }) {
       <div className={styles.muted} style={{ fontSize: "var(--fs-xs)" }}>
         To edit, remove and add again. Env values are never read back from disk.
       </div>
-      <div className={styles.popoverFooter}>
-        <ConfirmDeleteAction
-          label="Remove"
-          title={`Remove MCP @${mcp.name}?`}
-          consequence="The server is unregistered from this profile. Env values cannot be read back from disk afterwards."
-          confirmLabel="Remove"
-          loading={busy}
-          onConfirm={remove}
-        />
-      </div>
+      <DialogFooter
+        leading={(
+          <ConfirmDeleteAction
+            label="Remove"
+            title={`Remove MCP @${mcp.name}?`}
+            consequence="The server is unregistered from this profile. Env values cannot be read back from disk afterwards."
+            confirmLabel="Remove"
+            loading={busy}
+            onConfirm={remove}
+          />
+        )}
+      />
     </Modal>
   );
 }

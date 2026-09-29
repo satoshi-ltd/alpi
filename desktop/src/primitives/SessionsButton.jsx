@@ -127,9 +127,10 @@ export default function SessionsButton({
           <ChevDownIcon className={styles.chev} />
         </Button>
       </Tip>
-      <Popover open={open} onClose={() => setOpen(false)} width="var(--pop-lg)" align="right">
+      <Popover open={open} onClose={() => setOpen(false)} width="var(--pop-lg)" align="right" navigable role="menu">
         <button
           type="button"
+          role="menuitem"
           className={styles.newRow}
           onClick={() => {
             onNew?.();
@@ -153,6 +154,7 @@ export default function SessionsButton({
                   <button
                     key={s.id}
                     type="button"
+                    role="menuitem"
                     onClick={() => {
                       onChange?.(s.id);
                       setOpen(false);
