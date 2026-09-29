@@ -38,7 +38,7 @@ vi.mock("../lib/useOnline.js", () => ({ useOnline: () => true }));
 vi.mock("../lib/clipboard.js", () => ({ copyText: vi.fn(async () => true) }));
 vi.mock("../primitives/Notification.jsx", () => ({ useNotify: () => () => {} }));
 vi.mock("../hooks/useOutputs.js", () => ({
-  useAllOutputs: () => ({ rows: h.rows, refresh: () => {}, loading: h.loading ?? false }),
+  useAllOutputs: () => ({ rows: h.rows, refresh: () => {}, loading: h.loading ?? false, unreachable: h.unreachable ?? [] }),
   useOutput: () => ({ row: h.detail, markRead: () => {} }),
   useDeleteOutput: () => ({ schedule: () => {}, cancel: () => {} }),
   useMarkAllOutputsRead: () => () => {},
@@ -57,6 +57,7 @@ beforeEach(() => {
   h.ttsCb.current = null;
   h.rows = [h.ROW];
   h.loading = false;
+  h.unreachable = [];
   h.detail = h.DETAIL;
   h.profileDetail = null;
   h.invoke.mockClear();
@@ -382,5 +383,24 @@ describe("NotificationsModal — read / unread", () => {
     renderModal();
     expect(screen.queryByText("Inbox zero")).toBeNull();
     expect(screen.getByText("Syncing notifications…")).toBeInTheDocument();
+  });
+});
+
+
+describe("NotificationsModal unreachable daemons", () => {
+  const renderInbox = () => render(<NotificationsModal open connections={[{ id: "c1", name: "casa" }, { id: "c2", name: "mirai" }]} onClose={() => {}} />);
+
+  it("names the daemons that did not answer above a partial list", () => {
+    h.unreachable = ["mirai"];
+    renderInbox();
+    expect(screen.getByText(/Couldn't reach mirai\. Their notifications are missing/)).toBeInTheDocument();
+  });
+
+  it("never claims inbox zero when a daemon did not answer", () => {
+    h.rows = [];
+    h.unreachable = ["casa", "mirai"];
+    renderInbox();
+    expect(screen.getByText("Couldn't reach casa, mirai")).toBeInTheDocument();
+    expect(screen.queryByText("Inbox zero")).toBeNull();
   });
 });

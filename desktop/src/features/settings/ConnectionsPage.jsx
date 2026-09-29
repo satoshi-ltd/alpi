@@ -818,7 +818,7 @@ function PairingModal({ payload, connectionArg, onClose }) {
   }
 
   return (
-    <Modal title={`Pair a device with ${payload.label}`} onClose={close} width="var(--modal-md)">
+    <Modal title={`Pair a device with ${payload.label}`} onClose={close} closeOnBackdrop={status !== "pending"} width="var(--modal-md)">
       <div className={styles.pairing}>
         <div className={styles.qr} dangerouslySetInnerHTML={{ __html: qr }} />
         <div>

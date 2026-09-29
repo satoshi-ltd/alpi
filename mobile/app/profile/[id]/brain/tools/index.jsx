@@ -10,6 +10,7 @@ import { useBack } from '../../../../../src/hooks/useBack';
 import { useTools } from '../../../../../src/hooks/useDaemonData';
 import { usePullRefresh } from '../../../../../src/hooks/usePullRefresh';
 import { useTheme } from '../../../../../src/theme/ThemeContext';
+import { LoadFailed } from '../../../../../src/components/LoadFailed';
 import { EMPTY } from '../../../../../../common/emptyCopy.mjs';
 
 // Same category order as desktop ToolsPanel.
@@ -57,6 +58,8 @@ export default function ToolsList() {
           <View style={{ padding: space.s10, alignItems: 'center' }}>
             <ActivityIndicator color={colors.ink3} />
           </View>
+        ) : tools.error && rows.length === 0 ? (
+          <LoadFailed inline label="tools" error={tools.error} onRetry={() => tools.refresh?.()} />
         ) : rows.length === 0 ? (
           <Row label={EMPTY.tools.title} helper={EMPTY.tools.hint} chevron={false} />
         ) : (

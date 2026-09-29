@@ -37,7 +37,15 @@ export function PickerRow({
   ];
   return (
     <View style={right ? S.wrapWithRight : S.wrap}>
-      <Pressable onPress={onPress} android_ripple={{ color: colors.selected }} style={pressStyle}>
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityState={{ selected }}
+        accessibilityLabel={typeof label === 'string' ? label : undefined}
+        accessibilityHint={typeof helper === 'string' ? helper : undefined}
+        android_ripple={{ color: colors.selected }}
+        style={pressStyle}
+      >
         <View style={S.dotSlot}>
           {selected ? <Dot color={dotColor} /> : null}
         </View>

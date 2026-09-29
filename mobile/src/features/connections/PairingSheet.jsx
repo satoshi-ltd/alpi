@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, Share, Text, View } from 'react-native';
+import { Share, Text, View } from 'react-native';
 import { radii, space } from '../../theme/tokens';
 
+import { PickerRow } from '../../components/PickerRow';
 import { Pill } from '../../components/Pill';
 import { Row, RowSeparator } from '../../components/Row';
 import { Sheet } from '../../components/Sheet';
@@ -127,14 +128,12 @@ export function PairingSheet({ open, onClose, payload, onSettled }) {
           {endpoints.map((e, i) => (
             <View key={e.url}>
               {i > 0 ? <RowSeparator /> : null}
-              <Pressable onPress={() => setEndpointUrl(e.url)}>
-                <Row
-                  label={e.label || e.url}
-                  helper={e.label ? e.url : undefined}
-                  value={endpointUrl === e.url ? <Pill tone="on">in link</Pill> : undefined}
-                  chevron={false}
-                />
-              </Pressable>
+              <PickerRow
+                label={e.label || e.url}
+                helper={e.label ? e.url : undefined}
+                selected={endpointUrl === e.url}
+                onPress={() => setEndpointUrl(e.url)}
+              />
             </View>
           ))}
         </View>

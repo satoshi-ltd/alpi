@@ -194,7 +194,7 @@ function McpAddModal({ profile, connectionId, existingNames, onClose, onSaved })
   }
 
   return (
-    <Modal title="Add MCP server" onClose={onClose}>
+    <Modal title="Add MCP server" onClose={onClose} closeOnBackdrop={!busy && ![name, command, args, envText].some((v) => v.trim())}>
       <div className={styles.muted} style={{ marginBottom: "var(--space-2)" }}>
         Example — GitHub MCP: command <code>npx</code>, args{" "}
         <code>-y @modelcontextprotocol/server-github</code>, env{" "}

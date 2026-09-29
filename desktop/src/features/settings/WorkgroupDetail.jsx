@@ -13,7 +13,7 @@ import { Section, Row, CopyButton } from "./primitives.jsx";
 import { ConfirmDelete, ConfirmDeleteAction } from "../../primitives/index.js";
 import { RefreshBar, SettingsHero } from "../../primitives/index.js";
 import { Diamond, Dot, LoadFailed, Mono } from "../../primitives/index.js";
-import { BudgetEditor } from "./fields/alp.jsx";
+import { BudgetEdit } from "../../primitives/index.js";
 import { useProfileDetail } from "../../hooks/useProfileDetail.js";
 import { useWorkgroupUsageDaily } from "../../hooks/useUsage.js";
 import { useSwrValue } from "../../hooks/useSwrValue.js";
@@ -379,8 +379,11 @@ export default function WorkgroupDetail({
                 )}
                 <span className={styles.budgetSpacer} />
                 {workgroup.is_hub && (
-                  <BudgetEditor
-                    current={workgroup.budget_usd}
+                  <BudgetEdit
+                    value={workgroup.budget_usd}
+                    label="Lifetime USD cap"
+                    align="right"
+                    triggerLabel={workgroup.budget_usd != null ? "Edit cap" : "Set cap"}
                     onSave={async (next) => {
                       try {
                         await invoke("workgroup_update", {

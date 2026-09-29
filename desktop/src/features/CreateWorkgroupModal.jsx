@@ -237,6 +237,7 @@ export default function CreateWorkgroupModal({
       open
       title="New workgroup"
       onClose={onClose}
+      closeOnBackdrop={!busy && !name.trim() && !briefing.trim() && memberIds.length === 0 && !recipeYaml}
       width={isRecipe ? "var(--modal-lg)" : "var(--modal-md)"}
     >
       <div className={styles.body}>

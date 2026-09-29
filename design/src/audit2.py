@@ -1,14 +1,10 @@
 from gen import ALPI_ACCENT, DANGER, DOC_ACCENT, mix, page
 from desktop_boards import HOVER, INK, INK2, INK3, LINE, MONO
 
-OPEN = [
-    ("mobile", "Selected state", "Seven selected styles remain: PickerRow dot, radio, pill, role card, member chip, “in link” pill, swatch ring. Only ActionSheet pickers gained the mark.", "One selected style everywhere, the PickerRow's."),
-    ("desktop", "Dismiss as an action", "A backdrop click closes every form modal with no dirty guard, and a stray click kills a live pairing code.", "Dirty guard on the Create dialogs; the pairing dialog ignores the backdrop while a code is pending."),
-    ("desktop", "Budget editor", "Profiles use BudgetEdit (Selectish, Cancel + Save); workgroups use BudgetEditor (Edit button, Save only).", "One editor that validates and can clear the cap."),
-    ("desktop", "Text inputs", "Create profile and the provider form use raw 40 px inputs; Create workgroup uses the 32 px Field.", "Field everywhere."),
-    ("desktop", "Unreachable daemons", "Notifications drop an unreachable daemon silently, so the list can look complete when it is not.", "Say which daemons did not answer, as mobile does."),
-    ("mobile", "Failed loads", "MCP, skills and tools still show their empty row when the read fails.", "Inline “Couldn’t load” with Retry, as email and memories do."),
-]
+OPEN = []
+
+
+EMPTY_ROW = f'<div style="padding: 18px 0; border-top: 0.5px solid {LINE}; font-size: 14px; color: {INK2}">Nothing open. Both clients match the design; new findings land here first.</div>'
 
 
 def audit2_board():
@@ -25,7 +21,7 @@ def audit2_board():
 <span style="font-size: 30px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15">What is left between the two clients</span>
 <span style="font-size: 13px; line-height: 1.5; color: {INK3}; max-width: 900px">Only pending work lives here. A row leaves this table the moment it ships; what shipped is in each client's changelog.</span>
 <div style="height: 18px"></div>
-{head}
-{rows}
+{head if OPEN else ""}
+{rows or EMPTY_ROW}
 </div>"""
     return page("Open work", 1280, 140 + 90 * len(OPEN) + 120, body)

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { ActionLink, Eyebrow } from "../../primitives/index.js";
+import { ActionLink, Eyebrow, Field } from "../../primitives/index.js";
 import Dropdown from "../../primitives/Dropdown.jsx";
 import { PAID_PROVIDERS } from "./util.js";
 import styles from "./ProviderPickerForm.module.css";
@@ -166,8 +166,7 @@ export default function ProviderPickerForm({
         <div className={styles.grid}>
           <div className={styles.field}>
             <Eyebrow>NAME</Eyebrow>
-            <input
-              className={styles.input}
+            <Field
               value={v.name ?? ""}
               onChange={(e) => patch({ name: e.target.value.toLowerCase() })}
               placeholder="local · home-gpu · cloud-a"
@@ -177,8 +176,7 @@ export default function ProviderPickerForm({
           </div>
           <div className={styles.field}>
             <Eyebrow>URL</Eyebrow>
-            <input
-              className={styles.input}
+            <Field
               value={v.url ?? ""}
               onChange={(e) => patch({ url: e.target.value })}
               placeholder="http://localhost:11434"
@@ -190,8 +188,7 @@ export default function ProviderPickerForm({
         <>
           <div className={styles.field}>
             <Eyebrow>{meta.env}</Eyebrow>
-            <input
-              className={styles.input}
+            <Field
               type="password"
               value={v.keyValue ?? ""}
               onChange={(e) => patch({ keyValue: e.target.value })}
@@ -219,8 +216,7 @@ export default function ProviderPickerForm({
               </span>
               {manualModel || savedOpenRouterModels.length === 0 ? (
                 <>
-                  <input
-                    className={styles.input}
+                  <Field
                     value={v.model ?? ""}
                     onChange={(e) => patch({ model: e.target.value })}
                     placeholder="provider/model-id (optional)"

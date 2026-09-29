@@ -91,6 +91,26 @@ describe("DevicesField", () => {
 });
 
 describe("PairDeviceModal", () => {
+  it("a stray backdrop click never kills a live pairing code", async () => {
+    invoke.mockImplementation((command) => {
+      if (command === "profile_summaries") return Promise.resolve([]);
+      if (command === "devices_generate") return Promise.resolve({
+        connection_id: "conn-1", pairing_id: "pair-1", pairing_token: "grant", pairing_status: "pending",
+        expires_at: 1_800_000_000, url: "wss://client.example.com",
+      });
+      return Promise.resolve(null);
+    });
+    const onClose = vi.fn();
+    render(<PairDeviceModal onClose={onClose} onPaired={() => {}} />);
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Phone" } });
+    fireEvent.click(screen.getByRole("button", { name: "Generate pairing code" }));
+    await screen.findByText(/pairing_token=grant/);
+    fireEvent.mouseDown(document.querySelector('[role="dialog"]').parentElement);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(onClose).not.toHaveBeenCalled();
+    expect(invoke).not.toHaveBeenCalledWith("connections_cancel_pairing", expect.anything());
+  });
+
   it("includes the stable server connection id in the pairing link", async () => {
     invoke.mockImplementation((command) => {
       if (command === "profile_summaries") return Promise.resolve([]);

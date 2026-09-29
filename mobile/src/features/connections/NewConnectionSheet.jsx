@@ -4,6 +4,7 @@ import { space } from '../../theme/tokens';
 
 import { Field, FieldLabel } from '../../components/Field';
 import { OnOff } from '../../components/OnOff';
+import { PickerRow } from '../../components/PickerRow';
 import { Pill } from '../../components/Pill';
 import { Row } from '../../components/Row';
 import { Sheet } from '../../components/Sheet';
@@ -39,7 +40,6 @@ export function ProfilePicker({ profiles, selected, onToggle }) {
 export function NewConnectionSheet({ open, onClose, onCreated }) {
   const toast = useToast();
   const { call } = useEndpoint();
-  const { colors, fonts, fontSizes } = useTheme();
   const summaries = useProfileSummaries();
   const [label, setLabel] = useState('');
   const [role, setRole] = useState('member');
@@ -95,23 +95,9 @@ export function NewConnectionSheet({ open, onClose, onCreated }) {
         <Field label="Label" value={label} onChangeText={setLabel} placeholder="Javi, Support, agora-web…" autoCapitalize="none" autoCorrect={false} />
         <View style={{ gap: space.s2 }}>
           <FieldLabel>Role</FieldLabel>
-          <View style={{ flexDirection: 'row', gap: space.s3 }}>
+          <View style={{ marginHorizontal: -space.s8 }}>
             {ROLES.map(([id, title, helper]) => (
-              <Pressable key={id} onPress={() => setRole(id)} accessibilityRole="button" accessibilityLabel={`${title} role`} style={{ flex: 1 }}>
-                <View
-                  style={{
-                    padding: space.s5,
-                    borderRadius: 12,
-                    borderWidth: 0.5,
-                    borderColor: role === id ? colors.ink : colors.line2,
-                    backgroundColor: role === id ? colors.selected : colors.bgInput,
-                    gap: space.s1,
-                  }}
-                >
-                  <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.md, color: colors.ink }}>{title}</Text>
-                  <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>{helper}</Text>
-                </View>
-              </Pressable>
+              <PickerRow key={id} label={title} helper={helper} selected={role === id} onPress={() => setRole(id)} />
             ))}
           </View>
         </View>

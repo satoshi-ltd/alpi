@@ -31,7 +31,7 @@ vi.mock('react-native', () => {
     });
   const ScrollView = ({ children }) => React.createElement('div', {}, children);
   const Modal = ({ children, visible }) => (visible ? React.createElement('div', {}, children) : null);
-  return { Keyboard: { addListener: () => ({ remove: () => {} }) }, Modal, Pressable, ScrollView, Text, TextInput, View, useWindowDimensions: () => ({ width: 390, height: 844 }) };
+  return { Keyboard: { addListener: () => ({ remove: () => {} }) }, Modal, Pressable, ScrollView, StyleSheet: { create: (s) => s }, Text, TextInput, View, useWindowDimensions: () => ({ width: 390, height: 844 }) };
 });
 
 vi.mock('react-native-reanimated', () => ({
@@ -51,6 +51,7 @@ vi.mock('../../components/Button', () => ({
   Button: ({ title, onPress, disabled }) =>
     React.createElement('button', { type: 'button', onClick: onPress, disabled: !!disabled }, title),
 }));
+vi.mock('../../components/Dot', () => ({ Dot: () => React.createElement('span', { 'data-dot': 'true' }) }));
 vi.mock('../../components/Icon', () => ({ Icon: ({ name }) => React.createElement('span', { 'data-icon': name }) }));
 
 vi.mock('../../theme/ThemeContext', () => ({
@@ -217,5 +218,14 @@ describe('CreateProfileSheet pane modes', () => {
     const { container } = renderSheet(true);
     expect(sheetStyle(container).maxWidth).toBe(560);
     expect(screen.getByPlaceholderText(NAME)).toBeTruthy();
+  });
+
+  it('marks the picked provider with the picker dot', () => {
+    render(<CreateProfileSheet open onClose={() => {}} />);
+    const dotIn = (name) => !!screen.getByLabelText(name).querySelector('[data-dot]');
+    expect(dotIn('Ollama')).toBe(true);
+    fireEvent.click(screen.getByLabelText('Gemini'));
+    expect(dotIn('Gemini')).toBe(true);
+    expect(dotIn('Ollama')).toBe(false);
   });
 });

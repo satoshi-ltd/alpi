@@ -14,6 +14,16 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.5.8 — 2026-09-30 — one way to show what you picked
+
+- **Every single choice marks the pick the same way**, with the dot the model and voice pickers
+  already use. The provider in New profile, the role in New connection and the route in the
+  pairing sheet now look and read alike.
+- **MCP servers, skills and tools say when they could not load**, with a Retry, instead of an
+  empty list. A failed MCP handshake keeps its reason and retries in place.
+
+  Requires alpi 0.15.20.
+
 ## v0.5.7 — 2026-09-29 — empty says the same thing everywhere
 
 - **Empty lists and settings use the desktop's wording**, a short sentence with a hint, so both

@@ -4,14 +4,19 @@ import { lineHeights, space } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeContext';
 import { Button } from './Button';
 
-export function LoadFailed({ label, error, onRetry, inline = false }) {
+export function LoadFailed({ label, error, onRetry, inline = false, showDetail = false }) {
   const { colors, fonts, fontSizes } = useTheme();
   const message = `Couldn't load ${label}`;
   const detail = error ? String(error?.message ?? error) : null;
   if (inline) {
     return (
       <View accessibilityRole="alert" style={{ flexDirection: 'row', alignItems: 'center', gap: space.s4, paddingHorizontal: space.s8, paddingVertical: space.s6 }}>
-        <Text style={{ flex: 1, fontFamily: fonts.sans.medium, fontSize: fontSizes.md, color: colors.dangerText }}>{message}</Text>
+        <View style={{ flex: 1, gap: space.s1 }}>
+          <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.md, color: colors.dangerText }}>{message}</Text>
+          {showDetail && detail ? (
+            <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, lineHeight: fontSizes.xs * lineHeights.cozy, color: colors.ink3 }}>{detail}</Text>
+          ) : null}
+        </View>
         {onRetry ? (
           <Pressable onPress={onRetry} accessibilityRole="button" accessibilityLabel="Retry" hitSlop={8}>
             <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.md, color: colors.ink2 }}>Retry</Text>

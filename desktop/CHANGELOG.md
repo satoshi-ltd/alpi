@@ -11,6 +11,21 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.6.11 — 2026-09-30 — nothing you typed gets lost
+
+- **A stray click outside a half-filled form no longer throws it away.** New profile, new
+  workgroup, add MCP server and add email ignore the backdrop once you have typed something;
+  Esc and Cancel still close them.
+- **A live pairing code survives a click outside the dialog.** It ends only when you press Done
+  or Cancel.
+- **One budget editor.** Profile and workgroup caps edit the same way: it checks the number,
+  lets you clear the cap, and stays open if the save fails.
+- **Notifications say which daemons did not answer**, instead of showing a list that looks
+  complete or claiming "Inbox zero".
+- **New profile and the provider form use the same text fields** as the rest of the app.
+
+  Requires alpi 0.15.20, as v0.6.4.
+
 ## v0.6.10 — 2026-09-29 — empty says the same thing everywhere
 
 - **Empty settings speak in one voice with the phone.** "none" and "nothing yet" become a short

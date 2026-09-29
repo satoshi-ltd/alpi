@@ -10,20 +10,14 @@
   gap: var(--space-4);
 }
 
-.toggleRow {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-}
-
-.togglePill {
-  border: 0;
-  cursor: pointer;
-  height: 24px;
-}
-
 .field {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+}
+
+.error {
+  color: var(--c-danger-text);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-normal);
 }

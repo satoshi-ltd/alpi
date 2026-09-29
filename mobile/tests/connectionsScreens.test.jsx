@@ -34,6 +34,8 @@ vi.mock('react-native', () => {
   };
 });
 
+vi.mock('../src/components/Dot', () => ({ Dot: () => React.createElement('span', { 'data-dot': 'true' }) }));
+
 vi.mock('../src/components/Toggle', () => ({
   Toggle: ({ on, label, onChange, disabled }) =>
     React.createElement('button', { type: 'button', 'aria-label': label, disabled, onClick: () => onChange?.(!on) }, on ? 'on' : 'off'),
@@ -164,6 +166,35 @@ describe('connections list', () => {
     }));
     await waitFor(() => expect(screen.getByText(/alpi:\/\/device\?url=ws%3A%2F%2F10\.0\.0\.2%3A49200/)).toBeTruthy());
     expect(h.refresh).toHaveBeenCalled();
+  });
+
+  it('picks the pairing route with the picker dot and puts it in the link', async () => {
+    h.call.mockImplementation(async (method) =>
+      method === 'host.connections.create'
+        ? { connection_id: 'conn_9', pairing_id: 'pair_1', pairing_token: 'tok', pairing_status: 'pending', label: 'Web', role: 'member', endpoints: [{ url: 'ws://10.0.0.2:49200', label: 'lan' }, { url: 'wss://atlas.example.com', label: 'public' }] }
+        : { status: 'pending' });
+    render(<ConnectionsRoute />);
+    fireEvent.click(screen.getByText('New'));
+    fireEvent.change(document.querySelector('input'), { target: { value: 'Web' } });
+    fireEvent.click(screen.getByText('Create + pair'));
+    await waitFor(() => expect(screen.getByLabelText('public')).toBeTruthy());
+    const dotIn = (name) => !!screen.getByLabelText(name).querySelector('[data-dot]');
+    expect(dotIn('lan')).toBe(true);
+    fireEvent.click(screen.getByLabelText('public'));
+    expect(dotIn('public')).toBe(true);
+    expect(dotIn('lan')).toBe(false);
+    expect(screen.getByText(/url=wss%3A%2F%2Fatlas\.example\.com/)).toBeTruthy();
+  });
+
+  it('marks the chosen role with the picker dot, like every other single choice', () => {
+    render(<ConnectionsRoute />);
+    fireEvent.click(screen.getByText('New'));
+    const dotIn = (name) => !!screen.getByLabelText(name).querySelector('[data-dot]');
+    expect(dotIn('Member')).toBe(true);
+    expect(dotIn('Admin')).toBe(false);
+    fireEvent.click(screen.getByLabelText('Admin'));
+    expect(dotIn('Admin')).toBe(true);
+    expect(dotIn('Member')).toBe(false);
   });
 });
 

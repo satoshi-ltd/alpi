@@ -308,3 +308,25 @@ describe("WorkgroupDetail — delete / leave", () => {
     await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
   });
 });
+
+
+describe("WorkgroupDetail budget cap", () => {
+  it("clears the lifetime cap through workgroup_update", async () => {
+    invoke.mockResolvedValue([]);
+    const onSaved = vi.fn();
+    render(
+      <WorkgroupDetail
+        workgroup={{ id: "wg-1", profile: "mira", hub_id: "mira", is_hub: true, budget_usd: 10, spent_usd: 1 }}
+        profiles={[{ name: "mira", pubkey_b64: "hub", accent: "#446" }]}
+        connectionId="casa"
+        onSaved={onSaved}
+      />,
+    );
+    fireEvent.click(screen.getByText("Edit cap"));
+    fireEvent.change(screen.getByPlaceholderText("empty = unlimited"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("workgroup_update", {
+      profile: "mira", wgId: "wg-1", budgetUsd: null, clearBudget: true, connectionId: "casa",
+    }));
+  });
+});

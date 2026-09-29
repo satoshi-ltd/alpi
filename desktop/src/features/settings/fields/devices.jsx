@@ -581,7 +581,7 @@ export function PairDeviceModal({ connectionId, onClose, onPaired }) {
   }
 
   return (
-    <Modal title="Pair a new device" onClose={cancel} width="var(--modal-md)">
+    <Modal title="Pair a new device" onClose={cancel} closeOnBackdrop={!busy && !payload && !label.trim()} width="var(--modal-md)">
       <div className={styles.field}>
         <Eyebrow as="label">Label</Eyebrow>
         <Field

@@ -816,3 +816,24 @@ describe("rowKey (modal hide/delete namespacing)", () => {
     expect(visible).toEqual([{ connectionId: "c2", profile: "default", id: "o1" }]);
   });
 });
+
+
+describe("useAllOutputs unreachable daemons", () => {
+  it("lists a connection whose fetch failed and clears it once it answers", async () => {
+    let failing = true;
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "profile_summaries") {
+        if (failing) throw new Error("net down");
+        return [{ name: "p" }];
+      }
+      if (cmd === "outputs_list") return { aggregate: true, outputs: [{ id: "r", created_at: 1, profile: "p" }] };
+      return null;
+    });
+    const conns = [{ id: "c1", name: "home" }, { id: "c2", name: "work", status: "offline" }, { id: "c3", name: "guest", role: "member", status: "offline" }, { id: "c4", name: "off", status: "disabled" }];
+    const { result } = renderHook(() => useAllOutputs({ connections: conns }));
+    await waitFor(() => expect(result.current.unreachable).toEqual(["home", "work"]));
+    failing = false;
+    await act(async () => { await result.current.refresh("c1"); });
+    expect(result.current.unreachable).toEqual(["work"]);
+  });
+});

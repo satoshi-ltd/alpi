@@ -9,6 +9,7 @@ import { useBack } from '../../../../../src/hooks/useBack';
 import { useSkills } from '../../../../../src/hooks/useDaemonData';
 import { usePullRefresh } from '../../../../../src/hooks/usePullRefresh';
 import { useTheme } from '../../../../../src/theme/ThemeContext';
+import { LoadFailed } from '../../../../../src/components/LoadFailed';
 import { EMPTY } from '../../../../../../common/emptyCopy.mjs';
 
 function formatCategory(raw) {
@@ -52,6 +53,8 @@ export default function SkillsList() {
           <View style={{ padding: space.s10, alignItems: 'center' }}>
             <ActivityIndicator color={colors.ink3} />
           </View>
+        ) : skills.error && rows.length === 0 ? (
+          <LoadFailed inline label="skills" error={skills.error} onRetry={() => skills.refresh?.()} />
         ) : rows.length === 0 ? (
           <Row label={EMPTY.skills.title} helper={EMPTY.skills.hint} chevron={false} />
         ) : (

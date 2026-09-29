@@ -7,6 +7,7 @@ import { space } from '../../../../src/theme/tokens';
 import { Button } from '../../../../src/components/Button';
 import { Pill } from '../../../../src/components/Pill';
 import { Row, RowSeparator, SectionHeader } from '../../../../src/components/Row';
+import { LoadFailed } from '../../../../src/components/LoadFailed';
 import { Sheet } from '../../../../src/components/Sheet';
 import { ScreenHeader } from '../../../../src/components/ScreenHeader';
 import { useToast } from '../../../../src/components/Toast';
@@ -26,11 +27,12 @@ export default function McpList() {
   const { call } = useEndpoint();
   const { colors, fonts, fontSizes } = useTheme();
   const pull = usePullRefresh(() => refresh?.());
-  const { profile, loading, refresh } = useProfile(id);
+  const { profile, loading, error, refresh } = useProfile(id);
   const [target, setTarget] = useState(null);
   const [confirmRemove, setConfirmRemove] = useState(null);
   const [tools, setTools] = useState(null);
   const [toolsError, setToolsError] = useState(null);
+  const [toolsAttempt, setToolsAttempt] = useState(0);
 
   // Daemon profile summary uses `mcps` (alpi/host/device_state.py::_mcp_servers). Each entry: {name, command, args[], env_keys[]}.
   const servers = profile?.mcps ?? [];
@@ -45,7 +47,7 @@ export default function McpList() {
       .then((res) => { if (!cancelled) setTools(res?.tools ?? []); })
       .catch((e) => { if (!cancelled) { setToolsError(String(e)); setTools([]); } });
     return () => { cancelled = true; };
-  }, [target?.name, id, call]);
+  }, [target?.name, id, call, toolsAttempt]);
 
   const remove = async (name) => {
     try {
@@ -70,6 +72,8 @@ export default function McpList() {
           <View style={{ padding: space.s10, alignItems: 'center' }}>
             <ActivityIndicator color={colors.ink3} />
           </View>
+        ) : error && !profile ? (
+          <LoadFailed inline label="MCP servers" error={error} onRetry={() => refresh?.()} />
         ) : servers.length === 0 ? (
           <Row label={EMPTY.mcp.title} helper={EMPTY.mcp.hint} chevron={false} />
         ) : (
@@ -161,17 +165,7 @@ export default function McpList() {
               <Text style={{ fontFamily: fonts.sans.regular, color: colors.ink3, fontSize: fontSizes.sm }}>handshaking with server…</Text>
             </View>
           ) : toolsError ? (
-            <Text
-              style={{
-                fontFamily: fonts.sans.regular,
-                color: colors.dangerText,
-                fontSize: fontSizes.sm,
-                paddingHorizontal: space.s8,
-                paddingVertical: space.s3,
-              }}
-            >
-              {toolsError}
-            </Text>
+            <LoadFailed inline showDetail label="tools" error={toolsError} onRetry={() => setToolsAttempt((n) => n + 1)} />
           ) : tools.length === 0 ? (
             <Text
               style={{

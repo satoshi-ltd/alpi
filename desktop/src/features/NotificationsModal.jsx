@@ -75,6 +75,12 @@ function contextAction(row) {
   return null;
 }
 
+export function unreachableTitle(names) {
+  const shown = names.slice(0, 3).join(", ");
+  const rest = names.length > 3 ? ` and ${names.length - 3} more` : "";
+  return `Couldn't reach ${shown}${rest}`;
+}
+
 export default function NotificationsModal({
   open,
   onClose,
@@ -90,7 +96,7 @@ export default function NotificationsModal({
   const notify = useNotify();
   const multi = connections.length > 1;
   // deferMs 0: opening the inbox is explicit user intent — every connection starts syncing immediately (bounded concurrency, no boot stagger).
-  const { rows, refresh, loading } = useAllOutputs({
+  const { rows, refresh, loading, unreachable = [] } = useAllOutputs({
     connections, activeId: activeConnectionId, enabled: open, deferMs: 0,
   });
   const markAll = useMarkAllOutputsRead();
@@ -297,9 +303,21 @@ export default function NotificationsModal({
 
   const list = (
     <ul className={styles.list} role="listbox">
+      {rows.length > 0 && unreachable.length > 0 && (
+        <li className={styles.partial} role="presentation">
+          {unreachableTitle(unreachable)}. Their notifications are missing from this list.
+        </li>
+      )}
       {rows.length === 0 && loading ? (
         <li className={styles.empty}>
           <span className={styles.emptyHint}>Syncing notifications…</span>
+        </li>
+      ) : rows.length === 0 && unreachable.length > 0 ? (
+        <li className={styles.empty}>
+          <span className={styles.emptyTitle}>{unreachableTitle(unreachable)}</span>
+          <span className={styles.emptyHint}>
+            Their notifications show up here once the daemon answers again.
+          </span>
         </li>
       ) : rows.length === 0 ? (
         <li className={styles.empty}>

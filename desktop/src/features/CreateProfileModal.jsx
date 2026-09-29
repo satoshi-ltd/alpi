@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { DialogFooter, Eyebrow, Modal } from "../primitives/index.js";
+import { DialogFooter, Eyebrow, Field, Modal } from "../primitives/index.js";
 import { useNotify } from "../primitives/Notification.jsx";
 import { isValidProfileName, RESERVED_PROFILE_NAMES } from "../lib/profile-display.js";
 import ProviderPickerForm, {
@@ -63,15 +63,16 @@ export default function CreateProfileModal({
     }
   }
 
+  const dirty = trimmed !== "" || JSON.stringify(providerValue) !== JSON.stringify(defaultProviderValue());
+
   if (!open) return null;
 
   return (
-    <Modal open title="New profile" onClose={onClose} width="var(--modal-md)">
+    <Modal open title="New profile" onClose={onClose} closeOnBackdrop={!dirty && !busy} width="var(--modal-md)">
       <div className={styles.body}>
         <div className={styles.field}>
           <Eyebrow>NAME</Eyebrow>
-          <input
-            className={styles.input}
+          <Field
             value={name}
             onChange={(e) => setName(e.target.value.toLowerCase())}
             onKeyDown={(e) => {

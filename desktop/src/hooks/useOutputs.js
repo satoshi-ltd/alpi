@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { subscribeDaemonEvent } from "../lib/daemon-bus.js";
 
@@ -116,6 +116,8 @@ export async function fetchConnectionOutputs(connection, status, previous = null
   return rows;
 }
 
+const UNREACHABLE_STATUSES = new Set(["offline", "auth-failed", "rate-limited"]);
+
 function isFetchable(conn) {
   // Outputs are the operator's inbox — member-role connections are never asked (the daemon would reject them anyway).
   if (conn?.role === "member") return false;
@@ -129,6 +131,7 @@ export function useAllOutputs({ connections, status, activeId = null, deferMs = 
   const statusKey = String(status ?? "");
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [failedIds, setFailedIds] = useState(() => new Set());
   const byConnRef = useRef(new Map());
   const seqRef = useRef(new Map());
   const inflightRef = useRef(0);
@@ -151,6 +154,16 @@ export function useAllOutputs({ connections, status, activeId = null, deferMs = 
     setLoading(
       inflightRef.current > 0 || queueRef.current.length > 0 || timersRef.current.size > 0,
     );
+  }, []);
+
+  const markFailed = useCallback((id, failed) => {
+    setFailedIds((prev) => {
+      if (prev.has(id) === failed) return prev;
+      const next = new Set(prev);
+      if (failed) next.add(id);
+      else next.delete(id);
+      return next;
+    });
   }, []);
 
   const mergeRows = useCallback(() => {
@@ -177,6 +190,7 @@ export function useAllOutputs({ connections, status, activeId = null, deferMs = 
       const previous = byConnRef.current.get(conn.id) ?? _rowsMemory.get(key) ?? null;
       const fetched = await fetchConnectionOutputs(conn, statusRef.current, previous).catch(() => null);
       if (seqRef.current.get(conn.id) !== seq || !enabledRef.current) return;
+      markFailed(conn.id, fetched === null);
       // null = the daemon was unreachable: keep the last-known rows instead of blanking them.
       if (fetched === null) return;
       // A connection that went offline mid-flight must not resurrect: commit only against its live, fetchable self.
@@ -189,7 +203,7 @@ export function useAllOutputs({ connections, status, activeId = null, deferMs = 
       recount();
       pumpRef.current?.();
     }
-  }, [mergeRows, recount]);
+  }, [mergeRows, recount, markFailed]);
 
   const pumpRef = useRef(null);
   // Explicit-open fan-out: bounded concurrency instead of time stagger — each resolution frees the next slot.
@@ -222,6 +236,7 @@ export function useAllOutputs({ connections, status, activeId = null, deferMs = 
       queueRef.current.length = 0;
       seenSigRef.current.clear();
       for (const [id, n] of seqRef.current) seqRef.current.set(id, n + 1);
+      setFailedIds((prev) => (prev.size ? new Set() : prev));
       recount();
       return;
     }
@@ -357,7 +372,14 @@ export function useAllOutputs({ connections, status, activeId = null, deferMs = 
     return () => { _localListeners.delete(refresh); };
   }, [refresh, enabled]);
 
-  return { rows, loading, refresh };
+  const unreachable = useMemo(
+    () => list
+      .filter((c) => c.role !== "member" && c.status !== "disabled" && (failedIds.has(c.id) || UNREACHABLE_STATUSES.has(c.status)))
+      .map((c) => c.name || c.id),
+    [sig, failedIds], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  return { rows, loading, refresh, unreachable };
 }
 
 

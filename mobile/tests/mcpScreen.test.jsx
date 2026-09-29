@@ -87,7 +87,7 @@ describe('MCP server sheet typography', () => {
     h.call.mockRejectedValue(new Error('spawn failed'));
     openServer();
     await waitFor(() => expect(screen.getByText(/spawn failed/)).toBeTruthy());
-    expect(screen.getByText(/spawn failed/).getAttribute('data-font')).toBe('Geist_400Regular');
+    expect(screen.getByText(/spawn failed/).getAttribute('data-font')).toBe('GeistMono_400Regular');
   });
 
   it('renders the empty-tools notice in a theme font', async () => {

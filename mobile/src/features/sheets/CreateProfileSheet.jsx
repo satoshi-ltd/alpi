@@ -1,10 +1,10 @@
 import { usePathname, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
-import { mobile, space } from '../../theme/tokens';
+import { ScrollView, View } from 'react-native';
+import { space } from '../../theme/tokens';
 
 import { Field, FieldLabel } from '../../components/Field';
-import { Pill } from '../../components/Pill';
+import { PickerRow } from '../../components/PickerRow';
 import { Sheet } from '../../components/Sheet';
 import { useToast } from '../../components/Toast';
 import { useProfileSummaries } from '../../hooks/useDaemonData';
@@ -119,20 +119,16 @@ export function CreateProfileSheet({ open, onClose }) {
 
         <View style={{ gap: space.s4 }}>
           <FieldLabel>Provider · pick one to start</FieldLabel>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.s2 }}>
-            {PROVIDERS.map((p) => {
-              const on = providerId === p.id;
-              return (
-                <Pressable
-                  key={p.id}
-                  accessibilityLabel={p.label}
-                  onPress={() => setProviderId(p.id)}
-                  style={{ minHeight: mobile.tap, justifyContent: 'center' }}
-                >
-                  <Pill tone={on ? 'on' : undefined} off={!on}>● {p.label}</Pill>
-                </Pressable>
-              );
-            })}
+          <View style={{ marginHorizontal: -space.s8 }}>
+            {PROVIDERS.map((p) => (
+              <PickerRow
+                key={p.id}
+                label={p.label}
+                helper={p.env ?? 'local models, no key'}
+                selected={providerId === p.id}
+                onPress={() => setProviderId(p.id)}
+              />
+            ))}
           </View>
         </View>
 

@@ -312,7 +312,7 @@ function AddAccountModal({ profile, connectionId = null, onClose, onSaved }) {
   }
 
   return (
-    <Modal title="Add email account" onClose={onClose}>
+    <Modal title="Add email account" onClose={onClose} closeOnBackdrop={!busy && !Object.values(values).some((v) => String(v ?? "").trim())}>
       <div className={`${styles.field} ${styles.emailTypeToggle}`}>
         <Chip
           state={type === "imap" ? "on" : undefined}

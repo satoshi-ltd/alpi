@@ -121,6 +121,17 @@
 .emptyTitle { color: var(--ink-2); font-weight: var(--fw-semibold); }
 .emptyHint { font-size: var(--fs-sm); line-height: var(--lh-cozy); }
 
+.partial {
+  list-style: none;
+  margin: var(--space-3) var(--space-4) var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--c-warning) 12%, transparent);
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-cozy);
+}
+
 .detailEmpty {
   display: flex;
   align-items: center;

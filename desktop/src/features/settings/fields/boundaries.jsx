@@ -14,9 +14,9 @@ export function BudgetField({ profile, onSaved }) {
   const usd = profile.budget_daily_usd;
   const value = usd != null ? usd : "";
 
-  async function save({ value: v }) {
+  async function save(v) {
     try {
-      if (v == null || v === "") {
+      if (v == null) {
         await invoke("unset_config_field", { profile: profile.name, key: "budget.daily_usd" });
       } else {
         await invoke("set_config_field", { profile: profile.name, key: "budget.daily_usd", value: String(v) });
