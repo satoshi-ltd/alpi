@@ -84,6 +84,28 @@ export function rolesFromConnections(connections) {
   return map;
 }
 
+// The daemon names the caller's own connection and device in host.version; deviceId stays the daemon's identity.
+export function setIdentity(idToIdentity) {
+  return mutate(async () => {
+    const state = await loadConnections();
+    let changed = false;
+    for (const conn of state.connections) {
+      const next = idToIdentity.get(conn.id);
+      if (!next) continue;
+      if (next.connectionId && conn.connectionId !== next.connectionId) {
+        conn.connectionId = next.connectionId;
+        changed = true;
+      }
+      if (next.ownDeviceId && conn.ownDeviceId !== next.ownDeviceId) {
+        conn.ownDeviceId = next.ownDeviceId;
+        changed = true;
+      }
+    }
+    if (changed) await writeRaw(state);
+    return state;
+  });
+}
+
 export function setRoles(idToRole) {
   return mutate(async () => {
     const state = await loadConnections();

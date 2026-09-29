@@ -1,0 +1,94 @@
+import React from 'react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, render, screen } from '@testing-library/react';
+
+afterEach(cleanup);
+
+const h = vi.hoisted(() => ({ width: 390 }));
+
+vi.mock('react-native', () => {
+  const View = ({ children, style, onLayout, ...p }) => {
+    React.useEffect(() => {
+      onLayout?.({ nativeEvent: { layout: { width: h.width } } });
+    }, [onLayout]);
+    return React.createElement('div', { ...p, 'data-dir': style?.flexDirection ?? '' }, children);
+  };
+  const Text = ({ children, style, numberOfLines, ellipsizeMode, ...p }) =>
+    React.createElement('span', { ...p, 'data-ellipsis': ellipsizeMode ?? '', 'data-align': style?.textAlign ?? '' }, children);
+  const Pressable = ({ children, onPress, android_ripple, style, ...p }) =>
+    React.createElement('button', { type: 'button', onClick: onPress, ...p }, children);
+  return { View, Text, Pressable };
+});
+
+vi.mock('../theme/ThemeContext', () => ({
+  useTheme: () => ({
+    colors: { ink: '#000', ink2: '#222', ink3: '#666', ink4: '#999', danger: '#f00', bgPane: '#fff', selected: '#eee' },
+    fonts: { sans: { regular: 'sans' }, mono: 'mono', monoMedium: 'monoMedium', monoSemibold: 'monoSemibold' },
+    fontSizes: { xs: 11, sm: 12, md: 14, lg: 15, xl: 18 },
+  }),
+}));
+
+import { PaneContext } from '../nav/PaneContext';
+import { SettingsSurface } from '../nav/SettingsSurface';
+import { Row, RowSeparator, SectionHeader } from './Row';
+
+beforeEach(() => {
+  h.width = 390;
+});
+
+describe('Row on a narrow cover screen', () => {
+  it('keeps the value beside the label on a phone', () => {
+    render(<Row label="Model" value="z-ai/glm-5.3-flash" onPress={() => {}} />);
+    const value = screen.getByText('z-ai/glm-5.3-flash');
+    expect(value.getAttribute('data-ellipsis')).toBe('middle');
+    expect(value.getAttribute('data-align')).toBe('right');
+  });
+
+  it('drops the value under the label at full width below 360', () => {
+    h.width = 344;
+    render(<Row label="Model" helper="main model" value="z-ai/glm-5.3-flash" onPress={() => {}} />);
+    const value = screen.getByText('z-ai/glm-5.3-flash');
+    expect(value.getAttribute('data-ellipsis')).toBe('tail');
+    expect(value.getAttribute('data-align')).toBe('left');
+    expect(screen.getByText('main model')).toBeTruthy();
+  });
+});
+
+describe('Row inside wide settings', () => {
+  function wide(node) {
+    return render(
+      <PaneContext.Provider value={{ twoPane: true, side: 'detail', sidebarOpen: true, toggleSidebar: () => {} }}>
+        <SettingsSurface>{node}</SettingsSurface>
+      </PaneContext.Provider>,
+    );
+  }
+
+  it('renders the desktop field grid: label column, helper under it, mono value', () => {
+    wide(<Row label="Workspace" helper="where files land" value="~/git/casa/doc" onPress={() => {}} />);
+    const value = screen.getByText('~/git/casa/doc');
+    expect(value.getAttribute('data-ellipsis')).toBe('middle');
+    expect(screen.getByText('Workspace')).toBeTruthy();
+    expect(screen.getByText('where files land')).toBeTruthy();
+  });
+
+  it('drops the row separators and gives section headers a kicker', () => {
+    const { container } = wide(
+      <>
+        <SectionHeader kicker="last 14 days">Usage</SectionHeader>
+        <RowSeparator />
+      </>,
+    );
+    expect(screen.getByText('Usage')).toBeTruthy();
+    expect(screen.getByText('last 14 days')).toBeTruthy();
+    expect(container.querySelectorAll('div').length).toBeLessThan(4);
+  });
+
+  it('keeps the phone rows outside a settings surface even on a tablet', () => {
+    render(
+      <PaneContext.Provider value={{ twoPane: true, side: 'detail', sidebarOpen: true, toggleSidebar: () => {} }}>
+        <Row label="Peers" value="3" onPress={() => {}} />
+      </PaneContext.Provider>,
+    );
+    expect(screen.getByText('3').getAttribute('data-align')).toBe('right');
+  });
+});

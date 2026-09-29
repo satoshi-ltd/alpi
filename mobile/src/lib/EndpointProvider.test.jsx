@@ -69,6 +69,15 @@ vi.mock("./store", () => ({
     }
     return m;
   },
+  setIdentity: async (map) => {
+    storeMutations.push({ op: "setIdentity", count: map.size });
+    for (const conn of storeState.connections) {
+      const next = map.get(conn.id);
+      if (next?.connectionId) conn.connectionId = next.connectionId;
+      if (next?.ownDeviceId) conn.ownDeviceId = next.ownDeviceId;
+    }
+    return structuredClone(storeState);
+  },
   setRoles: async (map) => {
     storeMutations.push({ op: "setRoles", count: map.size });
     for (const conn of storeState.connections) {

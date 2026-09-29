@@ -68,7 +68,7 @@ vi.mock('../../lib/biometric', () => ({
   getBiometricPref: h.pref,
   setBiometricPref: vi.fn(async () => {}),
 }));
-vi.mock('../../lib/EndpointContext', () => ({ useEndpoint: () => ({ unpair: h.unpair }) }));
+vi.mock('../../lib/EndpointContext', () => ({ useEndpoint: () => ({ unpair: h.unpair, activeRole: h.role ?? null }) }));
 vi.mock('../../lib/signOut', () => ({ signOut: h.signOut }));
 vi.mock('../aln/notify', () => ({
   getPermissionStatus: h.permission,
@@ -217,4 +217,25 @@ describe('one settings implementation', () => {
       expect(owners).toEqual([BODY]);
     },
   );
+});
+
+describe('daemon rows', () => {
+  afterEach(() => {
+    h.role = null;
+  });
+
+  it('hides connections and network from a member', async () => {
+    h.role = 'member';
+    render(<SettingsBody />);
+    await waitFor(() => expect(screen.getByText('Face ID unlock')).toBeTruthy());
+    expect(screen.queryByText('Connections')).toBeNull();
+  });
+
+  it('routes an admin to the connections screen', async () => {
+    h.role = 'admin';
+    render(<SettingsBody />);
+    await waitFor(() => expect(screen.getByText('Connections')).toBeTruthy());
+    fireEvent.click(rowButton('Connections'));
+    expect(h.push).toHaveBeenCalledWith('/connections');
+  });
 });

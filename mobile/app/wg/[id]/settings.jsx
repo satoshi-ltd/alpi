@@ -2,33 +2,66 @@
 
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { radii, space, tracking } from '../../../src/theme/tokens';
 
+import { toUsageDays } from '../../../../common/usage.mjs';
 import { ActionSheet } from '../../../src/components/ActionSheet';
 import { Diamond } from '../../../src/components/Diamond';
 import { Eyebrow } from '../../../src/components/Eyebrow';
 import { Icon } from '../../../src/components/Icon';
 import { OnOff } from '../../../src/components/OnOff';
 import { Pill } from '../../../src/components/Pill';
-import { Row, RowSeparator, SectionHeader } from '../../../src/components/Row';
+import { Row, RowSeparator, SectionHeader, SettingsBand } from '../../../src/components/Row';
 import { ScreenHeader } from '../../../src/components/ScreenHeader';
+import { UsageChart } from '../../../src/components/UsageChart';
 import { useToast } from '../../../src/components/Toast';
 import { Bold, Code, TypedConfirm } from '../../../src/components/TypedConfirm';
 import { useBack } from '../../../src/hooks/useBack';
-import { useProfileSummaries, useWorkgroupMembers } from '../../../src/hooks/useDaemonData';
+import { useProfileSummaries, useWorkgroupMembers, useWorkgroupUsage } from '../../../src/hooks/useDaemonData';
 import { useProfile, useWorkgroup } from '../../../src/hooks/useSubject';
+import { copyText } from '../../../src/lib/clipboard';
 import { useEndpoint } from '../../../src/lib/EndpointContext';
 import { EditBudgetSheet } from '../../../src/features/sheets/EditBudgetSheet';
 import { PipelinesSection } from '../../../src/features/workgroups/PipelinesSection';
+import { usePane } from '../../../src/nav/PaneContext';
+import { SettingsSurface } from '../../../src/nav/SettingsSurface';
 import { accentForProfile } from '../../../src/theme/accents';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { AdminGuard } from '../../../src/components/AdminGuard';
 
+const WIDE_BODY_MAX_W = 968;
+
 function shortPubkey(pk) {
   if (!pk) return '—';
   return `${pk.slice(0, 6)}…${pk.slice(-4)}`;
+}
+
+export function joinCommand(hubId, wgId) {
+  return `alpi workgroup join ${hubId} ${wgId}`;
+}
+
+function RemoveButton({ label, onPress }) {
+  const { colors } = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      hitSlop={space.s2}
+      style={({ pressed }) => ({
+        width: 40,
+        height: 40,
+        borderRadius: radii.md,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: pressed ? colors.selected : 'transparent',
+      })}
+    >
+      <Icon name="x" size="md" color={colors.ink2} />
+    </Pressable>
+  );
 }
 
 export default function WorkgroupSettingsRoute() {
@@ -46,8 +79,10 @@ function WorkgroupSettings() {
   const toast = useToast();
   const { call } = useEndpoint();
   const { colors, fonts, fontSizes } = useTheme();
+  const { twoPane } = usePane();
   const { workgroup: wg, loading, refresh } = useWorkgroup(id);
   const memberQuery = useWorkgroupMembers(wg?.profile, wg?.id);
+  const usage = useWorkgroupUsage(wg?.profile, wg?.id);
   const summaries = useProfileSummaries();
   const { profile: hub } = useProfile(wg?.hub_id ?? null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -98,6 +133,9 @@ function WorkgroupSettings() {
   const isHub = !!wg.is_hub;
 
   const memberRows = memberQuery.data?.members ?? [];
+  const joined = memberRows.filter((m) => m.joined);
+  const invited = memberRows.filter((m) => !m.joined);
+  const usageDays = toUsageDays(usage.data?.days);
 
   const resolveMember = (pk) => {
     const hit = peerByPubkey.get(pk);
@@ -147,16 +185,60 @@ function WorkgroupSettings() {
     }
   };
 
+  const copyJoin = async () => {
+    const ok = await copyText(joinCommand(wg.hub_id, wg.id));
+    toast({ title: ok ? 'Join command copied' : 'Copy failed', duration: 1400 });
+  };
+
+  const contentStyle = twoPane
+    ? { paddingHorizontal: space.s9, paddingTop: space.s9, paddingBottom: space.s11, maxWidth: WIDE_BODY_MAX_W, width: '100%', alignSelf: 'center' }
+    : { paddingBottom: space.s10 };
+
+  const renderMember = (m, i, { removable }) => {
+    const pk = m.pubkey;
+    const resolved = resolveMember(pk);
+    const isHubMember = hub?.pubkey_b64 ? pk === hub.pubkey_b64 : resolved.label === `@${wg.hub_id}`;
+    const canRemove = removable && isHub && !isHubMember;
+    return (
+      <View key={pk ?? i}>
+        {i > 0 ? <RowSeparator /> : null}
+        <Row
+          leading={<Diamond color={isHubMember ? accent : resolved.accent} size="md" />}
+          label={resolved.label}
+          helper={m.bio || resolved.bio || (m.joined ? 'joined' : 'invited')}
+          value={
+            <View style={{ flexDirection: 'row', gap: space.s2, alignItems: 'center' }}>
+              {isHubMember ? <Eyebrow>hub</Eyebrow> : null}
+              {!isHubMember ? (m.joined ? <Pill tone="on">joined</Pill> : <Pill off>invited</Pill>) : null}
+            </View>
+          }
+          trailing={
+            canRemove ? (
+              <RemoveButton
+                label={`Remove ${resolved.label}`}
+                onPress={() => setConfirmKick({ ...m, label: resolved.label })}
+              />
+            ) : null
+          }
+          onLongPress={canRemove ? () => setMemberTarget({ ...m, label: resolved.label }) : undefined}
+          chevron={false}
+        />
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
       <ScreenHeader
         title={wg.name ?? wg.id}
         subtitle={`WORKGROUP · ${isHub ? 'HUB' : 'MEMBER'}`}
         onBack={goBack}
+        accent={accent}
         leadingGlyph={<Text style={{ color: colors.ink4, fontFamily: fonts.mono, fontSize: fontSizes.lg }}>#</Text>}
       />
-      <ScrollView contentContainerStyle={{ paddingBottom: space.s10 }}>
-        <SectionHeader>Overview</SectionHeader>
+      <SettingsSurface>
+      <ScrollView contentContainerStyle={contentStyle}>
+        <SectionHeader first>Overview</SectionHeader>
         <Row
           label="Hub"
           value={
@@ -204,30 +286,32 @@ function WorkgroupSettings() {
 
         {cap > 0 || isHub ? (
           <>
-            <SectionHeader>Budget · weekly cap</SectionHeader>
-            <View style={{ paddingHorizontal: space.s8, paddingVertical: space.s7, gap: space.s4, backgroundColor: colors.bgPane }}>
-              <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: space.s4, flexWrap: 'wrap' }}>
-                <Text
-                  style={{
-                    fontFamily: fonts.sans.semibold,
-                    fontSize: fontSizes.display,
-                    color: colors.ink,
-                    letterSpacing: fontSizes.display * tracking.tight,
-                  }}
-                >
-                  ${used.toFixed(2)}
-                </Text>
-                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.md, color: colors.ink3 }}>
-                  of <Text style={{ color: colors.ink2 }}>{cap > 0 ? `$${cap.toFixed(2)}` : 'no cap'}</Text>
-                  {cap > 0 ? ` · ${Math.round(pct)}%` : ''}
-                </Text>
-              </View>
-              {cap > 0 ? (
-                <View style={{ height: 6, borderRadius: radii.pill, backgroundColor: colors.line, overflow: 'hidden' }}>
-                  <View style={{ width: `${Math.min(100, pct)}%`, height: '100%', backgroundColor: accent }} />
+            <SectionHeader kicker="workgroup spend cap">Budget</SectionHeader>
+            <SettingsBand>
+              <View style={{ gap: space.s4 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: space.s4, flexWrap: 'wrap' }}>
+                  <Text
+                    style={{
+                      fontFamily: fonts.sans.semibold,
+                      fontSize: fontSizes.display,
+                      color: colors.ink,
+                      letterSpacing: fontSizes.display * tracking.tight,
+                    }}
+                  >
+                    ${used.toFixed(2)}
+                  </Text>
+                  <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.md, color: colors.ink3 }}>
+                    of <Text style={{ color: colors.ink2 }}>{cap > 0 ? `$${cap.toFixed(2)}` : 'no cap'}</Text>
+                    {cap > 0 ? ` · ${Math.round(pct)}%` : ''}
+                  </Text>
                 </View>
-              ) : null}
-            </View>
+                {cap > 0 ? (
+                  <View style={{ height: 6, borderRadius: radii.pill, backgroundColor: colors.line, overflow: 'hidden' }}>
+                    <View style={{ width: `${Math.min(100, pct)}%`, height: '100%', backgroundColor: accent }} />
+                  </View>
+                ) : null}
+              </View>
+            </SettingsBand>
             {isHub ? (
               <Row
                 label="Edit cap"
@@ -238,7 +322,18 @@ function WorkgroupSettings() {
           </>
         ) : null}
 
-        <SectionHeader>Briefing · what this workgroup decides</SectionHeader>
+        <SectionHeader kicker="last 14 days">Usage</SectionHeader>
+        {usageDays.length === 0 && usage.loading ? (
+          <Row label="Loading usage…" chevron={false} />
+        ) : usageDays.length === 0 ? (
+          <Row label="No usage yet" helper="spend appears once the hub posts or settles a task" chevron={false} />
+        ) : (
+          <SettingsBand>
+            <UsageChart days={usageDays} accent={accent} />
+          </SettingsBand>
+        )}
+
+        <SectionHeader kicker="what this workgroup decides">Briefing</SectionHeader>
         <Row
           label={wg.briefing && wg.briefing.length > 0 ? wg.briefing : 'No briefing set'}
           labelLines={3}
@@ -248,36 +343,31 @@ function WorkgroupSettings() {
         />
         <PipelinesSection workgroup={wg} />
 
-        <SectionHeader>Members · {memberRows.length || wg.members || 0}</SectionHeader>
-        {memberRows.map((m, i) => {
-          const pk = m.pubkey;
-          const resolved = resolveMember(pk);
-          const isHubMember = hub?.pubkey_b64 ? pk === hub.pubkey_b64 : resolved.label === `@${wg.hub_id}`;
-          return (
-            <View key={pk ?? i}>
-              {i > 0 ? <RowSeparator /> : null}
-              <Row
-                leading={<Diamond color={isHubMember ? accent : resolved.accent} size="md" />}
-                label={resolved.label}
-                helper={m.bio || resolved.bio || (m.joined ? 'joined' : 'invited')}
-                value={
-                  <View style={{ flexDirection: 'row', gap: space.s2, alignItems: 'center' }}>
-                    {isHubMember ? (
-                      <Eyebrow>hub</Eyebrow>
-                    ) : null}
-                    {!isHubMember ? (m.joined ? <Pill tone="on">joined</Pill> : <Pill off>invited</Pill>) : null}
-                  </View>
-                }
-                onLongPress={isHub && !isHubMember ? () => setMemberTarget({ ...m, label: resolved.label }) : undefined}
-                chevron={false}
-              />
-            </View>
-          );
-        })}
+        <SectionHeader kicker={`${joined.length || wg.members || 0} profiles`}>Members</SectionHeader>
+        {joined.map((m, i) => renderMember(m, i, { removable: true }))}
         {isHub ? (
           <>
-            <RowSeparator />
+            {joined.length ? <RowSeparator /> : null}
             <Row label="+ Add member" onPress={() => router.push(`/wg/${id}/member`)} chevron={false} />
+          </>
+        ) : null}
+
+        {invited.length > 0 ? (
+          <>
+            <SectionHeader kicker={`${invited.length} pending`}>Invitations</SectionHeader>
+            {isHub ? (
+              <>
+                <Row
+                  label="Join command"
+                  helper={joinCommand(wg.hub_id, wg.id)}
+                  value="Copy"
+                  onPress={copyJoin}
+                  chevron={false}
+                />
+                <RowSeparator />
+              </>
+            ) : null}
+            {invited.map((m, i) => renderMember(m, i, { removable: true }))}
           </>
         ) : null}
 
@@ -312,6 +402,7 @@ function WorkgroupSettings() {
           </>
         )}
       </ScrollView>
+      </SettingsSurface>
 
       <TypedConfirm
         open={confirmDelete}

@@ -162,9 +162,9 @@ describe('ChatHeader descenders', () => {
 });
 
 describe('ChatHeader title scale', () => {
-  it('goes display-size under two panes', () => {
+  it('keeps the phone title size under two panes', () => {
     const { container } = inTwoPane(<ChatHeader kind="workgroup" title="#alpha" />);
-    expect(styleOf(screen.getByText('#alpha')).fontSize).toBe(28);
+    expect(styleOf(screen.getByText('#alpha')).fontSize).toBe(18);
     expect(headerStyle(container).paddingTop).not.toBe(space.s11);
   });
 

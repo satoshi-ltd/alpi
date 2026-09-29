@@ -14,6 +14,39 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.5.0 — 2026-09-29 — settings as complete as the desktop, a fold that opens into two panes
+
+Requires alpi 0.15.20 for per-device session scope; everything else works with 0.15.x.
+
+- **Profile and workgroup settings now show what the desktop shows.** Usage is a chart, not two
+  lines: today's spend, input and output tokens, the daily cap with what is left, fourteen days of
+  bars you can tap for the day's numbers, and the 14- or 30-day total. The budget row carries its
+  meter, providers are named in place, the ALP section gains the public key with copy, the
+  listener port, the pipeline concurrency cap and the profile's workgroups as rows you can open,
+  (the port and the network address stay read-only: the daemon accepts those only from its own
+  machine),
+  and the service section can update the daemon. A workgroup adds
+  its own usage chart, a visible remove button on every member and, while invites are pending, an
+  Invitations section with the join command ready to copy.
+- **Connections and devices are managed from the phone.** Settings → Connections lists every
+  paired app with its role, profiles, devices and 14-day spend. A connection can be renamed,
+  promoted or demoted, scoped to profiles, disabled, deleted, or switched to per-device sessions;
+  each device can be revoked, and a new device gets a one-time pairing link to copy or share, with
+  a provisioning variant that may enrol and revoke its siblings. The local host appears with its
+  own usage.
+- **A folding phone opens into the two-pane layout.** Two panes start at 600 points wide instead
+  of 700, so a Galaxy Z Fold or a Pixel Fold opened flat gets the tablet layout. The roster can
+  be hidden from its own header and brought back from the pane it leaves behind; it starts
+  hidden on a fold and shown on a tablet, and the choice is remembered. On a wide screen the settings
+  screens use the desktop layout: a label column beside each field, section titles with their
+  kicker, and a centred column with the desktop's header and accent stripe.
+- **What you were typing survives opening or closing the phone.** Two things lost it. The
+  composer was remounted when the layout switched between one and two panes; it stays put now, in
+  profile chats and in workgroups. And the Android activity now declares the density and size changes a fold
+  triggers, so a device whose two screens differ in density resizes instead of relaunching.
+- Rows on the narrow cover screen of a fold drop their value under the label at full width
+  instead of cutting it in the middle.
+
 ## v0.4.11 — 2026-09-21 — a daemon can be renamed on the phone
 
 - **Long-press a daemon → Rename.** The name shown for each daemon was whatever the pairing

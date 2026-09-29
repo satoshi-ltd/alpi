@@ -105,18 +105,17 @@ describe('one token per typographic role', () => {
 });
 
 describe('the phone → tablet step', () => {
-  it('lifts the chat title from nav-bar xl to desktop hero display', () => {
+  it('keeps the chat title at nav-bar xl on the tablet, so an unfolded phone still reads like a phone', () => {
     pane(false, <ChatHeader kind="workgroup" title="#alpha" />);
     expect(sizeOf('#alpha')).toBe(fontSizes.xl);
     cleanup();
     pane(true, <ChatHeader kind="workgroup" title="#alpha" />);
-    expect(sizeOf('#alpha')).toBe(fontSizes.display);
+    expect(sizeOf('#alpha')).toBe(fontSizes.xl);
   });
 
-  it('tracks the hero title tighter, and only the hero title', () => {
+  it('never tracks the chat title: no pane mode promotes it to a hero', () => {
     pane(true, <ChatHeader kind="workgroup" title="#alpha" />);
-    expect(Number(screen.getByText('#alpha').getAttribute('data-track')))
-      .toBeCloseTo(fontSizes.display * tracking.tight, 5);
+    expect(Number(screen.getByText('#alpha').getAttribute('data-track'))).toBe(0);
     cleanup();
     pane(false, <ChatHeader kind="workgroup" title="#alpha" />);
     expect(Number(screen.getByText('#alpha').getAttribute('data-track'))).toBe(0);

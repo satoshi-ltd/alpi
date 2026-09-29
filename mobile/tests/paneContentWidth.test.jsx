@@ -189,7 +189,7 @@ describe.each(SCREENS)('%s content column', (_name, Screen, params, sample) => {
     expect(screen.getByText(sample)).toBeTruthy();
     expect(listStyle(container).paddingHorizontal).toBeUndefined();
     expect(listStyle(container).maxWidth).toBeUndefined();
-    expect(container.querySelector('[data-composer]').parentElement.getAttribute('data-kav')).toBe('true');
+    expect(container.querySelector('[data-composer]').parentElement.parentElement.getAttribute('data-kav')).toBe('true');
     expect([...container.querySelectorAll('[data-style]')].some(
       (node) => JSON.parse(node.getAttribute('data-style')).maxWidth === 720,
     )).toBe(false);

@@ -36,7 +36,7 @@ function isRowSelected(item, kind, id) {
   return kind !== 'wg' && item.id === id;
 }
 
-export function SidebarPane() {
+export function SidebarPane({ onCollapse }) {
   const { colors } = useTheme();
   const router = useRouter();
   const pathname = usePathname();
@@ -191,6 +191,7 @@ export function SidebarPane() {
           searchOpen={searchOpen}
           onToggleSearch={toggleSearch}
           onConnPress={() => setSheet('conn')}
+          onCollapse={onCollapse}
         />
         <DaemonBanner status={daemonStatus} paired={!!endpoint} onRetry={onRefresh} />
         <Roster

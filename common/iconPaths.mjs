@@ -18,6 +18,7 @@ export const ICON_ALIASES = {
 export const ICONS = {
   // --- lucide: 24×24, stroke 2, currentColor ---
   "arrow-left": [p("m12 19-7-7 7-7"), p("M19 12H5")],
+  "panel-left": [rr(3, 3, 18, 18, 2), p("M9 3v18")],
   "arrow-up": [p("m5 12 7-7 7 7"), p("M12 19V5")],
   "arrow-right-to-line": [p("M17 12H3"), p("m11 18 6-6-6-6"), p("M21 5v14")],
   "chevron-down": [p("m6 9 6 6 6-6")],

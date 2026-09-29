@@ -2,19 +2,26 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { radii, space } from '../../../src/theme/tokens';
+import { lineHeights, radii, space } from '../../../src/theme/tokens';
 
+import { toUsageDays } from '../../../../common/usage.mjs';
+import { Button } from '../../../src/components/Button';
 import { Diamond } from '../../../src/components/Diamond';
+import { Meter } from '../../../src/components/Meter';
 import { OnOff } from '../../../src/components/OnOff';
 import { Pill } from '../../../src/components/Pill';
-import { Row, RowSeparator, SectionHeader } from '../../../src/components/Row';
+import { Row, RowSeparator, SectionHeader, SettingsBand } from '../../../src/components/Row';
 import { ScreenHeader } from '../../../src/components/ScreenHeader';
 import { SyncBar } from '../../../src/components/SyncBar';
+import { TextPrompt } from '../../../src/components/TextPrompt';
+import { UsageChart } from '../../../src/components/UsageChart';
 import { useBack } from '../../../src/hooks/useBack';
 import { modelLabel } from '../../../src/lib/modelLabel';
 import { profileLabel } from '../../../src/lib/profileName';
+import { copyText } from '../../../src/lib/clipboard';
 import { useToast } from '../../../src/components/Toast';
 import { Bold, Code, TypedConfirm } from '../../../src/components/TypedConfirm';
+import { updateOutcome } from '../../../src/features/settings/daemonUpdate';
 import {
   useEmailAccounts,
   useProfileStorage,
@@ -32,26 +39,20 @@ import {
   VoiceSheet,
   WorkspaceSheet,
 } from '../../../src/features/sheets/ProfileFieldSheets';
+import { usePane } from '../../../src/nav/PaneContext';
+import { SettingsSurface } from '../../../src/nav/SettingsSurface';
 import { accentForProfile } from '../../../src/theme/accents';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { voiceLabel } from '../../../src/lib/voices';
+
+const DEFAULT_ALP_PORT = 7423;
+const WIDE_BODY_MAX_W = 968;
 
 function formatBytes(n) {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
   if (n < 1024 ** 3) return `${(n / 1024 / 1024).toFixed(1)} MB`;
   return `${(n / 1024 ** 3).toFixed(2)} GB`;
-}
-
-function formatUsd(n) {
-  return `$${Number(n || 0).toFixed(2)}`;
-}
-
-function formatTokens(n) {
-  const v = Number(n || 0);
-  if (v >= 1000000) return `${(v / 1000000).toFixed(1)}M`;
-  if (v >= 1000) return `${(v / 1000).toFixed(1)}K`;
-  return String(Math.round(v));
 }
 
 function tierValue(tier) {
@@ -69,15 +70,23 @@ function needsFallback(snapshot, name) {
   return !sectionData(snapshot.data?.[name]);
 }
 
-function usageTotals(days) {
-  return (days || []).reduce(
-    (acc, d) => ({
-      cost: acc.cost + Number(d.cost || 0),
-      tokIn: acc.tokIn + Number(d.tokIn || 0),
-      tokOut: acc.tokOut + Number(d.tokOut || 0),
-    }),
-    { cost: 0, tokIn: 0, tokOut: 0 },
+export function providerLabels(profile) {
+  const cloud = (profile?.provider_keys ?? []).map((k) =>
+    String(k?.env ?? k ?? '').replace(/_API_KEY$/, '').toLowerCase(),
   );
+  const ollama = (profile?.provider_ollama ?? []).map((o) => `ollama/${o.name}`);
+  return [...cloud, ...ollama].filter(Boolean);
+}
+
+export function pipelineLimitLabel(limit) {
+  const n = Number(limit);
+  if (!Number.isFinite(n) || n <= 0) return 'unlimited';
+  return `${n} pipeline${n === 1 ? '' : 's'}`;
+}
+
+export function shortPubkey(pk) {
+  if (!pk) return '—';
+  return pk.length <= 14 ? pk : `${pk.slice(0, 8)}…${pk.slice(-4)}`;
 }
 
 export default function ProfileSettings() {
@@ -87,6 +96,7 @@ export default function ProfileSettings() {
   const toast = useToast();
   const { call } = useEndpoint();
   const { colors, fonts, fontSizes } = useTheme();
+  const { twoPane } = usePane();
   const snap = useProfileSnapshot(id);
   const detailPre = sectionData(snap.data?.detail);
   const { profile: baseProfile, loading, refresh, refreshDetail } = useProfile(id, { skipDetail: !snap.unsupported });
@@ -98,6 +108,8 @@ export default function ProfileSettings() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [restartBusy, setRestartBusy] = useState(false);
   const [confirmRestart, setConfirmRestart] = useState(false);
+  const [confirmUpdate, setConfirmUpdate] = useState(false);
+  const [updateBusy, setUpdateBusy] = useState(false);
 
   useEffect(() => { if (intent === 'delete') setConfirmDelete(true); }, [intent]);
 
@@ -117,6 +129,19 @@ export default function ProfileSettings() {
       toast({ title: 'Restart failed', message: String(e), duration: 4000 });
     } finally {
       setRestartBusy(false);
+    }
+  };
+
+  const handleUpdate = async () => {
+    setConfirmUpdate(false);
+    setUpdateBusy(true);
+    try {
+      const result = await call('host.daemon.update', {});
+      toast({ ...updateOutcome(result), duration: 4000 });
+    } catch (e) {
+      toast({ title: 'Update failed', message: String(e), duration: 4000 });
+    } finally {
+      setUpdateBusy(false);
     }
   };
 
@@ -146,22 +171,27 @@ export default function ProfileSettings() {
   const usageSection = sectionData(snap.data?.usage);
   const workgroupsSection = sectionData(snap.data?.workgroups);
   const emailList = emailSection?.accounts ?? emailAccounts.data?.accounts ?? [];
-  const providerCount =
-    (profile.provider_keys?.length ?? 0) + (profile.provider_ollama?.length ?? 0);
+  const providers = providerLabels(profile);
   const mcpCount = profile.mcps?.length ?? 0;
   const skillCount = profile.counts?.skills ?? 0;
   const scheduleCount = scheduleSection?.jobs?.length ?? schedule.data?.jobs?.length ?? 0;
   const peerCount = profile.counts?.peers ?? profile.peers?.length ?? 0;
-  const workgroupCount = workgroupsSection?.workgroups?.length ?? profile.counts?.workgroups ?? 0;
+  const workgroups = workgroupsSection?.workgroups ?? [];
+  const workgroupCount = workgroups.length || (profile.counts?.workgroups ?? 0);
   const storageRows = storageSection?.storage ?? storage.data?.storage ?? [];
-  const usageDays = usageSection?.days ?? [];
-  const usageTotal = usageTotals(usageDays);
-  const todayUsage = usageDays.find((d) => d.today) ?? usageDays[usageDays.length - 1] ?? null;
+  const usageDays = toUsageDays(usageSection?.days);
+  const capUsd = profile.budget_daily_usd;
+  const usedUsd = Number(profile.budget_used_usd ?? 0);
   const settingsSyncing = snap.loading || emailAccounts.loading || schedule.loading || storage.loading;
 
   // Field keys are dotted paths into user.yaml (e.g. `tui.accent`); voice uses a dedicated RPC.
   const saveField = (key, value) =>
     call('host.config.set_field', { profile: id, key, value }).then(() => refreshSettings());
+  const saveOrUnsetField = (key, value) =>
+    (String(value ?? '').trim()
+      ? call('host.config.set_field', { profile: id, key, value: String(value).trim() })
+      : call('host.config.unset_field', { profile: id, key })
+    ).then(() => refreshSettings());
 
   const setVoice = (voiceId) =>
     call('host.voice.set_voice', { profile: id, voice_id: voiceId }).then(() => refreshSettings());
@@ -191,6 +221,12 @@ export default function ProfileSettings() {
     }
   };
 
+  const copyPubkey = async () => {
+    if (!profile.pubkey_b64) return;
+    const ok = await copyText(profile.pubkey_b64);
+    toast({ title: ok ? 'Public key copied' : 'Copy failed', duration: 1400 });
+  };
+
   const deleteProfile = async () => {
     try {
       // host.profile.delete takes `{name}`, not `{profile}`.
@@ -202,17 +238,33 @@ export default function ProfileSettings() {
     }
   };
 
+  const contentStyle = twoPane
+    ? { paddingHorizontal: space.s9, paddingTop: space.s9, paddingBottom: space.s11, maxWidth: WIDE_BODY_MAX_W, width: '100%', alignSelf: 'center' }
+    : { paddingBottom: space.s10 };
+
+  const budgetValue = capUsd == null ? 'not set' : (
+    <Meter
+      label="Daily budget"
+      value={`$${usedUsd.toFixed(2)}`}
+      tail={`/$${Number(capUsd).toFixed(2)}`}
+      pct={Number(capUsd) > 0 ? usedUsd / Number(capUsd) : 0}
+      color={accent}
+    />
+  );
+
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
       <ScreenHeader
         title={profileLabel(profile.name)}
         subtitle="PROFILE · SETTINGS"
         onBack={goBack}
+        accent={accent}
         leadingGlyph={<Diamond color={accent} size="md" />}
       />
       <SyncBar syncing={settingsSyncing} />
-      <ScrollView contentContainerStyle={{ paddingBottom: space.s10 }}>
-        <SectionHeader>Overview</SectionHeader>
+      <SettingsSurface>
+      <ScrollView contentContainerStyle={contentStyle}>
+        <SectionHeader first>Overview</SectionHeader>
         <Row
           label={profile.paused ? 'Resume profile' : 'Pause profile'}
           helper="paused profiles can't be chatted and sort last in new-chat"
@@ -223,8 +275,8 @@ export default function ProfileSettings() {
         <RowSeparator />
         <Row
           label="Providers"
-          helper="API keys + local Ollama"
-          value={String(providerCount)}
+          helper={providers.length ? providers.join(' · ') : 'API keys + local Ollama'}
+          value={String(providers.length)}
           onPress={() => router.push(`/profile/${id}/providers`)}
         />
         <RowSeparator />
@@ -297,12 +349,7 @@ export default function ProfileSettings() {
         <Row
           label="Budget"
           helper="daily spend cap"
-          value={(() => {
-            const cap = profile.budget_daily_usd;
-            const used = profile.budget_used_usd ?? 0;
-            if (cap == null) return 'not set';
-            return `$${Number(used).toFixed(2)}/$${Number(cap).toFixed(2)}`;
-          })()}
+          value={budgetValue}
           onPress={() => setSheet('budget')}
         />
         <RowSeparator />
@@ -327,43 +374,78 @@ export default function ProfileSettings() {
         <RowSeparator />
         <Row label="Home" value={`~/.alpi/profiles/${profile.name}`} chevron={false} />
 
-        <SectionHeader>Usage · last 14 days</SectionHeader>
+        <SectionHeader kicker="last 14 days">Usage</SectionHeader>
         {usageDays.length === 0 && snap.loading ? (
           <Row label="Loading usage…" chevron={false} />
         ) : usageDays.length === 0 ? (
           <Row label="No usage yet" helper="tokens and spend appear after the first turn" chevron={false} />
         ) : (
-          <>
-            <Row
-              label="Today"
-              value={formatUsd(todayUsage?.cost)}
-              helper={`${formatTokens((todayUsage?.tokIn || 0) + (todayUsage?.tokOut || 0))} tokens`}
-              chevron={false}
+          <SettingsBand>
+            <UsageChart
+              days={usageDays}
+              accent={accent}
+              capLine={capUsd != null ? Number(capUsd) : null}
+              total30={usageSection?.total30 ?? null}
             />
-            <RowSeparator />
-            <Row
-              label="14-day total"
-              value={formatUsd(usageTotal.cost)}
-              helper={`${formatTokens(usageTotal.tokIn)} in · ${formatTokens(usageTotal.tokOut)} out`}
-              chevron={false}
-            />
-          </>
+          </SettingsBand>
         )}
 
-        <SectionHeader>Identity · how peers see this agent</SectionHeader>
+        <SectionHeader kicker="how peers see this agent">Identity</SectionHeader>
         <Row
-          label={profile.bio ? profile.bio : 'Set identity prompt'}
-          helper={profile.bio ? undefined : 'one-line public bio'}
+          label={twoPane ? 'Identity' : profile.bio ? profile.bio : 'Set identity prompt'}
+          helper={profile.bio ? undefined : 'one-line public bio · draft it from AGENT.md'}
+          value={
+            !twoPane ? undefined : profile.bio ? (
+              <Text
+                numberOfLines={3}
+                style={{
+                  fontFamily: fonts.sans.regular,
+                  fontSize: fontSizes.sm,
+                  lineHeight: fontSizes.sm * lineHeights.cozy,
+                  color: colors.ink,
+                  flexShrink: 1,
+                }}
+              >
+                {profile.bio}
+              </Text>
+            ) : (
+              'Set identity prompt'
+            )
+          }
           labelLines={2}
           onPress={() => router.push(`/profile/${id}/identity`)}
         />
 
-        <SectionHeader>Service</SectionHeader>
+        <SectionHeader kicker="daemon">Service</SectionHeader>
         <Row
-          label={restartBusy ? 'Restarting…' : 'Daemon'}
+          label="Daemon"
           helper="exits the daemon · supervisor relaunches · reconnects automatically"
-          value={restartBusy ? null : 'Restart'}
+          value={
+            <Button
+              title="Restart"
+              variant="secondary"
+              size="sm"
+              loading={restartBusy}
+              onPress={() => setConfirmRestart(true)}
+            />
+          }
           onPress={restartBusy ? undefined : () => setConfirmRestart(true)}
+          chevron={false}
+        />
+        <RowSeparator />
+        <Row
+          label="Update daemon"
+          helper="installs the newest alpi and restarts"
+          value={
+            <Button
+              title="Update"
+              variant="secondary"
+              size="sm"
+              loading={updateBusy}
+              onPress={() => setConfirmUpdate(true)}
+            />
+          }
+          onPress={updateBusy ? undefined : () => setConfirmUpdate(true)}
           chevron={false}
         />
         <RowSeparator />
@@ -388,18 +470,52 @@ export default function ProfileSettings() {
           onPress={() => router.push(`/profile/${id}/email`)}
         />
 
-        <SectionHeader>ALP · link protocol</SectionHeader>
+        <SectionHeader kicker="peers + workgroups">ALP</SectionHeader>
+        <Row
+          label="Public key"
+          helper={profile.pubkey_b64 ? 'tap to copy' : 'no identity yet'}
+          value={shortPubkey(profile.pubkey_b64)}
+          onPress={profile.pubkey_b64 ? copyPubkey : undefined}
+          chevron={false}
+        />
+        <RowSeparator />
+        <Row
+          label="Port"
+          helper="ALP listener · set from alpi setup on the daemon's machine"
+          value={String(profile.tcp_port || DEFAULT_ALP_PORT)}
+          chevron={false}
+        />
+        <RowSeparator />
+        <Row
+          label="Concurrency"
+          helper={`${profile.queued_pipelines ? `${profile.queued_pipelines} queued · ` : ''}active workgroup pipelines at once`}
+          value={pipelineLimitLabel(profile.max_active_workgroups)}
+          onPress={() => setSheet('concurrency')}
+        />
+        <RowSeparator />
         <Row
           label="Peers"
           value={String(peerCount)}
           onPress={() => router.push(`/profile/${id}/peers`)}
         />
-        <RowSeparator />
-        <Row
-          label="Workgroups"
-          value={String(workgroupCount)}
-          chevron={false}
-        />
+        {workgroups.length === 0 ? (
+          <>
+            <RowSeparator />
+            <Row label="Workgroups" value={String(workgroupCount)} chevron={false} />
+          </>
+        ) : (
+          workgroups.map((wg) => (
+            <View key={wg.id}>
+              <RowSeparator />
+              <Row
+                label={`#${wg.name || wg.id}`}
+                helper={wg.is_hub ? 'hub · this profile runs it' : `hub @${wg.hub_id ?? '?'}`}
+                value={wg.paused ? <Pill tone="warn">paused</Pill> : undefined}
+                onPress={() => router.push(`/wg/${wg.id}`)}
+              />
+            </View>
+          ))
+        )}
 
         <SectionHeader>Schedule</SectionHeader>
         <Row
@@ -448,7 +564,7 @@ export default function ProfileSettings() {
           onPress={() => router.push(`/profile/${id}/mcp`)}
         />
 
-        <SectionHeader>Brain · skills, memories, tools</SectionHeader>
+        <SectionHeader kicker="skills, memories, tools">Brain</SectionHeader>
         <Row
           label="Skills"
           helper="instructions loaded on demand"
@@ -470,7 +586,7 @@ export default function ProfileSettings() {
           onPress={() => router.push(`/profile/${id}/brain/tools`)}
         />
 
-        <SectionHeader>Storage · disk footprint</SectionHeader>
+        <SectionHeader kicker="disk footprint">Storage</SectionHeader>
         {storageRows.filter((it) => it.size_bytes > 0 || it.file_count > 0).length === 0 ? (
           <Row
             label={snap.loading || storage.loading ? 'Loading storage…' : 'Nothing yet'}
@@ -480,7 +596,7 @@ export default function ProfileSettings() {
         ) : (
           storageRows
             .filter((it) => it.size_bytes > 0 || it.file_count > 0)
-            .map((it, i, arr) => (
+            .map((it, i) => (
               <View key={it.key}>
                 {i > 0 ? <RowSeparator /> : null}
                 <Row
@@ -508,6 +624,7 @@ export default function ProfileSettings() {
           onPress={() => setConfirmDelete(true)}
         />
       </ScrollView>
+      </SettingsSurface>
 
       <ModelSheet
         open={sheet === 'model'}
@@ -621,6 +738,26 @@ export default function ProfileSettings() {
         initialValue={profile.voice_id}
         onSave={setVoice}
       />
+      <TextPrompt
+        open={sheet === 'concurrency'}
+        onClose={() => setSheet(null)}
+        title="Pipeline concurrency"
+        label="active workgroups at once · blank = unlimited"
+        initialValue={profile.max_active_workgroups ? String(profile.max_active_workgroups) : ''}
+        placeholder="unlimited"
+        maxLength={3}
+        confirmLabel="Save"
+        onSubmit={(value) => {
+          const n = Number(String(value ?? '').trim());
+          if (String(value ?? '').trim() && (!Number.isInteger(n) || n < 1)) {
+            toast({ title: 'Enter a whole number of pipelines', duration: 2000 });
+            return;
+          }
+          saveOrUnsetField('alp.max_active_workgroups', value)
+            .then(() => toast({ title: 'Concurrency saved', duration: 1400 }))
+            .catch((e) => toast({ title: 'Save failed', message: String(e), duration: 2400 }));
+        }}
+      />
 
       <TypedConfirm
         open={confirmDelete}
@@ -653,6 +790,21 @@ export default function ProfileSettings() {
         expected="restart"
         confirmLabel="Restart"
         onConfirm={handleRestart}
+      />
+
+      <TypedConfirm
+        open={confirmUpdate}
+        onClose={() => setConfirmUpdate(false)}
+        title="Update the daemon"
+        body={
+          <>
+            Installs the newest alpi release and restarts the daemon. Every connected client
+            reconnects on its own. <Bold>Type update to confirm.</Bold>
+          </>
+        }
+        expected="update"
+        confirmLabel="Update"
+        onConfirm={handleUpdate}
       />
     </SafeAreaView>
   );

@@ -1,9 +1,11 @@
 import { mobile, space } from '../theme/tokens';
 
 export const SIDEBAR_W = 320;
-export const MIN_W = 700;
+export const MIN_W = 600;
 export const MIN_H = 500;
 export const HYSTERESIS = 24;
+export const SIDEBAR_OPEN_MIN_W = 800;
+export const ROW_STACK_MAX_W = 360;
 
 export const CONTENT_MAX_W = 720;
 // Desktop --pane-pad-x: header, transcript rows and composer share it; Bubble rows carry this same token, so the capped column adds none.
@@ -24,6 +26,15 @@ export function isTwoPane(width, height) {
 export function nextTwoPane(prev, width, height) {
   if (height < MIN_H) return false;
   return prev ? width >= MIN_W - HYSTERESIS : width >= MIN_W;
+}
+
+// A fold open (690) starts with the roster hidden; a tablet (800+, leaving 480 for the pane) starts with it shown.
+export function sidebarOpenByDefault(width) {
+  return width >= SIDEBAR_OPEN_MIN_W;
+}
+
+export function stacksRow(width) {
+  return width > 0 && width < ROW_STACK_MAX_W;
 }
 
 export const SETTINGS_PATH = '/settings';

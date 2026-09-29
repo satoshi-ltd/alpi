@@ -1,6 +1,6 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, renderHook, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react';
 
 afterEach(cleanup);
 
@@ -61,11 +61,13 @@ import { usePane } from '../../nav/PaneContext';
 import { PaneShell } from './PaneShell';
 
 function Probe() {
-  const { twoPane, side } = usePane();
+  const { twoPane, side, sidebarOpen, toggleSidebar } = usePane();
   React.useEffect(() => {
     h.mounts += 1;
   }, []);
-  return <span data-testid="probe" data-two={String(twoPane)} data-side={side} />;
+  return (
+    <button type="button" data-testid="probe" data-two={String(twoPane)} data-side={side} data-sidebar={String(sidebarOpen)} onClick={toggleSidebar} />
+  );
 }
 
 function probe() {
@@ -130,6 +132,43 @@ describe('PaneShell', () => {
     expect(screen.getByTestId('sidebar')).toBeTruthy();
   });
 
+  it('starts a fold open with the roster hidden and the pane full width', () => {
+    h.window = { width: 690, height: 829 };
+    render(
+      <PaneShell>
+        <Probe />
+      </PaneShell>,
+    );
+    expect(probe().getAttribute('data-two')).toBe('true');
+    expect(probe().getAttribute('data-sidebar')).toBe('false');
+    expect(screen.queryByTestId('sidebar')).toBeNull();
+  });
+
+  it('shows the roster on a fold once the pane asks for it, and hides it again', () => {
+    h.window = { width: 690, height: 829 };
+    render(
+      <PaneShell>
+        <Probe />
+      </PaneShell>,
+    );
+    fireEvent.click(probe());
+    expect(screen.getByTestId('sidebar')).toBeTruthy();
+    expect(probe().getAttribute('data-sidebar')).toBe('true');
+    fireEvent.click(probe());
+    expect(screen.queryByTestId('sidebar')).toBeNull();
+  });
+
+  it('starts a tablet with the roster shown', () => {
+    h.window = { width: 1194, height: 834 };
+    render(
+      <PaneShell>
+        <Probe />
+      </PaneShell>,
+    );
+    expect(probe().getAttribute('data-sidebar')).toBe('true');
+    expect(screen.getByTestId('sidebar')).toBeTruthy();
+  });
+
   it('drops the sidebar without remounting the children when the window narrows', () => {
     h.window = { width: 834, height: 1194 };
     const { rerender } = render(
@@ -154,7 +193,9 @@ const DEVICES = [
   ['iPhone 17 Pro Max landscape', 956, 440, false],
   ['iPad Slide Over', 320, 1194, false],
   ['iPad Split View 1/2', 507, 1194, false],
-  ['iPad Split View 2/3', 686, 1194, false],
+  ['iPad Split View 2/3', 686, 1194, true],
+  ['Galaxy Z Fold open', 690, 829, true],
+  ['Galaxy Z Fold cover', 344, 882, false],
   ['iPad mini portrait', 744, 1133, true],
   ['iPad 11" portrait', 834, 1194, true],
   ['iPad 11" landscape', 1194, 834, true],
@@ -177,19 +218,19 @@ describe('useTwoPane', () => {
     const { result, rerender } = renderHook(() => useTwoPane());
     expect(result.current).toBe(true);
 
-    h.window = { width: 686, height: 1194 };
+    h.window = { width: 590, height: 1194 };
     rerender();
     expect(result.current).toBe(true);
 
-    h.window = { width: 660, height: 1194 };
+    h.window = { width: 560, height: 1194 };
     rerender();
     expect(result.current).toBe(false);
 
-    h.window = { width: 686, height: 1194 };
+    h.window = { width: 590, height: 1194 };
     rerender();
     expect(result.current).toBe(false);
 
-    h.window = { width: 700, height: 1194 };
+    h.window = { width: 600, height: 1194 };
     rerender();
     expect(result.current).toBe(true);
   });

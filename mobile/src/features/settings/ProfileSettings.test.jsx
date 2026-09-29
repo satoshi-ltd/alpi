@@ -24,9 +24,9 @@ vi.mock('react-native-safe-area-context', () => ({
 }));
 
 vi.mock('react-native', () => {
-  const View = ({ children, ...props }) => React.createElement('div', props, children);
-  const Text = ({ children, ...props }) => React.createElement('span', props, children);
-  const Pressable = ({ children, onPress, ...props }) => {
+  const View = ({ children, style, ...props }) => React.createElement('div', props, children);
+  const Text = ({ children, style, ...props }) => React.createElement('span', props, children);
+  const Pressable = ({ children, onPress, style, ...props }) => {
     const body = children instanceof Function ? children({ pressed: false }) : children;
     return React.createElement('button', { type: 'button', onClick: onPress, ...props }, body);
   };
@@ -36,6 +36,7 @@ vi.mock('react-native', () => {
     Pressable,
     ScrollView: View,
     ActivityIndicator: () => React.createElement('span', { 'data-testid': 'activity' }),
+    StyleSheet: { create: (s) => s, absoluteFillObject: {} },
     useColorScheme: () => 'light',
     Animated: {
       Value: class {
@@ -60,8 +61,11 @@ vi.mock('../../components/ScreenHeader', () => ({
   ),
 }));
 
+vi.mock('../../components/TextPrompt', () => ({ TextPrompt: () => null }));
+
 vi.mock('../../components/Row', () => ({
   SectionHeader: ({ children }) => <h2>{children}</h2>,
+  SettingsBand: ({ children }) => <section>{children}</section>,
   RowSeparator: () => <hr />,
   Row: ({ label, helper, value }) => (
     <div>
@@ -147,7 +151,7 @@ describe('ProfileSettings snapshot first paint', () => {
 
     render(<ProfileSettings />, { wrapper: wrapper(call) });
 
-    await waitFor(() => expect(screen.getByText('14-day total')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/14-day total \$0\.12/)).toBeTruthy());
     expect(screen.getAllByText('$0.12').length).toBeGreaterThan(0);
     expect(screen.getByText('me@example.com')).toBeTruthy();
     expect(screen.getByText('2 KB')).toBeTruthy();
@@ -393,5 +397,31 @@ describe('ProfileSettings vocabulary', () => {
     await waitFor(() => expect(scope.getByText('Pause profile')).toBeTruthy());
     expect(scope.getByText("paused profiles can't be chatted and sort last in new-chat")).toBeTruthy();
     expect(container.textContent).not.toMatch(/alpis/i);
+  });
+
+  it('offers the daemon restart and update as buttons, like desktop', async () => {
+    const call = vi.fn(async (method) => {
+      if (method === 'host.profile.summaries') {
+        return { profiles: [{ name: 'doc', counts: {} }] };
+      }
+      if (method === 'host.settings.profile_snapshot') {
+        return {
+          detail: { name: 'doc', model: 'openrouter/example' },
+          usage: { days: [] },
+          schedules: { jobs: [] },
+          workgroups: { workgroups: [] },
+          email: { accounts: [] },
+          storage: { storage: [] },
+        };
+      }
+      throw new Error(`unexpected ${method}`);
+    });
+
+    const { container } = render(<ProfileSettings />, { wrapper: wrapper(call) });
+
+    const scope = within(container);
+    await waitFor(() => expect(scope.getByText('Update daemon')).toBeTruthy());
+    expect(scope.getByText('Restart').closest('button')).toBeTruthy();
+    expect(scope.getByText('Update').closest('button')).toBeTruthy();
   });
 });

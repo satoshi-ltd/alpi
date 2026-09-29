@@ -7,6 +7,10 @@ import {
   MIN_W,
   MIN_H,
   HYSTERESIS,
+  SIDEBAR_OPEN_MIN_W,
+  ROW_STACK_MAX_W,
+  sidebarOpenByDefault,
+  stacksRow,
   BUBBLE_MAX_PANE,
   CONTENT_MAX_W,
   PANE_PAD_X,
@@ -28,9 +32,11 @@ import { space } from "../theme/tokens.js";
 describe("constants", () => {
   it("pins the decided breakpoint", () => {
     expect(SIDEBAR_W).toBe(320);
-    expect(MIN_W).toBe(700);
+    expect(MIN_W).toBe(600);
     expect(MIN_H).toBe(500);
     expect(HYSTERESIS).toBe(24);
+    expect(SIDEBAR_OPEN_MIN_W).toBe(800);
+    expect(ROW_STACK_MAX_W).toBe(360);
   });
 });
 
@@ -68,7 +74,10 @@ describe("isTwoPane", () => {
     ["iPad Slide Over over a portrait host", 320, 1194, false],
     ["iPad Slide Over over a landscape host", 320, 834, false],
     ["iPad Split View 1/2", 507, 1194, false],
-    ["iPad Split View 2/3", 686, 1194, false],
+    ["iPad Split View 2/3", 686, 1194, true],
+    ["Galaxy Z Fold open portrait", 690, 829, true],
+    ["Galaxy Z Fold open landscape", 829, 690, true],
+    ["Galaxy Z Fold cover", 344, 882, false],
     ["iPad mini portrait", 744, 1133, true],
     ["iPad mini landscape", 1133, 744, true],
     ['iPad 11" portrait', 834, 1194, true],
@@ -84,9 +93,9 @@ describe("isTwoPane", () => {
   });
 
   it.each([
-    [700, 500, true],
-    [699, 500, false],
-    [700, 499, false],
+    [600, 500, true],
+    [599, 500, false],
+    [600, 499, false],
     [1194, 499, false],
   ])("%ix%i → %s at the exact threshold", (width, height, expected) => {
     expect(isTwoPane(width, height)).toBe(expected);
@@ -95,14 +104,14 @@ describe("isTwoPane", () => {
 
 describe("nextTwoPane", () => {
   it("needs the full width to enter two panes", () => {
-    expect(nextTwoPane(false, 699, 1194)).toBe(false);
-    expect(nextTwoPane(false, 700, 1194)).toBe(true);
+    expect(nextTwoPane(false, 599, 1194)).toBe(false);
+    expect(nextTwoPane(false, 600, 1194)).toBe(true);
   });
 
   it("holds two panes down to HYSTERESIS below the threshold", () => {
-    expect(nextTwoPane(true, 690, 1194)).toBe(true);
-    expect(nextTwoPane(true, 676, 1194)).toBe(true);
-    expect(nextTwoPane(true, 675, 1194)).toBe(false);
+    expect(nextTwoPane(true, 590, 1194)).toBe(true);
+    expect(nextTwoPane(true, 576, 1194)).toBe(true);
+    expect(nextTwoPane(true, 575, 1194)).toBe(false);
   });
 
   it("drops to one pane whenever the height gate fails, whatever prev says", () => {
@@ -112,7 +121,7 @@ describe("nextTwoPane", () => {
   });
 
   it("does not thrash across a Split View divider drag", () => {
-    const widths = [690, 700, 690, 680, 676, 675, 676, 700];
+    const widths = [590, 600, 590, 580, 576, 575, 576, 600];
     const seen = [];
     let twoPane = false;
     for (const width of widths) {
@@ -351,5 +360,26 @@ describe("backFallback", () => {
       }
       expect(at).toBe("/");
     }
+  });
+});
+
+describe("sidebarOpenByDefault", () => {
+  it("hides the roster on a fold and shows it on a tablet", () => {
+    expect(sidebarOpenByDefault(690)).toBe(false);
+    expect(sidebarOpenByDefault(744)).toBe(false);
+    expect(sidebarOpenByDefault(799)).toBe(false);
+    expect(sidebarOpenByDefault(800)).toBe(true);
+    expect(sidebarOpenByDefault(834)).toBe(true);
+    expect(sidebarOpenByDefault(1194)).toBe(true);
+  });
+});
+
+describe("stacksRow", () => {
+  it("stacks a row only once it has measured narrower than 360", () => {
+    expect(stacksRow(0)).toBe(false);
+    expect(stacksRow(344)).toBe(true);
+    expect(stacksRow(359)).toBe(true);
+    expect(stacksRow(360)).toBe(false);
+    expect(stacksRow(390)).toBe(false);
   });
 });

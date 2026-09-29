@@ -70,9 +70,10 @@ const TURN_STYLES = StyleSheet.create({
   routedModel: { paddingHorizontal: PANE_PAD_X },
 });
 
+// Always the same element shape: swapping View for bare children on a fold flip remounts the composer and drops its text.
 function PaneColumn({ children }) {
   const { twoPane } = usePane();
-  return twoPane ? <View style={TURN_STYLES.contentColumn}>{children}</View> : children;
+  return <View style={twoPane ? TURN_STYLES.contentColumn : undefined}>{children}</View>;
 }
 
 const TurnBlock = memo(function TurnBlock({ turn, turnIndex, profileName, profileModel, accent, colors, fonts, fontSizes, onActionTarget, inFlight = false }) {
@@ -348,6 +349,7 @@ function ProfileChatInner() {
   const router = useRouter();
   const goBack = useBack();
   const { colors, fonts, fontSizes } = useTheme();
+  const { twoPane } = usePane();
   const canAdmin = useCanAdminEarly();
   const { endpoint, call, probeState } = useEndpoint();
   const summaries = useProfileSummaries();
@@ -615,6 +617,7 @@ function ProfileChatInner() {
                   tail={`/${fmtTokens(ctxWindow)}`}
                   pct={ctxUsed / ctxWindow}
                   color={accent}
+                  showPercent={twoPane}
                 />
               ) : null}
               {budgetCap > 0 ? (
@@ -624,6 +627,7 @@ function ProfileChatInner() {
                   tail={`/$${budgetCap.toFixed(2)}`}
                   pct={budgetUsed / budgetCap}
                   color={accent}
+                  showPercent={twoPane}
                 />
               ) : null}
             </>

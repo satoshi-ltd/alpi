@@ -5,7 +5,7 @@ import { clearImageCache } from '../hooks/useCachedImage';
 import { seedCache } from '../hooks/useDaemonData';
 import { probe, probeAll } from './probe';
 import { call as rpcCall, callStream as rpcCallStream, dropEndpointPool } from './rpc';
-import { clearAll, loadConnections, removeConnection, renameConnection, rolesFromConnections, saveConnection, setActiveConnection, setDeviceIds, setRoles } from './store';
+import { clearAll, loadConnections, removeConnection, renameConnection, rolesFromConnections, saveConnection, setActiveConnection, setDeviceIds, setIdentity, setRoles } from './store';
 import { RATE_LIMITED_REPROBE_MS, RATE_LIMITED_STATUS } from './rateLimit';
 
 const OFFLINE_REPROBE_MS = 4000;
@@ -33,7 +33,7 @@ export function EndpointProvider({ children }) {
       next.set(id, 'probing');
       return next;
     });
-    const { status, version, updateAvailable, deviceId, role, summaries } = await probe(target);
+    const { status, version, updateAvailable, deviceId, role, connectionId, ownDeviceId, summaries } = await probe(target);
     if (summaries) seedCache(id, 'host.profile.summaries', {}, summaries);
     setProbeState((m) => {
       const next = new Map(m);
@@ -65,6 +65,10 @@ export function EndpointProvider({ children }) {
       const next = await setDeviceIds(new Map([[id, deviceId]]));
       setConnections(next.connections);
     }
+    if ((connectionId && connectionId !== target.connectionId) || (ownDeviceId && ownDeviceId !== target.ownDeviceId)) {
+      const next = await setIdentity(new Map([[id, { connectionId, ownDeviceId }]]));
+      setConnections(next.connections);
+    }
     return status;
   }, []);
 
@@ -85,7 +89,7 @@ export function EndpointProvider({ children }) {
     setConnections(state.connections);
     setActiveId(state.active_id);
     setReady(true);
-    const { status, versions, updates = new Map(), deviceIds, roles = new Map() } = await probeAll(state.connections);
+    const { status, versions, updates = new Map(), deviceIds, roles = new Map(), identities = new Map() } = await probeAll(state.connections);
     setProbeState(status);
     setVersionState(versions);
     setUpdateState(updates);
@@ -94,6 +98,10 @@ export function EndpointProvider({ children }) {
     if (roles.size > 0) await setRoles(roles);
     if (deviceIds.size > 0) {
       const next = await setDeviceIds(deviceIds);
+      setConnections(next.connections);
+    }
+    if (identities.size > 0) {
+      const next = await setIdentity(identities);
       setConnections(next.connections);
     }
   }, []);

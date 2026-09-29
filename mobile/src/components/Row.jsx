@@ -1,88 +1,52 @@
+import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { space } from '../theme/tokens';
+import { lineHeights, space, tracking } from '../theme/tokens';
 
 import { Eyebrow } from './Eyebrow';
 import { Icon } from './Icon';
+import { stacksRow } from '../lib/panes';
+import { useWideSettings } from '../nav/SettingsSurface';
 import { useTheme } from '../theme/ThemeContext';
 
-export function SectionHeader({ children }) {
+const WIDE_LABEL_W = 148;
+const WIDE_SECTION_GAP = 36;
+
+export function SectionHeader({ children, kicker, first = false }) {
+  const { colors, fonts, fontSizes } = useTheme();
+  const wide = useWideSettings();
+  if (wide) {
+    return (
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'baseline',
+          gap: space.s4,
+          marginTop: first ? 0 : WIDE_SECTION_GAP,
+          marginBottom: space.s5,
+        }}
+      >
+        <Eyebrow
+          color={colors.ink2}
+          style={{ fontFamily: fonts.monoSemibold, letterSpacing: fontSizes.xs * tracking.wider }}
+        >
+          {children}
+        </Eyebrow>
+        {kicker ? (
+          <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink4 }}>
+            {kicker}
+          </Text>
+        ) : null}
+      </View>
+    );
+  }
   return (
     <View style={{ paddingHorizontal: space.s8, paddingTop: space.s9, paddingBottom: space.s3 }}>
-      <Eyebrow>{children}</Eyebrow>
+      <Eyebrow>{children}{kicker ? ` · ${kicker}` : ''}</Eyebrow>
     </View>
   );
 }
 
-export function Row({ label, helper, value, leading, trailing, onPress, onLongPress, danger, disabled = false, chevron = true, labelLines = 1 }) {
-  const { colors, fonts, fontSizes } = useTheme();
-
-  const body = (
-    <View
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: space.s8,
-        paddingVertical: space.s6,
-        gap: space.s5,
-        backgroundColor: colors.bgPane,
-        opacity: disabled ? 0.45 : 1,
-      }}
-    >
-      {leading ? <View>{leading}</View> : null}
-      {/* Label container shrinks but always renders its label (min-width: 0 + flexShrink: 1 lets the value truncate before the label disappears). */}
-      <View style={{ flex: 1, minWidth: 0, gap: space.s1 }}>
-        <Text
-          numberOfLines={labelLines}
-          ellipsizeMode="tail"
-          style={{
-            fontFamily: fonts.sans.regular,
-            fontSize: fontSizes.lg,
-            color: danger ? colors.dangerText : colors.ink,
-            lineHeight: fontSizes.lg * 1.3,
-          }}
-        >
-          {label}
-        </Text>
-        {helper ? (
-          <Text
-            numberOfLines={1}
-            style={{
-              fontFamily: fonts.monoMedium,
-              fontSize: fontSizes.xs,
-              color: colors.ink3,
-            }}
-          >
-            {helper}
-          </Text>
-        ) : null}
-      </View>
-      {value ? (
-        typeof value === 'string' ? (
-          <Text
-            style={{
-              fontFamily: fonts.sans.regular,
-              fontSize: fontSizes.md,
-              color: colors.ink3,
-              flexShrink: 1,
-              textAlign: 'right',
-              maxWidth: '55%',
-            }}
-            numberOfLines={1}
-            ellipsizeMode="middle"
-          >
-            {value}
-          </Text>
-        ) : (
-          <View style={{ flexShrink: 0, maxWidth: '55%' }}>{value}</View>
-        )
-      ) : null}
-      {trailing}
-      {chevron && onPress && !disabled && !danger ? (
-        <Icon name="chevron-right" size="md" color={colors.ink4} />
-      ) : null}
-    </View>
-  );
-
+function pressable(body, { onPress, onLongPress, disabled, colors }) {
   if (disabled || (!onPress && !onLongPress)) return body;
   return (
     <Pressable
@@ -96,7 +60,197 @@ export function Row({ label, helper, value, leading, trailing, onPress, onLongPr
   );
 }
 
+function WideRow({ label, helper, value, leading, trailing, onPress, onLongPress, danger, disabled, chevron, labelLines }) {
+  const { colors, fonts, fontSizes } = useTheme();
+  const control =
+    typeof value === 'string' ? (
+      <Text
+        numberOfLines={1}
+        ellipsizeMode="middle"
+        style={{
+          fontFamily: fonts.mono,
+          fontSize: fontSizes.sm,
+          color: colors.ink2,
+          flexShrink: 1,
+          textAlign: 'right',
+        }}
+      >
+        {value}
+      </Text>
+    ) : (
+      value
+    );
+  const body = (
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: space.s9,
+        minHeight: 36,
+        paddingVertical: space.s3,
+        opacity: disabled ? 0.45 : 1,
+      }}
+    >
+      {leading ? <View>{leading}</View> : null}
+      <View style={{ flexBasis: WIDE_LABEL_W, flexGrow: 1, flexShrink: 1, minWidth: 0 }}>
+        <Eyebrow
+          numberOfLines={Math.max(labelLines, 2)}
+          color={danger ? colors.dangerText : colors.ink3}
+          style={{ lineHeight: fontSizes.xs * lineHeights.cozy }}
+        >
+          {label}
+        </Eyebrow>
+        {helper ? (
+          <Text
+            numberOfLines={2}
+            style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4, marginTop: space.s1 }}
+          >
+            {helper}
+          </Text>
+        ) : null}
+      </View>
+      <View style={{ flexShrink: 1, minWidth: 0, maxWidth: '60%', flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: space.s4 }}>
+        {control}
+        {trailing}
+        {chevron && onPress && !disabled && !danger ? (
+          <Icon name="chevron-right" size="sm" color={colors.ink4} />
+        ) : null}
+      </View>
+    </View>
+  );
+  return pressable(body, { onPress, onLongPress, disabled, colors });
+}
+
+export function Row({ label, helper, value, leading, trailing, onPress, onLongPress, danger, disabled = false, chevron = true, labelLines = 1 }) {
+  const { colors, fonts, fontSizes } = useTheme();
+  const wide = useWideSettings();
+  const [width, setWidth] = useState(0);
+  if (wide) {
+    return (
+      <WideRow
+        label={label}
+        helper={helper}
+        value={value}
+        leading={leading}
+        trailing={trailing}
+        onPress={onPress}
+        onLongPress={onLongPress}
+        danger={danger}
+        disabled={disabled}
+        chevron={chevron}
+        labelLines={labelLines}
+      />
+    );
+  }
+  const stacked = stacksRow(width);
+  const chevronNode =
+    chevron && onPress && !disabled && !danger ? (
+      <Icon name="chevron-right" size="md" color={colors.ink4} />
+    ) : null;
+  const valueNode = value ? (
+    typeof value === 'string' ? (
+      <Text
+        style={{
+          fontFamily: stacked ? fonts.mono : fonts.sans.regular,
+          fontSize: stacked ? fontSizes.sm : fontSizes.md,
+          color: stacked ? colors.ink2 : colors.ink3,
+          flexShrink: 1,
+          textAlign: stacked ? 'left' : 'right',
+          maxWidth: stacked ? '100%' : '55%',
+        }}
+        numberOfLines={1}
+        ellipsizeMode={stacked ? 'tail' : 'middle'}
+      >
+        {value}
+      </Text>
+    ) : (
+      <View style={{ flexShrink: 0, maxWidth: stacked ? '100%' : '55%' }}>{value}</View>
+    )
+  ) : null;
+
+  const labelNode = (
+    <Text
+      numberOfLines={labelLines}
+      ellipsizeMode="tail"
+      style={{
+        fontFamily: fonts.sans.regular,
+        fontSize: fontSizes.lg,
+        color: danger ? colors.dangerText : colors.ink,
+        lineHeight: fontSizes.lg * 1.3,
+      }}
+    >
+      {label}
+    </Text>
+  );
+  const helperNode = helper ? (
+    <Text
+      numberOfLines={1}
+      style={{
+        fontFamily: fonts.monoMedium,
+        fontSize: fontSizes.xs,
+        color: colors.ink3,
+      }}
+    >
+      {helper}
+    </Text>
+  ) : null;
+
+  const body = (
+    <View
+      onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: space.s8,
+        paddingVertical: space.s6,
+        gap: space.s5,
+        backgroundColor: colors.bgPane,
+        opacity: disabled ? 0.45 : 1,
+      }}
+    >
+      {leading ? <View>{leading}</View> : null}
+      {stacked ? (
+        <View style={{ flex: 1, minWidth: 0, gap: space.s1 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3 }}>
+            <View style={{ flex: 1, minWidth: 0 }}>{labelNode}</View>
+            {trailing}
+            {chevronNode}
+          </View>
+          {helperNode}
+          {valueNode ? <View style={{ marginTop: space.s1 }}>{valueNode}</View> : null}
+        </View>
+      ) : (
+        <>
+          {/* Label container shrinks but always renders its label (min-width: 0 + flexShrink: 1 lets the value truncate before the label disappears). */}
+          <View style={{ flex: 1, minWidth: 0, gap: space.s1 }}>
+            {labelNode}
+            {helperNode}
+          </View>
+          {valueNode}
+          {trailing}
+          {chevronNode}
+        </>
+      )}
+    </View>
+  );
+
+  return pressable(body, { onPress, onLongPress, disabled, colors });
+}
+
 export function RowSeparator({ indent = 20 }) {
   const { colors } = useTheme();
+  const wide = useWideSettings();
+  if (wide) return null;
   return <View style={{ height: 0.5, backgroundColor: colors.line, marginLeft: indent }} />;
+}
+
+export function SettingsBand({ children }) {
+  const { colors } = useTheme();
+  const wide = useWideSettings();
+  if (wide) return <View>{children}</View>;
+  return (
+    <View style={{ backgroundColor: colors.bgPane, paddingHorizontal: space.s8, paddingVertical: space.s7 }}>
+      {children}
+    </View>
+  );
 }

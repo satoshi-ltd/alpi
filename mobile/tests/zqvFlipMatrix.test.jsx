@@ -450,18 +450,18 @@ describe('two-pane flat stack', () => {
     expect(h.sidebarMounts).toBe(1);
   });
 
-  it('hysteresis: 690pt keeps two-pane once open, 676pt drops it', () => {
+  it('hysteresis: 590pt keeps two-pane once open, 575pt drops it', () => {
     h.window = TABLET;
     open(true, '/chat/doc');
     const { rerender } = render(<Session />);
     expect(sidebar()).toBeTruthy();
 
-    h.window = { width: 690, height: 768 };
+    h.window = { width: 590, height: 768 };
     rerender(<Session />);
     expect(sidebar()).toBeTruthy();
     expect(chevron()).toBeNull();
 
-    h.window = { width: 675, height: 768 };
+    h.window = { width: 575, height: 768 };
     rerender(<Session />);
     expect(sidebar()).toBeNull();
     expect(chevron()).toBeTruthy();

@@ -22,7 +22,7 @@ function registerMetadata(endpoint) {
 }
 
 export async function probe(endpoint) {
-  if (!endpoint) return { status: 'unknown', version: null, updateAvailable: null, deviceName: null, deviceId: null, role: null, summaries: null };
+  if (!endpoint) return { status: 'unknown', version: null, updateAvailable: null, deviceName: null, deviceId: null, role: null, connectionId: null, ownDeviceId: null, summaries: null };
   try {
     const summaries = await call(endpoint, 'host.profile.summaries', {}, { timeoutMs: PROBE_TIMEOUT_MS });
     let version = null;
@@ -30,6 +30,8 @@ export async function probe(endpoint) {
     let deviceName = null;
     let deviceId = null;
     let role = null;
+    let connectionId = null;
+    let ownDeviceId = null;
     try {
       const res = await call(endpoint, 'host.version', {}, { timeoutMs: VERSION_TIMEOUT_MS });
       if (res && typeof res.version === 'string') version = res.version;
@@ -45,22 +47,28 @@ export async function probe(endpoint) {
       if (res && typeof res.role === 'string' && res.role.trim()) {
         role = res.role.trim();
       }
+      if (res && typeof res.connection_id === 'string' && res.connection_id.trim()) {
+        connectionId = res.connection_id.trim();
+      }
+      if (res && typeof res.connection_device_id === 'string' && res.connection_device_id.trim()) {
+        ownDeviceId = res.connection_device_id.trim();
+      }
       registerMetadata(endpoint);
     } catch {
       // version is non-fatal
     }
-    return { status: 'online', version, updateAvailable, deviceName, deviceId, role, summaries };
+    return { status: 'online', version, updateAvailable, deviceName, deviceId, role, connectionId, ownDeviceId, summaries };
   } catch (e) {
     if (e instanceof RpcError && e.code === RATE_LIMITED) {
-      return { status: 'rate-limited', version: null, updateAvailable: null, deviceName: null, deviceId: null, role: null, summaries: null };
+      return { status: 'rate-limited', version: null, updateAvailable: null, deviceName: null, deviceId: null, role: null, connectionId: null, ownDeviceId: null, summaries: null };
     }
     if (e instanceof RpcError && e.code === AUTH_FAILED) {
       if (e.data?.reason === 'connection-disabled') {
-        return { status: 'disabled', version: null, updateAvailable: null, deviceName: null, deviceId: null, role: null, summaries: null };
+        return { status: 'disabled', version: null, updateAvailable: null, deviceName: null, deviceId: null, role: null, connectionId: null, ownDeviceId: null, summaries: null };
       }
-      return { status: 'auth-failed', version: null, updateAvailable: null, deviceName: null, deviceId: null, role: null, summaries: null };
+      return { status: 'auth-failed', version: null, updateAvailable: null, deviceName: null, deviceId: null, role: null, connectionId: null, ownDeviceId: null, summaries: null };
     }
-    return { status: 'offline', version: null, updateAvailable: null, deviceName: null, deviceId: null, role: null, summaries: null };
+    return { status: 'offline', version: null, updateAvailable: null, deviceName: null, deviceId: null, role: null, connectionId: null, ownDeviceId: null, summaries: null };
   }
 }
 
@@ -70,6 +78,7 @@ export async function probeAll(connections) {
   const updates = new Map();
   const deviceIds = new Map();
   const roles = new Map();
+  const identities = new Map();
   await Promise.all(
     connections.map(async (c) => {
       const r = await probe(c);
@@ -78,7 +87,8 @@ export async function probeAll(connections) {
       if (r.updateAvailable) updates.set(c.id, r.updateAvailable);
       if (r.deviceId) deviceIds.set(c.id, r.deviceId);
       if (r.role) roles.set(c.id, r.role);
+      if (r.connectionId || r.ownDeviceId) identities.set(c.id, { connectionId: r.connectionId, ownDeviceId: r.ownDeviceId });
     }),
   );
-  return { status, versions, updates, deviceIds, roles };
+  return { status, versions, updates, deviceIds, roles, identities };
 }

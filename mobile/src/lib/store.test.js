@@ -229,6 +229,18 @@ describe("store role persistence", () => {
     expect(state.connections[0].role).toBe("member");
   });
 
+  it("setIdentity persists the caller's connection and device ids without touching the daemon id", async () => {
+    const { saveConnection, setIdentity, loadConnections } = await import("./store.js");
+    await saveConnection({ id: "c-1", name: "n", ip: "1.1.1.1", port: 49200, token: "t", deviceId: "mac" });
+    await setIdentity(new Map([["c-1", { connectionId: "conn_1", ownDeviceId: "dev_me" }], ["ghost", { connectionId: "x" }]]));
+    const conn = (await loadConnections()).connections[0];
+    expect(conn.deviceId).toBe("mac");
+    expect(conn.connectionId).toBe("conn_1");
+    expect(conn.ownDeviceId).toBe("dev_me");
+    await setIdentity(new Map([["c-1", { connectionId: null, ownDeviceId: null }]]));
+    expect((await loadConnections()).connections[0].ownDeviceId).toBe("dev_me");
+  });
+
   it("saveConnection persists a provided role and preserves it on a role-less re-save", async () => {
     const { saveConnection, loadConnections } = await import("./store.js");
     await saveConnection({ id: "c-1", name: "n", ip: "1.1.1.1", port: 49200, token: "t", deviceId: "mac", role: "admin" });

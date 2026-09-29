@@ -5,7 +5,7 @@ import { Icon } from '../../components/Icon';
 import { CHROME_H } from '../../lib/panes';
 import { usePane } from '../../nav/PaneContext';
 import { useTheme } from '../../theme/ThemeContext';
-import { radii, space } from '../../theme/tokens';
+import { lineHeights, radii, space } from '../../theme/tokens';
 
 const HAIRLINE = 0.5;
 const APP_VERSION = Constants.expoConfig?.version ?? '0.0.0';
@@ -52,12 +52,14 @@ export function ShellFooter({ unread = 0, onNotificationsPress, onSettingsPress 
               <View
                 style={{
                   position: 'absolute',
-                  top: -space.s2,
-                  right: -space.s3,
-                  minWidth: space.s6,
-                  height: space.s6,
+                  top: -space.s1,
+                  right: -space.s2,
+                  minWidth: space.s7,
+                  height: space.s7,
                   paddingHorizontal: space.s1,
                   borderRadius: radii.pill,
+                  borderWidth: 1.5,
+                  borderColor: twoPane ? colors.bgSide : colors.bg,
                   backgroundColor: colors.danger,
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -67,8 +69,8 @@ export function ShellFooter({ unread = 0, onNotificationsPress, onSettingsPress 
                   style={{
                     fontFamily: fonts.sans.semibold,
                     fontSize: fontSizes.xxs,
-                    lineHeight: space.s6,
-                    color: '#fff',
+                    lineHeight: fontSizes.xxs * lineHeights.cozy,
+                    color: colors.onDanger ?? '#fff',
                   }}
                 >
                   {unread > 99 ? '99+' : unread}

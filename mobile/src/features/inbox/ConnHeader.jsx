@@ -14,6 +14,7 @@ export function ConnHeader({
   searchOpen = false,
   onToggleSearch,
   onConnPress,
+  onCollapse,
 }) {
   const { colors, fonts, fontSizes } = useTheme();
   const { twoPane } = usePane();
@@ -106,6 +107,24 @@ export function ConnHeader({
     >
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
         <Eyebrow style={{ flex: 1 }}>Connection</Eyebrow>
+        {onCollapse ? (
+          <Pressable
+            onPress={onCollapse}
+            hitSlop={tapSlop(CHROME_BTN)}
+            accessibilityRole="button"
+            accessibilityLabel="Hide sidebar"
+            style={({ pressed }) => ({
+              width: CHROME_BTN,
+              height: CHROME_BTN,
+              borderRadius: radii.lg,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: pressed ? colors.selected : 'transparent',
+            })}
+          >
+            <Icon name="panel-left" size="md" color={colors.ink2} />
+          </Pressable>
+        ) : null}
         {searchToggle}
       </View>
       <Pressable onPress={onConnPress} style={trigger}>

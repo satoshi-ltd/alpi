@@ -68,9 +68,10 @@ const WG_STYLES = StyleSheet.create({
   },
 });
 
+// Always the same element shape: swapping View for bare children on a fold flip remounts the composer and drops its text.
 function PaneColumn({ children }) {
   const { twoPane } = usePane();
-  return twoPane ? <View style={WG_STYLES.contentColumn}>{children}</View> : children;
+  return <View style={twoPane ? WG_STYLES.contentColumn : undefined}>{children}</View>;
 }
 
 const WgItem = memo(function WgItem({ m, hubPubkey, ownPubkey, workingStale, accent, accentFor, setActionTarget, colors, fonts, fontSizes, imageProfile }) {
@@ -283,6 +284,7 @@ function WorkgroupChatInner() {
   const router = useRouter();
   const goBack = useBack();
   const { colors, fonts, fontSizes } = useTheme();
+  const { twoPane } = usePane();
   const canAdmin = useCanAdminEarly();
   const { endpoint, call, probeState } = useEndpoint();
   const summaries = useProfileSummaries();
@@ -518,6 +520,7 @@ function WorkgroupChatInner() {
           tail={`/$${budgetCap.toFixed(2)}`}
           pct={budgetUsed / budgetCap}
           color={accent}
+          showPercent={twoPane}
         />
       ) : null}
     </>

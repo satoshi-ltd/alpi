@@ -19,6 +19,7 @@ import { useEndpoint } from '../../lib/EndpointContext';
 import { signOut } from '../../lib/signOut';
 import { describeHealth, readHealth } from '../aln/health';
 import { getPermissionStatus, requestPermission } from '../aln/notify';
+import { useIsAdmin } from '../../hooks/useActiveRole';
 import { useTheme } from '../../theme/ThemeContext';
 import {
   DEFAULT_TEXT_SCALE,
@@ -71,6 +72,7 @@ export function SettingsBody({ active = true, onDismiss }) {
   const router = useRouter();
   const toast = useToast();
   const { unpair } = useEndpoint();
+  const isAdmin = useIsAdmin();
 
   const [bioOn, setBioOn] = useState(false);
   const [bioCaps, setBioCaps] = useState({ hasHardware: false, enrolled: false, label: 'Biometric' });
@@ -161,6 +163,17 @@ export function SettingsBody({ active = true, onDismiss }) {
           onPress={toggleBiometric}
           chevron={false}
         />
+
+        {isAdmin ? (
+          <>
+            <SectionHeader>Daemon</SectionHeader>
+            <Row
+              label="Connections"
+              helper="paired apps, devices, pairing links, usage"
+              onPress={() => navigate('/connections')}
+            />
+          </>
+        ) : null}
 
         <SectionHeader>Notifications</SectionHeader>
         <Row

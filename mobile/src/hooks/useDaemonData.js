@@ -333,3 +333,16 @@ export function useProfileMemory(profile) {
 
   return { data, usage, loading, error, refresh };
 }
+
+export function useWorkgroupUsage(profile, wgId) {
+  return usePolledCall(
+    'host.usage.workgroup.daily',
+    profile && wgId ? { profile, wg_id: wgId } : null,
+    [profile, wgId],
+    { skipWhen: !profile || !wgId },
+  );
+}
+
+export function useConnectionsSummary(opts = {}) {
+  return usePolledCall('host.connections.summary', {}, [], { skipWhen: !!opts.skipWhen });
+}

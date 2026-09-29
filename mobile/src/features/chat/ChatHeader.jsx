@@ -1,5 +1,5 @@
 import { Pressable, ScrollView, Text, View } from 'react-native';
-import { radii, space, lineHeights, tracking } from '../../theme/tokens';
+import { radii, space, lineHeights } from '../../theme/tokens';
 
 import { Diamond } from '../../components/Diamond';
 import { Icon } from '../../components/Icon';
@@ -92,9 +92,10 @@ function SessionsTrigger({ onPress }) {
 
 export function ChatHeader({ kind, accent, title, meta, onBack, onMore, onPickSession, right }) {
   const { colors, fonts, fontSizes } = useTheme();
-  const { twoPane } = usePane();
+  const { twoPane, sidebarOpen, toggleSidebar } = usePane();
   const showBack = useShowBack(onBack);
-  const titleSize = twoPane ? fontSizes.display : fontSizes.xl;
+  const titleSize = fontSizes.xl;
+  const showSidebarToggle = twoPane && !sidebarOpen;
 
   return (
     <View
@@ -110,6 +111,11 @@ export function ChatHeader({ kind, accent, title, meta, onBack, onMore, onPickSe
         borderBottomColor: colors.line,
       }}
     >
+      {showSidebarToggle ? (
+        <HeaderButton label="Show sidebar" onPress={toggleSidebar}>
+          <Icon name="panel-left" size="lg" color={colors.ink2} />
+        </HeaderButton>
+      ) : null}
       {showBack ? (
         <Pressable
           onPress={onBack}
@@ -141,7 +147,6 @@ export function ChatHeader({ kind, accent, title, meta, onBack, onMore, onPickSe
               fontFamily: fonts.sans.semibold,
               fontSize: titleSize,
               lineHeight: titleSize * lineHeights.cozy,
-              letterSpacing: twoPane ? titleSize * tracking.tight : 0,
               color: colors.ink,
             }}
           >

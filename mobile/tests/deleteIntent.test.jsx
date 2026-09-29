@@ -112,6 +112,7 @@ vi.mock('../src/components/SyncBar', () => ({ SyncBar: () => null }));
 vi.mock('../src/components/Toast', () => ({ useToast: () => h.toast }));
 vi.mock('../src/components/Row', () => ({
   SectionHeader: ({ children }) => React.createElement('h2', {}, children),
+  SettingsBand: ({ children }) => React.createElement('section', {}, children),
   RowSeparator: () => React.createElement('hr'),
   Row: ({ label, helper, value, onPress }) =>
     React.createElement(
@@ -149,6 +150,7 @@ vi.mock('../src/hooks/useDaemonData', () => ({
   useScheduleList: () => ({ data: null, loading: false }),
   useProfileSummaries: () => ({ data: { profiles: [] }, loading: false, refresh: vi.fn() }),
   useWorkgroupMembers: () => ({ data: { members: [] }, loading: false, refresh: vi.fn() }),
+  useWorkgroupUsage: () => ({ data: null, loading: false, refresh: vi.fn() }),
 }));
 vi.mock('../src/hooks/useSubject', () => ({
   useProfile: (name) => ({
