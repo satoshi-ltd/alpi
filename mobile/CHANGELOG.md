@@ -14,6 +14,21 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.5.2 — 2026-09-29 — a switch where the desktop has a button
+
+Client-only change; the minimum compatible alpi stays 0.15.20.
+
+- **Every on/off setting of a profile, a workgroup or a connection is a switch.** Paused,
+  terminal sandbox, sandbox network, auto-read replies, a workgroup's auto-read and a connection's
+  enabled state flip from a real switch in the row; the row itself no longer toggles when tapped. Disabling the connection this phone is
+  paired through still asks for a typed confirmation.
+- **On a fold or tablet the identity is edited in place**, with Draft from AGENT.md, Save and
+  Discard beside the text, as on the desktop. The phone keeps its own screen, which drafts and
+  saves through the same path.
+- **A workgroup's cap is edited from the amount line.** The hub's Edit button sits next to the
+  spend; the separate cap row is gone.
+- **Providers and MCP servers show as chips on a wide screen**, named in the row instead of counted.
+
 ## v0.5.1 — 2026-09-29 — the fold reads like the desktop
 
 Client-only change; the minimum compatible alpi stays 0.15.20.

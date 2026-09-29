@@ -8,10 +8,11 @@ import { radii, space, tracking } from '../../../src/theme/tokens';
 
 import { toUsageDays } from '../../../../common/usage.mjs';
 import { ActionSheet } from '../../../src/components/ActionSheet';
+import { Button } from '../../../src/components/Button';
 import { Diamond } from '../../../src/components/Diamond';
 import { Eyebrow } from '../../../src/components/Eyebrow';
 import { Icon } from '../../../src/components/Icon';
-import { OnOff } from '../../../src/components/OnOff';
+import { Toggle } from '../../../src/components/Toggle';
 import { Pill } from '../../../src/components/Pill';
 import { Row, RowSeparator, SectionHeader, SettingsBand } from '../../../src/components/Row';
 import { ScreenHeader } from '../../../src/components/ScreenHeader';
@@ -248,7 +249,7 @@ function WorkgroupSettings() {
         }
       />
       <SettingsSurface>
-      <ScrollView contentContainerStyle={contentStyle}>
+      <ScrollView contentContainerStyle={contentStyle} keyboardShouldPersistTaps="handled">
         <SectionHeader first>Overview</SectionHeader>
         <Row
           label="Hub"
@@ -274,8 +275,8 @@ function WorkgroupSettings() {
             <Row
               label="Auto-read messages"
               helper="reads agents' automatic messages aloud — never your directives"
-              value={<OnOff on={!!wg.auto_read} />}
-              onPress={toggleAutoRead}
+              value={<Toggle on={!!wg.auto_read} label="Auto-read messages" color={accent} onChange={toggleAutoRead} />}
+              chevron={false}
             />
             <RowSeparator />
           </>
@@ -312,9 +313,15 @@ function WorkgroupSettings() {
                     ${used.toFixed(2)}
                   </Text>
                   <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.md, color: colors.ink3 }}>
-                    of <Text style={{ color: colors.ink2 }}>{cap > 0 ? `$${cap.toFixed(2)}` : 'no cap'}</Text>
+                    of <Text style={{ color: colors.ink2 }}>{cap > 0 ? `$${cap.toFixed(2)}/wk` : 'no cap'}</Text>
                     {cap > 0 ? ` · ${Math.round(pct)}%` : ''}
                   </Text>
+                  {isHub ? (
+                    <>
+                      <View style={{ flex: 1 }} />
+                      <Button title={cap > 0 ? 'Edit' : 'Set cap'} variant="ghost" size="sm" onPress={() => setBudgetOpen(true)} />
+                    </>
+                  ) : null}
                 </View>
                 {cap > 0 ? (
                   <View style={{ height: 6, borderRadius: radii.pill, backgroundColor: colors.line, overflow: 'hidden' }}>
@@ -323,13 +330,6 @@ function WorkgroupSettings() {
                 ) : null}
               </View>
             </SettingsBand>
-            {isHub ? (
-              <Row
-                label="Edit cap"
-                value={cap > 0 ? `$${cap.toFixed(2)}/wk` : 'set cap'}
-                onPress={() => setBudgetOpen(true)}
-              />
-            ) : null}
           </>
         ) : null}
 

@@ -9,7 +9,7 @@ import { toUsageDays } from '../../../common/usage.mjs';
 import { ActionSheet } from '../../src/components/ActionSheet';
 import { AdminGuard } from '../../src/components/AdminGuard';
 import { Icon } from '../../src/components/Icon';
-import { OnOff } from '../../src/components/OnOff';
+import { Toggle } from '../../src/components/Toggle';
 import { Pill } from '../../src/components/Pill';
 import { Row, RowSeparator, SectionHeader, SettingsBand } from '../../src/components/Row';
 import { ScreenHeader } from '../../src/components/ScreenHeader';
@@ -161,7 +161,7 @@ function ConnectionDetail() {
             ) : null}
             <RowSeparator />
             <Row
-              label={disabled ? 'Enable connection' : 'Disable connection'}
+              label="Enabled"
               helper={
                 disabled
                   ? 'devices reconnect with their existing tokens'
@@ -169,11 +169,16 @@ function ConnectionDetail() {
                     ? 'this phone goes offline with it · an admin elsewhere must re-enable it'
                     : 'every device goes offline · sessions and usage stay'
               }
-              value={<OnOff on={!disabled} onLabel="active" offLabel="disabled" />}
-              onPress={
-                !disabled && isSelf
-                  ? () => setConfirm('disable')
-                  : () => act('host.connections.set_status', { status: disabled ? 'active' : 'disabled' }, disabled ? 'Connection enabled' : 'Connection disabled')
+              value={
+                <Toggle
+                  on={!disabled}
+                  label="Enabled"
+                  onChange={(next) =>
+                    !next && isSelf
+                      ? setConfirm('disable')
+                      : act('host.connections.set_status', { status: next ? 'active' : 'disabled' }, next ? 'Connection enabled' : 'Connection disabled')
+                  }
+                />
               }
               chevron={false}
             />

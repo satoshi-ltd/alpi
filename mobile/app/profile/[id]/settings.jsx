@@ -2,13 +2,14 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { lineHeights, radii, space } from '../../../src/theme/tokens';
+import { radii, space } from '../../../src/theme/tokens';
 
 import { toUsageDays } from '../../../../common/usage.mjs';
 import { Button } from '../../../src/components/Button';
 import { Diamond } from '../../../src/components/Diamond';
 import { Meter } from '../../../src/components/Meter';
-import { OnOff } from '../../../src/components/OnOff';
+import { Eyebrow } from '../../../src/components/Eyebrow';
+import { Toggle } from '../../../src/components/Toggle';
 import { Pill } from '../../../src/components/Pill';
 import { Row, RowSeparator, SectionHeader, SettingsBand } from '../../../src/components/Row';
 import { ScreenHeader } from '../../../src/components/ScreenHeader';
@@ -22,6 +23,7 @@ import { copyText } from '../../../src/lib/clipboard';
 import { useToast } from '../../../src/components/Toast';
 import { Bold, Code, TypedConfirm } from '../../../src/components/TypedConfirm';
 import { updateOutcome } from '../../../src/features/settings/daemonUpdate';
+import { IdentityEditor } from '../../../src/features/settings/IdentityEditor';
 import {
   useEmailAccounts,
   useProfileStorage,
@@ -47,6 +49,17 @@ import { voiceLabel } from '../../../src/lib/voices';
 
 const DEFAULT_ALP_PORT = 7423;
 const WIDE_BODY_MAX_W = 968;
+const WIDE_LABEL_W = 96;
+
+function ChipRow({ items }) {
+  return (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: space.s2 }}>
+      {items.map((it) => (
+        <Pill key={it}>{it}</Pill>
+      ))}
+    </View>
+  );
+}
 
 function formatBytes(n) {
   if (n < 1024) return `${n} B`;
@@ -189,7 +202,9 @@ export default function ProfileSettings() {
 
   // Field keys are dotted paths into user.yaml (e.g. `tui.accent`); voice uses a dedicated RPC.
   const saveField = (key, value) =>
-    call('host.config.set_field', { profile: id, key, value }).then(() => refreshSettings());
+    call('host.config.set_field', { profile: id, key, value })
+      .then(() => refreshSettings())
+      .catch((e) => toast({ title: 'Save failed', message: String(e), duration: 3200 }));
   const saveOrUnsetField = (key, value) =>
     (String(value ?? '').trim()
       ? call('host.config.set_field', { profile: id, key, value: String(value).trim() })
@@ -284,20 +299,26 @@ export default function ProfileSettings() {
       />
       <SyncBar syncing={settingsSyncing} />
       <SettingsSurface>
-      <ScrollView contentContainerStyle={contentStyle}>
+      <ScrollView contentContainerStyle={contentStyle} keyboardShouldPersistTaps="handled">
         <SectionHeader first>Overview</SectionHeader>
         <Row
-          label={profile.paused ? 'Resume profile' : 'Pause profile'}
+          label="Paused"
           helper="paused profiles can't be chatted and sort last in new-chat"
-          value={<Pill tone={profile.paused ? 'warn' : 'on'}>{profile.paused ? 'paused' : 'active'}</Pill>}
-          onPress={() => saveField('paused', profile.paused ? 'false' : 'true')}
+          value={
+            <Toggle
+              on={!!profile.paused}
+              label="Paused"
+              color={accent}
+              onChange={(next) => saveField('paused', next ? 'true' : 'false')}
+            />
+          }
           chevron={false}
         />
         <RowSeparator />
         <Row
           label="Providers"
-          helper={providers.length ? providers.join(' · ') : 'API keys + local Ollama'}
-          value={String(providers.length)}
+          helper={twoPane || !providers.length ? 'API keys + local Ollama' : providers.join(' · ')}
+          value={twoPane && providers.length ? <ChipRow items={providers} /> : String(providers.length)}
           onPress={() => router.push(`/profile/${id}/providers`)}
         />
         <RowSeparator />
@@ -412,30 +433,23 @@ export default function ProfileSettings() {
         )}
 
         <SectionHeader kicker="how peers see this agent">Identity</SectionHeader>
-        <Row
-          label={twoPane ? 'Identity' : profile.bio ? profile.bio : 'Set identity prompt'}
-          helper={profile.bio ? undefined : 'one-line public bio · draft it from AGENT.md'}
-          value={
-            !twoPane ? undefined : profile.bio ? (
-              <Text
-                numberOfLines={3}
-                style={{
-                  fontFamily: fonts.sans.regular,
-                  fontSize: fontSizes.sm,
-                  lineHeight: fontSizes.sm * lineHeights.cozy,
-                  color: colors.ink,
-                  flexShrink: 1,
-                }}
-              >
-                {profile.bio}
-              </Text>
-            ) : (
-              'Set identity prompt'
-            )
-          }
-          labelLines={2}
-          onPress={() => router.push(`/profile/${id}/identity`)}
-        />
+        {twoPane ? (
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space.s9, paddingVertical: space.s3 }}>
+            <View style={{ width: WIDE_LABEL_W, flexShrink: 1, paddingTop: space.s3 }}>
+              <Eyebrow color={colors.ink3}>Identity</Eyebrow>
+            </View>
+            <View style={{ flex: 1, maxWidth: 520 }}>
+              <IdentityEditor profileId={id} profile={profile} call={call} onSaved={refreshSettings} />
+            </View>
+          </View>
+        ) : (
+          <Row
+            label={profile.bio ? profile.bio : 'Set identity prompt'}
+            helper={profile.bio ? undefined : 'one-line public bio · draft it from AGENT.md'}
+            labelLines={2}
+            onPress={() => router.push(`/profile/${id}/identity`)}
+          />
+        )}
 
         <SectionHeader kicker="daemon">Service</SectionHeader>
         {twoPane ? (
@@ -581,16 +595,22 @@ export default function ProfileSettings() {
         <Row
           label="Terminal"
           helper="wraps shell tools in sandbox-exec / bubblewrap"
-          value={<OnOff on={!!profile.sandbox} />}
-          onPress={toggleSandbox}
+          value={<Toggle on={!!profile.sandbox} label="Terminal sandbox" color={accent} onChange={toggleSandbox} />}
           chevron={false}
         />
         <RowSeparator />
         <Row
           label="Network"
           helper={profile.sandbox ? 'outbound http access' : 'enable terminal sandbox first'}
-          value={<OnOff on={!!profile.sandbox && !!profile.sandbox_allow_network} disabled={!profile.sandbox} />}
-          onPress={profile.sandbox ? toggleSandboxNetwork : undefined}
+          value={
+            <Toggle
+              on={!!profile.sandbox && !!profile.sandbox_allow_network}
+              disabled={!profile.sandbox}
+              label="Sandbox network"
+              color={accent}
+              onChange={toggleSandboxNetwork}
+            />
+          }
           chevron={false}
         />
 
@@ -604,15 +624,15 @@ export default function ProfileSettings() {
         <Row
           label="Auto-read replies"
           helper="reads each agent reply aloud as it arrives — never your messages"
-          value={<OnOff on={!!profile.voice_auto_read} />}
-          onPress={toggleAutoRead}
+          value={<Toggle on={!!profile.voice_auto_read} label="Auto-read replies" color={accent} onChange={toggleAutoRead} />}
+          chevron={false}
         />
 
         <SectionHeader>MCP Servers</SectionHeader>
         <Row
           label="Manage"
           helper="add, remove, inspect tools"
-          value={String(mcpCount)}
+          value={twoPane && mcpCount ? <ChipRow items={(profile.mcps ?? []).map((m) => m.name)} /> : String(mcpCount)}
           onPress={() => router.push(`/profile/${id}/mcp`)}
         />
 

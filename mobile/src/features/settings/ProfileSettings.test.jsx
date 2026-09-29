@@ -83,8 +83,16 @@ vi.mock('../../components/Pill', () => ({
   Pill: ({ children }) => <span>{children}</span>,
 }));
 
-vi.mock('../../components/OnOff', () => ({
-  OnOff: ({ on }) => <span>{on ? 'on' : 'off'}</span>,
+vi.mock('../../components/Toggle', () => ({
+  Toggle: ({ on, label, onChange, disabled }) => (
+    <button type="button" aria-label={label} aria-pressed={!!on} disabled={disabled} onClick={() => onChange?.(!on)}>
+      {on ? 'on' : 'off'}
+    </button>
+  ),
+}));
+
+vi.mock('./IdentityEditor', () => ({
+  IdentityEditor: ({ profileId }) => <div data-identity-editor={profileId}>Draft</div>,
 }));
 
 vi.mock('../../components/Diamond', () => ({
@@ -403,7 +411,7 @@ describe('ProfileSettings vocabulary', () => {
     const { container } = render(<ProfileSettings />, { wrapper: wrapper(call) });
 
     const scope = within(container);
-    await waitFor(() => expect(scope.getByText('Pause profile')).toBeTruthy());
+    await waitFor(() => expect(scope.getByText('Paused')).toBeTruthy());
     expect(scope.getByText("paused profiles can't be chatted and sort last in new-chat")).toBeTruthy();
     expect(container.textContent).not.toMatch(/alpis/i);
   });
@@ -459,6 +467,35 @@ describe('ProfileSettings vocabulary', () => {
     expect(meta.textContent).toMatch('deepseek-v4-flash');
     expect(meta.textContent).toMatch('$0.50');
     expect(meta.textContent).toMatch('/$2.00');
+    expect(container.querySelector('[data-identity-editor="doc"]')).toBeTruthy();
+  });
+
+  it('flips a boolean through its switch and never through the row', async () => {
+    const call = vi.fn(async (method) => {
+      if (method === 'host.profile.summaries') {
+        return { profiles: [{ name: 'doc', counts: {} }] };
+      }
+      if (method === 'host.settings.profile_snapshot') {
+        return {
+          detail: { name: 'doc', model: 'openrouter/example', paused: false, sandbox: false },
+          usage: { days: [] },
+          schedules: { jobs: [] },
+          workgroups: { workgroups: [] },
+          email: { accounts: [] },
+          storage: { storage: [] },
+        };
+      }
+      if (method === 'host.config.set_field') return {};
+      throw new Error(`unexpected ${method}`);
+    });
+
+    const { container } = render(<ProfileSettings />, { wrapper: wrapper(call) });
+    const scope = within(container);
+    await waitFor(() => expect(scope.getByLabelText('Paused')).toBeTruthy());
+    scope.getByLabelText('Paused').click();
+    await waitFor(() => expect(call).toHaveBeenCalledWith('host.config.set_field', { profile: 'doc', key: 'paused', value: 'true' }));
+    expect(scope.getByLabelText('Sandbox network').getAttribute('disabled')).not.toBeNull();
+    expect(container.querySelector('[data-identity-editor]')).toBeNull();
   });
 
   it('offers the daemon restart and update as buttons, like desktop', async () => {

@@ -104,6 +104,8 @@ vi.mock('../src/components/Diamond', () => ({ Diamond: () => React.createElement
 vi.mock('../src/components/Eyebrow', () => ({ Eyebrow: ({ children }) => React.createElement('span', {}, children) }));
 vi.mock('../src/components/Icon', () => ({ Icon: ({ name }) => React.createElement('span', { 'data-icon': name }) }));
 vi.mock('../src/components/OnOff', () => ({ OnOff: ({ on }) => React.createElement('span', {}, on ? 'on' : 'off') }));
+vi.mock('../src/components/Toggle', () => ({ Toggle: ({ on, label }) => React.createElement('span', { 'aria-label': label }, on ? 'on' : 'off') }));
+vi.mock('../src/features/settings/IdentityEditor', () => ({ IdentityEditor: () => null }));
 vi.mock('../src/components/Pill', () => ({ Pill: ({ children }) => React.createElement('span', {}, children) }));
 vi.mock('../src/components/ScreenHeader', () => ({
   ScreenHeader: ({ title, subtitle }) => React.createElement('header', { 'data-subtitle': subtitle }, title),

@@ -33,6 +33,11 @@ vi.mock('react-native', () => {
   };
 });
 
+vi.mock('../src/components/Toggle', () => ({
+  Toggle: ({ on, label, onChange, disabled }) =>
+    React.createElement('button', { type: 'button', 'aria-label': label, disabled, onClick: () => onChange?.(!on) }, on ? 'on' : 'off'),
+}));
+
 vi.mock('react-native-safe-area-context', () => ({
   SafeAreaView: ({ children }) => React.createElement('div', {}, children),
 }));
@@ -186,9 +191,9 @@ describe('connection detail', () => {
     await waitFor(() => expect(h.call).toHaveBeenCalledWith('host.connections.update', { connection_id: 'conn_1', session_scope: 'device' }));
   });
 
-  it('disables another connection on a plain tap', async () => {
+  it('disables another connection from its switch', async () => {
     render(<ConnectionRoute />);
-    fireEvent.click(screen.getByText('Disable connection'));
+    fireEvent.click(screen.getByLabelText('Enabled'));
     await waitFor(() => expect(h.call).toHaveBeenCalledWith('host.connections.set_status', { connection_id: 'conn_1', status: 'disabled' }));
   });
 
@@ -196,7 +201,7 @@ describe('connection detail', () => {
     h.endpoint = { id: 'phone-conn', connectionId: 'conn_1', deviceId: 'dev_me' };
     render(<ConnectionRoute />);
     expect(screen.getByText('this phone goes offline with it · an admin elsewhere must re-enable it')).toBeTruthy();
-    fireEvent.click(screen.getByText('Disable connection'));
+    fireEvent.click(screen.getByLabelText('Enabled'));
     expect(h.call).not.toHaveBeenCalledWith('host.connections.set_status', expect.anything());
     fireEvent.click(screen.getByText('confirm'));
     await waitFor(() => expect(h.call).toHaveBeenCalledWith('host.connections.set_status', { connection_id: 'conn_1', status: 'disabled' }));

@@ -13,6 +13,7 @@ import { useBack } from '../../../src/hooks/useBack';
 import { useDirtyBack } from '../../../src/hooks/useDirtyBack';
 import { useProfile } from '../../../src/hooks/useSubject';
 import { useEndpoint } from '../../../src/lib/EndpointContext';
+import { canDraftIdentity, draftIdentity, saveIdentity } from '../../../src/features/settings/identityDraft';
 import { useTheme } from '../../../src/theme/ThemeContext';
 
 export default function EditIdentity() {
@@ -34,7 +35,7 @@ export default function EditIdentity() {
 
   const save = async () => {
     try {
-      await call('host.config.set_field', { profile: id, key: 'public_bio', value: text });
+      await saveIdentity(call, id, text);
       toast({ title: 'Identity saved', duration: 1400 });
       goBack();
     } catch (e) {
@@ -42,17 +43,15 @@ export default function EditIdentity() {
     }
   };
 
-  // host.identity.draft synthesizes from AGENT.md via current LLM; needs cfg.model (else -32010 draft-failed).
   const draft = async () => {
     if (drafting) return;
-    if (!profile?.model) {
+    if (!canDraftIdentity(profile)) {
       toast({ title: 'Set a model first', message: 'Drafting needs an LLM wired up', duration: 2400 });
       return;
     }
     setDrafting(true);
     try {
-      const result = await call('host.identity.draft', { profile: id });
-      const bio = result?.bio ?? '';
+      const bio = await draftIdentity(call, id);
       if (bio) {
         setText(bio);
         toast({ title: 'Drafted from AGENT.md', duration: 1600 });
