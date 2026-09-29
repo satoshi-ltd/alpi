@@ -540,24 +540,106 @@ describe("useHostConnections connection-status", () => {
     expect(invoke.mock.calls.some(([cmd]) => cmd === "profiles")).toBe(false);
   });
 
-  it("keeps cached profiles and workgroups when workgroups rejects", async () => {
+  it("shows fresh profiles with the cached workgroups when only workgroups rejects, then retries", async () => {
     setProfileCache(
       "local",
       [{ name: "cached-doc", model: "a/b" }],
       [{ id: "wg-cached", profile: "cached-doc" }],
     );
+    let workgroupCalls = 0;
     invoke.mockImplementation(async (cmd) => {
       if (cmd === "host_connections") return makeConnections("local");
       if (cmd === "profile_summaries") return [{ name: "fresh-doc", model: "a/b" }];
-      if (cmd === "workgroups") throw new Error("read timeout");
+      if (cmd === "workgroups") {
+        workgroupCalls += 1;
+        if (workgroupCalls === 1) throw new Error("read timeout");
+        return [{ id: "wg-fresh", profile: "fresh-doc" }];
+      }
       return null;
     });
 
     const { result } = renderHostConnections();
     await waitFor(() => {
-      expect(result.current.profiles.map((p) => p.name)).toEqual(["cached-doc"]);
+      expect(result.current.profiles.map((p) => p.name)).toEqual(["fresh-doc"]);
       expect(result.current.workgroups.map((w) => w.id)).toEqual(["wg-cached"]);
     });
+    await waitFor(() => expect(result.current.workgroups.map((w) => w.id)).toEqual(["wg-fresh"]), { timeout: 4000 });
+  });
+
+  it("retries a cold start whose first summaries call failed while the connection is online", async () => {
+    let summaryCalls = 0;
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "host_connections") return makeConnections("remote");
+      if (cmd === "profile_summaries") {
+        summaryCalls += 1;
+        if (summaryCalls === 1) throw new Error("socket not ready");
+        return [{ name: "agora", model: "a/b" }];
+      }
+      if (cmd === "workgroups") return [];
+      return null;
+    });
+
+    const { result } = renderHostConnections();
+    await waitFor(() => expect(summaryCalls).toBe(1));
+    expect(result.current.profiles).toEqual([]);
+    await waitFor(() => expect(result.current.profiles.map((p) => p.name)).toEqual(["agora"]), { timeout: 4000 });
+    expect(summaryCalls).toBe(2);
+  });
+
+  it("frees roster caches of forgotten connections and the legacy keys when the store is full", async () => {
+    localStorage.setItem("alf:profiles:v1", "[]");
+    localStorage.setItem("alf:profiles:v1:remote-gone", "[]");
+    localStorage.setItem("alf:workgroups:v1:remote-gone", "[]");
+    localStorage.setItem("alpi:workgroup-task-cache:v3:remote", "{}");
+    setProfileCache("local", [{ name: "keep-me" }], []);
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "host_connections") return makeConnections("remote");
+      if (cmd === "profile_summaries") return [{ name: "agora", model: "a/b" }];
+      if (cmd === "workgroups") return [];
+      return null;
+    });
+    const original = Storage.prototype.setItem;
+    let failed = false;
+    const spy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (key, value) {
+      if (!failed && key === "alf:profiles:v1:remote") {
+        failed = true;
+        const err = new Error("full");
+        err.name = "QuotaExceededError";
+        throw err;
+      }
+      return original.call(this, key, value);
+    });
+    const { result } = renderHostConnections();
+    await waitFor(() => expect(result.current.profiles.map((p) => p.name)).toEqual(["agora"]));
+    spy.mockRestore();
+    expect(localStorage.getItem("alf:profiles:v1")).toBeNull();
+    expect(localStorage.getItem("alf:profiles:v1:remote-gone")).toBeNull();
+    expect(localStorage.getItem("alf:workgroups:v1:remote-gone")).toBeNull();
+    expect(localStorage.getItem("alpi:workgroup-task-cache:v3:remote")).toBeNull();
+    expect(localStorage.getItem("alf:profiles:v1:local")).not.toBeNull();
+    expect(JSON.parse(localStorage.getItem("alf:profiles:v1:remote")).map((p) => p.name)).toEqual(["agora"]);
+  });
+
+  it("writes the profile cache before the workgroup cache so a full store never keeps only the empty half", async () => {
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "host_connections") return makeConnections("remote");
+      if (cmd === "profile_summaries") return [{ name: "agora", model: "a/b" }];
+      if (cmd === "workgroups") return [];
+      return null;
+    });
+    const order = [];
+    const original = Storage.prototype.setItem;
+    const spy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (key, value) {
+      order.push(key);
+      return original.call(this, key, value);
+    });
+    const { result } = renderHostConnections();
+    await waitFor(() => expect(result.current.profiles.map((p) => p.name)).toEqual(["agora"]));
+    spy.mockRestore();
+    const profilesAt = order.indexOf("alf:profiles:v1:remote");
+    const workgroupsAt = order.indexOf("alf:workgroups:v1:remote");
+    expect(profilesAt).toBeGreaterThanOrEqual(0);
+    expect(profilesAt).toBeLessThan(workgroupsAt);
   });
 
   it("does not fall back to local profiles when an online remote returns no summaries", async () => {

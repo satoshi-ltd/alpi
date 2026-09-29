@@ -11,6 +11,16 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.6.8 — 2026-09-29 — the roster survives a rough cold start
+
+- **Profiles show up after a cold start on a remote connection.** A first request that failed while
+  the socket was still settling left the sidebar empty until the next status change; the roster now
+  keeps the profiles it did get, retries the rest shortly after, and the profile cache is written
+  before the workgroup cache so a full store can no longer keep only the empty half.
+- **Dialog footers no longer clip the hover of their Remove link.**
+
+  Requires alpi 0.15.20, as v0.6.4.
+
 ## v0.6.7 — 2026-09-29 — confirms and menus escape the dialog
 
 - **"Remove" inside a dialog asks for confirmation again.** The confirm used to open as a small
