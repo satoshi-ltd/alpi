@@ -9,7 +9,7 @@ REPO = Path(__file__).resolve().parents[1]
 
 def test_design_kit_builds_every_page_from_the_shipped_tokens(tmp_path):
     subprocess.run([sys.executable, str(REPO / "design" / "build.py"), "--out", str(tmp_path)], check=True, capture_output=True)
-    pages = {name: (tmp_path / name).read_text() for name in ("index.html", "desktop.html", "mobile.html", "audit.html")}
+    pages = {name: (tmp_path / name).read_text() for name in ("index.html", "desktop.html", "mobile.html", "audit.html", "proposals.html")}
     for html in pages.values():
         assert 'href="kit.css"' in html
         assert 'src="kit.js"' in html and 'data-kit-theme="dark"' in html
@@ -21,7 +21,7 @@ def test_design_kit_builds_every_page_from_the_shipped_tokens(tmp_path):
     versions = {name: json.loads((REPO / name / "package.json").read_text())["version"] for name in ("desktop", "mobile")}
     assert f"desktop {versions['desktop']} · mobile {versions['mobile']}" in pages["index.html"]
     index = json.loads((tmp_path / "canvas" / "project" / "canvas.json").read_text())
-    assert {p["id"] for p in index["pages"]} == {"system", "desktop", "mobile", "audit"}
+    assert {p["id"] for p in index["pages"]} == {"system", "desktop", "mobile", "audit", "proposals"}
     assert all("page" in frame for frame in index["boards"].values())
 
 
@@ -47,3 +47,16 @@ def test_design_system_covers_conversation_and_workgroups_on_both_clients(tmp_pa
     assert all(label in conversation for label in ("User message", "Alpi message", "Peer reply", "Tool calls", "Composer"))
     workgroup = (tmp_path / "canvas" / "project" / "System-DesktopWorkgroup.dc.html").read_text()
     assert all(f"Marker · {state}" in workgroup for state in ("task", "working", "done", "skip"))
+
+
+def test_design_proposals_number_every_board_from_the_ranked_table(tmp_path):
+    subprocess.run([sys.executable, str(REPO / "design" / "build.py"), "--out", str(tmp_path)], check=True, capture_output=True)
+    sys.path.insert(0, str(REPO / "design" / "src"))
+    from proposals_boards import NUM, PROPOSALS
+    project = tmp_path / "canvas" / "project"
+    boards = [p.read_text() for p in project.glob("Proposals-*.dc.html") if "Overview" not in p.name]
+    detailed = "".join(boards)
+    for key, n in NUM.items():
+        assert f">{n:02d}<" in detailed, key
+    assert len(PROPOSALS) == len(NUM)
+    assert "proposals" in (tmp_path / "proposals.html").read_text()

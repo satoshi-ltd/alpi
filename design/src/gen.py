@@ -14,6 +14,14 @@ MONO = "'Geist Mono', monospace"
 
 
 PATHS = {
+    "terminal": '<path d="M4 17l6-5-6-5"/><path d="M12 19h8"/>',
+    "globe": '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+    "file": '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/>',
+    "link": '<path d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/>',
+    "mic": '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
+    "pin": '<path d="M12 17v5"/><path d="M8 3h8l-1 7 3 3v2H6v-2l3-3z"/>',
+    "activity": '<path d="M3 12h4l3-8 4 16 3-8h4"/>',
+    "alert": '<path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18v.5"/>',
     "back": '<path d="M15 18l-6-6 6-6"/>',
     "chev-r": '<path d="M9 18l6-6-6-6"/>',
     "chev-d": '<path d="M6 9l6 6 6-6"/>',
@@ -718,13 +726,21 @@ def build(desktop_boards):
 
     place("Main.dc.html", audit2_board(), 0, 0, 1280, 140 + 90 * 6 + 120, "Open work", "audit")
 
+    from proposals_boards import PROPOSAL_BOARDS
+    y = 0
+    for name, fn, h, t in PROPOSAL_BOARDS:
+        y += 240
+        title(f"p-{t}", t, y - 223, "proposals")
+        place(name, fn(), 0, y, 1280, h, f"Proposals · {t.lower()}", "proposals")
+        y += h
+
     live_path = os.path.join(os.path.dirname(ROOT), "live", "project", "canvas.json")
     index = {
         "v": 3,
         "createdOnFiles": {"v": 1, "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")},
         "title": "Alpi desktop and mobile parity",
         "launch": {"view": "canvas", "page": "system"},
-        "pages": [{"id": "system", "name": "System"}, {"id": "desktop", "name": "Desktop"}, {"id": "mobile", "name": "Mobile"}, {"id": "audit", "name": "Open work"}],
+        "pages": [{"id": "system", "name": "System"}, {"id": "desktop", "name": "Desktop"}, {"id": "mobile", "name": "Mobile"}, {"id": "audit", "name": "Open work"}, {"id": "proposals", "name": "Proposals"}],
         "boards": boards,
         "order": order,
         "notes": notes,

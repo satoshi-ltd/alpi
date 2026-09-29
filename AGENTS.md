@@ -48,7 +48,7 @@ this repository. Hard constraints, not suggestions.
   it goes.
 
 - **`design/` is the visual reference, generated.** `python3 design/build.py`
-  rewrites `design/*.html` (System, Desktop, Mobile, Audit) and the canvas
+  rewrites `design/*.html` (System, Desktop, Mobile, Open work, Proposals) and the canvas
   artboards under `design/canvas/` from `design/src/`. After changing a token
   or a primitive, update the matching board and regenerate; never edit the
   HTML by hand. `tests/test_design_kit.py` keeps the pages on the shipped tokens.

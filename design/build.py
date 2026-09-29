@@ -17,6 +17,7 @@ PAGES = (
     ("desktop.html", "desktop", "Desktop", "Desktop", "Tauri client, 1280 wide. Every screen as the code paints it, with the sidebar it shares."),
     ("mobile.html", "mobile", "Mobile", "Phone and Fold", "Expo client. The phone keeps its own grammar; a fold or tablet renders the desktop layout at scale."),
     ("audit.html", "audit", "Open work", "Open work", "What is still pending between the two clients. Shipped rows leave the table; the changelogs keep the history."),
+    ("proposals.html", "proposals", "Proposals", "Where to go next", "A UX and UI review of both clients against the agent and chat apps shipping now. Each proposal shows today, the proposal, why it matters and who already does it."),
 )
 
 

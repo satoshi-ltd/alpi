@@ -2,7 +2,7 @@
  "v": 3,
  "createdOnFiles": {
   "v": 1,
-  "at": "2026-09-29T23:19:49Z"
+  "at": "2026-09-29T23:36:57Z"
  },
  "title": "Alpi desktop and mobile parity",
  "launch": {
@@ -25,6 +25,10 @@
   {
    "id": "audit",
    "name": "Open work"
+  },
+  {
+   "id": "proposals",
+   "name": "Proposals"
   }
  ],
  "boards": {
@@ -251,6 +255,54 @@
    "h": 800,
    "title": "Open work",
    "page": "audit"
+  },
+  "Proposals-Overview.dc.html": {
+   "x": 0,
+   "y": 240,
+   "w": 1280,
+   "h": 1900,
+   "title": "Proposals \u00b7 overview \u00b7 ranked proposals",
+   "page": "proposals"
+  },
+  "Proposals-Conversation.dc.html": {
+   "x": 0,
+   "y": 2380,
+   "w": 1280,
+   "h": 1860,
+   "title": "Proposals \u00b7 conversation",
+   "page": "proposals"
+  },
+  "Proposals-Activity.dc.html": {
+   "x": 0,
+   "y": 4480,
+   "w": 1280,
+   "h": 1330,
+   "title": "Proposals \u00b7 agents at work",
+   "page": "proposals"
+  },
+  "Proposals-Navigation.dc.html": {
+   "x": 0,
+   "y": 6050,
+   "w": 1280,
+   "h": 1300,
+   "title": "Proposals \u00b7 navigation",
+   "page": "proposals"
+  },
+  "Proposals-Foundations.dc.html": {
+   "x": 0,
+   "y": 7590,
+   "w": 1280,
+   "h": 2060,
+   "title": "Proposals \u00b7 foundations",
+   "page": "proposals"
+  },
+  "Proposals-Mobile.dc.html": {
+   "x": 0,
+   "y": 9890,
+   "w": 1280,
+   "h": 1720,
+   "title": "Proposals \u00b7 phone and fold",
+   "page": "proposals"
   }
  },
  "order": [
@@ -281,7 +333,13 @@
   "Phone-Sheet.dc.html",
   "Phone-ActionSheet.dc.html",
   "Phone-TypedConfirm.dc.html",
-  "Main.dc.html"
+  "Main.dc.html",
+  "Proposals-Overview.dc.html",
+  "Proposals-Conversation.dc.html",
+  "Proposals-Activity.dc.html",
+  "Proposals-Navigation.dc.html",
+  "Proposals-Foundations.dc.html",
+  "Proposals-Mobile.dc.html"
  ],
  "notes": {
   "s-Foundations": {
@@ -411,6 +469,54 @@
    "kind": "title1",
    "maxW": 2600,
    "page": "mobile"
+  },
+  "p-Overview \u00b7 ranked proposals": {
+   "x": 0,
+   "y": 17,
+   "text": "Overview \u00b7 ranked proposals",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "proposals"
+  },
+  "p-Conversation": {
+   "x": 0,
+   "y": 2157,
+   "text": "Conversation",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "proposals"
+  },
+  "p-Agents at work": {
+   "x": 0,
+   "y": 4257,
+   "text": "Agents at work",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "proposals"
+  },
+  "p-Navigation": {
+   "x": 0,
+   "y": 5827,
+   "text": "Navigation",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "proposals"
+  },
+  "p-Foundations": {
+   "x": 0,
+   "y": 7367,
+   "text": "Foundations",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "proposals"
+  },
+  "p-Phone and Fold": {
+   "x": 0,
+   "y": 9667,
+   "text": "Phone and Fold",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "proposals"
   }
  },
  "designSystems": []
