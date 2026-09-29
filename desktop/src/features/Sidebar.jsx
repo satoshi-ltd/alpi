@@ -588,6 +588,17 @@ function Sidebar({
           {noMatches && (
             <div className={styles.searchEmpty}>No profiles or workgroups match</div>
           )}
+          {!showLoadingRows && !query && !daemonOffline && !connectionSyncing && profiles.length === 0 && workgroups.length === 0 && (
+            <div className={styles.searchEmpty}>
+              No profiles yet
+              {onNewProfile && (
+                <>
+                  {" · "}
+                  <button type="button" className="alink" onClick={onNewProfile}>New profile</button>
+                </>
+              )}
+            </div>
+          )}
         </nav>
       </div>
 

@@ -5,7 +5,7 @@ import { useSwrValue } from "../../../hooks/useSwrValue.js";
 import Button from "../../../primitives/Button.jsx";
 import Chip from "../../../primitives/Chip.jsx";
 import { Row } from "../primitives.jsx";
-import { ConfirmDelete } from "../../../primitives/index.js";
+import { ConfirmDelete, LoadFailed } from "../../../primitives/index.js";
 import { useNotify } from "../../../primitives/Notification.jsx";
 import { STORAGE_GROUPS, RECLAIM_NOTES, formatBytes } from "../util.js";
 import styles from "../Settings.module.css";
@@ -30,7 +30,7 @@ export function StorageField({ profile, activeConnection, prefetched, onLoadingC
   const canClean = activeConnection?.kind === "local" || activeConnection?.role === "admin";
   const key = storageCacheKey(connectionId, profile.name);
 
-  const { data: usage, error, loading } = useSwrValue(
+  const { data: usage, error, loading, refresh: refreshUsage } = useSwrValue(
     _storageCache,
     key,
     { profile: profile.name, connectionId },
@@ -136,6 +136,9 @@ export function StorageField({ profile, activeConnection, prefetched, onLoadingC
 
   if (usageOverride == null && usage == null && !error) {
     return <Row label="storage"><span className={styles.muted}>loading…</span></Row>;
+  }
+  if (usageOverride == null && usage == null && error) {
+    return <Row label="storage"><LoadFailed inline label="storage" onRetry={refreshUsage} /></Row>;
   }
   if (groups.length === 0) {
     return <Row label="storage"><span className={styles.muted}>nothing yet</span></Row>;

@@ -134,4 +134,15 @@ describe("WorkgroupsView", () => {
     expect(screen.getByText("Queued hotel")).toBeInTheDocument();
     expect(screen.queryByText("Finished hotel")).not.toBeInTheDocument();
   });
+
+  it("waits quietly while the connection syncs, then offers to create the first workgroup", () => {
+    const onNewWorkgroup = vi.fn();
+    const { rerender } = render(<WorkgroupsView workgroups={[]} profiles={[]} syncing onNewWorkgroup={onNewWorkgroup} />);
+    expect(screen.getByText("Syncing workgroups…")).toBeInTheDocument();
+    expect(screen.queryByText("No workgroups yet")).toBeNull();
+    rerender(<WorkgroupsView workgroups={[]} profiles={[]} syncing={false} onNewWorkgroup={onNewWorkgroup} />);
+    expect(screen.getByText("No workgroups yet")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "New workgroup" }).at(-1));
+    expect(onNewWorkgroup).toHaveBeenCalledTimes(1);
+  });
 });

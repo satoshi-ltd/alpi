@@ -288,4 +288,23 @@ describe("WorkgroupDetail — delete / leave", () => {
     });
     await waitFor(() => expect(onGone).toHaveBeenCalled());
   });
+
+  it("names a failed members read and retries it instead of showing none", async () => {
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "workgroup_members") throw new Error("read timeout");
+      return null;
+    });
+    render(
+      <WorkgroupDetail
+        workgroup={{ id: "wg-1", profile: "mira", hub_id: "mira", is_hub: true }}
+        profiles={[{ name: "mira", pubkey_b64: "hub", accent: "#446" }]}
+        connectionId="casa"
+      />,
+    );
+    await screen.findByRole("alert");
+    expect(screen.getByRole("alert")).toHaveTextContent("Couldn't load members");
+    invoke.mockImplementation(async (cmd) => (cmd === "workgroup_members" ? [] : null));
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+  });
 });

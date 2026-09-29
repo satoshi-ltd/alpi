@@ -230,4 +230,16 @@ describe("StorageField — the destructive confirm has a positioned anchor", () 
     expect(anchor.className).toMatch(/confirmAnchor/);
     expect(anchor.contains(confirm)).toBe(true);
   });
+
+  it("names a failed storage read instead of claiming nothing is stored", async () => {
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "profile_storage") throw new Error("read timeout");
+      if (cmd === "cleanup_plan") return [];
+      return null;
+    });
+    render(<StorageField profile={{ name: "doc" }} activeConnection={local} />);
+    await screen.findByRole("alert");
+    expect(screen.getByRole("alert")).toHaveTextContent("Couldn't load storage");
+    expect(screen.queryByText("nothing yet")).toBeNull();
+  });
 });

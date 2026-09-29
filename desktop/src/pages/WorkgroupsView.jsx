@@ -6,6 +6,7 @@ import {
   PlusIcon,
   RelativeTime,
   SearchIcon,
+  EmptyState,
 } from "../primitives/index.js";
 import styles from "./WorkgroupsView.module.css";
 
@@ -54,6 +55,7 @@ export default function WorkgroupsView({
   activityByWorkgroup = {},
   onOpenWorkgroup,
   onNewWorkgroup,
+  syncing = false,
 }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
@@ -206,11 +208,16 @@ export default function WorkgroupsView({
             })}
           </div>
 
-          {rows.length === 0 && (
-            <div className={styles.empty}>
-              {workgroups.length === 0 ? "No workgroups on this connection." : "No workgroups match this view."}
-            </div>
+          {rows.length === 0 && workgroups.length > 0 && (
+            <div className={styles.empty}>No workgroups match this view.</div>
           )}
+          {workgroups.length === 0 && (syncing ? (
+            <div className={styles.empty}>Syncing workgroups…</div>
+          ) : (
+            <EmptyState glyph="hash" heading="No workgroups yet" subtitle="a hub profile plus the members it directs">
+              {onNewWorkgroup && <Button onClick={onNewWorkgroup}>New workgroup</Button>}
+            </EmptyState>
+          ))}
         </div>
       </div>
     </section>

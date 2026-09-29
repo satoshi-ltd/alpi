@@ -26,7 +26,7 @@ import Markdown from "../primitives/Markdown.jsx";
 import { ACCENT_HEXES } from "../../../common/accents.mjs";
 import ProducedImages from "../primitives/ProducedImages.jsx";
 import { setImageRoots } from "../lib/imageRoots.js";
-import { Banner, JumpToLatest, MessageBubble, NewChatHero, ProfileChatHeader } from "../primitives/index.js";
+import { Banner, JumpToLatest, LoadFailed, MessageBubble, NewChatHero, ProfileChatHeader } from "../primitives/index.js";
 import { ProfileMessage } from "../primitives/index.js";
 import {
   Activity,
@@ -93,6 +93,8 @@ export default function ChatPane({
   onCloseSearch,
   recents = [],
   onOpenRecent,
+  loadError = null,
+  onRetryLoad,
 }) {
   const inProfile = view.kind === "profile";
   const inEmpty = !pendingTurn && view.kind === "empty";
@@ -374,6 +376,8 @@ export default function ChatPane({
           rewriteDraft={rewriteDraft}
           searchOpen={searchOpen}
           onCloseSearch={onCloseSearch}
+          loadError={loadError}
+          onRetryLoad={onRetryLoad}
         />
       </div>
       <ChatComposer
@@ -419,6 +423,8 @@ function SessionView({
   rewriteDraft,
   searchOpen,
   onCloseSearch,
+  loadError,
+  onRetryLoad,
 }) {
   return (
     <>
@@ -439,6 +445,8 @@ function SessionView({
         rewriteDraft={rewriteDraft}
         searchOpen={searchOpen}
         onCloseSearch={onCloseSearch}
+        loadError={loadError}
+        onRetryLoad={onRetryLoad}
       />
     </>
   );
@@ -461,6 +469,8 @@ const Transcript = memo(function Transcript({
   rewriteDraft,
   searchOpen,
   onCloseSearch,
+  loadError = null,
+  onRetryLoad,
 }) {
   const allTurns = data?.turns ?? [];
   // session model, not current profile default: a model swap must not repaint history as routed
@@ -522,6 +532,13 @@ const Transcript = memo(function Transcript({
   }
 
   if (turns.length === 0 && !data && !pendingTurn) {
+    if (loadError) {
+      return (
+        <div className={styles.loading}>
+          <LoadFailed label="this conversation" error={loadError} onRetry={onRetryLoad} />
+        </div>
+      );
+    }
     if (!showSkeleton) return <div className={styles.loading} />;
     return (
       <div className={styles.loading}>

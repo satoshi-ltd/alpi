@@ -11,6 +11,22 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.6.9 — 2026-09-29 — every view says what happened
+
+- **A conversation or workgroup that fails to load says so**, with the reason and a Retry, instead
+  of an endless skeleton or a false "no posts yet". A workgroup thread shows a skeleton while it
+  loads.
+- **Empty means empty.** The workgroups list and the sidebar wait quietly while a connection syncs,
+  then offer to create the first workgroup or profile; notifications no longer claim "Inbox zero"
+  during the first sync.
+- **Connections recover from a failed load** with a Retry, say when nothing is paired yet, and get
+  a refresh button in the header.
+- **Email accounts, storage and workgroup members** show "couldn't load" with a Retry instead of
+  "none" when the read fails.
+- **The offline banner also shows in Settings**, and a save in Settings refreshes the page.
+
+  Requires alpi 0.15.20, as v0.6.4.
+
 ## v0.6.8 — 2026-09-29 — the roster survives a rough cold start
 
 - **Profiles show up after a cold start on a remote connection.** A first request that failed while

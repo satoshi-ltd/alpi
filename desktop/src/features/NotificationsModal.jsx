@@ -297,7 +297,11 @@ export default function NotificationsModal({
 
   const list = (
     <ul className={styles.list} role="listbox">
-      {rows.length === 0 ? (
+      {rows.length === 0 && loading ? (
+        <li className={styles.empty}>
+          <span className={styles.emptyHint}>Syncing notifications…</span>
+        </li>
+      ) : rows.length === 0 ? (
         <li className={styles.empty}>
           <span className={styles.emptyTitle}>Inbox zero</span>
           <span className={styles.emptyHint}>

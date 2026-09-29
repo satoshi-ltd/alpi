@@ -1,0 +1,29 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-5);
+  padding: var(--space-9) var(--space-7);
+  text-align: center;
+}
+
+.title {
+  font-size: var(--fs-base);
+  font-weight: var(--fw-medium);
+  color: var(--ink);
+}
+
+.detail {
+  max-width: 520px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  word-break: break-word;
+}
+
+.inline {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--c-danger-text);
+}

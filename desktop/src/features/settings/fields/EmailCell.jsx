@@ -11,7 +11,7 @@ import Eyebrow from "../../../primitives/Eyebrow.jsx";
 import Modal from "../../../primitives/Modal.jsx";
 import { useNotify } from "../../../primitives/Notification.jsx";
 import Field from "../../../primitives/Field.jsx";
-import { ConfirmDeleteAction, DialogFooter } from "../../../primitives/index.js";
+import { ConfirmDeleteAction, DialogFooter, LoadFailed } from "../../../primitives/index.js";
 import styles from "../Settings.module.css";
 
 function cacheKey(connectionId, profileName) {
@@ -52,7 +52,8 @@ export function EmailCell({
     { profile: profile.name, connectionId },
     { defer, prefetched },
   );
-  const accounts = data ?? (error ? [] : null);
+  const accounts = data ?? null;
+  const failed = !data && !!error;
   const [editing, setEditing] = useState(null);
   const [adding, setAdding] = useState(false);
 
@@ -76,7 +77,8 @@ export function EmailCell({
 
   return (
     <span className={styles.chipRow}>
-      {accounts === null && <span className={styles.muted}>loading…</span>}
+      {accounts === null && !failed && <span className={styles.muted}>loading…</span>}
+      {failed && <LoadFailed inline label="email accounts" onRetry={refresh} />}
       {accounts?.length === 0 && <span className={styles.muted}>none</span>}
       {accounts?.map((a) => (
         <Chip key={a.id} onClick={() => setEditing(a)}>

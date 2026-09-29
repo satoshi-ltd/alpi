@@ -30,6 +30,7 @@ export { default as Icon } from "./Icon.jsx";
 export { default as IconBtn } from "./IconBtn.jsx";
 export { default as JumpToLatest } from "./JumpToLatest.jsx";
 export { default as Kbd } from "./Kbd.jsx";
+export { default as LoadFailed } from "./LoadFailed.jsx";
 export { default as Logo } from "./Logo.jsx";
 export { default as MarkdownBody } from "./MarkdownBody.jsx";
 export { default as MarkerCard } from "./MarkerCard.jsx";

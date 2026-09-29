@@ -616,6 +616,7 @@ export default function App() {
     [],
   );
 
+  const [sessionLoadError, setSessionLoadError] = useState(null);
   const sessionOpener = useMemo(
     () =>
       createSessionOpener({
@@ -631,19 +632,30 @@ export default function App() {
               ? { ...v, sessionId: null }
               : v,
           ),
-        onError: (e) => notify({ message: `session load failed: ${e}`, variant: "error" }),
+        onError: (e, _connId, profile, sessionId) => {
+          if (sessionDataRef.current?.turns?.length > 0) {
+            notify({ message: `session refresh failed: ${e}`, variant: "error" });
+            return;
+          }
+          setSessionLoadError({ key: `${profile}:${sessionId}`, message: String(e) });
+        },
       }),
     [],
   );
 
+  const [sessionRetryTick, setSessionRetryTick] = useState(0);
   useEffect(() => {
     setSessionSync(null);
+    setSessionLoadError(null);
     if (view.kind !== "profile" || !view.sessionId) {
       setSessionData(null);
       return undefined;
     }
     return sessionOpener.open(view.profile, view.sessionId);
-  }, [view, hostConnections.active_id, sessionOpener]);
+  }, [view, hostConnections.active_id, sessionOpener, sessionRetryTick]);
+  const sessionLoadFailure = view.kind === "profile" && sessionLoadError?.key === `${view.profile}:${view.sessionId}`
+    ? sessionLoadError.message
+    : null;
 
   const scheduleReload = useCoalescedCallback(() => reloadRef.current?.(), 500, 5000);
 
@@ -1274,6 +1286,23 @@ export default function App() {
         onCloseSearch={onCloseSidebarSearch}
       />
       <main className={styles.main}>
+          {daemonOffline && (
+            <Banner
+              kind={isLocalAutostartInFlight ? "info" : connectionDisabled || connectionRateLimited ? "warning" : "danger"}
+              pulsing={!isLocalAutostartInFlight && !connectionDisabled && !connectionRateLimited}
+              action={isLocalAutostartInFlight || connectionDisabled || connectionRateLimited ? null : "Retry"}
+              onAction={isLocalAutostartInFlight || connectionDisabled || connectionRateLimited ? null : onRefreshHostConnectionStatus}
+            >
+              {connectionFailureMessage(activeConnection) ??
+                (activeConnection?.kind === "remote"
+                  ? `${activeConnection?.name ?? "Remote"} unreachable — check network / tunnel.`
+                  : isLocalAutostartInFlight
+                    ? "Starting local daemon…"
+                    : autostartPhase === "gave-up"
+                      ? "Local daemon won't start — check Settings → daemon, or run `alpi daemon start` from terminal."
+                      : "Local daemon unreachable — reconnecting…")}
+            </Banner>
+          )}
           {view.kind === "settings" && canAdminEarly ? (
             <Settings
               profiles={profiles}
@@ -1287,7 +1316,7 @@ export default function App() {
               jumpHints={jumpHints}
               onTogglePin={onTogglePin}
               onSelectTarget={setSettingsTarget}
-              onRefresh={reload}
+              onRefresh={onSettingsRefresh}
               onDeleteProfile={adminOnDeleteProfile}
               onOpenChat={closeSettings}
               onOpenConnections={openConnections}
@@ -1299,23 +1328,6 @@ export default function App() {
             />
           ) : (
             <>
-              {daemonOffline && (
-                <Banner
-                  kind={isLocalAutostartInFlight ? "info" : connectionDisabled || connectionRateLimited ? "warning" : "danger"}
-                  pulsing={!isLocalAutostartInFlight && !connectionDisabled && !connectionRateLimited}
-                  action={isLocalAutostartInFlight || connectionDisabled || connectionRateLimited ? null : "Retry"}
-                  onAction={isLocalAutostartInFlight || connectionDisabled || connectionRateLimited ? null : onRefreshHostConnectionStatus}
-                >
-                  {connectionFailureMessage(activeConnection) ??
-                    (activeConnection?.kind === "remote"
-                      ? `${activeConnection?.name ?? "Remote"} unreachable — check network / tunnel.`
-                      : isLocalAutostartInFlight
-                        ? "Starting local daemon…"
-                        : autostartPhase === "gave-up"
-                          ? "Local daemon won't start — check Settings → daemon, or run `alpi daemon start` from terminal."
-                          : "Local daemon unreachable — reconnecting…")}
-                </Banner>
-              )}
               {!daemonOffline && switchBannerVisible && (
                 <Banner kind="info" pulsing>
                   {activeStatus === "online"
@@ -1327,6 +1339,7 @@ export default function App() {
                 <WorkgroupsView
                   workgroups={workgroups}
                   profiles={profiles}
+                  syncing={connectionSyncing}
                   taskByWorkgroup={taskByWorkgroup}
                   activityByWorkgroup={activityByWorkgroup}
                   onOpenWorkgroup={onOpenWorkgroup}
@@ -1369,6 +1382,8 @@ export default function App() {
                   connectionId={hostConnections.active_id}
                   sessionData={sessionData}
                   sessionSync={sessionSync}
+                  loadError={sessionLoadFailure}
+                  onRetryLoad={() => setSessionRetryTick((t) => t + 1)}
                   daemonOffline={daemonOffline}
                   pendingTurn={pendingTurnForCurrentView}
                   onSend={onSend}

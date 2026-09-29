@@ -12,7 +12,7 @@ import { profileLabel } from "../../lib/profile-display.js";
 import { Section, Row, CopyButton } from "./primitives.jsx";
 import { ConfirmDelete, ConfirmDeleteAction } from "../../primitives/index.js";
 import { RefreshBar, SettingsHero } from "../../primitives/index.js";
-import { Diamond, Dot, Mono } from "../../primitives/index.js";
+import { Diamond, Dot, LoadFailed, Mono } from "../../primitives/index.js";
 import { BudgetEditor } from "./fields/alp.jsx";
 import { useProfileDetail } from "../../hooks/useProfileDetail.js";
 import { useWorkgroupUsageDaily } from "../../hooks/useUsage.js";
@@ -83,7 +83,8 @@ export default function WorkgroupDetail({
     wgId: workgroup.id,
     connectionId,
   });
-  const members = membersData ?? (membersError ? [] : null);
+  const members = membersData ?? null;
+  const membersFailed = !membersData && !!membersError;
   const [busyAction, setBusyAction] = useState(null);
   const [briefing, setBriefing] = useState(workgroup.briefing ?? "");
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -496,7 +497,9 @@ export default function WorkgroupDetail({
         </Section>
 
         <Section title="Members" kicker={members ? `${members.filter((m) => m.joined).length} profiles` : null} alignTop>
-          {members === null ? (
+          {membersFailed ? (
+            <LoadFailed inline label="members" onRetry={reloadMembers} />
+          ) : members === null ? (
             <>
               <Skeleton width="220px" />
               <Skeleton width="180px" />

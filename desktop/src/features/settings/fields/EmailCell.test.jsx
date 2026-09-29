@@ -518,4 +518,22 @@ describe("EmailCell — removing an account with a real click sequence", () => {
       });
     });
   });
+
+  it("says when the account list could not be read, and retries, instead of showing none", async () => {
+    let calls = 0;
+    invoke.mockImplementation(async (command) => {
+      if (command === "email_status") {
+        calls += 1;
+        if (calls === 1) throw new Error("read timeout");
+        return TWO_ACCOUNTS;
+      }
+      return null;
+    });
+    render(<EmailCell profile={profile} connectionId="casa" />);
+    await screen.findByRole("alert");
+    expect(screen.getByRole("alert")).toHaveTextContent("Couldn't load email accounts");
+    expect(screen.queryByText("none")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByRole("button", { name: "me@work.com" })).toBeInTheDocument();
+  });
 });

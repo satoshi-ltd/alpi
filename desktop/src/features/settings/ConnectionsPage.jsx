@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import Button from "../../primitives/Button.jsx";
 import ConfirmDelete, { ConfirmDeleteAction } from "../../primitives/ConfirmDelete.jsx";
 import Field from "../../primitives/Field.jsx";
 import Modal from "../../primitives/Modal.jsx";
 import SelectField from "../../primitives/SelectField.jsx";
+import LoadFailed from "../../primitives/LoadFailed.jsx";
 import {
   ArrowLeftIcon,
   Checkbox,
@@ -84,15 +85,22 @@ export default function ConnectionsPage({
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [showActivity, setShowActivity] = useState(false);
   const [query, setQuery] = useState("");
+  const [loadError, setLoadError] = useState(null);
+  const dataRef = useRef(data);
+  dataRef.current = data;
+  const notifyRef = useRef(notify);
+  notifyRef.current = notify;
 
   const reload = useCallback(async () => {
     try {
       const next = await invoke("connections_summary", connectionArg);
       setData(next || { connections: [], totals: {} });
+      setLoadError(null);
     } catch (error) {
-      notify({ message: `connections: ${String(error)}`, variant: "error" });
+      setLoadError(String(error));
+      if (dataRef.current) notifyRef.current({ message: `connections: ${String(error)}`, variant: "error" });
     }
-  }, [activeConnection?.id, notify]);
+  }, [activeConnection?.id]);
 
   useEffect(() => { reload(); }, [reload]);
 
@@ -173,6 +181,9 @@ export default function ConnectionsPage({
               <Button icon={<ArrowLeftIcon />} onClick={() => setShowActivity(false)}>Connections</Button>
             ) : (
               <>
+                <Tip text="Refresh" side="r">
+                  <IconBtn onClick={reload} aria-label="Refresh connections"><Icon name="refresh" /></IconBtn>
+                </Tip>
                 <Button icon={<Icon name="history" />} onClick={() => setShowActivity(true)}>Activity</Button>
                 <Button icon={<Icon name="plus" />} onClick={() => setCreating(true)}>New connection</Button>
               </>
@@ -207,7 +218,13 @@ export default function ConnectionsPage({
               <Mono>{visibleRows.length} of {rows.length}</Mono>
             </div>
           )}
-          {!data && <div className={styles.empty}>Loading connections…</div>}
+          {!data && !loadError && <div className={styles.empty}>Loading connections…</div>}
+          {!data && loadError && (
+            <div className={styles.empty}><LoadFailed inline label="connections" onRetry={reload} /></div>
+          )}
+          {data && rows.every((row) => row.id === "host") && (
+            <div className={styles.empty}>No paired apps yet · create a connection and share its pairing link with a phone or desktop.</div>
+          )}
           {data && visibleRows.length > 0 && (
             <div className={styles.tableHead} aria-hidden>
               <span>Connection</span>

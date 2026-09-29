@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const invokeMock = vi.fn();
@@ -63,5 +63,24 @@ describe("WorkgroupView empty state", () => {
     await waitFor(() => {
       expect(onGone).toHaveBeenCalledWith("local", "hub", "launch");
     });
+  });
+
+  it("shows a skeleton while the transcript loads, never a blank body", () => {
+    fetchWorkgroupTranscriptMock.mockReturnValueOnce(new Promise(() => {}));
+    const { container } = render(
+      <WorkgroupView workgroup={workgroup} profiles={profiles} connectionId="local" />,
+    );
+    expect(container.querySelector(".anim-fade[aria-hidden='true']")).toBeTruthy();
+    expect(screen.queryByText("no posts yet")).toBeNull();
+  });
+
+  it("names a failed load and retries it instead of pretending the workgroup is empty", async () => {
+    fetchWorkgroupTranscriptMock.mockRejectedValueOnce(new Error("read timeout"));
+    render(<WorkgroupView workgroup={workgroup} profiles={profiles} connectionId="local" />);
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Couldn't load this workgroup"));
+    expect(screen.queryByText("no posts yet")).toBeNull();
+    fetchWorkgroupTranscriptMock.mockResolvedValueOnce([]);
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(screen.getByText("no posts yet")).toBeInTheDocument());
   });
 });

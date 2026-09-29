@@ -37,7 +37,8 @@ import {
   saveCachedMessages,
 } from "../lib/workgroup-cache.js";
 import { fetchWorkgroupTranscript } from "../lib/workgroup-fetch.js";
-import { WorkgroupChatHeader, TasksButton, Eyebrow, AlpiSilhouette } from "../primitives/index.js";
+import { WorkgroupChatHeader, TasksButton, Eyebrow, AlpiSilhouette, LoadFailed } from "../primitives/index.js";
+import { ChatLoadSkeleton } from "./ChatSkeletons.jsx";
 import { JumpToLatest, MarkerCard, MessageBubble } from "../primitives/index.js";
 import {
   Banner,
@@ -570,7 +571,12 @@ export default function WorkgroupView({
           active={refreshBeat > 0}
           accent={ownerProfile?.accent ?? null}
         />
-        {error && <div className={styles.error}>{error}</div>}
+        {error && messages === null ? (
+          <LoadFailed label="this workgroup" error={error} onRetry={() => setRefreshTick((t) => t + 1)} />
+        ) : error ? (
+          <div className={styles.error}>{error}</div>
+        ) : null}
+        {messages === null && !error && <ChatLoadSkeleton />}
 
         {messages && (
           <>

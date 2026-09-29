@@ -38,7 +38,7 @@ vi.mock("../lib/useOnline.js", () => ({ useOnline: () => true }));
 vi.mock("../lib/clipboard.js", () => ({ copyText: vi.fn(async () => true) }));
 vi.mock("../primitives/Notification.jsx", () => ({ useNotify: () => () => {} }));
 vi.mock("../hooks/useOutputs.js", () => ({
-  useAllOutputs: () => ({ rows: h.rows, refresh: () => {} }),
+  useAllOutputs: () => ({ rows: h.rows, refresh: () => {}, loading: h.loading ?? false }),
   useOutput: () => ({ row: h.detail, markRead: () => {} }),
   useDeleteOutput: () => ({ schedule: () => {}, cancel: () => {} }),
   useMarkAllOutputsRead: () => () => {},
@@ -56,6 +56,7 @@ beforeEach(() => {
   h.playTts.mockClear();
   h.ttsCb.current = null;
   h.rows = [h.ROW];
+  h.loading = false;
   h.detail = h.DETAIL;
   h.profileDetail = null;
   h.invoke.mockClear();
@@ -373,5 +374,13 @@ describe("NotificationsModal — read / unread", () => {
       fireEvent.click(screen.getAllByLabelText("Delete notification")[0]);
     });
     expect(document.body.textContent).toContain("1 unread");
+  });
+
+  it("does not claim inbox zero while the first sync is still running", () => {
+    h.rows = [];
+    h.loading = true;
+    renderModal();
+    expect(screen.queryByText("Inbox zero")).toBeNull();
+    expect(screen.getByText("Syncing notifications…")).toBeInTheDocument();
   });
 });

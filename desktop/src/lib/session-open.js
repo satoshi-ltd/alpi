@@ -137,7 +137,7 @@ export function createSessionOpener({
           if (live()) onGone?.(connId, profile, sessionId);
           return;
         }
-        if (live()) onError?.(e);
+        if (live()) onError?.(e, connId, profile, sessionId);
       }
     })();
 

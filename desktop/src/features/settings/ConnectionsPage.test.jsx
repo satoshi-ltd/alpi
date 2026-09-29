@@ -356,4 +356,36 @@ describe("ConnectionsPage", () => {
     expect(screen.getByText("remote · member · conn_remote / dev_remote")).toBeInTheDocument();
     expect(screen.queryByText("Local host", { selector: "strong" })).toBeNull();
   });
+
+  it("names a failed load and retries it instead of loading forever", async () => {
+    let calls = 0;
+    invoke.mockImplementation((command) => {
+      if (command === "connections_summary") {
+        calls += 1;
+        return calls === 1 ? Promise.reject(new Error("socket closed")) : Promise.resolve(summary);
+      }
+      return Promise.resolve({ ok: true });
+    });
+    render(<ConnectionsPage profiles={[{ name: "atlas" }]} activeConnection={{ id: "local" }} />);
+    await screen.findByRole("alert");
+    expect(screen.getByRole("alert")).toHaveTextContent("Couldn't load connections");
+    expect(screen.queryByText("Loading connections…")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await screen.findByText("Javi");
+  });
+
+  it("offers a refresh from the header and says when nothing is paired yet", async () => {
+    let calls = 0;
+    invoke.mockImplementation((command) => {
+      if (command === "connections_summary") {
+        calls += 1;
+        return Promise.resolve({ connections: summary.connections.filter((row) => row.id === "host"), totals: {} });
+      }
+      return Promise.resolve({ ok: true });
+    });
+    render(<ConnectionsPage profiles={[{ name: "atlas" }]} activeConnection={{ id: "local" }} />);
+    await screen.findByText(/No paired apps yet/);
+    fireEvent.click(screen.getByRole("button", { name: "Refresh connections" }));
+    await waitFor(() => expect(calls).toBe(2));
+  });
 });
