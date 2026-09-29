@@ -11,6 +11,14 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.6.5 — 2026-09-29 — the sidebar stays put
+
+- **The sidebar no longer folds away.** The hide/show toggle shipped in v0.6.4 is gone: the desktop
+  has room for the roster, and the footer reads cleanly again. The command palette keeps the theme
+  switch under Preferences.
+
+  Requires alpi 0.15.20, as v0.6.4.
+
 ## v0.6.4 — 2026-09-29 — the sidebar folds away, connections say what they share
 
 - **Hide the sidebar.** A button in its footer folds the roster out of the way and a button in

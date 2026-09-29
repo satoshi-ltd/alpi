@@ -22,17 +22,12 @@ function renderCommands(overrides = {}) {
 }
 
 describe("useCommands", () => {
-  it("lists the sidebar and theme preferences when the shell provides them", () => {
-    const onToggleSidebar = vi.fn();
+  it("lists the theme switch under Preferences when the shell provides it", () => {
     const onCycleTheme = vi.fn();
-    const cmds = renderCommands({ sidebarOpen: false, onToggleSidebar, onCycleTheme });
-    const prefs = cmds.filter((c) => c.group === "Preferences");
-    expect(prefs.map((c) => c.label)).toEqual(["Show sidebar", "Switch theme"]);
+    const prefs = renderCommands({ onCycleTheme }).filter((c) => c.group === "Preferences");
+    expect(prefs.map((c) => c.label)).toEqual(["Switch theme"]);
     prefs[0].action();
-    prefs[1].action();
-    expect(onToggleSidebar).toHaveBeenCalledTimes(1);
     expect(onCycleTheme).toHaveBeenCalledTimes(1);
-    expect(renderCommands({ sidebarOpen: true, onToggleSidebar }).find((c) => c.id === "pref:sidebar").label).toBe("Hide sidebar");
     expect(renderCommands().some((c) => c.group === "Preferences")).toBe(false);
   });
 

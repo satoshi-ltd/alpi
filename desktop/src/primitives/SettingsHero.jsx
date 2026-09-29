@@ -9,8 +9,6 @@ import {
   Button,
   GlobeIcon,
 } from "./index.js";
-import { ShowSidebarButton } from "./ChatHeader.jsx";
-import { useSidebar } from "../lib/sidebar.js";
 import styles from "./SettingsHero.module.css";
 
 export default function SettingsHero({
@@ -28,7 +26,6 @@ export default function SettingsHero({
   const isWg = kind === "workgroup";
   const isConnections = kind === "connections";
   const trimmedBio = (bio || "").trim();
-  const sidebar = useSidebar();
   const glyph = isWg
     ? <DiamondStack color={accent} size="md" className={styles.stackGlyph} />
     : <Diamond color={accent} size="md" />;
@@ -44,7 +41,6 @@ export default function SettingsHero({
       <div className={`row between ${styles.topRow}`}>
         <div className={`col ${styles.titleCol}`}>
           <div className="title-row">
-            {!sidebar.open && <ShowSidebarButton onClick={sidebar.toggle} />}
             {titleGlyph}
             <h1>{id}</h1>
             <span className="eyebrow">{isConnections ? "connections" : "settings"}</span>

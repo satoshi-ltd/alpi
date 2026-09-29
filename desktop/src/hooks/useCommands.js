@@ -10,8 +10,6 @@ export function useCommands({
   onToggleSearch,
   onToggleSidebarSearch,
   sidebarSearchOpen = false,
-  sidebarOpen = true,
-  onToggleSidebar = null,
   onCycleTheme = null,
   onNewProfile,
   onNewWorkgroup,
@@ -218,14 +216,6 @@ export function useCommands({
       });
     }
 
-    if (onToggleSidebar) {
-      cmds.push({
-        id: "pref:sidebar",
-        group: "Preferences",
-        label: sidebarOpen ? "Hide sidebar" : "Show sidebar",
-        action: () => onToggleSidebar(),
-      });
-    }
     if (onCycleTheme) {
       cmds.push({
         id: "pref:theme",
@@ -255,8 +245,6 @@ export function useCommands({
   }, [
     view,
     searchOpen,
-    sidebarOpen,
-    onToggleSidebar,
     onCycleTheme,
     activeProfileName,
     historyKind,

@@ -9,7 +9,6 @@ import {
   IconBtn,
   Kbd,
   MoonIcon,
-  PanelLeftIcon,
   SunIcon,
   Tip,
   Diamond,
@@ -26,7 +25,6 @@ import {
 } from "../primitives/index.js";
 import RelativeTime from "../primitives/RelativeTime.jsx";
 import { cycleTheme, nextTheme, useTheme } from "../lib/theme.js";
-import { useSidebar } from "../lib/sidebar.js";
 import { profileLabel } from "../lib/profile-display.js";
 import {
   useReadState,
@@ -668,21 +666,9 @@ function SidebarFooter({
         />
       )}
       {!inSettings && <ThemeButton />}
-      <HideSidebarButton />
       <span className={styles.footerSpacer} aria-hidden />
       <VersionButton />
     </div>
-  );
-}
-
-function HideSidebarButton() {
-  const { toggle } = useSidebar();
-  return (
-    <Tip text="Hide sidebar" side="up-l">
-      <IconBtn aria-label="Hide sidebar" onClick={toggle}>
-        <PanelLeftIcon />
-      </IconBtn>
-    </Tip>
   );
 }
 

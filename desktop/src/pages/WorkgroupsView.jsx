@@ -1,6 +1,4 @@
 import { useMemo, useState } from "react";
-import { ShowSidebarButton } from "../primitives/ChatHeader.jsx";
-import { useSidebar } from "../lib/sidebar.js";
 import {
   Button,
   DiamondStack,
@@ -120,13 +118,11 @@ export default function WorkgroupsView({
     summary.error ? `${summary.error} need attention` : null,
   ].filter(Boolean);
 
-  const sidebar = useSidebar();
   return (
     <section className={styles.page}>
       <header className={`ds-chat-header ${styles.header}`} data-drag>
         <div className={styles.titleBlock}>
           <div className="title-row">
-            {!sidebar.open && <ShowSidebarButton onClick={sidebar.toggle} />}
             <DiamondStack size="md" />
             <h1>Workgroups</h1>
           </div>
