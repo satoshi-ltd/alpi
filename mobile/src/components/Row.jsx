@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { lineHeights, space, tracking } from '../theme/tokens';
+import { iconSizes, lineHeights, space, tracking } from '../theme/tokens';
 
 import { Eyebrow } from './Eyebrow';
 import { Icon } from './Icon';
@@ -60,7 +60,7 @@ function pressable(body, { onPress, onLongPress, disabled, colors }) {
   );
 }
 
-function WideRow({ label, helper, value, leading, trailing, onPress, onLongPress, danger, disabled, chevron, labelLines }) {
+function WideRow({ label, helper, value, leading, trailing, onPress, onLongPress, danger, disabled, chevron, labelLines, item }) {
   const { colors, fonts, fontSizes } = useTheme();
   const control =
     typeof value === 'string' ? (
@@ -93,17 +93,31 @@ function WideRow({ label, helper, value, leading, trailing, onPress, onLongPress
     >
       {leading ? <View>{leading}</View> : null}
       <View style={{ flexBasis: WIDE_LABEL_W, flexGrow: 1, flexShrink: 1, minWidth: 0 }}>
-        <Eyebrow
-          numberOfLines={Math.max(labelLines, 2)}
-          color={danger ? colors.dangerText : colors.ink3}
-          style={{ lineHeight: fontSizes.xs * lineHeights.cozy }}
-        >
-          {label}
-        </Eyebrow>
+        {item ? (
+          <Text
+            numberOfLines={Math.max(labelLines, 1)}
+            style={{
+              fontFamily: fonts.sans.semibold,
+              fontSize: fontSizes.md,
+              lineHeight: fontSizes.md * lineHeights.cozy,
+              color: danger ? colors.dangerText : colors.ink,
+            }}
+          >
+            {label}
+          </Text>
+        ) : (
+          <Eyebrow
+            numberOfLines={Math.max(labelLines, 2)}
+            color={danger ? colors.dangerText : colors.ink3}
+            style={{ lineHeight: fontSizes.xs * lineHeights.cozy }}
+          >
+            {label}
+          </Eyebrow>
+        )}
         {helper ? (
           <Text
             numberOfLines={2}
-            style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4, marginTop: space.s1 }}
+            style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: item ? colors.ink3 : colors.ink4, marginTop: space.s1 }}
           >
             {helper}
           </Text>
@@ -112,16 +126,18 @@ function WideRow({ label, helper, value, leading, trailing, onPress, onLongPress
       <View style={{ flexShrink: 1, minWidth: 0, maxWidth: '60%', flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: space.s4 }}>
         {control}
         {trailing}
-        {chevron && onPress && !disabled && !danger ? (
-          <Icon name="chevron-right" size="sm" color={colors.ink4} />
-        ) : null}
+        {danger || trailing ? null : (
+          <View style={{ width: iconSizes.sm, alignItems: 'flex-end' }}>
+            {chevron && onPress && !disabled ? <Icon name="chevron-right" size="sm" color={colors.ink4} /> : null}
+          </View>
+        )}
       </View>
     </View>
   );
   return pressable(body, { onPress, onLongPress, disabled, colors });
 }
 
-export function Row({ label, helper, value, leading, trailing, onPress, onLongPress, danger, disabled = false, chevron = true, labelLines = 1 }) {
+export function Row({ label, helper, value, leading, trailing, onPress, onLongPress, danger, disabled = false, chevron = true, labelLines = 1, item = false }) {
   const { colors, fonts, fontSizes } = useTheme();
   const wide = useWideSettings();
   const [width, setWidth] = useState(0);
@@ -139,6 +155,7 @@ export function Row({ label, helper, value, leading, trailing, onPress, onLongPr
         disabled={disabled}
         chevron={chevron}
         labelLines={labelLines}
+        item={item}
       />
     );
   }

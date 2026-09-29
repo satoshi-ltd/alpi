@@ -4,12 +4,14 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 
 import { EndpointContext } from '../../lib/EndpointContext';
 import { ThemeProvider } from '../../theme/ThemeContext';
+import { PaneContext } from '../../nav/PaneContext';
 import { _resetDaemonDataCache } from '../../hooks/useDaemonData';
 
 const h = vi.hoisted(() => ({
   params: { id: 'doc' },
   router: { push: vi.fn(), back: vi.fn(), replace: vi.fn() },
   visionSheetProps: null,
+  modelSheetProps: null,
 }));
 
 vi.mock('expo-router', () => ({
@@ -53,10 +55,11 @@ vi.mock('react-native', () => {
 });
 
 vi.mock('../../components/ScreenHeader', () => ({
-  ScreenHeader: ({ title, subtitle }) => (
+  ScreenHeader: ({ title, subtitle, meta }) => (
     <header>
       <h1>{title}</h1>
       {subtitle ? <span>{subtitle}</span> : null}
+      <div data-meta="true">{meta}</div>
     </header>
   ),
 }));
@@ -104,6 +107,7 @@ vi.mock('../../features/sheets/ProfileFieldSheets', () => ({
   CleanupSheet: () => null,
   ModelSheet: (props) => {
     if (props.title === 'Vision model') h.visionSheetProps = props;
+    if (!props.title) h.modelSheetProps = props;
     return null;
   },
   ReasoningEffortSheet: () => null,
@@ -113,10 +117,14 @@ vi.mock('../../features/sheets/ProfileFieldSheets', () => ({
 
 const ProfileSettings = (await import('../../../app/profile/[id]/settings.jsx')).default;
 
-function wrapper(call) {
+function wrapper(call, twoPane = false) {
   return ({ children }) => (
     <EndpointContext.Provider value={{ endpoint: { id: 'remote' }, call }}>
-      <ThemeProvider>{children}</ThemeProvider>
+      <ThemeProvider>
+        <PaneContext.Provider value={{ twoPane, side: twoPane ? 'detail' : 'full', sidebarOpen: true, toggleSidebar() {} }}>
+          {children}
+        </PaneContext.Provider>
+      </ThemeProvider>
     </EndpointContext.Provider>
   );
 }
@@ -126,6 +134,7 @@ beforeEach(() => {
   h.params = { id: 'doc' };
   h.router = { push: vi.fn(), back: vi.fn(), replace: vi.fn() };
   h.visionSheetProps = null;
+  h.modelSheetProps = null;
 });
 
 describe('ProfileSettings snapshot first paint', () => {
@@ -399,6 +408,59 @@ describe('ProfileSettings vocabulary', () => {
     expect(container.textContent).not.toMatch(/alpis/i);
   });
 
+  it('opens the model sheet straight away when the chat header asked for it', async () => {
+    h.params = { id: 'doc', intent: 'model' };
+    const call = vi.fn(async (method) => {
+      if (method === 'host.profile.summaries') {
+        return { profiles: [{ name: 'doc', counts: {} }] };
+      }
+      if (method === 'host.settings.profile_snapshot') {
+        return {
+          detail: { name: 'doc', model: 'openrouter/example' },
+          usage: { days: [] },
+          schedules: { jobs: [] },
+          workgroups: { workgroups: [] },
+          email: { accounts: [] },
+          storage: { storage: [] },
+        };
+      }
+      throw new Error(`unexpected ${method}`);
+    });
+
+    render(<ProfileSettings />, { wrapper: wrapper(call) });
+    await waitFor(() => expect(h.modelSheetProps?.open).toBe(true));
+    expect(h.modelSheetProps.initialValue).toBe('openrouter/example');
+  });
+
+  it('on two panes puts the model and the budget in the header and both daemon actions on one row', async () => {
+    const call = vi.fn(async (method) => {
+      if (method === 'host.profile.summaries') {
+        return { profiles: [{ name: 'doc', counts: {} }] };
+      }
+      if (method === 'host.settings.profile_snapshot') {
+        return {
+          detail: { name: 'doc', model: 'openrouter/deepseek/deepseek-v4-flash', budget_daily_usd: 2, budget_used_usd: 0.5 },
+          usage: { days: [] },
+          schedules: { jobs: [] },
+          workgroups: { workgroups: [] },
+          email: { accounts: [] },
+          storage: { storage: [] },
+        };
+      }
+      throw new Error(`unexpected ${method}`);
+    });
+
+    const { container } = render(<ProfileSettings />, { wrapper: wrapper(call, true) });
+    const scope = within(container);
+    await waitFor(() => expect(scope.getByText('Update alpi').closest('button')).toBeTruthy());
+    expect(scope.getByText('Restart daemon').closest('button')).toBeTruthy();
+    expect(scope.queryByText('Update daemon')).toBeNull();
+    const meta = container.querySelector('[data-meta]');
+    expect(meta.textContent).toMatch('deepseek-v4-flash');
+    expect(meta.textContent).toMatch('$0.50');
+    expect(meta.textContent).toMatch('/$2.00');
+  });
+
   it('offers the daemon restart and update as buttons, like desktop', async () => {
     const call = vi.fn(async (method) => {
       if (method === 'host.profile.summaries') {
@@ -420,7 +482,8 @@ describe('ProfileSettings vocabulary', () => {
     const { container } = render(<ProfileSettings />, { wrapper: wrapper(call) });
 
     const scope = within(container);
-    await waitFor(() => expect(scope.getByText('Update daemon')).toBeTruthy());
+    await waitFor(() => expect(scope.getByText('Update alpi')).toBeTruthy());
+    expect(scope.getByText('Restart daemon')).toBeTruthy();
     expect(scope.getByText('Restart').closest('button')).toBeTruthy();
     expect(scope.getByText('Update').closest('button')).toBeTruthy();
   });

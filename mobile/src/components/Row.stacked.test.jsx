@@ -14,7 +14,7 @@ vi.mock('react-native', () => {
     return React.createElement('div', { ...p, 'data-dir': style?.flexDirection ?? '' }, children);
   };
   const Text = ({ children, style, numberOfLines, ellipsizeMode, ...p }) =>
-    React.createElement('span', { ...p, 'data-ellipsis': ellipsizeMode ?? '', 'data-align': style?.textAlign ?? '' }, children);
+    React.createElement('span', { ...p, 'data-ellipsis': ellipsizeMode ?? '', 'data-align': style?.textAlign ?? '', 'data-transform': style?.textTransform ?? '' }, children);
   const Pressable = ({ children, onPress, android_ripple, style, ...p }) =>
     React.createElement('button', { type: 'button', onClick: onPress, ...p }, children);
   return { View, Text, Pressable };
@@ -90,5 +90,47 @@ describe('Row inside wide settings', () => {
       </PaneContext.Provider>,
     );
     expect(screen.getByText('3').getAttribute('data-align')).toBe('right');
+  });
+});
+
+describe('Row as an entity on a wide settings surface', () => {
+  function wide(node) {
+    return render(
+      <PaneContext.Provider value={{ twoPane: true, side: 'detail', sidebarOpen: true, toggleSidebar() {} }}>
+        <SettingsSurface>{node}</SettingsSurface>
+      </PaneContext.Provider>,
+    );
+  }
+
+  it('keeps an entity name in its own case, like the desktop table, instead of the field eyebrow', () => {
+    wide(<Row label="emulator-android" helper="admin · 2 devices" item onPress={() => {}} />);
+    expect(screen.getByText('emulator-android').getAttribute('data-transform')).toBe('');
+  });
+
+  it('still sets a field label as an eyebrow', () => {
+    wide(<Row label="Public key" value="abc" />);
+    expect(screen.getByText('Public key').getAttribute('data-transform')).toBe('uppercase');
+  });
+});
+
+describe('Row chevron gutter on a wide settings surface', () => {
+  function wide(node) {
+    return render(
+      <PaneContext.Provider value={{ twoPane: true, side: 'detail', sidebarOpen: true, toggleSidebar() {} }}>
+        <SettingsSurface>{node}</SettingsSurface>
+      </PaneContext.Provider>,
+    );
+  }
+
+  it('reserves the gutter on a plain value row so it shares the right edge with chevron rows', () => {
+    wide(<Row label="Port" value="7423" chevron={false} />);
+    const value = screen.getByText('7423');
+    expect(value.nextSibling).not.toBeNull();
+    expect(value.nextSibling.tagName).toBe('DIV');
+  });
+
+  it('gives a row whose trailing control is the action no gutter, so the control sits on that same edge', () => {
+    wide(<Row label="Pixel" helper="mobile" item trailing={<button type="button">revoke</button>} chevron={false} />);
+    expect(screen.getByText('revoke').nextSibling).toBeNull();
   });
 });

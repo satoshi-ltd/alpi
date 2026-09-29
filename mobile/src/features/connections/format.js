@@ -32,6 +32,20 @@ export function scopeLabel(row) {
   return scope.length ? scope.join(', ') : 'all profiles';
 }
 
+function count(n, noun) {
+  return `${n} ${noun}${n === 1 ? '' : 's'}`;
+}
+
+export function connectionMeta(row) {
+  return [
+    row?.role,
+    scopeLabel(row),
+    count((row?.devices ?? []).length, 'device'),
+    count(row?.sessions ?? 0, 'session'),
+    `seen ${relativeSeen(row?.last_seen)}`,
+  ].join(' · ');
+}
+
 export function sessionScopeLabel(row) {
   return row?.session_scope === 'device' ? 'per device' : 'per connection';
 }

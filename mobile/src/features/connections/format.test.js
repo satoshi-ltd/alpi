@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { deviceMeta, deviceTitle, pairingLink, relativeSeen, scopeLabel, sessionScopeLabel } from './format';
+import { connectionMeta, deviceMeta, deviceTitle, pairingLink, relativeSeen, scopeLabel, sessionScopeLabel } from './format';
 
 describe('relativeSeen', () => {
   beforeEach(() => {
@@ -72,5 +72,14 @@ describe('pairingLink', () => {
   it('is empty without an endpoint or credential', () => {
     expect(pairingLink({ pairing_token: 'tok' })).toBe('');
     expect(pairingLink({ url: 'ws://h:1' })).toBe('');
+  });
+});
+
+describe('connectionMeta', () => {
+  it('reads role · scope · devices · sessions · seen, singular where it counts one', () => {
+    expect(connectionMeta({ role: 'member', profile_scope: ['doc'], devices: [{}], sessions: 1, last_seen: 0 })).toBe(
+      'member · doc · 1 device · 1 session · seen never',
+    );
+    expect(connectionMeta({ role: 'admin', devices: [{}, {}], sessions: 0 })).toBe('admin · all profiles · 2 devices · 0 sessions · seen never');
   });
 });

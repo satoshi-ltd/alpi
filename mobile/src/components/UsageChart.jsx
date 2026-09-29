@@ -6,6 +6,7 @@ import { fmtTok, formatUsd } from '../../../common/format.mjs';
 import {
   barHeights,
   costOf,
+  hasUsage,
   pctLeft,
   todayOf,
   tokensOf,
@@ -66,6 +67,7 @@ export function UsageChart({ days = [], accent, capLine = null, total30 = null, 
   const [tilesW, setTilesW] = useState(0);
   if (!days.length) return null;
   const narrow = tilesW > 0 && tilesW < NARROW_TILES_W;
+  const empty = !hasUsage(days);
 
   const tint = accent ?? colors.accent;
   const inColor = mixHex(tint, IN_TINT, colors.bgPane);
@@ -76,7 +78,7 @@ export function UsageChart({ days = [], accent, capLine = null, total30 = null, 
   const capNum = typeof capLine === 'number' && capLine > 0 ? capLine : null;
   const todayCost = costOf(today);
   const left = pctLeft(todayCost, capNum);
-  const picked = selected != null && selected < days.length ? days[selected] : null;
+  const picked = !empty && selected != null && selected < days.length ? days[selected] : null;
 
   const foot = total30
     ? `30-day total ${formatUsd(total30.cost || 0)} · ${fmtTok(total30.tokIn || 0)} in / ${fmtTok(total30.tokOut || 0)} out`
@@ -123,6 +125,15 @@ export function UsageChart({ days = [], accent, capLine = null, total30 = null, 
         </Stat>
       </View>
 
+      {empty ? (
+        <Text
+          accessibilityLabel="No usage"
+          style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4, marginTop: space.s6 }}
+        >
+          {`no usage in the last ${days.length} days`}
+        </Text>
+      ) : null}
+      {empty ? null : (
       <View style={{ marginTop: space.s8 }}>
         <View style={{ height, flexDirection: 'row', alignItems: 'flex-end', gap: space.s1 }}>
           {days.map((d, i) => {
@@ -191,6 +202,7 @@ export function UsageChart({ days = [], accent, capLine = null, total30 = null, 
           ))}
         </View>
       </View>
+      )}
 
       {picked ? (
         <View
@@ -218,6 +230,7 @@ export function UsageChart({ days = [], accent, capLine = null, total30 = null, 
         </View>
       ) : null}
 
+      {empty ? null : (
       <View
         style={{
           flexDirection: 'row',
@@ -239,6 +252,7 @@ export function UsageChart({ days = [], accent, capLine = null, total30 = null, 
           {foot}
         </Text>
       </View>
+      )}
     </View>
   );
 }

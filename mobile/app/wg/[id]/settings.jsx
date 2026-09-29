@@ -205,6 +205,7 @@ function WorkgroupSettings() {
         <Row
           leading={<Diamond color={isHubMember ? accent : resolved.accent} size="md" />}
           label={resolved.label}
+          item
           helper={m.bio || resolved.bio || (m.joined ? 'joined' : 'invited')}
           value={
             <View style={{ flexDirection: 'row', gap: space.s2, alignItems: 'center' }}>
@@ -231,10 +232,20 @@ function WorkgroupSettings() {
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
       <ScreenHeader
         title={wg.name ?? wg.id}
-        subtitle={`WORKGROUP · ${isHub ? 'HUB' : 'MEMBER'}`}
+        subtitle={twoPane ? 'SETTINGS' : `WORKGROUP · ${isHub ? 'HUB' : 'MEMBER'}`}
         onBack={goBack}
         accent={accent}
         leadingGlyph={<Text style={{ color: colors.ink4, fontFamily: fonts.mono, fontSize: fontSizes.lg }}>#</Text>}
+        meta={
+          <>
+            <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink2 }}>{`hub @${wg.hub_id}`}</Text>
+            <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink2 }}>{`${joined.length} members`}</Text>
+            <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: paused ? colors.warningText : colors.successText }}>
+              {paused ? 'paused' : 'active'}
+            </Text>
+            <Text numberOfLines={1} style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink3, flexShrink: 1 }}>{wg.id}</Text>
+          </>
+        }
       />
       <SettingsSurface>
       <ScrollView contentContainerStyle={contentStyle}>

@@ -121,15 +121,15 @@ describe('the phone → tablet step', () => {
     expect(Number(screen.getByText('#alpha').getAttribute('data-track'))).toBe(0);
   });
 
-  it('leaves every other role at one size, so the sidebar does not drift with the header', () => {
+  it('sets the roster name one step smaller on two panes, closer to the desktop sidebar, and keeps the timestamp', () => {
     pane(false, <InboxRow item={ITEM} />);
     const phoneName = sizeOf('scout');
     const phoneTs = sizeOf('4m');
     cleanup();
     pane(true, <InboxRow item={ITEM} />);
-    expect(sizeOf('scout')).toBe(phoneName);
-    expect(sizeOf('4m')).toBe(phoneTs);
     expect(phoneName).toBe(fontSizes.lg);
+    expect(sizeOf('scout')).toBe(fontSizes.md);
+    expect(sizeOf('4m')).toBe(phoneTs);
   });
 
   it('keeps the chat meta line at one size in both modes', () => {

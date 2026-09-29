@@ -111,7 +111,10 @@ export default function ProfileSettings() {
   const [confirmUpdate, setConfirmUpdate] = useState(false);
   const [updateBusy, setUpdateBusy] = useState(false);
 
-  useEffect(() => { if (intent === 'delete') setConfirmDelete(true); }, [intent]);
+  useEffect(() => {
+    if (intent === 'delete') setConfirmDelete(true);
+    if (intent === 'model') setSheet('model');
+  }, [intent]);
 
   const refreshSettings = async () => {
     await refresh();
@@ -256,10 +259,28 @@ export default function ProfileSettings() {
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
       <ScreenHeader
         title={profileLabel(profile.name)}
-        subtitle="PROFILE · SETTINGS"
+        subtitle={twoPane ? 'SETTINGS' : 'PROFILE · SETTINGS'}
         onBack={goBack}
         accent={accent}
         leadingGlyph={<Diamond color={accent} size="md" />}
+        meta={
+          <>
+            {profile.model ? (
+              <Text numberOfLines={1} style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink2, flexShrink: 1 }}>
+                {modelLabel(profile.model)}
+              </Text>
+            ) : null}
+            {Number(capUsd) > 0 ? (
+              <Meter
+                label="Daily budget"
+                value={`$${usedUsd.toFixed(2)}`}
+                tail={`/$${Number(capUsd).toFixed(2)}`}
+                pct={usedUsd / Number(capUsd)}
+                color={accent}
+              />
+            ) : null}
+          </>
+        }
       />
       <SyncBar syncing={settingsSyncing} />
       <SettingsSurface>
@@ -417,37 +438,67 @@ export default function ProfileSettings() {
         />
 
         <SectionHeader kicker="daemon">Service</SectionHeader>
-        <Row
-          label="Daemon"
-          helper="exits the daemon · supervisor relaunches · reconnects automatically"
-          value={
-            <Button
-              title="Restart"
-              variant="secondary"
-              size="sm"
-              loading={restartBusy}
-              onPress={() => setConfirmRestart(true)}
+        {twoPane ? (
+          <Row
+            label="Daemon"
+            helper="update installs the newest alpi · restart exits and the supervisor relaunches"
+            value={
+              <View style={{ flexDirection: 'row', gap: space.s3 }}>
+                <Button
+                  title="Update alpi"
+                  variant="secondary"
+                  size="sm"
+                  loading={updateBusy}
+                  disabled={restartBusy}
+                  onPress={() => setConfirmUpdate(true)}
+                />
+                <Button
+                  title="Restart daemon"
+                  variant="secondary"
+                  size="sm"
+                  loading={restartBusy}
+                  disabled={updateBusy}
+                  onPress={() => setConfirmRestart(true)}
+                />
+              </View>
+            }
+            chevron={false}
+          />
+        ) : (
+          <>
+            <Row
+              label="Update alpi"
+              helper="installs the newest alpi and restarts"
+              value={
+                <Button
+                  title="Update"
+                  variant="secondary"
+                  size="sm"
+                  loading={updateBusy}
+                  onPress={() => setConfirmUpdate(true)}
+                />
+              }
+              onPress={updateBusy ? undefined : () => setConfirmUpdate(true)}
+              chevron={false}
             />
-          }
-          onPress={restartBusy ? undefined : () => setConfirmRestart(true)}
-          chevron={false}
-        />
-        <RowSeparator />
-        <Row
-          label="Update daemon"
-          helper="installs the newest alpi and restarts"
-          value={
-            <Button
-              title="Update"
-              variant="secondary"
-              size="sm"
-              loading={updateBusy}
-              onPress={() => setConfirmUpdate(true)}
+            <RowSeparator />
+            <Row
+              label="Restart daemon"
+              helper="exits the daemon · supervisor relaunches · reconnects automatically"
+              value={
+                <Button
+                  title="Restart"
+                  variant="secondary"
+                  size="sm"
+                  loading={restartBusy}
+                  onPress={() => setConfirmRestart(true)}
+                />
+              }
+              onPress={restartBusy ? undefined : () => setConfirmRestart(true)}
+              chevron={false}
             />
-          }
-          onPress={updateBusy ? undefined : () => setConfirmUpdate(true)}
-          chevron={false}
-        />
+          </>
+        )}
         <RowSeparator />
         <Row
           label="Email"
@@ -509,6 +560,7 @@ export default function ProfileSettings() {
               <RowSeparator />
               <Row
                 label={`#${wg.name || wg.id}`}
+                item
                 helper={wg.is_hub ? 'hub · this profile runs it' : `hub @${wg.hub_id ?? '?'}`}
                 value={wg.paused ? <Pill tone="warn">paused</Pill> : undefined}
                 onPress={() => router.push(`/wg/${wg.id}`)}
@@ -601,6 +653,7 @@ export default function ProfileSettings() {
                 {i > 0 ? <RowSeparator /> : null}
                 <Row
                   label={it.label}
+                  item
                   helper={`${it.file_count} file${it.file_count === 1 ? '' : 's'}`}
                   value={formatBytes(it.size_bytes)}
                   chevron={false}

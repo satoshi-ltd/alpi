@@ -10,9 +10,18 @@ import { lineHeights, radii, space } from '../../theme/tokens';
 const HAIRLINE = 0.5;
 const APP_VERSION = Constants.expoConfig?.version ?? '0.0.0';
 
+const THEME_ORDER = ['light', 'dark', 'system'];
+const THEME_ICON = { light: 'sun', dark: 'moon', system: 'sun-moon' };
+const THEME_LABEL = { light: 'Light', dark: 'Dark', system: 'System' };
+
+export function nextThemePref(pref) {
+  return THEME_ORDER[(THEME_ORDER.indexOf(pref) + 1) % THEME_ORDER.length];
+}
+
 export function ShellFooter({ unread = 0, onNotificationsPress, onSettingsPress }) {
-  const { colors, fonts, fontSizes } = useTheme();
+  const { colors, fonts, fontSizes, pref, setMode } = useTheme();
   const { twoPane } = usePane();
+  const themePref = THEME_ORDER.includes(pref) ? pref : 'system';
   const entryStyle = ({ pressed }) => ({
     flexDirection: 'row',
     alignItems: 'center',
@@ -78,6 +87,16 @@ export function ShellFooter({ unread = 0, onNotificationsPress, onSettingsPress 
               </View>
             ) : null}
           </View>
+        </Pressable>
+      ) : null}
+      {twoPane ? (
+        <Pressable
+          onPress={() => setMode?.(nextThemePref(themePref))}
+          style={entryStyle}
+          accessibilityRole="button"
+          accessibilityLabel={`Theme: ${THEME_LABEL[themePref]}`}
+        >
+          <Icon name={THEME_ICON[themePref]} size="md" color={colors.ink2} />
         </Pressable>
       ) : null}
       <View style={{ flex: 1 }} />

@@ -41,6 +41,10 @@ export function usageTotals(days) {
   );
 }
 
+export function hasUsage(days) {
+  return (days || []).some((d) => tokensOf(d) > 0 || costOf(d) > 0);
+}
+
 export function todayOf(days) {
   if (!days?.length) return null;
   return days.find((d) => d.today) ?? days[days.length - 1];

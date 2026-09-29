@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { KeyboardPane } from '../../src/components/KeyboardPane';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { radii, space } from '../../src/theme/tokens';
@@ -602,7 +602,21 @@ function ProfileChatInner() {
         ? 'profile · pick a model'
         : (
             <>
-              {shownModel ? (
+              {shownModel && canAdmin ? (
+                <Pressable
+                  onPress={() => router.push(`/profile/${profile.name}/settings?intent=model`)}
+                  hitSlop={space.s2}
+                  accessibilityRole="button"
+                  accessibilityLabel="Change model"
+                >
+                  <Text
+                    numberOfLines={1}
+                    style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink2 }}
+                  >
+                    {shownModel}
+                  </Text>
+                </Pressable>
+              ) : shownModel ? (
                 <Text
                   numberOfLines={1}
                   style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink2 }}

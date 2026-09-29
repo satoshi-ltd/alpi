@@ -14,6 +14,24 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.5.1 — 2026-09-29 — the fold reads like the desktop
+
+Client-only change; the minimum compatible alpi stays 0.15.20.
+
+- **The roster on a fold or tablet takes the desktop's measures.** The sidebar is narrower and its
+  names one step smaller, so the pane beside it keeps more room, and its footer gains the theme
+  switch the desktop has.
+- **On a wide screen the settings header carries the model and the budget** under the title, and
+  the chat's meta row separates model, context and budget with the same thin rules as the desktop.
+- **Every value in a wide settings row shares one right edge**, whether or not the row opens
+  something.
+- **The daemon's two actions read as they do on the desktop:** Update alpi and Restart daemon,
+  side by side on a wide screen.
+- **Tap the model in a chat header to change it.** The picker opens straight away in the
+  profile's settings.
+- **Connections list the local host first**, with each connection's session count, and an empty
+  usage range says so in one line instead of showing a blank chart.
+
 ## v0.5.0 — 2026-09-29 — settings as complete as the desktop, a fold that opens into two panes
 
 Requires alpi 0.15.20 for per-device session scope; everything else works with 0.15.x.
@@ -25,7 +43,8 @@ Requires alpi 0.15.20 for per-device session scope; everything else works with 0
   listener port, the pipeline concurrency cap and the profile's workgroups as rows you can open,
   (the port and the network address stay read-only: the daemon accepts those only from its own
   machine),
-  and the service section can update the daemon. A workgroup adds
+  and the service section can update the daemon (a Docker or source install is told how to do it
+  by hand instead of being reported as updated). A workgroup adds
   its own usage chart, a visible remove button on every member and, while invites are pending, an
   Invitations section with the join command ready to copy.
 - **Connections and devices are managed from the phone.** Settings → Connections lists every

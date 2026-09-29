@@ -342,6 +342,12 @@ describe('Profile chat model label', () => {
     expect(document.body.textContent).not.toMatch('openrouter');
   });
 
+  it('opens the model picker in settings when an admin taps the model', () => {
+    render(<ProfileChat />);
+    fireEvent.click(screen.getByLabelText('Change model'));
+    expect(h.push).toHaveBeenCalledWith('/profile/doc/settings?intent=model');
+  });
+
   it('keeps a bare Ollama id whole', () => {
     h.profile = { ...READY, model: 'llama3', provider_keys: [], provider_ollama: ['llama3'] };
     render(<ProfileChat />);

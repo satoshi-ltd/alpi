@@ -204,6 +204,7 @@ function ConnectionDetail() {
                   {i > 0 ? <RowSeparator /> : null}
                   <Row
                     label={deviceTitle(d)}
+                    item
                     helper={deviceMeta(d)}
                     value={d.id === thisDevice ? <Pill tone="on">this phone</Pill> : d.expired ? <Pill tone="warn">expired</Pill> : undefined}
                     trailing={<RevokeButton label={`Revoke ${deviceTitle(d)}`} onPress={() => setConfirm({ revoke: d })} />}

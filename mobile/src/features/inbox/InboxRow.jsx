@@ -24,7 +24,7 @@ const STATIC = StyleSheet.create({
     minHeight: mobile.tap,
     marginHorizontal: space.s5,
     paddingHorizontal: space.s4,
-    paddingVertical: space.s3,
+    paddingVertical: space.s2,
     borderRadius: radii.lg,
     flexDirection: 'row',
     alignItems: 'center',
@@ -77,8 +77,8 @@ export const InboxRow = memo(function InboxRow({ item, onPress, onLongPress, sel
         : selected
           ? fonts.sans.medium
           : fonts.sans.regular,
-      fontSize: fontSizes.lg,
-      lineHeight: fontSizes.lg * lineHeights.cozy,
+      fontSize: fontSizes.md,
+      lineHeight: fontSizes.md * lineHeights.cozy,
       color: needsProvider ? colors.ink3 : unread || selected ? colors.ink : colors.ink2,
     };
   }, [twoPane, unread, selected, needsProvider, fonts, fontSizes, colors]);

@@ -31,7 +31,7 @@ import { space } from "../theme/tokens.js";
 
 describe("constants", () => {
   it("pins the decided breakpoint", () => {
-    expect(SIDEBAR_W).toBe(320);
+    expect(SIDEBAR_W).toBe(280);
     expect(MIN_W).toBe(600);
     expect(MIN_H).toBe(500);
     expect(HYSTERESIS).toBe(24);

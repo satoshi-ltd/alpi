@@ -324,6 +324,15 @@ describe('ChatHeader meta row', () => {
     expect(content.gap).toBe(space.s6);
   });
 
+  it('rules between the meters on two panes only, like the desktop meta row', () => {
+    inTwoPane(<ChatHeader kind="profile" title="doc" meta={meta} />);
+    expect(scroller().querySelectorAll('[data-meta]').length).toBe(3);
+    expect(scroller().querySelectorAll('[testid="meta-sep"]').length).toBe(2);
+    cleanup();
+    render(<ChatHeader kind="profile" title="doc" meta={meta} />);
+    expect(scroller().querySelectorAll('[testid="meta-sep"]').length).toBe(0);
+  });
+
   it('leaves a plain string meta unscrolled', () => {
     render(<ChatHeader kind="profile" title="doc" meta="profile · not found" />);
     expect(scroller()).toBeNull();

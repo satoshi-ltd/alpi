@@ -126,10 +126,13 @@ describe('connections list', () => {
   it('lists paired connections with role, scope and device count, and the host apart', () => {
     render(<ConnectionsRoute />);
     expect(screen.getByText('Support')).toBeTruthy();
-    expect(screen.getByText('member · doc · 2 devices · seen never')).toBeTruthy();
+    expect(screen.getByText('member · doc · 2 devices · 3 sessions · seen never')).toBeTruthy();
     expect(screen.getByText('disabled')).toBeTruthy();
     expect(screen.getByText('Local host')).toBeTruthy();
     expect(screen.getByText('12 sessions · seen never')).toBeTruthy();
+    const host = screen.getByText('Local host');
+    const first = screen.getByText('Support');
+    expect(Boolean(host.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
   });
 
   it('opens a connection on press', () => {

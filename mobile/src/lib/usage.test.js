@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   barHeights,
   costOf,
+  hasUsage,
   pctLeft,
   todayOf,
   tokensOf,
@@ -66,5 +67,15 @@ describe('math', () => {
     const busy = barHeights(RPC[1], scale, 100);
     expect(busy.total).toBeCloseTo(100 / 1.08);
     expect(busy.out).toBeCloseTo((500 / scale) * 100);
+  });
+});
+
+describe('hasUsage', () => {
+  it('is false for an empty or all-zero range and true once any day carries tokens or cost', () => {
+    expect(hasUsage([])).toBe(false);
+    expect(hasUsage(undefined)).toBe(false);
+    expect(hasUsage([{ tokIn: 0, tokOut: 0, cost: 0 }])).toBe(false);
+    expect(hasUsage([{ tokIn: 0, tokOut: 0, cost: 0 }, { tokIn: 0, tokOut: 3 }])).toBe(true);
+    expect(hasUsage([{ cost: 0.01 }])).toBe(true);
   });
 });

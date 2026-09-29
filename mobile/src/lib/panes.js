@@ -1,6 +1,6 @@
 import { mobile, space } from '../theme/tokens';
 
-export const SIDEBAR_W = 320;
+export const SIDEBAR_W = 280;
 export const MIN_W = 600;
 export const MIN_H = 500;
 export const HYSTERESIS = 24;

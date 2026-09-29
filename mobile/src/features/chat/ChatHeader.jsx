@@ -3,6 +3,7 @@ import { radii, space, lineHeights } from '../../theme/tokens';
 
 import { Diamond } from '../../components/Diamond';
 import { Icon } from '../../components/Icon';
+import { MetaStrip } from '../../components/MetaStrip';
 import { useShowBack } from '../../hooks/useShowBack';
 import { CHROME_BTN, PANE_PAD_X, tapSlop } from '../../lib/panes';
 import { usePane } from '../../nav/PaneContext';
@@ -188,7 +189,7 @@ export function ChatHeader({ kind, accent, title, meta, onBack, onMore, onPickSe
                 gap: twoPane ? space.s6 : space.s2,
               }}
             >
-              {meta}
+              {twoPane ? <MetaStrip>{meta}</MetaStrip> : meta}
             </ScrollView>
           )
         ) : null}

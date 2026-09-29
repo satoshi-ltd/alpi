@@ -41,6 +41,26 @@ beforeEach(() => {
   h.canGoBack.mockClear().mockReturnValue(true);
 });
 
+describe('ScreenHeader meta strip', () => {
+  const meta = (
+    <>
+      <span data-meta="model">deepseek-v4-flash</span>
+      <span data-meta="budget">$0.00/$1.00</span>
+    </>
+  );
+
+  it('sits under the subtitle on two panes with a rule between items, like the desktop hero', () => {
+    inTwoPane(<ScreenHeader title="doc" subtitle="PROFILE · SETTINGS" meta={meta} />);
+    expect(document.querySelectorAll('[data-meta]').length).toBe(2);
+    expect(document.querySelectorAll('[testid="meta-sep"]').length).toBe(1);
+  });
+
+  it('stays out of the phone header', () => {
+    render(<ScreenHeader title="doc" subtitle="PROFILE · SETTINGS" meta={meta} />);
+    expect(document.querySelectorAll('[data-meta]').length).toBe(0);
+  });
+});
+
 describe('ScreenHeader back chevron', () => {
   it('renders the chevron outside any pane provider', () => {
     render(<ScreenHeader title="Outputs" onBack={() => {}} />);
@@ -66,10 +86,14 @@ describe('ScreenHeader back chevron', () => {
     expect(screen.getByText('back')).toBeTruthy();
   });
 
-  it('keeps the chevron on a drilled screen in two-pane mode', () => {
+  it('moves the back control to the right of a drilled screen in two-pane mode, like the desktop hero', () => {
     h.pathname = '/profile/doc/settings';
-    inTwoPane(<ScreenHeader title="Settings" onBack={() => {}} />);
-    expect(screen.getByText('back')).toBeTruthy();
+    const onBack = vi.fn();
+    inTwoPane(<ScreenHeader title="Settings" onBack={onBack} />);
+    expect(screen.queryByText('back')).toBeNull();
+    const arrow = screen.getByText('arrow-left');
+    arrow.closest('button').click();
+    expect(onBack).toHaveBeenCalledTimes(1);
   });
 
   it('drops the chevron without an onBack handler', () => {

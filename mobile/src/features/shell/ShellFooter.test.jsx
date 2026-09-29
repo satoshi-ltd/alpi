@@ -36,12 +36,15 @@ vi.mock('../../theme/ThemeContext', () => ({
     colors: { ink2: '#333', ink4: '#999', line: '#eee', selected: '#eaeaea', danger: '#c00' },
     fonts: { sans: { medium: 'm', semibold: 's' }, monoMedium: 'monoMedium' },
     fontSizes: { xxs: 9, xs: 11, sm: 12 },
+    pref: h.pref,
+    setMode: h.setMode,
   }),
 }));
 
 import { CHROME_H } from '../../lib/panes';
 import { mobile } from '../../theme/tokens';
-import { ShellFooter } from './ShellFooter';
+import { PaneContext } from '../../nav/PaneContext';
+import { ShellFooter, nextThemePref } from './ShellFooter';
 
 const settings = () => screen.getByLabelText('Settings');
 const bell = (unread = 0) => screen.getByLabelText(unread > 0 ? `Notifications · ${unread} unread` : 'Notifications');
@@ -145,5 +148,29 @@ describe('one notifications destination', () => {
   it('keeps no notifications sheet in the tree', () => {
     expect(existsSync(join(ROOT, 'src/features/shell/NotificationsSheet.jsx'))).toBe(false);
     expect(existsSync(join(ROOT, 'src/features/shell/NotificationsSheet.test.jsx'))).toBe(false);
+  });
+});
+
+describe('ShellFooter theme toggle', () => {
+  it('cycles light → dark → system from the footer on two panes, like the desktop', () => {
+    h.pref = 'light';
+    h.setMode = vi.fn();
+    render(
+      <PaneContext.Provider value={{ twoPane: true, side: 'list', sidebarOpen: true, toggleSidebar() {} }}>
+        <ShellFooter onSettingsPress={() => {}} />
+      </PaneContext.Provider>,
+    );
+    const toggle = screen.getByLabelText('Theme: Light');
+    expect(toggle.querySelector('[data-icon]').getAttribute('data-icon')).toBe('sun');
+    fireEvent.click(toggle);
+    expect(h.setMode).toHaveBeenCalledWith('dark');
+    expect(nextThemePref('dark')).toBe('system');
+    expect(nextThemePref('system')).toBe('light');
+  });
+
+  it('keeps the phone footer without it — the theme lives in Settings there', () => {
+    h.pref = 'dark';
+    render(<ShellFooter onSettingsPress={() => {}} />);
+    expect(screen.queryByLabelText(/^Theme:/)).toBeNull();
   });
 });

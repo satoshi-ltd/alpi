@@ -13,7 +13,7 @@ import { ScreenHeader } from '../../src/components/ScreenHeader';
 import { SyncBar } from '../../src/components/SyncBar';
 import { NewConnectionSheet } from '../../src/features/connections/NewConnectionSheet';
 import { PairingSheet } from '../../src/features/connections/PairingSheet';
-import { relativeSeen, scopeLabel } from '../../src/features/connections/format';
+import { connectionMeta, relativeSeen } from '../../src/features/connections/format';
 import { useBack } from '../../src/hooks/useBack';
 import { useConnectionsSummary } from '../../src/hooks/useDaemonData';
 import { usePane } from '../../src/nav/PaneContext';
@@ -65,7 +65,19 @@ function ConnectionsScreen() {
       ) : (
         <SettingsSurface>
         <ScrollView contentContainerStyle={contentStyle}>
-          <SectionHeader first kicker={`${paired.length} paired`}>Connections</SectionHeader>
+          {host ? (
+            <>
+              <SectionHeader first kicker="local socket · setup, TUI, CLI">Host</SectionHeader>
+              <Row
+                label="Local host"
+                item
+                helper={`${host.sessions ?? 0} sessions · seen ${relativeSeen(host.last_seen)}`}
+                value={formatUsd(host.cost_14d)}
+                onPress={() => router.push('/connections/host')}
+              />
+            </>
+          ) : null}
+          <SectionHeader first={!host} kicker={`${paired.length} paired`}>Connections</SectionHeader>
           {paired.length === 0 ? (
             <Row
               label="No paired apps yet"
@@ -78,7 +90,8 @@ function ConnectionsScreen() {
                 {i > 0 ? <RowSeparator /> : null}
                 <Row
                   label={row.label || row.id}
-                  helper={`${row.role} · ${scopeLabel(row)} · ${(row.devices ?? []).length} device${(row.devices ?? []).length === 1 ? '' : 's'} · seen ${relativeSeen(row.last_seen)}`}
+                  item
+                  helper={connectionMeta(row)}
                   value={
                     row.status === 'disabled'
                       ? <Pill tone="warn">disabled</Pill>
@@ -89,17 +102,6 @@ function ConnectionsScreen() {
               </View>
             ))
           )}
-          {host ? (
-            <>
-              <SectionHeader kicker="local socket · setup, TUI, CLI">Host</SectionHeader>
-              <Row
-                label="Local host"
-                helper={`${host.sessions ?? 0} sessions · seen ${relativeSeen(host.last_seen)}`}
-                value={formatUsd(host.cost_14d)}
-                onPress={() => router.push('/connections/host')}
-              />
-            </>
-          ) : null}
         </ScrollView>
         </SettingsSurface>
       )}
