@@ -64,6 +64,49 @@
   height: 12px;
 }
 
+.ds-seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--r-md);
+  background: var(--selected);
+}
+.ds-seg > button {
+  min-height: var(--ctrl-xs);
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background var(--dur-1) var(--ease),
+    color var(--dur-1) var(--ease);
+}
+.ds-seg > button:hover {
+  background: var(--line-2);
+  color: var(--ink);
+}
+.ds-seg > button:focus-visible {
+  outline: 0;
+  box-shadow: var(--focus-ring);
+}
+.ds-seg > button[aria-pressed="true"],
+.ds-seg > button.is-on {
+  background: var(--ink);
+  color: var(--bg-pane);
+}
+.ds-seg > button[aria-pressed="true"]:hover,
+.ds-seg > button.is-on:hover {
+  background: var(--ink-2);
+  color: var(--bg-pane);
+}
+
 .ds-dot, .dot {
   display: inline-block;
   width: var(--dot-size);

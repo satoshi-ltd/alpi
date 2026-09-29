@@ -448,6 +448,10 @@ jobs:
             exit 1
           fi
 
+          # tauri-action only knew the release id, so the manifest points at `releases/latest/download/…`, which on this repo is the newest alpi CLI release: pin every platform to this desktop tag.
+          node desktop/scripts/updater-manifest.mjs latest-assets/latest.json "$TAG"
+          gh release upload "$TAG" latest-assets/latest.json --clobber
+
           dmg=$(find latest-assets -maxdepth 1 -type f -name '*.dmg' | head -1)
           if [ -z "$dmg" ]; then
             echo "::error::no .dmg found in $TAG release — landing download would 404."
@@ -493,3 +497,33 @@ jobs:
             latest-assets/* \
             --title "desktop-latest (rolling)" \
             --notes "Rolling alias for the most recent desktop release. The Tauri updater endpoint in tauri.conf.json points here so the URL stays stable across versions."
+
+      - name: verify the updater can download what the manifest announces
+        env:
+          VERSION: ${{ needs.check-version.outputs.version }}
+        run: |
+          set -euo pipefail
+          manifest="https://github.com/satoshi-ltd/alpi/releases/download/desktop-latest/latest.json"
+          for attempt in 1 2 3 4 5 6; do
+            if curl -fsSL --max-time 30 "$manifest" -o "$RUNNER_TEMP/latest.json"; then break; fi
+            echo "manifest not served yet (attempt $attempt)"; sleep 10
+          done
+          python3 - "$VERSION" <<'PY'
+          import json, os, subprocess, sys
+          version = sys.argv[1]
+          manifest = json.load(open(os.path.join(os.environ["RUNNER_TEMP"], "latest.json")))
+          if manifest.get("version") != version:
+              sys.exit(f"manifest announces {manifest.get('version')}, expected {version}")
+          bad = []
+          for platform, entry in manifest["platforms"].items():
+              url = entry["url"]
+              if "/releases/latest/download/" in url:
+                  bad.append(f"{platform}: {url} (unpinned)")
+                  continue
+              code = subprocess.run(["curl", "-sIL", "--max-time", "30", "-o", "/dev/null", "-w", "%{http_code}", url], capture_output=True, text=True).stdout.strip()
+              print(f"{platform}: {code} {url}")
+              if code != "200":
+                  bad.append(f"{platform}: {code} {url}")
+          if bad:
+              sys.exit("updater manifest points at assets that do not resolve:\n  " + "\n  ".join(bad))
+          PY

@@ -5,6 +5,8 @@ import AlpiPicker from "../features/AlpiPicker.jsx";
 import VersionButton from "../features/VersionButton.jsx";
 
 vi.mock("../lib/updater.js", () => ({
+  describeUpdaterError: () => "",
+  quitForUpdate: vi.fn(),
   subscribeUpdater: () => () => {},
   checkForUpdates: vi.fn(),
   applyPendingUpdate: vi.fn(),

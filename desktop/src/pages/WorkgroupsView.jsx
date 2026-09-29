@@ -152,12 +152,11 @@ export default function WorkgroupsView({
               />
             </label>
             <div className={styles.toolbarRight}>
-              <div className={styles.filters} aria-label="Filter workgroups">
+              <div className="ds-seg" aria-label="Filter workgroups">
                 {FILTERS.map((item) => (
                   <button
                     key={item.id}
                     type="button"
-                    className={filter === item.id ? styles.filterActive : undefined}
                     onClick={() => setFilter(item.id)}
                     aria-pressed={filter === item.id}
                   >

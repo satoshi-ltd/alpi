@@ -11,6 +11,23 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.6.3 — 2026-09-29 — the updater downloads what it announces
+
+- **"Restart & install" installs again.** The update manifest pointed every platform at the
+  repository's newest GitHub release, which is usually an alpi CLI release that carries no desktop
+  build, so the download failed right after the app had announced a new version. Each release now
+  pins its manifest to its own desktop assets before the rolling alias is published, and the
+  pipeline then downloads what the manifest announces and fails loudly if anything is missing.
+- **The version popover shows what the updater is doing.** Download progress, then installing,
+  then restarting; a failed download stays on offer with a plain reason and a Try again button,
+  and a failed check no longer reads like a failed install.
+- **One install at a time.** The tray entry and the popover share a single download, and a check
+  that fails after an update was found keeps that update on offer.
+- **Option groups show their choice.** The selected segment of a filter group is filled with ink
+  instead of a faint wash; the segmented control is now a design-system primitive.
+
+  Client-only change: the minimum compatible alpi stays at 0.14.34, as pinned by v0.5.26.
+
 ## v0.6.2 — 2026-09-23 — an open app stops re-registering, and devices get their real name
 
 - **An idle desktop no longer registers itself with a daemon every minute.** The app now tells a

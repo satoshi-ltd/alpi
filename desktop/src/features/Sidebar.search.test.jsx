@@ -11,6 +11,8 @@ window.matchMedia ??= () => ({
 });
 
 vi.mock("../lib/updater.js", () => ({
+  describeUpdaterError: () => "",
+  quitForUpdate: vi.fn(),
   applyPendingUpdate: vi.fn(),
   checkForUpdates: vi.fn(),
   subscribeUpdater: vi.fn(() => () => {}),

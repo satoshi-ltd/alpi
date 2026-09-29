@@ -5,6 +5,8 @@ import { Dot, Tip, Mono, CheckIcon } from "../primitives/index.js";
 import {
   applyPendingUpdate,
   checkForUpdates,
+  describeUpdaterError,
+  quitForUpdate,
   subscribeUpdater,
 } from "../lib/updater.js";
 import styles from "./VersionButton.module.css";
@@ -12,32 +14,29 @@ import styles from "./VersionButton.module.css";
 // eslint-disable-next-line no-undef
 const APP_VERSION = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0";
 
-function friendlyUpdaterError(raw) {
-  const s = String(raw || "").toLowerCase();
-  if (s.includes("platform") || s.includes("fallback")) {
-    return "No build available for your platform yet";
-  }
-  if (s.includes("network") || s.includes("fetch") || s.includes("dns") || s.includes("timeout")) {
-    return "Couldn't reach update server";
-  }
-  if (s.includes("signature") || s.includes("signing")) {
-    return "Update signature check failed";
-  }
-  return "Couldn't check for updates";
-}
-
 export default function VersionButton() {
   const [state, setState] = useState({
     checking: false,
     available: false,
     version: null,
     error: null,
+    errorPhase: null,
     installing: false,
+    phase: "idle",
+    progress: null,
   });
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
-  useEffect(() => subscribeUpdater(setState), []);
+  // The tray's "Restart & install" runs the same install; the popover opens so the progress and any failure are visible.
+  useEffect(
+    () =>
+      subscribeUpdater((next) => {
+        setState(next);
+        if (next.installing) setOpen(true);
+      }),
+    [],
+  );
 
   useDismissOnOutside({ open, onClose: () => setOpen(false), wrapRef: ref });
 
@@ -91,6 +90,18 @@ function VersionPanel({ state, current, onInstall, onClose }) {
   }
 
   if (state.available) {
+    const installed = state.errorPhase === "restart";
+    const failed = state.error && (state.errorPhase === "install" || installed);
+    const staleCheck = state.error && state.errorPhase === "check";
+    const activity = !state.installing
+      ? null
+      : state.phase === "downloading"
+        ? state.progress == null
+          ? "Downloading…"
+          : `Downloading… ${Math.round(state.progress * 100)}%`
+        : state.phase === "installing"
+          ? "Installing…"
+          : "Restarting…";
     return (
       <div className={`col ${styles.panel} ${styles.panelGap5}`}>
         <div className={`col ${styles.colGap1}`}>
@@ -103,6 +114,20 @@ function VersionPanel({ state, current, onInstall, onClose }) {
             <span className={styles.versionTo}>{state.version}</span>
           </Mono>
         </div>
+        {activity ? (
+          <div className={`row row-gap ${styles.rowGap3}`} aria-live="polite">
+            <Dot pulse color="var(--ink-3)" />
+            <span className={styles.label}>{activity}</span>
+          </div>
+        ) : null}
+        {failed ? (
+          <div className={`row row-gap ${styles.rowGap3}`} role="alert">
+            <Dot color={installed ? "var(--c-success)" : "var(--c-danger)"} />
+            <span className={styles.label}>{describeUpdaterError(state.error, state.errorPhase)}</span>
+          </div>
+        ) : staleCheck ? (
+          <Mono className={styles.metaXs}>last check failed · {describeUpdaterError(state.error, "check")}</Mono>
+        ) : null}
         <div className="row between">
           <button
             type="button"
@@ -111,22 +136,33 @@ function VersionPanel({ state, current, onInstall, onClose }) {
           >
             Later
           </button>
-          <Button
-            type="button"
-            variant="primary"
-            className={styles.installBtn}
-            onClick={onInstall}
-            disabled={state.installing}
-          >
-            {state.installing ? "Installing…" : "Restart & install"}
-          </Button>
+          {installed ? (
+            <Button
+              type="button"
+              variant="primary"
+              className={styles.installBtn}
+              onClick={() => { quitForUpdate(); }}
+            >
+              Quit Alpi
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="primary"
+              className={styles.installBtn}
+              onClick={onInstall}
+              disabled={state.installing}
+            >
+              {state.installing ? "Installing…" : failed ? "Try again" : "Restart & install"}
+            </Button>
+          )}
         </div>
       </div>
     );
   }
 
   if (state.error) {
-    const friendly = friendlyUpdaterError(state.error);
+    const friendly = describeUpdaterError(state.error, state.errorPhase ?? "check");
     return (
       <div className={`col ${styles.panel} ${styles.panelGap3}`}>
         <div className={`row row-gap ${styles.rowGap3}`}>
