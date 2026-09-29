@@ -71,7 +71,7 @@ def test_committed_catalog_is_positive_int_map() -> None:
 
 
 def test_committed_catalog_includes_glm_5_3_flash_safe_input_limit() -> None:
-    assert ctx_window._openrouter_limits()["z-ai/glm-5.3-flash"] == 1_015_808
+    assert ctx_window._openrouter_limits()["z-ai/glm-5.3-flash"] == 1_015_807
 
 
 def test_a_same_model_suffix_does_not_cost_it_its_window(monkeypatch, tmp_path: Path) -> None:

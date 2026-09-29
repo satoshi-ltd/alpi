@@ -9,7 +9,7 @@ shell commands, browser calls, and user-specific state in context?"
 Use this page as a practical selector. Prices, context windows, and
 provider wrappers move quickly; re-check them every 2-3 months.
 
-Last updated: **2026-09-17**.
+Last updated: **2026-09-29**.
 
 ## What matters for alpi
 
@@ -32,9 +32,10 @@ tool-heavy agent workloads rather than chat-only benchmarks. Treat
 that data as a weak signal, not a ranking: defaults, price, rate
 limits, regional availability, and provider wrappers all bias usage.
 
-OpenRouter's public leaderboard for the week ending 2026-09-10 put
-DeepSeek V4 Flash 0731 third and GLM 5.3 Flash fourth by tokens
-processed, with MiMo V2.5 fifth. It ranks adoption, not quality, it
+OpenRouter's public leaderboard for the week ending 2026-09-28 put
+DeepSeek V4.1 Flash first by tokens processed (about 20.8T), ahead of a
+stealth model, with GLM 5.3 Flash third, DeepSeek V4 Flash 0731 sixth
+and the new MiMo V2.6 Flash seventh. It ranks adoption, not quality, it
 counts only traffic the caller did not mark private, and a single
 large application can move a row several places.
 
@@ -89,15 +90,16 @@ daily interactive alpi use.
 
 | Model | OpenRouter ID | Why |
 |---|---|---|
+| **DeepSeek V4.1 Flash** | `deepseek/deepseek-v4.1-flash` | **The alpi team's recommended default.** Low cache-read price, which suits an agent whose system prompt is large and stable. Text and image input, up to 1M context. First by weekly tokens on OpenRouter's public leaderboard (week ending 2026-09-28); released 2026-09-10 and not yet scored on the agentic index. |
 | **GLM 5.3 Flash** | `z-ai/glm-5.3-flash` | Highest published agentic index of the cheap tier (Artificial Analysis, via OpenRouter, read 2026-09-11); up to 1.25M context, image and video input. Reasoning is mandatory and defaults to `max`; `low` and `high` are also accepted, so set `model_reasoning.effort` deliberately. |
-| **DeepSeek V4.1 Flash** | `deepseek/deepseek-v4.1-flash` | Encoder-decoder architecture with a low cache-read price; suits agents whose system prompt is large and stable. Released 2026-09-10 and not yet scored on the agentic index. |
-| **DeepSeek V4 Flash 0731** | `deepseek/deepseek-v4-flash-0731` | Text only, up to 1.25M context, served by a large number of providers. Third by weekly tokens on OpenRouter's public leaderboard (window ending 2026-09-10). |
+| **DeepSeek V4 Flash 0731** | `deepseek/deepseek-v4-flash-0731` | Text only, up to 1.25M context, served by a large number of providers. Sixth by weekly tokens on OpenRouter's public leaderboard (week ending 2026-09-28). |
 | **Claude Sonnet 5** | `anthropic/claude-sonnet-5` | Premium daily driver; strongest tool discipline and coding judgement at this tier. |
 | **MiMo V2.5 Pro** | `xiaomi/mimo-v2.5-pro` | Text only, up to 1M context. Scores above the base MiMo on the published agentic and coding indices, at about three times the input price. |
 | **MiniMax M3** | `minimax/minimax-m3` | Mid-tier agent model. 1M is the announced ceiling; several of its endpoints serve 512K or 256K, so the window you get depends on routing. |
 
 If you can only choose one model for a skill-heavy profile, start with
-GLM 5.3 Flash or Sonnet 5 depending on budget and provider preference.
+DeepSeek V4.1 Flash, the alpi team's recommendation. Move to Sonnet 5
+when budget allows and tool discipline matters more than price.
 `deepseek/deepseek-v4-pro` is no longer a recommended daily driver: the bare
 id is pinned to the 2026-04 build, and a measured audit put it behind the
 flash tier at many times the price.
@@ -110,8 +112,8 @@ creating or debugging skills.
 
 | Model | OpenRouter ID | Why |
 |---|---|---|
+| **DeepSeek V4.1 Flash** | `deepseek/deepseek-v4.1-flash` | Recommended default for service turns too; cheap cache read when the prompt is large and barely changes between turns. |
 | **DeepSeek V4 Flash 0731** | `deepseek/deepseek-v4-flash-0731` | Cheapest model with a real agentic score; 1.25M context and broad provider support. |
-| **DeepSeek V4.1 Flash** | `deepseek/deepseek-v4.1-flash` | Cheap cache read; the better pick when the prompt is large and barely changes between turns. |
 | **MiMo V2.5** | `xiaomi/mimo-v2.5` | Budget sibling to MiMo V2.5 Pro; 1M context, useful for A/B testing cheap service profiles. |
 | **Claude Haiku 4.5** | `anthropic/claude-haiku-4.5` | Cheap and fast with reasoning support; reliable for short-chain turns. |
 | **GPT-5.6 Terra** | `openai/gpt-5.6-terra` | Balanced OpenAI tier for simple tool use; acceptable as a router when the skill catalog is clean and small. |
