@@ -623,7 +623,9 @@ def fire_by_id(home: Path, job_id: str) -> tuple[bool, str]:
         hint = f". Did you mean {hit[0]!r}?" if hit else ""
         return False, f"no job with id {job_id!r}{hint}"
     log.info("firing job %s ad-hoc (%s)", job_id, target.get("kind", "?"))
-    outcome = run_job(target, home)
+    from alpi.host.activity import scheduled_run
+    with scheduled_run(home, target):
+        outcome = run_job(target, home)
     log.info("job %s ad-hoc %s — %s", job_id,
              "OK" if outcome.ok else "FAIL", outcome.message)
     _emit_schedule_event(home, target, outcome)
@@ -790,7 +792,9 @@ def tick(home: Path, now: datetime | None = None) -> list[tuple[str, bool, str]]
         job_id = str(job.get("id", "?"))
         log.info("firing job %s (%s)", job_id, job.get("kind", "cron"))
         _started = time.time()
-        outcome = run_job(job, home)
+        from alpi.host.activity import scheduled_run
+        with scheduled_run(home, job):
+            outcome = run_job(job, home)
         _elapsed = time.time() - _started
         log.info("job %s %s — %s", job_id,
                  "OK" if outcome.ok else "FAIL", outcome.message)

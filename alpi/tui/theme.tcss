@@ -10,7 +10,13 @@ AlpiTopBar {
     padding: 1 2 0 2;
 }
 
-AlpiHeader {
+#dock {
+    dock: bottom;
+    height: auto;
+    background: $background;
+}
+
+StatusLine {
     height: 1;
     background: $background;
     color: $text-muted;
@@ -106,6 +112,14 @@ UserMessage > Horizontal {
     height: auto;
 }
 
+UserMessage > Horizontal > Static {
+    width: 2;
+}
+
+UserMessage > Horizontal > .user-plain {
+    width: 1fr;
+}
+
 UserMessage MarkdownBlock > .code_inline {
     background: transparent;
     color: $accent-darken-1;
@@ -151,19 +165,6 @@ DimLine {
     height: auto;
 }
 
-ReasoningLine {
-    color: $text-muted;
-    margin: 1 0 0 0;
-    padding: 0;
-    height: auto;
-}
-
-ToolCard {
-    height: 1;
-    margin: 0;
-    padding: 0;
-}
-
 ToolCard.-running {
     color: $foreground;
 }
@@ -173,7 +174,7 @@ ToolCard.-done {
 }
 
 ToolCard.-error {
-    color: $error;
+    color: $foreground;
 }
 
 #chat-input {
@@ -181,13 +182,15 @@ ToolCard.-error {
     color: $foreground;
     border: none;
     padding: 1 2;
-    height: 3;
-    margin: 1 1;
-    scrollbar-size-horizontal: 0;
+    height: auto;
+    min-height: 3;
+    max-height: 12;
+    margin: 1 1 0 1;
+    scrollbar-size: 0 0;
 }
 
 #chat-input:focus {
-    background-tint: $accent 15%;
+    background-tint: $accent 8%;
 }
 
 OptionList > .option-list--option {

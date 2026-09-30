@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.16.0 — 2026-09-30 — see what every agent is doing
+
+- **`host.activity.list` answers "what needs me and what is running".** One call returns pending
+  approvals and questions (`needs_you`), running turns from every source (chat, delegate, peer
+  mentions, scheduled jobs, workgroup dispatch) and running workgroup pipelines with their phase
+  (`running`), and the next scheduled jobs plus the ones whose last run failed (`scheduled`). It
+  applies the same visibility as the verbs it gathers: the owner and admins see every turn,
+  members only their own sessions, and scheduled jobs stay admin-only. A new live-only
+  `activity.changed {profile}` event (at most once a second per profile, never written to the
+  replay buffer) tells clients to refetch.
+- **`alpi activity` shows the same view in the terminal**, with `--json`, and says so when the
+  daemon is not running. The TUI gains an `/activity` panel that can answer approvals and
+  questions from any surface.
+- **The chat stream carries timing.** `tool_start` adds `started_at`, `tool_end` adds
+  `duration_s`, and a new `reasoning_done {seconds}` frame closes each span of reasoning, so
+  clients can show how long a step took and "Thought for 7s" live. `session_changed` adds
+  `in_flight`, and approval and question requests carry the asking `session_id` when it is known.
+- **The TUI catches up with the apps.** An approval or question can no longer be dismissed by
+  accident and leave the agent waiting: Esc denies or cancels, prompts queue with a countdown, and
+  quitting answers them. Turns fold into "N steps · Xs" rows that open to each tool's arguments
+  and output, reasoning collapses to "Thought for Xs", the composer takes several lines (Ctrl+J or
+  a trailing `\`), Esc and Ctrl+C stop a turn, one status line shows model, context, budget,
+  sandbox, unread and waiting prompts, and slash commands come from one registry with a
+  completion popup. Colours follow the shared tokens, so the accent is the brand amber in dark
+  mode and its deep variant in light mode.
+
 ## v0.15.27 — 2026-09-29 — a job runs for as long as it declares
 
 - **A scheduled job's `timeout` above one hour is honoured.** `schedule(add|update)` refused

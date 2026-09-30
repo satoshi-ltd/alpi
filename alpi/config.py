@@ -47,7 +47,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "show_cost": True,
         "show_tokens": True,
         "show_reasoning": True,
-        "accent": "#c8a24e",
+        "accent": "#f0b447",
         "theme": "dark",
         "auto_resume": False,
     },

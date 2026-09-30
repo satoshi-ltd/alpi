@@ -3727,7 +3727,6 @@ async def _dispatch_workgroup_turn(
         "started_against_task_seq": int(started_against_task_seq),
         "started_at": started_at,
     }
-
     working_task: asyncio.Task | None = None
     working_after = _working_after_for(home) if member_turn and not pipeline else 0
     if working_after > 0:
@@ -3741,6 +3740,11 @@ async def _dispatch_workgroup_turn(
 
     timed_out = False
     kill_reason: str | None = None
+    from alpi.host import activity as host_activity
+    host_activity.start_run(
+        profile, run_id, source="workgroup", title=wg_name or wg_id,
+        workgroup_id=wg_id, connection_id="host",
+    )
     try:
         idle_timeout = _turn_idle_timeout_for(pipeline)
         rc, timed_out, kill_reason = await _supervise_turn(
@@ -3773,6 +3777,7 @@ async def _dispatch_workgroup_turn(
         # Only a delivered turn buys settle time: a silently looping turn must leave the watchdog eligible to escalate.
         if posts_added[0] > 0:
             _stamp_turn_end(wg_id)
+        host_activity.end_run(profile, run_id)
     if working_task is not None:
         await asyncio.gather(working_task, return_exceptions=True)
     preempted = bool(info.get("preempted"))
@@ -4037,6 +4042,7 @@ async def _run_host(home: Path, profile: str) -> None:
         log.warning("host task requested for %r — only default can host", profile)
         return
 
+    from alpi.host import activity as host_activity
     from alpi.host import approval as host_approval
     from alpi.host import admin_audit as host_admin_audit
     from alpi.host import attachments_rpc as host_attachments
@@ -4074,6 +4080,7 @@ async def _run_host(home: Path, profile: str) -> None:
     host_events.register(server)
     host_approval.register(server)
     host_clarification.register(server)
+    host_activity.register(server)
     host_schedule.register(server)
     host_wg_admin.register(server)
     host_recipes.register(server)

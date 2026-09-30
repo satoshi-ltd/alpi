@@ -93,6 +93,7 @@ def host_clarification_handler(
         "allow_other": bool(allow_other),
         "multi": bool(multi),
         "ts": time.time(),
+        "session_id": home_mod.get_active_session() or None,
         **_owner(),
         "timeout_s": CLARIFICATION_TIMEOUT_S,
     }
@@ -240,9 +241,12 @@ async def _pending_handler(
     _params: dict[str, Any], _server: host_server.Server,
 ) -> dict[str, Any]:
     """``host.clarification.pending`` — cold-start recovery. Clients call on mount/reconnect to fetch requests whose ``clarification.request`` event fired before the live subscription anchored."""
+    return {"requests": pending_requests()}
+
+
+def pending_requests() -> list[dict[str, Any]]:
     with _pending_lock:
-        items = [m for m in _pending_meta.values() if _visible(m)]
-    return {"requests": items}
+        return [dict(m) for m in _pending_meta.values() if _visible(m)]
 
 
 def pending_profile(request_id: Any) -> str | None:

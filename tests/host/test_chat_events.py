@@ -370,7 +370,7 @@ def test_replay_frame_omits_terminal_command() -> None:
 
 
 def test_replay_frame_recomputes_workflow_preview_after_nested_sanitization() -> None:
-    from alpi.tui.formatting import arg_hint
+    from alpi.tool_hints import arg_hint
 
     secret = "LEAK"
     args = {"steps": [{

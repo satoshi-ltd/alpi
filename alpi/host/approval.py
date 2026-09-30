@@ -124,6 +124,7 @@ def host_approval_callback(
         "profile": profile,
         "cwd": cwd_display,
         "ts": time.time(),
+        "session_id": home_mod.get_active_session() or None,
         **_owner(),
         "timeout_s": PROMPT_TIMEOUT_S,
     }
@@ -235,9 +236,12 @@ async def _pending_handler(
     resolved prompts. Without this, a 60-second approval window with no
     active client just auto-denies invisibly.
     """
+    return {"requests": pending_requests()}
+
+
+def pending_requests() -> list[dict[str, Any]]:
     with _pending_lock:
-        items = [m for m in _pending_meta.values() if _visible(m)]
-    return {"requests": items}
+        return [dict(m) for m in _pending_meta.values() if _visible(m)]
 
 
 def _reset_for_tests() -> None:

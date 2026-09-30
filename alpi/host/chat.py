@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+import time
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -114,7 +115,7 @@ def _persistable_frame(frame: dict[str, Any]) -> dict[str, Any]:
     if frame.get("event") != "tool_start":
         return frame
     from alpi.runs import persisted_tool_arguments
-    from alpi.tui.formatting import arg_hint
+    from alpi.tool_hints import arg_hint
 
     name = str(frame.get("name") or "")
     raw_args = frame.get("args")
@@ -207,7 +208,7 @@ async def _data_chat_send(
         return
 
     from alpi.engine import AgentEvent
-    from alpi.tui.formatting import arg_hint
+    from alpi.tool_hints import arg_hint
 
     if isinstance(session_id, str) and session_id:
         from alpi.host.handlers import _check_id
@@ -370,6 +371,7 @@ async def _data_chat_send(
             except Exception as exc:  # noqa: BLE001
                 # Surface engine failures before done so the client captures them.
                 sink(AgentEvent(kind="error", text=f"engine error: {exc}"))
+                _close_crashed_turn(engine, run_profile)
             finally:
                 loop.call_soon_threadsafe(queue.put_nowait, SENTINEL)
 
@@ -378,6 +380,10 @@ async def _data_chat_send(
         _timing.mark(request_id, "stream_open")
 
         first_signal = False
+        step_started = time.time()
+        step_spans = 0
+        span_started: float | None = None
+        tool_started: dict[str, float] = {}
         while True:
             item = await queue.get()
             if item is SENTINEL:
@@ -386,13 +392,19 @@ async def _data_chat_send(
             if not first_signal and ev.kind in ("reasoning_delta", "assistant_delta", "tool_start"):
                 _timing.mark(request_id, "first_delta")
                 first_signal = True
+            if span_started is not None and ev.kind in ("assistant_delta", "tool_start", "assistant_done"):
+                await emit({"event": "reasoning_done", "seconds": round(time.time() - span_started, 1)})
+                span_started = None
             if ev.kind == "tool_start":
+                started_at = time.time()
+                tool_started[ev.tool_id] = started_at
                 await emit({
                     "event": "tool_start",
                     "tool_id": ev.tool_id,
                     "name": ev.name,
                     "preview": arg_hint(ev.name, ev.args or {}),
                     "args": ev.args or {},
+                    "started_at": started_at,
                 })
             elif ev.kind == "tool_state":
                 await emit({
@@ -403,17 +415,25 @@ async def _data_chat_send(
                     "ok": ev.ok,
                 })
             elif ev.kind == "tool_end":
+                ended_at = time.time()
+                step_started = ended_at
+                step_spans = 0
+                started_at = tool_started.pop(ev.tool_id, None)
                 await emit({
                     "event": "tool_end",
                     "tool_id": ev.tool_id,
                     "name": ev.name,
                     "ok": ev.ok,
                     "output": _truncate(ev.output, 4000),
+                    **({"duration_s": round(ended_at - started_at, 1)} if started_at is not None else {}),
                 })
             elif ev.kind == "routing":
                 model_used = ev.model or model_used
                 await emit({"event": "routing", "text": ev.text, "model": ev.model})
             elif ev.kind == "reasoning_delta":
+                if span_started is None:
+                    span_started = step_started if step_spans == 0 else time.time()
+                    step_spans += 1
                 await emit({"event": "reasoning_delta", "text": ev.text})
             elif ev.kind == "assistant_delta":
                 await emit({"event": "assistant_delta", "text": ev.text})
@@ -443,6 +463,8 @@ async def _data_chat_send(
                     produced.extend(ev.attachments)
                 if ev.text.strip():
                     parts.append(ev.text)
+        if span_started is not None:
+            await emit({"event": "reasoning_done", "seconds": round(time.time() - span_started, 1)})
         final = "\n\n".join(parts).strip()
         await emit({
             "event": "reply",
@@ -488,6 +510,27 @@ async def _data_chat_send(
         _timing.done(request_id)
 
 
+def _close_crashed_turn(engine: Any, profile: str) -> None:
+    try:
+        engine.save_session()
+        return
+    except Exception:  # noqa: BLE001
+        pass
+    session = getattr(engine, "session", None)
+    try:
+        from alpi.host import events as host_events
+        host_events.emit("session_changed", {
+            "profile": profile,
+            "id": getattr(session, "id", ""),
+            "subdir": getattr(session, "subdir", "sessions"),
+            "connection_id": getattr(session, "connection_id", "host"),
+            "device_id": getattr(session, "device_id", ""),
+            "in_flight": False,
+        })
+    except Exception:  # noqa: BLE001
+        pass
+
+
 async def _send_mention(
     home: Path, parsed, request_id: str, session_id, send_frame,
 ) -> None:
@@ -516,61 +559,76 @@ async def _send_mention(
         await send_frame({"event": "error", "text": f"session not found: {session_id}"})
         return
 
-    tool_id = f"mention-{parsed.peer_id}-{request_id}"
-    args = {"peer_id": parsed.peer_id, "prompt": parsed.prompt}
-    started = _time.time()
-    await send_frame({
-        "event": "tool_start", "tool_id": tool_id, "name": "peer",
-        "preview": f"peer_id={parsed.peer_id}", "args": args,
-    })
-
-    parts: list[str] = []
-    final_payload: dict = {}
-    ok = True
-    error_text = ""
-    async for frame in alp_mention.execute_stream(
-        home, parsed.peer_id, parsed.prompt, source_session=engine.session.id,
-    ):
-        kind = frame.get("kind")
-        if kind == "chunk":
-            delta = str(frame.get("text") or "")
-            if delta:
-                parts.append(delta)
-                await send_frame({"event": "assistant_delta", "text": delta})
-        elif kind == "final":
-            final_payload = frame
-        elif kind == "error":
-            ok = False
-            error_text = str(frame.get("text") or "unknown")
-            break
-
-    if ok:
-        reply = alp_mention.reply_text(parsed.peer_id, final_payload, parts)
-    else:
-        reply = f"error: {error_text}"
-    await send_frame({
-        "event": "tool_end", "tool_id": tool_id, "name": "peer",
-        "ok": ok, "output": _truncate(reply, 4000),
-    })
-
-    engine.session.log_turn(
-        user=f"@{parsed.peer_id} {parsed.prompt}",
-        assistant=reply,
-        tools=[sess.ToolLog(
-            at=started, name="peer", args=args,
-            result=reply[:sess.TOOL_RESULT_CAP], ok=ok,
-            duration_s=_time.time() - started,
-        )],
-        started_at=started,
+    from alpi.home import profile_name
+    from alpi.host import activity
+    run_profile = profile_name(home)
+    run_key = f"mention:{request_id}"
+    activity.start_run(
+        run_profile, run_key, session_id=engine.session.id,
+        title=activity.title_of(f"@{parsed.peer_id} {parsed.prompt}"), source="peer",
+        connection_id=getattr(engine.session, "connection_id", "host"),
+        device_id=getattr(engine.session, "device_id", ""),
     )
     try:
-        await asyncio.to_thread(engine.session.save)
-    except Exception:  # noqa: BLE001
-        pass
+        tool_id = f"mention-{parsed.peer_id}-{request_id}"
+        args = {"peer_id": parsed.peer_id, "prompt": parsed.prompt}
+        started = _time.time()
+        await send_frame({
+            "event": "tool_start", "tool_id": tool_id, "name": "peer",
+            "preview": f"peer_id={parsed.peer_id}", "args": args,
+            "started_at": started,
+        })
 
-    sid = engine.session.id
-    await send_frame({"event": "reply", "text": reply, "session_id": sid})
-    await send_frame({"event": "done", "session_id": sid})
+        parts: list[str] = []
+        final_payload: dict = {}
+        ok = True
+        error_text = ""
+        async for frame in alp_mention.execute_stream(
+            home, parsed.peer_id, parsed.prompt, source_session=engine.session.id,
+        ):
+            kind = frame.get("kind")
+            if kind == "chunk":
+                delta = str(frame.get("text") or "")
+                if delta:
+                    parts.append(delta)
+                    await send_frame({"event": "assistant_delta", "text": delta})
+            elif kind == "final":
+                final_payload = frame
+            elif kind == "error":
+                ok = False
+                error_text = str(frame.get("text") or "unknown")
+                break
+
+        if ok:
+            reply = alp_mention.reply_text(parsed.peer_id, final_payload, parts)
+        else:
+            reply = f"error: {error_text}"
+        await send_frame({
+            "event": "tool_end", "tool_id": tool_id, "name": "peer",
+            "ok": ok, "output": _truncate(reply, 4000),
+            "duration_s": round(_time.time() - started, 1),
+        })
+
+        engine.session.log_turn(
+            user=f"@{parsed.peer_id} {parsed.prompt}",
+            assistant=reply,
+            tools=[sess.ToolLog(
+                at=started, name="peer", args=args,
+                result=reply[:sess.TOOL_RESULT_CAP], ok=ok,
+                duration_s=_time.time() - started,
+            )],
+            started_at=started,
+        )
+        try:
+            await asyncio.to_thread(engine.session.save)
+        except Exception:  # noqa: BLE001
+            pass
+
+        sid = engine.session.id
+        await send_frame({"event": "reply", "text": reply, "session_id": sid})
+        await send_frame({"event": "done", "session_id": sid})
+    finally:
+        activity.end_run(run_profile, run_key)
 
 
 async def _data_chat_events_since(

@@ -1,47 +1,33 @@
-"""Alpi theme factory — builds a Textual Theme from the user's accent."""
-
 from __future__ import annotations
 
 from textual.theme import Theme
 
+from alpi.palette import DARK, DEFAULT_ACCENT, LIGHT, STATUS, resolve_accent
 
-_DARK = {
-    "background": "#1a1a1a",
-    "surface":    "#2d2d2d",
-    "foreground": "#e0e0e0",
-    "muted":      "#8a8a8a",
-}
-
-_LIGHT = {
-    "background": "#f5f5f5",
-    "surface":    "#ffffff",
-    "foreground": "#1a1a1a",
-    "muted":      "#6a6a6a",
-}
+__all__ = ["DARK", "DEFAULT_ACCENT", "LIGHT", "STATUS", "build_theme", "resolve_accent"]
 
 
-def build_theme(accent: str, dark: bool = True) -> Theme:
-    palette = _DARK if dark else _LIGHT
-    fg = palette["foreground"]
-
+def build_theme(accent: str | None = None, dark: bool = True) -> Theme:
+    palette = DARK if dark else LIGHT
+    fg = palette["ink"]
+    accent_hex = resolve_accent(accent, dark)
     return Theme(
         name=f"alpi-{'dark' if dark else 'light'}",
-        accent=accent,
-        primary=accent,
-        secondary=accent,
+        accent=accent_hex,
+        primary=accent_hex,
+        secondary=accent_hex,
         foreground=fg,
-        background=palette["background"],
-        surface=palette["surface"],
-        # Status colors need explicit values.
-        # (= accent), which would make errors/warnings read as accent.
-        warning="#ffa62b",
-        error="#ba3c5b",
-        success="#4EBF71",
+        background=palette["bg"],
+        surface=palette["bgPane"],
+        panel=palette["bgElev"],
+        warning=STATUS["warning"],
+        error=STATUS["danger"],
+        success=STATUS["success"],
         dark=dark,
         variables={
-            # Textual's default `text-muted` is `"auto 60%"` (valid CSS,
-            # invalid Rich markup). Concrete hex so our markup spans work.
-            "text-muted": palette["muted"],
+            # Rich markup spans need a concrete hex; Textual's default is "auto 60%".
+            "text-muted": palette["ink3"],
+            "text-secondary": palette["ink2"],
             "markdown-h1-color": fg,
             "markdown-h2-color": fg,
             "markdown-h3-color": fg,

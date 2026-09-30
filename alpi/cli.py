@@ -249,7 +249,7 @@ def _run_once(
     if parsed is not None:
         import asyncio as _aio
         import time as _t
-        from alpi.tui.formatting import arg_hint as _arg_hint
+        from alpi.tool_hints import arg_hint as _arg_hint
         from alpi.session import ToolLog as _ToolLog
         started = _t.time()
         if emit_events:
@@ -304,7 +304,7 @@ def _run_once(
     parts: list[str] = []
     produced: list[dict] = []
 
-    from alpi.tui.formatting import arg_hint
+    from alpi.tool_hints import arg_hint
 
     last_model_state_at = [0.0]
 
@@ -680,6 +680,109 @@ def runs_cancel(ctx: click.Context, run_id: str) -> None:
     click.echo(f"cancellation requested for {run_id}")
 
 
+_ACTIVITY_READ_LIMIT = 16 * 1024 * 1024
+
+
+async def _host_activity() -> dict[str, Any]:
+    import json as json_mod
+
+    reader, writer = await asyncio.open_unix_connection(
+        str(home.alpi_root() / "host" / "host.sock"), limit=_ACTIVITY_READ_LIMIT,
+    )
+    try:
+        request = {"id": "cli-activity", "method": "host.activity.list", "params": {}}
+        writer.write((json_mod.dumps(request) + "\n").encode())
+        await writer.drain()
+        response = json_mod.loads((await reader.readline()).decode())
+    finally:
+        writer.close()
+        await writer.wait_closed()
+    error = response.get("error")
+    if isinstance(error, dict):
+        raise click.ClickException(str(error.get("message") or "host.activity.list failed"))
+    return response.get("result") or {}
+
+
+def _ago(seconds: float) -> str:
+    seconds = max(0, int(seconds))
+    if seconds < 60:
+        return f"{seconds}s"
+    if seconds < 3600:
+        return f"{seconds // 60}m"
+    if seconds < 86400:
+        return f"{seconds // 3600}h"
+    return f"{seconds // 86400}d"
+
+
+def _epoch(value: Any) -> float | None:
+    from datetime import datetime
+
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str) and value:
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+        except ValueError:
+            return None
+    return None
+
+
+def _activity_lines(data: dict[str, Any], now: float) -> list[str]:
+    needs = data.get("needs_you") or []
+    running = data.get("running") or []
+    scheduled = data.get("scheduled") or []
+    lines = [f"Needs you · {len(needs)}"]
+    for row in needs:
+        age = _epoch(row.get("ts"))
+        lines.append(
+            f"  {row.get('kind', '?'):<13} {row.get('profile') or '-':<12} "
+            f"{row.get('title') or ''}  ({_ago(now - age) + ' ago' if age else '-'})"
+        )
+    lines.append(f"Running · {len(running)}")
+    for row in running:
+        if row.get("kind") == "workgroup":
+            detail = (
+                f"{row.get('pipeline') or '-'} · {row.get('phase') or '-'} "
+                f"{row.get('phases_done', 0)}/{row.get('phases_total', 0)}"
+            )
+            lines.append(f"  {'workgroup':<13} {row.get('profile') or '-':<12} {row.get('name') or row.get('workgroup_id')}  {detail}")
+            continue
+        started = _epoch(row.get("started_at"))
+        lines.append(
+            f"  {row.get('source') or 'turn':<13} {row.get('profile') or '-':<12} "
+            f"{row.get('title') or row.get('session_id') or '-'}  ({_ago(now - started) if started else '-'})"
+        )
+    lines.append(f"Scheduled · {len(scheduled)}")
+    for row in scheduled:
+        nxt = _epoch(row.get("next_fire"))
+        when = "not scheduled" if nxt is None else "now" if nxt <= now else f"in {_ago(nxt - now)}"
+        last = row.get("last_run_status")
+        lines.append(
+            f"  {row.get('profile') or '-':<12} {row.get('title') or row.get('job_id')}  {when}"
+            + (f"  last run: {last}" if last else "")
+        )
+    return lines
+
+
+@main.command("activity")
+@click.option("--json", "as_json", is_flag=True, help="Emit machine-readable JSON.")
+def activity_cmd(as_json: bool) -> None:
+    """Show what needs you, what is running and what is scheduled, across profiles."""
+    import json as json_mod
+
+    try:
+        data = asyncio.run(_host_activity())
+    except OSError as exc:
+        raise click.ClickException(f"daemon not running (host.sock unreachable: {exc})") from None
+    except ValueError as exc:
+        raise click.ClickException(f"invalid response from the daemon: {exc}") from None
+    if as_json:
+        click.echo(json_mod.dumps(data, indent=2, ensure_ascii=False))
+        return
+    for line in _activity_lines(data, time.time()):
+        click.echo(line)
+
+
 @main.command()
 @click.option(
     "--once", "input_text", default=None, help="Run one turn and print the reply to stdout."
@@ -712,7 +815,7 @@ def chat(
     attach: tuple[str, ...],
     connection_id: str | None,
 ) -> None:
-    """Launch the TUI, or run one turn with ``--once "text"``."""
+    """Launch the TUI, or run one turn with --once "text"."""
     h: Path = ctx.obj["home"]
     resume_last = continue_last or bool(ctx.obj.get("continue_last"))
     if input_text is not None or attach:
@@ -869,7 +972,7 @@ def cmd_backup(
 def cmd_restore(
     ctx: click.Context, archive: Path, passphrase_stdin: bool, force: bool,
 ) -> None:
-    """Decrypt an alpi backup into ``~/.alpi/``; refuses to overwrite a non-empty home without --force."""
+    """Decrypt an alpi backup into ~/.alpi/; refuses to overwrite a non-empty home without --force."""
     from alpi import backup as backup_mod
 
     root: Path = home.alpi_root()
@@ -3558,7 +3661,7 @@ def profile() -> None:
 @click.pass_context
 def profile_list(ctx: click.Context) -> None:
     """List available profiles with their model, size, and path."""
-    from alpi import config as cfg_mod, home as home_mod, ui
+    from alpi import config as cfg_mod, home as home_mod, palette, ui
 
     active = ctx.obj.get("profile") or "default"
 
@@ -3576,10 +3679,10 @@ def profile_list(ctx: click.Context) -> None:
         )
         try:
             cfg = cfg_mod.load(home_path)
-            accent = (cfg.tui or {}).get("accent") or "#c8a24e"
+            accent = palette.profile_accent(cfg.tui)
             model = cfg.model or "(no model)"
         except Exception:  # noqa: BLE001
-            accent = "#c8a24e"
+            accent = palette.DEFAULT_ACCENT
             model = "(unreadable)"
         glyph = "◆" if name == active else "◇"
         name_cell = f"[b]{name}[/b]" if name == active else name

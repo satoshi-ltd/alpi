@@ -10,6 +10,8 @@ from rich.prompt import Confirm
 from rich.text import Text
 from rich.theme import Theme
 
+from alpi import palette
+
 _THEME = Theme(
     {
         "muted": "dim",
@@ -36,7 +38,7 @@ _THEME = Theme(
 
 _console = Console(theme=_THEME, highlight=False)
 
-_MUTED_STYLE = "fg:#888888"
+_MUTED_STYLE = "fg:#828b97"
 
 LABEL_WIDTH = 16
 
@@ -69,8 +71,7 @@ def _render_title(title: str, *, home: Path | None) -> str:
     return f"[b]{title}[/b]"
 
 
-# Theme default matches the desktop accent token.
-DEFAULT_ACCENT = "#c8a24e"
+DEFAULT_ACCENT = palette.DEFAULT_ACCENT
 
 
 def _accent_hex(home: Path | None) -> str:
@@ -79,7 +80,7 @@ def _accent_hex(home: Path | None) -> str:
         from alpi import home as home_mod
         resolved = home or home_mod.get_home()
         cfg = config_mod.load(resolved)
-        return (cfg.tui or {}).get("accent", "") or DEFAULT_ACCENT
+        return palette.profile_accent(cfg.tui)
     except Exception:  # noqa: BLE001
         return DEFAULT_ACCENT
 

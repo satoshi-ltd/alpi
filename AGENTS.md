@@ -195,6 +195,28 @@ every ``host.*`` verb the UI calls.
   but the daemon won't be listening on it — clients should compare
   `host_in_use` against `candidates` to detect this and warn.
 
+- **`host.activity.list` is the one "what needs me / what is running" read.**
+  It aggregates `needs_you` (pending approvals + clarifications, each with
+  `session_id`), `running` (`turn` rows from the in-process registry in
+  `alpi/host/activity.py` — engine turns, workgroup dispatch in
+  `service._dispatch_workgroup_turn`, scheduler fires via `scheduled_run` — plus
+  `workgroup` pipeline rows from the cached fold) and `scheduled` (admin-only).
+  It reads memory and stat-keyed caches only, because clients call it on every
+  `activity.changed {profile}`; never add a per-call scan of `runs/` or
+  transcripts. A new long-running source registers with
+  `activity.start_run/end_run` (or `tracked_run`), and a new event that changes
+  what the verb returns joins `activity._TRIGGERS`. `activity.changed` is
+  live-only (`emit(..., history=False)`) so it never evicts replay rows; the read
+  path never writes the phase-change baseline. Running turns use the
+  `can_handle_prompt` rule, the same check as `needs_you`. Chat frames:
+  `tool_start.started_at`, `tool_end.duration_s`, and one `reasoning_done
+  {seconds}` per reasoning span (consecutive deltas closed by the next tool
+  call, text delta or step end); `seconds` is time spent reasoning — the first
+  span of a step counts from the model call (so it matches the stored
+  `reasoned_s`), later spans in the same step from their own first delta.
+  `session_changed.in_flight` is true only for the in-flight stub save; a
+  crashed chat turn still closes with `in_flight: false`.
+
 - **Session ownership is `(connection_id, device_id)`, gated by the
   connection's `session_scope`.** `Session` persists both ids; every host verb
   that lists, reads, continues, cancels or deletes a session goes through

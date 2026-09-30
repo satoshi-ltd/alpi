@@ -419,16 +419,16 @@ retention:
 ### TUI
 
 alpi's TUI is built on [Textual](https://textual.textualize.io/) and is
-the primary interactive surface. Replies stream into a Markdown widget, every
-tool call renders as a compact card with its live state and duration,
-reasoning models show their thinking inline, and the layout collapses labels
-below 60 columns. `tui.accent` recolours highlights and the profile name;
-`tui.theme` picks dark or light.
+the primary interactive surface. Replies stream in and settle as Markdown;
+each turn's tool calls collapse into one `N steps · Xs` row that opens to
+per-call cards, reasoning collapses into a `Thought for Xs` row, and the
+layout collapses labels below 60 columns. `tui.accent` recolours highlights
+and the profile name; `tui.theme` picks dark or light.
 
 **What the top bar shows (left to right):**
 
 ```
-alpi <version>  │  profile <name> <size>  │  [sandbox|offline]  │  workspace <path>
+alpi <version>  │  profile <name> <size>  │  workspace <path>
 ```
 
 - `<size>` is the total disk footprint of the active profile home dir
@@ -437,12 +437,14 @@ alpi <version>  │  profile <name> <size>  │  [sandbox|offline]  │  workspa
   model. For the default profile the `profiles/` subtree is excluded
   so it doesn't conflate with sibling profiles. Hidden in narrow mode
   (< 60 columns).
-- The sandbox segment shows `sandbox` when
-  `tools.terminal.sandbox=true` and `tools.terminal.allow_network=true`;
-  it switches to `offline` when the network is locked (see sandbox
-  knobs above). Hidden when sandbox is off.
 - Workspace shows the resolved workspace path, or `not set` in error
   colour when no workspace is configured and alpi falls back to cwd.
+
+**What the status line shows (bottom):** model · context use · session
+cost · daily budget · `sandbox` (or `sandbox · offline` when
+`tools.terminal.allow_network=false`) · unread inbox items · prompts
+waiting on you (this chat plus the daemon's), then key hints for the
+current context. Hints drop first when the terminal is narrow.
 
 **Config knobs (`tui.*`):**
 
@@ -451,7 +453,7 @@ alpi <version>  │  profile <name> <size>  │  [sandbox|offline]  │  workspa
 | `tui.show_cost` | `true` | bool | next session |
 | `tui.show_tokens` | `true` | bool | next session |
 | `tui.show_reasoning` | `true` | bool | next session |
-| `tui.accent` | `#c8a24e` | CSS color (hex / named / rgb) | next session |
+| `tui.accent` | `#f0b447` (`#8a5a0a` in light mode) | CSS color (hex / named / rgb) | next session |
 | `tui.theme` | `dark` | `dark` \| `light` | next session |
 | `tui.auto_resume` | `false` | bool | next launch |
 
@@ -461,17 +463,13 @@ TUI to start a fresh thread without changing the config. The flag does
 not affect `alpi chat --once` (scripts and scheduled jobs always start
 clean) or explicit `-c` usage (still an override).
 
-`tui.show_reasoning` controls two channels of model-thinking output:
+`tui.show_reasoning` controls the collapsed `Thought for Xs` row each
+turn gets: it holds the model's streamed chain-of-thought (DeepSeek-R1,
+OpenAI o-series, Claude extended thinking) together with any prose the
+model wrote between tool calls, and opens on click or `Ctrl+O`. While the
+model thinks, the spinner reads `Thinking…` either way.
 
-1. **Inter-tool prose** — the dim `» …` line that appears above a
-   tool card with whatever text the model emitted between tool
-   calls.
-2. **Streamed chain-of-thought** — for reasoning models
-   (DeepSeek-R1, OpenAI o-series, Claude extended thinking), the
-   tail of `reasoning_content` scrolls live inside the
-   `thinking…` indicator.
-
-When `false`, both are hidden from the screen. The reasoning is
+When `false`, the row is hidden from the screen. The reasoning is
 **still persisted** to the session file (`sessions/*.json`) so that
 re-enabling the flag later brings it back on replay, and so that
 debug inspection (`cat sessions/<id>.json`) always has the full

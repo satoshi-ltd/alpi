@@ -183,6 +183,14 @@ def _relay_fallback(peer: str) -> str:
     return f"I can only answer using '{peer}' and couldn't consult it for this. Please try again."
 
 
+def _end_activity(run_context: Any) -> None:
+    try:
+        from alpi.host import activity
+        activity.end_run(run_context.profile, run_context.run_id)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _unattended() -> bool:
     """No live observer, so replaying already-streamed text costs nothing and a transient stall stays retryable."""
     return bool(os.environ.get("ALPI_SCHEDULE_CHILD") or os.environ.get("ALPI_WORKGROUP_DISPATCH"))
@@ -217,6 +225,7 @@ class Engine:
         self.interrupt_requested: bool = False
         self.active_run_id: str = ""
         self.last_run_id: str = ""
+        self.turn_in_flight: bool = False
         # Serialize turns so concurrent runs do not race on session state.
         self._turn_lock = threading.Lock()
         # Post-turn memory reviewer: counter resets when the daemon fires.
@@ -388,6 +397,8 @@ class Engine:
         for server_pid in _live_mcp_pids():
             runs_mod.record_child(run_context, server_pid)
         runs_mod.register_active(run_context, self)
+        self.turn_in_flight = True
+        self._track_activity(run_context, user_text)
 
         saw_error = False
         saw_final = False
@@ -429,9 +440,31 @@ class Engine:
             raise
         finally:
             self.active_run_id = ""
+            self.turn_in_flight = False
             runs_mod.unregister_active(run_context)
+            _end_activity(run_context)
             reset_active_session(session_token)
             reset_active_home(home_token)
+
+    def _track_activity(self, run_context: Any, user_text: str) -> None:
+        try:
+            from alpi.host import activity
+            turns = getattr(self.session, "turns", None) or []
+            first_user = getattr(turns[0], "user", "") if turns else ""
+            activity.start_run(
+                run_context.profile, run_context.run_id,
+                session_id=self.session.id,
+                title=activity.title_of(first_user or user_text),
+                source=(
+                    "delegate" if self.connection_context.source == "local-delegate"
+                    else "chat" if run_context.source == "user"
+                    else run_context.source
+                ),
+                connection_id=getattr(self.session, "connection_id", run_context.connection_id),
+                device_id=getattr(self.session, "device_id", run_context.device_id),
+            )
+        except Exception:  # noqa: BLE001
+            pass
 
     def _note_cost_trail(
         self, *, cost_source: Any = None, provider: Any = None, generation_id: Any = None,
@@ -1940,6 +1973,7 @@ class Engine:
                         "subdir": self.session.subdir,
                         "connection_id": self.session.connection_id,
                         "device_id": self.session.device_id,
+                        "in_flight": bool(getattr(self, "turn_in_flight", False)),
                     },
                 )
             except Exception:  # noqa: BLE001

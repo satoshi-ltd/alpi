@@ -204,6 +204,7 @@ _SCOPE_FREE_METHODS = frozenset({
     "host.events.history",
     "host.approval.pending",
     "host.clarification.pending",
+    "host.activity.list",
     "host.approval.respond",
     "host.connections.register_device",
     "host.connections.add_device",
@@ -1255,6 +1256,14 @@ def _filter_payload_by_scope(
                 w for w in wg["workgroups"]
                 if isinstance(w, dict) and w.get("profile") in scope
             ]
+    elif method == "host.activity.list":
+        for section in ("needs_you", "running", "scheduled"):
+            rows = result.get(section)
+            if isinstance(rows, list):
+                result[section] = [
+                    r for r in rows
+                    if isinstance(r, dict) and r.get("profile") in scope
+                ]
     elif method in ("host.approval.pending", "host.clarification.pending"):
         rows = result.get("requests")
         if isinstance(rows, list):

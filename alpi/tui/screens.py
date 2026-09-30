@@ -1,7 +1,6 @@
-"""Floating chat-overlay panels for /help, /memory, /tools, /cost, /skills."""
-
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 from textual.app import ComposeResult
@@ -128,14 +127,31 @@ class FloatingPanel(Container):
     """
 
     panel_title: str = ""
+    panel_hint: str = "esc or click outside to close"
 
     def compose(self) -> ComposeResult:
         with Container(classes="panel-frame"):
             with Horizontal(classes="panel-header"):
                 yield Static(self.panel_title, classes="panel-title")
-                yield Static("esc or click outside to close", classes="panel-hint")
+                yield Static(self.hint_text(), classes="panel-hint")
             with Container(classes="panel-content"):
                 yield from self.compose_body()
+
+    def hint_text(self) -> str:
+        return self.panel_hint
+
+    def set_hint(self, text: str) -> None:
+        try:
+            self.query_one(".panel-hint", Static).update(text)
+        except Exception:  # noqa: BLE001
+            pass
+
+    def set_title(self, text: str) -> None:
+        self.panel_title = text
+        try:
+            self.query_one(".panel-title", Static).update(text)
+        except Exception:  # noqa: BLE001
+            pass
 
     def compose_body(self) -> ComposeResult:
         return
@@ -145,50 +161,19 @@ class FloatingPanel(Container):
 class HelpPanel(FloatingPanel):
     panel_title = "/help"
 
-    _COMMANDS: list[tuple[str, str]] = [
-        ("help",      "this panel"),
-        ("memory",    "show USER.md, MEMORY.md and AGENT.md"),
-        ("tools",     "list available tools"),
-        ("mcps",      "list running MCP servers"),
-        ("status",    "session snapshot — model, turns, tokens, cost"),
-        ("skills",    "list installed skills"),
-        ("peers",     "list ALP peers; pick one to drop @id into the input"),
-        ("sessions",  "list saved sessions; resume or delete one"),
-        ("outputs",   "outputs inbox — notifications, cron replies, files"),
-        ("diff",      "what changed in this profile in the last 24h"),
-        ("attach",    "attach an image/PDF to the next message: /attach <path>"),
-        ("attachments", "list pending attachments"),
-        ("clear-attachments", "drop pending attachments"),
-        ("clear",     "clear chat history (keeps session)"),
-        ("new",       "start a fresh session (new id, history wiped)"),
-        ("compact",   "force auto-compact now (recovery)"),
-        ("model",     "change model / provider"),
-        ("exit",      "quit"),
-    ]
-
-    _KEYS: list[tuple[str, str]] = [
-        ("Enter",  "send message"),
-        ("Ctrl+C", "quit"),
-        ("Ctrl+L", "clear chat"),
-        ("Ctrl+Y", "copy last assistant reply"),
-        ("Esc",    "close panel"),
-    ]
-
     def compose_body(self) -> ComposeResult:
+        from alpi.tui.commands import COMMANDS, KEYS
         from alpi.tui.list_row import build_options, name_width, row_text
 
-        cmd_items = [(k, f"/{k}", desc) for k, desc in self._COMMANDS]
-        # No active key: /help is a palette, nothing is selected.
-        # with_marker=False kills the 2-char prefix so rows align with the
-        # section header instead of sitting indented inside the highlight bar.
+        cmd_items = [(c.name, c.label, c.summary) for c in COMMANDS]
         options = build_options(cmd_items, with_marker=False)
         yield Static("slash commands — select to run", classes="help-section")
         yield OptionList(*options, id="help-commands", compact=True)
 
-        key_width = name_width([k for k, _ in self._KEYS])
-        yield Static("keybindings", classes="help-section")
+        key_width = name_width([k for k, _ in KEYS])
+        yield Static("keys", classes="help-section")
         with VerticalScroll(id="help-keys"):
-            for key, desc in self._KEYS:
+            for key, desc in KEYS:
                 yield Static(
                     row_text(key, desc, width=key_width, with_marker=False),
                     classes="list-row",
@@ -208,12 +193,16 @@ class HelpPanel(FloatingPanel):
     def on_option_list_option_selected(
         self, event: OptionList.OptionSelected,
     ) -> None:
-        cmd = event.option.id
-        if not cmd:
+        from alpi.tui.commands import lookup
+
+        cmd = lookup(event.option.id or "")
+        if cmd is None:
             return
         self.remove()
-        # Defer so the panel is fully gone before the next one mounts.
-        self.app.call_after_refresh(self.app._handle_slash, f"/{cmd}")
+        if cmd.requires_arg:
+            self.app.call_after_refresh(self.app._prefill_input, f"/{cmd.name} ")
+            return
+        self.app.call_after_refresh(self.app._handle_slash, f"/{cmd.name}")
 
 
 class MemoryPanel(FloatingPanel):
@@ -493,10 +482,9 @@ class PeersPanel(FloatingPanel):
         if not peer_id:
             return
         try:
-            from textual.widgets import Input
-            inp = self.app.query_one(Input)
+            from alpi.tui.widgets import ChatInput
+            inp = self.app.query_one(ChatInput)
             inp.value = f"@{peer_id} "
-            inp.cursor_position = len(inp.value)
             inp.focus()
         except Exception:  # noqa: BLE001
             pass
@@ -764,9 +752,97 @@ def _read_frontmatter(path: Path) -> dict:
     return meta
 
 
-class ApprovalPanel(FloatingPanel):
-    panel_title = "⚠ approval required"
+def fmt_remaining(seconds: float) -> str:
+    n = max(0, int(seconds + 0.999))
+    if n < 60:
+        return f"{n}s"
+    m, r = divmod(n, 60)
+    return f"{m}m {r:02d}s"
+
+
+class PromptPanel(FloatingPanel):
     DEFAULT_CSS = _LIST_PANEL_CSS
+    cancel_verb = "deny"
+
+    def __init__(self, on_choice, *, timeout_s: float | None = None, blocking: bool = True,
+                 cancel_choice: str = "deny", timeout_choice: str = "deny") -> None:
+        super().__init__()
+        self._on_choice = on_choice
+        self.blocking = blocking
+        self.cancel_choice = cancel_choice
+        self.timeout_choice = timeout_choice
+        self.deadline = None if timeout_s is None else time.monotonic() + max(0.0, float(timeout_s))
+        self.resolved = False
+        self.expired = False
+        self.on_finished = None
+        self._ticker = None
+
+    def remaining_s(self) -> float | None:
+        if self.deadline is None:
+            return None
+        return max(0.0, self.deadline - time.monotonic())
+
+    def hint_text(self) -> str:
+        remaining = self.remaining_s()
+        if not self.blocking:
+            if remaining is None:
+                return "esc back"
+            return "esc back · expired" if remaining <= 0 else f"esc back · expires in {fmt_remaining(remaining)}"
+        verb = self.cancel_verb
+        if remaining is None:
+            return f"esc {verb}"
+        return f"esc {verb} · auto-{verb} in {fmt_remaining(remaining)}"
+
+    def on_mount(self) -> None:
+        self.call_after_refresh(self._focus_first)
+        self._ticker = self.set_interval(1.0, self._tick)
+
+    def _tick(self) -> None:
+        self.set_hint(self.hint_text())
+
+    def _focus_first(self) -> None:
+        try:
+            self.query_one(OptionList).focus()
+        except Exception:  # noqa: BLE001
+            pass
+
+    def resolve(self, choice: str) -> bool:
+        if self.resolved:
+            return False
+        self.resolved = True
+        if self._ticker is not None:
+            self._ticker.stop()
+            self._ticker = None
+        try:
+            self._on_choice(choice)
+        finally:
+            if self.on_finished is not None:
+                self.on_finished(self)
+            elif self.is_mounted:
+                self.remove()
+        return True
+
+    def cancel(self) -> bool:
+        return self.resolve(self.cancel_choice)
+
+    def expire(self) -> bool:
+        if self.resolved:
+            return False
+        self.expired = True
+        return self.resolve(self.timeout_choice)
+
+    @property
+    def subject(self) -> str:
+        return "prompt"
+
+    def expiry_note(self, shown: bool) -> str:
+        when = "timed out" if shown else "timed out while queued behind another prompt"
+        return f"{self.subject} {when} — auto-{self.cancel_verb}"
+
+
+class ApprovalPanel(PromptPanel):
+    panel_title = "⚠ approval required"
+    cancel_verb = "deny"
 
     _OPTIONS: list[tuple[str, str, str]] = [
         ("once",    "Once",    "approve just this one call"),
@@ -775,41 +851,46 @@ class ApprovalPanel(FloatingPanel):
         ("deny",    "Deny",    "refuse"),
     ]
 
-    def __init__(self, command: str, pattern: str, severity: str,
-                 on_choice) -> None:
-        super().__init__()
+    def __init__(self, command: str, pattern: str, severity: str, on_choice, *,
+                 cwd: str | None = None, profile: str = "", timeout_s: float | None = None,
+                 blocking: bool = True) -> None:
+        super().__init__(on_choice, timeout_s=timeout_s, blocking=blocking,
+                         cancel_choice="deny", timeout_choice="deny")
         self._command = command
         self._pattern = pattern
         self._severity = severity
-        self._on_choice = on_choice
-        self.panel_title = f"⚠ {severity.upper()} · {pattern}"
+        self._cwd = cwd
+        head = f"⚠ {severity.upper()}" if severity else "⚠ approval"
+        if pattern:
+            head += f" · {pattern}"
+        if profile:
+            head += f" · {profile}"
+        self.panel_title = head
+
+    @property
+    def subject(self) -> str:
+        from alpi.tool_hints import truncate
+        return f"approval for `{truncate(self._command, 60)}`"
 
     def compose_body(self) -> ComposeResult:
         from alpi.tui.list_row import build_options
         yield Static(self._command, classes="entry-desc")
+        if self._cwd:
+            yield Static(f"in {self._cwd.replace(str(Path.home()), '~')}", classes="entry-desc")
         accent = self.app.theme_variables.get("accent")
         options = build_options(list(self._OPTIONS), accent=accent)
         yield OptionList(*options, id="approval-options", compact=True)
 
-    def on_mount(self) -> None:
-        self.call_after_refresh(self._focus_list)
-
-    def _focus_list(self) -> None:
-        try:
-            self.query_one(OptionList).focus()
-        except Exception:  # noqa: BLE001
-            pass
-
     def on_option_list_option_selected(
         self, event: OptionList.OptionSelected,
     ) -> None:
-        choice = event.option.id or "deny"
-        self.remove()
-        self._on_choice(choice)
+        event.stop()
+        self.resolve(event.option.id or "deny")
 
 
-class ClarificationPanel(FloatingPanel):
+class ClarificationPanel(PromptPanel):
     panel_title = "Question"
+    cancel_verb = "cancel"
     DEFAULT_CSS = _LIST_PANEL_CSS + """
     ClarificationPanel #clarify-other {
         margin-top: 1;
@@ -825,16 +906,28 @@ class ClarificationPanel(FloatingPanel):
         allow_other: bool,
         multi: bool,
         on_choice,
+        *,
+        timeout_s: float | None = None,
+        blocking: bool = True,
+        cancel_choice: str = "",
+        profile: str = "",
+        encode_multi=None,
     ) -> None:
-        super().__init__()
+        super().__init__(on_choice, timeout_s=timeout_s, blocking=blocking,
+                         cancel_choice=cancel_choice, timeout_choice="")
         self._question = question
         self._choices = choices
         self._allow_other = bool(allow_other) and not bool(multi)
         self._multi = bool(multi)
-        self._on_choice = on_choice
+        self._encode_multi = encode_multi or (lambda picks: ", ".join(picks))
         self._awaiting_input = False
         self._input_purpose = ""
-        self.panel_title = "Question"
+        self.panel_title = f"Question · {profile}" if profile else "Question"
+
+    @property
+    def subject(self) -> str:
+        from alpi.tool_hints import truncate
+        return f"question “{truncate(self._question, 60)}”"
 
     def compose_body(self) -> ComposeResult:
         from alpi.tui.list_row import build_options
@@ -857,6 +950,12 @@ class ClarificationPanel(FloatingPanel):
                 id="clarify-other",
             )
             return
+        if not self._choices and self._allow_other:
+            from textual.widgets import Input
+            self._awaiting_input = True
+            self._input_purpose = "other"
+            yield Input(placeholder="Type your answer, press Enter…", id="clarify-other")
+            return
         accent = self.app.theme_variables.get("accent")
         items: list[tuple[str, str, str]] = []
         for c in self._choices:
@@ -869,12 +968,9 @@ class ClarificationPanel(FloatingPanel):
         options = build_options(items, accent=accent)
         yield OptionList(*options, id="clarify-options", compact=True)
 
-    def on_mount(self) -> None:
-        self.call_after_refresh(self._focus_first)
-
     def _focus_first(self) -> None:
         try:
-            if self._multi:
+            if self._awaiting_input:
                 from textual.widgets import Input
                 self.query_one(Input).focus()
             else:
@@ -885,12 +981,12 @@ class ClarificationPanel(FloatingPanel):
     def on_option_list_option_selected(
         self, event: OptionList.OptionSelected,
     ) -> None:
+        event.stop()
         choice = event.option.id or ""
         if choice == self._OTHER_KEY:
             self._show_other_input()
             return
-        self.remove()
-        self._on_choice(choice)
+        self.resolve(choice)
 
     def _show_other_input(self) -> None:
         from textual.widgets import Input
@@ -908,23 +1004,23 @@ class ClarificationPanel(FloatingPanel):
         inp.focus()
 
     def on_input_submitted(self, event) -> None:
+        event.stop()
         if not self._awaiting_input:
             return
         text = (event.value or "").strip()
         if self._input_purpose == "multi":
             picks = self._resolve_multi(text)
             if not picks:
-                # Don't close — let the user retry (mirrors the inline TUI reprompt).
                 self._show_multi_error(
                     "No valid picks recognised. Use the numbers shown or the "
                     "labels exactly; separate with commas."
                 )
                 return
-            self.remove()
-            self._on_choice(", ".join(picks))
+            self.resolve(self._encode_multi(picks))
             return
-        self.remove()
-        self._on_choice(text)
+        if not text:
+            return
+        self.resolve(text)
 
     def _show_multi_error(self, message: str) -> None:
         from textual.widgets import Input

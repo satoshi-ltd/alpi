@@ -25,7 +25,7 @@ import threading
 import time
 from collections import deque
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from alpi import home as home_mod
 from alpi.host import server as host_server
@@ -34,6 +34,7 @@ from alpi.host import server as host_server
 _lock = threading.Lock()
 _subscribers: set[tuple[asyncio.Queue, frozenset[str] | None]] = set()
 _loop_ref: asyncio.AbstractEventLoop | None = None
+_listeners: list[Callable[[str, dict[str, Any]], None]] = []
 
 # Per-process monotone seq; clients pivot on it via `after_seq`.
 _seq_lock = threading.Lock()
@@ -178,25 +179,45 @@ def register(server: host_server.Server) -> None:
     server.register("host.events.history", _history_handler)
 
 
-def emit(kind: str, data: dict[str, Any] | None = None) -> None:
+def add_listener(fn: Callable[[str, dict[str, Any]], None]) -> None:
+    with _lock:
+        if fn not in _listeners:
+            _listeners.append(fn)
+
+
+def remove_listener(fn: Callable[[str, dict[str, Any]], None]) -> None:
+    with _lock:
+        if fn in _listeners:
+            _listeners.remove(fn)
+
+
+def _notify_listeners(kind: str, data: dict[str, Any]) -> None:
+    with _lock:
+        listeners = list(_listeners)
+    for fn in listeners:
+        try:
+            fn(kind, data)
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def emit(kind: str, data: dict[str, Any] | None = None, *, history: bool = True) -> None:
     payload = {
         "event": kind,
         "data": data or {},
         "at": time.time(),
         "seq": _next_seq(),
     }
-    _append_history(payload)
+    if history:
+        _append_history(payload)
     with _lock:
-        if not _subscribers or _loop_ref is None:
-            return
         loop = _loop_ref
         targets = [
             q for (q, kinds) in _subscribers if kinds is None or kind in kinds
-        ]
-    if not targets:
-        return
+        ] if loop is not None else []
     for q in targets:
         loop.call_soon_threadsafe(_safe_put, q, payload)
+    _notify_listeners(kind, payload["data"])
 
 
 def _safe_put(queue: asyncio.Queue, payload: dict[str, Any]) -> None:
@@ -279,4 +300,4 @@ async def _history_handler(
     return {"events": items, "next_seq": next_seq}
 
 
-__all__ = ["register", "emit"]
+__all__ = ["add_listener", "emit", "register", "remove_listener"]

@@ -136,7 +136,7 @@ Per-connection profile scope:
   `host.version`, `host.profiles.list`, `host.profile.summaries`,
   `host.workgroups.list`, `host.tools.list`, `host.events.subscribe`,
   `host.events.history`, `host.approval.pending`,
-  `host.clarification.pending`, `host.approval.respond`,
+  `host.clarification.pending`, `host.activity.list`, `host.approval.respond`,
   `host.clarification.respond`. Their list payloads are scope-filtered
   before dispatch; event frames with an out-of-scope `data.profile` are
   dropped.
