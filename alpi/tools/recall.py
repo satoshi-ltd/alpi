@@ -13,6 +13,7 @@ from alpi.tools.base import Tool, ToolResult
 from alpi.tools.workspace import EmbedderMismatch, RebuildAborted, _chunk_lines, _vec_blob
 
 _EMBED_BATCH = 64
+UNVERIFIED_DEVICE = "?unverified"
 _MAX_SNIPPET = 600
 
 
@@ -117,28 +118,41 @@ def _migrate_connection_id(conn: sqlite3.Connection) -> None:
         _add_column(conn, table, "connection_id TEXT NOT NULL DEFAULT 'host'")
 
 
-def _session_device(row: sqlite3.Row, sessions_dir: Path) -> str:
+def _session_device(row: sqlite3.Row, sessions_dir: Path) -> str | None:
     for path in (Path(row["source_path"]), sessions_dir / f"{row['session_id']}.json"):
         try:
             return str(json.loads(path.read_text()).get("device_id") or "")
         except Exception:  # noqa: BLE001
             continue
-    return ""
+    return None
 
 
 def _migrate_device_id(conn: sqlite3.Connection) -> None:
     for table in ("session_files", "session_chunks"):
         _add_column(conn, table, "device_id TEXT NOT NULL DEFAULT ''")
-    # The flag (blank-row count) commits with the backfill, so an interrupted pass or rows from an older alpi rerun it.
-    if _get_meta(conn, "device_backfill") == _blank_devices(conn):
+    # The flag (blank-row count) commits with the backfill, so an interrupted pass or rows from an older alpi rerun it; unverified rows always retry but write only when a file has become readable.
+    flag, blank = _get_meta(conn, "device_backfill"), _blank_devices(conn)
+    if flag == blank and not _unverified_devices(conn):
         return
     main = next(r for r in conn.execute("PRAGMA database_list").fetchall() if r["name"] == "main")
     sessions_dir = Path(main["file"]).parent / "sessions"
-    for row in conn.execute("SELECT session_id, source_path FROM session_files WHERE device_id = ''").fetchall():
+    where = "device_id = ?" if flag == blank else "device_id IN ('', ?)"
+    for row in conn.execute(
+        f"SELECT session_id, source_path, device_id FROM session_files WHERE {where}", (UNVERIFIED_DEVICE,),
+    ).fetchall():
         device = _session_device(row, sessions_dir)
-        if device:
-            _set_owner(conn, row["session_id"], None, device)
-    _set_meta(conn, "device_backfill", _blank_devices(conn))
+        target = UNVERIFIED_DEVICE if device is None else device
+        if target != row["device_id"]:
+            _set_owner(conn, row["session_id"], None, target)
+    settled = _blank_devices(conn)
+    if flag != settled:
+        _set_meta(conn, "device_backfill", settled)
+
+
+def _unverified_devices(conn: sqlite3.Connection) -> int:
+    return conn.execute(
+        "SELECT COUNT(*) AS n FROM session_files WHERE device_id = ?", (UNVERIFIED_DEVICE,),
+    ).fetchone()["n"]
 
 
 def _blank_devices(conn: sqlite3.Connection) -> str:

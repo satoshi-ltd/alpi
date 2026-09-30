@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.16.7 — 2026-09-30 — recall hides sessions of unknown owner
+
+- **Semantic recall no longer shares a session whose owner it could not read.** When an old index
+  was upgraded and a session file was unreadable at that moment, its fragments counted as shared
+  and any device of the connection could recall them, and the check never ran again. Such
+  sessions are now hidden from every device on a connection whose sessions are private to each
+  device, and are rechecked on every query until the file is readable.
+
 ## v0.16.6 — 2026-09-30 — dead sockets stop blocking a device
 
 - **A device is no longer locked out by its own dead connections.** After a network change or a

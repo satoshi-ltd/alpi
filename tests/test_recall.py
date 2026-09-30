@@ -561,6 +561,59 @@ def test_the_backfill_finds_a_session_whose_indexed_path_moved(tmp_home, stub_em
     assert _recall_as(ConnectionContext("c1", "d1", "remote", "member", session_scope="device")) == {"s_d1", "s_shared"}
 
 
+def test_an_unreadable_owner_is_hidden_until_the_file_is_repaired(tmp_home, stub_embedder):
+    from alpi.core.store import open_store
+    from alpi.host.connection_context import ConnectionContext
+    _device_sessions(tmp_home)
+    rc.index_sessions(tmp_home)
+    conn = open_store(tmp_home)
+    for table in ("session_files", "session_chunks"):
+        conn.execute(f"ALTER TABLE {table} DROP COLUMN device_id")
+    conn.execute("DELETE FROM session_meta WHERE key = 'device_backfill'")
+    conn.commit()
+    conn.close()
+    d2_file = tmp_home / "sessions" / "s_d2.json"
+    original = d2_file.read_text()
+    d2_file.write_text("{ not json")
+    d1 = ConnectionContext("c1", "d1", "remote", "member", session_scope="device")
+    d2 = ConnectionContext("c1", "d2", "remote", "member", session_scope="device")
+
+    assert _recall_as(d1) == {"s_d1", "s_shared"}
+    assert _recall_as(d2) == {"s_shared"}
+
+    d2_file.write_text(original)
+
+    assert _recall_as(d2) == {"s_d2", "s_shared"}
+    assert _recall_as(d1) == {"s_d1", "s_shared"}
+
+
+def test_a_permanently_unreadable_owner_adds_no_writes_to_a_query(tmp_home, stub_embedder):
+    from alpi.core.store import open_store
+    from alpi.host.connection_context import ConnectionContext
+    _device_sessions(tmp_home)
+    rc.index_sessions(tmp_home)
+    conn = open_store(tmp_home)
+    for table in ("session_files", "session_chunks"):
+        conn.execute(f"ALTER TABLE {table} DROP COLUMN device_id")
+    conn.execute("DELETE FROM session_meta WHERE key = 'device_backfill'")
+    conn.commit()
+    conn.close()
+    (tmp_home / "sessions" / "s_d2.json").write_text("{ not json")
+    d1 = ConnectionContext("c1", "d1", "remote", "member", session_scope="device")
+    assert _recall_as(d1) == {"s_d1", "s_shared"}
+
+    writer = open_store(tmp_home)
+    writer.execute("PRAGMA busy_timeout = 0")
+    writer.execute("BEGIN IMMEDIATE")
+    try:
+        writer_holds_the_lock = _recall_as(d1)
+    finally:
+        writer.rollback()
+        writer.close()
+
+    assert writer_holds_the_lock == {"s_d1", "s_shared"}
+
+
 def test_a_device_whose_chunks_sit_past_the_vec_limit_does_not_crash(tmp_home, stub_embedder):
     sdir = tmp_home / "sessions"
     sdir.mkdir(parents=True, exist_ok=True)
