@@ -159,6 +159,7 @@ export function UsageChart({ days = [], accent, capLine = null, total30 = null, 
             return (
               <Pressable
                 key={d.iso}
+                accessibilityRole="button"
                 accessibilityLabel={`${d.day} usage`}
                 onPress={() => setSelected(hasData ? (selected === i ? null : i) : null)}
                 style={{ flex: 1, height: '100%', justifyContent: 'flex-end', alignItems: 'center' }}
@@ -193,8 +194,8 @@ export function UsageChart({ days = [], accent, capLine = null, total30 = null, 
                 flex: 1,
                 textAlign: 'center',
                 fontFamily: d.today ? fonts.monoSemibold : fonts.mono,
-                fontSize: fontSizes.xxs,
-                lineHeight: fontSizes.xxs * lineHeights.tight,
+                fontSize: fontSizes.xs,
+                lineHeight: fontSizes.xs * lineHeights.tight,
                 color: d.today ? tint : colors.ink3,
               }}
             >
@@ -210,7 +211,7 @@ export function UsageChart({ days = [], accent, capLine = null, total30 = null, 
           accessibilityLabel="Selected day"
           style={{ flexDirection: 'row', alignItems: 'baseline', gap: space.s4, marginTop: space.s5, flexWrap: 'wrap' }}
         >
-          <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.label, color: colors.ink4 }}>
+          <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>
             {picked.day}
             {picked.today ? ' · today' : ''}
           </Text>

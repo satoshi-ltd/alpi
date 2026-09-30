@@ -74,6 +74,8 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
       const next = { ...cur };
       if (chunk) next.assistant = (cur.assistant ?? '') + chunk;
       if (rchunk) next.reasoning = (cur.reasoning ?? '') + rchunk;
+      if (chunk) next.reasoningOpen = false;
+      else if (rchunk) next.reasoningOpen = true;
       return next;
     });
   }, [writeTurn]);
@@ -195,12 +197,12 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
               name: frame.name,
               args: frame.args ?? frame.preview,
               ok: null,
-              at: Number.isFinite(ts) ? ts : Date.now() / 1000,
+              at: Number.isFinite(frame.started_at) ? frame.started_at : Number.isFinite(ts) ? ts : Date.now() / 1000,
             };
             if (segment) next.reasoning = segment;
             if (existing >= 0) tools[existing] = { ...tools[existing], ...next };
             else tools.push(next);
-            return { ...cur, tools, reasoning: '', assistant: '' };
+            return { ...cur, tools, reasoning: '', assistant: '', reasoningOpen: false };
           });
         } else if (event === 'tool_state') {
           writeTurn((cur) => {
@@ -216,11 +218,26 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
           writeTurn((cur) => {
             const tools = (cur.tools ?? []).map((t) =>
               t.tool_id === frame.tool_id
-                ? { ...t, ok: frame.ok ?? true, output: frame.output, duration_s: Math.max(0, endTs - (t.at ?? endTs)) }
+                ? {
+                    ...t,
+                    ok: frame.ok ?? true,
+                    output: frame.output,
+                    duration_s: Number.isFinite(frame.duration_s) ? frame.duration_s : Math.max(0, endTs - (t.at ?? endTs)),
+                  }
                 : t,
             );
             return { ...cur, tools };
           });
+        } else if (event === 'reasoning_done') {
+          const pendingReasoning = reasoningBufRef.current;
+          reasoningBufRef.current = '';
+          const seconds = Number(frame.seconds);
+          writeTurn((cur) => ({
+            ...cur,
+            reasoning: `${cur.reasoning ?? ''}${pendingReasoning}`,
+            reasoned_s: (cur.reasoned_s ?? 0) + (Number.isFinite(seconds) && seconds > 0 ? seconds : 0),
+            reasoningOpen: false,
+          }));
         } else if (event === 'reply') {
           deltaBufRef.current = '';
           reasoningBufRef.current = '';
@@ -247,7 +264,7 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
             cancelAnimationFrame(rafRef.current);
             rafRef.current = null;
           }
-          writeTurn((cur) => ({ ...cur, assistant: '', reasoning: '', tools: [], error: null }));
+          writeTurn((cur) => ({ ...cur, assistant: '', reasoning: '', reasoned_s: 0, reasoningOpen: false, tools: [], error: null }));
           let sawDone = false;
           for (const rec of records) {
             const f = rec?.frame ?? rec;
@@ -302,7 +319,7 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
 
       const handle = callStream(params.method ?? 'host.chat.send', params, {
         cancelMethod: 'host.chat.cancel',
-        // Daemon emit() in alpi/host/chat.py: tool_start | tool_state | tool_end | assistant_delta | reply | done | heartbeat | error | interrupted | reasoning_delta | auto_compact.
+        // Daemon emit() in alpi/host/chat.py: tool_start | tool_state | tool_end | assistant_delta | reply | done | heartbeat | error | interrupted | reasoning_delta | reasoning_done | auto_compact.
         onFrame: (frame) => {
           if (requestIdRef.current !== requestId) return;
           applyFrame(frame);

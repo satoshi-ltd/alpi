@@ -46,6 +46,17 @@ export function textScaleLabel(value) {
 export function scaleFontSizes(value) {
   const scale = clampTextScale(value);
   const scaled = {};
-  for (const [key, size] of Object.entries(fontSizes)) scaled[key] = Math.round(size * scale);
+  let prev = 0;
+  for (const [key, size] of Object.entries(fontSizes)) {
+    prev = Math.max(Math.round(size * scale), prev + 1);
+    scaled[key] = prev;
+  }
   return scaled;
+}
+
+export const CHROME_FONT_CAP = 1.3;
+
+// RN applies the OS font scale on top of the in-app step, so fixed-height chrome caps the product of both, not the OS factor alone.
+export function chromeFontMultiplier(value) {
+  return Math.max(1, CHROME_FONT_CAP / clampTextScale(value));
 }

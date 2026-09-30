@@ -1,20 +1,51 @@
 import { contrastText } from "../../../../common/color.mjs";
 import { useEffect, useRef, useState } from 'react';
-import { Platform, Pressable, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
+import Animated, { useAnimatedKeyboard, useAnimatedStyle } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { lineHeights, radii, space } from '../../theme/tokens';
+import { lineHeights, radii, space, typography } from '../../theme/tokens';
 
 import { Icon } from '../../components/Icon';
 import { CHROME_BTN, COMPOSER_CTRL, COMPOSER_PAD_Y, PANE_PAD_X, tapSlop } from '../../lib/panes';
-import { useKeyboardVisible } from '../../lib/useKeyboardVisible';
 import { useTheme } from '../../theme/ThemeContext';
 import { AttachmentCards } from './AttachmentCards';
+import { sendHaptic } from './chatHaptics';
 import { canComposerSend } from './composerSend';
 import { MentionPopover } from './MentionPopover';
 import { validateTaskShape } from './parseMarkers';
 
 const HAIRLINE = 0.5;
 const SEND_D = 30;
+const CHIP_H = 32;
+
+function ModelChip({ label, onPress, disabled }) {
+  const { colors, fonts, fontSizes } = useTheme();
+  return (
+    <Pressable
+      onPress={disabled ? undefined : onPress}
+      hitSlop={tapSlop(CHIP_H)}
+      accessibilityRole="button"
+      accessibilityLabel={`Model and effort: ${label}`}
+      style={({ pressed }) => ({
+        flexShrink: 1,
+        minWidth: 0,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: space.s2,
+        height: CHIP_H,
+        paddingHorizontal: space.s5,
+        borderRadius: CHIP_H / 2,
+        backgroundColor: pressed ? colors.selected : colors.bgInput,
+      })}
+    >
+      <Icon name="sparkle" size="xs" color={colors.ink3} />
+      <Text numberOfLines={1} style={{ flexShrink: 1, fontFamily: fonts.sans.regular, fontSize: fontSizes.md, color: colors.ink2 }}>
+        {label}
+      </Text>
+      <Icon name="chevron-down" size="xs" color={colors.ink3} />
+    </Pressable>
+  );
+}
 
 export function composerPlaceholder({ offline = false, disabled = false, placeholder }) {
   if (offline) return 'Daemon unreachable — sending paused';
@@ -36,10 +67,15 @@ export function Composer({
   busy = false,
   onStop,
   offline = false,
+  modelChip = null,
 }) {
   const { colors, fonts , fontSizes} = useTheme();
   const insets = useSafeAreaInsets();
-  const keyboardUp = useKeyboardVisible();
+  const keyboard = useAnimatedKeyboard();
+  const bottomInset = insets.bottom;
+  const rideKeyboard = useAnimatedStyle(() => ({
+    paddingBottom: Math.max(COMPOSER_PAD_Y, bottomInset - keyboard.height.value),
+  }));
   const [text, setText] = useState('');
   const [focused, setFocused] = useState(false);
   const lastSeedKeyRef = useRef(seedKey);
@@ -68,9 +104,15 @@ export function Composer({
   const submit = () => {
     if (!canSend) return;
     const trimmed = text.trim();
+    sendHaptic();
     setText('');
     onSend?.(trimmed, attachments);
   };
+  const stop = () => {
+    sendHaptic();
+    onStop?.();
+  };
+  const chatSize = fontSizes[typography.chat.size];
 
   const actionBg = accent ?? colors.ink;
 
@@ -94,7 +136,7 @@ export function Composer({
           <Text
             style={{
               fontFamily: fonts.sans.regular,
-              fontSize: fontSizes.xs,
+              fontSize: fontSizes.sm,
               color: colors.warningText,
             }}
           >
@@ -107,13 +149,16 @@ export function Composer({
           <AttachmentCards items={attachments} onRemove={onRemoveAttachment} variant="composer" />
         </View>
       ) : null}
-      <View
-        style={{
-          paddingHorizontal: PANE_PAD_X,
-          paddingTop: COMPOSER_PAD_Y,
-          paddingBottom: keyboardUp ? COMPOSER_PAD_Y : Math.max(COMPOSER_PAD_Y, insets.bottom),
-          opacity: disabled ? 0.55 : 1,
-        }}
+      <Animated.View
+        style={[
+          {
+            paddingHorizontal: PANE_PAD_X,
+            paddingTop: COMPOSER_PAD_Y,
+            paddingBottom: Math.max(COMPOSER_PAD_Y, insets.bottom),
+            opacity: disabled ? 0.55 : 1,
+          },
+          rideKeyboard,
+        ]}
       >
         <View
           style={{
@@ -137,15 +182,13 @@ export function Composer({
             autoCapitalize="sentences"
             autoCorrect
             includeFontPadding={false}
-            returnKeyType="send"
-            submitBehavior="submit"
-            onSubmitEditing={submit}
+            submitBehavior="newline"
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
             style={{
               fontFamily: fonts.sans.regular,
-              fontSize: fontSizes.lg,
-              lineHeight: fontSizes.lg * lineHeights.normal,
+              fontSize: chatSize,
+              lineHeight: chatSize * lineHeights.normal,
               color: colors.ink,
               maxHeight: 120,
               padding: 0,
@@ -159,15 +202,16 @@ export function Composer({
                 accessibilityLabel="Mention a peer"
                 style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: space.s1, opacity: pressed ? 0.5 : 1 })}
               >
-                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>@</Text>
-                <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3 }}>mention</Text>
+                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink3 }}>@</Text>
+                <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }}>mention</Text>
               </Pressable>
             ) : null}
+            {modelChip ? <ModelChip label={modelChip.label} onPress={modelChip.onPress} disabled={disabled} /> : null}
             <View style={{ flex: 1 }} />
             {onPickAttachment ? (
               <Pressable
                 onPress={disabled ? undefined : onPickAttachment}
-                hitSlop={tapSlop(CHROME_BTN)}
+                hitSlop={{ left: tapSlop(CHROME_BTN), right: tapSlop(CHROME_BTN), top: tapSlop(SEND_D), bottom: tapSlop(SEND_D) }}
                 accessibilityLabel="Attach file"
                 style={({ pressed }) => ({
                   width: CHROME_BTN,
@@ -181,7 +225,7 @@ export function Composer({
               </Pressable>
             ) : null}
             <Pressable
-              onPress={stoppable ? onStop : submit}
+              onPress={stoppable ? stop : submit}
               disabled={!stoppable && !canSend}
               hitSlop={tapSlop(SEND_D)}
               style={({ pressed }) => ({
@@ -203,7 +247,7 @@ export function Composer({
             </Pressable>
           </View>
         </View>
-      </View>
+      </Animated.View>
     </View>
   );
 }

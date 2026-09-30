@@ -426,6 +426,41 @@ describe("useChatSend.send", () => {
     expect(result.current.pendingTurn.tools[0].duration_s).toBeGreaterThanOrEqual(0);
   });
 
+  it("prefers the daemon's started_at and duration_s over local clocks", () => {
+    const { result } = renderHook(() => useChatSend({ profile: "doc" }));
+    act(() => result.current.send("hi"));
+    act(() => lastStreamHandlers.onFrame({ event: "tool_start", tool_id: "t1", name: "terminal", started_at: 1700000000.5 }));
+    expect(result.current.pendingTurn.tools[0].at).toBe(1700000000.5);
+    act(() => lastStreamHandlers.onFrame({ event: "tool_end", tool_id: "t1", ok: false, output: "boom", duration_s: 4.1 }));
+    expect(result.current.pendingTurn.tools[0].duration_s).toBe(4.1);
+    expect(result.current.pendingTurn.tools[0].ok).toBe(false);
+  });
+
+  it("reasoning_done closes the live reasoning and records its seconds", async () => {
+    const { result } = renderHook(() => useChatSend({ profile: "doc" }));
+    act(() => result.current.send("hi"));
+    act(() => lastStreamHandlers.onFrame({ event: "reasoning_delta", text: "Weighing it." }));
+    await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+    expect(result.current.pendingTurn.reasoningOpen).toBe(true);
+    act(() => lastStreamHandlers.onFrame({ event: "reasoning_delta", text: " Done." }));
+    act(() => lastStreamHandlers.onFrame({ event: "reasoning_done", seconds: 6.8 }));
+    await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+    expect(result.current.pendingTurn.reasoningOpen).toBe(false);
+    expect(result.current.pendingTurn.reasoning).toBe("Weighing it. Done.");
+    expect(result.current.pendingTurn.reasoned_s).toBe(6.8);
+  });
+
+  it("an answer delta closes live reasoning when an older daemon sends no reasoning_done", async () => {
+    const { result } = renderHook(() => useChatSend({ profile: "doc" }));
+    act(() => result.current.send("hi"));
+    act(() => lastStreamHandlers.onFrame({ event: "reasoning_delta", text: "Hmm." }));
+    await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+    act(() => lastStreamHandlers.onFrame({ event: "assistant_delta", text: "Answer" }));
+    await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+    expect(result.current.pendingTurn.reasoningOpen).toBe(false);
+    expect(result.current.pendingTurn.reasoned_s).toBeUndefined();
+  });
+
   it("a simple answer streams live into the answer bubble (no tool, no thinking)", async () => {
     const { result } = renderHook(() => useChatSend({ profile: "doc" }));
     act(() => result.current.send("hi"));

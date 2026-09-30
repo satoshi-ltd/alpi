@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { iconSizes, lineHeights, space, tracking } from '../theme/tokens';
+import { iconSizes, lineHeights, mobile, space, tracking } from '../theme/tokens';
 
 import { Eyebrow } from './Eyebrow';
 import { Icon } from './Icon';
@@ -46,10 +46,16 @@ export function SectionHeader({ children, kicker, first = false }) {
   );
 }
 
-function pressable(body, { onPress, onLongPress, disabled, colors }) {
+export function rowLabel(label, value, helper) {
+  return [label, value, helper].filter((part) => typeof part === 'string' && part).join(', ') || undefined;
+}
+
+function pressable(body, { onPress, onLongPress, disabled, colors, spoken }) {
   if (disabled || (!onPress && !onLongPress)) return body;
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={spoken}
       onPress={onPress}
       onLongPress={onLongPress}
       android_ripple={{ color: colors.selected }}
@@ -86,7 +92,7 @@ function WideRow({ label, helper, value, leading, trailing, onPress, onLongPress
         flexDirection: 'row',
         alignItems: 'center',
         gap: space.s9,
-        minHeight: 36,
+        minHeight: mobile.tap,
         paddingVertical: space.s3,
         opacity: disabled ? 0.45 : 1,
       }}
@@ -134,7 +140,7 @@ function WideRow({ label, helper, value, leading, trailing, onPress, onLongPress
       </View>
     </View>
   );
-  return pressable(body, { onPress, onLongPress, disabled, colors });
+  return pressable(body, { onPress, onLongPress, disabled, colors, spoken: rowLabel(label, value, helper) });
 }
 
 export function Row({ label, helper, value, leading, trailing, onPress, onLongPress, danger, disabled = false, chevron = true, labelLines = 1, item = false }) {
@@ -251,7 +257,7 @@ export function Row({ label, helper, value, leading, trailing, onPress, onLongPr
     </View>
   );
 
-  return pressable(body, { onPress, onLongPress, disabled, colors });
+  return pressable(body, { onPress, onLongPress, disabled, colors, spoken: rowLabel(label, value, helper) });
 }
 
 export function RowSeparator({ indent = 20 }) {

@@ -7,6 +7,7 @@ import { usePane } from '../../nav/PaneContext';
 import { accentForProfile } from '../../theme/accents';
 import { useTheme } from '../../theme/ThemeContext';
 import { Pip } from './Pip';
+import { RowState, STATE_TEXT } from './RowState';
 
 export const GLYPH_SLOT = space.s9;
 export const SEPARATOR_INSET = space.s7 + GLYPH_SLOT + space.s5;
@@ -45,8 +46,18 @@ export const InboxRow = memo(function InboxRow({ item, onPress, onLongPress, sel
 
   const unread = !!item.unread && !item.needsProvider;
   const needsProvider = !!item.needsProvider;
-  const working = showState && item.state === 'working';
+  const rowState = item.activity?.state ? item.activity : null;
+  const working = !rowState && showState && item.state === 'working';
+  const needsYou = rowState?.state === 'needs-you';
   const label = item.label ?? item.name ?? item.id;
+  const spoken = [
+    label,
+    unread ? 'unread' : null,
+    rowState ? STATE_TEXT[rowState.state] : working ? 'working' : null,
+    rowState?.phases ? `phase ${rowState.phases.replace('/', ' of ')}` : null,
+    item.preview,
+    item.ts,
+  ].filter(Boolean).join(', ');
 
   const handlePress = useCallback(() => onPress?.(item), [onPress, item]);
   const handleLongPress = useCallback(() => onLongPress?.(item), [onLongPress, item]);
@@ -65,23 +76,23 @@ export const InboxRow = memo(function InboxRow({ item, onPress, onLongPress, sel
   const nameVariant = useMemo(() => {
     if (!twoPane) {
       return {
-        fontFamily: unread ? fonts.sans.bold : fonts.sans.semibold,
+        fontFamily: unread || needsYou ? fonts.sans.bold : fonts.sans.semibold,
         fontSize: fontSizes.lg,
         lineHeight: fontSizes.lg * lineHeights.cozy,
         color: needsProvider ? colors.ink3 : colors.ink,
       };
     }
     return {
-      fontFamily: unread
+      fontFamily: unread || needsYou
         ? fonts.sans.semibold
         : selected
           ? fonts.sans.medium
           : fonts.sans.regular,
       fontSize: fontSizes.md,
       lineHeight: fontSizes.md * lineHeights.cozy,
-      color: needsProvider ? colors.ink3 : unread || selected ? colors.ink : colors.ink2,
+      color: needsProvider ? colors.ink3 : unread || selected || needsYou ? colors.ink : colors.ink2,
     };
-  }, [twoPane, unread, selected, needsProvider, fonts, fontSizes, colors]);
+  }, [twoPane, unread, needsYou, selected, needsProvider, fonts, fontSizes, colors]);
   const previewVariant = useMemo(
     () => ({
       fontFamily: needsProvider ? fonts.mono : fonts.sans.regular,
@@ -107,7 +118,8 @@ export const InboxRow = memo(function InboxRow({ item, onPress, onLongPress, sel
       onPress={handlePress}
       onLongPress={handleLongPress}
       android_ripple={{ color: colors.hover }}
-      accessibilityLabel={unread ? `${label} unread` : undefined}
+      accessibilityRole="button"
+      accessibilityLabel={spoken}
       style={rowStyle}
     >
       <View style={STATIC.glyph}>
@@ -123,9 +135,10 @@ export const InboxRow = memo(function InboxRow({ item, onPress, onLongPress, sel
           </Text>
         )}
       </View>
-      {item.ts || working ? (
+      {item.ts || working || rowState ? (
         <View style={STATIC.meta}>
           {item.ts ? <Text style={tsVariant}>{item.ts}</Text> : null}
+          {rowState ? <RowState state={rowState.state} phases={rowState.phases} /> : null}
           {working ? (
             <View style={STATIC.pip} accessibilityLabel={`${label} working`}>
               <Pip kind="working" color={accent} bg={colors.bg} />

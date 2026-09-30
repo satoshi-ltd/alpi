@@ -26,6 +26,11 @@ import {
   subjectPath,
   openVerb,
   stackAnimation,
+  paneAnimation,
+  PANE_FADE_MS,
+  CHROME_BTN,
+  tapSlop,
+  ACTIVITY_PATH,
 } from "./panes.js";
 import { space } from "../theme/tokens.js";
 
@@ -58,12 +63,35 @@ describe("content metrics", () => {
 });
 
 describe("stackAnimation", () => {
-  it("kills the slide in two-pane mode", () => {
+  it("kills the slide in a nested two-pane stack", () => {
     expect(stackAnimation(true)).toBe("none");
   });
 
   it("keeps the slide on one pane", () => {
     expect(stackAnimation(false)).toBe("slide_from_right");
+  });
+});
+
+describe("paneAnimation", () => {
+  it("crossfades the detail pane in two-pane mode instead of sliding it", () => {
+    expect(paneAnimation(true)).toBe("fade");
+    expect(PANE_FADE_MS).toBe(120);
+  });
+
+  it("drops the crossfade under reduced motion", () => {
+    expect(paneAnimation(true, true)).toBe("none");
+  });
+
+  it("keeps the phone slide either way", () => {
+    expect(paneAnimation(false)).toBe("slide_from_right");
+    expect(paneAnimation(false, true)).toBe("slide_from_right");
+  });
+});
+
+describe("chrome targets", () => {
+  it("draws chrome buttons at 36 and pads them to the 44 pt target", () => {
+    expect(CHROME_BTN).toBe(36);
+    expect(CHROME_BTN + tapSlop(CHROME_BTN) * 2).toBe(44);
   });
 });
 
@@ -158,7 +186,7 @@ describe("isFullBleed", () => {
 });
 
 describe("isPaneRoot", () => {
-  it.each(["/", "/chat/doc", "/wg/wg-1", "/settings", "/outputs"])(
+  it.each(["/", "/chat/doc", "/wg/wg-1", "/settings", "/outputs", "/activity"])(
     "%s is a detail pane root",
     (pathname) => {
       expect(isPaneRoot(pathname)).toBe(true);
@@ -174,6 +202,12 @@ describe("isPaneRoot", () => {
     "/onboarding",
   ])("%s is not a detail pane root", (pathname) => {
     expect(isPaneRoot(pathname)).toBe(false);
+  });
+
+  it("treats activity as a shell destination the detail pane holds", () => {
+    expect(ACTIVITY_PATH).toBe("/activity");
+    expect(isPaneRoot(ACTIVITY_PATH)).toBe(true);
+    expect(openVerb({ twoPane: true, pathname: "/chat/doc" })).toBe("replace");
   });
 
   it("treats notifications as a screen the pane holds, not an overlay over it", () => {
@@ -334,6 +368,7 @@ describe("backFallback", () => {
     ["/pair", "/"],
     ["/biometric", "/"],
     ["/debug/aln", "/"],
+    ["/activity", "/"],
   ])("%s → %s", (pathname, expected) => {
     expect(backFallback(pathname)).toBe(expected);
   });
@@ -364,6 +399,15 @@ describe("backFallback", () => {
 });
 
 describe("sidebarOpenByDefault", () => {
+  it("shows the roster from 600 wide once the window is landscape", () => {
+    expect(sidebarOpenByDefault(690, 829)).toBe(false);
+    expect(sidebarOpenByDefault(829, 690)).toBe(true);
+    expect(sidebarOpenByDefault(744, 1133)).toBe(false);
+    expect(sidebarOpenByDefault(600, 500)).toBe(true);
+    expect(sidebarOpenByDefault(599, 400)).toBe(false);
+    expect(sidebarOpenByDefault(834, 1194)).toBe(true);
+  });
+
   it("hides the roster on a fold and shows it on a tablet", () => {
     expect(sidebarOpenByDefault(690)).toBe(false);
     expect(sidebarOpenByDefault(744)).toBe(false);

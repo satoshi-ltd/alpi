@@ -1,10 +1,10 @@
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { fontSizes, space, palettes } from '../../theme/tokens';
 
-const themeState = vi.hoisted(() => ({ mode: 'light' }));
-afterEach(() => { cleanup(); themeState.mode = 'light'; });
+const themeState = vi.hoisted(() => ({ mode: 'light', reduce: false, ticks: [] }));
+afterEach(() => { cleanup(); themeState.mode = 'light'; themeState.reduce = false; themeState.ticks.length = 0; });
 
 const { flatStyle } = vi.hoisted(() => ({
   flatStyle: (style) => Object.assign({}, ...[style].flat(Infinity).filter(Boolean)),
@@ -13,11 +13,17 @@ const { flatStyle } = vi.hoisted(() => ({
 vi.mock('react-native', () => {
   const View = ({ children, style, ...p }) =>
     React.createElement('div', { ...p, 'data-style': JSON.stringify(flatStyle(style)) }, children);
-  const Text = ({ children, style, ...p }) => React.createElement('span', p, children);
-  const Pressable = ({ children, style, ...p }) =>
+  const Text = ({ children, style, ...p }) => React.createElement('span', { ...p, 'data-text-size': style?.fontSize, 'data-text-color': style?.color }, children);
+  const Pressable = ({ children, style, onLongPress, delayLongPress, ...p }) =>
     React.createElement(
       'button',
-      { type: 'button', ...p, 'data-style': JSON.stringify(flatStyle(typeof style === 'function' ? style({ pressed: false }) : style)) },
+      {
+        type: 'button',
+        ...p,
+        onContextMenu: onLongPress,
+        'data-style': JSON.stringify(flatStyle(typeof style === 'function' ? style({ pressed: false }) : style)),
+        'data-pressed-style': JSON.stringify(flatStyle(typeof style === 'function' ? style({ pressed: true }) : style)),
+      },
       children,
     );
   return { View, Text, Pressable, StyleSheet: { create: (s) => s } };
@@ -34,6 +40,8 @@ vi.mock('../../theme/ThemeContext', async () => {
   };
 });
 
+vi.mock('../../lib/reduceMotion', () => ({ useReduceMotion: () => themeState.reduce }));
+vi.mock('../../lib/haptics', () => ({ selection: () => themeState.ticks.push('selection'), tap: () => themeState.ticks.push('tap') }));
 vi.mock('../../components/Diamond', () => ({ Diamond: () => React.createElement('span', { 'data-diamond': 'true' }) }));
 vi.mock('./AttachmentCards', () => ({ AttachmentCards: () => React.createElement('span', { 'data-cards': 'true' }) }));
 vi.mock('../../components/RichText', () => ({
@@ -62,7 +70,8 @@ describe('transcript body type scale', () => {
   it.each(VARIANTS)('sizes the %s body from the token scale', (_name, Variant) => {
     const { container } = render(Variant());
     const size = bodySize(container);
-    expect(size).toBe(fontSizes.lg);
+    expect(size).toBe(fontSizes.chat);
+    expect(size).toBe(16);
     expect(Object.values(fontSizes)).toContain(size);
   });
 
@@ -119,5 +128,39 @@ describe('user bubble palette', () => {
     expect(style.backgroundColor).toBe(expected);
     expect(screen.getByText('Readable message').getAttribute('data-color')).toBe(palettes[mode].ink);
     expect(style.paddingHorizontal).toBe(space.s7);
+  });
+});
+
+describe('message footer and long press', () => {
+  it('gives agent messages the same faint time as user messages', () => {
+    render(<ProfileAssistantMessage text="shipped" ts="2m" />);
+    const stamp = screen.getByText('2m');
+    expect(Number(stamp.getAttribute('data-text-size'))).toBe(fontSizes.sm);
+    expect(Number(stamp.getAttribute('data-text-size'))).toBeGreaterThanOrEqual(12);
+    expect(stamp.getAttribute('data-text-color')).toBe(palettes.light.ink3);
+    cleanup();
+    render(<ProfileUserMessage text="ship it" ts="2m" accent="#b8954a" />);
+    expect(screen.getByText('2m').getAttribute('data-text-size')).toBe(String(fontSizes.sm));
+  });
+
+  it('ticks and opens the menu on long press', () => {
+    const onLongPress = vi.fn();
+    render(<ProfileAssistantMessage text="shipped" onLongPress={onLongPress} />);
+    fireEvent.contextMenu(screen.getByText('shipped').closest('button'));
+    expect(onLongPress).toHaveBeenCalledTimes(1);
+    expect(themeState.ticks).toEqual(['selection']);
+  });
+
+  it('scales the pressed bubble to 0.98, and dims instead under reduced motion', () => {
+    const { container } = render(<ProfileUserMessage text="ship it" accent="#b8954a" onLongPress={() => {}} />);
+    const pressed = JSON.parse(container.querySelector('button').getAttribute('data-pressed-style'));
+    expect(pressed.transform).toEqual([{ scale: 0.98 }]);
+    expect(pressed.opacity).toBeUndefined();
+    cleanup();
+    themeState.reduce = true;
+    const again = render(<ProfileUserMessage text="ship it" accent="#b8954a" onLongPress={() => {}} />);
+    const still = JSON.parse(again.container.querySelector('button').getAttribute('data-pressed-style'));
+    expect(still.transform).toBeUndefined();
+    expect(still.opacity).toBe(0.85);
   });
 });

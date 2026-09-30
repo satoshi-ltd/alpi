@@ -1,25 +1,8 @@
-import { useEffect, useState } from 'react';
-import { Dimensions, Keyboard, Platform, View } from 'react-native';
+import Animated, { useAnimatedKeyboard, useAnimatedStyle } from 'react-native-reanimated';
 
-const SHOW = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-const HIDE = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-
-function occupied(e) {
-  const frame = e?.endCoordinates;
-  if (!frame) return 0;
-  const screen = Dimensions.get('screen').height;
-  return Math.max(0, Math.min(screen, screen - frame.screenY));
-}
-
+// Edge-to-edge makes reanimated report the full IME inset, nav bar included — the padding a screen-bottom pane needs.
 export function KeyboardPane({ children, style }) {
-  const [pad, setPad] = useState(0);
-  useEffect(() => {
-    const show = Keyboard.addListener(SHOW, (e) => setPad(occupied(e)));
-    const hide = Keyboard.addListener(HIDE, () => setPad(0));
-    return () => {
-      show.remove();
-      hide.remove();
-    };
-  }, []);
-  return <View style={[style ?? { flex: 1 }, { paddingBottom: pad }]}>{children}</View>;
+  const keyboard = useAnimatedKeyboard();
+  const ride = useAnimatedStyle(() => ({ paddingBottom: keyboard.height.value }));
+  return <Animated.View style={[style ?? { flex: 1 }, ride]}>{children}</Animated.View>;
 }

@@ -33,6 +33,12 @@ describe('type scale reach', () => {
     expect(hits(/import\s*\{[^}]*\bfontSizes\b[^}]*\}\s*from\s*'[^']*theme\/tokens'/)).toEqual([]);
   });
 
+  it('never reaches for the sub-11 steps the phone scale drops', () => {
+    expect(hits(/fontSizes(\.(xxs|label)\b|\[['"](xxs|label)['"]\])/)).toEqual([]);
+    expect(fontSizes.xxs).toBeUndefined();
+    expect(fontSizes.label).toBeUndefined();
+  });
+
   it('names every step of the scale in ascending order', () => {
     const sizes = Object.values(fontSizes);
     expect(sizes).toEqual([...sizes].sort((a, b) => a - b));

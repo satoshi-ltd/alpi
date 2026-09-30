@@ -34,6 +34,8 @@ vi.mock("expo-router", () => ({
   useNavigation: () => ({ setOptions: vi.fn(), addListener: () => () => {}, dispatch: vi.fn() }),
 }));
 
+vi.mock("react-native-reanimated", () => import("./tests/mocks/reanimated.js"));
+
 vi.mock("expo-secure-store", () => ({
   getItemAsync: vi.fn(async () => null),
   setItemAsync: vi.fn(async () => {}),

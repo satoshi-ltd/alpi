@@ -8,7 +8,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { radii, space, lineHeights, typography } from '../theme/tokens';
 
-import { tapFeedback, warnFeedback } from '../lib/haptics';
+import { selection, warning } from '../lib/haptics';
 import { useTheme } from '../theme/ThemeContext';
 import { Button } from './Button';
 import { useExitSnapshot } from './useExitSnapshot';
@@ -65,8 +65,8 @@ export function TypedConfirm({
   const confirm = () => {
     if (!ready) return;
     setValue('');
-    if (danger) warnFeedback();
-    else tapFeedback();
+    if (danger) warning();
+    else selection();
     onConfirm?.();
   };
 
@@ -115,6 +115,7 @@ export function TypedConfirm({
       <Animated.View style={[{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', paddingBottom: kbHeight }, backdropStyle]}>
         <Pressable
           onPress={onClose}
+          accessible={false}
           style={{
             flex: 1,
             alignItems: 'center',
@@ -141,6 +142,7 @@ export function TypedConfirm({
           >
             <Pressable
               onPress={() => {}}
+              accessible={false}
               style={{
                 padding: space.s9,
                 gap: space.s7,

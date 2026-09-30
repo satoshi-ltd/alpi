@@ -5,6 +5,8 @@ import * as shared from '../../../common/tokens.mjs';
 import { profileAccents } from './accents';
 import {
   alpha,
+  FONT_SIZE_ADDS,
+  FONT_SIZE_DROPS,
   fonts,
   fontSizes,
   lineHeights,
@@ -13,6 +15,7 @@ import {
   radii,
   space,
   status,
+  typography,
 } from './tokens';
 
 const MODES = ['light', 'dark'];
@@ -53,7 +56,6 @@ describe('shared design tokens', () => {
   });
 
   it('re-exports the shared scales instead of restating their numbers', () => {
-    expect(fontSizes).toBe(shared.fontSizes);
     expect(lineHeights).toBe(shared.lineHeights);
     expect(alpha).toBe(shared.alpha);
     expect(status).toBe(shared.status);
@@ -86,6 +88,38 @@ describe('shared design tokens', () => {
   it('keeps fonts.mono a plain family string, since callers pass it straight to fontFamily', () => {
     expect(typeof fonts.mono).toBe('string');
     expect(typeof fonts.sans.regular).toBe('string');
+  });
+});
+
+describe('type scale parity with the shared module', () => {
+  it('drops only the sub-11 steps and adds only the 16 pt phone chat step, restated here so the tables cannot vouch for themselves', () => {
+    expect(FONT_SIZE_DROPS).toEqual(['xxs', 'label']);
+    expect(FONT_SIZE_ADDS).toEqual({ chat: 16 });
+    const dropped = Object.keys(shared.fontSizes).filter((name) => !(name in fontSizes));
+    const added = Object.keys(fontSizes).filter((name) => !(name in shared.fontSizes));
+    expect(dropped.sort()).toEqual(['label', 'xxs']);
+    expect(added).toEqual(['chat']);
+    expect(fontSizes.chat).toBe(16);
+  });
+
+  it('keeps every shared step it keeps at the shared value', () => {
+    for (const [name, value] of Object.entries(fontSizes)) {
+      if (name in shared.fontSizes) expect(value, name).toBe(shared.fontSizes[name]);
+    }
+  });
+
+  it('sets no text under 11 pt at the default scale', () => {
+    expect(Math.min(...Object.values(fontSizes))).toBe(11);
+  });
+
+  it('diverges from the shared roles only on chat, which reads at 16 on the phone and 15 on desktop', () => {
+    expect(shared.fontSizes[shared.typography.chat.size]).toBe(15);
+    expect(fontSizes[typography.chat.size]).toBe(16);
+    expect(typography.chat.leading).toBe(shared.typography.chat.leading);
+    const { chat: _mine, ...rest } = typography;
+    const { chat: _shared, ...sharedRest } = shared.typography;
+    expect(rest).toEqual(sharedRest);
+    for (const role of Object.values(typography)) expect(fontSizes[role.size], role.size).toBeGreaterThan(0);
   });
 });
 

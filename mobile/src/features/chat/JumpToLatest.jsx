@@ -1,14 +1,14 @@
 import { Pressable, Text } from 'react-native';
 
 import { Icon } from '../../components/Icon';
-import { space } from '../../theme/tokens';
+import { mobile, space } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeContext';
 
 // Inverted lists scroll away from the newest message towards the past; past this offset the tail is out of sight.
 export const JUMP_THRESHOLD = 800;
 
 export function JumpToLatest({ visible, onPress }) {
-  const { colors, fonts, fontSizes, shadow } = useTheme();
+  const { colors, fonts, fontSizes, shadow, chromeScale } = useTheme();
   if (!visible) return null;
   return (
     <Pressable
@@ -23,7 +23,7 @@ export function JumpToLatest({ visible, onPress }) {
         alignItems: 'center',
         gap: space.s3,
         paddingHorizontal: space.s6,
-        height: 36,
+        height: mobile.tap,
         borderRadius: 999,
         backgroundColor: pressed ? colors.selected : colors.bgPane,
         borderWidth: 0.5,
@@ -32,7 +32,7 @@ export function JumpToLatest({ visible, onPress }) {
       })}
     >
       <Icon name="chev-down" size="sm" color={colors.ink2} />
-      <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.sm, color: colors.ink2 }}>Latest</Text>
+      <Text maxFontSizeMultiplier={chromeScale} style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.sm, color: colors.ink2 }}>Latest</Text>
     </Pressable>
   );
 }

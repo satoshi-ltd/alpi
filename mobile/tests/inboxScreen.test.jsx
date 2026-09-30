@@ -19,6 +19,7 @@ const h = vi.hoisted(() => ({
   unread: 0,
   edges: [],
   list: null,
+  activity: { supported: false, states: new Map(), needsYouCount: 0, refresh: async () => {} },
 }));
 
 vi.mock('react-native', () => {
@@ -163,6 +164,14 @@ vi.mock('../src/hooks/useDebouncedCallback', () => ({ useDebouncedCallback: (fn)
 vi.mock('../src/hooks/useEvents', () => ({ useEventEffect: () => {} }));
 vi.mock('../src/hooks/useInbox', () => ({
   useInbox: () => ({ items: h.items, loading: false, refresh: h.refresh }),
+}));
+vi.mock('../src/hooks/useActivity', async (importOriginal) => ({
+  ...(await importOriginal()),
+  useActivity: () => h.activity,
+}));
+vi.mock('../src/features/inbox/RowState', async (importOriginal) => ({
+  ...(await importOriginal()),
+  RowState: ({ state, phases }) => React.createElement('span', { 'data-state': state }, phases ?? state),
 }));
 vi.mock('../src/hooks/useUnifiedOutputs', () => ({
   useUnifiedOutputs: () => ({ rows: Array.from({ length: h.unread }, (_, i) => ({ id: `o${i}` })) }),
@@ -491,5 +500,30 @@ describe('Inbox screen daemon health', () => {
     h.status = 'offline';
     render(<Index />);
     expect(document.querySelector('[data-banner]')).toBeNull();
+  });
+});
+
+describe('Inbox screen activity', () => {
+  const on = (states, needsYouCount = 0) => ({ supported: true, states: new Map(states), needsYouCount, refresh: async () => {} });
+
+  afterEach(() => {
+    h.activity = { supported: false, states: new Map(), needsYouCount: 0, refresh: async () => {} };
+  });
+
+  it('shows each row its state and the footer what needs the user', () => {
+    h.items = ITEMS;
+    h.activity = on([['profile:doc', { state: 'needs-you' }], ['workgroup:alpha', { state: 'working', phases: '1/3' }]], 1);
+    const { container } = render(<Index />);
+    expect(container.querySelector('[data-state="needs-you"]')).toBeTruthy();
+    expect(container.querySelector('[data-state="working"]').textContent).toBe('1/3');
+    fireEvent.click(screen.getByLabelText('Activity · 1 need you'));
+    expect(h.push).toHaveBeenCalledWith('/activity');
+  });
+
+  it('keeps the rows idle and the entry out of the footer on an older daemon', () => {
+    h.items = ITEMS;
+    const { container } = render(<Index />);
+    expect(container.querySelector('[data-state]')).toBeNull();
+    expect(screen.queryByLabelText(/^Activity/)).toBeNull();
   });
 });

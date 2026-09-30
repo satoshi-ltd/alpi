@@ -114,7 +114,7 @@ export function AttachmentCards({ items, onRemove, variant = 'composer', profile
             <Glyph kind={kind} localUri={a.localUri} name={a.name} colors={colors} />
             <View style={{ flexShrink: 1, flexGrow: 1 }}>
               <Text numberOfLines={1} style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink }}>{a.name}</Text>
-              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>{subtitle}</Text>
+              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink3 }}>{subtitle}</Text>
             </View>
             {!message && onRemove ? (
               <Pressable onPress={() => onRemove(i)} hitSlop={8} accessibilityLabel={`Remove ${a.name}`}>
@@ -125,7 +125,7 @@ export function AttachmentCards({ items, onRemove, variant = 'composer', profile
         );
       })}
       {hidden > 0 ? (
-        <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.xs, color: colors.ink3, paddingHorizontal: space.s2 }}>
+        <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3, paddingHorizontal: space.s2 }}>
           +{hidden} more file{hidden > 1 ? 's' : ''}
         </Text>
       ) : null}

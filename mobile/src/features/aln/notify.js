@@ -1,6 +1,6 @@
 import * as Notifications from 'expo-notifications';
 
-import { deepLinkFor, formatNotification } from './kinds';
+import { APPROVAL_CATEGORY, categoryFor, deepLinkFor, formatNotification } from './kinds';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -11,6 +11,35 @@ Notifications.setNotificationHandler({
     shouldShowList: true,
   }),
 });
+
+let categories = null;
+
+// opensAppToForeground: the response handler needs the JS runtime and the right connection to call host.approval.respond.
+export function registerNotificationCategories() {
+  categories ??= Promise.resolve()
+    .then(() => Notifications.setNotificationCategoryAsync?.(APPROVAL_CATEGORY, [
+      {
+        identifier: 'deny',
+        buttonTitle: 'Deny',
+        options: { opensAppToForeground: true, isDestructive: true },
+      },
+      {
+        identifier: 'allow_once',
+        buttonTitle: 'Allow once',
+        options: { opensAppToForeground: true },
+      },
+    ]))
+    .then(() => true)
+    .catch(() => {
+      categories = null;
+      return false;
+    });
+  return categories;
+}
+
+export function _resetCategoriesForTests() {
+  categories = null;
+}
 
 export async function getPermissionStatus() {
   try {
@@ -47,17 +76,20 @@ export async function fireForEvent(event, connection, { force = false } = {}) {
   const identifier = force
     ? `${notificationIdFor(event, connection)}:${(_forcedCount += 1)}`
     : notificationIdFor(event, connection);
+  const categoryIdentifier = categoryFor(event);
   try {
     await Notifications.scheduleNotificationAsync({
       identifier,
       content: {
         title,
         body,
+        ...(categoryIdentifier ? { categoryIdentifier } : {}),
         data: {
           link,
           connectionId: connection?.id || '',
           eventId: `${event?.event || ''}:${event?.seq ?? ''}`,
           kind: event?.event || '',
+          requestId: event?.data?.request_id || '',
           rawData: event?.data || {},
         },
       },

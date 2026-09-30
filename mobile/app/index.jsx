@@ -12,11 +12,12 @@ import { CreateProfileSheet } from '../src/features/sheets/CreateProfileSheet';
 import { CreateWorkgroupSheet } from '../src/features/sheets/CreateWorkgroupSheet';
 import { useDebouncedCallback } from '../src/hooks/useDebouncedCallback';
 import { useEventEffect } from '../src/hooks/useEvents';
+import { useActivity, rowStateFor } from '../src/hooks/useActivity';
 import { useInbox } from '../src/hooks/useInbox';
 import { useUnifiedOutputs } from '../src/hooks/useUnifiedOutputs';
 import { useEndpoint } from '../src/lib/EndpointContext';
 import { endpointHost } from '../src/lib/endpoint';
-import { openVerb, OUTPUTS_PATH, SETTINGS_PATH, subjectPath } from '../src/lib/panes';
+import { ACTIVITY_PATH, openVerb, OUTPUTS_PATH, SETTINGS_PATH, subjectPath } from '../src/lib/panes';
 import { useFireOnce } from '../src/lib/useFireOnce';
 import { usePins } from '../src/lib/pins';
 import { useTheme } from '../src/theme/ThemeContext';
@@ -37,6 +38,7 @@ function InboxScreen({ items, loading, refresh, error = null }) {
   const pins = usePins(endpoint?.id);
   const { rows: unreadOutputs } = useUnifiedOutputs({ status: 'unread' });
   const unreadCount = unreadOutputs.length;
+  const activity = useActivity();
 
   const [query, setQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -71,19 +73,20 @@ function InboxScreen({ items, loading, refresh, error = null }) {
         pinned: it.kind === 'profile'
           ? pins.isProfilePinned(it.name)
           : pins.isWorkgroupPinned(it.profile, it.id),
+        activity: rowStateFor(activity.states, it),
       });
     }
     return out;
-  }, [items, pins]);
+  }, [items, pins, activity.states]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await refresh();
+      await Promise.all([refresh(), activity.refresh()]);
     } finally {
       setRefreshing(false);
     }
-  }, [refresh]);
+  }, [refresh, activity.refresh]);
 
   // Coalesced: a busy workgroup or a reconnect backfill emits bursts — one summaries+workgroups refresh per beat, not per event.
   const debouncedRefresh = useDebouncedCallback(refresh, 800);
@@ -129,6 +132,12 @@ function InboxScreen({ items, loading, refresh, error = null }) {
     router[openVerb({ twoPane, pathname })](OUTPUTS_PATH);
   }, [router, twoPane, pathname]);
 
+  const openActivity = useCallback(() => {
+    setSheet(null);
+    router[openVerb({ twoPane, pathname })](ACTIVITY_PATH);
+  }, [router, twoPane, pathname]);
+  const activityEntry = activity.supported ? openActivity : null;
+
   const renderRow = useCallback(
     ({ item }) => <InboxRow item={item} onPress={openItem} onLongPress={handleLongPress} />,
     [openItem, handleLongPress],
@@ -154,6 +163,8 @@ function InboxScreen({ items, loading, refresh, error = null }) {
         searchOpen={searchOpen}
         onToggleSearch={toggleSearch}
         onConnPress={() => setSheet('conn')}
+        onActivityPress={activityEntry}
+        needsYou={activity.needsYouCount}
       />
       <DaemonBanner status={daemonStatus} paired={!!endpoint} onRetry={onRefresh} />
       <Roster
@@ -176,6 +187,8 @@ function InboxScreen({ items, loading, refresh, error = null }) {
         unread={unreadCount}
         onNotificationsPress={canAdmin ? openNotifications : null}
         onSettingsPress={openSettings}
+        onActivityPress={activityEntry}
+        needsYou={activity.needsYouCount}
       />
       <ConnectionSheet open={sheet === 'conn'} onClose={closeSheet} />
       {canCreate ? (

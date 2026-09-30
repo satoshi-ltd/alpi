@@ -5,22 +5,30 @@ function load() {
   return loading;
 }
 
-export async function tapFeedback() {
+async function play(run) {
   const h = await load();
+  if (!h) return;
   try {
-    await h?.selectionAsync?.();
+    await run(h);
   } catch {
     return;
   }
 }
 
-export async function warnFeedback() {
-  const h = await load();
-  try {
-    await h?.notificationAsync?.(h.NotificationFeedbackType?.Warning ?? 'warning');
-  } catch {
-    return;
-  }
+export function tap() {
+  return play((h) => h.impactAsync?.(h.ImpactFeedbackStyle?.Light ?? 'light'));
+}
+
+export function selection() {
+  return play((h) => h.selectionAsync?.());
+}
+
+export function warning() {
+  return play((h) => h.notificationAsync?.(h.NotificationFeedbackType?.Warning ?? 'warning'));
+}
+
+export function success() {
+  return play((h) => h.notificationAsync?.(h.NotificationFeedbackType?.Success ?? 'success'));
 }
 
 export function _resetHapticsForTests() {

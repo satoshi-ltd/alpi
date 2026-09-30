@@ -25,6 +25,8 @@ import { JumpToLatest, JUMP_THRESHOLD } from '../../src/features/chat/JumpToLate
 import { LoadFailed } from '../../src/components/LoadFailed';
 import { MarkerCard } from '../../src/features/chat/MarkerCard';
 import { MessageActionsSheet } from '../../src/features/chat/MessageActionsSheet';
+import { EnterOnce, listDismissMode, ownConfirmation, useSeenIds } from '../../src/features/chat/chatMotion';
+import { useReduceMotion } from '../../src/lib/reduceMotion';
 import { postsOf, unlandedPosts } from '../../src/features/chat/optimisticPosts';
 import { buildTasks, classifyMessage } from '../../src/features/chat/parseMarkers';
 import { PipelineStrip } from '../../src/features/chat/PipelineStrip';
@@ -132,7 +134,7 @@ const WgItem = memo(function WgItem({ m, hubPubkey, ownPubkey, workingStale, acc
         onLongPress={() => setActionTarget(makeTarget())}
       />
       {m.error ? (
-        <Text style={[WG_STYLES.error, { color: colors.dangerText, fontFamily: fonts.mono, fontSize: fontSizes.xs }]}>
+        <Text style={[WG_STYLES.error, { color: colors.dangerText, fontFamily: fonts.mono, fontSize: fontSizes.sm }]}>
           {m.error}
         </Text>
       ) : null}
@@ -144,6 +146,9 @@ const WgList = forwardRef(function WgList(
   { messages, hubPubkey, ownPubkey, workingStale, accent, accentFor, setActionTarget, hubLabel, colors, fonts, fontSizes, hydrating, imageProfile, loadError = null, onRetryLoad },
   ref,
 ) {
+  const reduceMotion = useReduceMotion();
+  const seqs = useMemo(() => messages.map((m) => m.seq), [messages]);
+  const { isFresh, markSeen } = useSeenIds(seqs, !hydrating);
   const [farFromLatest, setFarFromLatest] = useState(false);
   const [pageSize, setPageSize] = useState(INITIAL_PAGE);
   const { twoPane } = usePane();
@@ -169,7 +174,12 @@ const WgList = forwardRef(function WgList(
 
   const renderItem = useCallback(
     ({ item }) => (
-      <View style={WG_STYLES.rowPad}>
+      <EnterOnce
+        id={item.seq}
+        style={WG_STYLES.rowPad}
+        fresh={!reduceMotion && !ownConfirmation(item, ownPubkey) && isFresh(item.seq, item.pending ? Infinity : item.seq)}
+        onSeen={markSeen}
+      >
         <WgItem
           m={item}
           hubPubkey={hubPubkey}
@@ -183,9 +193,9 @@ const WgList = forwardRef(function WgList(
           fontSizes={fontSizes}
           imageProfile={imageProfile}
         />
-      </View>
+      </EnterOnce>
     ),
-    [hubPubkey, ownPubkey, workingStale, accent, accentFor, setActionTarget, colors, fonts, fontSizes, imageProfile],
+    [hubPubkey, ownPubkey, workingStale, accent, accentFor, setActionTarget, colors, fonts, fontSizes, imageProfile, reduceMotion, isFresh, markSeen],
   );
 
   if (hydrating && messages.length === 0) {
@@ -214,6 +224,8 @@ const WgList = forwardRef(function WgList(
       renderItem={renderItem}
       onScroll={(e) => setFarFromLatest(e.nativeEvent.contentOffset.y > JUMP_THRESHOLD)}
       scrollEventThrottle={200}
+      keyboardDismissMode={listDismissMode()}
+      keyboardShouldPersistTaps="handled"
       contentContainerStyle={twoPane ? [WG_STYLES.listContent, WG_STYLES.contentColumn] : WG_STYLES.listContent}
       onEndReached={hasMore ? () => setPageSize((n) => n + PAGE_STEP) : undefined}
       onEndReachedThreshold={0.5}

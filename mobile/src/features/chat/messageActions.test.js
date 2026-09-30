@@ -87,3 +87,22 @@ describe('retryTextFor', () => {
     expect(retryTextFor(null)).toBeNull();
   });
 });
+
+describe('Select text', () => {
+  it('follows Copy for both speakers when the host can open it', () => {
+    const handlers = { onCopy: vi.fn(), onSelectText: vi.fn(), onEdit: vi.fn(), onRetry: vi.fn() };
+    const user = buildMessageActions({ kind: 'user', text: 'hi', turnIndex: 1 }, handlers).map((a) => a.id);
+    const agent = buildMessageActions({ kind: 'agent', text: 'hello', retryText: 'hi' }, handlers).map((a) => a.id);
+    expect(user).toEqual(['copy', 'select', 'edit', 'retry']);
+    expect(agent).toEqual(['copy', 'select', 'retry-agent']);
+  });
+
+  it('hands the whole target to the handler and is absent for an empty message', () => {
+    const onSelectText = vi.fn();
+    const target = { kind: 'agent', text: 'long answer' };
+    buildMessageActions(target, { onSelectText }).find((a) => a.id === 'select').onPress();
+    expect(onSelectText).toHaveBeenCalledWith(target);
+    expect(buildMessageActions({ kind: 'agent', text: '' }, { onSelectText }).map((a) => a.id)).toEqual([]);
+  });
+});
+

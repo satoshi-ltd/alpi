@@ -6,7 +6,7 @@ import { useEndpoint } from '../../lib/EndpointContext';
 import { runPollOnce } from './backgroundTask';
 import { deliverEvents } from './deliver';
 import { NOTIFIABLE_KINDS } from './kinds';
-import { getPermissionStatus, requestPermission } from './notify';
+import { getPermissionStatus, registerNotificationCategories, requestPermission } from './notify';
 import { NotificationPrimer } from './NotificationPrimer';
 import { alnStateKey, eventId, loadFlag, saveFlag } from './state';
 
@@ -23,6 +23,10 @@ export function NotificationBridge() {
   const catchupBusyRef = useRef(false);
   const inFlightRef = useRef(new Set());
   const [primerOpen, setPrimerOpen] = useState(false);
+
+  useEffect(() => {
+    registerNotificationCategories();
+  }, []);
 
   const catchUp = useCallback(async ({ force = false } = {}) => {
     if (catchupBusyRef.current) return;

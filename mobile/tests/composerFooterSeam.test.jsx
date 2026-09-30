@@ -92,7 +92,7 @@ function restingHeight(row) {
   const outer = styleOf(row);
   const c = styleOf(card(row.ownerDocument.body));
   const ctrl = Math.max(...[...row.querySelectorAll('button')].map((b) => styleOf(b).height ?? 0), 0);
-  const line = Math.round(15 * 1.5);
+  const line = Math.round(tokens.fontSizes[tokens.typography.chat.size] * 1.5);
   return outer.paddingTop + c.paddingTop + line + c.gap + ctrl + c.paddingBottom + outer.paddingBottom;
 }
 
@@ -140,6 +140,7 @@ describe('composer and sidebar footer seam', () => {
   it('reads one constant instead of two hand-tuned numbers', () => {
     const composer = source('src/features/chat/Composer.jsx');
     expect(composer).toMatch(/Math\.max\(COMPOSER_PAD_Y, insets\.bottom\)/);
+    expect(composer).toMatch(/Math\.max\(COMPOSER_PAD_Y, bottomInset - keyboard\.height\.value\)/);
     expect(composer).not.toMatch(/Math\.max\(10/);
     expect(composer).not.toMatch(/: 44,/);
     expect(source('src/features/shell/ShellFooter.jsx')).toMatch(/height: CHROME_H/);

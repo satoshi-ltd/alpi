@@ -14,6 +14,22 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.6.0 — 2026-09-30 — made for the thumb
+
+- **Write real prompts.** Return adds a line and the send button sends. The model and reasoning
+  effort sit in a chip in the composer, one tap from any chat.
+- **Steps you can open.** Tap a tool step to see its full arguments, its output and how long it
+  took, with copy buttons. Reasoning shows "Thinking…" and then folds into "Thought for 7s".
+- **Agents at work.** Every profile and workgroup shows when it is working, failed or needs you,
+  and Activity lists what waits on you first. Approval notifications carry Deny and Allow once.
+- **Feels native.** Haptics on send, long press and approvals, larger touch targets, 16 pt chat
+  text, Select text in the long-press menu, and a composer that rides the keyboard smoothly.
+- **Tablets and the open Fold** rotate, show the roster in landscape and move between panes with a
+  short crossfade.
+
+  Requires alpi 0.16.0 for Activity, step durations and "Thought for Xs"; with an older daemon
+  those stay hidden.
+
 ## v0.5.8 — 2026-09-30 — one way to show what you picked
 
 - **Every single choice marks the pick the same way**, with the dot the model and voice pickers

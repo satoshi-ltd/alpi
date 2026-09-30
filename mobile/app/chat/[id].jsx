@@ -1,9 +1,9 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
 import { KeyboardPane } from '../../src/components/KeyboardPane';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { radii, space } from '../../src/theme/tokens';
+import { radii, space, typography } from '../../src/theme/tokens';
 
 import { ActionSheet } from '../../src/components/ActionSheet';
 import { AlpiMark } from '../../src/components/AlpiMark';
@@ -20,12 +20,16 @@ import { useBack } from '../../src/hooks/useBack';
 import { enqueueReadAloud } from '../../src/lib/readAloud';
 import { Composer } from '../../src/features/chat/Composer';
 import { MessageActionsSheet } from '../../src/features/chat/MessageActionsSheet';
+import { ModelEffortSheets } from '../../src/features/chat/ModelEffortSheets';
+import { modelChipLabel } from '../../src/features/chat/modelChip';
+import { EnterOnce, listDismissMode, useSeenIds } from '../../src/features/chat/chatMotion';
+import { useReduceMotion } from '../../src/lib/reduceMotion';
 import { retryTextFor } from '../../src/features/chat/messageActions';
 import { visibleWindow } from '../../src/lib/chatWindow';
 import { compactProducedTool } from '../../../common/producedAttachments.mjs';
 import { modelLabel } from '../../src/lib/modelLabel';
 import { profileLabel } from '../../src/lib/profileName';
-import { mergeStreamingTurn, isInterruptedTurn, isLastTurnInFlight, consumeAutoRead, routedModelFor, baselineModelFor, turnFrontier, turnLandedSince } from '../../src/features/chat/chatTurns';
+import { mergeStreamingTurn, isInterruptedTurn, isLastTurnInFlight, consumeAutoRead, routedModelFor, baselineModelFor, turnFrontier, turnLandedSince, reasoningStreams } from '../../src/features/chat/chatTurns';
 import { ChatSkeleton } from '../../src/features/chat/ChatSkeleton';
 import { EmptyThread } from '../../src/features/chat/EmptyThread';
 import { JumpToLatest, JUMP_THRESHOLD } from '../../src/features/chat/JumpToLatest';
@@ -80,6 +84,7 @@ function PaneColumn({ children }) {
 
 const TurnBlock = memo(function TurnBlock({ turn, turnIndex, profileName, profileModel, accent, colors, fonts, fontSizes, onActionTarget, inFlight = false }) {
   const ts = turn.at ? relativeTime(turn.at * 1000) : '';
+  const answeredTs = turn.ended_at ? relativeTime(turn.ended_at * 1000) : ts;
   const parts = turnParts(turn);
   const lastAnswer = parts.askUsers[parts.askUsers.length - 1]?.result;
   // Suppress only on exact echo; useful commentary after cancel/timeout/no-handler stays visible.
@@ -87,6 +92,7 @@ const TurnBlock = memo(function TurnBlock({ turn, turnIndex, profileName, profil
   const showAssistant = (!!turn.assistant || turn.output_attachments?.length > 0) && !assistantEchoesAsk;
   const routedModel = routedModelFor(turn, profileModel);
   const active = turn.pending && !showAssistant;
+  const reasoningLive = reasoningStreams(turn, parts.reasoning, showAssistant);
   return (
     <View style={TURN_STYLES.block}>
       {turn.user ? (
@@ -122,7 +128,8 @@ const TurnBlock = memo(function TurnBlock({ turn, turnIndex, profileName, profil
             <Reasoning
               text={parts.reasoning}
               seconds={parts.reasonedSeconds}
-              streaming={active}
+              streaming={reasoningLive}
+              answered={showAssistant}
               flat
             />
           ) : null}
@@ -131,6 +138,7 @@ const TurnBlock = memo(function TurnBlock({ turn, turnIndex, profileName, profil
       {showAssistant ? (
         <ProfileAssistantMessage
           text={turn.assistant}
+          ts={turn.pending ? '' : answeredTs}
           attachments={turn.output_attachments}
           profile={profileName}
           onLongPress={() => onActionTarget({
@@ -142,22 +150,22 @@ const TurnBlock = memo(function TurnBlock({ turn, turnIndex, profileName, profil
         />
       ) : null}
       {showAssistant && routedModel ? (
-        <Text style={[TURN_STYLES.routedModel, { color: colors.ink3, fontFamily: fonts.mono, fontSize: fontSizes.xs }]}>
+        <Text style={[TURN_STYLES.routedModel, { color: colors.ink3, fontFamily: fonts.mono, fontSize: fontSizes.sm }]}>
           ⇢ {routedModel}
         </Text>
       ) : null}
       {isInterruptedTurn(turn) ? (
-        <Text style={[TURN_STYLES.unfinished, { color: colors.ink3, fontFamily: fonts.mono, fontSize: fontSizes.xs }]}>
+        <Text style={[TURN_STYLES.unfinished, { color: colors.ink3, fontFamily: fonts.mono, fontSize: fontSizes.sm }]}>
           Interrupted before final reply
         </Text>
       ) : null}
       {!isInterruptedTurn(turn) && inFlight ? (
-        <Text style={[TURN_STYLES.unfinished, { color: colors.ink3, fontFamily: fonts.mono, fontSize: fontSizes.xs }]}>
+        <Text style={[TURN_STYLES.unfinished, { color: colors.ink3, fontFamily: fonts.mono, fontSize: fontSizes.sm }]}>
           Still working…
         </Text>
       ) : null}
       {turn.error ? (
-        <Text style={[TURN_STYLES.error, { color: colors.dangerText, fontFamily: fonts.mono, fontSize: fontSizes.xs }]}>
+        <Text style={[TURN_STYLES.error, { color: colors.dangerText, fontFamily: fonts.mono, fontSize: fontSizes.sm }]}>
           {turn.error}
         </Text>
       ) : null}
@@ -180,12 +188,12 @@ function AskUserAnswer({ result, question, accent, colors, fonts, fontSizes }) {
             gap: space.s2,
           }}
         >
-          <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.lg, color: colors.ink3 }}>
+          <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes[typography.chat.size], color: colors.ink3 }}>
             {question || result}
           </Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2 }}>
-            <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>∅</Text>
-            <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3, letterSpacing: 0.6 }}>
+            <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink3 }}>∅</Text>
+            <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink3, letterSpacing: 0.6 }}>
               {noAnswerTag}
             </Text>
           </View>
@@ -200,7 +208,7 @@ function AskUserAnswer({ result, question, accent, colors, fonts, fontSizes }) {
         style={{
           flex: 1,
           fontFamily: fonts.sans.regular,
-          fontSize: fontSizes.lg,
+          fontSize: fontSizes[typography.chat.size],
           color: colors.ink,
         }}
       >
@@ -215,6 +223,7 @@ function ChatList({ turns, pendingTurn, hydrating, profileName, model, accent, o
   const [farFromLatest, setFarFromLatest] = useState(false);
   const listRef = useRef(null);
   const { twoPane } = usePane();
+  const reduceMotion = useReduceMotion();
 
   const full = useMemo(
     () => mergeStreamingTurn(turns, pendingTurn),
@@ -225,6 +234,8 @@ function ChatList({ turns, pendingTurn, hydrating, profileName, model, accent, o
     [full, sessionInFlight],
   );
   const lastTurnIndex = turnsBase + full.length - 1;
+  const turnIds = useMemo(() => full.map((_, i) => turnsBase + i), [full, turnsBase]);
+  const { isFresh, markSeen } = useSeenIds(turnIds, !hydrating);
 
   const visible = useMemo(
     () => visibleWindow(full, pageSize, turnsBase),
@@ -234,20 +245,22 @@ function ChatList({ turns, pendingTurn, hydrating, profileName, model, accent, o
 
   const renderItem = useCallback(
     ({ item }) => (
-      <TurnBlock
-        turn={item.turn}
-        turnIndex={item.turnIndex}
-        profileName={profileName}
-        profileModel={model}
-        accent={accent}
-        colors={colors}
-        fonts={fonts}
-        fontSizes={fontSizes}
-        onActionTarget={onActionTarget}
-        inFlight={lastTurnInFlight && item.turnIndex === lastTurnIndex}
-      />
+      <EnterOnce id={item.turnIndex} fresh={!reduceMotion && isFresh(item.turnIndex)} onSeen={markSeen}>
+        <TurnBlock
+          turn={item.turn}
+          turnIndex={item.turnIndex}
+          profileName={profileName}
+          profileModel={model}
+          accent={accent}
+          colors={colors}
+          fonts={fonts}
+          fontSizes={fontSizes}
+          onActionTarget={onActionTarget}
+          inFlight={lastTurnInFlight && item.turnIndex === lastTurnIndex}
+        />
+      </EnterOnce>
     ),
-    [profileName, model, accent, colors, fonts, fontSizes, onActionTarget, lastTurnInFlight, lastTurnIndex],
+    [profileName, model, accent, colors, fonts, fontSizes, onActionTarget, lastTurnInFlight, lastTurnIndex, reduceMotion, isFresh, markSeen],
   );
 
   if (hydrating && full.length === 0) {
@@ -276,6 +289,8 @@ function ChatList({ turns, pendingTurn, hydrating, profileName, model, accent, o
       renderItem={renderItem}
       onScroll={(e) => setFarFromLatest(e.nativeEvent.contentOffset.y > JUMP_THRESHOLD)}
       scrollEventThrottle={200}
+      keyboardDismissMode={listDismissMode()}
+      keyboardShouldPersistTaps="handled"
       contentContainerStyle={twoPane ? [TURN_STYLES.listContent, TURN_STYLES.contentColumn] : TURN_STYLES.listContent}
       onEndReached={hasMore ? () => {
         if (full.length <= pageSize && hasMoreRemote) onLoadOlder?.();
@@ -471,10 +486,15 @@ function ProfileChatInner() {
   });
 
   const [voiceCfg, setVoiceCfg] = useState({ voiceId: null, autoRead: false });
+  const [detail, setDetail] = useState(null);
+  const [modelSheetOpen, setModelSheetOpen] = useState(false);
   const loadVoiceCfg = useCallback(() => {
     if (!id) return;
     call('host.profile.detail', { profile: id })
-      .then((d) => setVoiceCfg({ voiceId: d?.voice_id ?? null, autoRead: !!d?.voice_auto_read }))
+      .then((d) => {
+        setDetail(d ?? null);
+        setVoiceCfg({ voiceId: d?.voice_id ?? null, autoRead: !!d?.voice_auto_read });
+      })
       .catch(() => {});
   }, [id, call]);
   useEffect(() => { loadVoiceCfg(); }, [loadVoiceCfg]);
@@ -615,24 +635,10 @@ function ProfileChatInner() {
         ? 'profile · pick a model'
         : (
             <>
-              {shownModel && canAdmin ? (
-                <Pressable
-                  onPress={() => router.push(`/profile/${profile.name}/settings?intent=model`)}
-                  hitSlop={space.s2}
-                  accessibilityRole="button"
-                  accessibilityLabel="Change model"
-                >
-                  <Text
-                    numberOfLines={1}
-                    style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink2 }}
-                  >
-                    {shownModel}
-                  </Text>
-                </Pressable>
-              ) : shownModel ? (
+              {shownModel ? (
                 <Text
                   numberOfLines={1}
-                  style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink2 }}
+                  style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink2 }}
                 >
                   {shownModel}
                 </Text>
@@ -662,6 +668,12 @@ function ProfileChatInner() {
 
   const turns = sessionData?.turns ?? [];
   const paused = !!profile.paused;
+  const chipLabel = canAdmin ? modelChipLabel(profile.model, detail?.model_reasoning_effort) : '';
+  const saveProfileField = (key, value) =>
+    call('host.config.set_field', { profile: id, key, value }).then(() => {
+      summaries.refresh();
+      loadVoiceCfg();
+    });
 
   const menuActions = headerMenuActions({
     noun: 'profile',
@@ -753,6 +765,7 @@ function ProfileChatInner() {
               attachments={attachments}
               onPickAttachment={pickAttachment}
               onRemoveAttachment={(i) => setAttachments((p) => p.filter((_, j) => j !== i))}
+              modelChip={chipLabel ? { label: chipLabel, onPress: () => setModelSheetOpen(true) } : null}
             />
           </PaneColumn>
         </KeyboardPane>
@@ -764,6 +777,15 @@ function ProfileChatInner() {
         subtitle="PROFILE"
         actions={menuActions}
       />
+      {canAdmin ? (
+        <ModelEffortSheets
+          open={modelSheetOpen}
+          onClose={() => setModelSheetOpen(false)}
+          profile={{ ...profile, ...(detail ?? {}) }}
+          accent={accent}
+          onSave={saveProfileField}
+        />
+      ) : null}
       <MessageActionsSheet
         target={actionTarget}
         onClose={() => setActionTarget(null)}

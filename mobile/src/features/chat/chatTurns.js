@@ -72,3 +72,8 @@ export function autoReadText(streamedReply, turns) {
 export function consumeAutoRead(streamedReply, autoRead, turns) {
   return { speak: autoRead ? autoReadText(streamedReply, turns) : '', nextStreamed: '' };
 }
+
+export function reasoningStreams(turn, reasoningText, answered) {
+  if (!turn?.pending || answered) return false;
+  return !!turn.reasoningOpen || !String(reasoningText ?? '').trim();
+}

@@ -13,7 +13,7 @@ export const PANE_PAD_X = space.s7;
 export const BUBBLE_MAX_PANE = '76%';
 
 export const CHROME_H = mobile.tap;
-export const CHROME_BTN = space.s10;
+export const CHROME_BTN = space.s11;
 export const COMPOSER_PAD_Y = space.s3;
 export const COMPOSER_CTRL = mobile.tap;
 export const tapSlop = (size) => (mobile.tap - size) / 2;
@@ -28,9 +28,10 @@ export function nextTwoPane(prev, width, height) {
   return prev ? width >= MIN_W - HYSTERESIS : width >= MIN_W;
 }
 
-// A fold open (690) starts with the roster hidden; a tablet (800+, leaving 480 for the pane) starts with it shown.
-export function sidebarOpenByDefault(width) {
-  return width >= SIDEBAR_OPEN_MIN_W;
+// A fold open in portrait (690) starts with the roster hidden; landscape from MIN_W or any 800+ window starts with it shown.
+export function sidebarOpenByDefault(width, height = 0) {
+  if (width >= SIDEBAR_OPEN_MIN_W) return true;
+  return height > 0 && width >= MIN_W && width > height;
 }
 
 export function stacksRow(width) {
@@ -39,10 +40,11 @@ export function stacksRow(width) {
 
 export const SETTINGS_PATH = '/settings';
 export const OUTPUTS_PATH = '/outputs';
+export const ACTIVITY_PATH = '/activity';
 
 const FULL_BLEED = ['/onboarding', '/pair', '/paired', '/biometric'];
 // Shell destinations own the detail pane, so they are roots not drills
-const PANE_ROOT_PATHS = ['/', SETTINGS_PATH, OUTPUTS_PATH];
+const PANE_ROOT_PATHS = ['/', SETTINGS_PATH, OUTPUTS_PATH, ACTIVITY_PATH];
 const PANE_ROOT_KINDS = ['chat', 'wg'];
 const SELECTION_KINDS = ['chat', 'wg', 'profile'];
 const PROFILE_SECTIONS = ['brain/memory', 'brain/skills', 'brain/tools', 'email', 'mcp', 'peers', 'providers', 'schedule'];
@@ -108,6 +110,13 @@ export function backFallback(pathname) {
   return PROFILE_SECTIONS.includes(section) ? `/profile/${id}/${section}` : `/chat/${id}`;
 }
 
+export const PANE_FADE_MS = 120;
+
 export function stackAnimation(twoPane) {
   return twoPane ? 'none' : 'slide_from_right';
+}
+
+export function paneAnimation(twoPane, reduceMotion = false) {
+  if (!twoPane) return stackAnimation(false);
+  return reduceMotion ? 'none' : 'fade';
 }

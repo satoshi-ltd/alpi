@@ -23,6 +23,13 @@ const FIXTURES = {
     severity: 'caution',
     timeout_s: 60,
   },
+  'clarification.request': {
+    profile: 'vera',
+    request_id: 'ask-debug',
+    question: 'Which hotel ships first?',
+    choices: [{ label: 'roma' }, { label: 'lisboa' }],
+    timeout_s: 300,
+  },
   'schedule.failed': {
     profile: 'vera',
     job_id: 'job-debug',

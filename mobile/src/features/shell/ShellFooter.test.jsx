@@ -33,9 +33,10 @@ vi.mock('../../components/Icon', () => ({ Icon: ({ name }) => React.createElemen
 
 vi.mock('../../theme/ThemeContext', () => ({
   useTheme: () => ({
-    colors: { ink2: '#333', ink4: '#999', line: '#eee', selected: '#eaeaea', danger: '#c00' },
+    colors: { ink2: '#333', ink4: '#999', line: '#eee', selected: '#eaeaea', danger: '#c00', warning: '#e08a3c', warningText: '#8a5a0a' },
     fonts: { sans: { medium: 'm', semibold: 's' }, monoMedium: 'monoMedium' },
-    fontSizes: { xxs: 9, xs: 11, sm: 12 },
+    fontSizes: { xs: 11, sm: 12 },
+    chromeScale: 1.3,
     pref: h.pref,
     setMode: h.setMode,
   }),
@@ -97,6 +98,40 @@ describe('ShellFooter entries', () => {
     expect(screen.queryByLabelText('Notifications · 4 unread')).toBeNull();
     expect(settings()).toBeTruthy();
     expect(screen.getByText('v0.3.1')).toBeTruthy();
+  });
+});
+
+describe('ShellFooter activity entry', () => {
+  const activity = (n = 0) => screen.getByLabelText(n > 0 ? `Activity · ${n} need you` : 'Activity');
+
+  it('sits after notifications and opens the activity screen', () => {
+    const onActivityPress = vi.fn();
+    render(<ShellFooter unread={0} onNotificationsPress={() => {}} onSettingsPress={() => {}} onActivityPress={onActivityPress} />);
+    expect(follows(bell(), activity())).toBe(true);
+    fireEvent.click(activity());
+    expect(onActivityPress).toHaveBeenCalledTimes(1);
+  });
+
+  it('counts what needs the user in the warning tone, apart from the unread badge', () => {
+    render(<ShellFooter unread={3} needsYou={2} onNotificationsPress={() => {}} onSettingsPress={() => {}} onActivityPress={() => {}} />);
+    const badge = activity(2).querySelector('[data-pos="absolute"]');
+    expect(badge.textContent).toBe('2');
+    expect(JSON.parse(badge.getAttribute('data-style')).backgroundColor).toBe('#e08a3c');
+    expect(JSON.parse(bell(3).querySelector('[data-pos="absolute"]').getAttribute('data-style')).backgroundColor).toBe('#c00');
+  });
+
+  it('stays out of the footer on a daemon without the activity verb', () => {
+    render(<ShellFooter onSettingsPress={() => {}} onActivityPress={null} needsYou={4} />);
+    expect(screen.queryByLabelText(/^Activity/)).toBeNull();
+  });
+
+  it('gives every entry a 44 pt target and a button role, and caps its text at the chrome scale', () => {
+    render(<ShellFooter unread={1} onNotificationsPress={() => {}} onSettingsPress={() => {}} onActivityPress={() => {}} />);
+    for (const entry of [settings(), bell(1), activity()]) {
+      expect(entry.getAttribute('accessibilityRole')).toBe('button');
+      expect(Number(entry.getAttribute('hitSlop')) * 2 + 36).toBe(mobile.tap);
+    }
+    expect(screen.getByText('Settings').getAttribute('maxFontSizeMultiplier')).toBe('1.3');
   });
 });
 

@@ -4,6 +4,9 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 afterEach(cleanup);
 
+const haptics = vi.hoisted(() => ({ warning: vi.fn() }));
+vi.mock('../../lib/haptics', () => haptics);
+
 const { fontOf } = vi.hoisted(() => ({
   fontOf: (style) => [style].flat(Infinity).filter(Boolean).reduce((f, s) => s.fontFamily ?? f, null),
 }));
@@ -84,5 +87,14 @@ describe('ClarificationSheet dismissal contract', () => {
   it('cannot be swiped or tapped away: a stray gesture is not an answer', () => {
     const { container } = render(<ClarificationSheet />);
     expect(container.querySelector('[data-sheet]').getAttribute('data-dismissible')).toBe('false');
+  });
+});
+
+describe('ClarificationSheet feel', () => {
+  it('buzzes a warning once when a question opens the sheet', () => {
+    haptics.warning.mockClear();
+    const { rerender } = render(<ClarificationSheet />);
+    rerender(<ClarificationSheet />);
+    expect(haptics.warning).toHaveBeenCalledTimes(1);
   });
 });

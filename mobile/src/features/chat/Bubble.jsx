@@ -10,12 +10,37 @@ import { BUBBLE_MAX_PANE } from '../../lib/panes';
 import { usePane } from '../../nav/PaneContext';
 import { useTheme } from '../../theme/ThemeContext';
 import { AttachmentCards } from './AttachmentCards';
+import { useReduceMotion } from '../../lib/reduceMotion';
 import { stripProducedImageMarkdown } from '../../../../common/producedAttachments.mjs';
+import { longPressHaptic } from './chatHaptics';
+
+const PRESS_SCALE = 0.98;
+
+export function pressFeedback(pressed, reduceMotion) {
+  if (!pressed) return null;
+  return reduceMotion ? { opacity: 0.85 } : { transform: [{ scale: PRESS_SCALE }] };
+}
+
+function withTick(onLongPress) {
+  if (!onLongPress) return undefined;
+  return (e) => {
+    longPressHaptic();
+    onLongPress(e);
+  };
+}
+
+function Stamp({ ts }) {
+  const { colors, fonts, fontSizes } = useTheme();
+  if (!ts) return null;
+  return (
+    <Text style={{ fontFamily: fonts.monoMedium, fontSize: fontSizes.sm, lineHeight: fontSizes.sm, color: colors.ink3 }}>{ts}</Text>
+  );
+}
 
 
 const S = StyleSheet.create({
   userWrap: { alignItems: 'flex-end', paddingHorizontal: space.s7, gap: space.s1 },
-  agentWrap: { paddingHorizontal: space.s7 },
+  agentWrap: { paddingHorizontal: space.s7, gap: space.s1 },
   bubble: {
     maxWidth: '82%',
     paddingHorizontal: space.s7,
@@ -37,15 +62,17 @@ const S = StyleSheet.create({
 });
 
 export function ProfileUserMessage({ text, ts, accent, attachments, onLongPress, profile }) {
-  const { colors, fonts, fontSizes } = useTheme();
+  const { colors, fontSizes } = useTheme();
   const { twoPane } = usePane();
+  const reduceMotion = useReduceMotion();
   const bubbleStyle = useCallback(
     ({ pressed }) => [
       S.bubble,
       twoPane ? S.paneCap : null,
-      { backgroundColor: mixHex(accent ?? colors.accent, 0.12, colors.bgPane), opacity: pressed ? 0.85 : 1 },
+      { backgroundColor: mixHex(accent ?? colors.accent, 0.12, colors.bgPane) },
+      pressFeedback(pressed, reduceMotion),
     ],
-    [accent, colors.accent, colors.bgPane, twoPane],
+    [accent, colors.accent, colors.bgPane, twoPane, reduceMotion],
   );
   return (
     <View style={S.userWrap}>
@@ -53,7 +80,7 @@ export function ProfileUserMessage({ text, ts, accent, attachments, onLongPress,
         <AttachmentCards items={attachments} variant="message" profile={profile} />
       ) : null}
       {text ? (
-        <Pressable onLongPress={onLongPress} delayLongPress={350} style={bubbleStyle}>
+        <Pressable onLongPress={withTick(onLongPress)} delayLongPress={350} style={bubbleStyle}>
           <RichText
             size={fontSizes[typography.chat.size]}
             color={colors.ink}
@@ -63,22 +90,21 @@ export function ProfileUserMessage({ text, ts, accent, attachments, onLongPress,
           </RichText>
         </Pressable>
       ) : null}
-      {ts ? (
-        <Text style={[S.meta, { fontFamily: fonts.monoMedium, fontSize: fontSizes.xs, lineHeight: fontSizes.xs, color: colors.ink3 }]}>{ts}</Text>
-      ) : null}
+      <Stamp ts={ts} />
     </View>
   );
 }
 
-export function ProfileAssistantMessage({ text, attachments, onLongPress, profile }) {
+export function ProfileAssistantMessage({ text, ts, attachments, onLongPress, profile }) {
   const { colors, fontSizes } = useTheme();
+  const reduceMotion = useReduceMotion();
   const wrapStyle = useCallback(
-    ({ pressed }) => [S.agentWrap, pressed && { opacity: 0.85 }],
-    [],
+    ({ pressed }) => [S.agentWrap, pressFeedback(pressed, reduceMotion)],
+    [reduceMotion],
   );
   const body = stripProducedImageMarkdown(text, attachments);
   return (
-    <Pressable onLongPress={onLongPress} delayLongPress={350} style={wrapStyle}>
+    <Pressable onLongPress={withTick(onLongPress)} delayLongPress={350} style={wrapStyle}>
       {body ? (
         <RichText size={fontSizes[typography.chat.size]} color={colors.ink} imageProfile={profile}>
           {body}
@@ -87,6 +113,7 @@ export function ProfileAssistantMessage({ text, attachments, onLongPress, profil
       {attachments?.length ? (
         <AttachmentCards items={attachments} variant="message" profile={profile} />
       ) : null}
+      <Stamp ts={ts} />
     </Pressable>
   );
 }
@@ -100,7 +127,8 @@ export function WorkgroupMessage({ body, speakerName, speakerAccent, isFromHub, 
   const seqStr = seq != null ? `#${seq}` : null;
   const costStr = cost ? formatCostLine(cost) : null;
 
-  const metaStyle = [S.meta, { fontFamily: fonts.monoMedium, fontSize: fontSizes.xs, lineHeight: fontSizes.xs, color: colors.ink3 }];
+  const reduceMotion = useReduceMotion();
+  const metaStyle = { fontFamily: fonts.monoMedium, fontSize: fontSizes.sm, lineHeight: fontSizes.sm, color: colors.ink3 };
   const SpeakerEl = (
     <View style={S.speakerRow}>
       {!isFromHub ? <Diamond color={speakerAccent} /> : null}
@@ -118,9 +146,10 @@ export function WorkgroupMessage({ body, speakerName, speakerAccent, isFromHub, 
       right
         ? { borderTopLeftRadius: radii.bubble, borderTopRightRadius: radii.xs, borderBottomRightRadius: radii.bubble, borderBottomLeftRadius: radii.bubble }
         : { borderTopLeftRadius: radii.xs, borderTopRightRadius: radii.bubble, borderBottomRightRadius: radii.bubble, borderBottomLeftRadius: radii.bubble },
-      { backgroundColor: bg, opacity: pressed ? 0.85 : 1 },
+      { backgroundColor: bg },
+      pressFeedback(pressed, reduceMotion),
     ],
-    [bg, right, twoPane],
+    [bg, right, twoPane, reduceMotion],
   );
 
   return (
@@ -140,7 +169,7 @@ export function WorkgroupMessage({ body, speakerName, speakerAccent, isFromHub, 
           </>
         )}
       </View>
-      <Pressable onLongPress={onLongPress} delayLongPress={350} style={bubbleStyle}>
+      <Pressable onLongPress={withTick(onLongPress)} delayLongPress={350} style={bubbleStyle}>
         <RichText size={fontSizes[typography.chat.size]} color={colors.ink} imageProfile={profile}>
           {body}
         </RichText>

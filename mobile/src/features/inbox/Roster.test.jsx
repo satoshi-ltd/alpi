@@ -22,7 +22,13 @@ vi.mock('react-native', () => {
   const View = ({ children, ...p }) => React.createElement('div', plain(p), children);
   const Text = ({ children, ...p }) => React.createElement('span', plain(p), children);
   const Pressable = ({ children, onPress, hitSlop, ...p }) =>
-    React.createElement('button', { type: 'button', onClick: onPress, ...plain(p) }, children);
+    React.createElement('button', {
+      type: 'button',
+      onClick: onPress,
+      ...plain(p),
+      'data-slop': typeof hitSlop === 'number' ? String(hitSlop) : undefined,
+      'data-h': typeof p.style === 'function' ? String(p.style({ pressed: false }).height) : undefined,
+    }, children);
   const TextInput = ({ value, onChangeText, accessibilityLabel, placeholder }) =>
     React.createElement('input', {
       value,
@@ -88,6 +94,9 @@ vi.mock('./InboxSkeleton', () => ({
 }));
 
 import { space } from '../../theme/tokens';
+const haptics = vi.hoisted(() => ({ selection: vi.fn() }));
+vi.mock('../../lib/haptics', () => haptics);
+
 import { Roster } from './Roster';
 
 const alpi = { kind: 'profile', id: 'alpi', name: 'alpi', label: 'alpi', preview: 'ready', pinned: true };
@@ -335,5 +344,27 @@ describe('Roster creation reachability', () => {
     rerender(<Roster items={[]} paired error={new Error('read timeout')} onRefresh={onRefresh} />);
     expect(screen.getByText("Couldn't load the roster")).toBeTruthy();
     expect(screen.getByText('read timeout')).toBeTruthy();
+  });
+});
+
+describe('Roster section add targets', () => {
+  it('pads the New profile and New workgroup buttons to the 44 pt minimum', () => {
+    render(<Roster items={[]} paired addActions={{ profiles: { label: 'New profile', onPress: () => {} }, workgroups: { label: 'New workgroup', onPress: () => {} } }} />);
+    for (const name of ['New profile', 'New workgroup']) {
+      const button = screen.getByLabelText(name);
+      expect(Number(button.getAttribute('data-h')) + Number(button.getAttribute('data-slop')) * 2).toBe(44);
+      expect(button.getAttribute('accessibilityRole')).toBe('button');
+    }
+  });
+});
+
+describe('Roster pull to refresh', () => {
+  it('ticks a selection and refreshes when the pull triggers', () => {
+    haptics.selection.mockClear();
+    const onRefresh = vi.fn();
+    render(<Roster items={[]} paired onRefresh={onRefresh} />);
+    h.list.refreshControl.props.onRefresh();
+    expect(haptics.selection).toHaveBeenCalledTimes(1);
+    expect(onRefresh).toHaveBeenCalledTimes(1);
   });
 });

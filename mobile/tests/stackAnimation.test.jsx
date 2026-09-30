@@ -9,7 +9,10 @@ const h = vi.hoisted(() => ({
   pathname: '/',
   options: [],
   mounts: 0,
+  reduceMotion: false,
 }));
+
+vi.mock('../src/lib/reduceMotion', () => ({ useReduceMotion: () => h.reduceMotion }));
 
 vi.mock('react-native', () => ({
   View: ({ children }) => React.createElement('div', {}, children),
@@ -98,6 +101,7 @@ beforeEach(() => {
   h.pathname = '/';
   h.options = [];
   h.mounts = 0;
+  h.reduceMotion = false;
 });
 
 describe('root layout screenOptions', () => {
@@ -106,8 +110,16 @@ describe('root layout screenOptions', () => {
     expect(lastOptions().animation).toBe('slide_from_right');
   });
 
-  it('drops the animation on a tablet', () => {
+  it('crossfades the detail pane in 120 ms on a tablet', () => {
     h.window = TABLET;
+    render(<RootLayout />);
+    expect(lastOptions().animation).toBe('fade');
+    expect(lastOptions().animationDuration).toBe(120);
+  });
+
+  it('drops the crossfade under reduced motion', () => {
+    h.window = TABLET;
+    h.reduceMotion = true;
     render(<RootLayout />);
     expect(lastOptions().animation).toBe('none');
   });
@@ -172,13 +184,13 @@ describe('root layout screenOptions', () => {
     h.window = TABLET;
     const { container, rerender } = render(<RootLayout />);
     const node = stackNode(container);
-    expect(lastOptions().animation).toBe('none');
+    expect(lastOptions().animation).toBe('fade');
     expect(h.mounts).toBe(1);
 
     for (const [window, animation] of [
       [PHONE, 'slide_from_right'],
-      [TABLET, 'none'],
-      [{ width: 1194, height: 834 }, 'none'],
+      [TABLET, 'fade'],
+      [{ width: 1194, height: 834 }, 'fade'],
       [PHONE, 'slide_from_right'],
     ]) {
       h.window = window;

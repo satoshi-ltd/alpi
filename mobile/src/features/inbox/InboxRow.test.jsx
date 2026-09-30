@@ -77,6 +77,10 @@ vi.mock('../../components/Icon', () => ({
   Icon: ({ name, color }) => React.createElement('span', { 'data-icon': name, 'data-color': color }),
 }));
 vi.mock('./Pip', () => ({ Pip: ({ kind }) => React.createElement('span', { 'data-pip': kind }) }));
+vi.mock('./RowState', async (importOriginal) => ({
+  ...(await importOriginal()),
+  RowState: ({ state, phases }) => React.createElement('span', { 'data-state': state }, phases ?? state),
+}));
 
 vi.mock('expo-router', () => ({ useRouter: () => ({ push: h.push }) }));
 vi.mock('../../components/Toast', () => ({ useToast: () => h.toast }));
@@ -285,10 +289,29 @@ describe('InboxRow unread mark', () => {
 
   it('announces unread now that no dot carries the label', () => {
     renderRow({ item: { ...WORKGROUP, unread: true } });
-    expect(screen.getByLabelText('alpha unread')).toBeTruthy();
+    expect(screen.getByLabelText('alpha, unread, status?, 3m')).toBeTruthy();
     cleanup();
-    const { container } = renderRow({ item: WORKGROUP });
-    expect(container.querySelector('[aria-label]')).toBeNull();
+    renderRow({ item: WORKGROUP });
+    expect(screen.getByLabelText('alpha, status?, 3m')).toBeTruthy();
+  });
+
+  it('speaks the row as one button: name, state, preview and time', () => {
+    renderRow({ item: { ...PROFILE, ts: '4m', activity: { state: 'needs-you' } } });
+    const row = screen.getByLabelText('agora, needs you, ready, 4m');
+    expect(row.getAttribute('accessibilityRole')).toBe('button');
+    cleanup();
+    renderRow({ item: { ...WORKGROUP, activity: { state: 'working', phases: '2/4' } } });
+    expect(screen.getByLabelText('alpha, working, phase 2 of 4, status?, 3m')).toBeTruthy();
+  });
+
+  it('shows the row state on the phone roster and in the sidebar, and leads a waiting row in bold', () => {
+    const { container } = renderRow({ item: { ...PROFILE, activity: { state: 'needs-you' } } });
+    expect(container.querySelector('[data-state="needs-you"]')).toBeTruthy();
+    expect(styleOf(screen.getByText('agora')).fontFamily).toBe('Geist_700Bold');
+    cleanup();
+    const side = sidebarRow({ item: { ...WORKGROUP, state: 'working', activity: { state: 'working', phases: '2/4' } }, showState: true });
+    expect(side.container.querySelector('[data-state="working"]').textContent).toBe('2/4');
+    expect(side.container.querySelector('[data-pip]')).toBeNull();
   });
 });
 

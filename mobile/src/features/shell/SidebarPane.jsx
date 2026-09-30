@@ -16,11 +16,12 @@ import { ShellFooter } from './ShellFooter';
 import { useCanAdminEarly } from '../../hooks/useActiveRole';
 import { useDebouncedCallback } from '../../hooks/useDebouncedCallback';
 import { useEventEffect } from '../../hooks/useEvents';
+import { rowStateFor, useActivity } from '../../hooks/useActivity';
 import { useInbox } from '../../hooks/useInbox';
 import { useUnifiedOutputs } from '../../hooks/useUnifiedOutputs';
 import { useEndpoint } from '../../lib/EndpointContext';
 import { endpointHost } from '../../lib/endpoint';
-import { OUTPUTS_PATH, SETTINGS_PATH, SIDEBAR_W, openVerb, sidebarSelection } from '../../lib/panes';
+import { ACTIVITY_PATH, OUTPUTS_PATH, SETTINGS_PATH, SIDEBAR_W, openVerb, sidebarSelection } from '../../lib/panes';
 import { usePins } from '../../lib/pins';
 import { useFireOnce } from '../../lib/useFireOnce';
 import { NEW_PROFILE, NEW_WORKGROUP, useCreateGate } from './useCreateGate';
@@ -46,6 +47,7 @@ export function SidebarPane({ onCollapse }) {
   const pins = usePins(endpoint?.id);
   const { rows: unreadOutputs } = useUnifiedOutputs({ status: 'unread' });
   const unreadCount = unreadOutputs.length;
+  const activity = useActivity();
 
   const [query, setQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -78,19 +80,20 @@ export function SidebarPane({ onCollapse }) {
         pinned: it.kind === 'profile'
           ? pins.isProfilePinned(it.name)
           : pins.isWorkgroupPinned(it.profile, it.id),
+        activity: rowStateFor(activity.states, it),
       });
     }
     return out;
-  }, [items, pins]);
+  }, [items, pins, activity.states]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await refresh();
+      await Promise.all([refresh(), activity.refresh()]);
     } finally {
       setRefreshing(false);
     }
-  }, [refresh]);
+  }, [refresh, activity.refresh]);
 
   useEffect(() => {
     refresh();
@@ -148,6 +151,12 @@ export function SidebarPane({ onCollapse }) {
     router[openVerb({ twoPane: true, pathname })](OUTPUTS_PATH);
   }, [router, pathname]);
 
+  const openActivity = useCallback(() => {
+    setSheet(null);
+    router[openVerb({ twoPane: true, pathname })](ACTIVITY_PATH);
+  }, [router, pathname]);
+  const activityEntry = activity.supported ? openActivity : null;
+
   const renderRow = useCallback(
     ({ item }) => (
       <InboxRow
@@ -191,6 +200,8 @@ export function SidebarPane({ onCollapse }) {
           searchOpen={searchOpen}
           onToggleSearch={toggleSearch}
           onConnPress={() => setSheet('conn')}
+          onActivityPress={activityEntry}
+          needsYou={activity.needsYouCount}
           onCollapse={onCollapse}
         />
         <DaemonBanner status={daemonStatus} paired={!!endpoint} onRetry={onRefresh} />
@@ -215,6 +226,8 @@ export function SidebarPane({ onCollapse }) {
           unread={unreadCount}
           onNotificationsPress={canAdmin ? openNotifications : null}
           onSettingsPress={openSettings}
+          onActivityPress={activityEntry}
+          needsYou={activity.needsYouCount}
         />
         <ConnectionSheet open={sheet === 'conn'} onClose={closeSheet} />
         {canCreate ? (

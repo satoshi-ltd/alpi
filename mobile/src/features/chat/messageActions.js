@@ -1,8 +1,9 @@
-export function buildMessageActions(target, { onCopy, onEdit, onRetry }) {
+export function buildMessageActions(target, { onCopy, onSelectText, onEdit, onRetry }) {
   if (!target) return [];
   const isAgent = target.kind === 'agent';
   const out = [];
   if (onCopy) out.push({ id: 'copy', label: 'Copy', onPress: () => onCopy(target) });
+  if (onSelectText && target.text) out.push({ id: 'select', label: 'Select text', onPress: () => onSelectText(target) });
   if (!isAgent && onEdit) {
     out.push({ id: 'edit', label: 'Edit', onPress: () => onEdit(target) });
   }

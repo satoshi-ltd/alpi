@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { sheetStyles } from './sheetStyles';
 import { Modal, Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
@@ -5,6 +6,7 @@ import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { alpha, radii, space, lineHeights, typography } from '../theme/tokens';
 
+import { selection } from '../lib/haptics';
 import { usePane } from '../nav/PaneContext';
 import { useTheme } from '../theme/ThemeContext';
 import { SheetClose } from './SheetClose';
@@ -25,6 +27,10 @@ export function ActionSheet({ open, onClose, title, subtitle, description, actio
   const view = useExitSnapshot(open, { title, subtitle, description, actions });
   const pickable = view.actions.some((a) => 'selected' in a);
 
+  useEffect(() => {
+    if (open) selection();
+  }, [open]);
+
   return (
     <Modal
       visible={mounted}
@@ -37,7 +43,7 @@ export function ActionSheet({ open, onClose, title, subtitle, description, actio
         pointerEvents={open ? 'auto' : 'none'}
         style={[{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: twoPane ? 'center' : 'flex-end' }, backdropStyle]}
       >
-        <Pressable style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} onPress={onClose} />
+        <Pressable style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} onPress={onClose} accessible={false} />
         <Animated.View
           style={[
             {

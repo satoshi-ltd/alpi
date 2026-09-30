@@ -39,7 +39,7 @@ export function Banner({ kind = 'info', children, action, onAction, pulse }) {
         {children}
       </Text>
       {action ? (
-        <Pressable onPress={onAction} hitSlop={6}>
+        <Pressable onPress={onAction} hitSlop={space.s5} accessibilityRole="button" accessibilityLabel={action}>
           <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.md, color: textTint }}>
             {action}
           </Text>

@@ -2,8 +2,9 @@ import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, screen } from '@testing-library/react';
 
-const h = vi.hoisted(() => ({ toast: vi.fn() }));
+const h = vi.hoisted(() => ({ toast: vi.fn(), selection: vi.fn() }));
 vi.mock('../components/Toast', () => ({ useToast: () => h.toast }));
+vi.mock('../lib/haptics', () => ({ selection: h.selection }));
 
 import { usePullRefresh } from './usePullRefresh';
 
@@ -38,5 +39,14 @@ describe('usePullRefresh', () => {
     render(<Probe refresh={failing} />);
     await act(async () => { screen.getByText('pull').click(); });
     expect(h.toast).toHaveBeenCalledWith(expect.objectContaining({ title: 'Refresh failed', message: 'offline' }));
+  });
+});
+
+describe('usePullRefresh feel', () => {
+  it('ticks a selection the moment the pull triggers', async () => {
+    h.selection.mockClear();
+    render(<Probe refresh={async () => {}} />);
+    await act(async () => { screen.getByText('pull').click(); });
+    expect(h.selection).toHaveBeenCalledTimes(1);
   });
 });

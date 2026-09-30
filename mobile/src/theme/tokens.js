@@ -1,22 +1,36 @@
 import {
+  fontSizes as sharedFontSizes,
   nativeFace,
   palettes as sharedPalettes,
   radii as sharedRadii,
   space as sharedSpace,
   spaceExtra,
+  typography as sharedTypography,
 } from '../../../common/tokens.mjs';
 
-// Runtime consumers must read useTheme().fontSizes — these raw values ignore the user's text-size setting.
 export {
   alpha,
   dotSize,
-  fontSizes,
   glyphSize,
   glyphSizeMd,
   lineHeights,
   status,
-  typography,
 } from '../../../common/tokens.mjs';
+
+export const FONT_SIZE_DROPS = ['xxs', 'label'];
+export const FONT_SIZE_ADDS = { chat: 16 };
+
+// Runtime consumers must read useTheme().fontSizes — these raw values ignore the user's text-size setting.
+export const fontSizes = Object.fromEntries(
+  Object.entries({ ...sharedFontSizes, ...FONT_SIZE_ADDS })
+    .filter(([name]) => !FONT_SIZE_DROPS.includes(name))
+    .sort((a, b) => a[1] - b[1]),
+);
+
+export const typography = {
+  ...sharedTypography,
+  chat: { ...sharedTypography.chat, size: 'chat' },
+};
 
 // In RN each weight is a separate font family — never use fontWeight on custom fonts.
 export const fonts = {

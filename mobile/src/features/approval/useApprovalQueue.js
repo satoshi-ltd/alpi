@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 
 import { deadlineFor, useRequestQueue } from '../../hooks/useRequestQueue';
+import { dismissRequestNotifications } from '../aln/dismiss';
 
 function enqueueRequest(q, req) {
   if (!req?.request_id) return q;
@@ -36,6 +37,7 @@ export function useApprovalQueue() {
       });
       if (res && res.ok === false) setError(res.reason || 'request no longer pending');
       setQueue((q) => q.filter((r) => r.request_id !== current.request_id));
+      dismissRequestNotifications(current.request_id);
     } catch (e) {
       setError(String(e?.message || e));
     } finally {

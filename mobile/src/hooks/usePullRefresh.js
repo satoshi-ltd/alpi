@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useToast } from '../components/Toast';
+import { selection } from '../lib/haptics';
 
 export function usePullRefresh(refresh) {
   const toast = useToast();
@@ -13,6 +14,7 @@ export function usePullRefresh(refresh) {
     };
   }, []);
   const onRefresh = useCallback(async () => {
+    selection();
     setRefreshing(true);
     try {
       await refresh?.();

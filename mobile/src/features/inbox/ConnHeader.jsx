@@ -15,6 +15,8 @@ export function ConnHeader({
   onToggleSearch,
   onConnPress,
   onCollapse,
+  onActivityPress,
+  needsYou = 0,
 }) {
   const { colors, fonts, fontSizes } = useTheme();
   const { twoPane } = usePane();
@@ -39,9 +41,45 @@ export function ConnHeader({
         justifyContent: 'center',
         backgroundColor: pressed || searchOpen ? colors.selected : 'transparent',
       })}
+      accessibilityRole="button"
       accessibilityLabel={searchOpen ? 'Close filter' : 'Filter profiles and workgroups'}
     >
       <Icon name={searchOpen ? 'x' : 'search'} size="md" color={colors.ink2} />
+    </Pressable>
+  ) : null;
+
+  const activityButton = onActivityPress ? (
+    <Pressable
+      onPress={onActivityPress}
+      hitSlop={tapSlop(CHROME_BTN)}
+      accessibilityRole="button"
+      accessibilityLabel={needsYou > 0 ? `Activity · ${needsYou} need you` : 'Activity'}
+      style={({ pressed }) => ({
+        width: CHROME_BTN,
+        height: CHROME_BTN,
+        borderRadius: radii.lg,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: pressed ? colors.selected : 'transparent',
+      })}
+    >
+      <Icon name="activity" size="md" color={needsYou > 0 ? colors.warningText ?? colors.warning : colors.ink2} />
+      {needsYou > 0 ? (
+        <View
+          testID="needs-you-dot"
+          style={{
+            position: 'absolute',
+            top: space.s2,
+            right: space.s2,
+            width: 8,
+            height: 8,
+            borderRadius: radii.xs,
+            backgroundColor: colors.warning,
+            borderWidth: 1.5,
+            borderColor: twoPane ? colors.bgSide : colors.bg,
+          }}
+        />
+      ) : null}
     </Pressable>
   ) : null;
 
@@ -125,9 +163,15 @@ export function ConnHeader({
             <Icon name="panel-left" size="md" color={colors.ink2} />
           </Pressable>
         ) : null}
+        {activityButton}
         {searchToggle}
       </View>
-      <Pressable onPress={onConnPress} style={trigger}>
+      <Pressable
+        onPress={onConnPress}
+        style={trigger}
+        accessibilityRole="button"
+        accessibilityLabel={`Connection ${name}, ${host}`}
+      >
         {identity}
       </Pressable>
     </View>

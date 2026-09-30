@@ -4,7 +4,8 @@ import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
 import { Icon } from '../../components/Icon';
 import { Sheet } from '../../components/Sheet';
-import { lineHeights, radii, space } from '../../theme/tokens';
+import { warning } from '../../lib/haptics';
+import { lineHeights, mobile, radii, space } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeContext';
 import { useClarificationQueue } from './useClarificationQueue';
 
@@ -37,6 +38,7 @@ export function ClarificationSheet() {
     setPicked([]);
     setOtherMode(false);
     setOtherText('');
+    if (current?.request_id) warning();
   }, [current?.request_id]);
 
   useEffect(() => {
@@ -155,7 +157,11 @@ function ChoiceRow({ children, onPress, disabled }) {
     <Pressable
       disabled={disabled}
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: !!disabled }}
       style={({ pressed }) => ({
+        minHeight: mobile.tap,
+        justifyContent: 'center',
         paddingVertical: space.s4,
         opacity: disabled ? 0.5 : pressed ? 0.6 : 1,
       })}
@@ -246,7 +252,7 @@ function OtherInline({ otherText, setOtherText, onSend, onCancel, busy, colors, 
         }}
       />
       <View style={{ flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: space.s5, marginTop: space.s3 }}>
-        <Pressable disabled={busy} onPress={onCancel} hitSlop={6}>
+        <Pressable disabled={busy} onPress={onCancel} hitSlop={space.s5} accessibilityRole="button" accessibilityLabel="Cancel">
           <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.md, color: colors.ink3 }}>
             Cancel
           </Text>
@@ -254,6 +260,10 @@ function OtherInline({ otherText, setOtherText, onSend, onCancel, busy, colors, 
         <Pressable
           disabled={!canSend}
           onPress={onSend}
+          hitSlop={space.s2}
+          accessibilityRole="button"
+          accessibilityLabel="Send"
+          accessibilityState={{ disabled: !canSend }}
           style={{
             paddingVertical: space.s3,
             paddingHorizontal: space.s6,
@@ -355,6 +365,8 @@ function ConfirmChoices({ choices, onPick, busy, colors, fonts }) {
     <View style={{ gap: space.s4 }}>
       <Pressable
         disabled={busy}
+        accessibilityRole="button"
+        accessibilityLabel={primary.label}
         onPress={() => onPick(primary.label)}
         style={({ pressed }) => ({
           paddingVertical: space.s6,
@@ -370,8 +382,12 @@ function ConfirmChoices({ choices, onPick, busy, colors, fonts }) {
       </Pressable>
       <Pressable
         disabled={busy}
+        accessibilityRole="button"
+        accessibilityLabel={secondary.label}
         onPress={() => onPick(secondary.label)}
         style={({ pressed }) => ({
+          minHeight: mobile.tap,
+          justifyContent: 'center',
           paddingVertical: space.s4,
           alignItems: 'center',
           opacity: busy ? 0.5 : pressed ? 0.5 : 1,
@@ -393,6 +409,9 @@ function Footer({ picked, busy, onContinue, colors, fonts }) {
       <Pressable
         disabled={!canContinue}
         onPress={onContinue}
+        hitSlop={space.s2}
+        accessibilityRole="button"
+        accessibilityState={{ disabled: !canContinue }}
         style={{
           paddingVertical: space.s4,
           paddingHorizontal: space.s7,

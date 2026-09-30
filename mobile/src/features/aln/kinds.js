@@ -2,14 +2,28 @@ export const NOTIFIABLE_KINDS = [
   'agent.message',
   'wg.done',
   'approval.request',
+  'clarification.request',
   'schedule.failed',
   'budget.threshold',
 ];
 
 
-// Only approval.request expires: the daemon auto-denies at its own deadline, and a banner for an already-decided request is worse than silence.
+export const APPROVAL_CATEGORY = 'alpi.approval';
+export const APPROVAL_ACTIONS = { deny: 'deny', allow_once: 'once' };
+
+const REQUEST_KINDS = { 'approval.request': 'approval', 'clarification.request': 'clarification' };
+
+export function requestDomain(kind) {
+  return REQUEST_KINDS[kind] ?? null;
+}
+
+export function categoryFor(event) {
+  return event?.event === 'approval.request' ? APPROVAL_CATEGORY : null;
+}
+
+// Only requests expire: the daemon auto-resolves at its own deadline, and a banner for an already-decided request is worse than silence.
 export function isStale(event, nowMs) {
-  if (event?.event !== 'approval.request') return false;
+  if (!requestDomain(event?.event)) return false;
   const data = event?.data || {};
   const ts = Number(data.ts);
   const timeout = Number(data.timeout_s);
@@ -41,6 +55,11 @@ export function formatNotification(event, connection) {
       return {
         title: `${prefix} · approval needed`,
         body: data.command || 'Tool execution awaiting approval.',
+      };
+    case 'clarification.request':
+      return {
+        title: `${prefix} · question`,
+        body: data.question || 'Your agent is waiting for an answer.',
       };
     case 'schedule.failed': {
       const name = data.title || data.job_id || '';
@@ -74,6 +93,7 @@ export function deepLinkFor(event, _connection) {
     case 'wg.done':
       return data.wg_id ? `/wg/${data.wg_id}` : '/';
     case 'approval.request':
+    case 'clarification.request':
       return '/';
     case 'schedule.failed':
       if (typeof data.deep_link === 'string' && data.deep_link) {

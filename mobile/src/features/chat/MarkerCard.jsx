@@ -68,7 +68,7 @@ export function MarkerCard({ variant = 'task', side = 'left', hubColor, speakerN
 
   const costStr = cost?.tokens > 0 || cost?.usd > 0 ? formatCostLine(cost) : null;
 
-  const metaStyle = { fontFamily: fonts.monoMedium, fontSize: fontSizes.xs, lineHeight: fontSizes.xs * lineHeights.cozy, color: colors.ink3 };
+  const metaStyle = { fontFamily: fonts.monoMedium, fontSize: fontSizes.sm, lineHeight: fontSizes.sm * lineHeights.cozy, color: colors.ink3 };
 
   const SpeakerEl = speakerName ? (
     <View style={S.row}>
@@ -102,7 +102,7 @@ export function MarkerCard({ variant = 'task', side = 'left', hubColor, speakerN
           <View style={S.iconSlot}>
             <MarkerIcon variant={variant} color={baseAccent} stale={stale} />
           </View>
-          <Text style={{ fontFamily: fonts.monoSemibold, fontSize: fontSizes.xs, lineHeight: fontSizes.xs * lineHeights.cozy, letterSpacing: fontSizes.xs * tracking.wider, color: baseAccent }}>
+          <Text style={{ fontFamily: fonts.monoSemibold, fontSize: fontSizes.sm, lineHeight: fontSizes.sm * lineHeights.cozy, letterSpacing: fontSizes.sm * tracking.wider, color: baseAccent }}>
             {label || LABELS[variant]}
           </Text>
         </View>

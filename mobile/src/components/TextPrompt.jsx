@@ -43,10 +43,12 @@ export function TextPrompt({
     >
       <Pressable
         onPress={onClose}
+        accessible={false}
         style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', padding: space.s9, paddingBottom: space.s9 + kbHeight }}
       >
         <Pressable
           onPress={() => {}}
+          accessible={false}
           style={{
             width: '100%',
             maxWidth: 420,

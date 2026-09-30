@@ -179,7 +179,7 @@ describe('connections list', () => {
     fireEvent.click(screen.getByText('Create + pair'));
     await waitFor(() => expect(screen.getByLabelText('public')).toBeTruthy());
     const dotIn = (name) => !!screen.getByLabelText(name).querySelector('[data-dot]');
-    expect(dotIn('lan')).toBe(true);
+    await waitFor(() => expect(dotIn('lan')).toBe(true));
     fireEvent.click(screen.getByLabelText('public'));
     expect(dotIn('public')).toBe(true);
     expect(dotIn('lan')).toBe(false);

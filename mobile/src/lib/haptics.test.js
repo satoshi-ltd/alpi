@@ -1,34 +1,48 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const h = vi.hoisted(() => ({
+  impactAsync: vi.fn(async () => {}),
   selectionAsync: vi.fn(async () => {}),
   notificationAsync: vi.fn(async () => {}),
 }));
 
 vi.mock('expo-haptics', () => ({
+  impactAsync: h.impactAsync,
   selectionAsync: h.selectionAsync,
   notificationAsync: h.notificationAsync,
-  NotificationFeedbackType: { Warning: 'warning' },
+  ImpactFeedbackStyle: { Light: 'light' },
+  NotificationFeedbackType: { Warning: 'warning', Success: 'success' },
 }));
 
-import { _resetHapticsForTests, tapFeedback, warnFeedback } from './haptics';
+import { _resetHapticsForTests, selection, success, tap, warning } from './haptics';
 
 beforeEach(() => {
   _resetHapticsForTests();
-  h.selectionAsync.mockClear();
-  h.notificationAsync.mockClear();
+  for (const fn of Object.values(h)) fn.mockClear();
 });
 
-describe('haptics', () => {
-  it('plays a selection tick for a toggle and a warning for a destructive confirm', async () => {
-    await tapFeedback();
+describe('haptics map', () => {
+  it('plays a light impact for send and stop', async () => {
+    await tap();
+    expect(h.impactAsync).toHaveBeenCalledWith('light');
+  });
+
+  it('ticks a selection for toggles, pull to refresh and sheet menus', async () => {
+    await selection();
     expect(h.selectionAsync).toHaveBeenCalledTimes(1);
-    await warnFeedback();
-    expect(h.notificationAsync).toHaveBeenCalledWith('warning');
+  });
+
+  it('plays a warning when an agent needs the user and a success when it lands', async () => {
+    await warning();
+    expect(h.notificationAsync).toHaveBeenLastCalledWith('warning');
+    await success();
+    expect(h.notificationAsync).toHaveBeenLastCalledWith('success');
   });
 
   it('never throws when the device has no haptics', async () => {
     h.selectionAsync.mockRejectedValueOnce(new Error('no vibrator'));
-    await expect(tapFeedback()).resolves.toBeUndefined();
+    h.impactAsync.mockRejectedValueOnce(new Error('no vibrator'));
+    await expect(selection()).resolves.toBeUndefined();
+    await expect(tap()).resolves.toBeUndefined();
   });
 });

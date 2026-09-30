@@ -5,7 +5,9 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 afterEach(cleanup);
 
-const h = vi.hoisted(() => ({ window: { width: 834, height: 1194 }, insets: { bottom: 0 }, offScreen: [], mounted: null }));
+const h = vi.hoisted(() => ({ window: { width: 834, height: 1194 }, insets: { bottom: 0 }, offScreen: [], mounted: null, selection: vi.fn() }));
+
+vi.mock('../lib/haptics', () => ({ selection: h.selection }));
 
 vi.mock('react-native', () => {
   const View = ({ children, style, ...p }) => React.createElement('div', p, children);
@@ -267,5 +269,16 @@ describe('dialog title role', () => {
     rerender(<ActionSheet open onClose={() => {}} title="Preferences" />);
     expect(titleStyle().fontSize).toBe(23);
     expect(titleStyle().lineHeight).toBeCloseTo(29.9);
+  });
+});
+
+describe('ActionSheet feel', () => {
+  it('ticks a selection when it opens and stays quiet while closed', () => {
+    h.selection.mockClear();
+    const { rerender } = render(<ActionSheet open={false} onClose={() => {}} actions={[{ label: 'Pin' }]} />);
+    expect(h.selection).not.toHaveBeenCalled();
+    rerender(<ActionSheet open onClose={() => {}} actions={[{ label: 'Pin' }]} />);
+    rerender(<ActionSheet open onClose={() => {}} actions={[{ label: 'Pin' }]} />);
+    expect(h.selection).toHaveBeenCalledTimes(1);
   });
 });

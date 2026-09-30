@@ -28,3 +28,4 @@ describe('canComposerSend', () => {
     expect(canComposerSend({ hasText: true, hasAttachments: false, taskOk: true, disabled: false, busy: false })).toBe(true);
   });
 });
+

@@ -3,6 +3,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 
 import { Diamond } from '../../components/Diamond';
 import { Sheet } from '../../components/Sheet';
+import { warning } from '../../lib/haptics';
 import { lineHeights, radii, space } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeContext';
 import { useApprovalQueue } from './useApprovalQueue';
@@ -17,6 +18,10 @@ export function ApprovalSheet() {
   const { colors, fonts, fontSizes } = useTheme();
   const { current, busy, error, respond } = useApprovalQueue();
   const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (current?.request_id) warning();
+  }, [current?.request_id]);
 
   useEffect(() => {
     if (!current?.deadline) return undefined;
@@ -124,6 +129,9 @@ export function ApprovalSheet() {
               <Pressable
                 key={c.value}
                 disabled={busy}
+                accessibilityRole="button"
+                accessibilityLabel={`${c.label}, ${c.hint}`}
+                accessibilityState={{ disabled: busy }}
                 onPress={() => respond(c.value)}
                 style={({ pressed }) => ({
                   paddingVertical: space.s5,
@@ -152,6 +160,9 @@ export function ApprovalSheet() {
 
           <Pressable
             disabled={busy}
+            accessibilityRole="button"
+            accessibilityLabel="Deny"
+            accessibilityState={{ disabled: busy }}
             onPress={deny}
             style={({ pressed }) => ({
               alignSelf: 'stretch',

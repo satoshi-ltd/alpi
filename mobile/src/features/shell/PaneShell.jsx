@@ -9,9 +9,9 @@ import { SidebarPane } from './SidebarPane';
 
 export function PaneShell({ children }) {
   const { colors } = useTheme();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const twoPane = useTwoPane();
-  const { open, toggle } = useSidebarOpen(width, twoPane);
+  const { open, toggle } = useSidebarOpen(width, twoPane, height);
   const pane = useMemo(
     () => ({
       twoPane,

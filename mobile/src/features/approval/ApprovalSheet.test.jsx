@@ -4,7 +4,9 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 afterEach(cleanup);
 
-const h = vi.hoisted(() => ({ respond: vi.fn() }));
+const h = vi.hoisted(() => ({ respond: vi.fn(), warning: vi.fn() }));
+
+vi.mock('../../lib/haptics', () => ({ warning: h.warning }));
 
 vi.mock('react-native', () => {
   const View = ({ children, style, ...p }) => React.createElement('div', p, children);
@@ -67,5 +69,14 @@ describe('ApprovalSheet dismissal contract', () => {
   it('cannot be swiped or tapped away: a stray gesture is not a denial', () => {
     const { container } = render(<ApprovalSheet />);
     expect(container.querySelector('[data-sheet]').getAttribute('data-dismissible')).toBe('false');
+  });
+});
+
+describe('ApprovalSheet feel', () => {
+  it('buzzes a warning once when a request opens the sheet, not on every render', () => {
+    h.warning.mockClear();
+    const { rerender } = render(<ApprovalSheet />);
+    rerender(<ApprovalSheet />);
+    expect(h.warning).toHaveBeenCalledTimes(1);
   });
 });

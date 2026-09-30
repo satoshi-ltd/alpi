@@ -1,4 +1,5 @@
 import Constants from 'expo-constants';
+import { contrastText } from '../../../../common/color.mjs';
 import { Pressable, Text, View } from 'react-native';
 
 import { Icon } from '../../components/Icon';
@@ -8,6 +9,8 @@ import { useTheme } from '../../theme/ThemeContext';
 import { lineHeights, radii, space } from '../../theme/tokens';
 
 const HAIRLINE = 0.5;
+const ENTRY_H = space.s11;
+const ENTRY_SLOP = (CHROME_H - ENTRY_H) / 2;
 const APP_VERSION = Constants.expoConfig?.version ?? '0.0.0';
 
 const THEME_ORDER = ['light', 'dark', 'system'];
@@ -18,16 +21,56 @@ export function nextThemePref(pref) {
   return THEME_ORDER[(THEME_ORDER.indexOf(pref) + 1) % THEME_ORDER.length];
 }
 
-export function ShellFooter({ unread = 0, onNotificationsPress, onSettingsPress }) {
-  const { colors, fonts, fontSizes, pref, setMode } = useTheme();
+function CountBadge({ count, tone, ring }) {
+  const { colors, fonts, fontSizes, chromeScale } = useTheme();
+  if (!(count > 0)) return null;
+  const bg = tone === 'warning' ? colors.warning : colors.danger;
+  return (
+    <View
+      style={{
+        position: 'absolute',
+        top: -space.s2,
+        right: -space.s3,
+        minWidth: 18,
+        height: 18,
+        paddingHorizontal: space.s2,
+        flexDirection: 'row',
+        borderRadius: radii.pill,
+        borderWidth: 1.5,
+        borderColor: ring,
+        backgroundColor: bg,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <Text
+        numberOfLines={1}
+        maxFontSizeMultiplier={chromeScale}
+        style={{
+          fontFamily: fonts.sans.semibold,
+          fontSize: fontSizes.xs,
+          lineHeight: fontSizes.xs * lineHeights.cozy,
+          includeFontPadding: false,
+          color: tone === 'warning' ? contrastText(bg) : colors.onDanger ?? '#fff',
+        }}
+      >
+        {count > 99 ? '99+' : count}
+      </Text>
+    </View>
+  );
+}
+
+export function ShellFooter({ unread = 0, onNotificationsPress, onSettingsPress, needsYou = 0, onActivityPress }) {
+  const { colors, fonts, fontSizes, pref, setMode, chromeScale } = useTheme();
   const { twoPane } = usePane();
   const themePref = THEME_ORDER.includes(pref) ? pref : 'system';
+  const ring = twoPane ? colors.bgSide : colors.bg;
   const entryStyle = ({ pressed }) => ({
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.s2,
+    minHeight: ENTRY_H,
     paddingHorizontal: space.s3,
-    paddingVertical: space.s2,
     borderRadius: radii.lg,
     backgroundColor: pressed ? colors.selected : 'transparent',
   });
@@ -43,9 +86,9 @@ export function ShellFooter({ unread = 0, onNotificationsPress, onSettingsPress 
         borderTopColor: colors.line,
       }}
     >
-      <Pressable onPress={onSettingsPress} style={entryStyle} accessibilityLabel="Settings">
+      <Pressable onPress={onSettingsPress} style={entryStyle} hitSlop={ENTRY_SLOP} accessibilityRole="button" accessibilityLabel="Settings">
         <Icon name="gear" size="md" color={colors.ink2} />
-        <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.sm, color: colors.ink2 }}>
+        <Text maxFontSizeMultiplier={chromeScale} style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.sm, color: colors.ink2 }}>
           Settings
         </Text>
       </Pressable>
@@ -53,42 +96,27 @@ export function ShellFooter({ unread = 0, onNotificationsPress, onSettingsPress 
         <Pressable
           onPress={onNotificationsPress}
           style={entryStyle}
+          hitSlop={ENTRY_SLOP}
+          accessibilityRole="button"
           accessibilityLabel={unread > 0 ? `Notifications · ${unread} unread` : 'Notifications'}
         >
           <View style={{ position: 'relative' }}>
             <Icon name="bell" size="md" color={colors.ink2} />
-            {unread > 0 ? (
-              <View
-                style={{
-                  position: 'absolute',
-                  top: -space.s2,
-                  right: -space.s3,
-                  minWidth: 18,
-                  height: 18,
-                  paddingHorizontal: space.s2,
-                  flexDirection: 'row',
-                  borderRadius: radii.pill,
-                  borderWidth: 1.5,
-                  borderColor: twoPane ? colors.bgSide : colors.bg,
-                  backgroundColor: colors.danger,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <Text
-                  numberOfLines={1}
-                  style={{
-                    fontFamily: fonts.sans.semibold,
-                    fontSize: fontSizes.label,
-                    lineHeight: fontSizes.label * lineHeights.cozy,
-                    includeFontPadding: false,
-                    color: colors.onDanger ?? '#fff',
-                  }}
-                >
-                  {unread > 99 ? '99+' : unread}
-                </Text>
-              </View>
-            ) : null}
+            <CountBadge count={unread} tone="danger" ring={ring} />
+          </View>
+        </Pressable>
+      ) : null}
+      {onActivityPress ? (
+        <Pressable
+          onPress={onActivityPress}
+          style={entryStyle}
+          hitSlop={ENTRY_SLOP}
+          accessibilityRole="button"
+          accessibilityLabel={needsYou > 0 ? `Activity · ${needsYou} need you` : 'Activity'}
+        >
+          <View style={{ position: 'relative' }}>
+            <Icon name="activity" size="md" color={needsYou > 0 ? colors.warningText ?? colors.ink2 : colors.ink2} />
+            <CountBadge count={needsYou} tone="warning" ring={ring} />
           </View>
         </Pressable>
       ) : null}
@@ -96,6 +124,7 @@ export function ShellFooter({ unread = 0, onNotificationsPress, onSettingsPress 
         <Pressable
           onPress={() => setMode?.(nextThemePref(themePref))}
           style={entryStyle}
+          hitSlop={ENTRY_SLOP}
           accessibilityRole="button"
           accessibilityLabel={`Theme: ${THEME_LABEL[themePref]}`}
         >
@@ -103,7 +132,7 @@ export function ShellFooter({ unread = 0, onNotificationsPress, onSettingsPress 
         </Pressable>
       ) : null}
       <View style={{ flex: 1 }} />
-      <Text style={{ fontFamily: fonts.monoMedium, fontSize: fontSizes.xs, color: colors.ink4 }}>
+      <Text maxFontSizeMultiplier={chromeScale} style={{ fontFamily: fonts.monoMedium, fontSize: fontSizes.xs, color: colors.ink4 }}>
         v{APP_VERSION}
       </Text>
     </View>

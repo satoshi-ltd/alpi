@@ -11,12 +11,12 @@ vi.mock('react-native', () => {
     React.useEffect(() => {
       onLayout?.({ nativeEvent: { layout: { width: h.width } } });
     }, [onLayout]);
-    return React.createElement('div', { ...p, 'data-dir': style?.flexDirection ?? '' }, children);
+    return React.createElement('div', { ...p, 'data-dir': style?.flexDirection ?? '', 'data-minh': style?.minHeight ?? '' }, children);
   };
   const Text = ({ children, style, numberOfLines, ellipsizeMode, ...p }) =>
     React.createElement('span', { ...p, 'data-ellipsis': ellipsizeMode ?? '', 'data-align': style?.textAlign ?? '', 'data-transform': style?.textTransform ?? '' }, children);
-  const Pressable = ({ children, onPress, android_ripple, style, ...p }) =>
-    React.createElement('button', { type: 'button', onClick: onPress, ...p }, children);
+  const Pressable = ({ children, onPress, android_ripple, style, accessibilityLabel, ...p }) =>
+    React.createElement('button', { type: 'button', onClick: onPress, 'aria-label': accessibilityLabel, ...p }, children);
   return { View, Text, Pressable };
 });
 
@@ -62,6 +62,13 @@ describe('Row inside wide settings', () => {
       </PaneContext.Provider>,
     );
   }
+
+  it('stands every wide row at least one 44 pt touch target tall and speaks it as one button', () => {
+    wide(<Row label="Workspace" helper="where files land" value="~/git/casa/doc" onPress={() => {}} />);
+    const button = screen.getByLabelText('Workspace, ~/git/casa/doc, where files land');
+    expect(button.getAttribute('accessibilityRole')).toBe('button');
+    expect(Number(button.querySelector('[data-minh]:not([data-minh=""])').getAttribute('data-minh'))).toBe(44);
+  });
 
   it('renders the desktop field grid: label column, helper under it, mono value', () => {
     wide(<Row label="Workspace" helper="where files land" value="~/git/casa/doc" onPress={() => {}} />);

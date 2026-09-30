@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { mergeStreamingTurn, isInterruptedTurn, isLastTurnInFlight, isUnfinishedStub, autoReadText, consumeAutoRead, routedModelFor, baselineModelFor, turnFrontier, turnLandedSince } from './chatTurns.js';
+import { mergeStreamingTurn, isInterruptedTurn, isLastTurnInFlight, isUnfinishedStub, autoReadText, consumeAutoRead, routedModelFor, baselineModelFor, turnFrontier, turnLandedSince, reasoningStreams } from './chatTurns.js';
 
 describe('mergeStreamingTurn', () => {
   it('returns turns unchanged when there is no pendingTurn', () => {
@@ -280,3 +280,20 @@ describe('baselineModelFor', () => {
     expect(baselineModelFor(null, null)).toBeNull();
   });
 });
+
+describe('reasoningStreams', () => {
+  it('shimmers while a pending turn has not reasoned yet, or is reasoning now', () => {
+    expect(reasoningStreams({ pending: true }, '', false)).toBe(true);
+    expect(reasoningStreams({ pending: true, reasoningOpen: true }, 'weighing', false)).toBe(true);
+  });
+
+  it('settles to “Thought for Xs” once reasoning_done closed the step, while tools still run', () => {
+    expect(reasoningStreams({ pending: true, reasoningOpen: false }, 'weighing', false)).toBe(false);
+  });
+
+  it('stops once the answer lands or the turn is stored', () => {
+    expect(reasoningStreams({ pending: true, reasoningOpen: true }, 'weighing', true)).toBe(false);
+    expect(reasoningStreams({ reasoning: 'x' }, 'x', false)).toBe(false);
+  });
+});
+

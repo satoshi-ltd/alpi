@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  CHROME_FONT_CAP,
+  chromeFontMultiplier,
   clampTextScale,
   DEFAULT_TEXT_SCALE,
   MAX_TEXT_SCALE,
@@ -109,7 +111,7 @@ describe('scaleFontSizes', () => {
     for (const { value } of TEXT_SCALES) {
       for (const size of Object.values(scaleFontSizes(value))) {
         expect(Number.isInteger(size)).toBe(true);
-        expect(size).toBeGreaterThanOrEqual(8);
+        expect(size).toBeGreaterThanOrEqual(10);
       }
     }
   });
@@ -117,5 +119,31 @@ describe('scaleFontSizes', () => {
   it('clamps an out-of-range scale before it reaches the tokens', () => {
     expect(scaleFontSizes(99)).toEqual(scaleFontSizes(MAX_TEXT_SCALE));
     expect(scaleFontSizes(0.1)).toEqual(scaleFontSizes(MIN_TEXT_SCALE));
+  });
+});
+
+describe('chrome font cap', () => {
+  const OS_SCALES = [1, 1.3, 2, 3.1];
+
+  it('holds fixed-height chrome within 1.3x of its token at every in-app step and OS scale', () => {
+    for (const { value } of TEXT_SCALES) {
+      const cap = chromeFontMultiplier(value);
+      expect(cap).toBeGreaterThanOrEqual(1);
+      for (const os of OS_SCALES) {
+        const effective = value * Math.min(os, cap);
+        expect(effective).toBeLessThanOrEqual(Math.max(CHROME_FONT_CAP, value) + 1e-9);
+      }
+    }
+  });
+
+  it('lets the OS scale chrome up to the cap at the default step, and not at all once Largest has spent it', () => {
+    expect(chromeFontMultiplier(DEFAULT_TEXT_SCALE)).toBe(CHROME_FONT_CAP);
+    expect(chromeFontMultiplier(MAX_TEXT_SCALE)).toBe(1);
+    expect(chromeFontMultiplier('garbage')).toBe(CHROME_FONT_CAP);
+  });
+
+  it('keeps the largest chrome label inside the 44 pt chrome row at the cap', () => {
+    const largest = scaleFontSizes(MAX_TEXT_SCALE).sm * chromeFontMultiplier(MAX_TEXT_SCALE);
+    expect(largest * 1.3).toBeLessThan(44);
   });
 });

@@ -1,9 +1,10 @@
 import { useCallback, useMemo } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, SectionList, Text, TextInput, View } from 'react-native';
-import { radii, space } from '../../theme/tokens';
+import { mobile, radii, space } from '../../theme/tokens';
 
 import { Eyebrow } from '../../components/Eyebrow';
 import { Icon } from '../../components/Icon';
+import { selection } from '../../lib/haptics';
 import { rosterIsEmpty, rosterSections } from '../../lib/roster';
 import { usePane } from '../../nav/PaneContext';
 import { useTheme } from '../../theme/ThemeContext';
@@ -52,13 +53,25 @@ function SearchField({ query, onQueryChange, gutter }) {
   );
 }
 
+const ADD_BOX = space.s10;
+
 function SectionAdd({ label, onPress }) {
   const { colors } = useTheme();
   return (
     <Pressable
       onPress={onPress}
-      hitSlop={{ top: space.s7, bottom: space.s3, left: space.s7, right: space.s7 }}
+      hitSlop={(mobile.tap - ADD_BOX) / 2}
+      accessibilityRole="button"
       accessibilityLabel={label}
+      style={({ pressed }) => ({
+        width: ADD_BOX,
+        height: ADD_BOX,
+        marginVertical: -space.s2,
+        borderRadius: radii.md,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: pressed ? colors.selected : 'transparent',
+      })}
     >
       <Icon name="plus" size="sm" color={colors.ink3} />
     </Pressable>
@@ -149,6 +162,11 @@ export function Roster({
     [fonts, fontSizes, colors, gutter, addActions],
   );
 
+  const pull = useCallback(() => {
+    selection();
+    return onRefresh?.();
+  }, [onRefresh]);
+
   const separator = useCallback(
     () => <View style={{ height: HAIRLINE, backgroundColor: colors.line, marginLeft: SEPARATOR_INSET }} />,
     [colors.line],
@@ -171,7 +189,7 @@ export function Roster({
         contentContainerStyle={{ paddingBottom: CONTENT_PAD_BOTTOM, flexGrow: 1 }}
         refreshControl={
           onRefresh ? (
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.ink3} />
+            <RefreshControl refreshing={refreshing} onRefresh={pull} tintColor={colors.ink3} />
           ) : undefined
         }
         ListEmptyComponent={placeholder}

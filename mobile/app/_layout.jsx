@@ -30,7 +30,8 @@ import { useTwoPane } from '../src/hooks/useTwoPane';
 import { AppBootstrap } from '../src/lib/AppBootstrap';
 import { useEndpoint } from '../src/lib/EndpointContext';
 import { EndpointProvider } from '../src/lib/EndpointProvider';
-import { isPaneRoot, stackAnimation } from '../src/lib/panes';
+import { isPaneRoot, PANE_FADE_MS, paneAnimation } from '../src/lib/panes';
+import { useReduceMotion } from '../src/lib/reduceMotion';
 import { hasLiveSocket, setAuthFailedHandler, setRateLimitedHandler } from '../src/lib/rpc';
 import { RATE_LIMITED_STATUS } from '../src/lib/rateLimit';
 import { ThemeProvider, useTheme } from '../src/theme/ThemeContext';
@@ -99,6 +100,7 @@ function Routes() {
   const { mode, colors } = useTheme();
   const twoPane = useTwoPane();
   const pathname = usePathname();
+  const reduceMotion = useReduceMotion();
   useScheduleToast();
   useNotificationTapRouter();
   const paneRoot = twoPane && isPaneRoot(pathname);
@@ -106,10 +108,11 @@ function Routes() {
   const screenOptions = useMemo(() => ({
     headerShown: false,
     contentStyle: { backgroundColor: colors.bg },
-    animation: stackAnimation(twoPane),
+    animation: paneAnimation(twoPane, reduceMotion),
+    animationDuration: twoPane ? PANE_FADE_MS : undefined,
     gestureEnabled: !paneRoot,
     freezeOnBlur: true,
-  }), [colors.bg, twoPane, paneRoot]);
+  }), [colors.bg, twoPane, paneRoot, reduceMotion]);
   return (
     <>
       <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />

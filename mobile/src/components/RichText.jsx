@@ -23,7 +23,7 @@ function MarkdownImage({ path, alt, note, profile, theme }) {
 
   return (
     <View style={{ marginVertical: space.s3 }}>
-      <Pressable onPress={() => uri && setOpen(true)} disabled={!uri}>
+      <Pressable onPress={() => uri && setOpen(true)} disabled={!uri} accessibilityRole="imagebutton" accessibilityLabel={alt || caption || 'Image'}>
         {uri ? (
           <Image
             source={{ uri }}
@@ -49,6 +49,8 @@ function MarkdownImage({ path, alt, note, profile, theme }) {
       >
         <Pressable
           onPress={() => setOpen(false)}
+          accessibilityRole="button"
+          accessibilityLabel="Close image"
           style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', alignItems: 'center', justifyContent: 'center', padding: space.s5 }}
         >
           <SheetClose

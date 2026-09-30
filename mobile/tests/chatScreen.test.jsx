@@ -117,8 +117,22 @@ vi.mock('../src/features/chat/Bubble', () => ({
 }));
 vi.mock('../src/features/chat/ChatSkeleton', () => ({ ChatSkeleton: () => React.createElement('div', { 'data-skeleton': 'chat' }) }));
 vi.mock('../src/features/chat/Composer', () => ({
-  Composer: ({ disabled, placeholder }) =>
-    React.createElement('div', { 'data-composer': placeholder, 'data-disabled': String(!!disabled) }),
+  Composer: ({ disabled, placeholder, modelChip }) =>
+    React.createElement(
+      'div',
+      { 'data-composer': placeholder, 'data-disabled': String(!!disabled) },
+      modelChip ? React.createElement('button', { type: 'button', 'data-chip': modelChip.label, onClick: modelChip.onPress }, modelChip.label) : null,
+    ),
+}));
+vi.mock('../src/features/chat/ModelEffortSheets', () => ({
+  ModelEffortSheets: ({ open, onSave }) =>
+    open
+      ? React.createElement(
+          'div',
+          { 'data-model-sheets': 'open' },
+          React.createElement('button', { type: 'button', onClick: () => onSave('model_reasoning.effort', 'high') }, 'save effort'),
+        )
+      : null,
 }));
 vi.mock('../src/features/chat/MessageActionsSheet', () => ({ MessageActionsSheet: () => null }));
 vi.mock('../src/features/chat/Reasoning', () => ({ Reasoning: () => null }));
@@ -342,10 +356,34 @@ describe('Profile chat model label', () => {
     expect(document.body.textContent).not.toMatch('openrouter');
   });
 
-  it('opens the model picker in settings when an admin taps the model', () => {
+  it('keeps the header model read-only; the composer chip is the way to change it', () => {
     render(<ProfileChat />);
-    fireEvent.click(screen.getByLabelText('Change model'));
-    expect(h.push).toHaveBeenCalledWith('/profile/doc/settings?intent=model');
+    expect(screen.queryByLabelText('Change model')).toBeNull();
+    expect(document.querySelector('[data-chip]')).toBeTruthy();
+  });
+
+  it('labels the chip model · effort once the profile detail lands', async () => {
+    h.call.mockImplementation(async (method) =>
+      method === 'host.profile.detail' ? { model_reasoning_effort: 'medium' } : {});
+    render(<ProfileChat />);
+    await waitFor(() => expect(document.querySelector('[data-chip]').getAttribute('data-chip')).toBe('claude-opus-5 · medium'));
+  });
+
+  it('opens model and effort from the chip and saves through the settings field', async () => {
+    render(<ProfileChat />);
+    expect(document.querySelector('[data-model-sheets]')).toBeNull();
+    fireEvent.click(document.querySelector('[data-chip]'));
+    expect(document.querySelector('[data-model-sheets]')).toBeTruthy();
+    fireEvent.click(screen.getByText('save effort'));
+    await waitFor(() => expect(h.call).toHaveBeenCalledWith('host.config.set_field', { profile: 'doc', key: 'model_reasoning.effort', value: 'high' }));
+    expect(h.push).not.toHaveBeenCalled();
+    await waitFor(() => expect(h.refreshSummaries).toHaveBeenCalled());
+  });
+
+  it('gives a member no chip', () => {
+    h.canAdmin = false;
+    render(<ProfileChat />);
+    expect(document.querySelector('[data-chip]')).toBeNull();
   });
 
   it('keeps a bare Ollama id whole', () => {

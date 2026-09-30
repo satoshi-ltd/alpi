@@ -37,7 +37,7 @@ vi.mock('../../theme/ThemeContext', () => ({
       monoSemibold: 'GeistMono_600SemiBold',
     },
     shadow: { sm: { shadowOpacity: 0.06, shadowRadius: 2, elevation: 1 } },
-    fontSizes: { md: 14, xs: 11 },
+    fontSizes: { md: 14, sm: 12, xs: 11 },
   }),
 }));
 
@@ -114,3 +114,12 @@ describe('MarkerCard cap by pane mode', () => {
     expect(caps(container)).toEqual([BUBBLE_MAX_PANE]);
   });
 });
+
+describe('MarkerCard chat floor', () => {
+  it('keeps its eyebrow and meta at 12 pt or more', () => {
+    render(<MarkerCard variant="task" hubColor="#0af0af" seq={7} speakerName="lingo" title="translate" />);
+    expect(Number(screen.getByText('TASK').getAttribute('data-size'))).toBeGreaterThanOrEqual(12);
+    expect(Number(screen.getByText('lingo').getAttribute('data-size'))).toBeGreaterThanOrEqual(12);
+  });
+});
+

@@ -41,6 +41,8 @@ function StepButton({ glyph, label, disabled, onPress }) {
     <Pressable
       onPress={onPress}
       disabled={disabled}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: !!disabled }}
       accessibilityLabel={label}
       style={({ pressed }) => ({
         width: mobile.tap,

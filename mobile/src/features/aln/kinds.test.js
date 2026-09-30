@@ -152,3 +152,15 @@ describe('deepLinkFor', () => {
     expect(deepLinkFor({ event: 'unknown', data: {} })).toBe('/');
   });
 });
+
+describe('clarification requests', () => {
+  it('notify, read as a question and expire like approvals', async () => {
+    const { NOTIFIABLE_KINDS: kinds, formatNotification: format, deepLinkFor: link, isStale: stale } = await import('./kinds');
+    expect(kinds).toContain('clarification.request');
+    const ev = { event: 'clarification.request', data: { profile: 'doc', question: 'Which hotel first?', ts: 1000, timeout_s: 60 } };
+    expect(format(ev, { name: 'casa' })).toEqual({ title: 'casa · doc · question', body: 'Which hotel first?' });
+    expect(link(ev)).toBe('/');
+    expect(stale(ev, 1059_000)).toBe(false);
+    expect(stale(ev, 1061_000)).toBe(true);
+  });
+});

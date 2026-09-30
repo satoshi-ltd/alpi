@@ -14,6 +14,7 @@ const h = vi.hoisted(() => ({
   fireMock: vi.fn(async () => true),
   permMock: vi.fn(async () => 'granted'),
   requestPermMock: vi.fn(async () => 'granted'),
+  categoriesMock: vi.fn(async () => true),
   pollMock: vi.fn(async () => ({ groups: 1, notifications: 0 })),
   primer: { open: false, onEnable: null, onDecline: null },
 }));
@@ -50,6 +51,7 @@ vi.mock('./notify', () => ({
   fireForEvent: h.fireMock,
   getPermissionStatus: h.permMock,
   requestPermission: h.requestPermMock,
+  registerNotificationCategories: h.categoriesMock,
 }));
 
 vi.mock('./NotificationPrimer', () => ({
@@ -98,6 +100,14 @@ beforeEach(() => {
   h.pollMock.mockReset();
   h.pollMock.mockImplementation(async () => ({ groups: 1, notifications: 0 }));
   h.primer = { open: false, onEnable: null, onDecline: null };
+});
+
+describe('NotificationBridge actionable categories', () => {
+  it('registers the approval actions once the bridge mounts, paired or not', () => {
+    h.categoriesMock.mockClear();
+    render(<NotificationBridge />);
+    expect(h.categoriesMock).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('NotificationBridge live delivery', () => {
