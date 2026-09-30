@@ -53,6 +53,51 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
+- **SCOPE.4** — Device-scope privacy matrix
+  `chore · alpi · agent · high`
+  accept: one parametrised test writes as device A and then reads as device B through
+  every host verb, tool and event path that returns session text (summaries, session
+  read/list, search, recall, activity, events), under `session_scope: device`, and
+  asserts B sees none of A's text; adding a new path means adding it to the matrix.
+- **ACT.1** — Activity keeps pipelines a scoped caller can see
+  `bug · alpi · agent · normal`
+  note: [activity.py](../alpi/host/activity.py) dedupes a workgroup's rows preferring
+  the hub before the server's profile-scope filter runs, so a caller scoped to a
+  member profile loses the pipeline entirely.
+  accept: dedupe happens among the rows the caller is allowed to see; a test with hub
+  and member rows for one workgroup and a caller scoped to the member gets one row
+  for the member profile.
+- **SPAN.1** — A retried attempt leaves no reasoning span behind
+  `bug · alpi · agent · normal`
+  note: `_ReasoningSpans.discard_text()` in [engine.py](../alpi/engine.py) clears the
+  open span but not spans the discarded attempt already closed by emitting text
+  (reachable on replay-visible retries and the workgroup fallback).
+  accept: spans are truncated to the attempt's start on `retry_reset` and on
+  fallback; a test streams reasoning A, text, `retry_reset`, reasoning B, answer and
+  the stored spans hold only B, matching `turn.reasoning`.
+- **MEM.3** — Memory edits keep combining marks with their letter
+  `bug · alpi · agent · normal`
+  note: replacing a decomposed `Cafe\u0301` in [memory.py](../alpi/tools/memory.py)
+  leaves the combining accent behind (`Teá`) on AGENT.md edits and inside multi-line
+  entries.
+  accept: a match extends past trailing combining marks (or text is compared in NFC);
+  replace and remove tests with a decomposed accent produce the exact expected text.
+- **MOB.ACT-REDETECT** — Activity comes back after a daemon upgrade
+  `bug · mobile · agent · normal`
+  note: a `-32601` from `host.activity.list` sets `supported=false` in
+  [useActivity.js](../mobile/src/hooks/useActivity.js) for good; foreground and
+  `activity.changed` never ask again.
+  accept: the negative result resets on stream reconnect and on foreground; a test
+  rejects with `-32601`, then resolves, triggers foreground and sees Activity
+  supported; the tests that encode the permanent stop change accordingly.
+- **MOB.REFRESH-ERR** — A failed refresh over stale data says so
+  `bug · mobile · agent · low`
+  note: `refresh()` in [useDaemonData.js](../mobile/src/hooks/useDaemonData.js)
+  resolves `null` on failure, so the pull-to-refresh "Refresh failed" toast never
+  fires for screens that already show data.
+  accept: `refresh()` rejects (fire-and-forget callers handle it), and a
+  pull-to-refresh test on a screen with data and a failing call shows the toast.
+
 - **TERM.3** — Profile environment for `terminal`
   `feature · alpi · agent · normal`
   note: a skill toolchain installed in the volume (JDK and Maven under
@@ -241,6 +286,14 @@ _None._
   applied to every deployed daemon; any code it needs becomes an agent task.
 
 ## Proposed
+
+- **SCOPE.5** — Profile session counts respect scope
+  `bug · alpi · agent · low`
+  note: `counts.sessions` in `host.profile.summaries` counts every session file of the
+  profile, so a member or a device-scoped device learns how many sessions other
+  connections and sibling devices hold (a count only, no text).
+  accept: the count includes only sessions `owns_session_row` lets the caller see; a
+  test with sessions from two devices under `session_scope: device` counts one each.
 
 Demand-gated entries name the condition that promotes them.
 

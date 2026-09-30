@@ -87,6 +87,10 @@ metadata and `last_seen`. Tokens never expire unless the operator sets
 `token-expired` and loses its live sockets until it pairs again, while a device
 in regular use never expires. The rule is applied on read, never written into
 the store, so lifting the policy restores the device.
+Changing a connection's `role`, `profile_scope` or `session_scope` closes its open
+sockets within a second (close `1008` "Authorization changed"), from the app or from
+`alpi setup connections`; clients reconnect under the new policy, and a chat turn
+running on a closed socket is interrupted.
 New QR/links carry a high-entropy one-time grant instead of that token. The
 store keeps only the grant hash. `host.connections.exchange_pairing` consumes
 it atomically, creates one permanent device credential and records the client

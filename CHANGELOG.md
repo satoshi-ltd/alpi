@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.16.5 — 2026-09-30 — open streams follow a permission change
+
+- **A connection's open streams close when its permissions change.** Changing a connection's
+  role, profiles or `session_scope`, from the app or from `alpi setup connections`, closes its
+  open WebSockets within a second, so a live event stream can no longer keep delivering under
+  the policy it was opened with. Clients reconnect and get the new one; a chat turn running on
+  a closed socket is interrupted, and renaming a connection or re-saving the same values
+  leaves everything open.
+
 ## v0.16.4 — 2026-09-30 — semantic recall respects device scope
 
 - **Semantic recall keeps each device's conversations private.** On a connection whose sessions

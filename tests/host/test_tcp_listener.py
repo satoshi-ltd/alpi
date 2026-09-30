@@ -1257,6 +1257,291 @@ async def test_disabling_or_deleting_connection_closes_all_its_websockets(
         await server.stop()
 
 
+def _subscribe_request(token: str) -> str:
+    return json.dumps({
+        "id": "sub", "method": "host.events.subscribe",
+        "params": {"auth_token": token, "kinds": ["approval.request"]},
+    })
+
+
+async def _subscribe(url: str, token: str):
+    ws = await websockets.connect(url)
+    await ws.send(_subscribe_request(token))
+    assert json.loads(await ws.recv())["event"] == "subscribed"
+    return ws
+
+
+async def _next_event(ws, timeout: float):
+    import asyncio
+
+    try:
+        return json.loads(await asyncio.wait_for(ws.recv(), timeout=timeout))
+    except asyncio.TimeoutError:
+        return None
+
+
+async def _start_fast_recheck_server(short_tmp: Path, monkeypatch):
+    monkeypatch.setenv("ALPI_HOST_WS_AUTH_RECHECK", "0.1")
+    return await _start_security_test_server(short_tmp, monkeypatch)
+
+
+@pytest.mark.asyncio
+async def test_scope_change_closes_open_event_streams_and_reconnect_enforces_it(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    import asyncio
+    from alpi.host import connections, events
+
+    server, url = await _start_fast_recheck_server(short_tmp, monkeypatch)
+    server.register_stream("host.events.subscribe", events._subscribe_handler)
+    connection, device_a = connections.create_connection("Team")
+    _connection, device_b = connections.add_device(connection["id"])
+    ws = await _subscribe(url, device_b["token"])
+    try:
+        events.emit("approval.request", {
+            "connection_id": connection["id"], "device_id": device_a["id"], "marker": "before",
+        }, history=False)
+        assert (await _next_event(ws, 2))["data"]["marker"] == "before"
+
+        await connections._update({
+            "connection_id": connection["id"], "session_scope": "device",
+        }, server)
+
+        with pytest.raises(websockets.ConnectionClosedError):
+            await asyncio.wait_for(ws.recv(), timeout=2)
+        assert ws.close_code == 1008
+        assert ws.close_reason == "Authorization changed"
+
+        ws = await _subscribe(url, device_b["token"])
+        events.emit("approval.request", {
+            "connection_id": connection["id"], "device_id": device_a["id"], "marker": "from-a",
+        }, history=False)
+        events.emit("approval.request", {
+            "connection_id": connection["id"], "device_id": device_b["id"], "marker": "from-b",
+        }, history=False)
+        received = await _next_event(ws, 2)
+        assert received["data"]["marker"] == "from-b"
+        assert await _next_event(ws, 0.3) is None
+    finally:
+        await ws.close()
+        await server.stop()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("update", [
+    {"role": "admin"},
+    {"profile_scope": ["ops"]},
+    {"session_scope": "device"},
+])
+async def test_policy_change_closes_the_connections_websockets(
+    short_tmp: Path, monkeypatch, update: dict,
+) -> None:
+    import asyncio
+    from alpi.host import connections
+
+    server, url = await _start_fast_recheck_server(short_tmp, monkeypatch)
+    connection, device = connections.create_connection("Team")
+    _other, other_device = connections.create_connection("Other")
+    ws = await websockets.connect(url)
+    other_ws = await websockets.connect(url)
+    try:
+        await ws.send(_ws_request(device["token"]))
+        await other_ws.send(_ws_request(other_device["token"]))
+        assert "result" in json.loads(await ws.recv())
+        assert "result" in json.loads(await other_ws.recv())
+
+        assert connections.update_connection(connection["id"], **update)
+
+        with pytest.raises(websockets.ConnectionClosedError):
+            await asyncio.wait_for(ws.recv(), timeout=2)
+        assert ws.close_reason == "Authorization changed"
+        await other_ws.send(_ws_request(other_device["token"], "again"))
+        assert json.loads(await other_ws.recv())["id"] == "again"
+    finally:
+        await ws.close()
+        await other_ws.close()
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_update_that_keeps_the_policy_leaves_websockets_open(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    import asyncio
+    from alpi.host import connections
+
+    server, url = await _start_fast_recheck_server(short_tmp, monkeypatch)
+    connection, device = connections.create_connection("Team")
+    ws = await websockets.connect(url)
+    try:
+        await ws.send(_ws_request(device["token"]))
+        assert "result" in json.loads(await ws.recv())
+
+        await connections._update({
+            "connection_id": connection["id"], "label": "Renamed",
+            "role": "member", "session_scope": "connection", "profiles": [],
+        }, server)
+        await asyncio.sleep(0.3)
+
+        await ws.send(_ws_request(device["token"], "still-open"))
+        assert json.loads(await ws.recv())["id"] == "still-open"
+    finally:
+        await ws.close()
+        await server.stop()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("setup", [
+    {"role": "admin"},
+    {"role": "admin", "session_scope": "device"},
+    {"profile_scope": ["b", "a", "b"]},
+    {"profile_scope": ["b", "a"], "session_scope": "device"},
+])
+async def test_unchanged_policy_never_closes_websockets(
+    short_tmp: Path, monkeypatch, setup: dict,
+) -> None:
+    import asyncio
+    from alpi.host import connections
+
+    server, url = await _start_fast_recheck_server(short_tmp, monkeypatch)
+    connection, device = connections.create_connection("Team")
+    assert connections.update_connection(connection["id"], **setup)
+    ws = await websockets.connect(url)
+    try:
+        await ws.send(_ws_request(device["token"], profile="a"))
+        assert "result" in json.loads(await ws.recv())
+        await asyncio.sleep(0.5)
+        await ws.send(_ws_request(device["token"], "still-open", profile="a"))
+        assert json.loads(await ws.recv())["id"] == "still-open"
+    finally:
+        await ws.close()
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_policy_close_waits_for_the_callers_in_flight_unary_request(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    import asyncio
+    import time
+    from alpi.host import admin_audit, connections
+
+    real_record = admin_audit.record_request
+
+    def slow_record(*args, **kwargs):
+        time.sleep(0.4)
+        return real_record(*args, **kwargs)
+
+    monkeypatch.setattr(admin_audit, "record_request", slow_record)
+    server, url = await _start_fast_recheck_server(short_tmp, monkeypatch)
+    connections.register(server)
+    connection, device = connections.create_connection("Admin", role="admin")
+    ws = await websockets.connect(url)
+    try:
+        await ws.send(json.dumps({
+            "id": "update", "method": "host.connections.update",
+            "params": {
+                "auth_token": device["token"], "connection_id": connection["id"],
+                "session_scope": "device",
+            },
+        }))
+        response = json.loads(await asyncio.wait_for(ws.recv(), timeout=3))
+        assert response["result"] == {"ok": True}
+        with pytest.raises(websockets.ConnectionClosedError):
+            await asyncio.wait_for(ws.recv(), timeout=2)
+        assert ws.close_reason == "Authorization changed"
+    finally:
+        await ws.close()
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_socket_registered_under_an_older_policy_is_closed(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    import asyncio
+    from alpi.host import connections
+
+    server, url = await _start_fast_recheck_server(short_tmp, monkeypatch)
+    _connection, device = connections.create_connection("Team")
+    ws = await websockets.connect(url)
+    try:
+        await ws.send(_ws_request(device["token"]))
+        assert "result" in json.loads(await ws.recv())
+        for registered in list(server._ws_policies):
+            server._ws_policies[registered] = ("member", frozenset(), "device")
+
+        with pytest.raises(websockets.ConnectionClosedError):
+            await asyncio.wait_for(ws.recv(), timeout=2)
+        assert ws.close_reason == "Authorization changed"
+    finally:
+        await ws.close()
+        await server.stop()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("verb", ["promote", "demote", "set_profiles"])
+async def test_legacy_role_and_profile_verbs_close_the_connections_websockets(
+    short_tmp: Path, monkeypatch, verb: str,
+) -> None:
+    import asyncio
+    from alpi.host import connections
+
+    server, url = await _start_fast_recheck_server(short_tmp, monkeypatch)
+    _connection, device = connections.create_connection(
+        "Team", role="admin" if verb == "demote" else "member",
+    )
+    ws = await websockets.connect(url)
+    try:
+        await ws.send(_ws_request(device["token"]))
+        assert "result" in json.loads(await ws.recv())
+
+        params = {"token_id": device["token_id"]}
+        if verb == "promote":
+            await connections._legacy_promote(params, server)
+        elif verb == "demote":
+            await connections._legacy_demote(params, server)
+        else:
+            await connections._legacy_set_profiles({**params, "profiles": ["ops"]}, server)
+
+        with pytest.raises(websockets.ConnectionClosedError):
+            await asyncio.wait_for(ws.recv(), timeout=2)
+        assert ws.close_reason == "Authorization changed"
+    finally:
+        await ws.close()
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_admin_editing_its_own_connection_gets_the_response_before_the_close(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    import asyncio
+    from alpi.host import connections
+
+    server, url = await _start_fast_recheck_server(short_tmp, monkeypatch)
+    connections.register(server)
+    connection, device = connections.create_connection("Admin", role="admin")
+    ws = await websockets.connect(url)
+    try:
+        await ws.send(json.dumps({
+            "id": "update", "method": "host.connections.update",
+            "params": {
+                "auth_token": device["token"], "connection_id": connection["id"],
+                "session_scope": "device",
+            },
+        }))
+        response = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
+        assert response["id"] == "update"
+        assert response["result"] == {"ok": True}
+        with pytest.raises(websockets.ConnectionClosedError):
+            await asyncio.wait_for(ws.recv(), timeout=2)
+        assert ws.close_reason == "Authorization changed"
+    finally:
+        await ws.close()
+        await server.stop()
+
+
 @pytest.mark.asyncio
 async def test_authorization_store_failure_closes_authenticated_websockets(
     short_tmp: Path, monkeypatch,
@@ -1271,7 +1556,7 @@ async def test_authorization_store_failure_closes_authenticated_websockets(
     def fail_authorization_check():
         raise RuntimeError("store unavailable")
 
-    monkeypatch.setattr(host_server, "_active_authorizations", fail_authorization_check)
+    monkeypatch.setattr(host_server, "_authorization_policies", fail_authorization_check)
     try:
         async with websockets.connect(url) as ws:
             await ws.send(_ws_request(device["token"]))

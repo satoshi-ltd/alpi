@@ -828,6 +828,14 @@ Lifecycle:
 - **Revoke / delete**: `host.connections.revoke_device` invalidates one
   device. `host.connections.delete` tombstones the parent and clears every
   linked token while retaining historical session/ledger attribution.
+- **Policy change**: every WebSocket remembers the `role`, `profile_scope` and
+  `session_scope` it authenticated under, and the authorization watcher closes it with `1008
+  "Authorization changed"` on its next pass (`ALPI_HOST_WS_AUTH_RECHECK`) once the stored
+  connection differs, whoever edited it: `host.connections.update`, the legacy `host.devices.*`
+  verbs or `alpi setup connections`. An open stream, `host.events.subscribe` included, never
+  outlives the policy it was opened under; clients reconnect and get the new one. A running chat
+  turn on the closed socket is interrupted like on a revocation. A label-only or same-value
+  update leaves sockets open, and a caller editing its own connection gets its response first.
 
 The daemon migrates the credential store at startup, before it opens the
 WebSocket listener: a legacy `devices.yaml` becomes one connection per row

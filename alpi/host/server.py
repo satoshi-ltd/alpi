@@ -272,9 +272,11 @@ class Server:
         self._ws_connections: set[ServerConnection] = set()
         self._ws_tasks: dict[ServerConnection, asyncio.Task[Any]] = {}
         self._ws_identities: dict[ServerConnection, tuple[str, str]] = {}
+        self._ws_policies: dict[ServerConnection, AuthPolicy] = {}
         self._ws_by_device: dict[tuple[str, str], set[ServerConnection]] = defaultdict(set)
         self._ws_revoking: dict[ServerConnection, tuple[float, int]] = {}
         self._ws_rpc_counts: dict[tuple[str, str], int] = {}
+        self._ws_unary_inflight: dict[tuple[str, str], int] = {}
         self._ws_metrics = WebSocketMetrics()
         self._ws_auth_timeout = float(_env_number(
             "ALPI_HOST_WS_AUTH_TIMEOUT", WS_AUTH_TIMEOUT_SECONDS,
@@ -658,12 +660,14 @@ class Server:
             return False
         sockets.add(ws)
         self._ws_identities[ws] = key
+        self._ws_policies[ws] = _auth_policy(meta.role, meta.scope, meta.session_scope)
         return True
 
     def _unregister_websocket(self, ws: ServerConnection) -> None:
         self._ws_connections.discard(ws)
         self._ws_revoking.pop(ws, None)
         self._ws_tasks.pop(ws, None)
+        self._ws_policies.pop(ws, None)
         key = self._ws_identities.pop(ws, None)
         if key is None:
             return
@@ -694,7 +698,16 @@ class Server:
         self, connection_id: str, device_id: str, *,
         exclude_task: asyncio.Task[Any] | None = None,
     ) -> int:
-        sockets = list(self._ws_by_device.get((connection_id, device_id), ()))
+        return await self._close_sockets(
+            list(self._ws_by_device.get((connection_id, device_id), ())),
+            "Device authorization revoked",
+            exclude_task,
+        )
+
+    async def _close_sockets(
+        self, sockets: list[ServerConnection], reason: str,
+        exclude_task: asyncio.Task[Any] | None = None,
+    ) -> int:
         if not sockets:
             return 0
         now = time.monotonic()
@@ -710,7 +723,7 @@ class Server:
                 attempts += 1
             self._ws_revoking[ws] = (first_seen, attempts)
         await asyncio.gather(*(
-            ws.close(code=1008, reason="Device authorization revoked")
+            ws.close(code=1008, reason=reason)
             for ws in sockets
         ), return_exceptions=True)
         caller = exclude_task or asyncio.current_task()
@@ -736,18 +749,31 @@ class Server:
             await asyncio.sleep(self._ws_auth_recheck)
             if not self._ws_identities:
                 continue
+            checked = set(self._ws_identities)
             try:
-                active = await asyncio.to_thread(_active_authorizations)
+                active = await asyncio.to_thread(_authorization_policies)
             except Exception:  # noqa: BLE001
                 log.exception("cannot verify active WebSocket authorizations")
-                active = set()
+                active = {}
             stale = [key for key in self._ws_by_device if key not in active]
+            changed = []
+            for ws in checked:
+                key = self._ws_identities.get(ws)
+                current = active.get(key)
+                if (
+                    current is not None
+                    and self._ws_policies.get(ws) != current
+                    and not self._ws_unary_inflight.get(key)
+                ):
+                    changed.append(ws)
+            caller = asyncio.current_task()
             if stale:
-                caller = asyncio.current_task()
                 await asyncio.gather(*(
                     self.close_device_websockets(*key, exclude_task=caller)
                     for key in stale
                 ))
+            if changed:
+                await self._close_sockets(changed, "Authorization changed", caller)
 
     async def _handle_request(
         self, line: str, send: SendCoro, require_token: bool = False,
@@ -975,6 +1001,10 @@ class Server:
                     },
                 })
                 return
+            unary_key = None
+            if remote_meta is not None and method not in self.stream_handlers:
+                unary_key = (remote_meta.connection_id, remote_meta.device_id)
+                self._ws_unary_inflight[unary_key] = self._ws_unary_inflight.get(unary_key, 0) + 1
             try:
                 if method in self.stream_handlers:
                     await self._dispatch_stream(body, delivery)
@@ -992,6 +1022,12 @@ class Server:
                 if response is not None:
                     await delivery(response)
             finally:
+                if unary_key is not None:
+                    remaining = self._ws_unary_inflight.get(unary_key, 1) - 1
+                    if remaining > 0:
+                        self._ws_unary_inflight[unary_key] = remaining
+                    else:
+                        self._ws_unary_inflight.pop(unary_key, None)
                 if remote_meta is not None:
                     self._end_device_rpc(remote_meta)
 
@@ -1308,14 +1344,23 @@ def _check_token_role(body: dict[str, Any]) -> tuple[bool, str]:
     return valid, role
 
 
-def _active_authorizations() -> set[tuple[str, str]]:
+AuthPolicy = tuple[str, frozenset[str], str]
+
+
+def _auth_policy(role: str, scope: Any, session_scope: str) -> AuthPolicy:
+    return role, frozenset(scope), session_scope
+
+
+def _authorization_policies() -> dict[tuple[str, str], AuthPolicy | None]:
     from alpi.host import connections as connections_mod
 
     if connections_mod.store_path().exists():
         data = connections_mod.load_auth_store()
         ttl = connections_mod.token_ttl_seconds()
         return {
-            (connection["id"], device["id"])
+            (connection["id"], device["id"]): _auth_policy(
+                connection["role"], connection["profile_scope"], connection["session_scope"],
+            )
             for connection in data["connections"]
             if connection["status"] == "active"
             for device in connection["devices"]
@@ -1326,10 +1371,14 @@ def _active_authorizations() -> set[tuple[str, str]]:
     from alpi.host import devices as devices_mod
 
     return {
-        (f"legacy_{row['token'][-8:]}", f"legacy_{row['token'][-8:]}")
+        (f"legacy_{row['token'][-8:]}", f"legacy_{row['token'][-8:]}"): None
         for row in devices_mod.load()
         if row.get("token")
     }
+
+
+def _active_authorizations() -> set[tuple[str, str]]:
+    return set(_authorization_policies())
 
 
 @dataclass(frozen=True)
