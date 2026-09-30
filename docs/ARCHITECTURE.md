@@ -836,6 +836,12 @@ Lifecycle:
   outlives the policy it was opened under; clients reconnect and get the new one. A running chat
   turn on the closed socket is interrupted like on a revocation. A label-only or same-value
   update leaves sockets open, and a caller editing its own connection gets its response first.
+- **Per-device socket limit**: a device credential may hold `ALPI_HOST_WS_MAX_CONNECTIONS_PER_DEVICE`
+  sockets. A socket that would exceed it pings the device's existing ones first and evicts those
+  that do not answer within two seconds (ping and pong share one deadline; the transport is
+  aborted, no close handshake; `stale_connections_evicted` in `websocket_status()`), because a
+  client that lost its network leaves half-open sockets registered until the keepalive fails.
+  A device whose sockets all answer is refused with `-32029 too-many-connections`.
 
 The daemon migrates the credential store at startup, before it opens the
 WebSocket listener: a legacy `devices.yaml` becomes one connection per row

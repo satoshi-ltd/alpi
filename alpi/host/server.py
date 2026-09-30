@@ -30,6 +30,7 @@ WS_MAX_CONNECTIONS = 128
 WS_MAX_CONNECTIONS_PER_DEVICE = 8
 WS_MAX_RPCS_PER_DEVICE = 8
 WS_MAX_QUEUE = (16, 4)
+WS_PROBE_TIMEOUT_SECONDS = 2.0
 WS_AUTH_FAILURES_PER_MINUTE = 10
 WS_CLOSE_REASON_RATE_LIMITED = "auth-rate-limited"
 
@@ -248,6 +249,7 @@ class WebSocketMetrics:
     device_rpcs_rejected: int = 0
     peak_connections: int = 0
     revoked_connections: int = 0
+    stale_connections_evicted: int = 0
     pairing_exchange_attempts: int = 0
 
 
@@ -302,6 +304,7 @@ class Server:
             "ALPI_HOST_WS_MAX_CONNECTIONS_PER_DEVICE", WS_MAX_CONNECTIONS_PER_DEVICE,
             minimum=1, maximum=1_000,
         ))
+        self._ws_probe_timeout = WS_PROBE_TIMEOUT_SECONDS
         self._ws_max_rpcs_per_device = int(_env_number(
             "ALPI_HOST_WS_MAX_RPCS_PER_DEVICE", WS_MAX_RPCS_PER_DEVICE,
             minimum=1, maximum=1_000,
@@ -487,6 +490,7 @@ class Server:
             "auth_rate_limited": metrics.auth_rate_limited,
             "device_rpcs_rejected": metrics.device_rpcs_rejected,
             "revoked_connections": metrics.revoked_connections,
+            "stale_connections_evicted": metrics.stale_connections_evicted,
             "pairing_exchange_attempts": metrics.pairing_exchange_attempts,
         }
 
@@ -576,7 +580,7 @@ class Server:
                 await ws.close(code=1008, reason="Authentication failed")
                 return
             line, body, meta = authenticated
-            if not self._register_websocket_identity(ws, meta):
+            if not await self._admit_websocket(ws, meta):
                 self._ws_metrics.device_connections_rejected += 1
                 await send({
                     "id": body.get("id"),
@@ -662,6 +666,41 @@ class Server:
         self._ws_identities[ws] = key
         self._ws_policies[ws] = _auth_policy(meta.role, meta.scope, meta.session_scope)
         return True
+
+    async def _admit_websocket(self, ws: ServerConnection, meta: "AuthMeta") -> bool:
+        if self._register_websocket_identity(ws, meta):
+            return True
+        sockets = list(self._ws_by_device.get((meta.connection_id, meta.device_id), ()))
+        self._evict_sockets(await self._unresponsive_sockets(sockets))
+        return self._register_websocket_identity(ws, meta)
+
+    async def _unresponsive_sockets(
+        self, sockets: list[ServerConnection],
+    ) -> list[ServerConnection]:
+        async def ping_and_wait(ws: ServerConnection) -> None:
+            await (await ws.ping())
+
+        async def answers(ws: ServerConnection) -> bool:
+            try:
+                await asyncio.wait_for(ping_and_wait(ws), timeout=self._ws_probe_timeout)
+            except Exception:  # noqa: BLE001
+                return False
+            return True
+
+        verdicts = await asyncio.gather(*(answers(ws) for ws in sockets))
+        return [ws for ws, alive in zip(sockets, verdicts) if not alive]
+
+    def _evict_sockets(self, sockets: list[ServerConnection]) -> None:
+        caller = asyncio.current_task()
+        for ws in sockets:
+            if ws not in self._ws_identities:
+                continue
+            self._ws_metrics.stale_connections_evicted += 1
+            task = self._ws_tasks.get(ws)
+            self._unregister_websocket(ws)
+            ws.transport.abort()
+            if task is not None and task is not caller:
+                task.cancel()
 
     def _unregister_websocket(self, ws: ServerConnection) -> None:
         self._ws_connections.discard(ws)

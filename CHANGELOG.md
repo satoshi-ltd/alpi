@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.16.6 — 2026-09-30 — dead sockets stop blocking a device
+
+- **A device is no longer locked out by its own dead connections.** After a network change or a
+  VPN switch a client leaves half-open sockets that the daemon kept counting until its keepalive
+  gave up, so the next chat or request came back as `too-many-connections`. A device at its
+  socket limit now has its existing sockets pinged first and the ones that stay silent dropped,
+  so the request goes through; a device whose sockets all answer is still refused.
+
 ## v0.16.5 — 2026-09-30 — open streams follow a permission change
 
 - **A connection's open streams close when its permissions change.** Changing a connection's

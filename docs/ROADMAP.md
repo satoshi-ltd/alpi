@@ -53,6 +53,28 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
+- **ERR.1** — Errors reach the user in plain words
+  `bug · alpi · desktop · mobile · common · agent · high`
+  note: the chat shows daemon and provider failures raw. The desktop maps only the rate
+  limit ([connection-status.js](../desktop/src/lib/connection-status.js)); the daemon sends
+  `str(e)` of the litellm exception as the error frame ([engine.py](../alpi/engine.py)), so a
+  user can read `litellm.RateLimitError: OpenrouterException - {…}` or the bare slug
+  `too-many-connections`, in a red monospace pill. A raw provider error may also carry
+  credentials, and frames persist for replay.
+  accept: one classifier turns the known failures (provider rate limit, auth, credit, context
+  length, timeout, overloaded, `too-many-connections`, `busy`, budget) into a short sentence
+  with the technical detail kept apart (daemon-side, redacted); `too-many-connections` retries
+  once after a short wait before it shows; tests per class; both clients render the sentence.
+
+- **THINK.1** — The desktop "Thinking…" row renders wrongly
+  `bug · desktop · agent · normal`
+  note: while streaming with no reasoning text yet, `Reasoning.jsx` shows the static row
+  with the shimmer label ([Reasoning.module.css](../desktop/src/primitives/Reasoning.module.css)):
+  full-width grey bar, hidden chevron leaving a wide left gap, uneven letter spacing in the
+  monospace label under `background-clip: text`.
+  accept: the live row reads like the settled "Thought for Ns" row (no gap, even spacing),
+  checked in the desktop app; a test pins the static live row's classes.
+
 - **SCOPE.4** — Device-scope privacy matrix
   `chore · alpi · agent · high`
   accept: one parametrised test writes as device A and then reads as device B through

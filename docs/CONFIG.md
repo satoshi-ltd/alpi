@@ -786,7 +786,7 @@ fit Desktop and Mobile; changing them requires a daemon restart.
 | Environment | Default | Effect |
 |---|---:|---|
 | `ALPI_HOST_WS_MAX_CONNECTIONS` | `128` | Maximum simultaneous WebSockets. |
-| `ALPI_HOST_WS_MAX_CONNECTIONS_PER_DEVICE` | `8` | Maximum sockets sharing one device credential. |
+| `ALPI_HOST_WS_MAX_CONNECTIONS_PER_DEVICE` | `8` | Maximum sockets sharing one device credential. A socket over the limit first pings the device's existing ones: those that do not answer within 2 s (half-open after a network change or a VPN switch) are dropped and the new one is admitted; a device whose sockets all answer gets `too-many-connections`. |
 | `ALPI_HOST_WS_MAX_RPCS_PER_DEVICE` | `8` | Maximum concurrent RPC handlers or streams for one device. |
 | `ALPI_HOST_WS_AUTH_FAILURES_PER_MINUTE` | `10` | Authentication failures (rejected token or rejected pairing code) one source address may accumulate per minute before its new sockets are closed with 1013 before any token is read. |
 | `ALPI_HOST_WS_TRUSTED_PROXIES` | empty | Comma-separated IPs or CIDRs of reverse proxies whose `X-Forwarded-For` is trusted; the client is the rightmost hop not in this list. Empty means the header is ignored and the socket peer is the source. The WSS overlay pins Caddy to `172.30.250.10` and lists it. |

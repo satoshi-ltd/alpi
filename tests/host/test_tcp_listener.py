@@ -1455,6 +1455,167 @@ async def test_policy_close_waits_for_the_callers_in_flight_unary_request(
         await server.stop()
 
 
+async def _open_device_sockets(url: str, token: str, count: int) -> list:
+    sockets = []
+    for index in range(count):
+        ws = await websockets.connect(url)
+        await ws.send(_ws_request(token, f"open-{index}"))
+        assert "result" in json.loads(await ws.recv())
+        sockets.append(ws)
+    return sockets
+
+
+async def _close_sockets_quietly(sockets: list) -> None:
+    for ws in sockets:
+        ws.transport.resume_reading()
+        await ws.close()
+
+
+async def _start_limited_server(short_tmp: Path, monkeypatch, limit: int):
+    server, url = await _start_security_test_server(short_tmp, monkeypatch)
+    server._ws_max_connections_per_device = limit
+    server._ws_probe_timeout = 1.0
+    return server, url
+
+
+@pytest.mark.asyncio
+async def test_silent_sockets_do_not_block_a_device_at_its_limit(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    from alpi.host import connections
+
+    server, url = await _start_limited_server(short_tmp, monkeypatch, 3)
+    _connection, device = connections.create_connection("Phone")
+    silent = await _open_device_sockets(url, device["token"], 3)
+    for ws in silent:
+        ws.transport.pause_reading()
+    fresh = await websockets.connect(url)
+    try:
+        await fresh.send(_ws_request(device["token"], "fresh"))
+        response = json.loads(await fresh.recv())
+
+        assert response["id"] == "fresh"
+        assert "result" in response
+        assert len(server._ws_by_device[(_connection["id"], device["id"])]) == 1
+        assert server.websocket_status()["stale_connections_evicted"] == 3
+    finally:
+        await fresh.close()
+        await _close_sockets_quietly(silent)
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_responsive_sockets_keep_their_slots_at_the_limit(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    from alpi.host import connections
+
+    server, url = await _start_limited_server(short_tmp, monkeypatch, 3)
+    connection, device = connections.create_connection("Phone")
+    healthy = await _open_device_sockets(url, device["token"], 3)
+    extra = await websockets.connect(url)
+    try:
+        await extra.send(_ws_request(device["token"], "extra"))
+        response = json.loads(await extra.recv())
+
+        assert response["error"]["code"] == -32029
+        assert len(server._ws_by_device[(connection["id"], device["id"])]) == 3
+        assert server.websocket_status()["stale_connections_evicted"] == 0
+        for index, ws in enumerate(healthy):
+            await ws.send(_ws_request(device["token"], f"alive-{index}"))
+            assert json.loads(await ws.recv())["id"] == f"alive-{index}"
+    finally:
+        await extra.close()
+        await _close_sockets_quietly(healthy)
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_only_the_silent_socket_is_evicted_among_responsive_ones(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    from alpi.host import connections
+
+    server, url = await _start_limited_server(short_tmp, monkeypatch, 3)
+    connection, device = connections.create_connection("Phone")
+    sockets = await _open_device_sockets(url, device["token"], 3)
+    sockets[0].transport.pause_reading()
+    fresh = await websockets.connect(url)
+    try:
+        await fresh.send(_ws_request(device["token"], "fresh"))
+        assert "result" in json.loads(await fresh.recv())
+
+        assert len(server._ws_by_device[(connection["id"], device["id"])]) == 3
+        assert server.websocket_status()["stale_connections_evicted"] == 1
+        for ws in sockets[1:]:
+            await ws.send(_ws_request(device["token"], "alive"))
+            assert json.loads(await ws.recv())["id"] == "alive"
+    finally:
+        await fresh.close()
+        await _close_sockets_quietly(sockets)
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_a_socket_whose_ping_never_returns_is_evicted_within_the_probe_timeout(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    import asyncio
+    from alpi.host import connections
+
+    server, url = await _start_limited_server(short_tmp, monkeypatch, 2)
+    server._ws_probe_timeout = 0.3
+    connection, device = connections.create_connection("Phone")
+    sockets = await _open_device_sockets(url, device["token"], 2)
+
+    async def never_returns():
+        await asyncio.Event().wait()
+
+    for registered in server._ws_by_device[(connection["id"], device["id"])]:
+        registered.ping = never_returns
+    fresh = await websockets.connect(url)
+    try:
+        await fresh.send(_ws_request(device["token"], "fresh"))
+        response = json.loads(await asyncio.wait_for(fresh.recv(), timeout=2))
+
+        assert "result" in response
+        assert server.websocket_status()["stale_connections_evicted"] == 2
+        assert len(server._ws_by_device[(connection["id"], device["id"])]) == 1
+    finally:
+        await fresh.close()
+        await _close_sockets_quietly(sockets)
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_admissions_count_each_eviction_once(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    import asyncio
+    from alpi.host import connections
+
+    server, url = await _start_limited_server(short_tmp, monkeypatch, 3)
+    server._ws_probe_timeout = 0.3
+    connection, device = connections.create_connection("Phone")
+    silent = await _open_device_sockets(url, device["token"], 3)
+    for ws in silent:
+        ws.transport.pause_reading()
+    fresh = [await websockets.connect(url) for _ in range(3)]
+    try:
+        for index, ws in enumerate(fresh):
+            await ws.send(_ws_request(device["token"], f"fresh-{index}"))
+        responses = [json.loads(await asyncio.wait_for(ws.recv(), timeout=3)) for ws in fresh]
+
+        assert all("result" in response for response in responses)
+        assert server.websocket_status()["stale_connections_evicted"] == 3
+        assert len(server._ws_by_device[(connection["id"], device["id"])]) == 3
+    finally:
+        for ws in fresh:
+            await ws.close()
+        await _close_sockets_quietly(silent)
+        await server.stop()
+
+
 @pytest.mark.asyncio
 async def test_socket_registered_under_an_older_policy_is_closed(
     short_tmp: Path, monkeypatch,
