@@ -156,13 +156,22 @@ User-owned dirs under `{home}/skills/<category>/<name>/`. Runtime self-knowledge
 
 File tools and terminal commands are guarded by application-level checks; optional OS sandboxing adds isolation where supported. See `security`.
 
-## Tests
+## Tests and releases (working on alpi's own repository)
 
 ```bash
-pytest -q
-pytest --integration -q
-pytest --llm
+python3 scripts/validate.py        # release check + every suite the working tree touches
+pytest -q                          # fast suite
+pytest --integration -q            # adds sockets and sandbox-exec
+pytest --llm                       # adds real LLM calls
+python3 scripts/bump.py alpi       # or desktop / mobile; patch by default, minor / major
+python3 scripts/check_release.py   # manifests, locks and changelog headings agree
 ```
+
+The repository's own docs split by question: `AGENTS.md` holds the rules and the
+contributor workflow, `docs/ROADMAP.md` is the task pool (Queue, Needs creator,
+Proposed), `docs/ARCHITECTURE.md` describes how alpi works today and the contracts
+clients rely on, and each product (alpi, desktop, mobile) has its own changelog. A
+change that releases several products ships one commit per product, daemon first.
 
 ## Related topics
 

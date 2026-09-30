@@ -166,7 +166,7 @@ class AgentEvent:
     cost: float = 0.0
     tool_id: str = ""
     transient: bool = False
-    # True only on the turn's terminal `assistant_done`; preamble emissions stay False. Contract in AGENTS.md.
+    # True only on the turn's terminal `assistant_done`; preamble emissions stay False. Contract in docs/ARCHITECTURE.md.
     final: bool = False
     attachments: list[dict] = field(default_factory=list)
     model: str = ""                # set on 'usage' and 'routing' events

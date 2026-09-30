@@ -1296,11 +1296,144 @@ Security posture: `uv run --with pip-audit pip-audit` must run clean against the
 
 ## Testing
 
-Run via `uv run pytest tests/`. The `--llm` flag enables real-LLM integration tests (a few cents on free models).
+`python3 scripts/validate.py` is the one command before claiming done: it runs the release check and every suite the working tree touches (see `AGENTS.md`). Directly, `uv run pytest -q` is the fast suite, `--integration` adds sockets and sandbox-exec, and `--llm` enables real-LLM tests (a few cents on free models).
 
 Key fixtures (`tests/conftest.py`):
 - `tmp_home_no_env` — isolated `~/.alpi/` rooted at a tmp dir, no `.env` (safe for unit tests).
 - `tmp_home` — same with the user's `.env` copied (for LLM tests).
+
+## Contracts clients and consumers rely on
+
+Breaking one of these breaks a client, a gateway or a peer. Change the contract, its consumers and this section in the same change.
+
+- **The desktop / mobile client talks to the daemon, not the filesystem.**
+  Verbs in the `host.*` namespace (in `alpi/host/`) are served over
+  `~/.alpi/host/host.sock` (Unix socket, 0600 + same-user trust boundary;
+  no Noise, no pairing). When adding a desktop feature, add a `host.*`
+  verb — never read `~/.alpi/` directly from Rust, never spawn `alpi` as
+  a subprocess. ALP (`alpi/alp/`) is a separate plane for cross-machine
+  peer-to-peer (`link.*`, `workgroup.*`) and is **not** what the client
+  calls.
+
+- **Engine `assistant_done` events: `final=True` marks the deliverable.**
+  The engine emits `AgentEvent(kind="assistant_done", ...)` for **every**
+  assistant message, including preamble narration that comes *before*
+  tool calls ("Let me check things first.", etc.). Only the event that
+  closes the turn carries `final=True`. Consumers that build the
+  canonical reply (scheduler delivery, gateway, ALP) **must** filter on
+  `ev.final`; otherwise preamble leaks into the message users receive.
+  The TUI is the exception — it consumes every `assistant_done` to
+  rewrite the active bubble, which is correct for live streaming.
+
+- **Two messaging intents: `notify` (owner) vs `send_message` (third party).**
+  `notify(text, title?, type?)` pushes to the OWNER's own paired Alpi apps —
+  it files an inbox row in `~/.alpi/outputs/` and emits the `agent.message`
+  host event (the only native push). `type` is the single presentation axis:
+  `info` (default) | `warning` | `error`. `send_message(text, channel,
+  chat_id?, attachment?)` reaches a THIRD PARTY through a gateway
+  (telegram / imap / gmail / matrix / webhook) — `channel` is required, there
+  is no owner channel, and it carries no `type` (its inbox rows are always
+  `info`). The shared native-emit helpers live in `alpi/outputs.py`
+  (`create_output_and_emit_message`, `_suppress_native_emit`). Clients must
+  surface every `agent.message` — do not suppress it (e.g. for the active
+  chat).
+
+- **`schedule.done` / `schedule.failed` events carry structured output.**
+  The scheduler tick emits `{profile, job_id, title, kind, message, reply,
+  delivered_to, silent}` on the host event bus. `message` is the
+  operational status for daemon logs and ops UIs. `reply` is the clean
+  agent/script output, capped at 2000 chars, intended for native
+  notification bodies. A job has one delivery axis, `notify: bool` (default
+  `false`). `delivered_to` is `""` (silent, `notify:false`) | `"alpi"`
+  (`notify:true` → the daemon re-emits the reply as `agent.message`) |
+  `"external"` (the agent called `notify` itself → no duplicate). Failures
+  always file an `error` inbox row and emit `schedule.failed`, regardless of
+  `notify`; the failed event and row carry the job `title` and an enriched
+  `body` (reason + timeout/exit; a timeout also says which tool was in flight
+  and for how long, how many tool calls ran, and the agent's last message), and
+  `schedule.failed` is the single failure
+  notification — it is NOT also re-emitted as `agent.message`. `silent` means a
+  successful job produced no user-facing output.
+  Do not parse `message` in clients when an explicit field exists. When
+  changing the contract, update desktop/mobile consumers and bump the docs
+  here.
+
+- **`host.network.*` is the canonical network config surface for
+  desktop/mobile.** `host.network.status` returns
+  `{scope_in_use, host_in_use, is_override, port, device_name, endpoints,
+  is_endpoints_override,
+  candidates: {tailscale, lan, configured, docker}, diagnosis}` so clients
+  can show the live pairing endpoint AND let the user pick a different one
+  without dropping to `alpi setup`. `scope_in_use` is the network
+  character of the host (`tailscale | lan | custom | docker`) computed
+  via `network.classify_scope` — NOT the resolution path. `is_override`
+  carries the "this came from `cfg.network.host`" bit separately.
+  `host.network.set_advertised({host, device_name, endpoints})` persists
+  `cfg.network.host`, `cfg.host.device_name`, and the ordered
+  `cfg.host.endpoints`; empty values unset their override. Endpoint URLs accept
+  only `ws://` / `wss://`, reject credentials/paths and public plaintext WS,
+  and are advertisement metadata — they do not change the daemon bind.
+  Empty `host` unsets the
+  override (back to auto-detect). Validation rejects public IPs (token
+  leak), loopback, multicast/link-local/reserved, and malformed
+  hostnames — accepts RFC1918, Tailscale CGNAT (100.64/10), and any
+  valid hostname. `host.network.restart_host_server` ends the current
+  daemon process (supervisor respawns with fresh config) and is the
+  explicit handshake clients use after writing. **Known gotcha:** a
+  stale override (e.g. Tailscale IP saved in config but Tailscale now
+  off) still classifies as `tailscale` because the IP literally is one,
+  but the daemon won't be listening on it — clients should compare
+  `host_in_use` against `candidates` to detect this and warn.
+
+- **`host.activity.list` is the one "what needs me / what is running" read.**
+  It aggregates `needs_you` (pending approvals + clarifications, each with
+  `session_id`), `running` (`turn` rows from the in-process registry in
+  `alpi/host/activity.py` — engine turns, workgroup dispatch in
+  `service._dispatch_workgroup_turn`, scheduler fires via `scheduled_run` — plus
+  `workgroup` pipeline rows from the cached fold) and `scheduled` (admin-only).
+  It reads memory and stat-keyed caches only, because clients call it on every
+  `activity.changed {profile}`; never add a per-call scan of `runs/` or
+  transcripts. A new long-running source registers with
+  `activity.start_run/end_run` (or `tracked_run`), and a new event that changes
+  what the verb returns joins `activity._TRIGGERS`. `activity.changed` is
+  live-only (`emit(..., history=False)`) so it never evicts replay rows; the read
+  path never writes the phase-change baseline. Running turns use the
+  `can_handle_prompt` rule, the same check as `needs_you`. Chat frames:
+  `tool_start.started_at`, `tool_end.duration_s`, and one `reasoning_done
+  {seconds}` per reasoning span (consecutive deltas closed by the next tool
+  call, text delta or step end); `seconds` is time spent reasoning — the first
+  span of a step counts from the model call (equal to the stored `reasoned_s`
+  when step 0 streams no prose first), later spans in the same step from their
+  own first delta; reasoning a retry or fallback discards never reaches a span,
+  and all span texts of a turn share the turn's reasoning cap. The
+  engine measures spans once (`_ReasoningSpans` emits `reasoning_done`
+  AgentEvents; `host.chat` only forwards them) and stores them on the turn as
+  ordered `reasoning_spans: [{seconds, before_tool, text?}]`, `before_tool`
+  being the index in the turn's `tools` of the first call after the span
+  (`len(tools)` when it precedes the answer) and `text` that span's own
+  reasoning (clients place replayed text by span, never by splitting the joined
+  `reasoning`; `tools[].reasoning` is only the inter-tool prose); absent on
+  turns without reasoning and on pre-field sessions, where clients fall back to
+  `reasoned_s`. Each step restarts the span clock at its model call.
+  `session_changed.in_flight` is true only for the in-flight stub save; a
+  crashed chat turn still closes with `in_flight: false`.
+
+- **Session ownership is `(connection_id, device_id)`, gated by the
+  connection's `session_scope`.** `Session` persists both ids; every host verb
+  that lists, reads, continues, cancels or deletes a session goes through
+  `connection_context.owns_session(connection_id, device_id)` (row form:
+  `owns_session_row`; agent tools use `can_read_session`, which keeps the admin
+  bypass). Under `session_scope: connection` (default) the device clause is a
+  no-op; under `device` a remote device sees only sessions carrying its own
+  `device_id`, and sessions with no `device_id` (pre-flag, scheduler,
+  `host.chat.delegate`) stay visible to the whole connection. The local socket
+  never applies the device clause. `session_changed` events carry both ids and
+  `server._filter_session_events` drops foreign ones for members, next to the
+  role redaction. Never filter by `owns_connection` alone in a new session
+  verb. A device with `provisioner: true` may call the `_SELF_SERVICE_METHODS`
+  (`add_device`, `pairing_status`, `cancel_pairing`, `revoke_device`) on its own
+  `connection_id` without the admin role; those verbs are `_SCOPE_FREE_METHODS`
+  because they carry no profile.
 
 ## Non-obvious things to know
 

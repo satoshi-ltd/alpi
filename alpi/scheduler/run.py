@@ -26,7 +26,7 @@ log = logging.getLogger("alpi.schedule")
 
 @dataclass
 class JobOutcome:
-    # `delivered_to`: "" (silent) | "alpi" (native auto-notify) | "external" (agent notified itself). `silent`: True only when ok AND no user-facing output. Contract referenced by host event consumers — see AGENTS.md.
+    # `delivered_to`: "" (silent) | "alpi" (native auto-notify) | "external" (agent notified itself). `silent`: True only when ok AND no user-facing output. Contract referenced by host event consumers — see docs/ARCHITECTURE.md.
     ok: bool
     message: str
     reply: str = ""

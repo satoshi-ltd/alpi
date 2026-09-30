@@ -56,7 +56,8 @@ uv run alpi
 uv tool install -e . --reinstall   # editable into tool env, matches end-user daemon
 ```
 
-Tests: `pytest -q`, `pytest --integration -q`, `pytest --llm`.
+Tests: `python3 scripts/validate.py` runs the release check and every suite a change touches;
+`pytest -q`, `pytest --integration -q` and `pytest --llm` run the Python suites directly.
 
 ## Troubleshooting
 

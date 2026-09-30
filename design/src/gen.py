@@ -869,9 +869,18 @@ def build(desktop_boards):
         y += h
 
     live_path = os.path.join(os.path.dirname(ROOT), "live", "project", "canvas.json")
+    created = {"v": 1, "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+    previous_path = os.path.join(ROOT, "canvas.json")
+    try:
+        with open(previous_path) as f:
+            previous = json.load(f)
+        if isinstance(previous, dict) and isinstance(previous.get("createdOnFiles"), dict):
+            created = previous["createdOnFiles"]
+    except (OSError, ValueError):
+        pass
     index = {
         "v": 3,
-        "createdOnFiles": {"v": 1, "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")},
+        "createdOnFiles": created,
         "title": "Alpi desktop and mobile parity",
         "launch": {"view": "canvas", "page": "system"},
         "pages": [{"id": "system", "name": "System"}, {"id": "desktop", "name": "Desktop"}, {"id": "mobile", "name": "Mobile"}, {"id": "audit", "name": "Open work"}, {"id": "proposals", "name": "Proposals"}],

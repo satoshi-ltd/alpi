@@ -22,6 +22,123 @@ this repository. Hard constraints, not suggestions.
   audience while Alpi is scoped tight. The bar is "the smallest design
   that captures the value", not "port verbatim".
 
+## Documents
+
+Each document answers one question. Put information in the one that owns it
+and nowhere else, and update it in the same change as the code.
+
+| File | Question | Never contains |
+| --- | --- | --- |
+| `README.md` | What is alpi, and how do I install and run it? (humans) | Status, history, tasks |
+| `AGENTS.md` | Which rules apply when working here? | Status, tasks, contracts, history |
+| `docs/ROADMAP.md` | What is left to do? The task pool; its header defines fields and lanes | Shipped work |
+| `docs/ARCHITECTURE.md` | How does alpi work today? Layout, systems and the contracts clients and consumers rely on | Dates, statuses, test counts, investigation logs |
+| `docs/*.md` (CONFIG, PROFILES, WORKGROUPS, …) | How does one area work, in depth? | Tasks, history |
+| `CHANGELOG.md`, `desktop/CHANGELOG.md`, `mobile/CHANGELOG.md` | What did each version ship? | Implementation detail, test counts, review narrative, customers or infrastructure |
+
+- Start from `README.md`, `docs/ROADMAP.md` and the `docs/ARCHITECTURE.md`
+  section the task touches.
+- `docs/ARCHITECTURE.md` is present tense and edited in place: when behaviour
+  changes, rewrite the section that owns it. History lives in git and the
+  changelogs.
+- Changelog entries: `## vX.Y.Z — YYYY-MM-DD — short title`, at most five
+  bullets of what changed for someone using or running the product, then why
+  when it is not obvious. Client entries end with the minimum alpi version
+  they need.
+- `alpi/knowledge/references/` is what the alpi agent itself reads to know
+  alpi: hand-tuned AI-facing documentation, not a copy of `docs/`. Any change
+  to `docs/`, a contract or a user-visible behaviour updates the matching
+  reference in the same change, written for an agent (`scripts/sync_knowledge.py`
+  only validates the file set).
+- `design/` is the design kit, not a document (rules below). `reports/` holds
+  the creator's internal decision reports in Spanish; it is excluded from git,
+  never committed and never a task list.
+
+## Workflow
+
+The creator runs the project as an autonomous loop with the user-level
+`next-task` skill (usually `/loop /next-task`) and the `adversarial-reviewer`
+agent in `~/.claude/`. Each iteration takes one approved task, implements and
+tests it, bumps the version and changelog, has the reviewer try to break it,
+applies the findings, validates, commits, pushes and watches CI.
+
+Project wiring for those tools:
+
+- **Task pool:** `docs/ROADMAP.md`. Only `owner: agent` tasks in Queue are
+  worked on; only the creator approves a task into Queue.
+- **Products:** a task names the products it releases (`alpi`, `desktop`,
+  `mobile`; `common/` releases both clients, `design/` releases none). A task
+  that releases several products ships one commit per product, daemon first,
+  each with its own bump and changelog; `design/` and `common/` ride with the
+  first client commit.
+- **Version:** `python3 scripts/bump.py <alpi|desktop|mobile> [patch|minor|major]`
+  (patch by default) updates every version location, including the lock files
+  and the mobile build counters; then write the changelog entry. Every commit
+  to `main` that changes a product bumps it; docs-only, design-only and
+  build-tooling commits that leave the shipped artefact unchanged do not. `python3 scripts/check_release.py` proves manifests, locks and
+  changelog headings agree.
+- **Validation:** `python3 scripts/validate.py` runs the release check, then
+  every suite the working tree touches against `HEAD` (`--base REF` for another
+  base, `--all` for everything, `--dry-run` for the plan), stopping at the first
+  failure. Report it separately from the GitHub pipeline results.
+- **CI:** `gh run list --commit <sha>`: `publish` (alpi: PyPI, then
+  `publish-docker` and `publish-site`), `clients` (both JS suites on every push
+  that touches a client), `publish-desktop` (the desktop release). Mobile has
+  no pipeline; EAS builds are the creator's. A red pipeline on `main` is the
+  next task.
+
+Rules of the loop:
+
+- Invoking `/next-task` or `/loop /next-task` is the creator's explicit request
+  to commit and push each finished task once review and validation pass.
+  Outside the loop, commit only when asked in the current turn. When the
+  creator says not to commit, prepare and validate, leave the change staged
+  and report.
+- Adversarial review before every commit; a second pass on the deltas when the
+  fixes were substantive.
+- Interruptions: triage before continuing and say where each item went. A bug
+  the creator reports goes to the top of Queue; a requested feature goes to
+  Queue; ideas, including your own, go to Proposed; questions get answered.
+- Anything needing an EAS build, a physical device, the fleet, credentials or
+  a product choice becomes a `Needs creator` task. When a feature needs device
+  evidence, split it: the implementation is an agent task, the device check a
+  creator `verify` task that depends on it.
+- Stop and report when Queue is empty or everything is blocked on the creator.
+
+### Review checklist
+
+On top of the reviewer's generic checklist, and against every rule in the
+"Contracts clients and consumers rely on" section of `docs/ARCHITECTURE.md`
+(clients talk to the daemon over `host.*` only, never `~/.alpi` from Rust or a
+spawned `alpi`; `notify` for the owner vs `send_message` for third parties;
+clients surface every `agent.message`; `schedule.*` fields instead of parsing
+`message`; `host.network.*`, `host.activity.list` and session ownership):
+
+- **Ownership:** every `host.*` verb that lists, reads or acts on sessions,
+  prompts, runs or schedules filters by connection, device (`session_scope`)
+  and profile scope, and the local socket's owner semantics hold. Members
+  never see another connection's data.
+- **Console parity:** a new host verb with app UI ships its CLI or TUI
+  equivalent.
+- **Older daemons:** clients hide a feature when a verb answers
+  `-32601 method-not-found` (or `forbidden` for a scoped device) and ignore
+  unknown frame kinds; a new stream field is optional on the client.
+- **Event consumers:** anything that builds a reply from `AgentEvent`s filters
+  on `final=True`; a new event kind is ignored by the scheduler, gateways, ALP
+  and `--once` unless they need it.
+- **Redaction and caps:** anything persisted (sessions, run journals, replay
+  sidecars, outputs) is redacted and capped; no secret reaches a log.
+- **Desktop:** Tauri commands that touch the daemon run off the main thread
+  (`off_main()` / `spawn_blocking`); the Rust bridge forwards new fields.
+- **Mobile:** nothing needs a device to prove it; native config (app.json,
+  config plugins) survives `expo prebuild`; touch targets, reduce motion and
+  large text sizes hold.
+- **Design:** every board the change affects is regenerated and matches what
+  ships, in light and dark.
+- **Knowledge:** every `docs/` or behaviour change has its matching
+  `alpi/knowledge/references/` update, so the agent does not answer from stale
+  knowledge.
+
 ## Code style
 
 - **All source text in English.** No Spanish anywhere in `alpi/` — code,
@@ -66,8 +183,9 @@ this repository. Hard constraints, not suggestions.
 
 ## Releases & versioning
 
-Two products ship from this repo, on independent cadences with
-independent version schemes. Don't conflate them.
+Three products ship from this repo, on independent cadences with
+independent version schemes. Don't conflate them. `scripts/bump.py` owns
+every version location listed below; never edit them by hand.
 
 - **alpi (CLI / Python package).** Tags ``vX.Y.Z`` (no prefix).
   Versioned in ``pyproject.toml`` + ``alpi/__init__.py``.
@@ -76,8 +194,8 @@ independent version schemes. Don't conflate them.
   (PyPI + GitHub release).
 - **Desktop app (Tauri).** Tags ``desktop-vX.Y.Z``. Versioned in
   ``desktop/package.json`` + ``desktop/src-tauri/tauri.conf.json`` +
-  ``desktop/src-tauri/Cargo.toml`` (all three must agree, or the release
-  workflow aborts; ``cargo check`` refreshes ``Cargo.lock``). Changelog:
+  ``desktop/src-tauri/Cargo.toml`` + its ``Cargo.lock`` entry (all must agree,
+  or the release workflow aborts). Changelog:
   [desktop/CHANGELOG.md](desktop/CHANGELOG.md). Pipeline:
   [.github/workflows/publish-desktop.yml](.github/workflows/publish-desktop.yml)
   (GitHub release only — no PyPI). The Tauri updater reads
@@ -89,8 +207,8 @@ independent version schemes. Don't conflate them.
   ``mobile/package.json`` + ``mobile/app.json`` (``expo.version``), and both
   build counters must advance: ``ios.buildNumber`` and ``android.versionCode``,
   or the store upload is rejected. ``mobile/package-lock.json`` carries the
-  version twice — edit those two lines by hand rather than regenerating, and
-  check ``npm ci --dry-run``. Changelog:
+  version twice; a dependency change regenerates the lock with ``npm install``
+  and ``npm ci --dry-run`` must pass. Changelog:
   [mobile/CHANGELOG.md](mobile/CHANGELOG.md). Built by EAS; no GitHub workflow.
 
 - **Shared client source.** ``common/`` is a third source directory, not a
@@ -118,138 +236,10 @@ A desktop release pins a minimum compatible alpi version in its
 changelog entry — clients require a daemon recent enough to serve
 every ``host.*`` verb the UI calls.
 
-## Architecture
-
-- **The desktop / mobile client talks to the daemon, not the filesystem.**
-  Verbs in the `host.*` namespace (in `alpi/host/`) are served over
-  `~/.alpi/host/host.sock` (Unix socket, 0600 + same-user trust boundary;
-  no Noise, no pairing). When adding a desktop feature, add a `host.*`
-  verb — never read `~/.alpi/` directly from Rust, never spawn `alpi` as
-  a subprocess. ALP (`alpi/alp/`) is a separate plane for cross-machine
-  peer-to-peer (`link.*`, `workgroup.*`) and is **not** what the client
-  calls.
-
-- **Engine `assistant_done` events: `final=True` marks the deliverable.**
-  The engine emits `AgentEvent(kind="assistant_done", ...)` for **every**
-  assistant message, including preamble narration that comes *before*
-  tool calls ("Let me check things first.", etc.). Only the event that
-  closes the turn carries `final=True`. Consumers that build the
-  canonical reply (scheduler delivery, gateway, ALP) **must** filter on
-  `ev.final`; otherwise preamble leaks into the message users receive.
-  The TUI is the exception — it consumes every `assistant_done` to
-  rewrite the active bubble, which is correct for live streaming.
-
-- **Two messaging intents: `notify` (owner) vs `send_message` (third party).**
-  `notify(text, title?, type?)` pushes to the OWNER's own paired Alpi apps —
-  it files an inbox row in `~/.alpi/outputs/` and emits the `agent.message`
-  host event (the only native push). `type` is the single presentation axis:
-  `info` (default) | `warning` | `error`. `send_message(text, channel,
-  chat_id?, attachment?)` reaches a THIRD PARTY through a gateway
-  (telegram / imap / gmail / matrix / webhook) — `channel` is required, there
-  is no owner channel, and it carries no `type` (its inbox rows are always
-  `info`). The shared native-emit helpers live in `alpi/outputs.py`
-  (`create_output_and_emit_message`, `_suppress_native_emit`). Clients must
-  surface every `agent.message` — do not suppress it (e.g. for the active
-  chat).
-
-- **`schedule.done` / `schedule.failed` events carry structured output.**
-  The scheduler tick emits `{profile, job_id, title, kind, message, reply,
-  delivered_to, silent}` on the host event bus. `message` is the
-  operational status for daemon logs and ops UIs. `reply` is the clean
-  agent/script output, capped at 2000 chars, intended for native
-  notification bodies. A job has one delivery axis, `notify: bool` (default
-  `false`). `delivered_to` is `""` (silent, `notify:false`) | `"alpi"`
-  (`notify:true` → the daemon re-emits the reply as `agent.message`) |
-  `"external"` (the agent called `notify` itself → no duplicate). Failures
-  always file an `error` inbox row and emit `schedule.failed`, regardless of
-  `notify`; the failed event and row carry the job `title` and an enriched
-  `body` (reason + timeout/exit; a timeout also says which tool was in flight
-  and for how long, how many tool calls ran, and the agent's last message), and
-  `schedule.failed` is the single failure
-  notification — it is NOT also re-emitted as `agent.message`. `silent` means a
-  successful job produced no user-facing output.
-  Do not parse `message` in clients when an explicit field exists. When
-  changing the contract, update desktop/mobile consumers and bump the docs
-  here.
-
-- **`host.network.*` is the canonical network config surface for
-  desktop/mobile.** `host.network.status` returns
-  `{scope_in_use, host_in_use, is_override, port, device_name, endpoints,
-  is_endpoints_override,
-  candidates: {tailscale, lan, configured, docker}, diagnosis}` so clients
-  can show the live pairing endpoint AND let the user pick a different one
-  without dropping to `alpi setup`. `scope_in_use` is the network
-  character of the host (`tailscale | lan | custom | docker`) computed
-  via `network.classify_scope` — NOT the resolution path. `is_override`
-  carries the "this came from `cfg.network.host`" bit separately.
-  `host.network.set_advertised({host, device_name, endpoints})` persists
-  `cfg.network.host`, `cfg.host.device_name`, and the ordered
-  `cfg.host.endpoints`; empty values unset their override. Endpoint URLs accept
-  only `ws://` / `wss://`, reject credentials/paths and public plaintext WS,
-  and are advertisement metadata — they do not change the daemon bind.
-  Empty `host` unsets the
-  override (back to auto-detect). Validation rejects public IPs (token
-  leak), loopback, multicast/link-local/reserved, and malformed
-  hostnames — accepts RFC1918, Tailscale CGNAT (100.64/10), and any
-  valid hostname. `host.network.restart_host_server` ends the current
-  daemon process (supervisor respawns with fresh config) and is the
-  explicit handshake clients use after writing. **Known gotcha:** a
-  stale override (e.g. Tailscale IP saved in config but Tailscale now
-  off) still classifies as `tailscale` because the IP literally is one,
-  but the daemon won't be listening on it — clients should compare
-  `host_in_use` against `candidates` to detect this and warn.
-
-- **`host.activity.list` is the one "what needs me / what is running" read.**
-  It aggregates `needs_you` (pending approvals + clarifications, each with
-  `session_id`), `running` (`turn` rows from the in-process registry in
-  `alpi/host/activity.py` — engine turns, workgroup dispatch in
-  `service._dispatch_workgroup_turn`, scheduler fires via `scheduled_run` — plus
-  `workgroup` pipeline rows from the cached fold) and `scheduled` (admin-only).
-  It reads memory and stat-keyed caches only, because clients call it on every
-  `activity.changed {profile}`; never add a per-call scan of `runs/` or
-  transcripts. A new long-running source registers with
-  `activity.start_run/end_run` (or `tracked_run`), and a new event that changes
-  what the verb returns joins `activity._TRIGGERS`. `activity.changed` is
-  live-only (`emit(..., history=False)`) so it never evicts replay rows; the read
-  path never writes the phase-change baseline. Running turns use the
-  `can_handle_prompt` rule, the same check as `needs_you`. Chat frames:
-  `tool_start.started_at`, `tool_end.duration_s`, and one `reasoning_done
-  {seconds}` per reasoning span (consecutive deltas closed by the next tool
-  call, text delta or step end); `seconds` is time spent reasoning — the first
-  span of a step counts from the model call (equal to the stored `reasoned_s`
-  when step 0 streams no prose first), later spans in the same step from their
-  own first delta; reasoning a retry or fallback discards never reaches a span,
-  and all span texts of a turn share the turn's reasoning cap. The
-  engine measures spans once (`_ReasoningSpans` emits `reasoning_done`
-  AgentEvents; `host.chat` only forwards them) and stores them on the turn as
-  ordered `reasoning_spans: [{seconds, before_tool, text?}]`, `before_tool`
-  being the index in the turn's `tools` of the first call after the span
-  (`len(tools)` when it precedes the answer) and `text` that span's own
-  reasoning (clients place replayed text by span, never by splitting the joined
-  `reasoning`; `tools[].reasoning` is only the inter-tool prose); absent on
-  turns without reasoning and on pre-field sessions, where clients fall back to
-  `reasoned_s`. Each step restarts the span clock at its model call.
-  `session_changed.in_flight` is true only for the in-flight stub save; a
-  crashed chat turn still closes with `in_flight: false`.
-
-- **Session ownership is `(connection_id, device_id)`, gated by the
-  connection's `session_scope`.** `Session` persists both ids; every host verb
-  that lists, reads, continues, cancels or deletes a session goes through
-  `connection_context.owns_session(connection_id, device_id)` (row form:
-  `owns_session_row`; agent tools use `can_read_session`, which keeps the admin
-  bypass). Under `session_scope: connection` (default) the device clause is a
-  no-op; under `device` a remote device sees only sessions carrying its own
-  `device_id`, and sessions with no `device_id` (pre-flag, scheduler,
-  `host.chat.delegate`) stay visible to the whole connection. The local socket
-  never applies the device clause. `session_changed` events carry both ids and
-  `server._filter_session_events` drops foreign ones for members, next to the
-  role redaction. Never filter by `owns_connection` alone in a new session
-  verb. A device with `provisioner: true` may call the `_SELF_SERVICE_METHODS`
-  (`add_device`, `pairing_status`, `cancel_pairing`, `revoke_device`) on its own
-  `connection_id` without the admin role; those verbs are `_SCOPE_FREE_METHODS`
-  because they carry no profile.
-
 ## Testing
+
+`python3 scripts/validate.py` is the one command before claiming done. The
+suites it composes:
 
 ```bash
 pytest -q                # fast suite (unit + filesystem)
@@ -274,3 +264,16 @@ git config core.hooksPath .githooks
 
 Override with `git commit --no-verify` only when you know what you're
 doing (half-merge in progress, etc.).
+
+## Live environment boundaries
+
+- The creator's deployed daemons are theirs: never deploy, update, restart or
+  edit their state unless asked in the turn; read-only RPCs are fine. Their
+  config repositories take manual commits only, and a mounted copy of a remote
+  daemon's data is stale and read-only, never evidence of live state.
+- `~/.alpi` on this machine is the creator's live daemon. Tests use isolated
+  temporary homes and never point at a real daemon.
+- EAS builds, installs and device checks are the creator's. A running
+  `pnpm tauri dev` is the creator's too; never restart it.
+- Keep implemented, released and verified apart in reports: a green suite is
+  not a device check and a pushed commit is not a deployed daemon.

@@ -16,6 +16,7 @@ const fixture = (check) => {
   fs.mkdirSync(path.join(dir, "scripts"));
   fs.mkdirSync(path.join(dir, "node_modules/expo"), { recursive: true });
   fs.copyFileSync(script, path.join(dir, "scripts/android-build.mjs"));
+  fs.copyFileSync(path.join(root, "scripts/adb.mjs"), path.join(dir, "scripts/adb.mjs"));
   fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify({ scripts: { "check:release": check } }));
   fs.writeFileSync(
     path.join(dir, "app.json"),

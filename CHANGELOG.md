@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.16.2 — 2026-09-30 — one command to release and validate
+
+- **The agent knows how alpi itself is validated and released.** Its knowledge now covers the
+  validation command, the release scripts and how the repository's docs split, so questions about
+  contributing to alpi get current answers.
+- **Release tooling.** `scripts/bump.py <alpi|desktop|mobile> [patch|minor|major]` updates every
+  version location of a product, including lock files and the mobile build counters;
+  `scripts/check_release.py` proves manifests, locks and changelog headings agree.
+- **One validation command.** `scripts/validate.py` runs the release check and every suite the
+  working tree touches, the integration tests included, with `--all`, `--base` and `--dry-run`.
+- **Contributor docs reorganised.** `AGENTS.md` keeps rules, workflow and a review checklist;
+  the contracts clients and consumers rely on move to `docs/ARCHITECTURE.md`; `docs/ROADMAP.md`
+  becomes a typed task pool with Queue, Needs creator and Proposed lanes.
+
 ## v0.16.1 — 2026-09-30 — reasoning replays where it happened
 
 - **Stored turns keep each reasoning span.** A turn now saves `reasoning_spans: [{seconds,

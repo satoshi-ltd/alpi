@@ -4,6 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { attachedSerials, queryAdb } from './adb.mjs';
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const mode = process.argv[2];
 const local = process.argv.includes('--local');
@@ -71,22 +73,17 @@ if (mode === 'dev') {
   const emulator = path.join(sdk, 'emulator/emulator');
   const avd = process.env.ANDROID_AVD || 'Pixel_9_Pro_Fold';
 
-  const query = (args) => {
-    const result = spawnSync(adb, args, { env, encoding: 'utf8' });
-    if (result.error) throw result.error;
-    return result.status === 0 ? result.stdout.trim() : '';
+  const query = (args) => queryAdb(spawnSync, adb, env, args).out;
+  let adbAnswered = false;
+  const attached = () => {
+    const serials = attachedSerials(spawnSync, adb, env);
+    if (serials !== null) adbAnswered = true;
+    return serials;
   };
-  const attached = () =>
-    query(['devices'])
-      .split(/\r?\n/)
-      .slice(1)
-      .map((line) => line.split(/\s+/))
-      .filter(([, state]) => state === 'device')
-      .map(([serial]) => serial);
   const avdOf = (serial) => query(['-s', serial, 'emu', 'avd', 'name']).split(/\r?\n/)[0];
   const booted = (serial) => query(['-s', serial, 'shell', 'getprop', 'sys.boot_completed']) === '1';
   const target = () => {
-    const serials = attached();
+    const serials = attached() ?? [];
     const emulators = serials.filter((serial) => serial.startsWith('emulator-'));
     return (
       process.env.ANDROID_SERIAL ||
@@ -97,7 +94,7 @@ if (mode === 'dev') {
   };
 
   let serial = target();
-  if (!serial) {
+  if (!serial && attached() !== null) {
     const available = spawnSync(emulator, ['-list-avds'], { env, encoding: 'utf8' });
     if (!available.stdout?.split(/\r?\n/).includes(avd)) fail(`No device attached and no emulator named ${avd}`);
     const child = spawn(emulator, ['-avd', avd], { env, detached: true, stdio: 'ignore' });
@@ -114,6 +111,7 @@ if (mode === 'dev') {
     if (serial && booted(serial)) break;
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
+  if (!adbAnswered) fail('adb did not respond within 3 minutes; restart it with `adb kill-server`');
   if (!serial || !booted(serial)) fail('Device did not become ready within 3 minutes');
 
   // Never uninstall or clear user data to work around a signing/version mismatch.
