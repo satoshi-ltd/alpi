@@ -302,6 +302,17 @@ Per turn: append user message → loop {LLM stream → emit deltas → exec tool
 
 Events emitted to the UI sink: `user`, `reasoning_delta`, `assistant_delta`, `assistant_done`, `tool_start`, `tool_state`, `tool_end`, `usage`, `error`, `done`, `interrupted`. The TUI consumes them; the scheduler subprocess consumes a subset via JSON-lines.
 
+A model-provider failure reaches every surface as one plain sentence, never as the provider's
+exception text. `alpi/llm_errors.py` classifies the exception chain (litellm class, HTTP status,
+text) into `context_length`, `insufficient_credit`, `auth`, `forbidden`, `model_unavailable`,
+`content_policy`, `rate_limited`, `timeout`, `provider_unavailable`, `bad_request` or `unknown`.
+The `error` event carries `text` (the sentence), `code` (the class) and `detail` (the redacted,
+500-character technical text, also logged and kept in the run journal). `host.chat.send` frames
+carry `text` and `code`; `detail` reaches the TUI, `--once` (`[error] text (detail)`, or the
+`detail` key of the JSON event) and the scheduler, whose failed-job message reads `agent error:
+text (detail)`. ALP peer replies carry only the sentence. Chat-level codes such as `busy` share
+the `code` field.
+
 Host chat forwards `usage` with `context_tokens`; it is non-zero only for the
 main completion whose input becomes `Session.last_ctx_tokens`. Side-model usage
 still carries accounting fields but cannot move a client's conversation meter.

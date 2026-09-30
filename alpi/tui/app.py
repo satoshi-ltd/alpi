@@ -591,6 +591,8 @@ class AlpiApp(App):
             self._refresh_hints()
         elif kind == "error":
             self._mount_notice(ErrorLine(ev.text))
+            if ev.detail:
+                self._mount_notice(DimLine(ev.detail))
         elif kind == "usage":
             self._update_header()
         elif kind == "routing":

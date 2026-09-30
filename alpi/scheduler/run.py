@@ -53,6 +53,7 @@ class ParsedEvents:
     # Presence is tracked apart from the text: the engine builds it from str(exc), which can be empty.
     errored: bool = False
     error: str = ""
+    error_detail: str = ""
 
 
 # How often to wake up and check for due jobs. 30s is fine-grained enough
@@ -534,7 +535,10 @@ def run_job(job: dict, home: Path) -> JobOutcome:
 
     # The child exits 0 whether the turn succeeded or died, so its error event is the only failure signal.
     if parsed.errored:
-        return JobOutcome(False, f"agent error: {parsed.error or 'no message'}", run_id=run_id)
+        shown = parsed.error or "no message"
+        if parsed.error_detail:
+            shown = f"{shown} ({parsed.error_detail})"
+        return JobOutcome(False, f"agent error: {shown}", run_id=run_id)
 
     if parsed.notified_natively:
         # The agent already notified the user (called notify) — don't double-notify the reply.
@@ -559,6 +563,7 @@ def _parse_events(stdout: str) -> ParsedEvents:
     reply = ""
     errored = False
     error = ""
+    error_detail = ""
     pending: dict[str, list[dict]] = {"notify": []}
     agent_messages: list[dict] = []
     for line in stdout.splitlines():
@@ -585,7 +590,8 @@ def _parse_events(stdout: str) -> ParsedEvents:
         elif kind == "error":
             errored = True
             error = (ev.get("text") or "").strip()
-    return ParsedEvents(notified_natively, reply, agent_messages, errored, error)
+            error_detail = (ev.get("detail") or "").strip()
+    return ParsedEvents(notified_natively, reply, agent_messages, errored, error, error_detail)
 
 
 def _emit_agent_messages(home: Path, messages: list[dict]) -> None:

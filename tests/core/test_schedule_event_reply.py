@@ -438,6 +438,30 @@ def test_agent_error_event_fails_the_job_even_with_rc_zero(
     assert runs["stalled"]["last_run_status"] == "error"
 
 
+def test_a_failed_job_reports_the_sentence_and_the_technical_detail(
+    monkeypatch, tmp_home_no_env: Path,
+) -> None:
+    monkeypatch.setattr(scheduler.subprocess, "run", lambda *a, **kw: _proc_emitting(
+        {
+            "kind": "error", "text": "The model provider is rate limiting requests. Try again in a moment.",
+            "code": "rate_limited", "detail": "RateLimitError: 429 Too Many Requests",
+        },
+        {"kind": "reply", "text": ""},
+    )())
+    emits = _capture_emit(monkeypatch)
+    _seed_job(tmp_home_no_env, {
+        "id": "limited", "kind": "cron", "expression": "* * * * *",
+        "prompt": "do the thing", "last_run_at": "2000-01-01T00:00:00+00:00",
+    })
+
+    scheduler.tick(tmp_home_no_env)
+
+    failed = [d for k, d in emits if k == "schedule.failed"]
+    assert len(failed) == 1
+    assert "rate limiting requests" in failed[0]["message"]
+    assert "(RateLimitError: 429 Too Many Requests)" in failed[0]["message"]
+
+
 def test_agent_error_without_text_still_fails_the_job(
     monkeypatch, tmp_home_no_env: Path,
 ) -> None:

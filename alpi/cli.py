@@ -341,6 +341,7 @@ def _run_once(
             payload = {
                 "kind": "error", "text": ev.text,
                 "transient": ev.transient,
+                **({"code": ev.code, "detail": ev.detail} if ev.code else {}),
             }
         elif ev.kind == "interrupted":
             payload = {"kind": "interrupted"}
@@ -358,7 +359,7 @@ def _run_once(
             if ev.text.strip():
                 parts.append(ev.text)
         elif ev.kind == "error" and not emit_events:
-            parts.append(f"[error] {ev.text}")
+            parts.append(f"[error] {ev.text}" + (f" ({ev.detail})" if ev.detail else ""))
 
     import signal as _signal
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import threading
@@ -12,7 +13,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from alpi import clock, config as cfg_mod
-from alpi import llm, session, tools
+from alpi import llm, llm_errors, session, tools
 from alpi.tools import _policy as _tool_policy
 from alpi.tools._budget import apply as _budget_apply
 from alpi.tools._paths import dispatch_tool_deny_reasons as _dispatch_tool_deny_reasons
@@ -166,6 +167,8 @@ class AgentEvent:
     cost: float = 0.0
     tool_id: str = ""
     transient: bool = False
+    code: str = ""
+    detail: str = ""
     # True only on the turn's terminal `assistant_done`; preamble emissions stay False. Contract in docs/ARCHITECTURE.md.
     final: bool = False
     attachments: list[dict] = field(default_factory=list)
@@ -335,7 +338,6 @@ class Engine:
                 r for r in reasons if r != prefix_diag.REASON_NONE
             )
             if reasons and reasons != [prefix_diag.REASON_NONE]:
-                import logging
                 idx = (
                     prefix_diag.first_divergence(self._prefix_shape, shape)
                     if self._prefix_shape else None
@@ -350,7 +352,6 @@ class Engine:
 
     def request_interrupt(self, reason: str = "unknown") -> None:
         """Ask the current turn to stop at the next checkpoint."""
-        import logging
         logging.getLogger("alpi.engine").warning("interrupt requested: %s", reason)
         self.interrupt_requested = True
 
@@ -684,7 +685,6 @@ class Engine:
             )
             user_content = parts
             if vstatus == "unknown" and any(att_mod.is_image(a.mime) for a in validated):
-                import logging
                 logging.getLogger("alpi.engine").warning(
                     "model %r vision capability unknown; provider may reject image input",
                     model_name,
@@ -888,10 +888,9 @@ class Engine:
                                     continue
                                 fb_kwargs.update(_pc.cache_kwargs_for_model(fb_kwargs.get("model", "")))
                                 fb_kwargs = self._with_affinity(fb_kwargs)
-                                import logging
                                 logging.getLogger("alpi.engine").warning(
                                     "model %s failed (%s); falling back to %s",
-                                    turn_model, e, fb_model,
+                                    turn_model, llm_errors.explain(e).detail, fb_model,
                                 )
                                 failed_model = turn_model
                                 call_kwargs = fb_kwargs
@@ -907,9 +906,14 @@ class Engine:
                                 break
                         if fb_applied:
                             continue
-                        turn_error = str(e)
+                        explained = llm_errors.explain(e)
+                        turn_error = explained.detail
+                        logging.getLogger("alpi.engine").warning(
+                            "turn failed (%s): %s", explained.code, explained.detail,
+                        )
                         emit(AgentEvent(
-                            kind="error", text=turn_error,
+                            kind="error", text=explained.message,
+                            code=explained.code, detail=explained.detail,
                             transient=llm.is_transient(e),
                         ))
                         return
@@ -1619,9 +1623,14 @@ class Engine:
                             turn_completed = True
                             emit(AgentEvent(kind="done"))
                             return
-                    turn_error = str(e)
+                    explained = llm_errors.explain(e)
+                    turn_error = explained.detail
+                    logging.getLogger("alpi.engine").warning(
+                        "wrap-up failed (%s): %s", explained.code, explained.detail,
+                    )
                     emit(AgentEvent(
-                        kind="error", text=turn_error,
+                        kind="error", text=explained.message,
+                        code=explained.code, detail=explained.detail,
                         transient=llm.is_transient(e),
                     ))
                     return

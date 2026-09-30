@@ -459,6 +459,41 @@ def test_deadline_reached_during_stream_skips_returned_tool_calls(
     )
 
 
+def test_a_provider_failure_during_the_wrap_up_is_explained(
+    patched_engine: Engine, monkeypatch,
+) -> None:
+    import litellm
+
+    from alpi.llm_errors import MESSAGES
+
+    now = [100.0]
+    monkeypatch.setattr("alpi.engine.time.monotonic", lambda: now[0])
+    monkeypatch.setattr("alpi.engine._turn_deadline_from_env", lambda started: 105.0)
+
+    def fake_stream(messages, tools, **kwargs):
+        if not tools:
+            raise litellm.RateLimitError(
+                message="OpenrouterException - slow down sk-abcdefghijklmnopqrstuvwxyz0123456789",
+                model="m", llm_provider="openrouter",
+            )
+        now[0] = 106.0
+        yield _final_chunk("", tool_calls=[{
+            "id": "tc", "name": "todo", "arguments": '{"action": "list"}',
+        }])
+
+    monkeypatch.setattr("alpi.llm.stream", fake_stream)
+
+    events = []
+    patched_engine.run_turn("do work", emit=events.append)
+
+    error = next(event for event in events if event.kind == "error")
+    assert error.text == MESSAGES["rate_limited"]
+    assert error.code == "rate_limited"
+    assert error.transient is True
+    assert "sk-abcdefghijklmnop" not in error.detail
+    assert "Openrouter" not in error.text
+
+
 def test_deadline_stops_a_stream_that_keeps_emitting_reasoning(
     patched_engine: Engine, monkeypatch,
 ) -> None:

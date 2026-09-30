@@ -142,7 +142,33 @@ def test_fallback_exhausted_surfaces_error(monkeypatch, tmp_path: Path) -> None:
     engine.run_turn("hi", emit=events.append)
     assert len([e for e in events if e.kind == "routing"]) == 1
     errors = [e for e in events if e.kind == "error"]
-    assert errors and "backup" in errors[0].text
+    assert errors and "backup" in errors[0].detail and errors[0].text == "The model call failed."
+
+
+def test_a_provider_failure_reaches_the_user_as_a_plain_sentence(monkeypatch, tmp_path: Path) -> None:
+    import litellm
+
+    from alpi.llm_errors import MESSAGES
+
+    engine = _make_engine(monkeypatch, tmp_path, {"model": "primary"})
+
+    def script(i, kw):
+        raise litellm.RateLimitError(
+            message="OpenrouterException - key sk-abcdefghijklmnopqrstuvwxyz0123456789 is over its limit",
+            model="primary", llm_provider="openrouter",
+        )
+
+    _scripted_stream(monkeypatch, script)
+    events = []
+    engine.run_turn("hi", emit=events.append)
+
+    error = next(e for e in events if e.kind == "error")
+    assert error.text == MESSAGES["rate_limited"]
+    assert error.code == "rate_limited"
+    assert error.transient is True
+    assert "RateLimitError" in error.detail.split(":")[0]
+    assert "sk-abcdefghijklmnop" not in error.detail
+    assert "Openrouter" not in error.text
 
 
 def test_no_fallback_after_partial_output(monkeypatch, tmp_path: Path) -> None:

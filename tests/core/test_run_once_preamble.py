@@ -359,3 +359,48 @@ def test_once_mention_reply_tells_the_user_when_the_peer_shares_history(
     reply = next(event for event in events if event.get("kind") == "reply")
     assert reply["text"] == f"pong\n\n{alp_mention.shared_history_note('bob')}"
     assert isinstance(seen["kwargs"].get("source_session"), str) and seen["kwargs"]["source_session"]
+
+
+def _stub_once(tmp_home: Path, monkeypatch, events: list[AgentEvent]) -> None:
+    monkeypatch.setattr(_cli_mod, "_bootstrap", lambda _h: None)
+    monkeypatch.setattr("alpi.config.load", lambda _h: Config(home=tmp_home, model="stub", raw={}))
+    monkeypatch.setattr("alpi.engine.Engine.save_session", lambda self: None)
+    monkeypatch.setattr("alpi.engine._maybe_load_mcps", lambda _cfg: [])
+    monkeypatch.setattr("alpi.engine.Engine._build_system_prompt", lambda self: "stub")
+    monkeypatch.setattr("alpi.ctx_window.resolve", lambda _h, _c, _m: 200_000)
+    monkeypatch.setattr("alpi.ledger.check", lambda *a, **kw: None)
+    monkeypatch.setattr("alpi.ledger.record", lambda *a, **kw: None)
+    monkeypatch.setattr("alpi.engine.Engine.run_turn", _make_run_turn(events))
+
+
+def test_once_shows_the_plain_error_and_its_detail(tmp_home: Path, monkeypatch) -> None:
+    _stub_once(tmp_home, monkeypatch, [AgentEvent(
+        kind="error", text="The model took too long to answer. Try again.",
+        code="timeout", detail="Timeout: no bytes for 60 s",
+    )])
+    buf = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", buf)
+
+    _cli_mod._run_once(tmp_home, "hi", emit_events=False, persist=False)
+
+    assert "[error] The model took too long to answer. Try again. (Timeout: no bytes for 60 s)" in buf.getvalue()
+
+
+def test_once_events_carry_the_error_code_and_detail(tmp_home: Path, monkeypatch) -> None:
+    import json
+
+    _stub_once(tmp_home, monkeypatch, [AgentEvent(
+        kind="error", text="The model took too long to answer. Try again.",
+        code="timeout", detail="Timeout: no bytes for 60 s", transient=True,
+    )])
+    buf = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", buf)
+
+    _cli_mod._run_once(tmp_home, "hi", emit_events=True, persist=False)
+
+    frames = [json.loads(line) for line in buf.getvalue().splitlines() if line.startswith("{")]
+    error = next(frame for frame in frames if frame.get("kind") == "error")
+    assert error == {
+        "kind": "error", "text": "The model took too long to answer. Try again.",
+        "transient": True, "code": "timeout", "detail": "Timeout: no bytes for 60 s",
+    }

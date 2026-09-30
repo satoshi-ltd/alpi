@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.16.9 — 2026-09-30 — model errors in plain words
+
+- **A failing model now says what happened.** A rate limit, a rejected key, an empty balance, a
+  conversation too long for the model, a timeout or a provider outage reach the chat as one short
+  sentence instead of the provider's raw exception text, and the frame carries a `code` for the
+  app. The technical detail is redacted, capped and logged, and stays visible in the terminal
+  and in `alpi --once`.
+
 ## v0.16.8 — 2026-09-30 — a slow call no longer delays a permission change
 
 - **Changing a connection's permissions cuts every stream at once.** A call still running on one

@@ -429,7 +429,7 @@ async def _data_chat_send(
             elif ev.kind == "assistant_delta":
                 await emit({"event": "assistant_delta", "text": ev.text})
             elif ev.kind == "error":
-                await emit({"event": "error", "text": ev.text})
+                await emit({"event": "error", "text": ev.text, **({"code": ev.code} if ev.code else {})})
             elif ev.kind == "interrupted":
                 await emit({"event": "interrupted"})
             elif ev.kind == "auto_compact":

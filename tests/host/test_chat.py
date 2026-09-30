@@ -735,6 +735,70 @@ async def test_engine_exception_emits_error_frame_before_done(
 
 
 @pytest.mark.asyncio
+async def test_provider_error_frame_carries_its_code_and_plain_text(
+    monkeypatch, short_tmp: Path,
+) -> None:
+    home = short_tmp / "h"
+    home.mkdir()
+    load_or_generate(home)
+
+    class _RateLimitedEngine:
+        def __init__(self, *, home: Path, cfg) -> None:  # noqa: ANN001
+            self.home = home
+            self.session = SimpleNamespace(id="limited-sid", subdir="sessions")
+
+        def run_turn(self, text, emit, **kwargs) -> None:  # noqa: ANN001
+            from alpi.engine import AgentEvent
+
+            emit(AgentEvent(
+                kind="error", text="The model provider is rate limiting requests. Try again in a moment.",
+                code="rate_limited", detail="RateLimitError: sk-secret", transient=True,
+            ))
+
+        def request_interrupt(self, reason: str = "unknown") -> None:
+            return None
+
+        def save_session(self) -> None:
+            return None
+
+    from alpi import config as cfg_mod
+    monkeypatch.setattr(cfg_mod, "load", lambda h: SimpleNamespace(model="x"))
+    import alpi.engine
+    monkeypatch.setattr(alpi.engine, "Engine", _RateLimitedEngine)
+    from alpi.host import chat as dc
+    monkeypatch.setattr(dc, "_resolve_home", lambda profile: home)
+
+    srv = host_server.Server(home=home)
+    data_handlers.register(srv)
+    dc.register(srv)
+    await srv.start()
+
+    try:
+        reader, writer = await asyncio.open_unix_connection(str(srv.socket_path()))
+        writer.write((json.dumps({
+            "id": "req-limited", "method": "host.chat.send",
+            "params": {"profile": "default", "text": "hi", "request_id": "req-limited"},
+        }) + "\n").encode())
+        await writer.drain()
+        events: list[dict] = []
+        while True:
+            line = await reader.readline()
+            if not line:
+                break
+            events.append(json.loads(line))
+        writer.close()
+        await writer.wait_closed()
+    finally:
+        await srv.stop()
+
+    frame = next(e for e in events if e.get("event") == "error")
+    assert frame["text"] == "The model provider is rate limiting requests. Try again in a moment."
+    assert frame["code"] == "rate_limited"
+    assert "detail" not in frame
+    assert "sk-secret" not in json.dumps(events)
+
+
+@pytest.mark.asyncio
 async def test_data_chat_send_concurrent_same_session_returns_busy(
     monkeypatch, short_tmp: Path,
 ) -> None:
