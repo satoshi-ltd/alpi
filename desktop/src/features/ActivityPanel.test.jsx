@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import ActivityPanel from "./ActivityPanel.jsx";
+import { ICON_ROLES } from "../../../common/iconRoles.mjs";
 
 const now = Math.floor(Date.now() / 1000);
 
@@ -66,5 +67,12 @@ describe("ActivityPanel", () => {
   it("says so when nothing is going on", () => {
     mount({ activity: { needs_you: [], running: [], scheduled: [] } });
     expect(screen.getByText(/Nothing running/)).toBeInTheDocument();
+  });
+});
+
+describe("ActivityPanel iconography", () => {
+  it("heads the panel with the shared Activity role glyph", () => {
+    render(<ActivityPanel open onClose={vi.fn()} activity={{ needs_you: [], running: [], scheduled: [] }} />);
+    expect(screen.getByText("Activity").parentElement.querySelector("svg").getAttribute("data-icon")).toBe(ICON_ROLES.activity);
   });
 });

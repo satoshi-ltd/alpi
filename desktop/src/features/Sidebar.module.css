@@ -194,8 +194,15 @@
   width: auto;
   flex: 0 0 auto;
   justify-content: flex-start;
-  padding: 0 var(--space-4);
   color: var(--ink);
+}
+
+.footer :global(.ds-tip) .footerTight {
+  padding: 0 var(--space-1) 0 var(--space-4);
+}
+
+.footer :global(.ds-tip) .footerIcon {
+  width: var(--ctrl-xs);
 }
 
 .actionGlyph {
@@ -243,6 +250,11 @@
   flex-shrink: 0;
 }
 
+.footer > :not(:last-child) :global(.ds-icon) {
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+}
+
 .footerSettings {
   gap: var(--space-4);
 }
@@ -250,16 +262,12 @@
 .bellWrap {
   position: relative;
   display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
 }
 
 .bellBadge {
   position: absolute;
-  top: 2px;
-  right: 2px;
+  top: calc(var(--space-6) / -2 - var(--space-1) / 2);
+  right: calc(var(--space-1) * -1);
   min-width: var(--space-6);
   height: var(--space-6);
   padding: 0 var(--space-1);
@@ -286,10 +294,6 @@
   gap: var(--space-3);
   height: 30px;
   padding: 0 var(--space-4);
-}
-
-.needsBadge {
-  background: var(--c-warning);
 }
 
 .stateChip {

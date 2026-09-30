@@ -5,6 +5,7 @@ import { recentlyFailed, toEpochSeconds } from "../hooks/useActivity.js";
 import { profileLabel } from "../lib/profile-display.js";
 import { formatNextFire, relativeTime } from "../lib/time.js";
 import styles from "./ActivityPanel.module.css";
+import { ICON_ROLES } from "../../../common/iconRoles.mjs";
 
 function ago(seconds, now) {
   if (!seconds) return "";
@@ -70,7 +71,7 @@ export default function ActivityPanel({
     <Scrim onClose={onClose} top={80}>
       <PanelShell width={460} maxHeight="70vh">
         <div className={styles.head}>
-          <Icon name="history" />
+          <Icon name={ICON_ROLES.activity} />
           <span className={styles.headTitle}>Activity</span>
           <span className={styles.headKeys} aria-hidden>
             <Kbd>⌘</Kbd>

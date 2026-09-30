@@ -11,6 +11,19 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.7.2 — 2026-09-30 — the sidebar footer fits again
+
+- **Settings, notifications, Activity, theme and the version fit the sidebar footer again,** at
+  the compact size the design kit draws; the version never clips.
+- **Activity uses the same icon as on the phone.** Both apps and the design kit now take their
+  icons for settings, notifications and Activity from one shared map.
+- **The connections page's administrative log is called Audit log,** so it no longer shares a
+  name with the Activity panel.
+- **Unread and Activity counts share one red badge on the icon's corner,** as on the phone, clear of the
+  next icon; above nine it reads 9+ and the tooltip keeps the exact number.
+
+  Requires alpi 0.16.1, as v0.7.1.
+
 ## v0.7.1 — 2026-09-30 — alpi's process, apart from the answer
 
 - **Thinking and tool steps read as one compact block.** Rows sit close together in one mono

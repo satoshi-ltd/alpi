@@ -153,7 +153,7 @@ def activity_panel_shell():
             + activity_group("Scheduled", [
                 activity_row(icon("x"), "clonara · weekly labs", "failed 3h ago", "danger"),
                 activity_row(icon("clock"), "doc · Daily brief", "tomorrow 07:00")]))
-    return shell(sheet_head("history", "Activity", "⌘J") + f'<div style="padding: 0 8px 12px">{body}</div>', 460)
+    return shell(sheet_head("role:activity", "Activity", "⌘J") + f'<div style="padding: 0 8px 12px">{body}</div>', 460)
 
 
 SHORTCUT_GROUPS = (
@@ -179,7 +179,7 @@ def palette_idle():
     glyph = lambda name: ic(name, 14, INK3)
     return palette("", [
         ("General", [palette_row(glyph("search"), "Command palette", hint="⌘K", selected=True), palette_row(glyph("more"), "Keyboard shortcuts", hint="⌘/"),
-                     palette_row(glyph("history"), "Activity", hint="⌘J"), palette_row(glyph("search"), "Filter profiles &amp; workgroups", hint="⌘S")]),
+                     palette_row(glyph("role:activity"), "Activity", hint="⌘J"), palette_row(glyph("search"), "Filter profiles &amp; workgroups", hint="⌘S")]),
         ("Chat", [palette_row(glyph("plus"), "New session", hint="⌘N"), palette_row(glyph("search"), "Find in transcript", hint="⌘F"), palette_row(glyph("refresh"), "Refresh thread", hint="⇧⌘R")]),
     ])
 
@@ -194,7 +194,7 @@ def palette_search():
 
 def desktop_overlays():
     body = (f'<div style="padding: 28px 32px; display: flex; flex-direction: column; gap: 24px; box-sizing: border-box">'
-            f'<div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 22px; font-weight: 600; letter-spacing: -0.018em">Desktop overlays as of 0.7.0</span>'
+            f'<div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 22px; font-weight: 600; letter-spacing: -0.018em">Desktop overlays</span>'
             f'<span style="font-size: 13px; color: {INK3}; max-width: 900px; line-height: 1.5">Palette, Activity and shortcuts share one Scrim and PanelShell; shortcuts render as KeyHint chips everywhere. Modals, dropdowns and menus register on useOverlay so Escape, focus and layering behave the same.</span></div>'
             f'<div style="display: flex; gap: 16px">{scrim_frame("Command palette ⌘K · commands with KeyHint chips", palette_idle(), 600, 400)}{scrim_frame("Command palette · a query searches profiles, workgroups and sessions", palette_search(), 600, 400)}</div>'
             f'<div style="display: flex; gap: 16px">{scrim_frame("Activity ⌘J · needs you, running, scheduled", activity_panel_shell(), 520, 700)}{scrim_frame("Keyboard shortcuts ⌘/", shortcuts_shell(), 680, 700)}</div>'

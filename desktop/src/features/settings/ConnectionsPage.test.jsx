@@ -43,7 +43,7 @@ describe("ConnectionsPage", () => {
 
     expect(await screen.findByText("iPhone")).toBeInTheDocument();
     expect(screen.getByText("14-day total $0.42 · 100 in / 20 out")).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Activity" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Audit log" })).toHaveLength(1);
   });
 
   it("keeps host network setup out of connection administration", async () => {
@@ -308,11 +308,11 @@ describe("ConnectionsPage", () => {
     });
     render(<ConnectionsPage profiles={[]} activeConnection={{ id: "local" }} />);
 
-    const activityButton = await screen.findByRole("button", { name: "Activity" });
+    const activityButton = await screen.findByRole("button", { name: "Audit log" });
     expect(activityButton.querySelector('path[d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"]')).not.toBeNull();
     fireEvent.click(activityButton);
 
-    expect(await screen.findByRole("heading", { name: "Activity" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Audit log" })).toBeInTheDocument();
     expect(screen.getByText("Administrative changes only · messages are never recorded here")).toBeInTheDocument();
     expect(await screen.findByText("Revoked device")).toBeInTheDocument();
     expect(screen.getByText("MacBook Pro")).toBeInTheDocument();
@@ -350,7 +350,7 @@ describe("ConnectionsPage", () => {
     });
     render(<ConnectionsPage profiles={[]} activeConnection={{ id: "local" }} />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Activity" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Audit log" }));
 
     expect(await screen.findByText("dev_remote")).toBeInTheDocument();
     expect(screen.getByText("remote · member · conn_remote / dev_remote")).toBeInTheDocument();

@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ICON_ROLES } from "../../../common/iconRoles.mjs";
 import CommandPalette, { SESSION_CACHE_TTL_MS, _resetSessionCache, loadRecentSessions } from "./CommandPalette.jsx";
 
 describe("CommandPalette", () => {
@@ -204,5 +205,13 @@ describe("palette session source", () => {
     expect(selected().textContent).toContain("Alpha stop");
     fireEvent.keyDown(input, { key: "Enter" });
     expect(second).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("CommandPalette iconography", () => {
+  it("marks the Activity command with the shared Activity role glyph", () => {
+    render(<CommandPalette open onClose={vi.fn()} commands={[{ id: "view:activity", group: "General", label: "Open activity", hint: "⌘J" }]} />);
+    const row = screen.getByText("Open activity").closest("[role='option'], button, li, div");
+    expect(row.parentElement.querySelector(`svg[data-icon="${ICON_ROLES.activity}"]`)).not.toBeNull();
   });
 });

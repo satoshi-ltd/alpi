@@ -68,7 +68,7 @@ Per-record fields: `ts`, `trigger` (`auto`|`manual`), `session_id`,
 The `agent.log` + `approval.log` pair answers what the agent did and which
 shell decisions were made. `alpi audit-log` answers which connection/device
 performed an administrative mutation; Desktop exposes the same bounded trail
-under Connections → Activity. `compaction.jsonl` answers "did the context window pressure
+under Connections → Audit log. `compaction.jsonl` answers "did the context window pressure
 get tight this week?" and "are my trigger ratios right for this
 model?".
 
@@ -281,7 +281,7 @@ Use the smallest response that matches the incident:
   from an older archive.
 
 After any response, run `alpi doctor`, verify WSS from an external network, and
-inspect Connections → Activity or `alpi audit-log` for rejected use of the old
+inspect Connections → Audit log or `alpi audit-log` for rejected use of the old
 device identities.
 
 Backups are operational snapshots. They are not a review workflow for

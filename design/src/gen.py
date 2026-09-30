@@ -1,6 +1,7 @@
 import re
 import json
 import os
+import subprocess
 from datetime import datetime, timezone
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "project")
@@ -54,12 +55,49 @@ PATHS = {
 }
 
 
+COMMON = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "common")
+DESIGN_TO_SHARED = {
+    "back": "chevron-left", "chev-d": "chevron-down", "chev-r": "chevron-right", "chip": "cpu", "clip": "paperclip",
+    "gear": "settings", "more": "ellipsis", "panel": "panel-left", "refresh": "refresh-cw", "trash": "trash-2",
+    "up": "arrow-up", "volume": "volume-2", "alert": "triangle-alert",
+}
+
+
+def _load_shared():
+    script = (
+        "const [{ICONS}, {ICON_ROLES}] = await Promise.all(["
+        f"import({json.dumps(os.path.join(COMMON, 'iconPaths.mjs'))}), import({json.dumps(os.path.join(COMMON, 'iconRoles.mjs'))})]);"
+        "process.stdout.write(JSON.stringify({icons: ICONS, roles: ICON_ROLES}));"
+    )
+    try:
+        out = subprocess.run(["node", "--input-type=module", "-e", script], capture_output=True, text=True, check=True)
+    except FileNotFoundError:
+        raise SystemExit("design/build.py needs node on PATH to read the shared icons in common/")
+    return json.loads(out.stdout)
+
+
+_SHARED = _load_shared()
+SHARED_ICONS, ICON_ROLES = _SHARED["icons"], _SHARED["roles"]
+
+
+def _svg_children(elements):
+    return "".join("<" + tag + "".join(f' {k}="{v}"' for k, v in attrs.items()) + "/>" for tag, attrs in elements)
+
+
 def ic(name, size=16, color="currentColor", stroke=2):
+    if name.startswith("role:"):
+        return role_ic(name[5:], size, color, stroke)
+    shared = SHARED_ICONS.get(DESIGN_TO_SHARED.get(name, name))
+    inner = _svg_children(shared) if shared else PATHS[name]
     return (
         f'<svg width="{size}" height="{size}" viewBox="0 0 24 24" fill="none" stroke="{color}" '
         f'stroke-width="{stroke}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" '
-        f'style="flex-shrink: 0; display: block">{PATHS[name]}</svg>'
+        f'data-icon="{DESIGN_TO_SHARED.get(name, name)}" style="flex-shrink: 0; display: block">{inner}</svg>'
     )
+
+
+def role_ic(role, size=16, color="currentColor", stroke=2):
+    return ic(ICON_ROLES[role], size, color, stroke).replace("<svg ", f'<svg data-icon-role="{role}" ', 1)
 
 
 def diamond(color, size=16):
@@ -210,6 +248,12 @@ def textbox(text, rows=3, placeholder=False):
 
 
 
+
+def app_version(client):
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", client, "package.json")
+    with open(path) as f:
+        return json.load(f)["version"]
+
 def button_heights(client):
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "common", "button.mjs")
     with open(path) as f:
@@ -314,7 +358,7 @@ def m_row_state(state, phases=None):
 def m_count_badge(n, tone="danger", ring="#f5f6f8"):
     bg = "#e08a3c" if tone == "warning" else "#c14545"
     fg = "#0b1117" if tone == "warning" else "#ffffff"
-    return (f'<span style="position: absolute; top: -6px; right: -8px; min-width: 18px; height: 18px; padding: 0 6px; border-radius: 999px; border: 1.5px solid {ring}; background: {bg}; '
+    return (f'<span style="position: absolute; top: -12px; right: -8px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 999px; border: 1.5px solid {ring}; background: {bg}; '
             f'color: {fg}; font-weight: 600; font-size: 11px; line-height: 15px; text-align: center; box-sizing: border-box; white-space: nowrap">{n}</span>')
 
 
@@ -369,10 +413,9 @@ def m_roster(selected="doc", compact=True, wg_selected=False):
 
 
 def m_conn_header(ring="#f5f6f8", collapse=True, bg="#f5f6f8", selected=False):
-    dot = f'<span style="position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 4px; background: #e08a3c; border: 1.5px solid {ring}; box-sizing: border-box"></span>'
     hide = f'<button aria-label="Hide sidebar" class="m-chrome">{ic("panel", 16, "#3d4955")}</button>' if collapse else ""
     return f"""<div style="padding: 6px 12px 8px; background: {bg}; display: flex; flex-direction: column; gap: 4px">
-<div style="display: flex; align-items: center">{m_eyebrow("Connection", "#626e7d", 500, 0.06, 11, "flex: 1")}{hide}<button aria-label="Activity · 2 need you" class="m-chrome" style="position: relative">{ic("activity", 16, WARNING_TEXT)}{dot}</button><button aria-label="Filter profiles and workgroups" class="m-chrome">{ic("search", 16, "#3d4955")}</button></div>
+<div style="display: flex; align-items: center">{m_eyebrow("Connection", "#626e7d", 500, 0.06, 11, "flex: 1")}{hide}<button aria-label="Filter profiles and workgroups" class="m-chrome">{ic("search", 16, "#3d4955")}</button></div>
 <div style="padding: 6px 12px; border-radius: 12px; border: 0.5px solid rgba(11,17,23,0.07); background: {"rgba(11,17,23,0.06)" if selected else "#ffffff"}; display: flex; align-items: center; gap: 10px">
 <span style="position: relative">{ic("chip", 16, "#3d4955")}<span style="position: absolute; right: -2px; bottom: -2px; width: 8px; height: 8px; border-radius: 4px; background: #3fb37a; border: 2px solid #fff; box-sizing: border-box"></span></span>
 <div style="flex: 1; min-width: 0; display: flex; flex-direction: column"><span style="font-weight: 600; font-size: 14px; line-height: 1.3">casa</span><span style="font-family: {MONO}; font-size: 11px; line-height: 1.3; color: #626e7d">ws://100.99.29.84:49200</span></div>
@@ -381,20 +424,22 @@ def m_conn_header(ring="#f5f6f8", collapse=True, bg="#f5f6f8", selected=False):
 </div>"""
 
 
-def m_shell_footer(version="v0.6.0", theme=True, ring="#f5f6f8", border=False):
+def m_shell_footer(version=None, theme=True, ring="#f5f6f8", border=False):
+    version = version or "v" + app_version("mobile")
     entry = lambda inner, label: f'<span aria-label="{label}" style="display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 8px; border-radius: 10px">{inner}</span>'
     top = "border-top: 0.5px solid rgba(11,17,23,0.07);" if border else ""
     theme_html = entry(ic("sun", 16, "#3d4955"), "Theme: Light") if theme else ""
     wrap = '<span style="position: relative; display: inline-flex">'
-    bell = wrap + ic("bell", 16, "#3d4955") + m_count_badge(1, "danger", ring) + "</span>"
-    activity = wrap + ic("activity", 16, WARNING_TEXT) + m_count_badge(2, "warning", ring) + "</span>"
-    return (f'<div style="height: 44px; padding: 0 12px; display: flex; align-items: center; gap: 6px; {top}">'
-            f'<a href="Phone-Settings.dc.html" style="display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 8px; border-radius: 10px; text-decoration: none; color: #3d4955; font-weight: 500; font-size: 12px">{ic("gear", 16, "#3d4955")}Settings</a>'
+    bell = wrap + ic("role:notifications", 16, "#3d4955") + m_count_badge(1, "danger", ring) + "</span>"
+    activity = wrap + ic("role:activity", 16, "#3d4955") + m_count_badge(2, "danger", ring) + "</span>"
+    return (f'<div style="height: 44px; padding: 0 12px; display: flex; align-items: center; {top}">'
+            f'<a href="Phone-Settings.dc.html" style="display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 8px; border-radius: 10px; text-decoration: none; color: #3d4955; font-weight: 500; font-size: 12px">{ic("role:settings", 16, "#3d4955")}Settings</a>'
             f'{entry(bell, "Notifications · 1 unread")}{entry(activity, "Activity · 2 need you")}'
             f'{theme_html}<span style="flex: 1"></span><span style="font-family: {MONO}; font-weight: 500; font-size: 11px; color: #b1bac4">{version}</span></div>')
 
 
-def m_sidebar(h, selected="doc", badge="1", version="v0.6.0", conn_selected=False, wg_selected=False):
+def m_sidebar(h, selected="doc", badge="1", version=None, conn_selected=False, wg_selected=False):
+    version = version or "v" + app_version("mobile")
     return f"""<div style="width: 280px; height: {h}px; flex-shrink: 0; box-sizing: border-box; background: #f5f6f8; border-right: 0.5px solid rgba(11,17,23,0.07); display: flex; flex-direction: column">
 {m_conn_header(selected=conn_selected)}
 <div style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column">{m_roster(selected, True, wg_selected)}</div>
@@ -479,7 +524,7 @@ def m_activity_list():
 
 def phone_activity():
     body = f"""<div style="display: flex; flex-direction: column">
-{m_screen_header("Activity", "WHAT IS RUNNING", glyph="")}
+{m_screen_header("Activity", "ACROSS PROFILES", glyph="")}
 {m_activity_list()}
 </div>
 """
@@ -490,7 +535,7 @@ def fold_activity():
     body = f"""<div style="display: flex; height: 100%">
 {m_sidebar(FOLD_ACTIVITY_H, selected="")}
 <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; background: #ffffff">
-{m_screen_header("Activity", "WHAT IS RUNNING", glyph="", wide=True, back=False)}
+{m_screen_header("Activity", "ACROSS PROFILES", glyph="", wide=True, back=False)}
 <div style="max-width: 720px; width: 100%; align-self: center">{m_activity_list()}</div>
 </div>
 </div>
@@ -770,7 +815,7 @@ def phone_settings():
 {m_row("Text size", "multiplies your OS text size · long-press resets", control='<span style="display: inline-flex; align-items: center; gap: 10px"><span style="font-size: 14px; color: #626e7d">Default</span>' + m_button("−") + m_button("+") + '</span>', chevron=False, sep=False)}
 {m_section("Danger zone")}
 {m_row("Sign out", "forgets the pairing on this phone", danger=True, sep=False)}
-<div style="padding: 24px 20px; display: flex; justify-content: space-between; align-items: center">{m_eyebrow("About")}<span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #b1bac4">Alpi mobile · v0.5.0</span></div>
+<div style="padding: 24px 20px; display: flex; justify-content: space-between; align-items: center">{m_eyebrow("About")}<span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #b1bac4">Alpi mobile · v{app_version('mobile')}</span></div>
 </div>
 """
     return page("Phone · app settings", 390, 1100, body)

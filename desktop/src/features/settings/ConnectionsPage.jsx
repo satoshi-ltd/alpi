@@ -172,7 +172,7 @@ export default function ConnectionsPage({
     <main className={styles.page}>
       <SettingsHero
         kind="connections"
-        id={showActivity ? "Activity" : heroTitle}
+        id={showActivity ? "Audit log" : heroTitle}
         accent={heroAccent}
         meta={showActivity ? <span>Administrative changes only · messages are never recorded here</span> : connectionsHeroMeta}
         actions={(
@@ -184,7 +184,7 @@ export default function ConnectionsPage({
                 <Tip text="Refresh" side="r">
                   <IconBtn onClick={reload} aria-label="Refresh connections"><Icon name="refresh" /></IconBtn>
                 </Tip>
-                <Button icon={<Icon name="history" />} onClick={() => setShowActivity(true)}>Activity</Button>
+                <Button icon={<Icon name="history" />} onClick={() => setShowActivity(true)}>Audit log</Button>
                 <Button icon={<Icon name="plus" />} onClick={() => setCreating(true)}>New connection</Button>
               </>
             )}

@@ -1,5 +1,6 @@
 .root {
   position: relative;
+  flex-shrink: 0;
 }
 
 .trigger {
@@ -11,6 +12,7 @@
   border: 0;
   cursor: pointer;
   color: var(--ink-3);
+  white-space: nowrap;
   transition:
     color var(--dur-1) var(--ease),
     background var(--dur-1) var(--ease);

@@ -1,4 +1,4 @@
-from gen import button_heights, ALPI_ACCENT, DANGER, DOC_ACCENT, PROFILES, diamond, ic, mix, page, usage_chart
+from gen import app_version, button_heights, ALPI_ACCENT, DANGER, DOC_ACCENT, PROFILES, diamond, ic, mix, page, usage_chart
 
 INK, INK2, INK3, INK4 = "#0b1117", "#3d4955", "#626e7d", "#b1bac4"
 LINE, LINE2, HOVER, SELECTED = "rgba(11,17,23,0.07)", "rgba(11,17,23,0.14)", "rgba(11,17,23,0.04)", "rgba(11,17,23,0.06)"
@@ -12,8 +12,8 @@ def eyebrow(text, color=INK3, weight=500, track=0.06, size=11, extra=""):
             f'letter-spacing: {track}em; text-transform: uppercase; color: {color}; {extra}">{text}</span>')
 
 
-def iconbtn(name, label, size=28, icon=16, color=INK2):
-    return (f'<button aria-label="{label}" style="width: {size}px; height: {size}px; border: 0; border-radius: 8px; background: transparent; '
+def iconbtn(name, label, size=28, icon=16, color=INK2, width=None):
+    return (f'<button aria-label="{label}" style="width: {width or size}px; height: {size}px; border: 0; border-radius: 8px; background: transparent; '
             f'display: inline-flex; align-items: center; justify-content: center; padding: 0; cursor: pointer">{ic(name, icon, color)}</button>')
 
 
@@ -67,14 +67,16 @@ def phase_count(done, total):
     return f'<span aria-label="phase {done} of {total}" style="font-family: {MONO}; font-size: 11px; color: {ALPI_ACCENT}">{done}/{total}</span>'
 
 
-def count_badge(n, tone="danger"):
+def count_badge(n, tone="danger", ring="#f5f6f8"):
     bg = "#e08a3c" if tone == "warning" else "#c14545"
-    return (f'<span style="position: absolute; top: 2px; right: 2px; min-width: 14px; height: 14px; padding: 0 4px; border-radius: 999px; background: {bg}; color: #fff; '
-            f'font-size: 11px; font-weight: 600; line-height: 14px; text-align: center; box-sizing: border-box">{n}</span>')
+    return (f'<span style="position: absolute; top: -9px; right: -4px; min-width: 14px; height: 14px; padding: 0 4px; border-radius: 999px; background: {bg}; color: #fff; '
+            f'font-size: 11px; font-weight: 600; line-height: 14px; white-space: nowrap; text-align: center; box-sizing: border-box">{n}</span>')
 
 
-def badged(icon, label, n, tone):
-    return f'<span style="position: relative; display: inline-flex">{iconbtn(icon, label, 28, 14)}{count_badge(n, tone) if n else ""}</span>'
+def badged(icon, label, n, tone, width=None):
+    glyph = f'<span style="position: relative; display: inline-flex">{ic(icon, 14, INK2)}{count_badge(n, tone) if n else ""}</span>'
+    return (f'<button aria-label="{label}" style="width: {width or 28}px; height: 28px; border: 0; border-radius: 8px; background: transparent; '
+            f'display: inline-flex; align-items: center; justify-content: center; padding: 0; cursor: pointer">{glyph}</button>')
 
 
 def diamond_stack(color, size=8):
@@ -174,7 +176,8 @@ def sb_section(label, add=True):
     return f'<div style="display: flex; align-items: center; min-height: 22px; padding: 14px 10px 6px">{eyebrow(label, INK3, 500, 0.06, 11, "padding-left: 2px; flex: 1")}{plus}</div>'
 
 
-def d_sidebar(h, selected="doc", settings_mode=False, new_session=False, wg_selected=False, states=None, version="0.7.0"):
+def d_sidebar(h, selected="doc", settings_mode=False, new_session=False, wg_selected=False, states=None, version=None):
+    version = version or app_version("desktop")
     states = ROSTER_STATES if states is None else states
 
     def prow(name, col, ts):
@@ -189,8 +192,8 @@ def d_sidebar(h, selected="doc", settings_mode=False, new_session=False, wg_sele
         footer_main = (f'<button style="display: inline-flex; align-items: center; gap: 10px; height: 28px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: {INK}; font-family: Geist, sans-serif; font-size: 13px; font-weight: 500; cursor: pointer">'
                        f'{ic("search", 14, INK)}Command…{key_hint("⌘K")}</button>')
     else:
-        footer_main = (f'<a href="Desktop-AppSettings.dc.html" style="display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 8px; color: {INK}; font-size: 13px; font-weight: 500; text-decoration: none">{ic("gear", 14, INK)}Settings</a>'
-                       f'{badged("bell", "Notifications · 1 unread · ⌘O", 1, "danger")}{badged("history", "Activity · 2 need you · ⌘J", 2, "warning")}{iconbtn("sun", "Theme", 28, 14)}')
+        footer_main = (f'<a href="Desktop-AppSettings.dc.html" style="display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 4px 0 10px; border-radius: 8px; color: {INK}; font-size: 13px; font-weight: 500; text-decoration: none">{ic("role:settings", 14, INK)}Settings</a>'
+                       f'{badged("role:notifications", "Notifications · 1 unread · ⌘O", 1, "danger", 22)}{badged("role:activity", "Activity · 2 need you · ⌘J", 2, "danger", 22)}{iconbtn("sun", "Theme", 28, 14, width=22)}')
     return f"""<div style="width: 248px; height: {h}px; flex-shrink: 0; box-sizing: border-box; background: {SIDE}; border-right: 0.5px solid {LINE}; display: flex; flex-direction: column">
 <div style="height: 38px; flex-shrink: 0"></div>
 <div style="padding: 6px 12px 4px; display: flex; flex-direction: column">
@@ -397,7 +400,7 @@ def desktop_wg_settings():
 
 def desktop_connections():
     meta = f'<span>2 paired · 2 connected</span>{SEP}<span>14-day spend {mono12("$1.49")}</span>{SEP}<span>14 sessions</span>'
-    hero = d_hero(h1("alpi", diamond(AMBER, 14)) + eyebrow("connections"), meta, button("Activity", "ghost", "md", "clock") + button("New connection", "ghost", "md", "plus") + iconbtn("back", "Back to chat"), AMBER)
+    hero = d_hero(h1("alpi", diamond(AMBER, 14)) + eyebrow("connections"), meta, button("Audit log", "ghost", "md", "history") + button("New connection", "ghost", "md", "plus") + iconbtn("back", "Back to chat"), AMBER)
     head = (f'<div style="display: grid; grid-template-columns: minmax(240px, 1fr) 126px 88px 112px; min-height: 32px; align-items: center; padding: 0 10px; font-family: {MONO}; font-size: 11px; text-transform: uppercase; color: {INK3}">'
             f'<span>Connection</span><span style="text-align: right">Last activity</span><span style="text-align: right">Sessions</span><span style="text-align: right">14-day spend</span></div>')
 
@@ -461,9 +464,9 @@ def desktop_app_settings():
     card = lambda title, inner, w: (f'<div style="width: {w}px; display: flex; flex-direction: column; gap: 12px"><span style="font-size: 12px; color: {INK3}">{title}</span>'
                                     f'<div style="background: #ffffff; border: 0.5px solid {LINE2}; border-radius: 14px; box-shadow: 0 0 0 .5px rgba(11,17,23,.08), 0 18px 50px rgba(11,17,23,.10); overflow: hidden">{inner}</div></div>')
     footer = (f'<div style="display: flex; align-items: center; gap: 4px; padding: 10px 12px; background: {SIDE}; border-top: 0.5px solid {LINE}; width: 248px; box-sizing: border-box">'
-              f'<span style="display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; color: {INK}; font-size: 13px; font-weight: 500">{ic("gear", 14, INK)}Settings</span>'
-              f'{badged("bell", "Notifications", 1, "danger")}{badged("history", "Activity · 2 need you", 2, "warning")}'
-              f'{iconbtn("sun", "Theme: light → dark → system", 28, 14)}<span style="flex: 1"></span><span style="font-family: {MONO}; font-size: 11px; color: #217a45; padding: 2px 4px">0.7.0</span></div>')
+              f'<span style="display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 4px 0 10px; color: {INK}; font-size: 13px; font-weight: 500">{ic("role:settings", 14, INK)}Settings</span>'
+              f'{badged("role:notifications", "Notifications", 1, "danger", 22)}{badged("role:activity", "Activity · 2 need you", 2, "danger", 22)}'
+              f'{iconbtn("sun", "Theme: light → dark → system", 28, 14, width=22)}<span style="flex: 1"></span><span style="font-family: {MONO}; font-size: 11px; color: #217a45; padding: 2px 4px">{app_version("desktop")}</span></div>')
     popover = (f'<div style="width: 220px; padding: 16px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px">'
                f'<span style="display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500"><span style="width: 7px; height: 7px; border-radius: 999px; background: #3fb37a"></span>Update available</span>'
                f'<span style="font-family: {MONO}; font-size: 12px; color: {INK2}">0.7.0 → 0.7.1</span>'

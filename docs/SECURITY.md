@@ -456,7 +456,7 @@ today:
   client re-sending device metadata it already registered changes nothing and
   leaves no row; a registration that does change the device is audited, at most
   once per device per minute. Read it with `alpi audit-log` or the Desktop
-  Connections → Activity view.
+  Connections → Audit log view.
   `host.audit.list` is paginated and restricted to local/admin callers.
 - **Daemon logs** (`logs/<subsystem>.log`). Per-subsystem, human-readable,
   rotating (1 MB × 3). Includes a per-turn agent summary and the approval

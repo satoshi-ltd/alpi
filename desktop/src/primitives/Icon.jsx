@@ -36,6 +36,7 @@ export default function Icon({
       className={`${styles.icon} ds-icon ${className}`.trim()}
       style={{ color: color ?? undefined, ...style }}
       aria-hidden="true"
+      data-icon={name}
       {...rest}
     >
       {els.map(([tag, attrs], i) => createElement(tag, { key: i, ...attrs }))}

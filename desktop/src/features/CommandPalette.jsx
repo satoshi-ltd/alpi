@@ -6,16 +6,17 @@ import { I } from "../primitives/icons.jsx";
 import { profileLabel } from "../lib/profile-display.js";
 import { displaySessionTitle } from "../lib/session-titles.js";
 import { relativeTime } from "../lib/time.js";
+import { ICON_ROLES } from "../../../common/iconRoles.mjs";
 
 const SESSION_FETCH_LIMIT = 12;
 const SESSION_ROWS = 8;
 
 const GLYPH_BY_PREFIX = {
-  "view:settings": () => <I.Gear />,
+  "view:settings": () => <Icon name={ICON_ROLES.settings} />,
   "view:find": () => <I.Search />,
-  "view:notifications": () => <I.Bell />,
+  "view:notifications": () => <Icon name={ICON_ROLES.notifications} />,
   "view:shortcuts": () => <Icon name="more" />,
-  "view:activity": () => <Icon name="history" />,
+  "view:activity": () => <Icon name={ICON_ROLES.activity} />,
   "chat:find": () => <I.Search />,
   "chat:refresh": () => <I.Refresh />,
   "chat:read-aloud": () => <I.Volume />,

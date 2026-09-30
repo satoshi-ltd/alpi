@@ -5,7 +5,6 @@ import { ActionLink, SidebarRow, SectionLabel, ContextMenu } from "../primitives
 import { shortcutKeys } from "../lib/shortcuts.js";
 import {
   AutoIcon,
-  BellIcon,
   Button,
   IconBtn,
   KeyHint,
@@ -36,6 +35,8 @@ import { compareProfiles, orderedSidebarProfiles, orderPinnedItems } from "../li
 import Skeleton from "../primitives/Skeleton.jsx";
 import { useDelayedFlag } from "../lib/useDelayedFlag.js";
 import styles from "./Sidebar.module.css";
+import { ICON_ROLES } from "../../../common/iconRoles.mjs";
+import { badgeCount } from "../../../common/countBadge.mjs";
 
 const MIN_VISIBLE_ALPIS = 3;
 const MIN_VISIBLE_WORKGROUPS = 2;
@@ -656,8 +657,9 @@ function SidebarFooter({
       {showSettings && (
         <Button
           variant="ghost"
-          className={styles.footerButton}
-          icon={inSettings ? <SearchIcon /> : <GearIcon />}
+          size="sm"
+          className={inSettings ? styles.footerButton : `${styles.footerButton} ${styles.footerTight}`}
+          icon={inSettings ? <SearchIcon /> : <Icon name={ICON_ROLES.settings} />}
           tip={inSettings ? `Command palette · ${shortcutKeys("palette")}` : `Settings · ${shortcutKeys("settings")}`}
           tipSide="up-l"
           onClick={inSettings ? onOpenPalette : onOpenSettings}
@@ -691,12 +693,12 @@ function NotificationsBellButton({ unread = 0, onClick }) {
     : `Notifications · ${keys}`;
   return (
     <Tip text={tip} side="up-l">
-      <IconBtn aria-label={tip} onClick={onClick}>
+      <IconBtn size="sm" className={styles.footerIcon} aria-label={tip} onClick={onClick}>
         <span className={styles.bellWrap}>
-          <BellIcon />
+          <Icon name={ICON_ROLES.notifications} />
           {unread > 0 ? (
             <span className={styles.bellBadge} aria-hidden>
-              {unread > 99 ? "99+" : unread}
+              {badgeCount(unread)}
             </span>
           ) : null}
         </span>
@@ -710,12 +712,12 @@ function ActivityButton({ needsYou = 0, onClick }) {
   const tip = needsYou > 0 ? `Activity · ${needsYou} need you · ${keys}` : `Activity · ${keys}`;
   return (
     <Tip text={tip} side="up-l">
-      <IconBtn aria-label={tip} onClick={onClick}>
+      <IconBtn size="sm" className={styles.footerIcon} aria-label={tip} onClick={onClick}>
         <span className={styles.bellWrap}>
-          <Icon name="history" />
+          <Icon name={ICON_ROLES.activity} />
           {needsYou > 0 ? (
-            <span className={`${styles.bellBadge} ${styles.needsBadge}`} aria-hidden>
-              {needsYou > 99 ? "99+" : needsYou}
+            <span className={styles.bellBadge} aria-hidden>
+              {badgeCount(needsYou)}
             </span>
           ) : null}
         </span>
@@ -747,6 +749,8 @@ function ThemeButton() {
   return (
     <Tip text={`Theme: ${theme} · click for ${nextTheme(theme)}`} side="up-l">
       <IconBtn
+        size="sm"
+        className={styles.footerIcon}
         aria-label={`Theme: ${theme}`}
         onClick={() => cycleTheme()}
       >
