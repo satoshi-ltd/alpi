@@ -19,7 +19,7 @@ from alpi import config as cfg_mod
 from alpi import home as home_mod
 from alpi.host import sessions as host_sessions
 from alpi.host import server as host_server
-from alpi.host.connection_context import current as current_connection, owns_session_row
+from alpi.host.connection_context import owns_session_row, session_view_key
 
 READ_MAX_BYTES = 256 * 1024
 KNOWN_PROVIDER_KEYS = (
@@ -191,8 +191,8 @@ def _profile_summary(row: dict[str, Any]) -> dict[str, Any]:
 
 
 _SUMMARY_TTL_S = 3.0
-# Keyed by (connection, profile): latest_session is connection-scoped, so a shared entry would leak previews across connections.
-_summary_cache: dict[tuple[str, str], tuple[float, dict[str, Any]]] = {}
+# Keyed by (connection, device view, profile): latest_session follows owns_session, so a coarser key leaks previews.
+_summary_cache: dict[tuple[str, str, str], tuple[float, dict[str, Any]]] = {}
 _summary_gen: dict[str, int] = {}
 _summary_state_lock = threading.Lock()
 _summary_gate: tuple[Any, asyncio.Lock] | None = None
@@ -206,17 +206,17 @@ def invalidate_summary(profile: str | None = None) -> None:
                 _summary_gen[name] += 1
         else:
             name = str(profile)
-            for key in [k for k in _summary_cache if k[1] == name]:
+            for key in [k for k in _summary_cache if k[-1] == name]:
                 _summary_cache.pop(key, None)
             _summary_gen[name] = _summary_gen.get(name, 0) + 1
 
 
 def _summary_rows() -> list[dict[str, Any]]:
-    connection_id = current_connection().connection_id
+    view = session_view_key()
     rows: list[dict[str, Any]] = []
     for row in _profiles():
         name = str(row["name"])
-        key = (connection_id, name)
+        key = (*view, name)
         with _summary_state_lock:
             hit = _summary_cache.get(key)
             fresh = hit is not None and time.monotonic() - hit[0] < _SUMMARY_TTL_S

@@ -751,8 +751,10 @@ Sessions also persist `device_id`. A connection's `session_scope` decides
 whether that matters: `connection` (the default) shares every session among the
 connection's devices; `device` lets a remote device list, read, continue,
 cancel and delete only the sessions it created, drops other devices'
-`session_changed` frames from its event stream and history, and narrows the
-agent's `session_read` / `session_search` tools the same way. Every session
+`session_changed` frames from its event stream and history, serves each device
+its own `latest_session` preview in `host.profile.summaries` (the summary cache
+is keyed by connection, device and profile), and narrows the agent's
+`session_read` / `session_search` tools the same way. Every session
 records its device whatever the scope, so switching to `device` also hides a
 device's earlier sessions from its siblings; sessions without a `device_id`
 (saved by alpi before 0.15.20, or started by the daemon itself through the

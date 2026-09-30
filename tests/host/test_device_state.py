@@ -1480,3 +1480,55 @@ def test_provider_catalog_counts_curated_models_per_key() -> None:
 def test_provider_catalog_reports_zero_for_a_provider_alpi_curates_nothing_for() -> None:
     catalog = host_device_state._provider_catalog()
     assert catalog["GEMINI_API_KEY"] == 0
+
+
+@pytest.mark.asyncio
+async def test_profile_summaries_cache_never_serves_a_sibling_device_its_preview(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from alpi.host.connection_context import ConnectionContext, use
+    from alpi.session import Session, Turn
+
+    home = _bootstrap(tmp_path / "h")
+    monkeypatch.setattr(host_device_state.home_mod, "_ROOT", home)
+    host_device_state.invalidate_summary()
+    session = Session(home, "m", connection_id="conn", device_id="dev_a")
+    session.turns.append(Turn(1, "A-private question", [], "A-private answer"))
+    session.save()
+
+    srv = host_server.Server(home=home)
+    host_device_state.register(srv)
+    dev_a = ConnectionContext("conn", "dev_a", "remote", "member", session_scope="device")
+    dev_b = ConnectionContext("conn", "dev_b", "remote", "member", session_scope="device")
+
+    async def latest(ctx):
+        with use(ctx):
+            r = await srv._dispatch({"id": "s", "method": "host.profile.summaries", "params": {}})
+        return [p.get("latest_session") for p in r["result"]["profiles"]]
+
+    seen_a = await latest(dev_a)
+    assert any(row and "A-private" in json.dumps(row) for row in seen_a)
+    seen_b = await latest(dev_b)
+    assert not any(row and "A-private" in json.dumps(row) for row in seen_b)
+    assert await latest(dev_a) == seen_a
+
+    host_device_state.invalidate_summary("default")
+    assert not host_device_state._summary_cache
+
+
+def test_session_view_key_never_merges_a_device_scoped_caller_with_the_connection_view() -> None:
+    from alpi.host.connection_context import ConnectionContext, session_view_key, use
+
+    views = {}
+    for label, ctx in {
+        "local": ConnectionContext(),
+        "shared": ConnectionContext("conn", "dev_a", "remote", "member"),
+        "no_device": ConnectionContext("conn", None, "remote", "member", session_scope="device"),
+        "dev_a": ConnectionContext("conn", "dev_a", "remote", "member", session_scope="device"),
+    }.items():
+        with use(ctx):
+            views[label] = session_view_key()
+    assert views["shared"] == ("conn", "")
+    assert views["no_device"] != views["shared"]
+    assert len({views["no_device"], views["dev_a"], views["shared"]}) == 3
+    assert views["local"] == ("host", "")

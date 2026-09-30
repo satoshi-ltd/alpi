@@ -50,6 +50,12 @@ def _device_clause(ctx: ConnectionContext, owner_device_id: str | None) -> bool:
     return owner_device_id == ctx.device_id
 
 
+def session_view_key() -> tuple[str, str]:
+    ctx = current()
+    scoped = ctx.source == "remote" and ctx.session_scope == "device"
+    return ctx.connection_id, f"device:{ctx.device_id or ''}" if scoped else ""
+
+
 def owns_session(owner_connection_id: str | None, owner_device_id: str | None = None) -> bool:
     ctx = current()
     if (owner_connection_id or HOST_CONNECTION_ID) != ctx.connection_id:

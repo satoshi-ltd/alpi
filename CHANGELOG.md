@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.16.3 — 2026-09-30 — each device sees its own latest chat
+
+- **Profile lists respect device scope.** On a connection whose sessions are private to each
+  device, the latest-chat preview in the profile list now always belongs to the device asking,
+  even when another device of the same connection polled a moment earlier.
+
 ## v0.16.2 — 2026-09-30 — one command to release and validate
 
 - **The agent knows how alpi itself is validated and released.** Its knowledge now covers the

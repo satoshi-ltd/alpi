@@ -604,8 +604,8 @@ async def test_sessions_delete_rpc_deletes_each_id(
     srv = host_server.Server(home=home)
     data_handlers.register(srv)
     monkeypatch.setattr(data_handlers, "_resolve_home", lambda p: home)
-    # An omitted profile arrives as "", while the cache is keyed by (connection, name) — assert the effect, not the argument.
-    device_state._summary_cache[("host", "default")] = (float("inf"), {"latest_session": "a"})
+    # An omitted profile arrives as "", while the cache is keyed by (connection, device view, name) — assert the effect, not the argument.
+    device_state._summary_cache[("host", "", "default")] = (float("inf"), {"latest_session": "a"})
 
     response = await srv._dispatch({
         "id": "r", "method": "host.sessions.delete",
@@ -614,7 +614,7 @@ async def test_sessions_delete_rpc_deletes_each_id(
     assert response["result"] == {"deleted": ["a", "b"], "errors": []}
     assert not (home / "sessions" / "a.json").exists()
     assert not (home / "sessions" / "b.json").exists()
-    assert not [key for key in device_state._summary_cache if key[1] == "default"]
+    assert not [key for key in device_state._summary_cache if key[-1] == "default"]
 
 
 @pytest.mark.asyncio
