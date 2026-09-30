@@ -14,6 +14,18 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.6.2 — 2026-09-30 — one way into Activity
+
+- **Activity has one entry, in the footer beside the bell,** on the phone and the open Fold alike;
+  the duplicate icon in the roster header is gone, matching desktop.
+- **The Activity screen says what it shows:** across profiles, not only what is running.
+- **Settings, notifications and Activity use the same icons as desktop,** taken from one shared
+  map.
+- **Unread and Activity counts share one red badge on the icon's corner,** as on desktop, clear of the
+  next icon; above nine it reads 9+ and VoiceOver and TalkBack still say the exact number.
+
+  Requires alpi 0.16.1, as v0.6.1.
+
 ## v0.6.1 — 2026-09-30 — alpi's process, apart from the answer
 
 - **Thinking and tool steps read as one compact block.** Rows sit close together in one mono

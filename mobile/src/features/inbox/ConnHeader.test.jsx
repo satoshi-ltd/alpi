@@ -165,26 +165,14 @@ describe('ConnHeader job', () => {
 });
 
 describe('ConnHeader activity entry', () => {
-  it('opens activity from the roster header on both pane modes', () => {
+  it('draws no activity entry — the footer beside the bell owns it, on phone and fold alike', () => {
     for (const mount of [render, inSidebar]) {
-      const onActivityPress = vi.fn();
-      mount(<ConnHeader name="Local" host="host.sock" onActivityPress={onActivityPress} />);
-      screen.getByLabelText('Activity').click();
-      expect(onActivityPress).toHaveBeenCalledTimes(1);
+      mount(<ConnHeader name="Local" host="host.sock" onActivityPress={() => {}} needsYou={2} />);
+      expect(screen.queryByLabelText(/^Activity/)).toBeNull();
       cleanup();
     }
-  });
-
-  it('marks the entry while something needs the user, on a full touch target', () => {
-    render(<ConnHeader name="Local" host="host.sock" onActivityPress={() => {}} needsYou={2} />);
-    const entry = screen.getByLabelText('Activity · 2 need you');
-    expect(entry.querySelector('[testID="needs-you-dot"]')).toBeTruthy();
-    expect(JSON.parse(entry.getAttribute('data-style')).height + tapSlop(CHROME_BTN) * 2).toBe(44);
-  });
-
-  it('draws no entry on a daemon without the activity verb', () => {
-    render(<ConnHeader name="Local" host="host.sock" />);
-    expect(screen.queryByLabelText(/^Activity/)).toBeNull();
+    const text = readFileSync(join(import.meta.dirname, 'ConnHeader.jsx'), 'utf8');
+    expect(text).not.toMatch(/onActivityPress|needsYou/);
   });
 
   it('names the connection trigger for a screen reader', () => {

@@ -511,10 +511,10 @@ describe('SidebarPane footer', () => {
     expect(badge.textContent).toBe('7');
   });
 
-  it('caps the badge at 99+', () => {
+  it('caps the badge at 9+', () => {
     h.unread = 150;
     render(<SidebarPane />);
-    expect(bellEntry().querySelector('[data-pos="absolute"]').textContent).toBe('99+');
+    expect(bellEntry().querySelector('[data-pos="absolute"]').textContent).toBe('9+');
   });
 
   it('draws no badge at zero unread', () => {

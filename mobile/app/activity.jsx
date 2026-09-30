@@ -33,7 +33,7 @@ export default function ActivityScreen() {
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.bg }}>
-      <ScreenHeader title="Activity" subtitle="WHAT IS RUNNING" onBack={goBack} />
+      <ScreenHeader title="Activity" subtitle="ACROSS PROFILES" onBack={goBack} />
       <ActivityList
         activity={activity}
         supported={supported}

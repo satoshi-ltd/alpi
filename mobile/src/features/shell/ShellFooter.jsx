@@ -1,5 +1,6 @@
 import Constants from 'expo-constants';
-import { contrastText } from '../../../../common/color.mjs';
+import { badgeCount } from '../../../../common/countBadge.mjs';
+import { ICON_ROLES } from '../../../../common/iconRoles.mjs';
 import { Pressable, Text, View } from 'react-native';
 
 import { Icon } from '../../components/Icon';
@@ -31,35 +32,36 @@ export function countBadgeText(fonts, color) {
   };
 }
 
-export function CountBadge({ count, tone, ring }) {
+const BADGE_OUTSET = space.s3;
+const BADGE_LIFT = countBadge.size - space.s2;
+
+export function CountBadge({ count, ring }) {
   const { colors, fonts } = useTheme();
   if (!(count > 0)) return null;
-  const bg = tone === 'warning' ? colors.warning : colors.danger;
   return (
     <View
-      style={{
-        position: 'absolute',
-        top: -space.s2,
-        right: -space.s3,
-        minWidth: countBadge.size,
-        height: countBadge.size,
-        paddingHorizontal: space.s1,
-        flexDirection: 'row',
-        borderRadius: radii.pill,
-        borderWidth: countBadge.border,
-        borderColor: ring,
-        backgroundColor: bg,
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
+      testID="badge-anchor"
+      pointerEvents="none"
+      style={{ position: 'absolute', top: -BADGE_LIFT, right: -BADGE_OUTSET, flexDirection: 'row' }}
     >
-      <Text
-        numberOfLines={1}
-        allowFontScaling={false}
-        style={countBadgeText(fonts, tone === 'warning' ? contrastText(bg) : colors.onDanger ?? '#fff')}
+      <View
+        style={{
+          minWidth: countBadge.size,
+          height: countBadge.size,
+          paddingHorizontal: space.s1,
+          flexDirection: 'row',
+          borderRadius: radii.pill,
+          borderWidth: countBadge.border,
+          borderColor: ring,
+          backgroundColor: colors.danger,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
       >
-        {count > 99 ? '99+' : count}
-      </Text>
+        <Text numberOfLines={1} allowFontScaling={false} style={countBadgeText(fonts, colors.onDanger ?? '#fff')}>
+          {badgeCount(count)}
+        </Text>
+      </View>
     </View>
   );
 }
@@ -83,7 +85,6 @@ export function ShellFooter({ unread = 0, onNotificationsPress, onSettingsPress,
       style={{
         flexDirection: 'row',
         alignItems: 'center',
-        gap: space.s2,
         height: CHROME_H,
         paddingHorizontal: space.s5,
         borderTopWidth: twoPane ? 0 : HAIRLINE,
@@ -91,7 +92,7 @@ export function ShellFooter({ unread = 0, onNotificationsPress, onSettingsPress,
       }}
     >
       <Pressable onPress={onSettingsPress} style={entryStyle} hitSlop={ENTRY_SLOP} accessibilityRole="button" accessibilityLabel="Settings">
-        <Icon name="gear" size="md" color={colors.ink2} />
+        <Icon name={ICON_ROLES.settings} size="md" color={colors.ink2} />
         <Text maxFontSizeMultiplier={chromeScale} style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.sm, color: colors.ink2 }}>
           Settings
         </Text>
@@ -105,8 +106,8 @@ export function ShellFooter({ unread = 0, onNotificationsPress, onSettingsPress,
           accessibilityLabel={unread > 0 ? `Notifications · ${unread} unread` : 'Notifications'}
         >
           <View style={{ position: 'relative' }}>
-            <Icon name="bell" size="md" color={colors.ink2} />
-            <CountBadge count={unread} tone="danger" ring={ring} />
+            <Icon name={ICON_ROLES.notifications} size="md" color={colors.ink2} />
+            <CountBadge count={unread} ring={ring} />
           </View>
         </Pressable>
       ) : null}
@@ -119,8 +120,8 @@ export function ShellFooter({ unread = 0, onNotificationsPress, onSettingsPress,
           accessibilityLabel={needsYou > 0 ? `Activity · ${needsYou} need you` : 'Activity'}
         >
           <View style={{ position: 'relative' }}>
-            <Icon name="activity" size="md" color={needsYou > 0 ? colors.warningText ?? colors.ink2 : colors.ink2} />
-            <CountBadge count={needsYou} tone="warning" ring={ring} />
+            <Icon name={ICON_ROLES.activity} size="md" color={colors.ink2} />
+            <CountBadge count={needsYou} ring={ring} />
           </View>
         </Pressable>
       ) : null}

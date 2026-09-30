@@ -29,7 +29,7 @@ vi.mock('react-native', () => {
 
 vi.mock('expo-constants', () => ({ default: { expoConfig: { version: '0.3.1' } } }));
 
-vi.mock('../../components/Icon', () => ({ Icon: ({ name }) => React.createElement('span', { 'data-icon': name }) }));
+vi.mock('../../components/Icon', () => ({ Icon: ({ name, color }) => React.createElement('span', { 'data-icon': name, 'data-color': color }) }));
 
 vi.mock('../../theme/ThemeContext', () => ({
   useTheme: () => ({
@@ -45,6 +45,7 @@ vi.mock('../../theme/ThemeContext', () => ({
 import { CHROME_H } from '../../lib/panes';
 import { mobile } from '../../theme/tokens';
 import { PaneContext } from '../../nav/PaneContext';
+import { ICON_ROLES } from '../../../../common/iconRoles.mjs';
 import { ShellFooter, nextThemePref } from './ShellFooter';
 
 const settings = () => screen.getByLabelText('Settings');
@@ -72,7 +73,7 @@ describe('ShellFooter entries', () => {
     expect(onNotificationsPress).toHaveBeenCalledTimes(1);
   });
 
-  it('overlays the unread count on the bell glyph and caps it at 99+', () => {
+  it('overlays the unread count on the bell glyph and caps it at 9+ with the exact number in the label', () => {
     const { rerender } = render(<ShellFooter unread={7} onNotificationsPress={() => {}} onSettingsPress={() => {}} />);
     const wrap = bell(7).querySelector('[data-pos="relative"]');
     expect(wrap.querySelector('[data-icon="bell"]')).toBeTruthy();
@@ -80,11 +81,11 @@ describe('ShellFooter entries', () => {
 
     rerender(<ShellFooter unread={13} onNotificationsPress={() => {}} onSettingsPress={() => {}} />);
     const two = bell(13).querySelector('[data-pos="absolute"]');
-    expect(two.textContent).toBe('13');
+    expect(two.textContent).toBe('9+');
     expect(two.querySelector('[data-lines="1"]') ?? two.querySelector('span')).toBeTruthy();
 
     rerender(<ShellFooter unread={150} onNotificationsPress={() => {}} onSettingsPress={() => {}} />);
-    expect(bell(150).querySelector('[data-pos="absolute"]').textContent).toBe('99+');
+    expect(bell(150).querySelector('[data-pos="absolute"]').textContent).toBe('9+');
   });
 
   it('draws no badge at zero unread', () => {
@@ -112,13 +113,32 @@ describe('ShellFooter activity entry', () => {
     expect(onActivityPress).toHaveBeenCalledTimes(1);
   });
 
-  it('counts what needs the user in the warning tone, apart from the unread badge', () => {
+  it('counts both entries in the same red tone and leaves both glyphs ink-2', () => {
     render(<ShellFooter unread={3} needsYou={2} onNotificationsPress={() => {}} onSettingsPress={() => {}} onActivityPress={() => {}} />);
-    const badge = activity(2).querySelector('[data-pos="absolute"]');
-    expect(badge.textContent).toBe('2');
-    expect(JSON.parse(badge.getAttribute('data-style')).backgroundColor).toBe('#e08a3c');
-    expect(JSON.parse(bell(3).querySelector('[data-pos="absolute"]').getAttribute('data-style')).backgroundColor).toBe('#c00');
+    const pill = (entry) => entry.querySelector('[testID="badge-anchor"] > div');
+    const needs = pill(activity(2));
+    const unread = pill(bell(3));
+    expect(needs.textContent).toBe('2');
+    expect(JSON.parse(needs.getAttribute('data-style')).backgroundColor).toBe('#c00');
+    expect(JSON.parse(unread.getAttribute('data-style')).backgroundColor).toBe('#c00');
+    expect(activity(2).querySelector('[data-icon]').getAttribute('data-color')).toBe('#333');
+    expect(bell(3).querySelector('[data-icon]').getAttribute('data-color')).toBe('#333');
   });
+
+  it('lifts each badge to cover only the top 6 pt of the glyph and pins its right edge 8 pt past it, clear of the next entry', () => {
+    render(<ShellFooter unread={3} needsYou={2} onNotificationsPress={() => {}} onSettingsPress={() => {}} onActivityPress={() => {}} />);
+    for (const entry of [bell(3), activity(2)]) {
+      const anchor = entry.querySelector('[testID="badge-anchor"]');
+      expect(anchor.parentElement.getAttribute('data-pos')).toBe('relative');
+      expect(anchor.parentElement.querySelector('[data-icon]')).toBeTruthy();
+      const at = JSON.parse(anchor.getAttribute('data-style'));
+      expect(at.position).toBe('absolute');
+      expect(at.top).toBe(-12);
+      expect(at.right).toBe(-8);
+      expect(at.left).toBeUndefined();
+    }
+  });
+
 
   it('stays out of the footer on a daemon without the activity verb', () => {
     render(<ShellFooter onSettingsPress={() => {}} onActivityPress={null} needsYou={4} />);
@@ -188,6 +208,22 @@ describe('one notifications destination', () => {
   it('keeps no notifications sheet in the tree', () => {
     expect(existsSync(join(ROOT, 'src/features/shell/NotificationsSheet.jsx'))).toBe(false);
     expect(existsSync(join(ROOT, 'src/features/shell/NotificationsSheet.test.jsx'))).toBe(false);
+  });
+});
+
+describe('ShellFooter icon roles', () => {
+  it('draws settings, notifications and activity from the shared icon roles', () => {
+    render(<ShellFooter unread={1} needsYou={1} onNotificationsPress={() => {}} onSettingsPress={() => {}} onActivityPress={() => {}} />);
+    expect(ICON_ROLES).toMatchObject({ settings: 'settings', notifications: 'bell', activity: 'activity' });
+    expect(settings().querySelector('[data-icon]').getAttribute('data-icon')).toBe(ICON_ROLES.settings);
+    expect(bell(1).querySelector('[data-icon]').getAttribute('data-icon')).toBe(ICON_ROLES.notifications);
+    expect(screen.getByLabelText('Activity · 1 need you').querySelector('[data-icon]').getAttribute('data-icon')).toBe(ICON_ROLES.activity);
+  });
+
+  it.each(['src/features/shell/ShellFooter.jsx', 'src/features/shell/ActivityList.jsx'])('%s names no role icon by hand', (path) => {
+    const text = source(path);
+    expect(text).toMatch(/ICON_ROLES/);
+    expect(text).not.toMatch(/name="(gear|settings|bell|activity)"|icon: '(gear|settings|bell|activity)'/);
   });
 });
 

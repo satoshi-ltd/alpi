@@ -1,5 +1,6 @@
 import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 
+import { ICON_ROLES } from '../../../../common/iconRoles.mjs';
 import { Eyebrow } from '../../components/Eyebrow';
 import { Icon } from '../../components/Icon';
 import { recentlyFailed, toEpochSeconds } from '../../hooks/useActivity';
@@ -45,7 +46,7 @@ function runningRow(run, nowSec) {
     return {
       key: `wg:${run.workgroup_id}`,
       tone: 'accent',
-      icon: 'activity',
+      icon: ICON_ROLES.activity,
       title: [run.name || run.workgroup_id, run.phase ? `#${run.phase}` : null].filter(Boolean).join(' · '),
       sub: [phase, run.pipeline].filter(Boolean).join(' · '),
       target: { type: 'path', path: `/wg/${run.workgroup_id}` },
@@ -55,7 +56,7 @@ function runningRow(run, nowSec) {
   return {
     key: `turn:${run.profile}:${run.session_id ?? ''}`,
     tone: 'accent',
-    icon: 'activity',
+    icon: ICON_ROLES.activity,
     title: [run.profile, run.title || 'working'].filter(Boolean).join(' · '),
     sub: [run.started_at ? span(nowSec - toEpochSeconds(run.started_at)) : null, run.source].filter(Boolean).join(' · '),
     target: run.profile ? { type: 'path', path: `/chat/${run.profile}${sid}` } : null,

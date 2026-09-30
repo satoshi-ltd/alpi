@@ -200,8 +200,6 @@ export function SidebarPane({ onCollapse }) {
           searchOpen={searchOpen}
           onToggleSearch={toggleSearch}
           onConnPress={() => setSheet('conn')}
-          onActivityPress={activityEntry}
-          needsYou={activity.needsYouCount}
           onCollapse={onCollapse}
         />
         <DaemonBanner status={daemonStatus} paired={!!endpoint} onRetry={onRefresh} />

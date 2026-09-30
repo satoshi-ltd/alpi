@@ -163,8 +163,6 @@ function InboxScreen({ items, loading, refresh, error = null }) {
         searchOpen={searchOpen}
         onToggleSearch={toggleSearch}
         onConnPress={() => setSheet('conn')}
-        onActivityPress={activityEntry}
-        needsYou={activity.needsYouCount}
       />
       <DaemonBanner status={daemonStatus} paired={!!endpoint} onRetry={onRefresh} />
       <Roster

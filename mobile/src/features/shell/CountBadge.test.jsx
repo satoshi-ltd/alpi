@@ -38,7 +38,7 @@ import { CountBadge } from './ShellFooter';
 describe('CountBadge', () => {
   it.each([1, 1.3])('keeps the digits inside the pill at text scale %s', (scale) => {
     h.scale = scale;
-    render(<CountBadge count={7} tone="danger" ring="#fff" />);
+    render(<CountBadge count={7} ring="#fff" />);
     const text = screen.getByText('7');
     const pill = text.parentElement;
     const inner = Number(pill.getAttribute('data-h')) - 2 * Number(pill.getAttribute('data-border'));
@@ -49,9 +49,9 @@ describe('CountBadge', () => {
     expect(Number(text.getAttribute('data-size'))).toBeLessThanOrEqual(Number(text.getAttribute('data-lh')));
   });
 
-  it('keeps an 18 pt floor and grows sideways for 99+', () => {
-    render(<CountBadge count={250} tone="warning" ring="#fff" />);
-    const pill = screen.getByText('99+').parentElement;
+  it('keeps an 18 pt floor and grows sideways for 9+', () => {
+    render(<CountBadge count={250} ring="#fff" />);
+    const pill = screen.getByText('9+').parentElement;
     expect(Number(pill.getAttribute('data-h'))).toBe(18);
     expect(Number(pill.getAttribute('data-min-w'))).toBe(18);
     expect(pill.getAttribute('data-w')).toBeNull();
