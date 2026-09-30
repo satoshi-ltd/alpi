@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.16.8 — 2026-09-30 — a slow call no longer delays a permission change
+
+- **Changing a connection's permissions cuts every stream at once.** A call still running on one
+  socket of a device used to keep its other sockets, live streams included, open under the old
+  permissions until it finished. Now only the socket that made the change waits, up to two
+  seconds, so its own answer arrives; every other socket closes on the next check.
+
 ## v0.16.7 — 2026-09-30 — recall hides sessions of unknown owner
 
 - **Semantic recall no longer shares a session whose owner it could not read.** When an old index

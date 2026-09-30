@@ -1419,7 +1419,7 @@ async def test_unchanged_policy_never_closes_websockets(
 
 
 @pytest.mark.asyncio
-async def test_policy_close_waits_for_the_callers_in_flight_unary_request(
+async def test_policy_close_waits_for_the_callers_own_policy_request(
     short_tmp: Path, monkeypatch,
 ) -> None:
     import asyncio
@@ -1613,6 +1613,116 @@ async def test_concurrent_admissions_count_each_eviction_once(
         for ws in fresh:
             await ws.close()
         await _close_sockets_quietly(silent)
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_a_pending_rpc_does_not_keep_other_sockets_on_the_old_policy(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    import asyncio
+    from alpi.host import connections, events
+
+    server, url = await _start_fast_recheck_server(short_tmp, monkeypatch)
+    server.register_stream("host.events.subscribe", events._subscribe_handler)
+    held = asyncio.Event()
+
+    async def hold(_params, _server):
+        await held.wait()
+        return {}
+
+    server.register("host.hold", hold)
+    connection, _device_a = connections.create_connection("Team")
+    _connection, device_b = connections.add_device(connection["id"])
+    stream = await _subscribe(url, device_b["token"])
+    busy = await websockets.connect(url)
+    try:
+        await busy.send(json.dumps({
+            "id": "hold", "method": "host.hold", "params": {"auth_token": device_b["token"]},
+        }))
+        await asyncio.sleep(0.2)
+
+        assert connections.update_connection(connection["id"], session_scope="device")
+
+        with pytest.raises(websockets.ConnectionClosedError):
+            await asyncio.wait_for(stream.recv(), timeout=1)
+        assert stream.close_reason == "Authorization changed"
+    finally:
+        held.set()
+        await stream.close()
+        await busy.close()
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_only_the_socket_editing_its_own_connection_waits_for_its_response(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    import asyncio
+    import time
+    from alpi.host import admin_audit, connections, events
+
+    real_record = admin_audit.record_request
+
+    def slow_record(*args, **kwargs):
+        time.sleep(0.8)
+        return real_record(*args, **kwargs)
+
+    monkeypatch.setattr(admin_audit, "record_request", slow_record)
+    server, url = await _start_fast_recheck_server(short_tmp, monkeypatch)
+    server.register_stream("host.events.subscribe", events._subscribe_handler)
+    connections.register(server)
+    connection, device = connections.create_connection("Admin", role="admin")
+    stream = await _subscribe(url, device["token"])
+    editor = await websockets.connect(url)
+    try:
+        await editor.send(json.dumps({
+            "id": "update", "method": "host.connections.update",
+            "params": {
+                "auth_token": device["token"], "connection_id": connection["id"],
+                "session_scope": "device",
+            },
+        }))
+        stream_closed = asyncio.ensure_future(stream.wait_closed())
+        editor_answered = asyncio.ensure_future(editor.recv())
+        done, _pending = await asyncio.wait(
+            {stream_closed, editor_answered}, timeout=3, return_when=asyncio.FIRST_COMPLETED,
+        )
+
+        assert stream_closed in done
+        assert editor_answered not in done
+        assert json.loads(await asyncio.wait_for(editor_answered, timeout=3))["result"] == {"ok": True}
+        with pytest.raises(websockets.ConnectionClosedError):
+            await asyncio.wait_for(editor.recv(), timeout=2)
+    finally:
+        await editor.close()
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_a_refused_policy_request_leaves_no_marker_behind(
+    short_tmp: Path, monkeypatch,
+) -> None:
+    from alpi.host import connections
+
+    server, url = await _start_fast_recheck_server(short_tmp, monkeypatch)
+    connections.register(server)
+    connection, device = connections.create_connection("Member")
+    ws = await websockets.connect(url)
+    try:
+        await ws.send(json.dumps({
+            "id": "denied", "method": "host.connections.update",
+            "params": {
+                "auth_token": device["token"], "connection_id": connection["id"],
+                "session_scope": "device",
+            },
+        }))
+        response = json.loads(await ws.recv())
+
+        assert response["error"]["code"] == -32001
+        assert server._ws_policy_replies == {}
+    finally:
+        await ws.close()
         await server.stop()
 
 

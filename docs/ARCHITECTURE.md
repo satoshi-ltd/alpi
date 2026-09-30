@@ -835,7 +835,7 @@ Lifecycle:
   verbs or `alpi setup connections`. An open stream, `host.events.subscribe` included, never
   outlives the policy it was opened under; clients reconnect and get the new one. A running chat
   turn on the closed socket is interrupted like on a revocation. A label-only or same-value
-  update leaves sockets open, and a caller editing its own connection gets its response first.
+  update leaves sockets open. The one exception is the socket that carries the policy-changing request itself (`host.connections.update`, `host.devices.promote|demote|set_profiles`): it stays open for at most two seconds so its own response goes out first; every other socket of the connection, streams and pending calls included, closes on the next pass.
 - **Per-device socket limit**: a device credential may hold `ALPI_HOST_WS_MAX_CONNECTIONS_PER_DEVICE`
   sockets. A socket that would exceed it pings the device's existing ones first and evicts those
   that do not answer within two seconds (ping and pong share one deadline; the transport is

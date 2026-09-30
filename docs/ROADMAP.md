@@ -53,18 +53,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
-- **SCOPE.7** — A slow RPC does not postpone a permission change on other sockets
-  `bug · alpi · agent · high`
-  note: `_ws_unary_inflight` in [server.py](../alpi/host/server.py) is keyed by device, so
-  any pending unary call defers the watcher's close of every socket of that device, streams
-  included, which keep delivering under the old policy. Reproduced by an external review: B
-  holds a subscription and a slow RPC, the connection flips to `session_scope: device`, and
-  1.2 s later B still receives A's private approval.
-  accept: the only deferral is for the socket that is running the policy-changing request
-  itself (its own response goes out first), bounded to a couple of seconds; every other
-  socket of the device closes on the next pass; a test with a held unary RPC on one socket
-  and a subscription on another shows the subscription closing while the RPC is pending.
-
 - **ERR.1** — Errors reach the user in plain words
   `bug · alpi · desktop · mobile · common · agent · high`
   note: the chat shows daemon and provider failures raw. The desktop maps only the rate

@@ -31,6 +31,13 @@ WS_MAX_CONNECTIONS_PER_DEVICE = 8
 WS_MAX_RPCS_PER_DEVICE = 8
 WS_MAX_QUEUE = (16, 4)
 WS_PROBE_TIMEOUT_SECONDS = 2.0
+WS_POLICY_REPLY_GRACE_SECONDS = 2.0
+_POLICY_MUTATING_METHODS = frozenset({
+    "host.connections.update",
+    "host.devices.promote",
+    "host.devices.demote",
+    "host.devices.set_profiles",
+})
 WS_AUTH_FAILURES_PER_MINUTE = 10
 WS_CLOSE_REASON_RATE_LIMITED = "auth-rate-limited"
 
@@ -278,7 +285,7 @@ class Server:
         self._ws_by_device: dict[tuple[str, str], set[ServerConnection]] = defaultdict(set)
         self._ws_revoking: dict[ServerConnection, tuple[float, int]] = {}
         self._ws_rpc_counts: dict[tuple[str, str], int] = {}
-        self._ws_unary_inflight: dict[tuple[str, str], int] = {}
+        self._ws_policy_replies: dict[ServerConnection, float] = {}
         self._ws_metrics = WebSocketMetrics()
         self._ws_auth_timeout = float(_env_number(
             "ALPI_HOST_WS_AUTH_TIMEOUT", WS_AUTH_TIMEOUT_SECONDS,
@@ -537,6 +544,16 @@ class Server:
                 json.dumps(payload, separators=(",", ":"), ensure_ascii=False),
             )
 
+        async def dispatch(line: str, body: dict[str, Any], meta: "AuthMeta") -> None:
+            replying = str(body.get("method") or "") in _POLICY_MUTATING_METHODS
+            if replying:
+                self._ws_policy_replies[ws] = time.monotonic()
+            try:
+                await self._handle_request(line, send, require_token=True, authenticated=meta)
+            finally:
+                if replying:
+                    self._ws_policy_replies.pop(ws, None)
+
         if len(self._ws_connections) >= self._ws_max_connections:
             self._ws_metrics.handshakes_rejected += 1
             await ws.close(code=1013, reason="WebSocket capacity reached")
@@ -592,9 +609,7 @@ class Server:
                 })
                 await ws.close(code=1013, reason="Device connection limit reached")
                 return
-            await self._handle_request(
-                line, send, require_token=True, authenticated=meta,
-            )
+            await dispatch(line, body, meta)
             async for message in ws:
                 authenticated = await self._authenticate_websocket_message(message, send)
                 if authenticated is None:
@@ -613,9 +628,7 @@ class Server:
                     })
                     await ws.close(code=1008, reason="Socket identity changed")
                     return
-                await self._handle_request(
-                    line, send, require_token=True, authenticated=meta,
-                )
+                await dispatch(line, body, meta)
         except websockets.ConnectionClosed:
             return
         except Exception:  # noqa: BLE001
@@ -667,6 +680,10 @@ class Server:
         self._ws_policies[ws] = _auth_policy(meta.role, meta.scope, meta.session_scope)
         return True
 
+    def _awaiting_policy_reply(self, ws: ServerConnection) -> bool:
+        started = self._ws_policy_replies.get(ws)
+        return started is not None and time.monotonic() - started < WS_POLICY_REPLY_GRACE_SECONDS
+
     async def _admit_websocket(self, ws: ServerConnection, meta: "AuthMeta") -> bool:
         if self._register_websocket_identity(ws, meta):
             return True
@@ -707,6 +724,7 @@ class Server:
         self._ws_revoking.pop(ws, None)
         self._ws_tasks.pop(ws, None)
         self._ws_policies.pop(ws, None)
+        self._ws_policy_replies.pop(ws, None)
         key = self._ws_identities.pop(ws, None)
         if key is None:
             return
@@ -802,7 +820,7 @@ class Server:
                 if (
                     current is not None
                     and self._ws_policies.get(ws) != current
-                    and not self._ws_unary_inflight.get(key)
+                    and not self._awaiting_policy_reply(ws)
                 ):
                     changed.append(ws)
             caller = asyncio.current_task()
@@ -1040,10 +1058,6 @@ class Server:
                     },
                 })
                 return
-            unary_key = None
-            if remote_meta is not None and method not in self.stream_handlers:
-                unary_key = (remote_meta.connection_id, remote_meta.device_id)
-                self._ws_unary_inflight[unary_key] = self._ws_unary_inflight.get(unary_key, 0) + 1
             try:
                 if method in self.stream_handlers:
                     await self._dispatch_stream(body, delivery)
@@ -1061,12 +1075,6 @@ class Server:
                 if response is not None:
                     await delivery(response)
             finally:
-                if unary_key is not None:
-                    remaining = self._ws_unary_inflight.get(unary_key, 1) - 1
-                    if remaining > 0:
-                        self._ws_unary_inflight[unary_key] = remaining
-                    else:
-                        self._ws_unary_inflight.pop(unary_key, None)
                 if remote_meta is not None:
                     self._end_device_rpc(remote_meta)
 
