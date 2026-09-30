@@ -22,7 +22,7 @@
   background: var(--bg-input);
   color: var(--ink);
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   line-height: var(--lh-normal);
   outline: none;
   transition:
@@ -50,7 +50,7 @@
   border-radius: var(--r-md);
   background: var(--bg-input);
   color: var(--ink);
-  font-size: var(--fs-base);
+  font-size: var(--text-ui);
   font-weight: var(--fw-medium);
 }
 
@@ -97,7 +97,7 @@
 
 .statusBadge[data-status="probing"] {
   background: var(--c-warning);
-  animation: pulse 1s ease-in-out infinite;
+  animation: pulse var(--dur-loop) ease-in-out infinite;
 }
 
 .statusBadge[data-status="offline"] {
@@ -156,14 +156,14 @@
 }
 
 .rowName {
-  font-size: var(--fs-base);
+  font-size: var(--text-ui);
 }
 
 .rowCaption {
   margin-top: var(--space-1);
   color: var(--ink-3);
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
 }
 
 @keyframes pulse {

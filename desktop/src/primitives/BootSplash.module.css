@@ -12,7 +12,7 @@
 
 .glyph {
   color: var(--ink-4);
-  animation: bootPulse 1.4s ease-in-out infinite;
+  animation: bootPulse var(--dur-loop) ease-in-out infinite;
 }
 
 @keyframes bootPulse {
@@ -21,7 +21,7 @@
 }
 
 .msg {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--fs-sm);
   color: var(--ink-3);
 }

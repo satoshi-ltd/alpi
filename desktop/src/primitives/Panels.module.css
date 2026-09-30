@@ -29,12 +29,12 @@
 }
 
 .panelTitle {
-  font-size: var(--fs-md);
+  font-size: var(--text-ui);
   font-weight: var(--fw-semibold);
 }
 
 .panelTitleCap {
-  font-size: var(--fs-md);
+  font-size: var(--text-ui);
   font-weight: var(--fw-semibold);
   text-transform: capitalize;
 }
@@ -102,17 +102,17 @@
 }
 
 .connName {
-  font-size: var(--fs-base);
+  font-size: var(--text-ui);
   font-weight: var(--fw-medium);
 }
 
 .connHost {
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   color: var(--ink-3);
 }
 
 .connVersion {
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   color: var(--ink-3);
   opacity: var(--alpha-soft);
 }
@@ -162,7 +162,7 @@
   background: var(--bg-elev);
   color: var(--ink);
   font: inherit;
-  font-size: var(--fs-base);
+  font-size: var(--text-ui);
   font-weight: var(--fw-medium);
   line-height: 20px;
   outline: none;
@@ -185,12 +185,12 @@
 }
 
 .pairFootHint {
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   color: var(--ink-3);
 }
 
 .pairCode {
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
 }
 
 .pairRow {
@@ -206,8 +206,18 @@
 }
 
 .paletteInputWrap {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
   padding: 0 var(--space-7);
   border-bottom: .5px solid var(--line);
+}
+
+.paletteSearchIcon {
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+  color: var(--ink-3);
+  flex-shrink: 0;
 }
 
 .paletteInput {
@@ -216,7 +226,8 @@
   border: 0;
   outline: 0;
   background: transparent;
-  font: 14px var(--font-sans);
+  font-family: var(--font-sans);
+  font-size: var(--text-ui);
   color: var(--ink);
 }
 
@@ -228,7 +239,7 @@
 .paletteEmpty {
   padding: var(--space-11) 0;
   color: var(--ink-3);
-  font-size: var(--fs-base);
+  font-size: var(--text-ui);
 }
 
 .paletteHeader {
@@ -256,7 +267,7 @@
 }
 
 .paletteGlyph {
-  width: 16px;
+  width: var(--icon-md);
   display: inline-flex;
   justify-content: center;
   flex-shrink: 0;
@@ -264,14 +275,29 @@
 }
 
 .paletteLabel {
-  flex: 1;
-  font-size: var(--fs-base);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-ui);
   color: var(--ink);
 }
 
-.paletteShortcut {
-  display: inline-flex;
-  gap: var(--space-tight);
+.paletteSub {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  color: var(--ink-3);
+}
+
+.paletteSpacer {
+  flex: 1;
+}
+
+.paletteHit {
+  background: transparent;
+  color: inherit;
+  font-weight: var(--fw-semibold);
 }
 
 .mdBold {
@@ -288,21 +314,21 @@
 
 .mdH4 {
   margin: var(--space-8) 0 var(--space-2);
-  font-size: var(--fs-base);
+  font-size: var(--text-ui);
   font-weight: var(--fw-semibold);
   font-family: var(--font-mono);
 }
 
 .mdH3 {
   margin: 22px 0 var(--space-3);
-  font-size: var(--fs-lg);
+  font-size: var(--text-chat);
   font-weight: var(--fw-semibold);
   font-family: var(--font-mono);
 }
 
 .mdH2 {
   margin: var(--space-3) 0 var(--space-6);
-  font-size: var(--fs-xl);
+  font-size: var(--text-title);
   font-weight: var(--fw-bold);
   font-family: var(--font-mono);
 }
@@ -343,14 +369,14 @@
 .mdOl {
   margin: var(--space-3) 0;
   padding-left: 22px;
-  font-size: var(--fs-base);
+  font-size: var(--text-ui);
   line-height: var(--lh-normal);
 }
 
 .mdUl {
   margin: var(--space-3) 0;
   padding-left: 18px;
-  font-size: var(--fs-base);
+  font-size: var(--text-ui);
   line-height: var(--lh-normal);
 }
 
@@ -360,7 +386,7 @@
 
 .mdP {
   margin: var(--space-3) 0;
-  font-size: var(--fs-base);
+  font-size: var(--text-ui);
   line-height: var(--lh-relaxed);
   text-wrap: pretty;
 }

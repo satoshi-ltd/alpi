@@ -70,7 +70,7 @@
 
 .rowTime {
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   color: var(--ink-3);
   font-variant-numeric: tabular-nums slashed-zero;
   flex-shrink: 0;
@@ -107,7 +107,7 @@
   background: var(--hover);
   color: var(--ink-3);
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   font-weight: var(--fw-semibold);
   text-transform: uppercase;
   flex-shrink: 0;
@@ -143,7 +143,7 @@
 
 .rowLabel {
   flex: 1;
-  font-size: var(--fs-base);
+  font-size: var(--text-ui);
 }
 
 .searchRow {
@@ -169,7 +169,7 @@
   background: transparent;
   color: var(--ink);
   font-family: inherit;
-  font-size: var(--fs-base);
+  font-size: var(--text-ui);
 }
 
 .searchInput::placeholder {
@@ -177,23 +177,12 @@
 }
 
 .searchClose {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  width: var(--ctrl-2xs);
+  height: var(--ctrl-2xs);
   flex-shrink: 0;
-  padding: 2px;
-  border: 0;
-  border-radius: var(--r-sm);
-  background: transparent;
   color: var(--ink-3);
-  cursor: pointer;
-  transition: background var(--dur-1), color var(--dur-1);
 }
 
-.searchClose:hover {
-  color: var(--ink);
-  background: var(--hover);
-}
 
 .searchEmpty {
   padding: var(--space-2) var(--space-4);
@@ -204,18 +193,38 @@
 .footerButton {
   width: auto;
   flex: 0 0 auto;
-  height: 28px;
+  justify-content: flex-start;
+  padding: 0 var(--space-4);
+  color: var(--ink);
+}
+
+.actionGlyph {
+  width: var(--icon-sm);
+  display: inline-flex;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.sectionAdd {
+  width: var(--ctrl-2xs);
+  height: var(--ctrl-2xs);
+}
+
+.sectionAdd :global(.ds-icon) {
+  width: 12px;
+  height: 12px;
+}
+
+.pinButton {
+  width: var(--ctrl-xs);
+  height: var(--ctrl-xs);
 }
 
 .footerSpacer { flex: 1; }
 
-.footerKbds {
-  display: flex;
-  gap: var(--space-tight);
-}
 
 .rowMeta {
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   color: var(--ink-3);
 }
 
@@ -258,7 +267,7 @@
   background: var(--c-danger);
   color: #fff;
   font-family: var(--font-sans);
-  font-size: var(--fs-xxs);
+  font-size: var(--text-meta);
   line-height: var(--space-6);
   font-weight: var(--fw-semibold);
   font-variant-numeric: tabular-nums;
@@ -277,4 +286,54 @@
   gap: var(--space-3);
   height: 30px;
   padding: 0 var(--space-4);
+}
+
+.needsBadge {
+  background: var(--c-warning);
+}
+
+.stateChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  line-height: var(--lh-tight);
+  white-space: nowrap;
+  color: var(--ink-3);
+}
+
+.stateDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.stateChip[data-state="needs-you"] {
+  color: var(--c-warning-text);
+}
+
+.stateChip[data-state="failed"] {
+  color: var(--c-danger-text);
+}
+
+.stateChip[data-state="working"] {
+  color: var(--accent);
+}
+
+.stateChip[data-state="working"] .stateDot {
+  animation: statePulse var(--dur-loop) ease-in-out infinite;
+}
+
+@keyframes statePulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: var(--alpha-faint); }
+}
+
+.phaseCount {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  color: var(--accent);
 }

@@ -45,6 +45,8 @@ enum ChatEvent {
         name: String,
         preview: String,
         args: serde_json::Value,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        started_at: Option<f64>,
     },
     ToolState {
         request_id: String,
@@ -59,10 +61,16 @@ enum ChatEvent {
         name: String,
         ok: bool,
         output: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        duration_s: Option<f64>,
     },
     ReasoningDelta {
         request_id: String,
         text: String,
+    },
+    ReasoningDone {
+        request_id: String,
+        seconds: f64,
     },
     AssistantDelta {
         request_id: String,
@@ -2536,6 +2544,17 @@ async fn approval_pending() -> Result<serde_json::Value, String> {
 }
 
 #[tauri::command]
+async fn activity_list(connection_id: Option<String>) -> Result<serde_json::Value, String> {
+    let params = serde_json::json!({});
+    tauri::async_runtime::spawn_blocking(move || match connection_id.as_deref() {
+        Some(cid) => host_client::call_for(cid, "host.activity.list", params),
+        None => host_client::call("host.activity.list", params),
+    })
+    .await
+    .map_err(|e| format!("activity_list: {e}"))?
+}
+
+#[tauri::command]
 async fn clarification_respond(
     request_id: String, choice: String,
 ) -> Result<serde_json::Value, String> {
@@ -3061,6 +3080,7 @@ fn stream_chat(
                             .get("args")
                             .cloned()
                             .unwrap_or(serde_json::Value::Object(Default::default())),
+                        started_at: frame["started_at"].as_f64(),
                     },
                 );
             }
@@ -3088,6 +3108,16 @@ fn stream_chat(
                             .as_str()
                             .unwrap_or("")
                             .to_string(),
+                        duration_s: frame["duration_s"].as_f64(),
+                    },
+                );
+            }
+            "reasoning_done" => {
+                let _ = app_for_frames.emit(
+                    "chat-event",
+                    ChatEvent::ReasoningDone {
+                        request_id: rid_for_frames.clone(),
+                        seconds: frame["seconds"].as_f64().unwrap_or(0.0),
                     },
                 );
             }
@@ -3849,6 +3879,7 @@ pub fn run() {
             approval_pending,
             clarification_respond,
             clarification_pending,
+            activity_list,
             profile_create,
             profile_delete,
             provider_set_key,
@@ -3930,6 +3961,37 @@ mod chat_event_tests {
         assert_eq!(value["kind"], "usage");
         assert_eq!(value["context_tokens"], 42_000);
         assert_eq!(value["model"], "openrouter/z-ai/glm-5.3-flash");
+    }
+
+    #[test]
+    fn tool_timing_and_reasoning_done_reach_the_webview_only_when_the_daemon_sends_them() {
+        let start = serde_json::to_value(ChatEvent::ToolStart {
+            request_id: "r".to_string(),
+            tool_id: "t".to_string(),
+            name: "read_file".to_string(),
+            preview: String::new(),
+            args: serde_json::json!({}),
+            started_at: Some(1700000000.5),
+        })
+        .unwrap();
+        assert_eq!(start["started_at"], 1700000000.5);
+        let old_end = serde_json::to_value(ChatEvent::ToolEnd {
+            request_id: "r".to_string(),
+            tool_id: "t".to_string(),
+            name: "read_file".to_string(),
+            ok: true,
+            output: String::new(),
+            duration_s: None,
+        })
+        .unwrap();
+        assert!(old_end.get("duration_s").is_none());
+        let done = serde_json::to_value(ChatEvent::ReasoningDone {
+            request_id: "r".to_string(),
+            seconds: 7.2,
+        })
+        .unwrap();
+        assert_eq!(done["kind"], "reasoning_done");
+        assert_eq!(done["seconds"], 7.2);
     }
 }
 

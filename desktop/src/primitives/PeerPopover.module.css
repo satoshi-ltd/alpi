@@ -15,12 +15,12 @@
 
 .rowId {
   flex: 1;
-  font-size: var(--fs-base);
+  font-size: var(--text-ui);
 }
 
 .rowKey {
   color: var(--ink-3);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
 }
 
 .detail {
@@ -38,7 +38,7 @@
 
 .detailHandle {
   font-family: var(--font-mono);
-  font-size: var(--fs-base);
+  font-size: var(--text-ui);
   font-weight: var(--fw-medium);
   color: var(--ink);
 }
@@ -58,7 +58,7 @@
   background: var(--hover);
   border: .5px solid var(--line);
   border-radius: var(--r-xs);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   color: var(--ink-2);
   word-break: break-all;
 }
@@ -91,8 +91,8 @@
 .empty {
   padding: var(--space-7);
   text-align: center;
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-family: var(--font-sans);
+  font-size: var(--text-meta);
   color: var(--ink-3);
 }
 

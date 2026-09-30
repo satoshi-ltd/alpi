@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { hasDirtySettings } from "../lib/settingsDirty.js";
 
 export function useWindowChrome({
   viewRef,
@@ -25,6 +26,8 @@ export function useWindowChrome({
   onBrowseMemory,
   onBrowseSchedule,
   onToggleNotifications,
+  onToggleActivity,
+  onToggleShortcuts,
 } = {}) {
   useEffect(() => {
     function onDown(e) {
@@ -58,19 +61,31 @@ export function useWindowChrome({
       if (!cmd) return;
       const key = e.key.toLowerCase();
       const canSidebarSearch = !!sidebarSearchAvailableRef?.current;
+      const isSlash = key === "/" || e.code === "Slash";
+      const isJump = /^[1-9]$/.test(key) && !e.shiftKey && !isSlash;
       const isShortcut =
-        /^[1-9]$/.test(key) ||
+        isJump ||
         key === "n" ||
         key === "," ||
         key === "f" ||
         key === "k" ||
         key === "o" ||
+        (key === "j" && !!onToggleActivity) ||
+        (isSlash && !!onToggleShortcuts) ||
         (key === "s" && !e.shiftKey && canSidebarSearch) ||
         (e.shiftKey && (key === "t" || key === "s" || key === "m" || key === "e" || key === "h" || key === "l" || key === "p" || key === "r" || key === "n" || key === "w"));
       if (paletteOpenRef?.current && isShortcut && key !== "k") {
         onClosePalette?.();
       }
-      if (/^[1-9]$/.test(key)) {
+      if (isSlash && !e.altKey) {
+        if (onToggleShortcuts) {
+          e.preventDefault();
+          e.stopPropagation();
+          onToggleShortcuts();
+        }
+        return;
+      }
+      if (isJump) {
         e.preventDefault();
         e.stopPropagation();
         onJumpToProfile?.(Number(key) - 1);
@@ -96,13 +111,13 @@ export function useWindowChrome({
           setView((v) => (v.kind === "profile" ? { ...v, sessionId: null } : v));
           return;
         }
-        if (kind === "settings") {
+        if (kind === "settings" && hasDirtySettings()) {
           e.preventDefault();
           e.stopPropagation();
-          onNewProfile?.();
+          window.notify?.("Save or discard your settings changes first", { variant: "info" });
           return;
         }
-        if (kind === "empty" || kind === "workgroup") {
+        if (kind === "empty" || kind === "workgroup" || kind === "settings" || kind === "workgroups") {
           e.preventDefault();
           e.stopPropagation();
           setView({ kind: "empty" });
@@ -130,6 +145,14 @@ export function useWindowChrome({
         e.preventDefault();
         e.stopPropagation();
         onTogglePalette?.();
+        return;
+      }
+      if (key === "j" && !e.shiftKey && !e.altKey) {
+        if (onToggleActivity) {
+          e.preventDefault();
+          e.stopPropagation();
+          onToggleActivity();
+        }
         return;
       }
       if (key === "o" && !e.shiftKey && !e.altKey) {
@@ -189,5 +212,5 @@ export function useWindowChrome({
     }
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [viewRef, setView, onJumpToProfile, onNewProfile, onNewWorkgroup, onOpenSettings, onToggleSearch, onToggleSidebarSearch, sidebarSearchAvailableRef, onTogglePalette, paletteOpenRef, onClosePalette, activeProfileName, historyKind, onOpenHistory, onRefreshThread, onToggleContextPause, onToggleReadAloud, onBrowseTools, onBrowseSkills, onBrowseMemory, onBrowseSchedule, onToggleNotifications]);
+  }, [viewRef, setView, onJumpToProfile, onNewProfile, onNewWorkgroup, onOpenSettings, onToggleSearch, onToggleSidebarSearch, sidebarSearchAvailableRef, onTogglePalette, paletteOpenRef, onClosePalette, activeProfileName, historyKind, onOpenHistory, onRefreshThread, onToggleContextPause, onToggleReadAloud, onBrowseTools, onBrowseSkills, onBrowseMemory, onBrowseSchedule, onToggleNotifications, onToggleActivity, onToggleShortcuts]);
 }

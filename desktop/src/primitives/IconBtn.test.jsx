@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import IconBtn from "./IconBtn.jsx";
+import buttonStyles from "./Button.module.css";
 
 describe("IconBtn", () => {
   it("wraps in a tooltip when tip is provided", () => {
@@ -20,5 +21,14 @@ describe("IconBtn", () => {
     const btn = screen.getByRole("button", { name: "Close" });
     expect(btn.parentElement?.className ?? "").not.toContain("ds-tip");
     expect(screen.queryByText("Close")).toBeNull();
+  });
+});
+
+describe("IconBtn as an alias of Button", () => {
+  it("renders the icon-only ghost Button", () => {
+    render(<IconBtn aria-label="Close"><svg /></IconBtn>);
+    const btn = screen.getByRole("button", { name: "Close" });
+    expect(btn.className).toContain(buttonStyles.iconOnly);
+    expect(btn.className).toContain(buttonStyles.ghost);
   });
 });

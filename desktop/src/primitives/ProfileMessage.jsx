@@ -26,7 +26,7 @@ export default function ProfileMessage({
     <div className={`msg-row ${styles.assistantRow}`}>
       <div className="profmsg">{children}</div>
       {footer && (
-        <div className={`msg-actions ${styles.assistantFooter}`}>{footer}</div>
+        <div className={styles.assistantFooter}>{footer}</div>
       )}
     </div>
   );

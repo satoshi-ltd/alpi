@@ -84,20 +84,20 @@
 .modelPickerOptionLabelSelected { font-weight: var(--fw-semibold); }
 
 .modelPickerOptionCtx {
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   color: var(--ink-3);
 }
-.modelPickerBadge { font-size: var(--fs-xs); }
+.modelPickerBadge { font-size: var(--text-meta); }
 
 .modelPickerFooter {
   padding: var(--space-3) var(--space-5);
   border-top: .5px solid var(--line);
   background: var(--bg-side);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   color: var(--ink-3);
 }
 .modelPickerFooterLink {
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   color: var(--ink-2);
   background: transparent;
   border: 0;

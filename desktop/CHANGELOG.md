@@ -11,6 +11,28 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.7.0 — 2026-09-30 — see what every agent is doing
+
+- **Tool steps you can open.** Each step shows what it did in plain words, how long it took and a
+  file, terminal, web or memory icon; click it for the full arguments and the result. Failed steps
+  open on their own, and an approval for the chat you are in asks right there in the conversation.
+- **Agents at work.** Every profile and workgroup in the sidebar says when it is working, when it
+  failed and when it needs you. ⌘J opens Activity: what waits on you first, then what is running
+  and what is scheduled.
+- **Reasoning gets out of the way.** "Thinking…" while the model thinks, then one "Thought for
+  7s" row that opens to readable text and folds away when the answer lands.
+- **A calmer conversation.** Each exchange reads as one unit, both speakers share one quiet
+  footer with usage in a tooltip on the time, new turns and text ease in, and the app honours
+  reduced motion everywhere.
+- **Get anywhere from the keyboard.** ⌘K finds profiles, workgroups and past sessions as well as
+  commands, ⌘N starts a session, ⌘/ lists every shortcut. Profile settings gain a section rail
+  with search.
+- **Easier to read.** One type scale, readable contrast for secondary text, and one set of buttons
+  and tooltips across the app.
+
+  Requires alpi 0.16.0 for Activity, step durations and "Thought for Xs"; with an older daemon
+  those stay hidden and everything else works with 0.15.20.
+
 ## v0.6.11 — 2026-09-30 — nothing you typed gets lost
 
 - **A stray click outside a half-filled form no longer throws it away.** New profile, new

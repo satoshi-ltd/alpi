@@ -18,36 +18,36 @@
 .toolCount {
   flex-shrink: 0;
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
-  color: var(--ink-4);
+  font-size: var(--text-meta);
+  color: var(--ink-3);
 }
 
-.toolMuted { color: var(--ink-4); }
+.toolMuted { color: var(--ink-3); }
 
 .toolNameLg {
   display: inline-flex;
   align-items: center;
   font-family: var(--font-mono);
-  font-size: var(--fs-lg);
+  font-size: var(--text-chat);
   font-weight: var(--fw-semibold);
   color: var(--ink);
   text-transform: lowercase;
 }
 
-.detailCat { color: var(--ink-4); font-weight: var(--fw-regular); }
+.detailCat { color: var(--ink-3); font-weight: var(--fw-regular); }
 
 .params {
   width: 100%;
   margin-top: var(--space-7);
   border-collapse: collapse;
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
 }
 
 .params th {
   text-align: left;
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   font-weight: var(--fw-medium);
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -69,8 +69,8 @@
 
 .noParams {
   margin-top: var(--space-7);
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-family: var(--font-sans);
+  font-size: var(--text-meta);
   color: var(--ink-3);
   font-style: italic;
 }
@@ -89,7 +89,7 @@
 
 .denyBanner code {
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   background: var(--hover);
   padding: 0 var(--space-2);
   border-radius: var(--r-xs);

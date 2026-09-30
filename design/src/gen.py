@@ -684,7 +684,7 @@ def build(desktop_boards):
     for label, items in (
         ("Foundations", [("System-Tokens.dc.html", SYSTEM["tokens"](), 2000, "System · tokens")]),
         ("Controls and feedback", [("System-DesktopComponents.dc.html", SYSTEM["desktop"](), 1900, "Desktop · controls and feedback"), ("System-MobileComponents.dc.html", SYSTEM["mobile"](), 2300, "Mobile · controls and feedback")]),
-        ("Conversation", [("System-DesktopConversation.dc.html", CONVERSATION["desktop"](), 2560, "Desktop · conversation"), ("System-MobileConversation.dc.html", CONVERSATION["mobile"](), 1340, "Mobile · conversation")]),
+        ("Conversation", [("System-DesktopConversation.dc.html", CONVERSATION["desktop"](), 2900, "Desktop · conversation"), ("System-MobileConversation.dc.html", CONVERSATION["mobile"](), 1340, "Mobile · conversation")]),
         ("Workgroups", [("System-DesktopWorkgroup.dc.html", CONVERSATION["desktop_wg"](), 1200, "Desktop · workgroups"), ("System-MobileWorkgroup.dc.html", CONVERSATION["mobile_wg"](), 760, "Mobile · workgroups")]),
     ):
         y += 240

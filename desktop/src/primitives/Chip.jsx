@@ -1,4 +1,4 @@
-import Tooltip from "./Tooltip.jsx";
+import Tip from "./Tip.jsx";
 import styles from "./Chip.module.css";
 
 export default function Chip({
@@ -64,5 +64,5 @@ export default function Chip({
     </span>
   );
 
-  return tooltip ? <Tooltip text={tooltip}>{inner}</Tooltip> : inner;
+  return tooltip ? <Tip text={tooltip} escape>{inner}</Tip> : inner;
 }

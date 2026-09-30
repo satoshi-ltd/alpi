@@ -13,8 +13,12 @@ import { useScrollAnchor } from "../lib/useScrollAnchor.js";
 import { useDelayedFlag } from "../lib/useDelayedFlag.js";
 import RelativeTime from "../primitives/RelativeTime.jsx";
 import { turnParts } from "../../../common/reasoningSteps.mjs";
-import { pluralize } from "../../../common/pluralize.mjs";
-import { CaretIcon, Icon } from "../primitives/icons.jsx";
+import { fmtDuration } from "../../../common/reasoningLabel.mjs";
+import { ToolModule } from "../features/ToolSteps.jsx";
+import StreamingMarkdown from "../features/StreamingMarkdown.jsx";
+import { InlineApproval, InlineClarification } from "../features/InlineRequest.jsx";
+import { lastLine, reasoningTimeline } from "../lib/reasoningTimeline.js";
+import { useFreshTurns } from "../lib/useFreshTurns.js";
 import { profileLabel } from "../lib/profile-display.js";
 import { ChatLoadSkeleton } from "./ChatSkeletons.jsx";
 import SearchBar from "../primitives/SearchBar.jsx";
@@ -29,7 +33,6 @@ import { setImageRoots } from "../lib/imageRoots.js";
 import { Banner, JumpToLatest, LoadFailed, MessageBubble, NewChatHero, ProfileChatHeader } from "../primitives/index.js";
 import { ProfileMessage } from "../primitives/index.js";
 import {
-  Activity,
   AlpiSilhouette,
   CopyIcon as DSCopyIcon,
   Diamond,
@@ -95,7 +98,17 @@ export default function ChatPane({
   onOpenRecent,
   loadError = null,
   onRetryLoad,
+  inlineApprovals = null,
+  inlineClarifications = null,
+  onApprovalResolved,
+  onClarificationResolved,
 }) {
+  const inline = useMemo(() => ({
+    approvals: inlineApprovals ?? [],
+    clarifications: inlineClarifications ?? [],
+    onApprovalResolved,
+    onClarificationResolved,
+  }), [inlineApprovals, inlineClarifications, onApprovalResolved, onClarificationResolved]);
   const inProfile = view.kind === "profile";
   const inEmpty = !pendingTurn && view.kind === "empty";
   const sessionKey = inProfile ? `${view.profile}:${view.sessionId ?? "new"}` : "empty";
@@ -265,6 +278,7 @@ export default function ChatPane({
                 {hasProviders ? "Pick a model" : "Set up provider"}
               </Button>
             )}
+            <InlineRequests inline={inline} />
           </div>
         </div>
       </>
@@ -378,6 +392,7 @@ export default function ChatPane({
           onCloseSearch={onCloseSearch}
           loadError={loadError}
           onRetryLoad={onRetryLoad}
+          inline={inline}
         />
       </div>
       <ChatComposer
@@ -425,6 +440,7 @@ function SessionView({
   onCloseSearch,
   loadError,
   onRetryLoad,
+  inline,
 }) {
   return (
     <>
@@ -447,6 +463,7 @@ function SessionView({
         onCloseSearch={onCloseSearch}
         loadError={loadError}
         onRetryLoad={onRetryLoad}
+        inline={inline}
       />
     </>
   );
@@ -471,6 +488,7 @@ const Transcript = memo(function Transcript({
   onCloseSearch,
   loadError = null,
   onRetryLoad,
+  inline = null,
 }) {
   const allTurns = data?.turns ?? [];
   // session model, not current profile default: a model swap must not repaint history as routed
@@ -496,12 +514,20 @@ const Transcript = memo(function Transcript({
         tools: liveTail.tools,
         assistantPreview: liveTail.assistant,
         reasoningPreview: liveTail.reasoning,
+        reasoned_s: liveTail.reasonedSeconds ?? undefined,
+        reasoningDone: liveTail.reasoningDone,
       }
     : null;
   const renderTurns = tailTurn ? turns.slice(0, -1) : turns;
   const streamingTurn = pendingTurn ?? tailTurn;
+  const fresh = useFreshTurns(
+    `${connectionId ?? "local"}:${profileName}:${sessionId ?? "new"}`,
+    renderTurns.map((t, i) => t.at ?? turnBase + i),
+    { ready: data != null || showEmptyHint, streamKey: pendingTurn?.requestId ?? null },
+  );
+  const inlineBlock = <InlineRequests inline={inline} />;
 
-  const scrollRef = useStickyScroll([data, pendingTurn, tailTurn], streamingTurn?.requestId ?? (tailTurn ? `tail:${sessionId}` : null));
+  const scrollRef = useStickyScroll([data, pendingTurn, tailTurn, inline], streamingTurn?.requestId ?? (tailTurn ? `tail:${sessionId}` : null));
   const { farFromBottom, scrollToBottom } = useScrollProgress(scrollRef);
   const search = useTranscriptSearch(scrollRef, searchOpen);
   const closeSearch = () => {
@@ -527,6 +553,7 @@ const Transcript = memo(function Transcript({
         {profileModel && (
           <div className={styles.emptyModel}>{profileModel}</div>
         )}
+        {inlineBlock}
       </div>
     );
   }
@@ -536,13 +563,15 @@ const Transcript = memo(function Transcript({
       return (
         <div className={styles.loading}>
           <LoadFailed label="this conversation" error={loadError} onRetry={onRetryLoad} />
+          {inlineBlock}
         </div>
       );
     }
-    if (!showSkeleton) return <div className={styles.loading} />;
+    if (!showSkeleton) return <div className={styles.loading}>{inlineBlock}</div>;
     return (
       <div className={styles.loading}>
         <ChatLoadSkeleton />
+        {inlineBlock}
       </div>
     );
   }
@@ -576,8 +605,17 @@ const Transcript = memo(function Transcript({
               onRetryMessage={onRetryMessage}
               sessionId={sessionId}
               lastTurnInFlight={lastTurnInFlight && !tailTurn}
+              freshKeys={fresh.freshKeys}
             />
-            {streamingTurn && <PendingTurn turn={streamingTurn} accent={accent} profiles={profiles} />}
+            {streamingTurn ? (
+              <PendingTurn
+                turn={streamingTurn}
+                accent={accent}
+                profiles={profiles}
+                fresh={fresh.streamFresh}
+                inline={inlineBlock}
+              />
+            ) : inlineBlock}
           </div>
         </div>
         <JumpToLatest show={farFromBottom} onClick={scrollToBottom} />
@@ -599,12 +637,14 @@ const HistoryTurns = memo(function HistoryTurns({
   onRetryMessage,
   sessionId,
   lastTurnInFlight,
+  freshKeys,
 }) {
   return (
     <>
       {turns.map((t, i) => (
         <Turn
           key={t.at ?? turnBase + i}
+          fresh={freshKeys?.get(t.at ?? turnBase + i) === true}
           turn={t}
           connectionId={connectionId}
           baseModel={baseModel}
@@ -636,10 +676,12 @@ const Turn = memo(function Turn({
   onRewriteMessage,
   onRetryMessage,
   inFlight = false,
+  fresh = false,
 }) {
   const notify = useNotify();
   const allTools = turn.tools ?? [];
   const parts = turnParts(turn);
+  const timeline = useMemo(() => reasoningTimeline(turn.tools, turn.reasoning), [turn.tools, turn.reasoning]);
   const peerTool = peerReplyFrom(allTools);
   const lastAskUserAnswer = parts.askUsers[parts.askUsers.length - 1]?.result;
   // Only suppress the assistant message when it is the *exact* echo of the
@@ -670,19 +712,14 @@ const Turn = memo(function Turn({
     if (await copyText(text)) notify({ message: "Message copied", variant: "success" });
     else notify({ message: "Copy failed", variant: "error" });
   };
-  const routedModel =
-    turn.model && baseModel && turn.model !== baseModel ? turn.model : null;
   return (
-    <div className={styles.turn}>
+    <div className={`${styles.turn} ${fresh ? styles.turnEnter : ""}`} data-enter={fresh ? "" : undefined}>
       {turn.user && (
         <ProfileMessage
           role="user"
           accent={accent || "var(--accent)"}
           footer={
-            <>
-              <Mono className={`tnum ${styles.userActionTime}`}>
-                <RelativeTime ts={turn.at} />
-              </Mono>
+            <TurnFooter ts={turn.at} side="right">
               {onRewriteMessage && (
                 <Tip text="Edit message" side="up">
                   <IconBtn
@@ -705,7 +742,7 @@ const Turn = memo(function Turn({
                   <DSCopyIcon style={{ width: 12, height: 12 }} />
                 </IconBtn>
               </Tip>
-            </>
+            </TurnFooter>
           }
         >
           {turn.attachments?.length > 0 && (
@@ -726,7 +763,7 @@ const Turn = memo(function Turn({
             <AskUserAnswer key={`a-${a.tool_id ?? i}`} result={a.result} question={a.question} accent={accent} />
           ))}
           {parts.reasoning && (
-            <Reasoning text={parts.reasoning} seconds={parts.reasonedSeconds} flat />
+            <Reasoning text={parts.reasoning} seconds={parts.reasonedSeconds} timeline={timeline} />
           )}
         </div>
       )}
@@ -741,7 +778,7 @@ const Turn = memo(function Turn({
         <ProfileMessage
           role="assistant"
           footer={
-            <>
+            <TurnFooter ts={turn.ended_at || turn.at} meta={turnMeta(turn, baseModel)} side="left">
               <Tip text="Copy response" side="up">
                 <IconBtn
                   aria-label="Copy response"
@@ -780,30 +817,7 @@ const Turn = memo(function Turn({
                   )}
                 </IconBtn>
               </Tip>
-              <span className={styles.agentMeta}>
-                <Mono className="tnum"><RelativeTime ts={turn.ended_at || turn.at} /></Mono>
-                {turn.tokens != null && (
-                  <>
-                    <span className={styles.agentMetaSep}>·</span>
-                    <Mono className="tnum">{(turn.tokens / 1000).toFixed(1)}K</Mono>
-                  </>
-                )}
-                {turn.cost != null && (
-                  <>
-                    <span className={styles.agentMetaSep}>·</span>
-                    <Mono className="tnum">${turn.cost.toFixed(4)}</Mono>
-                  </>
-                )}
-                {routedModel && (
-                  <>
-                    <span className={styles.agentMetaSep}>·</span>
-                    <span className={styles.agentMetaModel} title={`Ran on ${routedModel}`}>
-                      <Mono>{routedModel.split("/").pop()}</Mono>
-                    </span>
-                  </>
-                )}
-              </span>
-            </>
+            </TurnFooter>
           }
         >
           <Markdown
@@ -906,39 +920,70 @@ function PeerReplyCard({ peerId, reply, accent }) {
   );
 }
 
-function previewForArgs(args) {
-  if (!args || typeof args !== "object") return "";
-  return Object.entries(args).slice(0, 2).map(([k, v]) => {
-    const raw = typeof v === "string" ? v : JSON.stringify(v);
-    const compact = raw.length > 60 ? raw.slice(0, 60) + "…" : raw;
-    return `${k}=${compact}`;
-  }).join(" ");
-}
-
-function renderPreview(str) {
-  const parts = String(str).split(/(\b\w+=)/);
-  return parts.map((p, i) =>
-    i % 2 === 1
-      ? <span key={i} className={styles.toolPreviewKey}>{p}</span>
-      : <span key={i} className={styles.toolPreviewVal}>{p}</span>
+function InlineRequests({ inline }) {
+  const approval = inline?.approvals?.[0] ?? null;
+  const clarification = inline?.clarifications?.[0] ?? null;
+  if (!approval && !clarification) return null;
+  return (
+    <div className={styles.inline}>
+      {approval && <InlineApproval request={approval} onResolved={inline.onApprovalResolved} />}
+      {clarification && <InlineClarification request={clarification} onResolved={inline.onClarificationResolved} />}
+    </div>
   );
 }
 
-function statusOf(t) {
-  return t.ok === null || t.ok === undefined ? "running" : t.ok ? "ok" : "fail";
+function TurnFooter({ ts, meta = null, side = "left", children }) {
+  const time = (
+    <Mono className={`tnum ${styles.footTime}`}>
+      <RelativeTime ts={ts} />
+    </Mono>
+  );
+  return (
+    <div className={styles.foot}>
+      {meta ? <Tip text={meta} side={side === "right" ? "up-r" : "up-l"}>{time}</Tip> : time}
+      <span className={styles.footActions}>{children}</span>
+    </div>
+  );
 }
 
-function PendingTurn({ turn, accent, profiles }) {
+function turnMeta(turn, baseModel) {
+  const usage = [
+    turn.tokens != null ? `${(turn.tokens / 1000).toFixed(1)}K tokens` : null,
+    turn.cost != null ? `$${turn.cost.toFixed(4)}` : null,
+  ].filter(Boolean).join(" · ");
+  const model = turn.model || baseModel || null;
+  const routed = turn.model && baseModel && turn.model !== baseModel ? turn.model : null;
+  const took = turn.ended_at && turn.at && turn.ended_at > turn.at ? fmtDuration(turn.ended_at - turn.at) : "";
+  if (!usage && !model && !took) return null;
+  return (
+    <span className={styles.meta}>
+      {usage && <span>{usage}</span>}
+      {(model || took) && (
+        <span className={styles.metaModel}>
+          {model && <span title={routed ? `Ran on ${routed}` : undefined}>{model.split("/").pop()}</span>}
+          {model && took && " · "}
+          {took}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function PendingTurn({ turn, accent, profiles, fresh = false, inline = null }) {
   const allTools = turn.tools ?? [];
   const parts = turnParts({
     tools: allTools,
     reasoning: turn.reasoningPreview,
     reasoned_s: turn.reasoned_s,
   });
-  const active = !turn.assistantPreview;
+  const answered = !!turn.assistantPreview;
+  const runningTool = allTools.some((t) => t.ok == null);
+  const closed = !!turn.error || !!turn.ended || !!turn.settling;
+  const thinking = !answered && !runningTool && !turn.reasoningDone && !closed;
+  const timeline = reasoningTimeline(allTools, turn.reasoningPreview);
   const peerTool = peerReplyFrom(allTools);
   return (
-    <div className={styles.turn}>
+    <div className={`${styles.turn} ${fresh ? styles.turnEnter : ""}`} data-enter={fresh ? "" : undefined}>
       {turn.user && (
         <ProfileMessage role="user" accent={accent || "var(--accent)"}>
           {turn.attachments?.length > 0 && (
@@ -947,7 +992,7 @@ function PendingTurn({ turn, accent, profiles }) {
           <Markdown as="div" source={turn.user} className="alpi-md" />
         </ProfileMessage>
       )}
-      {(parts.tools.length > 0 || parts.askUsers.length > 0 || parts.reasoning || active) && (
+      {(parts.tools.length > 0 || parts.askUsers.length > 0 || parts.reasoning || thinking) && (
         <div className={styles.steps}>
           {parts.tools.length > 0 && (
             <ToolModule
@@ -958,8 +1003,15 @@ function PendingTurn({ turn, accent, profiles }) {
           {parts.askUsers.map((a, i) => (
             <AskUserAnswer key={`a-${a.tool_id ?? i}`} result={a.result} question={a.question} accent={accent} />
           ))}
-          {(parts.reasoning || active) && (
-            <Reasoning text={parts.reasoning} seconds={parts.reasonedSeconds} streaming={active} flat />
+          {(parts.reasoning || thinking) && (
+            <Reasoning
+              text={parts.reasoning}
+              seconds={parts.reasonedSeconds}
+              streaming={thinking}
+              answered={answered}
+              timeline={timeline}
+              peek={lastLine(turn.reasoningPreview)}
+            />
           )}
         </div>
       )}
@@ -972,106 +1024,13 @@ function PendingTurn({ turn, accent, profiles }) {
       )}
       {turn.assistantPreview && !peerTool && (
         <ProfileMessage role="assistant">
-          <Markdown as="div" source={turn.assistantPreview} className="alpi-md" />
+          <StreamingMarkdown source={turn.assistantPreview} />
         </ProfileMessage>
       )}
       {turn.error && (
         <div className={styles.toolError}>{turn.error}</div>
       )}
+      {inline}
     </div>
   );
 }
-
-const ToolCard = memo(function ToolCard({ name, preview, ok, accent, primary = false }) {
-  const status = ok === null ? "running" : ok ? "ok" : "fail";
-  const iconColor =
-    status === "fail" ? "var(--c-danger)"
-      : primary ? (accent || "var(--ink-2)")
-        : "var(--ink-3)";
-  return (
-    <div className={`${styles.tool} ${styles[`tool_${status}`]}`}>
-      <Icon name="cpu" size={14} color={iconColor} className={styles.toolIcon} />
-      <span className={styles.toolName}>{name}</span>
-      {preview && (
-        <span className={styles.toolPreview}>{renderPreview(preview)}</span>
-      )}
-      {status === "running" && (
-        <Activity size="sm" tint={accent} className={styles.toolActivity} />
-      )}
-    </div>
-  );
-});
-
-const ToolModule = memo(function ToolModule({ tools, accent }) {
-  const [expanded, setExpanded] = useState(false);
-  if (!tools.length) return null;
-  const runningIdx = tools.findIndex((t) => t.ok == null);
-  const active = runningIdx >= 0;
-
-  if (tools.length === 1) {
-    const t = tools[0];
-    return (
-      <div className={styles.toolModule}>
-        <ToolCard
-          name={t.name}
-          preview={previewForArgs(t.args)}
-          ok={t.ok ?? null}
-          accent={accent}
-          primary
-        />
-      </div>
-    );
-  }
-
-  const primary = active ? tools[runningIdx] : null;
-  const bucket = active ? tools.filter((_, i) => i !== runningIdx) : tools;
-  const n = bucket.length;
-  const noun = pluralize(n, "tool call");
-  const failed = bucket.filter((t) => statusOf(t) === "fail").length;
-  const collapsedLabel = active ? `+${n} previous ${noun}` : `${n} ${noun}`;
-  const expandedLabel = active ? "Hide previous tool calls" : "Hide tool calls";
-  return (
-    <div className={styles.toolModule}>
-      <button
-        type="button"
-        className={styles.toolBucket}
-        onClick={() => setExpanded((v) => !v)}
-        aria-expanded={expanded}
-        aria-label={expanded ? expandedLabel : `Show ${collapsedLabel.replace(/^\+/, "")}`}
-      >
-        <CaretIcon
-          size={12}
-          className={`${styles.toolBucketChev} ${expanded ? styles.toolBucketChevOpen : ""}`}
-        />
-        <span className={styles.toolBucketLabel}>
-          {expanded ? expandedLabel : collapsedLabel}
-        </span>
-        {!expanded && failed > 0 && (
-          <span className={styles.toolBucketFailed}>
-            <Icon name="triangle-alert" size={13} color="var(--c-danger)" />
-            {failed} failed
-          </span>
-        )}
-      </button>
-      {expanded && bucket.map((t, i) => (
-        <div key={t.tool_id ?? `${t.name}:${i}`} className={styles.toolBucketChild}>
-          <ToolCard
-            name={t.name}
-            preview={previewForArgs(t.args)}
-            ok={t.ok ?? null}
-            accent={accent}
-          />
-        </div>
-      ))}
-      {primary && (
-        <ToolCard
-          name={primary.name}
-          preview={previewForArgs(primary.args)}
-          ok={primary.ok ?? null}
-          accent={accent}
-          primary
-        />
-      )}
-    </div>
-  );
-});

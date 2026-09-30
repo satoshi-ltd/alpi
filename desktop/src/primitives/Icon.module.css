@@ -13,7 +13,7 @@
 }
 
 .pulse {
-  animation: pulse 1.4s ease-in-out infinite;
+  animation: pulse var(--dur-loop) ease-in-out infinite;
 }
 
 @keyframes pulse {

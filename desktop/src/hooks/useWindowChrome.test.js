@@ -1,6 +1,7 @@
 import { renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useWindowChrome } from "./useWindowChrome.js";
+import { setSettingsDirty } from "../lib/settingsDirty.js";
 
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: () => ({
@@ -116,14 +117,53 @@ describe("useWindowChrome", () => {
     chrome.unmount();
   });
 
-  it("does not reserve command slash for a separate shortcuts modal", () => {
-    const chrome = mountWindowChrome({ activeProfileName: null });
+  it("opens the shortcuts sheet on ⌘/ and nothing else", () => {
+    const onToggleShortcuts = vi.fn();
+    const chrome = mountWindowChrome({ activeProfileName: null, onToggleShortcuts });
 
     press("/", { metaKey: true });
 
+    expect(onToggleShortcuts).toHaveBeenCalledTimes(1);
     expect(chrome.onToggleNotifications).not.toHaveBeenCalled();
     expect(chrome.onOpenHistory).not.toHaveBeenCalled();
     chrome.unmount();
+  });
+
+  it("toggles the activity panel on ⌘J and closes an open palette first", () => {
+    const onToggleActivity = vi.fn();
+    const onClosePalette = vi.fn();
+    const chrome = mountWindowChrome({ onToggleActivity, onClosePalette, paletteOpenRef: { current: true } });
+
+    press("j", { metaKey: true });
+
+    expect(onToggleActivity).toHaveBeenCalledTimes(1);
+    expect(onClosePalette).toHaveBeenCalledTimes(1);
+    chrome.unmount();
+  });
+
+  it("leaves ⌘J alone when the daemon has no activity verb", () => {
+    const chrome = mountWindowChrome({ onToggleActivity: null });
+    const ev = new KeyboardEvent("keydown", { key: "j", metaKey: true, cancelable: true });
+    window.dispatchEvent(ev);
+    expect(ev.defaultPrevented).toBe(false);
+    chrome.unmount();
+  });
+
+  it("starts a new session on ⌘N and keeps New profile on ⇧⌘N", () => {
+    const onNewProfile = vi.fn();
+    const settings = mountWindowChrome({ onNewProfile });
+    press("n", { metaKey: true });
+    expect(settings.setView).toHaveBeenCalledWith({ kind: "empty" });
+    expect(onNewProfile).not.toHaveBeenCalled();
+    press("N", { metaKey: true, shiftKey: true });
+    expect(onNewProfile).toHaveBeenCalledTimes(1);
+    settings.unmount();
+
+    const profile = mountWindowChrome({ viewRef: { current: { kind: "profile" } } });
+    press("n", { metaKey: true });
+    const updater = profile.setView.mock.calls[0][0];
+    expect(updater({ kind: "profile", profile: "doc", sessionId: "s1" })).toEqual({ kind: "profile", profile: "doc", sessionId: null });
+    profile.unmount();
   });
 
   it("opens contextual history when available", () => {
@@ -169,5 +209,43 @@ describe("useWindowChrome", () => {
 
     expect(chrome.onOpenHistory).not.toHaveBeenCalled();
     chrome.unmount();
+  });
+});
+
+describe("useWindowChrome on non-US layouts and dirty settings", () => {
+  it("opens the shortcuts sheet for ⇧⌘7 producing '/' and never jumps to slot 7", () => {
+    const onToggleShortcuts = vi.fn();
+    const onJumpToProfile = vi.fn();
+    const chrome = mountWindowChrome({ onToggleShortcuts, onJumpToProfile });
+    press("/", { metaKey: true, shiftKey: true, code: "Digit7" });
+    press("7", { metaKey: true, shiftKey: true, code: "Digit7" });
+    expect(onToggleShortcuts).toHaveBeenCalledTimes(1);
+    expect(onJumpToProfile).not.toHaveBeenCalled();
+    press("7", { metaKey: true, code: "Digit7" });
+    expect(onJumpToProfile).toHaveBeenCalledWith(6);
+    chrome.unmount();
+  });
+
+  it("falls back to the physical Slash key when the layout reports another character", () => {
+    const onToggleShortcuts = vi.fn();
+    const chrome = mountWindowChrome({ onToggleShortcuts });
+    press("-", { metaKey: true, code: "Slash" });
+    expect(onToggleShortcuts).toHaveBeenCalledTimes(1);
+    chrome.unmount();
+  });
+
+  it("keeps ⌘N from leaving settings while a draft is unsaved", () => {
+    const notifySpy = vi.fn();
+    window.notify = notifySpy;
+    setSettingsDirty("profile:doc:bio", true);
+    const chrome = mountWindowChrome();
+    press("n", { metaKey: true });
+    expect(chrome.setView).not.toHaveBeenCalled();
+    expect(notifySpy).toHaveBeenCalledTimes(1);
+    setSettingsDirty("profile:doc:bio", false);
+    press("n", { metaKey: true });
+    expect(chrome.setView).toHaveBeenCalledWith({ kind: "empty" });
+    chrome.unmount();
+    delete window.notify;
   });
 });

@@ -1,6 +1,7 @@
 import { renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { useCommands } from "./useCommands.js";
+import { SHORTCUTS, keyTokens } from "../lib/shortcuts.js";
 
 function renderCommands(overrides = {}) {
   const props = {
@@ -94,15 +95,15 @@ describe("useCommands", () => {
     expect(onOpenHistory).toHaveBeenCalledTimes(1);
   });
 
-  it("offers the recipient picker as New session without claiming ⌘N, which blanks the open profile instead", () => {
+  it("offers New session under ⌘N from any non-empty view", () => {
     const onNewChat = vi.fn();
-    const commands = renderCommands({ view: { kind: "profile" }, onNewChat });
+    const commands = renderCommands({ view: { kind: "workgroup" }, onNewChat });
     const command = commands.find((cmd) => cmd.id === "create:chat");
 
-    expect(command).toMatchObject({ group: "Chat", label: "New session" });
-    expect(command).not.toHaveProperty("hint");
+    expect(command).toMatchObject({ group: "Chat", label: "New session", hint: "⌘N" });
     command.action();
     expect(onNewChat).toHaveBeenCalledTimes(1);
+    expect(renderCommands({ view: { kind: "empty" }, onNewChat }).map((c) => c.id)).not.toContain("create:chat");
   });
 
   it("shows profile pause and refresh when available", () => {
@@ -253,11 +254,35 @@ describe("useCommands", () => {
     expect(commands.find((cmd) => cmd.id === "help:palette")).not.toHaveProperty("action");
   });
 
-  it("does not include a separate keyboard shortcuts command", () => {
-    const commands = renderCommands();
+  it("lists the shortcuts sheet and the activity panel when the app wires them", () => {
+    const onOpenShortcuts = vi.fn();
+    const onToggleActivity = vi.fn();
+    const commands = renderCommands({ onOpenShortcuts, onToggleActivity });
 
-    expect(commands.map((cmd) => cmd.id)).not.toContain("view:shortcuts");
-    expect(commands.map((cmd) => cmd.hint)).not.toContain("⌘/");
+    expect(commands.find((cmd) => cmd.id === "view:shortcuts")).toMatchObject({ label: "Keyboard shortcuts", hint: "⌘/" });
+    expect(commands.find((cmd) => cmd.id === "view:activity")).toMatchObject({ label: "Activity", hint: "⌘J" });
+    expect(renderCommands().map((cmd) => cmd.id)).not.toContain("view:activity");
+  });
+
+  it("takes every key hint from the shortcut registry", () => {
+    const commands = renderCommands({
+      view: { kind: "profile" },
+      activeProfileName: "doc",
+      historyKind: "sessions",
+      onOpenHistory: vi.fn(),
+      onNewChat: vi.fn(),
+      onOpenShortcuts: vi.fn(),
+      onToggleActivity: vi.fn(),
+      onToggleSidebarSearch: vi.fn(),
+      onToggleNotifications: vi.fn(),
+      onNewProfile: vi.fn(),
+      onNewWorkgroup: vi.fn(),
+      onOpenSettings: vi.fn(),
+    });
+    const registry = new Set(SHORTCUTS.map((s) => s.keys));
+    const keyHints = commands.map((c) => c.hint).filter((h) => keyTokens(h));
+    expect(keyHints.length).toBeGreaterThan(10);
+    expect(keyHints.filter((h) => !registry.has(h))).toEqual([]);
   });
 
   it("does not list dynamic jump targets as navigation commands", () => {

@@ -20,7 +20,7 @@
   min-width: 2.5ch;
   padding: 0 var(--space-4);
   text-align: right;
-  color: var(--ink-4);
+  color: var(--ink-3);
   background: var(--bg-pane);
   user-select: none;
   -webkit-user-select: none;
@@ -37,7 +37,7 @@
 .t_decorator { color: var(--accent); }
 .t_string { color: var(--c-success-text); }
 .t_number { color: var(--c-warning-text); }
-.t_comment { color: var(--ink-4); font-style: italic; }
+.t_comment { color: var(--ink-3); font-style: italic; }
 .t_def { color: var(--ink); font-weight: var(--fw-semibold); }
 .t_builtin { color: var(--ink-2); }
 
@@ -57,7 +57,7 @@
   min-width: 2.5ch;
   padding: var(--space-4);
   text-align: right;
-  color: var(--ink-4);
+  color: var(--ink-3);
   background: var(--bg-pane);
   white-space: pre;
   overflow: hidden;

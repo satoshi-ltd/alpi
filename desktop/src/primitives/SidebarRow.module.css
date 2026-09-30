@@ -19,6 +19,6 @@
 .mute {
   width: 11px;
   height: 11px;
-  color: var(--ink-4);
+  color: var(--ink-3);
   flex-shrink: 0;
 }

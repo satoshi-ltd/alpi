@@ -15,7 +15,6 @@ export default function SidebarRow({
   muted = false,
   state,
   ariaLabel,
-  title,
 }) {
   const isNeedsProvider = state === "needs-provider";
   const tinted = sel && colorWash && color;
@@ -36,7 +35,6 @@ export default function SidebarRow({
       className="ds-sb-row"
       data-state={state || undefined}
       aria-label={ariaLabel || undefined}
-      title={title || undefined}
       onClick={onClick}
       onContextMenu={onContextMenu}
       style={{

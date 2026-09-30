@@ -4,7 +4,7 @@ import { buttonStateCases } from "../../../common/button.fixtures.mjs";
 import styles from "./Button.module.css";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import Button from "./Button.jsx";
+import Button, { tipSideFor } from "./Button.jsx";
 
 describe("Button loading", () => {
   it("keeps its label, announces busy state and prevents duplicate submissions", () => {
@@ -69,5 +69,32 @@ describe("Button contract", () => {
   it("supports full width without adding layout styles to callers", () => {
     render(<Button fullWidth>Continue</Button>);
     expect(screen.getByRole("button")).toHaveClass(styles.fullWidth);
+  });
+});
+
+describe("Button tooltips and icon-only form", () => {
+  it("uses the icon-only form from iconOnly with children as the glyph", () => {
+    render(<Button iconOnly aria-label="Pin"><svg /></Button>);
+    expect(screen.getByRole("button", { name: "Pin" })).toHaveClass(styles.iconOnly);
+  });
+
+  it("shows title through the shared Tip and names icon-only buttons with it", () => {
+    render(<Button icon={<svg />} title="Copy pairing link" />);
+    const button = screen.getByRole("button", { name: "Copy pairing link" });
+    expect(button.closest(".ds-tip")).not.toBeNull();
+    expect(button).not.toHaveAttribute("title");
+  });
+
+  it("drops the tooltip while disabled", () => {
+    render(<Button icon={<svg />} title="Copy" disabled />);
+    expect(screen.getByRole("button", { name: "Copy" }).closest(".ds-tip")).toBeNull();
+  });
+
+  it("maps the legacy tooltip placement onto Tip sides", () => {
+    expect(tipSideFor("down", "center")).toBe("down");
+    expect(tipSideFor("down", "end")).toBe("r");
+    expect(tipSideFor("up", "start")).toBe("up-l");
+    expect(tipSideFor("up", "end")).toBe("up-r");
+    expect(tipSideFor("left")).toBe("l");
   });
 });

@@ -125,7 +125,7 @@ describe("ProfileDetail", () => {
       />,
     );
 
-    expect(screen.getAllByText("Service")).toHaveLength(1);
+    expect(screen.getAllByRole("heading", { name: "Service" })).toHaveLength(1);
     expect(screen.queryByText("Client access")).toBeNull();
     expect(screen.getByText("client address")).toBeInTheDocument();
     expect(screen.getByText("client name")).toBeInTheDocument();
@@ -262,5 +262,28 @@ describe("ProfileDetail — concurrency gating", () => {
     );
     expect(screen.getByText("concurrency")).toBeInTheDocument();
     expect(screen.getByText("pipeline limit")).toBeInTheDocument();
+  });
+});
+
+describe("ProfileDetail unsaved state", () => {
+  it("reports an unsaved identity draft and saves a pending debounced field on unmount", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const { hasDirtySettings } = await import("../../lib/settingsDirty.js");
+    const { waitFor } = await import("@testing-library/react");
+    invoke.mockImplementation(async (cmd) => (cmd === "draft_identity" ? "drafted bio" : null));
+    const view = render(
+      <ProfileDetail profile={{ name: "doc", model: "a/b" }} profiles={[]} activeConnection={{ id: "local", kind: "local" }} />,
+    );
+    expect(hasDirtySettings()).toBe(false);
+    fireEvent.change(screen.getByPlaceholderText("public identity — visible to peers"), { target: { value: "typed" } });
+    expect(hasDirtySettings()).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Draft" }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("draft_identity", { profile: "doc" }));
+    await waitFor(() => expect(screen.getByPlaceholderText("public identity — visible to peers").value).toBe("drafted bio"));
+    expect(invoke).not.toHaveBeenCalledWith("set_config_field", expect.anything());
+    view.unmount();
+    expect(invoke).toHaveBeenCalledWith("set_config_field", expect.objectContaining({ profile: "doc", value: "drafted bio" }));
+    expect(hasDirtySettings()).toBe(false);
+    invoke.mockReset();
   });
 });

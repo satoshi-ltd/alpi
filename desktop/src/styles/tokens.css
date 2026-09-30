@@ -16,6 +16,13 @@
   --fs-display: 28px;
   --fs-hero:    56px;
 
+  --text-meta:    11px;
+  --text-ui:      13px;
+  --text-chat:    15px;
+  --text-title:   18px;
+  --text-display: 28px;
+  --text-hero:    56px;
+
   --pop-xs:     220px;
   --pop-sm:     260px;
   --pop-md:     340px;
@@ -87,6 +94,9 @@
   --glyph-size: 8px;
   --glyph-size-md: 14px;
 
+  --icon-sm: 14px;
+  --icon-md: 16px;
+
   --ctrl-2xs: 18px;
   --ctrl-xs: 22px;
   --ctrl-sm: 28px;
@@ -117,7 +127,9 @@
 
   --ease: cubic-bezier(.2, .7, .2, 1);
   --dur-1: 120ms;
-  --dur-2: 180ms;
+  --dur-2: 200ms;
+  --dur-loop: 1.4s;
+  --dur-spin: 0.9s;
   --dur-3: 260ms;
   --dur-4: 360ms;
 

@@ -31,7 +31,7 @@
 }
 .newLabel {
   flex: 1;
-  font-size: var(--fs-base);
+  font-size: var(--text-ui);
   font-weight: var(--fw-semibold);
 }
 .kbd {
@@ -48,8 +48,8 @@
 .empty {
   padding: var(--space-7);
   text-align: center;
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-family: var(--font-sans);
+  font-size: var(--text-meta);
   color: var(--ink-3);
 }
 
@@ -80,7 +80,7 @@
 
 .preview {
   flex: 1;
-  font-size: var(--fs-base);
+  font-size: var(--text-ui);
   color: var(--ink);
   white-space: nowrap;
   overflow: hidden;
@@ -97,6 +97,6 @@
 }
 
 .popCount {
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   color: var(--ink-3);
 }

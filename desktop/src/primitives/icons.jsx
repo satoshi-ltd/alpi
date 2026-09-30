@@ -122,7 +122,7 @@ export function StatusIcon({ kind, className = "", style }) {
     return (
       <Pause
         className={className}
-        style={{ width: 11, height: 11, strokeWidth: 2, color: "var(--ink-4)", ...style }}
+        style={{ width: 11, height: 11, strokeWidth: 2, color: "var(--ink-3)", ...style }}
       />
     );
   }

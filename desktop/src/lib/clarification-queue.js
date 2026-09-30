@@ -9,6 +9,7 @@ export function normalizeRequest(req) {
   return {
     request_id: req.request_id,
     profile: req.profile || null,
+    session_id: req.session_id || null,
     question: req.question || "",
     choices: choices
       .filter((c) => c && typeof c.label === "string" && c.label.trim())

@@ -7,5 +7,5 @@
 
 .help {
   color: var(--ink-3);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
 }

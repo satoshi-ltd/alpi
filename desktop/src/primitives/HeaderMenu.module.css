@@ -8,18 +8,13 @@
 }
 
 .item {
-  display: flex;
-  align-items: center;
+  justify-content: flex-start;
   gap: var(--space-4);
-  width: 100%;
+  height: auto;
   padding: 10px 14px;
-  border: 0;
-  background: transparent;
-  border-radius: var(--r-md);
-  cursor: pointer;
   text-align: left;
   color: var(--ink);
-  font-size: var(--fs-base);
+  font-weight: var(--fw-regular);
 }
 .item:hover {
   background: var(--hover);
@@ -35,12 +30,7 @@
 }
 
 .statePill {
-  font-size: var(--fs-xs);
-}
-
-.kbd {
-  display: inline-flex;
-  gap: var(--space-1);
+  font-size: var(--text-meta);
 }
 
 .sep {

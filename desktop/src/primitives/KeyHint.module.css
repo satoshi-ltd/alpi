@@ -1,0 +1,13 @@
+.keys {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-tight);
+  flex-shrink: 0;
+}
+
+.text {
+  font-size: var(--text-meta);
+  color: var(--ink-3);
+  white-space: nowrap;
+  flex-shrink: 0;
+}

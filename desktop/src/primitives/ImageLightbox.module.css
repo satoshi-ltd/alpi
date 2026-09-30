@@ -11,7 +11,7 @@
   background: rgba(0, 0, 0, 0.55);
   backdrop-filter: blur(10px) saturate(0.9);
   -webkit-backdrop-filter: blur(10px) saturate(0.9);
-  animation: ds-fade-in var(--dur-2) var(--ease) both;
+  animation: lightboxIn var(--dur-2) var(--ease) both;
 }
 
 .actions {
@@ -50,4 +50,9 @@
   font-size: var(--fs-sm);
   color: rgba(255, 255, 255, 0.82);
   text-align: center;
+}
+
+@keyframes lightboxIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }

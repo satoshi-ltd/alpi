@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { act, render, fireEvent } from "@testing-library/react";
+import { act, render, fireEvent, waitFor } from "@testing-library/react";
 import { Scrim, ConnectionPanel } from "./Panels.jsx";
 
 function esc() {
@@ -104,7 +104,7 @@ describe("ConnectionPanel rename", () => {
     alpi_version: "0.15.0",
   };
 
-  it("Forget asks first: cancelling keeps the row, confirming forgets it, and neither picks the row", () => {
+  it("Forget asks first: cancelling keeps the row, confirming forgets it, and neither picks the row", async () => {
     const onPick = vi.fn();
     const onForget = vi.fn();
     const utils = render(
@@ -115,23 +115,23 @@ describe("ConnectionPanel rename", () => {
     expect(utils.getByText("Forget casa?")).toBeTruthy();
     expect(onForget).not.toHaveBeenCalled();
     fireEvent.click(utils.getByRole("button", { name: "Cancel" }));
-    expect(utils.queryByText("Forget casa?")).toBeNull();
+    await waitFor(() => expect(utils.queryByText("Forget casa?")).toBeNull());
     expect(onForget).not.toHaveBeenCalled();
     fireEvent.click(utils.getByLabelText("Forget"));
     fireEvent.click(utils.getByRole("button", { name: "Forget connection" }));
     expect(onForget).toHaveBeenCalledWith(remote);
-    expect(utils.queryByText("Forget casa?")).toBeNull();
+    await waitFor(() => expect(utils.queryByText("Forget casa?")).toBeNull());
     expect(onPick).not.toHaveBeenCalled();
   });
 
-  it("Escape closes the Forget confirm without closing the panel", () => {
+  it("Escape closes the Forget confirm without closing the panel", async () => {
     const onClose = vi.fn();
     const utils = render(
       <ConnectionPanel open onClose={onClose} activeId="local" connections={[remote]} onForget={() => {}} />,
     );
     fireEvent.click(utils.getByLabelText("Forget"));
     act(() => esc());
-    expect(utils.queryByText("Forget casa?")).toBeNull();
+    await waitFor(() => expect(utils.queryByText("Forget casa?")).toBeNull());
     expect(onClose).not.toHaveBeenCalled();
   });
 

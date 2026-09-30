@@ -50,7 +50,7 @@
 
 .headHelp {
   margin: var(--space-2) 0 0;
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   color: var(--ink-3);
   line-height: var(--lh-normal);
 }
@@ -66,9 +66,9 @@
 .empty {
   padding: var(--space-7) var(--space-5);
   text-align: center;
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   color: var(--ink-3);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
 }
 
 .row {
@@ -90,7 +90,7 @@
 
 .glyphSlot {
   width: 16px;
-  height: calc(var(--fs-base) * var(--lh-cozy));
+  height: calc(var(--text-ui) * var(--lh-cozy));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -106,7 +106,7 @@
 }
 
 .title {
-  font-size: var(--fs-base);
+  font-size: var(--text-ui);
   font-weight: var(--fw-semibold);
   color: var(--ink);
   line-height: var(--lh-cozy);
@@ -120,10 +120,10 @@
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   color: var(--ink-3);
 }
 
 .metaSep {
-  color: var(--ink-4);
+  color: var(--ink-3);
 }

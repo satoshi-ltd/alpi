@@ -74,7 +74,7 @@ describe("ChatPane — consolidated tool module and reasoning", () => {
     const text = container.textContent;
     expect(text).toContain("2 tool calls");
     const bucketIdx = text.indexOf("2 tool calls");
-    const reasoningIdx = text.indexOf("thinking · 5s");
+    const reasoningIdx = text.indexOf("Thought for 5s");
     expect(bucketIdx).toBeGreaterThanOrEqual(0);
     expect(reasoningIdx).toBeGreaterThan(bucketIdx);
   });

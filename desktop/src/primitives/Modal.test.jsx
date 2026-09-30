@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { render, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import Modal from "./Modal.jsx";
 
 describe("Modal focus return", () => {
@@ -32,5 +32,42 @@ describe("Modal content wrapper", () => {
     const b = getByText("beta");
     expect(a.parentElement).toBe(b.parentElement);
     expect(a.parentElement.className).toMatch(/content/);
+  });
+});
+
+function animationEnd(el) {
+  act(() => {
+    for (const type of ["animationend", "webkitAnimationEnd"]) el.dispatchEvent(new Event(type, { bubbles: true }));
+  });
+}
+
+describe("Modal exit", () => {
+  it("fades out before unmounting when a controlled modal closes", async () => {
+    const { rerender } = render(<Modal open title="Bye"><p>body</p></Modal>);
+    rerender(<Modal open={false} title="Bye"><p>body</p></Modal>);
+    const backdrop = document.querySelector("[data-closing]");
+    expect(backdrop).not.toBeNull();
+    expect(backdrop.getAttribute("aria-hidden")).toBe("true");
+    expect(backdrop.textContent).toContain("body");
+    await waitFor(() => expect(document.querySelector("[data-closing]")).toBeNull());
+    expect(document.body.textContent).not.toContain("body");
+  });
+
+  it("unmounts as soon as the dialog's own exit animation ends", () => {
+    const { rerender } = render(<Modal open aria-label="x"><p>inner</p></Modal>);
+    const dialog = document.querySelector('[role="dialog"]');
+    rerender(<Modal open={false} aria-label="x"><p>inner</p></Modal>);
+    animationEnd(dialog.querySelector("p"));
+    expect(document.querySelector("[data-closing]")).not.toBeNull();
+    animationEnd(dialog);
+    expect(document.querySelector("[data-closing]")).toBeNull();
+  });
+
+  it("reopens cleanly when opened again mid-exit", () => {
+    const { rerender } = render(<Modal open aria-label="x">a</Modal>);
+    rerender(<Modal open={false} aria-label="x">a</Modal>);
+    rerender(<Modal open aria-label="x">b</Modal>);
+    expect(document.querySelector("[data-closing]")).toBeNull();
+    expect(screen.getByRole("dialog").textContent).toContain("b");
   });
 });

@@ -6,7 +6,7 @@
   background: var(--hover);
   border: .5px solid var(--line);
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   font-weight: var(--fw-medium);
   line-height: var(--lh-tight);
   white-space: nowrap;

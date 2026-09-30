@@ -60,12 +60,12 @@
 
 .label {
   flex: 1;
-  font-size: var(--fs-base);
+  font-size: var(--text-ui);
 }
 
 .shortcut {
-  font-size: var(--fs-xs);
-  color: var(--ink-4);
+  font-size: var(--text-meta);
+  color: var(--ink-3);
   flex-shrink: 0;
 }
 

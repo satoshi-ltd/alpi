@@ -3,10 +3,11 @@ import ConfirmDelete from "./ConfirmDelete.jsx";
 import Icon from "./Icon.jsx";
 import IconBtn from "./IconBtn.jsx";
 import { OverlayScope, useOverlay } from "../hooks/useOverlay.js";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { I } from "./icons.jsx";
-import Tip from "./Tip.jsx";
+import KeyHint from "./KeyHint.jsx";
+import { fuzzyMatch, splitByRanges } from "../lib/fuzzy.js";
 import styles from "./Panels.module.css";
 
 export function Scrim({ onClose, children, align = "flex-start", top = 96, dismissable = true }) {
@@ -101,11 +102,9 @@ export function ConnectionPanel({
             </span>
           </div>
           {!locked && (
-            <Tip text="Close" side="r">
-              <button type="button" className="iconbtn" onClick={onClose}>
-                <I.X />
-              </button>
-            </Tip>
+            <IconBtn tip="Close" tipSide="r" onClick={onClose}>
+              <I.X />
+            </IconBtn>
           )}
         </div>
 
@@ -258,36 +257,64 @@ export function ConnectionPanel({
   );
 }
 
-export function Palette({ open, onClose, groups = [] }) {
+export function paletteRows(groups, query) {
+  const q = query.trim();
+  const out = [];
+  for (const g of groups) {
+    if (g.searchOnly && !q) continue;
+    let items = g.items.map((it) => {
+      if (!q) return { ...it, ranges: [], score: 0 };
+      const hit = fuzzyMatch(it.label, q);
+      if (hit) return { ...it, ranges: hit.ranges, score: hit.score };
+      const extra = (it.keywords || []).map((k) => fuzzyMatch(k, q)).filter(Boolean);
+      if (!extra.length) return null;
+      return { ...it, ranges: [], score: Math.max(...extra.map((x) => x.score)) - 400 };
+    }).filter(Boolean);
+    if (q) items.sort((a, b) => b.score - a.score);
+    if (g.limit) items = items.slice(0, g.limit);
+    if (!items.length) continue;
+    out.push({ kind: "header", label: g.label });
+    for (const it of items) out.push({ kind: "item", ...it });
+  }
+  return out;
+}
+
+function Highlighted({ text, ranges }) {
+  return splitByRanges(text, ranges).map((part, i) =>
+    part.hit ? <mark key={i} className={styles.paletteHit}>{part.text}</mark> : part.text,
+  );
+}
+
+export function Palette({ open, onClose, groups = [], placeholder = "Search profiles, sessions and commands…" }) {
   const [q, setQ] = useState("");
-  const [idx, setIdx] = useState(0);
+  const [selectedId, setSelectedId] = useState(null);
   const inputRef = useRef(null);
+  const baseId = useId();
 
   useEffect(() => {
     if (open) {
       setQ("");
-      setIdx(0);
+      setSelectedId(null);
       requestAnimationFrame(() => inputRef.current?.focus());
     }
   }, [open]);
 
-  const flat = useMemo(() => {
-    const out = [];
-    groups.forEach((g) => {
-      const filtered = q
-        ? g.items.filter((it) =>
-            it.label.toLowerCase().includes(q.toLowerCase()),
-          )
-        : g.items;
-      if (filtered.length) {
-        out.push({ kind: "header", label: g.label });
-        filtered.forEach((it) => out.push({ kind: "item", ...it }));
-      }
-    });
-    return out;
-  }, [q, groups]);
-  const items = flat.filter((x) => x.kind === "item");
-  const actionableItems = items.filter((x) => x.onSelect);
+  const flat = useMemo(() => paletteRows(groups, q), [q, groups]);
+  const actionableItems = useMemo(() => flat.filter((x) => x.kind === "item" && x.onSelect), [flat]);
+  const found = selectedId == null ? -1 : actionableItems.findIndex((it) => it.id === selectedId);
+  const idx = found >= 0 ? found : 0;
+  const setIdx = (next) => {
+    const i = typeof next === "function" ? next(idx) : next;
+    setSelectedId(actionableItems[i]?.id ?? null);
+  };
+  const optionId = (i) => `${baseId}-opt-${i}`;
+  const activeId = actionableItems[idx] ? optionId(idx) : undefined;
+
+  useEffect(() => {
+    if (!open || !activeId) return;
+    const el = document.getElementById(activeId);
+    if (el && typeof el.scrollIntoView === "function") el.scrollIntoView({ block: "nearest" });
+  }, [open, activeId]);
 
   function run(it) {
     if (!it?.onSelect) return;
@@ -309,23 +336,31 @@ export function Palette({ open, onClose, groups = [] }) {
   }
 
   if (!open) return null;
+  const listId = `${baseId}-list`;
   return (
     <Scrim onClose={onClose} top={120}>
-      <PanelShell width={520} maxHeight="60vh">
+      <PanelShell width={560} maxHeight="60vh">
         <div className={styles.paletteInputWrap}>
+          <I.Search className={styles.paletteSearchIcon} />
           <input
             ref={inputRef}
             value={q}
             onChange={(e) => {
               setQ(e.target.value);
-              setIdx(0);
+              setSelectedId(null);
             }}
             onKeyDown={onKey}
-            placeholder="Type a command…"
+            placeholder={placeholder}
             className={styles.paletteInput}
+            role="combobox"
+            aria-expanded="true"
+            aria-controls={listId}
+            aria-activedescendant={activeId}
+            aria-autocomplete="list"
+            aria-label="Command palette"
           />
         </div>
-        <div className={`scroll ${styles.paletteBody}`}>
+        <div id={listId} role="listbox" aria-label="Results" className={`scroll ${styles.paletteBody}`}>
           {flat.length === 0 ? (
             <div className={`col center ${styles.paletteEmpty}`}>
               No matches
@@ -336,6 +371,7 @@ export function Palette({ open, onClose, groups = [] }) {
                 return (
                   <div
                     key={`h-${row.label}`}
+                    role="presentation"
                     className={`eyebrow ${styles.paletteHeader}`}
                   >
                     {row.label}
@@ -346,30 +382,28 @@ export function Palette({ open, onClose, groups = [] }) {
               const selected = itemIndex >= 0 && itemIndex === idx;
               const actionable = Boolean(row.onSelect);
               return (
-                <button
+                <div
                   key={row.id}
-                  type="button"
+                  id={itemIndex >= 0 ? optionId(itemIndex) : undefined}
+                  role="option"
+                  aria-selected={selected}
+                  aria-disabled={!actionable || undefined}
                   onClick={() => run(row)}
-                  onMouseEnter={() => {
-                    if (itemIndex >= 0) setIdx(itemIndex);
+                  onMouseMove={() => {
+                    if (itemIndex >= 0 && itemIndex !== idx) setIdx(itemIndex);
                   }}
-                  aria-disabled={!actionable}
                   className={`row ${styles.paletteItem} ${selected ? styles.paletteItemSelected : ""} ${actionable ? "" : styles.paletteItemStatic}`}
                 >
                   <span className={styles.paletteGlyph}>
                     {row.glyph || <I.ChevRight />}
                   </span>
-                  <span className={styles.paletteLabel}>{row.label}</span>
-                  {row.shortcut && (
-                    <span className={styles.paletteShortcut}>
-                      {row.shortcut.split("").map((ch, ci) => (
-                        <span key={ci} className="kbd">
-                          {ch}
-                        </span>
-                      ))}
-                    </span>
-                  )}
-                </button>
+                  <span className={styles.paletteLabel}>
+                    <Highlighted text={row.label} ranges={row.ranges} />
+                  </span>
+                  {row.sub ? <span className={styles.paletteSub}>{row.sub}</span> : null}
+                  <span className={styles.paletteSpacer} />
+                  <KeyHint hint={row.shortcut} />
+                </div>
               );
             })
           )}

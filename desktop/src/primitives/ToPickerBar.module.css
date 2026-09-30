@@ -24,18 +24,18 @@
 }
 
 .handle {
-  font-size: var(--fs-base);
+  font-size: var(--text-ui);
   color: var(--ink);
   font-weight: var(--fw-semibold);
 }
 
 .sep {
-  color: var(--ink-4);
+  color: var(--ink-3);
 }
 
 .model {
   color: var(--ink-3);
-  font-size: var(--fs-base);
+  font-size: var(--text-ui);
 }
 
 .spacer {

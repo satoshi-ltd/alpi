@@ -18,14 +18,14 @@
   align-items: center;
   gap: 0;
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   font-weight: var(--fw-medium);
   color: var(--ink-3);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
-.eyebrow .sep { color: var(--ink-4); }
+.eyebrow .sep { color: var(--ink-3); }
 
 .eyebrow .diamondWrap {
   display: inline-flex;
@@ -48,7 +48,7 @@
 
 .title {
   font-family: var(--font-sans);
-  font-size: var(--fs-lg);
+  font-size: var(--text-chat);
   font-weight: var(--fw-semibold);
   color: var(--ink);
   line-height: var(--lh-cozy);
@@ -56,7 +56,7 @@
 
 .command {
   font-family: var(--font-mono);
-  font-size: var(--fs-lg);
+  font-size: var(--text-chat);
   color: var(--ink);
   background: var(--bg-input);
   border: 0.5px solid var(--line-2);
@@ -71,7 +71,7 @@
 
 .cwd {
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   color: var(--ink-3);
   margin-top: var(--space-1);
 }
@@ -104,21 +104,21 @@
 .row:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .rowLabel {
-  font-size: var(--fs-lg);
+  font-size: var(--text-chat);
   font-weight: var(--fw-semibold);
   color: var(--ink);
   line-height: var(--lh-cozy);
 }
 
 .rowHint {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--fs-sm);
   color: var(--ink-3);
 }
 
 .error {
   margin-top: var(--space-3);
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-family: var(--font-sans);
+  font-size: var(--text-meta);
   color: var(--c-danger-text);
 }

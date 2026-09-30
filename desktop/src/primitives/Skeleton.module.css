@@ -7,7 +7,7 @@
     var(--hover) 100%
   );
   background-size: 200% 100%;
-  animation: shimmer 1.4s ease-in-out infinite;
+  animation: shimmer var(--dur-loop) ease-in-out infinite;
   border-radius: var(--r-xs);
   vertical-align: middle;
 }
@@ -34,7 +34,7 @@
     var(--hover) 70%
   );
   background-size: 220% 100%;
-  animation: skShimmer 1.5s ease-in-out infinite;
+  animation: skShimmer var(--dur-loop) ease-in-out infinite;
 }
 
 .skLineLg {

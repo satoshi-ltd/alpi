@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import Button from "../../primitives/Button.jsx";
+import ActionLink from "../../primitives/ActionLink.jsx";
 import Chip from "../../primitives/Chip.jsx";
 import Textarea from "../../primitives/Textarea.jsx";
 import { useNotify } from "../../primitives/Notification.jsx";
@@ -9,6 +10,7 @@ import { useProfileSnapshot } from "../../hooks/useProfileSnapshot.js";
 import { useUsageDaily } from "../../hooks/useUsage.js";
 import { Section, Row, CopyButton } from "./primitives.jsx";
 import Usage from "./Usage.jsx";
+import SettingsNav from "./SettingsNav.jsx";
 import {
   CopyIcon,
   MeterChip,
@@ -58,6 +60,7 @@ import {
 } from "./fields/maintenance.jsx";
 import styles from "./Settings.module.css";
 import { copyText } from "../../lib/clipboard.js";
+import { useSettingsDirty } from "../../lib/settingsDirty.js";
 import { emptyLine } from "../../../../common/emptyCopy.mjs";
 
 // storage stays out: its os.walk dominates snapshot latency, so StorageField fetches it independently.
@@ -129,7 +132,9 @@ export default function ProfileDetail({
   }, [workgroupsPre]);
 
   const notify = useNotify();
+  const bodyRef = useRef(null);
   const timersRef = useRef({});
+  const pendingRef = useRef({});
   const prevBaselineRef = useRef(baseline);
   const profileKey = `${profile.name}|${activeConnection?.id ?? ""}`;
   const prevProfileKeyRef = useRef(profileKey);
@@ -146,12 +151,17 @@ export default function ProfileDetail({
     prevProfileKeyRef.current = profileKey;
   }, [baseline, profileKey]);
 
-  useEffect(() => {
+  const flushRef = useRef(null);
+  flushRef.current = () => {
     const timers = timersRef.current;
-    return () => {
-      for (const t of Object.values(timers)) clearTimeout(t);
-    };
-  }, []);
+    for (const [field, t] of Object.entries(timers)) {
+      clearTimeout(t);
+      if (field in pendingRef.current) persist(field, pendingRef.current[field]);
+    }
+    timersRef.current = {};
+    pendingRef.current = {};
+  };
+  useEffect(() => () => flushRef.current?.(), []);
 
   function persist(field, value) {
     invoke("set_config_field", {
@@ -173,13 +183,19 @@ export default function ProfileDetail({
     setDraft((d) => ({ ...d, [field]: value }));
     const timers = timersRef.current;
     if (timers[field]) clearTimeout(timers[field]);
-    timers[field] = setTimeout(() => persist(field, value), 600);
+    pendingRef.current[field] = value;
+    timers[field] = setTimeout(() => {
+      delete timers[field];
+      delete pendingRef.current[field];
+      persist(field, value);
+    }, 600);
   }
 
   function updateBio(value) {
     setDraft((d) => ({ ...d, bio: value }));
   }
   const bioDirty = draft.bio !== baseline.bio;
+  useSettingsDirty(`profile:${profileKey}:bio`, bioDirty);
   function discardBio() {
     setDraft((d) => ({ ...d, bio: baseline.bio }));
   }
@@ -263,7 +279,8 @@ export default function ProfileDetail({
           label="Fetching latest settings"
         />
       </div>
-      <div className={styles.body}>
+      <div ref={bodyRef} className={styles.body}>
+        <SettingsNav scrollRef={bodyRef}>
         <Section title="Overview">
           <Row label="home">
             <span className={styles.inlineRow}>
@@ -400,9 +417,8 @@ export default function ProfileDetail({
                 <code className={`${styles.codeChip} ${styles.truncate}`}>
                   {profile.pubkey_b64}
                 </code>
-                <button
-                  type="button"
-                  className={`alink ${styles.copyBtn}`}
+                <ActionLink
+                  className={styles.copyBtn}
                   onClick={async () => {
                     if (await copyText(profile.pubkey_b64)) {
                       notify({ message: "Pubkey copied", variant: "success" });
@@ -416,7 +432,7 @@ export default function ProfileDetail({
                 >
                   <CopyIcon style={{ width: 12, height: 12 }} />{" "}
                   Copy
-                </button>
+                </ActionLink>
               </span>
             </Row>
           )}
@@ -432,20 +448,16 @@ export default function ProfileDetail({
               {bioDirty && (
                 <div className={styles.draftRow}>
                   <span className={styles.draftTag}>draft</span>
-                  <button
-                    type="button"
-                    className="alink"
+                  <ActionLink
                     onClick={discardBio}
                   >
                     Discard
-                  </button>
-                  <button
-                    type="button"
-                    className="alink"
+                  </ActionLink>
+                  <ActionLink
                     onClick={saveBio}
                   >
                     Save
-                  </button>
+                  </ActionLink>
                   <span style={{ flex: 1 }} />
                   <Button
                     size="sm"
@@ -565,6 +577,7 @@ export default function ProfileDetail({
             </Row>
           </Section>
         )}
+        </SettingsNav>
       </div>
     </main>
   );

@@ -29,6 +29,21 @@ describe("reconstructFromEvents", () => {
     expect(r.assistant).toBe("");
   });
 
+  it("prefers the daemon's timing fields and sums reasoning_done seconds", () => {
+    const r = reconstructFromEvents([
+      ev("reasoning_delta", { text: "hmm" }, 1),
+      ev("reasoning_done", { seconds: 2 }, 2),
+      ev("tool_start", { tool_id: "t1", name: "grep", started_at: 50.5 }, 3, 100),
+      ev("tool_end", { tool_id: "t1", ok: true, output: "", duration_s: 1.2 }, 4, 104),
+      ev("reasoning_delta", { text: "more" }, 5),
+      ev("reasoning_done", { seconds: 1.5 }, 6),
+    ]);
+    expect(r.tools[0].started_at).toBe(50.5);
+    expect(r.tools[0].duration_s).toBe(1.2);
+    expect(r.reasonedSeconds).toBe(3.5);
+    expect(r.reasoningDone).toBe(true);
+  });
+
   it("flags done and carries the session id", () => {
     const r = reconstructFromEvents([ev("done", { session_id: "s9" }, 1)]);
     expect(r.sawDone).toBe(true);

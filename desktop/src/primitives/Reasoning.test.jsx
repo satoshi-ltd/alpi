@@ -22,19 +22,26 @@ describe("Reasoning", () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it("streaming renders the thinking header even before any trace text", () => {
+  it("streaming shows the Thinking label even before any trace text", () => {
     render(<Reasoning text="" streaming />);
-    expect(screen.getByRole("button").textContent).toContain("thinking");
+    expect(screen.getByRole("button").textContent).toContain("Thinking…");
   });
 
   it("streaming peeks the latest line while collapsed and expands to the full trace", () => {
     render(<Reasoning text={"line one\nline two"} streaming />);
     const btn = screen.getByRole("button");
-    expect(btn.textContent).toContain("thinking");
+    expect(btn.textContent).toContain("Thinking…");
     expect(screen.getByText("line two")).toBeTruthy();
     expect(screen.queryByText("line one")).toBeNull();
     fireEvent.click(btn);
     expect(screen.getByText("line one")).toBeTruthy();
+  });
+
+  it("the open live trace is readable by assistive tech and scrolls instead of clipping", () => {
+    const { container } = render(<Reasoning text={"a\nb"} streaming />);
+    fireEvent.click(screen.getByRole("button"));
+    expect(container.querySelector("[aria-hidden='true'] p")).toBeNull();
+    expect(screen.getByText("a").tagName).toBe("P");
   });
 
   it("finished is collapsed, labelled, and expands on click", () => {
@@ -51,5 +58,29 @@ describe("Reasoning", () => {
     const btn = screen.getByRole("button");
     expect(btn.textContent).toContain("Thought");
     expect(btn.textContent).not.toContain("0s");
+  });
+
+  it("collapses to the Thought row when reasoning ends, keeping the open state until the answer lands", () => {
+    const { rerender } = render(<Reasoning text="plan" streaming />);
+    fireEvent.click(screen.getByRole("button"));
+    rerender(<Reasoning text="plan" seconds={7} />);
+    const btn = screen.getByRole("button");
+    expect(btn.textContent).toContain("Thought for 7s");
+    expect(btn).toHaveAttribute("aria-expanded", "true");
+    rerender(<Reasoning text="plan" seconds={7} answered />);
+    expect(screen.getByRole("button")).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("lays the trace out in order with the tool steps between segments", () => {
+    const timeline = [
+      { kind: "text", text: "read the log" },
+      { kind: "tools", names: ["read_file"] },
+      { kind: "text", text: "now summarize" },
+    ];
+    const { container } = render(<Reasoning text="read the log\n\nnow summarize" seconds={3} timeline={timeline} />);
+    fireEvent.click(screen.getByRole("button"));
+    const text = container.textContent;
+    expect(text.indexOf("read the log")).toBeLessThan(text.indexOf("read_file"));
+    expect(text.indexOf("read_file")).toBeLessThan(text.indexOf("now summarize"));
   });
 });

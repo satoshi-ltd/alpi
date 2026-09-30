@@ -1,12 +1,24 @@
 import { forwardRef } from "react";
 import { buttonDefaults, buttonHeights, buttonVariants } from "../../../common/button.mjs";
-import Tooltip from "./Tooltip.jsx";
+import Tip from "./Tip.jsx";
 import styles from "./Button.module.css";
+
+export function tipSideFor(direction = "down", align = "center") {
+  if (direction === "left") return "l";
+  if (direction === "right") return "r";
+  const up = direction === "up";
+  if (align === "start") return up ? "up-l" : "l";
+  if (align === "end") return up ? "up-r" : "r";
+  return up ? "up" : "down";
+}
 
 const Button = forwardRef(function Button({
   variant = buttonDefaults.desktop.variant,
   size = buttonDefaults.desktop.size,
   icon,
+  iconOnly = false,
+  tip,
+  tipSide,
   children,
   disabled = false,
   loading = false,
@@ -23,7 +35,7 @@ const Button = forwardRef(function Button({
 }, ref) {
   variant = buttonVariants.includes(variant) ? variant : buttonDefaults.desktop.variant;
   size = Object.hasOwn(buttonHeights, size) ? size : buttonDefaults.desktop.size;
-  const isIconOnly = !!icon && !children;
+  const isIconOnly = iconOnly || (!!icon && !children);
   const isDisabled = disabled || loading;
   const className = [
     styles.button,
@@ -40,7 +52,8 @@ const Button = forwardRef(function Button({
     .filter(Boolean)
     .join(" ");
 
-  const showTooltip = !!title && !isDisabled;
+  const tipText = tip ?? title;
+  const accessibleName = rest["aria-label"] ?? (isIconOnly ? tipText : undefined);
 
   const button = (
     <button
@@ -52,7 +65,7 @@ const Button = forwardRef(function Button({
       disabled={isDisabled}
       aria-busy={loading || undefined}
       onClick={onClick}
-      aria-label={rest["aria-label"] ?? (isIconOnly ? title : undefined)}
+      aria-label={accessibleName}
     >
       {loading && <span className={styles.spinner} aria-hidden />}
       {icon && !loading && <span className={styles.icon}>{icon}</span>}
@@ -60,15 +73,17 @@ const Button = forwardRef(function Button({
     </button>
   );
 
-  return (
-    <Tooltip
-      text={showTooltip ? title : null}
-      direction={tooltipDirection}
-      align={tooltipAlign}
-    >
-      {button}
-    </Tooltip>
-  );
+  if (tip) {
+    return <Tip text={tip} side={tipSide ?? "down"}>{button}</Tip>;
+  }
+  if (title && !isDisabled) {
+    return (
+      <Tip text={title} side={tipSide ?? tipSideFor(tooltipDirection, tooltipAlign)} escape block={fullWidth}>
+        {button}
+      </Tip>
+    );
+  }
+  return button;
 });
 
 export default Button;

@@ -192,6 +192,37 @@ describe("useChatStream live frames", () => {
   });
 });
 
+describe("useChatStream step timing and reasoning", () => {
+  it("keeps the daemon's tool start and duration over the client clock", async () => {
+    const { result } = mount();
+    await waitForListen();
+    seedTurn(result);
+    emit({ kind: "tool_start", tool_id: "t1", name: "read_file", args: {}, started_at: 1700000000.5 });
+    expect(turnOf(result).tools[0].started_at).toBe(1700000000.5);
+    await settle(400);
+    emit({ kind: "tool_end", tool_id: "t1", name: "read_file", ok: true, output: "x", duration_s: 2.4 });
+    expect(turnOf(result).tools[0].duration_s).toBe(2.4);
+  });
+
+  it("reasoning_done folds buffered deltas in, adds the seconds, and a new step reopens thinking", async () => {
+    const { result } = mount();
+    await waitForListen();
+    seedTurn(result);
+    emit({ kind: "reasoning_delta", text: "plan it" });
+    emit({ kind: "reasoning_done", seconds: 3.5 });
+    expect(turnOf(result).reasoningPreview).toBe("plan it");
+    expect(turnOf(result).reasoned_s).toBe(3.5);
+    expect(turnOf(result).reasoningDone).toBe(true);
+    await settle(60);
+    expect(turnOf(result).reasoningDone).toBe(true);
+    emit({ kind: "tool_start", tool_id: "t1", name: "grep", args: {} });
+    expect(turnOf(result).reasoningDone).toBe(false);
+    emit({ kind: "reasoning_delta", text: "again" });
+    emit({ kind: "reasoning_done", seconds: 1 });
+    expect(turnOf(result).reasoned_s).toBe(4.5);
+  });
+});
+
 describe("useChatStream concurrent turns", () => {
   it("routes frames to the turn matching request_id; other turns are untouched", async () => {
     const { result } = mount();

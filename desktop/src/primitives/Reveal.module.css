@@ -1,0 +1,22 @@
+.reveal {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows var(--dur-2, 200ms) var(--ease),
+    opacity var(--dur-2, 200ms) var(--ease);
+}
+
+.open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal { transition: none; }
+}

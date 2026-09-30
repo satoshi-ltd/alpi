@@ -53,3 +53,22 @@
 .closeBtn {
   margin-left: auto;
 }
+
+.backdropClosing {
+  animation: modalBackdropOut var(--dur-1) var(--ease) both;
+  pointer-events: none;
+}
+
+.modalClosing {
+  animation: modalOut var(--dur-1) var(--ease) both;
+}
+
+@keyframes modalBackdropOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes modalOut {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: scale(0.97); }
+}

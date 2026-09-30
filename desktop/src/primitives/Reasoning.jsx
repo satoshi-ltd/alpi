@@ -1,87 +1,74 @@
 import { useEffect, useRef, useState } from "react";
 
-import { CaretIcon } from "./icons.jsx";
+import Icon from "./Icon.jsx";
+import Reveal from "./Reveal.jsx";
 import styles from "./Reasoning.module.css";
-import { fmtDuration, thoughtLabel } from "../../../common/reasoningLabel.mjs";
+import { thoughtLabel } from "../../../common/reasoningLabel.mjs";
+import { lastLine } from "../lib/reasoningTimeline.js";
+import { toolIcon } from "../lib/toolSteps.js";
 
 export { thoughtLabel };
 
-function toLines(text) {
-  return String(text || "").split("\n").map((s) => s.trimEnd()).filter((s) => s.trim());
+function paragraphs(text) {
+  return String(text || "").split("\n").map((s) => s.trim()).filter(Boolean);
 }
 
-export default function Reasoning({ text, seconds, streaming = false, flat = false }) {
-  if (!streaming && !String(text || "").trim()) return null;
-  return streaming
-    ? <Thinking text={text} flat={flat} />
-    : <Finished text={text} seconds={seconds} flat={flat} />;
-}
-
-function Thinking({ text, flat }) {
-  const boxRef = useRef(null);
+export default function Reasoning({ text, seconds, streaming = false, answered = false, timeline = null, peek = null }) {
   const [open, setOpen] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
+  const bodyRef = useRef(null);
+  const hasText = !!String(text || "").trim();
+
   useEffect(() => {
-    const id = setInterval(() => setElapsed((s) => s + 1), 1000);
-    return () => clearInterval(id);
-  }, []);
+    if (answered) setOpen(false);
+  }, [answered]);
+
   useEffect(() => {
-    const el = boxRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [text, open]);
-  const lines = toLines(text);
-  const lastLine = lines[lines.length - 1] ?? "";
+    const el = bodyRef.current;
+    if (streaming && open && el) el.scrollTop = el.scrollHeight;
+  }, [text, open, streaming]);
+
+  if (!streaming && !hasText) return null;
+
+  const items = timeline?.length ? timeline : [{ kind: "text", text }];
+  const livePeek = peek ?? lastLine(text);
+  const label = streaming ? "Thinking…" : thoughtLabel(seconds);
+
   return (
-    <div className={flat ? styles.flat : styles.trace}>
+    <div className={styles.reasoning}>
       <button
         type="button"
-        className={`${styles.disclosure} ${styles.live}`}
+        className={`${styles.row} ${streaming ? styles.rowLive : ""}`}
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-label={open ? "Collapse reasoning" : "Expand reasoning"}
+        disabled={!hasText}
       >
-        <CaretIcon className={open ? styles.chevOpen : styles.chev} />
-        <span className={styles.thinkingLabel}>thinking · {elapsed}s</span>
-        {!open && lastLine && <span className={styles.peek}>{lastLine}</span>}
+        {hasText && (
+          <Icon name="chevron-right" size={12} className={`${styles.chev} ${open ? styles.chevOpen : ""}`} />
+        )}
+        <span className={streaming ? styles.shimmer : styles.label}>{label}</span>
+        {streaming && !open && livePeek && <span className={styles.peek}>{livePeek}</span>}
       </button>
-      {open && (
-        <div className={styles.box} ref={boxRef} aria-hidden="true">
-          {lines.map((r, i) => (
-            <div key={i} className={styles.line}>{r}</div>
-          ))}
+      <Reveal open={open && hasText}>
+        <div className={styles.body} ref={bodyRef}>
+          {items.map((item, i) =>
+            item.kind === "tools" ? (
+              <div key={i} className={styles.stepMark}>
+                {item.names.map((name, j) => (
+                  <span key={j} className={styles.stepName}>
+                    <Icon name={toolIcon(name)} size={11} />
+                    {name}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              paragraphs(item.text).map((p, j) => (
+                <p key={`${i}-${j}`} className={styles.para}>{p}</p>
+              ))
+            ),
+          )}
         </div>
-      )}
-    </div>
-  );
-}
-
-function Finished({ text, seconds, flat }) {
-  const [open, setOpen] = useState(false);
-  const lines = toLines(text);
-  const lastLine = lines[lines.length - 1] ?? "";
-  const label = flat
-    ? (seconds >= 1 ? `thinking · ${fmtDuration(seconds)}` : "thinking")
-    : thoughtLabel(seconds);
-  return (
-    <div className={flat ? styles.flat : styles.trace}>
-      <button
-        type="button"
-        className={flat ? `${styles.disclosure} ${styles.live}` : styles.disclosure}
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        aria-label={open ? "Collapse reasoning" : "Expand reasoning"}
-      >
-        <CaretIcon className={open ? styles.chevOpen : styles.chev} />
-        <span className={flat ? styles.thinkingLabel : styles.thoughtLabel}>{label}</span>
-        {flat && !open && lastLine && <span className={styles.peek}>{lastLine}</span>}
-      </button>
-      {open && (
-        <div className={styles.full}>
-          {lines.map((r, i) => (
-            <div key={i} className={styles.line}>{r}</div>
-          ))}
-        </div>
-      )}
+      </Reveal>
     </div>
   );
 }

@@ -47,7 +47,7 @@
 
 .count {
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   color: var(--ink-3);
   background: var(--hover);
   border-radius: var(--r-sm);
@@ -59,7 +59,7 @@
 
 .kicker {
   color: var(--ink-3);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -100,7 +100,7 @@
   outline: 0;
   padding: 0;
   font-family: var(--font-sans);
-  font-size: var(--fs-base);
+  font-size: var(--text-ui);
   color: var(--ink);
 }
 .searchInput::placeholder { color: var(--ink-3); }
@@ -136,8 +136,8 @@
 .sizeTag {
   flex-shrink: 0;
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
-  color: var(--ink-4);
+  font-size: var(--text-meta);
+  color: var(--ink-3);
   background: var(--hover);
   border-radius: var(--r-sm);
   padding: 0 var(--space-2);

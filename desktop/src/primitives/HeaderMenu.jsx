@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Icon, IconBtn, Kbd, Pill, Popover, Tip } from "./index.js";
+import { Button, Icon, IconBtn, KeyHint, Pill, Popover } from "./index.js";
+import { shortcutKeys } from "../lib/shortcuts.js";
 import styles from "./HeaderMenu.module.css";
 
 export default function HeaderMenu({
@@ -24,71 +25,69 @@ export default function HeaderMenu({
   };
   return (
     <span className={styles.root}>
-      <Tip text="More" side="r">
-        <IconBtn aria-label="More" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-          <Icon name="ellipsis" />
-        </IconBtn>
-      </Tip>
+      <IconBtn tip="More" tipSide="r" aria-label="More" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <Icon name="ellipsis" />
+      </IconBtn>
       <Popover open={open} onClose={() => setOpen(false)} align="right" navigable role="menu">
         <div className={styles.menu}>
           {onOpenSettings && (
-            <button type="button" role="menuitem" className={styles.item} onClick={run(onOpenSettings)}>
+            <Button role="menuitem" fullWidth className={styles.item} onClick={run(onOpenSettings)}>
               <Icon name="settings" size="lg" className={styles.icon} />
               <span className={styles.label}>{Noun} settings</span>
-              <span className={styles.kbd}><Kbd>⌘</Kbd><Kbd>,</Kbd></span>
-            </button>
+              <KeyHint hint={shortcutKeys("settings")} />
+            </Button>
           )}
           {onTogglePause && (
-            <button type="button" role="menuitem" className={styles.item} onClick={run(onTogglePause)}>
+            <Button role="menuitem" fullWidth className={styles.item} onClick={run(onTogglePause)}>
               <Icon name={paused ? "play" : "pause"} size="lg" className={styles.icon} />
               <span className={styles.label}>{paused ? "Resume" : "Pause"} {noun}</span>
-              <span className={styles.kbd}><Kbd>⇧</Kbd><Kbd>⌘</Kbd><Kbd>P</Kbd></span>
-            </button>
+              <KeyHint hint={shortcutKeys("pause")} />
+            </Button>
           )}
           {onToggleAutoRead && (
-            <button type="button" role="menuitem" className={styles.item} onClick={() => onToggleAutoRead()}>
+            <Button role="menuitem" fullWidth className={styles.item} onClick={() => onToggleAutoRead()}>
               <Icon name="volume" size="lg" className={styles.icon} />
               <span className={styles.label}>Auto-read replies</span>
               <Pill state={autoRead ? "on" : "off"} className={styles.statePill}>{autoRead ? "on" : "off"}</Pill>
-            </button>
+            </Button>
           )}
           {(onOpenSkills || onOpenMemory || onOpenTools || onOpenSchedule) && <div className={styles.sep} aria-hidden />}
           {onOpenSkills && (
-            <button type="button" role="menuitem" className={styles.item} onClick={run(onOpenSkills)}>
+            <Button role="menuitem" fullWidth className={styles.item} onClick={run(onOpenSkills)}>
               <Icon name="sparkle" size="lg" className={styles.icon} />
               <span className={styles.label}>Skills</span>
-              <span className={styles.kbd}><Kbd>⇧</Kbd><Kbd>⌘</Kbd><Kbd>S</Kbd></span>
-            </button>
+              <KeyHint hint={shortcutKeys("skills")} />
+            </Button>
           )}
           {onOpenMemory && (
-            <button type="button" role="menuitem" className={styles.item} onClick={run(onOpenMemory)}>
+            <Button role="menuitem" fullWidth className={styles.item} onClick={run(onOpenMemory)}>
               <Icon name="folder" size="lg" className={styles.icon} />
               <span className={styles.label}>Memory</span>
-              <span className={styles.kbd}><Kbd>⇧</Kbd><Kbd>⌘</Kbd><Kbd>M</Kbd></span>
-            </button>
+              <KeyHint hint={shortcutKeys("memory")} />
+            </Button>
           )}
           {onOpenTools && (
-            <button type="button" role="menuitem" className={styles.item} onClick={run(onOpenTools)}>
+            <Button role="menuitem" fullWidth className={styles.item} onClick={run(onOpenTools)}>
               <Icon name="cpu" size="lg" className={styles.icon} />
               <span className={styles.label}>Tools</span>
-              <span className={styles.kbd}><Kbd>⇧</Kbd><Kbd>⌘</Kbd><Kbd>T</Kbd></span>
-            </button>
+              <KeyHint hint={shortcutKeys("tools")} />
+            </Button>
           )}
           {onOpenSchedule && (
-            <button type="button" role="menuitem" className={styles.item} onClick={run(onOpenSchedule)}>
+            <Button role="menuitem" fullWidth className={styles.item} onClick={run(onOpenSchedule)}>
               <Icon name="clock" size="lg" className={styles.icon} />
               <span className={styles.label}>Schedule</span>
-              <span className={styles.kbd}><Kbd>⇧</Kbd><Kbd>⌘</Kbd><Kbd>E</Kbd></span>
-            </button>
+              <KeyHint hint={shortcutKeys("schedule")} />
+            </Button>
           )}
           {onRefresh && canRefresh && (
             <>
               <div className={styles.sep} aria-hidden />
-              <button type="button" role="menuitem" className={styles.item} onClick={run(onRefresh)}>
+              <Button role="menuitem" fullWidth className={styles.item} onClick={run(onRefresh)}>
                 <Icon name="refresh" size="lg" className={styles.icon} />
                 <span className={styles.label}>Refresh thread</span>
-                <span className={styles.kbd}><Kbd>⇧</Kbd><Kbd>⌘</Kbd><Kbd>R</Kbd></span>
-              </button>
+                <KeyHint hint={shortcutKeys("refresh")} />
+              </Button>
             </>
           )}
         </div>

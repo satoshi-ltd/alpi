@@ -45,11 +45,12 @@ describe("Sidebar filter", () => {
     expect(filterInput()).toBeInTheDocument();
   });
 
-  it("leaves ⌘N unclaimed on the recipient-picker row — the sessions dropdown owns that key", () => {
+  it("keeps the New session row text-only and names ⌘N in its tooltip", () => {
     render(<Sidebar {...BASE} onNewChat={() => {}} />);
     const row = screen.getByText("New session").closest("button");
 
     expect(row.textContent).toBe("New session");
+    expect(row.closest(".ds-tip").textContent).toContain("⌘N");
   });
 
   it("narrows the list to matches as you type", () => {

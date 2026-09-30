@@ -11,8 +11,11 @@ import Settings from "./pages/Settings.jsx";
 import { Banner } from "./primitives/index.js";
 import { useNotify } from "./primitives/Notification.jsx";
 import CommandPalette from "./features/CommandPalette.jsx";
+import ActivityPanel from "./features/ActivityPanel.jsx";
+import ShortcutsSheet from "./features/ShortcutsSheet.jsx";
 import ApprovalModal from "./features/ApprovalModal.jsx";
 import ClarificationModal from "./features/ClarificationModal.jsx";
+import { splitInline } from "./lib/inlineRequests.js";
 import CreateProfileModal from "./features/CreateProfileModal.jsx";
 import CreateWorkgroupModal from "./features/CreateWorkgroupModal.jsx";
 import NotificationsModal from "./features/NotificationsModal.jsx";
@@ -45,6 +48,7 @@ import { enqueueRequest as enqueueClarificationRequest } from "./lib/clarificati
 import { invalidateProfileDetailCache } from "./hooks/useProfileDetail.js";
 import { useCoalescedCallback } from "./hooks/useCoalescedCallback.js";
 import { usePendingQueue } from "./hooks/usePendingQueue.js";
+import { rosterStates, useActivity } from "./hooks/useActivity.js";
 import { useChatStream } from "./hooks/useChatStream.js";
 import { useHostConnections } from "./hooks/useHostConnections.js";
 import { useAllOutputs } from "./hooks/useOutputs.js";
@@ -276,6 +280,15 @@ export default function App() {
     setPaletteOpen((v) => !v);
   }, []);
   const onClosePalette = useCallback(() => setPaletteOpen(false), []);
+  const [activityOpen, setActivityOpen] = useState(false);
+  const onToggleActivity = useCallback(() => setActivityOpen((v) => !v), []);
+  const onCloseActivity = useCallback(() => setActivityOpen(false), []);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const onToggleShortcuts = useCallback(() => {
+    setPaletteOpen(false);
+    setShortcutsOpen((v) => !v);
+  }, []);
+  const onCloseShortcuts = useCallback(() => setShortcutsOpen(false), []);
 
   const [browse, setBrowse] = useState(null);
   const [sessionsDropdownOpenTick, setSessionsDropdownOpenTick] = useState(0);
@@ -880,6 +893,33 @@ export default function App() {
     }
   }, [onToggleActiveProfilePause, onToggleActiveWorkgroupPause]);
 
+  const activityOnline = hostConnections.connections.find((c) => c.id === hostConnections.active_id)?.status === "online";
+  const { activity, supported: activitySupported, counts: activityCounts } = useActivity({
+    connectionId: hostConnections.active_id,
+    online: activityOnline,
+  });
+  const rosterState = useMemo(
+    () => (activitySupported ? rosterStates(activity) : null),
+    [activity, activitySupported],
+  );
+  const onToggleActivityIfSupported = activitySupported ? onToggleActivity : null;
+  useEffect(() => {
+    if (!activitySupported) setActivityOpen(false);
+  }, [activitySupported]);
+  const accentByProfile = useMemo(() => {
+    const out = {};
+    for (const p of profiles) out[p.name] = p.accent ?? null;
+    return out;
+  }, [profiles]);
+  const onReviewActivity = useCallback((item) => {
+    if (item?.profile && item.session_id) {
+      setRewriteDraft(null);
+      setView({ kind: "profile", profile: item.profile, sessionId: item.session_id });
+    }
+    const q = item?.kind === "clarification" ? clarification : approval;
+    q.refetch().then(() => q.promote(item.request_id));
+  }, [approval, clarification]);
+
   useWindowChrome({
     viewRef,
     setView,
@@ -910,6 +950,8 @@ export default function App() {
     onBrowseMemory: canManageProfileSurfaces ? onBrowseMemory : null,
     onBrowseSchedule: canManageProfileSurfaces ? onBrowseSchedule : null,
     onToggleNotifications: canManageProfileSurfaces ? onOpenNotifications : null,
+    onToggleActivity: onToggleActivityIfSupported,
+    onToggleShortcuts,
   });
 
   const pendingTurnForCurrentView = useMemo(
@@ -924,6 +966,13 @@ export default function App() {
   useEffect(() => {
     foregroundTurnRef.current = pendingTurnForCurrentView;
   }, [pendingTurnForCurrentView]);
+  const inlineScope = useMemo(() => ({
+    profile: view.kind === "profile" ? view.profile : null,
+    sessionIds: [view.sessionId, pendingTurnForCurrentView?.sessionId],
+    live: !!pendingTurnForCurrentView,
+  }), [view, pendingTurnForCurrentView]);
+  const approvalSplit = useMemo(() => splitInline(approval.queue, inlineScope), [approval.queue, inlineScope]);
+  const clarificationSplit = useMemo(() => splitInline(clarification.queue, inlineScope), [clarification.queue, inlineScope]);
   const pendingProfiles = useMemo(() => {
     const s = new Set();
     for (const t of Object.values(pendingTurns)) {
@@ -1223,7 +1272,7 @@ export default function App() {
     sidebarSearchOpen,
     onNewProfile: adminOnNewProfile,
     onNewWorkgroup: adminOnNewWorkgroup,
-    onNewChat,
+    onNewChat: view.kind === "profile" ? onNewSessionForCurrentProfile : onNewChat,
     onRefreshThread:
       view.kind === "profile" || view.kind === "workgroup"
         ? onRefreshActiveThread
@@ -1243,7 +1292,14 @@ export default function App() {
     onBrowseSchedule: canManageProfileSurfaces ? onBrowseSchedule : null,
     onOpenHistory,
     onToggleNotifications: canManageProfileSurfaces ? onOpenNotifications : null,
+    onToggleActivity: onToggleActivityIfSupported,
+    onOpenShortcuts: onToggleShortcuts,
   });
+
+  const onPaletteOpenSession = useCallback((profile, sessionId) => {
+    setRewriteDraft(null);
+    setView({ kind: "profile", profile, sessionId });
+  }, []);
 
   return (
     <div className={styles.app}>
@@ -1253,6 +1309,7 @@ export default function App() {
         taskByWorkgroup={taskByWorkgroup}
         activityByWorkgroup={activityByWorkgroup}
         pendingProfiles={pendingProfiles}
+        rosterState={rosterState}
         view={view}
         settingsTarget={settingsTarget}
         pinned={pinned}
@@ -1284,6 +1341,8 @@ export default function App() {
         notificationsUnread={canManageProfileSurfaces ? notificationsUnread : 0}
         searchOpen={sidebarSearchOpen}
         onCloseSearch={onCloseSidebarSearch}
+        onOpenActivity={onToggleActivityIfSupported}
+        activityNeedsYou={activityCounts.needsYou}
       />
       <main className={styles.main}>
           {daemonOffline && (
@@ -1386,6 +1445,10 @@ export default function App() {
                   onRetryLoad={() => setSessionRetryTick((t) => t + 1)}
                   daemonOffline={daemonOffline}
                   pendingTurn={pendingTurnForCurrentView}
+                  inlineApprovals={approvalSplit.inline}
+                  inlineClarifications={clarificationSplit.inline}
+                  onApprovalResolved={approval.resolve}
+                  onClarificationResolved={clarification.resolve}
                   onSend={onSend}
                   onCancel={onCancelTurn}
                   onConfigureProfile={canAdminEarly ? (p) => {
@@ -1437,6 +1500,30 @@ export default function App() {
         open={paletteOpen}
         onClose={onClosePalette}
         commands={paletteCommands}
+        profiles={profiles}
+        workgroups={workgroups}
+        jumpHints={jumpHints}
+        connectionId={hostConnections.active_id}
+        onOpenProfile={onOpenProfile}
+        onOpenWorkgroup={onOpenWorkgroup}
+        onOpenSession={onPaletteOpenSession}
+      />
+      <ShortcutsSheet open={shortcutsOpen} onClose={onCloseShortcuts} />
+      <ActivityPanel
+        open={activityOpen && activitySupported}
+        onClose={onCloseActivity}
+        activity={activity}
+        accentByProfile={accentByProfile}
+        onReview={onReviewActivity}
+        onOpenSession={(profile, sessionId) => {
+          setRewriteDraft(null);
+          setView({ kind: "profile", profile, sessionId: sessionId || null });
+        }}
+        onOpenWorkgroup={(profile, id) => setView({ kind: "workgroup", profile, id })}
+        onOpenProfile={(name) => {
+          const p = profilesRef.current.find((x) => x.name === name);
+          if (p) onOpenProfile(p);
+        }}
       />
       <ToolsModal
         key={profileSurfaceKey("tools", hostConnections.active_id, activeProfileName)}
@@ -1493,8 +1580,8 @@ export default function App() {
           }
         }}
       />
-      <ApprovalModal requests={approval.queue} onResolved={approval.resolve} />
-      <ClarificationModal requests={clarification.queue} onResolved={clarification.resolve} />
+      <ApprovalModal requests={approvalSplit.modal} onResolved={approval.resolve} />
+      <ClarificationModal requests={clarificationSplit.modal} onResolved={clarification.resolve} />
       {notificationsOpen && canManageProfileSurfaces && <NotificationsModal
         open={notificationsOpen}
         onClose={onCloseNotifications}

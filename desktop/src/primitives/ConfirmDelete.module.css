@@ -44,8 +44,8 @@
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-family: var(--font-sans);
+  font-size: var(--text-meta);
   font-weight: var(--fw-medium);
   letter-spacing: .06em;
   color: var(--ink-3);

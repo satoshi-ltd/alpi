@@ -8,7 +8,7 @@
 }
 
 .title {
-  font-size: var(--fs-base);
+  font-size: var(--text-ui);
   font-weight: var(--fw-medium);
   color: var(--ink);
 }
@@ -16,7 +16,7 @@
 .detail {
   max-width: 520px;
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   color: var(--ink-3);
   word-break: break-word;
 }

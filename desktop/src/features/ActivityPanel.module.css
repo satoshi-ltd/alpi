@@ -1,0 +1,124 @@
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5) var(--space-4) var(--space-7);
+  border-bottom: .5px solid var(--line);
+  color: var(--ink);
+}
+
+.headTitle {
+  flex: 1;
+  font-size: var(--text-ui);
+  font-weight: var(--fw-semibold);
+}
+
+.headKeys {
+  display: inline-flex;
+  gap: var(--space-tight);
+}
+
+.body {
+  flex: 1;
+  padding: var(--space-3) var(--space-3) var(--space-5);
+}
+
+.empty {
+  margin: 0;
+  padding: var(--space-10) var(--space-5);
+  text-align: center;
+  font-size: var(--text-ui);
+  color: var(--ink-3);
+}
+
+.group + .group {
+  margin-top: var(--space-3);
+}
+
+.groupLabel {
+  margin: 0;
+  padding: var(--space-5) var(--space-4) var(--space-2);
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding-right: var(--space-3);
+  border-radius: var(--r-md);
+}
+
+.row:hover {
+  background: var(--hover);
+}
+
+.rowMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+button.rowMain {
+  cursor: pointer;
+}
+
+.glyph {
+  width: var(--icon-md);
+  display: inline-flex;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--ink-3);
+}
+
+.glyph svg {
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+}
+
+.glyph[data-tone="warning"] {
+  color: var(--c-warning-text);
+}
+
+.glyph[data-tone="danger"] {
+  color: var(--c-danger-text);
+}
+
+.glyph[data-tone="accent"] {
+  color: var(--accent);
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-tight);
+}
+
+.title {
+  font-size: var(--text-ui);
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sub {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  color: var(--ink-3);
+}

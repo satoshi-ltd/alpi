@@ -18,7 +18,7 @@
 .sm {
   gap: var(--space-1);
   padding: var(--space-1) var(--space-3);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   height: var(--ctrl-2xs);
 }
 
@@ -103,7 +103,7 @@
   border: 1.5px solid currentColor;
   border-right-color: transparent;
   opacity: 0.6;
-  animation: chipSpin 0.7s linear infinite;
+  animation: chipSpin var(--dur-spin) linear infinite;
   flex-shrink: 0;
 }
 

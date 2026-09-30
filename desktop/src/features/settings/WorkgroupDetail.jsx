@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import Button from "../../primitives/Button.jsx";
+import ActionLink from "../../primitives/ActionLink.jsx";
 import Chip from "../../primitives/Chip.jsx";
 import PipelineStages from "../../primitives/PipelineStages.jsx";
 import Dropdown from "../../primitives/Dropdown.jsx";
@@ -22,6 +23,7 @@ import Usage from "./Usage.jsx";
 import styles from "./Settings.module.css";
 import { shortPubkey } from "../../lib/pubkey.js";
 import { emptyLine } from "../../../../common/emptyCopy.mjs";
+import { useSettingsDirty } from "../../lib/settingsDirty.js";
 
 function renderMemberRow(m, profiles, workgroup, hubPubkey, onRemove) {
   const local = profiles.find((p) => p.pubkey_b64 === m.pubkey);
@@ -120,6 +122,7 @@ export default function WorkgroupDetail({
     setBriefing(text);
   }
   const briefingDirty = briefing !== (workgroup.briefing ?? "");
+  useSettingsDirty(`workgroup:${connectionId ?? ""}:${workgroup.profile}/${workgroup.id}:briefing`, briefingDirty);
   function discardBriefing() {
     setBriefing(workgroup.briefing ?? "");
   }
@@ -448,20 +451,16 @@ export default function WorkgroupDetail({
                 {briefingDirty && (
                   <div className={styles.draftRow}>
                     <span className={styles.draftTag}>draft</span>
-                    <button
-                      type="button"
-                      className="alink"
+                    <ActionLink
                       onClick={discardBriefing}
                     >
                       Discard
-                    </button>
-                    <button
-                      type="button"
-                      className="alink"
+                    </ActionLink>
+                    <ActionLink
                       onClick={saveBriefing}
                     >
                       Save
-                    </button>
+                    </ActionLink>
                   </div>
                 )}
               </div>
@@ -587,14 +586,13 @@ export default function WorkgroupDetail({
         {workgroup.is_hub && (
           <Section title="Danger zone">
             <Row label="delete">
-              <button
-                type="button"
-                className="alink danger"
+              <ActionLink
+                danger
                 onClick={() => setDeleteOpen(true)}
                 disabled={busy}
               >
                 Delete workgroup…
-              </button>
+              </ActionLink>
               <ConfirmDelete
                 open={deleteOpen}
                 onClose={() => setDeleteOpen(false)}

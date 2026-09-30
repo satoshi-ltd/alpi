@@ -1,30 +1,22 @@
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useRef, useState } from "react";
 import { I } from "./icons.jsx";
-import Tip from "./Tip.jsx";
 import ConfirmDelete from "./ConfirmDelete.jsx";
 import Diamond from "./Diamond.jsx";
+import IconBtn from "./IconBtn.jsx";
+import Selectish from "./Selectish.jsx";
 import { useDismissOnOutside } from "../hooks/useDismissOnOutside.js";
-import { ACCENT_HEXES } from "../../../common/accents.mjs";
+import { ACCENTS } from "../../../common/accents.mjs";
 import styles from "./SettingsLayout.module.css";
 
-function Anchored({ open, onClose, children, width = 320, align = "left" }) {
-  const ref = useRef(null);
-  useDismissOnOutside({ open, onClose, wrapRef: ref });
-  if (!open) return null;
+export const Section = forwardRef(function Section({ label, children, kicker, id, hidden = false }, ref) {
   return (
-    <div
+    <section
       ref={ref}
-      className={`anim-pop ${styles.anchored} ${align === "right" ? styles.anchoredRight : styles.anchoredLeft}`}
-      style={{ width }}
+      id={id}
+      hidden={hidden}
+      data-settings-section={typeof label === "string" ? label : undefined}
+      className={styles.section}
     >
-      {children}
-    </div>
-  );
-}
-
-export function Section({ label, children, kicker }) {
-  return (
-    <section className={styles.section}>
       <div className={`row ${styles.sectionHead}`}>
         <h3 className={styles.sectionTitle}>{label}</h3>
         {kicker && <span className={styles.sectionKicker}>{kicker}</span>}
@@ -32,72 +24,25 @@ export function Section({ label, children, kicker }) {
       <div className={`col ${styles.sectionBody}`}>{children}</div>
     </section>
   );
-}
+});
 
-export function Field({ label, children, helper, align = "center", hidden = false }) {
+export function Field({ label, children, helper, align = "center", hidden = false, searchable = false }) {
   const rowAlign = align === "center" ? styles.fieldRowCenter : styles.fieldRowTop;
   // `hidden` keeps the same element so children stay mounted while the row is out of view.
   return (
-    <div className={`row ${styles.fieldRow} ${rowAlign}`} hidden={hidden}>
+    <div
+      className={`row ${styles.fieldRow} ${rowAlign}`}
+      hidden={hidden}
+      data-settings-row={searchable ? "" : undefined}
+    >
       <div
         className={`${styles.fieldLabelCol} ${align === "top" ? styles.fieldLabelColTop : ""}`}
       >
-        <div className={`eyebrow ${styles.fieldLabel}`}>{label}</div>
+        <div className={styles.fieldLabel}>{label}</div>
         {helper && <div className={styles.fieldHelper}>{helper}</div>}
       </div>
       <div className={`row ${styles.fieldControl}`}>{children}</div>
     </div>
-  );
-}
-
-export function ActionLink({ children, onClick, danger }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`${styles.actionLink} ${danger ? styles.actionLinkDanger : ""}`}
-    >
-      {children}
-    </button>
-  );
-}
-
-export function Selectish({ children, onClick }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`row row-gap ${styles.selectish}`}
-    >
-      {children}
-      <I.ChevDown className={styles.chev} />
-    </button>
-  );
-}
-
-export function Popped({
-  trigger,
-  width = 320,
-  children,
-  mode = "selectish",
-  align = "left",
-}) {
-  const [open, setOpen] = useState(false);
-  const TriggerEl = mode === "selectish" ? Selectish : ActionLink;
-  return (
-    <span className={styles.poppedWrap}>
-      <TriggerEl onClick={() => setOpen((o) => !o)}>{trigger}</TriggerEl>
-      <Anchored
-        open={open}
-        onClose={() => setOpen(false)}
-        width={width}
-        align={align}
-      >
-        {typeof children === "function"
-          ? children({ close: () => setOpen(false) })
-          : children}
-      </Anchored>
-    </span>
   );
 }
 
@@ -120,30 +65,30 @@ export function AccentPicker({ value, onChange }) {
 
   return (
     <span ref={ref} className={styles.accentPickerWrap}>
-      <button
-        type="button"
+      <Selectish
+        leading={<Diamond color={value} />}
+        aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className={`row row-gap ${styles.selectish}`}
       >
-        <Diamond color={value} />
-        <span>{value}</span>
-        <I.ChevDown className={styles.chev} />
-      </button>
+        {value}
+      </Selectish>
       {open && (
         <div className={`anim-pop ${styles.accentPopover}`}>
           <div className={styles.swatchGrid}>
-            {ACCENT_HEXES.map((c) => {
+            {ACCENTS.map(([name, c]) => {
               const sel = value?.toLowerCase() === c.toLowerCase();
               return (
-                <button
+                <IconBtn
                   key={c}
-                  type="button"
+                  tip={`${name} · ${c}`}
+                  tipSide="up"
+                  aria-label={`${name} ${c}`}
+                  aria-pressed={sel}
                   onClick={() => commit(c)}
-                  title={c}
                   className={`${styles.swatchChip} ${sel ? styles.swatchChipSelected : ""}`}
                 >
                   <Diamond color={c} size="md" className={styles.swatchDiamond} />
-                </button>
+                </IconBtn>
               );
             })}
           </div>
@@ -181,15 +126,9 @@ export function MemberRow({ member, isHub, note, onRemove }) {
       <p className={styles.memberNote}>{note}</p>
       {!isHub && (
         <span className={styles.memberRemoveWrap}>
-          <Tip text="Remove from workgroup" side="l">
-            <button
-              type="button"
-              className="iconbtn"
-              onClick={() => setConfirm(true)}
-            >
-              <I.X />
-            </button>
-          </Tip>
+          <IconBtn tip="Remove from workgroup" tipSide="l" onClick={() => setConfirm(true)}>
+            <I.X />
+          </IconBtn>
           <ConfirmDelete
             open={confirm}
             onClose={() => setConfirm(false)}

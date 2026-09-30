@@ -28,12 +28,13 @@
 
 .hash {
   font-family: var(--font-mono);
-  font-size: var(--fs-hero);
+  font-size: var(--text-hero);
   font-weight: var(--fw-medium);
   color: var(--ink-4);
   line-height: var(--lh-tight);
 }
 
-.subtitle {
+.col .subtitle {
+  font-family: var(--font-sans);
   color: var(--ink-3);
 }

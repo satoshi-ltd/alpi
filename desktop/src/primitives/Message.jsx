@@ -13,7 +13,7 @@ function MessageImpl({
   footer = null,
 }) {
   const isRight = align === "right";
-  const effectiveAccent = accent || readDefaultAccent();
+  const effectiveAccent = accent || DEFAULT_ACCENT;
 
   let bubbleStyle;
   if (bubble && tintBubble) {
@@ -95,28 +95,15 @@ function MessageImpl({
 const Message = memo(MessageImpl);
 export default Message;
 
-const DEFAULT_ACCENT_FALLBACK = "#f0b447";
+const DEFAULT_ACCENT = "var(--accent)";
 
-function readDefaultAccent() {
-  if (typeof window === "undefined" || !document?.documentElement) {
-    return DEFAULT_ACCENT_FALLBACK;
+export function tintFor(color, alpha = 0.16) {
+  const value = String(color ?? "").trim();
+  const m = /^#?([0-9a-f]{6})$/i.exec(value);
+  if (m) {
+    const v = parseInt(m[1], 16);
+    return `rgba(${(v >> 16) & 0xff}, ${(v >> 8) & 0xff}, ${v & 0xff}, ${alpha})`;
   }
-  try {
-    const v = getComputedStyle(document.documentElement)
-      .getPropertyValue("--color-accent")
-      .trim();
-    return v || DEFAULT_ACCENT_FALLBACK;
-  } catch {
-    return DEFAULT_ACCENT_FALLBACK;
-  }
-}
-
-function tintFor(hex, alpha = 0.16) {
-  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex).trim());
-  if (!m) return undefined;
-  const v = parseInt(m[1], 16);
-  const r = (v >> 16) & 0xff;
-  const g = (v >> 8) & 0xff;
-  const b = v & 0xff;
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  if (!value) return undefined;
+  return `color-mix(in srgb, ${value} ${Math.round(alpha * 100)}%, transparent)`;
 }

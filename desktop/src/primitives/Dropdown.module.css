@@ -16,7 +16,7 @@
   background: transparent;
   color: var(--ink-2);
   font: inherit;
-  font-size: var(--fs-base);
+  font-size: var(--text-ui);
   font-weight: var(--fw-medium);
   line-height: var(--lh-tight);
   transition: background var(--dur-1) var(--ease),
@@ -89,7 +89,7 @@
   max-width: none;
   text-align: left;
   font-weight: var(--fw-medium);
-  font-size: var(--fs-base);
+  font-size: var(--text-ui);
   line-height: var(--lh-cozy);
 }
 
@@ -111,13 +111,13 @@
 
 .labelStack .label {
   font-weight: var(--fw-medium);
-  font-size: var(--fs-base);
+  font-size: var(--text-ui);
   line-height: var(--lh-cozy);
 }
 
 .caption {
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   color: var(--ink-3);
   line-height: var(--lh-cozy);
   overflow: hidden;
@@ -214,8 +214,8 @@
 
 .emptyRow {
   padding: var(--space-5);
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-family: var(--font-sans);
+  font-size: var(--text-meta);
   color: var(--ink-3);
   text-align: center;
 }
@@ -274,7 +274,7 @@
 }
 
 .rowName {
-  font-size: var(--fs-base);
+  font-size: var(--text-ui);
   color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -283,7 +283,7 @@
 
 .rowCaption {
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   color: var(--ink-3);
   overflow: hidden;
   text-overflow: ellipsis;

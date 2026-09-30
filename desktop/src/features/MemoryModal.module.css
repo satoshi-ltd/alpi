@@ -18,7 +18,7 @@
 
 .fileNameLg {
   font-family: var(--font-mono);
-  font-size: var(--fs-lg);
+  font-size: var(--text-chat);
   font-weight: var(--fw-semibold);
   color: var(--ink);
 }
@@ -33,5 +33,5 @@
   gap: var(--space-2);
   color: var(--ink-3);
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
 }

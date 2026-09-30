@@ -50,3 +50,21 @@ describe("usePendingQueue", () => {
     await waitFor(() => expect(result.current.queue.map((r) => r.request_id)).toEqual(["new"]));
   });
 });
+
+describe("usePendingQueue review", () => {
+  it("refetch pulls a request the event stream missed and promote moves it to the front", async () => {
+    invoke
+      .mockResolvedValueOnce({ requests: [{ request_id: "a" }] })
+      .mockResolvedValueOnce({ requests: [{ request_id: "a" }, { request_id: "b" }] });
+    const { result } = renderHook(() =>
+      usePendingQueue({ command: "clarification_pending", connectionId: "local", enqueue }),
+    );
+    await waitFor(() => expect(result.current.queue).toHaveLength(1));
+    await act(async () => { await result.current.refetch(); });
+    expect(result.current.queue.map((r) => r.request_id)).toEqual(["a", "b"]);
+    act(() => result.current.promote("b"));
+    expect(result.current.queue.map((r) => r.request_id)).toEqual(["b", "a"]);
+    act(() => result.current.promote("missing"));
+    expect(result.current.queue.map((r) => r.request_id)).toEqual(["b", "a"]);
+  });
+});

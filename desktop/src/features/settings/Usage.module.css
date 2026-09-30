@@ -16,7 +16,7 @@
 
 .statLabel {
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--ink-3);
@@ -25,7 +25,7 @@
 
 .today {
   font-family: var(--font-sans);
-  font-size: var(--fs-display);
+  font-size: var(--text-display);
   font-weight: 600;
   letter-spacing: -0.018em;
   line-height: var(--lh-tight);
@@ -34,7 +34,7 @@
 
 .statValue {
   font-family: var(--font-mono);
-  font-size: var(--fs-xl);
+  font-size: var(--text-title);
   font-weight: 500;
   line-height: var(--lh-tight);
   color: var(--ink);
@@ -42,7 +42,7 @@
 
 .unit {
   margin-left: var(--space-1);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   font-weight: 400;
   color: var(--ink-3);
 }
@@ -111,7 +111,7 @@
   flex: 1;
   text-align: center;
   font-family: var(--font-mono);
-  font-size: var(--fs-xxs);
+  font-size: var(--text-meta);
   line-height: var(--lh-tight);
   color: var(--ink-3);
 }
@@ -134,18 +134,18 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   color: var(--ink-3);
 }
 
 .legendSep::before {
   content: "·";
-  color: var(--ink-4);
+  color: var(--ink-3);
 }
 
 .totals {
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   color: var(--ink-3);
 }
 
@@ -186,8 +186,8 @@
 
 .tipDay {
   font-family: var(--font-mono);
-  font-size: var(--fs-label);
-  color: var(--ink-4);
+  font-size: var(--text-meta);
+  color: var(--ink-3);
   margin-bottom: var(--space-1);
 }
 
@@ -197,7 +197,7 @@
 
 .tipCost {
   font-family: var(--font-sans);
-  font-size: var(--fs-xl);
+  font-size: var(--text-title);
   font-weight: 600;
   line-height: var(--lh-tight);
   color: var(--ink);
@@ -208,7 +208,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   line-height: 1.4;
   color: var(--ink-2);
 }
@@ -223,6 +223,6 @@
 .empty {
   margin: var(--space-6) 0 0;
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
-  color: var(--ink-4);
+  font-size: var(--text-meta);
+  color: var(--ink-3);
 }

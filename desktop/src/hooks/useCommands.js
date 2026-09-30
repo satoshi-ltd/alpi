@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { shortcutKeys as keys } from "../lib/shortcuts.js";
 
 export function useCommands({
   view,
@@ -29,6 +30,8 @@ export function useCommands({
   onBrowseSchedule,
   onOpenHistory,
   onToggleNotifications,
+  onToggleActivity = null,
+  onOpenShortcuts = null,
 }) {
   return useMemo(() => {
     const cmds = [
@@ -36,22 +39,42 @@ export function useCommands({
         id: "help:palette",
         group: "General",
         label: "Command palette",
-        hint: "⌘K",
+        hint: keys("palette"),
       },
       {
         id: "help:jump",
         group: "General",
         label: "Jump to profile / workgroup",
-        hint: "⌘1–9",
+        hint: keys("jump"),
       },
     ];
+
+    if (onOpenShortcuts) {
+      cmds.push({
+        id: "view:shortcuts",
+        group: "General",
+        label: "Keyboard shortcuts",
+        hint: keys("shortcuts"),
+        action: () => onOpenShortcuts(),
+      });
+    }
+
+    if (onToggleActivity) {
+      cmds.push({
+        id: "view:activity",
+        group: "General",
+        label: "Activity",
+        hint: keys("activity"),
+        action: () => onToggleActivity(),
+      });
+    }
 
     if (onToggleSidebarSearch) {
       cmds.push({
         id: "view:find",
         group: "General",
         label: sidebarSearchOpen ? "Close filter" : "Filter profiles & workgroups",
-        hint: "⌘S",
+        hint: keys("filter"),
         action: () => onToggleSidebarSearch(),
       });
     }
@@ -61,17 +84,18 @@ export function useCommands({
         id: "profile:sessions",
         group: "Profile",
         label: "Sessions",
-        hint: "⇧⌘H",
+        hint: keys("history"),
         action: () => onOpenHistory(),
       });
     }
 
-    if (view.kind === "profile") {
+    if (view.kind !== "empty" && onNewChat) {
       cmds.push({
         id: "create:chat",
         group: "Chat",
         label: "New session",
-        action: () => onNewChat?.(),
+        hint: keys("new-session"),
+        action: () => onNewChat(),
       });
     }
 
@@ -80,7 +104,7 @@ export function useCommands({
         id: "chat:refresh",
         group: "Chat",
         label: "Refresh thread",
-        hint: "⇧⌘R",
+        hint: keys("refresh"),
         action: () => onRefreshThread(),
       });
     }
@@ -90,7 +114,7 @@ export function useCommands({
         id: "chat:read-aloud",
         group: "Chat",
         label: readAloudActive ? "Stop audio" : "Read aloud",
-        hint: "⇧⌘L",
+        hint: keys("read-aloud"),
         action: () => onToggleReadAloud(),
       });
     }
@@ -100,7 +124,7 @@ export function useCommands({
         id: "chat:find",
         group: "Chat",
         label: searchOpen ? "Close find" : "Find in transcript",
-        hint: "⌘F",
+        hint: keys("find"),
         action: () => onToggleSearch?.(),
       });
     }
@@ -110,7 +134,7 @@ export function useCommands({
         id: "workgroup:tasks",
         group: "Workgroup",
         label: "Task history",
-        hint: "⇧⌘H",
+        hint: keys("history"),
         action: () => onOpenHistory(),
       });
     }
@@ -120,7 +144,7 @@ export function useCommands({
         id: "workgroup:pause",
         group: "Workgroup",
         label: workgroupPaused ? "Resume workgroup" : "Pause workgroup",
-        hint: "⇧⌘P",
+        hint: keys("pause"),
         action: () => onToggleWorkgroupPause(),
       });
     }
@@ -130,7 +154,7 @@ export function useCommands({
         id: "workgroup:refresh",
         group: "Workgroup",
         label: "Refresh thread",
-        hint: "⇧⌘R",
+        hint: keys("refresh"),
         action: () => onRefreshThread(),
       });
     }
@@ -141,7 +165,7 @@ export function useCommands({
           id: "profile:pause",
           group: "Profile",
           label: profilePaused ? "Resume profile" : "Pause profile",
-          hint: "⇧⌘P",
+          hint: keys("pause"),
           action: () => onToggleProfilePause(),
         });
       }
@@ -149,28 +173,28 @@ export function useCommands({
         id: "profile:tools",
         group: "Profile",
         label: "Tools",
-        hint: "⇧⌘T",
+        hint: keys("tools"),
         action: () => onBrowseTools?.(),
       });
       cmds.push({
         id: "profile:skills",
         group: "Profile",
         label: "Skills",
-        hint: "⇧⌘S",
+        hint: keys("skills"),
         action: () => onBrowseSkills?.(),
       });
       cmds.push({
         id: "profile:memory",
         group: "Profile",
         label: "Memory",
-        hint: "⇧⌘M",
+        hint: keys("memory"),
         action: () => onBrowseMemory?.(),
       });
       cmds.push({
         id: "profile:schedule",
         group: "Profile",
         label: "Schedule",
-        hint: "⇧⌘E",
+        hint: keys("schedule"),
         action: () => onBrowseSchedule?.(),
       });
     }
@@ -180,7 +204,7 @@ export function useCommands({
         id: "view:settings",
         group: "General",
         label: view.kind === "settings" ? "Close settings" : "Open settings",
-        hint: "⌘,",
+        hint: keys("settings"),
         action: () =>
           view.kind === "settings" ? onCloseSettings?.() : onOpenSettings?.(),
       });
@@ -191,7 +215,7 @@ export function useCommands({
         id: "view:notifications",
         group: "General",
         label: "Notifications",
-        hint: "⌘O",
+        hint: keys("notifications"),
         action: () => onToggleNotifications(),
       });
     }
@@ -201,7 +225,7 @@ export function useCommands({
         id: "create:profile",
         group: "Create",
         label: "New profile",
-        hint: "⇧⌘N",
+        hint: keys("new-profile"),
         action: () => onNewProfile(),
       });
     }
@@ -211,7 +235,7 @@ export function useCommands({
         id: "create:workgroup",
         group: "Create",
         label: "New workgroup",
-        hint: "⇧⌘W",
+        hint: keys("new-workgroup"),
         action: () => onNewWorkgroup(),
       });
     }
@@ -227,11 +251,11 @@ export function useCommands({
     }
 
     [
-      ["help:send", "Chat", "Send message", "⌘↵"],
-      ["help:zoom-in", "View", "Zoom in", "⌘+"],
-      ["help:zoom-out", "View", "Zoom out", "⌘-"],
-      ["help:zoom-reset", "View", "Reset zoom", "⌘0"],
-      ["help:close", "View", "Close / dismiss", "Esc"],
+      ["help:send", "Chat", "Send message", keys("send")],
+      ["help:zoom-in", "View", "Zoom in", keys("zoom-in")],
+      ["help:zoom-out", "View", "Zoom out", keys("zoom-out")],
+      ["help:zoom-reset", "View", "Reset zoom", keys("zoom-reset")],
+      ["help:close", "View", "Close / dismiss", keys("close")],
     ].forEach(([id, group, label, hint]) => {
       cmds.push({
         id,
@@ -271,5 +295,7 @@ export function useCommands({
     onBrowseSchedule,
     onOpenHistory,
     onToggleNotifications,
+    onToggleActivity,
+    onOpenShortcuts,
   ]);
 }

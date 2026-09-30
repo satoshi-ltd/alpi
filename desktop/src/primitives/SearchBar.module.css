@@ -11,7 +11,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  animation: ds-pop-in var(--dur-2) var(--ease) both;
+  animation: searchBarIn var(--dur-2) var(--ease) both;
 }
 
 .input {
@@ -19,12 +19,12 @@
   border: 0;
   outline: 0;
   background: transparent;
-  font: var(--fs-base) var(--font-sans);
+  font: var(--text-ui) var(--font-sans);
   color: var(--ink);
 }
 
 .counter {
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   color: var(--ink-3);
   min-width: var(--ctrl-lg);
   text-align: right;
@@ -48,4 +48,9 @@
   width: 14px;
   height: 14px;
   color: var(--ink-3);
+}
+
+@keyframes searchBarIn {
+  from { opacity: 0; transform: translateY(4px) scale(0.98); }
+  to { opacity: 1; transform: none; }
 }

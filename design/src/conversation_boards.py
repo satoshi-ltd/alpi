@@ -64,15 +64,16 @@ def vsep():
 def d_user(text, accent=AMBER):
     return (f'<div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px">'
             f'<div style="max-width: 76%; padding: 12px 16px; border-radius: 14px 6px 14px 14px; background: {mix(accent, 0.12)}; font-size: 15px; line-height: 1.65; color: {INK}">{text}</div>'
-            f'<div style="display: flex; align-items: center; gap: 4px; color: {INK3}"><span style="margin-right: 6px">{mono("2m")}</span>{iconbtn("pencil")}{iconbtn("copy")}</div></div>')
+            f'<div style="display: flex; align-items: center; gap: 4px; color: {INK3}"><span style="margin-right: 6px">{mono("2m", 11)}</span><span style="opacity: 0.4; display: inline-flex">{iconbtn("pencil")}{iconbtn("copy")}</span></div></div>')
 
 
 def d_assistant(body, meta=True, hover=True):
     footer = ""
     if meta:
-        model = f'<span style="color: {BRAND}">sonnet-4</span>'
-        footer = (f'<div style="display: flex; align-items: center; gap: 2px; margin-top: 4px; opacity: {1 if hover else 0}">{iconbtn("copy", 26, 13)}{iconbtn("refresh", 26, 13)}{iconbtn("volume", 26, 13)}'
-                  f'<span style="margin-left: 8px; font-family: {MONO}; font-size: 12px; color: {INK3}">2m{sep()}3.4K{sep()}$0.0123{sep()}{model}</span></div>')
+        tip = (f'<span style="display: inline-flex; flex-direction: column; gap: 3px; margin-left: 10px; padding: 6px 9px; border-radius: 8px; background: {INK}">'
+               f'{mono("3.4K tokens · $0.0123", 11, PANE)}{mono("sonnet-4 · 12.4s", 11, INK4)}</span>')
+        footer = (f'<div style="display: flex; align-items: center; gap: 2px; margin-top: 4px">{mono("2m", 11)}'
+                  f'<span style="display: inline-flex; margin-left: 6px; opacity: {1 if hover else 0.4}">{iconbtn("copy", 26, 13)}{iconbtn("refresh", 26, 13)}{iconbtn("volume", 26, 13)}</span>{tip if hover else ""}</div>')
     return f'<div style="display: flex; flex-direction: column; gap: 6px"><div style="font-size: 15px; line-height: 1.65; letter-spacing: -0.003em; color: {INK}">{body}</div>{footer}</div>'
 
 
@@ -215,21 +216,61 @@ def d_hero():
             f'<div style="display: flex; justify-content: space-between; padding: 0 8px">{label("Recents")}{mono("5 sessions", 11)}</div>{recents}</div>')
 
 
+TOOL_ICONS = {"read_file": "file", "grep": "search", "shell": "terminal", "web_fetch": "globe", "memory": "chip"}
+
+
+def d_step(name, summary, dur, state="done", body=""):
+    icon = TOOL_ICONS.get(name, "chip")
+    color = {"done": INK3, "failed": DANGER_FILL, "running": BRAND}[state]
+    status = {"done": mono(dur, 11), "failed": mono(f"failed · {dur}", 11, DANGER), "running": mono(f"{dur} …", 11, BRAND)}[state]
+    chev = ic("chev-d", 12, INK3) if body else ic("chev-r", 12, INK3)
+    head = (f'<div style="display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 10px; border-radius: 8px; background: {HOVER if body else "transparent"}">'
+            f'{ic(icon, 14, color)}<span style="font-family: {MONO}; font-size: 12px; font-weight: 500; color: {DANGER if state == "failed" else INK}">{name}</span>'
+            f'<span style="flex: 1; min-width: 0; font-size: 13px; color: {INK2}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{summary}</span>{status}{chev}</div>')
+    return f'<div style="display: flex; flex-direction: column; gap: 6px">{head}{body}</div>'
+
+
+def step_body(lines):
+    return f'<div style="margin-left: 34px; padding: 10px 12px; border-radius: 8px; background: {SIDE}; border: 0.5px solid {LINE}; font-family: {MONO}; font-size: 12px; line-height: 1.6; color: {INK2}">{"<br>".join(lines)}</div>'
+
+
+def inline_request():
+    btn = lambda t, primary=False: f'<span style="display: inline-flex; align-items: center; height: 28px; padding: 0 12px; border-radius: 8px; font-size: 13px; font-weight: 500; background: {INK if primary else HOVER}; color: {PANE if primary else INK}">{t}</span>'
+    return (f'<div style="display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border-radius: 10px; border: 1px solid {mix(WARNING, 0.6)}; background: {mix(WARNING, 0.08)}">'
+            f'<span style="display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600">{ic("alert", 14, WARNING)}shell wants to run a command{mono("· auto-deny in 42s", 11)}</span>'
+            f'<span style="font-family: {MONO}; font-size: 12px; color: {INK}">rm -rf dist &amp;&amp; npm run build</span>'
+            f'<span style="display: flex; gap: 8px">{btn("Deny")}{btn("Allow once", True)}{btn("Allow this session")}{btn("Always allow")}</span></div>')
+
+
+def thinking(peek="reading the deploy log", size=13):
+    shimmer = f"background: linear-gradient(90deg, {INK3} 0%, {INK} 50%, {INK3} 100%); -webkit-background-clip: text; background-clip: text; color: transparent;"
+    return f'<div style="display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 0 10px; border-radius: 8px; background: {HOVER}"><span style="font-size: {size}px; font-weight: 500; {shimmer}">Thinking…</span>{mono(peek, 11)}</div>'
+
+
+def thought(open_=False, size=13):
+    head = f'<div style="display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 0 10px; border-radius: 8px">{ic("chev-d" if open_ else "chev-r", 12, INK3)}<span style="font-size: {size}px; color: {INK2}">Thought for 7s</span></div>'
+    if not open_:
+        return head
+    lines = "".join(f'<p style="margin: 0; font-size: {size}px; line-height: 1.55; color: {INK2}">{t}</p>' for t in ("The user wants a summary of yesterday’s deploys.", "Read the log, group by job, count exits.", "Two jobs failed; call them out first."))
+    return head + f'<div style="display: flex; flex-direction: column; gap: 6px; padding: 0 10px 0 30px; border-left: 2px solid {LINE}; margin-left: 10px">{lines}</div>'
+
+
 def desktop_conversation():
     body = f"""<div style="padding: 40px 48px; display: flex; flex-direction: column; gap: 24px; box-sizing: border-box">
-{h1("Conversation · desktop", "Messages, reasoning, tools and the composer as ChatPane paints them. The user writes in a tinted bubble; alpi answers full width with no bubble and a footer that appears on hover. Chat text is 15/1.65 everywhere.")}
+{h1("Conversation · desktop", "Messages, reasoning, tool steps and the composer as ChatPane paints them. The user writes in a tinted bubble; alpi answers full width. Both footers keep a faint time; actions appear on hover and usage lives in a tooltip on the time. A turn keeps 10 px inside and 40 px before the next.")}
 {spec("Chat header · profile", d_header("profile"), 1184, 0)}
 {spec("Chat header · workgroup", d_header("workgroup"), 1184, 0)}
-{row(spec("User message · accent 12%, radius 14 6 14 14, footer always visible", d_user("Can you summarize yesterday’s deploy logs and flag anything that failed?"), 580), spec("Peer reply · peer accent 11%, radius 6 14 14 14", d_peer(), 580))}
-{spec("Alpi message · markdown body, footer on hover (copy · retry · read aloud · time · tokens · cost · routed model)", d_assistant("<strong>Deploy summary</strong>: 14 jobs ran; 2 failed.<ul style='margin: 8px 0; padding-left: 22px'><li>" + code_inline("api-migrate") + " timed out after 300s</li><li>" + code_inline("web-build") + " hit a lint error</li></ul>" + d_code_block("bash", "alpi logs api-migrate --tail 50") + d_table() + "Want me to open a fix?"), 1184)}
-{row(spec("Reasoning · collapsed with peek", d_reasoning(), 380), spec("Reasoning · expanded", d_reasoning(True), 380), spec("Reasoning · streaming (fades at the top)", d_reasoning(True, True), 380))}
-{row(spec("Tool calls · running, done, failed, bucket", d_tool("read_file", (("path", "/var/log/deploy.log"), ("limit", "200")), "running") + d_tool("grep", (("pattern", "exit=1"),)) + d_tool("shell", (("cmd", "npm run lint"),), "failed") + d_bucket("3 tool calls", 1), 580), spec("Load skeleton · after 450 ms", d_skeleton(), 580))}
+{row(spec("User message · accent 12%, radius 14 6 14 14, faint time, actions on hover", d_user("Can you summarize yesterday’s deploy logs and flag anything that failed?"), 580), spec("Peer reply · peer accent 11%, radius 6 14 14 14", d_peer(), 580))}
+{spec("Alpi message · markdown body, faint time, actions on hover, usage in a tooltip on the time", d_assistant("<strong>Deploy summary</strong>: 14 jobs ran; 2 failed.<ul style='margin: 8px 0; padding-left: 22px'><li>" + code_inline("api-migrate") + " timed out after 300s</li><li>" + code_inline("web-build") + " hit a lint error</li></ul>" + d_code_block("bash", "alpi logs api-migrate --tail 50") + d_table() + "Want me to open a fix?"), 1184)}
+{row(spec("Reasoning · streaming (shimmer, static under reduced motion)", thinking(), 380), spec("Reasoning · Thought for Xs, collapsed when the answer lands", thought(), 380), spec("Reasoning · opened, sans, scrollable", thought(True), 380))}
+{row(spec("Tool steps · family icon, summary, duration; failures open", d_step("read_file", "deploy.log · first 200 lines", "0.2s") + d_step("grep", "3 matches for exit=1", "0.1s") + d_step("shell", "npm run lint", "4.1s", "failed", step_body(["$ npm run lint", '<span style="color: #c14545">src/app.ts:14  no-unused-vars</span>', "1 error, 0 warnings"])) + d_step("web_fetch", "status.example.com", "3s", "running") + d_bucket("+3 previous tool calls", 1), 580), spec("Inline approval · the open chat asks in the flow", inline_request(), 580))}
+{spec("Load skeleton · after 450 ms", d_skeleton(), 580)}
 {row(spec("Attachments · composer and message variants", d_attachment("deploy-report.pdf", "1.2 MB") + d_attachment("chart.png", "png · 240 KB", "message"), 380), spec("Produced images · 2-column grid, 4:3", d_images(), 380), spec("Ask user · answered and unanswered", d_ask_answered() + d_ask_missing(), 380))}
 {row(spec("Composer · idle", d_composer(), 580), spec("Composer · ready to send", d_composer("Open a fix for the lint error", "ready"), 580))}
 {row(spec("Composer · busy (Stop)", d_composer("Open a fix for the lint error", "busy"), 580), spec("Mention popover · jump to latest", row(d_mention(), d_jump()), 580))}
 {spec("New chat hero · TO picker, composer, recents", d_hero(), 1184)}
 </div>"""
-    return page("System · desktop conversation", 1280, 2560, body)
+    return page("System · desktop conversation", 1280, 2900, body)
 
 
 
@@ -304,13 +345,13 @@ def m_assistant():
 
 
 def m_reasoning():
-    return f'<div style="padding: 0 16px; display: flex; align-items: center; gap: 6px">{ic("chev-r", 12, INK3)}{mono("thinking · 7s")}<span style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{mono("Checking which jobs exited non-zero…")}</span></div>'
+    return f'<div style="padding: 0 6px">{thought(size=14)}</div>'
 
 
 def m_tool(name, args, state="done"):
     color = {"running": BRAND, "done": INK3, "failed": DANGER_FILL}[state]
-    return (f'<div style="padding: 0 16px; display: flex; align-items: center; gap: 8px">{ic("chip", 14, color)}{mono(name, 12, DANGER if state == "failed" else INK, 500)}'
-            f'<span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{mono(args)}</span></div>')
+    return (f'<div style="display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 16px">{ic(TOOL_ICONS.get(name, "chip"), 16, color)}'
+            f'<div style="flex: 1; min-width: 0; display: flex; flex-direction: column">{mono(name, 13, DANGER if state == "failed" else INK, 500)}<span style="font-size: 13px; color: {INK2}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{args}</span></div>{ic("chev-r", 14, INK3)}</div>')
 
 
 def m_attachment(name, sub, variant="composer"):
@@ -323,7 +364,7 @@ def m_attachment(name, sub, variant="composer"):
 
 
 def m_composer(text="", state="idle", workgroup=False):
-    value = f'<span style="font-size: 15px; line-height: 22.5px">{text}</span>' if text else f'<span style="font-size: 15px; line-height: 22.5px; color: {INK3}">Message @alpi…</span>'
+    value = f'<span style="font-size: 16px; line-height: 23px">{text}</span>' if text else f'<span style="font-size: 16px; line-height: 23px; color: {INK3}">Message @alpi…</span>'
     mention = f'<span style="font-size: 11px; color: {INK3}">{mono("@", 11)} mention</span>' if workgroup else ""
     if state == "busy":
         send = f'<span style="width: 30px; height: 30px; border-radius: 10px; background: {AMBER}; display: inline-flex; align-items: center; justify-content: center"><span style="width: 12px; height: 12px; background: #0b1117; border-radius: 2px"></span></span>'
@@ -332,8 +373,9 @@ def m_composer(text="", state="idle", workgroup=False):
     else:
         send = f'<span style="width: 30px; height: 30px; border-radius: 10px; background: {LINE}; display: inline-flex; align-items: center; justify-content: center">{ic("up", 14, INK3)}</span>'
     clip = "" if workgroup else ic("clip", 20, INK3)
+    chip = "" if workgroup else f'<span style="display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px; border-radius: 15px; background: {HOVER}">{ic("sun", 12, INK3)}<span style="font-size: 13px">sonnet-4 · medium</span>{ic("chev-d", 11, INK3)}</span>'
     return (f'<div style="padding: 8px 16px; border-top: 0.5px solid {LINE}"><div style="display: flex; flex-direction: column; gap: 8px; padding: 14px 16px 10px; border-radius: 16px; background: {PANE}; border: 0.5px solid {LINE2}">'
-            f'{value}<div style="display: flex; align-items: center; gap: 10px">{mention}<span style="flex: 1"></span>{clip}{send}</div></div></div>')
+            f'{value}<div style="display: flex; align-items: center; gap: 10px">{mention}{clip}{chip}<span style="flex: 1"></span>{send}</div></div></div>')
 
 
 def m_header(kind="profile"):
@@ -356,10 +398,10 @@ def m_empty():
 
 def mobile_conversation():
     body = f"""<div style="padding: 40px 48px; display: flex; flex-direction: column; gap: 24px; box-sizing: border-box">
-{h1("Conversation · phone and Fold", "The phone draws the same conversation with touch rules: bubbles at radius 18, actions behind a long press instead of a hover footer, and a composer that keeps only attach and send.")}
+{h1("Conversation · phone and Fold", "The phone draws the same conversation with touch rules: bubbles at radius 18, chat text at 16, actions behind a long press (with Select text), steps that open into a sheet, and a composer where Return adds a line and the model chip sits beside attach.")}
 {row(spec("Chat header · profile", m_header("profile"), 420, 0), spec("Chat header · workgroup", m_header("workgroup"), 420, 0), spec("Empty thread", m_empty(), 300))}
 {row(spec("User message · accent 12%, radius 18 4 18 18, long press for actions", phone(m_user("Can you summarize yesterday’s deploy logs?")), 420, 16), spec("Alpi message · rich text: heading, quote, list, code, routed model", phone(m_assistant()), 420, 16))}
-{row(spec("Reasoning and tool calls", phone(m_reasoning() + m_tool("read_file", "path=/var/log/deploy.log limit=200", "running") + m_tool("shell", "cmd=npm run lint", "failed")), 420, 16), spec("Attachments · composer and message", m_attachment("deploy-report.pdf", "1.2 MB") + m_attachment("chart.png", "png · 240 KB", "message"), 420))}
+{row(spec("Reasoning and tool steps · tap a step for its sheet", phone(f'<div style="padding: 0 6px">{thinking("reading the log", 14)}</div>' + m_reasoning() + m_tool("read_file", "deploy.log · 200 lines", "running") + m_tool("shell", "npm run lint · failed", "failed")), 420, 16), spec("Attachments · composer and message", m_attachment("deploy-report.pdf", "1.2 MB") + m_attachment("chart.png", "png · 240 KB", "message"), 420))}
 {row(spec("Composer · idle", phone(m_composer()), 420, 0), spec("Composer · ready", phone(m_composer("Open a fix", "ready")), 420, 0))}
 {row(spec("Composer · busy (Stop on the accent)", phone(m_composer("Open a fix", "busy")), 420, 0), spec("Jump to latest", m_jump(), 300))}
 </div>"""

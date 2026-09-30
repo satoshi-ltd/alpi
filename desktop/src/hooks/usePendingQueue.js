@@ -13,6 +13,24 @@ export function usePendingQueue({ command, connectionId, enqueue }) {
     setQueue((q) => enqueue(q, req));
   }, [enqueue]);
 
+  const promote = useCallback((requestId) => {
+    setQueue((q) => {
+      const i = q.findIndex((r) => r.request_id === requestId);
+      if (i <= 0) return q;
+      return [q[i], ...q.slice(0, i), ...q.slice(i + 1)];
+    });
+  }, []);
+
+  const refetch = useCallback(
+    () =>
+      invoke(command)
+        .then((res) => {
+          for (const it of res?.requests || []) merge(it);
+        })
+        .catch(() => {}),
+    [command, merge],
+  );
+
   useEffect(() => {
     setQueue([]);
     let cancelled = false;
@@ -25,5 +43,5 @@ export function usePendingQueue({ command, connectionId, enqueue }) {
     return () => { cancelled = true; };
   }, [command, connectionId, merge]);
 
-  return { queue, merge, resolve };
+  return { queue, merge, resolve, promote, refetch };
 }

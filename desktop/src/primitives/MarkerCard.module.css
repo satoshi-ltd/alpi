@@ -34,7 +34,7 @@
   flex-direction: row;
   align-items: baseline;
   gap: var(--space-4);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   color: var(--ink-3);
 }
 .metaRight {
@@ -43,7 +43,7 @@
 .meta > *,
 .meta :global(.mono),
 .meta :global(.tnum) {
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
 }
 
 .footer {
@@ -53,6 +53,6 @@
   gap: var(--space-tight);
   align-items: center;
   color: var(--ink-3);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
 }
 .footerRight { justify-content: flex-end; }

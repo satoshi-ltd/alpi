@@ -196,7 +196,7 @@ describe("overlay interactions", () => {
       { id: "first", label: "First", onSelect: first },
       { id: "second", label: "Second", onSelect: second },
     ]}]} />);
-    const input = screen.getByRole("textbox");
+    const input = screen.getByRole("combobox");
     fireEvent.keyDown(input, { key: "Tab" });
     fireEvent.keyDown(input, { key: "Tab", shiftKey: true });
     fireEvent.keyDown(input, { key: "Enter" });

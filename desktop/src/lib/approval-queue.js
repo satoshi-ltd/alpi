@@ -16,6 +16,7 @@ export function normalizeRequest(req) {
     pattern: req.pattern || "",
     profile: req.profile || null,
     cwd: req.cwd || null,
+    session_id: req.session_id || null,
     deadline: deadlineFor(req),
   };
 }

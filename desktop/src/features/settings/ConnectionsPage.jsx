@@ -628,7 +628,7 @@ function ConnectionDetail({
   return (
     <div className={styles.detail}>
       <section className={styles.usageSection}>
-        <div className={styles.sectionLabel}>USAGE <span>last 14 days</span></div>
+        <h2 className={styles.sectionLabel}>Usage <span>last 14 days</span></h2>
         <Usage days={toUsageDays(row.usage_days)} accent="var(--accent)" />
       </section>
 

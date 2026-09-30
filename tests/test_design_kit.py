@@ -44,19 +44,19 @@ def test_design_system_covers_conversation_and_workgroups_on_both_clients(tmp_pa
     for client in ("Desktop", "Mobile"):
         assert {f"System-{client}Components.dc.html", f"System-{client}Conversation.dc.html", f"System-{client}Workgroup.dc.html"} <= system
     conversation = (tmp_path / "canvas" / "project" / "System-DesktopConversation.dc.html").read_text()
-    assert all(label in conversation for label in ("User message", "Alpi message", "Peer reply", "Tool calls", "Composer"))
+    assert all(label in conversation for label in ("User message", "Alpi message", "Peer reply", "Tool steps", "Composer"))
     workgroup = (tmp_path / "canvas" / "project" / "System-DesktopWorkgroup.dc.html").read_text()
     assert all(f"Marker · {state}" in workgroup for state in ("task", "working", "done", "skip"))
 
 
-def test_design_proposals_number_every_board_from_the_ranked_table(tmp_path):
+def test_design_proposals_list_only_open_work(tmp_path):
     subprocess.run([sys.executable, str(REPO / "design" / "build.py"), "--out", str(tmp_path)], check=True, capture_output=True)
     sys.path.insert(0, str(REPO / "design" / "src"))
-    from proposals_boards import NUM, PROPOSALS
+    from proposals_boards import PROPOSALS
     project = tmp_path / "canvas" / "project"
-    boards = [p.read_text() for p in project.glob("Proposals-*.dc.html") if "Overview" not in p.name]
-    detailed = "".join(boards)
-    for key, n in NUM.items():
-        assert f">{n:02d}<" in detailed, key
-    assert len(PROPOSALS) == len(NUM)
-    assert "proposals" in (tmp_path / "proposals.html").read_text()
+    assert [p.name for p in project.glob("Proposals-*.dc.html")] == ["Proposals-Overview.dc.html"]
+    overview = (project / "Proposals-Overview.dc.html").read_text()
+    for _key, _who, area, *_rest in PROPOSALS:
+        assert area in overview
+    conversation = (project / "System-DesktopConversation.dc.html").read_text()
+    assert "Thought for 7s" in conversation and "Inline approval" in conversation

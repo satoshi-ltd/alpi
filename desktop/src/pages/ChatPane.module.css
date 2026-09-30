@@ -112,13 +112,32 @@
 }
 
 .turn {
-  display: contents;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: 100%;
+}
+
+.turnEnter {
+  animation: turnRise var(--dur-2, 200ms) var(--ease) both;
+}
+
+@keyframes turnRise {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.inline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: 100%;
 }
 
 .timeline {
   display: flex;
   flex-direction: column;
-  gap: var(--space-9);
+  gap: var(--space-11);
   width: 100%;
   max-width: var(--stream-max);
   margin-left: auto;
@@ -202,46 +221,6 @@
   margin: 0 auto;
 }
 
-.tool {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: 2px 0;
-  font-family: var(--font-mono);
-  font-size: var(--fs-sm);
-  color: var(--ink-2);
-  align-self: flex-start;
-  max-width: 100%;
-}
-
-.toolIcon { flex-shrink: 0; }
-.tool_running .toolIcon { animation: toolIconPulse 1.4s ease-in-out infinite; }
-@keyframes toolIconPulse {
-  0%, 100% { opacity: 1; }
-  50%      { opacity: 0.35; }
-}
-
-.toolName {
-  font-family: var(--font-mono);
-  font-size: var(--fs-sm);
-  font-weight: var(--fw-medium);
-  color: var(--ink);
-  flex-shrink: 0;
-}
-
-.tool_fail .toolName { color: var(--c-danger-text); }
-
-.toolPreview {
-  font-family: var(--font-mono);
-  font-size: var(--fs-sm);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-}
-.toolPreviewKey { color: var(--ink-4); }
-.toolPreviewVal { color: var(--ink-2); }
-
 .peerMeta {
   display: flex;
   align-items: center;
@@ -250,62 +229,6 @@
 .peerName {
   font-weight: var(--fw-semibold);
   color: var(--ink-2);
-}
-
-.toolBucketFailed {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  flex-shrink: 0;
-  font-family: var(--font-mono);
-  font-size: var(--fs-sm);
-  color: var(--c-danger-text);
-}
-
-.toolModule {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  width: 100%;
-}
-
-.toolBucket {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  align-self: flex-start;
-  appearance: none;
-  background: none;
-  border: 0;
-  padding: 2px 0;
-  cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: var(--fs-sm);
-  color: var(--ink-3);
-  text-align: left;
-}
-.toolBucket:hover { color: var(--ink-2); }
-
-.toolBucketChev,
-.toolBucketChevOpen {
-  flex: none;
-  width: 11px;
-  height: 11px;
-  color: var(--ink-3);
-  transition: transform var(--dur-2) var(--ease);
-}
-.toolBucketChev { transform: rotate(-90deg); }
-.toolBucketChevOpen { transform: rotate(0deg); }
-
-.toolBucketLabel { white-space: nowrap; }
-
-.toolBucketChild {
-  padding-left: var(--space-6);
-}
-
-.toolActivity {
-  margin-left: var(--space-2);
-  flex: none;
 }
 
 .toolError {
@@ -321,17 +244,13 @@
 }
 
 .spinner {
-  animation: spin 0.9s linear infinite;
+  animation: spin var(--dur-spin) linear infinite;
 }
 
 @keyframes spin {
   to {
     transform: rotate(360deg);
   }
-}
-
-.userActionTime {
-  margin-right: var(--space-2);
 }
 
 .userActionBtn {
@@ -344,23 +263,50 @@
   height: 26px;
 }
 
-.agentMeta {
-  margin-left: var(--space-3);
-}
-
 .unfinished {
   padding: 0 var(--space-3);
   font-size: var(--fs-xs);
   color: var(--ink-3);
 }
 
-.agentMetaSep {
-  margin: 0 6px;
-  color: var(--ink-4);
+.foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
 }
 
-.agentMetaModel {
-  color: var(--accent);
+.footTime {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  cursor: default;
+}
+
+.footActions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-tight);
+  opacity: 0;
+  transition: opacity var(--dur-1) var(--ease);
+}
+
+:global(.msg-row):hover .footActions,
+:global(.msg-row):focus-within .footActions {
+  opacity: 1;
+}
+
+.meta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-hair);
+}
+
+.metaModel {
+  opacity: 0.72;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .turnEnter { animation: none; }
+  .footActions { transition: none; }
 }
 
 .hintAt {

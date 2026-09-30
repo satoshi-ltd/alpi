@@ -43,7 +43,7 @@
 
 .recentsCount {
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   color: var(--ink-3);
 }
 
@@ -82,7 +82,7 @@
 
 .recentText {
   color: var(--ink-2);
-  font-size: var(--fs-base);
+  font-size: var(--text-ui);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -91,7 +91,7 @@
 
 .recentTime {
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   color: var(--ink-3);
   flex-shrink: 0;
 }

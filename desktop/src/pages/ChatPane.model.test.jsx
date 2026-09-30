@@ -22,6 +22,8 @@ describe("pickEffectiveModel", () => {
   });
 });
 
+const OUTSIDE_TIPS = { ignore: "script, style, .ds-tip-body, .ds-tip-body *" };
+
 function renderPane(profile, sessionData) {
   return render(
     <ChatPane
@@ -67,7 +69,7 @@ describe("ChatPane — header reflects the next turn's model", () => {
     expect(screen.getAllByText("deepseek-v4-flash-latest")).toHaveLength(2);
     expect(screen.getAllByText("openrouter/deepseek/deepseek-v4-flash-latest")).toHaveLength(2);
     expect(screen.queryByTitle("openrouter/deepseek/deepseek-v4-flash-latest")).toBeNull();
-    expect(screen.queryByText(/flash-0731/)).toBeNull();
+    expect(screen.queryByText(/flash-0731/, OUTSIDE_TIPS)).toBeNull();
     await waitFor(() => expect(screen.getAllByText(/480K/).length).toBeGreaterThan(0));
   });
 
@@ -85,7 +87,7 @@ describe("ChatPane — header reflects the next turn's model", () => {
         model: "prof/ile",
       }),
     );
-    expect(screen.getByText("ile")).toBeTruthy();
+    expect(screen.getByText("ile", OUTSIDE_TIPS)).toBeTruthy();
   });
 });
 

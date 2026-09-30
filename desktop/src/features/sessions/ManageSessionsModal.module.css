@@ -45,7 +45,7 @@
 
 .title {
   margin: 0;
-  font-size: var(--fs-lg);
+  font-size: var(--text-chat);
   font-weight: var(--fw-semibold);
   color: var(--ink);
   letter-spacing: -0.01em;
@@ -53,7 +53,7 @@
 
 .meta {
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   color: var(--ink-3);
 }
 
@@ -98,7 +98,7 @@
 
 .sortLabel {
   font-family: var(--font-mono);
-  font-size: var(--fs-xxs);
+  font-size: var(--text-meta);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-3);
@@ -123,7 +123,7 @@
   background: var(--bg-elev);
   padding: var(--space-3) var(--space-5);
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   letter-spacing: 0.06em;
   color: var(--ink-3);
   font-weight: var(--fw-regular);
@@ -189,7 +189,7 @@
 }
 
 .preview {
-  font-size: var(--fs-base);
+  font-size: var(--text-ui);
   color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -199,7 +199,7 @@
 
 .previewInput {
   max-width: 460px;
-  font-size: var(--fs-base);
+  font-size: var(--text-ui);
 }
 .rowCurrent .preview,
 .rowCurrent .cellActivity,
@@ -214,7 +214,7 @@
   gap: var(--space-2);
   margin-top: var(--space-1);
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   color: var(--ink-2);
   letter-spacing: 0.02em;
 }
@@ -226,7 +226,7 @@
   gap: var(--space-5);
   padding: var(--space-4) var(--space-8);
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   color: var(--ink-3);
 }
 

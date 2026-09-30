@@ -34,7 +34,7 @@
 
 .title {
   margin: 0;
-  font-size: var(--fs-xl);
+  font-size: var(--text-title);
   font-weight: var(--fw-semibold);
   letter-spacing: -0.01em;
   line-height: var(--lh-cozy);
@@ -42,7 +42,7 @@
 
 .lede {
   margin: 0;
-  font-size: var(--fs-md);
+  font-size: var(--text-chat);
   line-height: var(--lh-normal);
   color: var(--ink-3);
   text-wrap: pretty;
@@ -63,7 +63,7 @@
 
 .errorName {
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   font-weight: var(--fw-medium);
   letter-spacing: .06em;
   text-transform: uppercase;
@@ -89,7 +89,7 @@
 .secondary {
   padding: var(--space-3) var(--space-8);
   border-radius: var(--r-md);
-  font-size: var(--fs-base);
+  font-size: var(--text-ui);
   cursor: pointer;
   transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
 }
@@ -124,10 +124,10 @@
 .summary {
   cursor: pointer;
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   letter-spacing: .06em;
   text-transform: uppercase;
-  color: var(--ink-4);
+  color: var(--ink-3);
   padding: var(--space-2) 0;
   list-style: none;
 }
@@ -155,7 +155,7 @@
   white-space: pre-wrap;
   word-break: break-word;
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   line-height: var(--lh-normal);
   color: var(--ink-3);
   background: var(--bg-elev);

@@ -36,8 +36,6 @@
 }
 
 .assistantFooter {
-  opacity: 0;
-  transition: opacity var(--dur-1) var(--ease);
   display: flex;
   gap: var(--space-tight);
   align-items: center;

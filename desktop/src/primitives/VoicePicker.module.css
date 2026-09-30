@@ -50,6 +50,6 @@
 .row.selected .name { font-weight: var(--fw-semibold); }
 
 .desc {
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   color: var(--ink-3);
 }

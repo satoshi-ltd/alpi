@@ -13,7 +13,7 @@
 }
 
 .bars[data-active] span {
-  animation: wave 0.9s ease-in-out infinite;
+  animation: wave var(--dur-loop) ease-in-out infinite;
 }
 
 .bars[data-active] span:nth-child(2) {

@@ -185,7 +185,10 @@ export function useChatStream({
         if (!cur) continue;
         const t = { ...cur };
         if (assistant) t.assistantPreview = (cur.assistantPreview ?? "") + assistant;
-        if (reasoning) t.reasoningPreview = (cur.reasoningPreview ?? "") + reasoning;
+        if (reasoning) {
+          t.reasoningPreview = (cur.reasoningPreview ?? "") + reasoning;
+          t.reasoningDone = false;
+        }
         next[rid] = t;
         changed = true;
       }
@@ -277,10 +280,12 @@ export function useChatStream({
 
   // Rebuild a turn's state from the persisted sidecar — used when its live stream goes silent.
   const applyReplayedEvents = useCallback((requestId, events) => {
-    const { tools, assistant, reasoning, error, sawDone, finalSessionId, ctxTokens } = reconstructFromEvents(events);
+    const { tools, assistant, reasoning, error, sawDone, finalSessionId, ctxTokens, reasonedSeconds, reasoningDone } = reconstructFromEvents(events);
     updateTurn(requestId, (prev) => ({
       ...prev,
       tools,
+      reasoned_s: reasonedSeconds ?? prev.reasoned_s,
+      reasoningDone,
       assistantPreview: assistant || prev.assistantPreview,
       reasoningPreview: reasoning || prev.reasoningPreview,
       error,
@@ -391,13 +396,14 @@ export function useChatStream({
             output: prior ? prior.output : "",
             ok: null,
             startedAt: prior ? prior.startedAt : Date.now(),
-            at: prior?.at ?? Date.now() / 1000,
+            started_at: typeof p.started_at === "number" ? p.started_at : prior?.started_at ?? null,
+            at: prior?.at ?? (typeof p.started_at === "number" ? p.started_at : Date.now() / 1000),
             ...(reasoning ? { reasoning } : {}),
           };
           const tools = existing >= 0
             ? prev.tools.map((t, i) => (i === existing ? entry : t))
             : [...prev.tools, entry];
-          return { ...prev, tools, reasoningPreview: "", assistantPreview: "" };
+          return { ...prev, tools, reasoningPreview: "", assistantPreview: "", reasoningDone: false };
         });
       } else if (p.kind === "tool_state") {
         updateTurn(rid, (prev) => {
@@ -423,7 +429,9 @@ export function useChatStream({
                   ...tools[i],
                   ok: p.ok,
                   output: p.output ?? "",
-                  duration_s: Math.max(0, (Date.now() - tools[i].startedAt) / 1000),
+                  duration_s: typeof p.duration_s === "number"
+                    ? p.duration_s
+                    : Math.max(0, (Date.now() - tools[i].startedAt) / 1000),
                 };
                 break;
               }
@@ -448,7 +456,7 @@ export function useChatStream({
               ...tools[idx],
               ok: p.ok,
               output: p.output ?? "",
-              duration_s: elapsed / 1000,
+              duration_s: typeof p.duration_s === "number" ? p.duration_s : elapsed / 1000,
             };
             return { ...prev, tools };
           }
@@ -468,6 +476,17 @@ export function useChatStream({
         const buf = (deltaBufferRef.current[rid] ??= { assistant: "", reasoning: "" });
         buf.reasoning += p.text;
         scheduleDeltaFlush();
+      } else if (p.kind === "reasoning_done") {
+        const buf = (deltaBufferRef.current[rid] ??= { assistant: "", reasoning: "" });
+        const tail = buf.reasoning;
+        buf.reasoning = "";
+        const seconds = typeof p.seconds === "number" && p.seconds > 0 ? p.seconds : 0;
+        updateTurn(rid, (prev) => ({
+          ...prev,
+          reasoningPreview: `${prev.reasoningPreview ?? ""}${tail}`,
+          reasoned_s: (prev.reasoned_s ?? 0) + seconds,
+          reasoningDone: true,
+        }));
       } else if (p.kind === "usage") {
         updateTurn(rid, (prev) => ({
           ...prev,

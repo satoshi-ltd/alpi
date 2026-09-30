@@ -1,19 +1,21 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ConnectionSwitcher from "./ConnectionSwitcher.jsx";
 import VersionButton from "./VersionButton.jsx";
-import { SidebarRow, SectionLabel, ContextMenu } from "../primitives/index.js";
+import { ActionLink, SidebarRow, SectionLabel, ContextMenu } from "../primitives/index.js";
+import { shortcutKeys } from "../lib/shortcuts.js";
 import {
   AutoIcon,
   BellIcon,
   Button,
   IconBtn,
-  Kbd,
+  KeyHint,
   MoonIcon,
   SunIcon,
   Tip,
   Diamond,
   DiamondStack,
   GearIcon,
+  Icon,
   PauseIcon,
   PinIcon,
   PinOffIcon,
@@ -82,6 +84,7 @@ function Sidebar({
   taskByWorkgroup = {},
   activityByWorkgroup = {},
   pendingProfiles = null,
+  rosterState = null,
   view,
   settingsTarget = null,
   pinned = { profiles: [], workgroups: [] },
@@ -109,6 +112,8 @@ function Sidebar({
   connectionLocked = false,
   onOpenNotifications,
   notificationsUnread = 0,
+  onOpenActivity = null,
+  activityNeedsYou = 0,
   searchOpen = false,
   onCloseSearch,
 }) {
@@ -357,7 +362,7 @@ function Sidebar({
         {
           label: "Open settings",
           icon: <GearIcon />,
-          shortcut: "⌘,",
+          shortcut: shortcutKeys("settings"),
           onClick: () => onOpenSettingsTarget({ kind: "profile", id: profile.name }),
         },
         { kind: "separator" },
@@ -395,7 +400,7 @@ function Sidebar({
         {
           label: "Open settings",
           icon: <GearIcon />,
-          shortcut: "⌘,",
+          shortcut: shortcutKeys("settings"),
           onClick: () => onOpenSettingsTarget(wgTarget),
         },
         { kind: "separator" },
@@ -416,7 +421,8 @@ function Sidebar({
       key={keyPrefix + p.name}
       profile={p}
       active={activeProfileName === p.name}
-      pending={!!pendingProfiles?.has(p.name)}
+      pending={!!pendingProfiles?.has(p.name) || rosterState?.profiles?.[p.name] === "working"}
+      rowState={rosterState?.profiles?.[p.name] ?? null}
       isPinned={pinnedProfileNames.includes(p.name)}
       connId={connId}
       checkUnread={checkUnread}
@@ -435,6 +441,7 @@ function Sidebar({
         hubAccent={hubAccentByProfile[w.hub_id ?? w.profile] ?? null}
         task={taskByWorkgroup[key] ?? null}
         busy={!!activityByWorkgroup[key]}
+        run={rosterState?.workgroups?.[key] ?? null}
         active={activeWorkgroupId === key}
         isPinned={pinnedWorkgroupKeys.includes(key)}
         connId={connId}
@@ -485,26 +492,24 @@ function Sidebar({
                   autoCorrect="off"
                   aria-label="Filter profiles and workgroups"
                 />
-                <button
-                  type="button"
+                <IconBtn
                   className={styles.searchClose}
                   onClick={onCloseSearch}
                   aria-label="Close filter"
                 >
-                  <XIcon size={14} />
-                </button>
+                  <XIcon />
+                </IconBtn>
               </div>
             ) : (
-              <button
-                type="button"
-                className="ds-sb-row"
-                data-active={inEmpty || undefined}
-                onClick={onNewChat}
-                style={inEmpty ? { background: "var(--selected)" } : undefined}
-              >
-                <PlusIcon />
-                <span className={styles.rowLabel}>New session</span>
-              </button>
+              <Tip text={`New session · ${shortcutKeys("new-session")}`} side="r" block>
+                <SidebarRow
+                  kind="action"
+                  id="New session"
+                  sel={inEmpty}
+                  leading={<span className={styles.actionGlyph}><PlusIcon /></span>}
+                  onClick={onNewChat}
+                />
+              </Tip>
             )
           )}
         </div>
@@ -594,7 +599,7 @@ function Sidebar({
               {onNewProfile && (
                 <>
                   {" · "}
-                  <button type="button" className="alink" onClick={onNewProfile}>New profile</button>
+                  <ActionLink onClick={onNewProfile}>New profile</ActionLink>
                 </>
               )}
             </div>
@@ -608,6 +613,8 @@ function Sidebar({
         onOpenPalette={() => onOpenPalette?.()}
         onOpenNotifications={onOpenNotifications}
         notificationsUnread={notificationsUnread}
+        onOpenActivity={onOpenActivity}
+        activityNeedsYou={activityNeedsYou}
       />
       {ctxMenu && (
         <ContextMenu
@@ -640,35 +647,35 @@ function SidebarFooter({
   onOpenPalette,
   onOpenNotifications,
   notificationsUnread = 0,
+  onOpenActivity = null,
+  activityNeedsYou = 0,
 }) {
   const showSettings = inSettings || Boolean(onOpenSettings);
   return (
     <div className={`${styles.footer} ${inSettings ? styles.footerSettings : ""}`}>
       {showSettings && (
-        <Tip text={inSettings ? "Command palette · ⌘K" : "Settings · ⌘,"} side="up-l">
-          <button
-            type="button"
-            className={`ds-sb-row ${styles.footerButton}`}
-            onClick={inSettings ? onOpenPalette : onOpenSettings}
-          >
-            {inSettings ? <SearchIcon /> : <GearIcon />}
-            <span className={styles.rowLabel}>
-              {inSettings ? "Command…" : "Settings"}
-            </span>
-            {inSettings ? (
-              <span className={styles.footerKbds} aria-hidden>
-                <Kbd>⌘</Kbd>
-                <Kbd>K</Kbd>
-              </span>
-            ) : null}
-          </button>
-        </Tip>
+        <Button
+          variant="ghost"
+          className={styles.footerButton}
+          icon={inSettings ? <SearchIcon /> : <GearIcon />}
+          tip={inSettings ? `Command palette · ${shortcutKeys("palette")}` : `Settings · ${shortcutKeys("settings")}`}
+          tipSide="up-l"
+          onClick={inSettings ? onOpenPalette : onOpenSettings}
+        >
+          <span className={styles.rowLabel}>
+            {inSettings ? "Command…" : "Settings"}
+          </span>
+          {inSettings ? <KeyHint hint={shortcutKeys("palette")} /> : null}
+        </Button>
       )}
       {!inSettings && onOpenNotifications && (
         <NotificationsBellButton
           unread={notificationsUnread}
           onClick={onOpenNotifications}
         />
+      )}
+      {!inSettings && onOpenActivity && (
+        <ActivityButton needsYou={activityNeedsYou} onClick={onOpenActivity} />
       )}
       {!inSettings && <ThemeButton />}
       <span className={styles.footerSpacer} aria-hidden />
@@ -678,9 +685,10 @@ function SidebarFooter({
 }
 
 function NotificationsBellButton({ unread = 0, onClick }) {
+  const keys = shortcutKeys("notifications");
   const tip = unread > 0
-    ? `Notifications · ${unread} unread · ⌘O`
-    : "Notifications · ⌘O";
+    ? `Notifications · ${unread} unread · ${keys}`
+    : `Notifications · ${keys}`;
   return (
     <Tip text={tip} side="up-l">
       <IconBtn aria-label={tip} onClick={onClick}>
@@ -694,6 +702,38 @@ function NotificationsBellButton({ unread = 0, onClick }) {
         </span>
       </IconBtn>
     </Tip>
+  );
+}
+
+function ActivityButton({ needsYou = 0, onClick }) {
+  const keys = shortcutKeys("activity");
+  const tip = needsYou > 0 ? `Activity · ${needsYou} need you · ${keys}` : `Activity · ${keys}`;
+  return (
+    <Tip text={tip} side="up-l">
+      <IconBtn aria-label={tip} onClick={onClick}>
+        <span className={styles.bellWrap}>
+          <Icon name="history" />
+          {needsYou > 0 ? (
+            <span className={`${styles.bellBadge} ${styles.needsBadge}`} aria-hidden>
+              {needsYou > 99 ? "99+" : needsYou}
+            </span>
+          ) : null}
+        </span>
+      </IconBtn>
+    </Tip>
+  );
+}
+
+const ROW_STATE_LABEL = { "needs-you": "needs you", failed: "failed", working: "working" };
+
+export function RowStateChip({ state }) {
+  const text = ROW_STATE_LABEL[state];
+  if (!text) return null;
+  return (
+    <span className={styles.stateChip} data-state={state}>
+      <span className={styles.stateDot} aria-hidden />
+      {text}
+    </span>
   );
 }
 
@@ -731,26 +771,18 @@ function Section({ label, children, right = null, containerRef = null, labelRef 
 
 function SectionAddButton({ tip, ariaLabel, onClick }) {
   return (
-    <Tip text={tip} side="r">
-      <IconBtn
-        onClick={onClick}
-        aria-label={ariaLabel}
-        style={{ width: 18, height: 18 }}
-      >
-        <PlusIcon style={{ width: 12, height: 12 }} />
-      </IconBtn>
-    </Tip>
+    <IconBtn tip={tip} tipSide="r" onClick={onClick} aria-label={ariaLabel} className={styles.sectionAdd}>
+      <PlusIcon />
+    </IconBtn>
   );
 }
 
 function PinAction({ isPinned, onClick }) {
   return (
     <span className={`${styles.pinWrap} ${isPinned ? styles.pinWrapPinned : ""}`}>
-      <Tip text={isPinned ? "Unpin" : "Pin"} side="up">
-        <IconBtn onClick={onClick} aria-label={isPinned ? "Unpin" : "Pin"} style={{ width: 22, height: 22 }}>
-          {isPinned ? <PinOffIcon /> : <PinIcon />}
-        </IconBtn>
-      </Tip>
+      <IconBtn tip={isPinned ? "Unpin" : "Pin"} tipSide="up" onClick={onClick} aria-label={isPinned ? "Unpin" : "Pin"} className={styles.pinButton}>
+        {isPinned ? <PinOffIcon /> : <PinIcon />}
+      </IconBtn>
     </span>
   );
 }
@@ -759,6 +791,7 @@ const ProfileRow = memo(function ProfileRow({
   profile,
   active,
   pending,
+  rowState = null,
   isPinned,
   connId,
   checkUnread,
@@ -785,13 +818,15 @@ const ProfileRow = memo(function ProfileRow({
   }, [active, connId, profile.name, sessionRecency]);
   const unread =
     !incomplete && !paused && !active && checkUnread?.(profile.name, sessionRecency);
-  const trailing = sessionRecency > 0
-    ? (
-      <span className={`tnum sb-ts${unread ? " is-unr" : ""}`}>
-        <RelativeTime ts={sessionRecency} />
-      </span>
-    )
-    : null;
+  const trailing = rowState
+    ? <RowStateChip state={rowState} />
+    : sessionRecency > 0
+      ? (
+        <span className={`tnum sb-ts${unread ? " is-unr" : ""}`}>
+          <RelativeTime ts={sessionRecency} />
+        </span>
+      )
+      : null;
   const label = profileLabel(profile.name);
   const incompleteHint = `@${label}, needs provider — tap to set up`;
   const leadingDiamond = <Diamond color={profile.accent || undefined} pulse={pending} />;
@@ -806,12 +841,19 @@ const ProfileRow = memo(function ProfileRow({
         sel={active}
         unread={unread}
         state={paused ? "paused" : incomplete ? "needs-provider" : undefined}
-        ariaLabel={incomplete ? incompleteHint : unread ? `${label} unread` : undefined}
-        title={incomplete ? incompleteHint : undefined}
+        ariaLabel={
+          incomplete
+            ? incompleteHint
+            : rowState
+              ? `${label}, ${ROW_STATE_LABEL[rowState]}`
+              : unread ? `${label} unread` : undefined
+        }
         leading={
           pending
             ? <Tip text="thinking…" side="up-l">{leadingDiamond}</Tip>
-            : bio
+            : incomplete
+              ? <Tip text={incompleteHint} side="l" escape>{leadingDiamond}</Tip>
+              : bio
               ? <Tip text={bio} side="l" escape>{leadingDiamond}</Tip>
               : leadingDiamond
         }
@@ -829,6 +871,7 @@ const WorkgroupRow = memo(function WorkgroupRow({
   hubAccent,
   task,
   busy,
+  run = null,
   active,
   isPinned,
   connId,
@@ -853,9 +896,9 @@ const WorkgroupRow = memo(function WorkgroupRow({
 
   let stateKind;
   let stateLabel;
-  if (busy || task?.state === "open") {
+  if (run || busy || task?.state === "open") {
     stateKind = "working";
-    stateLabel = "Working…";
+    stateLabel = run?.phase ? `Working · ${run.phase}` : "Working…";
   } else if (paused) {
     stateKind = "paused";
     stateLabel = "Paused";
@@ -876,13 +919,20 @@ const WorkgroupRow = memo(function WorkgroupRow({
   const unread =
     !paused && !active && checkUnread?.(workgroup.profile, workgroup.id, mtime);
   const working = stateKind === "working";
-  const trailing = mtime > 0
+  const hasPhases = run?.phasesTotal > 0 && run?.phasesDone != null;
+  const trailing = hasPhases
     ? (
-      <span className={`tnum sb-ts${unread ? " is-unr" : ""}`}>
-        <RelativeTime ts={mtime} />
+      <span className={`tnum ${styles.phaseCount}`} aria-label={`phase ${run.phasesDone} of ${run.phasesTotal}`}>
+        {run.phasesDone}/{run.phasesTotal}
       </span>
     )
-    : null;
+    : mtime > 0
+      ? (
+        <span className={`tnum sb-ts${unread ? " is-unr" : ""}`}>
+          <RelativeTime ts={mtime} />
+        </span>
+      )
+      : null;
 
   return (
     <div className={styles.rowWrap}>
@@ -895,7 +945,7 @@ const WorkgroupRow = memo(function WorkgroupRow({
         state={paused ? "paused" : undefined}
         ariaLabel={unread ? `${label} unread` : undefined}
         leading={
-          <span className={styles.workgroupLeading} style={{ color: hubAccent || "var(--ink-4)" }}>
+          <span className={styles.workgroupLeading} style={{ color: hubAccent || "var(--ink-3)" }}>
             {working ? (
               <Tip text={stateLabel} side="up-l">
                 <DiamondStack color={hubAccent || undefined} pulse />

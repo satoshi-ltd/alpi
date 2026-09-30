@@ -1,0 +1,12 @@
+.chunk {
+  animation: chunkIn 150ms var(--ease) both;
+}
+
+@keyframes chunkIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chunk { animation: none; }
+}

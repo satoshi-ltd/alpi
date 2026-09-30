@@ -37,7 +37,7 @@
 }
 
 .jobCron {
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   color: var(--ink-3);
 }
 
@@ -45,20 +45,20 @@
   flex-shrink: 0;
   margin-left: auto;
   padding-left: var(--space-3);
-  font-size: var(--fs-xs);
-  color: var(--ink-4);
+  font-size: var(--text-meta);
+  color: var(--ink-3);
   white-space: nowrap;
 }
 
 .detailTitle {
-  font-size: var(--fs-lg);
+  font-size: var(--text-chat);
   font-weight: var(--fw-semibold);
   color: var(--ink);
 }
 
 .detailId {
-  font-size: var(--fs-xs);
-  color: var(--ink-4);
+  font-size: var(--text-meta);
+  color: var(--ink-3);
 }
 
 .deleteWrap {
@@ -83,7 +83,7 @@
 
 .fields dt {
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--ink-3);
@@ -101,7 +101,7 @@
 
 .promptLabel {
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--ink-3);

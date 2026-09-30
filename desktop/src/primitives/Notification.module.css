@@ -19,7 +19,7 @@
   border: .5px solid var(--line);
   border-radius: var(--r-3xl);
   box-shadow: 0 0 0 .5px rgba(0, 0, 0, .04), 0 12px 32px rgba(0, 0, 0, .10);
-  font-size: var(--fs-base);
+  font-size: var(--text-ui);
   color: var(--ink-2);
   pointer-events: auto;
   white-space: nowrap;
@@ -38,7 +38,7 @@
 }
 
 .dotPulse {
-  animation: ds-pulse-dot 1.6s ease-in-out infinite;
+  animation: notifDotPulse var(--dur-loop) ease-in-out infinite;
 }
 
 .text {
@@ -67,4 +67,9 @@
 
 .actionBtn:hover {
   background: var(--hover);
+}
+
+@keyframes notifDotPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: var(--alpha-faint); }
 }

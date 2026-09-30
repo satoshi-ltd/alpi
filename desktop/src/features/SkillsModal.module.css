@@ -24,7 +24,7 @@
 
 .rowBlurb {
   margin-left: var(--space-5);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   line-height: var(--lh-cozy);
   color: var(--ink-3);
   display: -webkit-box;
@@ -47,12 +47,12 @@
   display: inline-flex;
   align-items: center;
   font-family: var(--font-mono);
-  font-size: var(--fs-lg);
+  font-size: var(--text-chat);
   font-weight: var(--fw-semibold);
   color: var(--ink);
   text-transform: lowercase;
 }
-.detailCat { color: var(--ink-4); font-weight: var(--fw-regular); }
+.detailCat { color: var(--ink-3); font-weight: var(--fw-regular); }
 
 .detailInfo {
   display: inline-flex;
@@ -60,9 +60,9 @@
   gap: var(--space-2);
   color: var(--ink-3);
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
 }
-.detailInfoDot { color: var(--ink-4); }
+.detailInfoDot { color: var(--ink-3); }
 
 
 .article {
@@ -96,7 +96,7 @@
   margin-top: 0.4em;
   flex-shrink: 0;
 }
-.calloutReason { font-family: var(--font-mono); color: var(--ink); }
+.calloutReason { font-family: var(--font-sans); color: var(--ink); }
 .calloutInvalid {
   background: color-mix(in srgb, var(--c-danger) 10%, transparent);
   border-color: color-mix(in srgb, var(--c-danger) 28%, transparent);
@@ -126,8 +126,8 @@
   gap: var(--space-2) var(--space-5);
 }
 .req { display: inline-flex; align-items: center; gap: var(--space-2); }
-.reqName { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--ink-2); }
-.reqMissing { color: var(--ink-4); }
+.reqName { font-family: var(--font-mono); font-size: var(--text-meta); color: var(--ink-2); }
+.reqMissing { color: var(--ink-3); }
 .reqDot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
 .reqOk { background: var(--c-success); }
 .reqNo { border: 1px solid var(--ink-4); }
@@ -135,7 +135,7 @@
 .kwFlow { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .kw {
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--text-meta);
   color: var(--ink-3);
   background: var(--hover);
   border-radius: var(--r-sm);
@@ -197,7 +197,7 @@
 .treeChevron { flex-shrink: 0; color: var(--ink-3); transition: transform 0.12s ease; }
 .treeChevronOpen { transform: rotate(90deg); }
 .treeChevronEmpty { opacity: 0.3; }
-.treeMeta { flex-shrink: 0; color: var(--ink-4); font-size: var(--fs-xs); }
+.treeMeta { flex-shrink: 0; color: var(--ink-3); font-size: var(--text-meta); }
 .treeSecrets { cursor: default; }
 .treeSecrets:hover { background: transparent; }
 .treeRowStatic { cursor: default; }
