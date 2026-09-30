@@ -253,6 +253,11 @@ on every PR and on manual dispatch — not on push. The push-to-main gate is
 `uv.lock` and `CHANGELOG.md`. Backstop only, not a substitute for running the
 suite locally before declaring done.
 
+`prune-actions.yml` runs weekly and on manual dispatch (`dry_run` only lists):
+`scripts/prune_actions.py --apply` deletes the runs beyond the newest 10 per
+workflow that are also older than 7 days, and the artifacts older than 7 days.
+Without `--apply` the script only lists. CI caches are left to GitHub's eviction.
+
 A repo-versioned `pre-commit` hook (`.githooks/pre-commit`) runs only
 the suites touched by the staged diff — alpi (pytest), desktop
 (`pnpm test` + `cargo test`), mobile (`npm test`). Enable once per
