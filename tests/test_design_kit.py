@@ -49,6 +49,43 @@ def test_design_system_covers_conversation_and_workgroups_on_both_clients(tmp_pa
     assert all(f"Marker · {state}" in workgroup for state in ("task", "working", "done", "skip"))
 
 
+def test_design_kit_draws_what_desktop_0_7_and_mobile_0_6_shipped(tmp_path):
+    subprocess.run([sys.executable, str(REPO / "design" / "build.py"), "--out", str(tmp_path)], check=True, capture_output=True)
+    project = tmp_path / "canvas" / "project"
+    boards = json.loads((project / "canvas.json").read_text())["boards"]
+    read = lambda name: (project / name).read_text()
+    for name in ("Phone-Activity.dc.html", "Fold-Activity.dc.html", "Phone-Roster.dc.html", "Phone-ToolSheet.dc.html", "Phone-SelectText.dc.html"):
+        assert boards[name]["page"] == "mobile"
+    chat = read("Desktop-Chat.dc.html")
+    assert all(f'data-state="{s}"' in chat for s in ("needs-you", "failed", "working"))
+    assert "Pinned" in chat and 'aria-label="phase 2 of 4"' in chat and "Activity · 2 need you" in chat
+    assert "Thought for 7s" in chat and "wants to run a command" in chat
+    overlays = read("Desktop-Overlays.dc.html")
+    assert all(group in overlays for group in ("Needs you · 2", "Running · 2", "Scheduled", "Keyboard shortcuts", 'data-keys="⌘K"', "Sessions"))
+    assert "Tooltip" not in overlays and "was: raw" not in overlays
+    profile = read("Desktop-ProfileSettings.dc.html")
+    assert 'aria-label="Settings sections"' in profile and "Search settings" in profile and "MCP Servers" in profile
+    tokens = read("System-Tokens.dc.html")
+    shipped = (REPO / "desktop" / "src" / "styles" / "tokens.css").read_text()
+    for role in ("--text-meta", "--text-ui", "--text-chat", "--text-title", "--text-display", "--text-hero", "--dur-1", "--dur-2", "--dur-loop", "--dur-spin", "--icon-sm", "--icon-md"):
+        value = re.search(rf"{role}:\s*([^;]+);", shipped).group(1).strip()
+        assert role in tokens, role
+        assert value.removesuffix("px") in tokens, (role, value)
+    desktop_components = read("System-DesktopComponents.dc.html")
+    assert "KeyHint" in desktop_components and "Tip" in desktop_components and "iconOnly" in desktop_components
+    mobile_components = read("System-MobileComponents.dc.html")
+    assert "chat · 16" in mobile_components and "RowState" in mobile_components and "Model chip" in mobile_components
+    assert "xxs · 9" not in mobile_components
+    for name in ("Phone-Roster.dc.html", "Fold-Chat.dc.html"):
+        html = read(name)
+        assert 'data-state="needs-you"' in html and "Activity · 2 need you" in html
+    assert "Needs you · 2" in read("Phone-Activity.dc.html") and "Review" in read("Phone-Activity.dc.html")
+    tool = read("Phone-ToolSheet.dc.html")
+    assert "Arguments" in tool and "Output" in tool and "Copy output" in tool
+    assert "Select text" in read("Phone-SelectText.dc.html")
+    assert "deepseek-v4.1-flash · medium" in read("Phone-Chat.dc.html")
+
+
 def test_design_proposals_list_only_open_work(tmp_path):
     subprocess.run([sys.executable, str(REPO / "design" / "build.py"), "--out", str(tmp_path)], check=True, capture_output=True)
     sys.path.insert(0, str(REPO / "design" / "src"))

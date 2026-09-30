@@ -44,6 +44,12 @@ PATHS = {
     "pencil": '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
     "volume": '<path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/>',
     "qr": '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM20 14v3M17 20h3"/>',
+    "history": '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>',
+    "sparkle": '<path d="M9.94 15.5a2 2 0 0 0-1.44-1.44l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.14a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z"/>',
+    "moon": '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
+    "pin-off": '<path d="M12 17v5"/><path d="M15 9.34V6h1a2 2 0 0 0 0-4H7.89"/><path d="M2 2l20 20"/><path d="M9 9v1.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h11"/>',
+    "trash": '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+    "pause": '<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>',
 }
 
 
@@ -280,40 +286,112 @@ PROFILES = [("doc", DOC_ACCENT, "6w", True), ("alpi", "#c9a227", "", False), ("a
             ("clonara", "#e2704a", "", False), ("galt", "#5b6670", "", False), ("lingo", "#8a5cf6", "", False),
             ("yuri", "#f0a58f", "6w", False), ("etxea", "#9ccf95", "", False)]
 
+WARNING_TEXT = "#8a5a0a"
+M_STATES = {"alpi": ("working", None), "abby": ("needs-you", None), "clonara": ("failed", None)}
+M_STATE_TEXT = {"needs-you": "needs you", "failed": "failed", "working": "working"}
+M_PINNED = ("doc",)
+PREVIEWS = {"doc": "Triglycerides moved most: 142 → 88 mg/dL", "alpi": "Summarizing yesterday’s deploys…", "abby": "Wants to send the invoice reminder",
+            "clonara": "weekly labs failed · timeout", "galt": "Filed the Q3 receipts", "lingo": "Ready for today’s Basque drill?", "yuri": "Translation of the letter is in",
+            "etxea": "needs provider — tap to set up"}
 
-def m_sidebar(h, selected="doc", badge="1", version="v0.5.0", conn_selected=False):
-    rows = []
-    for name, col, ts, sel in PROFILES:
-        sel = name == selected
-        dim = name == "etxea"
-        stamp = f'<span style="font-family: {MONO}; font-size: 11px; color: #626e7d">{ts}</span>' if ts else ""
-        bg = "rgba(11,17,23,0.06)" if sel else "transparent"
-        rows.append(
-            f'<a href="Fold-Chat.dc.html" style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 8px 10px; border-radius: 10px; '
-            f'background: {bg}; text-decoration: none; color: inherit; opacity: {0.55 if dim else 1}">'
-            f'{diamond(col, 16)}<span style="flex: 1; font-size: 14px; line-height: 1.3; color: #0b1117">{name}</span>{stamp}</a>')
-    badge_html = (f'<span style="position: absolute; top: -4px; right: -6px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; '
-                  f'background: #c14545; border: 1.5px solid #f5f6f8; color: #fff; font-family: {MONO}; font-size: 9px; line-height: 13px; text-align: center; box-sizing: border-box">{badge}</span>') if badge else ""
-    return f"""<div style="width: 280px; height: {h}px; flex-shrink: 0; box-sizing: border-box; background: #f5f6f8; border-right: 0.5px solid rgba(11,17,23,0.07); display: flex; flex-direction: column">
-<div style="padding: 6px 12px 8px; display: flex; align-items: center; gap: 4px">{m_eyebrow("Connection", "#626e7d", 500, 0.06, 11, "flex: 1")}<button aria-label="Hide sidebar" class="m-chrome">{ic("panel", 16, "#3d4955")}</button><button aria-label="Filter" class="m-chrome">{ic("search", 16, "#3d4955")}</button></div>
-<div style="margin: 0 12px; padding: 12px 14px; border-radius: 12px; background: {"rgba(11,17,23,0.06)" if conn_selected else "#ffffff"}; display: flex; align-items: center; gap: 12px">
-<span style="position: relative">{ic("chip", 18, "#3d4955")}<span style="position: absolute; right: -2px; bottom: -2px; width: 7px; height: 7px; border-radius: 999px; background: #3fb37a; border: 1.5px solid #fff"></span></span>
-<div style="flex: 1; min-width: 0; display: flex; flex-direction: column"><span style="font-weight: 600; font-size: 14px; line-height: 1.3">casa</span><span style="font-family: 'Geist Mono', monospace; font-size: 11px; line-height: 1.3; color: #626e7d">ws://100.99.29.84:49200</span></div>
-{ic("chev-d", 16, "#3d4955")}
-</div>
-<div style="padding: 24px 12px 8px; display: flex; align-items: center">{m_eyebrow("Profiles", "#626e7d", 500, 0.06, 11, "flex: 1")}<button aria-label="New profile" class="m-chrome">{ic("plus", 16, "#3d4955")}</button></div>
-<div style="padding: 0 12px; display: flex; flex-direction: column">{''.join(rows)}</div>
-<div style="padding: 24px 12px 8px; display: flex; align-items: center">{m_eyebrow("Workgroups", "#626e7d", 500, 0.06, 11, "flex: 1")}<button aria-label="New workgroup" class="m-chrome">{ic("plus", 16, "#3d4955")}</button></div>
-<div style="flex: 1"></div>
-<div style="height: 44px; padding: 0 12px; display: flex; align-items: center; gap: 10px; border-top: 0.5px solid rgba(11,17,23,0.07)">
-<a href="Phone-Settings.dc.html" style="display: inline-flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 10px; text-decoration: none; color: #3d4955; font-weight: 500; font-size: 12px">{ic("gear", 18, "#3d4955")}Settings</a>
-<span style="position: relative; display: inline-flex; padding: 6px 8px">{ic("bell", 18, "#3d4955")}{badge_html}</span>
-<button aria-label="Theme: Light" class="m-chrome" style="padding: 6px 8px">{ic("sun", 18, "#3d4955")}</button>
-<span style="flex: 1"></span>
-<span style="font-family: 'Geist Mono', monospace; font-weight: 500; font-size: 11px; color: #b1bac4">{version}</span>
+
+def m_row_state(state, phases=None):
+    color = {"needs-you": WARNING_TEXT, "failed": DANGER, "working": ALPI_ACCENT}[state]
+    font = f"font-family: {MONO}; font-weight: 500;" if phases else "font-weight: 500;"
+    return (f'<span data-state="{state}" style="display: inline-flex; align-items: center; gap: 6px; white-space: nowrap">'
+            f'<span style="width: 6px; height: 6px; border-radius: 999px; background: {color}"></span>'
+            f'<span style="{font} font-size: 11px; line-height: 14.3px; color: {color}">{phases or M_STATE_TEXT[state]}</span></span>')
+
+
+def m_count_badge(n, tone="danger", ring="#f5f6f8"):
+    bg = "#e08a3c" if tone == "warning" else "#c14545"
+    fg = "#0b1117" if tone == "warning" else "#ffffff"
+    return (f'<span style="position: absolute; top: -6px; right: -8px; min-width: 18px; height: 18px; padding: 0 6px; border-radius: 999px; border: 1.5px solid {ring}; background: {bg}; '
+            f'color: {fg}; font-weight: 600; font-size: 11px; line-height: 15px; text-align: center; box-sizing: border-box">{n}</span>')
+
+
+def m_glyph(kind, color):
+    if kind == "workgroup":
+        from desktop_boards import diamond_stack
+        return diamond_stack(color, 10)
+    return diamond(color, 16)
+
+
+def m_roster_row(name, color, kind="profile", ts="", state=None, phases=None, selected=False, unread=False, compact=True, dim=False, href="Fold-Chat.dc.html"):
+    needs = state == "needs-you"
+    meta = []
+    if ts:
+        meta.append(f'<span style="font-family: {MONO}; font-weight: {600 if unread else 500}; font-size: 11px; line-height: 1; color: {"#0b1117" if unread else "#626e7d"}">{ts}</span>')
+    if state:
+        meta.append(m_row_state(state, phases))
+    meta_html = f'<span style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0">{"".join(meta)}</span>' if meta else ""
+    if compact:
+        weight = 600 if (unread or needs) else (500 if selected else 400)
+        ink = "#0b1117" if (unread or selected or needs) else "#3d4955"
+        return (f'<a href="{href}" style="display: flex; align-items: center; gap: 12px; min-height: 44px; margin: 0 12px; padding: 6px 10px; border-radius: 10px; box-sizing: border-box; '
+                f'background: {"rgba(11,17,23,0.06)" if selected else "transparent"}; text-decoration: none; color: inherit; opacity: {0.55 if dim else 1}">'
+                f'<span style="width: 24px; display: inline-flex; justify-content: center">{m_glyph(kind, color)}</span>'
+                f'<span style="flex: 1; min-width: 0; font-size: 14px; font-weight: {weight}; line-height: 18.2px; color: {ink}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{name}</span>{meta_html}</a>')
+    weight = 700 if (unread or needs) else 600
+    preview = PREVIEWS.get(name, "3 members · hub @doc")
+    return (f'<a href="Phone-Chat.dc.html" style="display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 12px 16px; box-sizing: border-box; text-decoration: none; color: inherit; opacity: {0.55 if dim else 1}">'
+            f'<span style="width: 24px; display: inline-flex; justify-content: center">{m_glyph(kind, color)}</span>'
+            f'<span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 15px; font-weight: {weight}; line-height: 19.5px; color: #0b1117">{name}</span>'
+            f'<span style="font-size: 14px; line-height: 18.2px; color: #626e7d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{preview}</span></span>{meta_html}</a>')
+
+
+def m_roster_label(label, add=True, gutter=12):
+    plus = f'<button aria-label="New {label.lower()[:-1]}" class="m-chrome" style="width: 28px; height: 28px; margin: -6px 0">{ic("plus", 14, "#626e7d")}</button>' if add else ""
+    return f'<div style="display: flex; align-items: center; gap: 8px; padding: 12px {gutter}px 6px">{m_eyebrow(label, "#626e7d", 500, 0.06, 11, "flex: 1")}{plus}</div>'
+
+
+def m_roster(selected="doc", compact=True, wg_selected=False):
+    sep = "" if compact else '<div style="height: 0.5px; background: rgba(11,17,23,0.07); margin-left: 52px"></div>'
+    gutter = 12 if compact else 16
+
+    def prow(name, col, ts):
+        state, phases = M_STATES.get(name, (None, None))
+        return m_roster_row(name, col, ts=ts, state=state, phases=phases, selected=compact and name == selected, unread=name == "yuri", compact=compact, dim=name == "etxea")
+
+    pinned = sep.join(prow(n, c, t) for n, c, t, _ in PROFILES if n in M_PINNED)
+    rows = sep.join(prow(n, c, t) for n, c, t, _ in PROFILES if n not in M_PINNED)
+    wgs = sep.join((m_roster_row("alpha", DOC_ACCENT, "workgroup", state="working", phases="2/4", selected=wg_selected, compact=compact),
+                    m_roster_row("launch-crew", "#f0b447", "workgroup", ts="2h", compact=compact)))
+    return (f'{m_roster_label("Pinned", False, gutter)}{pinned}{m_roster_label("Profiles", True, gutter)}{rows}{m_roster_label("Workgroups", True, gutter)}{wgs}')
+
+
+def m_conn_header(ring="#f5f6f8", collapse=True, bg="#f5f6f8", selected=False):
+    dot = f'<span style="position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 4px; background: #e08a3c; border: 1.5px solid {ring}; box-sizing: border-box"></span>'
+    hide = f'<button aria-label="Hide sidebar" class="m-chrome">{ic("panel", 16, "#3d4955")}</button>' if collapse else ""
+    return f"""<div style="padding: 6px 12px 8px; background: {bg}; display: flex; flex-direction: column; gap: 4px">
+<div style="display: flex; align-items: center">{m_eyebrow("Connection", "#626e7d", 500, 0.06, 11, "flex: 1")}{hide}<button aria-label="Activity · 2 need you" class="m-chrome" style="position: relative">{ic("activity", 16, WARNING_TEXT)}{dot}</button><button aria-label="Filter profiles and workgroups" class="m-chrome">{ic("search", 16, "#3d4955")}</button></div>
+<div style="padding: 6px 12px; border-radius: 12px; border: 0.5px solid rgba(11,17,23,0.07); background: {"rgba(11,17,23,0.06)" if selected else "#ffffff"}; display: flex; align-items: center; gap: 10px">
+<span style="position: relative">{ic("chip", 16, "#3d4955")}<span style="position: absolute; right: -2px; bottom: -2px; width: 8px; height: 8px; border-radius: 4px; background: #3fb37a; border: 2px solid #fff; box-sizing: border-box"></span></span>
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column"><span style="font-weight: 600; font-size: 14px; line-height: 1.3">casa</span><span style="font-family: {MONO}; font-size: 11px; line-height: 1.3; color: #626e7d">ws://100.99.29.84:49200</span></div>
+{ic("chev-d", 12, "#626e7d")}
 </div>
 </div>"""
 
+
+def m_shell_footer(version="v0.6.0", theme=True, ring="#f5f6f8", border=False):
+    entry = lambda inner, label: f'<span aria-label="{label}" style="display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 8px; border-radius: 10px">{inner}</span>'
+    top = "border-top: 0.5px solid rgba(11,17,23,0.07);" if border else ""
+    theme_html = entry(ic("sun", 16, "#3d4955"), "Theme: Light") if theme else ""
+    wrap = '<span style="position: relative; display: inline-flex">'
+    bell = wrap + ic("bell", 16, "#3d4955") + m_count_badge(1, "danger", ring) + "</span>"
+    activity = wrap + ic("activity", 16, WARNING_TEXT) + m_count_badge(2, "warning", ring) + "</span>"
+    return (f'<div style="height: 44px; padding: 0 12px; display: flex; align-items: center; gap: 6px; {top}">'
+            f'<a href="Phone-Settings.dc.html" style="display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 8px; border-radius: 10px; text-decoration: none; color: #3d4955; font-weight: 500; font-size: 12px">{ic("gear", 16, "#3d4955")}Settings</a>'
+            f'{entry(bell, "Notifications · 1 unread")}{entry(activity, "Activity · 2 need you")}'
+            f'{theme_html}<span style="flex: 1"></span><span style="font-family: {MONO}; font-weight: 500; font-size: 11px; color: #b1bac4">{version}</span></div>')
+
+
+def m_sidebar(h, selected="doc", badge="1", version="v0.6.0", conn_selected=False, wg_selected=False):
+    return f"""<div style="width: 280px; height: {h}px; flex-shrink: 0; box-sizing: border-box; background: #f5f6f8; border-right: 0.5px solid rgba(11,17,23,0.07); display: flex; flex-direction: column">
+{m_conn_header(selected=conn_selected)}
+<div style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column">{m_roster(selected, True, wg_selected)}</div>
+{m_shell_footer(version)}
+</div>"""
 
 
 def m_chat_header(title, accent, meta_html, two_pane=False, back=True, meta_items=None):
@@ -331,24 +409,17 @@ def m_chat_header(title, accent, meta_html, two_pane=False, back=True, meta_item
 
 
 def m_thread(accent, pane=False):
-    cap = "76%" if pane else "82%"
-    return f"""<div style="flex: 1; display: flex; flex-direction: column; justify-content: flex-end; gap: 4px; padding-bottom: 12px">
-<div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px; padding: 0 16px">
-<div style="max-width: {cap}; padding: 12px 16px; border-radius: 18px; border-bottom-right-radius: 6px; background: {mix(accent, 0.12)}; font-size: 15px; line-height: 1.65">Hi</div>
-<span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #626e7d">42d</span>
-</div>
-<div style="padding: 10px 16px 0; display: flex; align-items: center; gap: 8px; font-family: 'Geist Mono', monospace; font-size: 12px; color: #626e7d; white-space: nowrap; overflow: hidden">{ic("chev-r", 12, "#626e7d")}<span style="overflow: hidden; text-overflow: ellipsis">thinking · 4s The user just said "Hi". A greeting. Reply warmly and ask what they need…</span></div>
-<div style="padding: 8px 16px 0; font-size: 15px; line-height: 1.65; color: #0b1117; max-width: 90%">Morning. What do you have for me today: labs, sleep, training, or something deeper?</div>
+    from conversation_boards import m_agent_text, m_reasoning, m_tool, m_user
+    return f"""<div style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; gap: 10px; padding-bottom: 12px">
+{m_user("Pull my last three lipid panels and tell me what moved.", accent, pane)}
+<div style="display: flex; flex-direction: column">{m_reasoning()}{m_tool("memory", "lipid panels · 3 results")}{m_tool("read_file", "labs/2026-08-lipids.pdf")}</div>
+{m_agent_text("Triglycerides moved most: <strong>142 → 88 mg/dL</strong> since March. LDL-P eased to 1,180 nmol/L; HDL held at 68.")}
 </div>"""
 
 
 def m_composer(name="doc"):
-    return f"""<div style="padding: 8px 16px 12px; border-top: 0.5px solid rgba(11,17,23,0.07); background: #ffffff">
-<div style="display: flex; flex-direction: column; gap: 6px; padding: 12px 12px 8px; border: 0.5px solid rgba(11,17,23,0.14); border-radius: 16px">
-<label style="display: block"><span style="position: absolute; left: -9999px">Message</span><input placeholder="Message @{name}…" style="width: 100%; border: 0; outline: 0; background: transparent; font-family: Geist, sans-serif; font-size: 15px; color: #0b1117; padding: 4px 4px 8px; box-sizing: border-box"></label>
-<div style="display: flex; justify-content: flex-end; align-items: center; gap: 10px"><button aria-label="Attach" class="m-chrome" style="width: 36px; height: 36px">{ic("clip", 20, "#3d4955")}</button><button aria-label="Send" style="width: 36px; height: 36px; border: 0; border-radius: 10px; background: #f1f3f5; display: flex; align-items: center; justify-content: center; cursor: pointer">{ic("up", 18, "#626e7d")}</button></div>
-</div>
-</div>"""
+    from conversation_boards import m_composer as composer
+    return composer(name=name, chip="deepseek-v4.1-flash · medium", accent=DOC_ACCENT)
 
 
 def phone_chat():
@@ -372,13 +443,66 @@ def fold_chat():
 {m_sidebar(884)}
 <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; background: #ffffff">
 {m_chat_header("doc", DOC_ACCENT, meta, two_pane=True, back=False, meta_items=items)}
-<div style="flex: 1; display: flex; flex-direction: column; max-width: 720px; width: 100%; align-self: center; box-sizing: border-box">{m_thread(DOC_ACCENT, pane=True)}</div>
+<div style="flex: 1; min-height: 0; display: flex; flex-direction: column; max-width: 720px; width: 100%; align-self: center; box-sizing: border-box">{m_thread(DOC_ACCENT, pane=True)}</div>
 <div style="max-width: 720px; width: 100%; align-self: center; box-sizing: border-box">{m_composer()}</div>
 </div>
 </div>
 """
     return page("Fold · chat, two panes", 852, 884, body)
 
+
+def m_activity_row(icon, title, sub, tone="quiet", action=""):
+    tint = {"warning": WARNING_TEXT, "accent": ALPI_ACCENT, "danger": DANGER, "quiet": "#626e7d"}[tone]
+    btn = f'<span style="padding: 6px 12px; border-radius: 10px; background: #0b1117; color: #ffffff; font-weight: 600; font-size: 12px">{action}</span>' if action else ""
+    return (f'<div role="button" style="display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 16px; box-sizing: border-box">{ic(icon, 16, tint)}'
+            f'<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px"><span style="font-weight: 500; font-size: 15px; line-height: 19.5px; color: #0b1117">{title}</span>'
+            f'<span style="font-family: {MONO}; font-size: 12px; line-height: 15.6px; color: {tint if tone == "danger" else "#626e7d"}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{sub}</span></div>{btn}</div>')
+
+
+def m_activity_list():
+    group = lambda label, rows, color="#626e7d": f'<div role="list"><div style="padding: 16px 16px 6px">{m_eyebrow(label, color)}</div>{"".join(rows)}</div>'
+    return (group("Needs you · 2", [m_activity_row("alert", "abby · wants to run a command", "approval · 2m ago", "warning", "Review"),
+                                    m_activity_row("alert", "doc · Which lab should I book?", "question · 12s ago", "warning", "Review")], WARNING_TEXT)
+            + group("Running · 2", [m_activity_row("activity", "alpha · #collect", "phase 2 of 4 · daily-digest", "accent"),
+                                    m_activity_row("activity", "alpi · Summarize yesterday’s deploys", "4m · chat", "accent")])
+            + group("Scheduled", [m_activity_row("x", "clonara · weekly labs", "failed 3h ago", "danger"),
+                                  m_activity_row("clock", "doc · Daily brief", "in 14h")]))
+
+
+def phone_activity():
+    body = f"""<div style="display: flex; flex-direction: column">
+{m_screen_header("Activity", "WHAT IS RUNNING", glyph="")}
+{m_activity_list()}
+</div>
+"""
+    return page("Phone · activity", 390, PHONE_ACTIVITY_H, body)
+
+
+def fold_activity():
+    body = f"""<div style="display: flex; height: 100%">
+{m_sidebar(FOLD_ACTIVITY_H, selected="")}
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; background: #ffffff">
+{m_screen_header("Activity", "WHAT IS RUNNING", glyph="", wide=True, back=False)}
+<div style="max-width: 720px; width: 100%; align-self: center">{m_activity_list()}</div>
+</div>
+</div>
+"""
+    return page("Fold · activity", 852, FOLD_ACTIVITY_H, body)
+
+
+def phone_roster():
+    body = f"""<div style="display: flex; flex-direction: column; height: 100%; background: #ffffff">
+{m_conn_header(ring="#ffffff", collapse=False, bg="#ffffff")}
+<div style="height: 0.5px; background: rgba(11,17,23,0.07)"></div>
+<div style="flex: 1; min-height: 0; overflow: hidden">{m_roster(compact=False)}</div>
+{m_shell_footer(theme=False, ring="#ffffff", border=True)}
+</div>
+"""
+    return page("Phone · roster", 390, 844, body)
+
+
+PHONE_ACTIVITY_H = 540
+FOLD_ACTIVITY_H = 700
 
 
 def phone_profile_settings():
@@ -533,7 +657,7 @@ def fold_wg_settings():
 {m_wide_row("Delete workgroup", "removes it for every member. Cannot be undone.", danger=True)}
 </div>"""
     body = f"""<div style="display: flex; height: 100%">
-{m_sidebar(1300, selected="")}
+{m_sidebar(1300, selected="", wg_selected=True)}
 <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; background: #ffffff">
 {m_screen_header("alpha", "Settings", accent=ALPI_ACCENT, glyph='<span style="font-family: {MONO}; font-weight: 500; font-size: 18px; color: #626e7d">#</span>', wide=True, meta=['<span style="font-family: {MONO}; font-size: 12px; color: #3d4955">hub @doc</span>', '<span style="font-family: {MONO}; font-size: 12px; color: #3d4955">3 members</span>', '<span style="font-family: {MONO}; font-size: 12px; color: #217a45">active</span>', '<span style="font-family: {MONO}; font-size: 12px; color: #626e7d">wg_4f2a…9c1e</span>'])}
 {inner}
@@ -651,7 +775,7 @@ def write(name, html):
 
 
 CSS = """
-.m-chrome{width:28px;height:28px;border:0;border-radius:8px;background:transparent;display:inline-flex;align-items:center;justify-content:center;padding:0;cursor:pointer;color:#3d4955}
+.m-chrome{width:36px;height:36px;border:0;border-radius:10px;background:transparent;display:inline-flex;align-items:center;justify-content:center;padding:0;cursor:pointer;color:#3d4955}
 .m-chrome:hover{background:rgba(11,17,23,0.06)}
 button,input{font-family:inherit}
 """
@@ -674,17 +798,17 @@ def build(desktop_boards):
         notes[id_] = {"x": x, "y": y, "text": text, "kind": "title1", "maxW": max_w, "page": page}
 
     from audit2 import audit2_board
-    from desktop_overlays import desktop_overlays
+    from desktop_overlays import OVERLAYS_H, desktop_overlays
     from mobile_overlays import MOBILE_OVERLAYS
-    from system_boards import SYSTEM
+    from system_boards import DESKTOP_COMPONENTS_H, MOBILE_COMPONENTS_H, SYSTEM, TOKENS_H
 
     from conversation_boards import CONVERSATION
 
     y = 0
     for label, items in (
-        ("Foundations", [("System-Tokens.dc.html", SYSTEM["tokens"](), 2000, "System · tokens")]),
-        ("Controls and feedback", [("System-DesktopComponents.dc.html", SYSTEM["desktop"](), 1900, "Desktop · controls and feedback"), ("System-MobileComponents.dc.html", SYSTEM["mobile"](), 2300, "Mobile · controls and feedback")]),
-        ("Conversation", [("System-DesktopConversation.dc.html", CONVERSATION["desktop"](), 2900, "Desktop · conversation"), ("System-MobileConversation.dc.html", CONVERSATION["mobile"](), 1340, "Mobile · conversation")]),
+        ("Foundations", [("System-Tokens.dc.html", SYSTEM["tokens"](), TOKENS_H, "System · tokens")]),
+        ("Controls and feedback", [("System-DesktopComponents.dc.html", SYSTEM["desktop"](), DESKTOP_COMPONENTS_H, "Desktop · controls and feedback"), ("System-MobileComponents.dc.html", SYSTEM["mobile"](), MOBILE_COMPONENTS_H, "Mobile · controls and feedback")]),
+        ("Conversation", [("System-DesktopConversation.dc.html", CONVERSATION["desktop"](), 2900, "Desktop · conversation"), ("System-MobileConversation.dc.html", CONVERSATION["mobile"](), 1400, "Mobile · conversation")]),
         ("Workgroups", [("System-DesktopWorkgroup.dc.html", CONVERSATION["desktop_wg"](), 1200, "Desktop · workgroups"), ("System-MobileWorkgroup.dc.html", CONVERSATION["mobile_wg"](), 760, "Mobile · workgroups")]),
     ):
         y += 240
@@ -696,11 +820,11 @@ def build(desktop_boards):
     y = 0
     for name, html, h, label in (
         ("Desktop-Chat.dc.html", desktop_boards["chat"], 800, "Chat"),
-        ("Desktop-ProfileSettings.dc.html", desktop_boards["profile"], 2600, "Profile settings"),
-        ("Desktop-WorkgroupSettings.dc.html", desktop_boards["wg"], 1900, "Workgroup settings"),
-        ("Desktop-Connections.dc.html", desktop_boards["connections"], 1300, "Connections"),
-        ("Desktop-AppSettings.dc.html", desktop_boards["app"], 800, "App settings"),
-        ("Desktop-Overlays.dc.html", desktop_overlays(), 860, "Overlays"),
+        ("Desktop-ProfileSettings.dc.html", desktop_boards["profile"], 2400, "Profile settings"),
+        ("Desktop-WorkgroupSettings.dc.html", desktop_boards["wg"], 1760, "Workgroup settings"),
+        ("Desktop-Connections.dc.html", desktop_boards["connections"], 820, "Connections"),
+        ("Desktop-AppSettings.dc.html", desktop_boards["app"], 740, "App settings"),
+        ("Desktop-Overlays.dc.html", desktop_overlays(), OVERLAYS_H, "Overlays"),
     ):
         y += 240
         title(f"d-{label}", label, y - 223, "desktop")
@@ -715,7 +839,9 @@ def build(desktop_boards):
         ("Workgroup settings", [("Fold-WorkgroupSettings.dc.html", fold_wg_settings(), X_FOLD, 852, 1300, "Fold · workgroup settings"), ("Phone-WorkgroupSettings.dc.html", phone_wg_settings(), X_PHONE, 390, 1700, "Phone · workgroup settings")]),
         ("Connections", [("Fold-ConnectionDetail.dc.html", fold_connection_detail(), X_FOLD, 852, 1300, "Fold · connection detail"), ("Phone-Connections.dc.html", phone_connections(), X_PHONE, 390, 844, "Phone · connections"), ("Phone-ConnectionDetail.dc.html", phone_connection_detail(), X_PHONE + 470, 390, 1500, "Phone · connection detail")]),
         ("App settings", [("Phone-Settings.dc.html", phone_settings(), X_PHONE, 390, 1100, "Phone · app settings")]),
+        ("Activity", [("Fold-Activity.dc.html", fold_activity(), X_FOLD, 852, FOLD_ACTIVITY_H, "Fold · activity"), ("Phone-Roster.dc.html", phone_roster(), X_PHONE, 390, 844, "Phone · roster"), ("Phone-Activity.dc.html", phone_activity(), X_PHONE + 470, 390, PHONE_ACTIVITY_H, "Phone · activity")]),
         ("Overlays", [("Fold-Sheet.dc.html", MOBILE_OVERLAYS["fold_sheet"](), X_FOLD, 852, 884, "Fold · sheet as a centred dialog"), ("Phone-Sheet.dc.html", MOBILE_OVERLAYS["phone_sheet"](), X_PHONE, 390, 844, "Phone · sheet"), ("Phone-ActionSheet.dc.html", MOBILE_OVERLAYS["phone_action"](), X_PHONE + 470, 390, 844, "Phone · action sheet"), ("Phone-TypedConfirm.dc.html", MOBILE_OVERLAYS["phone_confirm"](), X_PHONE + 940, 390, 844, "Phone · typed confirm")]),
+        ("Sheets", [("Phone-ToolSheet.dc.html", MOBILE_OVERLAYS["phone_tool"](), X_PHONE, 390, 844, "Phone · tool step sheet"), ("Phone-SelectText.dc.html", MOBILE_OVERLAYS["phone_select"](), X_PHONE + 470, 390, 844, "Phone · select text"), ("Phone-MessageActions.dc.html", MOBILE_OVERLAYS["phone_message"](), X_PHONE + 940, 390, 844, "Phone · message actions")]),
     )
     for label, items in rows:
         y += 240

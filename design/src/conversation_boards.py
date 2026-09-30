@@ -165,10 +165,10 @@ def d_send(state="idle", accent=AMBER):
     return f'<button aria-label="Send" style="width: 30px; height: 30px; border: 0; border-radius: 10px; background: {bg}; display: inline-flex; align-items: center; justify-content: center">{ic("up", 14, fg)}</button>'
 
 
-def d_composer(text="", state="idle", hint=True, model=True):
-    value = f'<span style="font-size: 14px; line-height: 1.5; color: {INK}">{text}</span>' if text else f'<span style="font-size: 14px; line-height: 1.5; color: {INK3}">Message alpi…</span>'
+def d_composer(text="", state="idle", hint=True, model=True, name="alpi", model_name="sonnet-4"):
+    value = f'<span style="font-size: 14px; line-height: 1.5; color: {INK}">{text}</span>' if text else f'<span style="font-size: 14px; line-height: 1.5; color: {INK3}">Message {name}…</span>'
     hints = f'<span style="display: inline-flex; align-items: center; gap: 10px; font-size: 11px; color: {INK3}"><span>{mono("@", 11, INK2)} mention</span><span style="display: inline-flex; gap: 3px; align-items: center">{kbd("⌘")}{kbd("↵")} send</span></span>' if hint else ""
-    picker = f'<span style="display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border-radius: 8px">{ic("sun", 12, INK3)}{mono("sonnet-4", 12, INK)}{ic("chev-d", 12, INK3)}</span>' if model else ""
+    picker = f'<span style="display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border-radius: 8px">{ic("sun", 12, INK3)}{mono(model_name, 12, INK)}{ic("chev-d", 12, INK3)}</span>' if model else ""
     return (f'<div style="display: flex; flex-direction: column; gap: 8px; padding: 14px 16px 10px; border-radius: 16px; background: {PANE}; border: 0.5px solid {LINE2}">'
             f'<div style="min-height: 22px">{value}</div>'
             f'<div style="display: flex; align-items: center; gap: 6px">{hints}<span style="flex: 1"></span>{iconbtn("clip", 28, 16)}{picker}{d_send(state)}</div></div>')
@@ -216,7 +216,7 @@ def d_hero():
             f'<div style="display: flex; justify-content: space-between; padding: 0 8px">{label("Recents")}{mono("5 sessions", 11)}</div>{recents}</div>')
 
 
-TOOL_ICONS = {"read_file": "file", "grep": "search", "shell": "terminal", "web_fetch": "globe", "memory": "chip"}
+TOOL_ICONS = {"read_file": "file", "grep": "search", "shell": "terminal", "web_fetch": "globe", "memory": "chip", "send_message": "link"}
 
 
 def d_step(name, summary, dur, state="done", body=""):
@@ -234,12 +234,22 @@ def step_body(lines):
     return f'<div style="margin-left: 34px; padding: 10px 12px; border-radius: 8px; background: {SIDE}; border: 0.5px solid {LINE}; font-family: {MONO}; font-size: 12px; line-height: 1.6; color: {INK2}">{"<br>".join(lines)}</div>'
 
 
-def inline_request():
-    btn = lambda t, primary=False: f'<span style="display: inline-flex; align-items: center; height: 28px; padding: 0 12px; border-radius: 8px; font-size: 13px; font-weight: 500; background: {INK if primary else HOVER}; color: {PANE if primary else INK}">{t}</span>'
+def req_btn(text, variant="secondary"):
+    bg, fg = {"primary": (INK, PANE), "secondary": (HOVER, INK), "ghost": ("transparent", INK2)}[variant]
+    return f'<span style="display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 8px; font-size: 12px; font-weight: 500; white-space: nowrap; background: {bg}; color: {fg}">{text}</span>'
+
+
+def inline_request(who="@alpi", command="rm -rf dist &amp;&amp; npm run build", seconds=42):
     return (f'<div style="display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border-radius: 10px; border: 1px solid {mix(WARNING, 0.6)}; background: {mix(WARNING, 0.08)}">'
-            f'<span style="display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600">{ic("alert", 14, WARNING)}shell wants to run a command{mono("· auto-deny in 42s", 11)}</span>'
-            f'<span style="font-family: {MONO}; font-size: 12px; color: {INK}">rm -rf dist &amp;&amp; npm run build</span>'
-            f'<span style="display: flex; gap: 8px">{btn("Deny")}{btn("Allow once", True)}{btn("Allow this session")}{btn("Always allow")}</span></div>')
+            f'<span style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600">{ic("alert", 14, WARNING)}<span style="flex: 1">{who} wants to run a command</span>{mono(f"auto-deny in {seconds}s", 11)}</span>'
+            f'<span style="font-family: {MONO}; font-size: 12px; line-height: 1.65; color: {INK}">{command}</span>'
+            f'<span style="display: flex; flex-wrap: wrap; gap: 8px">{req_btn("Deny")}{req_btn("Allow once", "primary")}{req_btn("Allow this session")}{req_btn("Always allow")}</span></div>')
+
+
+def inline_ask(question="Which lab should I book with?", choices=("Quest · Main St", "Labcorp · 5th Ave"), seconds=88):
+    return (f'<div style="display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border-radius: 10px; border: 1px solid {mix(WARNING, 0.6)}; background: {mix(WARNING, 0.08)}">'
+            f'<span style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600">{ic("sparkle", 14, BRAND)}<span style="flex: 1">{question}</span>{mono(f"auto-cancel in {seconds}s", 11)}</span>'
+            f'<span style="display: flex; flex-wrap: wrap; gap: 8px">{"".join(req_btn(c) for c in choices)}{req_btn("Type your own…", "ghost")}</span></div>')
 
 
 def thinking(peek="reading the deploy log", size=13):
@@ -263,7 +273,7 @@ def desktop_conversation():
 {row(spec("User message · accent 12%, radius 14 6 14 14, faint time, actions on hover", d_user("Can you summarize yesterday’s deploy logs and flag anything that failed?"), 580), spec("Peer reply · peer accent 11%, radius 6 14 14 14", d_peer(), 580))}
 {spec("Alpi message · markdown body, faint time, actions on hover, usage in a tooltip on the time", d_assistant("<strong>Deploy summary</strong>: 14 jobs ran; 2 failed.<ul style='margin: 8px 0; padding-left: 22px'><li>" + code_inline("api-migrate") + " timed out after 300s</li><li>" + code_inline("web-build") + " hit a lint error</li></ul>" + d_code_block("bash", "alpi logs api-migrate --tail 50") + d_table() + "Want me to open a fix?"), 1184)}
 {row(spec("Reasoning · streaming (shimmer, static under reduced motion)", thinking(), 380), spec("Reasoning · Thought for Xs, collapsed when the answer lands", thought(), 380), spec("Reasoning · opened, sans, scrollable", thought(True), 380))}
-{row(spec("Tool steps · family icon, summary, duration; failures open", d_step("read_file", "deploy.log · first 200 lines", "0.2s") + d_step("grep", "3 matches for exit=1", "0.1s") + d_step("shell", "npm run lint", "4.1s", "failed", step_body(["$ npm run lint", '<span style="color: #c14545">src/app.ts:14  no-unused-vars</span>', "1 error, 0 warnings"])) + d_step("web_fetch", "status.example.com", "3s", "running") + d_bucket("+3 previous tool calls", 1), 580), spec("Inline approval · the open chat asks in the flow", inline_request(), 580))}
+{row(spec("Tool steps · family icon, summary, duration; failures open", d_step("read_file", "deploy.log · first 200 lines", "0.2s") + d_step("grep", "3 matches for exit=1", "0.1s") + d_step("shell", "npm run lint", "4.1s", "failed", step_body(["$ npm run lint", '<span style="color: #c14545">src/app.ts:14  no-unused-vars</span>', "1 error, 0 warnings"])) + d_step("web_fetch", "status.example.com", "3s", "running") + d_bucket("+3 previous tool calls", 1), 580), spec("Inline approval · the open chat asks in the flow; a question uses the same card", inline_request() + inline_ask(), 580))}
 {spec("Load skeleton · after 450 ms", d_skeleton(), 580)}
 {row(spec("Attachments · composer and message variants", d_attachment("deploy-report.pdf", "1.2 MB") + d_attachment("chart.png", "png · 240 KB", "message"), 380), spec("Produced images · 2-column grid, 4:3", d_images(), 380), spec("Ask user · answered and unanswered", d_ask_answered() + d_ask_missing(), 380))}
 {row(spec("Composer · idle", d_composer(), 580), spec("Composer · ready to send", d_composer("Open a fix for the lint error", "ready"), 580))}
@@ -291,20 +301,20 @@ def d_marker(variant, color, body, side="right"):
     align = "flex-end" if side == "right" else "flex-start"
     eyebrow_color = ey if variant in ("blocked", "skipped") else f"color-mix(in srgb, {ey} 75%, {INK})"
     return (f'<div style="display: flex; flex-direction: column; align-items: {align}"><div style="max-width: 76%; min-width: 320px; padding: 14px 16px 16px; border-radius: {radius}; background: {bg}">'
-            f'<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-family: {MONO}; font-size: 11px; font-weight: 700; letter-spacing: 0.10em; color: {eyebrow_color}">{icon}{variant.upper()}</div>'
-            f'<div style="font-size: 14px; line-height: 1.5; color: {INK}">{body}</div></div></div>')
+            f'<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-family: {MONO}; font-size: 11px; font-weight: 600; letter-spacing: 0.10em; color: {eyebrow_color}">{icon}{variant.upper()}</div>'
+            f'<div style="font-size: 15px; line-height: 1.5; color: {INK}">{body}</div></div></div>')
 
 
 def d_pipeline():
     chip = lambda icon, text, extra="": f'<span style="display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 8px; border-radius: 16px; font-family: {MONO}; font-size: 11px; color: {INK2}; {extra}">{icon}{text}</span>'
-    arrow = f'<span style="color: {INK4}">›</span>'
+    arrow = f'<span style="color: {INK3}">›</span>'
     return (f'<div style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px 0">'
             f'<span style="font-family: {MONO}; font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: {INK3}; margin-right: 6px">Pipeline · triage</span>'
             f'{chip(ic("check", 9, SUCCESS), "#intake")}{arrow}{chip(dot(AMBER), "#analyze")}{arrow}{chip("", "#report")}{arrow}{chip(ic("x", 9, DANGER), "#publish", "background: " + mix(DANGER_FILL, 0.16) + "; color: " + DANGER)}</div>')
 
 
 def d_wg_composer():
-    hint = f'<span style="font-size: 11px; color: {INK3}"><span style="color: {INK4}">→</span> {small_diamond(AMBER)} {mono("@alpi", 12, INK2)} formulates as {mono("#task #&lt;slug&gt;", 12, INK2)}</span>'
+    hint = f'<span style="font-size: 11px; color: {INK3}"><span style="color: {INK3}">→</span> {small_diamond(AMBER)} {mono("@alpi", 12, INK2)} formulates as {mono("#task #&lt;slug&gt;", 12, INK2)}</span>'
     return (f'<div style="display: flex; flex-direction: column; gap: 8px; padding: 14px 16px 10px; border-radius: 16px; background: {PANE}; border: 0.5px solid {LINE2}">'
             f'<span style="font-size: 14px; color: {INK3}">Send a message — use @&lt;peer&gt; or #task #&lt;slug&gt; to open</span>'
             f'<div style="display: flex; align-items: center; gap: 6px">{hint}<span style="flex: 1"></span>{kbd("⌘")}{kbd("↵")}{d_send()}</div></div>')
@@ -328,10 +338,14 @@ def phone(inner, w=390):
     return f'<div style="width: {w}px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px">{inner}</div>'
 
 
-def m_user(text, accent=AMBER):
+def m_stamp(text="2m"):
+    return f'<span style="font-family: {MONO}; font-size: 12px; font-weight: 500; line-height: 1; color: {INK3}">{text}</span>'
+
+
+def m_user(text, accent=AMBER, pane=False):
     return (f'<div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px; padding: 0 16px">'
-            f'<div style="max-width: 82%; padding: 12px 16px; border-radius: 18px 4px 18px 18px; background: {mix(accent, 0.12)}; font-size: 15px; line-height: 24.75px">{text}</div>'
-            f'<span style="font-family: {MONO}; font-size: 11px; font-weight: 500; color: {INK3}">2m</span></div>')
+            f'<div style="max-width: {76 if pane else 82}%; padding: 12px 16px; border-radius: 18px 4px 18px 18px; background: {mix(accent, 0.12)}; font-size: 16px; line-height: 26.4px">{text}</div>'
+            f'{m_stamp()}</div>')
 
 
 def m_assistant():
@@ -339,9 +353,13 @@ def m_assistant():
             f'<div style="padding: 12px; font-family: {MONO}; font-size: 14px; line-height: 21px">alpi logs api-migrate</div></div>')
     quote = f'<div style="margin: 6px 0; padding-left: 10px; border-left: 3px solid {INK}; opacity: 0.85">Two jobs failed overnight.</div>'
     lst = "".join(f'<div style="display: flex; gap: 8px"><span>•</span><span>{t}</span></div>' for t in ("api-migrate timed out", "web-build hit a lint error"))
-    return (f'<div style="padding: 0 16px; font-size: 15px; line-height: 24.75px; color: {INK}"><div style="font-weight: 600; margin-top: 4px; margin-bottom: 4px">Deploy summary</div>'
+    return (f'<div style="padding: 0 16px; font-size: 16px; line-height: 26.4px; color: {INK}"><div style="font-weight: 600; margin-top: 4px; margin-bottom: 4px">Deploy summary</div>'
             f'{quote}<div style="display: flex; flex-direction: column; gap: 4px; margin: 6px 0; padding-left: 20px">{lst}</div>{code}Want me to open a fix?'
-            f'<div style="margin-top: 4px">{mono("⇢ sonnet-4", 11)}</div></div>')
+            f'<div style="margin-top: 4px; display: flex; gap: 10px; align-items: center">{m_stamp()}{mono("⇢ sonnet-4", 11)}</div></div>')
+
+
+def m_agent_text(text, stamp="2m"):
+    return f'<div style="padding: 0 16px; display: flex; flex-direction: column; gap: 4px"><div style="font-size: 16px; line-height: 26.4px; color: {INK}">{text}</div>{m_stamp(stamp)}</div>'
 
 
 def m_reasoning():
@@ -350,8 +368,20 @@ def m_reasoning():
 
 def m_tool(name, args, state="done"):
     color = {"running": BRAND, "done": INK3, "failed": DANGER_FILL}[state]
-    return (f'<div style="display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 16px">{ic(TOOL_ICONS.get(name, "chip"), 16, color)}'
-            f'<div style="flex: 1; min-width: 0; display: flex; flex-direction: column">{mono(name, 13, DANGER if state == "failed" else INK, 500)}<span style="font-size: 13px; color: {INK2}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{args}</span></div>{ic("chev-r", 14, INK3)}</div>')
+    summary_color = DANGER if state == "failed" else INK2
+    return (f'<div style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 16px">{ic(TOOL_ICONS.get(name, "chip"), 16, color)}'
+            f'<div style="flex: 1; min-width: 0; display: flex; flex-direction: column">{mono(name, 14, DANGER if state == "failed" else INK, 500)}<span style="font-size: 14px; line-height: 18.2px; color: {summary_color}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{args}</span></div>{ic("chev-r", 14, INK3)}</div>')
+
+
+def m_bucket(text, failed=0, open_=False):
+    chev = ic("chev-d", 12, INK3) if open_ else ic("chev-d", 12, INK3).replace("style=" + chr(34), "style=" + chr(34) + "transform: rotate(-90deg); ", 1)
+    fail = f'<span style="display: inline-flex; align-items: center; gap: 4px">{ic("alert", 12, DANGER_FILL)}{mono(f"{failed} failed", 12, DANGER)}</span>' if failed else ""
+    return f'<div style="display: flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 16px">{chev}{mono(text, 12)}{fail}</div>'
+
+
+def m_model_chip(text="sonnet-4 · medium"):
+    return (f'<span style="display: inline-flex; align-items: center; gap: 6px; min-width: 0; height: 32px; padding: 0 12px; border-radius: 16px; background: #f1f3f5">'
+            f'{ic("sparkle", 12, INK3)}<span style="font-size: 14px; color: {INK2}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{text}</span>{ic("chev-d", 12, INK3)}</span>')
 
 
 def m_attachment(name, sub, variant="composer"):
@@ -363,19 +393,19 @@ def m_attachment(name, sub, variant="composer"):
             f'<span style="display: flex; flex-direction: column"><span style="font-size: 12px">{name}</span>{mono(sub, 11)}</span>{remove}</div>')
 
 
-def m_composer(text="", state="idle", workgroup=False):
-    value = f'<span style="font-size: 16px; line-height: 23px">{text}</span>' if text else f'<span style="font-size: 16px; line-height: 23px; color: {INK3}">Message @alpi…</span>'
-    mention = f'<span style="font-size: 11px; color: {INK3}">{mono("@", 11)} mention</span>' if workgroup else ""
+def m_composer(text="", state="idle", workgroup=False, name="alpi", chip="sonnet-4 · medium", accent=AMBER):
+    value = f'<span style="font-size: 16px; line-height: 24px">{text}</span>' if text else f'<span style="font-size: 16px; line-height: 24px; color: {INK3}">Message @{name}…</span>'
+    mention = f'<span style="font-size: 12px; color: {INK3}">{mono("@", 12)} mention</span>' if workgroup else ""
     if state == "busy":
-        send = f'<span style="width: 30px; height: 30px; border-radius: 10px; background: {AMBER}; display: inline-flex; align-items: center; justify-content: center"><span style="width: 12px; height: 12px; background: #0b1117; border-radius: 2px"></span></span>'
+        send = f'<span style="width: 30px; height: 30px; border-radius: 10px; background: {accent}; display: inline-flex; align-items: center; justify-content: center"><span style="width: 12px; height: 12px; background: #0b1117; border-radius: 2px"></span></span>'
     elif state == "ready":
-        send = f'<span style="width: 30px; height: 30px; border-radius: 10px; background: {AMBER}; display: inline-flex; align-items: center; justify-content: center">{ic("up", 14, "#0b1117")}</span>'
+        send = f'<span style="width: 30px; height: 30px; border-radius: 10px; background: {accent}; display: inline-flex; align-items: center; justify-content: center">{ic("up", 14, "#0b1117")}</span>'
     else:
         send = f'<span style="width: 30px; height: 30px; border-radius: 10px; background: {LINE}; display: inline-flex; align-items: center; justify-content: center">{ic("up", 14, INK3)}</span>'
-    clip = "" if workgroup else ic("clip", 20, INK3)
-    chip = "" if workgroup else f'<span style="display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px; border-radius: 15px; background: {HOVER}">{ic("sun", 12, INK3)}<span style="font-size: 13px">sonnet-4 · medium</span>{ic("chev-d", 11, INK3)}</span>'
-    return (f'<div style="padding: 8px 16px; border-top: 0.5px solid {LINE}"><div style="display: flex; flex-direction: column; gap: 8px; padding: 14px 16px 10px; border-radius: 16px; background: {PANE}; border: 0.5px solid {LINE2}">'
-            f'{value}<div style="display: flex; align-items: center; gap: 10px">{mention}{clip}{chip}<span style="flex: 1"></span>{send}</div></div></div>')
+    clip = "" if workgroup else f'<span style="width: 36px; display: inline-flex; justify-content: center">{ic("clip", 20, INK3)}</span>'
+    model = "" if workgroup else m_model_chip(chip)
+    return (f'<div style="padding: 8px 16px; border-top: 0.5px solid {LINE}; background: {PANE}"><div style="display: flex; flex-direction: column; gap: 8px; padding: 14px 16px 10px; border-radius: 16px; background: {PANE}; border: 0.5px solid {LINE2}">'
+            f'{value}<div style="display: flex; align-items: center; gap: 8px">{mention}{model}<span style="flex: 1"></span>{clip}{send}</div></div></div>')
 
 
 def m_header(kind="profile"):
@@ -401,18 +431,18 @@ def mobile_conversation():
 {h1("Conversation · phone and Fold", "The phone draws the same conversation with touch rules: bubbles at radius 18, chat text at 16, actions behind a long press (with Select text), steps that open into a sheet, and a composer where Return adds a line and the model chip sits beside attach.")}
 {row(spec("Chat header · profile", m_header("profile"), 420, 0), spec("Chat header · workgroup", m_header("workgroup"), 420, 0), spec("Empty thread", m_empty(), 300))}
 {row(spec("User message · accent 12%, radius 18 4 18 18, long press for actions", phone(m_user("Can you summarize yesterday’s deploy logs?")), 420, 16), spec("Alpi message · rich text: heading, quote, list, code, routed model", phone(m_assistant()), 420, 16))}
-{row(spec("Reasoning and tool steps · tap a step for its sheet", phone(f'<div style="padding: 0 6px">{thinking("reading the log", 14)}</div>' + m_reasoning() + m_tool("read_file", "deploy.log · 200 lines", "running") + m_tool("shell", "npm run lint · failed", "failed")), 420, 16), spec("Attachments · composer and message", m_attachment("deploy-report.pdf", "1.2 MB") + m_attachment("chart.png", "png · 240 KB", "message"), 420))}
+{row(spec("Reasoning and tool steps · tap a step for its sheet", phone(f'<div style="padding: 0 6px">{thinking("reading the log", 14)}</div>' + m_reasoning() + m_bucket("Hide previous tool calls", open_=True) + m_tool("shell", "src/app.ts:14  no-unused-vars", "failed").replace("padding: 0 16px", "padding: 0 16px 0 28px", 1) + m_tool("read_file", "deploy.log", "running")), 420, 16), spec("Attachments · composer and message", m_attachment("deploy-report.pdf", "1.2 MB") + m_attachment("chart.png", "png · 240 KB", "message"), 420))}
 {row(spec("Composer · idle", phone(m_composer()), 420, 0), spec("Composer · ready", phone(m_composer("Open a fix", "ready")), 420, 0))}
 {row(spec("Composer · busy (Stop on the accent)", phone(m_composer("Open a fix", "busy")), 420, 0), spec("Jump to latest", m_jump(), 300))}
 </div>"""
-    return page("System · mobile conversation", 1280, 1340, body)
+    return page("System · mobile conversation", 1280, 1400, body)
 
 
 def m_post(name, color, text, seq, side="left"):
     radius = "4px 18px 18px 18px" if side == "left" else "18px 4px 18px 18px"
     align = "flex-start" if side == "left" else "flex-end"
-    return (f'<div style="display: flex; flex-direction: column; align-items: {align}; gap: 6px; padding: 0 16px"><div style="display: flex; align-items: center; gap: 6px">{small_diamond(color)}{mono(name, 11, INK3, 500)}{mono(f"#{seq}", 11, INK3, 500)}{mono("1.2K · $0.01", 11, INK3, 500)}</div>'
-            f'<div style="max-width: 90%; padding: 14px 16px; border-radius: {radius}; background: {mix(color, 0.11)}; font-size: 15px; line-height: 24.75px">{text}</div></div>')
+    return (f'<div style="display: flex; flex-direction: column; align-items: {align}; gap: 6px; padding: 0 16px"><div style="display: flex; align-items: center; gap: 6px">{small_diamond(color)}{mono(name, 12, INK3, 500)}{mono(f"#{seq}", 12, INK3, 500)}{mono("1.2K · $0.01", 12, INK3, 500)}</div>'
+            f'<div style="max-width: 90%; padding: 14px 16px; border-radius: {radius}; background: {mix(color, 0.11)}; font-size: 16px; line-height: 26.4px">{text}</div></div>')
 
 
 def m_marker(variant, color, body, side="right"):
@@ -422,7 +452,7 @@ def m_marker(variant, color, body, side="right"):
     radius = "18px 4px 18px 18px" if side == "right" else "4px 18px 18px 18px"
     align = "flex-end" if side == "right" else "flex-start"
     return (f'<div style="display: flex; flex-direction: column; align-items: {align}; padding: 0 16px"><div style="max-width: 90%; padding: 14px 16px; border-radius: {radius}; background: {mix(base, pct)}">'
-            f'<div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-family: {MONO}; font-size: 11px; font-weight: 600; letter-spacing: 1.1px; color: {base}"><span style="width: 14px; display: inline-flex; justify-content: center">{icon}</span>{variant.upper()}</div>'
+            f'<div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-family: {MONO}; font-size: 12px; font-weight: 600; letter-spacing: 1.2px; color: {base}"><span style="width: 14px; display: inline-flex; justify-content: center">{icon}</span>{variant.upper()}</div>'
             f'<div style="font-size: 14px; line-height: 21px">{body}</div></div></div>')
 
 
