@@ -31,7 +31,10 @@ def _engine_class(script):  # noqa: ANN001
             self.session = SimpleNamespace(id="sid", subdir="sessions")
 
         def run_turn(self, text, emit, **kwargs) -> None:  # noqa: ANN001
-            script(emit)
+            from alpi.engine import _ReasoningSpans
+            spans = _ReasoningSpans(emit, time.time(), [])
+            script(spans)
+            spans.close()
 
         def request_interrupt(self, reason: str = "unknown") -> None:
             pass
@@ -191,6 +194,21 @@ async def test_interleaved_reasoning_counts_each_span_from_its_own_start(
 
     assert len(seconds) == 2
     assert 0.1 <= seconds[1] < 0.5
+
+
+@pytest.mark.asyncio
+async def test_reasoning_done_frames_carry_engine_seconds_verbatim(monkeypatch, short_tmp: Path) -> None:
+    home = short_tmp / "h"
+    home.mkdir()
+    load_or_generate(home)
+
+    def script(emit) -> None:  # noqa: ANN001
+        from alpi.engine import AgentEvent
+        emit(AgentEvent(kind="reasoning_done", seconds=7.3))
+        emit(AgentEvent(kind="assistant_done", text="ok", final=True))
+
+    frames = await _stream(monkeypatch, home, script)
+    assert [f["seconds"] for f in frames if f["event"] == "reasoning_done"] == [7.3]
 
 
 class _CrashEngine:

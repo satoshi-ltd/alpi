@@ -70,6 +70,7 @@ class Turn:
     ended_at: float = 0.0  # `at` is turn START; a long turn's reply is minutes younger. 0 = pre-0.12.5 session.
     reasoning: str = ""
     reasoned_s: float = 0.0
+    reasoning_spans: list[dict[str, Any]] = field(default_factory=list)  # [{seconds, before_tool, text?}]; before_tool indexes `tools`
     attachments: list[dict[str, Any]] = field(default_factory=list)  # bytes-free; carries a best-effort local path (may be unfetchable cross-client / post-TTL)
     output_attachments: list[dict[str, Any]] = field(default_factory=list)  # bytes-free; carries a best-effort local path (may be unfetchable cross-client / post-TTL)
     interrupted: bool = False
@@ -228,6 +229,9 @@ def _serialize_turn_v2(t: Turn, *, redact) -> dict[str, Any]:  # noqa: ANN001
         _put(row, "reasoning", redact(t.reasoning), TURN_REASONING_CAP)
     if t.reasoned_s:
         row["reasoned_s"] = round(t.reasoned_s, 1)
+    if t.reasoning_spans:
+        budget = [TURN_REASONING_CAP]
+        row["reasoning_spans"] = [_span_row(sp, redact, budget) for sp in t.reasoning_spans]
     if t.attachments:
         row["attachments"] = redact(t.attachments)
     if t.output_attachments:
@@ -386,12 +390,38 @@ def load_turns(data: dict[str, Any]) -> list[Turn]:
             ended_at=float(t.get("ended_at", 0) or 0),
             reasoning=_preview(t.get("reasoning")),
             reasoned_s=float(t.get("reasoned_s", 0)),
+            reasoning_spans=_spans_from_serialized(t.get("reasoning_spans")),
             attachments=list(t.get("attachments") or []),
             output_attachments=list(t.get("output_attachments") or []),
             interrupted=bool(t.get("interrupted")),
             model=str(t.get("model", "") or ""),
             host_context=str(t.get("host_context", "") or ""),
         ))
+    return out
+
+
+def _span_row(sp: dict[str, Any], redact, budget: list[int]) -> dict[str, Any]:  # noqa: ANN001
+    row: dict[str, Any] = {"seconds": round(float(sp["seconds"]), 1), "before_tool": int(sp["before_tool"])}
+    cap = min(TOOL_REASONING_CAP, budget[0])
+    if sp.get("text") and cap > 0:
+        text = _clip(redact(str(sp["text"])), cap)[0]
+        budget[0] -= len(text.encode("utf-8"))
+        row["text"] = text
+    return row
+
+
+def _spans_from_serialized(raw: Any) -> list[dict[str, Any]]:
+    if not isinstance(raw, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for sp in raw:
+        try:
+            span: dict[str, Any] = {"seconds": float(sp["seconds"]), "before_tool": int(sp["before_tool"])}
+        except (TypeError, KeyError, ValueError):
+            continue
+        if isinstance(sp.get("text"), str) and sp["text"]:
+            span["text"] = sp["text"]
+        out.append(span)
     return out
 
 

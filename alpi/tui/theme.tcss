@@ -165,16 +165,17 @@ DimLine {
     height: auto;
 }
 
-ToolCard.-running {
-    color: $foreground;
+ProcessBlock ReasoningBlock,
+ProcessBlock StepsGroup,
+ProcessBlock ToolCard,
+ProcessBlock AskUserLine {
+    margin: 0;
+    color: $text-muted;
 }
 
-ToolCard.-done {
-    color: $foreground;
-}
-
-ToolCard.-error {
-    color: $foreground;
+ProcessBlock DimLine,
+ProcessBlock ErrorLine {
+    margin: 0;
 }
 
 #chat-input {

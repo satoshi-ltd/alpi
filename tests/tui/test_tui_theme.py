@@ -45,7 +45,8 @@ def test_built_theme_uses_the_token_values(dark: bool) -> None:
     assert theme.foreground.lower() == tokens["ink"]
     assert theme.variables["text-muted"].lower() == tokens["ink3"] == palette["ink3"].lower()
     assert theme.success.lower() == status["success"]
-    assert theme.warning.lower() == status["warning"]
+    assert theme.warning.lower() == tokens["warningText"] == palette["warningText"].lower()
+    assert theme.warning.lower() != theme.accent.lower()
     assert theme.error.lower() == status["danger"]
 
 

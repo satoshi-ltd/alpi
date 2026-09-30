@@ -66,7 +66,8 @@ Frames are `{ "id", "event", ... }`:
 | `session_start` | `session_id`, `model_used` | first; capture `session_id` to continue |
 | `assistant_delta` | `text` | concatenate for the answer |
 | `reasoning_delta` | `text` | reasoning fragment |
-| `tool_start`/`tool_state`/`tool_end` | `tool_id`, `name`, … | agent ran a tool |
+| `reasoning_done` | `seconds` | closes one reasoning span |
+| `tool_start`/`tool_state`/`tool_end` | `tool_id`, `name`, `started_at` / `duration_s`, … | agent ran a tool |
 | `auto_compact` | `text`, `tokens_before`, `tokens_after` | context compacted |
 | `heartbeat` | — | every 5s; ignore |
 | `reply` | `text`, `session_id`, `attachments?` | final answer |

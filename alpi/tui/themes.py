@@ -20,7 +20,7 @@ def build_theme(accent: str | None = None, dark: bool = True) -> Theme:
         background=palette["bg"],
         surface=palette["bgPane"],
         panel=palette["bgElev"],
-        warning=STATUS["warning"],
+        warning=palette["warningText"],
         error=STATUS["danger"],
         success=STATUS["success"],
         dark=dark,

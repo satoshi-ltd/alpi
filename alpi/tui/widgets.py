@@ -394,11 +394,10 @@ class _Collapsible(Widget):
 
 class ReasoningBlock(_Collapsible):
     DEFAULT_CSS = """
-    ReasoningBlock { height: auto; margin: 1 0 0 0; }
+    ReasoningBlock { height: auto; margin: 0; }
     ReasoningBlock > .reasoning-head { height: 1; color: $text-muted; }
     ReasoningBlock > .reasoning-body {
-        display: none; height: auto; color: $text-muted;
-        padding: 0 0 0 2; border-left: solid $text-muted 40%;
+        display: none; height: auto; color: $text-muted; padding: 0 0 0 2;
     }
     ReasoningBlock.-expanded > .reasoning-body { display: block; }
     """
@@ -432,6 +431,9 @@ class ReasoningBlock(_Collapsible):
         self.seconds = seconds
         self.refresh_head()
 
+    def add_seconds(self, seconds: float) -> None:
+        self.set_seconds((self.seconds or 0.0) + seconds)
+
     def refresh_head(self) -> None:
         head = _child(self, ".reasoning-head")
         if head is not None:
@@ -441,10 +443,10 @@ class ReasoningBlock(_Collapsible):
 
 class ToolCard(_Collapsible):
     DEFAULT_CSS = """
-    ToolCard { height: auto; margin: 0; padding: 0; }
-    ToolCard > .tool-head { height: 1; }
+    ToolCard { height: auto; margin: 0; padding: 0; color: $text-muted; }
+    ToolCard > .tool-head { height: 1; color: $text-muted; }
     ToolCard > .tool-detail {
-        display: none; height: auto; color: $text-muted; padding: 0 0 0 4;
+        display: none; height: auto; color: $text-muted; padding: 0 0 0 2;
     }
     ToolCard.-expanded > .tool-detail { display: block; }
     """
@@ -515,8 +517,8 @@ class ToolCard(_Collapsible):
         text = Text(no_wrap=True, overflow="ellipsis")
         if self.done:
             text.append(f"{_OPEN if self.expanded else _CLOSED} ", style=muted)
-            text.append(f"{glyph} ", style=error if not self.ok else accent)
-            text.append(self.tool_name, style="bold")
+            text.append(f"{glyph} ", style=error if not self.ok else muted)
+            text.append(self.tool_name, style=muted)
             hint = arg_hint(self.tool_name, self.args)
             if hint:
                 text.append(f"  {hint}", style=muted)
@@ -531,8 +533,8 @@ class ToolCard(_Collapsible):
             return text
         live_style = error if self._state_is_error else muted
         text.append(f"{_spinner()} ", style=error if self._state_is_error else accent)
-        text.append(f"{glyph} ", style=accent)
-        text.append(self.tool_name, style="bold")
+        text.append(f"{glyph} ", style=muted)
+        text.append(self.tool_name, style=muted)
         text.append(f"  {self._state_label or arg_hint(self.tool_name, self.args)}", style=live_style)
         text.append(f"  {fmt_duration(time.time() - self.started)}", style=muted)
         return text
@@ -570,7 +572,7 @@ class ToolCard(_Collapsible):
 
 class StepsGroup(_Collapsible):
     DEFAULT_CSS = """
-    StepsGroup { height: auto; margin: 1 0 0 0; }
+    StepsGroup { height: auto; margin: 0; }
     StepsGroup > .steps-head { height: 1; color: $text-muted; }
     StepsGroup > .steps-body { display: none; height: auto; padding: 0 0 0 2; }
     StepsGroup.-expanded > .steps-body { display: block; }
@@ -656,7 +658,7 @@ class StepsGroup(_Collapsible):
         live = next((c for c in reversed(self.cards) if not c.done), None)
         if live is not None and not self.expanded:
             glyph = FAMILY_GLYPHS.get(live.family, FAMILY_GLYPHS["chip"])
-            text.append(f"   {glyph} {live.tool_name}", style="bold")
+            text.append(f"   {glyph} {live.tool_name}", style=muted)
             hint = live._state_label or arg_hint(live.tool_name, live.args)
             if hint:
                 text.append(f"  {hint}", style=muted)
@@ -670,16 +672,26 @@ class StepsGroup(_Collapsible):
 
 class AskUserLine(Static):
     DEFAULT_CSS = """
-    AskUserLine { height: auto; color: $text-muted; margin: 1 0 0 0; }
+    AskUserLine { height: auto; color: $text-muted; margin: 0; }
     """
 
     def __init__(self, question: str, answer: str) -> None:
         t = Text()
-        t.append("? ", style="bold")
+        t.append("? ")
         t.append(question.strip())
         t.append("  → ")
-        t.append(answer.strip(), style="bold")
+        t.append(answer.strip())
         super().__init__(t)
+
+
+class ProcessBlock(Vertical):
+    DEFAULT_CSS = """
+    ProcessBlock { height: auto; margin: 1 0 0 0; color: $text-muted; }
+    """
+
+    @property
+    def details(self) -> list[_Collapsible]:
+        return [c for c in self.children if isinstance(c, (ReasoningBlock, StepsGroup))]
 
 
 class AlpiTopBar(Static):

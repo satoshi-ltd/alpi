@@ -49,9 +49,13 @@ this repository. Hard constraints, not suggestions.
 
 - **`design/` is the visual reference, generated.** `python3 design/build.py`
   rewrites `design/*.html` (System, Desktop, Mobile, Open work, Proposals) and the canvas
-  artboards under `design/canvas/` from `design/src/`. After changing a token
-  or a primitive, update the matching board and regenerate; never edit the
-  HTML by hand. `tests/test_design_kit.py` keeps the pages on the shipped tokens.
+  artboards under `design/canvas/` from `design/src/`; never edit the HTML by
+  hand. **Any change to what desktop or mobile shows or how it behaves updates
+  every affected board in the same change** (System tokens, controls,
+  conversation and workgroups; the Desktop and Mobile screens), regenerated and
+  rendered in light and dark. A UI change is not done while `design/` still
+  shows the old look. `tests/test_design_kit.py` keeps the pages on the shipped
+  tokens; Open work and Proposals hold only pending rows.
 
 - **Console parity is mandatory.** The console (`alpi setup`, the TUI,
   the CLI) is the core product; desktop/mobile are siblings, not the
@@ -212,8 +216,19 @@ every ``host.*`` verb the UI calls.
   `tool_start.started_at`, `tool_end.duration_s`, and one `reasoning_done
   {seconds}` per reasoning span (consecutive deltas closed by the next tool
   call, text delta or step end); `seconds` is time spent reasoning — the first
-  span of a step counts from the model call (so it matches the stored
-  `reasoned_s`), later spans in the same step from their own first delta.
+  span of a step counts from the model call (equal to the stored `reasoned_s`
+  when step 0 streams no prose first), later spans in the same step from their
+  own first delta; reasoning a retry or fallback discards never reaches a span,
+  and all span texts of a turn share the turn's reasoning cap. The
+  engine measures spans once (`_ReasoningSpans` emits `reasoning_done`
+  AgentEvents; `host.chat` only forwards them) and stores them on the turn as
+  ordered `reasoning_spans: [{seconds, before_tool, text?}]`, `before_tool`
+  being the index in the turn's `tools` of the first call after the span
+  (`len(tools)` when it precedes the answer) and `text` that span's own
+  reasoning (clients place replayed text by span, never by splitting the joined
+  `reasoning`; `tools[].reasoning` is only the inter-tool prose); absent on
+  turns without reasoning and on pre-field sessions, where clients fall back to
+  `reasoned_s`. Each step restarts the span clock at its model call.
   `session_changed.in_flight` is true only for the in-flight stub save; a
   crashed chat turn still closes with `in_flight: false`.
 

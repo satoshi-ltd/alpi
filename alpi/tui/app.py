@@ -30,7 +30,7 @@ from alpi.tui.screens import (
     StatusPanel,
     ToolsPanel,
 )
-from alpi.tui.turns import turn_parts
+from alpi.tui.turns import process_rows, turn_parts
 from alpi.tui.widgets import (
     AlpiTopBar,
     AskUserLine,
@@ -39,6 +39,7 @@ from alpi.tui.widgets import (
     CompletionPopup,
     DimLine,
     ErrorLine,
+    ProcessBlock,
     ReasoningBlock,
     ResumeActivity,
     StatusLine,
@@ -92,6 +93,8 @@ class _LiveTurn:
         self.reasoning_buffer: list[str] = []
         self.reasoning: ReasoningBlock | None = None
         self.steps: StepsGroup | None = None
+        self.process: ProcessBlock | None = None
+        self.spans_seen = False
         self.ask_users: dict[str, dict] = {}
 
 
@@ -550,6 +553,11 @@ class AlpiApp(App):
                 self._turn.reasoning_buffer.append(ev.text)
             self._show_thinking()
             return
+        if kind == "reasoning_done":
+            if self._turn is not None:
+                self._turn.spans_seen = True
+                self._flush_reasoning(seconds=ev.seconds)
+            return
         if kind == "model_state":
             if self._thinking is not None:
                 self._thinking.set_label("Preparing a step…")
@@ -582,44 +590,63 @@ class AlpiApp(App):
             self._current_assistant = None
             self._refresh_hints()
         elif kind == "error":
-            self._mount_message(ErrorLine(ev.text))
+            self._mount_notice(ErrorLine(ev.text))
         elif kind == "usage":
             self._update_header()
         elif kind == "routing":
-            self._mount_message(DimLine(f"⇢ {ev.text}"))
+            self._mount_notice(DimLine(f"⇢ {ev.text}"))
         elif kind == "auto_compact":
-            self._mount_message(DimLine(f"↺ {ev.text}"))
+            self._mount_notice(DimLine(f"↺ {ev.text}"))
             self._update_header()
+
+    def _mount_notice(self, widget) -> None:
+        turn = self._turn
+        block = turn.process if turn is not None else None
+        if block is not None and block.is_attached:
+            chat = self.query_one("#chat", VerticalScroll)
+            tail = [c for c in chat.children if not isinstance(c, ThinkingIndicator)]
+            if tail and tail[-1] is block:
+                block.mount(widget)
+                return
+            turn.process = None
+        self._mount_message(widget)
 
     def _mark_reasoned(self) -> None:
         turn = self._turn
         if turn is not None and turn.reasoned_s is None:
             turn.reasoned_s = max(0.0, time.time() - turn.started)
-            if turn.reasoning is not None:
+            if turn.reasoning is not None and not turn.spans_seen and turn.reasoning.seconds is None:
                 turn.reasoning.set_seconds(turn.reasoned_s)
 
-    def _add_reasoning(self, text: str) -> None:
+    def _is_last_process_row(self, widget) -> bool:
+        block = self._turn.process if self._turn is not None else None
+        return (
+            widget is not None and widget.is_attached and block is not None
+            and bool(block.children) and block.children[-1] is widget
+        )
+
+    def _add_reasoning(self, text: str, seconds: float | None = None) -> None:
         turn = self._turn
         text = (text or "").strip()
-        if turn is None or not text or not self._show_reasoning():
+        if turn is None or (not text and seconds is None) or not self._show_reasoning():
             return
-        if turn.reasoning is None:
-            turn.reasoning = ReasoningBlock(text, seconds=turn.reasoned_s)
-            chat = self.query_one("#chat", VerticalScroll)
-            if turn.steps is not None and turn.steps.is_attached:
-                chat.mount(turn.reasoning, before=turn.steps)
-            else:
-                chat.mount(turn.reasoning)
-        else:
+        if self._is_last_process_row(turn.reasoning):
             turn.reasoning.append(text)
+            if seconds is not None:
+                turn.reasoning.add_seconds(seconds)
+            return
+        if seconds is None and not turn.spans_seen:
+            seconds = turn.reasoned_s
+        turn.reasoning = ReasoningBlock(text, seconds=seconds)
+        self._add_process_row(turn.reasoning)
 
-    def _flush_reasoning(self) -> None:
+    def _flush_reasoning(self, seconds: float | None = None) -> None:
         turn = self._turn
-        if turn is None or not turn.reasoning_buffer:
+        if turn is None or (not turn.reasoning_buffer and seconds is None):
             return
         text = "".join(turn.reasoning_buffer)
         turn.reasoning_buffer = []
-        self._add_reasoning(text)
+        self._add_reasoning(text, seconds)
 
     def _on_assistant_delta(self, delta: str) -> None:
         if not delta:
@@ -645,11 +672,23 @@ class AlpiApp(App):
         card = ToolCard(tool_id=ev.tool_id, name=ev.name, args=ev.args)
         self._active_tools[ev.tool_id] = card
         steps = self._turn.steps
-        if steps is None or not steps.is_attached:
-            self._turn.steps = StepsGroup([card])
-            self._mount_message(self._turn.steps)
-        else:
+        if self._is_last_process_row(steps):
             steps.add(card)
+        else:
+            self._turn.steps = StepsGroup([card])
+            self._add_process_row(self._turn.steps)
+
+    def _add_process_row(self, widget) -> None:
+        turn = self._turn
+        block = turn.process if turn is not None else None
+        if block is not None and block.is_attached:
+            block.mount(widget)
+            return
+        block = ProcessBlock()
+        if turn is not None:
+            turn.process = block
+        self._mount_message(block)
+        block.mount(widget)
 
     def _show_reasoning(self) -> bool:
         return bool((self.cfg.tui or {}).get("show_reasoning", True))
@@ -665,7 +704,7 @@ class AlpiApp(App):
             args = turn.ask_users.pop(ev.tool_id)
             answer = (ev.output or "").strip()
             if answer:
-                self._mount_message(AskUserLine(str(args.get("question") or ""), answer))
+                self._add_process_row(AskUserLine(str(args.get("question") or ""), answer))
         card = self._active_tools.pop(ev.tool_id, None)
         if card is not None:
             card.finish(ev.output, ev.ok)
@@ -1012,8 +1051,8 @@ class AlpiApp(App):
         chat = self.query_one("#chat", VerticalScroll)
         targets: list = []
         for child in reversed(list(chat.children)):
-            if isinstance(child, (ReasoningBlock, StepsGroup)):
-                targets.append(child)
+            if isinstance(child, ProcessBlock):
+                targets.extend(child.details)
             elif targets and isinstance(child, UserMessage):
                 break
         if not targets:
@@ -1179,26 +1218,48 @@ class AlpiApp(App):
         if resumed:
             await self._replay_session_turns()
 
+    @staticmethod
+    def _replay_steps(turn, tools: list, offset: int = 0) -> StepsGroup:
+        cards = []
+        for i, tl in enumerate(tools, start=offset):
+            card = ToolCard(tool_id=f"replay-{id(turn)}-{i}", name=tl.name, args=tl.args, started=tl.at)
+            card.finish(tl.result, ok=tl.ok, duration_s=tl.duration_s)
+            cards.append(card)
+        group = StepsGroup(cards)
+        if any(not c.ok for c in cards):
+            group.add_class("-expanded")
+        return group
+
+    def _replay_process_rows(self, turn) -> list:
+        timeline = process_rows(turn, include_reasoning=self._show_reasoning())
+        if timeline is not None:
+            rows: list = []
+            done = 0
+            for row in timeline:
+                if row["kind"] == "thought":
+                    rows.append(ReasoningBlock(row["text"], seconds=row["seconds"]))
+                elif row["kind"] == "ask":
+                    rows.append(AskUserLine(row["question"], row["result"]))
+                else:
+                    rows.append(self._replay_steps(turn, row["tools"], offset=done))
+                    done += len(row["tools"])
+            return rows
+        parts = turn_parts(turn)
+        rows = [self._replay_steps(turn, parts["tools"])] if parts["tools"] else []
+        if parts["reasoning"] and self._show_reasoning():
+            thought = ReasoningBlock(parts["reasoning"], seconds=parts["reasoned_s"])
+            rows.insert(0 if parts["reasoning_first"] else len(rows), thought)
+        rows.extend(AskUserLine(a["question"], a["result"]) for a in parts["ask_users"])
+        return rows
+
     def replay_widgets(self, turns: list) -> list:
         widgets: list = []
         for t in turns:
             if t.user:
                 widgets.append(UserMessage(t.user))
-            parts = turn_parts(t)
-            if parts["reasoning"] and self._show_reasoning():
-                widgets.append(ReasoningBlock(parts["reasoning"], seconds=parts["reasoned_s"]))
-            if parts["tools"]:
-                cards = []
-                for i, tl in enumerate(parts["tools"]):
-                    card = ToolCard(tool_id=f"replay-{id(t)}-{i}", name=tl.name, args=tl.args, started=tl.at)
-                    card.finish(tl.result, ok=tl.ok, duration_s=tl.duration_s)
-                    cards.append(card)
-                group = StepsGroup(cards)
-                if any(not c.ok for c in cards):
-                    group.add_class("-expanded")
-                widgets.append(group)
-            for a in parts["ask_users"]:
-                widgets.append(AskUserLine(a["question"], a["result"]))
+            rows = self._replay_process_rows(t)
+            if rows:
+                widgets.append(ProcessBlock(*rows))
             if t.assistant or getattr(t, "output_attachments", None):
                 text = t.assistant
                 if getattr(t, "output_attachments", None):

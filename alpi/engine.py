@@ -153,7 +153,7 @@ def _profile_name(home: Path) -> str:
 
 @dataclass
 class AgentEvent:
-    kind: str                      # 'user' | 'reasoning_delta' | 'assistant_delta' | 'model_state' | 'assistant_done' | 'tool_start' | 'tool_state' | 'tool_end' | 'usage' | 'routing' | 'error' | 'done' | 'interrupted' | 'auto_compact'
+    kind: str                      # 'user' | 'reasoning_delta' | 'reasoning_done' | 'assistant_delta' | 'model_state' | 'assistant_done' | 'tool_start' | 'tool_state' | 'tool_end' | 'usage' | 'routing' | 'error' | 'done' | 'interrupted' | 'auto_compact'
     text: str = ""
     name: str = ""                 # tool name for tool_* events
     args: dict = field(default_factory=dict)
@@ -170,9 +170,55 @@ class AgentEvent:
     final: bool = False
     attachments: list[dict] = field(default_factory=list)
     model: str = ""                # set on 'usage' and 'routing' events
+    seconds: float = 0.0           # set on 'reasoning_done'
 
 
 EventSink = Callable[[AgentEvent], None]
+
+
+class _ReasoningSpans:
+    _CLOSERS = frozenset({"assistant_delta", "tool_start", "assistant_done", "done", "interrupted", "error"})
+
+    def __init__(self, emit: EventSink, started: float, tools: list) -> None:
+        self._emit = emit
+        self._tools = tools
+        self._step_started = started
+        self._step_spans = 0
+        self._span_started: float | None = None
+        self._span_text: list[str] = []
+        self.spans: list[dict] = []
+
+    def __call__(self, ev: AgentEvent) -> None:
+        if ev.kind in self._CLOSERS:
+            self.close()
+        elif ev.kind == "reasoning_delta":
+            if self._span_started is None:
+                # The first span of a step counts from the model call so it agrees with the stored reasoned_s.
+                self._span_started = self._step_started if self._step_spans == 0 else time.time()
+                self._step_spans += 1
+            self._span_text.append(ev.text or "")
+        self._emit(ev)
+
+    def discard_text(self) -> None:
+        self._span_text = []
+
+    def new_step(self, first: bool) -> None:
+        if not first:
+            self._step_started = time.time()
+            self._step_spans = 0
+
+    def close(self) -> None:
+        if self._span_started is None:
+            return
+        seconds = round(max(0.0, time.time() - self._span_started), 1)
+        self._span_started = None
+        text = "".join(self._span_text)
+        self._span_text = []
+        span = {"seconds": seconds, "before_tool": len(self._tools)}
+        if text:
+            span["text"] = text
+        self.spans.append(span)
+        self._emit(AgentEvent(kind="reasoning_done", seconds=seconds))
 
 
 def _schema_name(schema: dict) -> str:
@@ -524,6 +570,8 @@ class Engine:
         turn_tools: list[ToolLog] = []
         turn_produced: list[dict] = []
         turn_reasoning_parts: list[str] = []
+        reasoning_spans = _ReasoningSpans(emit, turn_started, turn_tools)
+        emit = reasoning_spans
         first_tool_at: float | None = None
         first_text_delta_at: float | None = None
         final_assistant = ""
@@ -749,6 +797,7 @@ class Engine:
 
         try:
             for step_idx in range(max_steps):
+                reasoning_spans.new_step(step_idx == 0)
                 if self.interrupt_requested:
                     self._finalize_interrupt(emit)
                     return
@@ -780,6 +829,7 @@ class Engine:
                         break
                     accumulated_text = []
                     reasoning_text = []
+                    reasoning_spans.discard_text()
                     final = {}
                     self._diagnose_prefix(call_kwargs, schemas)
                     try:
@@ -800,6 +850,7 @@ class Engine:
                             if chunk.get("retry_reset"):
                                 accumulated_text = []
                                 reasoning_text = []
+                                reasoning_spans.discard_text()
                                 continue
                             reasoning_delta = chunk.get("reasoning_delta") or ""
                             if reasoning_delta:
@@ -862,6 +913,7 @@ class Engine:
                             transient=llm.is_transient(e),
                         ))
                         return
+                reasoning_spans.close()
                 if deadline_hit:
                     break
 
@@ -1582,6 +1634,10 @@ class Engine:
                 emit(AgentEvent(kind="error", text=turn_error))
         finally:
             todo_mod.reset_store(todo_token)
+            try:
+                reasoning_spans.close()
+            except Exception:  # noqa: BLE001
+                pass
             # Replace the in-flight stub from turn-start, or append if an early exception aborted before it was logged.
             reasoned_until = (
                 first_tool_at if first_tool_at is not None
@@ -1593,6 +1649,7 @@ class Engine:
                 tools=turn_tools, assistant=final_assistant,
                 reasoning="\n\n".join(p for p in turn_reasoning_parts if p),
                 reasoned_s=max(0.0, reasoned_until - turn_started),
+                reasoning_spans=list(reasoning_spans.spans),
                 attachments=att_meta, output_attachments=turn_produced,
                 interrupted=self._interrupted_this_turn,
                 model=turn_model,

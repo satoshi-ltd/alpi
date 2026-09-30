@@ -56,3 +56,26 @@ async def test_narrow_status_line_drops_hints_before_state(tui_home) -> None:
         rendered = str(app.status_line.render())
         assert "some-model" in rendered
         assert "/ commands" not in rendered
+
+
+@pytest.mark.asyncio
+async def test_waiting_prompts_use_the_warning_text_not_the_accent(tui_home) -> None:
+    from textual.color import Color
+
+    from alpi.tui import themes
+
+    app = AlpiApp(home_dir=tui_home)
+    async with app.run_test(size=(160, 40)) as pilot:
+        app._remote_waiting = 1
+        app._update_header()
+        await pilot.pause()
+        text = app.status_line.left_text()
+        start = text.plain.index("1 waiting on you")
+        (span,) = [s for s in text.spans if s.start <= start < s.end]
+        colour = Color.parse(str(span.style).split()[-1])
+
+        def near(hex_: str) -> bool:
+            return sum(abs(x - y) for x, y in zip(colour.rgb, Color.parse(hex_).rgb)) <= 6
+
+        assert near(themes.DARK["warningText"])
+        assert not near(themes.DARK["accent"])

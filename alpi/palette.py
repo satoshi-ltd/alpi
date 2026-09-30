@@ -16,6 +16,7 @@ DARK = {
     "ink2": "#b1bac4",
     "ink3": "#828b97",
     "accent": "#f0b447",
+    "warningText": "#f59e5b",
 }
 
 LIGHT = {
@@ -26,6 +27,7 @@ LIGHT = {
     "ink2": "#3d4955",
     "ink3": "#626e7d",
     "accent": "#8a5a0a",
+    "warningText": "#b3470e",
 }
 
 DEFAULT_ACCENT = DARK["accent"]

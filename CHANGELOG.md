@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.16.1 — 2026-09-30 — reasoning replays where it happened
+
+- **Stored turns keep each reasoning span.** A turn now saves `reasoning_spans: [{seconds,
+  before_tool, text}]`: how long each stretch of thinking took, which tool call came right after
+  it, and its own text. A reloaded conversation shows "Thought for Xs" exactly where it happened,
+  with the same seconds and text as the live stream; `reasoned_s` and the joined `reasoning` stay
+  for older clients. Each model step restarts the span clock, so a retried step no longer inflates
+  the next span, and run journals record one `agent.reasoning_done` per span.
+- **The TUI shows alpi's process as one compact block.** Thinking and tool steps sit together in
+  the order they happened, in the same muted style, apart from the answer; notices stay in order.
+- **Warnings no longer look like the accent.** The shared warning text colour moves to an orange
+  (`#b3470e` light, `#f59e5b` dark) that reads apart from the amber accent in the TUI too.
+
 ## v0.16.0 — 2026-09-30 — see what every agent is doing
 
 - **`host.activity.list` answers "what needs me and what is running".** One call returns pending

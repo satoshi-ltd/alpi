@@ -184,11 +184,11 @@ async def test_a_prompt_that_expires_while_queued_says_so(tui_home) -> None:
     app = AlpiApp(home_dir=tui_home)
     async with app.run_test(size=(110, 40)) as pilot:
         head = ApprovalPanel("first", "p", "caution", lambda c: None, timeout_s=60)
-        queued = ApprovalPanel("second", "p", "caution", lambda c: None, timeout_s=0.1)
+        queued = ApprovalPanel("second", "p", "caution", lambda c: None, timeout_s=30)
         app._enqueue_prompt(head)
         app._enqueue_prompt(queued)
         await pilot.pause()
-        assert queued.hint_text() == "esc deny · auto-deny in 1s"
+        assert queued.hint_text() == "esc deny · auto-deny in 30s"
         queued.expire()
         await pilot.pause()
         assert app.pending_prompts == [head]

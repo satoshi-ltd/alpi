@@ -380,9 +380,6 @@ async def _data_chat_send(
         _timing.mark(request_id, "stream_open")
 
         first_signal = False
-        step_started = time.time()
-        step_spans = 0
-        span_started: float | None = None
         tool_started: dict[str, float] = {}
         while True:
             item = await queue.get()
@@ -392,9 +389,6 @@ async def _data_chat_send(
             if not first_signal and ev.kind in ("reasoning_delta", "assistant_delta", "tool_start"):
                 _timing.mark(request_id, "first_delta")
                 first_signal = True
-            if span_started is not None and ev.kind in ("assistant_delta", "tool_start", "assistant_done"):
-                await emit({"event": "reasoning_done", "seconds": round(time.time() - span_started, 1)})
-                span_started = None
             if ev.kind == "tool_start":
                 started_at = time.time()
                 tool_started[ev.tool_id] = started_at
@@ -416,8 +410,6 @@ async def _data_chat_send(
                 })
             elif ev.kind == "tool_end":
                 ended_at = time.time()
-                step_started = ended_at
-                step_spans = 0
                 started_at = tool_started.pop(ev.tool_id, None)
                 await emit({
                     "event": "tool_end",
@@ -431,10 +423,9 @@ async def _data_chat_send(
                 model_used = ev.model or model_used
                 await emit({"event": "routing", "text": ev.text, "model": ev.model})
             elif ev.kind == "reasoning_delta":
-                if span_started is None:
-                    span_started = step_started if step_spans == 0 else time.time()
-                    step_spans += 1
                 await emit({"event": "reasoning_delta", "text": ev.text})
+            elif ev.kind == "reasoning_done":
+                await emit({"event": "reasoning_done", "seconds": ev.seconds})
             elif ev.kind == "assistant_delta":
                 await emit({"event": "assistant_delta", "text": ev.text})
             elif ev.kind == "error":
@@ -463,8 +454,6 @@ async def _data_chat_send(
                     produced.extend(ev.attachments)
                 if ev.text.strip():
                     parts.append(ev.text)
-        if span_started is not None:
-            await emit({"event": "reasoning_done", "seconds": round(time.time() - span_started, 1)})
         final = "\n\n".join(parts).strip()
         await emit({
             "event": "reply",
