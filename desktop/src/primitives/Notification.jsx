@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { plainError } from "../../../common/plainError.mjs";
 import styles from "./Notification.module.css";
 
 const NotifyContext = createContext(null);
@@ -14,7 +15,7 @@ const DEDUP_WINDOW_MS = 2000;
 
 function normalize(arg, extra) {
   const o = typeof arg === "string" ? { text: arg, ...(extra || {}) } : arg || {};
-  const text = o.text ?? o.message ?? "";
+  let text = o.text ?? o.message ?? "";
   let kind = o.kind;
   if (!kind) {
     const v = o.variant;
@@ -23,6 +24,7 @@ function normalize(arg, extra) {
     else if (v === "warning") kind = "warning";
     else kind = "info";
   }
+  if (kind === "danger" || o.variant === "danger") text = plainError(text);
   return {
     text,
     kind,

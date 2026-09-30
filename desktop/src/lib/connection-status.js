@@ -1,3 +1,5 @@
+import { plainError } from "../../../common/plainError.mjs";
+
 export const RATE_LIMITED = "rate-limited";
 export const RATE_LIMITED_CLOSE = "1013 auth-rate-limited";
 export const RATE_LIMITED_MESSAGE =
@@ -9,5 +11,5 @@ export function isRateLimitedError(text) {
 }
 
 export function describeConnectionError(text) {
-  return isRateLimitedError(text) ? RATE_LIMITED_MESSAGE : String(text ?? "");
+  return isRateLimitedError(text) ? RATE_LIMITED_MESSAGE : plainError(text);
 }

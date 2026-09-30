@@ -313,6 +313,13 @@ carry `text` and `code`; `detail` reaches the TUI, `--once` (`[error] text (deta
 text (detail)`. ALP peer replies carry only the sentence. Chat-level codes such as `busy` share
 the `code` field.
 
+The apps put the daemon's own protocol errors in plain words through one shared map,
+`common/plainError.mjs` (fixtures in `common/plainError.fixtures.mjs`, exercised by both clients):
+`too-many-connections`, `too-many-requests`, `forbidden`, `method-not-found` and the close reasons
+`Authorization changed`, `Device authorization revoked`, `WebSocket capacity reached`, plus the
+transport failures, become a sentence; anything else is shown unchanged. Both clients retry a call
+or a stream refused with `-32029 too-many-connections` once after 1.5 s before showing it.
+
 Host chat forwards `usage` with `context_tokens`; it is non-zero only for the
 main completion whose input becomes `Session.last_ctx_tokens`. Side-model usage
 still carries accounting fields but cannot move a client's conversation meter.

@@ -1588,6 +1588,48 @@ fn call_remote_single(
     )
 }
 
+const TOO_MANY_CONNECTIONS: &str = "too-many-connections";
+#[cfg(not(test))]
+const TOO_MANY_RETRY_DELAY: Duration = Duration::from_millis(1500);
+#[cfg(test)]
+const TOO_MANY_RETRY_DELAY: Duration = Duration::from_millis(1);
+
+fn cancelled_requests() -> &'static Mutex<HashSet<String>> {
+    static CANCELLED: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+    CANCELLED.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+pub fn mark_request_cancelled(request_id: &str) {
+    if let Ok(mut set) = cancelled_requests().lock() {
+        set.insert(request_id.to_string());
+    }
+}
+
+pub fn forget_request_cancelled(request_id: &str) {
+    if let Ok(mut set) = cancelled_requests().lock() {
+        set.remove(request_id);
+    }
+}
+
+fn request_was_cancelled(request_id: Option<&str>) -> bool {
+    request_id
+        .and_then(|rid| cancelled_requests().lock().ok().map(|set| set.contains(rid)))
+        .unwrap_or(false)
+}
+
+fn is_too_many_connections(err: &str) -> bool {
+    err.contains(TOO_MANY_CONNECTIONS)
+}
+
+fn frame_is_too_many_connections(frame: &Value) -> bool {
+    frame
+        .get("error")
+        .and_then(|err| err.get("message"))
+        .and_then(|message| message.as_str())
+        .map(is_too_many_connections)
+        .unwrap_or(false)
+}
+
 fn retry_remote<F>(mut attempt: F) -> Result<Value, String>
 where
     F: FnMut() -> Result<Value, String>,
@@ -1595,6 +1637,10 @@ where
     for i in 0..2 {
         match attempt() {
             Ok(value) => return Ok(value),
+            Err(e) if i == 0 && is_too_many_connections(&e) => {
+                std::thread::sleep(TOO_MANY_RETRY_DELAY);
+                continue;
+            }
             Err(e) if i == 0 && should_retry_remote_ws(&e) => continue,
             Err(e) => return Err(e),
         }
@@ -1697,11 +1743,17 @@ where
         Duration::from_secs(STREAM_READ_TIMEOUT_SECS),
     )?;
     let id = "tauri-stream";
-    ws.send_json(&json!({
+    let request_id = params
+        .get("request_id")
+        .and_then(|value| value.as_str())
+        .map(str::to_owned);
+    let request = json!({
         "id": id,
         "method": method,
         "params": with_auth(params, token),
-    }))?;
+    });
+    ws.send_json(&request)?;
+    let mut retried_too_many = false;
     loop {
         let text = ws.read_text()?;
         if !frame_matches_id(&text, id) {
@@ -1711,6 +1763,22 @@ where
             Ok(v) => v,
             Err(_) => continue,
         };
+        if !retried_too_many && frame_is_too_many_connections(&frame) {
+            retried_too_many = true;
+            std::thread::sleep(TOO_MANY_RETRY_DELAY);
+            if request_was_cancelled(request_id.as_deref()) {
+                on_frame(json!({"id": id, "event": "interrupted"}));
+                return Ok(());
+            }
+            ws = WsClient::connect(
+                host,
+                port,
+                Duration::from_secs(WS_CONNECT_TIMEOUT_SECS),
+                Duration::from_secs(STREAM_READ_TIMEOUT_SECS),
+            )?;
+            ws.send_json(&request)?;
+            continue;
+        }
         let done = frame
             .get("event")
             .and_then(|v| v.as_str())
@@ -3311,6 +3379,50 @@ mod tests {
         });
         assert_eq!(calls, 2);
         assert_eq!(r.unwrap()["ok"], json!(true));
+    }
+
+    #[test]
+    fn retry_remote_waits_and_retries_once_when_the_daemon_has_too_many_connections() {
+        let mut calls = 0;
+        let r = retry_remote(|| {
+            calls += 1;
+            if calls == 1 {
+                Err("alp -32029: too-many-connections".to_string())
+            } else {
+                Ok(json!({"ok": true}))
+            }
+        });
+        assert_eq!(calls, 2);
+        assert_eq!(r.unwrap()["ok"], json!(true));
+    }
+
+    #[test]
+    fn retry_remote_gives_up_after_a_second_too_many_connections() {
+        let mut calls = 0;
+        let r = retry_remote(|| {
+            calls += 1;
+            Err("alp -32029: too-many-connections".to_string())
+        });
+        assert_eq!(calls, 2);
+        assert!(r.unwrap_err().contains("too-many-connections"));
+    }
+
+    #[test]
+    fn a_cancelled_request_is_remembered_until_forgotten() {
+        assert!(!request_was_cancelled(Some("tauri-test-cancel")));
+        assert!(!request_was_cancelled(None));
+        mark_request_cancelled("tauri-test-cancel");
+        assert!(request_was_cancelled(Some("tauri-test-cancel")));
+        forget_request_cancelled("tauri-test-cancel");
+        assert!(!request_was_cancelled(Some("tauri-test-cancel")));
+    }
+
+    #[test]
+    fn a_stream_error_frame_is_recognised_as_too_many_connections() {
+        let frame = json!({"id": "tauri-stream", "error": {"code": -32029, "message": "too-many-connections"}});
+        assert!(frame_is_too_many_connections(&frame));
+        assert!(!frame_is_too_many_connections(&json!({"error": {"code": -32001, "message": "forbidden"}})));
+        assert!(!frame_is_too_many_connections(&json!({"event": "done"})));
     }
 
     #[test]

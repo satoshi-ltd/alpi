@@ -2939,6 +2939,14 @@ async fn chat_cancel(
     let Some(request_id) = request_id else {
         return Ok(());
     };
+    let is_active = active_chats()
+        .lock()
+        .unwrap()
+        .values()
+        .any(|active| active == &request_id);
+    if is_active {
+        host_client::mark_request_cancelled(&request_id);
+    }
     tauri::async_runtime::spawn_blocking(move || {
         host_client::call_for(
             &connection_id,
@@ -3206,6 +3214,7 @@ fn stream_chat(
             _ => {}
         }
     });
+    host_client::forget_request_cancelled(&request_id);
 
     if let Err(e) = result {
         if !got_error && !got_interrupted {
