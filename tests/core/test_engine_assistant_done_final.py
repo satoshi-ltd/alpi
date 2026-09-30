@@ -418,14 +418,14 @@ def test_monotonic_deadline_triggers_wrap_up(
 def test_deadline_reached_during_stream_skips_returned_tool_calls(
     patched_engine: Engine, monkeypatch,
 ) -> None:
-    import time
-
+    now = [100.0]
     ledger_calls: list[dict] = []
     monkeypatch.setattr(
         "alpi.ledger.record", lambda *args, **kwargs: ledger_calls.append(kwargs),
     )
+    monkeypatch.setattr("alpi.engine.time.monotonic", lambda: now[0])
     monkeypatch.setattr(
-        "alpi.engine._turn_deadline_from_env", lambda started: time.monotonic() + 0.01,
+        "alpi.engine._turn_deadline_from_env", lambda started: 105.0,
     )
     calls = {"loop": 0, "wrap": 0}
 
@@ -436,7 +436,7 @@ def test_deadline_reached_during_stream_skips_returned_tool_calls(
             yield _final_chunk("")
             return
         calls["loop"] += 1
-        time.sleep(0.03)
+        now[0] = 106.0
         final = _final_chunk("", tool_calls=[{
             "id": "tc", "name": "todo", "arguments": '{"action": "list"}',
         }])
