@@ -263,4 +263,22 @@ describe('InboxRow selection', () => {
     render(<InboxRow item={ITEM} />);
     expect(screen.getByRole('button').getAttribute('data-bg')).toBe('transparent');
   });
+
+  it('slides the roster open and shut over 200 ms instead of snapping', async () => {
+    const { state } = await import('../../../tests/mocks/reanimated.js');
+    const { motionMs } = await import('../../theme/tokens');
+    h.window = { width: 690, height: 829 };
+    render(
+      <PaneShell>
+        <Probe />
+      </PaneShell>,
+    );
+    state.timings.length = 0;
+    fireEvent.click(probe());
+    expect(screen.getByTestId('sidebar')).toBeTruthy();
+    expect(state.timings.at(-1)).toEqual({ to: 1, duration: motionMs.sidebar });
+    fireEvent.click(probe());
+    expect(state.timings.at(-1)).toEqual({ to: 0, duration: motionMs.sidebar });
+    expect(screen.queryByTestId('sidebar')).toBeNull();
+  });
 });

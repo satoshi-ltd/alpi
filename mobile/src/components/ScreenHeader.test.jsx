@@ -16,7 +16,8 @@ vi.mock('react-native', () => {
   const Text = ({ children, style, numberOfLines, ...p }) => React.createElement('span', p, children);
   const Pressable = ({ children, onPress, hitSlop, style, ...p }) =>
     React.createElement('button', { type: 'button', onClick: onPress, ...p }, children);
-  return { View, Text, Pressable };
+  const StyleSheet = { create: (x) => x, absoluteFillObject: {} };
+  return { View, Text, Pressable, StyleSheet, ActivityIndicator: () => null };
 });
 
 vi.mock('../theme/ThemeContext', () => ({
@@ -30,7 +31,9 @@ vi.mock('../theme/ThemeContext', () => ({
 vi.mock('./Icon', () => ({ Icon: ({ name }) => React.createElement('span', {}, name) }));
 
 import { PaneContext } from '../nav/PaneContext';
-import { ScreenHeader } from './ScreenHeader';
+import { Button } from './Button';
+import { CHROME_BTN } from '../lib/panes';
+import { ScreenHeader, headerRightBleed } from './ScreenHeader';
 
 function inTwoPane(node) {
   return render(<PaneContext.Provider value={{ twoPane: true, side: 'detail' }}>{node}</PaneContext.Provider>);
@@ -99,5 +102,18 @@ describe('ScreenHeader back chevron', () => {
   it('drops the chevron without an onBack handler', () => {
     render(<ScreenHeader title="Outputs" />);
     expect(screen.queryByText('back')).toBeNull();
+  });
+});
+
+describe('ScreenHeader right slot', () => {
+  it('lets a 44 pt header button bleed into the padding so it never outgrows the chrome row', () => {
+    const bleed = headerRightBleed(<Button title="Save" size="md" />);
+    expect(Button.touchHeight('md') - 2 * bleed).toBe(CHROME_BTN);
+    expect(Button.touchHeight('sm') - 2 * headerRightBleed(<Button title="Edit" size="sm" />)).toBe(CHROME_BTN);
+  });
+
+  it('leaves anything that is not a Button at its own height', () => {
+    expect(headerRightBleed(<span>wave</span>)).toBe(0);
+    expect(headerRightBleed(null)).toBe(0);
   });
 });

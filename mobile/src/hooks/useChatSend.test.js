@@ -450,6 +450,22 @@ describe("useChatSend.send", () => {
     expect(result.current.pendingTurn.reasoned_s).toBe(6.8);
   });
 
+  it("records each live reasoning span against the tool that followed it, like the stored turn", async () => {
+    const { result } = renderHook(() => useChatSend({ profile: "doc" }));
+    act(() => result.current.send("hi"));
+    act(() => lastStreamHandlers.onFrame({ event: "reasoning_delta", text: "plan" }));
+    act(() => lastStreamHandlers.onFrame({ event: "reasoning_done", seconds: 3 }));
+    act(() => lastStreamHandlers.onFrame({ event: "tool_start", tool_id: "t1", name: "read" }));
+    act(() => lastStreamHandlers.onFrame({ event: "tool_end", tool_id: "t1", ok: true }));
+    act(() => lastStreamHandlers.onFrame({ event: "reasoning_delta", text: "wrap up" }));
+    act(() => lastStreamHandlers.onFrame({ event: "reasoning_done", seconds: 1.5 }));
+    await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+    expect(result.current.pendingTurn.reasoning_spans).toEqual([
+      { seconds: 3, before_tool: 0 },
+      { seconds: 1.5, before_tool: 1 },
+    ]);
+  });
+
   it("an answer delta closes live reasoning when an older daemon sends no reasoning_done", async () => {
     const { result } = renderHook(() => useChatSend({ profile: "doc" }));
     act(() => result.current.send("hi"));

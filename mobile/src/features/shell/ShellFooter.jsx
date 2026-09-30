@@ -6,7 +6,7 @@ import { Icon } from '../../components/Icon';
 import { CHROME_H } from '../../lib/panes';
 import { usePane } from '../../nav/PaneContext';
 import { useTheme } from '../../theme/ThemeContext';
-import { lineHeights, radii, space } from '../../theme/tokens';
+import { countBadge, radii, space } from '../../theme/tokens';
 
 const HAIRLINE = 0.5;
 const ENTRY_H = space.s11;
@@ -21,8 +21,18 @@ export function nextThemePref(pref) {
   return THEME_ORDER[(THEME_ORDER.indexOf(pref) + 1) % THEME_ORDER.length];
 }
 
-function CountBadge({ count, tone, ring }) {
-  const { colors, fonts, fontSizes, chromeScale } = useTheme();
+export function countBadgeText(fonts, color) {
+  return {
+    fontFamily: fonts.sans.semibold,
+    fontSize: countBadge.fontSize,
+    lineHeight: countBadge.fontSize,
+    includeFontPadding: false,
+    color,
+  };
+}
+
+export function CountBadge({ count, tone, ring }) {
+  const { colors, fonts } = useTheme();
   if (!(count > 0)) return null;
   const bg = tone === 'warning' ? colors.warning : colors.danger;
   return (
@@ -31,12 +41,12 @@ function CountBadge({ count, tone, ring }) {
         position: 'absolute',
         top: -space.s2,
         right: -space.s3,
-        minWidth: 18,
-        height: 18,
-        paddingHorizontal: space.s2,
+        minWidth: countBadge.size,
+        height: countBadge.size,
+        paddingHorizontal: space.s1,
         flexDirection: 'row',
         borderRadius: radii.pill,
-        borderWidth: 1.5,
+        borderWidth: countBadge.border,
         borderColor: ring,
         backgroundColor: bg,
         alignItems: 'center',
@@ -45,14 +55,8 @@ function CountBadge({ count, tone, ring }) {
     >
       <Text
         numberOfLines={1}
-        maxFontSizeMultiplier={chromeScale}
-        style={{
-          fontFamily: fonts.sans.semibold,
-          fontSize: fontSizes.xs,
-          lineHeight: fontSizes.xs * lineHeights.cozy,
-          includeFontPadding: false,
-          color: tone === 'warning' ? contrastText(bg) : colors.onDanger ?? '#fff',
-        }}
+        allowFontScaling={false}
+        style={countBadgeText(fonts, tone === 'warning' ? contrastText(bg) : colors.onDanger ?? '#fff')}
       >
         {count > 99 ? '99+' : count}
       </Text>

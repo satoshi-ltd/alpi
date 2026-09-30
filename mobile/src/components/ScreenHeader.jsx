@@ -32,6 +32,11 @@ function ChromeButton({ label, onPress, children }) {
   );
 }
 
+export function headerRightBleed(node) {
+  const height = node?.type?.touchHeight?.(node.props?.size);
+  return height ? Math.max(0, (height - CHROME_BTN) / 2) : 0;
+}
+
 export function ScreenHeader({ title, subtitle, meta, onBack, right, leadingGlyph, accent }) {
   const { colors, fonts, fontSizes } = useTheme();
   const { twoPane, sidebarOpen, toggleSidebar } = usePane();
@@ -121,7 +126,7 @@ export function ScreenHeader({ title, subtitle, meta, onBack, right, leadingGlyp
         ) : null}
         {metaList.length ? <MetaStrip style={{ marginTop: space.s3 }}>{metaList}</MetaStrip> : null}
       </View>
-      {right}
+      {right ? <View style={{ marginVertical: -headerRightBleed(right) }}>{right}</View> : null}
       {showBack && twoPane ? (
         <ChromeButton label="Back" onPress={onBack}>
           <Icon name="arrow-left" size="md" color={colors.ink2} />

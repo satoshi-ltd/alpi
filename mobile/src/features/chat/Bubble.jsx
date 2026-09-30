@@ -1,7 +1,8 @@
 import { mixHex } from "../../../../common/color.mjs";
 import { formatCostLine } from "../../../../common/format.mjs";
-import { useCallback } from 'react';
+import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 import { radii, space, typography } from '../../theme/tokens';
 
 import { Diamond } from '../../components/Diamond';
@@ -14,19 +15,33 @@ import { useReduceMotion } from '../../lib/reduceMotion';
 import { stripProducedImageMarkdown } from '../../../../common/producedAttachments.mjs';
 import { longPressHaptic } from './chatHaptics';
 
-const PRESS_SCALE = 0.98;
+export const LONG_PRESS_MS = 350;
+export const PULSE_FROM = 0.985;
+export const PULSE_MS = 160;
 
-export function pressFeedback(pressed, reduceMotion) {
-  if (!pressed) return null;
-  return reduceMotion ? { opacity: 0.85 } : { transform: [{ scale: PRESS_SCALE }] };
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+function useLongPressPulse(onLongPress) {
+  const reduceMotion = useReduceMotion();
+  const scale = useSharedValue(1);
+  const pulse = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const handle = onLongPress
+    ? (e) => {
+      longPressHaptic();
+      if (!reduceMotion) scale.value = withSequence(withTiming(PULSE_FROM, { duration: 0 }), withTiming(1, { duration: PULSE_MS }));
+      onLongPress(e);
+    }
+    : undefined;
+  return { onLongPress: handle, pulse: reduceMotion ? null : pulse };
 }
 
-function withTick(onLongPress) {
-  if (!onLongPress) return undefined;
-  return (e) => {
-    longPressHaptic();
-    onLongPress(e);
-  };
+function MessagePress({ onLongPress, style, children }) {
+  const press = useLongPressPulse(onLongPress);
+  return (
+    <AnimatedPressable onLongPress={press.onLongPress} delayLongPress={LONG_PRESS_MS} style={[style, press.pulse]}>
+      {children}
+    </AnimatedPressable>
+  );
 }
 
 function Stamp({ ts }) {
@@ -64,15 +79,13 @@ const S = StyleSheet.create({
 export function ProfileUserMessage({ text, ts, accent, attachments, onLongPress, profile }) {
   const { colors, fontSizes } = useTheme();
   const { twoPane } = usePane();
-  const reduceMotion = useReduceMotion();
-  const bubbleStyle = useCallback(
-    ({ pressed }) => [
+  const bubbleStyle = useMemo(
+    () => [
       S.bubble,
       twoPane ? S.paneCap : null,
       { backgroundColor: mixHex(accent ?? colors.accent, 0.12, colors.bgPane) },
-      pressFeedback(pressed, reduceMotion),
     ],
-    [accent, colors.accent, colors.bgPane, twoPane, reduceMotion],
+    [accent, colors.accent, colors.bgPane, twoPane],
   );
   return (
     <View style={S.userWrap}>
@@ -80,7 +93,7 @@ export function ProfileUserMessage({ text, ts, accent, attachments, onLongPress,
         <AttachmentCards items={attachments} variant="message" profile={profile} />
       ) : null}
       {text ? (
-        <Pressable onLongPress={withTick(onLongPress)} delayLongPress={350} style={bubbleStyle}>
+        <MessagePress onLongPress={onLongPress} style={bubbleStyle}>
           <RichText
             size={fontSizes[typography.chat.size]}
             color={colors.ink}
@@ -88,7 +101,7 @@ export function ProfileUserMessage({ text, ts, accent, attachments, onLongPress,
           >
             {text}
           </RichText>
-        </Pressable>
+        </MessagePress>
       ) : null}
       <Stamp ts={ts} />
     </View>
@@ -97,14 +110,9 @@ export function ProfileUserMessage({ text, ts, accent, attachments, onLongPress,
 
 export function ProfileAssistantMessage({ text, ts, attachments, onLongPress, profile }) {
   const { colors, fontSizes } = useTheme();
-  const reduceMotion = useReduceMotion();
-  const wrapStyle = useCallback(
-    ({ pressed }) => [S.agentWrap, pressFeedback(pressed, reduceMotion)],
-    [reduceMotion],
-  );
   const body = stripProducedImageMarkdown(text, attachments);
   return (
-    <Pressable onLongPress={withTick(onLongPress)} delayLongPress={350} style={wrapStyle}>
+    <MessagePress onLongPress={onLongPress} style={S.agentWrap}>
       {body ? (
         <RichText size={fontSizes[typography.chat.size]} color={colors.ink} imageProfile={profile}>
           {body}
@@ -114,7 +122,7 @@ export function ProfileAssistantMessage({ text, ts, attachments, onLongPress, pr
         <AttachmentCards items={attachments} variant="message" profile={profile} />
       ) : null}
       <Stamp ts={ts} />
-    </Pressable>
+    </MessagePress>
   );
 }
 
@@ -127,7 +135,6 @@ export function WorkgroupMessage({ body, speakerName, speakerAccent, isFromHub, 
   const seqStr = seq != null ? `#${seq}` : null;
   const costStr = cost ? formatCostLine(cost) : null;
 
-  const reduceMotion = useReduceMotion();
   const metaStyle = { fontFamily: fonts.monoMedium, fontSize: fontSizes.sm, lineHeight: fontSizes.sm, color: colors.ink3 };
   const SpeakerEl = (
     <View style={S.speakerRow}>
@@ -139,17 +146,16 @@ export function WorkgroupMessage({ body, speakerName, speakerAccent, isFromHub, 
   const SeqEl = seqStr ? <Text style={metaStyle}>{seqStr}</Text> : null;
   const CostEl = costStr ? <Text style={metaStyle}>{costStr}</Text> : null;
 
-  const bubbleStyle = useCallback(
-    ({ pressed }) => [
+  const bubbleStyle = useMemo(
+    () => [
       S.wgBubble,
       twoPane ? S.paneCap : null,
       right
         ? { borderTopLeftRadius: radii.bubble, borderTopRightRadius: radii.xs, borderBottomRightRadius: radii.bubble, borderBottomLeftRadius: radii.bubble }
         : { borderTopLeftRadius: radii.xs, borderTopRightRadius: radii.bubble, borderBottomRightRadius: radii.bubble, borderBottomLeftRadius: radii.bubble },
       { backgroundColor: bg },
-      pressFeedback(pressed, reduceMotion),
     ],
-    [bg, right, twoPane, reduceMotion],
+    [bg, right, twoPane],
   );
 
   return (
@@ -169,11 +175,11 @@ export function WorkgroupMessage({ body, speakerName, speakerAccent, isFromHub, 
           </>
         )}
       </View>
-      <Pressable onLongPress={withTick(onLongPress)} delayLongPress={350} style={bubbleStyle}>
+      <MessagePress onLongPress={onLongPress} style={bubbleStyle}>
         <RichText size={fontSizes[typography.chat.size]} color={colors.ink} imageProfile={profile}>
           {body}
         </RichText>
-      </Pressable>
+      </MessagePress>
     </View>
   );
 }

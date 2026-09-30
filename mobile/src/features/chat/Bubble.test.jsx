@@ -50,7 +50,8 @@ vi.mock('../../components/RichText', () => ({
 
 import { BUBBLE_MAX_PANE } from '../../lib/panes';
 import { PaneContext } from '../../nav/PaneContext';
-import { ProfileAssistantMessage, ProfileUserMessage, WorkgroupMessage } from './Bubble';
+import { state as motion } from '../../../tests/mocks/reanimated.js';
+import { LONG_PRESS_MS, PULSE_FROM, PULSE_MS, ProfileAssistantMessage, ProfileUserMessage, WorkgroupMessage } from './Bubble';
 
 function bodySize(container) {
   return Number(container.querySelector('[data-size]').getAttribute('data-size'));
@@ -151,16 +152,31 @@ describe('message footer and long press', () => {
     expect(themeState.ticks).toEqual(['selection']);
   });
 
-  it('scales the pressed bubble to 0.98, and dims instead under reduced motion', () => {
-    const { container } = render(<ProfileUserMessage text="ship it" accent="#b8954a" onLongPress={() => {}} />);
-    const pressed = JSON.parse(container.querySelector('button').getAttribute('data-pressed-style'));
-    expect(pressed.transform).toEqual([{ scale: 0.98 }]);
-    expect(pressed.opacity).toBeUndefined();
-    cleanup();
-    themeState.reduce = true;
-    const again = render(<ProfileUserMessage text="ship it" accent="#b8954a" onLongPress={() => {}} />);
-    const still = JSON.parse(again.container.querySelector('button').getAttribute('data-pressed-style'));
-    expect(still.transform).toBeUndefined();
-    expect(still.opacity).toBe(0.85);
+  it.each(VARIANTS)('does not move the %s bubble on press-in or a short tap', (_name, Variant) => {
+    const { container } = render(Variant());
+    const button = container.querySelector('button');
+    expect(button.getAttribute('data-pressed-style')).toBe(button.getAttribute('data-style'));
+    expect(JSON.parse(button.getAttribute('data-style')).transform).toEqual([{ scale: 1 }]);
   });
+
+  it('pulses 0.985 → 1 over 160 ms with the haptic only once the long press lands', () => {
+    motion.timings.length = 0;
+    render(<ProfileUserMessage text="ship it" accent="#b8954a" onLongPress={() => {}} />);
+    expect(motion.timings).toEqual([]);
+    fireEvent.contextMenu(screen.getByText('ship it').closest('button'));
+    expect(motion.timings).toEqual([{ to: PULSE_FROM, duration: 0 }, { to: 1, duration: PULSE_MS }]);
+    expect(themeState.ticks).toEqual(['selection']);
+    expect([PULSE_FROM, PULSE_MS, LONG_PRESS_MS]).toEqual([0.985, 160, 350]);
+  });
+
+  it('keeps the haptic but drops the pulse under reduced motion', () => {
+    themeState.reduce = true;
+    motion.timings.length = 0;
+    const { container } = render(<WorkgroupMessage body="status?" speakerName="scout" speakerAccent="#0af0af" onLongPress={() => {}} />);
+    expect(JSON.parse(container.querySelector('button').getAttribute('data-style')).transform).toBeUndefined();
+    fireEvent.contextMenu(screen.getByText('status?').closest('button'));
+    expect(motion.timings).toEqual([]);
+    expect(themeState.ticks).toEqual(['selection']);
+  });
+
 });

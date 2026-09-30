@@ -1,7 +1,7 @@
 import React from 'react';
 import * as RN from 'react-native';
 
-export const state = { reducedMotion: false, keyboardHeight: 0 };
+export const state = { reducedMotion: false, keyboardHeight: 0, timings: [], hold: false, pending: [] };
 
 const flat = (style) => Object.assign({}, ...[style].flat(Infinity).filter(Boolean));
 
@@ -51,7 +51,15 @@ export const useAnimatedKeyboard = () => ({ height: { value: state.keyboardHeigh
 export const useAnimatedStyle = (fn) => fn();
 export const useSharedValue = (initial) => React.useRef({ value: initial }).current;
 export const useDerivedValue = (fn) => ({ value: fn() });
-export const withTiming = (v) => v;
+export const withTiming = (v, config, done) => {
+  state.timings.push({ to: v, duration: config?.duration });
+  if (done && state.hold) state.pending.push(done);
+  else done?.(true);
+  return v;
+};
+export function finishTimings(finished = true) {
+  for (const done of state.pending.splice(0)) done(finished);
+}
 export const withRepeat = (v) => v;
 export const withSequence = (...v) => v[v.length - 1];
 export const cancelAnimation = () => {};

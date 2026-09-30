@@ -46,7 +46,7 @@ export function Button({
       onPress={onPress}
       disabled={blocked}
       style={({ pressed }) => [styles.root, {
-        minHeight: buttonHeights[size].mobile,
+        minHeight: Button.touchHeight(size),
         paddingHorizontal: dims.padX,
         borderRadius: dims.radius,
         backgroundColor: pressed && !blocked ? bgPressed : bgIdle,
@@ -72,6 +72,9 @@ export function Button({
     </Pressable>
   );
 }
+
+Button.touchHeight = (size) =>
+  buttonHeights[Object.hasOwn(buttonHeights, size) ? size : buttonDefaults.mobile.size].mobile;
 
 const styles = StyleSheet.create({
   root: {

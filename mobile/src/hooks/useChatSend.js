@@ -236,6 +236,10 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
             ...cur,
             reasoning: `${cur.reasoning ?? ''}${pendingReasoning}`,
             reasoned_s: (cur.reasoned_s ?? 0) + (Number.isFinite(seconds) && seconds > 0 ? seconds : 0),
+            reasoning_spans: [
+              ...(cur.reasoning_spans ?? []),
+              { seconds: Number.isFinite(seconds) && seconds > 0 ? seconds : 0, before_tool: (cur.tools ?? []).length },
+            ],
             reasoningOpen: false,
           }));
         } else if (event === 'reply') {
@@ -264,7 +268,7 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
             cancelAnimationFrame(rafRef.current);
             rafRef.current = null;
           }
-          writeTurn((cur) => ({ ...cur, assistant: '', reasoning: '', reasoned_s: 0, reasoningOpen: false, tools: [], error: null }));
+          writeTurn((cur) => ({ ...cur, assistant: '', reasoning: '', reasoned_s: 0, reasoning_spans: [], reasoningOpen: false, tools: [], error: null }));
           let sawDone = false;
           for (const rec of records) {
             const f = rec?.frame ?? rec;

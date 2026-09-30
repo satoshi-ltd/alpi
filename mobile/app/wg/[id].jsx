@@ -269,7 +269,7 @@ function TasksHeaderButton({ tasks, accent, onPress }) {
         alignItems: 'center',
         gap: space.s2,
         paddingHorizontal: space.s4,
-        height: 30,
+        minHeight: 30,
         backgroundColor: pressed ? colors.selected : colors.bgInput,
         borderRadius: radii.lg,
       })}

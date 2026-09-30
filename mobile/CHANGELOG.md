@@ -14,6 +14,23 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.6.1 — 2026-09-30 — alpi's process, apart from the answer
+
+- **Thinking and tool steps read as one compact block.** Rows sit close together in one mono
+  style, in the order they happened, clearly apart from the answer, and a reloaded conversation
+  shows each "Thought for Xs" where it happened with its own text.
+- **The process block matches desktop** at 12 pt, flush with the answer.
+- **Motion where it was missing.** The Fold and tablet sidebar slides open and closed, thoughts
+  and tool groups open smoothly, and the Latest button fades in; all of it respects reduce motion.
+- **Tapping a message no longer moves it.** Only a real long press answers, with a short pulse and
+  a tick as the menu opens.
+- **The notification count shows its number again** at every text size.
+- **Opening a tool while it streams no longer closes itself** when the next thought arrives.
+- **"Needs you" no longer looks like "working".** Warnings use their own orange.
+- **Small buttons are full touch size** (44 pt).
+
+  Requires alpi 0.16.1 to place replayed thoughts exactly; with 0.16.0 they show as one row.
+
 ## v0.6.0 — 2026-09-30 — made for the thumb
 
 - **Write real prompts.** Return adds a line and the send button sends. The model and reasoning

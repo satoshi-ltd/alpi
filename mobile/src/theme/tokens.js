@@ -64,6 +64,9 @@ export const iconSizes = {
 
 export const iconStroke = 2;
 
+// fixed-size chrome: deliberately outside the user/OS text scale so digits never clip the pill
+export const countBadge = { size: 18, border: 1.5, fontSize: fontSizes.xs };
+
 export const space = { ...sharedSpace, ...spaceExtra.mobile };
 
 export const pulseDuration = 1600;
@@ -74,6 +77,8 @@ export const motion = {
   ease: 'easeInOut',
   duration: { fast: 120, base: 180, slow: 240 },
 };
+
+export const motionMs = { sidebar: 200, expand: 180, jump: 150 };
 
 export const mobile = {
   tap: 44,

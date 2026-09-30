@@ -35,6 +35,7 @@ vi.mock("expo-router", () => ({
 }));
 
 vi.mock("react-native-reanimated", () => import("./tests/mocks/reanimated.js"));
+vi.mock("react-native-worklets", () => ({ scheduleOnRN: (fn, ...args) => fn(...args) }));
 
 vi.mock("expo-secure-store", () => ({
   getItemAsync: vi.fn(async () => null),

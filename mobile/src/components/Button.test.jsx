@@ -60,7 +60,12 @@ describe('Button shared contract', () => {
     render(<Button title="Continue" size={size} />);
     const style = JSON.parse(screen.getByRole('button').dataset.style);
     expect(style.minHeight).toBe(buttonHeights[size].mobile);
-    expect(style.minHeight).toBeGreaterThanOrEqual(40);
+    expect(style.minHeight).toBeGreaterThanOrEqual(44);
+  });
+
+  it('pins the phone heights: sm and md at the 44 pt target, lg 48, hero 56', () => {
+    expect(['sm', 'md', 'lg', 'hero'].map((size) => Button.touchHeight(size))).toEqual([44, 44, 48, 56]);
+    expect(Button.touchHeight('bogus')).toBe(buttonHeights.lg.mobile);
   });
 
   it('retains label layout while loading so the button does not shrink', () => {

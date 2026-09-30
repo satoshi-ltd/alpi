@@ -5,13 +5,14 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 afterEach(cleanup);
 
 vi.mock('react-native', () => {
-  const View = ({ children, ...p }) => React.createElement('div', p, children);
-  const Text = ({ children, ...p }) => React.createElement('span', p, children);
-  const Pressable = ({ children, onPress, accessibilityLabel, accessibilityState, style, accessibilityRole, ...p }) => {
+  const View = ({ children, style, ...p }) => React.createElement('div', { ...p, 'data-gap': style?.gap, 'data-indent': style?.paddingLeft }, children);
+  const Text = ({ children, style, numberOfLines, ...p }) =>
+    React.createElement('span', { ...p, 'data-font': style?.fontFamily, 'data-size': style?.fontSize, 'data-color': style?.color }, children);
+  const Pressable = ({ children, onPress, accessibilityLabel, accessibilityState, style, accessibilityRole, hitSlop, ...p }) => {
     const resolved = typeof style === 'function' ? style({ pressed: false }) : style;
     return React.createElement(
       'button',
-      { type: 'button', onClick: onPress, 'aria-label': accessibilityLabel, 'aria-expanded': accessibilityState?.expanded, 'data-min-h': resolved?.minHeight, ...p },
+      { type: 'button', onClick: onPress, 'aria-label': accessibilityLabel, 'aria-expanded': accessibilityState?.expanded, 'data-min-h': resolved?.minHeight, 'data-slop': (hitSlop?.top ?? 0) + (hitSlop?.bottom ?? 0), ...p },
       children,
     );
   };
@@ -48,7 +49,8 @@ vi.mock('./ToolDetailSheet', () => ({
 }));
 
 import { ToolModule } from './ToolCallRow';
-import { mobile } from '../../theme/tokens';
+import { fontSizes, mobile } from '../../theme/tokens';
+import { PROCESS_GAP, PROCESS_INDENT, PROCESS_ROW_H } from './processRow';
 
 describe('ToolModule', () => {
   it('a single tool renders inline, no bucket', () => {
@@ -92,11 +94,32 @@ describe('ToolModule', () => {
 });
 
 describe('tool rows open their detail', () => {
-  it('shows a family icon, a plain summary and a 44 pt target', () => {
+  it('shows a family icon and a plain summary on one compact row whose slop only meets its neighbours', () => {
     render(<ToolModule tools={[{ name: 'read_file', args: { path: 'deploy.log', limit: 200 }, ok: true }]} />);
     expect(document.querySelector('[data-icon="file"]')).toBeTruthy();
     expect(screen.getByText('deploy.log')).toBeTruthy();
-    expect(Number(screen.getByLabelText('read_file. Show details').getAttribute('data-min-h'))).toBe(mobile.tap);
+    const row = screen.getByLabelText('read_file. Show details');
+    expect(Number(row.getAttribute('data-min-h'))).toBe(PROCESS_ROW_H);
+    expect(Number(row.getAttribute('data-slop'))).toBe(PROCESS_GAP);
+  });
+
+  it('sets names in ink-2 and labels in ink-3, all in the same mono size', () => {
+    render(<ToolModule tools={[
+      { name: 'read_file', args: { path: 'a.log' }, ok: true, tool_id: 't1' },
+      { name: 'grep', args: { pattern: 'x' }, ok: true, tool_id: 't2' },
+    ]} />);
+    const label = screen.getByText('2 tool calls');
+    expect(label.getAttribute('data-color')).toBe('#666');
+    fireEvent.click(label.closest('button'));
+    const name = screen.getByText('read_file');
+    expect(name.getAttribute('data-color')).toBe('#333');
+    expect(screen.getByText('a.log').getAttribute('data-color')).toBe('#666');
+    for (const el of [label, name, screen.getByText('a.log')]) {
+      expect(el.getAttribute('data-font')).toBe('m');
+      expect(Number(el.getAttribute('data-size'))).toBe(fontSizes.sm);
+    }
+    expect(Number(name.closest('[data-indent]').getAttribute('data-indent'))).toBe(PROCESS_INDENT);
+    expect(Number(document.querySelector('[data-gap]').getAttribute('data-gap'))).toBe(PROCESS_GAP);
   });
 
   it('opens the sheet for the tapped call, not its namesake', () => {

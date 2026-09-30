@@ -88,14 +88,18 @@ export function activitySections(activity, nowSec = Date.now() / 1000) {
   return sections;
 }
 
-function ActivityRow({ row, onPress }) {
-  const { colors, fonts, fontSizes } = useTheme();
-  const tint = {
+export function activityTint(tone, colors) {
+  return {
     warning: colors.warningText ?? colors.warning,
     accent: colors.accent,
     danger: colors.dangerText ?? colors.danger,
     quiet: colors.ink3,
-  }[row.tone];
+  }[tone];
+}
+
+function ActivityRow({ row, onPress }) {
+  const { colors, fonts, fontSizes } = useTheme();
+  const tint = activityTint(row.tone, colors);
   return (
     <Pressable
       onPress={row.target ? () => onPress(row.target) : undefined}

@@ -12,7 +12,8 @@ import { DaemonBanner, isDaemonDown } from '../../src/components/DaemonBanner';
 import { Meter } from '../../src/components/Meter';
 import { useToast } from '../../src/components/Toast';
 import { ProfileAssistantMessage, ProfileUserMessage } from '../../src/features/chat/Bubble';
-import { Reasoning } from '../../src/features/chat/Reasoning';
+import { ProcessBlock } from '../../src/features/chat/ProcessBlock';
+import { TURN_GAP } from '../../src/features/chat/processRow';
 import { turnParts } from '../../../common/reasoningSteps.mjs';
 import { ChatHeader, headerMenuActions } from '../../src/features/chat/ChatHeader';
 import { SoundWave } from '../../src/features/chat/SoundWave';
@@ -34,7 +35,6 @@ import { ChatSkeleton } from '../../src/features/chat/ChatSkeleton';
 import { EmptyThread } from '../../src/features/chat/EmptyThread';
 import { JumpToLatest, JUMP_THRESHOLD } from '../../src/features/chat/JumpToLatest';
 import { LoadFailed } from '../../src/components/LoadFailed';
-import { ToolModule } from '../../src/features/chat/ToolCallRow';
 import { askUserNoAnswerTag } from '../../src/features/chat/askUserAnswer';
 import { Diamond } from '../../src/components/Diamond';
 import { SessionsSheet } from '../../src/features/sheets/SessionsSheet';
@@ -66,11 +66,9 @@ const INITIAL_PAGE = 30;
 const PAGE_STEP = 30;
 
 const TURN_STYLES = StyleSheet.create({
-  block: { gap: space.s4, paddingTop: space.s8 },
+  block: { gap: TURN_GAP, paddingTop: space.s8 },
   listContent: { paddingTop: space.s5, paddingBottom: space.s5 },
   contentColumn: { alignSelf: 'center', width: '100%', maxWidth: CONTENT_MAX_W },
-  steps: { gap: space.s2 },
-  tools: { gap: space.s1 },
   error: { paddingHorizontal: PANE_PAD_X },
   unfinished: { paddingHorizontal: PANE_PAD_X },
   routedModel: { paddingHorizontal: PANE_PAD_X },
@@ -105,36 +103,27 @@ const TurnBlock = memo(function TurnBlock({ turn, turnIndex, profileName, profil
           onLongPress={() => onActionTarget({ kind: 'user', text: turn.user, turnIndex })}
         />
       ) : null}
-      {(parts.tools.length > 0 || parts.askUsers.length > 0 || parts.reasoning || active) ? (
-        <View style={TURN_STYLES.steps}>
-          {parts.tools.length > 0 ? (
-            <ToolModule
-              tools={parts.tools.map((t) => compactProducedTool(t, turn.output_attachments))}
-              accent={accent}
-            />
-          ) : null}
-          {parts.askUsers.map((a, i) => (
-            <AskUserAnswer
-              key={`a-${a.tool_id ?? i}`}
-              result={a.result}
-              question={a.question}
-              accent={accent}
-              colors={colors}
-              fonts={fonts}
-              fontSizes={fontSizes}
-            />
-          ))}
-          {(parts.reasoning || active) ? (
-            <Reasoning
-              text={parts.reasoning}
-              seconds={parts.reasonedSeconds}
-              streaming={reasoningLive}
-              answered={showAssistant}
-              flat
-            />
-          ) : null}
-        </View>
-      ) : null}
+      <ProcessBlock
+        turn={turn}
+        tools={parts.tools.map((t) => compactProducedTool(t, turn.output_attachments))}
+        reasoning={parts.reasoning}
+        seconds={parts.reasonedSeconds}
+        reasoningLive={reasoningLive}
+        answered={showAssistant}
+        showReasoning={!!parts.reasoning || active}
+        accent={accent}
+      />
+      {parts.askUsers.map((a, i) => (
+        <AskUserAnswer
+          key={`a-${a.tool_id ?? i}`}
+          result={a.result}
+          question={a.question}
+          accent={accent}
+          colors={colors}
+          fonts={fonts}
+          fontSizes={fontSizes}
+        />
+      ))}
       {showAssistant ? (
         <ProfileAssistantMessage
           text={turn.assistant}
