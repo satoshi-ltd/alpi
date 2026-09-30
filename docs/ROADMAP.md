@@ -53,17 +53,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
-- **ERR.1** — The apps say plain words for their own errors
-  `bug · desktop · mobile · common · agent · high`
-  note: the daemon now sends a plain sentence and a `code` for model failures (v0.16.9), so the
-  chat shows it as is. Still raw in the apps: JSON-RPC slugs and transport errors such as
-  `too-many-connections` (`-32029`), `busy`, `forbidden` or `websocket closed by daemon`, which
-  the desktop maps only for the rate limit ([connection-status.js](../desktop/src/lib/connection-status.js))
-  and the mobile in [rpc.js](../mobile/src/lib/rpc.js).
-  accept: one shared map in `common/` turns those slugs into short sentences, both clients use it
-  wherever an error reaches the user, and a call refused with `-32029` retries once after a
-  short wait before it shows; tests in `common/` and in both clients.
-
 - **THINK.1** — The desktop "Thinking…" row renders wrongly
   `bug · desktop · agent · normal`
   note: while streaming with no reasoning text yet, `Reasoning.jsx` shows the static row

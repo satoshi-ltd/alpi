@@ -41,6 +41,7 @@ import {
 import { useDebouncedCallback } from '../../src/hooks/useDebouncedCallback';
 import { useEventEffect } from '../../src/hooks/useEvents';
 import { useEndpoint } from '../../src/lib/EndpointContext';
+import { describeError } from '../../src/lib/rpc';
 import { isForeignConnection } from '../../src/features/aln/deeplink';
 import { CONTENT_MAX_W, PANE_PAD_X } from '../../src/lib/panes';
 import { markWorkgroupRead } from '../../src/lib/readState';
@@ -484,7 +485,7 @@ function WorkgroupChatInner() {
       pruneOptimistic(fetched);
     } catch (e) {
       setOptimistic((cur) =>
-        cur.map((m) => (m.seq === tempSeq ? { ...m, pending: false, error: String(e) } : m)),
+        cur.map((m) => (m.seq === tempSeq ? { ...m, pending: false, error: describeError(e) } : m)),
       );
     } finally {
       setSending(false);

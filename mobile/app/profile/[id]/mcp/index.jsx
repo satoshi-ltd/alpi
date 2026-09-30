@@ -15,6 +15,7 @@ import { Bold, Code, TypedConfirm } from '../../../../src/components/TypedConfir
 import { useBack } from '../../../../src/hooks/useBack';
 import { useProfile } from '../../../../src/hooks/useSubject';
 import { useEndpoint } from '../../../../src/lib/EndpointContext';
+import { describeError } from '../../../../src/lib/rpc';
 import { useTheme } from '../../../../src/theme/ThemeContext';
 import { usePullRefresh } from '../../../../src/hooks/usePullRefresh';
 import { EMPTY } from '../../../../../common/emptyCopy.mjs';
@@ -45,7 +46,7 @@ export default function McpList() {
     setToolsError(null);
     call('host.mcp.tools', { profile: id, name })
       .then((res) => { if (!cancelled) setTools(res?.tools ?? []); })
-      .catch((e) => { if (!cancelled) { setToolsError(String(e)); setTools([]); } });
+      .catch((e) => { if (!cancelled) { setToolsError(describeError(e)); setTools([]); } });
     return () => { cancelled = true; };
   }, [target?.name, id, call, toolsAttempt]);
 

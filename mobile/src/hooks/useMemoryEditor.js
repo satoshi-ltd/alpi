@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useEndpoint } from '../lib/EndpointContext';
+import { describeError } from '../lib/rpc.js';
 
 export function useMemoryEditor(profile, name) {
   const { call } = useEndpoint();
@@ -28,7 +29,7 @@ export function useMemoryEditor(profile, name) {
       setRev(r?.rev ?? null);
     } catch (e) {
       if (gen !== genRef.current) return;
-      setLoadError(String(e?.message || e));
+      setLoadError(describeError(e));
       setRev(null);
     } finally {
       if (gen === genRef.current) setLoading(false);
@@ -75,7 +76,7 @@ export function useMemoryEditor(profile, name) {
       return { ok: true };
     } catch (e) {
       if (gen !== genRef.current) return { ok: false, stale: true };
-      const message = String(e?.message || e);
+      const message = describeError(e);
       return { ok: false, conflict: message.includes('conflict'), message };
     } finally {
       if (gen === genRef.current) setSaving(false);

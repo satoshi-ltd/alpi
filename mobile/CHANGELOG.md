@@ -14,6 +14,19 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.6.3 — 2026-10-01 — errors in plain words
+
+- **The app's own errors read as sentences.** `too-many-connections`, `forbidden`, the closed or
+  unreachable connection messages and the rest of the daemon's protocol slugs show as a short
+  sentence in the chat, the approval and question sheets, the memory editor and toasts; an error
+  the app does not know is shown unchanged.
+- **A chat or request refused for too many connections tries again once,** a moment later,
+  before the error shows.
+- **Model failures arrive as a sentence from the daemon** (rate limit, rejected key, empty
+  balance, conversation too long), shown as sent.
+
+  Requires alpi 0.16.1; the model-failure sentences need alpi 0.16.9.
+
 ## v0.6.2 — 2026-09-30 — one way into Activity
 
 - **Activity has one entry, in the footer beside the bell,** on the phone and the open Fold alike;

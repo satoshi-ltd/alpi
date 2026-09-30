@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { radii, space } from '../theme/tokens';
 
 import { useTheme } from '../theme/ThemeContext';
+import { plainError } from '../../../common/plainError.mjs';
 
 const ToastContext = createContext(null);
 
@@ -34,7 +35,8 @@ export function ToastProvider({ children }) {
   const show = useCallback(
     (next) => {
       if (timer.current) clearTimeout(timer.current);
-      setToast(next);
+      const danger = (next?.kind ?? inferKind(next?.title)) === 'danger';
+      setToast(danger && typeof next.message === 'string' ? { ...next, message: plainError(next.message) } : next);
       Animated.parallel([
         Animated.timing(slide, { toValue: 0, duration: 220, useNativeDriver: true }),
         Animated.timing(fade, { toValue: 1, duration: 220, useNativeDriver: true }),

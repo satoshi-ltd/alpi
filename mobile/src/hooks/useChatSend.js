@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useEndpoint } from '../lib/EndpointContext';
+import { describeError } from '../lib/rpc.js';
 
 let _seq = 0;
 function nextRequestId() {
@@ -369,7 +370,7 @@ export function useChatSend({ profile, sessionId, onCompleted }) {
           requestIdRef.current = null;
           if (activeRef.current?.req === requestId) activeRef.current = null;
           handleRef.current = null;
-          writeTurn((cur) => ({ ...cur, error: String(err?.message ?? err), pending: false }));
+          writeTurn((cur) => ({ ...cur, error: describeError(err), pending: false }));
           try {
             const ret = onCompletedRef.current?.({
               ok: false,

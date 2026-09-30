@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 
 import { deadlineFor, useRequestQueue } from '../../hooks/useRequestQueue';
 import { dismissRequestNotifications } from '../aln/dismiss';
+import { describeError } from '../../lib/rpc.js';
 
 function enqueueRequest(q, req) {
   if (!req?.request_id) return q;
@@ -56,7 +57,7 @@ export function useClarificationQueue() {
       setQueue((q) => q.filter((r) => r.request_id !== current.request_id));
       dismissRequestNotifications(current.request_id);
     } catch (e) {
-      setError(String(e?.message || e));
+      setError(describeError(e));
     } finally {
       setBusy(false);
     }

@@ -37,7 +37,7 @@ class FakeWs {
 }
 globalThis.WebSocket = FakeWs;
 
-const { call, callStream, dropEndpointPool, hasLiveSocket, setAuthFailedHandler, setRateLimitedHandler, RATE_LIMITED, RATE_LIMITED_MESSAGE, _resetPoolForTests } = await import('../src/lib/rpc.js');
+const { call, callStream, describeError, dropEndpointPool, hasLiveSocket, setAuthFailedHandler, setRateLimitedHandler, RATE_LIMITED, RATE_LIMITED_MESSAGE, _resetPoolForTests } = await import('../src/lib/rpc.js');
 const { RATE_LIMITED_HOLD_MS, CLOSE_AFTER_ERROR_GRACE_MS } = await import('../src/lib/rateLimit.js');
 
 const realNow = Date.now;
@@ -595,6 +595,119 @@ await test('dropping an endpoint clears its hold and its late close cannot touch
   nextWs.closeWith(1006, '');
   await assert.rejects(again, (e) => e.code === -32002);
   setRateLimitedHandler(null);
+});
+
+await test('describeError puts a daemon slug in plain words and leaves the rest alone', () => {
+  assert.strictEqual(
+    describeError({ code: -32029, message: 'too-many-connections' }),
+    'This device has too many open connections to the daemon. Wait a few seconds and try again.',
+  );
+  assert.strictEqual(describeError(new Error('label required')), 'label required');
+  assert.strictEqual(describeError('forbidden'), 'This device is not allowed to do that.');
+  assert.strictEqual(describeError(null), '');
+});
+
+const TOO_MANY = { code: -32029, message: 'too-many-connections', data: { detail: 'device WebSocket limit reached' } };
+
+await test('a call refused with too-many-connections retries once on a new socket', async () => {
+  _resetPoolForTests();
+  nextWs = null;
+  const pending = call(endpoint, 'host.ping', {}, { tooManyRetryMs: 5 });
+  const first = nextWs;
+  first.open();
+  first.message({ id: JSON.parse(first.sent[0]).id, error: TOO_MANY });
+  first.closeWith(1013, 'Device connection limit reached');
+  await settle(30);
+  const second = nextWs;
+  assert.notStrictEqual(second, first, 'the retry opens a new socket');
+  second.open();
+  second.message({ id: JSON.parse(second.sent[0]).id, result: { ok: true } });
+  assert.deepStrictEqual(await pending, { ok: true });
+});
+
+await test('a call refused twice with too-many-connections fails with that error', async () => {
+  _resetPoolForTests();
+  nextWs = null;
+  const pending = call(endpoint, 'host.ping', {}, { tooManyRetryMs: 5 });
+  const outcome = assert.rejects(pending, (e) => e.code === -32029 && e.message === 'too-many-connections');
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await settle(30);
+    const ws = nextWs;
+    ws.open();
+    ws.message({ id: JSON.parse(ws.sent[0]).id, error: TOO_MANY });
+    ws.closeWith(1013, 'Device connection limit reached');
+  }
+  await outcome;
+});
+
+await test('other errors are not retried', async () => {
+  _resetPoolForTests();
+  nextWs = null;
+  const pending = call(endpoint, 'host.ping', {}, { tooManyRetryMs: 5 });
+  const ws = nextWs;
+  ws.open();
+  ws.message({ id: JSON.parse(ws.sent[0]).id, error: { code: -32001, message: 'forbidden' } });
+  await assert.rejects(pending, (e) => e.code === -32001);
+  await settle(30);
+  assert.strictEqual(nextWs, ws, 'no second socket was opened');
+});
+
+await test('a stream refused with too-many-connections reopens once and keeps its handle', async () => {
+  _resetPoolForTests();
+  nextWs = null;
+  const errors = [];
+  const frames = [];
+  const handle = callStream(endpoint, 'host.chat.send', { text: 'hi' }, {
+    tooManyRetryMs: 5,
+    onError: (e) => errors.push(e),
+    onFrame: (f) => frames.push(f),
+    onDone: () => {},
+  });
+  const first = nextWs;
+  first.open();
+  first.message({ id: JSON.parse(first.sent[0]).id, error: TOO_MANY });
+  first.closeWith(1013, 'Device connection limit reached');
+  assert.deepStrictEqual(errors, [], 'the first refusal is not shown');
+  await settle(30);
+  const second = nextWs;
+  assert.notStrictEqual(second, first);
+  second.open();
+  const id = JSON.parse(second.sent[0]).id;
+  assert.strictEqual(handle.requestId, id, 'the handle follows the stream that is open');
+  second.message({ id, event: 'assistant_delta', text: 'hello' });
+  assert.strictEqual(frames.length, 1);
+  assert.deepStrictEqual(errors, []);
+});
+
+await test('a stream refused twice reports the error once', async () => {
+  _resetPoolForTests();
+  nextWs = null;
+  const errors = [];
+  callStream(endpoint, 'host.chat.send', { text: 'hi' }, { tooManyRetryMs: 5, onError: (e) => errors.push(e) });
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await settle(30);
+    const ws = nextWs;
+    ws.open();
+    ws.message({ id: JSON.parse(ws.sent[0]).id, error: TOO_MANY });
+    ws.closeWith(1013, 'Device connection limit reached');
+  }
+  assert.strictEqual(errors.length, 1);
+  assert.strictEqual(errors[0].code, -32029);
+});
+
+await test('detaching during the wait cancels the retry', async () => {
+  _resetPoolForTests();
+  nextWs = null;
+  const errors = [];
+  const handle = callStream(endpoint, 'host.chat.send', {}, { tooManyRetryMs: 20, onError: (e) => errors.push(e) });
+  const first = nextWs;
+  first.open();
+  first.message({ id: JSON.parse(first.sent[0]).id, error: TOO_MANY });
+  first.closeWith(1013, 'Device connection limit reached');
+  handle.detach();
+  await settle(60);
+  assert.strictEqual(nextWs, first, 'no new socket after detach');
+  assert.deepStrictEqual(errors, []);
 });
 
 if (failed > 0) {

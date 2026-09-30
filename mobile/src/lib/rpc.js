@@ -1,4 +1,5 @@
 // auth_token injected into every request; daemon: alpi/host/server.py::_check_token.
+import { plainError } from '../../../common/plainError.mjs';
 import { endpointUrl } from './endpoint.js';
 import {
   CLOSE_AFTER_ERROR_GRACE_MS,
@@ -21,6 +22,12 @@ export class RpcError extends Error {
 }
 
 export const AUTH_FAILED = -32000;
+export const TOO_MANY_CONNECTIONS = -32029;
+const TOO_MANY_RETRY_MS = 1500;
+
+export function describeError(err) {
+  return plainError(String(err?.message || err || ''));
+}
 
 let _authFailedHandler = null;
 export function setAuthFailedHandler(cb) {
@@ -245,6 +252,16 @@ function ensureEntry(endpoint) {
 }
 
 export async function call(endpoint, method, params = {}, options = {}) {
+  try {
+    return await callOnce(endpoint, method, params, options);
+  } catch (err) {
+    if (err?.code !== TOO_MANY_CONNECTIONS) throw err;
+    await new Promise((resolve) => setTimeout(resolve, options.tooManyRetryMs ?? TOO_MANY_RETRY_MS));
+    return callOnce(endpoint, method, params, options);
+  }
+}
+
+function callOnce(endpoint, method, params = {}, options = {}) {
   const timeoutMs = options.timeoutMs ?? REQUEST_TIMEOUT_MS;
   const id = nextId();
   const payload = JSON.stringify({
@@ -294,6 +311,40 @@ const STREAM_OPEN_TIMEOUT_MS = 8000;
 
 // Stream sockets NOT pooled — chat is long-lived, must not contend with unary RPCs. `cancelMethod` opt-in (chat: 'host.chat.cancel').
 export function callStream(endpoint, method, params, handlers) {
+  let retried = false;
+  let detached = false;
+  let retryTimer = null;
+  let current = null;
+  const open = () => openStream(endpoint, method, params, {
+    ...handlers,
+    onError: (err) => {
+      if (!retried && !detached && err?.code === TOO_MANY_CONNECTIONS) {
+        retried = true;
+        retryTimer = setTimeout(() => {
+          if (!detached) current = open();
+        }, handlers?.tooManyRetryMs ?? TOO_MANY_RETRY_MS);
+        return;
+      }
+      handlers?.onError?.(err);
+    },
+  });
+  current = open();
+  return {
+    get requestId() { return current.requestId; },
+    cancel: () => {
+      detached = true;
+      clearTimeout(retryTimer);
+      current.cancel();
+    },
+    detach: () => {
+      detached = true;
+      clearTimeout(retryTimer);
+      current.detach();
+    },
+  };
+}
+
+function openStream(endpoint, method, params, handlers) {
   const url = endpointUrl(endpoint);
   const key = endpointKey(endpoint);
   if (isHeld(key)) {
