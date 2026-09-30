@@ -4,7 +4,7 @@ import json
 import sqlite3
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from alpi.core import embed as embed_mod
 from alpi.core.store import open_store, store_path
@@ -29,6 +29,8 @@ def _set_meta(conn: sqlite3.Connection, key: str, value: str) -> None:
     )
 
 
+_VEC_K_MAX = 4096
+
 # One statement per execute: executescript() commits the open transaction, which would break the single-transaction rebuild.
 _TABLE_DDL = (
     """CREATE TABLE IF NOT EXISTS session_files (
@@ -37,7 +39,8 @@ _TABLE_DDL = (
           mtime REAL NOT NULL,
           size INTEGER NOT NULL,
           started_at REAL,
-          connection_id TEXT NOT NULL DEFAULT 'host'
+          connection_id TEXT NOT NULL DEFAULT 'host',
+          device_id TEXT NOT NULL DEFAULT ''
         )""",
     """CREATE TABLE IF NOT EXISTS session_chunks (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -45,7 +48,8 @@ _TABLE_DDL = (
           chunk_index INTEGER NOT NULL,
           content TEXT NOT NULL,
           started_at REAL,
-          connection_id TEXT NOT NULL DEFAULT 'host'
+          connection_id TEXT NOT NULL DEFAULT 'host',
+          device_id TEXT NOT NULL DEFAULT ''
         )""",
     "CREATE INDEX IF NOT EXISTS session_chunks_by_session ON session_chunks(session_id)",
 )
@@ -56,6 +60,7 @@ def _create_tables(conn: sqlite3.Connection, dim: int) -> None:
     for statement in _TABLE_DDL:
         conn.execute(statement)
     _migrate_connection_id(conn)
+    _migrate_device_id(conn)
     conn.execute(
         f"CREATE VIRTUAL TABLE IF NOT EXISTS session_vec USING vec0("
         f"chunk_id INTEGER PRIMARY KEY, embedding float[{dim}])"
@@ -76,6 +81,7 @@ def _ensure_schema(conn, dim, embedder_name, *, index_mode, force=False) -> bool
     drift = int(stored_dim) != dim or stored_embedder != embedder_name
     if not index_mode:
         _create_tables(conn, int(stored_dim))
+        conn.commit()
         if drift:
             raise EmbedderMismatch(
                 f"Session index was built with {stored_embedder} (dim={stored_dim}) "
@@ -95,11 +101,59 @@ def _ensure_schema(conn, dim, embedder_name, *, index_mode, force=False) -> bool
     return True
 
 
+def _add_column(conn: sqlite3.Connection, table: str, ddl: str) -> None:
+    name = ddl.split()[0]
+    if name in {r["name"] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}:
+        return
+    try:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {ddl}")
+    except sqlite3.OperationalError as e:
+        if "duplicate column" not in str(e):
+            raise
+
+
 def _migrate_connection_id(conn: sqlite3.Connection) -> None:
     for table in ("session_files", "session_chunks"):
-        cols = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
-        if "connection_id" not in cols:
-            conn.execute(f"ALTER TABLE {table} ADD COLUMN connection_id TEXT NOT NULL DEFAULT 'host'")
+        _add_column(conn, table, "connection_id TEXT NOT NULL DEFAULT 'host'")
+
+
+def _session_device(row: sqlite3.Row, sessions_dir: Path) -> str:
+    for path in (Path(row["source_path"]), sessions_dir / f"{row['session_id']}.json"):
+        try:
+            return str(json.loads(path.read_text()).get("device_id") or "")
+        except Exception:  # noqa: BLE001
+            continue
+    return ""
+
+
+def _migrate_device_id(conn: sqlite3.Connection) -> None:
+    for table in ("session_files", "session_chunks"):
+        _add_column(conn, table, "device_id TEXT NOT NULL DEFAULT ''")
+    # The flag (blank-row count) commits with the backfill, so an interrupted pass or rows from an older alpi rerun it.
+    if _get_meta(conn, "device_backfill") == _blank_devices(conn):
+        return
+    main = next(r for r in conn.execute("PRAGMA database_list").fetchall() if r["name"] == "main")
+    sessions_dir = Path(main["file"]).parent / "sessions"
+    for row in conn.execute("SELECT session_id, source_path FROM session_files WHERE device_id = ''").fetchall():
+        device = _session_device(row, sessions_dir)
+        if device:
+            _set_owner(conn, row["session_id"], None, device)
+    _set_meta(conn, "device_backfill", _blank_devices(conn))
+
+
+def _blank_devices(conn: sqlite3.Connection) -> str:
+    return str(conn.execute("SELECT COUNT(*) AS n FROM session_files WHERE device_id = ''").fetchone()["n"])
+
+
+def _set_owner(conn: sqlite3.Connection, session_id: str, connection_id: str | None, device_id: str) -> None:
+    for table in ("session_files", "session_chunks"):
+        if connection_id is None:
+            conn.execute(f"UPDATE {table} SET device_id = ? WHERE session_id = ?", (device_id, session_id))
+        else:
+            conn.execute(
+                f"UPDATE {table} SET connection_id = ?, device_id = ? WHERE session_id = ?",
+                (connection_id, device_id, session_id),
+            )
 
 
 def _delete_session(conn: sqlite3.Connection, session_id: str) -> None:
@@ -164,22 +218,22 @@ def index_sessions(
                 stat = path.stat()
                 mtime, size = stat.st_mtime, stat.st_size
                 cid = str(data.get("connection_id") or "host")
+                did = str(data.get("device_id") or "")
                 existing = conn.execute(
-                    "SELECT mtime, size, connection_id FROM session_files WHERE session_id = ?", (sid,),
+                    "SELECT mtime, size, connection_id, device_id FROM session_files WHERE session_id = ?", (sid,),
                 ).fetchone()
                 if existing and abs(existing["mtime"] - mtime) < 1e-6 and existing["size"] == size:
-                    if (existing["connection_id"] or "host") != cid:
-                        conn.execute("UPDATE session_files SET connection_id = ? WHERE session_id = ?", (cid, sid))
-                        conn.execute("UPDATE session_chunks SET connection_id = ? WHERE session_id = ?", (cid, sid))
+                    if (existing["connection_id"] or "host") != cid or (existing["device_id"] or "") != did:
+                        _set_owner(conn, sid, cid, did)
                     skipped += 1
                     continue
                 chunks = _chunk_lines(_transcript(data))
                 started = data.get("started_at")
                 _delete_session(conn, sid)
                 conn.execute(
-                    "INSERT INTO session_files(session_id, source_path, mtime, size, started_at, connection_id) "
-                    "VALUES(?, ?, ?, ?, ?, ?)",
-                    (sid, str(path), mtime, size, started, cid),
+                    "INSERT INTO session_files(session_id, source_path, mtime, size, started_at, connection_id, device_id) "
+                    "VALUES(?, ?, ?, ?, ?, ?, ?)",
+                    (sid, str(path), mtime, size, started, cid, did),
                 )
                 if not chunks:
                     continue
@@ -189,9 +243,9 @@ def index_sessions(
                     vectors.extend(embedder.embed(bodies[i:i + _EMBED_BATCH]))
                 for chunk_idx, ((_ls, _le, body), vec) in enumerate(zip(chunks, vectors, strict=True)):
                     cur = conn.execute(
-                        "INSERT INTO session_chunks(session_id, chunk_index, content, started_at, connection_id) "
-                        "VALUES(?, ?, ?, ?, ?)",
-                        (sid, chunk_idx, body, started, cid),
+                        "INSERT INTO session_chunks(session_id, chunk_index, content, started_at, connection_id, device_id) "
+                        "VALUES(?, ?, ?, ?, ?, ?)",
+                        (sid, chunk_idx, body, started, cid, did),
                     )
                     conn.execute(
                         "INSERT INTO session_vec(chunk_id, embedding) VALUES(?, ?)",
@@ -205,6 +259,7 @@ def index_sessions(
             if sid not in seen and not Path(row["source_path"]).exists():
                 _delete_session(conn, sid)
                 removed += 1
+        _set_meta(conn, "device_backfill", _blank_devices(conn))
         conn.commit()
         total_sessions = conn.execute("SELECT COUNT(*) AS n FROM session_files").fetchone()["n"]
         total_chunks = conn.execute("SELECT COUNT(*) AS n FROM session_chunks").fetchone()["n"]
@@ -230,6 +285,7 @@ def recall(
     embedder: embed_mod.Embedder | None = None,
     exclude_id: str | None = None,
     connection_id: str | None = None,
+    can_read: Callable[[dict[str, Any]], bool] | None = None,
 ) -> list[dict[str, Any]]:
     embedder = embedder or embed_mod.default()
     conn = open_store(home)
@@ -239,11 +295,12 @@ def recall(
         if total == 0:
             return []
         qvec = embedder.embed([query])[0]
-        fetch = min(total, k + (8 if exclude_id else 0) + (32 if connection_id is not None else 0))
+        filtered = connection_id is not None or can_read is not None
+        fetch = min(total, _VEC_K_MAX, k + (8 if exclude_id else 0) + (32 if filtered else 0))
         out: list[dict[str, Any]] = []
         while True:
             rows = conn.execute(
-                "SELECT c.session_id, c.content, c.started_at, c.connection_id, v.distance "
+                "SELECT c.session_id, c.content, c.started_at, c.connection_id, c.device_id, v.distance "
                 "FROM session_vec v JOIN session_chunks c ON c.id = v.chunk_id "
                 "WHERE v.embedding MATCH ? AND k = ? ORDER BY v.distance",
                 (_vec_blob(qvec), fetch),
@@ -254,6 +311,8 @@ def recall(
                     continue
                 if connection_id is not None and (r["connection_id"] or "host") != connection_id:
                     continue
+                if can_read is not None and not can_read({"connection_id": r["connection_id"], "device_id": r["device_id"]}):
+                    continue
                 out.append({
                     "session_id": r["session_id"],
                     "when": _fmt_when(r["started_at"]),
@@ -262,9 +321,9 @@ def recall(
                 })
                 if len(out) >= k:
                     break
-            if len(out) >= k or fetch >= total:
+            if len(out) >= k or fetch >= min(total, _VEC_K_MAX):
                 break
-            fetch = min(total, fetch * 4)
+            fetch = min(total, _VEC_K_MAX, fetch * 4)
         return out
     finally:
         conn.close()
@@ -357,14 +416,15 @@ class RecallSessions(Tool):
             return ToolResult(ok=False, output="", error="Empty query.")
         if k < 1 or k > 50:
             return ToolResult(ok=False, output="", error="k must be in [1, 50].")
-        from alpi.host.connection_context import current
-        ctx = current()
-        scope = None if ctx.role == "admin" else ctx.connection_id
+        from alpi.host.connection_context import can_read_session
         try:
             results = recall(get_home(), query.strip(), k,
-                             exclude_id=_active_session_id(), connection_id=scope)
+                             exclude_id=_active_session_id(), can_read=can_read_session)
         except EmbedderMismatch as e:
             return ToolResult(ok=False, output="", error=str(e))
+        except sqlite3.OperationalError as e:
+            state = "busy" if "locked" in str(e) or "busy" in str(e) else "unavailable"
+            return ToolResult(ok=False, output="", error=f"Session index is {state} ({e}); try again shortly.")
         if not results:
             return ToolResult(ok=True, output=json.dumps(
                 {"results": [], "hint": "Session index is empty. Run index_sessions first."}

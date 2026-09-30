@@ -319,7 +319,7 @@ def test_a_failed_rebuild_after_embedder_drift_keeps_the_old_index_and_meta(tmp_
         rc.index_sessions(tmp_home, embedder=_FailsMidRebuild(name="drifted", dim=8, fail_on_call=1))
 
     assert _counts(tmp_home) == before
-    assert before["meta"] == {"dim": "16", "embedder": "stub-test"}
+    assert before["meta"] == {"dim": "16", "embedder": "stub-test", "device_backfill": "2"}
     assert rc.recall(tmp_home, "the React migration to components", k=1)[0]["session_id"] == "react"
 
 
@@ -443,3 +443,147 @@ def test_the_index_tool_reports_an_aborted_rebuild(tmp_home, stub_embedder):
     assert not result.ok
     assert "infra.json cannot be read" in result.error
     assert _counts(tmp_home)["chunks"] == 2
+
+
+def _session_dev(home: Path, sid: str, cid: str, device: str, text: str) -> None:
+    sdir = home / "sessions"
+    sdir.mkdir(parents=True, exist_ok=True)
+    payload = {"id": sid, "started_at": 1000.0, "connection_id": cid,
+               "turns": [{"user": text, "assistant": f"jQuery to React Router — {text}"}]}
+    if device:
+        payload["device_id"] = device
+    (sdir / f"{sid}.json").write_text(json.dumps(payload))
+
+
+def _device_sessions(home: Path) -> None:
+    _session_dev(home, "s_d1", "c1", "d1", "the React migration")
+    _session_dev(home, "s_d2", "c1", "d2", "the React migration")
+    _session_dev(home, "s_shared", "c1", "", "the React migration")
+    _session_dev(home, "s_c2", "c2", "d1", "the React migration")
+
+
+def _recall_as(ctx) -> set[str]:
+    from alpi.host.connection_context import use
+    with use(ctx):
+        out = rc.RecallSessions().run(query="React migration to components", k=10)
+    return {r["session_id"] for r in json.loads(out.output)["results"]}
+
+
+def test_recall_under_device_scope_sees_own_device_and_shared_sessions(tmp_home, stub_embedder):
+    from alpi.host.connection_context import ConnectionContext
+    _device_sessions(tmp_home)
+    rc.index_sessions(tmp_home)
+
+    assert _recall_as(ConnectionContext("c1", "d1", "remote", "member", session_scope="device")) == {"s_d1", "s_shared"}
+    assert _recall_as(ConnectionContext("c1", "d1", "remote", "member")) == {"s_d1", "s_d2", "s_shared"}
+    assert _recall_as(ConnectionContext("c1", "d1", "remote", "admin", session_scope="device")) == {"s_d1", "s_d2", "s_shared", "s_c2"}
+
+
+def test_recall_legacy_index_backfills_device_ids_before_any_reindex(tmp_home, stub_embedder):
+    from alpi.core.store import open_store
+    from alpi.host.connection_context import ConnectionContext
+    _device_sessions(tmp_home)
+    rc.index_sessions(tmp_home)
+    conn = open_store(tmp_home)
+    conn.execute("DROP INDEX IF EXISTS session_chunks_by_session")
+    for table in ("session_files", "session_chunks"):
+        conn.execute(f"ALTER TABLE {table} DROP COLUMN device_id")
+    conn.execute("DELETE FROM session_meta WHERE key = 'device_backfill'")
+    conn.commit()
+    conn.close()
+
+    assert _recall_as(ConnectionContext("c1", "d1", "remote", "member", session_scope="device")) == {"s_d1", "s_shared"}
+    conn = open_store(tmp_home)
+    stored = dict(conn.execute("SELECT session_id, device_id FROM session_files").fetchall())
+    conn.close()
+    assert stored == {"s_d1": "d1", "s_d2": "d2", "s_shared": "", "s_c2": "d1"}
+
+
+def test_recall_relabels_the_device_on_incremental_skip(tmp_home, stub_embedder):
+    from alpi.core.store import open_store
+    from alpi.host.connection_context import ConnectionContext
+    _device_sessions(tmp_home)
+    rc.index_sessions(tmp_home)
+    conn = open_store(tmp_home)
+    conn.execute("UPDATE session_files SET device_id = ''")
+    conn.execute("UPDATE session_chunks SET device_id = ''")
+    conn.commit()
+    conn.close()
+
+    assert rc.index_sessions(tmp_home)["skipped_sessions"] == 4
+    assert _recall_as(ConnectionContext("c1", "d1", "remote", "member", session_scope="device")) == {"s_d1", "s_shared"}
+
+
+def test_an_interrupted_backfill_runs_again_on_the_next_query(tmp_home, stub_embedder, monkeypatch):
+    import sqlite3
+    from alpi.core.store import open_store
+    from alpi.host.connection_context import ConnectionContext
+    _device_sessions(tmp_home)
+    rc.index_sessions(tmp_home)
+    conn = open_store(tmp_home)
+    for table in ("session_files", "session_chunks"):
+        conn.execute(f"ALTER TABLE {table} DROP COLUMN device_id")
+    conn.execute("DELETE FROM session_meta WHERE key = 'device_backfill'")
+    conn.commit()
+    conn.close()
+
+    real = rc._set_owner
+    calls = {"n": 0}
+
+    def flaky(*a, **kw):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise sqlite3.OperationalError("database is locked")
+        return real(*a, **kw)
+
+    monkeypatch.setattr(rc, "_set_owner", flaky)
+    device_d1 = ConnectionContext("c1", "d1", "remote", "member", session_scope="device")
+    from alpi.host.connection_context import use
+    with use(device_d1):
+        out = rc.RecallSessions().run(query="React migration to components", k=10)
+    assert out.ok is False and "busy" in out.error
+    assert _recall_as(device_d1) == {"s_d1", "s_shared"}
+
+
+def test_the_backfill_finds_a_session_whose_indexed_path_moved(tmp_home, stub_embedder):
+    from alpi.core.store import open_store
+    from alpi.host.connection_context import ConnectionContext
+    _device_sessions(tmp_home)
+    rc.index_sessions(tmp_home)
+    conn = open_store(tmp_home)
+    for table in ("session_files", "session_chunks"):
+        conn.execute(f"ALTER TABLE {table} DROP COLUMN device_id")
+    conn.execute("DELETE FROM session_meta WHERE key = 'device_backfill'")
+    conn.execute("UPDATE session_files SET source_path = '/gone/' || session_id || '.json'")
+    conn.commit()
+    conn.close()
+
+    assert _recall_as(ConnectionContext("c1", "d1", "remote", "member", session_scope="device")) == {"s_d1", "s_shared"}
+
+
+def test_a_device_whose_chunks_sit_past_the_vec_limit_does_not_crash(tmp_home, stub_embedder):
+    sdir = tmp_home / "sessions"
+    sdir.mkdir(parents=True, exist_ok=True)
+    for i in range(rc._VEC_K_MAX + 50):
+        (sdir / f"o{i}.json").write_text(json.dumps({
+            "id": f"o{i}", "started_at": 1000.0, "connection_id": "c1", "device_id": "d2",
+            "turns": [{"user": "the React migration", "assistant": "the React migration"}]}))
+    _session_dev(tmp_home, "mine", "c1", "d1", "postgres database backups nightly")
+    rc.index_sessions(tmp_home)
+    res = rc.recall(tmp_home, "the React migration to components", k=3,
+                    can_read=lambda row: row["device_id"] == "d1")
+    assert isinstance(res, list)
+
+
+def test_rows_an_older_alpi_writes_after_the_backfill_are_backfilled_on_the_next_query(tmp_home, stub_embedder):
+    from alpi.core.store import open_store
+    from alpi.host.connection_context import ConnectionContext
+    _device_sessions(tmp_home)
+    rc.index_sessions(tmp_home)
+    conn = open_store(tmp_home)
+    conn.execute("UPDATE session_files SET device_id = '' WHERE session_id = 's_d2'")
+    conn.execute("UPDATE session_chunks SET device_id = '' WHERE session_id = 's_d2'")
+    conn.commit()
+    conn.close()
+
+    assert _recall_as(ConnectionContext("c1", "d1", "remote", "member", session_scope="device")) == {"s_d1", "s_shared"}

@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.16.4 — 2026-09-30 — semantic recall respects device scope
+
+- **Semantic recall keeps each device's conversations private.** On a connection whose sessions
+  are private to each device, `recall_sessions` now returns only that device's sessions and the
+  shared ones, like `session_search` already did. An existing index is updated in place on the
+  first query; no reindex is needed.
+
 ## v0.16.3 — 2026-09-30 — each device sees its own latest chat
 
 - **Profile lists respect device scope.** On a connection whose sessions are private to each

@@ -407,7 +407,7 @@ Recall over **past conversations**, the conversational-memory peer of knowledge 
 - `session_search(query)` — lexical first layer; returns the tail thread of matching sessions, active session excluded.
 - `session_read(session?, phrase?, start?)` — browse layer, no embedding/LLM call: lists recent sessions, or opens a windowed turn slice around an exact phrase or `start` index (paged). Pairs with `session_search` (find → open the window).
 - `index_sessions(force?)` — **opt-in** (sessions are never auto-indexed): walks `<home>/sessions/*.json`, builds a per-turn transcript (`user:`/`alpi:` lines), chunks + embeds with the same `core/embed.py` + sqlite-vec primitives as the knowledge index, into a **separate table family** (`session_files` / `session_chunks` / `session_vec` / `session_meta`) in the same `knowledge.sqlite`. Incremental (mtime/size skip); the active session is excluded. A pass — incremental, `force`, or the rebuild an embedder change triggers — runs in one write transaction, so a failure part-way leaves the previous index searchable, and readers keep seeing it until the new one commits. A session file that cannot be read stops a forced or embedder-change rebuild, keeping the previous index; an incremental pass skips it and keeps its old rows.
-- `recall_sessions(query, k=5)` — cosine MATCH → `[{session_id, when, snippet, score}]`, active session excluded.
+- `recall_sessions(query, k=5)` — cosine MATCH → `[{session_id, when, snippet, score}]`, active session excluded. Index rows carry the session's `connection_id` and `device_id` (an index built before either column is migrated in place, device ids backfilled from the session files before the first query; a `device_backfill` count of device-less rows in `session_meta` commits with the backfill, so an interrupted pass or rows written by an older alpi rerun it, and a query that cannot migrate fails instead of answering unfiltered), and results pass the same `can_read_session` check as `session_search` (the widening search stops at sqlite-vec's k limit of 4096), so a member sees its connection and a device under `session_scope: device` its own and deviceless sessions.
 
 **Forgettable.** Recall is a derived view, so forgetting is real: deleting a session (`host.sessions.delete` → `host/sessions.py::delete_session`) purges its rows via `recall.forget_session`, and `index_sessions` orphan-sweeps any tracked session whose file is gone. No auto per-turn injection — retrieval is explicit, like the workspace tools.
 
@@ -754,7 +754,7 @@ cancel and delete only the sessions it created, drops other devices'
 `session_changed` frames from its event stream and history, serves each device
 its own `latest_session` preview in `host.profile.summaries` (the summary cache
 is keyed by connection, device and profile), and narrows the agent's
-`session_read` / `session_search` tools the same way. Every session
+`session_read` / `session_search` / `recall_sessions` tools the same way. Every session
 records its device whatever the scope, so switching to `device` also hides a
 device's earlier sessions from its siblings; sessions without a `device_id`
 (saved by alpi before 0.15.20, or started by the daemon itself through the
