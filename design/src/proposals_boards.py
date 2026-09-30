@@ -6,8 +6,6 @@ DOC = "#3a7ca5"
 
 PROPOSALS = [
     ("remote", "mobile", "Running work", "A Live Activity for a running workgroup, updated from the daemon, and approval pushes that arrive with the app closed.", "Both need a remote push path (APNs / FCM relay) the daemon does not have; today the phone polls every 15 minutes in the background and only shows actionable approval notifications it has already fetched.", "ChatGPT, Codex", "L"),
-    ("controls", "both", "Button sizes", "Move Button heights to 28 / 32 / 40 on both clients.", "The shared button tokens in common/button.mjs drive both apps, so the change needs a paired release and a pass over every dense toolbar.", "Linear", "S"),
-    ("reasoning", "desktop", "Step order", "Place the reasoning row between the tool rows in the order they happened, not after all of them.", "Inside the opened block the order is already chronological; the row itself still sits below the tool list.", "Claude, Zed", "S"),
 ]
 
 NUM = {key: i for i, (key, *_rest) in enumerate(PROPOSALS, start=1)}
@@ -49,14 +47,14 @@ def overview():
         for t, d in ALIGNED
     )
     verdict = para(
-        "The review of both clients against the agent and chat apps shipping now landed in alpi 0.16.0, desktop 0.7.0 and mobile 0.6.0: steps you can open, what each agent is doing and what waits on you, reasoning that gets out of the way, one type scale, real contrast, motion where the eye needs it, and a phone that feels native. The System page shows the result. Only what is below is still open.",
+        "The review of both clients against the agent and chat apps shipping now has landed: steps you can open, what each agent is doing and what waits on you, alpi's process as one compact block apart from the answer, one type scale, real contrast, motion where the eye needs it, and a phone that feels native. The System page shows the result. Only what is below is still open.",
         14, INK, "max-width: 1080px")
     body = (f'{verdict}<div style="display: flex; flex-direction: column">{label("Still open")}<div style="height: 12px"></div>{head}{rows}</div>'
             f'<div style="display: flex; flex-direction: column; gap: 10px">{label("In line with the field · keep")}'
             f'<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px">{aligned}</div></div>')
-    return board("Where Alpi could go next", "What is left from the UX and UI review. A row leaves this table when it ships.", body, 790)
+    return board("Where Alpi could go next", "What is left from the UX and UI review. A row leaves this table when it ships.", body, 690)
 
 
 PROPOSAL_BOARDS = [
-    ("Proposals-Overview.dc.html", overview, 790, "Still open"),
+    ("Proposals-Overview.dc.html", overview, 690, "Still open"),
 ]

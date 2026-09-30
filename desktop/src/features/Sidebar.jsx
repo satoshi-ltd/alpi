@@ -556,7 +556,7 @@ function Sidebar({
               )}
               {hasAlpisOverflow && (
                 <div ref={showMoreRef} className={styles.showMoreWrap}>
-                  <Button variant="ghost" onClick={() => setShowAllAlpis((v) => !v)}>
+                  <Button variant="ghost" size="sm" onClick={() => setShowAllAlpis((v) => !v)}>
                     {showAllAlpis
                       ? "Show less"
                       : `Show ${hiddenAlpisCount} more`}
@@ -583,7 +583,7 @@ function Sidebar({
               {visibleWorkgroups.map((w) => renderWorkgroupRow(w))}
               {hasWorkgroupOverflow && onViewAllWorkgroups && (
                 <div className={styles.showMoreWrap}>
-                  <Button variant="ghost" onClick={onViewAllWorkgroups}>
+                  <Button variant="ghost" size="sm" onClick={onViewAllWorkgroups}>
                     View all workgroups
                   </Button>
                 </div>

@@ -280,14 +280,15 @@ export function useChatStream({
 
   // Rebuild a turn's state from the persisted sidecar — used when its live stream goes silent.
   const applyReplayedEvents = useCallback((requestId, events) => {
-    const { tools, assistant, reasoning, error, sawDone, finalSessionId, ctxTokens, reasonedSeconds, reasoningDone } = reconstructFromEvents(events);
+    const { tools, assistant, reasoning, error, sawDone, finalSessionId, ctxTokens, reasonedSeconds, reasoningDone, spanReasonedSeconds, sawToolStart } = reconstructFromEvents(events);
     updateTurn(requestId, (prev) => ({
       ...prev,
       tools,
       reasoned_s: reasonedSeconds ?? prev.reasoned_s,
+      spanReasoned_s: spanReasonedSeconds,
       reasoningDone,
-      assistantPreview: assistant || prev.assistantPreview,
-      reasoningPreview: reasoning || prev.reasoningPreview,
+      assistantPreview: sawToolStart ? assistant : assistant || prev.assistantPreview,
+      reasoningPreview: sawToolStart ? reasoning : reasoning || prev.reasoningPreview,
       error,
       ctxTokens: ctxTokens ?? prev.ctxTokens,
     }));
@@ -399,11 +400,12 @@ export function useChatStream({
             started_at: typeof p.started_at === "number" ? p.started_at : prior?.started_at ?? null,
             at: prior?.at ?? (typeof p.started_at === "number" ? p.started_at : Date.now() / 1000),
             ...(reasoning ? { reasoning } : {}),
+            ...(prev.spanReasoned_s > 0 ? { reasoned_s: prev.spanReasoned_s } : prior?.reasoned_s ? { reasoned_s: prior.reasoned_s } : {}),
           };
           const tools = existing >= 0
             ? prev.tools.map((t, i) => (i === existing ? entry : t))
             : [...prev.tools, entry];
-          return { ...prev, tools, reasoningPreview: "", assistantPreview: "", reasoningDone: false };
+          return { ...prev, tools, reasoningPreview: "", assistantPreview: "", reasoningDone: false, spanReasoned_s: 0 };
         });
       } else if (p.kind === "tool_state") {
         updateTurn(rid, (prev) => {
@@ -485,6 +487,7 @@ export function useChatStream({
           ...prev,
           reasoningPreview: `${prev.reasoningPreview ?? ""}${tail}`,
           reasoned_s: (prev.reasoned_s ?? 0) + seconds,
+          spanReasoned_s: (prev.spanReasoned_s ?? 0) + seconds,
           reasoningDone: true,
         }));
       } else if (p.kind === "usage") {

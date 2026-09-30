@@ -102,6 +102,7 @@
   --ctrl-sm: 28px;
   --ctrl-md: 32px;
   --ctrl-lg: 40px;
+  --ctrl-xl: 48px;
 
   --focus-border: color-mix(in srgb, var(--ink) 30%, transparent);
   --focus-ring: 0 0 0 4px color-mix(in srgb, var(--ink) 6%, transparent);
@@ -166,7 +167,7 @@
 
   --accent: #8a5a0a;
   --c-success-text: #217a45;
-  --c-warning-text: #8a5a0a;
+  --c-warning-text: #b3470e;
   --c-danger-text: #b73737;
   --on-danger: #ffffff;
 
@@ -192,7 +193,7 @@
     --shadow-sm: 0 0 0 .5px rgba(230, 237, 243, .08);
     --accent:    #f0b447;
     --c-success-text: #70c592;
-    --c-warning-text: #efb254;
+    --c-warning-text: #f59e5b;
     --c-danger-text: #f08080;
     --logo-filter: invert(1) brightness(.95);
     color-scheme: dark;
@@ -217,7 +218,7 @@
   --shadow-sm: 0 0 0 .5px rgba(230, 237, 243, .08);
   --accent:    #f0b447;
   --c-success-text: #70c592;
-  --c-warning-text: #efb254;
+  --c-warning-text: #f59e5b;
   --c-danger-text: #f08080;
   --logo-filter: invert(1) brightness(.95);
   color-scheme: dark;

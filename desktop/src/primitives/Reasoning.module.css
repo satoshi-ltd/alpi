@@ -7,34 +7,35 @@
 .row {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  width: 100%;
-  min-height: 30px;
+  gap: var(--space-4);
+  width: calc(100% + 2 * var(--space-4));
+  height: var(--ctrl-xs);
+  margin: 0 calc(-1 * var(--space-4));
   padding: 0 var(--space-4);
   border: 0;
-  border-radius: var(--r-md);
+  border-radius: var(--r-sm);
   background: none;
-  color: var(--ink-2);
-  font-family: var(--font-sans);
-  font-size: var(--fs-base);
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-tight);
   text-align: left;
   cursor: pointer;
   transition: background-color var(--dur-1) var(--ease);
 }
-.row:hover:not(:disabled) { background: var(--hover); }
-.row:disabled { cursor: default; }
+.row:hover:not(.rowStatic) { background: var(--hover); }
 .row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
+.rowStatic { cursor: default; }
 .rowLive { background: var(--hover); }
 
 .label {
   flex: none;
-  color: var(--ink-2);
+  color: var(--ink-3);
 }
 
 .shimmer {
   flex: none;
-  font-weight: var(--fw-medium);
   background: linear-gradient(90deg, var(--ink-3) 0%, var(--ink) 50%, var(--ink-3) 100%);
   background-size: 200% 100%;
   -webkit-background-clip: text;
@@ -54,8 +55,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
   color: var(--ink-3);
 }
 
@@ -65,12 +64,13 @@
   transition: transform var(--dur-2, 200ms) var(--ease);
 }
 .chevOpen { transform: rotate(90deg); }
+.chevIdle { visibility: hidden; }
 
 .body {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  margin: var(--space-2) 0 var(--space-2) var(--space-6);
+  margin: var(--space-1) 0 var(--space-1) calc(var(--space-6) - var(--space-4));
   padding: var(--space-1) var(--space-4) var(--space-1) var(--space-5);
   border-left: 2px solid var(--line);
   max-height: 50vh;
@@ -80,8 +80,8 @@
 
 .para {
   margin: 0;
-  font-family: var(--font-sans);
-  font-size: var(--fs-base);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
   line-height: var(--lh-relaxed);
   color: var(--ink-2);
   white-space: pre-wrap;
@@ -93,7 +93,7 @@
   flex-wrap: wrap;
   gap: var(--space-2) var(--space-4);
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: var(--fs-sm);
   color: var(--ink-3);
 }
 
@@ -107,7 +107,7 @@
   .shimmer {
     animation: none;
     background: none;
-    color: var(--ink-2);
+    color: var(--ink-3);
   }
   .chev, .row { transition: none; }
 }

@@ -8,6 +8,7 @@ export function reconstructFromEvents(events) {
   let ctxTokens = null;
   let reasonedSeconds = null;
   let reasoningDone = false;
+  let spanSeconds = 0;
   for (const rec of events) {
     const f = rec.frame ?? {};
     const kind = f.event;
@@ -33,7 +34,9 @@ export function reconstructFromEvents(events) {
           ? nextTools[existing].at
           : Number.isFinite(f.started_at) ? f.started_at : (Number.isFinite(rec.ts) ? rec.ts : Date.now() / 1000),
         ...(segment ? { reasoning: segment } : {}),
+        ...(spanSeconds > 0 ? { reasoned_s: spanSeconds } : existing >= 0 && nextTools[existing].reasoned_s ? { reasoned_s: nextTools[existing].reasoned_s } : {}),
       };
+      spanSeconds = 0;
       if (existing >= 0) nextTools[existing] = entry;
       else nextTools.push(entry);
     } else if (kind === "tool_state") {
@@ -62,7 +65,9 @@ export function reconstructFromEvents(events) {
       reasoning += f.text ?? "";
       reasoningDone = false;
     } else if (kind === "reasoning_done") {
-      reasonedSeconds = (reasonedSeconds ?? 0) + (Number.isFinite(f.seconds) && f.seconds > 0 ? f.seconds : 0);
+      const seconds = Number.isFinite(f.seconds) && f.seconds > 0 ? f.seconds : 0;
+      reasonedSeconds = (reasonedSeconds ?? 0) + seconds;
+      spanSeconds += seconds;
       reasoningDone = true;
     } else if (kind === "usage" && f.context_tokens > 0) {
       ctxTokens = f.context_tokens;
@@ -77,5 +82,5 @@ export function reconstructFromEvents(events) {
       if (f.session_id) finalSessionId = f.session_id;
     }
   }
-  return { tools: nextTools, assistant, reasoning, error: errorText, sawDone, finalSessionId, ctxTokens, reasonedSeconds, reasoningDone };
+  return { tools: nextTools, assistant, reasoning, error: errorText, sawDone, finalSessionId, ctxTokens, reasonedSeconds, reasoningDone, spanReasonedSeconds: spanSeconds, sawToolStart: nextTools.length > 0 };
 }

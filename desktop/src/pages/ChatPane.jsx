@@ -1,6 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import Reasoning from "../primitives/Reasoning.jsx";
 import ChatComposer from "../features/ChatComposer.jsx";
 import AttachmentChips from "../primitives/AttachmentChips.jsx";
 import { useProfileDetail } from "../hooks/useProfileDetail.js";
@@ -14,10 +13,10 @@ import { useDelayedFlag } from "../lib/useDelayedFlag.js";
 import RelativeTime from "../primitives/RelativeTime.jsx";
 import { turnParts } from "../../../common/reasoningSteps.mjs";
 import { fmtDuration } from "../../../common/reasoningLabel.mjs";
-import { ToolModule } from "../features/ToolSteps.jsx";
+import { ProcessBlock } from "../features/ToolSteps.jsx";
 import StreamingMarkdown from "../features/StreamingMarkdown.jsx";
 import { InlineApproval, InlineClarification } from "../features/InlineRequest.jsx";
-import { lastLine, reasoningTimeline } from "../lib/reasoningTimeline.js";
+import { processTimeline } from "../lib/reasoningTimeline.js";
 import { useFreshTurns } from "../lib/useFreshTurns.js";
 import { profileLabel } from "../lib/profile-display.js";
 import { ChatLoadSkeleton } from "./ChatSkeletons.jsx";
@@ -681,7 +680,16 @@ const Turn = memo(function Turn({
   const notify = useNotify();
   const allTools = turn.tools ?? [];
   const parts = turnParts(turn);
-  const timeline = useMemo(() => reasoningTimeline(turn.tools, turn.reasoning), [turn.tools, turn.reasoning]);
+  const process = useMemo(
+    () => processTimeline(
+      (turn.tools ?? []).map((t) => compactProducedTool(t, turn.output_attachments)),
+      turn.reasoning,
+      parts.reasonedSeconds,
+      turn.reasoning_spans,
+      { mergeUnattributed: true },
+    ),
+    [turn.tools, turn.output_attachments, turn.reasoning, parts.reasonedSeconds, turn.reasoning_spans],
+  );
   const peerTool = peerReplyFrom(allTools);
   const lastAskUserAnswer = parts.askUsers[parts.askUsers.length - 1]?.result;
   // Only suppress the assistant message when it is the *exact* echo of the
@@ -751,20 +759,12 @@ const Turn = memo(function Turn({
           <Markdown as="div" source={turn.user} className="alpi-md" />
         </ProfileMessage>
       )}
-      {(parts.tools.length > 0 || parts.askUsers.length > 0 || parts.reasoning) && (
+      {(process.length > 0 || parts.askUsers.length > 0) && (
         <div className={styles.steps}>
-          {parts.tools.length > 0 && (
-            <ToolModule
-              tools={parts.tools.map((t) => compactProducedTool(t, turn.output_attachments))}
-              accent={accent}
-            />
-          )}
+          {process.length > 0 && <ProcessBlock entries={process} accent={accent} />}
           {parts.askUsers.map((a, i) => (
             <AskUserAnswer key={`a-${a.tool_id ?? i}`} result={a.result} question={a.question} accent={accent} />
           ))}
-          {parts.reasoning && (
-            <Reasoning text={parts.reasoning} seconds={parts.reasonedSeconds} timeline={timeline} />
-          )}
         </div>
       )}
       {turn.assistant && !hideAssistant && peerTool && (
@@ -980,7 +980,11 @@ function PendingTurn({ turn, accent, profiles, fresh = false, inline = null }) {
   const runningTool = allTools.some((t) => t.ok == null);
   const closed = !!turn.error || !!turn.ended || !!turn.settling;
   const thinking = !answered && !runningTool && !turn.reasoningDone && !closed;
-  const timeline = reasoningTimeline(allTools, turn.reasoningPreview);
+  const process = processTimeline(
+    allTools.map((t) => compactProducedTool(t, turn.output_attachments)),
+    turn.reasoningPreview,
+    parts.reasonedSeconds,
+  );
   const peerTool = peerReplyFrom(allTools);
   return (
     <div className={`${styles.turn} ${fresh ? styles.turnEnter : ""}`} data-enter={fresh ? "" : undefined}>
@@ -992,27 +996,14 @@ function PendingTurn({ turn, accent, profiles, fresh = false, inline = null }) {
           <Markdown as="div" source={turn.user} className="alpi-md" />
         </ProfileMessage>
       )}
-      {(parts.tools.length > 0 || parts.askUsers.length > 0 || parts.reasoning || thinking) && (
+      {(process.length > 0 || parts.askUsers.length > 0 || thinking) && (
         <div className={styles.steps}>
-          {parts.tools.length > 0 && (
-            <ToolModule
-              tools={parts.tools.map((t) => compactProducedTool(t, turn.output_attachments))}
-              accent={accent}
-            />
+          {(process.length > 0 || thinking) && (
+            <ProcessBlock entries={process} accent={accent} thinking={thinking} answered={answered} />
           )}
           {parts.askUsers.map((a, i) => (
             <AskUserAnswer key={`a-${a.tool_id ?? i}`} result={a.result} question={a.question} accent={accent} />
           ))}
-          {(parts.reasoning || thinking) && (
-            <Reasoning
-              text={parts.reasoning}
-              seconds={parts.reasonedSeconds}
-              streaming={thinking}
-              answered={answered}
-              timeline={timeline}
-              peek={lastLine(turn.reasoningPreview)}
-            />
-          )}
         </div>
       )}
       {turn.assistantPreview && peerTool && (

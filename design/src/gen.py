@@ -1,3 +1,4 @@
+import re
 import json
 import os
 from datetime import datetime, timezone
@@ -171,7 +172,7 @@ def pill(text, on=False, tone="off"):
     if tone == "success":
         return f'<span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: rgba(63,179,122,0.16); font-family: {MONO}; font-size: 12px; color: #217a45"><span style="width: 7px; height: 7px; border-radius: 999px; background: #217a45"></span>{text}</span>'
     if tone == "warning":
-        return f'<span style="display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px; background: rgba(224,138,60,0.16); font-family: {MONO}; font-size: 12px; color: #8a5a0a">{text}</span>'
+        return f'<span style="display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px; background: rgba(224,138,60,0.16); font-family: {MONO}; font-size: 12px; color: #b3470e">{text}</span>'
     dot = "#217a45" if on else "#b1bac4"
     return f'<span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: #f1f3f5; font-family: {MONO}; font-size: 12px; color: {"#217a45" if on else "#626e7d"}"><span style="width: 7px; height: 7px; border-radius: 999px; background: {dot}"></span>{"on" if on else "off"}</span>'
 
@@ -208,8 +209,15 @@ def textbox(text, rows=3, placeholder=False):
             f'font-size: 15px; line-height: 1.5; color: {color}">{text}</div>')
 
 
+
+def button_heights(client):
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "common", "button.mjs")
+    with open(path) as f:
+        src = f.read()
+    return {size: int(value) for size, value in re.findall(r"(\w+): \{[^}]*" + client + r": (\d+)", src)}
+
 def m_button(title, variant="secondary", size="sm", accent=None):
-    h = {"sm": 40, "md": 40, "lg": 48}[size]
+    h = button_heights("mobile")[size]
     padx = {"sm": 12, "md": 14, "lg": 18}[size]
     fs = {"sm": 12, "md": 14, "lg": 15}[size]
     if variant == "primary":
@@ -286,7 +294,7 @@ PROFILES = [("doc", DOC_ACCENT, "6w", True), ("alpi", "#c9a227", "", False), ("a
             ("clonara", "#e2704a", "", False), ("galt", "#5b6670", "", False), ("lingo", "#8a5cf6", "", False),
             ("yuri", "#f0a58f", "6w", False), ("etxea", "#9ccf95", "", False)]
 
-WARNING_TEXT = "#8a5a0a"
+WARNING_TEXT = "#b3470e"
 M_STATES = {"alpi": ("working", None), "abby": ("needs-you", None), "clonara": ("failed", None)}
 M_STATE_TEXT = {"needs-you": "needs you", "failed": "failed", "working": "working"}
 M_PINNED = ("doc",)
@@ -307,7 +315,7 @@ def m_count_badge(n, tone="danger", ring="#f5f6f8"):
     bg = "#e08a3c" if tone == "warning" else "#c14545"
     fg = "#0b1117" if tone == "warning" else "#ffffff"
     return (f'<span style="position: absolute; top: -6px; right: -8px; min-width: 18px; height: 18px; padding: 0 6px; border-radius: 999px; border: 1.5px solid {ring}; background: {bg}; '
-            f'color: {fg}; font-weight: 600; font-size: 11px; line-height: 15px; text-align: center; box-sizing: border-box">{n}</span>')
+            f'color: {fg}; font-weight: 600; font-size: 11px; line-height: 15px; text-align: center; box-sizing: border-box; white-space: nowrap">{n}</span>')
 
 
 def m_glyph(kind, color):
@@ -409,10 +417,10 @@ def m_chat_header(title, accent, meta_html, two_pane=False, back=True, meta_item
 
 
 def m_thread(accent, pane=False):
-    from conversation_boards import m_agent_text, m_reasoning, m_tool, m_user
+    from conversation_boards import m_agent_text, m_process, m_reasoning, m_tool, m_user
     return f"""<div style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; gap: 10px; padding-bottom: 12px">
 {m_user("Pull my last three lipid panels and tell me what moved.", accent, pane)}
-<div style="display: flex; flex-direction: column">{m_reasoning()}{m_tool("memory", "lipid panels · 3 results")}{m_tool("read_file", "labs/2026-08-lipids.pdf")}</div>
+{m_process(m_reasoning(secs="4s"), m_tool("memory", "lipid panels · 3 results"), m_tool("read_file", "labs/2026-08-lipids.pdf"))}
 {m_agent_text("Triglycerides moved most: <strong>142 → 88 mg/dL</strong> since March. LDL-P eased to 1,180 nmol/L; HDL held at 68.")}
 </div>"""
 
@@ -806,7 +814,7 @@ def build(desktop_boards):
 
     y = 0
     for label, items in (
-        ("Foundations", [("System-Tokens.dc.html", SYSTEM["tokens"](), TOKENS_H, "System · tokens")]),
+        ("Foundations", [("System-Tokens.dc.html", SYSTEM["tokens"](), TOKENS_H, "System · tokens"), ("System-Motion.dc.html", SYSTEM["motion"](), 900, "System · motion and feel")]),
         ("Controls and feedback", [("System-DesktopComponents.dc.html", SYSTEM["desktop"](), DESKTOP_COMPONENTS_H, "Desktop · controls and feedback"), ("System-MobileComponents.dc.html", SYSTEM["mobile"](), MOBILE_COMPONENTS_H, "Mobile · controls and feedback")]),
         ("Conversation", [("System-DesktopConversation.dc.html", CONVERSATION["desktop"](), 2900, "Desktop · conversation"), ("System-MobileConversation.dc.html", CONVERSATION["mobile"](), 1400, "Mobile · conversation")]),
         ("Workgroups", [("System-DesktopWorkgroup.dc.html", CONVERSATION["desktop_wg"](), 1200, "Desktop · workgroups"), ("System-MobileWorkgroup.dc.html", CONVERSATION["mobile_wg"](), 760, "Mobile · workgroups")]),

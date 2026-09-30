@@ -100,11 +100,6 @@
   font-weight: var(--fw-semibold);
 }
 
-.installBtn {
-  height: 26px;
-  font-size: var(--fs-sm);
-}
-
 .checkIcon {
   color: var(--c-success-text);
 }

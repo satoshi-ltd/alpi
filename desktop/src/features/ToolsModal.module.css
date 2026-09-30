@@ -78,7 +78,7 @@
 .denyBanner {
   font-family: var(--font-sans);
   font-size: var(--fs-sm);
-  color: var(--c-warning, var(--ink-2));
+  color: var(--c-warning-text);
   background: color-mix(in srgb, var(--c-warning, var(--ink-3)) 12%, var(--bg-elev));
   border: 0.5px solid color-mix(in srgb, var(--c-warning, var(--line-2)) 35%, var(--line));
   border-radius: var(--r-md);

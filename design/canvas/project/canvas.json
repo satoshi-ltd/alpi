@@ -2,7 +2,7 @@
  "v": 3,
  "createdOnFiles": {
   "v": 1,
-  "at": "2026-09-30T02:49:08Z"
+  "at": "2026-09-30T04:54:58Z"
  },
  "title": "Alpi desktop and mobile parity",
  "launch": {
@@ -38,6 +38,14 @@
    "w": 1280,
    "h": 2580,
    "title": "System \u00b7 tokens",
+   "page": "system"
+  },
+  "System-Motion.dc.html": {
+   "x": 1360,
+   "y": 240,
+   "w": 1280,
+   "h": 900,
+   "title": "System \u00b7 motion and feel",
    "page": "system"
   },
   "System-DesktopComponents.dc.html": {
@@ -308,13 +316,14 @@
    "x": 0,
    "y": 240,
    "w": 1280,
-   "h": 790,
+   "h": 690,
    "title": "Proposals \u00b7 still open",
    "page": "proposals"
   }
  },
  "order": [
   "System-Tokens.dc.html",
+  "System-Motion.dc.html",
   "System-DesktopComponents.dc.html",
   "System-MobileComponents.dc.html",
   "System-DesktopConversation.dc.html",

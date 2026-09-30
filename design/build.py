@@ -42,6 +42,7 @@ THEMED = (
     ("#b1bac4", "var(--ink-4)"),
     ("#8a5a0a", "var(--accent)"),
     ("#b73737", "var(--c-danger-text)"),
+    ("#b3470e", "var(--c-warning-text)"),
 )
 LITERAL_BOARDS = {"System-Tokens.dc.html"}
 

@@ -1,9 +1,5 @@
 .modelPickerWrap { position: relative; }
 
-.modelPickerTrigger {
-  height: var(--ctrl-sm);
-}
-
 .modelPickerTriggerField {
   height: var(--ctrl-md);
   border: .5px solid var(--line-2);

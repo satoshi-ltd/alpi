@@ -13,7 +13,7 @@ function paragraphs(text) {
   return String(text || "").split("\n").map((s) => s.trim()).filter(Boolean);
 }
 
-export default function Reasoning({ text, seconds, streaming = false, answered = false, timeline = null, peek = null }) {
+export default function Reasoning({ text, seconds, streaming = false, answered = false, timeline = null }) {
   const [open, setOpen] = useState(false);
   const bodyRef = useRef(null);
   const hasText = !!String(text || "").trim();
@@ -27,11 +27,27 @@ export default function Reasoning({ text, seconds, streaming = false, answered =
     if (streaming && open && el) el.scrollTop = el.scrollHeight;
   }, [text, open, streaming]);
 
-  if (!streaming && !hasText) return null;
+  if (!streaming && !hasText && !(seconds >= 1)) return null;
 
-  const items = timeline?.length ? timeline : [{ kind: "text", text }];
-  const livePeek = peek ?? lastLine(text);
+  const livePeek = lastLine(text);
   const label = streaming ? "Thinking…" : thoughtLabel(seconds);
+  const labelNode = <span className={streaming ? styles.shimmer : styles.label}>{label}</span>;
+  const peekNode = streaming && !open && livePeek ? <span className={styles.peek}>{livePeek}</span> : null;
+
+  if (!hasText) {
+    return (
+      <div className={styles.reasoning}>
+        <div
+          className={`${styles.row} ${styles.rowStatic} ${streaming ? styles.rowLive : ""}`}
+          role={streaming ? "status" : undefined}
+          aria-live={streaming ? "polite" : undefined}
+        >
+          <Icon name="chevron-right" size={14} className={`${styles.chev} ${styles.chevIdle}`} />
+          {labelNode}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.reasoning}>
@@ -40,18 +56,14 @@ export default function Reasoning({ text, seconds, streaming = false, answered =
         className={`${styles.row} ${streaming ? styles.rowLive : ""}`}
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        aria-label={open ? "Collapse reasoning" : "Expand reasoning"}
-        disabled={!hasText}
       >
-        {hasText && (
-          <Icon name="chevron-right" size={12} className={`${styles.chev} ${open ? styles.chevOpen : ""}`} />
-        )}
-        <span className={streaming ? styles.shimmer : styles.label}>{label}</span>
-        {streaming && !open && livePeek && <span className={styles.peek}>{livePeek}</span>}
+        <Icon name="chevron-right" size={14} className={`${styles.chev} ${open ? styles.chevOpen : ""}`} />
+        {labelNode}
+        {peekNode}
       </button>
-      <Reveal open={open && hasText}>
+      <Reveal open={open}>
         <div className={styles.body} ref={bodyRef}>
-          {items.map((item, i) =>
+          {(timeline?.length ? timeline : [{ kind: "text", text }]).map((item, i) =>
             item.kind === "tools" ? (
               <div key={i} className={styles.stepMark}>
                 {item.names.map((name, j) => (

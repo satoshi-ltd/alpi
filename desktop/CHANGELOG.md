@@ -11,6 +11,21 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.7.1 — 2026-09-30 — alpi's process, apart from the answer
+
+- **Thinking and tool steps read as one compact block.** Rows sit close together in one mono
+  style, in the order they happened, clearly apart from the answer. A reloaded conversation shows
+  each "Thought for Xs" where it happened; a collapsed group says how many steps and thoughts it
+  holds.
+- **The block lines up with the answer**, the same way it does on the phone.
+- **"Needs you" no longer looks like "working".** Warnings use their own orange, distinct from the
+  amber accent.
+- **Workgroup settings get the section rail and search** that profile settings have.
+- **Buttons are a size larger** (28 / 32 / 40), and the composer row lines up again.
+- **Screen readers read each thought by its visible label.**
+
+  Requires alpi 0.16.1 to place replayed thoughts exactly; with 0.16.0 they show as one row.
+
 ## v0.7.0 — 2026-09-30 — see what every agent is doing
 
 - **Tool steps you can open.** Each step shows what it did in plain words, how long it took and a

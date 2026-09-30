@@ -48,7 +48,7 @@ export default function ModelPicker({
           ref={triggerRef}
           type="button"
           variant="ghost"
-          className={`${styles.modelPickerTrigger} ${variant === "field" ? styles.modelPickerTriggerField : ""}`.trim()}
+          className={variant === "field" ? styles.modelPickerTriggerField : undefined}
           onClick={() => setOpen((o) => !o)}
           aria-expanded={open}
         >

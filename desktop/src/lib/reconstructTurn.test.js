@@ -20,6 +20,22 @@ describe("reconstructFromEvents", () => {
     expect(r.finalSessionId).toBe("s1");
   });
 
+  it("pins each reasoning span's seconds to the tool it led to and keeps the open span apart", () => {
+    const r = reconstructFromEvents([
+      ev("reasoning_delta", { text: "hmm" }, 1),
+      ev("reasoning_done", { seconds: 2 }, 2),
+      ev("tool_start", { tool_id: "t1", name: "grep" }, 3),
+      ev("tool_end", { tool_id: "t1", ok: true, output: "" }, 4),
+      ev("tool_start", { tool_id: "t2", name: "read_file" }, 5),
+      ev("reasoning_delta", { text: "more" }, 6),
+      ev("reasoning_done", { seconds: 1.5 }, 7),
+    ]);
+    expect(r.tools[0].reasoned_s).toBe(2);
+    expect(r.tools[1].reasoned_s).toBeUndefined();
+    expect(r.spanReasonedSeconds).toBe(1.5);
+    expect(r.reasonedSeconds).toBe(3.5);
+  });
+
   it("attaches inter-tool prose as the tool's reasoning, not the answer", () => {
     const r = reconstructFromEvents([
       ev("assistant_delta", { text: "let me look" }, 1),

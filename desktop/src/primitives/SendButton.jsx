@@ -27,9 +27,9 @@ export default function SendButton({
       disabled={isStop ? stopping : !enabled}
       aria-label={isStop ? (stopping ? "Stopping" : "Stop") : "Send"}
       style={{
-        width: 30,
-        height: 30,
-        borderRadius: 10,
+        width: "var(--ctrl-md)",
+        height: "var(--ctrl-md)",
+        borderRadius: "calc(var(--ctrl-md) / 3)",
         border: 0,
         background: bg,
         color: fg,

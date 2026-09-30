@@ -128,7 +128,7 @@ def sheet_head(icon, title, keys, pad_left=16):
 
 
 def activity_row(glyph, title, sub, tone=None, action=""):
-    color = {"warning": "#8a5a0a", "danger": DANGER, "accent": ALPI_ACCENT}.get(tone, INK3)
+    color = {"warning": "#b3470e", "danger": DANGER, "accent": ALPI_ACCENT}.get(tone, INK3)
     return (f'<li style="display: flex; align-items: center; gap: 8px; padding-right: 8px; border-radius: 8px">'
             f'<span style="flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 8px 10px">'
             f'<span style="width: 16px; display: inline-flex; justify-content: center; flex-shrink: 0; color: {color}">{glyph(color)}</span>'

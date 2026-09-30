@@ -3,10 +3,6 @@
   display: inline-flex;
 }
 
-.trigger {
-  height: 28px;
-}
-
 .popover {
   position: absolute;
   right: 0;

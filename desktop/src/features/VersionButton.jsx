@@ -140,7 +140,7 @@ function VersionPanel({ state, current, onInstall, onClose }) {
             <Button
               type="button"
               variant="primary"
-              className={styles.installBtn}
+              size="sm"
               onClick={() => { quitForUpdate(); }}
             >
               Quit Alpi
@@ -149,7 +149,7 @@ function VersionPanel({ state, current, onInstall, onClose }) {
             <Button
               type="button"
               variant="primary"
-              className={styles.installBtn}
+              size="sm"
               onClick={onInstall}
               disabled={state.installing}
             >

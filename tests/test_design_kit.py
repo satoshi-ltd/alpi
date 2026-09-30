@@ -44,7 +44,7 @@ def test_design_system_covers_conversation_and_workgroups_on_both_clients(tmp_pa
     for client in ("Desktop", "Mobile"):
         assert {f"System-{client}Components.dc.html", f"System-{client}Conversation.dc.html", f"System-{client}Workgroup.dc.html"} <= system
     conversation = (tmp_path / "canvas" / "project" / "System-DesktopConversation.dc.html").read_text()
-    assert all(label in conversation for label in ("User message", "Alpi message", "Peer reply", "Tool steps", "Composer"))
+    assert all(label in conversation for label in ("User message", "Alpi message", "Peer reply", "Process block", "Composer"))
     workgroup = (tmp_path / "canvas" / "project" / "System-DesktopWorkgroup.dc.html").read_text()
     assert all(f"Marker · {state}" in workgroup for state in ("task", "working", "done", "skip"))
 
@@ -59,7 +59,7 @@ def test_design_kit_draws_what_desktop_0_7_and_mobile_0_6_shipped(tmp_path):
     chat = read("Desktop-Chat.dc.html")
     assert all(f'data-state="{s}"' in chat for s in ("needs-you", "failed", "working"))
     assert "Pinned" in chat and 'aria-label="phase 2 of 4"' in chat and "Activity · 2 need you" in chat
-    assert "Thought for 7s" in chat and "wants to run a command" in chat
+    assert "Thought for 4s" in chat and "wants to run a command" in chat
     overlays = read("Desktop-Overlays.dc.html")
     assert all(group in overlays for group in ("Needs you · 2", "Running · 2", "Scheduled", "Keyboard shortcuts", 'data-keys="⌘K"', "Sessions"))
     assert "Tooltip" not in overlays and "was: raw" not in overlays
@@ -96,4 +96,5 @@ def test_design_proposals_list_only_open_work(tmp_path):
     for _key, _who, area, *_rest in PROPOSALS:
         assert area in overview
     conversation = (project / "System-DesktopConversation.dc.html").read_text()
-    assert "Thought for 7s" in conversation and "Inline approval" in conversation
+    assert "Thought for 3s" in conversation and "Inline approval" in conversation
+    assert "System-Motion.dc.html" in json.loads((project / "canvas.json").read_text())["boards"]

@@ -1,3 +1,6 @@
+import os
+import re
+
 from gen import DANGER, DOC_ACCENT, ic, m_button, m_count_badge, m_roster_row, m_row, m_row_state, m_wide_row, meter, page, pill, switch, textbox
 from desktop_boards import (HOVER, INK, INK2, INK3, INK4, LINE, LINE2, MONO, PANE, SELECTED, SIDE, alink, badged, button, chip, code_chip, count_badge, field_input, iconbtn, kbd, key_hint,
                             meterchip, phase_count, selectish, settings_rail, state_chip, textarea)
@@ -5,13 +8,33 @@ from desktop_overlays import checkbox, dialog_footer, dropdown_row, dropdown_tri
 from mobile_overlays import action_item, picker_row, separator, sheet_header
 
 AMBER, ACCENT_LIGHT, ACCENT_DARK = "#f0b447", "#8a5a0a", "#f0b447"
-LIGHT = [("bg", "#eef0f2"), ("bgPane", "#ffffff"), ("bgSide", "#f5f6f8"), ("bgElev", "#ffffff"), ("bgInput", "#ffffff"), ("ink", "#0b1117"), ("ink2", "#3d4955"), ("ink3", "#626e7d"), ("ink4", "#b1bac4"), ("accent", "#8a5a0a"), ("successText", "#217a45"), ("warningText", "#8a5a0a"), ("dangerText", "#b73737")]
-DARK = [("bg", "#0a0d11"), ("bgPane", "#11151a"), ("bgSide", "#0c1014"), ("bgElev", "#161b22"), ("bgInput", "#11151a"), ("ink", "#e6edf3"), ("ink2", "#b1bac4"), ("ink3", "#828b97"), ("ink4", "#484f58"), ("accent", "#f0b447"), ("successText", "#70c592"), ("warningText", "#efb254"), ("dangerText", "#f08080")]
-STATUS = [("success", "#3fb37a"), ("warning", "#e08a3c"), ("danger", "#c14545")]
+TOKENS_MJS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "common", "tokens.mjs")
+SWATCH_KEYS = ("bg", "bgPane", "bgSide", "bgElev", "bgInput", "ink", "ink2", "ink3", "ink4", "accent", "successText", "warningText", "dangerText")
+
+
+def token_block(name):
+    with open(TOKENS_MJS) as f:
+        src = f.read()
+    body = re.search(r"const " + name + r" = \{(.*?)\};", src, re.S).group(1)
+    return dict(re.findall(r"(\w+):\s*\"(#[0-9a-fA-F]{6})\"", body))
+
+
+LIGHT = [(k, token_block("light")[k]) for k in SWATCH_KEYS]
+DARK = [(k, token_block("dark")[k]) for k in SWATCH_KEYS]
+STATUS = list(token_block("status").items())
 FS = [("xxs", 9), ("label", 10), ("xs", 11), ("sm", 12), ("base", 13), ("md", 14), ("lg", 15), ("xl", 18), ("xxl", 22), ("display", 28), ("hero", 56)]
 SPACE = [("s1", 4), ("s2", 6), ("s3", 8), ("s4", 10), ("s5", 12), ("s6", 14), ("s7", 16), ("s8", 20), ("s9", 24), ("s10", 32), ("s11", 40)]
 RADII = [("xs", 4), ("sm", 6), ("md", 8), ("lg", 10), ("xl", 12), ("2xl", 14), ("3xl", 16), ("pill", 999)]
-CTRL = [("2xs", 18), ("xs", 22), ("sm", 28), ("md", 32), ("lg", 40)]
+TOKENS_CSS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "desktop", "src", "styles", "tokens.css")
+
+
+def css_tokens(prefix):
+    with open(TOKENS_CSS) as f:
+        root = f.read().split("}", 1)[0]
+    return re.findall(r"--" + prefix + r"-([\w-]+):\s*([^;]+);", root)
+
+
+CTRL = [(name, int(value.rstrip("px"))) for name, value in css_tokens("ctrl") if value.strip().endswith("px")]
 ROLES = [("--text-meta", 11, "timestamps, chips, eyebrows, keys"), ("--text-ui", 13, "rows, buttons, labels, palette"), ("--text-chat", 15, "messages, settings section titles"),
          ("--text-title", 18, "dialog titles, empty headings"), ("--text-display", 28, "chat and settings hero"), ("--text-hero", 56, "empty-state glyph")]
 MOTION = [("--dur-1", "120ms", 120, "hover, press, tooltip"), ("--dur-2", "200ms", 200, "turn rise, card in, text reveal"), ("--dur-3", "260ms", 260, "panels"), ("--dur-4", "360ms", 360, "slow reveals"),
@@ -149,7 +172,7 @@ def mobile_components_board():
     roster = (f'<div style="width: 300px; padding: 6px 0; border-radius: 12px; background: {SIDE}; border: 0.5px solid {LINE}">{m_roster_row("abby", "#c33d7e", state="needs-you")}{m_roster_row("alpha", DOC_ACCENT, "workgroup", state="working", phases="2/4")}{m_roster_row("yuri", "#f0a58f", ts="6w", unread=True)}</div>'
               f'<div style="width: 390px; border-radius: 12px; border: 0.5px solid {LINE}; overflow: hidden">{m_roster_row("clonara", "#e2704a", state="failed", compact=False)}</div>')
     badges = (f'<span style="position: relative; display: inline-flex; margin: 8px">{ic("bell", 16, INK2)}{m_count_badge(1, "danger", "#ffffff")}</span>'
-              f'<span style="position: relative; display: inline-flex; margin: 8px">{ic("activity", 16, "#8a5a0a")}{m_count_badge(2, "warning", "#ffffff")}</span>'
+              f'<span style="position: relative; display: inline-flex; margin: 8px">{ic("activity", 16, "#b3470e")}{m_count_badge(2, "warning", "#ffffff")}</span>'
               f'<span style="font-size: 12px; color: {INK3}">footer badges · danger unread, warning needs you</span>')
     targets = (f'<div style="display: flex; gap: 18px; align-items: center">'
                + "".join(f'<span style="display: inline-flex; flex-direction: column; align-items: center; gap: 6px"><span style="width: {w}px; height: {h}px; border-radius: 10px; background: {HOVER}; border: 0.5px dashed {LINE2}; display: inline-flex; align-items: center; justify-content: center">{ic(i, 16, INK2) if i else ""}</span><span style="font-family: {MONO}; font-size: 11px; color: {INK3}">{t}</span></span>'
@@ -178,4 +201,52 @@ def mobile_components_board():
 TOKENS_H = 2580
 DESKTOP_COMPONENTS_H = 2250
 MOBILE_COMPONENTS_H = 3140
-SYSTEM = {"tokens": tokens_board, "desktop": desktop_components_board, "mobile": mobile_components_board}
+
+DESKTOP_MOTION = [
+    ("Hover, press, tooltip", "--dur-1 · 120 ms", "colour and opacity only"),
+    ("New turn", "--dur-2 · 200 ms", "rises 8 px and fades in; only turns appended after the thread is on screen"),
+    ("Streaming text", "150 ms", "only the newest chunk fades; nothing already shown re-animates"),
+    ("Steps and reasoning open", "--dur-2 · 200 ms", "grid-rows reveal; reasoning folds itself when the answer lands"),
+    ("Modal and dialog exit", "120 ms", "fade and scale down; a timer closes it if the animation never ends"),
+    ("Working pulse, dots", "--dur-loop · 1.4 s", "the only loops; every loop shares one duration"),
+    ("Spinner", "--dur-spin · 0.9 s", "busy buttons and loaders"),
+    ("Reduced motion", "global rule", "one prefers-reduced-motion rule stops every animation and transition"),
+]
+MOBILE_MOTION = [
+    ("New message", "180 ms FadeIn", "only rows that arrive after the first page; recycled rows never fade again"),
+    ("Pane replace", "120 ms crossfade", "Fold and tablet two-pane navigation"),
+    ("Sidebar open and close", "200 ms", "the Fold and tablet roster slides and narrows instead of snapping"),
+    ("Thought, group, step", "180 ms", "opening and closing measure the height and fade the content"),
+    ("Latest button", "150 ms", "fades in with an 8 pt rise when the reader scrolls away"),
+    ("Sheet in and out", "220 ms", "drag to dismiss on the header when the sheet is dismissible"),
+    ("Keyboard", "frame by frame", "the composer rides the keyboard with useAnimatedKeyboard; swipe down dismisses"),
+    ("Long press", "350 ms · pulse 160 ms", "nothing moves on a tap or a scroll; only a recognised long press pulses once with the haptic as the menu opens"),
+    ("Working pulse", "1.4 s", "roster state dot; static under reduce motion"),
+    ("Reduce motion", "one shared value", "every fade, pulse and shimmer reads one app-wide setting"),
+]
+HAPTICS = [
+    ("tap", "light impact", "send, stop"),
+    ("selection", "selection tick", "long press, pull to refresh, action sheet open, toggles, roster create buttons"),
+    ("warning", "warning notification", "an approval or a question sheet opens; a destructive typed confirm"),
+    ("success", "success notification", "available for confirmations; unused today"),
+]
+
+
+def motion_board():
+    def table(rows, cols="200px 170px 1fr"):
+        return "".join(
+            f'<div style="display: grid; grid-template-columns: {cols}; gap: 14px; padding: 9px 0; border-top: 0.5px solid {LINE}; align-items: baseline">'
+            f'<span style="font-size: 13px; color: {INK}">{a}</span><span style="font-family: {MONO}; font-size: 12px; color: {INK2}">{b}</span><span style="font-size: 12.5px; line-height: 1.5; color: {INK3}">{c}</span></div>'
+            for a, b, c in rows)
+    body = f"""<div style="padding: 40px 48px; display: flex; flex-direction: column; gap: 22px; box-sizing: border-box">
+{h1("Motion and feel", "Still boards cannot move, so this page states what moves, for how long and what it answers to. Motion marks change: a new turn, the streaming edge, a step opening, the keyboard. Nothing decorative loops except the working pulse, and reduced motion turns it all off.")}
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 28px; align-items: start">
+<div style="display: flex; flex-direction: column">{label("Desktop")}<div style="height: 8px"></div>{table(DESKTOP_MOTION, "170px 140px 1fr")}</div>
+<div style="display: flex; flex-direction: column">{label("Phone and Fold")}<div style="height: 8px"></div>{table(MOBILE_MOTION, "150px 130px 1fr")}</div>
+</div>
+<div style="display: flex; flex-direction: column">{label("Haptics · src/lib/haptics.js")}<div style="height: 8px"></div>{table(HAPTICS, "120px 180px 1fr")}</div>
+</div>"""
+    return page("System · motion and feel", 1280, 900, body)
+
+
+SYSTEM = {"tokens": tokens_board, "motion": motion_board, "desktop": desktop_components_board, "mobile": mobile_components_board}

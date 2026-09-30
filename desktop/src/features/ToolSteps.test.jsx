@@ -1,7 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 
-import { ToolModule, ToolStep } from "./ToolSteps.jsx";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+import { ProcessBlock, ToolStep } from "./ToolSteps.jsx";
+import { processTimeline } from "../lib/reasoningTimeline.js";
+
+function ToolModule({ tools, reasoning, seconds, ...rest }) {
+  return <ProcessBlock entries={processTimeline(tools, reasoning, seconds)} {...rest} />;
+}
 
 afterEach(() => {
   vi.useRealTimers();
@@ -56,7 +64,7 @@ describe("ToolStep", () => {
   });
 });
 
-describe("ToolModule", () => {
+describe("ProcessBlock", () => {
   it("keeps a clean group collapsed until clicked", () => {
     const tools = [
       { tool_id: "a", name: "read_file", args: { path: "a" }, ok: true },
@@ -88,5 +96,110 @@ describe("ToolModule", () => {
     rerender(<ToolModule tools={[{ ...first, ok: true }, { tool_id: "b", name: "grep", args: {}, ok: null }]} />);
     expect(screen.getByRole("button", { name: /read_file/ })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("button", { name: /grep/ })).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("lays reasoning and steps out in the order they happened, thought first when it led", () => {
+    const tools = [
+      { tool_id: "a", name: "read_file", args: {}, ok: true, reasoning: "check the log", reasoned_s: 2 },
+      { tool_id: "b", name: "grep", args: {}, ok: true },
+    ];
+    const { container } = render(<ToolModule tools={tools} reasoning={"check the log\n\nsummarize"} seconds={6} />);
+    const text = container.textContent;
+    expect(text.indexOf("Thought for 2s")).toBe(0);
+    expect(text.indexOf("Thought for 2s")).toBeLessThan(text.indexOf("2 tool calls"));
+    expect(text.indexOf("2 tool calls")).toBeLessThan(text.indexOf("Thought for 4s"));
+  });
+
+  it("keeps mid-run reasoning inside the bucket, between the steps", () => {
+    const tools = [
+      { tool_id: "a", name: "read_file", args: {}, ok: true },
+      { tool_id: "b", name: "grep", args: {}, ok: true, reasoning: "narrow it" },
+    ];
+    const { container } = render(<ToolModule tools={tools} reasoning="narrow it" />);
+    expect(screen.queryByText("Thought")).toBeNull();
+    expect(screen.getByText("2 tool calls · 1 thought")).toBeTruthy();
+    fireEvent.click(screen.getByLabelText(/Show 2 tool calls/));
+    const text = container.textContent;
+    expect(text.indexOf("read_file")).toBeLessThan(text.indexOf("Thought"));
+    expect(text.indexOf("Thought")).toBeLessThan(text.indexOf("grep"));
+  });
+
+  it("shows the running call with the thought that led to it outside the bucket", () => {
+    const tools = [
+      { tool_id: "a", name: "read_file", args: {}, ok: true },
+      { tool_id: "b", name: "terminal", args: {}, ok: null, reasoning: "run the tests" },
+    ];
+    render(<ToolModule tools={tools} />);
+    expect(screen.getByText("+1 previous tool call")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Thought" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /terminal/ })).toBeTruthy();
+  });
+
+  it("adds the live Thinking row at the end of the block", () => {
+    const tools = [{ tool_id: "a", name: "grep", args: {}, ok: true }];
+    const { container } = render(<ToolModule tools={tools} thinking />);
+    const text = container.textContent;
+    expect(text.indexOf("grep")).toBeLessThan(text.indexOf("Thinking…"));
+  });
+
+  it("keeps an opened live thought open when its tool starts", () => {
+    const { rerender } = render(<ToolModule tools={[]} reasoning="plan it" thinking />);
+    fireEvent.click(screen.getByRole("button", { name: /Thinking…/ }));
+    rerender(<ToolModule tools={[{ tool_id: "a", name: "grep", args: {}, ok: null, reasoning: "plan it" }]} reasoning="" />);
+    expect(screen.getByRole("button", { name: "Thought" })).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("never counts an empty sub-second stored span as a thought", () => {
+    const tools = [
+      { tool_id: "a", name: "grep", args: {}, ok: true },
+      { tool_id: "b", name: "read_file", args: {}, ok: true },
+    ];
+    render(<ProcessBlock entries={processTimeline(tools, "", 2, [{ seconds: 0.4, before_tool: 1 }])} />);
+    expect(screen.getByText("2 tool calls")).toBeTruthy();
+  });
+
+  it("renders nothing when there is no process", () => {
+    const { container } = render(<ToolModule tools={[]} />);
+    expect(container.firstChild).toBeNull();
+  });
+});
+
+describe("process block typography", () => {
+  const read = (rel) => readFileSync(join(import.meta.dirname, rel), "utf8");
+  const block = (css, sel) => css.match(new RegExp(`\\.${sel} \\{([^}]+)\\}`))[1];
+  const steps = read("ToolSteps.module.css");
+  const reasoning = read("../primitives/Reasoning.module.css");
+
+  it.each([[steps, "head"], [steps, "bucket"], [reasoning, "row"]])("every row is a 22 px mono 12 px line", (css, sel) => {
+    const rule = block(css, sel);
+    expect(rule).toMatch(/height: var\(--ctrl-xs\)/);
+    expect(rule).toMatch(/font-family: var\(--font-mono\)/);
+    expect(rule).toMatch(/font-size: var\(--fs-sm\)/);
+  });
+
+  it("labels and meta read ink-3, names ink-2, the opened thought mono ink-2", () => {
+    expect(block(steps, "summary")).toMatch(/color: var\(--ink-3\)/);
+    expect(block(steps, "status")).toMatch(/color: var\(--ink-3\)/);
+    expect(block(steps, "name")).toMatch(/color: var\(--ink-2\)/);
+    expect(block(reasoning, "label")).toMatch(/color: var\(--ink-3\)/);
+    const para = block(reasoning, "para");
+    expect(para).toMatch(/font-family: var\(--font-mono\)/);
+    expect(para).toMatch(/font-size: var\(--fs-sm\)/);
+    expect(para).toMatch(/color: var\(--ink-2\)/);
+    expect(block(steps, "module")).toMatch(/gap: var\(--space-tight\)/);
+  });
+
+  it.each([[steps, "head"], [steps, "bucket"], [reasoning, "row"]])("pulls each row into the gutter by its own padding so glyphs sit flush with the answer", (css, sel) => {
+    const rule = block(css, sel);
+    expect(rule).toMatch(/margin: 0 calc\(-1 \* var\(--space-4\)\)/);
+    expect(rule).toMatch(/padding: 0 var\(--space-4\)/);
+    expect(rule).toMatch(/width: calc\(100% \+ 2 \* var\(--space-4\)\)/);
+  });
+
+  it("keeps the opened bodies' indent relative to the row and lets the bucket's rows reach the gutter", () => {
+    expect(block(steps, "detail")).toMatch(/padding: var\(--space-3\) 0 var\(--space-3\) calc\(14px \+ var\(--space-4\)\)/);
+    expect(block(reasoning, "body")).toMatch(/margin: var\(--space-1\) 0 var\(--space-1\) calc\(var\(--space-6\) - var\(--space-4\)\)/);
+    expect(block(steps, "bucketReveal")).toMatch(/margin: 0 calc\(-1 \* var\(--space-4\)\)/);
+    expect(block(steps, "bucketList")).toMatch(/calc\(var\(--space-6\) \+ var\(--space-4\)\)/);
   });
 });

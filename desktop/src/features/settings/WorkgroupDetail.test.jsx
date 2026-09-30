@@ -31,6 +31,22 @@ describe("WorkgroupDetail", () => {
     expect(screen.getByRole("progressbar", { name: "Fetching latest workgroup settings" })).toBeInTheDocument();
   });
 
+  it("lists its sections in the searchable settings rail", async () => {
+    invoke.mockResolvedValue([]);
+    render(
+      <WorkgroupDetail
+        workgroup={{ id: "wg-1", profile: "mira", hub_id: "mira", is_hub: true }}
+        profiles={[{ name: "mira", pubkey_b64: "hub", accent: "#446" }]}
+        connectionId="casa"
+      />,
+    );
+    const rail = screen.getByRole("navigation", { name: "Settings sections" });
+    const items = () => within(rail).getAllByRole("button").map((b) => b.textContent);
+    await waitFor(() => expect(items()).toEqual(expect.arrayContaining(["Overview", "Budget", "Briefing", "Members", "Danger zone"])));
+    fireEvent.change(within(rail).getByRole("searchbox", { name: "Search settings" }), { target: { value: "brief" } });
+    await waitFor(() => expect(items()).toEqual(["Briefing"]));
+  });
+
   it("routes member reads to the selected connection", async () => {
     invoke.mockResolvedValueOnce([]);
     render(
@@ -82,7 +98,7 @@ function pipelineRow(key) {
 }
 
 function pipelineSection() {
-  return screen.getByText("Pipelines").closest("section");
+  return screen.getByRole("heading", { name: "Pipelines" }).closest("section");
 }
 
 describe("WorkgroupDetail — pipelines", () => {
@@ -90,7 +106,7 @@ describe("WorkgroupDetail — pipelines", () => {
     mockHost();
     render(<WorkgroupDetail workgroup={PIPELINE_WG} profiles={PROFILES} connectionId="casa" />);
 
-    await waitFor(() => expect(screen.getByText("Pipelines")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Pipelines" })).toBeInTheDocument());
     expect(within(pipelineRow("setup")).getByText("#enrich")).toBeInTheDocument();
     expect(within(pipelineRow("media-update")).getByText("#media-qa")).toBeInTheDocument();
     expect(screen.getAllByText("launch")).toHaveLength(1);
@@ -101,7 +117,7 @@ describe("WorkgroupDetail — pipelines", () => {
     mockHost();
     render(<WorkgroupDetail workgroup={PIPELINE_WG} profiles={PROFILES} connectionId="casa" />);
 
-    await waitFor(() => expect(screen.getByText("Pipelines")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Pipelines" })).toBeInTheDocument());
     const section = within(pipelineSection());
     expect(section.queryAllByRole("button")).toHaveLength(0);
     expect(section.queryAllByRole("textbox")).toHaveLength(0);
@@ -112,7 +128,7 @@ describe("WorkgroupDetail — pipelines", () => {
     mockHost();
     render(<WorkgroupDetail workgroup={PIPELINE_WG} profiles={PROFILES} connectionId="casa" />);
 
-    await waitFor(() => expect(screen.getByText("Pipelines")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Pipelines" })).toBeInTheDocument());
     expect(invoke).not.toHaveBeenCalledWith("workgroup_tasks", expect.anything());
     expect(invoke).not.toHaveBeenCalledWith("workgroup_trigger", expect.anything());
   });
@@ -127,7 +143,7 @@ describe("WorkgroupDetail — pipelines", () => {
       />,
     );
 
-    await waitFor(() => expect(screen.getByText("Pipelines")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Pipelines" })).toBeInTheDocument());
     expect(
       screen.getByText("nothing starts on its own — every chain awaits a trigger"),
     ).toBeInTheDocument();
@@ -144,7 +160,7 @@ describe("WorkgroupDetail — pipelines", () => {
       />,
     );
 
-    await waitFor(() => expect(screen.getByText("Pipelines")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Pipelines" })).toBeInTheDocument());
     expect(screen.getByText("no pipeline (deliberation workgroup)")).toBeInTheDocument();
   });
 
@@ -164,7 +180,7 @@ describe("WorkgroupDetail — pipelines", () => {
       />,
     );
 
-    await waitFor(() => expect(screen.getByText("Pipelines")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Pipelines" })).toBeInTheDocument());
     expect(screen.getByText(/retired pipeline shape/)).toBeInTheDocument();
     expect(screen.getByText(/relaunch it from its recipe/)).toBeInTheDocument();
     expect(screen.queryByText("no pipeline (deliberation workgroup)")).toBeNull();
@@ -174,7 +190,7 @@ describe("WorkgroupDetail — pipelines", () => {
     mockHost();
     render(<WorkgroupDetail workgroup={PIPELINE_WG} profiles={PROFILES} connectionId="casa" />);
 
-    await waitFor(() => expect(screen.getByText("Pipelines")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Pipelines" })).toBeInTheDocument());
     fireEvent.change(screen.getAllByRole("textbox")[0], { target: { value: "new brief" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
@@ -198,7 +214,7 @@ describe("WorkgroupDetail — pipelines", () => {
       />,
     );
 
-    await waitFor(() => expect(screen.getByText("Pipelines")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Pipelines" })).toBeInTheDocument());
     expect(within(pipelineRow("media-update")).getByText("#media-qa")).toBeInTheDocument();
     expect(within(pipelineSection()).queryAllByRole("button")).toHaveLength(0);
   });
@@ -213,7 +229,7 @@ describe("WorkgroupDetail — pipelines", () => {
       />,
     );
 
-    await waitFor(() => expect(screen.getByText("Pipelines")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Pipelines" })).toBeInTheDocument());
     expect(
       screen.getByText("nothing starts on its own — every chain awaits a trigger"),
     ).toBeInTheDocument();

@@ -39,7 +39,6 @@ export default function AlpiPicker({ profiles, activeAlpi, onChange, variant = "
         <Button
           type="button"
           variant="ghost"
-          className={styles.trigger}
           onClick={() => setOpen((o) => !o)}
         >
           {active && <Diamond color={active.accent} />}

@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useState } from "react";
 
 import CodeView from "../primitives/CodeView.jsx";
 import IconBtn from "../primitives/IconBtn.jsx";
+import Reasoning from "../primitives/Reasoning.jsx";
 import Reveal from "../primitives/Reveal.jsx";
 import Tip from "../primitives/Tip.jsx";
 import { CaretIcon, CopyIcon, Icon } from "../primitives/icons.jsx";
@@ -116,60 +117,86 @@ export const ToolStep = memo(function ToolStep({ tool, accent, open: openProp, o
   );
 });
 
-export const ToolModule = memo(function ToolModule({ tools, accent }) {
+export const ProcessBlock = memo(function ProcessBlock({ entries, accent, thinking = false, answered = false }) {
   const [bucketChoice, setBucketChoice] = useState(null);
   const [overrides, setOverrides] = useState({});
   const setStep = useCallback((key, value) => setOverrides((prev) => ({ ...prev, [key]: value })), []);
-  if (!tools.length) return null;
-  const keyOf = (t, i) => t.tool_id ?? `${t.name}:${i}`;
-  const isOpen = (t, i) => overrides[keyOf(t, i)] ?? toolStatus(t) === "fail";
-  const step = (t, i) => (
+  const base = Array.isArray(entries) ? entries : [];
+  const list = thinking && !base[base.length - 1]?.tail
+    ? [...base, { kind: "reasoning", key: `r${base.filter((e) => e.kind === "reasoning").length}`, text: "", tail: true }]
+    : base;
+  if (!list.length) return null;
+  const isOpen = (e) => overrides[e.key] ?? toolStatus(e.tool) === "fail";
+  const row = (e) => (e.kind === "tool" ? (
     <ToolStep
-      key={keyOf(t, i)}
-      tool={t}
+      key={e.key}
+      tool={e.tool}
       accent={accent}
-      open={isOpen(t, i)}
-      onToggle={(value) => setStep(keyOf(t, i), value)}
+      open={isOpen(e)}
+      onToggle={(value) => setStep(e.key, value)}
     />
-  );
+  ) : (
+    <Reasoning
+      key={e.key}
+      text={e.text}
+      seconds={e.seconds}
+      timeline={e.timeline}
+      streaming={thinking && !!e.tail}
+      answered={answered}
+    />
+  ));
 
-  if (tools.length === 1) {
-    return <div className={styles.module}>{step(tools[0], 0)}</div>;
+  const toolAt = list.flatMap((e, i) => (e.kind === "tool" ? [i] : []));
+  if (toolAt.length < 2) {
+    return <div className={styles.module}>{list.map(row)}</div>;
   }
 
-  const runningIdx = tools.findIndex((t) => t.ok == null);
-  const active = runningIdx >= 0;
-  const bucket = tools.map((t, i) => [t, i]).filter(([, i]) => i !== runningIdx);
-  const n = bucket.length;
+  const first = toolAt[0];
+  const last = toolAt[toolAt.length - 1];
+  const runningAt = toolAt.find((i) => list[i].tool.ok == null);
+  const active = runningAt !== undefined;
+  const live = new Set();
+  if (active) {
+    live.add(runningAt);
+    if (runningAt - 1 > first && list[runningAt - 1].kind === "reasoning") live.add(runningAt - 1);
+  }
+  const bucket = [];
+  for (let i = first; i <= last; i += 1) if (!live.has(i)) bucket.push(list[i]);
+  const bucketTools = bucket.filter((e) => e.kind === "tool");
+  const n = bucketTools.length;
   const noun = pluralize(n, "tool call");
-  const failed = bucket.filter(([t]) => toolStatus(t) === "fail").length;
-  const expanded = bucketChoice ?? bucket.some(([t, i]) => isOpen(t, i));
-  const collapsedLabel = active ? `+${n} previous ${noun}` : `${n} ${noun}`;
+  const failed = bucketTools.filter((e) => toolStatus(e.tool) === "fail").length;
+  const expanded = bucketChoice ?? bucketTools.some(isOpen);
+  const thoughts = bucket.filter((e) => e.kind === "reasoning").length;
+  const thoughtNote = thoughts ? ` · ${thoughts} ${pluralize(thoughts, "thought")}` : "";
+  const collapsedLabel = `${active ? `+${n} previous ${noun}` : `${n} ${noun}`}${thoughtNote}`;
   const expandedLabel = active ? "Hide previous tool calls" : "Hide tool calls";
   return (
     <div className={styles.module}>
-      <button
-        type="button"
-        className={styles.bucket}
-        onClick={() => setBucketChoice(!expanded)}
-        aria-expanded={expanded}
-        aria-label={expanded ? expandedLabel : `Show ${collapsedLabel.replace(/^\+/, "")}`}
-      >
-        <CaretIcon size={12} className={`${styles.bucketChev} ${expanded ? styles.bucketChevOpen : ""}`} />
-        <span className={styles.bucketLabel}>{expanded ? expandedLabel : collapsedLabel}</span>
-        {failed > 0 && (
-          <span className={styles.bucketFailed}>
-            <Icon name="triangle-alert" size={13} color="var(--c-danger)" />
-            {failed} failed
-          </span>
-        )}
-      </button>
-      <Reveal open={expanded}>
-        <div className={styles.bucketList}>
-          {bucket.map(([t, i]) => step(t, i))}
-        </div>
-      </Reveal>
-      {active && step(tools[runningIdx], runningIdx)}
+      {list.slice(0, first).map(row)}
+      <div className={styles.group}>
+        <button
+          type="button"
+          className={styles.bucket}
+          onClick={() => setBucketChoice(!expanded)}
+          aria-expanded={expanded}
+          aria-label={expanded ? expandedLabel : `Show ${collapsedLabel.replace(/^\+/, "")}`}
+        >
+          <CaretIcon size={14} className={`${styles.bucketChev} ${expanded ? styles.bucketChevOpen : ""}`} />
+          <span className={styles.bucketLabel}>{expanded ? expandedLabel : collapsedLabel}</span>
+          {failed > 0 && (
+            <span className={styles.bucketFailed}>
+              <Icon name="triangle-alert" size={12} color="var(--c-danger)" />
+              {failed} failed
+            </span>
+          )}
+        </button>
+        <Reveal open={expanded} className={styles.bucketReveal}>
+          <div className={styles.bucketList}>{bucket.map(row)}</div>
+        </Reveal>
+      </div>
+      {[...live].sort((a, b) => a - b).map((i) => row(list[i]))}
+      {list.slice(last + 1).map(row)}
     </div>
   );
 });

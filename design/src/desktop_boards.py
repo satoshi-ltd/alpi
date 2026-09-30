@@ -1,4 +1,4 @@
-from gen import ALPI_ACCENT, DANGER, DOC_ACCENT, PROFILES, diamond, ic, mix, page, usage_chart
+from gen import button_heights, ALPI_ACCENT, DANGER, DOC_ACCENT, PROFILES, diamond, ic, mix, page, usage_chart
 
 INK, INK2, INK3, INK4 = "#0b1117", "#3d4955", "#626e7d", "#b1bac4"
 LINE, LINE2, HOVER, SELECTED = "rgba(11,17,23,0.07)", "rgba(11,17,23,0.14)", "rgba(11,17,23,0.04)", "rgba(11,17,23,0.06)"
@@ -18,7 +18,7 @@ def iconbtn(name, label, size=28, icon=16, color=INK2):
 
 
 def button(label, variant="ghost", size="md", icon=None, icon_only=False):
-    h = {"sm": 24, "md": 28, "lg": 32, "hero": 40}[size]
+    h = button_heights("desktop")[size]
     fs = {"sm": 12, "md": 13, "lg": 13, "hero": 13}[size]
     padx = {"sm": 10, "md": 12, "lg": 14, "hero": 20}[size]
     if variant == "primary":
@@ -54,7 +54,7 @@ def key_hint(hint):
 
 
 STATE_TEXT = {"needs-you": "needs you", "failed": "failed", "working": "working"}
-STATE_COLOR = {"needs-you": "#8a5a0a", "failed": DANGER, "working": ALPI_ACCENT}
+STATE_COLOR = {"needs-you": "#b3470e", "failed": DANGER, "working": ALPI_ACCENT}
 
 
 def state_chip(state):
@@ -273,18 +273,16 @@ def kbd(t):
 
 
 def desktop_chat():
-    from conversation_boards import d_assistant, d_composer, d_step, d_user, inline_request, thought
+    from conversation_boards import d_assistant, d_composer, d_step, d_user, inline_request, process, thought
     meta = (f'{mono12("deepseek-v4.1-flash")}{SEP}{meterchip("24K", "/1.0M", 0.024, DOC_ACCENT)}{SEP}{meterchip("$0.00", "/$1.00", 0, DOC_ACCENT)}')
     actions = (f'{button("Sessions", "ghost", "md")}{ic("chev-d", 12, INK2)}'.replace('</button>' + ic("chev-d", 12, INK2), ic("chev-d", 12, INK2) + '</button>')
                + f'<span style="display: inline-flex; align-items: flex-end; gap: 2px; height: 18px; padding: 0 4px">' + ''.join(f'<span style="width: 2px; height: {h}px; border-radius: 1px; background: {INK3}"></span>' for h in (6, 12, 8, 14, 7)) + '</span>'
                + iconbtn("more", "More"))
     header = d_hero(h1("doc", diamond(DOC_ACCENT, 14)), meta, actions, DOC_ACCENT)
     turn = lambda *parts: f'<div style="display: flex; flex-direction: column; gap: 10px">{"".join(parts)}</div>'
-    steps = lambda *parts: f'<div style="display: flex; flex-direction: column; gap: 6px">{"".join(parts)}</div>'
     first = turn(
         d_user("Pull my last three lipid panels and tell me what moved.", DOC_ACCENT),
-        thought(),
-        steps(d_step("memory", "lipid panels · 3 results", "0.4s"), d_step("read_file", "labs/2026-08-lipids.pdf", "0.3s")),
+        process(thought(secs="4s"), d_step("memory", "lipid panels · 3 results", "0.4s"), d_step("read_file", "labs/2026-08-lipids.pdf", "0.3s")),
         d_assistant("Triglycerides moved most: <strong>142 → 88 mg/dL</strong> since March. LDL-P eased to 1,180 nmol/L; HDL held at 68.", hover=False),
     )
     second = turn(
@@ -305,6 +303,7 @@ def desktop_chat():
     return page("Desktop · chat", 1280, 800, body, bg=BG)
 
 
+WG_SECTIONS = ("Overview", "Budget", "Usage", "Briefing", "Pipelines", "Members", "Invitations", "Danger zone")
 PROFILE_SECTIONS = ("Overview", "Usage", "Service", "ALP", "Sandbox", "Voice", "MCP Servers", "Email", "Storage", "Danger Zone")
 
 
@@ -389,7 +388,7 @@ def desktop_wg_settings():
 {d_sidebar(1760, selected="", settings_mode=True, wg_selected=True)}
 <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; background: {PANE}">
 <div style="height: 2px; background: {LINE}"></div>
-{hero}{d_body(inner)}
+{hero}{railed_body(settings_rail(WG_SECTIONS), inner)}
 </div>
 </div>
 """

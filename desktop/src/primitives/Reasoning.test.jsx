@@ -22,9 +22,38 @@ describe("Reasoning", () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it("streaming shows the Thinking label even before any trace text", () => {
+  it("streaming with no trace yet is a polite live status, not a dead button", () => {
     render(<Reasoning text="" streaming />);
-    expect(screen.getByRole("button").textContent).toContain("Thinking…");
+    expect(screen.queryByRole("button")).toBeNull();
+    const status = screen.getByRole("status");
+    expect(status).toHaveAttribute("aria-live", "polite");
+    expect(status.textContent).toContain("Thinking…");
+  });
+
+  it("each row is named by its visible label and carries state in aria-expanded", () => {
+    render(<Reasoning text="plan" seconds={3} />);
+    const btn = screen.getByRole("button", { name: "Thought for 3s" });
+    expect(btn).not.toHaveAttribute("aria-label");
+    expect(btn).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("a stored span with seconds but no text still shows its row, without a toggle", () => {
+    render(<Reasoning text="" seconds={4} />);
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.getByText("Thought for 4s")).toBeTruthy();
+  });
+
+  it("the merged legacy row lays its trace out with tool markers between segments", () => {
+    const timeline = [
+      { kind: "text", text: "read the log" },
+      { kind: "tools", names: ["read_file"] },
+      { kind: "text", text: "now summarize" },
+    ];
+    const { container } = render(<Reasoning text={"read the log\n\nnow summarize"} seconds={3} timeline={timeline} />);
+    fireEvent.click(screen.getByRole("button"));
+    const text = container.textContent;
+    expect(text.indexOf("read the log")).toBeLessThan(text.indexOf("read_file"));
+    expect(text.indexOf("read_file")).toBeLessThan(text.indexOf("now summarize"));
   });
 
   it("streaming peeks the latest line while collapsed and expands to the full trace", () => {
@@ -71,16 +100,9 @@ describe("Reasoning", () => {
     expect(screen.getByRole("button")).toHaveAttribute("aria-expanded", "false");
   });
 
-  it("lays the trace out in order with the tool steps between segments", () => {
-    const timeline = [
-      { kind: "text", text: "read the log" },
-      { kind: "tools", names: ["read_file"] },
-      { kind: "text", text: "now summarize" },
-    ];
-    const { container } = render(<Reasoning text="read the log\n\nnow summarize" seconds={3} timeline={timeline} />);
+  it("opens to this span's own text only", () => {
+    const { container } = render(<Reasoning text={"read the log\n\nnow summarize"} seconds={3} />);
     fireEvent.click(screen.getByRole("button"));
-    const text = container.textContent;
-    expect(text.indexOf("read the log")).toBeLessThan(text.indexOf("read_file"));
-    expect(text.indexOf("read_file")).toBeLessThan(text.indexOf("now summarize"));
+    expect([...container.querySelectorAll("p")].map((p) => p.textContent)).toEqual(["read the log", "now summarize"]);
   });
 });

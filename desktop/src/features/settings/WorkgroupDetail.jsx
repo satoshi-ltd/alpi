@@ -20,6 +20,7 @@ import { useWorkgroupUsageDaily } from "../../hooks/useUsage.js";
 import { useSwrValue } from "../../hooks/useSwrValue.js";
 import { createSwrCache } from "../../lib/swr-cache.js";
 import Usage from "./Usage.jsx";
+import SettingsNav from "./SettingsNav.jsx";
 import styles from "./Settings.module.css";
 import { shortPubkey } from "../../lib/pubkey.js";
 import { emptyLine } from "../../../../common/emptyCopy.mjs";
@@ -92,6 +93,7 @@ export default function WorkgroupDetail({
   const [briefing, setBriefing] = useState(workgroup.briefing ?? "");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const briefingTimer = useRef(null);
+  const bodyRef = useRef(null);
   const notify = useNotify();
 
   useEffect(() => {
@@ -289,328 +291,329 @@ export default function WorkgroupDetail({
           label="Fetching latest workgroup settings"
         />
       </div>
-      <div className={styles.body}>
-        {/* Overview — Hub / Status / ID (3 rows, per v2 §8 canonical) */}
-        <Section title="Overview">
-          <Row label="hub">
-            <span className={styles.inlineRow}>
-              <Diamond color={hub?.accent} />
-              <span className={styles.mono}>@{profileLabel(hubName)}</span>
-            </span>
-          </Row>
-          <Row label="status">
-            <span className={styles.inlineRow}>
-              {workgroup.paused ? (
-                <Chip state="off" activity={busyAction === "resume"}>paused</Chip>
-              ) : (
-                <Chip state="on" activity={busyAction === "pause"}>active</Chip>
-              )}
-              {workgroup.is_hub ? (
-                workgroup.paused ? (
-                  <Button size="sm" onClick={() => act("resume")} disabled={busy}>
-                    Resume
-                  </Button>
-                ) : (
-                  <Button size="sm" onClick={() => act("pause")} disabled={busy}>
-                    Pause
-                  </Button>
-                )
-              ) : (
-                <ConfirmDeleteAction
-                  label="Leave"
-                  title={`Leave workgroup #${workgroup.name || workgroup.id}?`}
-                  consequence="Your subscription is removed and you stop receiving messages. The hub can re-invite you later."
-                  confirmLabel="Leave"
-                  disabled={busy}
-                  loading={busyAction === "leave"}
-                  onConfirm={() => act("leave")}
-                />
-              )}
-            </span>
-          </Row>
-          {workgroup.is_hub && (
-            <Row label="auto-read">
+      <div ref={bodyRef} className={styles.body}>
+        <SettingsNav scrollRef={bodyRef}>
+          <Section title="Overview">
+            <Row label="hub">
               <span className={styles.inlineRow}>
-                <Chip
-                  state={autoRead ? "on" : "off"}
-                  tooltip="reads agents' automatic messages aloud — never your directives"
-                >
-                  {autoRead ? "on" : "off"}
-                </Chip>
-                <Button
-                  size="sm"
-                  onClick={() => setAutoRead(!autoRead)}
-                  disabled={autoReadBusy}
-                  loading={autoReadBusy}
-                >
-                  {autoRead ? "Disable" : "Enable"}
-                </Button>
+                <Diamond color={hub?.accent} />
+                <span className={styles.mono}>@{profileLabel(hubName)}</span>
               </span>
             </Row>
-          )}
-          <Row label="id">
-            <span className={styles.inlineRow}>
-              <span className={styles.mono}>{workgroup.id}</span>
-              <CopyButton value={workgroup.id} message="Workgroup id copied" />
-            </span>
-          </Row>
-        </Section>
-
-        {/* Budget — hero metric ($X.XX display 28 + sublabel + Edit cap) + bar.
-            1:1 with v2 §8 Budget section in WorkgroupDetail. */}
-        <Section title="Budget" tooltip="workgroup spend cap">
-          <Row label="used" alignTop>
-            <div className={styles.budgetHero}>
-              <div className={styles.budgetHeroLine}>
-                <span className={`${styles.budgetUsed} tnum`}>
-                  ${(workgroup.spent_usd ?? 0).toFixed(2)}
-                </span>
-                {workgroup.budget_usd != null ? (
-                  <Mono className={styles.budgetCap}>
-                    of{" "}
-                    <span className={`tnum ${styles.budgetCapValue}`}>
-                      ${workgroup.budget_usd.toFixed(2)}
-                    </span>{" "}
-                    ·{" "}
-                    {Math.round(
-                      (workgroup.spent_usd ?? 0) / workgroup.budget_usd * 100,
-                    )}
-                    %
-                  </Mono>
+            <Row label="status">
+              <span className={styles.inlineRow}>
+                {workgroup.paused ? (
+                  <Chip state="off" activity={busyAction === "resume"}>paused</Chip>
                 ) : (
-                  <Mono className={styles.budgetCap}>no cap</Mono>
+                  <Chip state="on" activity={busyAction === "pause"}>active</Chip>
                 )}
-                <span className={styles.budgetSpacer} />
-                {workgroup.is_hub && (
-                  <BudgetEdit
-                    value={workgroup.budget_usd}
-                    label="Lifetime USD cap"
-                    align="right"
-                    triggerLabel={workgroup.budget_usd != null ? "Edit cap" : "Set cap"}
-                    onSave={async (next) => {
-                      try {
-                        await invoke("workgroup_update", {
-                          profile: workgroup.profile,
-                          wgId: workgroup.id,
-                          budgetUsd: next,
-                          clearBudget: next === null,
-                          ...(connectionId ? { connectionId } : {}),
-                        });
-                        await onSaved?.();
-                      } catch (e) {
-                        notify({
-                          message: `budget: ${String(e)}`,
-                          variant: "error",
-                          duration: 4000,
-                        });
-                        throw e;
-                      }
-                    }}
+                {workgroup.is_hub ? (
+                  workgroup.paused ? (
+                    <Button size="sm" onClick={() => act("resume")} disabled={busy}>
+                      Resume
+                    </Button>
+                  ) : (
+                    <Button size="sm" onClick={() => act("pause")} disabled={busy}>
+                      Pause
+                    </Button>
+                  )
+                ) : (
+                  <ConfirmDeleteAction
+                    label="Leave"
+                    title={`Leave workgroup #${workgroup.name || workgroup.id}?`}
+                    consequence="Your subscription is removed and you stop receiving messages. The hub can re-invite you later."
+                    confirmLabel="Leave"
+                    disabled={busy}
+                    loading={busyAction === "leave"}
+                    onConfirm={() => act("leave")}
                   />
                 )}
-              </div>
-              {workgroup.budget_usd != null && (
-                <div className={styles.budgetBar}>
-                  <div
-                    className={styles.budgetBarFill}
-                    style={{
-                      width: `${Math.min(
-                        100,
-                        ((workgroup.spent_usd ?? 0) / workgroup.budget_usd) * 100,
-                      )}%`,
-                      background: hub?.accent || "var(--accent)",
-                    }}
-                  />
-                </div>
-              )}
-            </div>
-          </Row>
-        </Section>
-
-        {usage.days.length > 0 && (
-          <Section title="Usage" kicker="last 14 days">
-            <Usage
-              days={usage.days}
-              accent={hub?.accent || "var(--accent)"}
-            />
+              </span>
+            </Row>
+            {workgroup.is_hub && (
+              <Row label="auto-read">
+                <span className={styles.inlineRow}>
+                  <Chip
+                    state={autoRead ? "on" : "off"}
+                    tooltip="reads agents' automatic messages aloud — never your directives"
+                  >
+                    {autoRead ? "on" : "off"}
+                  </Chip>
+                  <Button
+                    size="sm"
+                    onClick={() => setAutoRead(!autoRead)}
+                    disabled={autoReadBusy}
+                    loading={autoReadBusy}
+                  >
+                    {autoRead ? "Disable" : "Enable"}
+                  </Button>
+                </span>
+              </Row>
+            )}
+            <Row label="id">
+              <span className={styles.inlineRow}>
+                <span className={styles.mono}>{workgroup.id}</span>
+                <CopyButton value={workgroup.id} message="Workgroup id copied" />
+              </span>
+            </Row>
           </Section>
-        )}
 
-        {/* Briefing — textarea with draft tag pattern (v2 §12.5). */}
-        <Section title="Briefing" tooltip="what this workgroup decides">
-          <Row label="brief" alignTop>
-            {workgroup.is_hub ? (
-              <div className={styles.briefingWrap}>
-                <Textarea
-                  className={styles.textarea}
-                  rows={4}
-                  value={briefing}
-                  onChange={(e) => updateBriefing(e.target.value)}
-                  placeholder="what is this workgroup about? who does what?"
-                />
-                {briefingDirty && (
-                  <div className={styles.draftRow}>
-                    <span className={styles.draftTag}>draft</span>
-                    <ActionLink
-                      onClick={discardBriefing}
-                    >
-                      Discard
-                    </ActionLink>
-                    <ActionLink
-                      onClick={saveBriefing}
-                    >
-                      Save
-                    </ActionLink>
+          {/* Budget — hero metric ($X.XX display 28 + sublabel + Edit cap) + bar.
+              1:1 with v2 §8 Budget section in WorkgroupDetail. */}
+          <Section title="Budget" tooltip="workgroup spend cap">
+            <Row label="used" alignTop>
+              <div className={styles.budgetHero}>
+                <div className={styles.budgetHeroLine}>
+                  <span className={`${styles.budgetUsed} tnum`}>
+                    ${(workgroup.spent_usd ?? 0).toFixed(2)}
+                  </span>
+                  {workgroup.budget_usd != null ? (
+                    <Mono className={styles.budgetCap}>
+                      of{" "}
+                      <span className={`tnum ${styles.budgetCapValue}`}>
+                        ${workgroup.budget_usd.toFixed(2)}
+                      </span>{" "}
+                      ·{" "}
+                      {Math.round(
+                        (workgroup.spent_usd ?? 0) / workgroup.budget_usd * 100,
+                      )}
+                      %
+                    </Mono>
+                  ) : (
+                    <Mono className={styles.budgetCap}>no cap</Mono>
+                  )}
+                  <span className={styles.budgetSpacer} />
+                  {workgroup.is_hub && (
+                    <BudgetEdit
+                      value={workgroup.budget_usd}
+                      label="Lifetime USD cap"
+                      align="right"
+                      triggerLabel={workgroup.budget_usd != null ? "Edit cap" : "Set cap"}
+                      onSave={async (next) => {
+                        try {
+                          await invoke("workgroup_update", {
+                            profile: workgroup.profile,
+                            wgId: workgroup.id,
+                            budgetUsd: next,
+                            clearBudget: next === null,
+                            ...(connectionId ? { connectionId } : {}),
+                          });
+                          await onSaved?.();
+                        } catch (e) {
+                          notify({
+                            message: `budget: ${String(e)}`,
+                            variant: "error",
+                            duration: 4000,
+                          });
+                          throw e;
+                        }
+                      }}
+                    />
+                  )}
+                </div>
+                {workgroup.budget_usd != null && (
+                  <div className={styles.budgetBar}>
+                    <div
+                      className={styles.budgetBarFill}
+                      style={{
+                        width: `${Math.min(
+                          100,
+                          ((workgroup.spent_usd ?? 0) / workgroup.budget_usd) * 100,
+                        )}%`,
+                        background: hub?.accent || "var(--accent)",
+                      }}
+                    />
                   </div>
                 )}
               </div>
-            ) : workgroup.briefing ? (
-              <pre className={styles.briefing}>{workgroup.briefing}</pre>
-            ) : (
-              <span className={styles.muted}>no briefing yet</span>
-            )}
-          </Row>
-        </Section>
-
-        <Section title="Pipelines" tooltip="declared chains the hub runs">
-          {pipelineEntries.map(([key, chain]) => (
-            <Row key={key} label={key} alignTop>
-              <div className={styles.stagesRow}>
-                {key === launchPipeline && <Chip size="sm" state="on">launch</Chip>}
-                <PipelineStages phases={chain} />
-              </div>
             </Row>
-          ))}
-          {pipelineEntries.length > 0 && !launchPipeline && (
-            <Row label="no launch" alignTop>
-              <span className={styles.muted}>
-                nothing starts on its own — every chain awaits a trigger
-              </span>
-            </Row>
-          )}
-          {pipelineEntries.length === 0 && (
-            <Row label="stages" alignTop>
-              <span className={styles.muted}>
-                {workgroup.needs_relaunch
-                  ? "retired pipeline shape — the daemon skips this workgroup; relaunch it from its recipe"
-                  : "no pipeline (deliberation workgroup)"}
-              </span>
-            </Row>
-          )}
-        </Section>
+          </Section>
 
-        <Section title="Members" kicker={members ? `${members.filter((m) => m.joined).length} profiles` : null} alignTop>
-          {membersFailed ? (
-            <LoadFailed inline label="members" onRetry={reloadMembers} />
-          ) : members === null ? (
-            <>
-              <Skeleton width="220px" />
-              <Skeleton width="180px" />
-            </>
-          ) : members.filter((m) => m.joined).length === 0 ? (
-            <span className={styles.muted}>{emptyLine("members")}</span>
-          ) : (
-            members
-              .filter((m) => m.joined)
-              .map((m) =>
-                renderMemberRow(m, profiles, workgroup, hub?.pubkey_b64, (target) =>
-                  act("kick", target.pubkey),
-                ),
-              )
+          {usage.days.length > 0 && (
+            <Section title="Usage" kicker="last 14 days">
+              <Usage
+                days={usage.days}
+                accent={hub?.accent || "var(--accent)"}
+              />
+            </Section>
           )}
-          {workgroup.is_hub && members && (() => {
-            const memberPubkeys = new Set(members.map((m) => m.pubkey));
-            const candidates = (hub?.peers ?? []).filter(
-              (p) => !memberPubkeys.has(p.pubkey),
-            );
-            if (candidates.length === 0) return null;
-            return (
-              <Row label="add">
-                <Dropdown
-                  trigger={{ label: "Add member…" }}
-                  direction="down"
-                  align="left"
-                  width={300}
-                  variant="field"
-                >
-                  {({ close }) => (
-                    <>
-                      {candidates.map((p) => {
-                        const local = profiles.find(
-                          (x) => x.pubkey_b64 === p.pubkey,
-                        );
-                        const label = `@${p.alias || p.id}`;
-                        return (
-                          <Dropdown.Row
-                            key={p.id}
-                            caption={shortPubkey(p.pubkey)}
-                            leading={<Diamond color={local?.accent} />}
-                            onClick={() => {
-                              close();
-                              addMember(p.id, label);
-                            }}
-                          >
-                            {label}
-                          </Dropdown.Row>
-                        );
-                      })}
-                    </>
-                  )}
-                </Dropdown>
-              </Row>
-            );
-          })()}
-        </Section>
 
-        {members && members.some((m) => !m.joined) && (
-          <Section title="Invitations" tooltip="pending member invites" alignTop>
-            {workgroup.is_hub && (
-              <Row label="join command" alignTop>
-                <span className={styles.inlineRow}>
-                  <code className={styles.mono}>
-                    alpi workgroup join {hubName} {workgroup.id}
-                  </code>
-                  <CopyButton
-                    value={`alpi workgroup join ${hubName} ${workgroup.id}`}
-                    message="Join command copied"
+          {/* Briefing — textarea with draft tag pattern (v2 §12.5). */}
+          <Section title="Briefing" tooltip="what this workgroup decides">
+            <Row label="brief" alignTop>
+              {workgroup.is_hub ? (
+                <div className={styles.briefingWrap}>
+                  <Textarea
+                    className={styles.textarea}
+                    rows={4}
+                    value={briefing}
+                    onChange={(e) => updateBriefing(e.target.value)}
+                    placeholder="what is this workgroup about? who does what?"
                   />
+                  {briefingDirty && (
+                    <div className={styles.draftRow}>
+                      <span className={styles.draftTag}>draft</span>
+                      <ActionLink
+                        onClick={discardBriefing}
+                      >
+                        Discard
+                      </ActionLink>
+                      <ActionLink
+                        onClick={saveBriefing}
+                      >
+                        Save
+                      </ActionLink>
+                    </div>
+                  )}
+                </div>
+              ) : workgroup.briefing ? (
+                <pre className={styles.briefing}>{workgroup.briefing}</pre>
+              ) : (
+                <span className={styles.muted}>no briefing yet</span>
+              )}
+            </Row>
+          </Section>
+
+          <Section title="Pipelines" tooltip="declared chains the hub runs">
+            {pipelineEntries.map(([key, chain]) => (
+              <Row key={key} label={key} alignTop>
+                <div className={styles.stagesRow}>
+                  {key === launchPipeline && <Chip size="sm" state="on">launch</Chip>}
+                  <PipelineStages phases={chain} />
+                </div>
+              </Row>
+            ))}
+            {pipelineEntries.length > 0 && !launchPipeline && (
+              <Row label="no launch" alignTop>
+                <span className={styles.muted}>
+                  nothing starts on its own — every chain awaits a trigger
                 </span>
               </Row>
             )}
-            {members
-              .filter((m) => !m.joined)
-              .map((m) => renderMemberRow(m, profiles, workgroup, hub?.pubkey_b64))}
+            {pipelineEntries.length === 0 && (
+              <Row label="stages" alignTop>
+                <span className={styles.muted}>
+                  {workgroup.needs_relaunch
+                    ? "retired pipeline shape — the daemon skips this workgroup; relaunch it from its recipe"
+                    : "no pipeline (deliberation workgroup)"}
+                </span>
+              </Row>
+            )}
           </Section>
-        )}
 
-        {workgroup.is_hub && (
-          <Section title="Danger zone">
-            <Row label="delete">
-              <ActionLink
-                danger
-                onClick={() => setDeleteOpen(true)}
-                disabled={busy}
-              >
-                Delete workgroup…
-              </ActionLink>
-              <ConfirmDelete
-                open={deleteOpen}
-                onClose={() => setDeleteOpen(false)}
-                onConfirm={() => act("remove")}
-                title={`Delete workgroup #${workgroup.name || workgroup.id}`}
-                consequence={
-                  <>
-                    This removes the channel and all thread history, tasks, and
-                    decisions. Members keep their own copies of past messages.
-                    This action <strong>cannot be undone</strong>.
-                  </>
-                }
-                typeToConfirm={workgroup.name || workgroup.id}
-                confirmLabel="Delete workgroup"
-              />
-            </Row>
+          <Section title="Members" kicker={members ? `${members.filter((m) => m.joined).length} profiles` : null} alignTop>
+            {membersFailed ? (
+              <LoadFailed inline label="members" onRetry={reloadMembers} />
+            ) : members === null ? (
+              <>
+                <Skeleton width="220px" />
+                <Skeleton width="180px" />
+              </>
+            ) : members.filter((m) => m.joined).length === 0 ? (
+              <span className={styles.muted}>{emptyLine("members")}</span>
+            ) : (
+              members
+                .filter((m) => m.joined)
+                .map((m) =>
+                  renderMemberRow(m, profiles, workgroup, hub?.pubkey_b64, (target) =>
+                    act("kick", target.pubkey),
+                  ),
+                )
+            )}
+            {workgroup.is_hub && members && (() => {
+              const memberPubkeys = new Set(members.map((m) => m.pubkey));
+              const candidates = (hub?.peers ?? []).filter(
+                (p) => !memberPubkeys.has(p.pubkey),
+              );
+              if (candidates.length === 0) return null;
+              return (
+                <Row label="add">
+                  <Dropdown
+                    trigger={{ label: "Add member…" }}
+                    direction="down"
+                    align="left"
+                    width={300}
+                    variant="field"
+                  >
+                    {({ close }) => (
+                      <>
+                        {candidates.map((p) => {
+                          const local = profiles.find(
+                            (x) => x.pubkey_b64 === p.pubkey,
+                          );
+                          const label = `@${p.alias || p.id}`;
+                          return (
+                            <Dropdown.Row
+                              key={p.id}
+                              caption={shortPubkey(p.pubkey)}
+                              leading={<Diamond color={local?.accent} />}
+                              onClick={() => {
+                                close();
+                                addMember(p.id, label);
+                              }}
+                            >
+                              {label}
+                            </Dropdown.Row>
+                          );
+                        })}
+                      </>
+                    )}
+                  </Dropdown>
+                </Row>
+              );
+            })()}
           </Section>
-        )}
+
+          {members && members.some((m) => !m.joined) && (
+            <Section title="Invitations" tooltip="pending member invites" alignTop>
+              {workgroup.is_hub && (
+                <Row label="join command" alignTop>
+                  <span className={styles.inlineRow}>
+                    <code className={styles.mono}>
+                      alpi workgroup join {hubName} {workgroup.id}
+                    </code>
+                    <CopyButton
+                      value={`alpi workgroup join ${hubName} ${workgroup.id}`}
+                      message="Join command copied"
+                    />
+                  </span>
+                </Row>
+              )}
+              {members
+                .filter((m) => !m.joined)
+                .map((m) => renderMemberRow(m, profiles, workgroup, hub?.pubkey_b64))}
+            </Section>
+          )}
+
+          {workgroup.is_hub && (
+            <Section title="Danger zone">
+              <Row label="delete">
+                <ActionLink
+                  danger
+                  onClick={() => setDeleteOpen(true)}
+                  disabled={busy}
+                >
+                  Delete workgroup…
+                </ActionLink>
+                <ConfirmDelete
+                  open={deleteOpen}
+                  onClose={() => setDeleteOpen(false)}
+                  onConfirm={() => act("remove")}
+                  title={`Delete workgroup #${workgroup.name || workgroup.id}`}
+                  consequence={
+                    <>
+                      This removes the channel and all thread history, tasks, and
+                      decisions. Members keep their own copies of past messages.
+                      This action <strong>cannot be undone</strong>.
+                    </>
+                  }
+                  typeToConfirm={workgroup.name || workgroup.id}
+                  confirmLabel="Delete workgroup"
+                />
+              </Row>
+            </Section>
+          )}
+        </SettingsNav>
       </div>
     </main>
   );

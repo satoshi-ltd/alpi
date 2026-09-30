@@ -76,14 +76,14 @@ describe("ChatPane — reasoning while streaming", () => {
 
   it("shows the Thinking label with a live peek while the model reasons", () => {
     render(pane({ sessionData: history, pendingTurn: { requestId: "r", user: "q", tools: [], assistantPreview: "", reasoningPreview: "reading the deploy log" } }));
-    const row = screen.getByRole("button", { name: "Expand reasoning" });
-    expect(row.textContent).toContain("Thinking…");
+    const row = screen.getByRole("button", { name: /Thinking…/ });
+    expect(row).toHaveAttribute("aria-expanded", "false");
     expect(row.textContent).toContain("reading the deploy log");
   });
 
   it("collapses to the Thought row once reasoning_done lands", () => {
     render(pane({ sessionData: history, pendingTurn: { requestId: "r", user: "q", tools: [], assistantPreview: "", reasoningPreview: "plan", reasoned_s: 7, reasoningDone: true } }));
-    expect(screen.getByRole("button", { name: "Expand reasoning" }).textContent).toContain("Thought for 7s");
+    expect(screen.getByRole("button", { name: "Thought for 7s" })).toHaveAttribute("aria-expanded", "false");
   });
 });
 

@@ -221,6 +221,20 @@ describe("useChatStream step timing and reasoning", () => {
     emit({ kind: "reasoning_done", seconds: 1 });
     expect(turnOf(result).reasoned_s).toBe(4.5);
   });
+
+  it("pins the span's seconds to the tool it led to and restarts the open span", async () => {
+    const { result } = mount();
+    await waitForListen();
+    seedTurn(result);
+    emit({ kind: "reasoning_delta", text: "plan it" });
+    emit({ kind: "reasoning_done", seconds: 3.5 });
+    emit({ kind: "tool_start", tool_id: "t1", name: "grep", args: {} });
+    expect(turnOf(result).tools[0].reasoned_s).toBe(3.5);
+    expect(turnOf(result).spanReasoned_s).toBe(0);
+    emit({ kind: "reasoning_delta", text: "again" });
+    emit({ kind: "reasoning_done", seconds: 1 });
+    expect(turnOf(result).spanReasoned_s).toBe(1);
+  });
 });
 
 describe("useChatStream concurrent turns", () => {
@@ -778,6 +792,35 @@ describe("useChatStream stall watchdog", () => {
     });
     expect(turnOf(result)).toBeNull();
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("a replay that holds a missed tool_start drops the stale reasoning preview", async () => {
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "chat_events_since") {
+        return {
+          exists: true,
+          events: [
+            { frame: { event: "session_start", session_id: "sess-1" } },
+            { frame: { event: "reasoning_delta", text: "check the log" } },
+            { frame: { event: "reasoning_done", seconds: 2 } },
+            { frame: { event: "tool_start", tool_id: "t1", name: "grep" } },
+          ],
+        };
+      }
+      return null;
+    });
+    const { result } = mount();
+    await waitForListen();
+    seedTurn(result, { sessionId: "sess-1" });
+    emit({ kind: "reasoning_delta", text: "check the log" });
+    await settle(60);
+    expect(turnOf(result).reasoningPreview).toBe("check the log");
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(12_000); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+
+    expect(turnOf(result).tools[0].reasoning).toBe("check the log");
+    expect(turnOf(result).reasoningPreview).toBe("");
   });
 
   it("if sidecar has no done frame, watchdog does NOT clear the turn", async () => {

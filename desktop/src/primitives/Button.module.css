@@ -3,7 +3,7 @@
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  height: var(--ctrl-sm);
+  height: var(--ctrl-md);
   padding: 0;
   border: 0;
   border-radius: var(--r-md);
@@ -56,7 +56,7 @@
 }
 
 .iconOnly {
-  width: var(--ctrl-sm);
+  width: var(--ctrl-md);
 }
 
 .ghost:not(:disabled):hover {
@@ -95,7 +95,7 @@
 }
 
 .sm {
-  height: 24px;
+  height: var(--ctrl-sm);
   font-size: var(--fs-sm);
 }
 
@@ -125,11 +125,11 @@
 }
 
 .sm.iconOnly {
-  width: 24px;
+  width: var(--ctrl-sm);
 }
 
 .lg {
-  height: var(--ctrl-md);
+  height: var(--ctrl-lg);
   font-size: var(--text-ui);
 }
 
@@ -138,11 +138,11 @@
 }
 
 .lg.iconOnly {
-  width: var(--ctrl-md);
+  width: var(--ctrl-lg);
 }
 
 .hero {
-  height: var(--ctrl-lg);
+  height: var(--ctrl-xl);
   font-size: var(--text-ui);
 }
 
@@ -151,7 +151,7 @@
 }
 
 .hero.iconOnly {
-  width: var(--ctrl-lg);
+  width: var(--ctrl-xl);
 }
 
 .secondary {

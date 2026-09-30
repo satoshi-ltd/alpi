@@ -47,7 +47,7 @@ describe("ChatPane — a paused profile is read-only", () => {
 });
 
 describe("ChatPane — consolidated tool module and reasoning", () => {
-  it("shows the active tool, buckets the rest, and puts the reasoning chain below", () => {
+  it("puts reasoning that only followed the calls below the bucket", () => {
     const profile = { name: "a", model: "x/y" };
     const turn = {
       at: 0,
@@ -77,6 +77,67 @@ describe("ChatPane — consolidated tool module and reasoning", () => {
     const reasoningIdx = text.indexOf("Thought for 5s");
     expect(bucketIdx).toBeGreaterThanOrEqual(0);
     expect(reasoningIdx).toBeGreaterThan(bucketIdx);
+  });
+
+  it("puts reasoning that led the first call at the top of the process block", () => {
+    const profile = { name: "a", model: "x/y" };
+    const turn = {
+      at: 0,
+      user: "hi",
+      assistant: "answer",
+      reasoned_s: 5,
+      reasoning: "let me search",
+      tools: [
+        { name: "knowledge", args: { query: "x" }, tool_id: "t1", ok: true, at: 5, duration_s: 1, reasoning: "let me search" },
+        { name: "read_file", args: { path: "p" }, tool_id: "t2", ok: true, at: 8, duration_s: 1 },
+      ],
+    };
+    const { container } = render(
+      <ChatPane
+        view={{ kind: "profile", profile: profile.name, sessionId: "s1" }}
+        profiles={[profile]}
+        activeProfile={profile}
+        sessionData={{ turns: [turn], last_ctx_tokens: 0 }}
+        onSend={vi.fn()}
+        onRewriteMessage={vi.fn()}
+        onRetryMessage={vi.fn()}
+      />,
+    );
+    const text = container.textContent;
+    expect(text.indexOf("Thought for 5s")).toBeGreaterThanOrEqual(0);
+    expect(text.indexOf("Thought for 5s")).toBeLessThan(text.indexOf("2 tool calls"));
+    expect(text.indexOf("2 tool calls")).toBeLessThan(text.indexOf("answer"));
+  });
+
+  it("a reloaded turn shows each stored reasoning span where it happened", () => {
+    const profile = { name: "a", model: "x/y" };
+    const turn = {
+      at: 0,
+      user: "hi",
+      assistant: "answer",
+      reasoned_s: 20,
+      reasoning: "let me search\n\nwrap up",
+      reasoning_spans: [{ seconds: 3, before_tool: 0 }, { seconds: 6, before_tool: 2 }],
+      tools: [
+        { name: "knowledge", args: { query: "x" }, tool_id: "t1", ok: true, at: 5, duration_s: 1, reasoning: "let me search" },
+        { name: "read_file", args: { path: "p" }, tool_id: "t2", ok: true, at: 8, duration_s: 1 },
+      ],
+    };
+    const { container } = render(
+      <ChatPane
+        view={{ kind: "profile", profile: profile.name, sessionId: "s1" }}
+        profiles={[profile]}
+        activeProfile={profile}
+        sessionData={{ turns: [turn], last_ctx_tokens: 0 }}
+        onSend={vi.fn()}
+        onRewriteMessage={vi.fn()}
+        onRetryMessage={vi.fn()}
+      />,
+    );
+    const text = container.textContent;
+    expect(text.indexOf("Thought for 3s")).toBeLessThan(text.indexOf("2 tool calls"));
+    expect(text.indexOf("2 tool calls")).toBeLessThan(text.indexOf("Thought for 6s"));
+    expect(text).not.toContain("Thought for 20s");
   });
 
   it("a running turn keeps the active call out of the bucket", () => {

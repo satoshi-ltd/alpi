@@ -105,7 +105,7 @@ const light = {
   selected: "rgba(11,17,23,0.06)",
   accent: "#8a5a0a",
   successText: "#217a45",
-  warningText: "#8a5a0a",
+  warningText: "#b3470e",
   dangerText: "#b73737",
   onDanger: "#ffffff",
 };
@@ -126,7 +126,7 @@ const dark = {
   selected: "rgba(230,237,243,0.07)",
   accent: "#f0b447",
   successText: "#70c592",
-  warningText: "#efb254",
+  warningText: "#f59e5b",
   dangerText: "#f08080",
   onDanger: "#ffffff",
 };
