@@ -202,3 +202,72 @@ def test_reasoning_discarded_by_a_retry_never_reaches_the_span(bootstrapped_home
     turn = engine.session.turns[-1]
     assert [sp.get("text") for sp in turn.reasoning_spans] == ["kept"]
     assert turn.reasoning == "kept"
+
+
+def test_a_span_closed_by_text_in_a_retried_attempt_is_dropped(bootstrapped_home, monkeypatch):
+    from alpi import engine as engine_mod
+
+    def _stream(*_a, **_kw):
+        yield {"reasoning_delta": "DISCARDED"}
+        yield {"text_delta": "partial"}
+        yield {"retry_reset": True}
+        yield {"reasoning_delta": "kept"}
+        yield {"text_delta": "answer"}
+        yield _final()
+
+    monkeypatch.setattr(engine_mod.llm, "stream", _stream)
+    engine = Engine(home=bootstrapped_home, cfg=config.load(bootstrapped_home))
+    engine.run_turn("go", lambda _ev: None)
+    turn = engine.session.turns[-1]
+    assert [sp.get("text") for sp in turn.reasoning_spans] == ["kept"]
+    assert turn.reasoning == "kept"
+
+
+def test_a_closed_span_of_a_failed_model_never_reaches_the_workgroup_fallback(tmp_path, monkeypatch):
+    from alpi import engine as engine_mod
+    from tests.core.test_engine_routing import _make_engine
+
+    monkeypatch.setenv("ALPI_WORKGROUP_DISPATCH", "wg1")
+    monkeypatch.setattr("alpi.alp.agent_context.build", lambda *a, **kw: "wg ctx")
+    engine = _make_engine(monkeypatch, tmp_path, {"model": "primary", "fallback_models": ["backup"]})
+
+    def _stream(*_a, **kwargs):
+        if kwargs.get("model") == "primary":
+            yield {"reasoning_delta": "DISCARDED"}
+            yield {"text_delta": "partial"}
+            raise RuntimeError("provider down")
+        yield {"reasoning_delta": "kept"}
+        yield {"text_delta": "answer"}
+        yield _final()
+
+    monkeypatch.setattr(engine_mod.llm, "stream", _stream)
+    engine.run_turn("go", lambda _ev: None)
+    turn = engine.session.turns[-1]
+    assert [sp.get("text") for sp in turn.reasoning_spans] == ["kept"]
+    assert turn.reasoning == "kept"
+
+
+def test_the_reasoned_seconds_follow_the_attempt_that_answered(bootstrapped_home, monkeypatch):
+    from alpi import engine as engine_mod
+
+    clock = {"t": 1000.0}
+    monkeypatch.setattr(engine_mod.time, "time", lambda: clock["t"])
+    script = [
+        (1000.0, {"reasoning_delta": "DISCARDED"}),
+        (1001.0, {"text_delta": "partial"}),
+        (1002.0, {"retry_reset": True}),
+        (1010.0, {"reasoning_delta": "kept"}),
+        (1011.0, {"text_delta": "answer"}),
+        (1012.0, _final()),
+    ]
+
+    def _stream(*_a, **_kw):
+        for t, chunk in script:
+            clock["t"] = t
+            yield chunk
+
+    monkeypatch.setattr(engine_mod.llm, "stream", _stream)
+    engine = Engine(home=bootstrapped_home, cfg=config.load(bootstrapped_home))
+    engine.run_turn("go", lambda _ev: None)
+    turn = engine.session.turns[-1]
+    assert turn.reasoned_s == turn.reasoning_spans[0]["seconds"]

@@ -190,6 +190,7 @@ class _ReasoningSpans:
         self._span_started: float | None = None
         self._span_text: list[str] = []
         self.spans: list[dict] = []
+        self._attempt_spans = 0
 
     def __call__(self, ev: AgentEvent) -> None:
         if ev.kind in self._CLOSERS:
@@ -202,13 +203,17 @@ class _ReasoningSpans:
             self._span_text.append(ev.text or "")
         self._emit(ev)
 
-    def discard_text(self) -> None:
+    def discard_attempt(self) -> None:
+        del self.spans[self._attempt_spans:]
+        self._step_spans = 0
+        self._span_started = None
         self._span_text = []
 
     def new_step(self, first: bool) -> None:
         if not first:
             self._step_started = time.time()
             self._step_spans = 0
+        self._attempt_spans = len(self.spans)
 
     def close(self) -> None:
         if self._span_started is None:
@@ -819,6 +824,7 @@ class Engine:
                 reasoning_text: list[str] = []
                 final: dict = {}
                 call_done = False
+                first_text_at_step_start = first_text_delta_at
                 # Same-step loop: a fallback retries THIS call — step_idx advances only when an LLM call completes.
                 while not call_done:
                     if self.interrupt_requested:
@@ -829,7 +835,8 @@ class Engine:
                         break
                     accumulated_text = []
                     reasoning_text = []
-                    reasoning_spans.discard_text()
+                    reasoning_spans.discard_attempt()
+                    first_text_delta_at = first_text_at_step_start
                     final = {}
                     self._diagnose_prefix(call_kwargs, schemas)
                     try:
@@ -850,7 +857,8 @@ class Engine:
                             if chunk.get("retry_reset"):
                                 accumulated_text = []
                                 reasoning_text = []
-                                reasoning_spans.discard_text()
+                                reasoning_spans.discard_attempt()
+                                first_text_delta_at = first_text_at_step_start
                                 continue
                             reasoning_delta = chunk.get("reasoning_delta") or ""
                             if reasoning_delta:

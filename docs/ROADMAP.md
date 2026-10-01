@@ -60,14 +60,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
-- **SPAN.1** — A retried attempt leaves no reasoning span behind
-  `bug · alpi · agent · normal`
-  note: `_ReasoningSpans.discard_text()` in [engine.py](../alpi/engine.py) clears the
-  open span but not spans the discarded attempt already closed by emitting text
-  (reachable on replay-visible retries and the workgroup fallback).
-  accept: spans are truncated to the attempt's start on `retry_reset` and on
-  fallback; a test streams reasoning A, text, `retry_reset`, reasoning B, answer and
-  the stored spans hold only B, matching `turn.reasoning`.
 - **MEM.3** — Memory edits keep combining marks with their letter
   `bug · alpi · agent · normal`
   note: replacing a decomposed `Cafe\u0301` in [memory.py](../alpi/tools/memory.py)

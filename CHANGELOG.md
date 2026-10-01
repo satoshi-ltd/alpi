@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.16.12 — 2026-10-01 — a retried model call leaves no thinking behind
+
+- **When a model call is retried or falls back to another model, the thinking it had already shown
+  is dropped from the stored turn,** not only the thinking it had not yet finished. The saved
+  "Thought for Ns" blocks, and the reasoning time saved with the turn, now match the thinking of
+  the attempt that answered.
+
 ## v0.16.11 — 2026-10-01 — Activity keeps a pipeline a limited device can see
 
 - **A device limited to a member profile no longer loses its running pipelines in Activity.** When
