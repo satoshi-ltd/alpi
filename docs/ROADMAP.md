@@ -60,14 +60,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
-- **MOB.ACT-REDETECT** — Activity comes back after a daemon upgrade
-  `bug · mobile · agent · normal`
-  note: a `-32601` from `host.activity.list` sets `supported=false` in
-  [useActivity.js](../mobile/src/hooks/useActivity.js) for good; foreground and
-  `activity.changed` never ask again.
-  accept: the negative result resets on stream reconnect and on foreground; a test
-  rejects with `-32601`, then resolves, triggers foreground and sees Activity
-  supported; the tests that encode the permanent stop change accordingly.
 - **MOB.REFRESH-ERR** — A failed refresh over stale data says so
   `bug · mobile · agent · low`
   note: `refresh()` in [useDaemonData.js](../mobile/src/hooks/useDaemonData.js)

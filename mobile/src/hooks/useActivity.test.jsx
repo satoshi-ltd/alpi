@@ -150,14 +150,16 @@ describe('useActivity', () => {
     expect(h.call).toHaveBeenCalledTimes(1);
   });
 
-  it('hides itself on a daemon that predates the verb and stops asking', async () => {
+  it('hides itself on a daemon that predates the verb and stops asking on its own events', async () => {
     h.call.mockRejectedValue(Object.assign(new Error('unknown method: host.activity.list'), { code: -32601 }));
     render(<Probe />);
     await act(async () => {});
     expect(seen.supported).toBe(false);
     expect(seen.needsYouCount).toBe(0);
+    vi.useFakeTimers();
     h.call.mockClear();
-    await act(async () => { await seen.refresh(); });
+    act(() => { emit('activity.changed'); });
+    await act(async () => { vi.advanceTimersByTime(ACTIVITY_DEBOUNCE_MS); });
     expect(h.call).not.toHaveBeenCalled();
   });
 
@@ -166,8 +168,62 @@ describe('useActivity', () => {
     render(<Probe />);
     await act(async () => {});
     expect(seen.unsupported).toBe(true);
+    vi.useFakeTimers();
     h.call.mockClear();
+    act(() => { emit('activity.changed'); });
+    await act(async () => { vi.advanceTimersByTime(ACTIVITY_DEBOUNCE_MS); });
+    expect(h.call).not.toHaveBeenCalled();
+  });
+
+  it('asks again when the user refreshes by hand after the daemon was upgraded', async () => {
+    h.call.mockRejectedValueOnce(Object.assign(new Error('unknown method: host.activity.list'), { code: -32601 }));
+    render(<Probe />);
+    await act(async () => {});
+    expect(seen.unsupported).toBe(true);
+    h.call.mockResolvedValue(LIST);
     await act(async () => { await seen.refresh(); });
+    expect(seen.supported).toBe(true);
+  });
+
+  it('comes back when the app returns to the foreground after the daemon was upgraded', async () => {
+    h.call.mockRejectedValueOnce(Object.assign(new Error('unknown method: host.activity.list'), { code: -32601 }));
+    render(<Probe />);
+    await act(async () => {});
+    expect(seen.unsupported).toBe(true);
+    h.call.mockResolvedValue(LIST);
+    await act(async () => { h.appState('active'); });
+    expect(seen.unsupported).toBe(false);
+    expect(seen.supported).toBe(true);
+    expect(seen.needsYouCount).toBe(1);
+  });
+
+  it('comes back when the event stream reconnects after the daemon was upgraded', async () => {
+    h.call.mockRejectedValueOnce(Object.assign(new Error('unknown method: host.activity.list'), { code: -32601 }));
+    render(<Probe />);
+    await act(async () => {});
+    expect(seen.unsupported).toBe(true);
+    h.call.mockResolvedValue(LIST);
+    await act(async () => { emit('stream.connected'); });
+    expect(seen.supported).toBe(true);
+  });
+
+  it('a reconnect of the stream asks nothing while Activity is already supported', async () => {
+    h.call.mockResolvedValue(LIST);
+    render(<Probe />);
+    await act(async () => {});
+    h.call.mockClear();
+    await act(async () => { emit('stream.connected'); });
+    expect(h.call).not.toHaveBeenCalled();
+  });
+
+  it('keeps asking nothing on activity.changed while the verb is still missing', async () => {
+    h.call.mockRejectedValue(Object.assign(new Error('unknown method'), { code: -32601 }));
+    render(<Probe />);
+    await act(async () => {});
+    vi.useFakeTimers();
+    h.call.mockClear();
+    act(() => { emit('activity.changed'); });
+    await act(async () => { vi.advanceTimersByTime(ACTIVITY_DEBOUNCE_MS); });
     expect(h.call).not.toHaveBeenCalled();
   });
 

@@ -14,6 +14,15 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.6.4 — 2026-10-01 — Activity comes back after a daemon upgrade
+
+- **Activity reappears after the daemon is upgraded,** without restarting the app. If the daemon
+  did not know the Activity list when the app first asked, the app used to stop asking for good;
+  it now asks again when the app returns to the foreground, when the event stream reconnects and
+  when you pull to refresh on the Activity screen.
+
+  Requires alpi 0.16.1.
+
 ## v0.6.3 — 2026-10-01 — errors in plain words
 
 - **The app's own errors read as sentences.** `too-many-connections`, `forbidden`, the closed or

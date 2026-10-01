@@ -75,6 +75,20 @@ describe("useEvents handshake + anchor", () => {
     expect(mockCall).not.toHaveBeenCalled();
   });
 
+  it("announces every handshake as stream.connected, first connect and reconnect alike", async () => {
+    const sink = [];
+    mount("stream.connected", sink);
+    await waitFor(() => expect(mockCallStream).toHaveBeenCalled());
+    await act(async () => {
+      lastStreamHandlers.onFrame({ event: "subscribed", next_seq: 5 });
+    });
+    expect(sink.map((ev) => ev.event)).toEqual(["stream.connected"]);
+    await act(async () => {
+      lastStreamHandlers.onFrame({ event: "subscribed", next_seq: 9 });
+    });
+    expect(sink.map((ev) => ev.event)).toEqual(["stream.connected", "stream.connected"]);
+  });
+
   it("subsequent reconnect backfills via host.events.history", async () => {
     vi.useFakeTimers();
     const sink = [];

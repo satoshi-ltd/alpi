@@ -3,6 +3,7 @@ import { AppState } from 'react-native';
 
 import { useEndpoint } from '../lib/EndpointContext';
 import { endpointHost } from '../lib/endpoint';
+import { STREAM_CONNECTED } from '../lib/streamEvents';
 
 const EventsContext = createContext(null);
 
@@ -109,6 +110,7 @@ export function EventsProvider({ children }) {
               } else {
                 backfill();
               }
+              fanOut({ event: STREAM_CONNECTED, data: {}, at: Date.now() / 1000, seq: null });
               return;
             }
             // 'ping' is the daemon's stream keepalive — transport-level, never fans out.

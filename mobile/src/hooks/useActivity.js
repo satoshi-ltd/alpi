@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as ReactNative from 'react-native';
 
 import { useEndpoint } from '../lib/EndpointContext';
+import { STREAM_CONNECTED } from '../lib/streamEvents';
 import { useDebouncedCallback } from './useDebouncedCallback';
 import { useEventEffect } from './useEvents';
 
@@ -149,11 +150,16 @@ export function useActivity() {
     };
   }, [id]);
 
-  const refresh = useCallback(() => {
+  const refreshIfSupported = useCallback(() => {
     if (!id) return Promise.resolve();
     const store = storeFor(id);
     if (!store.supported) return Promise.resolve();
     return fetchInto(store, (...args) => callRef.current(...args));
+  }, [id]);
+
+  const refresh = useCallback(() => {
+    if (!id) return Promise.resolve();
+    return fetchInto(storeFor(id), (...args) => callRef.current(...args));
   }, [id]);
 
   useEffect(() => {
@@ -163,8 +169,11 @@ export function useActivity() {
     return () => sub?.remove?.();
   }, [refresh]);
 
-  const debounced = useDebouncedCallback(refresh, ACTIVITY_DEBOUNCE_MS);
+  const debounced = useDebouncedCallback(refreshIfSupported, ACTIVITY_DEBOUNCE_MS);
   useEventEffect(['activity.changed'], debounced);
+  useEventEffect([STREAM_CONNECTED], () => {
+    if (id && !storeFor(id).supported) refresh();
+  });
 
   const store = id ? storeFor(id) : null;
   const supported = !!store?.supported && !!store?.data;
