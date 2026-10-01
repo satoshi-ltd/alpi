@@ -313,9 +313,18 @@ PROFILE_SECTIONS = ("Overview", "Usage", "Service", "ALP", "Sandbox", "Voice", "
 def desktop_profile_settings():
     meta = f'{mono12("deepseek-v4.1-flash")}{SEP}{meterchip("$0.00", "/$1.00", 0, DOC_ACCENT)}'
     hero = d_hero(h1("doc", diamond(DOC_ACCENT, 14)) + eyebrow("settings"), meta, button("Connections", "ghost", "md", "globe") + iconbtn("back", "Back to chat"), DOC_ACCENT)
-    storage = [("sessions", "6.5 MB", "56 files"), ("skills", "133 KB", "22 files"), ("memories", "15 KB", "5 files"), ("knowledge", "4.5 MB", "1 file"),
-               ("outputs", "34 KB", "1 file"), ("logs", "1.1 MB", "11 files"), ("runs", "21.8 MB", "135 files")]
-    storage_rows = ''.join(row(k, chip(a, "plain", "sm") + chip(b, "plain", "sm")) for k, a, b in storage)
+    clean = lambda: button("Clean", "ghost", "sm")
+    delete = lambda text: button(text, "danger-ghost", "sm")
+    group = lambda name, size, files, *actions: row(name, chip(size, "plain", "sm") + chip(files, "plain", "sm") + "".join(actions))
+    storage_rows = (
+        group("Conversations", "6.5 MB", "56 files", delete("Delete sessions"), delete("Delete workgroup transcripts"), delete("Delete @-mention threads"))
+        + group("Skills", "133 KB", "22 files") + group("Memories", "15 KB", "5 files")
+        + group("Files", "34 KB", "1 file", clean(), delete("Delete generated files"))
+        + group("Knowledge", "4.5 MB", "1 file", clean())
+        + group("Caches", "181 KB", "1 file", clean())
+        + group("Logs", "23 MB", "146 files", clean(), delete("Delete run journals"))
+        + row("everything", button("Clean everything safe · 1.3 MB · 14 items", "ghost", "sm"))
+    )
     inner = (
         section("Overview", "", ''.join([
             row("home", mono12("~/.alpi/profiles/doc") + button("Reveal", "ghost", "sm")),
@@ -342,7 +351,7 @@ def desktop_profile_settings():
         + section("Voice", "text-to-speech voice", row("voice", selectish("Alvaro · Spanish (ES) · male") + button("Test", "ghost", "sm")) + row("auto-read", chip("off", "off") + button("Enable", "ghost", "sm")))
         + section("MCP Servers", "external tool servers", row("servers", muted("none") + button("+ Add MCP", "ghost", "sm")))
         + section("Email", "IMAP + Gmail accounts", row("accounts", button("+ Add account", "ghost", "sm")))
-        + section("Storage", "disk + data usage", storage_rows + row("reclaim", button("Clean · 21.8 MB · 135 items", "ghost", "sm") + muted("runs older than 30 days")))
+        + section("Storage", "disk + data usage", storage_rows)
         + section("Danger Zone", "", row("delete", button("Delete profile", "danger-ghost", "md") + muted("removes identity, memory, skills, schedule from disk. Cannot be undone.")))
     )
     body = f"""<div style="display: flex; height: 100%">

@@ -7,7 +7,7 @@ import Chip from "../../../primitives/Chip.jsx";
 import { Row } from "../primitives.jsx";
 import { ConfirmDelete, LoadFailed } from "../../../primitives/index.js";
 import { useNotify } from "../../../primitives/Notification.jsx";
-import { STORAGE_GROUPS, RECLAIM_NOTES, formatBytes } from "../util.js";
+import { STORAGE_GROUPS, RECLAIM_NOTES, DELETE_TARGETS, formatBytes } from "../util.js";
 import styles from "../Settings.module.css";
 import { emptyLine } from "../../../../../common/emptyCopy.mjs";
 
@@ -40,7 +40,8 @@ export function StorageField({ profile, activeConnection, prefetched, onLoadingC
 
   const [plan, setPlan] = useState(null);
   const [usageOverride, setUsageOverride] = useState(null);
-  const [busy, setBusy] = useState(false);
+  const [busyId, setBusyId] = useState(null);
+  const busy = busyId !== null;
   const [confirmKey, setConfirmKey] = useState(null);
 
   const fetchPlan = useCallback(() => {
@@ -76,9 +77,9 @@ export function StorageField({ profile, activeConnection, prefetched, onLoadingC
     return m;
   }, [plan]);
 
-  const doClean = useCallback(async (keys, label) => {
+  const doClean = useCallback(async (keys, label, id) => {
     if (busy || keys.length === 0) return;
-    setBusy(true);
+    setBusyId(id);
     try {
       const results = await invoke("cleanup_apply", {
         profile: profile.name,
@@ -107,33 +108,36 @@ export function StorageField({ profile, activeConnection, prefetched, onLoadingC
     } catch (e) {
       notify({ message: `${label}: ${String(e)}`, variant: "error", duration: 4000 });
     } finally {
-      setBusy(false);
+      setBusyId(null);
     }
   }, [busy, profile.name, connectionId, notify, fetchPlan, onCleaned]);
 
-  const groups = useMemo(() => STORAGE_GROUPS.map((g) => {
-    const usageRows = g.usage.map((k) => usageBy[k]).filter(Boolean);
-    return {
-      key: g.key,
-      label: g.label,
-      desc: g.desc,
-      size: usageRows.reduce((n, r) => n + r.size_bytes, 0),
-      count: usageRows.reduce((n, r) => n + r.file_count, 0),
-      reclaimable: (planByGroup[g.key] ?? []).some((m) => m.size > 0 || m.count > 0),
-    };
-  }).filter((g) => g.size > 0 || g.count > 0 || g.reclaimable), [usageBy, planByGroup]);
+  const groups = useMemo(() => {
+    const live = (m) => m.size > 0 || m.count > 0;
+    const known = new Set(STORAGE_GROUPS.map((g) => g.key));
+    const defs = [...STORAGE_GROUPS, { key: "other", label: "Other", usage: [], desc: "everything else the daemon can clean" }];
+    return defs.map((g) => {
+      const usageRows = g.usage.map((k) => usageBy[k]).filter(Boolean);
+      const members = (plan ?? []).filter((m) => (known.has(m.group) ? m.group : "other") === g.key && live(m));
+      const safe = members.filter((m) => !m.destructive);
+      return {
+        key: g.key,
+        label: g.label,
+        desc: g.desc,
+        size: usageRows.length > 0 ? usageRows.reduce((n, r) => n + r.size_bytes, 0) : members.reduce((n, r) => n + r.size, 0),
+        count: usageRows.length > 0 ? usageRows.reduce((n, r) => n + r.file_count, 0) : members.reduce((n, r) => n + (r.count ?? 0), 0),
+        safe,
+        safeSize: safe.reduce((n, m) => n + m.size, 0),
+        safeCount: safe.reduce((n, m) => n + (m.count ?? 0), 0),
+        destructive: members.filter((m) => m.destructive),
+      };
+    }).filter((g) => g.size > 0 || g.count > 0 || g.safe.length > 0 || g.destructive.length > 0);
+  }, [usageBy, plan]);
 
-  const safeMembers = useMemo(
-    () => (plan ?? []).filter((m) => !m.destructive && (m.size > 0 || m.count > 0)),
-    [plan],
-  );
-  const safeKeys = safeMembers.map((m) => m.key);
-  const safeSize = safeMembers.reduce((n, m) => n + m.size, 0);
-  const safeCount = safeMembers.reduce((n, m) => n + (m.count ?? 0), 0);
-  const destructive = useMemo(
-    () => (plan ?? []).filter((m) => m.destructive && (m.size > 0 || m.count > 0)),
-    [plan],
-  );
+  const cleanable = groups.filter((g) => g.safe.length > 0);
+  const safeKeys = cleanable.flatMap((g) => g.safe.map((m) => m.key));
+  const safeSize = cleanable.reduce((n, g) => n + g.safeSize, 0);
+  const safeCount = cleanable.reduce((n, g) => n + g.safeCount, 0);
 
   if (usageOverride == null && usage == null && !error) {
     return <Row label="storage"><span className={styles.muted}>loading…</span></Row>;
@@ -152,43 +156,51 @@ export function StorageField({ profile, activeConnection, prefetched, onLoadingC
           <span className={styles.inlineRow}>
             <Chip size="sm" tooltip={g.desc}>{formatBytes(g.size)}</Chip>
             <Chip size="sm">{g.count} {g.count === 1 ? "file" : "files"}</Chip>
+            {canClean && g.safe.length > 0 && (
+              <Button
+                size="sm"
+                disabled={busy}
+                tip={`${formatBytes(g.safeSize)} · ${countLabel(g.safeCount)}`}
+                aria-label={`Clean ${g.label.toLowerCase()} · ${formatBytes(g.safeSize)} · ${countLabel(g.safeCount)}`}
+                onClick={() => doClean(g.safe.map((m) => m.key), `Clean ${g.label.toLowerCase()}`, `group:${g.key}`)}
+              >
+                {busyId === `group:${g.key}` ? "Cleaning…" : "Clean"}
+              </Button>
+            )}
+            {canClean && g.destructive.map((m) => {
+              const note = RECLAIM_NOTES[m.key] ?? m.label.toLowerCase();
+              const target = DELETE_TARGETS[m.key] ?? m.label.toLowerCase();
+              return (
+                <span key={m.key} className={styles.confirmAnchor}>
+                  <Button
+                    size="sm"
+                    variant="danger-ghost"
+                    disabled={busy}
+                    onClick={() => setConfirmKey(m.key)}
+                  >
+                    {busyId === `member:${m.key}` ? "Deleting…" : `Delete ${target}`}
+                  </Button>
+                  <ConfirmDelete
+                    open={confirmKey === m.key}
+                    onClose={() => setConfirmKey(null)}
+                    onConfirm={() => { setConfirmKey(null); doClean([m.key], m.label, `member:${m.key}`); }}
+                    title={`Delete ${note}?`}
+                    consequence={`This permanently deletes ${note}. It cannot be undone.`}
+                  />
+                </span>
+              );
+            })}
           </span>
         </Row>
       ))}
 
-      {canClean && safeKeys.length > 0 && (
-        <Row label="reclaim">
-          <span className={styles.inlineRow}>
-            <Button size="sm" disabled={busy} onClick={() => doClean(safeKeys, "Clean")}>
-              {busy ? "Cleaning…" : `Clean · ${formatBytes(safeSize)} · ${countLabel(safeCount)}`}
-            </Button>
-            <span className={styles.muted}>caches, logs and knowledge — always safe</span>
-          </span>
+      {canClean && cleanable.length > 1 && (
+        <Row label="everything">
+          <Button size="sm" disabled={busy} onClick={() => doClean(safeKeys, "Clean", "all")}>
+            {busyId === "all" ? "Cleaning…" : `Clean everything safe · ${formatBytes(safeSize)} · ${countLabel(safeCount)}`}
+          </Button>
         </Row>
       )}
-
-      {canClean && destructive.map((m) => {
-        const note = RECLAIM_NOTES[m.key] ?? m.label.toLowerCase();
-        return (
-          <Row key={m.key} label="delete">
-            <span className={styles.inlineRow}>
-              <Chip size="sm">{formatBytes(m.size)}</Chip>
-              <Chip size="sm">{countLabel(m.count ?? 0)}</Chip>
-              <span className={styles.muted}>{note}</span>
-              <span className={styles.confirmAnchor}>
-                <Button size="sm" variant="danger-ghost" disabled={busy} onClick={() => setConfirmKey(m.key)}>Delete</Button>
-                <ConfirmDelete
-                  open={confirmKey === m.key}
-                  onClose={() => setConfirmKey(null)}
-                  onConfirm={() => { setConfirmKey(null); doClean([m.key], m.label); }}
-                  title={`Delete ${note}?`}
-                  consequence={`This permanently deletes ${note}. It cannot be undone.`}
-                />
-              </span>
-            </span>
-          </Row>
-        );
-      })}
     </>
   );
 }

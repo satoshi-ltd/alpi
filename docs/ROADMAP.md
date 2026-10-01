@@ -77,21 +77,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
   protected variables. The map is listed in the takes-effect table of
   [CONFIG.md](CONFIG.md#tools) and in the packaged config reference.
 
-- **UX.7** — The desktop Storage field is one inventory
-  `ui · desktop · agent · normal`
-  note: [maintenance.jsx](../desktop/src/features/settings/fields/maintenance.jsx)
-  renders a usage row per `STORAGE_GROUPS` entry, then a `reclaim` row, then a
-  `delete` row per destructive `host.cleanup.plan` member. Plan members carry
-  their group (`GROUP_OF` in [cleanup.py](../alpi/cleanup.py)) and the component
-  already builds `planByGroup`.
-  accept: the board UX.7. Desktop rendering only; `host.profile.storage`,
-  `host.cleanup.plan`, `host.cleanup.apply`, console and mobile untouched;
-  destructive actions still open `ConfirmDelete`, `canClean` is unchanged.
-  `maintenance.test.jsx` covers a mixed group (Logs shows Clean plus Delete run
-  journals; Conversations shows three named Deletes and no Clean; Files shows
-  Clean plus Delete generated files); both client suites pass; the changelog
-  entry pins no new alpi minimum.
-
 - **UX.8** — Usage bars by cost when the profile pays
   `ui · desktop · agent · normal`
   note: [Usage.jsx](../desktop/src/features/settings/Usage.jsx) sizes bars by

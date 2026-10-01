@@ -1,5 +1,5 @@
 from gen import DOC_ACCENT, ic, page, usage_chart
-from desktop_boards import AMBER, HOVER, INK, INK2, INK3, INK4, LINE, LINE2, PANE, MONO, SIDE, button, chip, diamond_stack, muted, row, section
+from desktop_boards import AMBER, HOVER, INK, INK2, INK3, INK4, LINE, LINE2, PANE, MONO, SIDE, diamond_stack, row, section
 from conversation_boards import h1, label, mono, spec
 
 PAGE_W = 1280
@@ -8,41 +8,6 @@ COLUMN_PAD = 20
 
 def drawing(title, inner):
     return f'<div style="flex: 1; min-width: 0; display: flex; flex-direction: column">{spec(title, inner, pad=COLUMN_PAD)}</div>'
-
-
-def storage_now():
-    usage = lambda name, size, files: row(name, chip(size, "plain", "sm") + chip(files, "plain", "sm"))
-    deletes = "".join(
-        row("delete", chip(size, "plain", "sm") + chip(items, "plain", "sm") + muted(note) + button("Delete", "danger-ghost", "sm"))
-        for size, items, note in (
-            ("21.8 MB", "135 items", "run journals"),
-            ("6.4 MB", "54 items", "sessions"),
-            ("90 KB", "2 items", "workgroup transcripts"),
-            ("12 KB", "3 items", "@-mention threads"),
-            ("34 KB", "1 item", "generated files"),
-        )
-    )
-    return section(
-        "Storage", "disk + data usage",
-        usage("Conversations", "6.5 MB", "56 files") + usage("Files", "4.5 MB", "12 files") + usage("Logs", "23 MB", "146 files")
-        + row("reclaim", button("Clean · 21.8 MB · 135 items", "ghost", "sm") + muted("caches, logs and knowledge — always safe"))
-        + deletes,
-        first=True,
-    )
-
-
-def storage_proposed():
-    group = lambda name, size, files, *actions: row(name, chip(size, "plain", "sm") + chip(files, "plain", "sm") + "".join(actions))
-    clean = lambda text: button(text, "ghost", "sm")
-    delete = lambda text: button(text, "danger-ghost", "sm")
-    return section(
-        "Storage", "disk + data usage",
-        group("Conversations", "6.5 MB", "56 files", delete("Delete sessions"), delete("Delete workgroup transcripts"), delete("Delete @-mention threads"))
-        + group("Files", "4.5 MB", "12 files", clean("Clean"), delete("Delete generated files"))
-        + group("Logs", "23 MB", "146 files", clean("Clean"), delete("Delete run journals"))
-        + row("everything", clean("Clean everything safe · 21.8 MB · 135 items")),
-        first=True,
-    )
 
 
 COST_DAYS = [("W", 0.16, 0.02), ("T", 0.22, 0.02), ("F", 0.08, 0.01), ("S", 0.18, 0.02), ("S", 0.96, 0.06), ("M", 0.10, 0.01),
@@ -229,17 +194,6 @@ def empty_proposed():
 
 
 PROPOSALS = [
-    {
-        "id": "UX.7",
-        "client": "desktop",
-        "area": "Settings · Storage",
-        "title": "The Storage field is one inventory",
-        "why": "Every group shows its size twice: once as a usage row, again inside a reclaim row and up to five DELETE rows, so the field grows to thirteen rows that repeat each other.",
-        "now": storage_now,
-        "proposed": storage_proposed,
-        "accept": "Each group row keeps size and file count and carries its own actions: one Clean chip totalling its safe members and one confirmed Delete chip per destructive member, named after the target. The standalone reclaim and delete rows go, leaving at most one Clean everything safe line and no always-safe prose. With every category populated the field has no more rows than non-empty groups plus one, no two rows share a label, and the per-row amounts sum to the sweep total.",
-        "h": 880,
-    },
     {
         "id": "UX.8",
         "client": "desktop",

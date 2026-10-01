@@ -11,6 +11,17 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.7.6 — 2026-10-01 — Storage is one inventory
+
+- **Each storage group carries its own actions.** A group shows its size and file count with a Clean
+  button for what is safe to reclaim (the amount is in its tooltip) and one named Delete button per
+  destructive target (Delete sessions, Delete run journals, …); the Delete still asks to confirm.
+- **The separate reclaim and delete rows are gone.** One "Clean everything safe" line stays when
+  more than one group has something to clean, so a fully populated profile shows eight rows instead
+  of thirteen.
+
+  Requires alpi 0.16.1.
+
 ## v0.7.5 — 2026-10-01 — no Update button on a daemon that cannot update itself
 
 - **Settings no longer offers Update alpi for a daemon that reports it cannot update itself** (a

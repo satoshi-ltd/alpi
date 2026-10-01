@@ -31,6 +31,14 @@ export const RECLAIM_NOTES = {
   workgroups: "all workgroup history",
 };
 
+export const DELETE_TARGETS = {
+  sessions: "sessions",
+  workgroups: "workgroup transcripts",
+  mentions: "@-mention threads",
+  generated: "generated files",
+  runs: "run journals",
+};
+
 export const STORAGE_GROUPS = [
   { key: "conversations", label: "Conversations", usage: ["sessions", "workgroups", "mentions"], desc: "chats, workgroup transcripts and @-mention threads" },
   { key: "skills", label: "Skills", usage: ["skills"], content: true, desc: STORAGE_SCOPE.skills },
