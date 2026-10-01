@@ -11,3 +11,5 @@ build/
 .DS_Store
 .alpi-umbrel
 .usage.json
+CLAUDE.md
+design/CLAUDE.md

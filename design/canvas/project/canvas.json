@@ -23,10 +23,6 @@
    "name": "Mobile"
   },
   {
-   "id": "audit",
-   "name": "Open work"
-  },
-  {
    "id": "proposals",
    "name": "Proposals"
   }
@@ -304,20 +300,60 @@
    "title": "Phone \u00b7 message actions",
    "page": "mobile"
   },
-  "Main.dc.html": {
-   "x": 0,
-   "y": 0,
-   "w": 1280,
-   "h": 800,
-   "title": "Open work",
-   "page": "audit"
-  },
-  "Proposals-Overview.dc.html": {
+  "Proposals-UX.7.dc.html": {
    "x": 0,
    "y": 240,
    "w": 1280,
-   "h": 690,
-   "title": "Proposals \u00b7 still open",
+   "h": 880,
+   "title": "Proposals \u00b7 ux.7 \u00b7 the storage field is one inventory",
+   "page": "proposals"
+  },
+  "Proposals-UX.8.dc.html": {
+   "x": 0,
+   "y": 1360,
+   "w": 1280,
+   "h": 760,
+   "title": "Proposals \u00b7 ux.8 \u00b7 usage bars follow the cost when the profile pays",
+   "page": "proposals"
+  },
+  "Proposals-THINK.1.dc.html": {
+   "x": 0,
+   "y": 2360,
+   "w": 1280,
+   "h": 560,
+   "title": "Proposals \u00b7 think.1 \u00b7 the live thinking row reads like the settled one",
+   "page": "proposals"
+  },
+  "Proposals-UI-WG.STATUS.dc.html": {
+   "x": 0,
+   "y": 3160,
+   "w": 1280,
+   "h": 700,
+   "title": "Proposals \u00b7 ui-wg.status \u00b7 a workgroup row says what finished as well as what runs",
+   "page": "proposals"
+  },
+  "Proposals-UI-UPD.1.dc.html": {
+   "x": 0,
+   "y": 4100,
+   "w": 1280,
+   "h": 1260,
+   "title": "Proposals \u00b7 ui-upd.1 \u00b7 a daemon that cannot self-update offers no update button",
+   "page": "proposals"
+  },
+  "Proposals-UI-MOB.LIVE-ACTIVITY.dc.html": {
+   "x": 0,
+   "y": 5600,
+   "w": 1280,
+   "h": 870,
+   "title": "Proposals \u00b7 ui-mob.live-activity \u00b7 a running workgroup and an approval reach a locked phone",
+   "page": "proposals"
+  },
+  "Proposals-UI-EMPTY-VOICE.dc.html": {
+   "x": 0,
+   "y": 6710,
+   "w": 1280,
+   "h": 1580,
+   "title": "Proposals \u00b7 ui-empty-voice \u00b7 empty states speak in one voice on both clients",
    "page": "proposals"
   }
  },
@@ -356,8 +392,13 @@
   "Phone-ToolSheet.dc.html",
   "Phone-SelectText.dc.html",
   "Phone-MessageActions.dc.html",
-  "Main.dc.html",
-  "Proposals-Overview.dc.html"
+  "Proposals-UX.7.dc.html",
+  "Proposals-UX.8.dc.html",
+  "Proposals-THINK.1.dc.html",
+  "Proposals-UI-WG.STATUS.dc.html",
+  "Proposals-UI-UPD.1.dc.html",
+  "Proposals-UI-MOB.LIVE-ACTIVITY.dc.html",
+  "Proposals-UI-EMPTY-VOICE.dc.html"
  ],
  "notes": {
   "s-Foundations": {
@@ -504,10 +545,58 @@
    "maxW": 2600,
    "page": "mobile"
   },
-  "p-Still open": {
+  "p-UX.7 \u00b7 The Storage field is one inventory": {
    "x": 0,
    "y": 17,
-   "text": "Still open",
+   "text": "UX.7 \u00b7 The Storage field is one inventory",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "proposals"
+  },
+  "p-UX.8 \u00b7 Usage bars follow the cost when the profile pays": {
+   "x": 0,
+   "y": 1137,
+   "text": "UX.8 \u00b7 Usage bars follow the cost when the profile pays",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "proposals"
+  },
+  "p-THINK.1 \u00b7 The live Thinking row reads like the settled one": {
+   "x": 0,
+   "y": 2137,
+   "text": "THINK.1 \u00b7 The live Thinking row reads like the settled one",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "proposals"
+  },
+  "p-UI-WG.STATUS \u00b7 A workgroup row says what finished as well as what runs": {
+   "x": 0,
+   "y": 2937,
+   "text": "UI-WG.STATUS \u00b7 A workgroup row says what finished as well as what runs",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "proposals"
+  },
+  "p-UI-UPD.1 \u00b7 A daemon that cannot self-update offers no update button": {
+   "x": 0,
+   "y": 3877,
+   "text": "UI-UPD.1 \u00b7 A daemon that cannot self-update offers no update button",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "proposals"
+  },
+  "p-UI-MOB.LIVE-ACTIVITY \u00b7 A running workgroup and an approval reach a locked phone": {
+   "x": 0,
+   "y": 5377,
+   "text": "UI-MOB.LIVE-ACTIVITY \u00b7 A running workgroup and an approval reach a locked phone",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "proposals"
+  },
+  "p-UI-EMPTY-VOICE \u00b7 Empty states speak in one voice on both clients": {
+   "x": 0,
+   "y": 6487,
+   "text": "UI-EMPTY-VOICE \u00b7 Empty states speak in one voice on both clients",
    "kind": "title1",
    "maxW": 2600,
    "page": "proposals"

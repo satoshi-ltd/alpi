@@ -2,6 +2,7 @@
 import json
 import os
 import re
+import shutil
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -12,12 +13,12 @@ import gen  # noqa: E402
 from desktop_boards import DESKTOP  # noqa: E402
 
 FONT_LINK = '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">'
+FAVICON_SOURCE = os.path.join(REPO, "site", "assets", "alpi-favicon.svg")
 PAGES = (
     ("index.html", "system", "System", "Design system", "One token file feeds both clients. Colour, type, space, radius and every primitive of desktop and mobile, drawn from the values that ship."),
     ("desktop.html", "desktop", "Desktop", "Desktop", "Tauri client, 1280 wide. Every screen as the code paints it, with the sidebar it shares."),
     ("mobile.html", "mobile", "Mobile", "Phone and Fold", "Expo client. The phone keeps its own grammar; a fold or tablet renders the desktop layout at scale."),
-    ("audit.html", "audit", "Open work", "Open work", "What is still pending between the two clients. Shipped rows leave the table; the changelogs keep the history."),
-    ("proposals.html", "proposals", "Proposals", "Where to go next", "What is left from the UX and UI review of both clients against the agent and chat apps shipping now. A row leaves when it ships."),
+    ("proposals.html", "proposals", "Proposals", "Proposals", "Visual ideas that are not approved yet, one board each: what exists, what is proposed and what proves it done. A board leaves when it ships; the changelog and ARCHITECTURE record it."),
 )
 
 
@@ -45,6 +46,7 @@ THEMED = (
     ("#b3470e", "var(--c-warning-text)"),
 )
 LITERAL_BOARDS = {"System-Tokens.dc.html"}
+EMPTY_STATES = {"proposals": "No proposals open. A visual idea lands here as a board before it is approved."}
 
 
 def board_root(path):
@@ -72,7 +74,7 @@ def shell(current, heading, intro, sections, versions):
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>alpi design · {heading}</title>
-<link rel="icon" href="../site/assets/alpi-favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
 {FONT_LINK}
 <link rel="stylesheet" href="../desktop/src/styles/tokens.css">
 <link rel="stylesheet" href="boards.css">
@@ -99,6 +101,7 @@ def shell(current, heading, intro, sections, versions):
 def build(out):
     canvas_root = os.path.join(out, "canvas", "project")
     os.makedirs(canvas_root, exist_ok=True)
+    shutil.copyfile(FAVICON_SOURCE, os.path.join(out, "favicon.svg"))
     gen.ROOT = canvas_root
     gen.build(DESKTOP)
     with open(os.path.join(canvas_root, "canvas.json")) as f:
@@ -134,6 +137,8 @@ def build(out):
                 for _, name, frame in items
             )
             sections.append('<section class="kit-section"><h2>%s<span>%02d</span></h2><div class="kit-row">%s</div></section>' % (label, i, cards))
+        if not sections and page in EMPTY_STATES:
+            sections.append('<section class="kit-section"><p class="kit-empty">%s</p></section>' % EMPTY_STATES[page])
         with open(os.path.join(out, file), "w") as f:
             f.write(shell(page, heading, intro, sections, versions))
     return [file for file, *_ in PAGES]

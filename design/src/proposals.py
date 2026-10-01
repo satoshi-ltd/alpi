@@ -1,0 +1,419 @@
+from gen import DOC_ACCENT, WARNING_TEXT, ic, m_row, m_button, mix, page, usage_chart
+from desktop_boards import AMBER, HOVER, INK, INK2, INK3, INK4, LINE, LINE2, PANE, MONO, SIDE, button, chip, diamond_stack, muted, row, section
+from conversation_boards import h1, label, mono, spec, thought
+from mobile_overlays import action_item, separator, sheet_header
+
+PAGE_W = 1280
+COLUMN_PAD = 20
+
+
+def drawing(title, inner):
+    return f'<div style="flex: 1; min-width: 0; display: flex; flex-direction: column">{spec(title, inner, pad=COLUMN_PAD)}</div>'
+
+
+def storage_now():
+    usage = lambda name, size, files: row(name, chip(size, "plain", "sm") + chip(files, "plain", "sm"))
+    deletes = "".join(
+        row("delete", chip(size, "plain", "sm") + chip(items, "plain", "sm") + muted(note) + button("Delete", "danger-ghost", "sm"))
+        for size, items, note in (
+            ("21.8 MB", "135 items", "run journals"),
+            ("6.4 MB", "54 items", "sessions"),
+            ("90 KB", "2 items", "workgroup transcripts"),
+            ("12 KB", "3 items", "@-mention threads"),
+            ("34 KB", "1 item", "generated files"),
+        )
+    )
+    return section(
+        "Storage", "disk + data usage",
+        usage("Conversations", "6.5 MB", "56 files") + usage("Files", "4.5 MB", "12 files") + usage("Logs", "23 MB", "146 files")
+        + row("reclaim", button("Clean · 21.8 MB · 135 items", "ghost", "sm") + muted("caches, logs and knowledge — always safe"))
+        + deletes,
+        first=True,
+    )
+
+
+def storage_proposed():
+    group = lambda name, size, files, *actions: row(name, chip(size, "plain", "sm") + chip(files, "plain", "sm") + "".join(actions))
+    clean = lambda text: button(text, "ghost", "sm")
+    delete = lambda text: button(text, "danger-ghost", "sm")
+    return section(
+        "Storage", "disk + data usage",
+        group("Conversations", "6.5 MB", "56 files", delete("Delete sessions"), delete("Delete workgroup transcripts"), delete("Delete @-mention threads"))
+        + group("Files", "4.5 MB", "12 files", clean("Clean"), delete("Delete generated files"))
+        + group("Logs", "23 MB", "146 files", clean("Clean"), delete("Delete run journals"))
+        + row("everything", clean("Clean everything safe · 21.8 MB · 135 items")),
+        first=True,
+    )
+
+
+COST_DAYS = [("W", 0.16, 0.02), ("T", 0.22, 0.02), ("F", 0.08, 0.01), ("S", 0.18, 0.02), ("S", 0.96, 0.06), ("M", 0.10, 0.01),
+             ("T", 0.14, 0.02), ("W", 0.15, 0.02), ("T", 0.06, 0.01), ("F", 0.13, 0.02), ("S", 0.09, 0.01), ("S", 0.30, 0.02),
+             ("M", 0.26, 0.03), ("T", 0.12, 0.02)]
+
+
+def usage_tooltip():
+    line = lambda name, value: f'<div style="display: flex; justify-content: space-between; gap: 24px; font-size: 12px; color: {INK2}"><span>{name}</span>{mono(value, 11, INK2)}</div>'
+    return (f'<div style="align-self: flex-start; display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 10px; background: {PANE}; border: 0.5px solid {LINE2}">'
+            f'<span style="font-size: 12px; font-weight: 600; color: {INK}">Sat</span>{mono("$0.42", 14, INK, 600)}'
+            f'{line("in", "1.2M")}{line("out", "18K")}</div>')
+
+
+def usage_now():
+    return section("Usage", "last 14 days", usage_chart(DOC_ACCENT, "$0.00", "102K", "831", "$1.00", "100% left", "bars by tokens · 14-day total $1.61"), first=True)
+
+
+def usage_proposed():
+    chart = usage_chart(DOC_ACCENT, "$0.00", "102K", "831", "$1.00", "100% left", "bars by cost · 14-day total $1.61", days=COST_DAYS)
+    return section("Usage", "last 14 days", chart + f'<div style="height: 16px"></div>{usage_tooltip()}', first=True)
+
+def cap(text):
+    return mono(text, 11, INK3)
+
+
+def stack(*items, gap=14):
+    return f'<div style="display: flex; flex-direction: column; gap: {gap}px">{"".join(items)}</div>'
+
+
+def tagged(title, inner):
+    return stack(cap(title), inner, gap=8)
+
+
+def gutter(inner):
+    return f'<div style="padding: 0 10px"><div style="margin: 0 -10px">{inner}</div></div>'
+
+
+SHIMMER = f"background: linear-gradient(90deg, {INK3} 0%, {INK} 50%, {INK3} 100%); -webkit-background-clip: text; background-clip: text; color: transparent;"
+
+
+def live_row(bar, chevron):
+    lead = ic("chev-r", 14, INK3) if chevron else '<span style="width: 14px; height: 14px; flex-shrink: 0"></span>'
+    text = f'<span style="font-family: {MONO}; font-size: 12px; {SHIMMER if bar else f"color: {INK3};"}">Thinking…</span>'
+    fill = f"background: {HOVER};" if bar else ""
+    return f'<div style="display: flex; align-items: center; gap: 10px; height: 22px; padding: 0 10px; border-radius: 6px; {fill}">{lead}{text}</div>'
+
+
+def think_now():
+    return stack(
+        tagged("Live · streaming, no reasoning text yet", gutter(live_row(True, False))),
+        tagged("Settled · once the turn ends", gutter(thought())),
+        cap("Tinted bar across the row, chevron hidden but still reserving 24px, letters drift under background-clip: text."),
+    )
+
+
+def think_proposed():
+    return stack(
+        tagged("Live · streaming, no reasoning text yet", gutter(live_row(False, True))),
+        tagged("Settled · once the turn ends", gutter(thought())),
+        cap("Same chevron, same label x, no bar; the shimmer is drawn still and sweeps the label's opacity."),
+    )
+
+
+WG_GRID = "grid-template-columns: minmax(90px, 1fr) 168px 40px 52px 44px; gap: 12px; padding: 0 10px"
+
+
+def wg_head():
+    cells = "".join(f'<span style="{"text-align: right" if i > 2 else ""}">{t}</span>' for i, t in enumerate(("Workgroup", "Status", "Members", "Spend", "Updated"), start=1))
+    return f'<div style="display: grid; {WG_GRID}; align-items: center; min-height: 32px; font-family: {MONO}; font-size: 11px; text-transform: uppercase; color: {INK3}">{cells}</div>'
+
+
+def wg_row(name, accent, dot, status, members, spend, age, note=""):
+    lines = (f'<span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: {INK2}; white-space: nowrap">'
+             f'<span style="width: 7px; height: 7px; border-radius: 999px; background: {dot}; flex-shrink: 0"></span>{status}</span>')
+    if note:
+        lines += f'<span style="padding-left: 13px; font-family: {MONO}; font-size: 11px; color: {INK3}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{note}</span>'
+    cell = lambda v, size: f'<span style="text-align: right; font-family: {MONO}; font-size: {size}px; color: {INK2 if size == 12 else INK3}">{v}</span>'
+    return (f'<div style="display: grid; {WG_GRID}; align-items: center; min-height: 64px; border-bottom: 0.5px solid {LINE}">'
+            f'<span style="display: flex; align-items: center; gap: 10px; min-width: 0">{diamond_stack(accent)}<strong style="font-size: 13px; font-weight: 700; color: {INK}">{name}</strong></span>'
+            f'<span style="display: flex; flex-direction: column; gap: 3px; min-width: 0">{lines}</span>{cell(members, 12)}{cell(spend, 12)}{cell(age, 11)}</div>')
+
+
+def wg_list(notes):
+    note = lambda text: text if notes else ""
+    return stack(
+        wg_head()
+        + wg_row("alpha", DOC_ACCENT, "#3fb37a", "Working · media", 3, "$0.40", "2m", note("setup done"))
+        + wg_row("launch-crew", AMBER, "#e08a3c", "Queued · #2", 4, "$1.12", "9m", note("setup done · media next"))
+        + wg_row("digest", "#8a5cf6", INK4, "Idle", 2, "$0.08", "1d"),
+        cap("A queued workgroup hides its finished setup; the pipeline phase shows only while it runs." if not notes else "The caption names what finished and what waits; rows with nothing finished draw none."),
+        gap=10,
+    )
+
+
+def wg_now():
+    return wg_list(False)
+
+
+def wg_proposed():
+    return wg_list(True)
+
+
+VERSION = "0.16.10"
+DOCKER_STEP = f'Set the image tag to {VERSION} in <span style="font-family: {MONO}">docker-compose.yml</span>, then <span style="font-family: {MONO}">docker compose up -d</span>.'
+DOCKER_PLAIN = f"Set the image tag to {VERSION} in docker-compose.yml, then docker compose up -d."
+
+
+def conn_line(tooltip=False):
+    tag = (f'<span style="padding: 2px 6px; border-radius: 4px; font-family: {MONO}; font-size: 11px; color: {WARNING_TEXT}; background: {mix("#e08a3c", 0.14, PANE)}">update</span>')
+    tip = ""
+    if tooltip:
+        tip = (f'<div style="position: absolute; left: 0; top: 46px; width: 300px; box-sizing: border-box; padding: 10px 12px; border-radius: 10px; background: {PANE}; border: 0.5px solid {LINE2}; '
+               f'box-shadow: 0 0 0 0.5px rgba(11,17,23,0.08), 0 12px 32px rgba(11,17,23,0.10); font-size: 12px; line-height: 1.5; color: {INK2}; z-index: 1">{DOCKER_STEP}</div>')
+    return (f'<div style="display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 0 10px; border-bottom: 0.5px solid {LINE}">{ic("server", 16, INK2)}'
+            f'<div style="display: flex; flex-direction: column; gap: 3px"><span style="display: inline-flex; align-items: center; gap: 8px; position: relative"><strong style="font-size: 13px; color: {INK}">remote-casa</strong>{tag}{tip}</span>'
+            f'{mono("casa.local · v0.16.9", 11, INK3)}</div></div>')
+
+
+def desktop_toast(text):
+    return (f'<div style="max-width: 440px; padding: 10px 12px; border-radius: 10px; background: {PANE}; border: 0.5px solid {LINE2}; font-size: 12px; line-height: 1.5; color: {INK2}; '
+            f'box-shadow: 0 0 0 0.5px rgba(11,17,23,0.08), 0 12px 32px rgba(11,17,23,0.10)">{text}</div>')
+
+
+def phone_frame(inner):
+    return f'<div style="width: 390px; max-width: 100%; border-radius: 12px; border: 0.5px solid {LINE2}; overflow: hidden; background: #ffffff">{inner}</div>'
+
+
+def phone_toast(title, message):
+    return (f'<div style="width: 350px; box-sizing: border-box; padding: 12px 16px; border-radius: 14px; background: {INK}; display: flex; flex-direction: column; gap: 3px">'
+            f'<span style="font-weight: 600; font-size: 14px; color: #ffffff">{title}</span><span style="font-size: 13px; line-height: 1.4; color: #ffffff; opacity: 0.8">{message}</span></div>')
+
+
+def connection_actions(update):
+    items = []
+    if update:
+        items.append(action_item("download", f"Update to v{VERSION}"))
+    items += [action_item("pencil", "Rename"), action_item("x", "Forget", danger=True)]
+    return phone_frame(sheet_header("remote-casa", "https://casa.local:7421") + f'<div style="padding-bottom: 12px">{separator(56).join(items)}</div>')
+
+
+def upd_now():
+    desktop = stack(
+        tagged("Desktop · Settings · Service, a Docker daemon", section("Service", "daemon + network", row("daemon", button("Update alpi", "ghost", "sm") + button("Restart daemon", "ghost", "sm")), first=True)),
+        tagged("Desktop · Connections, the update tag has no hint", conn_line()),
+        tagged("Desktop · after a click", desktop_toast("Can't self-update this installation. Docker: run docker compose pull, then docker compose up -d. Source install: git pull and restart the daemon.")),
+    )
+    mobile = stack(
+        tagged("Mobile · profile settings row, after a tap", stack(phone_frame(m_row("Update alpi", "installs the newest alpi and restarts", control=m_button("Update"), chevron=False, sep=False)),
+                                                                   phone_toast("Can't self-update this install", "Docker: docker compose pull, then docker compose up -d · source install: git pull and restart the daemon"), gap=10)),
+        tagged("Mobile · connection action sheet, after a tap", stack(connection_actions(True), phone_toast("Can't self-update", "Image-pinned (Docker) — repull the image to update."), gap=10)),
+    )
+    return stack(desktop, mobile, gap=26)
+
+
+def upd_proposed():
+    desktop = stack(
+        tagged("Desktop · Settings · Service, a Docker daemon", section("Service", "daemon + network", row("daemon", button("Restart daemon", "ghost", "sm")), first=True)),
+        tagged("Desktop · Connections, the tag explains itself on hover", f'<div style="height: 118px">{conn_line(True)}</div>'),
+    )
+    mobile = stack(
+        tagged("Mobile · profile settings row, no button", phone_frame(m_row("Update alpi", DOCKER_PLAIN, chevron=False, sep=False).replace("white-space: nowrap; overflow: hidden; text-overflow: ellipsis", "", 1))),
+        tagged("Mobile · connection action sheet, no update item", connection_actions(False)),
+        cap("One sentence from common/, read by the desktop tooltip, both mobile places and alpi update."),
+    )
+    return stack(desktop, mobile, gap=26)
+
+
+LOCK_BG = "background: linear-gradient(180deg, #1b2530 0%, #0d131a 100%)"
+
+
+def glass(inner, pad=14):
+    return f'<div style="padding: {pad}px; border-radius: 22px; background: rgba(255,255,255,0.14); display: flex; flex-direction: column; gap: 10px; box-sizing: border-box">{inner}</div>'
+
+
+def app_icon():
+    return f'<span style="width: 34px; height: 34px; border-radius: 8px; background: #fff; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0">{diamond_stack(AMBER, 10)}</span>'
+
+
+def push_banner(actions):
+    buttons = ""
+    if actions:
+        pill_ = lambda text, color: f'<span style="flex: 1; text-align: center; padding: 9px 0; border-radius: 12px; background: rgba(255,255,255,0.14); font-size: 14px; font-weight: 600; color: {color}">{text}</span>'
+        buttons = f'<div style="display: flex; gap: 8px; margin-top: 4px">{pill_("Deny", "#ff9b94")}{pill_("Allow once", "#fff")}</div>'
+    head = (f'<div style="display: flex; gap: 10px; align-items: flex-start">{app_icon()}<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">'
+            f'<span style="display: flex; justify-content: space-between; font-size: 12px; color: rgba(255,255,255,0.6)"><span>ALPI</span><span>now</span></span>'
+            f'<span style="font-size: 14px; font-weight: 600; color: #fff">remote-casa · abby · approval needed</span>'
+            f'<span style="font-family: {MONO}; font-size: 12px; color: rgba(255,255,255,0.75)">rm -rf dist &amp;&amp; npm run build</span></div></div>')
+    return glass(head + buttons, 12)
+
+
+def live_activity():
+    seg = lambda on: f'<span style="flex: 1; height: 5px; border-radius: 999px; background: {AMBER if on else "rgba(255,255,255,0.25)"}"></span>'
+    top = (f'<div style="display: flex; align-items: center; gap: 10px">{diamond_stack(AMBER, 10)}<span style="flex: 1; font-size: 15px; font-weight: 600; color: #fff">alpha · #collect</span>'
+           f'<span style="font-family: {MONO}; font-size: 13px; color: #fff">4:12</span></div>')
+    bar = f'<div style="display: flex; gap: 4px">{seg(True)}{seg(True)}{seg(False)}{seg(False)}</div>'
+    foot = (f'<div style="display: flex; justify-content: space-between; font-family: {MONO}; font-size: 12px; color: rgba(255,255,255,0.7)"><span>phase 2 of 4</span><span>doc · alpi · yuri</span></div>')
+    return glass(top + bar + foot)
+
+
+def lock_screen():
+    return (f'<div style="width: 360px; box-sizing: border-box; padding: 34px 16px 22px; border-radius: 34px; {LOCK_BG}; display: flex; flex-direction: column; gap: 14px">'
+            f'<div style="display: flex; flex-direction: column; align-items: center; gap: 2px; padding-bottom: 10px"><span style="font-size: 13px; color: rgba(255,255,255,0.7)">Thursday 1 October</span>'
+            f'<span style="font-size: 64px; font-weight: 600; line-height: 1.05; letter-spacing: -0.02em; color: #fff">9:41</span></div>'
+            f'{live_activity()}{push_banner(True)}</div>')
+
+
+def live_now():
+    activity = phone_frame(f'<div style="padding: 12px 16px 4px">{cap("Running · 2")}</div>'
+                           + f'<div style="display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 16px">{ic("activity", 16, "#8a5a0a")}'
+                           f'<div style="flex: 1; display: flex; flex-direction: column; gap: 4px"><span style="font-weight: 500; font-size: 15px; color: {INK}">alpha · #collect</span>'
+                           f'<span style="font-family: {MONO}; font-size: 12px; color: {INK3}">phase 2 of 4 · daily-digest</span></div></div>')
+    banner = (f'<div style="width: 350px; box-sizing: border-box; padding: 12px; border-radius: 18px; background: {SIDE}; border: 0.5px solid {LINE2}; display: flex; flex-direction: column; gap: 10px">'
+              f'<div style="display: flex; gap: 10px; align-items: flex-start"><span style="width: 34px; height: 34px; border-radius: 8px; background: {PANE}; border: 0.5px solid {LINE2}; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0">{diamond_stack(AMBER, 10)}</span>'
+              f'<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span style="display: flex; justify-content: space-between; font-size: 12px; color: {INK3}"><span>ALPI</span><span>now</span></span>'
+              f'<span style="font-size: 14px; font-weight: 600; color: {INK}">remote-casa · abby · approval needed</span><span style="font-family: {MONO}; font-size: 12px; color: {INK2}">rm -rf dist &amp;&amp; npm run build</span></div></div>'
+              f'<div style="display: flex; gap: 8px"><span style="flex: 1; text-align: center; padding: 9px 0; border-radius: 12px; background: {HOVER}; font-size: 14px; font-weight: 600; color: #b73737">Deny</span>'
+              f'<span style="flex: 1; text-align: center; padding: 9px 0; border-radius: 12px; background: {HOVER}; font-size: 14px; font-weight: 600; color: {INK}">Allow once</span></div></div>')
+    return stack(
+        tagged("Activity tab · only while the app is open", activity),
+        tagged("Local notification · only while the app holds a socket", banner),
+        cap("Close the app and neither reaches the lock screen."),
+        gap=18,
+    )
+
+
+def live_proposed():
+    return stack(tagged("Lock screen · app closed", lock_screen()), cap("A Live Activity for the running workgroup and the approval as a push with the same two actions."), gap=10)
+
+
+EMPTY = (
+    ("Desktop · Workgroups list", "box-d", ("No workgroups yet", "a hub profile plus the members it directs"), ("No workgroups yet", "A workgroup is a hub profile plus the members it directs.")),
+    ("Desktop · Workgroup thread", "box-d", ("no posts yet", "direct @doc to open a #task"), ("No posts yet", "Direct @doc to open a #task.")),
+    ("Desktop · Activity panel", "box-d", ("Nothing running · agents at work show up here", ""), ("Nothing running", "Running turns, workgroup phases, schedules and anything waiting on you show up here.")),
+    ("Desktop · Sessions menu", "box-d", ("No sessions yet", ""), ("No sessions yet", "A session starts with your first message.")),
+    ("Desktop · Connections", "box-d", ("No paired apps yet · create a connection and share its pairing link with a phone or desktop.", ""), ("No paired apps yet", "Create a connection and share its pairing link with a phone or desktop.")),
+    ("Desktop · MCP server, env keys", "env", "none", "No env keys"),
+    ("Mobile · Roster", "box-m", ("Nothing here yet", "This daemon has no profiles or workgroups yet."), ("No profiles or workgroups yet", "Create one to begin.")),
+    ("Mobile · Activity", "box-m", ("Nothing running", "Running turns, workgroup phases, schedules and anything waiting on you show up here."), ("Nothing running", "Running turns, workgroup phases, schedules and anything waiting on you show up here.")),
+    ("Mobile · Workgroup thread", "box-m", ("no posts yet", "direct @doc to open a #task"), ("No posts yet", "Direct @doc to open a #task.")),
+    ("Mobile · Connection sheet", "box-m", ("Not paired yet — tap below to scan a QR.", ""), ("Not paired yet", "Tap below to scan a QR.")),
+    ("Mobile · Email row", "pill", "none", "No accounts yet"),
+)
+
+
+def empty_box(client, title, hint):
+    size, hint_size = (14, 12) if client == "d" else (16, 14)
+    body = f'<span style="font-size: {hint_size}px; line-height: 1.45; color: {INK3}; max-width: 380px">{hint}</span>' if hint else ""
+    return (f'<div style="display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 20px; border-radius: 10px; border: 0.5px solid {LINE}; background: {PANE}; text-align: center">'
+            f'<span style="font-size: {size}px; font-weight: 600; color: {INK if client == "d" else INK2}">{title}</span>{body}</div>')
+
+
+def empty_inline(kind, text):
+    pill = f'<span style="display: inline-flex; align-items: center; min-height: 22px; padding: 0 8px; border-radius: 999px; background: {HOVER}; font-family: {MONO}; font-size: 12px; color: {INK2}; opacity: 0.55">{text}</span>'
+    value = pill if kind == "pill" else f'<span style="font-size: 12px; color: {INK3}">{text}</span>'
+    name = "Email" if kind == "pill" else "env"
+    return f'<div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-radius: 10px; border: 0.5px solid {LINE}; background: {PANE}"><span style="font-size: 13px; color: {INK}">{name}</span>{value}</div>'
+
+
+def empty_column(index):
+    items = []
+    for where, kind, *texts in EMPTY:
+        now_or_proposed = texts[index]
+        drawn = empty_inline(kind, now_or_proposed) if kind in ("env", "pill") else empty_box(kind[-1], *now_or_proposed)
+        items.append(tagged(where, drawn))
+    return stack(*items, gap=12)
+
+
+def empty_now():
+    return empty_column(0)
+
+
+def empty_proposed():
+    return empty_column(1)
+
+
+PROPOSALS = [
+    {
+        "id": "UX.7",
+        "client": "desktop",
+        "area": "Settings · Storage",
+        "title": "The Storage field is one inventory",
+        "why": "Every group shows its size twice: once as a usage row, again inside a reclaim row and up to five DELETE rows, so the field grows to thirteen rows that repeat each other.",
+        "now": storage_now,
+        "proposed": storage_proposed,
+        "accept": "Each group row keeps size and file count and carries its own actions: one Clean chip totalling its safe members and one confirmed Delete chip per destructive member, named after the target. The standalone reclaim and delete rows go, leaving at most one Clean everything safe line and no always-safe prose. With every category populated the field has no more rows than non-empty groups plus one, no two rows share a label, and the per-row amounts sum to the sweep total.",
+        "h": 880,
+    },
+    {
+        "id": "UX.8",
+        "client": "desktop",
+        "area": "Settings · Usage",
+        "title": "Usage bars follow the cost when the profile pays",
+        "why": "The bars are sized by tokens while the headline and the daily cap are dollars; with prompt caching a heavy token day can cost little, so the tallest bar is not the expensive day.",
+        "now": usage_now,
+        "proposed": usage_proposed,
+        "accept": "A window with any cost draws bars proportional to dollars, and hovering a bar shows the cost with input and output tokens. A window where every day is free draws tokens as today.",
+        "h": 760,
+    },
+    {
+        "id": "THINK.1",
+        "client": "desktop",
+        "area": "Conversation · reasoning row",
+        "title": "The live Thinking row reads like the settled one",
+        "why": "While a turn streams with no reasoning text yet, the row is a tinted bar across the whole width with its chevron hidden, so the label sits 24px in with nothing before it and its letters drift under the clipped gradient. The settled Thought for Ns row beside it has a chevron and no bar. The alternative is to drop the chevron slot and start the label flush left, which would put it 24px left of every settled row in the same block.",
+        "now": think_now,
+        "proposed": think_proposed,
+        "accept": "The static live row has no tinted bar, shows the same chevron as the settled row so its label starts at the same x, and draws its letters as ordinary text with the shimmer on opacity. Checked in the desktop app; a test pins the static live row's classes.",
+        "h": 560,
+    },
+    {
+        "id": "UI-WG.STATUS",
+        "client": "desktop",
+        "area": "Workgroups · list",
+        "title": "A workgroup row says what finished as well as what runs",
+        "why": "The Status cell shows one state, so a workgroup whose setup is done and whose media pipeline waits reads only Queued · #2. The recommendation is a second mono line under the existing dot and label naming the finished phases and what is next. The alternative is one compound line, setup done · media queued #2, which does not fit the 10.5rem column and would truncate.",
+        "now": wg_now,
+        "proposed": wg_proposed,
+        "accept": "The Status cell keeps today's dot and label and adds one mono caption naming the finished phases and, when a later phase waits, that phase; a row with nothing finished draws no caption; the row keeps its 64px height and the caption truncates with an ellipsis at the column width; dot colours are unchanged.",
+        "h": 700,
+    },
+    {
+        "id": "UI-UPD.1",
+        "client": "desktop + mobile",
+        "area": "Settings · daemon update",
+        "title": "A daemon that cannot self-update offers no update button",
+        "why": "A Docker daemon still shows Update alpi on both clients and answers the tap with three different texts, one of them wrong for a pinned tag. The recommendation removes the button where the daemon reports it cannot self-update and puts one shared step in the connection tag's tooltip and in the mobile settings row. The alternative keeps the button but disabled, which leaves a control that never works.",
+        "now": upd_now,
+        "proposed": upd_proposed,
+        "accept": "For a daemon that reports no self-update, desktop hides Update alpi and the update tag's tooltip reads the shared step with the latest version filled in; mobile shows the same sentence in the profile settings row, its helper wrapping to two lines, with no button and drops the update item from the connection action sheet. A daemon that can self-update keeps today's button, toast and action.",
+        "h": 1260,
+    },
+    {
+        "id": "UI-MOB.LIVE-ACTIVITY",
+        "client": "mobile",
+        "area": "Lock screen · Live Activity and approval push",
+        "title": "A running workgroup and an approval reach a locked phone",
+        "why": "Today the phone learns about a running workgroup only in the Activity tab and about an approval only through a local notification while the app is alive. This is a design proposal only while the push relay is pending: the card and the banner are drawn so the relay work has a target. The alternative is the approval push alone, without a Live Activity, which needs no widget extension.",
+        "now": live_now,
+        "proposed": live_proposed,
+        "accept": "A running workgroup shows as a Live Activity with its name and task, phase segments, elapsed time and the members working; an approval arrives as a push with the app closed, carrying Deny and Allow once as actions. Both draw in the light and dark lock screens and stay within the system's Live Activity height.",
+        "h": 870,
+    },
+    {
+        "id": "UI-EMPTY-VOICE",
+        "client": "desktop + mobile",
+        "area": "Empty states",
+        "title": "Empty states speak in one voice on both clients",
+        "why": "Empty copy mixes lowercase headings, none, a middle dot or em dash joining title and hint, and hints with or without a full stop; desktop and mobile word the same absence differently. The recommendation is one rule: a sentence-case title, No X yet for a list that will fill or Nothing running for a live state, and at most one hint sentence. The alternative is titles without hints, which is shorter but drops the next step.",
+        "now": empty_now,
+        "proposed": empty_proposed,
+        "accept": "Every empty state on both clients has a sentence-case title and, where it helps, one hint sentence that starts with a capital and ends with a full stop; none uses none, a lowercase heading, a middle dot or an em dash to join title and hint; an inline absence reads No X. The same absence reads the same on desktop and mobile.",
+        "h": 1580,
+    },
+]
+
+
+def proposal_board(p):
+    kicker = " · ".join((p["id"], p["client"], p["area"]))
+    head = f'<div style="display: flex; flex-direction: column; gap: 10px">{label(kicker)}{h1(p["title"], p["why"])}</div>'
+    drawings = f'<div style="display: flex; gap: 24px; align-items: stretch">{drawing("Now", p["now"]())}{drawing("Proposed", p["proposed"]())}</div>'
+    accept = (f'<div style="display: flex; flex-direction: column; gap: 6px">{label("Accept")}'
+              f'<p style="margin: 0; max-width: 1080px; font-size: 13px; line-height: 1.55; color: {INK}">{p["accept"]}</p></div>')
+    body = (f'<div data-proposal="{p["id"]}" style="padding: 40px 48px; display: flex; flex-direction: column; gap: 26px; box-sizing: border-box">'
+            f'{head}{drawings}{accept}</div>')
+    return page("Proposal " + p["id"], PAGE_W, p["h"], body)
+
+
+def board_name(p):
+    return "Proposals-" + p["id"] + ".dc.html"
+
+
+PROPOSAL_BOARDS = [(board_name(p), (lambda p=p: proposal_board(p)), p["h"], p["id"] + " · " + p["title"]) for p in PROPOSALS]

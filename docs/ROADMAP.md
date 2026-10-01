@@ -14,9 +14,9 @@ Every task is one entry that one commit per product it releases can finish, with
 
 - **ID** — stable, never reused. Keep an existing ID when ARCHITECTURE, a
   changelog, a test or a sibling repository cites it.
-- **type** — `bug`, `feature`, `chore`, `verify` (evidence from a real device or
-  environment), `deploy` (build, install or roll out outside the repository) or
-  `decision`.
+- **type** — `bug`, `feature`, `chore`, `ui` (a visual change drawn as a board in
+  [design/](../design/)), `verify` (evidence from a real device or environment),
+  `deploy` (build, install or roll out outside the repository) or `decision`.
 - **product** — `alpi`, `desktop`, `mobile`, `common` or `design`, one or more. A
   task that releases several products ships one commit per product, daemon first;
   a `common/` change releases both clients.
@@ -45,6 +45,13 @@ ARCHITECTURE section it changes. When a feature needs device evidence, split it:
 the implementation is an agent task; the device check is a creator `verify` task
 that depends on it.
 
+A purely visual idea is not filed here: its board on the `design/` Proposals page is the
+proposal. Once the creator approves it, it becomes one `ui` entry in Queue that names the
+board ID, with the board as its accept; shipping it deletes the board and regenerates
+`design/`. A task that mixes logic and a screen is split: the screen is board `UI-<TASKID>`, and the
+logic stays under its ID with the line "the interface follows board UI-<TASKID>" in its accept; board
+IDs never equal a non-`ui` task ID. Tasks with no visual component never get a board.
+
 Every agent task also meets these, on top of its `accept`: a regression test that
 fails before the fix; the relevant `pytest --integration` tests run for the exact
 release SHA (`publish.yml` runs only `pytest -q`); no new runtime dependency, RPC
@@ -54,13 +61,14 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 ## Queue
 
 - **THINK.1** — The desktop "Thinking…" row renders wrongly
-  `bug · desktop · agent · normal`
+  `ui · desktop · agent · normal`
   note: while streaming with no reasoning text yet, `Reasoning.jsx` shows the static row
   with the shimmer label ([Reasoning.module.css](../desktop/src/primitives/Reasoning.module.css)):
   full-width grey bar, hidden chevron leaving a wide left gap, uneven letter spacing in the
   monospace label under `background-clip: text`.
-  accept: the live row reads like the settled "Thought for Ns" row (no gap, even spacing),
-  checked in the desktop app; a test pins the static live row's classes.
+  accept: the board THINK.1: the live row reads like the settled "Thought for Ns" row (no
+  gap, no bar, even spacing), checked in the desktop app; a test pins the static live row's
+  classes.
 
 - **SCOPE.4** — Device-scope privacy matrix
   `chore · alpi · agent · high`
@@ -140,25 +148,19 @@ defect, so a helper is extracted only when it removes evidenced duplication.
   overwrite.
 
 - **UX.7** — The desktop Storage field is one inventory
-  `feature · desktop · agent · normal`
+  `ui · desktop · agent · normal`
   note: [maintenance.jsx](../desktop/src/features/settings/fields/maintenance.jsx)
   renders a usage row per `STORAGE_GROUPS` entry, then a `reclaim` row, then a
-  `delete` row per destructive `host.cleanup.plan` member (up to thirteen rows,
-  five labelled `DELETE`), re-counting bytes already shown. Plan members carry
+  `delete` row per destructive `host.cleanup.plan` member. Plan members carry
   their group (`GROUP_OF` in [cleanup.py](../alpi/cleanup.py)) and the component
   already builds `planByGroup`.
-  accept: desktop rendering only; `host.profile.storage`, `host.cleanup.plan`,
-  `host.cleanup.apply`, console and mobile untouched. Each group row keeps size
-  and file count and carries its own actions: one **Clean** chip totalling its
-  safe members and one confirmed **Delete** chip per destructive member, named
-  after the target. The standalone reclaim/delete rows go (at most one **Clean
-  everything safe** summary line); no "always safe" prose. With every category
-  populated the field renders no more rows than non-empty groups plus one, no two
-  rows share a label, per-row amounts sum to the sweep total, destructive actions
-  still open `ConfirmDelete`, `canClean` is unchanged. `maintenance.test.jsx`
-  covers a mixed group (Logs shows Clean plus Delete run journals; Conversations
-  shows three named Deletes and no Clean; Files shows Clean plus Delete generated
-  files); both client suites pass; the changelog entry pins no new alpi minimum.
+  accept: the board UX.7. Desktop rendering only; `host.profile.storage`,
+  `host.cleanup.plan`, `host.cleanup.apply`, console and mobile untouched;
+  destructive actions still open `ConfirmDelete`, `canClean` is unchanged.
+  `maintenance.test.jsx` covers a mixed group (Logs shows Clean plus Delete run
+  journals; Conversations shows three named Deletes and no Clean; Files shows
+  Clean plus Delete generated files); both client suites pass; the changelog
+  entry pins no new alpi minimum.
 
 - **KB.14** — Unchanged content is not embedded again
   `bug · alpi · agent · normal`
@@ -234,16 +236,15 @@ defect, so a helper is extracted only when it removes evidenced duplication.
   today's behaviour. Updater tests stub environment and subprocess per kind; both
   client suites cover the one hint string. No in-container upgrade, no compose
   editing.
+  the interface follows board UI-UPD.1.
 
 - **UX.8** — Usage bars by cost when the profile pays
-  `feature · desktop · agent · normal`
+  `ui · desktop · agent · normal`
   note: [Usage.jsx](../desktop/src/features/settings/Usage.jsx) sizes bars by
   tokens (`maxTok`) while the headline and the daily cap are dollars; with prompt
   caching they diverge. [ledger.py](../alpi/ledger.py) already keeps both per day.
-  accept: a window with any cost draws bars proportional to dollars and the
-  tooltip shows both numbers; an all-free window draws tokens as today; no new
-  verb; a component test renders a mixed window; both client suites pass; the
-  changelog entry pins no new alpi minimum.
+  accept: the board UX.8. No new verb; a component test renders a mixed window;
+  both client suites pass; the changelog entry pins no new alpi minimum.
 
 - **SCHED.6** — Each fired job is stamped when it finishes
   `bug · alpi · agent · normal`
@@ -350,6 +351,7 @@ Demand-gated entries name the condition that promotes them.
   note: one observation only, cosmetic.
   accept: the workgroup list shows a compound status ("setup done · media queued
   #N") instead of `queued` hiding `completed`, in the CLI and desktop.
+  the interface follows board UI-WG.STATUS.
 - **ALP.ADMIT** — Admission that adapts to provider latency
   `feature · alpi · agent · low`
   note: ALP.9 (shipped) settled `alp.max_active_workgroups` as an admission threshold, not
@@ -361,6 +363,7 @@ Demand-gated entries name the condition that promotes them.
   note: needs a remote push relay (APNs/FCM) the daemon does not have.
   accept: a running workgroup shows as a Live Activity, and an approval reaches
   the phone as a push with the app closed.
+  the interface follows board UI-MOB.LIVE-ACTIVITY.
 
 ## Discarded — don't relitigate
 

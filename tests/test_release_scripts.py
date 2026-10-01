@@ -239,7 +239,7 @@ def test_alpi_changes_run_the_integration_suite() -> None:
 def test_design_drift_passes_when_the_build_changes_nothing_and_names_what_it_regenerated(tmp_path: Path) -> None:
     import importlib.util
 
-    spec = importlib.util.spec_from_file_location("design_drift", REPO / "scripts" / "design_drift.py")
+    spec = importlib.util.spec_from_file_location("design_drift", REPO / "design" / "drift.py")
     drift = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(drift)
     (tmp_path / "design").mkdir()

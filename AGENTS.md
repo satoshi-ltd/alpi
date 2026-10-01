@@ -165,14 +165,16 @@ clients surface every `agent.message`; `schedule.*` fields instead of parsing
   it goes.
 
 - **`design/` is the visual reference, generated.** `python3 design/build.py`
-  rewrites `design/*.html` (System, Desktop, Mobile, Open work, Proposals) and the canvas
-  artboards under `design/canvas/` from `design/src/`; never edit the HTML by
-  hand. **Any change to what desktop or mobile shows or how it behaves updates
-  every affected board in the same change** (System tokens, controls,
-  conversation and workgroups; the Desktop and Mobile screens), regenerated and
-  rendered in light and dark. A UI change is not done while `design/` still
-  shows the old look. `tests/test_design_kit.py` keeps the pages on the shipped
-  tokens; Open work and Proposals hold only pending rows.
+  rewrites `design/*.html` and the canvas artboards under `design/canvas/` from
+  the repo's tokens, components and screens; never edit the HTML by hand. **Any
+  change to what desktop or mobile shows or how it behaves regenerates `design/`
+  in the same change**: a UI change is not done while `design/` still shows the old
+  look. `tests/test_design_kit.py` and `design/drift.py` fail until you do. The
+  design-kit contract, board format and lifecycle live in `design/AGENTS.md`.
+  - **Views in sync.** The views (System and every interface tab) show what ships; Proposals shows what is proposed.
+    Shipping a proposal is one change: the code, the views regenerated so they show the new design, the board deleted,
+    its `ui` line deleted, and the changelog and the spec updated. A board left standing after its change shipped, or
+    a view that still draws the old look, fails the adversarial review before the commit.
 
 - **Console parity is mandatory.** The console (`alpi setup`, the TUI,
   the CLI) is the core product; desktop/mobile are siblings, not the

@@ -82,7 +82,7 @@ def plan(paths: list[str], run_all: bool = False) -> list[Step]:
     if on(MOBILE_DEPS):
         steps.append(Step("mobile-lock", ("npm", "ci", "--dry-run"), "mobile"))
     if on(DESIGN, exclude_tests=True):
-        steps.append(Step("design", ("python3", "scripts/design_drift.py")))
+        steps.append(Step("design", ("python3", "design/drift.py")))
         steps.append(Step("design-kit", ("uv", "run", "pytest", "-q", "tests/test_design_kit.py")))
     return steps
 

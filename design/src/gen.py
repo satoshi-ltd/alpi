@@ -114,6 +114,7 @@ def page(title, w, h, body, bg="#ffffff", lang="en"):
 <head>
 <meta charset="utf-8">
 <title>{title}</title>
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
 <script src="./support.js"></script>
 {FONT_LINK}
 <link rel="stylesheet" href="parity.css">
@@ -850,7 +851,6 @@ def build(desktop_boards):
     def title(id_, text, y, page, x=0, max_w=2600):
         notes[id_] = {"x": x, "y": y, "text": text, "kind": "title1", "maxW": max_w, "page": page}
 
-    from audit2 import audit2_board
     from desktop_overlays import OVERLAYS_H, desktop_overlays
     from mobile_overlays import MOBILE_OVERLAYS
     from system_boards import DESKTOP_COMPONENTS_H, MOBILE_COMPONENTS_H, SYSTEM, TOKENS_H
@@ -903,9 +903,7 @@ def build(desktop_boards):
             place(name, html, x, y, w, h, t, "mobile")
         y += max(h for _, _, _, _, h, _ in items)
 
-    place("Main.dc.html", audit2_board(), 0, 0, 1280, 140 + 90 * 6 + 120, "Open work", "audit")
-
-    from proposals_boards import PROPOSAL_BOARDS
+    from proposals import PROPOSAL_BOARDS
     y = 0
     for name, fn, h, t in PROPOSAL_BOARDS:
         y += 240
@@ -928,7 +926,7 @@ def build(desktop_boards):
         "createdOnFiles": created,
         "title": "Alpi desktop and mobile parity",
         "launch": {"view": "canvas", "page": "system"},
-        "pages": [{"id": "system", "name": "System"}, {"id": "desktop", "name": "Desktop"}, {"id": "mobile", "name": "Mobile"}, {"id": "audit", "name": "Open work"}, {"id": "proposals", "name": "Proposals"}],
+        "pages": [{"id": "system", "name": "System"}, {"id": "desktop", "name": "Desktop"}, {"id": "mobile", "name": "Mobile"}, {"id": "proposals", "name": "Proposals"}],
         "boards": boards,
         "order": order,
         "notes": notes,

@@ -97,6 +97,12 @@ body.kit {
   font-weight: 400;
   color: var(--ink-4, #b1bac4);
 }
+.kit-empty {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--ink-3, #626e7d);
+}
 .kit-row {
   display: flex;
   flex-wrap: wrap;
