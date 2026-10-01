@@ -94,10 +94,13 @@ async def _host_version(
     role = auth.role if auth and auth.valid else ("member" if token else "admin")
     context = current()
     from alpi import updater
+    installer = await asyncio.to_thread(updater.install_kind)
     return {
         "agent_name": "alpi",
         "version": _alpi_version,
         "update_available": updater.available_update() or "",
+        "installer": installer,
+        "self_update": updater.can_self_update(installer),
         "device_name": device_name,
         "device_id": _ensure_device_id(server.home),
         "role": role,

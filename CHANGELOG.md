@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.16.19 — 2026-10-01 — a daemon says whether it can update itself
+
+- **`host.version` now reports `installer` and `self_update`.** A Docker or source-checkout daemon
+  cannot upgrade itself, and the apps used to offer an update button that could only fail.
+- **`alpi update` names the manual step** on those installs instead of a dev-install remark: the image
+  tag to set in `docker-compose.yml` for Docker, `git pull` and a restart for a checkout.
+- The install kind that used to read `dev` is now `source`; the `manual` update reason is unchanged.
+
 ## v0.16.18 — 2026-10-01 — a finished scheduled job is not fired again after a restart
 
 - **Each scheduled job is marked as run as soon as it finishes.** The marks used to be written once

@@ -114,6 +114,12 @@ result in two places —
 - The TUI's top bar adds a small `↑ vX.Y.Z` badge next to the
   current version.
 
+`alpi update` cannot update an alpi that runs in Docker or from a source
+checkout: it prints the manual step instead (set the new image tag in
+`docker-compose.yml` and run `docker compose up -d`, or `git pull` and restart
+the daemon), and the desktop and mobile apps show the same step instead of an
+update button.
+
 `alpi update --check` does just the check and tells you whether
 an upgrade exists, without installing anything, and it queries
 PyPI whenever you run it. `ALPI_SKIP_UPDATE_CHECK=1` stops only

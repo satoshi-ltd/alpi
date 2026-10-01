@@ -25,7 +25,7 @@ async def _daemon_update(
 ) -> dict[str, Any]:
     from alpi import updater
     result = await asyncio.to_thread(updater.update_now)
-    # Restart only on a real upgrade — the supervisor relaunches the new code (in-container too: a restart keeps the writable layer; only a recreate reverts).
+    # Restart only on a real upgrade; a Docker daemon never gets here (reason "manual").
     if result.get("updated"):
         schedule_self_terminate(delay=0.5)
     return result

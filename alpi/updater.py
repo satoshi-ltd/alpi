@@ -166,31 +166,63 @@ def available_update() -> str | None:
 # ── upgrade flow ────────────────────────────────────────────────────
 
 
+_SELF_UPDATING = frozenset({"uv", "pipx"})
+_DOCKER_HINT = "Set the image tag to {version} in docker-compose.yml, then docker compose up -d."
+_SOURCE_HINT = "Run git pull and restart the daemon."
+_installer_memo: str | None = None
+_installer_lock = threading.Lock()
+
+
+def _probe_installer() -> tuple[str, bool]:
+    """``(kind, certain)``; ``certain`` is False when a package manager failed to answer."""
+    from alpi import runtime
+    if runtime.is_docker():
+        return "docker", True
+    certain = True
+    for name, args, kind in (
+        ("uv", ["tool", "list"], "uv"),
+        ("pipx", ["list", "--short"], "pipx"),
+    ):
+        binary = shutil.which(name)
+        if not binary:
+            continue
+        try:
+            out = subprocess.run(
+                [binary, *args], capture_output=True, text=True,
+                timeout=10, check=False,
+            )
+        except (subprocess.TimeoutExpired, OSError):
+            certain = False
+            continue
+        if out.returncode == 0 and _PACKAGE_NAME in (out.stdout or ""):
+            return kind, True
+    return "source", certain
+
+
 def _detect_installer() -> str:
-    """``"uv"`` | ``"pipx"`` | ``"dev"`` (editable / source install)."""
-    uv = shutil.which("uv")
-    if uv:
-        try:
-            out = subprocess.run(
-                [uv, "tool", "list"], capture_output=True, text=True,
-                timeout=10, check=False,
-            )
-            if out.returncode == 0 and _PACKAGE_NAME in (out.stdout or ""):
-                return "uv"
-        except (subprocess.TimeoutExpired, OSError):
-            pass
-    pipx = shutil.which("pipx")
-    if pipx:
-        try:
-            out = subprocess.run(
-                [pipx, "list", "--short"], capture_output=True, text=True,
-                timeout=10, check=False,
-            )
-            if out.returncode == 0 and _PACKAGE_NAME in (out.stdout or ""):
-                return "pipx"
-        except (subprocess.TimeoutExpired, OSError):
-            pass
-    return "dev"
+    """``"uv"`` | ``"pipx"`` | ``"docker"`` | ``"source"`` (editable / checkout install)."""
+    return _probe_installer()[0]
+
+
+def install_kind() -> str:
+    global _installer_memo
+    with _installer_lock:
+        if _installer_memo is None:
+            kind, certain = _probe_installer()
+            if not certain:
+                return kind
+            _installer_memo = kind
+        return _installer_memo
+
+
+def can_self_update(kind: str) -> bool:
+    return kind in _SELF_UPDATING
+
+
+def manual_hint(kind: str, version: str | None) -> str:
+    if kind == "docker":
+        return _DOCKER_HINT.format(version=version or "the new version")
+    return _SOURCE_HINT
 
 
 def _upgrade_command(installer: str) -> list[str] | None:
@@ -251,24 +283,20 @@ def do_update(*, check_only: bool, yes: bool) -> int:
     )
     ui._console.print(f"[dim]changelog: {_CHANGELOG_URL}[/dim]")
 
+    kind = _detect_installer()
+    if not can_self_update(kind):
+        ui._console.print(f"\n[dim]this alpi cannot update itself. {manual_hint(kind, latest)}[/dim]")
+        return 0
+
     if check_only:
         ui._console.print(
             "\n[dim]run `alpi update` (without --check) to install.[/dim]"
         )
         return 0
 
-    installer = _detect_installer()
-    if installer == "dev":
-        ui._console.print(
-            "\n[dim]you appear to be on a dev install (`uv sync` from "
-            "a clone). To upgrade, `git pull` in your alpi checkout."
-            "[/dim]"
-        )
-        return 0
-
-    cmd = _upgrade_command(installer)
+    cmd = _upgrade_command(kind)
     if cmd is None:
-        ui.fail(f"don't know how to upgrade installer {installer!r}")
+        ui.fail(f"don't know how to upgrade installer {kind!r}")
         return 1
 
     if not yes:

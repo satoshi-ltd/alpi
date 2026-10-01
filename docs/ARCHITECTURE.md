@@ -1349,6 +1349,17 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   peer-to-peer (`link.*`, `workgroup.*`) and is **not** what the client
   calls.
 
+- **`host.version` says whether a daemon can update itself.** It returns
+  `installer` (`uv` | `pipx` | `docker` | `source`, named once per process by
+  `updater.install_kind`; `docker` comes from the deploy runtime) and
+  `self_update`, true only for `uv` and `pipx`. A client shows its update
+  button only when `self_update` is not false (a daemon that omits it keeps
+  today's behaviour) and otherwise shows the manual step from
+  `common/updateHint.mjs`, which `alpi update` prints too: for Docker the image
+  tag to set in `docker-compose.yml`, for a source install `git pull` and a
+  restart. `host.daemon.update` on such a daemon answers `reason: "manual"`
+  and runs nothing.
+
 - **Engine `assistant_done` events: `final=True` marks the deliverable.**
   The engine emits `AgentEvent(kind="assistant_done", ...)` for **every**
   assistant message, including preamble narration that comes *before*

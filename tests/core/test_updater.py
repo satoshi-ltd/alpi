@@ -25,6 +25,13 @@ def fake_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return tmp_path
 
 
+@pytest.fixture(autouse=True)
+def _outside_a_container(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("ALPI_PLATFORM", raising=False)
+    monkeypatch.delenv("ALPI_DEPLOY_RUNTIME", raising=False)
+    monkeypatch.setattr(updater, "_installer_memo", None)
+
+
 def _write_cache(home: Path, latest: str, current: str,
                  checked_at: str | None = None) -> None:
     p = updater._cache_path()
@@ -52,13 +59,13 @@ def test_update_now_up_to_date(fake_home: Path, monkeypatch) -> None:
     assert res["ok"] is True and res["updated"] is False and res["reason"] == "up-to-date"
 
 
-def test_update_now_dev_install_is_manual(fake_home: Path, monkeypatch) -> None:
+def test_update_now_source_install_is_manual(fake_home: Path, monkeypatch) -> None:
     monkeypatch.setattr(updater, "__version__", "0.9.4")
     monkeypatch.setattr(updater, "_fetch_pypi_version", lambda: "0.9.5")
-    monkeypatch.setattr(updater, "_detect_installer", lambda: "dev")
+    monkeypatch.setattr(updater, "_detect_installer", lambda: "source")
     res = updater.update_now()
     assert res["ok"] is False and res["updated"] is False
-    assert res["reason"] == "manual" and res["installer"] == "dev"
+    assert res["reason"] == "manual" and res["installer"] == "source"
 
 
 def test_update_now_runs_upgrade_and_reports_updated(fake_home: Path, monkeypatch) -> None:
@@ -414,10 +421,10 @@ def test_has_outbound_returns_false_when_connect_fails(
 # _detect_installer
 
 
-def test_detect_installer_returns_dev_when_no_managers(
+def test_detect_installer_returns_source_when_no_managers(
         monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(updater.shutil, "which", lambda name: None)
-    assert updater._detect_installer() == "dev"
+    assert updater._detect_installer() == "source"
 
 
 def test_detect_installer_returns_uv_when_listed(
@@ -452,7 +459,7 @@ def test_detect_installer_returns_pipx_when_only_pipx(
     assert updater._detect_installer() == "pipx"
 
 
-def test_detect_installer_returns_dev_when_uv_lacks_alpi(
+def test_detect_installer_returns_source_when_uv_lacks_alpi(
         monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(updater.shutil, "which",
                         lambda name: f"/fake/{name}" if name == "uv" else None)
@@ -464,4 +471,112 @@ def test_detect_installer_returns_dev_when_uv_lacks_alpi(
         return out
 
     monkeypatch.setattr(updater.subprocess, "run", fake_run)
-    assert updater._detect_installer() == "dev"
+    assert updater._detect_installer() == "source"
+
+
+def test_detect_installer_names_docker_without_asking_a_package_manager(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ALPI_PLATFORM", "docker")
+    monkeypatch.setattr(updater.shutil, "which", lambda name: pytest.fail("asked a package manager"))
+    assert updater._detect_installer() == "docker"
+
+
+def test_a_scheduled_turn_inside_docker_is_still_docker(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ALPI_PLATFORM", "cron")
+    monkeypatch.setenv("ALPI_DEPLOY_RUNTIME", "docker")
+    assert updater._detect_installer() == "docker"
+
+
+@pytest.mark.parametrize(("kind", "expected"), [
+    ("uv", True), ("pipx", True), ("docker", False), ("source", False),
+])
+def test_only_package_manager_installs_update_themselves(kind: str, expected: bool) -> None:
+    assert updater.can_self_update(kind) is expected
+
+
+def test_manual_hint_fills_in_the_version_for_docker_and_not_for_source() -> None:
+    assert updater.manual_hint("docker", "0.16.18") == (
+        "Set the image tag to 0.16.18 in docker-compose.yml, then docker compose up -d."
+    )
+    assert updater.manual_hint("source", "0.16.18") == "Run git pull and restart the daemon."
+
+
+def test_install_kind_is_detected_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = []
+    monkeypatch.setattr(updater, "_installer_memo", None)
+    monkeypatch.setattr(updater, "_probe_installer", lambda: calls.append(1) or ("uv", True))
+    assert updater.install_kind() == updater.install_kind() == "uv"
+    assert calls == [1]
+
+
+def test_update_now_in_docker_is_manual_and_runs_nothing(fake_home: Path, monkeypatch) -> None:
+    monkeypatch.setattr(updater, "__version__", "0.9.4")
+    monkeypatch.setattr(updater, "_fetch_pypi_version", lambda: "0.9.5")
+    monkeypatch.setenv("ALPI_PLATFORM", "docker")
+    monkeypatch.setattr(updater.subprocess, "run", lambda *a, **k: pytest.fail("ran a command"))
+    res = updater.update_now()
+    assert res["reason"] == "manual" and res["installer"] == "docker"
+
+
+@pytest.mark.parametrize(("kind", "needle"), [
+    ("docker", "Set the image tag to 0.9.5 in docker-compose.yml"),
+    ("source", "Run git pull and restart the daemon."),
+])
+def test_alpi_update_prints_the_shared_hint_when_it_cannot_update(
+        fake_home: Path, monkeypatch, capsys, kind: str, needle: str) -> None:
+    from alpi import ui
+
+    printed = []
+    monkeypatch.setattr(updater, "__version__", "0.9.4")
+    monkeypatch.setattr(updater, "_fetch_pypi_version", lambda: "0.9.5")
+    monkeypatch.setattr(updater, "_detect_installer", lambda: kind)
+    monkeypatch.setattr(ui._console, "print", lambda *a, **k: printed.append(" ".join(map(str, a))))
+
+    assert updater.do_update(check_only=False, yes=True) == 0
+    assert any(needle in line for line in printed)
+
+
+def test_a_package_manager_that_times_out_is_not_remembered_as_a_source_install(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(updater.shutil, "which", lambda name: f"/fake/{name}" if name == "uv" else None)
+
+    def hang(args, **kw):  # noqa: ARG001
+        raise updater.subprocess.TimeoutExpired(args, 10)
+
+    monkeypatch.setattr(updater.subprocess, "run", hang)
+    assert updater.install_kind() == "source"
+    assert updater._installer_memo is None
+
+    def answer(args, **kw):  # noqa: ARG001
+        return MagicMock(returncode=0, stdout="alpi-agent v1\n")
+
+    monkeypatch.setattr(updater.subprocess, "run", answer)
+    assert updater.install_kind() == "uv"
+
+
+def test_a_source_install_is_remembered_when_every_manager_answered(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = []
+    monkeypatch.setattr(updater.shutil, "which", lambda name: f"/fake/{name}")
+    monkeypatch.setattr(
+        updater.subprocess, "run",
+        lambda args, **kw: calls.append(args) or MagicMock(returncode=0, stdout="ruff v1\n"),
+    )
+    assert updater.install_kind() == updater.install_kind() == "source"
+    assert len(calls) == 2
+
+
+def test_alpi_update_check_prints_the_hint_when_it_cannot_update(
+        fake_home: Path, monkeypatch) -> None:
+    from alpi import ui
+
+    printed = []
+    monkeypatch.setattr(updater, "__version__", "0.9.4")
+    monkeypatch.setattr(updater, "_fetch_pypi_version", lambda: "0.9.5")
+    monkeypatch.setattr(updater, "_detect_installer", lambda: "docker")
+    monkeypatch.setattr(ui._console, "print", lambda *a, **k: printed.append(" ".join(map(str, a))))
+
+    assert updater.do_update(check_only=True, yes=False) == 0
+    assert any("Set the image tag to 0.9.5" in line for line in printed)
+    assert not any("without --check" in line for line in printed)

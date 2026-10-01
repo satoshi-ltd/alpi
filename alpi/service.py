@@ -243,6 +243,8 @@ async def _main_all(root: Path, profiles: list[str]) -> None:
 
     # Load only the root .env once for daemon-wide vars (ALPI_PLATFORM, telemetry). Per-profile secrets stay out of os.environ — read on-demand by resolve_model.
     _load_env(home_mod.alpi_root())
+    from alpi import updater
+    loop.run_in_executor(None, updater.install_kind)
 
     registry: dict[str, dict[str, Any]] = {}
     _start_new_profiles(root, profiles, registry)

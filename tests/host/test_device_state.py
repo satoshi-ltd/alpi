@@ -71,6 +71,25 @@ async def test_host_version_returns_alpi_runtime(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(("kind", "self_update"), [
+    ("uv", True), ("pipx", True), ("docker", False), ("source", False),
+])
+async def test_host_version_says_how_the_daemon_is_installed(
+    monkeypatch, tmp_path: Path, kind: str, self_update: bool,
+) -> None:
+    from alpi import updater
+
+    monkeypatch.setattr(updater, "_installer_memo", kind)
+    srv = host_server.Server(home=tmp_path)
+    host_device_state.register(srv)
+
+    resp = await srv._dispatch({"id": "v", "method": "host.version", "params": {}})
+
+    assert resp["result"]["installer"] == kind
+    assert resp["result"]["self_update"] is self_update
+
+
+@pytest.mark.asyncio
 async def test_host_version_reports_member_for_an_invalid_presented_token(
     monkeypatch, tmp_path: Path,
 ) -> None:
