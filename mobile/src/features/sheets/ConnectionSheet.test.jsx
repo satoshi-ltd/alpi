@@ -1,6 +1,6 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 afterEach(cleanup);
 
@@ -23,11 +23,17 @@ vi.mock('../../theme/ThemeContext', () => ({
   }),
 }));
 
-vi.mock('../../components/ActionSheet', () => ({ ActionSheet: () => null }));
+const actions = vi.hoisted(() => ({ shown: [] }));
+vi.mock('../../components/ActionSheet', () => ({
+  ActionSheet: ({ open, actions: items }) => {
+    actions.shown = open ? items.map((a) => a.id) : [];
+    return null;
+  },
+}));
 vi.mock('../../components/Dot', () => ({ Dot: () => React.createElement('span', { 'data-dot': 'true' }) }));
 vi.mock('../../components/Icon', () => ({ Icon: ({ name }) => React.createElement('span', { 'data-icon': name }) }));
 vi.mock('../../components/Row', () => ({
-  Row: ({ label, value }) => React.createElement('div', {}, label, value),
+  Row: ({ label, value, onLongPress }) => React.createElement('div', { 'data-row': label, onContextMenu: onLongPress }, label, value),
   RowSeparator: () => React.createElement('hr', {}),
 }));
 vi.mock('../../components/Sheet', () => ({
@@ -48,6 +54,7 @@ const emptyEndpoint = () => ({
   probeState: new Map(),
   versionState: new Map(),
   updateState: new Map(),
+  installState: new Map(),
   roleState: new Map(),
   setActive: vi.fn(),
   rename: vi.fn(),
@@ -82,5 +89,34 @@ describe('ConnectionSheet list', () => {
     render(<ConnectionSheet open onClose={() => {}} />);
     expect(screen.getByText('current')).toBeTruthy();
     expect(screen.queryByText('update')).toBeNull();
+  });
+});
+
+describe('ConnectionSheet update action', () => {
+  const casa = { id: 'c1', kind: 'remote', name: 'casa', url: 'ws://casa:49200', lastUsed: 1 };
+
+  function openActions(installState) {
+    endpoint.state = {
+      ...emptyEndpoint(),
+      connections: [casa],
+      activeId: 'c1',
+      probeState: new Map([['c1', 'online']]),
+      updateState: new Map([['c1', '0.15.2']]),
+      roleState: new Map([['c1', 'admin']]),
+      installState,
+    };
+    render(<ConnectionSheet open onClose={() => {}} />);
+    fireEvent.contextMenu(document.querySelector('[data-row="casa"]'));
+    return actions.shown;
+  }
+
+  it('offers the update to an admin of a daemon that can update itself', () => {
+    expect(openActions(new Map([['c1', { installer: 'uv', selfUpdate: true }]]))).toContain('update');
+  });
+
+  it('drops the update item for a daemon that says it cannot', () => {
+    const shown = openActions(new Map([['c1', { installer: 'docker', selfUpdate: false }]]));
+    expect(shown).toContain('rename');
+    expect(shown).not.toContain('update');
   });
 });

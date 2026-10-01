@@ -30,7 +30,7 @@ describe('probe', () => {
       .mockResolvedValueOnce({})
       .mockResolvedValueOnce({ version: '0.6.6', device_name: 'Macbook.Pro', device_id: 'mac-uuid' });
     const result = await probe({ ip: '100.64.0.1', port: 49200, token: 't' });
-    expect(result).toEqual({ status: 'online', version: '0.6.6', updateAvailable: null, deviceName: 'Macbook.Pro', deviceId: 'mac-uuid', role: null, connectionId: null, ownDeviceId: null, summaries: {} });
+    expect(result).toEqual({ status: 'online', version: '0.6.6', updateAvailable: null, installer: null, selfUpdate: null, deviceName: 'Macbook.Pro', deviceId: 'mac-uuid', role: null, connectionId: null, ownDeviceId: null, summaries: {} });
     expect(result === 'online').toBe(false);
     expect(mockCall).toHaveBeenNthCalledWith(
       3,
@@ -47,7 +47,7 @@ describe('probe', () => {
       .mockResolvedValueOnce({})
       .mockResolvedValueOnce({ version: '0.6.6', device_name: '   ', device_id: '  ' });
     const result = await probe({ ip: '100.64.0.1', port: 49200, token: 't' });
-    expect(result).toEqual({ status: 'online', version: '0.6.6', updateAvailable: null, deviceName: null, deviceId: null, role: null, connectionId: null, ownDeviceId: null, summaries: {} });
+    expect(result).toEqual({ status: 'online', version: '0.6.6', updateAvailable: null, installer: null, selfUpdate: null, deviceName: null, deviceId: null, role: null, connectionId: null, ownDeviceId: null, summaries: {} });
   });
 
   it('marks offline when the summaries call rejects with a network error', async () => {
@@ -77,7 +77,7 @@ describe('probe', () => {
       .mockResolvedValueOnce({})
       .mockRejectedValueOnce(new Error('timeout'));
     const result = await probe({ ip: '100.64.0.1', port: 49200, token: 't' });
-    expect(result).toEqual({ status: 'online', version: null, updateAvailable: null, deviceName: null, deviceId: null, role: null, connectionId: null, ownDeviceId: null, summaries: {} });
+    expect(result).toEqual({ status: 'online', version: null, updateAvailable: null, installer: null, selfUpdate: null, deviceName: null, deviceId: null, role: null, connectionId: null, ownDeviceId: null, summaries: {} });
   });
 
   it('captures role from host.version response', async () => {
@@ -98,6 +98,26 @@ describe('probe', () => {
     expect(result.deviceId).toBe('daemon-uuid');
     expect(result.connectionId).toBe('conn_1');
     expect(result.ownDeviceId).toBe('dev_me');
+  });
+
+  it('captures installer and self_update so the app can hide an update that cannot work', async () => {
+    const { probe } = await import('./probe');
+    mockCall
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ version: '0.16.19', update_available: '0.16.20', installer: 'docker', self_update: false });
+    const result = await probe({ ip: '100.64.0.1', port: 49200, token: 't' });
+    expect(result.installer).toBe('docker');
+    expect(result.selfUpdate).toBe(false);
+  });
+
+  it('leaves both unknown for a daemon older than self_update', async () => {
+    const { probe } = await import('./probe');
+    mockCall
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ version: '0.16.1', update_available: '0.16.20' });
+    const result = await probe({ ip: '100.64.0.1', port: 49200, token: 't' });
+    expect(result.installer).toBeNull();
+    expect(result.selfUpdate).toBeNull();
   });
 
   it('captures update_available from host.version response', async () => {

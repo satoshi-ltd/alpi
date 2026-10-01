@@ -1,4 +1,4 @@
-const MANUAL_HINT = 'Docker: docker compose pull, then docker compose up -d · source install: git pull and restart the daemon';
+import { updateHint } from '../../../../common/updateHint.mjs';
 
 export function updateOutcome(result) {
   const r = result ?? {};
@@ -9,7 +9,7 @@ export function updateOutcome(result) {
     case 'up-to-date':
       return { title: 'Already up to date', message: r.current ? `alpi ${r.current}` : undefined };
     case 'manual':
-      return { title: "Can't self-update this install", message: MANUAL_HINT };
+      return { title: "Can't self-update this install", message: updateHint(r.installer, r.latest) };
     case 'offline':
       return { title: 'Update check failed', message: 'the daemon could not reach PyPI' };
     default:

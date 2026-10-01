@@ -274,6 +274,21 @@ describe("EndpointProvider lifecycle", () => {
     expect(captureRef.current.probeState.get("alpha")).toBe("online");
   });
 
+  it("probeOne records the install kind and keeps it when a later probe cannot say", async () => {
+    const { captureRef } = await mount();
+    probeResults.set("beta", { status: "online", version: "0.9.4", installer: "docker", selfUpdate: false });
+    await act(async () => { await captureRef.current.probeOne("beta"); });
+    expect(captureRef.current.installState.get("beta")).toEqual({ installer: "docker", selfUpdate: false });
+
+    probeResults.set("beta", { status: "offline", version: null });
+    await act(async () => { await captureRef.current.probeOne("beta"); });
+    expect(captureRef.current.installState.get("beta")).toEqual({ installer: "docker", selfUpdate: false });
+
+    probeResults.set("beta", { status: "online", version: "0.9.5", installer: "uv", selfUpdate: true });
+    await act(async () => { await captureRef.current.probeOne("beta"); });
+    expect(captureRef.current.installState.get("beta")).toEqual({ installer: "uv", selfUpdate: true });
+  });
+
   it("probeOne records update_available so the badge updates without a full reload", async () => {
     const { captureRef } = await mount();
     probeResults.set("beta", { status: "online", version: "0.9.4", updateAvailable: "0.9.5" });

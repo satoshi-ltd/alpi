@@ -128,9 +128,9 @@ vi.mock('../../features/sheets/ProfileFieldSheets', () => ({
 
 const ProfileSettings = (await import('../../../app/profile/[id]/settings.jsx')).default;
 
-function wrapper(call, twoPane = false) {
+function wrapper(call, twoPane = false, extra = {}) {
   return ({ children }) => (
-    <EndpointContext.Provider value={{ endpoint: { id: 'remote' }, call }}>
+    <EndpointContext.Provider value={{ endpoint: { id: 'remote' }, call, ...extra }}>
       <ThemeProvider>
         <PaneContext.Provider value={{ twoPane, side: twoPane ? 'detail' : 'full', sidebarOpen: true, toggleSidebar() {} }}>
           {children}
@@ -589,5 +589,57 @@ describe('ProfileSettings vocabulary', () => {
     expect(scope.getByText('Restart daemon')).toBeTruthy();
     expect(scope.getByText('Restart').closest('button')).toBeTruthy();
     expect(scope.getByText('Update').closest('button')).toBeTruthy();
+  });
+});
+
+describe('ProfileSettings daemon update on a daemon that cannot update itself', () => {
+  const call = vi.fn(async (method) => {
+    if (method === 'host.profile.summaries') return { profiles: [{ name: 'doc', counts: {} }] };
+    if (method === 'host.settings.profile_snapshot') {
+      return {
+        detail: { name: 'doc', model: 'openrouter/example' },
+        usage: { days: [] },
+        schedules: { jobs: [] },
+        workgroups: { workgroups: [] },
+        email: { accounts: [] },
+        storage: { storage: [] },
+      };
+    }
+    throw new Error(`unexpected ${method}`);
+  });
+  const docker = {
+    installState: new Map([['remote', { installer: 'docker', selfUpdate: false }]]),
+    updateState: new Map([['remote', '0.16.19']]),
+  };
+  const sentence = 'Set the image tag to 0.16.19 in docker-compose.yml, then docker compose up -d.';
+
+  it('shows the manual step in the profile settings row instead of an Update button', async () => {
+    const { container } = render(<ProfileSettings />, { wrapper: wrapper(call, false, docker) });
+    const scope = within(container);
+
+    await waitFor(() => expect(scope.getByText(sentence)).toBeTruthy());
+    expect(scope.getByText('Update alpi')).toBeTruthy();
+    expect(scope.queryByText('Update')).toBeNull();
+    expect(scope.getByText('Restart').closest('button')).toBeTruthy();
+  });
+
+  it('draws no Update row at all while a Docker daemon has nothing newer to install', async () => {
+    const { container } = render(<ProfileSettings />, {
+      wrapper: wrapper(call, false, { installState: docker.installState, updateState: new Map() }),
+    });
+    const scope = within(container);
+
+    await waitFor(() => expect(scope.getByText('Restart daemon')).toBeTruthy());
+    expect(scope.queryByText('Update alpi')).toBeNull();
+    expect(container.textContent).not.toContain('docker-compose.yml');
+  });
+
+  it('drops the Update button from the two-pane daemon row and keeps Restart', async () => {
+    const { container } = render(<ProfileSettings />, { wrapper: wrapper(call, true, docker) });
+    const scope = within(container);
+
+    await waitFor(() => expect(scope.getByText('Restart daemon').closest('button')).toBeTruthy());
+    expect(scope.queryByText('Update alpi')).toBeNull();
+    expect(container.textContent).toContain(sentence);
   });
 });

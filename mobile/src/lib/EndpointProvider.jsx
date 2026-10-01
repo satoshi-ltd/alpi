@@ -17,6 +17,7 @@ export function EndpointProvider({ children }) {
   const [probeState, setProbeState] = useState(() => new Map());
   const [versionState, setVersionState] = useState(() => new Map());
   const [updateState, setUpdateState] = useState(() => new Map());
+  const [installState, setInstallState] = useState(() => new Map());
   const [roleState, setRoleState] = useState(() => new Map());
   const [ready, setReady] = useState(false);
 
@@ -33,7 +34,7 @@ export function EndpointProvider({ children }) {
       next.set(id, 'probing');
       return next;
     });
-    const { status, version, updateAvailable, deviceId, role, connectionId, ownDeviceId, summaries } = await probe(target);
+    const { status, version, updateAvailable, installer, selfUpdate, deviceId, role, connectionId, ownDeviceId, summaries } = await probe(target);
     if (summaries) seedCache(id, 'host.profile.summaries', {}, summaries);
     setProbeState((m) => {
       const next = new Map(m);
@@ -52,6 +53,13 @@ export function EndpointProvider({ children }) {
       else next.delete(id);
       return next;
     });
+    if (installer || typeof selfUpdate === 'boolean') {
+      setInstallState((m) => {
+        const next = new Map(m);
+        next.set(id, { installer: installer ?? null, selfUpdate: selfUpdate ?? null });
+        return next;
+      });
+    }
     // A failed/roleless probe (offline, old daemon) keeps the last-known role — only the daemon demotes, never a dropped connection.
     if (role) {
       setRoleState((m) => {
@@ -89,10 +97,11 @@ export function EndpointProvider({ children }) {
     setConnections(state.connections);
     setActiveId(state.active_id);
     setReady(true);
-    const { status, versions, updates = new Map(), deviceIds, roles = new Map(), identities = new Map() } = await probeAll(state.connections);
+    const { status, versions, updates = new Map(), installs = new Map(), deviceIds, roles = new Map(), identities = new Map() } = await probeAll(state.connections);
     setProbeState(status);
     setVersionState(versions);
     setUpdateState(updates);
+    setInstallState((m) => new Map([...m, ...installs]));
     // Fresh probe roles overlay the persisted ones; an offline connection keeps its last-known role instead of vanishing from the map.
     setRoleState(new Map([...rolesFromConnections(state.connections), ...roles]));
     if (roles.size > 0) await setRoles(roles);
@@ -236,6 +245,7 @@ export function EndpointProvider({ children }) {
       probeState,
       versionState,
       updateState,
+      installState,
       roleState,
       activeRole,
       setActive,
@@ -249,7 +259,7 @@ export function EndpointProvider({ children }) {
       call,
       callStream,
     }),
-    [ready, connections, activeId, activeEndpoint, probeState, versionState, updateState, roleState, activeRole, setActive, addConnection, rename, forget, unpair, probeOne, markConnectionStatus, probeAllConnections, call, callStream],
+    [ready, connections, activeId, activeEndpoint, probeState, versionState, updateState, installState, roleState, activeRole, setActive, addConnection, rename, forget, unpair, probeOne, markConnectionStatus, probeAllConnections, call, callStream],
   );
 
   return <EndpointContext.Provider value={value}>{children}</EndpointContext.Provider>;

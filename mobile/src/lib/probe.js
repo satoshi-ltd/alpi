@@ -32,6 +32,8 @@ export async function probe(endpoint) {
     let role = null;
     let connectionId = null;
     let ownDeviceId = null;
+    let installer = null;
+    let selfUpdate = null;
     try {
       const res = await call(endpoint, 'host.version', {}, { timeoutMs: VERSION_TIMEOUT_MS });
       if (res && typeof res.version === 'string') version = res.version;
@@ -53,11 +55,17 @@ export async function probe(endpoint) {
       if (res && typeof res.connection_device_id === 'string' && res.connection_device_id.trim()) {
         ownDeviceId = res.connection_device_id.trim();
       }
+      if (res && typeof res.installer === 'string' && res.installer.trim()) {
+        installer = res.installer.trim();
+      }
+      if (res && typeof res.self_update === 'boolean') {
+        selfUpdate = res.self_update;
+      }
       registerMetadata(endpoint);
     } catch {
       // version is non-fatal
     }
-    return { status: 'online', version, updateAvailable, deviceName, deviceId, role, connectionId, ownDeviceId, summaries };
+    return { status: 'online', version, updateAvailable, installer, selfUpdate, deviceName, deviceId, role, connectionId, ownDeviceId, summaries };
   } catch (e) {
     if (e instanceof RpcError && e.code === RATE_LIMITED) {
       return { status: 'rate-limited', version: null, updateAvailable: null, deviceName: null, deviceId: null, role: null, connectionId: null, ownDeviceId: null, summaries: null };
@@ -79,16 +87,18 @@ export async function probeAll(connections) {
   const deviceIds = new Map();
   const roles = new Map();
   const identities = new Map();
+  const installs = new Map();
   await Promise.all(
     connections.map(async (c) => {
       const r = await probe(c);
       status.set(c.id, r.status);
       if (r.version) versions.set(c.id, r.version);
       if (r.updateAvailable) updates.set(c.id, r.updateAvailable);
+      if (r.installer || typeof r.selfUpdate === 'boolean') installs.set(c.id, { installer: r.installer ?? null, selfUpdate: r.selfUpdate ?? null });
       if (r.deviceId) deviceIds.set(c.id, r.deviceId);
       if (r.role) roles.set(c.id, r.role);
       if (r.connectionId || r.ownDeviceId) identities.set(c.id, { connectionId: r.connectionId, ownDeviceId: r.ownDeviceId });
     }),
   );
-  return { status, versions, updates, deviceIds, roles, identities };
+  return { status, versions, updates, installs, deviceIds, roles, identities };
 }

@@ -66,7 +66,7 @@ function pressable(body, { onPress, onLongPress, disabled, colors, spoken }) {
   );
 }
 
-function WideRow({ label, helper, value, leading, trailing, onPress, onLongPress, danger, disabled, chevron, labelLines, item }) {
+function WideRow({ label, helper, value, leading, trailing, onPress, onLongPress, danger, disabled, chevron, labelLines, helperLines, item }) {
   const { colors, fonts, fontSizes } = useTheme();
   const control =
     typeof value === 'string' ? (
@@ -122,7 +122,7 @@ function WideRow({ label, helper, value, leading, trailing, onPress, onLongPress
         )}
         {helper ? (
           <Text
-            numberOfLines={2}
+            numberOfLines={helperLines ?? 2}
             style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: item ? colors.ink3 : colors.ink4, marginTop: space.s1 }}
           >
             {helper}
@@ -143,7 +143,7 @@ function WideRow({ label, helper, value, leading, trailing, onPress, onLongPress
   return pressable(body, { onPress, onLongPress, disabled, colors, spoken: rowLabel(label, value, helper) });
 }
 
-export function Row({ label, helper, value, leading, trailing, onPress, onLongPress, danger, disabled = false, chevron = true, labelLines = 1, item = false }) {
+export function Row({ label, helper, value, leading, trailing, onPress, onLongPress, danger, disabled = false, chevron = true, labelLines = 1, helperLines, item = false }) {
   const { colors, fonts, fontSizes } = useTheme();
   const wide = useWideSettings();
   const [width, setWidth] = useState(0);
@@ -161,6 +161,7 @@ export function Row({ label, helper, value, leading, trailing, onPress, onLongPr
         disabled={disabled}
         chevron={chevron}
         labelLines={labelLines}
+        helperLines={helperLines}
         item={item}
       />
     );
@@ -207,7 +208,7 @@ export function Row({ label, helper, value, leading, trailing, onPress, onLongPr
   );
   const helperNode = helper ? (
     <Text
-      numberOfLines={1}
+      numberOfLines={helperLines ?? 1}
       style={{
         fontFamily: fonts.monoMedium,
         fontSize: fontSizes.xs,

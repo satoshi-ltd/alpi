@@ -25,6 +25,7 @@ import { copyText } from '../../../src/lib/clipboard';
 import { useToast } from '../../../src/components/Toast';
 import { Bold, Code, TypedConfirm } from '../../../src/components/TypedConfirm';
 import { updateOutcome } from '../../../src/features/settings/daemonUpdate';
+import { canSelfUpdate, updateHint } from '../../../../common/updateHint.mjs';
 import { IdentityEditor } from '../../../src/features/settings/IdentityEditor';
 import {
   useEmailAccounts,
@@ -110,7 +111,11 @@ export default function ProfileSettings() {
   const router = useRouter();
   const goBack = useBack();
   const toast = useToast();
-  const { call } = useEndpoint();
+  const { call, endpoint, installState, updateState } = useEndpoint();
+  const install = installState?.get(endpoint?.id);
+  const selfUpdate = canSelfUpdate(install?.selfUpdate);
+  const updateAvailable = updateState?.get(endpoint?.id);
+  const manualStep = !selfUpdate && updateAvailable ? updateHint(install?.installer, updateAvailable) : null;
   const { colors, fonts, fontSizes } = useTheme();
   const { twoPane } = usePane();
   const snap = useProfileSnapshot(id);
@@ -472,17 +477,20 @@ export default function ProfileSettings() {
         {twoPane ? (
           <Row
             label="Daemon"
-            helper="update installs the newest alpi · restart exits and the supervisor relaunches"
+            helper={manualStep ? `${manualStep} Restart exits and the supervisor relaunches.` : 'update installs the newest alpi · restart exits and the supervisor relaunches'}
+            helperLines={0}
             value={
               <View style={{ flexDirection: 'row', gap: space.s3 }}>
-                <Button
-                  title="Update alpi"
-                  variant="secondary"
-                  size="sm"
-                  loading={updateBusy}
-                  disabled={restartBusy}
-                  onPress={() => setConfirmUpdate(true)}
-                />
+                {selfUpdate ? (
+                  <Button
+                    title="Update alpi"
+                    variant="secondary"
+                    size="sm"
+                    loading={updateBusy}
+                    disabled={restartBusy}
+                    onPress={() => setConfirmUpdate(true)}
+                  />
+                ) : null}
                 <Button
                   title="Restart daemon"
                   variant="secondary"
@@ -497,22 +505,26 @@ export default function ProfileSettings() {
           />
         ) : (
           <>
-            <Row
-              label="Update alpi"
-              helper="installs the newest alpi and restarts"
-              value={
-                <Button
-                  title="Update"
-                  variant="secondary"
-                  size="sm"
-                  loading={updateBusy}
-                  onPress={() => setConfirmUpdate(true)}
-                />
-              }
-              onPress={updateBusy ? undefined : () => setConfirmUpdate(true)}
-              chevron={false}
-            />
-            <RowSeparator />
+            {selfUpdate ? (
+              <Row
+                label="Update alpi"
+                helper="installs the newest alpi and restarts"
+                value={
+                  <Button
+                    title="Update"
+                    variant="secondary"
+                    size="sm"
+                    loading={updateBusy}
+                    onPress={() => setConfirmUpdate(true)}
+                  />
+                }
+                onPress={updateBusy ? undefined : () => setConfirmUpdate(true)}
+                chevron={false}
+              />
+            ) : manualStep ? (
+              <Row label="Update alpi" helper={manualStep} helperLines={0} chevron={false} />
+            ) : null}
+            {selfUpdate || manualStep ? <RowSeparator /> : null}
             <Row
               label="Restart daemon"
               helper="exits the daemon · supervisor relaunches · reconnects automatically"

@@ -12,6 +12,7 @@ import { TextPrompt } from '../../components/TextPrompt';
 import { useToast } from '../../components/Toast';
 import { Bold, Code, TypedConfirm } from '../../components/TypedConfirm';
 import { canUpdateConnection } from '../../lib/connectionUpdate';
+import { updateHint } from '../../../../common/updateHint.mjs';
 import { useEndpoint } from '../../lib/EndpointContext';
 import { sortConnectionsByRecency } from '../../lib/store';
 import { call as rpc } from '../../lib/rpc';
@@ -39,7 +40,7 @@ export function ConnectionSheet({ open, onClose }) {
   const { colors, fonts } = useTheme();
   const router = useRouter();
   const toast = useToast();
-  const { connections, activeId, probeState, versionState, updateState, roleState, setActive, rename, forget, probeAll } = useEndpoint();
+  const { connections, activeId, probeState, versionState, updateState, installState, roleState, setActive, rename, forget, probeAll } = useEndpoint();
   const [target, setTarget] = useState(null);
   const [confirmForget, setConfirmForget] = useState(null);
   const [renameTarget, setRenameTarget] = useState(null);
@@ -58,7 +59,7 @@ export function ConnectionSheet({ open, onClose }) {
       } else if (res?.reason === 'up-to-date') {
         toast({ title: 'Up to date', message: `${conn.name} is on v${res.current}`, duration: 2000 });
       } else if (res?.reason === 'manual') {
-        toast({ title: "Can't self-update", message: 'Image-pinned (Docker) — repull the image to update.', duration: 4000 });
+        toast({ title: "Can't self-update", message: updateHint(res.installer, res.latest), duration: 4000 });
       } else {
         toast({ title: 'Update failed', message: String(res?.reason || 'unknown'), duration: 4000 });
       }
@@ -144,7 +145,7 @@ export function ConnectionSheet({ open, onClose }) {
         actions={
           target
             ? [
-                ...(canUpdateConnection(roleState.get(target.id), updateState.get(target.id))
+                ...(canUpdateConnection(roleState.get(target.id), updateState.get(target.id), installState.get(target.id)?.selfUpdate)
                   ? [{
                       id: 'update',
                       label: `Update to v${updateState.get(target.id)}`,

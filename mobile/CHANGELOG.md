@@ -14,6 +14,16 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.6.6 — 2026-10-01 — no Update button on a daemon that cannot update itself
+
+- **Profile settings shows the manual step instead of an Update button for a daemon that reports it
+  cannot update itself** (a Docker or source install): the image tag to set in `docker-compose.yml`,
+  or `git pull` and a restart.
+- **The connection action sheet drops "Update to …" for such a daemon,** and a failed update names
+  the install kind's step instead of listing both.
+
+  Requires alpi 0.16.1; alpi 0.16.19 is what reports the install kind.
+
 ## v0.6.5 — 2026-10-01 — a failed refresh says so
 
 - **Pulling to refresh a list that is already on screen now tells you when it failed,** on the
