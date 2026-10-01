@@ -363,7 +363,7 @@ function WorkgroupChatInner() {
   // session_changed excluded — fires on every profile chat turn, would cause wasted wg transcript fetch+decrypt over Tailscale.
   // Coalesced: each refresh re-fetches and decrypts the 200-post tail, so post bursts must collapse into one.
   const refreshTranscript = useDebouncedCallback(() => {
-    transcript.refresh().then(pruneOptimistic);
+    transcript.refresh().then(pruneOptimistic).catch(() => {});
     taskState.refresh();
   }, 400);
   useEventEffect(['wg.post', 'wg.done', 'workgroup_members'], (ev) => {
@@ -480,7 +480,7 @@ function WorkgroupChatInner() {
     setSending(true);
     try {
       await call('host.workgroup.post', { profile, wg_id: id, text: trimmed });
-      const fetched = await transcript.refresh();
+      const fetched = await transcript.refresh().catch(() => null);
       taskState.refresh();
       pruneOptimistic(fetched);
     } catch (e) {
@@ -558,13 +558,13 @@ function WorkgroupChatInner() {
     onTogglePause: canAdmin && wg.is_hub
       ? () =>
           call('host.workgroup.action', { profile: wg.profile, wg_id: wg.id, action: paused ? 'resume' : 'pause' })
-            .then(() => wgs.refresh())
+            .then(() => wgs.refresh().catch(() => {}))
             .catch((e) => toast({ title: paused ? 'resume failed' : 'pause failed', message: String(e) }))
       : null,
     onToggleAutoRead: canAdmin
       ? () =>
           call('host.workgroup.update', { profile: wg.profile, wg_id: wg.id, auto_read: !autoRead })
-            .then(() => wgs.refresh())
+            .then(() => wgs.refresh().catch(() => {}))
             .catch((e) => toast({ title: 'auto-read failed', message: String(e) }))
       : null,
     onRefresh: () => {

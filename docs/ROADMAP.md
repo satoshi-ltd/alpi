@@ -60,14 +60,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
-- **MOB.REFRESH-ERR** — A failed refresh over stale data says so
-  `bug · mobile · agent · low`
-  note: `refresh()` in [useDaemonData.js](../mobile/src/hooks/useDaemonData.js)
-  resolves `null` on failure, so the pull-to-refresh "Refresh failed" toast never
-  fires for screens that already show data.
-  accept: `refresh()` rejects (fire-and-forget callers handle it), and a
-  pull-to-refresh test on a screen with data and a failing call shows the toast.
-
 - **TERM.3** — Profile environment for `terminal`
   `feature · alpi · agent · normal`
   note: a skill toolchain installed in the volume (JDK and Maven under

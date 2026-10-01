@@ -359,12 +359,12 @@ describe('Roster section add targets', () => {
 });
 
 describe('Roster pull to refresh', () => {
-  it('ticks a selection and refreshes when the pull triggers', () => {
+  it('hands the pull to the screen, which owns the haptic tick and the failure message', () => {
     haptics.selection.mockClear();
     const onRefresh = vi.fn();
     render(<Roster items={[]} paired onRefresh={onRefresh} />);
     h.list.refreshControl.props.onRefresh();
-    expect(haptics.selection).toHaveBeenCalledTimes(1);
+    expect(haptics.selection).not.toHaveBeenCalled();
     expect(onRefresh).toHaveBeenCalledTimes(1);
   });
 });

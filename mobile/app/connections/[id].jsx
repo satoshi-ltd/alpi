@@ -87,7 +87,7 @@ function ConnectionDetail() {
   const act = async (method, params, title) => {
     try {
       const result = await call(method, { connection_id: id, ...params });
-      await summary.refresh();
+      await summary.refresh().catch(() => {});
       toast({ title, duration: 1600 });
       return result;
     } catch (e) {

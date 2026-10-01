@@ -672,7 +672,7 @@ function ProfileChatInner() {
     onTogglePause: canAdmin
       ? () =>
           call('host.config.set_field', { profile: id, key: 'paused', value: paused ? 'false' : 'true' })
-            .then(() => summaries.refresh())
+            .then(() => summaries.refresh().catch(() => {}))
             .catch((e) => toast({ title: paused ? 'Resume failed' : 'Pause failed', message: String(e) }))
       : null,
     onToggleAutoRead: canAdmin

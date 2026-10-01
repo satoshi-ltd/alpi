@@ -7,6 +7,7 @@ import { useReadState } from '../lib/readState';
 import { accentForProfile } from '../theme/accents';
 import { useProfileSummaries, useWorkgroups } from './useDaemonData';
 import { useEventEffect } from './useEvents';
+import { quiet } from '../lib/settled';
 
 const ACTIVITY_EVENTS = ['wg.post', 'wg.done', 'wg.mention'];
 const ACTIVITY_TTL_MS = 10000;
@@ -142,9 +143,7 @@ export function useInbox() {
 
   // Stable ref so useFocusEffect(useCallback(refresh, [refresh])) doesn't infinite-loop.
   const refresh = useCallback(
-    async () => {
-      await Promise.all([profilesQ.refresh(), wgsQ.refresh()]);
-    },
+    () => quiet(Promise.all([profilesQ.refresh(), wgsQ.refresh()]).then(() => undefined)),
     [profilesQ.refresh, wgsQ.refresh],
   );
 

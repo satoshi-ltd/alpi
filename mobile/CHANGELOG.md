@@ -14,6 +14,17 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.6.5 — 2026-10-01 — a failed refresh says so
+
+- **Pulling to refresh a list that is already on screen now tells you when it failed,** on the
+  home list, the sidebar and every settings page that refreshes from the daemon. Before, the
+  spinner ended in silence and the old data looked current.
+- **A refresh that fails after a save or a create no longer turns that action into an error:**
+  saving a profile field, adding a provider, creating a profile or a workgroup and the
+  connection actions report their own result only.
+
+  Requires alpi 0.16.1.
+
 ## v0.6.4 — 2026-10-01 — Activity comes back after a daemon upgrade
 
 - **Activity reappears after the daemon is upgraded,** without restarting the app. If the daemon

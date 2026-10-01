@@ -83,7 +83,7 @@ export function CreateProfileSheet({ open, onClose }) {
         ollamaUrl,
         openrouterModel,
       });
-      await summaries.refresh?.();
+      await summaries.refresh?.()?.catch(() => {});
       toast({ title: 'Profile created', message: `@${trimmed}`, duration: 1800 });
       onClose?.();
       router[openVerb({ twoPane, pathname })](`/profile/${trimmed}/settings`);

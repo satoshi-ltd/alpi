@@ -18,6 +18,7 @@ import { useDebouncedCallback } from '../../hooks/useDebouncedCallback';
 import { useEventEffect } from '../../hooks/useEvents';
 import { rowStateFor, useActivity } from '../../hooks/useActivity';
 import { useInbox } from '../../hooks/useInbox';
+import { usePullRefresh } from '../../hooks/usePullRefresh';
 import { useUnifiedOutputs } from '../../hooks/useUnifiedOutputs';
 import { useEndpoint } from '../../lib/EndpointContext';
 import { endpointHost } from '../../lib/endpoint';
@@ -57,7 +58,6 @@ export function SidebarPane({ onCollapse }) {
   const closeSheet = useCallback(() => setSheet(null), []);
   const canCreate = useCreateGate(sheet, closeSheet);
   const [ctxTarget, setCtxTarget] = useState(null);
-  const [refreshing, setRefreshing] = useState(false);
 
   const selection = sidebarSelection(pathname);
   const selectedKind = selection?.kind ?? null;
@@ -86,14 +86,12 @@ export function SidebarPane({ onCollapse }) {
     return out;
   }, [items, pins, activity.states]);
 
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    try {
+  const pull = usePullRefresh(
+    useCallback(async () => {
       await Promise.all([refresh(), activity.refresh()]);
-    } finally {
-      setRefreshing(false);
-    }
-  }, [refresh, activity.refresh]);
+    }, [refresh, activity.refresh]),
+  );
+  const { refreshing, onRefresh } = pull;
 
   useEffect(() => {
     refresh();

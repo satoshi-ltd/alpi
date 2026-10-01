@@ -86,7 +86,7 @@ export function CreateWorkgroupSheet({ open, onClose }) {
       });
       const wgId = result?.wg_id ?? result?.id;
       // Refresh before navigating: /wg/<id> renders "not found" against a list that predates the create.
-      await wgs.refresh?.();
+      await wgs.refresh?.()?.catch(() => {});
       toast({ title: 'Workgroup created', message: `#${name.trim()}` });
       onClose?.();
       router[openVerb({ twoPane, pathname })](wgId ? `/wg/${wgId}` : '/');

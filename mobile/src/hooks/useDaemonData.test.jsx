@@ -143,7 +143,7 @@ describe("useProfileSnapshot", () => {
     await waitFor(() => expect(result.current.data?.schedules?.jobs?.[0]?.id).toBe("daily"));
 
     await act(async () => {
-      await result.current.refresh();
+      await expect(result.current.refresh()).rejects.toThrow();
     });
 
     expect(result.current.data?.schedules?.jobs?.[0]?.id).toBe("daily");
@@ -169,7 +169,7 @@ describe("useProfileSnapshot", () => {
     await waitFor(() => expect(result.current.data?.detail?.name).toBe("doc"));
 
     await act(async () => {
-      await result.current.refresh();
+      await expect(result.current.refresh()).rejects.toThrow();
     });
 
     expect(result.current.data?.detail?.name).toBe("doc");
@@ -196,7 +196,7 @@ describe("useProfileSnapshot", () => {
     await waitFor(() => expect(result.current.data?.detail?.name).toBe("doc"));
 
     await act(async () => {
-      await result.current.refresh();
+      await expect(result.current.refresh()).rejects.toThrow();
     });
 
     expect(result.current.data).toBe(null);
@@ -223,7 +223,7 @@ describe("useProfileSnapshot", () => {
     await waitFor(() => expect(result.current.data?.detail?.name).toBe("doc"));
 
     await act(async () => {
-      await result.current.refresh();
+      await expect(result.current.refresh()).rejects.toThrow();
     });
 
     expect(result.current.data?.detail?.name).toBe("doc");
@@ -470,5 +470,43 @@ describe("usePolledCall error latch", () => {
     await waitFor(() => expect(result.current.error).toBeTruthy());
     await act(async () => { await result.current.refresh().catch(() => {}); });
     await waitFor(() => expect(result.current.error).toBeNull());
+  });
+});
+
+
+describe("refresh over data that is already on screen", () => {
+  it("rejects with the failure and keeps the stale data", async () => {
+    const call = vi.fn()
+      .mockResolvedValueOnce({ profiles: [{ name: "doc" }] })
+      .mockRejectedValueOnce(new Error("offline"));
+    const endpoint = { id: "stale-1" };
+    const wrapper = ({ children }) => (
+      <EndpointContext.Provider value={{ endpoint, call }}>{children}</EndpointContext.Provider>
+    );
+    const { result } = renderHook(() => useProfileSummaries(), { wrapper });
+    await waitFor(() => expect(result.current.data?.profiles?.[0]?.name).toBe("doc"));
+
+    let outcome;
+    await act(async () => { outcome = result.current.refresh(); await outcome.catch(() => {}); });
+
+    await expect(outcome).rejects.toThrow("offline");
+    expect(result.current.data?.profiles?.[0]?.name).toBe("doc");
+  });
+
+  it("resolves with the fresh data when the call succeeds", async () => {
+    const call = vi.fn()
+      .mockResolvedValueOnce({ profiles: [{ name: "doc" }] })
+      .mockResolvedValueOnce({ profiles: [{ name: "doc2" }] });
+    const endpoint = { id: "stale-2" };
+    const wrapper = ({ children }) => (
+      <EndpointContext.Provider value={{ endpoint, call }}>{children}</EndpointContext.Provider>
+    );
+    const { result } = renderHook(() => useProfileSummaries(), { wrapper });
+    await waitFor(() => expect(result.current.data?.profiles?.[0]?.name).toBe("doc"));
+
+    let fresh;
+    await act(async () => { fresh = await result.current.refresh(); });
+
+    expect(fresh.profiles[0].name).toBe("doc2");
   });
 });

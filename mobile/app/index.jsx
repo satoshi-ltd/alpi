@@ -14,6 +14,7 @@ import { useDebouncedCallback } from '../src/hooks/useDebouncedCallback';
 import { useEventEffect } from '../src/hooks/useEvents';
 import { useActivity, rowStateFor } from '../src/hooks/useActivity';
 import { useInbox } from '../src/hooks/useInbox';
+import { usePullRefresh } from '../src/hooks/usePullRefresh';
 import { useUnifiedOutputs } from '../src/hooks/useUnifiedOutputs';
 import { useEndpoint } from '../src/lib/EndpointContext';
 import { endpointHost } from '../src/lib/endpoint';
@@ -48,7 +49,6 @@ function InboxScreen({ items, loading, refresh, error = null }) {
   const closeSheet = useCallback(() => setSheet(null), []);
   const canCreate = useCreateGate(sheet, closeSheet);
   const [ctxTarget, setCtxTarget] = useState(null);
-  const [refreshing, setRefreshing] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -79,14 +79,12 @@ function InboxScreen({ items, loading, refresh, error = null }) {
     return out;
   }, [items, pins, activity.states]);
 
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    try {
+  const pull = usePullRefresh(
+    useCallback(async () => {
       await Promise.all([refresh(), activity.refresh()]);
-    } finally {
-      setRefreshing(false);
-    }
-  }, [refresh, activity.refresh]);
+    }, [refresh, activity.refresh]),
+  );
+  const { refreshing, onRefresh } = pull;
 
   // Coalesced: a busy workgroup or a reconnect backfill emits bursts — one summaries+workgroups refresh per beat, not per event.
   const debouncedRefresh = useDebouncedCallback(refresh, 800);

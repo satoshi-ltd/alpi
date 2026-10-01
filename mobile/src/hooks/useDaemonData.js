@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useEndpoint } from '../lib/EndpointContext';
+import { quiet } from '../lib/settled';
 
 const cache = new Map();
 
@@ -112,13 +113,9 @@ function usePolledCall(method, params, deps, opts = {}) {
     };
   }, [key, call, method]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const refresh = useCallback(async () => {
-    if (!key) return null;
-    try {
-      return await fetchAndStore(key, call, method, params);
-    } catch {
-      return null;
-    }
+  const refresh = useCallback(() => {
+    if (!key) return Promise.resolve(null);
+    return quiet(fetchAndStore(key, call, method, params));
   }, [key, call, method]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return { ...snap, refresh };

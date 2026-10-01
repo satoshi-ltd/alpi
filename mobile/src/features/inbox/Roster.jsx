@@ -4,7 +4,6 @@ import { mobile, radii, space } from '../../theme/tokens';
 
 import { Eyebrow } from '../../components/Eyebrow';
 import { Icon } from '../../components/Icon';
-import { selection } from '../../lib/haptics';
 import { rosterIsEmpty, rosterSections } from '../../lib/roster';
 import { usePane } from '../../nav/PaneContext';
 import { useTheme } from '../../theme/ThemeContext';
@@ -162,10 +161,7 @@ export function Roster({
     [fonts, fontSizes, colors, gutter, addActions],
   );
 
-  const pull = useCallback(() => {
-    selection();
-    return onRefresh?.();
-  }, [onRefresh]);
+  const pull = useCallback(() => onRefresh?.(), [onRefresh]);
 
   const separator = useCallback(
     () => <View style={{ height: HAIRLINE, backgroundColor: colors.line, marginLeft: SEPARATOR_INSET }} />,

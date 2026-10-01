@@ -132,12 +132,19 @@ export default function ProfileSettings() {
     if (intent === 'model') setSheet('model');
   }, [intent]);
 
-  const refreshSettings = useCallback(async () => {
-    await refresh();
-    const next = await snap.refresh();
+  const loadSettings = useCallback(async () => {
+    let failure = null;
+    try {
+      await refresh();
+    } catch (e) {
+      failure = e;
+    }
+    const next = await snap.refresh().catch(() => null);
     if (!next && snap.unsupported) await refreshDetail();
+    if (failure) throw failure;
   }, [refresh, snap.refresh, snap.unsupported, refreshDetail]);
-  const pull = usePullRefresh(refreshSettings);
+  const refreshSettings = useCallback(() => loadSettings().catch(() => {}), [loadSettings]);
+  const pull = usePullRefresh(loadSettings);
 
   const handleRestart = async () => {
     setConfirmRestart(false);

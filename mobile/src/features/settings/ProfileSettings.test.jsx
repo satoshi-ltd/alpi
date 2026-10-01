@@ -532,6 +532,38 @@ describe('ProfileSettings vocabulary', () => {
     await expect(h.lastToggle).rejects.toThrow('daemon said no');
   });
 
+  it('does not report a saved field as failed when only the refresh after it fails', async () => {
+    let summariesCalls = 0;
+    const call = vi.fn(async (method) => {
+      if (method === 'host.profile.summaries') {
+        summariesCalls += 1;
+        if (summariesCalls > 1) throw new Error('offline');
+        return { profiles: [{ name: 'doc', counts: {} }] };
+      }
+      if (method === 'host.settings.profile_snapshot') {
+        return {
+          detail: { name: 'doc', model: 'openrouter/example', paused: false, sandbox: false },
+          usage: { days: [] }, schedules: { jobs: [] }, workgroups: { workgroups: [] }, email: { accounts: [] }, storage: { storage: [] },
+        };
+      }
+      if (method === 'host.config.set_field') return {};
+      throw new Error(`unexpected ${method}`);
+    });
+    const { container } = render(<ProfileSettings />, { wrapper: wrapper(call) });
+    const scope = within(container);
+    await waitFor(() => expect(scope.getByLabelText('Paused')).toBeTruthy());
+    scope.getByLabelText('Paused').click();
+    let failure = null;
+    try {
+      await h.lastToggle;
+    } catch (e) {
+      failure = e;
+    }
+    expect(call).toHaveBeenCalledWith('host.config.set_field', { profile: 'doc', key: 'paused', value: 'true' });
+    expect(summariesCalls).toBeGreaterThan(1);
+    expect(failure).toBeNull();
+  });
+
   it('offers the daemon restart and update as buttons, like desktop', async () => {
     const call = vi.fn(async (method) => {
       if (method === 'host.profile.summaries') {

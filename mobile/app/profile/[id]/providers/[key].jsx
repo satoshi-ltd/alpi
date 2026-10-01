@@ -77,11 +77,11 @@ export default function ProviderKey() {
         onNameChange={setName}
         onUrlChange={setUrl}
         onSaved={async () => {
-          await refresh();
+          await refresh().catch(() => {});
           goBack();
         }}
         onRemoved={async () => {
-          await refresh();
+          await refresh().catch(() => {});
           goBack();
         }}
         call={call}
@@ -105,7 +105,7 @@ export default function ProviderKey() {
     try {
       // Daemon reads `key` (the env var name is passed as the `key` value).
       await call('host.providers.set_key', { profile: id, key: info.env, value: trimmed });
-      await refresh();
+      await refresh().catch(() => {});
       toast({ title: isExisting ? 'Updated' : 'Saved', message: info.env, duration: 1500 });
       goBack();
     } catch (e) {
@@ -116,7 +116,7 @@ export default function ProviderKey() {
   const onRemove = async () => {
     try {
       await call('host.providers.unset_key', { profile: id, key: info.env });
-      await refresh();
+      await refresh().catch(() => {});
       toast({ title: 'Removed', message: info.env });
       goBack();
     } catch (e) {
