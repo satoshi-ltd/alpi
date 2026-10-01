@@ -228,9 +228,6 @@ def test_board_ids_are_unique_and_split_tasks_name_their_board():
         for named in follows.findall(block):
             assert named in ids, (task, named)
             assert named == f"UI-{task}", (task, named)
-    if "THINK.1" in tasks:
-        assert tasks["THINK.1"][0] == "ui"
-        assert "a test pins the static live row's classes" in " ".join(tasks["THINK.1"][1].split())
 
 
 def test_the_design_contract_lives_in_design_and_scripts_holds_no_design_file():

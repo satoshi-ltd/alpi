@@ -1,6 +1,6 @@
 from gen import DOC_ACCENT, WARNING_TEXT, ic, m_row, m_button, mix, page, usage_chart
 from desktop_boards import AMBER, HOVER, INK, INK2, INK3, INK4, LINE, LINE2, PANE, MONO, SIDE, button, chip, diamond_stack, muted, row, section
-from conversation_boards import h1, label, mono, spec, thought
+from conversation_boards import h1, label, mono, spec
 from mobile_overlays import action_item, separator, sheet_header
 
 PAGE_W = 1280
@@ -76,36 +76,6 @@ def stack(*items, gap=14):
 
 def tagged(title, inner):
     return stack(cap(title), inner, gap=8)
-
-
-def gutter(inner):
-    return f'<div style="padding: 0 10px"><div style="margin: 0 -10px">{inner}</div></div>'
-
-
-SHIMMER = f"background: linear-gradient(90deg, {INK3} 0%, {INK} 50%, {INK3} 100%); -webkit-background-clip: text; background-clip: text; color: transparent;"
-
-
-def live_row(bar, chevron):
-    lead = ic("chev-r", 14, INK3) if chevron else '<span style="width: 14px; height: 14px; flex-shrink: 0"></span>'
-    text = f'<span style="font-family: {MONO}; font-size: 12px; {SHIMMER if bar else f"color: {INK3};"}">Thinking…</span>'
-    fill = f"background: {HOVER};" if bar else ""
-    return f'<div style="display: flex; align-items: center; gap: 10px; height: 22px; padding: 0 10px; border-radius: 6px; {fill}">{lead}{text}</div>'
-
-
-def think_now():
-    return stack(
-        tagged("Live · streaming, no reasoning text yet", gutter(live_row(True, False))),
-        tagged("Settled · once the turn ends", gutter(thought())),
-        cap("Tinted bar across the row, chevron hidden but still reserving 24px, letters drift under background-clip: text."),
-    )
-
-
-def think_proposed():
-    return stack(
-        tagged("Live · streaming, no reasoning text yet", gutter(live_row(False, True))),
-        tagged("Settled · once the turn ends", gutter(thought())),
-        cap("Same chevron, same label x, no bar; the shimmer is drawn still and sweeps the label's opacity."),
-    )
 
 
 WG_GRID = "grid-template-columns: minmax(90px, 1fr) 168px 40px 52px 44px; gap: 12px; padding: 0 10px"
@@ -342,17 +312,6 @@ PROPOSALS = [
         "proposed": usage_proposed,
         "accept": "A window with any cost draws bars proportional to dollars, and hovering a bar shows the cost with input and output tokens. A window where every day is free draws tokens as today.",
         "h": 760,
-    },
-    {
-        "id": "THINK.1",
-        "client": "desktop",
-        "area": "Conversation · reasoning row",
-        "title": "The live Thinking row reads like the settled one",
-        "why": "While a turn streams with no reasoning text yet, the row is a tinted bar across the whole width with its chevron hidden, so the label sits 24px in with nothing before it and its letters drift under the clipped gradient. The settled Thought for Ns row beside it has a chevron and no bar. The alternative is to drop the chevron slot and start the label flush left, which would put it 24px left of every settled row in the same block.",
-        "now": think_now,
-        "proposed": think_proposed,
-        "accept": "The static live row has no tinted bar, shows the same chevron as the settled row so its label starts at the same x, and draws its letters as ordinary text with the shimmer on opacity. Checked in the desktop app; a test pins the static live row's classes.",
-        "h": 560,
     },
     {
         "id": "UI-WG.STATUS",

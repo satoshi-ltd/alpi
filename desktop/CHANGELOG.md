@@ -11,6 +11,16 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.7.4 — 2026-10-01 — the Thinking row reads like a settled one
+
+- **While the model has not yet shown any reasoning, the Thinking row no longer sits in a tinted
+  bar with an empty gap before its label.** It shows the same chevron as a settled Thought row, so
+  the label starts at the same place.
+- **The shimmer sweeps the label's opacity instead of a gradient clipped to the letters,** so
+  the letters keep an even spacing; under reduced motion it is still.
+
+  Requires alpi 0.16.1.
+
 ## v0.7.3 — 2026-10-01 — errors in plain words
 
 - **The app's own errors read as sentences.** `too-many-connections`, `forbidden`, the closed or

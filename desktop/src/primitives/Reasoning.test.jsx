@@ -30,6 +30,23 @@ describe("Reasoning", () => {
     expect(status.textContent).toContain("Thinking…");
   });
 
+  it("the live row without a trace has no tinted bar and shows the same chevron as a settled row", () => {
+    render(<Reasoning text="" streaming />);
+    const status = screen.getByRole("status");
+    expect(status.className).toContain("rowStatic");
+    expect(status.className).not.toContain("rowLive");
+    expect(screen.getByText("Thinking…").className).toContain("shimmer");
+    const chevron = status.querySelector("svg");
+    expect(chevron.getAttribute("class")).toContain("chev");
+    expect(chevron.getAttribute("class")).not.toContain("chevIdle");
+  });
+
+  it("a settled span with no text keeps its chevron slot hidden because there is nothing to toggle", () => {
+    render(<Reasoning text="" seconds={4} />);
+    const chevron = screen.getByText("Thought for 4s").parentElement.querySelector("svg");
+    expect(chevron.getAttribute("class")).toContain("chevIdle");
+  });
+
   it("each row is named by its visible label and carries state in aria-expanded", () => {
     render(<Reasoning text="plan" seconds={3} />);
     const btn = screen.getByRole("button", { name: "Thought for 3s" });

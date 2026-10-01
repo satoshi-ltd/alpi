@@ -38,11 +38,11 @@ export default function Reasoning({ text, seconds, streaming = false, answered =
     return (
       <div className={styles.reasoning}>
         <div
-          className={`${styles.row} ${styles.rowStatic} ${streaming ? styles.rowLive : ""}`}
+          className={`${styles.row} ${styles.rowStatic}`}
           role={streaming ? "status" : undefined}
           aria-live={streaming ? "polite" : undefined}
         >
-          <Icon name="chevron-right" size={14} className={`${styles.chev} ${styles.chevIdle}`} />
+          <Icon name="chevron-right" size={14} className={`${styles.chev} ${streaming ? "" : styles.chevIdle}`} />
           {labelNode}
         </div>
       </div>

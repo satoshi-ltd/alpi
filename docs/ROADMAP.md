@@ -60,16 +60,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
-- **THINK.1** — The desktop "Thinking…" row renders wrongly
-  `ui · desktop · agent · normal`
-  note: while streaming with no reasoning text yet, `Reasoning.jsx` shows the static row
-  with the shimmer label ([Reasoning.module.css](../desktop/src/primitives/Reasoning.module.css)):
-  full-width grey bar, hidden chevron leaving a wide left gap, uneven letter spacing in the
-  monospace label under `background-clip: text`.
-  accept: the board THINK.1: the live row reads like the settled "Thought for Ns" row (no
-  gap, no bar, even spacing), checked in the desktop app; a test pins the static live row's
-  classes.
-
 - **SCOPE.4** — Device-scope privacy matrix
   `chore · alpi · agent · high`
   accept: one parametrised test writes as device A and then reads as device B through

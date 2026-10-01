@@ -253,9 +253,8 @@ def inline_ask(question="Which lab should I book with?", choices=("Quest · Main
             f'<span style="display: flex; flex-wrap: wrap; gap: 8px">{"".join(req_btn(c) for c in choices)}{req_btn("Type your own…", "ghost")}</span></div>')
 
 
-def thinking(peek="reading the deploy log", size=12, h=22, pad=10):
-    shimmer = f"background: linear-gradient(90deg, {INK3} 0%, {INK} 50%, {INK3} 100%); -webkit-background-clip: text; background-clip: text; color: transparent;"
-    return f'<div style="display: flex; align-items: center; gap: 10px; height: {h}px; padding: 0 {pad}px; border-radius: 6px; background: {HOVER}"><span style="font-family: {MONO}; font-size: {size}px; {shimmer}">Thinking…</span>{mono(peek, size)}</div>'
+def thinking(peek="reading the deploy log", size=12, h=22, pad=10, glyph=14):
+    return f'<div style="display: flex; align-items: center; gap: 10px; height: {h}px; padding: 0 {pad}px; border-radius: 6px; background: {HOVER}">{ic("chev-r", glyph, INK3)}<span style="font-family: {MONO}; font-size: {size}px; color: {INK3}">Thinking…</span>{mono(peek, size)}</div>'
 
 
 def thought(open_=False, size=12, h=22, secs="7s", chev=INK3, pad=10, glyph=14, rule=(2, 14, 12), lines=("The user wants a summary of yesterday’s deploys.", "Read the log, group by job, count exits.", "Two jobs failed; call them out first.")):
@@ -439,7 +438,7 @@ def mobile_conversation():
 {h1("Conversation · phone and Fold", "The phone draws the same conversation with touch rules: bubbles at radius 18, chat text at 16, actions behind a long press (with Select text), steps that open into a sheet, and a composer where Return adds a line and the model chip sits beside attach.")}
 {row(spec("Chat header · profile", m_header("profile"), 420, 0), spec("Chat header · workgroup", m_header("workgroup"), 420, 0), spec("Empty thread", m_empty(), 300))}
 {row(spec("User message · accent 12%, radius 18 4 18 18, long press for actions", phone(m_user("Can you summarize yesterday’s deploy logs?")), 420, 16), spec("Alpi message · rich text: heading, quote, list, code, routed model", phone(m_assistant()), 420, 16))}
-{row(spec("Process block · one mono block at 12 pt like desktop, flush with the answer, in order; tap a step for its sheet", phone(m_process(m_reasoning(secs="3s"), m_tool("read_file", "deploy.log · 200 lines"), m_bucket("2 tool calls", 1), m_reasoning(True, "2s"), thinking("reading the log", 12, 20, 16))), 420, 16), spec("Attachments · composer and message", m_attachment("deploy-report.pdf", "1.2 MB") + m_attachment("chart.png", "png · 240 KB", "message"), 420))}
+{row(spec("Process block · one mono block at 12 pt like desktop, flush with the answer, in order; tap a step for its sheet", phone(m_process(m_reasoning(secs="3s"), m_tool("read_file", "deploy.log · 200 lines"), m_bucket("2 tool calls", 1), m_reasoning(True, "2s"), thinking("reading the log", 12, 20, 16, 12))), 420, 16), spec("Attachments · composer and message", m_attachment("deploy-report.pdf", "1.2 MB") + m_attachment("chart.png", "png · 240 KB", "message"), 420))}
 {row(spec("Composer · idle", phone(m_composer()), 420, 0), spec("Composer · ready", phone(m_composer("Open a fix", "ready")), 420, 0))}
 {row(spec("Composer · busy (Stop on the accent)", phone(m_composer("Open a fix", "busy")), 420, 0), spec("Jump to latest", m_jump(), 300))}
 </div>"""
