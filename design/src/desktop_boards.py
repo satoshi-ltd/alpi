@@ -458,6 +458,40 @@ def desktop_connections():
     return page("Desktop · connections", 1280, 820, body, bg=BG)
 
 
+WG_GRID = "grid-template-columns: minmax(240px, 1fr) 10.5rem 76px 112px 92px; gap: 20px; padding: 0 10px"
+
+
+def desktop_workgroups():
+    head = "".join(f'<span style="{"text-align: right" if i > 2 else ""}">{t}</span>' for i, t in enumerate(("Workgroup", "Status", "Members", "Spend", "Updated"), start=1))
+    head = f'<div style="display: grid; {WG_GRID}; align-items: center; min-height: 32px; font-family: {MONO}; font-size: 11px; text-transform: uppercase; color: {INK3}">{head}</div>'
+
+    def wrow(name, accent, dot, status, members, spend, age, note=""):
+        lines = (f'<span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: {INK2}; white-space: nowrap">'
+                 f'<span style="width: 7px; height: 7px; border-radius: 999px; background: {dot}; flex-shrink: 0"></span>{status}</span>')
+        if note:
+            lines += f'<span style="padding-left: 13px; font-family: {MONO}; font-size: 11px; color: {INK3}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{note}</span>'
+        cell = lambda v, size: f'<span style="text-align: right; font-family: {MONO}; font-size: {size}px; color: {INK2 if size == 12 else INK3}">{v}</span>'
+        return (f'<div style="display: grid; {WG_GRID}; align-items: center; min-height: 64px; border-bottom: 0.5px solid {LINE}">'
+                f'<span style="display: flex; align-items: center; gap: 10px; min-width: 0">{diamond_stack(accent)}<strong style="font-size: 13px; font-weight: 700; color: {INK}">{name}</strong></span>'
+                f'<span style="display: flex; flex-direction: column; gap: 3px; min-width: 0">{lines}</span>{cell(members, 12)}{cell(spend, 12)}{cell(age, 11)}</div>')
+
+    table = (head
+             + wrow("alpha", DOC_ACCENT, "#3fb37a", "Working · media", 3, "$0.40", "2m", "setup done")
+             + wrow("launch-crew", AMBER, "#e08a3c", "Queued · #2", 4, "$1.12", "9m", "setup done · media next")
+             + wrow("digest", "#8a5cf6", INK4, "Idle", 2, "$0.08", "1d"))
+    meta = f'<span>3 workgroups</span>{SEP}<span>1 working · 1 queued · 1 idle</span>'
+    hero = d_hero(h1("workgroups", diamond(AMBER, 14)) + eyebrow("all profiles"), meta, button("New workgroup", "ghost", "md", "plus"), AMBER)
+    body = f"""<div style="display: flex; height: 100%">
+{d_sidebar(560, selected="", settings_mode=False)}
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; background: {PANE}">
+<div style="height: 2px; background: {LINE}"></div>
+{hero}{d_body(table)}
+</div>
+</div>
+"""
+    return page("Desktop · workgroups", 1280, 560, body, bg=BG)
+
+
 def palette_row(glyph, label, sub="", hint="", selected=False, hit=""):
     text = label.replace(hit, f'<b style="font-weight: 600">{hit}</b>', 1) if hit else label
     sub_html = f'<span style="flex-shrink: 0; font-family: {MONO}; font-size: 11px; color: {INK3}">{sub}</span>' if sub else ""
@@ -508,6 +542,7 @@ DESKTOP = {
     "chat": desktop_chat(),
     "profile": desktop_profile_settings(),
     "wg": desktop_wg_settings(),
+    "workgroups": desktop_workgroups(),
     "connections": desktop_connections(),
     "app": desktop_app_settings(),
 }

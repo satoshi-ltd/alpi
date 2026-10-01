@@ -38,6 +38,24 @@ describe("WorkgroupsView", () => {
     expect(onOpenWorkgroup).toHaveBeenCalledWith(WORKGROUPS[1]);
   });
 
+  it("captions a row with what finished and what waits, and draws nothing for a row without a note", () => {
+    render(
+      <WorkgroupsView
+        workgroups={[
+          { id: "wg-q", name: "Queued hotel", profile: "mira", pipeline_status: "queued", queue_position: 2, pipeline_note: "setup done · media next", mtime: 4 },
+          { id: "wg-a", name: "Active hotel", profile: "mira", pipeline_status: "running", pipeline_phase: "media", pipeline_note: "setup done", mtime: 20 },
+          { id: "wg-i", name: "Idle hotel", profile: "mira", pipeline_status: "completed", mtime: 10 },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("setup done · media next")).toBeInTheDocument();
+    expect(screen.getByText("setup done")).toBeInTheDocument();
+    expect(screen.getByText("Queued · #2")).toBeInTheDocument();
+    expect(screen.getByText("Working · media")).toBeInTheDocument();
+    expect(document.querySelectorAll('[class*="statusNote"]')).toHaveLength(2);
+  });
+
   it("groups working first, then queued, then paused and idle by last update", () => {
     const now = Math.floor(Date.now() / 1000);
     render(

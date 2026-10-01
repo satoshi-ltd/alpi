@@ -11,6 +11,14 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.7.8 — 2026-10-01 — a workgroup row says what finished as well as what runs
+
+- **The Workgroups list captions each row with the finished phases and the phase that waits** (for
+  example "setup done · media next") under the existing status; a row with nothing finished draws no
+  caption.
+
+  Requires alpi 0.16.1; alpi 0.16.20 is what sends the caption.
+
 ## v0.7.7 — 2026-10-01 — Usage bars follow the cost when the profile pays
 
 - **The Usage bars are sized by dollars when any day in the window cost something,** so a heavy

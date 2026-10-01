@@ -194,9 +194,14 @@ export default function WorkgroupsView({
                     <DiamondStack color={accent} />
                     <strong>{workgroup.name ?? workgroup.id}</strong>
                   </span>
-                  <span className={`${styles.status} ${styles[`status_${state.id}`]}`}>
-                    <span aria-hidden />
-                    {state.label}
+                  <span className={styles.statusCell}>
+                    <span className={`${styles.status} ${styles[`status_${state.id}`]}`}>
+                      <span aria-hidden />
+                      {state.label}
+                    </span>
+                    {workgroup.pipeline_note && (
+                      <span className={styles.statusNote} title={workgroup.pipeline_note}>{workgroup.pipeline_note}</span>
+                    )}
                   </span>
                   <Mono tnum>{workgroup.members ?? 0}</Mono>
                   <Mono tnum className={styles.spend}>{money(workgroup.spent_usd)}</Mono>

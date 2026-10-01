@@ -77,6 +77,14 @@ defect, so a helper is extracted only when it removes evidenced duplication.
   protected variables. The map is listed in the takes-effect table of
   [CONFIG.md](CONFIG.md#tools) and in the packaged config reference.
 
+- **UI-EMPTY-VOICE** — Empty states speak in one voice on both clients
+  `ui · desktop, mobile, common · agent · normal`
+  note: empty copy mixes lowercase headings, "none", a middle dot or em dash joining title and hint, and hints
+  with or without a full stop; [emptyCopy.mjs](../common/emptyCopy.mjs) already holds the shared entries.
+  accept: the board UI-EMPTY-VOICE. Every empty state on both clients follows the rule; the copy lives in
+  `common/` and a test fails on a title that is not sentence case or a hint without a full stop; both client
+  suites pass.
+
 ## In progress
 
 _None._
@@ -240,12 +248,6 @@ Demand-gated entries name the condition that promotes them.
   promote when: a second profile mixes cheap questions with quality-sensitive
   writes in chat.
   accept: a skill-level `tier` raises the rest of the turn once that skill runs.
-- **WG.STATUS** — Compound workgroup list status
-  `feature · alpi, desktop · agent · low`
-  note: one observation only, cosmetic.
-  accept: the workgroup list shows a compound status ("setup done · media queued
-  #N") instead of `queued` hiding `completed`, in the CLI and desktop.
-  the interface follows board UI-WG.STATUS.
 - **ALP.ADMIT** — Admission that adapts to provider latency
   `feature · alpi · agent · low`
   note: ALP.9 (shipped) settled `alp.max_active_workgroups` as an admission threshold, not

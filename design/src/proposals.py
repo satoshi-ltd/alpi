@@ -1,5 +1,5 @@
-from gen import DOC_ACCENT, ic, page
-from desktop_boards import AMBER, HOVER, INK, INK2, INK3, INK4, LINE, LINE2, PANE, MONO, SIDE, diamond_stack, row
+from gen import ic, page
+from desktop_boards import AMBER, HOVER, INK, INK2, INK3, LINE, LINE2, PANE, MONO, SIDE, diamond_stack, row
 from conversation_boards import h1, label, mono, spec
 
 PAGE_W = 1280
@@ -20,45 +20,6 @@ def stack(*items, gap=14):
 
 def tagged(title, inner):
     return stack(cap(title), inner, gap=8)
-
-
-WG_GRID = "grid-template-columns: minmax(90px, 1fr) 168px 40px 52px 44px; gap: 12px; padding: 0 10px"
-
-
-def wg_head():
-    cells = "".join(f'<span style="{"text-align: right" if i > 2 else ""}">{t}</span>' for i, t in enumerate(("Workgroup", "Status", "Members", "Spend", "Updated"), start=1))
-    return f'<div style="display: grid; {WG_GRID}; align-items: center; min-height: 32px; font-family: {MONO}; font-size: 11px; text-transform: uppercase; color: {INK3}">{cells}</div>'
-
-
-def wg_row(name, accent, dot, status, members, spend, age, note=""):
-    lines = (f'<span style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: {INK2}; white-space: nowrap">'
-             f'<span style="width: 7px; height: 7px; border-radius: 999px; background: {dot}; flex-shrink: 0"></span>{status}</span>')
-    if note:
-        lines += f'<span style="padding-left: 13px; font-family: {MONO}; font-size: 11px; color: {INK3}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{note}</span>'
-    cell = lambda v, size: f'<span style="text-align: right; font-family: {MONO}; font-size: {size}px; color: {INK2 if size == 12 else INK3}">{v}</span>'
-    return (f'<div style="display: grid; {WG_GRID}; align-items: center; min-height: 64px; border-bottom: 0.5px solid {LINE}">'
-            f'<span style="display: flex; align-items: center; gap: 10px; min-width: 0">{diamond_stack(accent)}<strong style="font-size: 13px; font-weight: 700; color: {INK}">{name}</strong></span>'
-            f'<span style="display: flex; flex-direction: column; gap: 3px; min-width: 0">{lines}</span>{cell(members, 12)}{cell(spend, 12)}{cell(age, 11)}</div>')
-
-
-def wg_list(notes):
-    note = lambda text: text if notes else ""
-    return stack(
-        wg_head()
-        + wg_row("alpha", DOC_ACCENT, "#3fb37a", "Working · media", 3, "$0.40", "2m", note("setup done"))
-        + wg_row("launch-crew", AMBER, "#e08a3c", "Queued · #2", 4, "$1.12", "9m", note("setup done · media next"))
-        + wg_row("digest", "#8a5cf6", INK4, "Idle", 2, "$0.08", "1d"),
-        cap("A queued workgroup hides its finished setup; the pipeline phase shows only while it runs." if not notes else "The caption names what finished and what waits; rows with nothing finished draw none."),
-        gap=10,
-    )
-
-
-def wg_now():
-    return wg_list(False)
-
-
-def wg_proposed():
-    return wg_list(True)
 
 
 def phone_frame(inner):
@@ -174,17 +135,6 @@ def empty_proposed():
 
 
 PROPOSALS = [
-    {
-        "id": "UI-WG.STATUS",
-        "client": "desktop",
-        "area": "Workgroups · list",
-        "title": "A workgroup row says what finished as well as what runs",
-        "why": "The Status cell shows one state, so a workgroup whose setup is done and whose media pipeline waits reads only Queued · #2. The recommendation is a second mono line under the existing dot and label naming the finished phases and what is next. The alternative is one compound line, setup done · media queued #2, which does not fit the 10.5rem column and would truncate.",
-        "now": wg_now,
-        "proposed": wg_proposed,
-        "accept": "The Status cell keeps today's dot and label and adds one mono caption naming the finished phases and, when a later phase waits, that phase; a row with nothing finished draws no caption; the row keeps its 64px height and the caption truncates with an ellipsis at the column width; dot colours are unchanged.",
-        "h": 700,
-    },
     {
         "id": "UI-MOB.LIVE-ACTIVITY",
         "client": "mobile",

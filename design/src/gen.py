@@ -881,6 +881,7 @@ def build(desktop_boards):
         ("Desktop-Chat.dc.html", desktop_boards["chat"], 800, "Chat"),
         ("Desktop-ProfileSettings.dc.html", desktop_boards["profile"], 2400, "Profile settings"),
         ("Desktop-WorkgroupSettings.dc.html", desktop_boards["wg"], 1760, "Workgroup settings"),
+        ("Desktop-Workgroups.dc.html", desktop_boards["workgroups"], 560, "Workgroups"),
         ("Desktop-Connections.dc.html", desktop_boards["connections"], 820, "Connections"),
         ("Desktop-AppSettings.dc.html", desktop_boards["app"], 740, "App settings"),
         ("Desktop-Overlays.dc.html", desktop_overlays(), OVERLAYS_H, "Overlays"),

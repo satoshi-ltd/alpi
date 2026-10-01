@@ -116,9 +116,17 @@
    "title": "Desktop \u00b7 workgroup settings",
    "page": "desktop"
   },
-  "Desktop-Connections.dc.html": {
+  "Desktop-Workgroups.dc.html": {
    "x": 0,
    "y": 5920,
+   "w": 1280,
+   "h": 560,
+   "title": "Desktop \u00b7 workgroups",
+   "page": "desktop"
+  },
+  "Desktop-Connections.dc.html": {
+   "x": 0,
+   "y": 6720,
    "w": 1280,
    "h": 820,
    "title": "Desktop \u00b7 connections",
@@ -126,7 +134,7 @@
   },
   "Desktop-AppSettings.dc.html": {
    "x": 0,
-   "y": 6980,
+   "y": 7780,
    "w": 1280,
    "h": 740,
    "title": "Desktop \u00b7 app settings",
@@ -134,7 +142,7 @@
   },
   "Desktop-Overlays.dc.html": {
    "x": 0,
-   "y": 7960,
+   "y": 8760,
    "w": 1280,
    "h": 2090,
    "title": "Desktop \u00b7 overlays",
@@ -300,17 +308,9 @@
    "title": "Phone \u00b7 message actions",
    "page": "mobile"
   },
-  "Proposals-UI-WG.STATUS.dc.html": {
-   "x": 0,
-   "y": 240,
-   "w": 1280,
-   "h": 700,
-   "title": "Proposals \u00b7 ui-wg.status \u00b7 a workgroup row says what finished as well as what runs",
-   "page": "proposals"
-  },
   "Proposals-UI-MOB.LIVE-ACTIVITY.dc.html": {
    "x": 0,
-   "y": 1180,
+   "y": 240,
    "w": 1280,
    "h": 870,
    "title": "Proposals \u00b7 ui-mob.live-activity \u00b7 a running workgroup and an approval reach a locked phone",
@@ -318,7 +318,7 @@
   },
   "Proposals-UI-EMPTY-VOICE.dc.html": {
    "x": 0,
-   "y": 2290,
+   "y": 1350,
    "w": 1280,
    "h": 1580,
    "title": "Proposals \u00b7 ui-empty-voice \u00b7 empty states speak in one voice on both clients",
@@ -337,6 +337,7 @@
   "Desktop-Chat.dc.html",
   "Desktop-ProfileSettings.dc.html",
   "Desktop-WorkgroupSettings.dc.html",
+  "Desktop-Workgroups.dc.html",
   "Desktop-Connections.dc.html",
   "Desktop-AppSettings.dc.html",
   "Desktop-Overlays.dc.html",
@@ -360,7 +361,6 @@
   "Phone-ToolSheet.dc.html",
   "Phone-SelectText.dc.html",
   "Phone-MessageActions.dc.html",
-  "Proposals-UI-WG.STATUS.dc.html",
   "Proposals-UI-MOB.LIVE-ACTIVITY.dc.html",
   "Proposals-UI-EMPTY-VOICE.dc.html"
  ],
@@ -421,9 +421,17 @@
    "maxW": 2600,
    "page": "desktop"
   },
-  "d-Connections": {
+  "d-Workgroups": {
    "x": 0,
    "y": 5697,
+   "text": "Workgroups",
+   "kind": "title1",
+   "maxW": 2600,
+   "page": "desktop"
+  },
+  "d-Connections": {
+   "x": 0,
+   "y": 6497,
    "text": "Connections",
    "kind": "title1",
    "maxW": 2600,
@@ -431,7 +439,7 @@
   },
   "d-App settings": {
    "x": 0,
-   "y": 6757,
+   "y": 7557,
    "text": "App settings",
    "kind": "title1",
    "maxW": 2600,
@@ -439,7 +447,7 @@
   },
   "d-Overlays": {
    "x": 0,
-   "y": 7737,
+   "y": 8537,
    "text": "Overlays",
    "kind": "title1",
    "maxW": 2600,
@@ -509,17 +517,9 @@
    "maxW": 2600,
    "page": "mobile"
   },
-  "p-UI-WG.STATUS \u00b7 A workgroup row says what finished as well as what runs": {
-   "x": 0,
-   "y": 17,
-   "text": "UI-WG.STATUS \u00b7 A workgroup row says what finished as well as what runs",
-   "kind": "title1",
-   "maxW": 2600,
-   "page": "proposals"
-  },
   "p-UI-MOB.LIVE-ACTIVITY \u00b7 A running workgroup and an approval reach a locked phone": {
    "x": 0,
-   "y": 957,
+   "y": 17,
    "text": "UI-MOB.LIVE-ACTIVITY \u00b7 A running workgroup and an approval reach a locked phone",
    "kind": "title1",
    "maxW": 2600,
@@ -527,7 +527,7 @@
   },
   "p-UI-EMPTY-VOICE \u00b7 Empty states speak in one voice on both clients": {
    "x": 0,
-   "y": 2067,
+   "y": 1127,
    "text": "UI-EMPTY-VOICE \u00b7 Empty states speak in one voice on both clients",
    "kind": "title1",
    "maxW": 2600,
