@@ -60,13 +60,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
-- **MEM.3** — Memory edits keep combining marks with their letter
-  `bug · alpi · agent · normal`
-  note: replacing a decomposed `Cafe\u0301` in [memory.py](../alpi/tools/memory.py)
-  leaves the combining accent behind (`Teá`) on AGENT.md edits and inside multi-line
-  entries.
-  accept: a match extends past trailing combining marks (or text is compared in NFC);
-  replace and remove tests with a decomposed accent produce the exact expected text.
 - **MOB.ACT-REDETECT** — Activity comes back after a daemon upgrade
   `bug · mobile · agent · normal`
   note: a `-32601` from `host.activity.list` sets `supported=false` in

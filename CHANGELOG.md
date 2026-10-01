@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.16.13 — 2026-10-01 — memory edits keep an accent with its letter
+
+- **Replacing or removing text in memory no longer leaves a loose accent behind.** When a note
+  stored an accented letter as a letter plus a combining accent (common in text pasted from some
+  apps), an edit that matched the letter left the accent on the neighbouring character. The
+  accent now goes with its letter, in `AGENT.md` and inside multi-line entries.
+
 ## v0.16.12 — 2026-10-01 — a retried model call leaves no thinking behind
 
 - **When a model call is retried or falls back to another model, the thinking it had already shown

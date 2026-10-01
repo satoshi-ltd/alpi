@@ -385,6 +385,8 @@ class Memory(Tool):
 
 
 def _folded_spans(text: str, match: str) -> list[tuple[int, int]]:
+    import unicodedata
+
     from alpi.memory import _fold
 
     needle = _fold(match)
@@ -400,7 +402,10 @@ def _folded_spans(text: str, match: str) -> list[tuple[int, int]]:
     spans: list[tuple[int, int]] = []
     pos = haystack.find(needle)
     while pos >= 0:
-        spans.append((origin[pos], origin[pos + len(needle) - 1] + 1))
+        end = origin[pos + len(needle) - 1] + 1
+        while end < len(text) and unicodedata.category(text[end]) == "Mn":
+            end += 1
+        spans.append((origin[pos], end))
         pos = haystack.find(needle, pos + 1)
     return spans
 

@@ -318,3 +318,41 @@ def test_remove_matches_the_last_line_copied_with_its_line_break(isolated_home: 
     r = Memory().run(action="remove", target="USER.md", match="- B\n")
     assert r.ok, r.error
     assert (isolated_home / "memories" / "USER.md").read_text() == "- A\n"
+
+
+DECOMPOSED_CAFE = "Café"
+
+
+def test_agent_replace_takes_the_accent_with_its_letter(isolated_home: Path) -> None:
+    (isolated_home / "memories" / "AGENT.md").write_text(f"Bebe {DECOMPOSED_CAFE} negro.\n")
+    r = Memory().run(action="replace", target="AGENT.md", match="cafe", content="te")
+    assert r.ok, r.error
+    assert (isolated_home / "memories" / "AGENT.md").read_text() == "Bebe te negro.\n"
+
+
+def test_agent_remove_takes_the_accent_with_its_letter(isolated_home: Path) -> None:
+    (isolated_home / "memories" / "AGENT.md").write_text(f"Bebe {DECOMPOSED_CAFE} negro.\n")
+    r = Memory().run(action="remove", target="AGENT.md", match="Cafe")
+    assert r.ok, r.error
+    assert (isolated_home / "memories" / "AGENT.md").read_text() == "Bebe  negro.\n"
+
+
+def test_replace_inside_a_multi_line_entry_takes_the_accent_with_its_letter(isolated_home: Path) -> None:
+    (isolated_home / "memories" / "USER.md").write_text(f"Perfil\n- Bebe {DECOMPOSED_CAFE} negro.\n- Corre.\n")
+    r = Memory().run(action="replace", target="USER.md", match="cafe", content="te")
+    assert r.ok, r.error
+    assert (isolated_home / "memories" / "USER.md").read_text() == "Perfil\n- Bebe te negro.\n- Corre.\n"
+
+
+def test_remove_inside_a_multi_line_entry_takes_the_accent_with_its_letter(isolated_home: Path) -> None:
+    (isolated_home / "memories" / "USER.md").write_text(f"Perfil\n- Bebe {DECOMPOSED_CAFE}\n- Corre.\n")
+    r = Memory().run(action="remove", target="USER.md", match="- Bebe Cafe")
+    assert r.ok, r.error
+    assert (isolated_home / "memories" / "USER.md").read_text() == "Perfil\n- Corre.\n"
+
+
+def test_a_match_that_stops_before_the_accented_letter_leaves_it_intact(isolated_home: Path) -> None:
+    (isolated_home / "memories" / "AGENT.md").write_text(f"Bebe {DECOMPOSED_CAFE} negro.\n")
+    r = Memory().run(action="replace", target="AGENT.md", match="Caf", content="Bar")
+    assert r.ok, r.error
+    assert (isolated_home / "memories" / "AGENT.md").read_text() == "Bebe Bare\u0301 negro.\n"
