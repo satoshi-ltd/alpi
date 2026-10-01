@@ -4,8 +4,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { useNotify } from "../../../primitives/Notification.jsx";
 import ConfirmDelete from "../../../primitives/ConfirmDelete.jsx";
 import { Button } from "../../../primitives/index.js";
+import { updateHint } from "../../../../../common/updateHint.mjs";
 
-export function DaemonField({ connectionId }) {
+export function DaemonField({ connectionId, selfUpdate = true }) {
   const notify = useNotify();
   const [busy, setBusy] = useState(null);
   const [confirming, setConfirming] = useState(false);
@@ -34,7 +35,7 @@ export function DaemonField({ connectionId }) {
         notify({ message: `Already on the latest (v${res.current})`, variant: "info", duration: 2500 });
       } else if (res?.reason === "manual") {
         notify({
-          message: "Can't self-update this installation. Docker: run docker compose pull, then docker compose up -d. Source install: git pull and restart the daemon.",
+          message: `Can't self-update this installation. ${updateHint(res.installer, res.latest)}`,
           variant: "error",
           duration: 8000,
         });
@@ -50,9 +51,11 @@ export function DaemonField({ connectionId }) {
 
   return (
     <span className="row row-gap">
-      <Button onClick={update} disabled={!!busy} variant="ghost" size="sm">
-        {busy === "update" ? "Updating…" : "Update alpi"}
-      </Button>
+      {selfUpdate && (
+        <Button onClick={update} disabled={!!busy} variant="ghost" size="sm">
+          {busy === "update" ? "Updating…" : "Update alpi"}
+        </Button>
+      )}
       <Button onClick={() => setConfirming(true)} disabled={!!busy} variant="ghost" size="sm">
         {busy === "restart" ? "Restarting…" : "Restart daemon"}
       </Button>

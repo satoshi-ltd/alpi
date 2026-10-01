@@ -10,6 +10,7 @@ os.makedirs(ROOT, exist_ok=True)
 FONT_LINK = '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap">'
 
 DOC_ACCENT = "#3d7ea6"
+UPDATE_STEP = "Set the image tag to 0.16.19 in docker-compose.yml, then docker compose up -d."
 ALPI_ACCENT = "#8a5a0a"
 DANGER = "#b73737"
 MONO = "'Geist Mono', monospace"
@@ -195,11 +196,11 @@ def m_section(title, kicker="", first=False):
     return f'<div style="padding: {0 if first else 24}px 20px 8px">{m_eyebrow(title + k)}</div>'
 
 
-def m_row(label, helper="", value="", chevron=True, control="", danger=False, sep=True):
+def m_row(label, helper="", value="", chevron=True, control="", danger=False, sep=True, helper_lines=1):
     color = DANGER if danger else "#0b1117"
     val = f'<span style="font-size: 14px; color: #626e7d; text-align: right; max-width: 55%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{value}</span>' if value else ""
     chev = ic("chev-r", 16, "#b1bac4") if chevron and not danger else ""
-    help_ = f'<span style="font-family: {MONO}; font-weight: 500; font-size: 11px; line-height: 1.3; color: #626e7d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{helper}</span>' if helper else ""
+    help_ = f'<span style="font-family: {MONO}; font-weight: 500; font-size: 11px; line-height: 1.3; color: #626e7d; {"white-space: nowrap; overflow: hidden; text-overflow: ellipsis" if helper_lines == 1 else ""}">{helper}</span>' if helper else ""
     sepd = '<div style="height: 0.5px; background: rgba(11,17,23,0.07); margin-left: 20px"></div>' if sep else ""
     return f"""<div style="display: flex; align-items: center; gap: 12px; padding: 14px 20px; background: #ffffff">
 <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 15px; line-height: 1.3; color: {color}">{label}</span>{help_}</div>
@@ -581,6 +582,9 @@ def phone_profile_settings():
 {m_section("Service", "daemon")}
 {m_row("Update alpi", "installs the newest alpi and restarts", control=m_button("Update"), chevron=False)}
 {m_row("Restart daemon", "exits the daemon · supervisor relaunches · reconnects automatically", control=m_button("Restart"), chevron=False)}
+{m_section("Service", "daemon that cannot update itself")}
+{m_row("Update alpi", UPDATE_STEP, chevron=False, helper_lines=2)}
+{m_row("Restart daemon", "exits the daemon · supervisor relaunches · reconnects automatically", control=m_button("Restart"), chevron=False)}
 {m_row("Email", "IMAP / Gmail accounts", control=pill("none"), sep=False)}
 {m_section("ALP", "peers + workgroups")}
 {m_row("Public key", "tap to copy", "X+iAJ/6f…lNs=", chevron=False)}
@@ -600,7 +604,7 @@ def phone_profile_settings():
 {m_row("Delete profile", "removes identity, memory, skills, schedule from disk. Cannot be undone.", danger=True, sep=False)}
 </div>
 """
-    return page("Phone · profile settings", 390, 2360, body)
+    return page("Phone · profile settings", 390, 2540, body)
 
 
 def fold_profile_settings():
@@ -626,6 +630,8 @@ def fold_profile_settings():
 </div>
 {m_wide_section("Service", "daemon")}
 {m_wide_row("Daemon", "update installs the newest alpi · restart exits and the supervisor relaunches", control='<span style="display: inline-flex; gap: 8px">' + m_button("Update alpi") + m_button("Restart daemon") + '</span>', chevron=False)}
+{m_wide_section("Service", "daemon that cannot update itself")}
+{m_wide_row("Daemon", UPDATE_STEP + " Restart exits and the supervisor relaunches.", control=m_button("Restart daemon"), chevron=False)}
 {m_wide_row("Email", "IMAP / Gmail accounts", control=pill("none"))}
 {m_wide_section("ALP", "peers + workgroups")}
 {m_wide_row("Public key", "tap to copy", "X+iAJ/6f…lNs=", chevron=False)}
@@ -650,7 +656,7 @@ def fold_profile_settings():
 </div>
 </div>
 """
-    return page("Fold · profile settings", 852, 2000, body)
+    return page("Fold · profile settings", 852, 2120, body)
 
 
 

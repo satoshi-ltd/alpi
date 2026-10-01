@@ -92,31 +92,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
   Clean plus Delete generated files); both client suites pass; the changelog
   entry pins no new alpi minimum.
 
-- **UPD.1** — Clients know before the click whether a daemon can self-update
-  `bug · alpi, common, desktop, mobile · agent · normal`
-  note: `_detect_installer()` in [updater.py](../alpi/updater.py) returns `uv`/`pipx`
-  or `dev`; a Docker image (`pip install .` as root, daemon as uid 1000) always
-  lands on `dev` → `reason: "manual"`, while `host.version`
-  ([device_state.py](../alpi/host/device_state.py)) advertises `update_available`
-  and desktop shows **Update alpi**. The hint `docker compose pull` is wrong for a
-  pinned tag; desktop [DaemonField.jsx](../desktop/src/features/settings/fields/DaemonField.jsx),
-  mobile [daemonUpdate.js](../mobile/src/features/settings/daemonUpdate.js) and
-  [ConnectionSheet.jsx](../mobile/src/features/sheets/ConnectionSheet.jsx) carry
-  three texts; the comment in `_daemon_update` wrongly implies an in-container
-  upgrade.
-  accept: the updater names the install kind `uv | pipx | docker | source`
-  (`docker` from `ALPI_PLATFORM`) and `host.version` adds `installer` and
-  `self_update: bool`. A Docker daemon reports `self_update: false`,
-  `installer: docker`; desktop and mobile hide the button and the badge tooltip
-  shows one shared `common/` step with the latest version filled in ("set the
-  image tag to `X.Y.Z` in docker-compose.yml, then `docker compose up -d`";
-  `source`: "git pull and restart the daemon"); `alpi update` prints the same
-  text. uv/pipx keep the one-click flow; a daemon without `self_update` keeps
-  today's behaviour. Updater tests stub environment and subprocess per kind; both
-  client suites cover the one hint string. No in-container upgrade, no compose
-  editing.
-  the interface follows board UI-UPD.1.
-
 - **UX.8** — Usage bars by cost when the profile pays
   `ui · desktop · agent · normal`
   note: [Usage.jsx](../desktop/src/features/settings/Usage.jsx) sizes bars by

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { act, render, fireEvent, waitFor } from "@testing-library/react";
+import { act, cleanup, render, fireEvent, waitFor } from "@testing-library/react";
 import { Scrim, ConnectionPanel } from "./Panels.jsx";
 
 function esc() {
@@ -90,6 +90,29 @@ describe("ConnectionPanel revoked row", () => {
       />,
     );
     expect(getByText("revoked")).toBeTruthy();
+  });
+});
+
+describe("ConnectionPanel update tag", () => {
+  const row = { id: "r", kind: "remote", name: "casa", host: "casa:49200", status: "online", revoked: false, update_available: "0.16.19" };
+
+  function tag(connection) {
+    const { getByText } = render(
+      <ConnectionPanel open onClose={() => {}} activeId="local" connections={[connection]} />,
+    );
+    return getByText("update");
+  }
+
+  it("explains the manual step on the tag of a daemon that cannot update itself", () => {
+    expect(tag({ ...row, installer: "docker", self_update: false }).getAttribute("title")).toBe(
+      "Set the image tag to 0.16.19 in docker-compose.yml, then docker compose up -d.",
+    );
+  });
+
+  it("leaves the tag plain for a daemon that can update itself or does not say", () => {
+    expect(tag({ ...row, installer: "uv", self_update: true }).getAttribute("title")).toBeNull();
+    cleanup();
+    expect(tag(row).getAttribute("title")).toBeNull();
   });
 });
 

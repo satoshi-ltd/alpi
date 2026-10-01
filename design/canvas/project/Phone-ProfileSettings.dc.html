@@ -17,7 +17,7 @@ body{margin:0;background:#ffffff;font-family:"Geist",ui-sans-serif,system-ui,san
 a{color:#8a5a0a}a:hover{color:#6b4608}
 </style>
 </helmet>
-<div style="position: relative; width: 390px; height: 2360px; box-sizing: border-box; overflow: hidden; background: #ffffff; font-family: Geist, ui-sans-serif, system-ui, sans-serif; color: #0b1117">
+<div style="position: relative; width: 390px; height: 2540px; box-sizing: border-box; overflow: hidden; background: #ffffff; font-family: Geist, ui-sans-serif, system-ui, sans-serif; color: #0b1117">
 <div style="display: flex; flex-direction: column">
 <div style="position: relative; display: flex; align-items: center; gap: 10px; padding: 8px 20px 12px; background: #ffffff; border-bottom: 0.5px solid rgba(11,17,23,0.07)">
 <button aria-label="Back" class="m-chrome" style="width: 28px; height: 36px; margin-left: -6px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3d4955" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" data-icon="chevron-left" style="flex-shrink: 0; display: block"><path d="m15 18-6-6 6-6"/></svg></button>
@@ -96,6 +96,15 @@ a{color:#8a5a0a}a:hover{color:#6b4608}
 <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 15px; line-height: 1.3; color: #0b1117">Restart daemon</span><span style="font-family: 'Geist Mono', monospace; font-weight: 500; font-size: 11px; line-height: 1.3; color: #626e7d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">exits the daemon · supervisor relaunches · reconnects automatically</span></div>
 <button style="min-height: 44px; padding: 6px 12px; border: 0; border-radius: 10px; background: rgba(11,17,23,0.04); color: #0b1117; font-family: Geist, sans-serif; font-weight: 600; font-size: 12px; cursor: pointer">Restart</button>
 </div><div style="height: 0.5px; background: rgba(11,17,23,0.07); margin-left: 20px"></div>
+<div style="padding: 24px 20px 8px"><span style="font-family: 'Geist Mono', monospace; font-weight: 500; font-size: 11px; line-height: 1.3; letter-spacing: 0.06em; text-transform: uppercase; color: #626e7d; ">Service · daemon that cannot update itself</span></div>
+<div style="display: flex; align-items: center; gap: 12px; padding: 14px 20px; background: #ffffff">
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 15px; line-height: 1.3; color: #0b1117">Update alpi</span><span style="font-family: 'Geist Mono', monospace; font-weight: 500; font-size: 11px; line-height: 1.3; color: #626e7d; ">Set the image tag to 0.16.19 in docker-compose.yml, then docker compose up -d.</span></div>
+
+</div><div style="height: 0.5px; background: rgba(11,17,23,0.07); margin-left: 20px"></div>
+<div style="display: flex; align-items: center; gap: 12px; padding: 14px 20px; background: #ffffff">
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 15px; line-height: 1.3; color: #0b1117">Restart daemon</span><span style="font-family: 'Geist Mono', monospace; font-weight: 500; font-size: 11px; line-height: 1.3; color: #626e7d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">exits the daemon · supervisor relaunches · reconnects automatically</span></div>
+<button style="min-height: 44px; padding: 6px 12px; border: 0; border-radius: 10px; background: rgba(11,17,23,0.04); color: #0b1117; font-family: Geist, sans-serif; font-weight: 600; font-size: 12px; cursor: pointer">Restart</button>
+</div><div style="height: 0.5px; background: rgba(11,17,23,0.07); margin-left: 20px"></div>
 <div style="display: flex; align-items: center; gap: 12px; padding: 14px 20px; background: #ffffff">
 <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 15px; line-height: 1.3; color: #0b1117">Email</span><span style="font-family: 'Geist Mono', monospace; font-weight: 500; font-size: 11px; line-height: 1.3; color: #626e7d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">IMAP / Gmail accounts</span></div>
 <span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: #f1f3f5; font-family: 'Geist Mono', monospace; font-size: 12px; color: #626e7d"><span style="width: 7px; height: 7px; border-radius: 999px; background: #b1bac4"></span>off</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#b1bac4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" data-icon="chevron-right" style="flex-shrink: 0; display: block"><path d="m9 18 6-6-6-6"/></svg>
@@ -153,7 +162,7 @@ a{color:#8a5a0a}a:hover{color:#6b4608}
 
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":2360}}'>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":2540}}'>
 class Component extends DCLogic {
 renderVals() { return {}; }
 }

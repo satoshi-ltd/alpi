@@ -3782,6 +3782,8 @@ pub fn run() {
                         "error": error,
                         "alpi_version": host_client::version_for(id),
                         "update_available": host_client::update_available_for(id),
+                        "installer": host_client::installer_for(id),
+                        "self_update": host_client::self_update_for(id),
                         "role": host_client::role_for(id),
                     }),
                 );

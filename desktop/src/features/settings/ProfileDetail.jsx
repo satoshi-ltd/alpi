@@ -46,6 +46,7 @@ import {
 } from "./fields/alp.jsx";
 import { EmailCell } from "./fields/services.jsx";
 import { DaemonField } from "./fields/DaemonField.jsx";
+import { canSelfUpdate } from "../../../../common/updateHint.mjs";
 import {
   NetworkAddressField,
   PairingNameField,
@@ -395,7 +396,7 @@ export default function ProfileDetail({
         {(activeConnection?.kind === "local" || activeConnection?.role === "admin") && (
           <Section title="Service" tooltip="daemon + network">
             <Row label="daemon">
-              <DaemonField connectionId={activeConnection.id} />
+              <DaemonField connectionId={activeConnection.id} selfUpdate={canSelfUpdate(activeConnection.self_update)} />
             </Row>
             {profile.name === "default" && activeConnection?.kind === "local" && (
               <>

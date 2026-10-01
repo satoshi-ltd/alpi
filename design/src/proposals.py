@@ -1,7 +1,6 @@
-from gen import DOC_ACCENT, WARNING_TEXT, ic, m_row, m_button, mix, page, usage_chart
+from gen import DOC_ACCENT, ic, page, usage_chart
 from desktop_boards import AMBER, HOVER, INK, INK2, INK3, INK4, LINE, LINE2, PANE, MONO, SIDE, button, chip, diamond_stack, muted, row, section
 from conversation_boards import h1, label, mono, spec
-from mobile_overlays import action_item, separator, sheet_header
 
 PAGE_W = 1280
 COLUMN_PAD = 20
@@ -117,69 +116,8 @@ def wg_proposed():
     return wg_list(True)
 
 
-VERSION = "0.16.10"
-DOCKER_STEP = f'Set the image tag to {VERSION} in <span style="font-family: {MONO}">docker-compose.yml</span>, then <span style="font-family: {MONO}">docker compose up -d</span>.'
-DOCKER_PLAIN = f"Set the image tag to {VERSION} in docker-compose.yml, then docker compose up -d."
-
-
-def conn_line(tooltip=False):
-    tag = (f'<span style="padding: 2px 6px; border-radius: 4px; font-family: {MONO}; font-size: 11px; color: {WARNING_TEXT}; background: {mix("#e08a3c", 0.14, PANE)}">update</span>')
-    tip = ""
-    if tooltip:
-        tip = (f'<div style="position: absolute; left: 0; top: 46px; width: 300px; box-sizing: border-box; padding: 10px 12px; border-radius: 10px; background: {PANE}; border: 0.5px solid {LINE2}; '
-               f'box-shadow: 0 0 0 0.5px rgba(11,17,23,0.08), 0 12px 32px rgba(11,17,23,0.10); font-size: 12px; line-height: 1.5; color: {INK2}; z-index: 1">{DOCKER_STEP}</div>')
-    return (f'<div style="display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 0 10px; border-bottom: 0.5px solid {LINE}">{ic("server", 16, INK2)}'
-            f'<div style="display: flex; flex-direction: column; gap: 3px"><span style="display: inline-flex; align-items: center; gap: 8px; position: relative"><strong style="font-size: 13px; color: {INK}">remote-casa</strong>{tag}{tip}</span>'
-            f'{mono("casa.local · v0.16.9", 11, INK3)}</div></div>')
-
-
-def desktop_toast(text):
-    return (f'<div style="max-width: 440px; padding: 10px 12px; border-radius: 10px; background: {PANE}; border: 0.5px solid {LINE2}; font-size: 12px; line-height: 1.5; color: {INK2}; '
-            f'box-shadow: 0 0 0 0.5px rgba(11,17,23,0.08), 0 12px 32px rgba(11,17,23,0.10)">{text}</div>')
-
-
 def phone_frame(inner):
     return f'<div style="width: 390px; max-width: 100%; border-radius: 12px; border: 0.5px solid {LINE2}; overflow: hidden; background: #ffffff">{inner}</div>'
-
-
-def phone_toast(title, message):
-    return (f'<div style="width: 350px; box-sizing: border-box; padding: 12px 16px; border-radius: 14px; background: {INK}; display: flex; flex-direction: column; gap: 3px">'
-            f'<span style="font-weight: 600; font-size: 14px; color: #ffffff">{title}</span><span style="font-size: 13px; line-height: 1.4; color: #ffffff; opacity: 0.8">{message}</span></div>')
-
-
-def connection_actions(update):
-    items = []
-    if update:
-        items.append(action_item("download", f"Update to v{VERSION}"))
-    items += [action_item("pencil", "Rename"), action_item("x", "Forget", danger=True)]
-    return phone_frame(sheet_header("remote-casa", "https://casa.local:7421") + f'<div style="padding-bottom: 12px">{separator(56).join(items)}</div>')
-
-
-def upd_now():
-    desktop = stack(
-        tagged("Desktop · Settings · Service, a Docker daemon", section("Service", "daemon + network", row("daemon", button("Update alpi", "ghost", "sm") + button("Restart daemon", "ghost", "sm")), first=True)),
-        tagged("Desktop · Connections, the update tag has no hint", conn_line()),
-        tagged("Desktop · after a click", desktop_toast("Can't self-update this installation. Docker: run docker compose pull, then docker compose up -d. Source install: git pull and restart the daemon.")),
-    )
-    mobile = stack(
-        tagged("Mobile · profile settings row, after a tap", stack(phone_frame(m_row("Update alpi", "installs the newest alpi and restarts", control=m_button("Update"), chevron=False, sep=False)),
-                                                                   phone_toast("Can't self-update this install", "Docker: docker compose pull, then docker compose up -d · source install: git pull and restart the daemon"), gap=10)),
-        tagged("Mobile · connection action sheet, after a tap", stack(connection_actions(True), phone_toast("Can't self-update", "Image-pinned (Docker) — repull the image to update."), gap=10)),
-    )
-    return stack(desktop, mobile, gap=26)
-
-
-def upd_proposed():
-    desktop = stack(
-        tagged("Desktop · Settings · Service, a Docker daemon", section("Service", "daemon + network", row("daemon", button("Restart daemon", "ghost", "sm")), first=True)),
-        tagged("Desktop · Connections, the tag explains itself on hover", f'<div style="height: 118px">{conn_line(True)}</div>'),
-    )
-    mobile = stack(
-        tagged("Mobile · profile settings row, no button", phone_frame(m_row("Update alpi", DOCKER_PLAIN, chevron=False, sep=False).replace("white-space: nowrap; overflow: hidden; text-overflow: ellipsis", "", 1))),
-        tagged("Mobile · connection action sheet, no update item", connection_actions(False)),
-        cap("One sentence from common/, read by the desktop tooltip, both mobile places and alpi update."),
-    )
-    return stack(desktop, mobile, gap=26)
 
 
 LOCK_BG = "background: linear-gradient(180deg, #1b2530 0%, #0d131a 100%)"
@@ -323,17 +261,6 @@ PROPOSALS = [
         "proposed": wg_proposed,
         "accept": "The Status cell keeps today's dot and label and adds one mono caption naming the finished phases and, when a later phase waits, that phase; a row with nothing finished draws no caption; the row keeps its 64px height and the caption truncates with an ellipsis at the column width; dot colours are unchanged.",
         "h": 700,
-    },
-    {
-        "id": "UI-UPD.1",
-        "client": "desktop + mobile",
-        "area": "Settings · daemon update",
-        "title": "A daemon that cannot self-update offers no update button",
-        "why": "A Docker daemon still shows Update alpi on both clients and answers the tap with three different texts, one of them wrong for a pinned tag. The recommendation removes the button where the daemon reports it cannot self-update and puts one shared step in the connection tag's tooltip and in the mobile settings row. The alternative keeps the button but disabled, which leaves a control that never works.",
-        "now": upd_now,
-        "proposed": upd_proposed,
-        "accept": "For a daemon that reports no self-update, desktop hides Update alpi and the update tag's tooltip reads the shared step with the latest version filled in; mobile shows the same sentence in the profile settings row, its helper wrapping to two lines, with no button and drops the update item from the connection action sheet. A daemon that can self-update keeps today's button, toast and action.",
-        "h": 1260,
     },
     {
         "id": "UI-MOB.LIVE-ACTIVITY",

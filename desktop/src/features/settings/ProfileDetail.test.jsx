@@ -57,7 +57,9 @@ vi.mock("./fields/services.jsx", () => ({
 }));
 vi.mock("./fields/devices.jsx", () => ({ DevicesField: () => null }));
 vi.mock("./fields/DaemonField.jsx", () => ({
-  DaemonField: ({ connectionId }) => <span data-testid="daemon-connection">{connectionId}</span>,
+  DaemonField: ({ connectionId, selfUpdate }) => (
+    <span data-testid="daemon-connection" data-self-update={String(selfUpdate)}>{connectionId}</span>
+  ),
 }));
 vi.mock("./fields/network.jsx", () => ({
   NetworkAddressField: () => <span>client address</span>,
@@ -142,6 +144,24 @@ describe("ProfileDetail", () => {
     );
     expect(screen.queryByText("private route")).toBeNull();
     expect(screen.getByTestId("daemon-connection")).toHaveTextContent("remote");
+  });
+});
+
+describe("ProfileDetail — daemon update", () => {
+  it.each([
+    [{ self_update: false }, "false"],
+    [{ self_update: true }, "true"],
+    [{}, "true"],
+  ])("passes %j to the daemon field as selfUpdate=%s", (flags, expected) => {
+    render(
+      <ProfileDetail
+        profile={{ name: "default" }}
+        profiles={[]}
+        activeConnection={{ id: "remote", kind: "remote", role: "admin", ...flags }}
+      />,
+    );
+
+    expect(screen.getByTestId("daemon-connection")).toHaveAttribute("data-self-update", expected);
   });
 });
 

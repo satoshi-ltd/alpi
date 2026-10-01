@@ -330,6 +330,7 @@ def desktop_profile_settings():
         ]), first=True)
         + section("Usage", "last 14 days", usage_chart())
         + section("Service", "daemon + network", row("daemon", button("Update alpi", "ghost", "sm") + button("Restart daemon", "ghost", "sm")))
+        + section("Service", "daemon that cannot update itself", row("daemon", button("Restart daemon", "ghost", "sm")))
         + section("ALP", "peers + workgroups", ''.join([
             row("pubkey", code_chip("X+iAJ/6fQm3v…lNs=") + alink("Copy", "copy")),
             row("identity", f'<div style="flex: 1; display: flex; flex-direction: column; gap: 8px">{textarea("Ancestral, lab-savvy personal doctor; food-first, skeptical of mainstream dogma")}<div style="display: flex; align-items: center; gap: 10px; max-width: 520px"><span style="flex: 1"></span>{button("Draft", "ghost", "sm")}</div></div>', align_top=True),
@@ -352,7 +353,7 @@ def desktop_profile_settings():
 </div>
 </div>
 """
-    return page("Desktop · profile settings", 1280, 2400, body, bg=BG)
+    return page("Desktop · profile settings", 1280, 2520, body, bg=BG)
 
 
 def member_row(name, color, bio, hub=False, removable=True):

@@ -8,6 +8,7 @@ import { createPortal } from "react-dom";
 import { I } from "./icons.jsx";
 import KeyHint from "./KeyHint.jsx";
 import { fuzzyMatch, splitByRanges } from "../lib/fuzzy.js";
+import { canSelfUpdate, updateHint } from "../../../common/updateHint.mjs";
 import styles from "./Panels.module.css";
 
 export function Scrim({ onClose, children, align = "flex-start", top = 96, dismissable = true }) {
@@ -177,7 +178,12 @@ export function ConnectionPanel({
                       <span className={`tag ${styles.tagOffline}`}>revoked</span>
                     )}
                     {r.update_available && (
-                      <span className={`tag ${styles.tagUpdate}`}>update</span>
+                      <span
+                        className={`tag ${styles.tagUpdate}`}
+                        title={canSelfUpdate(r.self_update) ? undefined : updateHint(r.installer, r.update_available)}
+                      >
+                        update
+                      </span>
                     )}
                   </div>
                   <span className={`mono ${styles.connHost}`}>

@@ -324,17 +324,9 @@
    "title": "Proposals \u00b7 ui-wg.status \u00b7 a workgroup row says what finished as well as what runs",
    "page": "proposals"
   },
-  "Proposals-UI-UPD.1.dc.html": {
-   "x": 0,
-   "y": 3300,
-   "w": 1280,
-   "h": 1260,
-   "title": "Proposals \u00b7 ui-upd.1 \u00b7 a daemon that cannot self-update offers no update button",
-   "page": "proposals"
-  },
   "Proposals-UI-MOB.LIVE-ACTIVITY.dc.html": {
    "x": 0,
-   "y": 4800,
+   "y": 3300,
    "w": 1280,
    "h": 870,
    "title": "Proposals \u00b7 ui-mob.live-activity \u00b7 a running workgroup and an approval reach a locked phone",
@@ -342,7 +334,7 @@
   },
   "Proposals-UI-EMPTY-VOICE.dc.html": {
    "x": 0,
-   "y": 5910,
+   "y": 4410,
    "w": 1280,
    "h": 1580,
    "title": "Proposals \u00b7 ui-empty-voice \u00b7 empty states speak in one voice on both clients",
@@ -387,7 +379,6 @@
   "Proposals-UX.7.dc.html",
   "Proposals-UX.8.dc.html",
   "Proposals-UI-WG.STATUS.dc.html",
-  "Proposals-UI-UPD.1.dc.html",
   "Proposals-UI-MOB.LIVE-ACTIVITY.dc.html",
   "Proposals-UI-EMPTY-VOICE.dc.html"
  ],
@@ -560,17 +551,9 @@
    "maxW": 2600,
    "page": "proposals"
   },
-  "p-UI-UPD.1 \u00b7 A daemon that cannot self-update offers no update button": {
-   "x": 0,
-   "y": 3077,
-   "text": "UI-UPD.1 \u00b7 A daemon that cannot self-update offers no update button",
-   "kind": "title1",
-   "maxW": 2600,
-   "page": "proposals"
-  },
   "p-UI-MOB.LIVE-ACTIVITY \u00b7 A running workgroup and an approval reach a locked phone": {
    "x": 0,
-   "y": 4577,
+   "y": 3077,
    "text": "UI-MOB.LIVE-ACTIVITY \u00b7 A running workgroup and an approval reach a locked phone",
    "kind": "title1",
    "maxW": 2600,
@@ -578,7 +561,7 @@
   },
   "p-UI-EMPTY-VOICE \u00b7 Empty states speak in one voice on both clients": {
    "x": 0,
-   "y": 5687,
+   "y": 4187,
    "text": "UI-EMPTY-VOICE \u00b7 Empty states speak in one voice on both clients",
    "kind": "title1",
    "maxW": 2600,

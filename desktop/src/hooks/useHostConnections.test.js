@@ -445,6 +445,30 @@ describe("useHostConnections connection-status", () => {
     expect(remote.update_available).toBe("0.9.6");
   });
 
+  it("propagates installer and self_update from a connection-status event", async () => {
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === "host_connections") return makeConnections("local");
+      if (cmd === "profile_summaries") return [{ name: "doc", model: "a/b" }];
+      if (cmd === "workgroups") return [];
+      return null;
+    });
+
+    const { result } = renderHostConnections();
+    await waitFor(() =>
+      expect(result.current.hostConnections.connections.length).toBe(2),
+    );
+
+    await act(async () => {
+      await connectionStatusListener({
+        payload: { id: "remote", status: "online", installer: "docker", self_update: false },
+      });
+    });
+
+    const remote = result.current.hostConnections.connections.find((c) => c.id === "remote");
+    expect(remote.installer).toBe("docker");
+    expect(remote.self_update).toBe(false);
+  });
+
   it("applies a role change (admin→member) from a connection-status event, and a null role never clears it", async () => {
     invoke.mockImplementation(async (cmd) => {
       if (cmd === "host_connections") return makeConnections("local");

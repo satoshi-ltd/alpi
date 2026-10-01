@@ -11,6 +11,17 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.7.5 — 2026-10-01 — no Update button on a daemon that cannot update itself
+
+- **Settings no longer offers Update alpi for a daemon that reports it cannot update itself** (a
+  Docker or source install); only Restart daemon stays.
+- **The update tag in the connection list explains the manual step on hover:** the image tag to set
+  in `docker-compose.yml` for Docker, `git pull` and a restart for a checkout.
+- **The failure message of an update that cannot run names the install kind's step** instead of
+  listing both.
+
+  Requires alpi 0.16.1; alpi 0.16.19 is what reports the install kind.
+
 ## v0.7.4 — 2026-10-01 — the Thinking row reads like a settled one
 
 - **While the model has not yet shown any reasoning, the Thinking row no longer sits in a tinted

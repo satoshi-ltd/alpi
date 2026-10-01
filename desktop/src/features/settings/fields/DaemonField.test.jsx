@@ -43,16 +43,32 @@ describe("DaemonField", () => {
     expect(invoke).toHaveBeenCalledWith("daemon_restart", { connectionId: "remote-b" });
   });
 
-  it("explains both supported manual update paths", async () => {
-    invoke.mockResolvedValue({ updated: false, reason: "manual" });
+  it("names the manual step for the install kind a daemon without self_update answers with", async () => {
+    invoke.mockResolvedValue({ updated: false, reason: "manual", installer: "docker", latest: "0.16.19" });
     render(<DaemonField connectionId="local" />);
 
     fireEvent.click(screen.getByRole("button", { name: "Update alpi" }));
 
     await waitFor(() => expect(notify).toHaveBeenCalledWith(expect.objectContaining({
-      message: expect.stringContaining("docker compose pull"),
+      message: expect.stringContaining("Set the image tag to 0.16.19 in docker-compose.yml"),
     })));
+  });
+
+  it("keeps explaining both paths when an older daemon only says dev", async () => {
+    invoke.mockResolvedValue({ updated: false, reason: "manual", installer: "dev" });
+    render(<DaemonField connectionId="local" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Update alpi" }));
+
+    await waitFor(() => expect(notify).toHaveBeenCalled());
     expect(notify.mock.calls[0][0].message).toContain("docker compose up -d");
     expect(notify.mock.calls[0][0].message).toContain("git pull");
+  });
+
+  it("offers no update button where the daemon cannot update itself", () => {
+    render(<DaemonField connectionId="docker-box" selfUpdate={false} />);
+
+    expect(screen.queryByRole("button", { name: "Update alpi" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Restart daemon" })).toBeTruthy();
   });
 });

@@ -102,6 +102,8 @@ struct StatusEntry {
     last_stream_frame: Option<Instant>,
     alpi_version: Option<String>,
     update_available: Option<String>,
+    installer: Option<String>,
+    self_update: Option<bool>,
     role: Option<String>,
 }
 
@@ -115,6 +117,8 @@ impl Default for StatusEntry {
             last_stream_frame: None,
             alpi_version: None,
             update_available: None,
+            installer: None,
+            self_update: None,
             role: None,
         }
     }
@@ -246,6 +250,54 @@ pub fn update_available_for(id: &str) -> Option<String> {
         }
     }
     None
+}
+
+pub fn installer_for(id: &str) -> Option<String> {
+    if let Ok(map) = status_map().lock() {
+        if let Some(entry) = map.get(id) {
+            return entry.installer.clone();
+        }
+    }
+    None
+}
+
+pub fn self_update_for(id: &str) -> Option<bool> {
+    if let Ok(map) = status_map().lock() {
+        if let Some(entry) = map.get(id) {
+            return entry.self_update;
+        }
+    }
+    None
+}
+
+fn install_from_version(value: &Value) -> (Option<String>, Option<bool>) {
+    let installer = value
+        .get("installer")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+    let self_update = value.get("self_update").and_then(|v| v.as_bool());
+    (installer, self_update)
+}
+
+fn set_install(id: &str, installer: Option<String>, self_update: Option<bool>) {
+    let mut changed = false;
+    if let Ok(mut map) = status_map().lock() {
+        let entry = map.entry(id.to_string()).or_default();
+        if entry.installer != installer || entry.self_update != self_update {
+            entry.installer = installer;
+            entry.self_update = self_update;
+            changed = true;
+        }
+    }
+    if changed {
+        if let Ok(guard) = listeners().lock() {
+            let (status, error) = status_for(id);
+            for listener in guard.iter() {
+                listener(id, status, error.as_deref());
+            }
+        }
+    }
 }
 
 fn set_update_available(id: &str, value: Option<String>) {
@@ -595,6 +647,8 @@ impl HostConnection {
         let (status, error) = status_for(self.id());
         let alpi_version = version_for(self.id());
         let update_available = update_available_for(self.id());
+        let installer = installer_for(self.id());
+        let self_update = self_update_for(self.id());
         let role = role_for(self.id()).or_else(|| self.last_role().map(str::to_string));
         match self {
             HostConnection::Local { id, name, device_id, last_connected, .. } => {
@@ -606,6 +660,8 @@ impl HostConnection {
                     "error": error,
                     "alpi_version": alpi_version,
                     "update_available": update_available,
+                    "installer": installer,
+                    "self_update": self_update,
                     "device_id": device_id,
                     "role": role,
                     "last_connected": last_connected,
@@ -636,6 +692,8 @@ impl HostConnection {
                     "error": error,
                     "alpi_version": alpi_version,
                     "update_available": update_available,
+                    "installer": installer,
+                    "self_update": self_update,
                     "device_id": device_id,
                     "role": role,
                     "last_connected": last_connected,
@@ -2397,6 +2455,10 @@ pub fn probe_connection(conn: &HostConnection) {
                 .filter(|s| !s.is_empty())
                 .map(|s| s.to_string());
             set_update_available(&id, update_available);
+            if let Some(value) = version_value.as_ref() {
+                let (installer, self_update) = install_from_version(value);
+                set_install(&id, installer, self_update);
+            }
             set_version(&id, version);
             let role = version_value
                 .as_ref()
@@ -3289,6 +3351,38 @@ mod tests {
         assert_eq!(status_for(id).0, ConnectionStatus::Offline);
         note_stream_frame(id);
         assert_eq!(status_for(id).0, ConnectionStatus::Online);
+    }
+
+    #[test]
+    fn host_version_install_fields_are_read_and_absent_ones_stay_unknown() {
+        let docker = json!({"installer": "docker", "self_update": false});
+        assert_eq!(install_from_version(&docker), (Some("docker".to_string()), Some(false)));
+        let uv = json!({"installer": "uv", "self_update": true});
+        assert_eq!(install_from_version(&uv), (Some("uv".to_string()), Some(true)));
+        assert_eq!(install_from_version(&json!({"version": "0.16.1"})), (None, None));
+        assert_eq!(install_from_version(&json!({"installer": "", "self_update": "no"})), (None, None));
+    }
+
+    #[test]
+    fn the_install_kind_reaches_the_connection_row() {
+        let conn = HostConnection::Remote {
+            id: "install-kind-1".to_string(),
+            name: "x".to_string(),
+            host: "1.1.1.1".to_string(),
+            port: 49200,
+            token: "t".to_string(),
+            revoked: false,
+            device_id: None,
+            last_connected: None,
+            last_role: None,
+        };
+        assert!(conn.with_token_redacted()["self_update"].is_null());
+
+        set_install("install-kind-1", Some("docker".into()), Some(false));
+
+        let row = conn.with_token_redacted();
+        assert_eq!(row["installer"], "docker");
+        assert_eq!(row["self_update"], false);
     }
 
     #[test]

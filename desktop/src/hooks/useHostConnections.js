@@ -319,7 +319,7 @@ export function useHostConnections({
 
   useEffect(() => {
     return subscribe("connection-status", (event) => {
-      const { id, status, error, alpi_version, update_available, role } = event.payload ?? {};
+      const { id, status, error, alpi_version, update_available, installer, self_update, role } = event.payload ?? {};
       if (!id || !status) return;
       setHostConnections((prev) => {
         const before = prev.connections.find((c) => c.id === id);
@@ -331,6 +331,8 @@ export function useHostConnections({
           before.error === error &&
           before.alpi_version === (alpi_version ?? null) &&
           before.update_available === (update_available ?? null) &&
+          (before.installer ?? null) === (installer ?? null) &&
+          (before.self_update ?? null) === (self_update ?? null) &&
           (before.role ?? null) === nextRole
         ) {
           return prev;
@@ -345,6 +347,8 @@ export function useHostConnections({
                   error: error ?? null,
                   alpi_version: alpi_version ?? null,
                   update_available: update_available ?? null,
+                  installer: installer ?? null,
+                  self_update: self_update ?? null,
                   role: role ?? c.role ?? null,
                 }
               : c,
