@@ -9,6 +9,7 @@ import { usePane } from '../../nav/PaneContext';
 import { useTheme } from '../../theme/ThemeContext';
 import { SEPARATOR_INSET } from './InboxRow';
 import { InboxSkeleton } from './InboxSkeleton';
+import { EMPTY } from '../../../../common/emptyCopy.mjs';
 
 const HAIRLINE = 0.5;
 const EMPTY_MIN_H = 240;
@@ -77,18 +78,18 @@ function SectionAdd({ label, onPress }) {
   );
 }
 
-function EmptyState({ paired, query, device, daemonDown = false, error = null, onRetry }) {
+function EmptyState({ paired, query, device, canCreate = false, daemonDown = false, error = null, onRetry }) {
   const { colors, fonts, fontSizes } = useTheme();
   const needle = String(query ?? '').trim();
   const [title, body] = !paired
     ? ['Not paired', `Pair this ${device} to a daemon and its profiles show up here.`]
     : needle
-      ? ['No matches', `Nothing matches “${needle}”.`]
+      ? [EMPTY.matches.title, EMPTY.matches.hint]
       : daemonDown
         ? ['Daemon unreachable', 'Profiles and workgroups show up again once the connection is back.']
         : error
           ? ['Couldn\'t load the roster', String(error?.message ?? error)]
-          : ['Nothing here yet', 'This daemon has no profiles or workgroups yet.'];
+          : [EMPTY.roster.title, canCreate ? EMPTY.roster.hint : ''];
   const retry = paired && !needle && (daemonDown || error) && onRetry;
   return (
     <View
@@ -104,9 +105,11 @@ function EmptyState({ paired, query, device, daemonDown = false, error = null, o
       <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.lg, color: colors.ink2, textAlign: 'center' }}>
         {title}
       </Text>
-      <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.md, color: colors.ink3, textAlign: 'center' }}>
-        {body}
-      </Text>
+      {body ? (
+        <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.md, color: colors.ink3, textAlign: 'center' }}>
+          {body}
+        </Text>
+      ) : null}
       {retry ? (
         <Pressable onPress={onRetry} accessibilityRole="button" accessibilityLabel="Retry" hitSlop={8} style={{ paddingVertical: space.s4 }}>
           <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.md, color: colors.ink2 }}>Retry</Text>
@@ -137,7 +140,7 @@ export function Roster({
   const keepEmpty = useMemo(() => Object.keys(addActions ?? {}), [addActions]);
   const sections = useMemo(() => rosterSections(items, query, { keepEmpty }), [items, query, keepEmpty]);
   const empty = rosterIsEmpty(sections);
-  const placeholder = loading ? <InboxSkeleton /> : <EmptyState paired={paired} query={query} device={device} daemonDown={daemonDown} error={error} onRetry={onRefresh} />;
+  const placeholder = loading ? <InboxSkeleton /> : <EmptyState paired={paired} query={query} device={device} canCreate={addActions != null} daemonDown={daemonDown} error={error} onRetry={onRefresh} />;
 
   const renderSectionHeader = useCallback(
     ({ section }) => {

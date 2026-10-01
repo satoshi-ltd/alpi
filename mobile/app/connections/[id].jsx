@@ -204,7 +204,7 @@ function ConnectionDetail() {
             <UsageChart days={usageDays} />
           </SettingsBand>
         ) : (
-          <Row label="No usage yet" value={formatUsd(row.cost_14d)} chevron={false} />
+          <Row label={EMPTY.usage.title} value={formatUsd(row.cost_14d)} chevron={false} />
         )}
 
         {!isHost ? (

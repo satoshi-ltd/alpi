@@ -11,6 +11,7 @@ import { copyText } from '../../lib/clipboard';
 import { useEndpoint } from '../../lib/EndpointContext';
 import { useTheme } from '../../theme/ThemeContext';
 import { pairingLink } from './format';
+import { EMPTY } from '../../../../common/emptyCopy.mjs';
 
 const POLL_MS = 2500;
 
@@ -120,7 +121,7 @@ export function PairingSheet({ open, onClose, payload, onSettled }) {
             borderColor: colors.line2,
           }}
         >
-          {link || 'no advertised endpoint · set one under Network'}
+          {link || `${EMPTY.endpoint.title}. ${EMPTY.endpoint.hint}`}
         </Text>
       </View>
       {endpoints.length > 1 ? (

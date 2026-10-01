@@ -71,7 +71,7 @@ import { ConnectionSheet } from './ConnectionSheet';
 describe('ConnectionSheet typography', () => {
   it('renders the unpaired notice in a theme font', () => {
     render(<ConnectionSheet open onClose={() => {}} />);
-    expect(screen.getByText('Not paired yet — tap below to scan a QR.').getAttribute('data-font')).toBe('Geist_400Regular');
+    expect(screen.getByText('Not paired yet. Tap below to scan a QR.').getAttribute('data-font')).toBe('Geist_400Regular');
   });
 });
 

@@ -52,7 +52,7 @@ export default function ProvidersList() {
       <ScrollView>
         <SectionHeader>Ollama · local</SectionHeader>
         {ollamas.length === 0 ? (
-          <Row label="No Ollama instance" helper="local LLMs — runs on the daemon host" chevron={false} />
+          <Row label="No Ollama instance" helper="Local LLMs run on the daemon host." chevron={false} />
         ) : (
           ollamas.map((o, i) => {
             const reachableCount = modelsByName.get(o.name);

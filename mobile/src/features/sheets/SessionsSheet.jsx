@@ -30,7 +30,7 @@ const BUCKET_ORDER = ['Today', 'Yesterday', 'This week', 'Earlier'];
 function previewOf(s) {
   const t = (s.first_user || '').trim();
   if (t) return t.length > 64 ? `${t.slice(0, 64)}…` : t;
-  return `(empty · ${(s.id || '').slice(0, 6)})`;
+  return `Empty session ${(s.id || '').slice(0, 6)}`;
 }
 
 function fmtCost(n) {

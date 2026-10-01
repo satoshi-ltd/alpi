@@ -261,7 +261,7 @@ function ChatList({ turns, pendingTurn, hydrating, profileName, model, accent, o
   if (full.length === 0) {
     return (
       <EmptyThread
-        heading={`start a thread with ${profileLabel(profileName)}`}
+        heading={`Start a thread with ${profileLabel(profileName)}`}
         detail={modelLabel(model)}
         accent={accent}
       />

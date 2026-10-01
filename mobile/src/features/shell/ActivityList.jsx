@@ -6,6 +6,7 @@ import { Icon } from '../../components/Icon';
 import { recentlyFailed, toEpochSeconds } from '../../hooks/useActivity';
 import { mobile, lineHeights, radii, space } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeContext';
+import { EMPTY } from '../../../../common/emptyCopy.mjs';
 
 function span(seconds) {
   const s = Math.max(0, Math.round(seconds));
@@ -140,7 +141,7 @@ function ActivityRow({ row, onPress }) {
 function Empty({ unsupported }) {
   const { colors, fonts, fontSizes } = useTheme();
   const [title, body] = !unsupported
-    ? ['Nothing running', 'Running turns, workgroup phases, schedules and anything waiting on you show up here.']
+    ? [EMPTY.activity.title, EMPTY.activity.hint]
     : ['Activity needs a newer daemon', 'Update alpi on this connection to see what is running and what waits on you.'];
   return (
     <View style={{ alignItems: 'center', padding: space.s8, gap: space.s3, marginTop: space.s11 }}>

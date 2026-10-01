@@ -302,8 +302,8 @@ function OllamaScreen({
                   ) : null}
                   <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3, lineHeight: fontSizes.sm * 1.5 }}>
                     {myError
-                      ? 'Verify ollama is running and the URL is reachable from the daemon host.'
-                      : "No models reported. The daemon couldn't reach this server — verify ollama is running and the URL is correct."}
+                      ? 'Verify Ollama is running and the URL is reachable from the daemon host.'
+                      : "No models reported. The daemon couldn't reach this server, so verify Ollama is running and the URL is correct."}
                   </Text>
                 </View>
               ) : (

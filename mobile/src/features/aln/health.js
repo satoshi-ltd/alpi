@@ -1,3 +1,4 @@
+import { EMPTY } from '../../../../common/emptyCopy.mjs';
 function ago(deltaMs) {
   const mins = Math.max(0, Math.round(deltaMs / 60000));
   if (mins < 1) return 'just now';
@@ -43,7 +44,7 @@ export function describeHealth(health, nowMs = Date.now()) {
     const worst = daemons[index];
     const why = worst?.lastError
       ? `last error: ${worst.lastError}`
-      : 'no successful check yet';
+      : EMPTY.checks.title.toLowerCase();
     const scope = daemons.length > 1 ? `${healthy.length} of ${daemons.length} daemons checking in · ` : '';
     return { ok: false, detail: `${scope}${label(worst, index)}: ${why}.` };
   }

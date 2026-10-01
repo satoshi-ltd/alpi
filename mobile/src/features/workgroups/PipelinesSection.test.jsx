@@ -102,7 +102,7 @@ describe('PipelinesSection', () => {
   it('explains the launchless case instead of looking empty', () => {
     render(<PipelinesSection workgroup={{ ...WG, launch_pipeline: null }} />);
     expect(screen.queryByText('launch')).toBeNull();
-    expect(screen.getByText(/nothing starts on its own; every chain awaits a trigger\./)).toBeTruthy();
+    expect(screen.getByText(/Nothing starts until a trigger\./)).toBeTruthy();
     expect(screen.getAllByText('on demand')).toHaveLength(2);
   });
 
@@ -127,7 +127,7 @@ describe('PipelinesSection', () => {
         workgroup={{ id: 'w4', is_hub: true, pipeline: ['legacy'], pipelines: {}, needs_relaunch: true }}
       />,
     );
-    expect(screen.getByText(/Retired pipeline shape — the daemon skips this workgroup/)).toBeTruthy();
+    expect(screen.getByText(/Retired pipeline shape\. The daemon skips this workgroup/)).toBeTruthy();
     expect(screen.getByText(/relaunch it from its recipe/)).toBeTruthy();
     expect(screen.queryByText(/deliberation workgroup/)).toBeNull();
     expect(screen.queryByText('#legacy')).toBeNull();

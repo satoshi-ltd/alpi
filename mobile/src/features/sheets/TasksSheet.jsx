@@ -4,6 +4,7 @@ import { fonts, lineHeights, radii, space } from '../../theme/tokens';
 import { Sheet } from '../../components/Sheet';
 import { Dot } from '../../components/Dot';
 import { useTheme } from '../../theme/ThemeContext';
+import { EMPTY } from '../../../../common/emptyCopy.mjs';
 
 function mix(hex, pct, base) {
   const fromHex = (h) => {
@@ -89,7 +90,7 @@ export function TasksSheet({ open, onClose, tasks = [], workgroupId, accent, onP
         {tasks.length === 0 ? (
           <View style={{ padding: space.s9, alignItems: 'center' }}>
             <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.md, color: colors.ink3 }}>
-              No tasks yet — direct the hub to open one.
+              {EMPTY.tasks.title}. {EMPTY.tasks.hint}
             </Text>
           </View>
         ) : (

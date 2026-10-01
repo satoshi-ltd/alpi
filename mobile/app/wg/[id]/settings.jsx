@@ -355,7 +355,7 @@ function WorkgroupSettings() {
 
         <SectionHeader kicker="what this workgroup decides">Briefing</SectionHeader>
         <Row
-          label={wg.briefing && wg.briefing.length > 0 ? wg.briefing : 'No briefing set'}
+          label={wg.briefing && wg.briefing.length > 0 ? wg.briefing : EMPTY.briefing.title}
           labelLines={3}
           helper={isHub ? 'tap to edit' : undefined}
           onPress={isHub ? () => router.push(`/wg/${id}/briefing`) : undefined}

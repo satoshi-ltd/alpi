@@ -339,7 +339,7 @@ export default function ProfileSettings() {
         <RowSeparator />
         <Row
           label="Providers"
-          helper={providers.length ? (twoPane ? 'API keys + local Ollama' : providers.join(' · ')) : 'add an API key or a local Ollama to pick a model'}
+          helper={providers.length ? (twoPane ? 'API keys + local Ollama' : providers.join(' · ')) : EMPTY.providers.hint}
           value={twoPane && providers.length ? <ChipRow items={providers} /> : providers.length ? String(providers.length) : EMPTY.providers.title}
           onPress={() => router.push(`/profile/${id}/providers`)}
         />
@@ -549,7 +549,7 @@ export default function ProfileSettings() {
           value={
             <View style={{ flexDirection: 'row', gap: space.s1, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: 200 }}>
               {emailList.filter((a) => a.configured).length === 0 ? (
-                <Pill off>none</Pill>
+                <Pill off>{EMPTY.accounts.title}</Pill>
               ) : (
                 emailList
                   .filter((a) => a.configured)
@@ -567,7 +567,7 @@ export default function ProfileSettings() {
         <SectionHeader kicker="peers + workgroups">ALP</SectionHeader>
         <Row
           label="Public key"
-          helper={profile.pubkey_b64 ? 'tap to copy' : 'no identity yet'}
+          helper={profile.pubkey_b64 ? 'tap to copy' : 'No identity yet'}
           value={shortPubkey(profile.pubkey_b64)}
           onPress={profile.pubkey_b64 ? copyPubkey : undefined}
           chevron={false}
@@ -589,7 +589,7 @@ export default function ProfileSettings() {
         <RowSeparator />
         <Row
           label="Peers"
-          helper={peerCount ? undefined : 'pair a peer to chat across daemons'}
+          helper={peerCount ? undefined : EMPTY.peers.hint}
           value={peerCount ? String(peerCount) : EMPTY.peers.title}
           onPress={() => router.push(`/profile/${id}/peers`)}
         />

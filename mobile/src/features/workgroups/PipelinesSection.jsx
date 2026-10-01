@@ -5,6 +5,7 @@ import { Pill } from '../../components/Pill';
 import { RowSeparator, SectionHeader } from '../../components/Row';
 import { isLaunchless, namedPipelines } from '../../lib/workgroupPipelines';
 import { useTheme } from '../../theme/ThemeContext';
+import { EMPTY } from '../../../../common/emptyCopy.mjs';
 
 const STYLES = StyleSheet.create({
   head: {
@@ -74,8 +75,8 @@ export function PipelinesSection({ workgroup }) {
       {chains.length === 0 ? (
         <Note>
           {workgroup?.needs_relaunch
-            ? 'Retired pipeline shape — the daemon skips this workgroup; relaunch it from its recipe.'
-            : 'No pipelines · deliberation workgroup'}
+            ? `${EMPTY.retiredPipelines.title}. ${EMPTY.retiredPipelines.hint}`
+            : `${EMPTY.noPipelines.title}. ${EMPTY.noPipelines.hint}`}
         </Note>
       ) : (
         chains.map((chain, i) => (
@@ -92,7 +93,7 @@ export function PipelinesSection({ workgroup }) {
         ))
       )}
       {isLaunchless(workgroup) ? (
-        <Note>No launch pipeline — nothing starts on its own; every chain awaits a trigger.</Note>
+        <Note>{EMPTY.launchPipeline.title}. {EMPTY.launchPipeline.hint}</Note>
       ) : null}
       {chains.length > 0 ? (
         <Note>Read-only — a recipe declares these chains.</Note>

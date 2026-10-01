@@ -82,7 +82,7 @@ describe('SessionsSheet vocabulary', () => {
     h.sessions = { loading: false, data: { sessions: [] } };
     const { container } = render(<SessionsSheet open onClose={() => {}} profile="doc" />);
 
-    expect(screen.getByText('No previous sessions')).toBeTruthy();
+    expect(screen.getByText('No sessions yet')).toBeTruthy();
     expect(container.textContent).not.toMatch(/chat/i);
   });
 });

@@ -352,7 +352,7 @@ describe('Inbox screen creation', () => {
   it('offers the first profile and the first workgroup on a daemon with nothing at all', () => {
     h.items = [];
     render(<Index />);
-    expect(screen.getByText('Nothing here yet')).toBeTruthy();
+    expect(screen.getByText('No profiles or workgroups yet')).toBeTruthy();
     fireEvent.click(screen.getByLabelText('New profile'));
     expect(document.querySelector('[data-create="profile"]')).toBeTruthy();
   });
@@ -361,7 +361,7 @@ describe('Inbox screen creation', () => {
     h.items = [];
     h.role = 'member';
     render(<Index />);
-    expect(screen.getByText('Nothing here yet')).toBeTruthy();
+    expect(screen.getByText('No profiles or workgroups yet')).toBeTruthy();
     expect(screen.queryByLabelText('New profile')).toBeNull();
     expect(screen.queryByLabelText('New workgroup')).toBeNull();
   });

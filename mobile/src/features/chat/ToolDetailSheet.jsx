@@ -6,6 +6,7 @@ import { copyText } from '../../lib/clipboard';
 import { useTheme } from '../../theme/ThemeContext';
 import { lineHeights, radii, space } from '../../theme/tokens';
 import { prettyArgs, toolCommand, toolOutput, toolTitle } from './toolDetail';
+import { EMPTY } from '../../../../common/emptyCopy.mjs';
 
 function Block({ label, tag, children, danger = false }) {
   const { colors, fonts, fontSizes } = useTheme();
@@ -70,7 +71,7 @@ export function ToolDetailSheet({ tool, status, onClose }) {
           <Block label="Output" tag={excerpt ? 'excerpt' : null} danger={failed}>{output}</Block>
         ) : (
           <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.md, color: colors.ink3 }}>
-            {status === 'running' ? 'Still running — output appears when it finishes.' : 'No output was recorded.'}
+            {status === 'running' ? 'Still running. Output appears when it finishes.' : EMPTY.toolOutput.title}
           </Text>
         )}
       </ScrollView>

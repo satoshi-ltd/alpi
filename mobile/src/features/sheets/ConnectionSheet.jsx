@@ -85,7 +85,7 @@ export function ConnectionSheet({ open, onClose }) {
       <ScrollView>
         {connections.length === 0 ? (
           <View style={{ padding: space.s9, alignItems: 'center' }}>
-            <Text style={{ fontFamily: fonts.sans.regular, color: colors.ink3 }}>Not paired yet — tap below to scan a QR.</Text>
+            <Text style={{ fontFamily: fonts.sans.regular, color: colors.ink3 }}>Not paired yet. Tap below to scan a QR.</Text>
           </View>
         ) : (
           sortConnectionsByRecency(connections).map((c, i) => {

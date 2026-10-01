@@ -192,21 +192,27 @@ describe('Roster empty states', () => {
   it('says nothing matched instead of claiming the daemon is empty', () => {
     render(<Roster items={ITEMS} query="zzz" onQueryChange={() => {}} renderRow={plainRow} searchOpen />);
     expect(screen.getByText('No matches')).toBeTruthy();
-    expect(screen.getByText('Nothing matches “zzz”.')).toBeTruthy();
-    expect(screen.queryByText('Nothing here yet')).toBeNull();
+    expect(screen.getByText('Try a different query, or clear it.')).toBeTruthy();
+    expect(screen.queryByText('No profiles or workgroups yet')).toBeNull();
     expect(screen.getByLabelText('Filter list')).toBeTruthy();
   });
 
   it('names the daemon as empty only when it truly has nothing', () => {
+    render(<Roster items={[]} query="" onQueryChange={() => {}} renderRow={plainRow} addActions={{ profiles: () => {} }} />);
+    expect(screen.getByText('No profiles or workgroups yet')).toBeTruthy();
+    expect(screen.getByText('Create one to begin.')).toBeTruthy();
+  });
+
+  it('keeps the empty verdict neutral for a reader who cannot create', () => {
     render(<Roster items={[]} query="" onQueryChange={() => {}} renderRow={plainRow} />);
-    expect(screen.getByText('Nothing here yet')).toBeTruthy();
-    expect(screen.getByText('This daemon has no profiles or workgroups yet.')).toBeTruthy();
+    expect(screen.getByText('No profiles or workgroups yet')).toBeTruthy();
+    expect(screen.queryByText('Create one to begin.')).toBeNull();
   });
 
   it('shows the skeleton while the first load is in flight, never an empty verdict', () => {
     render(<Roster items={[]} query="" onQueryChange={() => {}} renderRow={plainRow} loading />);
     expect(screen.getByTestId('skeleton')).toBeTruthy();
-    expect(screen.queryByText('Nothing here yet')).toBeNull();
+    expect(screen.queryByText('No profiles or workgroups yet')).toBeNull();
   });
 
   it('keeps a spinner under the rows while refreshing a non-empty roster', () => {
@@ -309,13 +315,13 @@ describe('Roster creation reachability', () => {
     expect(sections()).toEqual(['profiles', 'workgroups']);
     expect(screen.getByLabelText('New profile')).toBeTruthy();
     expect(screen.getByLabelText('New workgroup')).toBeTruthy();
-    expect(screen.getByText('Nothing here yet')).toBeTruthy();
+    expect(screen.getByText('No profiles or workgroups yet')).toBeTruthy();
   });
 
   it('holds no heading for a reader who cannot create', () => {
     render(<Roster items={[]} query="" onQueryChange={() => {}} renderRow={plainRow} />);
     expect(sections()).toEqual([]);
-    expect(screen.getByText('Nothing here yet')).toBeTruthy();
+    expect(screen.getByText('No profiles or workgroups yet')).toBeTruthy();
   });
 
   it('drops the held headings while a filter is on, so a miss reads as a miss', () => {
@@ -330,7 +336,7 @@ describe('Roster creation reachability', () => {
   it('shows the skeleton over the held headings while the first load is in flight', () => {
     render(<Roster items={[]} query="" onQueryChange={() => {}} renderRow={plainRow} addActions={addActions()} loading />);
     expect(screen.getByTestId('skeleton')).toBeTruthy();
-    expect(screen.queryByText('Nothing here yet')).toBeNull();
+    expect(screen.queryByText('No profiles or workgroups yet')).toBeNull();
     expect(screen.getByLabelText('New workgroup')).toBeTruthy();
   });
 
@@ -338,7 +344,7 @@ describe('Roster creation reachability', () => {
     const onRefresh = vi.fn();
     const { rerender } = render(<Roster items={[]} paired daemonDown onRefresh={onRefresh} />);
     expect(screen.getByText('Daemon unreachable')).toBeTruthy();
-    expect(screen.queryByText('Nothing here yet')).toBeNull();
+    expect(screen.queryByText('No profiles or workgroups yet')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     expect(onRefresh).toHaveBeenCalledTimes(1);
     rerender(<Roster items={[]} paired error={new Error('read timeout')} onRefresh={onRefresh} />);

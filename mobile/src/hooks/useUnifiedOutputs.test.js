@@ -265,7 +265,7 @@ describe('outputsEmptyState', () => {
 
   it('reads as empty when every daemon answered', () => {
     const state = outputsEmptyState({ hasAdmin: true, paired: true, unreachable: false });
-    expect(state.title).toBe('Nothing here yet');
+    expect(state.title).toBe('No notifications yet');
     expect(state.detail).toMatch(/Notifications land here/);
   });
 

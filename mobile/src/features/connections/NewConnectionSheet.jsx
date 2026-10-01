@@ -12,6 +12,7 @@ import { useToast } from '../../components/Toast';
 import { useProfileSummaries } from '../../hooks/useDaemonData';
 import { useEndpoint } from '../../lib/EndpointContext';
 import { useTheme } from '../../theme/ThemeContext';
+import { EMPTY } from '../../../../common/emptyCopy.mjs';
 
 const ROLES = [
   ['member', 'Member', 'chat + settings of scoped profiles'],
@@ -31,7 +32,7 @@ export function ProfilePicker({ profiles, selected, onToggle }) {
         );
       })}
       {!profiles.length ? (
-        <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>no profiles yet</Text>
+        <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}>{EMPTY.profiles.title}</Text>
       ) : null}
     </View>
   );

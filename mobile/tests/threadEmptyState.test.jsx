@@ -201,7 +201,7 @@ describe('profile thread with nothing to load', () => {
   it('settles into the empty state when the profile has no sessions', async () => {
     render(<ProfileChat />);
     await settle();
-    expect(hasText('start a thread with doc')).toBe(true);
+    expect(hasText('Start a thread with doc')).toBe(true);
     expect(skeleton()).toBeNull();
   });
 
@@ -214,14 +214,14 @@ describe('profile thread with nothing to load', () => {
     render(<ProfileChat />);
     await settle();
     expect(skeleton()).toBeNull();
-    expect(hasText('start a thread with doc')).toBe(true);
+    expect(hasText('Start a thread with doc')).toBe(true);
     expect(document.querySelector('[data-composer]').getAttribute('data-disabled')).toBe('false');
   });
 
   it('names the subject and the provider-less model in the empty state', async () => {
     render(<ProfileChat />);
     await settle();
-    expect(hasText('start a thread with doc')).toBe(true);
+    expect(hasText('Start a thread with doc')).toBe(true);
     expect(hasText('claude-opus-5')).toBe(true);
     expect(hasText('anthropic/claude-opus-5')).toBe(false);
     expect(document.querySelector('[data-mark]').getAttribute('data-mark')).toBe('#abc123');
@@ -237,7 +237,7 @@ describe('profile thread with nothing to load', () => {
     render(<ProfileChat />);
     await settle();
     expect(skeleton()?.getAttribute('data-skeleton')).toBe('profile');
-    expect(hasText('start a thread with doc')).toBe(false);
+    expect(hasText('Start a thread with doc')).toBe(false);
   });
 
   it('never flashes the empty state while the seeded transcript is on its way', async () => {
@@ -253,7 +253,7 @@ describe('profile thread with nothing to load', () => {
     watch.stop();
 
     expect(watch.sawText('doc')).toBe(true);
-    expect(watch.sawText('start a thread with doc')).toBe(false);
+    expect(watch.sawText('Start a thread with doc')).toBe(false);
     expect(skeleton()).toBeTruthy();
   });
 
@@ -277,7 +277,7 @@ describe('profile thread with nothing to load', () => {
 
     expect(skeleton()).toBeNull();
     expect(document.querySelector('[data-list]').getAttribute('data-list')).toBe('1');
-    expect(hasText('start a thread with doc')).toBe(false);
+    expect(hasText('Start a thread with doc')).toBe(false);
   });
 
   it('shows the empty state for a session that exists with no turns', async () => {
@@ -292,20 +292,20 @@ describe('profile thread with nothing to load', () => {
 
     render(<ProfileChat />);
     await settle();
-    expect(hasText('start a thread with doc')).toBe(true);
+    expect(hasText('Start a thread with doc')).toBe(true);
     expect(skeleton()).toBeNull();
   });
 
   it('keeps the empty state through a refresh instead of flashing the skeleton', async () => {
     render(<ProfileChat />);
     await settle();
-    expect(hasText('start a thread with doc')).toBe(true);
+    expect(hasText('Start a thread with doc')).toBe(true);
 
     h.handlers['host.sessions.list'] = () => deferred().promise;
     await emit('session_changed', { profile: 'doc' });
 
     expect(skeleton()).toBeNull();
-    expect(hasText('start a thread with doc')).toBe(true);
+    expect(hasText('Start a thread with doc')).toBe(true);
   });
 });
 
@@ -317,8 +317,8 @@ describe('workgroup thread with nothing to load', () => {
   it('settles into the same empty hero when the workgroup has no posts', async () => {
     render(<WorkgroupChat />);
     await settle();
-    expect(hasText('no posts yet')).toBe(true);
-    expect(hasText('direct @scout to open a #task')).toBe(true);
+    expect(hasText('No posts yet')).toBe(true);
+    expect(hasText('Direct @scout to open a #task.')).toBe(true);
     expect(skeleton()).toBeNull();
   });
 
@@ -329,7 +329,7 @@ describe('workgroup thread with nothing to load', () => {
     render(<WorkgroupChat />);
     await settle();
     expect(skeleton()?.getAttribute('data-skeleton')).toBe('workgroup');
-    expect(hasText('no posts yet')).toBe(false);
+    expect(hasText('No posts yet')).toBe(false);
 
     read.resolve({ posts: [{ seq: 1, from: '@scout', from_pubkey: 'k', body: 'hello' }] });
     await settle();
@@ -341,12 +341,12 @@ describe('workgroup thread with nothing to load', () => {
   it('keeps the empty hero through a refresh instead of flashing the skeleton', async () => {
     render(<WorkgroupChat />);
     await settle();
-    expect(hasText('no posts yet')).toBe(true);
+    expect(hasText('No posts yet')).toBe(true);
 
     h.handlers['host.workgroup.transcript'] = () => deferred().promise;
     await emit('wg.post', { wg_id: 'alpha' });
 
     expect(skeleton()).toBeNull();
-    expect(hasText('no posts yet')).toBe(true);
+    expect(hasText('No posts yet')).toBe(true);
   });
 });

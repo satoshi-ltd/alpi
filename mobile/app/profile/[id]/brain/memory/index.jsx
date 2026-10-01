@@ -57,7 +57,7 @@ export default function MemoryList() {
           FILES.map((f, i) => {
             const text = mem.data?.[f.name] ?? '';
             const u = mem.usage?.[f.name];
-            const value = u?.pct != null ? `${u.pct}%` : (text ? humanBytes(text.length) : 'empty');
+            const value = u?.pct != null ? `${u.pct}%` : (text ? humanBytes(text.length) : 'Empty');
             return (
               <View key={f.name}>
                 {i > 0 ? <RowSeparator /> : null}

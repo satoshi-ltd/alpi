@@ -471,7 +471,7 @@ export function CleanupSheet({ open, onClose, profileName, call, onCleaned }) {
               fontSize: fontSizes.sm, color: colors.ink3,
             }}
           >
-            Nothing to clean — this profile is tidy.
+            Nothing to clean: this profile is tidy.
           </Text>
         ) : (
           reclaimable.map((c, i) => (

@@ -111,7 +111,7 @@ function AddMember() {
             <View style={{ padding: space.s10, alignItems: 'center' }}>
               <Text style={{ color: colors.ink3, textAlign: 'center', fontFamily: fonts.sans.regular, fontSize: fontSizes.md }}>
                 {(hub?.peers ?? []).length === 0
-                  ? `@${wg?.hub_id ?? '…'} has no peers yet — add some from Profile · ALP first`
+                  ? `@${wg?.hub_id ?? '…'} has no peers yet. Add some in the profile's ALP settings first.`
                   : 'No more peers to add'}
               </Text>
             </View>

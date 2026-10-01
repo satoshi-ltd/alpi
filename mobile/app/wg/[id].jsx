@@ -49,6 +49,7 @@ import { usePane } from '../../src/nav/PaneContext';
 import { resolveMembers } from '../../src/lib/workgroupMembers';
 import { accentForProfile } from '../../src/theme/accents';
 import { useTheme } from '../../src/theme/ThemeContext';
+import { EMPTY, postsHint } from '../../../common/emptyCopy.mjs';
 
 const INITIAL_PAGE = 30;
 const PAGE_STEP = 30;
@@ -208,8 +209,8 @@ const WgList = forwardRef(function WgList(
   if (messages.length === 0) {
     return (
       <EmptyThread
-        heading="no posts yet"
-        detail={`direct @${hubLabel} to open a #task`}
+        heading={EMPTY.posts.title}
+        detail={postsHint(hubLabel)}
         accent={accent}
       />
     );

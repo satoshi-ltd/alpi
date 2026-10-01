@@ -14,6 +14,15 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.6.7 — 2026-10-01 — empty states speak in one voice
+
+- **Every empty state now has a sentence-case title and at most one hint sentence ending in a full stop,**
+  with no lowercase headings, "none" or dash joining them: "No posts yet", "Start a thread with doc",
+  "No profiles or workgroups yet". The same absence reads the same on desktop.
+- **The notifications inbox says "No notifications yet"** instead of "Nothing here yet".
+
+  Requires alpi 0.16.1.
+
 ## v0.6.6 — 2026-10-01 — no Update button on a daemon that cannot update itself
 
 - **Profile settings shows the manual step instead of an Update button for a daemon that reports it

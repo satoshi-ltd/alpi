@@ -173,7 +173,7 @@ export function CreateWorkgroupSheet({ open, onClose }) {
             <FieldLabel>Members — peers of @{hub ?? '…'}</FieldLabel>
             {peers.length === 0 ? (
               <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink4 }}>
-                @{hub} has no peers yet — add some from Profile · ALP first
+                @{hub} has no peers yet. Add some in the profile's ALP settings first.
               </Text>
             ) : (
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space.s3 }}>

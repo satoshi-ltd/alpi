@@ -336,7 +336,7 @@ describe('SidebarPane filter', () => {
     render(<SidebarPane />);
     type('zzz');
     expect(screen.getByText('No matches')).toBeTruthy();
-    expect(screen.getByText('Nothing matches “zzz”.')).toBeTruthy();
+    expect(screen.getByText('Try a different query, or clear it.')).toBeTruthy();
     expect(screen.queryByText('Empty inbox.')).toBeNull();
   });
 

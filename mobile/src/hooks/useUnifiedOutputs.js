@@ -5,6 +5,7 @@ import { endpointUrl } from '../lib/endpoint.js';
 import { call as rpcCall } from '../lib/rpc';
 import { useDebouncedCallback } from './useDebouncedCallback';
 import { useEventEffect } from './useEvents';
+import { EMPTY } from '../../../common/emptyCopy.mjs';
 
 const LIMIT = 100;
 const PER_CALL_TIMEOUT_MS = 8000;
@@ -152,8 +153,8 @@ export function outputsEmptyState({
 }) {
   if (memberOnly) {
     return {
-      title: 'Nothing here yet',
-      detail: 'The notifications inbox is available to admin connections. This device is paired as a member.',
+      title: 'Notifications unavailable',
+      detail: 'The notifications inbox is available to admin connections; this device is paired as a member.',
     };
   }
   if (unreachable) {
@@ -170,14 +171,14 @@ export function outputsEmptyState({
   }
   if (hasAdmin) {
     return {
-      title: 'Nothing here yet',
-      detail: 'Notifications land here when your agent notifies you or a scheduled job fails.',
+      title: EMPTY.notifications.title,
+      detail: EMPTY.notifications.hint,
     };
   }
   return {
-    title: 'Nothing here yet',
+    title: paired ? 'Connecting…' : 'Not paired',
     detail: paired
-      ? 'Connecting… notifications appear once your daemons respond.'
+      ? 'Notifications appear once your daemons respond.'
       : 'Pair this phone to a daemon to see your notifications.',
   };
 }
