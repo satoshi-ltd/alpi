@@ -260,6 +260,9 @@ class WebSocketMetrics:
     pairing_exchange_attempts: int = 0
 
 
+_DEVICE_THROTTLED = object()
+
+
 class Server:
     def __init__(
         self,
@@ -321,6 +324,7 @@ class Server:
             minimum=1, maximum=10_000,
         ))
         self._ws_auth_failures = RateLimiter(default_per_minute=self._ws_auth_failure_limit)
+        self._ws_device_failures = RateLimiter(default_per_minute=self._ws_auth_failure_limit)
         self._ws_trusted_proxies = _parse_networks(os.environ.get("ALPI_HOST_WS_TRUSTED_PROXIES", ""))
 
     @staticmethod
@@ -593,6 +597,10 @@ class Server:
                 await ws.close(code=1000, reason="Pairing exchange complete")
                 return
             authenticated = await self._authenticate_websocket_message(message, send, source=source)
+            if authenticated is _DEVICE_THROTTLED:
+                self._ws_metrics.auth_rate_limited += 1
+                await ws.close(code=1013, reason=WS_CLOSE_REASON_RATE_LIMITED)
+                return
             if authenticated is None:
                 await ws.close(code=1008, reason="Authentication failed")
                 return
@@ -638,7 +646,7 @@ class Server:
 
     async def _authenticate_websocket_message(
         self, message: str | bytes, send: SendCoro, *, source: str | None = None,
-    ) -> tuple[str, dict[str, Any], "AuthMeta"] | None:
+    ) -> tuple[str, dict[str, Any], "AuthMeta"] | None | object:
         try:
             line = message if isinstance(message, str) else message.decode("utf-8")
             body = json.loads(line)
@@ -658,9 +666,26 @@ class Server:
             return None
         meta = await asyncio.to_thread(_check_token_meta, body)
         if not meta.valid:
-            self._ws_metrics.auth_failures += 1
-            if source is not None:
+            device_key = f"{meta.connection_id}|{meta.device_id}" if meta.device_id else None
+            if source is not None and device_key is not None:
+                if self._ws_device_failures.exceeded(device_key):
+                    return _DEVICE_THROTTLED
+                self._ws_device_failures.admit(device_key, None)
+            elif source is not None:
                 self._ws_auth_failures.admit(source, None)
+            self._ws_metrics.auth_failures += 1
+            if device_key is not None:
+                from alpi.host import admin_audit
+                from alpi.host.connection_context import ConnectionContext
+                await asyncio.to_thread(
+                    admin_audit.record_auth_failed,
+                    self.home,
+                    str(body.get("method") or ""),
+                    ConnectionContext(
+                        connection_id=meta.connection_id, device_id=meta.device_id,
+                        source="remote", role=meta.role or "",
+                    ),
+                )
             error: dict[str, Any] = {"code": -32000, "message": "auth-failed"}
             if meta.reason:
                 error["data"] = {"reason": meta.reason}

@@ -386,8 +386,7 @@ def record_auth_failed(
         known_actor = context.connection_id not in {"", "unauthenticated"}
         scope = context.connection_id if known_actor else "unauthenticated"
         device = context.device_id if known_actor else ""
-        rate_method = method if known_actor else "*"
-        if not _allow_rate_limited(home, scope, device or "", rate_method):
+        if not _allow_rate_limited(home, scope, device or "", "*"):
             return False
         response = {"error": {"code": -32000, "message": "auth-failed"}}
         return _record(

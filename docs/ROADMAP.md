@@ -92,24 +92,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
   Clean plus Delete generated files); both client suites pass; the changelog
   entry pins no new alpi minimum.
 
-- **AUTH.1** — Auth-failure throttle per device, not per shared address
-  `bug · alpi · agent · normal`
-  note: `_handle_websocket` in [server.py](../alpi/host/server.py) closes a source
-  with 1013 after `WS_AUTH_FAILURES_PER_MINUTE` (10); a multi-user front end
-  reaches alpi from one address, so one revoked device retrying locks every user
-  out. `authenticate` in [connections.py](../alpi/host/connections.py) skips
-  devices with `status != "active"` and returns an anonymous failure.
-  accept: `authenticate` matches revoked devices and returns
-  `reason="device-revoked"` with the `device_id` (still a failure, logged in the
-  audit trail); failures that name a device count against that device with the
-  same limit and window and close it with `auth-rate-limited` without spending
-  the address budget; anonymous failures stay per address;
-  `ALPI_HOST_WS_TRUSTED_PROXIES` unchanged. Over real WebSockets from one address:
-  a revoked device retried 30 times in a minute is throttled while a second valid
-  device keeps connecting; ten unknown tokens still close the address;
-  `token-expired` and `connection-disabled` count per device; the client still
-  gets `auth-failed` with the existing reasons plus `device-revoked`.
-
 - **UPD.1** — Clients know before the click whether a daemon can self-update
   `bug · alpi, common, desktop, mobile · agent · normal`
   note: `_detect_installer()` in [updater.py](../alpi/updater.py) returns `uv`/`pipx`

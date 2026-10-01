@@ -262,12 +262,14 @@ def _normalise_device(row: Any, fallback_label: str = "") -> dict[str, Any] | No
     token = str(row.get("token") or "")
     token_hash = str(row.get("token_hash") or "") or (_hash_token(token) if token else "")
     token_id = str(row.get("token_id") or (token[-8:] if token else ""))
-    if not token_hash and not token_id:
+    revoked_hash = str(row.get("revoked_token_hash") or "")
+    if not token_hash and not token_id and not revoked_hash:
         return None
     client = str(row.get("client") or "unknown").strip().lower()
     return {
         "id": str(row.get("id") or _new_id("dev")),
         "token_hash": token_hash,
+        "revoked_token_hash": revoked_hash,
         "token_id": token_id,
         "name": str(row.get("name") or fallback_label or "").strip(),
         "client": client if client in _VALID_CLIENTS else "unknown",
@@ -945,6 +947,7 @@ def update_connection(
 
 def _mark_device_deleted(device: dict[str, Any]) -> None:
     device["token_id"] = device.get("token_id") or ""
+    device["revoked_token_hash"] = device.get("token_hash") or device.get("revoked_token_hash") or ""
     device["token_hash"] = ""
     device["status"] = "deleted"
 
@@ -1031,6 +1034,13 @@ def authenticate(token: str, min_interval: float = 60.0) -> AuthResult:
     now = int(time.time())
     for connection in data["connections"]:
         for device in connection["devices"]:
+            if device["status"] == "deleted" and _tokens_match(device.get("revoked_token_hash", ""), presented):
+                return AuthResult(
+                    False,
+                    connection_id=connection["id"],
+                    device_id=device["id"],
+                    reason="device-revoked",
+                )
             if device["status"] != "active" or not _tokens_match(device.get("token_hash", ""), presented):
                 continue
             if connection["status"] == "disabled":

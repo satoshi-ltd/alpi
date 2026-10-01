@@ -103,7 +103,8 @@ not reach.
   stores only SHA-256 digests of grants and device tokens, so a copy of the
   store is not a credential. Devices can be revoked independently, may
   expire after `host.token_ttl_days` of inactivity, and authentication
-  failures are throttled per source address. The daemon never binds a
+  failures are throttled per source address, or per device when the failed
+  token names one. The daemon never binds a
   public IP unless `host.allow_public_bind` says so, warns on `0.0.0.0`
   binds, and accepts plaintext `ws://` routes only for private IP literals
   — hostnames require certificate-validated `wss://` behind a TLS

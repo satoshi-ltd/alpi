@@ -179,7 +179,11 @@ obtains certificates. Caddy still forwards every RPC to Alpi's normal
 per-device authentication. The listener throttles authentication failures per
 source address (default 10 per minute, `ALPI_HOST_WS_AUTH_FAILURES_PER_MINUTE`):
 over budget, a source's new sockets close with 1013 and the reason
-`auth-rate-limited` before any token is read. It is a temporary block on that
+`auth-rate-limited` before any token is read. A failure that names a device (a
+revoked token answers `auth-failed` with reason `device-revoked`; expired and
+disabled keep theirs) counts against that device with the same limit and
+closes it the same way (the client sees the 1013 block, not the reason), without spending the address budget, and is recorded in
+the audit trail. It is a temporary block on that
 source address, shown by the clients as `rate-limited` — never as a rejected
 token or an offline daemon: credentials and caches survive, one attempt is made
 per minute, and another socket of the same connection that keeps streaming still

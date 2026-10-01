@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.16.17 — 2026-10-01 — one revoked device no longer locks out its neighbours
+
+- **A revoked, expired or disabled device that keeps retrying is throttled on its own.** The
+  failed-login limit used to count by network address, so behind a front end that shares one
+  address a single revoked device retrying could lock every user out. Failures that name a
+  device now count against that device, and only unknown tokens still count against the address.
+  Devices revoked before this version keep counting against the address: their token was not kept.
+- **A revoked token now answers `auth-failed` with the reason `device-revoked`,** and every
+  attempt is recorded in the audit trail with its device.
+
 ## v0.16.16 — 2026-10-01 — a device only downloads its own files
 
 - **On a connection whose sessions are private to each device, a device can no longer download
