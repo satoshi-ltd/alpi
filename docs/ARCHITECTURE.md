@@ -1461,10 +1461,18 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   no-op; under `device` a remote device sees only sessions carrying its own
   `device_id`, and sessions with no `device_id` (pre-flag, scheduler,
   `host.chat.delegate`) stay visible to the whole connection. The local socket
-  never applies the device clause. `session_changed` events carry both ids and
-  `server._filter_session_events` drops foreign ones for members, next to the
-  role redaction. Never filter by `owns_connection` alone in a new session
-  verb. A device with `provisioner: true` may call the `_SELF_SERVICE_METHODS`
+  never applies the device clause. The events that carry session text, `session_changed`,
+  `chat.turn_done` (the first 200 characters of the reply), `file_mutations` (a diff
+  preview) and the `approval.*` and `clarification.*` prompts, carry both ids, and
+  `server._filter_session_events` (`_OWNED_EVENTS`) drops foreign ones for members, next to the
+  role redaction; a new event that carries session text joins that set. Never filter by
+  `owns_connection` alone in a new session verb. Those two
+  events recorded without an owner are hidden from members altogether. `tests/host/test_device_scope_matrix.py`
+  writes as device A and reads as device B through each path it lists (the session verbs, replay,
+  runs, activity, prompts, summaries, events and the session tools); a new path is one more row.
+  Profile-wide data is shared by design: workgroup posts, memory and the files an admin may read.
+  The known gaps, the `terminal` tool, peer turns, staged attachments, the profile session count
+  and the admin reading of the scope, are tasks in `docs/ROADMAP.md`. A device with `provisioner: true` may call the `_SELF_SERVICE_METHODS`
   (`add_device`, `pairing_status`, `cancel_pairing`, `revoke_device`) on its own
   `connection_id` without the admin role; those verbs are `_SCOPE_FREE_METHODS`
   because they carry no profile.

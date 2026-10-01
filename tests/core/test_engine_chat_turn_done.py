@@ -110,6 +110,25 @@ def test_turn_with_tool_call_emits_for_user_source(
     assert "done" in dones[0]["summary"]
 
 
+def test_the_event_carries_the_device_that_ran_the_turn(
+    bootstrapped_home: Path, monkeypatch,
+) -> None:
+    from alpi import engine as engine_mod
+    from alpi.host.connection_context import ConnectionContext, use
+
+    target = bootstrapped_home / "owner.txt"
+    monkeypatch.setattr(engine_mod.llm, "stream", _write_file_then_done_stream(target))
+    captured = _capture(monkeypatch)
+
+    cfg = config.load(bootstrapped_home)
+    with use(ConnectionContext("conn_x", "dev_a", "remote", "member", session_scope="device")):
+        engine = Engine(home=bootstrapped_home, cfg=cfg)
+        engine.run_turn("write a note", lambda _ev: None)
+
+    done = next(d for k, d in captured if k == "chat.turn_done")
+    assert (done["connection_id"], done["device_id"]) == ("conn_x", "dev_a")
+
+
 def test_peer_source_never_emits_even_with_tool_calls(
     bootstrapped_home: Path, monkeypatch,
 ) -> None:

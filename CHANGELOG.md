@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.16.10 — 2026-10-01 — a device no longer sees its sibling's turn summaries
+
+- **Two live events stop crossing devices.** On a connection whose sessions are private to each
+  device, the notification that a turn finished (with the first 200 characters of its reply) and
+  the one listing the files an agent edited (with a diff preview) reached every other device, and
+  every other member connection. They now go only to the device that ran the turn.
+- **A test now proves the boundary path by path.** One matrix writes as one device and reads as
+  its sibling through every session list, read, replay, run, activity, prompt, summary and event
+  path and the three session tools, and checks the owner does see its own data.
+
 ## v0.16.9 — 2026-09-30 — model errors in plain words
 
 - **A failing model now says what happened.** A rate limit, a rejected key, an empty balance, a

@@ -1345,6 +1345,8 @@ class Engine:
                             {
                                 "profile": _profile_name(self.home),
                                 "session_id": self.session.id,
+                                "connection_id": self.session.connection_id,
+                                "device_id": self.session.device_id,
                                 "mutations": [m.to_dict() for m in _muts],
                             },
                         )
@@ -1709,6 +1711,8 @@ class Engine:
             host_events.emit("chat.turn_done", {
                 "profile": profile_name(self.home),
                 "session_id": self.session.id,
+                "connection_id": self.session.connection_id,
+                "device_id": self.session.device_id,
                 "source": source,
                 "duration_s": round(elapsed, 2),
                 "tool_count": tools_count,

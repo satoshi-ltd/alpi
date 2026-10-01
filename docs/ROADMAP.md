@@ -60,12 +60,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
-- **SCOPE.4** — Device-scope privacy matrix
-  `chore · alpi · agent · high`
-  accept: one parametrised test writes as device A and then reads as device B through
-  every host verb, tool and event path that returns session text (summaries, session
-  read/list, search, recall, activity, events), under `session_scope: device`, and
-  asserts B sees none of A's text; adding a new path means adding it to the matrix.
 - **ACT.1** — Activity keeps pipelines a scoped caller can see
   `bug · alpi · agent · normal`
   note: [activity.py](../alpi/host/activity.py) dedupes a workgroup's rows preferring
@@ -278,6 +272,16 @@ _None._
 
 ### Decisions
 
+- **SCOPE.D1** — Does `session_scope: device` bind an admin connection?
+  `decision · alpi · creator · high`
+  note: found by the SCOPE.4 inventory. `can_read_session` and `can_handle_prompt` return
+  true for `role == admin`, and the member-only event filters never run for an admin, so a
+  remote admin device with `session_scope: device` sees device A's sessions through
+  `session_search`, `session_read`, `recall_sessions`, `host.activity.list`, prompts and
+  every event, while `host.sessions.*`, `host.chat.*` and `host.runs.*` hide them. Today the
+  scope is a partition for admins, not a privacy boundary.
+  accept: a written decision, one of "admins are never bound" (documented as such) or "admins
+  are bound for session text", with the matrix rows added for the chosen reading.
 - **OPS-CONN-POLICY** — Connection policy for the fleet
   `decision · alpi · creator · normal`
   accept: a written connection policy (one connection per person with an exact
@@ -287,6 +291,33 @@ _None._
 
 ## Proposed
 
+- **SCOPE.8** — A member device's `terminal` reads every session of the profile
+  `bug · alpi · agent · high`
+  note: found by the SCOPE.4 inventory. Members keep the `terminal` tool, it exports
+  `ALPI_HOME` and `_approval.classify` rates `cat $ALPI_HOME/sessions/*.json`,
+  `grep -r … $ALPI_HOME/sessions` and `cat $ALPI_HOME/runs/*.jsonl` safe, so a turn run
+  from device B can read device A's sessions, run journals and replay sidecars, and other
+  connections' too. The file tools are fenced by `_member_home_area` in
+  [_paths.py](../alpi/tools/_paths.py); `terminal` is not.
+  accept: a member's `terminal` cannot read the profile's `sessions/`, `runs/` and `host/`
+  areas; a matrix row in `tests/host/test_device_scope_matrix.py` runs `cat` on A's session
+  file as device B and gets no text, with the owner or admin control reading it.
+- **SCOPE.9** — Peer and host-context turns can search every session
+  `bug · alpi · agent · high`
+  note: found by the SCOPE.4 inventory. A turn answering an ALP peer runs as `peer:<id>`
+  with the default admin role and no tool allow-list unless the peer has `tools.allow`, so
+  `session_search`, `session_read` and `recall_sessions` see every session of every
+  connection; a workgroup post that mentions the agent can paste that text into the shared
+  transcript. Only the workgroup pipeline denies them (`PIPELINE_HISTORY_TOOLS`).
+  accept: peer turns deny the history tools unless the peer's config allows them; a test
+  asks as a peer and gets none of a member's session text.
+- **SCOPE.10** — Staged attachments can be fetched by any device
+  `bug · alpi · agent · low`
+  note: found by the SCOPE.4 inventory. `host.attachments.fetch` and `stage` check no owner;
+  a device that knows the path of another device's staged upload (`host/attachments/tmp/<hex8>/`
+  or `out/<name>`) can fetch it, and `host.chat.send` accepts any staged path.
+  accept: a staged file is bound to the device that staged it; another device's fetch or
+  attach is refused; a test stages as A and fetches as B.
 - **SCOPE.5** — Profile session counts respect scope
   `bug · alpi · agent · low`
   note: `counts.sessions` in `host.profile.summaries` counts every session file of the

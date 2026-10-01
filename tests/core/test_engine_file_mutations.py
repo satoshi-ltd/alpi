@@ -110,6 +110,27 @@ def test_run_turn_emits_event_with_profile_session_and_injects_footer(
     assert new_msgs.index(tool_msgs[-1]) < new_msgs.index(footers[0])
 
 
+def test_the_mutations_event_carries_the_device_that_ran_the_turn(
+    bootstrapped_home: Path, monkeypatch
+) -> None:
+    from alpi import engine as engine_mod
+    from alpi.host import events as host_events
+    from alpi.host.connection_context import ConnectionContext, use
+
+    target = bootstrapped_home / "owner.txt"
+    captured: list[tuple[str, dict]] = []
+    monkeypatch.setattr(engine_mod.llm, "stream", _two_step_stream(str(target), "hello"))
+    monkeypatch.setattr(host_events, "emit", lambda kind, data=None: captured.append((kind, data or {})))
+
+    cfg = config.load(bootstrapped_home)
+    with use(ConnectionContext("conn_x", "dev_a", "remote", "member", session_scope="device")):
+        engine = Engine(home=bootstrapped_home, cfg=cfg)
+        engine.run_turn("write notes please", lambda _ev: None)
+
+    payload = next(d for k, d in captured if k == "file_mutations")
+    assert (payload["connection_id"], payload["device_id"]) == ("conn_x", "dev_a")
+
+
 def test_run_turn_with_no_mutations_emits_nothing_and_appends_no_footer(
     bootstrapped_home: Path, monkeypatch
 ) -> None:

@@ -1262,9 +1262,9 @@ def _redact_payload_by_role(method: str, payload: dict[str, Any]) -> dict[str, A
     return payload
 
 
-def _session_event_visible(data: Any, ctx: Any) -> bool:
+def _session_event_visible(data: Any, ctx: Any, strict: bool = False) -> bool:
     if not isinstance(data, dict) or not data.get("connection_id"):
-        return True
+        return not strict
     if data["connection_id"] != ctx.connection_id:
         return False
     if ctx.session_scope != "device" or not data.get("device_id"):
@@ -1272,8 +1272,10 @@ def _session_event_visible(data: Any, ctx: Any) -> bool:
     return data["device_id"] == ctx.device_id
 
 
+_OWNERLESS_HIDDEN_EVENTS = frozenset({"chat.turn_done", "file_mutations"})
+
 _OWNED_EVENTS = frozenset({
-    "session_changed",
+    "session_changed", "chat.turn_done", "file_mutations",
     "clarification.request", "clarification.resolved",
     "approval.request", "approval.resolved",
 })
@@ -1283,7 +1285,8 @@ def _filter_session_events(method: str, payload: dict[str, Any], ctx: Any) -> di
     if not isinstance(payload, dict):
         return payload
     if "data" in payload and payload.get("event") in _OWNED_EVENTS:
-        return payload if _session_event_visible(payload.get("data"), ctx) else None
+        strict = payload.get("event") in _OWNERLESS_HIDDEN_EVENTS
+        return payload if _session_event_visible(payload.get("data"), ctx, strict) else None
     if method == "host.events.history":
         result = payload.get("result")
         events = result.get("events") if isinstance(result, dict) else None
@@ -1291,7 +1294,9 @@ def _filter_session_events(method: str, payload: dict[str, Any], ctx: Any) -> di
             result["events"] = [
                 ev for ev in events
                 if not isinstance(ev, dict) or ev.get("event") not in _OWNED_EVENTS
-                or _session_event_visible(ev.get("data"), ctx)
+                or _session_event_visible(
+                    ev.get("data"), ctx, ev.get("event") in _OWNERLESS_HIDDEN_EVENTS,
+                )
             ]
     return payload
 
