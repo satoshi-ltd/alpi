@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.16.18 — 2026-10-01 — a finished scheduled job is not fired again after a restart
+
+- **Each scheduled job is marked as run as soon as it finishes.** The marks used to be written once
+  after every due job had run, and a job can now run for up to a day, so restarting the daemon
+  in the middle of a pass fired the jobs that had already finished a second time.
+
 ## v0.16.17 — 2026-10-01 — one revoked device no longer locks out its neighbours
 
 - **A revoked, expired or disabled device that keeps retrying is throttled on its own.** The

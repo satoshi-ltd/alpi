@@ -315,6 +315,94 @@ def test_pause_mid_tick_stops_remaining_jobs(monkeypatch, tmp_home_no_env: Path)
     assert merged["second"]["last_run_at"] == _PAST
 
 
+def test_each_fired_job_is_stamped_before_the_next_one_runs(monkeypatch, tmp_home_no_env: Path) -> None:
+    jobs = [
+        {"id": "first", "kind": "cron", "expression": "* * * * *", "prompt": "a", "last_run_at": _PAST},
+        {"id": "second", "kind": "cron", "expression": "* * * * *", "prompt": "b", "last_run_at": _PAST},
+    ]
+    scheduler._save_jobs(tmp_home_no_env, jobs)
+    seen_while_second_runs = {}
+
+    def run(job, home):
+        if job["id"] == "second":
+            seen_while_second_runs.update({j["id"]: j for j in jobs_store.read(home)})
+        return scheduler.JobOutcome(True, "ok")
+
+    monkeypatch.setattr(scheduler, "run_job", run)
+    scheduler.tick(tmp_home_no_env)
+
+    assert seen_while_second_runs["first"]["last_run_at"] != _PAST
+    assert seen_while_second_runs["first"]["last_run_status"] == "ok"
+    assert seen_while_second_runs["second"]["last_run_at"] == _PAST
+
+
+def test_the_stamp_lands_before_the_run_is_reported(monkeypatch, tmp_home_no_env: Path) -> None:
+    scheduler._save_jobs(tmp_home_no_env, [
+        {"id": "only", "kind": "cron", "expression": "* * * * *", "prompt": "a", "last_run_at": _PAST},
+    ])
+    stamped_at_report = []
+    monkeypatch.setattr(scheduler, "run_job", lambda job, home: scheduler.JobOutcome(True, "ok"))
+    monkeypatch.setattr(
+        scheduler, "_emit_schedule_event",
+        lambda home, job, outcome: stamped_at_report.append(jobs_store.read(home)[0]["last_run_at"]),
+    )
+
+    scheduler.tick(tmp_home_no_env)
+
+    assert stamped_at_report and stamped_at_report[0] != _PAST
+
+
+def test_a_restart_after_the_first_job_does_not_fire_it_again(monkeypatch, tmp_home_no_env: Path) -> None:
+    now = datetime(2026, 3, 2, 12, 0, tzinfo=timezone.utc)
+    jobs = [
+        {"id": "first", "kind": "cron", "expression": "* * * * *", "prompt": "a", "last_run_at": _PAST},
+        {"id": "second", "kind": "cron", "expression": "* * * * *", "prompt": "b", "last_run_at": _PAST},
+    ]
+    scheduler._save_jobs(tmp_home_no_env, jobs)
+    ran = []
+    crashed = []
+
+    class Crash(BaseException):
+        pass
+
+    def run(job, home):
+        ran.append(job["id"])
+        if job["id"] == "second" and not crashed:
+            crashed.append(True)
+            raise Crash
+        return scheduler.JobOutcome(True, "ok")
+
+    monkeypatch.setattr(scheduler, "run_job", run)
+    with pytest.raises(Crash):
+        scheduler.tick(tmp_home_no_env, now=now)
+    ran.clear()
+    scheduler.tick(tmp_home_no_env, now=now + timedelta(seconds=10))
+
+    assert ran == ["second"]
+
+
+def test_stamping_per_job_keeps_one_shot_and_failure_semantics(monkeypatch, tmp_home_no_env: Path) -> None:
+    jobs = [
+        {"id": "done", "kind": "once", "run_at": _PAST, "prompt": "a"},
+        {"id": "broken", "kind": "cron", "expression": "* * * * *", "prompt": "b", "last_run_at": _PAST},
+        {"id": "retry", "kind": "once", "run_at": _PAST, "prompt": "c"},
+    ]
+    scheduler._save_jobs(tmp_home_no_env, jobs)
+    outcomes = {"done": True, "broken": False, "retry": False}
+    monkeypatch.setattr(
+        scheduler, "run_job",
+        lambda job, home: scheduler.JobOutcome(outcomes[job["id"]], "x"),
+    )
+
+    scheduler.tick(tmp_home_no_env)
+
+    merged = {j["id"]: j for j in jobs_store.read(tmp_home_no_env)}
+    assert "done" not in merged
+    assert merged["broken"]["last_run_status"] == "error"
+    assert merged["broken"]["last_run_at"] != _PAST
+    assert merged["retry"]["last_run_status"] == "error"
+
+
 def test_fire_by_id_bypasses_profile_pause(monkeypatch, tmp_home_no_env: Path) -> None:
     jobs = [{"id": "abc123", "kind": "cron", "expression": "* * * * *", "prompt": "ping", "last_run_at": None}]
     scheduler._save_jobs(tmp_home_no_env, jobs)

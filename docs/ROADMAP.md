@@ -125,18 +125,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
   accept: the board UX.8. No new verb; a component test renders a mixed window;
   both client suites pass; the changelog entry pins no new alpi minimum.
 
-- **SCHED.6** — Each fired job is stamped when it finishes
-  `bug · alpi · agent · normal`
-  note: `tick` in [scheduler/run.py](../alpi/scheduler/run.py) writes
-  `last_run_at` / `last_run_status` for every fired job in one
-  `jobs_store.update` after the pass, with the pass's start time; a fire may now
-  run up to 86400 s, so a restart mid-pass fires finished jobs again.
-  accept: each job is stamped right after its `run_job` returns, with the same
-  update rules (first-seen, one-shot removal on success, stamp on failure); the
-  pass stays serial with no new state. With two due jobs and the second still
-  running, the first is already stamped in `jobs.json`; a simulated restart after
-  the first does not fire it again; one-shot and failure semantics unchanged.
-
 ## In progress
 
 _None._
@@ -186,6 +174,22 @@ _None._
 
 ## Proposed
 
+- **SCHED.7** — A job whose run raises is never stamped and starves the rest of the pass
+  `bug · alpi · agent · normal`
+  note: found while reviewing SCHED.6. `tick` in [scheduler/run.py](../alpi/scheduler/run.py)
+  does not catch an exception from `run_job` or `scheduled_run` (a `PermissionError` or
+  `FileNotFoundError` from the agent subprocess; only the timeout is caught): the job gets no
+  `last_run_at`, the pass aborts and the jobs after it never run, and it fires again every tick.
+  accept: an exception from `run_job` becomes a failed outcome stamped like any failure, the pass
+  goes on with the next job, and a test with three jobs where the second raises shows all three
+  handled and the second not re-fired on the next tick.
+- **SCHED.8** — A long pass fires jobs from a stale snapshot
+  `bug · alpi · agent · low`
+  note: found while reviewing SCHED.6. `tick` iterates the jobs read at the start of the pass; a
+  job removed, edited, paused or fired by hand during an earlier run of up to 86400 s is still
+  fired from the old copy.
+  accept: each job is re-read from `jobs.json` just before it fires and skipped if it is gone,
+  paused or no longer due; a test removes the second job during the first run and it does not fire.
 - **SCOPE.8** — A member device's `terminal` reads every session of the profile
   `bug · alpi · agent · high`
   note: found by the SCOPE.4 inventory. Members keep the `terminal` tool, it exports

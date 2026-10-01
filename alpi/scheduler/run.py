@@ -778,17 +778,35 @@ def _profile_paused(home: Path) -> bool:
 
 
 def tick(home: Path, now: datetime | None = None) -> list[tuple[str, bool, str]]:
-    """Run one pass: fire every due job, persist ``last_run_at`` on success."""
+    """Run one pass: fire every due job, stamping each one as soon as it returns."""
     now = now or _now()
     try:
         jobs = jobs_store.read(home)
     except jobs_store.CorruptJobsFile as e:
         log.error("jobs.json corrupt — skipping tick (preserve disk state): %s", e)
         return []
-    fired: dict[str, tuple[str, bool]] = {}
     results: list[tuple[str, bool, str]] = []
     unseen = {str(j["id"]) for j in jobs if _needs_first_seen(j)}
+    stamp_at = now.isoformat()
 
+    def _stamp(fired: dict[str, tuple[str, bool]]) -> None:
+        def _apply(current: list[dict]) -> list[dict]:
+            kept: list[dict] = []
+            for j in current:
+                jid = str(j.get("id"))
+                if jid in unseen and _needs_first_seen(j):
+                    j["first_seen_at"] = stamp_at
+                if jid in fired:
+                    kind, ok = fired[jid]
+                    j["last_run_at"] = stamp_at
+                    j["last_run_status"] = "ok" if ok else "error"
+                    if kind == "once" and ok:
+                        continue
+                kept.append(j)
+            return kept
+        jobs_store.update(home, _apply)
+
+    stamped = False
     for job in jobs:
         if not is_due(job, now=now, home=home):
             continue
@@ -802,34 +820,17 @@ def tick(home: Path, now: datetime | None = None) -> list[tuple[str, bool, str]]
         with scheduled_run(home, job):
             outcome = run_job(job, home)
         _elapsed = time.time() - _started
+        # Stamp even on failure to avoid a tight re-fire loop; keep it ahead of the I/O below.
+        _stamp({job_id: (str(job.get("kind", "cron")), outcome.ok)})
+        stamped = True
         log.info("job %s %s — %s", job_id,
                  "OK" if outcome.ok else "FAIL", outcome.message)
         _emit_schedule_event(home, job, outcome)
         _record_schedule_run(home, job, outcome, started=_started, elapsed=_elapsed)
-        fired[job_id] = (str(job.get("kind", "cron")), outcome.ok)
         results.append((job_id, outcome.ok, outcome.message))
 
-    if not fired and not unseen:
-        return results
-
-    stamp_at = now.isoformat()
-    def _apply(current: list[dict]) -> list[dict]:
-        kept: list[dict] = []
-        for j in current:
-            jid = j.get("id")
-            if str(jid) in unseen and _needs_first_seen(j):
-                j["first_seen_at"] = stamp_at
-            if str(jid) in fired:
-                kind, ok = fired[str(jid)]
-                # Stamp last_run_at even on failure to avoid a tight re-fire loop.
-                j["last_run_at"] = stamp_at
-                j["last_run_status"] = "ok" if ok else "error"
-                # One-shot success: drop. On failure, keep so the next tick retries.
-                if kind == "once" and ok:
-                    continue
-            kept.append(j)
-        return kept
-    jobs_store.update(home, _apply)
+    if unseen and not stamped:
+        _stamp({})
     return results
 
 
