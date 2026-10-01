@@ -35,7 +35,7 @@ const SORTS = [
 function previewOf(s) {
   const t = (s.first_user || "").trim();
   if (t) return t.length > PREVIEW_MAX ? `${t.slice(0, PREVIEW_MAX)}…` : t;
-  return `(empty · ${(s.id || "").slice(0, 6)})`;
+  return `Empty session ${(s.id || "").slice(0, 6)}`;
 }
 
 function activityMs(s) {

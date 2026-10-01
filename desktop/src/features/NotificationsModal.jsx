@@ -36,6 +36,7 @@ import { useProfileDetail } from "../hooks/useProfileDetail.js";
 import styles from "./NotificationsModal.module.css";
 import { copyText } from "../lib/clipboard.js";
 import { headlineParts } from "../lib/notificationHeadline.js";
+import { EMPTY } from "../../../common/emptyCopy.mjs";
 
 
 function fmtAbsolute(ts) {
@@ -321,17 +322,13 @@ export default function NotificationsModal({
         </li>
       ) : rows.length === 0 ? (
         <li className={styles.empty}>
-          <span className={styles.emptyTitle}>Inbox zero</span>
-          <span className={styles.emptyHint}>
-            Notifications land here when an agent notifies you or a scheduled job fails.
-          </span>
+          <span className={styles.emptyTitle}>{EMPTY.notifications.title}</span>
+          <span className={styles.emptyHint}>{EMPTY.notifications.hint}</span>
         </li>
       ) : filteredRows.length === 0 ? (
         <li className={styles.empty}>
-          <span className={styles.emptyTitle}>No matches</span>
-          <span className={styles.emptyHint}>
-            Try a different query, or clear it to see everything.
-          </span>
+          <span className={styles.emptyTitle}>{EMPTY.matches.title}</span>
+          <span className={styles.emptyHint}>{EMPTY.matches.hint}</span>
         </li>
       ) : (
         grouped.map((group) => (

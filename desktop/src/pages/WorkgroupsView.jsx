@@ -9,6 +9,7 @@ import {
   EmptyState,
 } from "../primitives/index.js";
 import styles from "./WorkgroupsView.module.css";
+import { EMPTY } from "../../../common/emptyCopy.mjs";
 
 const FILTERS = [
   { id: "all", label: "All" },
@@ -219,7 +220,7 @@ export default function WorkgroupsView({
           {workgroups.length === 0 && (syncing ? (
             <div className={styles.empty}>Syncing workgroups…</div>
           ) : (
-            <EmptyState glyph="hash" heading="No workgroups yet" subtitle="a hub profile plus the members it directs">
+            <EmptyState glyph="hash" heading={EMPTY.workgroups.title} subtitle={EMPTY.workgroups.hint}>
               {onNewWorkgroup && <Button onClick={onNewWorkgroup}>New workgroup</Button>}
             </EmptyState>
           ))}

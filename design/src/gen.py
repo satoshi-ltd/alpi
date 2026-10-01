@@ -315,7 +315,7 @@ def usage_chart(accent=DOC_ACCENT, today="$0.00", tin="102K", tout="831", cap="$
              f'<div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 14px">'
              f'<span style="display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: #626e7d"><span style="width: 9px; height: 9px; border-radius: 2px; background: {in_col}"></span>input <span style="color: #b1bac4">·</span> <span style="width: 9px; height: 9px; border-radius: 2px; background: {accent}"></span>output</span>'
              f'<span style="font-family: {MONO}; font-size: 11px; color: #626e7d">{footer}</span></div>')
-    empty_line = f'<span style="font-family: {MONO}; font-size: 11px; color: #b1bac4; margin-top: 14px">no usage in the last {n} days</span>'
+    empty_line = f'<span style="font-family: {MONO}; font-size: 11px; color: #b1bac4; margin-top: 14px">No usage in the last {n} days</span>'
     tile = lambda label, body: f'<div style="flex: 1; min-width: 0; display: flex; flex-direction: column">{m_eyebrow(label, "#626e7d", 400, 0.1, 11, "margin-bottom: 6px")}{body}</div>'
     def mono(v, u):
         unit = f'<span style="font-weight: 400; font-size: 11px; color: #626e7d"> {u}</span>' if u else ""
@@ -585,7 +585,7 @@ def phone_profile_settings():
 {m_section("Service", "daemon that cannot update itself")}
 {m_row("Update alpi", UPDATE_STEP, chevron=False, helper_lines=2)}
 {m_row("Restart daemon", "exits the daemon · supervisor relaunches · reconnects automatically", control=m_button("Restart"), chevron=False)}
-{m_row("Email", "IMAP / Gmail accounts", control=pill("none"), sep=False)}
+{m_row("Email", "IMAP / Gmail accounts", control=pill("No accounts yet"), sep=False)}
 {m_section("ALP", "peers + workgroups")}
 {m_row("Public key", "tap to copy", "X+iAJ/6f…lNs=", chevron=False)}
 {m_row("Port", "ALP listener · set from alpi setup on the daemon's machine", "7423", chevron=False)}
@@ -632,7 +632,7 @@ def fold_profile_settings():
 {m_wide_row("Daemon", "update installs the newest alpi · restart exits and the supervisor relaunches", control='<span style="display: inline-flex; gap: 8px">' + m_button("Update alpi") + m_button("Restart daemon") + '</span>', chevron=False)}
 {m_wide_section("Service", "daemon that cannot update itself")}
 {m_wide_row("Daemon", UPDATE_STEP + " Restart exits and the supervisor relaunches.", control=m_button("Restart daemon"), chevron=False)}
-{m_wide_row("Email", "IMAP / Gmail accounts", control=pill("none"))}
+{m_wide_row("Email", "IMAP / Gmail accounts", control=pill("No accounts yet"))}
 {m_wide_section("ALP", "peers + workgroups")}
 {m_wide_row("Public key", "tap to copy", "X+iAJ/6f…lNs=", chevron=False)}
 {m_wide_row("Port", "ALP listener · set from alpi setup on the daemon's machine", "7423", chevron=False)}

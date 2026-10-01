@@ -23,7 +23,7 @@ import Usage from "./Usage.jsx";
 import SettingsNav from "./SettingsNav.jsx";
 import styles from "./Settings.module.css";
 import { shortPubkey } from "../../lib/pubkey.js";
-import { emptyLine } from "../../../../common/emptyCopy.mjs";
+import { EMPTY, emptyLine } from "../../../../common/emptyCopy.mjs";
 import { useSettingsDirty } from "../../lib/settingsDirty.js";
 
 function renderMemberRow(m, profiles, workgroup, hubPubkey, onRemove) {
@@ -469,7 +469,7 @@ export default function WorkgroupDetail({
               ) : workgroup.briefing ? (
                 <pre className={styles.briefing}>{workgroup.briefing}</pre>
               ) : (
-                <span className={styles.muted}>no briefing yet</span>
+                <span className={styles.muted}>{emptyLine("briefing")}</span>
               )}
             </Row>
           </Section>
@@ -486,7 +486,7 @@ export default function WorkgroupDetail({
             {pipelineEntries.length > 0 && !launchPipeline && (
               <Row label="no launch" alignTop>
                 <span className={styles.muted}>
-                  nothing starts on its own — every chain awaits a trigger
+                  {EMPTY.launchPipeline.title}. {EMPTY.launchPipeline.hint}
                 </span>
               </Row>
             )}
@@ -494,8 +494,8 @@ export default function WorkgroupDetail({
               <Row label="stages" alignTop>
                 <span className={styles.muted}>
                   {workgroup.needs_relaunch
-                    ? "retired pipeline shape — the daemon skips this workgroup; relaunch it from its recipe"
-                    : "no pipeline (deliberation workgroup)"}
+                    ? `${EMPTY.retiredPipelines.title}. ${EMPTY.retiredPipelines.hint}`
+                    : `${EMPTY.noPipelines.title}. ${EMPTY.noPipelines.hint}`}
                 </span>
               </Row>
             )}

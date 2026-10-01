@@ -145,7 +145,7 @@ describe("WorkgroupDetail — pipelines", () => {
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Pipelines" })).toBeInTheDocument());
     expect(
-      screen.getByText("nothing starts on its own — every chain awaits a trigger"),
+      screen.getByText("No launch pipeline. Nothing starts until a trigger."),
     ).toBeInTheDocument();
     expect(screen.queryByText("launch")).toBeNull();
   });
@@ -161,7 +161,7 @@ describe("WorkgroupDetail — pipelines", () => {
     );
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Pipelines" })).toBeInTheDocument());
-    expect(screen.getByText("no pipeline (deliberation workgroup)")).toBeInTheDocument();
+    expect(screen.getByText("No pipelines. This is a deliberation workgroup.")).toBeInTheDocument();
   });
 
   it("a retired-shape workgroup says it needs a relaunch, not that it deliberates", async () => {
@@ -181,9 +181,9 @@ describe("WorkgroupDetail — pipelines", () => {
     );
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Pipelines" })).toBeInTheDocument());
-    expect(screen.getByText(/retired pipeline shape/)).toBeInTheDocument();
+    expect(screen.getByText(/Retired pipeline shape/)).toBeInTheDocument();
     expect(screen.getByText(/relaunch it from its recipe/)).toBeInTheDocument();
-    expect(screen.queryByText("no pipeline (deliberation workgroup)")).toBeNull();
+    expect(screen.queryByText("No pipelines. This is a deliberation workgroup.")).toBeNull();
   });
 
   it("never sends a pipeline edit through workgroup_update", async () => {
@@ -231,7 +231,7 @@ describe("WorkgroupDetail — pipelines", () => {
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Pipelines" })).toBeInTheDocument());
     expect(
-      screen.getByText("nothing starts on its own — every chain awaits a trigger"),
+      screen.getByText("No launch pipeline. Nothing starts until a trigger."),
     ).toBeInTheDocument();
   });
 });

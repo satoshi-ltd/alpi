@@ -77,14 +77,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
   protected variables. The map is listed in the takes-effect table of
   [CONFIG.md](CONFIG.md#tools) and in the packaged config reference.
 
-- **UI-EMPTY-VOICE** — Empty states speak in one voice on both clients
-  `ui · desktop, mobile, common · agent · normal`
-  note: empty copy mixes lowercase headings, "none", a middle dot or em dash joining title and hint, and hints
-  with or without a full stop; [emptyCopy.mjs](../common/emptyCopy.mjs) already holds the shared entries.
-  accept: the board UI-EMPTY-VOICE. Every empty state on both clients follows the rule; the copy lives in
-  `common/` and a test fails on a title that is not sentence case or a hint without a full stop; both client
-  suites pass.
-
 ## In progress
 
 _None._

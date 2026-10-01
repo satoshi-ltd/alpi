@@ -547,7 +547,7 @@ const Transcript = memo(function Transcript({
       <div className={styles.empty}>
         <AlpiSilhouette color={accent || "var(--accent)"} />
         <div className={styles.emptyHeading}>
-          start a thread with {profileName}
+          Start a thread with {profileName}
         </div>
         {profileModel && (
           <div className={styles.emptyModel}>{profileModel}</div>

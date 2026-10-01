@@ -14,6 +14,7 @@ import { Popover } from "./index.js";
 import ManageSessionsModal from "../features/sessions/ManageSessionsModal.jsx";
 import { displaySessionTitle, subscribeSessionTitles } from "../lib/session-titles.js";
 import styles from "./SessionsButton.module.css";
+import { EMPTY } from "../../../common/emptyCopy.mjs";
 
 const DAY_MS = 86400000;
 const RECENT_LIMIT = 30;
@@ -143,7 +144,7 @@ export default function SessionsButton({
         </button>
         <div className={styles.scroll}>
           {shownSessions.length === 0 && (
-            <div className={styles.empty}>No sessions yet</div>
+            <div className={styles.empty}>{EMPTY.sessions.title}</div>
           )}
           {grouped.map(([day, items]) => (
             <div key={day}>

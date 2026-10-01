@@ -37,6 +37,7 @@ import { useDelayedFlag } from "../lib/useDelayedFlag.js";
 import styles from "./Sidebar.module.css";
 import { ICON_ROLES } from "../../../common/iconRoles.mjs";
 import { badgeCount } from "../../../common/countBadge.mjs";
+import { EMPTY } from "../../../common/emptyCopy.mjs";
 
 const MIN_VISIBLE_ALPIS = 3;
 const MIN_VISIBLE_WORKGROUPS = 2;
@@ -596,12 +597,11 @@ function Sidebar({
           )}
           {!showLoadingRows && !query && !daemonOffline && !connectionSyncing && profiles.length === 0 && workgroups.length === 0 && (
             <div className={styles.searchEmpty}>
-              No profiles yet
+              {EMPTY.profiles.title}
               {onNewProfile && (
-                <>
-                  {" · "}
+                <div>
                   <ActionLink onClick={onNewProfile}>New profile</ActionLink>
-                </>
+                </div>
               )}
             </div>
           )}

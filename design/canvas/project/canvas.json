@@ -315,14 +315,6 @@
    "h": 870,
    "title": "Proposals \u00b7 ui-mob.live-activity \u00b7 a running workgroup and an approval reach a locked phone",
    "page": "proposals"
-  },
-  "Proposals-UI-EMPTY-VOICE.dc.html": {
-   "x": 0,
-   "y": 1350,
-   "w": 1280,
-   "h": 1580,
-   "title": "Proposals \u00b7 ui-empty-voice \u00b7 empty states speak in one voice on both clients",
-   "page": "proposals"
   }
  },
  "order": [
@@ -361,8 +353,7 @@
   "Phone-ToolSheet.dc.html",
   "Phone-SelectText.dc.html",
   "Phone-MessageActions.dc.html",
-  "Proposals-UI-MOB.LIVE-ACTIVITY.dc.html",
-  "Proposals-UI-EMPTY-VOICE.dc.html"
+  "Proposals-UI-MOB.LIVE-ACTIVITY.dc.html"
  ],
  "notes": {
   "s-Foundations": {
@@ -521,14 +512,6 @@
    "x": 0,
    "y": 17,
    "text": "UI-MOB.LIVE-ACTIVITY \u00b7 A running workgroup and an approval reach a locked phone",
-   "kind": "title1",
-   "maxW": 2600,
-   "page": "proposals"
-  },
-  "p-UI-EMPTY-VOICE \u00b7 Empty states speak in one voice on both clients": {
-   "x": 0,
-   "y": 1127,
-   "text": "UI-EMPTY-VOICE \u00b7 Empty states speak in one voice on both clients",
    "kind": "title1",
    "maxW": 2600,
    "page": "proposals"

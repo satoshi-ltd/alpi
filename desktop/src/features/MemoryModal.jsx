@@ -8,6 +8,7 @@ import shell from "../primitives/BrowseModal.module.css";
 import MarkdownBody from "../primitives/MarkdownBody.jsx";
 import { shortDate } from "../lib/time.js";
 import styles from "./MemoryModal.module.css";
+import { EMPTY } from "../../../common/emptyCopy.mjs";
 
 const FILES = [
   { name: "AGENT.md", label: "Things alpi is" },
@@ -170,11 +171,11 @@ export default function MemoryModal({ open, onClose, profile, connectionId, canE
           <span className={shell.emptyHint}>{error}</span>
         </li>
       ) : files.length === 0 ? (
-        <li className={shell.empty}><span className={shell.emptyTitle}>No memory files</span></li>
+        <li className={shell.empty}><span className={shell.emptyTitle}>{EMPTY.memory.title}</span></li>
       ) : filtered.length === 0 ? (
         <li className={shell.empty}>
-          <span className={shell.emptyTitle}>No matches</span>
-          <span className={shell.emptyHint}>Try a different query, or clear it.</span>
+          <span className={shell.emptyTitle}>{EMPTY.matches.title}</span>
+          <span className={shell.emptyHint}>{EMPTY.matches.hint}</span>
         </li>
       ) : filtered.map((f) => (
         <li key={f.name}>

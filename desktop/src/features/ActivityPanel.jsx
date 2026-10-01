@@ -6,6 +6,7 @@ import { profileLabel } from "../lib/profile-display.js";
 import { formatNextFire, relativeTime } from "../lib/time.js";
 import styles from "./ActivityPanel.module.css";
 import { ICON_ROLES } from "../../../common/iconRoles.mjs";
+import { EMPTY } from "../../../common/emptyCopy.mjs";
 
 function ago(seconds, now) {
   if (!seconds) return "";
@@ -83,7 +84,7 @@ export default function ActivityPanel({
         </div>
         <div className={`scroll ${styles.body}`}>
           {empty ? (
-            <p className={styles.empty}>Nothing running · agents at work show up here</p>
+            <p className={styles.empty}>{EMPTY.activity.title}. {EMPTY.activity.hint}</p>
           ) : null}
           {needs.length > 0 && (
             <Group label="Needs you" count={needs.length}>

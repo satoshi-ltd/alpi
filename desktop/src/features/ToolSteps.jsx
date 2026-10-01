@@ -11,6 +11,7 @@ import { pluralize } from "../../../common/pluralize.mjs";
 import { copyText } from "../lib/clipboard.js";
 import { fmtToolDuration, prettyArgs, toolIcon, toolResult, toolSummary } from "../lib/toolSteps.js";
 import styles from "./ToolSteps.module.css";
+import { EMPTY } from "../../../common/emptyCopy.mjs";
 
 export function toolStatus(t) {
   return t.ok === null || t.ok === undefined ? "running" : t.ok ? "ok" : "fail";
@@ -109,7 +110,7 @@ export const ToolStep = memo(function ToolStep({ tool, accent, open: openProp, o
               <pre className={`${styles.output} ${status === "fail" ? styles.outputFail : ""}`}>{result.text}</pre>
             </section>
           ) : (
-            <div className={styles.empty}>{status === "running" ? "Running…" : "No output"}</div>
+            <div className={styles.empty}>{status === "running" ? "Running…" : EMPTY.toolOutput.title}</div>
           )}
         </div>
       </Reveal>

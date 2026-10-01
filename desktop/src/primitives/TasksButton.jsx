@@ -14,6 +14,7 @@ import {
 import { Popover } from "./index.js";
 import { deriveTasks } from "../lib/workgroup-tasks.js";
 import styles from "./TasksButton.module.css";
+import { EMPTY } from "../../../common/emptyCopy.mjs";
 
 const CLOSED = ["done", "skipped", "blocked", "preempted"];
 
@@ -107,7 +108,7 @@ export default function TasksButton({
     ? truncated
     : outcome === "blocked"
       ? `Blocked at #${lastBlocked.slug}`
-      : RESOLVED_LABEL[outcome] ?? "No tasks yet";
+      : RESOLVED_LABEL[outcome] ?? EMPTY.tasks.title;
   const tipText = active
     ? "Active #task · click for history"
     : RESOLVED_TIP[outcome] ?? "Direct @hub to open a #task";
@@ -161,7 +162,7 @@ export default function TasksButton({
           <p className={styles.headHelp}>{headHelp}</p>
         </div>
         <div className={styles.list}>
-          {total === 0 && <div className={styles.empty}>no #task yet</div>}
+          {total === 0 && <div className={styles.empty}>{EMPTY.tasks.title}</div>}
           {tasks.map((t) => (
             <button
               key={t.seq}

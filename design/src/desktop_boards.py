@@ -354,7 +354,7 @@ def desktop_profile_settings():
         ]))
         + section("Sandbox", "isolate shell commands", row("terminal", chip("off", "off") + button("Enable", "ghost", "sm")) + row("network", chip("n/a", "off") + button("Allow", "ghost", "sm")))
         + section("Voice", "text-to-speech voice", row("voice", selectish("Alvaro · Spanish (ES) · male") + button("Test", "ghost", "sm")) + row("auto-read", chip("off", "off") + button("Enable", "ghost", "sm")))
-        + section("MCP Servers", "external tool servers", row("servers", muted("none") + button("+ Add MCP", "ghost", "sm")))
+        + section("MCP Servers", "external tool servers", row("servers", muted("No MCP servers yet") + button("+ Add MCP", "ghost", "sm")))
         + section("Email", "IMAP + Gmail accounts", row("accounts", button("+ Add account", "ghost", "sm")))
         + section("Storage", "disk + data usage", storage_rows)
         + section("Danger Zone", "", row("delete", button("Delete profile", "danger-ghost", "md") + muted("removes identity, memory, skills, schedule from disk. Cannot be undone.")))

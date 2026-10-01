@@ -11,6 +11,15 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.7.9 — 2026-10-01 — empty states speak in one voice
+
+- **Every empty state now has a sentence-case title and at most one hint sentence ending in a full stop,**
+  with no "none", middle dot or em dash joining them: "No posts yet", "Nothing running", "No env keys".
+  Inline absences in settings read just "No X"; the same absence reads the same on mobile.
+- **The wording lives in `common/emptyCopy.mjs`** and a test fails on a title or hint that breaks the rule.
+
+  Requires alpi 0.16.1.
+
 ## v0.7.8 — 2026-10-01 — a workgroup row says what finished as well as what runs
 
 - **The Workgroups list captions each row with the finished phases and the phase that waits** (for

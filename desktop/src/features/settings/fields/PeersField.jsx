@@ -14,7 +14,7 @@ import { ConfirmDeleteAction, DialogFooter } from "../../../primitives/index.js"
 import { ALLOW_METHODS, isValidEd25519Pubkey } from "../util.js";
 import styles from "../Settings.module.css";
 import { shortPubkey } from "../../../lib/pubkey.js";
-import { emptyLine } from "../../../../../common/emptyCopy.mjs";
+import { EMPTY, emptyLine } from "../../../../../common/emptyCopy.mjs";
 
 function renderPeerStatusChip(status, reason) {
   if (status === "on") {
@@ -363,7 +363,7 @@ function PeerDetailPopover({ peer, status, reason, anchorRef, onClose, onRemove 
         <Eyebrow as="label">allow</Eyebrow>
         <span className={styles.inlineRow}>
           {(peer.allow ?? []).length === 0 ? (
-            <span className={styles.muted}>none</span>
+            <span className={styles.muted}>{EMPTY.peerMethods.title}</span>
           ) : (
             (peer.allow ?? []).map((m) => (
               <Chip key={m} size="sm" state="on">{m}</Chip>

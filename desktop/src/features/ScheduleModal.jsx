@@ -9,6 +9,7 @@ import { useNotify } from "../primitives/Notification.jsx";
 import { scheduleSummary, formatLastRun } from "./settings/util.js";
 import { formatNextFire, lastRunShort } from "../lib/time.js";
 import styles from "./ScheduleModal.module.css";
+import { EMPTY } from "../../../common/emptyCopy.mjs";
 
 const REFRESH_EVENTS = new Set(["schedule.changed", "schedule.done", "schedule.failed"]);
 
@@ -120,13 +121,13 @@ export default function ScheduleModal({ open, onClose, profile, connectionId }) 
         </li>
       ) : jobs.length === 0 ? (
         <li className={shell.empty}>
-          <span className={shell.emptyTitle}>No scheduled jobs</span>
-          <span className={shell.emptyHint}>Ask the agent in chat to schedule something.</span>
+          <span className={shell.emptyTitle}>{EMPTY.schedule.title}</span>
+          <span className={shell.emptyHint}>{EMPTY.schedule.hint}</span>
         </li>
       ) : filtered.length === 0 ? (
         <li className={shell.empty}>
-          <span className={shell.emptyTitle}>No matches</span>
-          <span className={shell.emptyHint}>Try a different query, or clear it.</span>
+          <span className={shell.emptyTitle}>{EMPTY.matches.title}</span>
+          <span className={shell.emptyHint}>{EMPTY.matches.hint}</span>
         </li>
       ) : filtered.map((j) => (
         <li key={j.id}>

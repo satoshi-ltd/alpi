@@ -99,7 +99,7 @@ export function ConnectionPanel({
             <I.Globe />
             <span className={styles.panelTitle}>Connection</span>
             <span className={`eyebrow ${styles.headerEyebrow}`}>
-              {locked ? "no host yet — add a connection to continue" : "where alpi runs"}
+              {locked ? "No host yet. Add a connection to continue." : "where alpi runs"}
             </span>
           </div>
           {!locked && (

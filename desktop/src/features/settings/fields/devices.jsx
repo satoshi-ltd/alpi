@@ -21,7 +21,7 @@ import { formatLastSeen } from "../util.js";
 import styles from "../Settings.module.css";
 import { copyText } from "../../../lib/clipboard.js";
 import { pairingDisplayStatus, pairingExpiryText } from "../../../lib/pairing-expiry.js";
-import { emptyLine } from "../../../../../common/emptyCopy.mjs";
+import { EMPTY, emptyLine } from "../../../../../common/emptyCopy.mjs";
 
 function cacheKey(connectionId) {
   return connectionId || "local";
@@ -704,7 +704,7 @@ export function PairDeviceModal({ connectionId, onClose, onPaired }) {
                       </Dropdown.Row>
                     ))}
                     {filteredProfiles.length === 0 && (
-                      <Dropdown.Empty>no matches</Dropdown.Empty>
+                      <Dropdown.Empty>{EMPTY.matches.title}</Dropdown.Empty>
                     )}
                   </>
                 )}

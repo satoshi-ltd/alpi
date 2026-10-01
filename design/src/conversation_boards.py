@@ -430,7 +430,7 @@ def m_jump():
 
 def m_empty():
     return (f'<div style="display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 24px 28px; text-align: center">'
-            f'<span style="font-size: 22px; font-weight: 600; letter-spacing: -0.396px; line-height: 28.6px">start a thread with alpi</span>{mono("sonnet-4", 11)}</div>')
+            f'<span style="font-size: 22px; font-weight: 600; letter-spacing: -0.396px; line-height: 28.6px">Start a thread with alpi</span>{mono("sonnet-4", 11)}</div>')
 
 
 def mobile_conversation():

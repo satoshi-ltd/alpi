@@ -90,13 +90,13 @@ function McpDetailModal({ profile, connectionId, mcp, onClose, onRemoved }) {
     <Modal title={`MCP · ${mcp.name}`} onClose={onClose} closeButton>
       <div className={styles.field}>
         <Eyebrow as="label">command</Eyebrow>
-        <span className={styles.mono}>{mcp.command || "(none)"}</span>
+        <span className={styles.mono}>{mcp.command || "No command"}</span>
       </div>
       <div className={styles.field}>
         <Eyebrow as="label">args</Eyebrow>
         <span className={styles.mono}>
           {(mcp.args ?? []).length === 0
-            ? "(none)"
+            ? EMPTY.mcpArgs.title
             : (mcp.args ?? []).join(" ")}
         </span>
       </div>
@@ -104,7 +104,7 @@ function McpDetailModal({ profile, connectionId, mcp, onClose, onRemoved }) {
         <Eyebrow as="label">env</Eyebrow>
         <span className={styles.inlineRow}>
           {(mcp.env_keys ?? []).length === 0 ? (
-            <span className={styles.muted}>none</span>
+            <span className={styles.muted}>{EMPTY.mcpEnv.title}</span>
           ) : (
             (mcp.env_keys ?? []).map((k) => (
               <Chip key={k} size="sm" state="on">{k}</Chip>

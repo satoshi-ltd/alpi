@@ -31,6 +31,7 @@ import { copyText } from "../../lib/clipboard.js";
 import { pairingDisplayStatus, pairingExpiryText } from "../../lib/pairing-expiry.js";
 import { profileLabel } from "../../lib/profile-display.js";
 import styles from "./ConnectionsPage.module.css";
+import { EMPTY } from "../../../../common/emptyCopy.mjs";
 
 
 export function deviceCount(row) {
@@ -223,7 +224,7 @@ export default function ConnectionsPage({
             <div className={styles.empty}><LoadFailed inline label="connections" onRetry={reload} /></div>
           )}
           {data && rows.every((row) => row.id === "host") && (
-            <div className={styles.empty}>No paired apps yet · create a connection and share its pairing link with a phone or desktop.</div>
+            <div className={styles.empty}>{EMPTY.connections.title}. {EMPTY.connections.hint}</div>
           )}
           {data && visibleRows.length > 0 && (
             <div className={styles.tableHead} aria-hidden>

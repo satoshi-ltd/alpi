@@ -1,5 +1,5 @@
 from gen import ic, page
-from desktop_boards import AMBER, HOVER, INK, INK2, INK3, LINE, LINE2, PANE, MONO, SIDE, diamond_stack, row
+from desktop_boards import AMBER, HOVER, INK, INK2, INK3, LINE2, PANE, MONO, SIDE, diamond_stack
 from conversation_boards import h1, label, mono, spec
 
 PAGE_W = 1280
@@ -88,52 +88,6 @@ def live_proposed():
     return stack(tagged("Lock screen · app closed", lock_screen()), cap("A Live Activity for the running workgroup and the approval as a push with the same two actions."), gap=10)
 
 
-EMPTY = (
-    ("Desktop · Workgroups list", "box-d", ("No workgroups yet", "a hub profile plus the members it directs"), ("No workgroups yet", "A workgroup is a hub profile plus the members it directs.")),
-    ("Desktop · Workgroup thread", "box-d", ("no posts yet", "direct @doc to open a #task"), ("No posts yet", "Direct @doc to open a #task.")),
-    ("Desktop · Activity panel", "box-d", ("Nothing running · agents at work show up here", ""), ("Nothing running", "Running turns, workgroup phases, schedules and anything waiting on you show up here.")),
-    ("Desktop · Sessions menu", "box-d", ("No sessions yet", ""), ("No sessions yet", "A session starts with your first message.")),
-    ("Desktop · Connections", "box-d", ("No paired apps yet · create a connection and share its pairing link with a phone or desktop.", ""), ("No paired apps yet", "Create a connection and share its pairing link with a phone or desktop.")),
-    ("Desktop · MCP server, env keys", "env", "none", "No env keys"),
-    ("Mobile · Roster", "box-m", ("Nothing here yet", "This daemon has no profiles or workgroups yet."), ("No profiles or workgroups yet", "Create one to begin.")),
-    ("Mobile · Activity", "box-m", ("Nothing running", "Running turns, workgroup phases, schedules and anything waiting on you show up here."), ("Nothing running", "Running turns, workgroup phases, schedules and anything waiting on you show up here.")),
-    ("Mobile · Workgroup thread", "box-m", ("no posts yet", "direct @doc to open a #task"), ("No posts yet", "Direct @doc to open a #task.")),
-    ("Mobile · Connection sheet", "box-m", ("Not paired yet — tap below to scan a QR.", ""), ("Not paired yet", "Tap below to scan a QR.")),
-    ("Mobile · Email row", "pill", "none", "No accounts yet"),
-)
-
-
-def empty_box(client, title, hint):
-    size, hint_size = (14, 12) if client == "d" else (16, 14)
-    body = f'<span style="font-size: {hint_size}px; line-height: 1.45; color: {INK3}; max-width: 380px">{hint}</span>' if hint else ""
-    return (f'<div style="display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 20px; border-radius: 10px; border: 0.5px solid {LINE}; background: {PANE}; text-align: center">'
-            f'<span style="font-size: {size}px; font-weight: 600; color: {INK if client == "d" else INK2}">{title}</span>{body}</div>')
-
-
-def empty_inline(kind, text):
-    pill = f'<span style="display: inline-flex; align-items: center; min-height: 22px; padding: 0 8px; border-radius: 999px; background: {HOVER}; font-family: {MONO}; font-size: 12px; color: {INK2}; opacity: 0.55">{text}</span>'
-    value = pill if kind == "pill" else f'<span style="font-size: 12px; color: {INK3}">{text}</span>'
-    name = "Email" if kind == "pill" else "env"
-    return f'<div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-radius: 10px; border: 0.5px solid {LINE}; background: {PANE}"><span style="font-size: 13px; color: {INK}">{name}</span>{value}</div>'
-
-
-def empty_column(index):
-    items = []
-    for where, kind, *texts in EMPTY:
-        now_or_proposed = texts[index]
-        drawn = empty_inline(kind, now_or_proposed) if kind in ("env", "pill") else empty_box(kind[-1], *now_or_proposed)
-        items.append(tagged(where, drawn))
-    return stack(*items, gap=12)
-
-
-def empty_now():
-    return empty_column(0)
-
-
-def empty_proposed():
-    return empty_column(1)
-
-
 PROPOSALS = [
     {
         "id": "UI-MOB.LIVE-ACTIVITY",
@@ -145,17 +99,6 @@ PROPOSALS = [
         "proposed": live_proposed,
         "accept": "A running workgroup shows as a Live Activity with its name and task, phase segments, elapsed time and the members working; an approval arrives as a push with the app closed, carrying Deny and Allow once as actions. Both draw in the light and dark lock screens and stay within the system's Live Activity height.",
         "h": 870,
-    },
-    {
-        "id": "UI-EMPTY-VOICE",
-        "client": "desktop + mobile",
-        "area": "Empty states",
-        "title": "Empty states speak in one voice on both clients",
-        "why": "Empty copy mixes lowercase headings, none, a middle dot or em dash joining title and hint, and hints with or without a full stop; desktop and mobile word the same absence differently. The recommendation is one rule: a sentence-case title, No X yet for a list that will fill or Nothing running for a live state, and at most one hint sentence. The alternative is titles without hints, which is shorter but drops the next step.",
-        "now": empty_now,
-        "proposed": empty_proposed,
-        "accept": "Every empty state on both clients has a sentence-case title and, where it helps, one hint sentence that starts with a capital and ends with a full stop; none uses none, a lowercase heading, a middle dot or an em dash to join title and hint; an inline absence reads No X. The same absence reads the same on desktop and mobile.",
-        "h": 1580,
     },
 ]
 

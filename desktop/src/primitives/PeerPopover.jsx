@@ -16,6 +16,7 @@ import {
 } from "./index.js";
 import styles from "./PeerPopover.module.css";
 import { pubkeyTail } from "../lib/pubkey.js";
+import { EMPTY } from "../../../common/emptyCopy.mjs";
 
 function PeerRow({ peer, onOpen }) {
   return (
@@ -104,7 +105,7 @@ export default function PeerPopover({
           </div>
           <div className={styles.scroll}>
             {peers.length === 0 && (
-              <div className={styles.empty}>No peers linked</div>
+              <div className={styles.empty}>{EMPTY.peers.title}</div>
             )}
             {peers.map((p) => (
               <PeerRow key={p.pubkey || p.id} peer={p} onOpen={() => setDetail(p)} />

@@ -5,6 +5,7 @@ import Markdown from "../primitives/Markdown.jsx";
 import CodeView from "../primitives/CodeView.jsx";
 import shell from "../primitives/BrowseModal.module.css";
 import styles from "./SkillsModal.module.css";
+import { EMPTY } from "../../../common/emptyCopy.mjs";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -177,15 +178,13 @@ export default function SkillsModal({ open, onClose, profile, connectionId }) {
         </li>
       ) : skills.length === 0 ? (
         <li className={shell.empty}>
-          <span className={shell.emptyTitle}>No skills installed</span>
-          <span className={shell.emptyHint}>
-            Skills are created by talking to the agent — ask it to build one.
-          </span>
+          <span className={shell.emptyTitle}>{EMPTY.skills.title}</span>
+          <span className={shell.emptyHint}>{EMPTY.skills.hint}</span>
         </li>
       ) : filtered.length === 0 ? (
         <li className={shell.empty}>
-          <span className={shell.emptyTitle}>No matches</span>
-          <span className={shell.emptyHint}>Try a different query, or clear it.</span>
+          <span className={shell.emptyTitle}>{EMPTY.matches.title}</span>
+          <span className={shell.emptyHint}>{EMPTY.matches.hint}</span>
         </li>
       ) : (
         groups.map((g) => (
@@ -413,7 +412,7 @@ function SkillTree({ tree, selectedPath, openDirs, onToggle, onSelectFile }) {
             <div key={node.name} className={`${styles.treeRow} ${styles.treeSecrets}`}>
               <LockIcon className={styles.treeIcon} size="sm" />
               <span className={styles.treeName}>{node.name}/</span>
-              <span className={styles.treeMeta}>{node.count ? `${node.count} · ${node.mode}` : "empty"}</span>
+              <span className={styles.treeMeta}>{node.count ? `${node.count} · ${node.mode}` : "Empty"}</span>
             </div>
           );
         }

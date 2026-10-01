@@ -4,6 +4,7 @@ import { BrowseModal, Eyebrow } from "../primitives/index.js";
 import shell from "../primitives/BrowseModal.module.css";
 import MarkdownBody from "../primitives/MarkdownBody.jsx";
 import styles from "./ToolsModal.module.css";
+import { EMPTY } from "../../../common/emptyCopy.mjs";
 
 const CATEGORY_ORDER = [
   "Filesystem", "Workspace", "Web", "Memory", "Comms", "Agent", "Media", "System", "Collab",
@@ -82,11 +83,14 @@ export default function ToolsModal({ open, onClose, profile, connectionId }) {
           <span className={shell.emptyHint}>{error}</span>
         </li>
       ) : tools.length === 0 ? (
-        <li className={shell.empty}><span className={shell.emptyTitle}>No tools registered</span></li>
+        <li className={shell.empty}>
+          <span className={shell.emptyTitle}>{EMPTY.tools.title}</span>
+          <span className={shell.emptyHint}>{EMPTY.tools.hint}</span>
+        </li>
       ) : filtered.length === 0 ? (
         <li className={shell.empty}>
-          <span className={shell.emptyTitle}>No matches</span>
-          <span className={shell.emptyHint}>Try a different query, or clear it.</span>
+          <span className={shell.emptyTitle}>{EMPTY.matches.title}</span>
+          <span className={shell.emptyHint}>{EMPTY.matches.hint}</span>
         </li>
       ) : groups.map((g) => (
         <Fragment key={g.cat}>

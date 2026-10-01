@@ -40,8 +40,8 @@ describe("WorkgroupView empty state", () => {
     const { container } = render(
       <WorkgroupView workgroup={workgroup} profiles={profiles} connectionId="local" />,
     );
-    await waitFor(() => expect(screen.getByText("no posts yet")).toBeInTheDocument());
-    expect(screen.getByText(/direct @hub to open a #task/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("No posts yet")).toBeInTheDocument());
+    expect(screen.getByText("Direct @hub to open a #task.")).toBeInTheDocument();
     expect(container.querySelector("svg")).toBeTruthy();
   });
 
@@ -71,16 +71,16 @@ describe("WorkgroupView empty state", () => {
       <WorkgroupView workgroup={workgroup} profiles={profiles} connectionId="local" />,
     );
     expect(container.querySelector(".anim-fade[aria-hidden='true']")).toBeTruthy();
-    expect(screen.queryByText("no posts yet")).toBeNull();
+    expect(screen.queryByText("No posts yet")).toBeNull();
   });
 
   it("names a failed load and retries it instead of pretending the workgroup is empty", async () => {
     fetchWorkgroupTranscriptMock.mockRejectedValueOnce(new Error("read timeout"));
     render(<WorkgroupView workgroup={workgroup} profiles={profiles} connectionId="local" />);
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Couldn't load this workgroup"));
-    expect(screen.queryByText("no posts yet")).toBeNull();
+    expect(screen.queryByText("No posts yet")).toBeNull();
     fetchWorkgroupTranscriptMock.mockResolvedValueOnce([]);
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-    await waitFor(() => expect(screen.getByText("no posts yet")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("No posts yet")).toBeInTheDocument());
   });
 });

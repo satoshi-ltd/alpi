@@ -57,6 +57,7 @@ import {
   VolumeIcon,
 } from "../primitives/index.js";
 import styles from "./WorkgroupView.module.css";
+import { EMPTY, postsHint } from "../../../common/emptyCopy.mjs";
 
 const MY_SEQS_KEY = "alpi.workgroup.mySeqs";
 const taskStateCache = new Map();
@@ -583,8 +584,8 @@ export default function WorkgroupView({
             {messages.length === 0 && (
               <div className={styles.empty}>
                 <AlpiSilhouette color={ownerProfile?.accent || "var(--accent)"} />
-                <div className={styles.emptyHeading}>no posts yet</div>
-                <div className={styles.emptyModel}>direct @{profileLabel(hubName)} to open a #task</div>
+                <div className={styles.emptyHeading}>{EMPTY.posts.title}</div>
+                <div className={styles.emptyModel}>{postsHint(profileLabel(hubName))}</div>
               </div>
             )}
             {messages.length > 0 && (
