@@ -161,7 +161,11 @@ Output attachments (MM.2):
   Indexing another bundle is refused unless `force=true`, and the rebuild runs in
   one transaction, so a failure leaves the previous index searchable.
 - Text, HTML, PDF, DOCX, EPUB, and images are supported for ingest. Scanned
-  PDF/image OCR requires `ocr=true`.
+  PDF/image OCR requires `ocr=true`. The synthesiser reads the first 12,000
+  characters of a source; the ingest/maintain result carries
+  `source_budget {available, used, truncated}`, so tell the user when
+  `truncated` is true. A DOCX keeps its tables (one line per row, cells joined
+  by ` | `) in document order.
 
 ## Session and workgroup recall
 

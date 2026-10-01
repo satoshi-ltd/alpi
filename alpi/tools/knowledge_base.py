@@ -1213,6 +1213,10 @@ Return one JSON object only, no prose and no fences:
   "log": "One short sentence describing the maintenance change."
 }
 
+source_excerpt is the start of the source. source_budget says how much you got: the
+source has `available` characters and you were given the first `used`. When
+truncated is true, do not present what you read as the whole source and say in the
+page or in the log that it was cut.
 related_pages carries the current full body of each existing page you may update.
 A proposed body replaces the whole file: return the complete page and keep every
 fact that still holds, dropping only what the source contradicts or the topic asks
@@ -1225,6 +1229,9 @@ Prefer updating a small number of durable concept/project/person/source pages.
 Do not include secrets, credentials, API keys, tokens, or raw private data.
 Do not create pages for ephemeral session state.
 """
+
+
+SOURCE_BUDGET_CHARS = 12000
 
 
 def maintain_knowledge(
@@ -1263,6 +1270,11 @@ def maintain_knowledge(
             related = []
     related = _related_pages_for_prompt(root, related)
     cfg = cfg_mod.load(home)
+    source_budget = {
+        "available": len(source_text),
+        "used": min(len(source_text), SOURCE_BUDGET_CHARS),
+        "truncated": len(source_text) > SOURCE_BUDGET_CHARS,
+    }
     messages = [
         {"role": "system", "content": _MAINTAIN_PROMPT},
         {
@@ -1270,7 +1282,8 @@ def maintain_knowledge(
             "content": json.dumps({
                 "topic": topic.strip(),
                 "source_ref": source_ref,
-                "source_excerpt": source_text[:12000],
+                "source_excerpt": source_text[:SOURCE_BUDGET_CHARS],
+                "source_budget": source_budget,
                 "related_pages": related,
             }),
         },
@@ -1280,11 +1293,11 @@ def maintain_knowledge(
     tool_state_mod.record_completion_usage(completion)
     proposal = _parse_llm_json(completion.content)
     if not apply:
-        return {"applied": False, "proposal": proposal}
+        return {"applied": False, "proposal": proposal, "source_budget": source_budget}
     seen_full = frozenset(str(p["path"]) for p in related if not p["truncated"])
     applied = _apply_maintenance(root, proposal, source_ref, seen_full=seen_full)
     lint = lint_knowledge(root)
-    return {"applied": True, "proposal": proposal, "lint": lint, **applied}
+    return {"applied": True, "proposal": proposal, "lint": lint, "source_budget": source_budget, **applied}
 
 
 def ingest_knowledge(

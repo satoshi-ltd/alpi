@@ -77,21 +77,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
   protected variables. The map is listed in the takes-effect table of
   [CONFIG.md](CONFIG.md#tools) and in the packaged config reference.
 
-- **KB.11 + KB.13** — Ingest reports its cut and keeps Word tables (one commit)
-  `bug · alpi · agent · high`
-  note: [knowledge_base.py](../alpi/tools/knowledge_base.py) sends
-  `source_text[:12000]` with no truncation metadata; the shared Word reader in
-  [workspace.py](../alpi/tools/workspace.py) reads `doc.paragraphs` only, so a
-  DOCX table is lost (reproduced locally).
-  accept: the source budget stays; sources below, at and above it report
-  truncated/available/used counts in preview and apply results, and the
-  synthesizer prompt says so too. A paragraph/table/paragraph DOCX keeps its text
-  in order through the shared reader and the ingest path, with explicit handling
-  of empty and merged cells, using the existing `python-docx` (no new library, no
-  chunked synthesis, vision or translation). Regressions cover the reader's other
-  consumers and the existing protection of truncated related pages against
-  overwrite.
-
 - **UX.7** — The desktop Storage field is one inventory
   `ui · desktop · agent · normal`
   note: [maintenance.jsx](../desktop/src/features/settings/fields/maintenance.jsx)

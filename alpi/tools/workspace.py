@@ -84,8 +84,55 @@ def _read_image(path: Path, ocr: bool = False) -> str:
 def _read_docx(path: Path) -> str:
     from docx import Document
 
-    doc = Document(str(path))
-    return "\n\n".join(p.text for p in doc.paragraphs if p.text.strip())
+    return "\n\n".join(_docx_blocks(Document(str(path))))
+
+
+def _docx_blocks(container, *, nested: bool = False) -> list[str]:
+    from docx.table import Table
+
+    blocks: list[str] = []
+    for item in container.iter_inner_content():
+        text = _docx_table_text(item, nested=nested) if isinstance(item, Table) else item.text
+        if text.strip():
+            blocks.append(text)
+    return blocks
+
+
+def _docx_table_text(table, *, nested: bool = False) -> str:
+    try:
+        rows = _docx_grid_rows(table)
+    except (ValueError, IndexError, KeyError):
+        rows = _docx_flat_rows(table)
+    return ("; " if nested else "\n").join(rows)
+
+
+def _docx_cell_text(cell) -> str:
+    return " ".join(" ".join(_docx_blocks(cell, nested=True)).split())
+
+
+def _docx_grid_rows(table) -> list[str]:
+    rows: list[str] = []
+    seen: set = set()
+    for row in table.rows:
+        cells: list[str] = []
+        for cell in row.cells:
+            first_sight = cell._tc not in seen
+            seen.add(cell._tc)
+            cells.append(_docx_cell_text(cell) if first_sight else "")
+        if any(cells):
+            rows.append(" | ".join(cells))
+    return rows
+
+
+def _docx_flat_rows(table) -> list[str]:
+    from docx.table import _Cell
+
+    rows: list[str] = []
+    for tr in table._tbl.tr_lst:
+        cells = [_docx_cell_text(_Cell(tc, table)) for tc in tr.tc_lst]
+        if any(cells):
+            rows.append(" | ".join(cells))
+    return rows
 
 
 def _read_epub(path: Path) -> str:

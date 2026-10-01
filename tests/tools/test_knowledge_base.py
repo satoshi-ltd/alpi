@@ -2381,3 +2381,205 @@ def test_a_reference_use_without_a_definition_sits_beside_one_that_has_it(tmp_pa
     )
 
     assert [entry["target"] for entry in links] == ["concepts/widget.md", "concepts/polaris.md"]
+
+
+def _capture_prompt(monkeypatch, proposal: dict) -> dict:
+    seen: dict = {}
+
+    def fake(**kwargs):
+        seen["system"] = kwargs["messages"][0]["content"]
+        seen["payload"] = json.loads(kwargs["messages"][1]["content"])
+        return _completion(proposal)
+
+    monkeypatch.setattr(kb.llm, "complete", fake)
+    return seen
+
+
+@pytest.mark.parametrize(("size", "available", "used", "truncated"), [
+    (11999, 11999, 11999, False),
+    (12000, 12000, 12000, False),
+    (12001, 12001, 12000, True),
+    (30000, 30000, 12000, True),
+])
+@pytest.mark.parametrize("apply", [False, True])
+def test_ingest_reports_how_much_of_the_source_it_read(
+    tmp_home: Path, tmp_path: Path, monkeypatch, stub_embedder, size: int, available: int, used: int,
+    truncated: bool, apply: bool,
+) -> None:
+    _ingest_bundle(tmp_home, tmp_path, monkeypatch)
+    seen = _capture_prompt(monkeypatch, _proposal(_proposed("sources/long.md", page_type="source")))
+    source = tmp_path / "long.md"
+    source.write_text("x" * size)
+
+    result = kb.Knowledge().run(action="ingest", source_path=str(source), apply=apply)
+
+    assert result.ok, result.error
+    body = json.loads(result.output)
+    assert body["source_budget"] == {"available": available, "used": used, "truncated": truncated}
+    assert seen["payload"]["source_budget"] == body["source_budget"]
+    assert len(seen["payload"]["source_excerpt"]) == used
+
+
+def test_the_synthesizer_is_told_the_source_may_be_cut(tmp_home: Path, tmp_path: Path, monkeypatch, stub_embedder) -> None:
+    _ingest_bundle(tmp_home, tmp_path, monkeypatch)
+    seen = _capture_prompt(monkeypatch, _proposal(_proposed("sources/long.md", page_type="source")))
+    source = tmp_path / "long.md"
+    source.write_text("x" * 20000)
+
+    kb.Knowledge().run(action="ingest", source_path=str(source), apply=False)
+
+    assert "source_budget" in seen["system"]
+    assert "truncated" in seen["system"]
+
+
+def test_maintain_reports_the_source_budget_too(tmp_home: Path, tmp_path: Path, monkeypatch, stub_embedder) -> None:
+    _ingest_bundle(tmp_home, tmp_path, monkeypatch)
+    source = tmp_path / "memo.md"
+    source.write_text("short memo")
+
+    result = kb.Knowledge().run(action="maintain", source_path=str(source), apply=False)
+
+    assert json.loads(result.output)["source_budget"] == {"available": 10, "used": 10, "truncated": False}
+
+
+def _docx_with_table(path: Path, rows: list[list[str]], merge: tuple[int, int, int, int] | None = None) -> Path:
+    from docx import Document
+
+    doc = Document()
+    doc.add_paragraph("Before the table.")
+    table = doc.add_table(rows=len(rows), cols=len(rows[0]))
+    for r, row in enumerate(rows):
+        for c, value in enumerate(row):
+            table.cell(r, c).text = value
+    if merge is not None:
+        r1, c1, r2, c2 = merge
+        table.cell(r1, c1).merge(table.cell(r2, c2))
+    doc.add_paragraph("After the table.")
+    doc.save(path)
+    return path
+
+
+def test_a_word_table_keeps_its_text_in_document_order(tmp_path: Path) -> None:
+    path = _docx_with_table(tmp_path / "t.docx", [["Plan", "Price"], ["Pro", "20"], ["Team", "50"]])
+
+    text = kb._read_source(path)
+
+    assert text.index("Before the table.") < text.index("Plan") < text.index("Team") < text.index("After the table.")
+    assert "Pro | 20" in text
+    assert "Plan | Price" in text
+
+
+def test_a_word_table_keeps_empty_cells_and_skips_empty_rows(tmp_path: Path) -> None:
+    path = _docx_with_table(tmp_path / "t.docx", [["Plan", ""], ["", ""], ["Pro", "20"]])
+
+    text = kb._read_source(path)
+
+    assert "Plan |" in text
+    assert "Pro | 20" in text
+    assert not any(line.strip() and set(line.strip()) <= {"|", " "} for line in text.splitlines())
+    assert text.count("Plan") == 1
+
+
+def test_a_merged_cell_is_read_once(tmp_path: Path) -> None:
+    path = _docx_with_table(tmp_path / "t.docx", [["Header", "x", "y"], ["a", "b", "c"]], merge=(0, 0, 0, 2))
+
+    text = kb._read_source(path)
+
+    assert text.count("Header") == 1
+
+
+def test_a_word_document_without_tables_reads_as_before(tmp_path: Path) -> None:
+    from docx import Document
+
+    doc = Document()
+    doc.add_paragraph("One.")
+    doc.add_paragraph("")
+    doc.add_paragraph("Two.")
+    path = tmp_path / "plain.docx"
+    doc.save(path)
+
+    assert kb._read_source(path) == "One.\n\nTwo."
+
+
+def _word_with_first_row_vmerge_continue(path: Path) -> Path:
+    from docx import Document
+    from docx.oxml import OxmlElement
+
+    doc = Document()
+    doc.add_paragraph("Intro paragraph.")
+    table = doc.add_table(rows=2, cols=2)
+    table.cell(0, 0).text = "Header"
+    table.cell(1, 0).text = "Body"
+    table.cell(1, 1).text = "Value"
+    table.cell(0, 0)._tc.get_or_add_tcPr().append(OxmlElement("w:vMerge"))
+    doc.add_paragraph("Closing paragraph.")
+    doc.save(path)
+    return path
+
+
+def test_a_table_python_docx_cannot_lay_out_still_reads_the_whole_document(tmp_path: Path) -> None:
+    path = _word_with_first_row_vmerge_continue(tmp_path / "bad.docx")
+
+    text = kb._read_source(path)
+
+    assert "Intro paragraph." in text
+    assert "Closing paragraph." in text
+    assert "Header" in text and "Value" in text
+
+
+def test_a_vertically_merged_cell_is_read_once_and_keeps_its_column(tmp_path: Path) -> None:
+    from docx import Document
+
+    doc = Document()
+    table = doc.add_table(rows=3, cols=2)
+    table.cell(0, 0).text = "Region"
+    table.cell(0, 1).text = "Sales"
+    table.cell(1, 0).text = "North"
+    table.cell(1, 1).text = "10"
+    table.cell(2, 1).text = "20"
+    table.cell(1, 0).merge(table.cell(2, 0))
+    path = tmp_path / "v.docx"
+    doc.save(path)
+
+    lines = kb._read_source(path).splitlines()
+
+    assert lines == ["Region | Sales", "North | 10", " | 20"]
+
+
+def test_a_nested_table_keeps_its_rows_apart_inside_the_cell(tmp_path: Path) -> None:
+    from docx import Document
+
+    doc = Document()
+    outer = doc.add_table(rows=1, cols=2)
+    outer.cell(0, 0).text = "Outer"
+    inner = outer.cell(0, 1).add_table(rows=2, cols=1)
+    inner.cell(0, 0).text = "n1"
+    inner.cell(1, 0).text = "n2"
+    path = tmp_path / "n.docx"
+    doc.save(path)
+
+    assert "Outer | n1; n2" in kb._read_source(path)
+
+
+def test_a_table_with_nothing_in_it_adds_nothing(tmp_path: Path) -> None:
+    from docx import Document
+
+    doc = Document()
+    doc.add_paragraph("Only text.")
+    doc.add_table(rows=2, cols=2)
+    path = tmp_path / "empty.docx"
+    doc.save(path)
+
+    assert kb._read_source(path) == "Only text."
+
+
+def test_ingest_sends_a_word_table_to_the_synthesizer(tmp_home: Path, tmp_path: Path, monkeypatch, stub_embedder) -> None:
+    _ingest_bundle(tmp_home, tmp_path, monkeypatch)
+    seen = _capture_prompt(monkeypatch, _proposal(_proposed("sources/plans.md", page_type="source")))
+    path = _docx_with_table(tmp_path / "plans.docx", [["Plan", "Price"], ["Pro", "20"]])
+
+    result = kb.Knowledge().run(action="ingest", source_path=str(path), apply=False)
+
+    assert result.ok, result.error
+    excerpt = seen["payload"]["source_excerpt"]
+    assert excerpt.index("Before the table.") < excerpt.index("Pro | 20") < excerpt.index("After the table.")

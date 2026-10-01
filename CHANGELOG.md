@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.16.14 — 2026-10-01 — ingest says what it cut and keeps Word tables
+
+- **Knowledge ingest and maintain report how much of a source the model read.** Results carry
+  `source_budget` with the characters available, used and whether the source was cut, and the
+  model is told the same, so a long source is no longer silently summarised from its first
+  12,000 characters.
+- **Word tables are no longer lost.** A DOCX now keeps its tables in the order they appear, one
+  line per row with the cells separated by ` | `; empty rows are skipped and a merged cell is
+  read once.
+
 ## v0.16.13 — 2026-10-01 — memory edits keep an accent with its letter
 
 - **Replacing or removing text in memory no longer leaves a loose accent behind.** When a note
