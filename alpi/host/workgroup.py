@@ -402,6 +402,27 @@ def fold_task_state(home: Path, wg_id: str) -> dict[str, Any]:
     return _cache_fold(cache_key, stamp, out)
 
 
+_NOTE_FITS = 24
+
+
+def pipeline_note(home: Path, wg_id: str, queued_pipeline: str | None = None) -> str:
+    run = fold_task_state(home, wg_id).get("pipeline_run")
+    if not isinstance(run, dict):
+        return ""
+    phases = run.get("phases") or []
+    done = [p["slug"] for p in phases if p.get("state") == "completed"]
+    if not done:
+        return ""
+    waiting = queued_pipeline or None
+    if waiting is None and run.get("status") == "between":
+        waiting = next((p["slug"] for p in phases if p.get("state") == "pending"), None)
+    tail = f" · {waiting} next" if waiting else ""
+    named = f"{', '.join(done)} done"
+    if len(done) > 1 and len(named) + len(tail) > _NOTE_FITS:
+        named = f"{len(done)} done"
+    return named + tail
+
+
 def _cache_fold(key: str, stamp: tuple, out: dict[str, Any]) -> dict[str, Any]:
     with _FOLD_CACHE_LOCK:
         if len(_FOLD_CACHE) >= _FOLD_CACHE_CAP:

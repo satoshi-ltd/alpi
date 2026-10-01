@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.16.20 — 2026-10-01 — a workgroup row says what finished as well as what runs
+
+- **Workgroup rows carry a `pipeline_note`** such as `setup done · media next`: the phases of the current run
+  that finished and, when a queued pipeline or the next phase waits, which one. A queued workgroup used to
+  read only `queued`, hiding that its setup was complete.
+- **`alpi workgroup list` prints the same note** after the row; a workgroup with nothing finished prints none.
+
 ## v0.16.19 — 2026-10-01 — a daemon says whether it can update itself
 
 - **`host.version` now reports `installer` and `self_update`.** A Docker or source-checkout daemon

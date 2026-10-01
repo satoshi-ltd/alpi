@@ -845,6 +845,7 @@ def _aggregate_workgroups(
                 pipeline_phase = _pipeline_phase(home, str(row.get("id") or ""))
                 if pipeline_phase:
                     row["pipeline_phase"] = pipeline_phase
+            _add_pipeline_note(row, home, queue_item)
     rows.sort(key=lambda x: int(x.get("mtime") or 0), reverse=True)
     return rows
 
@@ -1467,6 +1468,16 @@ def _pipeline_phase(home: Path, wg_id: str) -> str | None:
     return str(run.get("current_phase") or "") or None
 
 
+def _add_pipeline_note(row: dict[str, Any], home: Path, queue_item: dict[str, Any] | None) -> None:
+    from alpi.host import workgroup as host_workgroup
+
+    note = host_workgroup.pipeline_note(
+        home, str(row.get("id") or ""), queue_item.get("pipeline") if queue_item else None,
+    )
+    if note:
+        row["pipeline_note"] = note
+
+
 def _hub_workgroups(
     home: Path, profile: str, *, include_pipeline_status: bool = False,
 ) -> list[dict[str, Any]]:
@@ -1524,6 +1535,7 @@ def _hub_workgroups(
                 pipeline_phase = _pipeline_phase(home, path.name)
                 if pipeline_phase:
                     row["pipeline_phase"] = pipeline_phase
+            _add_pipeline_note(row, home, queue_item)
         out.append(row)
     return out
 
@@ -1579,6 +1591,8 @@ def _subscribed_workgroups(
                 pipeline_phase = _pipeline_phase(home, sub.wg_id)
                 if pipeline_phase:
                     row["pipeline_phase"] = pipeline_phase
+            if sub.pipeline_mode:
+                _add_pipeline_note(row, home, None)
         out.append(row)
     return out
 

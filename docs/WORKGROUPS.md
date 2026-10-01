@@ -860,7 +860,8 @@ are separate surfaces. `host.workgroups.list` returns the definitions
 without decrypting anything by default. Inventory clients can request
 `include_pipeline_status: true`; the daemon then uses the same cached
 task-ledger fold as `host.workgroup.tasks` and adds its status to each
-row. The full task response adds `pipeline_run`:
+row, plus `pipeline_note` when the run has finished phases (`setup done ·
+media next`; a long list of finished phases collapses to a count). The full task response adds `pipeline_run`:
 
 ```json
 {

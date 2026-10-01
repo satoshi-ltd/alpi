@@ -91,10 +91,12 @@ WebSocket or implement a second run-to-chat reconstruction path.
 
 | Method | Params | Returns |
 |---|---|---|
-| `host.workgroups.list` | `profile?`, `include_pipeline_status?` | `{ workgroups: [{ id, profile, name, members, is_hub, hub_id, pipeline_status?, queued_pipeline?, queue_position?, … }] }` |
+| `host.workgroups.list` | `profile?`, `include_pipeline_status?` | `{ workgroups: [{ id, profile, name, members, is_hub, hub_id, pipeline_status?, queued_pipeline?, queue_position?, pipeline_note?, … }] }` |
 | `host.workgroup.post` | `profile`, `wg_id`, `text` | `{ ok, seq }` |
 | `host.workgroup.transcript` | `profile`, `wg_id`, `after_seq?`, `limit?`, `tail?` | `{ posts: [{ seq, at, from, body, cost }], next_seq, limit }` |
 | `host.workgroup.tasks` | `profile`, `wg_id` | `{ active, closed, blocked, pipeline_run }` |
+
+`pipeline_note` (with `include_pipeline_status`) is one display string for a row whose current run has finished phases (`intake, content done · shoot next`; a long list of finished phases collapses to `3 done · edit next`); the row omits it when nothing finished. The desktop list and `alpi workgroup list` print it.
 
 The token acts as a local member profile; the daemon holds that profile's
 keys and does the group crypto. `create`/`update`/`add_member`/`kick`/

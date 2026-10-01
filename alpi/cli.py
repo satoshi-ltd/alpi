@@ -4212,6 +4212,7 @@ def workgroup_list(ctx: click.Context) -> None:
     if hub:
         click.echo("hub of:")
         from alpi.alp import pipeline_queue
+        from alpi.host import workgroup as host_workgroup
         queued = pipeline_queue.positions(h)
         maximum, origin = pipeline_queue.limit_origin(h)
         click.echo(
@@ -4225,10 +4226,13 @@ def workgroup_list(ctx: click.Context) -> None:
                 f" [queued {queue_item['pipeline']} #{queue_item['position']}]"
                 if queue_item else ""
             )
+            progress = host_workgroup.pipeline_note(
+                h, w.meta.id, queue_item["pipeline"] if queue_item else None,
+            )
             click.echo(
                 f"  {w.meta.id}  {w.meta.name}  ({len(w.members)} members)"
                 f"{_pipelines_summary(w.meta.pipelines, w.meta.launch_pipeline)}"
-                f"{paused}{queue_note}"
+                f"{paused}{queue_note}{f'  — {progress}' if progress else ''}"
             )
     if sub:
         click.echo("member of:")

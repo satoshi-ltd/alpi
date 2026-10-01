@@ -283,3 +283,38 @@ def test_limit_sets_and_reports_the_admission_cap(short_tmp: Path, monkeypatch) 
     assert "max_active_workgroups" not in (cfg_mod.load(home).raw.get("alp") or {})
     assert _run(monkeypatch, home, ["workgroup", "limit", "-1"]).exit_code != 0
     assert _run(monkeypatch, root, ["workgroup", "limit", "--inherit"]).exit_code != 0
+
+
+def test_list_prints_what_finished_and_what_waits(short_tmp: Path, monkeypatch) -> None:
+    from tests.host.test_workgroup_pipeline_run import _append
+
+    home = short_tmp / "profiles" / "hub"
+    wg = _hub(home)
+    _append(home, wg.meta.id, "@scout #task #setup gather the brief")
+    _append(home, wg.meta.id, "#done ready")
+
+    out = _run(monkeypatch, home, ["workgroup", "list"]).output
+
+    assert "— setup done · build next" in out
+
+
+def test_list_prints_no_note_for_a_workgroup_that_has_not_finished_a_phase(short_tmp: Path, monkeypatch) -> None:
+    home = short_tmp / "profiles" / "hub"
+    _hub(home)
+
+    assert "done" not in _run(monkeypatch, home, ["workgroup", "list"]).output
+
+
+def test_list_prints_the_note_of_a_queued_workgroup(short_tmp: Path, monkeypatch) -> None:
+    from alpi.alp import pipeline_queue
+    from tests.host.test_workgroup_pipeline_run import _append
+
+    home = short_tmp / "profiles" / "hub"
+    wg = _hub(home)
+    _append(home, wg.meta.id, "@scout #task #setup gather the brief")
+    _append(home, wg.meta.id, "#done ready")
+    pipeline_queue.enqueue(home, wg.meta.id, "media-update")
+
+    out = _run(monkeypatch, home, ["workgroup", "list"]).output
+
+    assert "[queued media-update #1]  — setup done · media-update next" in out
