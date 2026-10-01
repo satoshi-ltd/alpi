@@ -1,5 +1,5 @@
-from gen import DOC_ACCENT, ic, page, usage_chart
-from desktop_boards import AMBER, HOVER, INK, INK2, INK3, INK4, LINE, LINE2, PANE, MONO, SIDE, diamond_stack, row, section
+from gen import DOC_ACCENT, ic, page
+from desktop_boards import AMBER, HOVER, INK, INK2, INK3, INK4, LINE, LINE2, PANE, MONO, SIDE, diamond_stack, row
 from conversation_boards import h1, label, mono, spec
 
 PAGE_W = 1280
@@ -9,26 +9,6 @@ COLUMN_PAD = 20
 def drawing(title, inner):
     return f'<div style="flex: 1; min-width: 0; display: flex; flex-direction: column">{spec(title, inner, pad=COLUMN_PAD)}</div>'
 
-
-COST_DAYS = [("W", 0.16, 0.02), ("T", 0.22, 0.02), ("F", 0.08, 0.01), ("S", 0.18, 0.02), ("S", 0.96, 0.06), ("M", 0.10, 0.01),
-             ("T", 0.14, 0.02), ("W", 0.15, 0.02), ("T", 0.06, 0.01), ("F", 0.13, 0.02), ("S", 0.09, 0.01), ("S", 0.30, 0.02),
-             ("M", 0.26, 0.03), ("T", 0.12, 0.02)]
-
-
-def usage_tooltip():
-    line = lambda name, value: f'<div style="display: flex; justify-content: space-between; gap: 24px; font-size: 12px; color: {INK2}"><span>{name}</span>{mono(value, 11, INK2)}</div>'
-    return (f'<div style="align-self: flex-start; display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 10px; background: {PANE}; border: 0.5px solid {LINE2}">'
-            f'<span style="font-size: 12px; font-weight: 600; color: {INK}">Sat</span>{mono("$0.42", 14, INK, 600)}'
-            f'{line("in", "1.2M")}{line("out", "18K")}</div>')
-
-
-def usage_now():
-    return section("Usage", "last 14 days", usage_chart(DOC_ACCENT, "$0.00", "102K", "831", "$1.00", "100% left", "bars by tokens · 14-day total $1.61"), first=True)
-
-
-def usage_proposed():
-    chart = usage_chart(DOC_ACCENT, "$0.00", "102K", "831", "$1.00", "100% left", "bars by cost · 14-day total $1.61", days=COST_DAYS)
-    return section("Usage", "last 14 days", chart + f'<div style="height: 16px"></div>{usage_tooltip()}', first=True)
 
 def cap(text):
     return mono(text, 11, INK3)
@@ -194,17 +174,6 @@ def empty_proposed():
 
 
 PROPOSALS = [
-    {
-        "id": "UX.8",
-        "client": "desktop",
-        "area": "Settings · Usage",
-        "title": "Usage bars follow the cost when the profile pays",
-        "why": "The bars are sized by tokens while the headline and the daily cap are dollars; with prompt caching a heavy token day can cost little, so the tallest bar is not the expensive day.",
-        "now": usage_now,
-        "proposed": usage_proposed,
-        "accept": "A window with any cost draws bars proportional to dollars, and hovering a bar shows the cost with input and output tokens. A window where every day is free draws tokens as today.",
-        "h": 760,
-    },
     {
         "id": "UI-WG.STATUS",
         "client": "desktop",

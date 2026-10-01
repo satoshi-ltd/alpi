@@ -306,6 +306,11 @@ def desktop_chat():
     return page("Desktop · chat", 1280, 800, body, bg=BG)
 
 
+COST_DAYS = [("W", 0.16, 0.02), ("T", 0.22, 0.02), ("F", 0.08, 0.01), ("S", 0.18, 0.02), ("S", 0.96, 0.06), ("M", 0.10, 0.01),
+             ("T", 0.14, 0.02), ("W", 0.15, 0.02), ("T", 0.06, 0.01), ("F", 0.13, 0.02), ("S", 0.09, 0.01), ("S", 0.30, 0.02),
+             ("M", 0.26, 0.03), ("T", 0.12, 0.02)]
+
+
 WG_SECTIONS = ("Overview", "Budget", "Usage", "Briefing", "Pipelines", "Members", "Invitations", "Danger zone")
 PROFILE_SECTIONS = ("Overview", "Usage", "Service", "ALP", "Sandbox", "Voice", "MCP Servers", "Email", "Storage", "Danger Zone")
 
@@ -337,7 +342,7 @@ def desktop_profile_settings():
             row("workspace", field_input("/data/workspace/doc") + button("Browse…", "ghost", "sm")),
             row("accent", selectish(f'<span style="display: inline-flex; align-items: center; gap: 8px">{small_diamond(DOC_ACCENT)}#3d7ea6</span>')),
         ]), first=True)
-        + section("Usage", "last 14 days", usage_chart())
+        + section("Usage", "last 14 days", usage_chart(days=COST_DAYS, footer="bars by cost · 30-day total $1.61 · 17.2M in / 277K out"))
         + section("Service", "daemon + network", row("daemon", button("Update alpi", "ghost", "sm") + button("Restart daemon", "ghost", "sm")))
         + section("Service", "daemon that cannot update itself", row("daemon", button("Restart daemon", "ghost", "sm")))
         + section("ALP", "peers + workgroups", ''.join([
@@ -387,7 +392,7 @@ def desktop_wg_settings():
             row("id", mono12("wg_4f2a…9c1e") + button("Copy", "ghost", "sm")),
         ]))
         + section("Budget", "workgroup spend cap", row("used", f'<div style="flex: 1; display: flex; flex-direction: column; gap: 10px"><div style="display: flex; align-items: baseline; gap: 10px"><span style="font-size: 28px; font-weight: 600; letter-spacing: -0.018em; line-height: 1">$0.40</span><span style="font-family: {MONO}; font-size: 12px; color: {INK3}">of <span style="color: {INK2}">$5.00</span> · 8%</span><span style="flex: 1"></span>{selectish("Edit cap")}</div><div style="height: 6px; border-radius: 16px; background: {LINE}; overflow: hidden"><div style="width: 8%; height: 100%; background: {ALPI_ACCENT}"></div></div></div>', align_top=True))
-        + section("Usage", "last 14 days", usage_chart(ALPI_ACCENT, "$0.00", "12K", "310", None, None, "14-day total $0.40 · 0.9M in / 22K out"))
+        + section("Usage", "last 14 days", usage_chart(ALPI_ACCENT, "$0.00", "12K", "310", None, None, "bars by cost · 14-day total $0.40 · 0.9M in / 22K out"))
         + section("Briefing", "what this workgroup decides", row("brief", f'<div style="flex: 1; display: flex; flex-direction: column; gap: 8px">{textarea("Weekly digest of lab results for the household; doc leads, alpi formats, yuri translates.", rows=4)}<div style="display: flex; max-width: 520px"><span style="flex: 1"></span>{button("Draft", "ghost", "sm")}</div></div>', align_top=True))
         + section("Pipelines", "declared chains the hub runs", row("daily-digest", chip("launch", "on", "sm") + stages))
         + section("Members", "3 profiles", member_row("doc", DOC_ACCENT, "Ancestral, lab-savvy personal doctor; food-first, skeptical of mainstream dogma", hub=True)

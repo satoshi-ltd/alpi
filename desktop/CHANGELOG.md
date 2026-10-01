@@ -11,6 +11,16 @@ schemes:
 The desktop app is a host-plane client of a local ``alpi``
 daemon. Each release pins a minimum compatible alpi version.
 
+## v0.7.7 — 2026-10-01 — Usage bars follow the cost when the profile pays
+
+- **The Usage bars are sized by dollars when any day in the window cost something,** so a heavy
+  token day that prompt caching made cheap is no longer the tallest bar. Hovering a bar still shows
+  its cost with the input and output tokens.
+- **A window where every day is free, as with a local model, keeps drawing tokens.** The footer now
+  says which one the bars show.
+
+  Requires alpi 0.16.1.
+
 ## v0.7.6 — 2026-10-01 — Storage is one inventory
 
 - **Each storage group carries its own actions.** A group shows its size and file count with a Clean

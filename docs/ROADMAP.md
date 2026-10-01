@@ -77,14 +77,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
   protected variables. The map is listed in the takes-effect table of
   [CONFIG.md](CONFIG.md#tools) and in the packaged config reference.
 
-- **UX.8** — Usage bars by cost when the profile pays
-  `ui · desktop · agent · normal`
-  note: [Usage.jsx](../desktop/src/features/settings/Usage.jsx) sizes bars by
-  tokens (`maxTok`) while the headline and the daily cap are dollars; with prompt
-  caching they diverge. [ledger.py](../alpi/ledger.py) already keeps both per day.
-  accept: the board UX.8. No new verb; a component test renders a mixed window;
-  both client suites pass; the changelog entry pins no new alpi minimum.
-
 ## In progress
 
 _None._
@@ -150,6 +142,16 @@ _None._
   fired from the old copy.
   accept: each job is re-read from `jobs.json` just before it fires and skipped if it is gone,
   paused or no longer due; a test removes the second job during the first run and it does not fire.
+- **CHART.1** — The mobile Usage chart follows the cost too
+  `feature · mobile, common · agent · normal`
+  note: found while reviewing UX.8. Desktop sizes bars by dollars when any day cost something, but
+  [UsageChart.jsx](../mobile/src/components/UsageChart.jsx) still scales by tokens through `usageScale` in
+  [usage.mjs](../common/usage.mjs), so one profile draws a different tallest bar on each client. Desktop's in/out
+  split in cost mode is price-weighted from fixed constants because the ledger keeps one cost per day; on
+  cache-heavy days it understates the output share.
+  accept: `byCost` and `sizeOf` live in `common/usage.mjs` and both clients use them; mobile gets the same
+  thin-bar minimum and a "bars by" footer; a component test renders a mixed window on each client; the creator
+  decides first whether cost mode keeps the in/out split or draws one tone.
 - **SCOPE.8** — A member device's `terminal` reads every session of the profile
   `bug · alpi · agent · high`
   note: found by the SCOPE.4 inventory. Members keep the `terminal` tool, it exports

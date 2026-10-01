@@ -173,3 +173,90 @@ describe("Usage empty range", () => {
     expect(screen.getByText("Avg / day")).toBeInTheDocument();
   });
 });
+
+describe("Usage bars follow the cost when the window pays", () => {
+  const barPx = (container, iso) =>
+    parseFloat(container.querySelector(`[data-day="${iso}"] > div:last-child`).style.height);
+
+  const mixed = [
+    { iso: "2026-06-01", day: "6/1", label: "M", tokIn: 9_000_000, tokOut: 100_000, cost: 0.05 },
+    { iso: "2026-06-02", day: "6/2", label: "T", tokIn: 400_000, tokOut: 50_000, cost: 0.4 },
+    { iso: "2026-06-03", day: "6/3", label: "W", tokIn: 0, tokOut: 0, cost: 0 },
+    { iso: "2026-06-04", day: "6/4", label: "T", tokIn: 200_000, tokOut: 20_000, cost: 0.2, today: true },
+  ];
+
+  it("sizes bars by dollars: the heavy cached token day is not the tallest", () => {
+    const { container } = render(<Usage days={mixed} accent="#3fb37a" />);
+
+    const heavy = barPx(container, "2026-06-01");
+    const dear = barPx(container, "2026-06-02");
+    const today = barPx(container, "2026-06-04");
+    expect(dear).toBeGreaterThan(today);
+    expect(today).toBeGreaterThan(heavy);
+    expect(dear / today).toBeCloseTo(2, 2);
+    expect(barPx(container, "2026-06-03")).toBe(0);
+    expect(screen.getByText(/bars by cost/)).toBeTruthy();
+  });
+
+  it("keeps a thin bar for a free day that did work inside a paid window", () => {
+    const days = [
+      { iso: "2026-06-01", day: "6/1", label: "M", tokIn: 5_000_000, tokOut: 0, cost: 0 },
+      { iso: "2026-06-02", day: "6/2", label: "T", tokIn: 100_000, tokOut: 10_000, cost: 0.5, today: true },
+    ];
+    const { container } = render(<Usage days={days} accent="#3fb37a" />);
+
+    expect(barPx(container, "2026-06-01")).toBe(3);
+  });
+
+  it("draws tokens when every day is free, as a local model does", () => {
+    const days = [
+      { iso: "2026-06-01", day: "6/1", label: "M", tokIn: 4_000_000, tokOut: 0, cost: 0 },
+      { iso: "2026-06-02", day: "6/2", label: "T", tokIn: 1_000_000, tokOut: 0, cost: 0, today: true },
+    ];
+    const { container } = render(<Usage days={days} accent="#3fb37a" />);
+
+    expect(barPx(container, "2026-06-01") / barPx(container, "2026-06-02")).toBeCloseTo(4, 0);
+    expect(screen.getByText(/bars by tokens/)).toBeTruthy();
+  });
+
+  it("splits a paid bar by the price-weighted output share", () => {
+    const days = [{ iso: "2026-06-01", day: "6/1", label: "M", tokIn: 1_000_000, tokOut: 250_000, cost: 0.3, today: true }];
+    const { container } = render(<Usage days={days} accent="#3fb37a" />);
+
+    const bar = container.querySelector('[data-day="2026-06-01"] > div:last-child');
+    const out = parseFloat(bar.firstElementChild.style.height);
+    const total = parseFloat(bar.style.height);
+    expect(out / total).toBeCloseTo((250_000 * PRICE_OUT) / (1_000_000 * PRICE_IN + 250_000 * PRICE_OUT), 2);
+  });
+
+  it("makes the only paid day nearly full height beside free days", () => {
+    const days = [
+      { iso: "2026-06-01", day: "6/1", label: "M", tokIn: 1_000_000, tokOut: 0, cost: 0 },
+      { iso: "2026-06-02", day: "6/2", label: "T", tokIn: 10_000, tokOut: 1_000, cost: 0.2, today: true },
+    ];
+    const { container } = render(<Usage days={days} accent="#3fb37a" />);
+
+    expect(barPx(container, "2026-06-02")).toBeGreaterThan(90);
+    expect(barPx(container, "2026-06-01")).toBe(3);
+  });
+
+  it("draws a day that cost money without tokens", () => {
+    const days = [
+      { iso: "2026-06-01", day: "6/1", label: "M", tokIn: 0, tokOut: 0, cost: 0.4, today: true },
+      { iso: "2026-06-02", day: "6/2", label: "T", tokIn: 0, tokOut: 0, cost: 0.2 },
+    ];
+    const { container } = render(<Usage days={days} accent="#3fb37a" />);
+
+    expect(barPx(container, "2026-06-01") / barPx(container, "2026-06-02")).toBeCloseTo(2, 2);
+  });
+
+  it("still shows cost with input and output tokens when hovering a bar", () => {
+    const { container } = render(<Usage days={mixed} accent="#3fb37a" />);
+
+    fireEvent.mouseEnter(container.querySelector('[data-day="2026-06-02"]'));
+
+    expect(screen.getByText("$0.40")).toBeTruthy();
+    expect(screen.getByText("400K")).toBeTruthy();
+    expect(screen.getByText("50K")).toBeTruthy();
+  });
+});

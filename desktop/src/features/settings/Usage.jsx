@@ -19,6 +19,12 @@ function tokensOf(d) {
   return (d.tokIn || 0) + (d.tokOut || 0);
 }
 
+function outShareOf(d) {
+  const out = (d.tokOut || 0) * PRICE_OUT;
+  const total = (d.tokIn || 0) * PRICE_IN + out;
+  return total > 0 ? out / total : 0;
+}
+
 export default function Usage({ days = [], accent = "var(--accent)", capLine = null, total30 = null }) {
   const [hover, setHover] = useState(null);
   if (!days.length) return null;
@@ -28,8 +34,10 @@ export default function Usage({ days = [], accent = "var(--accent)", capLine = n
   const totOut = days.reduce((s, d) => s + (d.tokOut || 0), 0);
   const totCost = days.reduce((s, d) => s + costOf(d), 0);
   const avg = totCost / days.length;
-  const maxTok = Math.max(0, ...days.map(tokensOf));
-  const scale = (maxTok || 1) * SCALE_HEADROOM;
+  const byCost = days.some((d) => (d.cost || 0) > 0);
+  const sizeOf = byCost ? costOf : tokensOf;
+  const maxSize = Math.max(0, ...days.map(sizeOf));
+  const scale = (maxSize || 1) * SCALE_HEADROOM;
 
   const empty = !days.some((d) => tokensOf(d) > 0 || costOf(d) > 0);
   const capNum = typeof capLine === "number" && capLine > 0 ? capLine : null;
@@ -74,10 +82,13 @@ export default function Usage({ days = [], accent = "var(--accent)", capLine = n
         <div className={styles.track}>
           {days.map((d, i) => {
             const tok = tokensOf(d);
-            const totalPx = (tok / scale) * CHART_H;
-            const outPx = tok > 0 ? Math.min(totalPx, ((d.tokOut || 0) / scale) * CHART_H) : 0;
-            const dim = hover != null && hover !== i;
+            const size = sizeOf(d);
             const hasData = tok > 0 || costOf(d) > 0;
+            const totalPx = (size / scale) * CHART_H;
+            const outPx = byCost
+              ? totalPx * outShareOf(d)
+              : tok > 0 ? Math.min(totalPx, ((d.tokOut || 0) / scale) * CHART_H) : 0;
+            const dim = hover != null && hover !== i;
             return (
               <div
                 key={d.iso}
@@ -109,7 +120,7 @@ export default function Usage({ days = [], accent = "var(--accent)", capLine = n
                 )}
                 <div
                   className={`${styles.bar} ${dim ? styles.dim : ""} ${d.today ? styles.barToday : ""}`}
-                  style={{ height: `${Math.max(tok > 0 ? 3 : 0, totalPx)}px` }}
+                  style={{ height: `${Math.max(hasData ? 3 : 0, totalPx)}px` }}
                 >
                   <div className={styles.barOut} style={{ height: `${outPx}px` }} />
                   <div className={styles.barIn} />
@@ -141,6 +152,7 @@ export default function Usage({ days = [], accent = "var(--accent)", capLine = n
           output
         </div>
         <div className={`${styles.totals} tnum`}>
+          <span>bars by {byCost ? "cost" : "tokens"} · </span>
           {total30
             ? <>30-day total {usd(total30.cost || 0)} · {fmtTok(total30.tokIn || 0)} in / {fmtTok(total30.tokOut || 0)} out</>
             : <>14-day total {usd(totCost)} · {fmtTok(totIn)} in / {fmtTok(totOut)} out</>}
