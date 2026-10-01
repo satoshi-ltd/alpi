@@ -150,7 +150,8 @@ _None._
   [usage.mjs](../common/usage.mjs), so one profile draws a different tallest bar on each client. The split is
   price-weighted from fixed constants because the ledger keeps one cost per day.
   accept: `byCost` and `sizeOf` live in `common/usage.mjs` and both clients use them; mobile gets the same
-  thin-bar minimum, split and a "bars by" footer; a component test renders a mixed window on each client.
+  thin-bar minimum, split and a "bars by" footer; a window with no cost on any day (a local model) sizes bars by
+  total tokens; a component test renders a mixed window and a free window on each client.
 - **SCOPE.8** — A member device's `terminal` reads every session of the profile
   `bug · alpi · agent · high`
   note: found by the SCOPE.4 inventory. Members keep the `terminal` tool, it exports
