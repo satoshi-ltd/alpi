@@ -144,14 +144,13 @@ _None._
   paused or no longer due; a test removes the second job during the first run and it does not fire.
 - **CHART.1** — The mobile Usage chart follows the cost too
   `feature · mobile, common · agent · normal`
-  note: found while reviewing UX.8. Desktop sizes bars by dollars when any day cost something, but
+  note: found while reviewing UX.8. Desktop sizes bars by dollars when any day cost something, with the
+  input/output split drawn inside each bar (the creator confirmed this design), but
   [UsageChart.jsx](../mobile/src/components/UsageChart.jsx) still scales by tokens through `usageScale` in
-  [usage.mjs](../common/usage.mjs), so one profile draws a different tallest bar on each client. Desktop's in/out
-  split in cost mode is price-weighted from fixed constants because the ledger keeps one cost per day; on
-  cache-heavy days it understates the output share.
+  [usage.mjs](../common/usage.mjs), so one profile draws a different tallest bar on each client. The split is
+  price-weighted from fixed constants because the ledger keeps one cost per day.
   accept: `byCost` and `sizeOf` live in `common/usage.mjs` and both clients use them; mobile gets the same
-  thin-bar minimum and a "bars by" footer; a component test renders a mixed window on each client; the creator
-  decides first whether cost mode keeps the in/out split or draws one tone.
+  thin-bar minimum, split and a "bars by" footer; a component test renders a mixed window on each client.
 - **SCOPE.8** — A member device's `terminal` reads every session of the profile
   `bug · alpi · agent · high`
   note: found by the SCOPE.4 inventory. Members keep the `terminal` tool, it exports
