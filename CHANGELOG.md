@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.16.21 — 2026-10-01 — an unknown owner is not a shared file
+
+- **Recall rechecks device ownership in older indexes**, without rebuilding embeddings.
+  A previously unreadable private session no longer remains classified as shared;
+  its owner is checked again when the session becomes readable.
+- **An unreadable or malformed upload owner marker refuses access** for device-scoped
+  members instead of exposing the upload as legacy-shared. Uploads without a marker
+  keep their existing compatibility window.
+- **A failed package-manager probe is retried** on the next update-capability check,
+  so a temporary failure does not hide self-update for the rest of the daemon's life.
+
 ## v0.16.20 — 2026-10-01 — a workgroup row says what finished as well as what runs
 
 - **Workgroup rows carry a `pipeline_note`** such as `setup done · media next`: the phases of the current run

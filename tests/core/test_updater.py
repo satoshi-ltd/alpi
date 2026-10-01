@@ -30,6 +30,7 @@ def _outside_a_container(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("ALPI_PLATFORM", raising=False)
     monkeypatch.delenv("ALPI_DEPLOY_RUNTIME", raising=False)
     monkeypatch.setattr(updater, "_installer_memo", None)
+    monkeypatch.setattr(updater, "_installer_guess", None)
 
 
 def _write_cache(home: Path, latest: str, current: str,
@@ -552,7 +553,44 @@ def test_a_package_manager_that_times_out_is_not_remembered_as_a_source_install(
         return MagicMock(returncode=0, stdout="alpi-agent v1\n")
 
     monkeypatch.setattr(updater.subprocess, "run", answer)
+    monkeypatch.setattr(updater, "_installer_guess", None)
     assert updater.install_kind() == "uv"
+
+
+@pytest.mark.parametrize("manager", ["uv", "pipx"])
+def test_a_failed_package_listing_is_retried(monkeypatch, manager):
+    monkeypatch.setattr(updater, "_installer_memo", None)
+    monkeypatch.setattr(updater.shutil, "which", lambda name: f"/fake/{name}" if name == manager else None)
+    answers = iter([
+        MagicMock(returncode=1, stdout="", stderr="temporary failure"),
+        MagicMock(returncode=0, stdout="alpi-agent v1\n"),
+    ])
+    monkeypatch.setattr(updater.subprocess, "run", lambda *a, **k: next(answers))
+    clock = [1000.0]
+    monkeypatch.setattr(updater.time, "monotonic", lambda: clock[0])
+    assert updater.install_kind() == "source"
+    assert updater._installer_memo is None
+    clock[0] += updater._UNCERTAIN_RETRY_SECONDS + 1
+    assert updater.install_kind() == manager
+    assert updater.install_kind() == manager
+
+
+def test_a_permanent_package_manager_failure_is_not_probed_on_every_call(monkeypatch):
+    calls = []
+    monkeypatch.setattr(updater.shutil, "which", lambda name: f"/fake/{name}" if name == "uv" else None)
+    monkeypatch.setattr(
+        updater.subprocess, "run",
+        lambda *a, **k: calls.append(1) or MagicMock(returncode=2, stdout="", stderr="tool dir not writable"),
+    )
+    clock = [1000.0]
+    monkeypatch.setattr(updater.time, "monotonic", lambda: clock[0])
+
+    assert [updater.install_kind() for _ in range(5)] == ["source"] * 5
+    assert len(calls) == 1
+
+    clock[0] += updater._UNCERTAIN_RETRY_SECONDS + 1
+    assert updater.install_kind() == "source"
+    assert len(calls) == 2
 
 
 def test_a_source_install_is_remembered_when_every_manager_answered(

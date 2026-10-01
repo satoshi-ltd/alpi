@@ -14,6 +14,7 @@ import shutil
 import socket
 import subprocess
 import threading
+import time
 from pathlib import Path
 
 import httpx
@@ -171,6 +172,8 @@ _DOCKER_HINT = "Set the image tag to {version} in docker-compose.yml, then docke
 _SOURCE_HINT = "Run git pull and restart the daemon."
 _installer_memo: str | None = None
 _installer_lock = threading.Lock()
+_UNCERTAIN_RETRY_SECONDS = 120.0
+_installer_guess: tuple[str, float] | None = None
 
 
 def _probe_installer() -> tuple[str, bool]:
@@ -194,7 +197,10 @@ def _probe_installer() -> tuple[str, bool]:
         except (subprocess.TimeoutExpired, OSError):
             certain = False
             continue
-        if out.returncode == 0 and _PACKAGE_NAME in (out.stdout or ""):
+        if out.returncode != 0:
+            certain = False
+            continue
+        if _PACKAGE_NAME in (out.stdout or ""):
             return kind, True
     return "source", certain
 
@@ -205,12 +211,16 @@ def _detect_installer() -> str:
 
 
 def install_kind() -> str:
-    global _installer_memo
+    global _installer_memo, _installer_guess
     with _installer_lock:
         if _installer_memo is None:
+            if _installer_guess is not None and time.monotonic() < _installer_guess[1]:
+                return _installer_guess[0]
             kind, certain = _probe_installer()
             if not certain:
+                _installer_guess = (kind, time.monotonic() + _UNCERTAIN_RETRY_SECONDS)
                 return kind
+            _installer_guess = None
             _installer_memo = kind
         return _installer_memo
 

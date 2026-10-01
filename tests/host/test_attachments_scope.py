@@ -7,11 +7,11 @@ from pathlib import Path
 import pytest
 import websockets
 
-from alpi import attachments as att
 from alpi.host import attachments_rpc, connections
 from alpi.host import sessions as host_sessions
 from alpi.session import Session, Turn
-from tests.host.test_tcp_listener import _start_security_test_server, short_tmp  # noqa: F401
+from tests.host.test_tcp_listener import _start_security_test_server
+from tests.host.test_tcp_listener import short_tmp as short_tmp
 
 PNG = b"\x89PNG\r\n\x1a\nbytes-of-the-chart"
 
@@ -214,6 +214,45 @@ async def test_dot_dot_after_a_symlink_cannot_borrow_the_lexical_path_of_an_offe
         sneaky = f"{short_tmp}/link/../report.md"
 
         assert _forbidden(await _call(url, b["token"], "host.attachments.fetch", path=sneaky))
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("broken", ["{", "[]", "{}", "null", '{"connection_id": [], "device_id": ""}', "unreadable"])
+async def test_an_invalid_existing_owner_marker_never_grants_access(short_tmp, monkeypatch, broken) -> None:
+    server, url, a, b, *_rest, staged = await _world(short_tmp, monkeypatch, "device")
+    marker = (Path(staged).parent / ".owner").resolve()
+    original = marker.read_text()
+    try:
+        if broken == "unreadable":
+            read = Path.read_text
+
+            def fail_marker(path, *args, **kwargs):
+                if path.resolve() == marker:
+                    raise PermissionError("cannot read owner")
+                return read(path, *args, **kwargs)
+
+            with monkeypatch.context() as patch:
+                patch.setattr(Path, "read_text", fail_marker)
+                assert _forbidden(await _call(url, b["token"], "host.attachments.fetch", path=staged))
+        else:
+            marker.write_text(broken)
+            assert _forbidden(await _call(url, b["token"], "host.attachments.fetch", path=staged))
+            marker.write_text(original)
+        assert _fetch_ok(await _call(url, a["token"], "host.attachments.fetch", path=staged))
+        assert _forbidden(await _call(url, b["token"], "host.attachments.fetch", path=staged))
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_an_upload_with_no_marker_stays_fetchable_for_the_whole_connection(short_tmp, monkeypatch) -> None:
+    server, url, a, b, *_rest, staged = await _world(short_tmp, monkeypatch, "device")
+    try:
+        (Path(staged).parent / ".owner").unlink()
+        assert _fetch_ok(await _call(url, a["token"], "host.attachments.fetch", path=staged))
+        assert _fetch_ok(await _call(url, b["token"], "host.attachments.fetch", path=staged))
     finally:
         await server.stop()
 

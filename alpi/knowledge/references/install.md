@@ -37,7 +37,7 @@ alpi daemon restart
 alpi --version
 ```
 
-`alpi update` only upgrades a `uv tool` or `pipx` install. In Docker it prints "Set the image tag to X.Y.Z in docker-compose.yml, then docker compose up -d"; from a source checkout, "Run git pull and restart the daemon." `host.version` reports `installer` and `self_update` so the apps hide their update button for those.
+`alpi update` only upgrades a `uv tool` or `pipx` install. In Docker it prints "Set the image tag to X.Y.Z in docker-compose.yml, then docker compose up -d"; from a source checkout, "Run git pull and restart the daemon." `host.version` reports `installer` and `self_update` so the apps hide their update button for those. A failed package-manager probe is not cached as a source install; it is retried after two minutes.
 
 Pin older: `uv tool install alpi-agent==0.2.99 --force`.
 

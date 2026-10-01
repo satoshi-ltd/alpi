@@ -319,7 +319,7 @@ def test_a_failed_rebuild_after_embedder_drift_keeps_the_old_index_and_meta(tmp_
         rc.index_sessions(tmp_home, embedder=_FailsMidRebuild(name="drifted", dim=8, fail_on_call=1))
 
     assert _counts(tmp_home) == before
-    assert before["meta"] == {"dim": "16", "embedder": "stub-test", "device_backfill": "2"}
+    assert before["meta"] == {"dim": "16", "embedder": "stub-test", "device_backfill": "v2:2"}
     assert rc.recall(tmp_home, "the React migration to components", k=1)[0]["session_id"] == "react"
 
 
@@ -626,6 +626,31 @@ def test_a_device_whose_chunks_sit_past_the_vec_limit_does_not_crash(tmp_home, s
     res = rc.recall(tmp_home, "the React migration to components", k=3,
                     can_read=lambda row: row["device_id"] == "d1")
     assert isinstance(res, list)
+
+
+def test_a_completed_legacy_backfill_is_reverified_before_recall(tmp_home, stub_embedder):
+    from alpi.core.store import open_store
+    from alpi.host.connection_context import ConnectionContext
+
+    _device_sessions(tmp_home)
+    rc.index_sessions(tmp_home)
+    source = tmp_home / "sessions" / "s_d2.json"
+    original = source.read_text()
+    source.write_text("{")
+    conn = open_store(tmp_home)
+    for table in ("session_files", "session_chunks"):
+        conn.execute(f"UPDATE {table} SET device_id = '' WHERE session_id = 's_d2'")
+    conn.execute("UPDATE session_meta SET value = '2' WHERE key = 'device_backfill'")
+    conn.commit()
+    conn.close()
+    d1 = ConnectionContext("c1", "d1", "remote", "member", session_scope="device")
+    d2 = ConnectionContext("c1", "d2", "remote", "member", session_scope="device")
+
+    assert _recall_as(d1) == {"s_d1", "s_shared"}
+    assert _recall_as(d2) == {"s_shared"}
+    source.write_text(original)
+    assert _recall_as(d2) == {"s_d2", "s_shared"}
+    assert _recall_as(d1) == {"s_d1", "s_shared"}
 
 
 def test_rows_an_older_alpi_writes_after_the_backfill_are_backfilled_on_the_next_query(tmp_home, stub_embedder):

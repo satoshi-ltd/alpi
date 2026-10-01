@@ -130,8 +130,8 @@ def _session_device(row: sqlite3.Row, sessions_dir: Path) -> str | None:
 def _migrate_device_id(conn: sqlite3.Connection) -> None:
     for table in ("session_files", "session_chunks"):
         _add_column(conn, table, "device_id TEXT NOT NULL DEFAULT ''")
-    # The flag (blank-row count) commits with the backfill, so an interrupted pass or rows from an older alpi rerun it; unverified rows always retry but write only when a file has become readable.
-    flag, blank = _get_meta(conn, "device_backfill"), _blank_devices(conn)
+    # The v2:-prefixed blank-row count commits with the backfill, so an interrupted pass or rows from an older alpi rerun it; unverified rows always retry but write only when a file has become readable.
+    flag, blank = _get_meta(conn, "device_backfill"), _device_backfill_stamp(conn)
     if flag == blank and not _unverified_devices(conn):
         return
     main = next(r for r in conn.execute("PRAGMA database_list").fetchall() if r["name"] == "main")
@@ -144,7 +144,7 @@ def _migrate_device_id(conn: sqlite3.Connection) -> None:
         target = UNVERIFIED_DEVICE if device is None else device
         if target != row["device_id"]:
             _set_owner(conn, row["session_id"], None, target)
-    settled = _blank_devices(conn)
+    settled = _device_backfill_stamp(conn)
     if flag != settled:
         _set_meta(conn, "device_backfill", settled)
 
@@ -155,8 +155,9 @@ def _unverified_devices(conn: sqlite3.Connection) -> int:
     ).fetchone()["n"]
 
 
-def _blank_devices(conn: sqlite3.Connection) -> str:
-    return str(conn.execute("SELECT COUNT(*) AS n FROM session_files WHERE device_id = ''").fetchone()["n"])
+def _device_backfill_stamp(conn: sqlite3.Connection) -> str:
+    count = conn.execute("SELECT COUNT(*) AS n FROM session_files WHERE device_id = ''").fetchone()["n"]
+    return f"v2:{count}"
 
 
 def _set_owner(conn: sqlite3.Connection, session_id: str, connection_id: str | None, device_id: str) -> None:
@@ -273,7 +274,7 @@ def index_sessions(
             if sid not in seen and not Path(row["source_path"]).exists():
                 _delete_session(conn, sid)
                 removed += 1
-        _set_meta(conn, "device_backfill", _blank_devices(conn))
+        _set_meta(conn, "device_backfill", _device_backfill_stamp(conn))
         conn.commit()
         total_sessions = conn.execute("SELECT COUNT(*) AS n FROM session_files").fetchone()["n"]
         total_chunks = conn.execute("SELECT COUNT(*) AS n FROM session_chunks").fetchone()["n"]

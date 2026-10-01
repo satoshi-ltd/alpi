@@ -120,6 +120,9 @@ checkout: it prints the manual step instead (set the new image tag in
 the daemon), and the desktop and mobile apps show the same step instead of an
 update button.
 
+If a package-manager listing fails, the next check retries detection instead of
+remembering the installation as a source checkout for the rest of the process.
+
 `alpi update --check` does just the check and tells you whether
 an upgrade exists, without installing anything, and it queries
 PyPI whenever you run it. `ALPI_SKIP_UPDATE_CHECK=1` stops only

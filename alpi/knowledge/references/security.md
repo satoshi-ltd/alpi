@@ -244,8 +244,11 @@ authorised for a profile can fetch any image under those roots by path (broader
 than "an image in this chat"); intentional but a real read surface. On a
 connection whose sessions are private to each device (`session_scope: device`)
 a member device fetches only what it staged itself or what appears in its own
-sessions (attachments, output attachments, tool args and results, the assistant's
-text, never a path the user typed); admins and the local socket are not narrowed. Documents
+sessions. Offered paths come from its own sessions (attachments, output
+attachments, tool args and results, the assistant's text, never a path the user
+typed). An upload with no `.owner` marker remains legacy-shared until its TTL; an
+existing unreadable or malformed marker refuses access. Admins and the local
+socket are not narrowed. Documents
 are served only from the profile's `out/`, the workspace and the upload staging
 area, and only those are offered as attachments; `attach_file` refuses the rest.
 A remote device's chat attachments must be files uploaded to the profile's

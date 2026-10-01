@@ -131,9 +131,18 @@ def _staged_owner(home: Path, real: Path) -> dict[str, str] | None:
         return None
     try:
         owner = json.loads((_stage_root(home).resolve() / relative.parts[0] / _OWNER_FILE).read_text())
-    except (OSError, ValueError):
+    except FileNotFoundError:
         return {}
-    return owner if isinstance(owner, dict) else {}
+    except (OSError, ValueError):
+        raise host_server.HandlerError(-32001, "forbidden", {"detail": "upload owner cannot be verified"}) from None
+    if (
+        not isinstance(owner, dict)
+        or not isinstance(owner.get("connection_id"), str)
+        or not owner["connection_id"]
+        or not isinstance(owner.get("device_id"), str)
+    ):
+        raise host_server.HandlerError(-32001, "forbidden", {"detail": "upload owner cannot be verified"})
+    return owner
 
 
 def _device_bound(ctx: Any) -> bool:
