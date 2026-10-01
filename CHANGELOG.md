@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.16.15 — 2026-10-01 — an unchanged knowledge page is not embedded again
+
+- **Indexing the knowledge base no longer re-embeds a page whose content did not change.** The
+  index used to decide by file time and size, so touching or re-saving a page paid for another
+  embedding, and an edit that kept the size and restored the time was missed. It now compares a
+  fingerprint of the page: unchanged pages are skipped, edited pages are re-embedded, and a page
+  whose only change is its tags, type, date or sources is refreshed in place without embedding.
+  An existing index gains the fingerprint on its next indexing, without a rebuild.
+
 ## v0.16.14 — 2026-10-01 — ingest says what it cut and keeps Word tables
 
 - **Knowledge ingest and maintain report how much of a source the model read.** Results carry

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import shutil
 from pathlib import Path
@@ -2583,3 +2584,176 @@ def test_ingest_sends_a_word_table_to_the_synthesizer(tmp_home: Path, tmp_path: 
     assert result.ok, result.error
     excerpt = seen["payload"]["source_excerpt"]
     assert excerpt.index("Before the table.") < excerpt.index("Pro | 20") < excerpt.index("After the table.")
+
+
+class _CountingEmbedder:
+    name = "stub-test"
+    dim = 16
+
+    def __init__(self) -> None:
+        self.texts: list[str] = []
+        self._real = StubEmbedder()
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        self.texts.extend(texts)
+        return self._real.embed(texts)
+
+
+def _touch(path: Path, mtime: float) -> None:
+    os.utime(path, (mtime, mtime))
+
+
+def test_a_touched_page_with_the_same_content_is_not_embedded_again(tmp_home: Path, tmp_path: Path) -> None:
+    root = _bundle(tmp_path)
+    embedder = _CountingEmbedder()
+    kb.index_knowledge(tmp_home, root, embedder=embedder)
+    embedder.texts.clear()
+    page = root / "concepts" / "polaris.md"
+    _touch(page, page.stat().st_mtime + 500)
+
+    summary = kb.index_knowledge(tmp_home, root, embedder=embedder)
+
+    assert embedder.texts == []
+    assert summary["indexed_pages"] == 0
+    assert summary["skipped_pages"] == 3
+
+
+def test_changed_text_of_the_same_size_with_a_restored_mtime_is_embedded_again(tmp_home: Path, tmp_path: Path, stub_embedder) -> None:
+    root = _bundle(tmp_path)
+    embedder = _CountingEmbedder()
+    kb.index_knowledge(tmp_home, root, embedder=embedder)
+    page = root / "concepts" / "polaris.md"
+    before = page.stat()
+    page.write_text(page.read_text().replace("React", "Redux"))
+    assert page.stat().st_size == before.st_size
+    _touch(page, before.st_mtime)
+    embedder.texts.clear()
+
+    summary = kb.index_knowledge(tmp_home, root, embedder=embedder)
+
+    assert summary["indexed_pages"] == 1
+    assert any("Redux" in text for text in embedder.texts)
+    assert any(r["path"] == "concepts/polaris.md" for r in kb.search_knowledge(tmp_home, "Redux", k=5))
+
+
+def test_a_metadata_change_updates_the_index_without_embedding(tmp_home: Path, tmp_path: Path, stub_embedder) -> None:
+    root = _bundle(tmp_path)
+    embedder = _CountingEmbedder()
+    kb.index_knowledge(tmp_home, root, embedder=embedder)
+    page = root / "concepts" / "polaris.md"
+    page.write_text(page.read_text().replace('"launch"', '"zephyrtag"'))
+    embedder.texts.clear()
+
+    summary = kb.index_knowledge(tmp_home, root, embedder=embedder)
+
+    assert embedder.texts == []
+    assert summary["indexed_pages"] == 0
+    assert summary["refreshed_pages"] == 1
+    assert any(r["path"] == "concepts/polaris.md" for r in kb.search_knowledge(tmp_home, "zephyrtag", k=5))
+    from alpi.core.store import open_store
+
+    conn = open_store(tmp_home)
+    try:
+        assert conn.execute("SELECT COUNT(*) AS n FROM okf_fts WHERE tags MATCH 'zephyrtag'").fetchone()["n"] >= 1
+        assert conn.execute("SELECT COUNT(*) AS n FROM okf_fts WHERE tags MATCH 'launch'").fetchone()["n"] == 0
+    finally:
+        conn.close()
+
+
+def test_a_title_change_is_embedded_again_because_the_title_is_part_of_the_content(tmp_home: Path, tmp_path: Path) -> None:
+    root = _bundle(tmp_path)
+    embedder = _CountingEmbedder()
+    kb.index_knowledge(tmp_home, root, embedder=embedder)
+    page = root / "concepts" / "polaris.md"
+    page.write_text(page.read_text().replace("title: Polaris", "title: Polaris Renamed"))
+    embedder.texts.clear()
+
+    summary = kb.index_knowledge(tmp_home, root, embedder=embedder)
+
+    assert summary["indexed_pages"] == 1
+    assert any("Polaris Renamed" in text for text in embedder.texts)
+
+
+def test_an_index_without_the_fingerprint_stays_searchable_and_gains_it_without_embedding(
+    tmp_home: Path, tmp_path: Path, stub_embedder,
+) -> None:
+    from alpi.core.store import open_store
+
+    root = _bundle(tmp_path)
+    embedder = _CountingEmbedder()
+    kb.index_knowledge(tmp_home, root, embedder=embedder)
+    conn = open_store(tmp_home)
+    conn.execute("ALTER TABLE okf_files DROP COLUMN fingerprint")
+    conn.execute("CREATE TABLE unrelated_notes (id INTEGER PRIMARY KEY, body TEXT)")
+    conn.execute("INSERT INTO unrelated_notes(body) VALUES ('keep me')")
+    conn.commit()
+    conn.close()
+    assert any(r["path"] == "concepts/polaris.md" for r in kb.search_knowledge(tmp_home, "Polaris", k=5))
+    embedder.texts.clear()
+
+    summary = kb.index_knowledge(tmp_home, root, embedder=embedder)
+
+    assert embedder.texts == []
+    assert summary["indexed_pages"] == 0
+    conn = open_store(tmp_home)
+    try:
+        assert conn.execute("SELECT body FROM unrelated_notes").fetchone()["body"] == "keep me"
+        assert {row["fingerprint"] != "" for row in conn.execute("SELECT fingerprint FROM okf_files")} == {True}
+    finally:
+        conn.close()
+
+
+def test_a_failed_pass_leaves_the_stored_fingerprints_alone(tmp_home: Path, tmp_path: Path) -> None:
+    from alpi.core.store import open_store
+
+    root = _bundle(tmp_path)
+    kb.index_knowledge(tmp_home, root, embedder=StubEmbedder())
+    conn = open_store(tmp_home)
+    before = {row["path"]: row["fingerprint"] for row in conn.execute("SELECT path, fingerprint FROM okf_files")}
+    conn.close()
+    page = root / "concepts" / "polaris.md"
+    page.write_text(page.read_text().replace("React", "Redux"))
+
+    with pytest.raises(RuntimeError):
+        kb.index_knowledge(tmp_home, root, embedder=_ExplodingEmbedder(1))
+
+    conn = open_store(tmp_home)
+    after = {row["path"]: row["fingerprint"] for row in conn.execute("SELECT path, fingerprint FROM okf_files")}
+    conn.close()
+    assert after == before
+
+
+def test_a_refresh_followed_by_a_failure_rolls_back_with_the_pass(tmp_home: Path, tmp_path: Path) -> None:
+    from alpi.core.store import open_store
+
+    root = _bundle(tmp_path)
+    kb.index_knowledge(tmp_home, root, embedder=StubEmbedder())
+    polaris = root / "concepts" / "polaris.md"
+    polaris.write_text(polaris.read_text().replace('"launch"', '"zephyrtag"'))
+    index = root / "index.md"
+    index.write_text(index.read_text() + "\nAn extra line that changes the indexed content.\n")
+
+    with pytest.raises(RuntimeError):
+        kb.index_knowledge(tmp_home, root, embedder=_ExplodingEmbedder(1))
+
+    conn = open_store(tmp_home)
+    try:
+        tags = conn.execute("SELECT tags FROM okf_files WHERE path = 'concepts/polaris.md'").fetchone()["tags"]
+        assert "launch" in tags and "zephyrtag" not in tags
+        assert conn.execute("SELECT COUNT(*) AS n FROM okf_fts WHERE tags MATCH 'zephyrtag'").fetchone()["n"] == 0
+    finally:
+        conn.close()
+
+
+def test_a_change_to_the_chunking_re_checks_every_page(tmp_home: Path, tmp_path: Path, monkeypatch) -> None:
+    from alpi.tools import workspace
+
+    root = _bundle(tmp_path)
+    embedder = _CountingEmbedder()
+    kb.index_knowledge(tmp_home, root, embedder=embedder)
+    monkeypatch.setattr(workspace, "_LINES_PER_CHUNK", 1)
+    embedder.texts.clear()
+
+    summary = kb.index_knowledge(tmp_home, root, embedder=embedder)
+
+    assert summary["skipped_pages"] == 0

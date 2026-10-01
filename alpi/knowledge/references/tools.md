@@ -158,6 +158,8 @@ Output attachments (MM.2):
   nothing points at, so a page written with `write_file` still lints clean. Any
   explicit `path` is indexed read-only. Link destinations are percent-encoded and
   titles escaped, and the graph reads bare, angle-bracketed and encoded forms.
+  Indexing skips pages whose text fingerprint is unchanged (touching or re-saving a page
+  costs no embedding) and refreshes tags/type/date changes in place.
   Indexing another bundle is refused unless `force=true`, and the rebuild runs in
   one transaction, so a failure leaves the previous index searchable.
 - Text, HTML, PDF, DOCX, EPUB, and images are supported for ingest. Scanned

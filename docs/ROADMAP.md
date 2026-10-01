@@ -92,19 +92,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
   Clean plus Delete generated files); both client suites pass; the changelog
   entry pins no new alpi minimum.
 
-- **KB.14** — Unchanged content is not embedded again
-  `bug · alpi · agent · normal`
-  note: [knowledge_base.py](../alpi/tools/knowledge_base.py) skips a file by mtime
-  and size, so a metadata-only change pays for another embedding.
-  accept: a content fingerprint covering everything that shapes the indexed page
-  decides the skip; embedder change and explicit force keep their rebuild
-  contract; single-root store and transactional rebuild stay. With a counting
-  embedder and real SQLite: a touched unchanged page does not call the embedder;
-  changed text with the same size and restored mtime is re-embedded; metadata
-  changes update the index; an index without the fingerprint stays usable and
-  gains it on indexing without dropping unrelated tables; a failure still rolls
-  back the pass. Schema work is limited to that field.
-
 - **ATT.2** — `host.attachments.fetch` scoped to the owning device
   `bug · alpi · agent · high`
   note: `_fetch` in [attachments_rpc.py](../alpi/host/attachments_rpc.py) checks

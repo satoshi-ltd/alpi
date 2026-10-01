@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import posixpath
 import re
@@ -439,7 +440,8 @@ _TABLE_DDL = (
           type TEXT NOT NULL,
           tags TEXT NOT NULL,
           updated_at TEXT NOT NULL,
-          sources TEXT NOT NULL
+          sources TEXT NOT NULL,
+          fingerprint TEXT NOT NULL DEFAULT ''
         )""",
     """CREATE TABLE IF NOT EXISTS okf_chunks (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -473,6 +475,12 @@ def _create_tables(conn: sqlite3.Connection, dim: int) -> None:
         "CREATE VIRTUAL TABLE IF NOT EXISTS okf_fts "
         "USING fts5(path UNINDEXED, title, tags, content)"
     )
+
+
+def _ensure_fingerprint_column(conn: sqlite3.Connection) -> None:
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(okf_files)")}
+    if "fingerprint" not in columns:
+        conn.execute("ALTER TABLE okf_files ADD COLUMN fingerprint TEXT NOT NULL DEFAULT ''")
 
 
 def _drop_tables(conn: sqlite3.Connection) -> None:
@@ -518,6 +526,7 @@ def _ensure_schema(
     root_changed = root is not None and stored_root not in (None, root)
     if not (force or drift or root_changed):
         _create_tables(conn, dim)
+        _ensure_fingerprint_column(conn)
         if root is not None and stored_root is None:
             _set_meta(conn, "knowledge_root", root)
         return False
@@ -545,6 +554,38 @@ def _delete_page(conn: sqlite3.Connection, rel_path: str) -> None:
         conn.execute("DELETE FROM okf_chunks WHERE path = ?", (rel_path,))
     conn.execute("DELETE FROM okf_links WHERE source_path = ? OR target_path = ?", (rel_path, rel_path))
     conn.execute("DELETE FROM okf_files WHERE path = ?", (rel_path,))
+
+
+def _chunk_shape() -> str:
+    from alpi.tools import workspace
+
+    return f"{workspace._LINES_PER_CHUNK}:{workspace._LINE_STRIDE}:{_EMBED_BATCH}"
+
+
+def _stored_chunks(conn: sqlite3.Connection, file_id: int) -> list[str]:
+    return [
+        row["content"]
+        for row in conn.execute(
+            "SELECT content FROM okf_chunks WHERE file_id = ? ORDER BY chunk_index", (file_id,)
+        )
+    ]
+
+
+def _refresh_page_meta(
+    conn: sqlite3.Connection, file_id: int, meta: dict[str, Any], mtime: float, size: int, fingerprint: str,
+) -> None:
+    conn.execute(
+        "UPDATE okf_files SET mtime = ?, size = ?, title = ?, type = ?, tags = ?, updated_at = ?, "
+        "sources = ?, fingerprint = ? WHERE id = ?",
+        (
+            mtime, size, meta["title"].strip(), meta["type"], json.dumps(meta["tags"]),
+            meta["updated_at"], json.dumps(meta["sources"]), fingerprint, file_id,
+        ),
+    )
+    conn.execute(
+        "UPDATE okf_fts SET title = ?, tags = ? WHERE rowid IN (SELECT id FROM okf_chunks WHERE file_id = ?)",
+        (meta["title"], " ".join(meta["tags"]), file_id),
+    )
 
 
 def _page_chunks(title: str, body: str) -> list[str]:
@@ -583,7 +624,7 @@ def index_knowledge(
             force=force,
             index_mode=True,
         )
-        indexed = skipped = removed = added = 0
+        indexed = skipped = removed = added = refreshed = 0
         failed: list[dict[str, str]] = []
         seen: set[str] = set()
         parsed_pages: dict[str, dict[str, Any]] = {}
@@ -606,21 +647,23 @@ def index_knowledge(
             parsed_pages[rel] = page
             stat = path.stat()
             mtime, size = stat.st_mtime, stat.st_size
+            fingerprint = hashlib.sha256(f"{_chunk_shape()}\0{page['text']}".encode("utf-8")).hexdigest()
             existing = conn.execute(
-                "SELECT mtime, size FROM okf_files WHERE path = ?", (rel,)
+                "SELECT id, fingerprint FROM okf_files WHERE path = ?", (rel,)
             ).fetchone()
-            if (
-                existing
-                and abs(existing["mtime"] - mtime) < 1e-6
-                and existing["size"] == size
-            ):
+            if existing and existing["fingerprint"] == fingerprint:
                 skipped += 1
                 continue
             meta = page["meta"]
+            chunks = _page_chunks(meta["title"], page["body"])
+            if existing and _stored_chunks(conn, existing["id"]) == chunks:
+                _refresh_page_meta(conn, existing["id"], meta, mtime, size, fingerprint)
+                refreshed += 1
+                continue
             _delete_page(conn, rel)
             cur = conn.execute(
-                "INSERT INTO okf_files(path, mtime, size, title, type, tags, updated_at, sources) "
-                "VALUES(?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO okf_files(path, mtime, size, title, type, tags, updated_at, sources, fingerprint) "
+                "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     rel,
                     mtime,
@@ -630,10 +673,10 @@ def index_knowledge(
                     json.dumps(meta["tags"]),
                     meta["updated_at"],
                     json.dumps(meta["sources"]),
+                    fingerprint,
                 ),
             )
             file_id = cur.lastrowid
-            chunks = _page_chunks(meta["title"], page["body"])
             vectors: list[list[float]] = []
             for i in range(0, len(chunks), _EMBED_BATCH):
                 vectors.extend(embedder.embed(chunks[i:i + _EMBED_BATCH]))
@@ -685,6 +728,7 @@ def index_knowledge(
             "root": str(root),
             "indexed_pages": indexed,
             "skipped_pages": skipped,
+            "refreshed_pages": refreshed,
             "removed_pages": removed,
             "added_chunks": added,
             "total_pages": total_pages,
