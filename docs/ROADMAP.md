@@ -92,26 +92,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
   Clean plus Delete generated files); both client suites pass; the changelog
   entry pins no new alpi minimum.
 
-- **ATT.2** — `host.attachments.fetch` scoped to the owning device
-  `bug · alpi · agent · high`
-  note: `_fetch` in [attachments_rpc.py](../alpi/host/attachments_rpc.py) checks
-  `servable_roots` and the secrets denylist, never the caller, so any device of a
-  `session_scope: device` connection can download another user's produced file by
-  path.
-  accept: for a remote caller on a `session_scope: device` connection, a path is
-  served only if it appears in a session the device owns (`owns_session`) as a
-  turn's `attachments`, `output_attachments`, tool result or assistant text, or if
-  the device staged it (`_stage` records the `device_id` beside the file). A
-  per-device index of offered paths is updated on session save and rebuilt
-  lazily, never a transcript rescan per call. Roots and denylist stay the first
-  barrier; a refusal returns the existing `-32001 forbidden` / `path not
-  readable`. Over real WebSockets with two devices of one connection: A fetches
-  its `out/report.md`, B gets `forbidden` for it and for A's staged upload; under
-  `session_scope: connection` both fetch it; an image an assistant turn
-  referenced stays fetchable for the session's device; sessions with no
-  `device_id` stay fetchable for the whole connection; admin and the Unix socket
-  are unaffected.
-
 - **AUTH.1** — Auth-failure throttle per device, not per shared address
   `bug · alpi · agent · normal`
   note: `_handle_websocket` in [server.py](../alpi/host/server.py) closes a source
@@ -244,13 +224,25 @@ _None._
   transcript. Only the workgroup pipeline denies them (`PIPELINE_HISTORY_TOOLS`).
   accept: peer turns deny the history tools unless the peer's config allows them; a test
   asks as a peer and gets none of a member's session text.
-- **SCOPE.10** — Staged attachments can be fetched by any device
+- **ATT.3** — `host.attachments.fetch` ignores the caller's connection
+  `bug · alpi · agent · normal`
+  note: found while reviewing ATT.2. `_fetch` in [attachments_rpc.py](../alpi/host/attachments_rpc.py)
+  checks roots, the denylist and, since ATT.2, the device under `session_scope: device`; under
+  `session_scope: connection` and for any non-admin member it never compares the path with the
+  caller's connection, so a member of one connection can fetch another connection's produced
+  file or staged upload by path.
+  accept: a remote non-admin caller is served only what its own connection staged or what appears
+  in a session its connection owns (`owns_session` without the device clause); a test with two
+  connections fetches across them and is refused, with the owner control; admin and the Unix
+  socket are unaffected.
+- **SCOPE.10** — A device can attach another device's staged upload to its own turn
   `bug · alpi · agent · low`
-  note: found by the SCOPE.4 inventory. `host.attachments.fetch` and `stage` check no owner;
-  a device that knows the path of another device's staged upload (`host/attachments/tmp/<hex8>/`
-  or `out/<name>`) can fetch it, and `host.chat.send` accepts any staged path.
-  accept: a staged file is bound to the device that staged it; another device's fetch or
-  attach is refused; a test stages as A and fetches as B.
+  note: found by the SCOPE.4 inventory. `host.chat.send` accepts any path under the staging
+  root from a remote device, so a device that knows the path of another device's staged upload
+  (`host/attachments/tmp/<hex8>/`) can attach it to its own turn and read it through the model.
+  `host.attachments.fetch` is already scoped (ATT.2, v0.16.16).
+  accept: `host.chat.send` refuses a staged path whose `.owner` marker names another device of a
+  `session_scope: device` connection; a test stages as A and sends as B.
 - **SCOPE.5** — Profile session counts respect scope
   `bug · alpi · agent · low`
   note: `counts.sessions` in `host.profile.summaries` counts every session file of the

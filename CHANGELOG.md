@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.16.16 — 2026-10-01 — a device only downloads its own files
+
+- **On a connection whose sessions are private to each device, a device can no longer download
+  another device's files by path.** Fetching a produced file or image now works only for what the
+  device uploaded itself or what appears in its own conversations (attachments, files the agent
+  produced, tool results, the assistant's text). Admins, the local socket and connections that
+  share sessions between devices are unaffected. Files uploaded before this version stay
+  fetchable by the connection until they expire.
+
 ## v0.16.15 — 2026-10-01 — an unchanged knowledge page is not embedded again
 
 - **Indexing the knowledge base no longer re-embeds a page whose content did not change.** The

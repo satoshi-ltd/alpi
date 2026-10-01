@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import base64
+import json
+import os
 import re
 import secrets
 import shutil
@@ -85,7 +88,12 @@ async def _stage(params: dict[str, Any], server: host_server.Server) -> dict[str
     target_dir = root / secrets.token_hex(8)
     target_dir.mkdir(parents=True, exist_ok=True)
     path = target_dir / name
-    path.write_bytes(data)
+    try:
+        _record_owner(target_dir)
+        path.write_bytes(data)
+    except OSError:
+        shutil.rmtree(target_dir, ignore_errors=True)
+        raise
     # Validate exactly as host.chat.send will, so anything that stages can send.
     try:
         validated = att.validate([{"path": str(path), "name": name, "mime": mime}])
@@ -101,6 +109,57 @@ async def _stage(params: dict[str, Any], server: host_server.Server) -> dict[str
             "size": len(data),
         },
     }
+
+
+_OWNER_FILE = ".owner"
+
+
+def _record_owner(directory: Path) -> None:
+    from alpi.host.connection_context import current
+    ctx = current()
+    (directory / _OWNER_FILE).write_text(json.dumps({
+        "connection_id": ctx.connection_id, "device_id": ctx.device_id or "",
+    }))
+
+
+def _staged_owner(home: Path, real: Path) -> dict[str, str] | None:
+    try:
+        relative = real.relative_to(_stage_root(home).resolve())
+    except (ValueError, OSError):
+        return None
+    if not relative.parts:
+        return None
+    try:
+        owner = json.loads((_stage_root(home).resolve() / relative.parts[0] / _OWNER_FILE).read_text())
+    except (OSError, ValueError):
+        return {}
+    return owner if isinstance(owner, dict) else {}
+
+
+def _device_bound(ctx: Any) -> bool:
+    return ctx.source == "remote" and ctx.session_scope == "device" and ctx.role != "admin"
+
+
+def _device_may_fetch(home: Path, requested: str, real: Path) -> bool:
+    from alpi.host import offered_paths
+    from alpi.host import sessions as host_sessions
+    from alpi.host.connection_context import current, owns_session_row
+
+    staged = _staged_owner(home, real)
+    if staged is not None:
+        ctx = current()
+        if not staged:
+            return True
+        return staged.get("connection_id") == ctx.connection_id and staged.get("device_id") in ("", ctx.device_id)
+    lexical = os.path.normpath(requested)
+    wanted = {str(real)}
+    if os.path.realpath(lexical) == str(real):
+        wanted.add(lexical)
+    return any(
+        wanted & offered_paths.for_session(home, row)
+        for row in host_sessions.list_sessions(home, None)
+        if owns_session_row(row)
+    )
 
 
 def _workspace(home: Path) -> Path | None:
@@ -163,6 +222,9 @@ async def _fetch(params: dict[str, Any], server: host_server.Server) -> dict[str
     else:
         allowed = _fetch_nonimage_allowed(home, real)
     if not real.is_file() or not allowed or _fetch_denied(real):
+        raise host_server.HandlerError(-32001, "forbidden", {"detail": "path not readable"})
+    from alpi.host.connection_context import current
+    if _device_bound(current()) and not await asyncio.to_thread(_device_may_fetch, home, path, real):
         raise host_server.HandlerError(-32001, "forbidden", {"detail": "path not readable"})
     data = real.read_bytes()
     if len(data) > _MAX_FETCH_BYTES:

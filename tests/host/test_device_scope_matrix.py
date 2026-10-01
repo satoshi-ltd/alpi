@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import contextlib
 import json
 from pathlib import Path
@@ -10,7 +11,7 @@ import pytest
 
 from alpi import runs
 from alpi.core.run_context import RunContext
-from alpi.host import _chat_events, activity, chat, connections, handlers, sessions as host_sessions
+from alpi.host import _chat_events, activity, attachments_rpc, chat, connections, handlers, sessions as host_sessions
 from alpi.host import approval as host_approval
 from alpi.host import clarification as host_clarification
 from alpi.host import device_state as host_device_state
@@ -40,8 +41,14 @@ def world(tmp_path: Path, monkeypatch):
     _row, device_b = connections.add_device(row["id"])
     conn = row["id"]
 
+    produced = tmp_path / "out" / "secret.md"
+    produced.parent.mkdir(exist_ok=True)
+    produced.write_text(SECRET)
     session = Session(tmp_path, "model", connection_id=conn, device_id=device_a["id"])
-    session.turns.append(Turn(1, f"{SECRET} question", [], f"{SECRET} answer"))
+    session.turns.append(Turn(
+        1, f"{SECRET} question", [], f"{SECRET} answer",
+        output_attachments=[{"path": str(produced), "name": "secret.md", "mime": "text/markdown"}],
+    ))
     session.save()
 
     context = RunContext.create(
@@ -70,11 +77,12 @@ def world(tmp_path: Path, monkeypatch):
 
     server = host_server.Server(home=tmp_path)
     for module in (handlers, host_runs, activity, host_device_state, chat, host_events,
-                   host_approval, host_clarification):
+                   host_approval, host_clarification, attachments_rpc):
         module.register(server)
 
     yield SimpleNamespace(
         root=tmp_path, server=server, conn=conn, session_id=session.id, run_id=context.run_id,
+        produced=str(produced),
         a=device_a, b=device_b,
     )
 
@@ -155,18 +163,19 @@ RPC_PATHS = {
     "host.activity.list": lambda w, d: _call(w, d, "host.activity.list"),
     "host.approval.pending": lambda w, d: _call(w, d, "host.approval.pending"),
     "host.clarification.pending": lambda w, d: _call(w, d, "host.clarification.pending"),
+    "host.attachments.fetch": lambda w, d: _call(w, d, "host.attachments.fetch", path=w.produced),
     "host.events.history": _history_text,
     "host.events.subscribe": _stream_text,
 }
 
 
-METADATA_ONLY = {"host.runs.list"}
-
-
 @pytest.mark.asyncio
 @pytest.mark.parametrize("path", sorted(RPC_PATHS))
 async def test_a_sibling_device_never_reads_what_device_a_wrote(world, path: str) -> None:
-    marker = world.run_id if path in METADATA_ONLY else SECRET
+    marker = {
+        "host.runs.list": world.run_id,
+        "host.attachments.fetch": base64.b64encode(SECRET.encode()).decode(),
+    }.get(path, SECRET)
     owner_sees = await RPC_PATHS[path](world, world.a)
     sibling_sees = await RPC_PATHS[path](world, world.b)
 
