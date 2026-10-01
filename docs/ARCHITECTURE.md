@@ -1425,8 +1425,10 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   `alpi/host/activity.py` — engine turns, workgroup dispatch in
   `service._dispatch_workgroup_turn`, scheduler fires via `scheduled_run` — plus
   `workgroup` pipeline rows from the cached fold) and `scheduled` (admin-only).
-  It reads memory and stat-keyed caches only, because clients call it on every
-  `activity.changed {profile}`; never add a per-call scan of `runs/` or
+  A workgroup seen from both its hub and a member profile is one row, the hub's, chosen among the
+  profiles the caller's `ConnectionContext.profile_scope` allows, so a caller limited to the
+  member profile keeps the member's row. It reads memory and stat-keyed caches only, because
+  clients call it on every `activity.changed {profile}`; never add a per-call scan of `runs/` or
   transcripts. A new long-running source registers with
   `activity.start_run/end_run` (or `tracked_run`), and a new event that changes
   what the verb returns joins `activity._TRIGGERS`. `activity.changed` is

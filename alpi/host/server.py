@@ -887,6 +887,7 @@ class Server:
                     role=meta.role or "member",
                     session_scope=meta.session_scope,
                     provisioner=meta.provisioner,
+                    profile_scope=tuple(meta.scope),
                 )
                 remote_meta = meta
         if bootstrap and method != "host.connections.exchange_pairing":

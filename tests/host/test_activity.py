@@ -178,6 +178,75 @@ def test_running_workgroup_reports_phase_progress(monkeypatch, tmp_path: Path) -
     }]
 
 
+def _two_rows_for_one_workgroup(monkeypatch, tmp_path: Path) -> None:
+    hub_home, alice_home = tmp_path / "hub", tmp_path / "alice"
+    monkeypatch.setattr(activity, "_profile_homes", lambda: [("hub", hub_home), ("alice", alice_home)])
+    def row(profile: str, is_hub: bool) -> dict:
+        return {
+            "kind": "workgroup", "profile": profile, "workgroup_id": "w1", "name": "factory",
+            "pipeline": "intake", "phase": "content", "phases_done": 1, "phases_total": 4, "_hub": is_hub,
+        }
+
+    def hub_rows(home, profile):
+        return [("w1", row(profile, True))] if profile == "hub" else []
+
+    def member_rows(home, profile):
+        return [("w1", row(profile, False))] if profile == "alice" else []
+
+    monkeypatch.setattr(activity, "_hub_rows", hub_rows)
+    monkeypatch.setattr(activity, "_member_rows", member_rows)
+
+
+def _workgroup_profiles(ctx: ConnectionContext) -> list[str]:
+    with use(ctx):
+        return [r["profile"] for r in activity.snapshot()["running"] if r["kind"] == "workgroup"]
+
+
+def test_a_caller_scoped_to_the_member_profile_keeps_the_pipeline(monkeypatch, tmp_path: Path) -> None:
+    _two_rows_for_one_workgroup(monkeypatch, tmp_path)
+    scoped = ConnectionContext(connection_id="conn-a", source="remote", role="member", profile_scope=("alice",))
+
+    assert _workgroup_profiles(scoped) == ["alice"]
+
+
+def test_a_caller_who_sees_both_profiles_still_gets_one_row_from_the_hub(monkeypatch, tmp_path: Path) -> None:
+    _two_rows_for_one_workgroup(monkeypatch, tmp_path)
+    both = ConnectionContext(connection_id="conn-a", source="remote", role="member", profile_scope=("alice", "hub"))
+    unscoped = ConnectionContext(connection_id="conn-a", source="remote", role="member")
+
+    assert _workgroup_profiles(both) == ["hub"]
+    assert _workgroup_profiles(unscoped) == ["hub"]
+    assert _workgroup_profiles(ConnectionContext(role="admin")) == ["hub"]
+
+
+def test_the_server_hands_the_authenticated_profile_scope_to_the_handler(monkeypatch, tmp_path: Path) -> None:
+    seen: list[tuple[str, ...]] = []
+
+    async def probe(params, server):
+        from alpi.host.connection_context import current
+        seen.append(current().profile_scope)
+        return {}
+
+    srv = host_server.Server(tmp_path)
+    srv.register("host.probe", probe)
+    monkeypatch.setattr(
+        host_server, "_check_token_meta",
+        lambda body: host_server.AuthMeta(True, "member", ["alice", "bob"], "conn-a", "dev-a"),
+    )
+
+    async def run():
+        async def send(payload):
+            return None
+        await srv._handle_request(
+            json.dumps({"id": "1", "method": "host.probe", "params": {"profile": "alice", "auth_token": "t"}}),
+            send, require_token=True,
+        )
+
+    asyncio.run(run())
+
+    assert seen == [("alice", "bob")]
+
+
 def test_workgroup_without_active_pipeline_is_not_running(monkeypatch, tmp_path: Path) -> None:
     home = tmp_path / "hub"
     wg = _hub(home, pipelines=_CHAIN, launch="intake", steps=_STEPS)

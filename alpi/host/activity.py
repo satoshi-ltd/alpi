@@ -187,6 +187,9 @@ def snapshot() -> dict[str, Any]:
     from alpi.host.connection_context import current
     admin = current().role == "admin"
     profiles = _profile_homes()
+    allowed = current().profile_scope
+    if allowed and not admin:
+        profiles = [(name, home) for name, home in profiles if name in allowed]
     return {
         "needs_you": _needs_you(),
         "running": _running_turns(admin) + _running_workgroups(profiles),

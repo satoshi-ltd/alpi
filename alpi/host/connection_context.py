@@ -18,6 +18,7 @@ class ConnectionContext:
     role: str = "admin"
     session_scope: str = "connection"
     provisioner: bool = False
+    profile_scope: tuple[str, ...] = ()
 
 
 _current: ContextVar[ConnectionContext] = ContextVar(

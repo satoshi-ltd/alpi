@@ -60,14 +60,6 @@ defect, so a helper is extracted only when it removes evidenced duplication.
 
 ## Queue
 
-- **ACT.1** — Activity keeps pipelines a scoped caller can see
-  `bug · alpi · agent · normal`
-  note: [activity.py](../alpi/host/activity.py) dedupes a workgroup's rows preferring
-  the hub before the server's profile-scope filter runs, so a caller scoped to a
-  member profile loses the pipeline entirely.
-  accept: dedupe happens among the rows the caller is allowed to see; a test with hub
-  and member rows for one workgroup and a caller scoped to the member gets one row
-  for the member profile.
 - **SPAN.1** — A retried attempt leaves no reasoning span behind
   `bug · alpi · agent · normal`
   note: `_ReasoningSpans.discard_text()` in [engine.py](../alpi/engine.py) clears the

@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.16.11 — 2026-10-01 — Activity keeps a pipeline a limited device can see
+
+- **A device limited to a member profile no longer loses its running pipelines in Activity.** When
+  the same workgroup shows up from its hub profile and from a member profile, Activity picked the
+  hub's row before hiding the profiles the device may not see, so a device limited to the member
+  profile saw nothing. It now picks among the profiles the device may see.
+
 ## v0.16.10 — 2026-10-01 — a device no longer sees its sibling's turn summaries
 
 - **Two live events stop crossing devices.** On a connection whose sessions are private to each
