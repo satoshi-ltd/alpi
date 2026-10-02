@@ -4,6 +4,7 @@ import json
 import re
 from typing import Any
 
+from alpi.tools._args import coerce as coerce_arguments
 from alpi.tools.base import Tool, ToolResult
 
 
@@ -74,11 +75,16 @@ class Workflow(Tool):
             name = str(raw.get("tool") or "").strip()
             args = raw.get("arguments")
             deps = raw.get("depends_on") or []
-            if not sid or sid in pending or name == "workflow" or not isinstance(args, dict):
+            if not sid or sid in pending or name == "workflow":
                 return ToolResult(False, "", f"invalid or duplicate workflow step: {sid or '(missing id)'}")
+            if not isinstance(args, dict):
+                return ToolResult(False, "", f"arguments of workflow step {sid} must be a JSON object")
+            target = tools.get(name)
+            if target is not None:
+                args = coerce_arguments(args, target.parameters)
             if not isinstance(deps, list) or any(not isinstance(dep, str) for dep in deps):
                 return ToolResult(False, "", f"invalid dependencies for step: {sid}")
-            pending[sid] = {**raw, "tool": name, "depends_on": deps}
+            pending[sid] = {**raw, "tool": name, "arguments": args, "depends_on": deps}
         unknown = sorted({dep for row in pending.values() for dep in row["depends_on"] if dep not in pending})
         if unknown:
             return ToolResult(False, "", f"unknown workflow dependencies: {', '.join(unknown)}")

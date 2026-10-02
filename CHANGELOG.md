@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.16.22 — 2026-10-02 — a broken tool call never runs on empty arguments
+
+- **A tool call whose arguments do not parse no longer runs with none.** Cut-off or malformed JSON used to
+  reach the tool as `{}`, so a write tool failed with a misleading "missing field" error. The call now does
+  not run, and the agent is told why: where the JSON broke and, when the reply hit the output-token limit,
+  that the limit cut the call off. Arguments that give one key two different values, or carry `NaN` or
+  infinite numbers, are refused the same way.
+- **Literal line breaks inside argument strings are accepted**, and an object or list sent as a JSON string
+  reaches the tool as the structure its schema expects. Long knowledge or note payloads stop failing on
+  formatting alone.
+- **A model provider that checks history no longer rejects the next request** after a broken call: the
+  history carries the arguments as dispatched.
+- **Workflow steps never leave a terminal command in run logs**, even when the steps arrive as a string.
+
 ## v0.16.21 — 2026-10-01 — an unknown owner is not a shared file
 
 - **Recall rechecks device ownership in older indexes**, without rebuilding embeddings.

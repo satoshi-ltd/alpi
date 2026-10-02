@@ -199,15 +199,51 @@ when every call is safe. A mixed batch remains serial. Results and emitted
 states are replayed in original call order, preserving provider transcript
 determinism.
 
+A call runs only with the arguments the model actually sent. The engine,
+`delegate`, `research`, the workgroup wrap-up handoff and the memory reviewer
+decode them through `alpi/tools/_args.py`: empty or `null` is `{}`, raw control
+characters inside strings are accepted, and one JSON-encoded layer around an
+object is unwrapped. Anything else never reaches the tool and answers one of:
+
+- `arguments for <tool> are not valid JSON: <reason> (char <pos> of <len>); the call did not run.`
+- `arguments for <tool> are not valid JSON: <reason>; the call did not run.` —
+  a key given two different values, nesting deeper than 100 levels, a string
+  holding an unpaired surrogate or a number out of range (`NaN`, `Infinity`,
+  beyond ±1.8e308): values a tool, the logs or a strict JSON reader would
+  mishandle. A key repeated with the same value is kept once.
+- `arguments for <tool> are not a JSON object (got array); the call did not run.`
+- `arguments for <tool> are missing (required: …); the call did not run.` — a
+  tool with required parameters got empty or `null` arguments; an explicit
+  `{}` still reaches the tool.
+
+Only the last call of a reply cut at the output-token limit adds that the limit
+cut it off. A batch holding a refused call runs serially. The assistant message
+sent back to the provider carries the arguments as dispatched: the raw string
+when it is already a strict JSON object without repeated keys equal to them,
+canonical ASCII JSON otherwise, `{}` for a refused call, so a provider that
+parses history never sees a broken payload.
+
+Right after decoding, a top-level argument sent as a JSON string is decoded
+when its schema admits objects or arrays and not strings (`type`, a type list
+or `anyOf`/`oneOf` branches), so a stringified `knowledge` object or `workflow`
+`steps` list reaches the tool, the events and the journal as the structure the
+schema declares. A string whose JSON would be refused above stays a string.
+`workflow` applies the same rule to each step's own arguments before
+`${step.output}` references expand; an expanded value stays a string. A
+parameter that admits strings, or one without a readable type, passes through
+untouched.
+
 Each turn writes `runs/<run_id>.jsonl` with bounded, redacted events: the
 start record (pid, model, input), tool starts / states / ends, `model_state`
 when it changes, `usage`, every `assistant_done` (only the one closing the
 turn carries `final=True`), errors and the finish outcome. Streaming deltas
 are never journaled — the reconnect replay is the sessions sidecar — so
 `alpi runs show` and `host.run.read` return an operational timeline, not the
-stream. Terminal command text is omitted everywhere. Local operators use
-`alpi runs list|show|cancel` or `/runs`; paired clients use `host.runs.list`,
-`host.run.read`, `host.run.cancel`, connection-scoped like sessions.
+stream. Terminal command text is omitted everywhere, including `workflow`
+steps; `steps` or step arguments that are not structured are dropped from the
+record. Local operators use `alpi runs list|show|cancel` or `/runs`; paired
+clients use `host.runs.list`, `host.run.read`, `host.run.cancel`,
+connection-scoped like sessions.
 
 Cleanup offers completed journals older than 30 days plus the oldest beyond
 200 MiB per profile, skipping anything completed within the last hour;
@@ -334,7 +370,7 @@ Cron jobs with `no_agent: true` skip the LLM entirely. The `prompt` is shlex-tok
 
 ### LLM transport (`alpi/llm.py`)
 
-Thin wrapper over `litellm.completion`. `stream()` is an async generator yielding `{text_delta, reasoning_delta, tool_calls_delta, finish_reason}` per chunk plus a final `{final, tool_calls, input_tokens, output_tokens, cost_usd}`. `complete()` is the non-streaming variant used by `research`. `_silence_litellm()` runs at import time to mute LiteLLM's startup banner via FD-level redirect (Textual is sensitive to stdout pollution).
+Thin wrapper over `litellm.completion`. `stream()` is a generator yielding `{text_delta, reasoning_delta, tool_calls_delta, finish_reason}` per chunk plus a final `{final, tool_calls, input_tokens, output_tokens, cost_usd, finish_reason}` whose `finish_reason` is the last one the provider reported (litellm reports `stop` when a stream closes early, so only `length` proves a cut); the `stream end` breadcrumb logs it. `complete()` is the non-streaming variant (`research`, `delegate` and the background passes); its `Completion.finish_reason` carries the same signal. `_silence_litellm()` runs at import time to mute LiteLLM's startup banner via FD-level redirect (Textual is sensitive to stdout pollution).
 
 ### Memory (`alpi/memory.py`)
 

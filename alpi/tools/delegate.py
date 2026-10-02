@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import contextvars
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -11,6 +10,7 @@ from typing import Any
 from alpi import config as cfg_mod
 from alpi import llm
 from alpi.home import get_home
+from alpi.tools import _args as tool_args
 from alpi.tools import _policy as _tool_policy
 from alpi.tools._budget import apply as _budget_apply
 from alpi.tools.base import Tool, ToolResult, failure_payload
@@ -357,12 +357,18 @@ class Delegate(Tool):
             content = out.content or ""
             tool_calls = out.tool_calls or []
 
+            cut_index = len(tool_calls) - 1 if getattr(out, "finish_reason", None) == "length" else -1
+            decoded_args = [
+                tool_args.prepare(tc["name"], tc.get("arguments"))
+                for tc in tool_calls
+            ]
             assistant_msg: dict[str, Any] = {"role": "assistant", "content": content}
             if tool_calls:
                 assistant_msg["tool_calls"] = [
                     {"id": tc["id"], "type": "function",
-                     "function": {"name": tc["name"], "arguments": tc["arguments"]}}
-                    for tc in tool_calls
+                     "function": {"name": tc["name"],
+                                  "arguments": tool_args.wire(tc.get("arguments"), call_args)}}
+                    for tc, (call_args, _) in zip(tool_calls, decoded_args)
                 ]
             messages.append(assistant_msg)
 
@@ -379,7 +385,7 @@ class Delegate(Tool):
 
             tool_state_mod.set_emit(_prefixed)
             try:
-                for tc in tool_calls:
+                for i, tc in enumerate(tool_calls):
                     if tool_state_mod.is_interrupted():
                         return ToolResult(ok=True, output=(
                             "[delegate: interrupted by user mid-task]"
@@ -391,11 +397,13 @@ class Delegate(Tool):
                             f"sub-agent's toolsets"
                         )
                     else:
-                        try:
-                            args = json.loads(tc["arguments"]) if tc["arguments"] else {}
-                        except json.JSONDecodeError:
-                            args = {}
-                        result = execute(name, args, deny=deny_tools)
+                        args, args_error = decoded_args[i]
+                        if args_error is None:
+                            result = execute(name, args, deny=deny_tools)
+                        else:
+                            result = ToolResult(ok=False, output="", error=tool_args.refusal(
+                                name, args_error, cut=i == cut_index,
+                            ))
                         payload = result.output if result.ok else failure_payload(result)
                         payload = _budget_apply(name, payload)
                         from alpi.tools._sanitizer import sanitize_tool_payload

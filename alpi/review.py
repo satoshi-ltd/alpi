@@ -16,7 +16,6 @@ parent.
 from __future__ import annotations
 
 import copy
-import json
 import threading
 from pathlib import Path
 from typing import Any
@@ -25,6 +24,7 @@ from alpi import config as cfg_mod
 from alpi import llm
 from alpi.home import reset_active_home, set_active_home
 from alpi.tools import execute as run_tool, schemas as all_schemas
+from alpi.tools._args import decode as decode_arguments
 
 
 _REVIEW_PROMPT = """You are a focused memory reviewer running between turns of an alpi session.
@@ -96,12 +96,8 @@ def _apply_calls(tool_calls: list[dict]) -> int:
     for call in tool_calls or []:
         if call.get("name") != "memory":
             continue
-        raw = call.get("arguments") or "{}"
-        try:
-            args = json.loads(raw) if isinstance(raw, str) else dict(raw)
-        except (json.JSONDecodeError, TypeError, ValueError):
-            continue
-        if not isinstance(args, dict):
+        args, _ = decode_arguments(call.get("arguments"))
+        if args is None:
             continue
         if args.get("action") != "add":
             continue

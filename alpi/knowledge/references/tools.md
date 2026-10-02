@@ -17,6 +17,13 @@
 - Attachments are turn input unless explicitly learned. Output attachments are
   tool-produced files surfaced separately from the final text.
 - Use `alpi_knowledge` first for questions about alpi itself.
+- Tool arguments are one JSON object, with nested objects and arrays sent as
+  structures, never as JSON-encoded strings. `arguments for <tool> are …; the
+  call did not run` means nothing executed: resend the complete call. When it
+  adds that the output-token limit cut the call off, the same payload will be
+  cut again — make the call smaller if the tool allows it, otherwise report the
+  limit instead of retrying. Never probe or pad a call to test the transport;
+  the error says what was wrong with the arguments.
 
 ## Registered tool families
 

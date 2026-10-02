@@ -73,17 +73,19 @@ def persisted_tool_arguments(name: str, arguments: dict[str, Any]) -> dict[str, 
     elif name == "workflow":
         raw_steps = safe.get("steps")
         if not isinstance(raw_steps, list):
+            safe.pop("steps", None)
             return safe
         steps = []
         for raw in raw_steps:
             if not isinstance(raw, dict):
-                steps.append(raw)
                 continue
             step = dict(raw)
-            nested_name = str(step.get("tool") or "")
+            nested_name = str(step.get("tool") or "").strip()
             nested_args = step.get("arguments")
             if isinstance(nested_args, dict):
                 step["arguments"] = persisted_tool_arguments(nested_name, nested_args)
+            else:
+                step.pop("arguments", None)
             steps.append(step)
         safe["steps"] = steps
     return safe

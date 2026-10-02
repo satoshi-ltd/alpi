@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import re
@@ -942,6 +941,12 @@ class Engine:
 
                 content = _strip_cache_noise("".join(accumulated_text))
                 tool_calls = final.get("tool_calls", [])
+                from alpi.tools import _args as tool_args
+                cut_index = len(tool_calls) - 1 if final.get("finish_reason") == "length" else -1
+                decoded_args = [
+                    tool_args.prepare(tc["name"], tc.get("arguments"))
+                    for tc in tool_calls
+                ]
 
                 _rd = "".join(reasoning_text).strip()
                 if _rd:
@@ -1012,9 +1017,9 @@ class Engine:
                         {
                             "id": tc["id"], "type": "function",
                             "function": {"name": tc["name"],
-                                         "arguments": tc["arguments"]},
+                                         "arguments": tool_args.wire(tc.get("arguments"), call_args)},
                         }
-                        for tc in tool_calls
+                        for tc, (call_args, _) in zip(tool_calls, decoded_args)
                     ]
                 self.session.messages.append(assistant_msg)
 
@@ -1171,17 +1176,17 @@ class Engine:
                 batch_reasoning = content
                 dispatch_delivered = False
                 parallel_outcomes = {}
-                if not relay_peer and not self.interrupt_requested and len(tool_calls) > 1:
+                if (
+                    not relay_peer and not self.interrupt_requested and len(tool_calls) > 1
+                    and all(error is None for _, error in decoded_args)
+                ):
                     from alpi.core.tool_executor import ToolCall, current as current_executor
 
                     executor = current_executor()
-                    parsed_calls = []
-                    for tc in tool_calls:
-                        try:
-                            call_args = json.loads(tc["arguments"]) if tc.get("arguments") else {}
-                        except json.JSONDecodeError:
-                            call_args = {}
-                        parsed_calls.append(ToolCall(tc["id"], tc["name"], call_args))
+                    parsed_calls = [
+                        ToolCall(tc["id"], tc["name"], call_args)
+                        for tc, (call_args, _) in zip(tool_calls, decoded_args)
+                    ]
                     if not self.interrupt_requested and executor is not None and all(
                         executor.is_parallel_safe(call.name, call.arguments)
                         for call in parsed_calls
@@ -1206,10 +1211,7 @@ class Engine:
                             "name": tc["name"],
                             "content": skip_msg,
                         })
-                        try:
-                            args_skipped = json.loads(tc["arguments"]) if tc.get("arguments") else {}
-                        except json.JSONDecodeError:
-                            args_skipped = {}
+                        args_skipped = decoded_args[i][0] or {}
                         turn_tools.append(ToolLog(
                             at=time.time(), name=tc["name"],
                             args=persisted_tool_arguments(tc["name"], args_skipped),
@@ -1225,10 +1227,8 @@ class Engine:
 
                     name = tc["name"]
                     tid = tc["id"]
-                    try:
-                        args = json.loads(tc["arguments"]) if tc["arguments"] else {}
-                    except json.JSONDecodeError:
-                        args = {}
+                    args, args_error = decoded_args[i]
+                    args = args or {}
                     outcome = parallel_outcomes.get(tid)
                     if outcome is None:
                         emit(AgentEvent(kind="tool_start", name=name, args=args, tool_id=tid))
@@ -1249,7 +1249,12 @@ class Engine:
                         tool_state_mod.set_emit(_relay)
                         tool_started = time.time()
                         try:
-                            if relay_peer and relay_declined:
+                            if args_error is not None:
+                                result = ToolResult(
+                                    ok=False, output="",
+                                    error=tool_args.refusal(name, args_error, cut=i == cut_index),
+                                )
+                            elif relay_peer and relay_declined:
                                 result = ToolResult(
                                     ok=False, output="",
                                     error="relay mode: the request was declined; no further tool calls run this turn",
@@ -1585,10 +1590,8 @@ class Engine:
                         final_calls = list(wrap_final.get("tool_calls") or [])
                         final_call = final_calls[0] if len(final_calls) == 1 else {}
                         final_tid = str(final_call.get("id") or "workgroup-final-handoff")
-                        try:
-                            final_args = json.loads(final_call.get("arguments") or "")
-                        except (TypeError, json.JSONDecodeError):
-                            final_args = None
+                        from alpi.tools import _args as tool_args
+                        final_args, _ = tool_args.decode(final_call.get("arguments"))
                         model_text = ""
                         if (
                             final_call.get("name") == "workgroup_post"

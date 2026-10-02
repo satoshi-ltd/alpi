@@ -1100,6 +1100,47 @@ def test_workgroup_step_limit_posts_a_working_continuation(
     )
 
 
+def test_workgroup_step_limit_keeps_a_handoff_with_raw_newlines(
+    patched_engine: Engine, monkeypatch,
+) -> None:
+    patched_engine.cfg.tools.max_steps_per_turn = 1
+    monkeypatch.setenv("ALPI_WORKGROUP_DISPATCH", "wg_target")
+    monkeypatch.setattr(
+        "alpi.alp.agent_context.build",
+        lambda _home, wg_id=None, max_chars=None: "target context",
+    )
+    calls = []
+
+    def fake_stream(messages, tools, **kwargs):
+        calls.append(kwargs.get("tool_choice"))
+        if len(calls) == 1:
+            yield _final_chunk("", tool_calls=[{
+                "id": "todo-1", "name": "todo", "arguments": '{"action":"list"}',
+            }])
+            return
+        yield _final_chunk("", tool_calls=[{
+            "id": "handoff", "name": "workgroup_post",
+            "arguments": '{"wg_id":"wg_target","text":"#working draft written\n#working checking the rest"}',
+        }])
+
+    deliveries = []
+
+    def fake_execute(name, args, **_kwargs):
+        if name == "workgroup_post":
+            deliveries.append(dict(args))
+        return ToolResult(ok=True, output="posted seq 9")
+
+    monkeypatch.setattr("alpi.llm.stream", fake_stream)
+    monkeypatch.setattr("alpi.tools.execute", fake_execute)
+
+    patched_engine.run_turn("work", emit=lambda _e: None)
+
+    assert deliveries == [{
+        "wg_id": "wg_target",
+        "text": "#working draft written\n#working checking the rest (continuation)",
+    }]
+
+
 def test_workgroup_deadline_posts_a_working_continuation(
     patched_engine: Engine, monkeypatch,
 ) -> None:

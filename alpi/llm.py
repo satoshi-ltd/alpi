@@ -50,6 +50,7 @@ class Completion:
     cost_source: str = ""
     generation_id: str | None = None
     provider: str | None = None
+    finish_reason: str | None = None
 
 
 def _cached_tokens(usage: Any) -> int | None:
@@ -490,7 +491,10 @@ def _identity(resp) -> tuple[str | None, str | None]:
     return (str(gen_id) if gen_id else None, str(provider) if provider else None)
 
 
-def _final_chunk(last_chunk, tool_calls_accum: dict, model: str, provider: str | None = None) -> dict:
+def _final_chunk(
+    last_chunk, tool_calls_accum: dict, model: str, provider: str | None = None,
+    finish_reason: str | None = None,
+) -> dict:
     usage = getattr(last_chunk, "usage", None) if last_chunk else None
     cost, cost_source = _compute_cost_detail(last_chunk, model)
     gen_id, chunk_provider = _identity(last_chunk)
@@ -510,6 +514,7 @@ def _final_chunk(last_chunk, tool_calls_accum: dict, model: str, provider: str |
         "cost_source": cost_source,
         "generation_id": gen_id,
         "provider": provider or chunk_provider,
+        "finish_reason": finish_reason,
     }
 
 
@@ -612,6 +617,7 @@ def stream(
         gen_id: str | None = None
         started = _breadcrumb("request start", f"model={model} attempt={attempt}")
         first_delta_at: float | None = None
+        finish_reason: str | None = None
         try:
             stream_iter = _completion_silenced(attempt_kwargs)
             for chunk in _iter_with_watchdog(
@@ -623,6 +629,7 @@ def stream(
                 norm = _normalize_chunk(chunk, tool_calls_accum)
                 if norm is None:
                     continue
+                finish_reason = norm.get("finish_reason") or finish_reason
                 if first_delta_at is None and (
                     norm.get("text_delta") or norm.get("reasoning_delta")
                     or norm.get("tool_calls_delta")
@@ -636,9 +643,10 @@ def stream(
                 yield norm
             _breadcrumb(
                 "stream end",
-                f"model={model} total={_dt(started)} gen={gen_id or '-'} provider={served_provider or '-'}",
+                f"model={model} total={_dt(started)} gen={gen_id or '-'} provider={served_provider or '-'} "
+                f"finish={finish_reason or '-'}",
             )
-            yield _final_chunk(last_chunk, tool_calls_accum, model, served_provider)
+            yield _final_chunk(last_chunk, tool_calls_accum, model, served_provider, finish_reason)
             return
         except Exception as exc:  # noqa: BLE001
             _breadcrumb(
@@ -705,6 +713,7 @@ def complete(
               file=sys.stderr)
         print(f"[alpi.llm] raw choice={response.choices[0].message}", file=sys.stderr)
     choice = response.choices[0].message
+    finish_reason = getattr(response.choices[0], "finish_reason", None)
     usage = getattr(response, "usage", None)
 
     cost, cost_source = _compute_cost_detail(response, model)
@@ -733,4 +742,5 @@ def complete(
         cost_source=cost_source,
         generation_id=gen_id,
         provider=provider,
+        finish_reason=finish_reason,
     )
