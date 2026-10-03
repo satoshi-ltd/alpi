@@ -16,15 +16,15 @@
     --muted:#a39a8b;
     --dim:#3d3830;
     --line:#221f19;
-    --amber-soft:#f9e4b4;
-    --amber:#f0b447;
-    --amber-deep:#8f5e0c;
+    --amber-soft:#ffffff;
+    --amber:#f3efe6;
+    --amber-deep:#cfc8b8;
     --umber:#4a3006;
     --accent:var(--amber);
     --accent-deep:var(--amber-deep);
     --accent-soft:var(--amber-soft);
-    --accent-wash:rgba(240,180,71,.07);
-    --accent-line:rgba(240,180,71,.22);
+    --accent-wash:rgba(243,239,230,.07);
+    --accent-line:rgba(243,239,230,.22);
     --warn:#e0604f;
     --space:clamp(24px, 5vw, 80px);
     --radius:22px;
@@ -46,15 +46,15 @@
     --bg:#f6f3ec; --bg-rgb:246,243,236;
     --fg:#1f1a12; --muted:#6f6759; --dim:#e6e0d3; --line:#e2dccf;
     --soft:#fffdf8; --band:#efe9dc;
-    --accent:#8a5a0a; --accent-wash:rgba(143,94,12,.07); --accent-line:rgba(143,94,12,.24);
+    --accent:#14110c; --accent-wash:rgba(20,17,12,.05); --accent-line:rgba(20,17,12,.2);
     --warn:#b8392c;
     --veil:radial-gradient(ellipse at 50% 30%, transparent 0%, rgba(246,243,236,.55) 55%, rgba(246,243,236,.85) 100%);
     --nav-bg:rgba(246,243,236,.72); --panel-bg:rgba(255,253,248,.88); --panel-soft:rgba(255,253,248,.7);
-    --hover:rgba(143,94,12,.05);
+    --hover:rgba(20,17,12,.04);
     --drawer-bg:rgba(246,243,236,.94); --ctrl-bg:rgba(246,243,236,.78);
   }
   :root[data-theme="light"] .grain{opacity:.05}
-  :root[data-theme="light"] #ascii-bg pre{background-image:linear-gradient(118deg, rgba(143,94,12,.34) 0%, rgba(143,94,12,.14) 32%, rgba(90,84,74,.18) 62%, rgba(90,84,74,.10) 100%)}
+  :root[data-theme="light"] #ascii-bg pre{background-image:linear-gradient(118deg, rgba(150,143,130,.34) 0%, rgba(150,143,130,.14) 32%, rgba(90,84,74,.18) 62%, rgba(90,84,74,.10) 100%)}
   :root[data-theme="light"] .aurora{mix-blend-mode:multiply}
   .theme-btn{
     position:fixed;right:20px;bottom:20px;z-index:30;
@@ -96,8 +96,8 @@
   #ascii-bg pre{
     margin:0;padding:0;font:inherit;white-space:pre;
     background-image:linear-gradient(118deg,
-      rgba(240,180,71,.26) 0%,
-      rgba(240,180,71,.09) 32%,
+      rgba(243,239,230,.26) 0%,
+      rgba(243,239,230,.09) 32%,
       rgba(150,143,130,.13) 62%,
       rgba(150,143,130,.07) 100%);
     -webkit-background-clip:text;background-clip:text;color:transparent;
@@ -111,12 +111,12 @@
   .aurora:before,.aurora:after{content:"";position:absolute;border-radius:50%;will-change:transform}
   .aurora:before{
     left:-24%;bottom:-38%;width:86%;height:78%;
-    background:radial-gradient(closest-side, rgba(240,180,71,.14) 0%, rgba(143,94,12,.07) 46%, transparent 72%);
+    background:radial-gradient(closest-side, rgba(243,239,230,.14) 0%, rgba(150,143,130,.07) 46%, transparent 72%);
     animation:drift-a 38s ease-in-out infinite alternate;
   }
   .aurora:after{
     right:-20%;top:-34%;width:66%;height:62%;
-    background:radial-gradient(closest-side, rgba(143,94,12,.11) 0%, transparent 68%);
+    background:radial-gradient(closest-side, rgba(150,143,130,.11) 0%, transparent 68%);
     animation:drift-b 46s ease-in-out infinite alternate;
   }
   @keyframes drift-a{
@@ -157,7 +157,7 @@
   .brand-lockup{display:flex;align-items:center;gap:18px;min-width:0}
   .brand{display:inline-flex;align-items:center;color:var(--fg);text-decoration:none;line-height:1}
   .brand .logo{color:var(--fg);flex-shrink:0;display:inline-flex;align-items:center;gap:12px}
-  .brand .logo-mark{width:34px;height:34px;display:block;border-radius:9px}
+  .brand .logo-mark{height:34px;width:auto;display:block}
   .brand .logo-word{font-family:"Instrument Sans",system-ui,sans-serif;font-weight:700;font-size:29px;line-height:1;letter-spacing:-1px;color:var(--fg)}
     .bp-tail{display:inline-flex;align-items:center;gap:14px;line-height:1;margin-top:4px}
   .bp-sep,
@@ -223,10 +223,10 @@
   .hero .kicker .dot{width:6px;height:6px;background:var(--accent);border-radius:50%;flex-shrink:0}
   /* arca's scale, which only works if each line stays two or three words. */
   .hero h1{
-    font-size:clamp(55px,6.6vw,92px);font-weight:500;line-height:1.02;
-    letter-spacing:-5px;margin:25px 0;
+    font-size:clamp(40px,4.9vw,68px);line-height:1.02;
+    margin:25px 0;
   }
-  .hero h1 .two{color:var(--accent);display:block}
+  .hero h1 span{display:block}
   .hero p.lead{max-width:46ch;font-size:20px;line-height:1.6;color:var(--muted);margin-bottom:30px}
   .hero-cta{display:flex;flex-direction:column;align-items:flex-start;gap:14px;margin:30px 0 16px}
   .hero-cta .under{font-size:13px;color:var(--accent);border-bottom:1px solid var(--accent-line);padding-bottom:2px}
@@ -263,7 +263,7 @@
     padding:17px 24px;border-radius:var(--radius-btn);text-decoration:none;
     transition:all .2s;
   }
-  .btn-primary{background:var(--amber-deep);color:#fff;border:1px solid var(--amber-deep)}
+  .btn-primary{background:var(--fg);color:var(--bg);border:1px solid var(--fg)}
   .btn-primary:hover{background:var(--umber);border-color:var(--umber);color:#fff;transform:translateY(-2px)}
   .btn-ghost{background:transparent;color:var(--fg);border:1px solid var(--line)}
   .btn-ghost:hover{border-color:var(--fg)}
@@ -295,7 +295,8 @@
   .network-machine{border:1px solid var(--line);border-radius:var(--radius-in);padding:18px;min-width:0;background:var(--bg)}
   .network-machine.primary{border-color:var(--accent-line);background:linear-gradient(var(--accent-wash),var(--bg))}
   .machine-location{font:10px/1.5 "Geist Mono",ui-monospace,monospace;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;display:block;margin-bottom:18px}
-  .agent-symbol{display:flex;width:44px;height:44px;align-items:center;justify-content:center;color:var(--accent);border:1px solid var(--accent-line);background:var(--accent-wash);border-radius:12px;margin-bottom:14px}
+  .agent-symbol{display:flex;width:44px;height:44px;align-items:center;justify-content:center;border:1px solid var(--accent-line);background:var(--accent-wash);border-radius:12px;margin-bottom:14px}
+  .agent-symbol svg{display:block}
   .network-machine h3{font-size:20px;margin:0 0 8px;letter-spacing:-.4px}
   .network-machine p{font-size:13px;line-height:1.6;color:var(--muted);min-height:42px}
   .agent-memory{display:flex;gap:6px;align-items:center;margin-top:18px;padding-top:12px;border-top:1px solid var(--line);font:10px/1.5 "Geist Mono",ui-monospace,monospace;color:var(--muted)}
@@ -382,7 +383,8 @@
   .boundary{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:44px}
   .prof{border:1px solid var(--line);border-radius:var(--radius-in);background:var(--panel-soft);padding:22px 24px;display:flex;flex-direction:column;gap:14px;min-width:0}
   .prof.lit{border-color:var(--accent-line);background:linear-gradient(180deg,var(--accent-wash),transparent)}
-  .prof .nm{font-family:"Geist Mono",ui-monospace,monospace;font-size:13px;color:var(--accent);letter-spacing:.04em}
+  .prof .nm{display:flex;align-items:center;gap:9px;font-family:"Geist Mono",ui-monospace,monospace;font-size:13px;color:var(--accent);letter-spacing:.04em}
+  .prof .nm svg{flex:none;display:block}
   .prof .kv{display:flex;justify-content:space-between;gap:12px;font-family:"Geist Mono",ui-monospace,monospace;font-size:11.5px;color:var(--muted)}
   .prof .kv b{color:var(--fg);font-weight:400;text-align:right;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .grant{
@@ -392,6 +394,8 @@
   }
   .grant .rest{margin-left:auto}
   .grant b{color:var(--accent);font-weight:400}
+  .profile-ink{color:var(--ink-night)}
+  :root[data-theme="light"] .profile-ink{color:var(--ink-paper)}
   .grant b.deny,.prof .kv .hit{color:var(--warn)}
 
   .steps{list-style:none;padding:0;margin:0}
@@ -501,7 +505,6 @@
   }
 @media(max-width:900px){.hero-meta{white-space:normal}}
 @media(max-width:1000px){
-    .hero h1{letter-spacing:-3px}
     .hero .shell{gap:20px}
     .how-layout{gap:50px}
     .questions-grid{gap:40px}
@@ -509,7 +512,7 @@
   }
 @media(max-width:720px){
     .hero{padding:28px 0 48px}
-    .hero h1{font-size:clamp(40px,11.7vw,64px);letter-spacing:-2.4px}
+    .hero h1{font-size:clamp(36px,10.4vw,56px)}
     .hero p.lead{font-size:18px}
     .hero-scene{padding:12px 0 20px}
     .hero .alpi-term{height:360px}
@@ -562,7 +565,7 @@
     </g>
     <text x="200" y="210" text-anchor="middle" fill="#f3efe6" font-family="sans-serif" font-size="64" font-weight="700" letter-spacing="-2">alpi</text>
     <text x="200" y="250" text-anchor="middle" fill="#7a746a" font-family="monospace" font-size="12" letter-spacing="2">YOUR PRIVATE AGENT NETWORK</text>
-    <circle cx="200" cy="290" r="3" fill="#f0b447"/>
+    <circle cx="200" cy="290" r="3" fill="#f3efe6"/>
   </svg>
 </template>
 
@@ -580,7 +583,7 @@
   <div class="shell">
     <div>
       <div class="kicker"><span class="dot"></span>No account. No telemetry.</div>
-      <h1>Your agents.<span class="two">Your machines.</span></h1>
+      <h1><span class="crease crease-first">Your agents.</span><span class="crease crease-second">Your machines.</span></h1>
       <p class="lead">
         Review pull requests. Keep a knowledge base. Run the nightly job. Give each agent its own memory, tools and budget &mdash; on a machine you control.
       </p>
@@ -615,7 +618,7 @@
   <div class="shell story-layout">
     <div class="story-copy">
       <div class="eyebrow">From one agent to your own network</div>
-      <h2 id="story-title">Start with one.<br>Let it grow with you.</h2>
+      <h2 id="story-title" class="crease crease-heading">Start with one.<br>Let it grow with you.</h2>
       <p class="sub">An agent in your terminal today. A daily briefing from your server tomorrow. Add another profile when the work needs its own memory, tools or model.</p>
       <ol class="story-points">
         <li><span class="point-num">01</span><div><strong>Give it a real responsibility.</strong><p>Review changes, learn your documents or prepare a morning report.</p></div></li>
@@ -631,7 +634,7 @@
       <div class="network-machines">
         <div class="network-machine primary">
           <span class="machine-location">Your server</span>
-          <span class="agent-symbol"><svg class="network-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="m7 8 3 3-3 3m6 1h4"/></svg></span>
+          <span class="agent-symbol"><!-- PAIR shield 30 --></span>
           <h3>Reviewer</h3>
           <p>Checks the changes.<br>Prepares your briefing.</p>
           <span class="agent-memory"><svg class="network-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h6l2 2h8v13H4z"/></svg>Own memory &amp; budget</span>
@@ -639,7 +642,7 @@
         <div class="network-link" aria-label="ALP request and response"><svg viewBox="0 0 64 24" aria-hidden="true"><path d="M5 7h52m-5-4 5 4-5 4M59 17H7m5-4-5 4 5 4"/></svg><span>ALP</span></div>
         <div class="network-machine">
           <span class="machine-location">Another machine</span>
-          <span class="agent-symbol"><svg class="network-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v16M3 4c4-1 6 0 9 2 3-2 5-3 9-2v15c-4-1-6 0-9 2-3-2-5-3-9-2z"/></svg></span>
+          <span class="agent-symbol"><!-- PAIR tree 30 --></span>
           <h3>Librarian</h3>
           <p>Finds the context<br>in your knowledge base.</p>
           <span class="agent-memory"><svg class="network-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h6l2 2h8v13H4z"/></svg>Own memory &amp; budget</span>
@@ -662,7 +665,7 @@
   <div class="shell">
     <div class="sec-head">
       <div class="eyebrow"><b>01</b> / The unit you own is the profile</div>
-      <h2>A home for every responsibility.</h2>
+      <h2 class="crease crease-heading">A home for every responsibility.</h2>
       <p class="sub">
       Code review, project knowledge, research or a daily report. Each has its own model, memory, keys, schedules and spend, kept together in a profile.
     </p>
@@ -674,7 +677,7 @@
 
       <div class="boundary">
         <div class="prof lit">
-          <span class="nm">reviewer</span>
+          <span class="nm"><!-- PAIR shield 18 -->reviewer</span>
           <p class="purpose">Reviews code changes and flags what needs attention.</p>
           <div class="kv"><span>key</span><b>ed25519 · 9f2c…</b></div>
           <div class="kv"><span>memory</span><b>own</b></div>
@@ -683,7 +686,7 @@
           <div class="kv"><span>tools</span><b>repo, email</b></div>
         </div>
         <div class="prof">
-          <span class="nm">librarian</span>
+          <span class="nm"><!-- PAIR tree 18 -->librarian</span>
           <p class="purpose">Keeps project knowledge and finds relevant context.</p>
           <div class="kv"><span>key</span><b>ed25519 · 41ab…</b></div>
           <div class="kv"><span>memory</span><b>own</b></div>
@@ -692,7 +695,7 @@
           <div class="kv"><span>tools</span><b>knowledge</b></div>
         </div>
         <div class="prof">
-          <span class="nm">researcher</span>
+          <span class="nm"><!-- PAIR star 18 -->researcher</span>
           <p class="purpose">Compares sources and prepares a cited brief.</p>
           <div class="kv"><span>key</span><b>ed25519 · c07e…</b></div>
           <div class="kv"><span>memory</span><b>own</b></div>
@@ -703,7 +706,7 @@
       </div>
 
       <div class="grant">
-        <span>reviewer</span><b>&#8594; link.ask &#8594;</b><span>librarian</span>
+        <span data-ink="shield">reviewer</span><b>&#8594; link.ask &#8594;</b><span data-ink="tree">librarian</span>
         <span class="rest">everything else: <b class="deny">denied</b></span>
       </div>
     </div>
@@ -753,7 +756,7 @@
   <div class="shell how-layout">
     <div>
       <div class="eyebrow"><b>02</b> / Set it up once, then it is yours</div>
-      <h2>One daemon. Your agents around it.</h2>
+      <h2 class="crease crease-heading">One daemon. Your agents around it.</h2>
       <p class="say">Five decisions, once. After that it runs unattended, and every surface reaches the same agents.</p>
     </div>
     <ol class="steps">
@@ -800,7 +803,7 @@
   <div class="shell">
     <div class="sec-head">
       <div class="eyebrow"><b>03</b> / ALP &mdash; the Alpi Link Protocol</div>
-      <h2>A team of agents. One protocol.</h2>
+      <h2 class="crease crease-heading">A team of agents. One protocol.</h2>
       <p class="sub">
       ALP is how alpi agents talk to each other &mdash; across profiles, across machines, and in workgroups. Pinned keys, signed envelopes, grants you wrote. Nothing in between.
     </p>
@@ -876,7 +879,7 @@
   <div class="shell">
     <div class="sec-head">
       <div class="eyebrow"><b>04</b> / Put it on a machine you already run</div>
-      <h2>Put alpi to work.</h2>
+      <h2 class="crease crease-heading">Put alpi to work.</h2>
       <p class="sub">Start in the terminal or the desktop app, then pair your phone. The clients are windows onto the same daemon; your keys never leave the machine running it.</p>
     </div>
 
@@ -952,7 +955,7 @@ $ alpi doctor
     <div class="eyebrow">Questions, answered</div>
     <div class="questions-grid">
       <div>
-        <h2>Before you get started.</h2>
+        <h2 class="crease crease-heading">Before you get started.</h2>
         <p class="sub">The answers people ask for before putting agents anywhere near production.</p>
       </div>
       <div class="qa">

@@ -15,16 +15,16 @@ html{scroll-behavior:smooth}
   --ctrl-bg:rgba(12,11,9,.7);
   --prose:#d6d0c4;
   --prose-lead:#e6e0d4;
-  --code-fg:#f9e4b4;
-  --code-bg:rgba(240,180,71,.07);
-  --amber-soft:#f9e4b4;
-  --amber:#f0b447;
-  --amber-deep:#8f5e0c;
+  --code-fg:#ffffff;
+  --code-bg:rgba(243,239,230,.07);
+  --amber-soft:#ffffff;
+  --amber:#f3efe6;
+  --amber-deep:#cfc8b8;
   --umber:#4a3006;
   --accent:var(--amber);
   --warn:#e0604f;
   --accent-deep:var(--amber-deep);
-  --accent-line:rgba(240,180,71,.22);
+  --accent-line:rgba(243,239,230,.22);
   --space:clamp(24px, 5vw, 80px);
   --radius:22px;
   --term-bg:#100e0b;
@@ -32,7 +32,7 @@ html{scroll-behavior:smooth}
   --term-fg:#ddd7cb;
   --term-muted:#8a8275;
   --term-cmd:#f6f2e9;
-  --term-flag:#f0b447;
+  --term-flag:#f3efe6;
   --term-string:#cfe0a8;
   --radius-in:12px;
   --radius-btn:10px;
@@ -60,8 +60,8 @@ a{color:inherit;text-decoration:none}
 #ascii-bg pre{
 margin:0;padding:0;font:inherit;white-space:pre;
 background-image:linear-gradient(118deg,
-rgba(240,180,71,.26) 0%,
-rgba(240,180,71,.09) 32%,
+rgba(243,239,230,.26) 0%,
+rgba(243,239,230,.09) 32%,
 rgba(150,143,130,.13) 62%,
 rgba(150,143,130,.07) 100%);
 -webkit-background-clip:text;background-clip:text;color:transparent;
@@ -92,7 +92,7 @@ nav.top .row{
 .brand-lockup{display:flex;align-items:center;gap:18px;min-width:0}
 .brand{display:inline-flex;align-items:center;color:var(--fg);text-decoration:none;line-height:1}
 .brand .logo{color:var(--fg);flex-shrink:0;display:inline-flex;align-items:center;gap:12px}
-.brand .logo-mark{width:34px;height:34px;display:block;border-radius:9px}
+.brand .logo-mark{height:34px;width:auto;display:block}
 .brand .logo-word{font-family:"Instrument Sans",system-ui,sans-serif;font-weight:700;font-size:29px;line-height:1;letter-spacing:-1px;color:var(--fg)}
 /* Breadcrumb tail — matches the landing nav menu typography
    (Geist Mono, 12px, uppercase) so the header reads as one system. */
@@ -217,8 +217,8 @@ a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var
 .aurora{
   position:fixed;inset:0;z-index:3;pointer-events:none;mix-blend-mode:screen;
   background:
-    radial-gradient(58% 40% at 8% 94%, rgba(240,180,71,.13) 0%, rgba(143,94,12,.07) 38%, transparent 70%),
-    radial-gradient(42% 32% at 94% 6%, rgba(143,94,12,.11) 0%, transparent 64%);
+    radial-gradient(58% 40% at 8% 94%, rgba(243,239,230,.13) 0%, rgba(150,143,130,.07) 38%, transparent 70%),
+    radial-gradient(42% 32% at 94% 6%, rgba(150,143,130,.11) 0%, transparent 64%);
   -webkit-mask-image:linear-gradient(to bottom,#000 0,#000 300px,rgba(0,0,0,.35) 620px,rgba(0,0,0,.35) 100%);
   mask-image:linear-gradient(to bottom,#000 0,#000 300px,rgba(0,0,0,.35) 620px,rgba(0,0,0,.35) 100%);
 }
@@ -361,16 +361,16 @@ a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var
   --bg:#f6f3ec; --bg-rgb:246,243,236;
   --fg:#1f1a12; --muted:#6f6759; --dim:#e6e0d3; --line:#e2dccf;
   --soft:#fffdf8; --band:#efe9dc;
-  --accent:#8a5a0a; --accent-wash:rgba(143,94,12,.07); --accent-line:rgba(143,94,12,.24);
+  --accent:#14110c; --accent-wash:rgba(20,17,12,.05); --accent-line:rgba(20,17,12,.2);
   --warn:#b8392c;
   --veil:radial-gradient(ellipse at 50% 30%, transparent 0%, rgba(246,243,236,.55) 55%, rgba(246,243,236,.85) 100%);
   --nav-bg:rgba(246,243,236,.72); --panel-bg:rgba(255,253,248,.88); --panel-soft:rgba(255,253,248,.7);
-  --prose:#3f382d; --prose-lead:#2a241a; --code-fg:#7a4e06; --code-bg:rgba(143,94,12,.08);
-  --hover:rgba(143,94,12,.05);
+  --prose:#3f382d; --prose-lead:#2a241a; --code-fg:#3f382d; --code-bg:rgba(20,17,12,.06);
+  --hover:rgba(20,17,12,.04);
   --ctrl-bg:rgba(246,243,236,.78);
 }
 :root[data-theme="light"] .grain{opacity:.05}
-:root[data-theme="light"] #ascii-bg pre{background-image:linear-gradient(118deg, rgba(143,94,12,.34) 0%, rgba(143,94,12,.14) 32%, rgba(90,84,74,.18) 62%, rgba(90,84,74,.10) 100%)}
+:root[data-theme="light"] #ascii-bg pre{background-image:linear-gradient(118deg, rgba(150,143,130,.34) 0%, rgba(150,143,130,.14) 32%, rgba(90,84,74,.18) 62%, rgba(90,84,74,.10) 100%)}
 :root[data-theme="light"] .aurora{mix-blend-mode:multiply}
 
 .theme-btn{

@@ -5,14 +5,21 @@
     return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
   }
 
+  const PROFILES = __PROFILES__;
+  const pg = (name) => `<span class="pg" aria-hidden="true">${PROFILES[name].mark}</span>`;
+  const pn = (name, label = name) => `<span class="pn" style="color:${PROFILES[name].color}">${label}</span>`;
+  const voice = (name) => `${pg(name)} ${pn(name)}`;
+  const said = (name, text) => `<span class="said" style="border-color:${PROFILES[name].color}">${text}</span>`;
+  const dot = (name) => `<span class="pdot" style="background:${PROFILES[name].color}"></span>`;
+
   const TOPBAR = {
     fresh:'alpi v0.3.0 <span class="sep">·</span> <span class="lbl">profile </span><span class="acc">default</span> <span class="sep">·</span> sandbox off <span class="sep">·</span> ~/projects/alpi',
     work: 'alpi v0.3.0 <span class="sep">·</span> <span class="lbl">profile </span><span class="acc">work</span> <span class="sep">·</span> sandbox off <span class="sep">·</span> ~/projects/work',
-    personal:'alpi v0.3.0 <span class="sep">·</span> <span class="lbl">profile </span><span class="acc">reviewer</span> <span class="sep">·</span> sandbox on <span class="sep">·</span> /srv/agents',
+    personal:`alpi v0.3.0 <span class="sep">·</span> <span class="lbl">profile </span>${voice("reviewer")} <span class="sep">·</span> sandbox on <span class="sep">·</span> /srv/agents`,
   };
   const STATUS = {
     fresh:'<span class="diamond">◆</span> deepseek-v4.1-flash <span class="sep">·</span> ctx 8.4K/1M <span class="sep">·</span> $0.00',
-    hero: '<span class="diamond">◆</span> deepseek-v4.1-flash <span class="sep">·</span> ctx 24K/1M <span class="sep">·</span> $0.01',
+    hero: `${dot("reviewer")} deepseek-v4.1-flash <span class="sep">·</span> ctx 24K/1M <span class="sep">·</span> $0.01`,
   };
   const PLACEHOLDER = 'Type a message or /help for commands…';
 
@@ -21,10 +28,12 @@
     let n = TOOL_PAD - s.length;
     return n > 0 ? s + " ".repeat(n) : s;
   }
-  function tool(name, args, result, dur){
-    return `<span class="diamond">◆</span> <span class="tool">${pad(name)}</span> <span class="muted">${args}</span>  <span class="muted">→</span>  ${result}` +
+  function tool(name, args, result, dur, lead = '<span class="diamond">◆</span>'){
+    return `${lead} <span class="tool">${pad(name)}</span> <span class="muted">${args}</span>  <span class="muted">→</span>  ${result}` +
       (dur ? `   <span class="muted">${dur}</span>` : "");
   }
+
+  const run = (name, args, result, dur) => tool(name, args, result, dur, pg("reviewer"));
 
   const HERO_SCENES = [
     {
@@ -32,38 +41,42 @@
       topbar: TOPBAR.personal,
       statusbar: STATUS.hero,
       placeholder: PLACEHOLDER,
+      thinking: `${pg("reviewer")} <span class="muted">Thinking…</span>`,
       initialBody:"",
       turns:[
         {
           input:"what landed overnight, and what needs me before standup?",
           lines:[
-            { d:300, t: tool("schedule", "list · today",          '<span class="muted">3 jobs ran</span>') },
-            { d:380, t: tool("memory",   "read · review notes",   '<span class="muted">2 open threads</span>') },
-            { d:360, t: tool("peer",     "link.ask · librarian",  '<span class="muted">changelog diff</span>') },
+            { d:300, t: run("schedule", "list · today",          '<span class="muted">3 jobs ran</span>') },
+            { d:380, t: run("memory",   "read · review notes",   '<span class="muted">2 open threads</span>') },
+            { d:360, t: run("peer",     `link.ask · ${voice("librarian")}`, '<span class="muted">changelog diff</span>') },
+            { d:420, t: voice("librarian") },
+            { d:120, t: said("librarian", '<span class="bot">3 merges since 18:00; the migration job retried once and settled.</span>') },
             { d:240, t:"" },
-            { d:320, t:'<span class="bot">Nightly pipeline finished clean. The migration job retried once and settled.</span>' },
-            { d:160, t:'<span class="bot">PR #412 needs you: the retry state is not reset after a timeout.</span>' },
-            { d:160, t:'<span class="bot">Spend is $6.10 of the $20 daily cap on this profile. The librarian bills its own.</span>' },
+            { d:320, t: voice("reviewer") },
+            { d:120, t:'<span class="bot">PR #412 needs you: the retry state is not reset after a timeout.</span>' },
+            { d:160, t:`<span class="bot">Spend is $6.10 of the $20 daily cap. The ${pn("librarian")} bills its own.</span>` },
           ],
           postPause: 1400,
         },
         {
           input:"ask builder to review the payment PR before standup",
           lines:[
-            { d:320, t: tool("peer", "link.ask · builder", '<span class="muted">PR review</span>') },
-            { d:520, t: tool("todo", "add Check the retry reset path", '<span class="muted">0. [ ] Check the retry reset path</span>') },
-            { d:280, t:"" },
-            { d:360, t:'<span class="bot">@builder found one real issue: retry state is not reset after timeout.</span>' },
-            { d:160, t:'<span class="bot">It left a minimal patch and a focused test. Everything else is cosmetic.</span>' },
+            { d:320, t: run("peer", `link.ask · ${voice("builder")}`, '<span class="muted">PR review</span>') },
+            { d:520, t: run("todo", "add Check the retry reset path", '<span class="muted">1 open item</span>') },
+            { d:420, t: voice("builder") },
+            { d:120, t: said("builder", '<span class="bot">One real issue: retry state is not reset after timeout.</span>') },
+            { d:160, t: said("builder", '<span class="bot">I left a minimal patch and a focused test. Everything else is cosmetic.</span>') },
           ],
           postPause: 1500,
         },
         {
           input:"post the decision to #launch and notify the phone if anyone blocks",
           lines:[
-            { d:480, t: tool("workgroup_post", "wg_id=wg_7x2f9kq3", '<span class="muted">posted seq 184 · declared $0.0031</span>', "0.2s") },
-            { d:420, t: tool("notify", "text=Ping me if anyone blocks…", '<span class="muted">delivered: alpi</span>') },
-            { d:420, t:'<span class="bot">posted. If a profile flags a blocker, desktop and mobile will show the same thread.</span>' },
+            { d:480, t: run("workgroup_post", "wg_id=wg_7x2f9kq3", '<span class="muted">posted seq 184 · declared $0.0031</span>', "0.2s") },
+            { d:420, t: run("notify", "text=Ping me if anyone blocks…", '<span class="muted">delivered: alpi</span>') },
+            { d:300, t: voice("reviewer") },
+            { d:120, t:'<span class="bot">Posted. If a profile flags a blocker, desktop and mobile will show the same thread.</span>' },
           ],
           postPause: 1700,
         },
@@ -401,9 +414,12 @@ $ alpi -p work workgroup join alice wg_stack-decision
       tbRight.innerHTML = topbarRight(scene, idx, TOTAL);
     }
 
-    function appendLine(html){
-      body.insertAdjacentHTML("beforeend", html + "\n");
+    function appendHtml(html){
+      body.insertAdjacentHTML("beforeend", html);
       body.scrollTop = body.scrollHeight;
+    }
+    function appendLine(html){
+      appendHtml(html + "\n");
     }
 
     async function typeIntoInput(scene, text){
@@ -440,9 +456,13 @@ $ alpi -p work workgroup join alice wg_stack-decision
           }
           appendLine(`<span class="prompt">›</span> <span class="user">${escape(turn.input)}</span>`);
           appendLine("");
+          if(scene.thinking){
+            appendHtml(`<span class="thinking">${scene.thinking}</span>`);
+          }
           for(const line of turn.lines){
             await new Promise(r => later(r, line.d));
             if(cancelled) return;
+            body.querySelector(".thinking")?.remove();
             appendLine(line.t);
           }
           if(turn.postPause){
