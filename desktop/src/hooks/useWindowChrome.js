@@ -1,10 +1,9 @@
 import { useEffect } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { hasDirtySettings } from "../lib/settingsDirty.js";
 
 export function useWindowChrome({
   viewRef,
-  setView,
+  onNewSession = null,
   onJumpToProfile,
   onNewProfile,
   onNewWorkgroup,
@@ -55,7 +54,7 @@ export function useWindowChrome({
   }, []);
 
   useEffect(() => {
-    if (!viewRef || !setView) return;
+    if (!viewRef) return;
     function onKey(e) {
       const cmd = e.metaKey || e.ctrlKey;
       if (!cmd) return;
@@ -104,25 +103,10 @@ export function useWindowChrome({
         return;
       }
       if (key === "n") {
-        const kind = viewRef.current?.kind;
-        if (kind === "profile") {
-          e.preventDefault();
-          e.stopPropagation();
-          setView((v) => (v.kind === "profile" ? { ...v, sessionId: null } : v));
-          return;
-        }
-        if (kind === "settings" && hasDirtySettings()) {
-          e.preventDefault();
-          e.stopPropagation();
-          window.notify?.("Save or discard your settings changes first", { variant: "info" });
-          return;
-        }
-        if (kind === "empty" || kind === "workgroup" || kind === "settings" || kind === "workgroups") {
-          e.preventDefault();
-          e.stopPropagation();
-          setView({ kind: "empty" });
-          return;
-        }
+        if (!onNewSession) return;
+        e.preventDefault();
+        e.stopPropagation();
+        onNewSession();
         return;
       }
       if (key === ",") {
@@ -212,5 +196,5 @@ export function useWindowChrome({
     }
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [viewRef, setView, onJumpToProfile, onNewProfile, onNewWorkgroup, onOpenSettings, onToggleSearch, onToggleSidebarSearch, sidebarSearchAvailableRef, onTogglePalette, paletteOpenRef, onClosePalette, activeProfileName, historyKind, onOpenHistory, onRefreshThread, onToggleContextPause, onToggleReadAloud, onBrowseTools, onBrowseSkills, onBrowseMemory, onBrowseSchedule, onToggleNotifications, onToggleActivity, onToggleShortcuts]);
+  }, [viewRef, onNewSession, onJumpToProfile, onNewProfile, onNewWorkgroup, onOpenSettings, onToggleSearch, onToggleSidebarSearch, sidebarSearchAvailableRef, onTogglePalette, paletteOpenRef, onClosePalette, activeProfileName, historyKind, onOpenHistory, onRefreshThread, onToggleContextPause, onToggleReadAloud, onBrowseTools, onBrowseSkills, onBrowseMemory, onBrowseSchedule, onToggleNotifications, onToggleActivity, onToggleShortcuts]);
 }

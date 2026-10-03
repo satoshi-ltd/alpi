@@ -22,7 +22,7 @@
   margin: 0 calc(-1 * var(--space-4));
   padding: 0 var(--space-4);
   border: 0;
-  border-radius: var(--r-sm);
+  border-radius: var(--r-xs);
   background: none;
   color: var(--ink-3);
   font-family: var(--font-mono);
@@ -34,7 +34,7 @@
 }
 .head:hover,
 .headOpen { background: var(--hover); }
-.head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.head:focus-visible { outline: 2px solid var(--focus-border); outline-offset: -2px; }
 
 .icon { flex: none; }
 .step_running .icon { animation: stepPulse var(--dur-loop, 1.4s) ease-in-out infinite; }
@@ -63,7 +63,7 @@
   color: var(--ink-3);
 }
 .step_fail .status { color: var(--c-danger-text); }
-.step_running .status { color: var(--accent); }
+.step_running .status { color: var(--c, var(--ink-2)); }
 
 .chev {
   flex: none;
@@ -107,7 +107,7 @@
   max-height: 280px;
   overflow: auto;
   border: .5px solid var(--line);
-  border-radius: var(--r-md);
+  border-radius: var(--r-xs);
   background: var(--bg-pane);
 }
 
@@ -117,7 +117,7 @@
   overflow: auto;
   padding: var(--space-4) var(--space-5);
   border: .5px solid var(--line);
-  border-radius: var(--r-md);
+  border-radius: var(--r-xs);
   background: var(--bg-side);
   font-family: var(--font-mono);
   font-size: var(--fs-sm);
@@ -145,7 +145,7 @@
   appearance: none;
   background: none;
   border: 0;
-  border-radius: var(--r-sm);
+  border-radius: var(--r-xs);
   padding: 0 var(--space-4);
   cursor: pointer;
   font-family: var(--font-mono);
@@ -156,7 +156,7 @@
   transition: background-color var(--dur-1) var(--ease);
 }
 .bucket:hover { background: var(--hover); color: var(--ink-2); }
-.bucket:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.bucket:focus-visible { outline: 2px solid var(--focus-border); outline-offset: -2px; }
 
 .bucketChev {
   flex: none;

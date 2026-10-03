@@ -8,7 +8,8 @@ import ChatPane from "./pages/ChatPane.jsx";
 import WorkgroupView from "./pages/WorkgroupView.jsx";
 import WorkgroupsView from "./pages/WorkgroupsView.jsx";
 import Settings from "./pages/Settings.jsx";
-import { Banner } from "./primitives/index.js";
+import { Banner, Button, EmptyState } from "./primitives/index.js";
+import { EMPTY } from "../../common/emptyCopy.mjs";
 import { useNotify } from "./primitives/Notification.jsx";
 import CommandPalette from "./features/CommandPalette.jsx";
 import ActivityPanel from "./features/ActivityPanel.jsx";
@@ -25,6 +26,8 @@ import MemoryModal from "./features/MemoryModal.jsx";
 import ScheduleModal from "./features/ScheduleModal.jsx";
 import { useCommands } from "./hooks/useCommands.js";
 import { orderedJumpTargets } from "./lib/profile-order.js";
+import LoadFailed from "./primitives/LoadFailed.jsx";
+import { LANDING_VIEW, firstRosterProfile, newSessionProfile, profileLandingView, swapPreviousView, viewLeavingSettings } from "./lib/landing.js";
 import { profileLabel } from "./lib/profile-display.js";
 import { installUpdater } from "./lib/updater.js";
 import { cycleTheme } from "./lib/theme.js";
@@ -64,8 +67,10 @@ import {
   useActiveViewPing,
   useNotificationDeeplink,
 } from "./hooks/useNotificationDeeplink.js";
-import { useDaemonAutostart } from "./hooks/useDaemonAutostart.js";
+import { useLocalDaemon } from "./hooks/useLocalDaemon.js";
+import Welcome, { FirstRunHint, firstRunHintSeen, markFirstRunHintSeen } from "./features/Welcome.jsx";
 import { useDelayedFlag } from "./lib/useDelayedFlag.js";
+import { hasDirtySettings } from "./lib/settingsDirty.js";
 import styles from "./App.module.css";
 
 function isChatSessionSummary(session) {
@@ -135,7 +140,7 @@ export function settingsTargetForChatView(view, selectedProfile = null) {
 
 export default function App() {
   const notify = useNotify();
-  const [view, setView] = useState({ kind: "empty" });
+  const [view, setView] = useState(LANDING_VIEW);
   const [settingsTarget, setSettingsTarget] = useState({
     kind: "profile",
     id: null,
@@ -161,10 +166,10 @@ export default function App() {
   const [rewriteDraft, setRewriteDraft] = useState(null);
   const [pendingAttachment, setPendingAttachment] = useState(null);
   const [activeTask, setActiveTask] = useState(null);
-  const [recents, setRecents] = useState([]);
 
   const viewRef = useRef(view);
   const prevViewRef = useRef(view);
+  const prevViewsRef = useRef({});
   useEffect(() => {
     if (view.kind !== "settings") prevViewRef.current = view;
     viewRef.current = view;
@@ -184,10 +189,6 @@ export default function App() {
     setNotificationsTarget(null);
   }, []);
   useActiveViewPing(view);
-
-  const onOpenRecent = useCallback((profile, sessionId) => {
-    setView({ kind: "profile", profile, sessionId });
-  }, []);
 
   useEffect(() => {
     const onTtsError = (ev) => {
@@ -213,7 +214,7 @@ export default function App() {
   const reloadRef = useRef(null);
   const foregroundTurnRef = useRef(null);
   const activeConnectionIdRef = useRef(null);
-  const pickerAlpiRef = useRef(null);
+  const newSessionProfileRef = useRef(() => null);
 
   const jumpTargetsRef = useRef([]);
   const onJumpToProfile = useCallback((index) => {
@@ -297,13 +298,15 @@ export default function App() {
   const [readAloudActive, setReadAloudActive] = useState(() => isTtsActive());
   const [workgroupRefreshTick, setWorkgroupRefreshTick] = useState(0);
   const [workgroupPauseTick, setWorkgroupPauseTick] = useState(0);
-  const onCloseBrowse = useCallback(() => setBrowse(null), []);
+  const [scheduleJob, setScheduleJob] = useState(null);
+  const onCloseBrowse = useCallback(() => { setBrowse(null); setScheduleJob(null); }, []);
   const onBrowseTools = useCallback(() => setBrowse("tools"), []);
   const onBrowseSkills = useCallback(() => setBrowse("skills"), []);
   const onBrowseMemory = useCallback(() => setBrowse("memory"), []);
-  const onBrowseSchedule = useCallback(() => setBrowse("schedule"), []);
+  const onBrowseSchedule = useCallback(() => { setScheduleJob(null); setBrowse("schedule"); }, []);
   const resetAdminSurfaces = useCallback(() => {
     setBrowse(null);
+    setScheduleJob(null);
     setNotificationsOpen(false);
   }, []);
   useCloseAdminSurfacesOnDemotion(canManageProfileSurfaces, resetAdminSurfaces);
@@ -325,41 +328,26 @@ export default function App() {
   useEffect(() => {
     setSearchOpen(false);
   }, [view.kind, view.profile, view.sessionId, view.id]);
-  // Member devices have no Settings surface — snap back to empty if state ever points there (deeplink, nav event, ⌘, race).
+  // Member devices have no Settings surface — snap back to the landing if state ever points there (deeplink, nav event, ⌘, race).
   useEffect(() => {
     if (!canAdminEarly && view.kind === "settings") {
-      setView({ kind: "empty" });
+      setView(LANDING_VIEW);
     }
   }, [canAdminEarly, view.kind]);
+  const leavingSettingsView = (target = settingsTargetRef.current) =>
+    viewLeavingSettings({
+      target,
+      previous: prevViewRef.current,
+      profiles: profilesRef.current,
+      workgroups: workgroupsRef.current,
+    });
   const onOpenSettings = useCallback(() => {
     const v = viewRef.current;
     if (v?.kind === "settings") {
-      const t = settingsTargetRef.current;
-      if (t?.kind === "profile" && t.id) {
-        const profile = profilesRef.current.find((p) => p.name === t.id);
-        const latest = profile?.latest_session;
-        setView({
-          kind: "profile",
-          profile: t.id,
-          sessionId: latest?.kind === "chat" ? latest.id : null,
-        });
-        return;
-      }
-      if (t?.kind === "workgroup" && t.id) {
-        const wg = workgroupsRef.current.find((w) => w.id === t.id);
-        if (wg) {
-          setView({ kind: "workgroup", profile: wg.profile, id: wg.id });
-          return;
-        }
-      }
-      setView(
-        prevViewRef.current && prevViewRef.current.kind !== "settings"
-          ? prevViewRef.current
-          : { kind: "empty" },
-      );
+      setView(leavingSettingsView());
       return;
     }
-    const next = settingsTargetForChatView(v, pickerAlpiRef.current);
+    const next = settingsTargetForChatView(v, newSessionProfileRef.current());
     settingsTargetRef.current = next;
     setSettingsTarget(next);
     setView({ kind: "settings" });
@@ -393,9 +381,11 @@ export default function App() {
     dropWorkgroup,
     connectionSyncing,
     connectionSwitching,
+    rosterAnswered,
+    rosterSettled,
+    rosterGeneration,
+    onLocalDaemonStarted,
     touchWorkgroup,
-    pickerAlpi,
-    setPickerAlpi,
     reload,
     onSetHostConnection,
     onAddHostConnection,
@@ -412,12 +402,21 @@ export default function App() {
   });
 
   useEffect(() => {
-    pickerAlpiRef.current = pickerAlpi;
-  }, [pickerAlpi]);
-
-  useEffect(() => {
     activeConnectionIdRef.current = hostConnections.active_id;
   }, [hostConnections.active_id]);
+
+  const startNewThread = useCallback((name) => {
+    if (!name) return;
+    if (viewRef.current?.kind === "settings" && hasDirtySettings()) {
+      window.notify?.("Save or discard your settings changes first", { variant: "info" });
+      return;
+    }
+    detachNewChatTurns(hostConnectionsRef.current?.active_id ?? null, name);
+    setRewriteDraft(null);
+    setView({ kind: "profile", profile: name, sessionId: null });
+  }, [detachNewChatTurns, hostConnectionsRef]);
+  const onNewSessionWith = useCallback((profile) => startNewThread(profile?.name), [startNewThread]);
+  const onNewSession = useCallback(() => startNewThread(newSessionProfileRef.current()), [startNewThread]);
 
   useNotificationDeeplink({
     setView,
@@ -508,31 +507,13 @@ export default function App() {
       invalidateConnectionCaches(hostConnections.active_id);
       invalidateSessionsButtonCache();
     }
+    if (prev !== hostConnections.active_id) {
+      const swapped = swapPreviousView(prevViewsRef.current, prev, hostConnections.active_id, prevViewRef.current);
+      prevViewsRef.current = swapped.saved;
+      prevViewRef.current = swapped.previous;
+    }
     prevConnectionIdRef.current = hostConnections.active_id;
   }, [hostConnections.active_id]);
-
-  const recentsConnRef = useRef(null);
-  useEffect(() => {
-    if (view.kind !== "empty") return;
-    // SWR: keep the previous list while refetching; clear only when the daemon changed.
-    if (recentsConnRef.current !== hostConnections.active_id) {
-      recentsConnRef.current = hostConnections.active_id;
-      setRecents([]);
-    }
-    let cancelled = false;
-    invoke("sessions", { limit: 8, connectionId: hostConnections.active_id })
-      .then((rows) => {
-        if (cancelled) return;
-        const list = Array.isArray(rows) ? rows : [];
-        const sorted = list
-          .filter((s) => s.kind === "chat" && s.first_user)
-          .sort((a, b) => (b.updated_at || b.mtime || 0) - (a.updated_at || a.mtime || 0))
-          .slice(0, 4);
-        setRecents(sorted);
-      })
-      .catch(() => { if (!cancelled) setRecents([]); });
-    return () => { cancelled = true; };
-  }, [view.kind, hostConnections.active_id]);
 
   const profilesRef = useRef(profiles);
   useEffect(() => {
@@ -546,7 +527,7 @@ export default function App() {
     const viewingDeleted =
       (v?.kind === "profile" && v.profile === name) ||
       (v?.kind === "settings" && t?.kind === "profile" && t.id === name);
-    if (viewingDeleted) setView({ kind: "empty" });
+    if (viewingDeleted) setView(LANDING_VIEW);
     try {
       await invoke("profile_delete", { name });
       window.notify?.(`Profile @${name} deleted`, { variant: "success" });
@@ -827,11 +808,8 @@ export default function App() {
         profiles.find((p) => p.name === settingsTarget.id) ?? profiles[0] ?? null
       );
     }
-    if (view.kind === "empty" && pickerAlpi) {
-      return profiles.find((p) => p.name === pickerAlpi) ?? null;
-    }
     return null;
-  }, [view, profiles, pickerAlpi, settingsTarget]);
+  }, [view, profiles, settingsTarget]);
   const activeProfileName = activeProfile?.name ?? null;
   const historyKind = activeWorkgroup || activeSettingsWorkgroup
     ? "tasks"
@@ -911,6 +889,11 @@ export default function App() {
     for (const p of profiles) out[p.name] = p.accent ?? null;
     return out;
   }, [profiles]);
+  const foldByProfile = useMemo(() => {
+    const out = {};
+    for (const p of profiles) out[p.name] = p.fold;
+    return out;
+  }, [profiles]);
   const onReviewActivity = useCallback((item) => {
     if (item?.profile && item.session_id) {
       setRewriteDraft(null);
@@ -920,9 +903,10 @@ export default function App() {
     q.refetch().then(() => q.promote(item.request_id));
   }, [approval, clarification]);
 
+  const newSessionAvailable = profiles.length > 0;
   useWindowChrome({
     viewRef,
-    setView,
+    onNewSession: newSessionAvailable ? onNewSession : null,
     onJumpToProfile,
     onNewProfile: adminOnNewProfile,
     onNewWorkgroup: adminOnNewWorkgroup,
@@ -1093,25 +1077,13 @@ export default function App() {
     }).catch(() => {});
   }, []);
 
-  const onNewChat = useCallback(() => {
-    setRewriteDraft(null);
-    detachNewChatTurns(hostConnectionsRef.current?.active_id ?? null);
-    setView({ kind: "empty" });
-  }, [detachNewChatTurns, hostConnectionsRef]);
-
   const onSelectWorkgroup = useCallback((wg) => {
     setView({ kind: "workgroup", profile: wg.profile, id: wg.id });
   }, []);
 
   const onOpenProfile = useCallback((profile) => {
     setRewriteDraft(null);
-    setView({
-      kind: "profile",
-      profile: profile.name,
-      sessionId: isChatSessionSummary(profile.latest_session)
-        ? profile.latest_session.id
-        : null,
-    });
+    setView(profileLandingView(profile));
   }, []);
 
   const onChangeSession = useCallback((sessionId) => {
@@ -1120,9 +1092,9 @@ export default function App() {
   }, []);
 
   const onNewSessionForCurrentProfile = useCallback(() => {
-    setRewriteDraft(null);
-    setView((v) => (v.kind === "profile" ? { ...v, sessionId: null } : v));
-  }, []);
+    const v = viewRef.current;
+    if (v?.kind === "profile") startNewThread(v.profile);
+  }, [startNewThread]);
 
   const onRewriteMessage = useCallback((profileName, sessionId, turnIndex, text) => {
     if (!profileName || !sessionId || !text) return;
@@ -1159,28 +1131,7 @@ export default function App() {
       settingsTargetRef.current = next;
       setSettingsTarget(next);
     }
-    if (t?.kind === "profile" && t.id) {
-      const profile = profilesRef.current.find((p) => p.name === t.id);
-      const latest = profile?.latest_session;
-      setView({
-        kind: "profile",
-        profile: t.id,
-        sessionId: latest?.kind === "chat" ? latest.id : null,
-      });
-      return;
-    }
-    if (t?.kind === "workgroup" && t.id) {
-      const wg = workgroupsRef.current.find((w) => w.id === t.id);
-      if (wg) {
-        setView({ kind: "workgroup", profile: wg.profile, id: wg.id });
-        return;
-      }
-    }
-    setView(
-      prevViewRef.current && prevViewRef.current.kind !== "settings"
-        ? prevViewRef.current
-        : { kind: "empty" },
-    );
+    setView(leavingSettingsView(t));
   }, []);
 
   const activeConnection = hostConnections.connections.find(
@@ -1194,13 +1145,33 @@ export default function App() {
       activeConnection.status === RATE_LIMITED);
 
   const sidebarSearchAvailable = !daemonOffline && view.kind !== "settings";
+  const emptyRosterKey = workgroups.length > 0 ? "profiles" : adminOnNewProfile ? "roster" : "rosterMember";
   useEffect(() => {
     sidebarSearchAvailableRef.current = sidebarSearchAvailable;
     if (!sidebarSearchAvailable) setSidebarSearchOpen(false);
   }, [sidebarSearchAvailable]);
 
-  const [autostartPhase, setAutostartPhase] = useState("idle");
-  useDaemonAutostart({ activeConnection, onAttempt: setAutostartPhase });
+  const localActive = activeConnection?.kind === "local";
+  const [localSeenOnline, setLocalSeenOnline] = useState(false);
+  useEffect(() => {
+    if (localActive && activeConnection?.status === "online") setLocalSeenOnline(true);
+  }, [localActive, activeConnection?.status]);
+  const localDaemon = useLocalDaemon({
+    enabled: localActive && !localSeenOnline && activeConnection?.status === "offline",
+    onStarted: onLocalDaemonStarted,
+  });
+  const showWelcome = localActive && daemonOffline
+    && (localDaemon.phase !== "idle" || ["stopped", "absent", "unsupported"].includes(localDaemon.state));
+  const retryLocal = useCallback(() => {
+    setLocalSeenOnline(false);
+    onRefreshHostConnectionStatus();
+  }, [onRefreshHostConnectionStatus]);
+  const [firstRunHint, setFirstRunHint] = useState(() => !firstRunHintSeen());
+  const showFirstRunHint = firstRunHint && localActive && activeConnection?.status === "online" && view.kind !== "settings";
+  const dismissFirstRunHint = useCallback(() => {
+    markFirstRunHintSeen();
+    setFirstRunHint(false);
+  }, []);
 
   const activeStatus = activeConnection?.status;
   const connectionDisabled = activeStatus === "disabled";
@@ -1213,18 +1184,13 @@ export default function App() {
     activeConnection?.kind === "remote"
       ? activeConnection?.name ?? "remote daemon"
       : "local daemon";
-  const isLocalAutostartInFlight =
-    activeConnection?.kind === "local" &&
-    activeStatus === "offline" &&
-    autostartPhase === "starting";
 
-  // Local connections defer to autostart; only auto-open after it gave up.
+  // The local connection answers an outage with its welcome or the banner, never the switcher.
   const autoOpenConnectionSwitcher =
     hostConnections.connections.length > 0 &&
     (activeStatus === "auth-failed" ||
       connectionDisabled ||
-      (activeStatus === "offline" &&
-        (activeConnection?.kind !== "local" || autostartPhase === "gave-up")));
+      (activeStatus === "offline" && activeConnection?.kind !== "local"));
 
   const connectionLocked =
     autoOpenConnectionSwitcher &&
@@ -1246,6 +1212,42 @@ export default function App() {
   useEffect(() => {
     jumpTargetsRef.current = jumpTargets;
   }, [jumpTargets]);
+
+  const firstProfile = useMemo(() => firstRosterProfile(jumpTargets), [jumpTargets]);
+  useEffect(() => {
+    if (view.kind !== "landing" || !firstProfile || !(rosterAnswered || rosterSettled || daemonOffline)) return;
+    setRewriteDraft(null);
+    setView((v) => (v.kind === "landing" ? profileLandingView(firstProfile) : v));
+  }, [view.kind, firstProfile, rosterAnswered, rosterSettled, daemonOffline]);
+
+  const viewGenerationRef = useRef({ profile: null, generation: 0 });
+  useEffect(() => {
+    if (view.kind !== "profile") return;
+    if (viewGenerationRef.current.profile !== view.profile) viewGenerationRef.current = { profile: view.profile, generation: rosterGeneration };
+  }, [view.kind, view.profile, rosterGeneration]);
+  useEffect(() => {
+    if (!rosterAnswered || connectionSwitching || view.kind !== "profile") return;
+    if (profiles.some((p) => p.name === view.profile)) return;
+    if (rosterGeneration <= viewGenerationRef.current.generation) {
+      reload();
+      return;
+    }
+    setView((v) => (v.kind === "profile" && v.profile === view.profile ? LANDING_VIEW : v));
+  }, [rosterAnswered, connectionSwitching, view.kind, view.profile, profiles, rosterGeneration, reload]);
+
+  const lastProfileByConnectionRef = useRef({});
+  useEffect(() => {
+    if (view.kind === "profile" && view.profile) {
+      lastProfileByConnectionRef.current[hostConnections.active_id ?? ""] = view.profile;
+    }
+  }, [view, hostConnections.active_id]);
+  newSessionProfileRef.current = () =>
+    newSessionProfile({
+      view: viewRef.current,
+      profiles: profilesRef.current,
+      lastSeen: lastProfileByConnectionRef.current[hostConnectionsRef.current?.active_id ?? ""] ?? null,
+      firstProfile,
+    });
 
   const jumpHints = useMemo(() => {
     const out = {};
@@ -1272,7 +1274,7 @@ export default function App() {
     sidebarSearchOpen,
     onNewProfile: adminOnNewProfile,
     onNewWorkgroup: adminOnNewWorkgroup,
-    onNewChat: view.kind === "profile" ? onNewSessionForCurrentProfile : onNewChat,
+    onNewSession: newSessionAvailable ? onNewSession : null,
     onRefreshThread:
       view.kind === "profile" || view.kind === "workgroup"
         ? onRefreshActiveThread
@@ -1317,7 +1319,8 @@ export default function App() {
         hostConnections={hostConnections}
         daemonOffline={daemonOffline}
         connectionSyncing={connectionSyncing}
-        onNewChat={onNewChat}
+        rosterAnswered={rosterAnswered}
+        onNewSessionWith={onNewSessionWith}
         onOpenProfile={onOpenProfile}
         onOpenWorkgroup={onOpenWorkgroup}
         onViewAllWorkgroups={onViewAllWorkgroups}
@@ -1345,24 +1348,30 @@ export default function App() {
         activityNeedsYou={activityCounts.needsYou}
       />
       <main className={styles.main}>
-          {daemonOffline && (
+          {daemonOffline && !showWelcome && (
             <Banner
-              kind={isLocalAutostartInFlight ? "info" : connectionDisabled || connectionRateLimited ? "warning" : "danger"}
-              pulsing={!isLocalAutostartInFlight && !connectionDisabled && !connectionRateLimited}
-              action={isLocalAutostartInFlight || connectionDisabled || connectionRateLimited ? null : "Retry"}
-              onAction={isLocalAutostartInFlight || connectionDisabled || connectionRateLimited ? null : onRefreshHostConnectionStatus}
+              kind={connectionDisabled || connectionRateLimited ? "warning" : "danger"}
+              pulsing={!connectionDisabled && !connectionRateLimited}
+              action={connectionDisabled || connectionRateLimited ? null : "Retry"}
+              onAction={connectionDisabled || connectionRateLimited ? null : localActive ? retryLocal : onRefreshHostConnectionStatus}
             >
               {connectionFailureMessage(activeConnection) ??
                 (activeConnection?.kind === "remote"
                   ? `${activeConnection?.name ?? "Remote"} unreachable — check network / tunnel.`
-                  : isLocalAutostartInFlight
-                    ? "Starting local daemon…"
-                    : autostartPhase === "gave-up"
-                      ? "Local daemon won't start — check Settings → daemon, or run `alpi daemon start` from terminal."
-                      : "Local daemon unreachable — reconnecting…")}
+                  : "alpi on this computer is not answering — reconnecting…")}
             </Banner>
           )}
-          {view.kind === "settings" && canAdminEarly ? (
+          {showFirstRunHint && <FirstRunHint onDismiss={dismissFirstRunHint} />}
+          {showWelcome ? (
+            <Welcome
+              localState={localDaemon.state}
+              phase={localDaemon.phase}
+              error={localDaemon.error}
+              onStart={localDaemon.start}
+              onCheckAgain={localDaemon.detect}
+              onConnect={onAddHostConnection}
+            />
+          ) : view.kind === "settings" && canAdminEarly ? (
             <Settings
               profiles={profiles}
               workgroups={workgroups}
@@ -1433,7 +1442,20 @@ export default function App() {
                   pauseCommandTick={workgroupPauseTick}
                 />
               )}
-              {(view.kind === "empty" || view.kind === "profile") && (
+              {view.kind === "landing" && !firstProfile && !rosterAnswered && rosterSettled && !connectionSwitching && !daemonOffline && (
+                <LoadFailed label="profiles" onRetry={() => reload()} />
+              )}
+              {view.kind === "landing" && !firstProfile && rosterAnswered && !connectionSwitching && !daemonOffline && (
+                <EmptyState
+                  heading={EMPTY[emptyRosterKey].title}
+                  subtitle={EMPTY[emptyRosterKey].hint}
+                >
+                  {adminOnNewProfile && (
+                    <Button variant="primary" onClick={adminOnNewProfile}>New profile</Button>
+                  )}
+                </EmptyState>
+              )}
+              {view.kind === "profile" && (
                 <ChatPane
                   view={view}
                   profiles={profiles}
@@ -1456,13 +1478,6 @@ export default function App() {
                     setView({ kind: "settings" });
                   } : null}
                   onTogglePauseProfile={adminOnTogglePauseProfile}
-                  onSelectProfile={(name) => {
-                    setPickerAlpi(name);
-                    if (view.kind === "profile") {
-                      const p = profiles.find((x) => x.name === name);
-                      if (p) onOpenProfile(p);
-                    }
-                  }}
                   onRewriteMessage={onRewriteMessage}
                   onRetryMessage={onRetryMessage}
                   rewriteDraft={rewriteDraft}
@@ -1489,8 +1504,6 @@ export default function App() {
                   onChangeSession={onChangeSession}
                   searchOpen={searchOpen}
                   onCloseSearch={onCloseSearch}
-                  recents={recents}
-                  onOpenRecent={onOpenRecent}
                 />
               )}
             </>
@@ -1514,6 +1527,7 @@ export default function App() {
         onClose={onCloseActivity}
         activity={activity}
         accentByProfile={accentByProfile}
+        foldByProfile={foldByProfile}
         onReview={onReviewActivity}
         onOpenSession={(profile, sessionId) => {
           setRewriteDraft(null);
@@ -1553,6 +1567,7 @@ export default function App() {
         onClose={onCloseBrowse}
         profile={activeProfileName}
         connectionId={hostConnections.active_id}
+        openJob={scheduleJob}
       />
       <CreateProfileModal
         open={createProfileOpen}
@@ -1580,7 +1595,7 @@ export default function App() {
           }
         }}
       />
-      <ApprovalModal requests={approvalSplit.modal} onResolved={approval.resolve} />
+      <ApprovalModal requests={approvalSplit.modal} onResolved={approval.resolve} profiles={profiles} />
       <ClarificationModal requests={clarificationSplit.modal} onResolved={clarification.resolve} />
       {notificationsOpen && canManageProfileSurfaces && <NotificationsModal
         open={notificationsOpen}
@@ -1590,9 +1605,15 @@ export default function App() {
         selectedId={notificationsTarget?.id}
         selectedProfile={notificationsTarget?.profile}
         selectedConnectionId={notificationsTarget?.connectionId}
-        onOpenChat={(profile, sessionId) =>
-          setView({ kind: "profile", profile, sessionId: sessionId || null })
-        }
+        onOpenChat={(profile, sessionId, connId) => {
+          if (connId && connId !== hostConnections.active_id) onSetHostConnection(connId);
+          setView({ kind: "profile", profile, sessionId: sessionId || null });
+        }}
+        onOpenJob={canManageProfileSurfaces ? (profile, jobId) => {
+          if (activeProfileName !== profile) setView({ kind: "profile", profile, sessionId: null });
+          setScheduleJob({ id: jobId });
+          setBrowse("schedule");
+        } : null}
         onSendToChat={(profile, connId, attachment) => {
           setPendingAttachment({ profile, connectionId: connId ?? null, attachment, consumed: false });
           if (connId && connId !== hostConnections.active_id) onSetHostConnection(connId);

@@ -55,6 +55,18 @@ describe("rosterStates", () => {
     expect(workgroups["alpi/wg1"]).toEqual({ state: "working", phasesDone: 2, phasesTotal: 4, phase: "analyze" });
   });
 
+  it("reads a failed job that is running again as working, but not another failed job of the profile", () => {
+    const now = 1000 + 3600;
+    const failed = (job_id) => ({ profile: "smith", job_id, last_run_status: "error", last_run_at: 1000 });
+    const rerun = { kind: "turn", source: "schedule", profile: "smith", job_id: "audit", started_at: 1100 };
+    expect(rosterStates({ needs_you: [], running: [rerun], scheduled: [failed("audit")] }, { nowS: now }).profiles).toEqual({ smith: "working" });
+    expect(rosterStates({ needs_you: [], running: [rerun], scheduled: [failed("audit"), failed("digest")] }, { nowS: now }).profiles).toEqual({ smith: "failed" });
+    expect(rosterStates({ needs_you: [{ kind: "approval", profile: "smith" }], running: [rerun], scheduled: [failed("audit")] }, { nowS: now }).profiles).toEqual({ smith: "needs-you" });
+    expect(rosterStates({ needs_you: [], running: [{ ...rerun, profile: "doc" }], scheduled: [failed("audit")] }, { nowS: now }).profiles).toEqual({ smith: "failed", doc: "working" });
+    const { job_id: _, ...older } = rerun;
+    expect(rosterStates({ needs_you: [], running: [older], scheduled: [failed("audit")] }, { nowS: now }).profiles).toEqual({ smith: "failed" });
+  });
+
   it("only counts a scheduled error from the last 24 hours as failed", () => {
     const job = { last_run_status: "error", last_run_at: "2026-09-29T10:00:00Z" };
     const at = Date.parse(job.last_run_at) / 1000;

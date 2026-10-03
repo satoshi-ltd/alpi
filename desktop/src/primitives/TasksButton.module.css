@@ -76,7 +76,7 @@
   align-items: flex-start;
   gap: var(--space-4);
   padding: var(--space-4) var(--space-5);
-  border-radius: var(--r-md);
+  border-radius: var(--r-xs);
   text-align: left;
   background: transparent;
   border: 0;

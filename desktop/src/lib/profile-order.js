@@ -1,6 +1,4 @@
-// Sidebar order — pinned profiles + workgroups first (in pin-order),
-// then unpinned profiles by completeness/recency. Shared between Sidebar
-// render and ⌘1-9 jump shortcuts so the keys match what the user sees.
+import { splitDefaultProfile, withoutDefaultPin } from "../../../common/rosterOrder.mjs";
 
 function recency(profile) {
   const ls = profile.latest_session;
@@ -18,13 +16,15 @@ export function compareProfiles(a, b) {
 }
 
 export function orderedSidebarProfiles(profiles, pinnedNames = []) {
-  const pinnedSet = new Set(pinnedNames);
-  const pinned = pinnedNames
-    .map((name) => profiles.find((p) => p.name === name))
+  const { front, rest: others } = splitDefaultProfile(profiles);
+  const pins = withoutDefaultPin(pinnedNames);
+  const pinnedSet = new Set(pins);
+  const pinned = pins
+    .map((name) => others.find((p) => p.name === name))
     .filter(Boolean);
-  const rest = profiles.filter((p) => !pinnedSet.has(p.name));
+  const rest = others.filter((p) => !pinnedSet.has(p.name));
   rest.sort(compareProfiles);
-  return [...pinned, ...rest];
+  return [...(front ? [front] : []), ...pinned, ...rest];
 }
 
 export function orderPinnedItems(pinnedProfiles = [], pinnedWorkgroups = []) {
@@ -46,34 +46,27 @@ export function orderPinnedItems(pinnedProfiles = [], pinnedWorkgroups = []) {
   return items;
 }
 
-// Items eligible for ⌘1-9 jump: pinned profiles + pinned workgroups (in
-// pin-order, profiles before workgroups), then unpinned profiles by
-// recency. Returns a uniform shape: { kind: "profile"|"workgroup", target }.
 export function orderedJumpTargets({
   profiles,
   workgroups,
   pinnedProfiles = [],
   pinnedWorkgroups = [],
 }) {
-  const pinnedProfileSet = new Set(pinnedProfiles);
-  const pinnedWgSet = new Set(pinnedWorkgroups);
+  const { front, rest: others } = splitDefaultProfile(profiles);
+  const pins = withoutDefaultPin(pinnedProfiles);
+  const pinnedProfileSet = new Set(pins);
 
-  const pinnedProfileItems = pinnedProfiles
-    .map((name) => profiles.find((p) => p.name === name))
-    .filter(Boolean)
-    .map((p) => ({ kind: "profile", target: p }));
+  const frontItems = front ? [{ kind: "profile", target: front }] : [];
 
-  const pinnedWgItems = pinnedWorkgroups
-    .map((key) =>
-      workgroups.find((w) => `${w.profile}/${w.id}` === key),
-    )
-    .filter(Boolean)
-    .map((w) => ({ kind: "workgroup", target: w }));
+  const pinnedItems = orderPinnedItems(
+    pins.map((name) => others.find((p) => p.name === name)).filter(Boolean),
+    pinnedWorkgroups.map((key) => workgroups.find((w) => `${w.profile}/${w.id}` === key)).filter(Boolean),
+  ).map(({ kind, item }) => ({ kind, target: item }));
 
-  const restProfiles = profiles
+  const restProfiles = others
     .filter((p) => !pinnedProfileSet.has(p.name))
     .sort(compareProfiles)
     .map((p) => ({ kind: "profile", target: p }));
 
-  return [...pinnedProfileItems, ...pinnedWgItems, ...restProfiles];
+  return [...frontItems, ...pinnedItems, ...restProfiles];
 }

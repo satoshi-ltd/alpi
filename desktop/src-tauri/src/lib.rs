@@ -829,6 +829,180 @@ fn current_uid() -> u32 {
     0
 }
 
+const ALPI_FALLBACK_DIRS: [&str; 3] = [".local/bin", "/opt/homebrew/bin", "/usr/local/bin"];
+
+fn find_alpi_binary(path_var: Option<&std::ffi::OsStr>, home: Option<&std::path::Path>) -> Option<std::path::PathBuf> {
+    let name = if cfg!(windows) { "alpi.exe" } else { "alpi" };
+    let mut dirs: Vec<std::path::PathBuf> = path_var.map(|v| std::env::split_paths(v).collect()).unwrap_or_default();
+    for dir in ALPI_FALLBACK_DIRS {
+        if dir.starts_with('/') {
+            dirs.push(std::path::PathBuf::from(dir));
+        } else if let Some(h) = home {
+            dirs.push(h.join(dir));
+        }
+    }
+    dirs.into_iter().map(|d| d.join(name)).find(|c| c.is_file())
+}
+
+fn alpi_installed(home: &std::path::Path, binary_found: bool) -> bool {
+    binary_found
+        || home.join("Library/LaunchAgents/com.alpi.daemon.plist").exists()
+        || home.join(".config/systemd/user/alpi-daemon.service").exists()
+}
+
+fn classify_local_state(unsupported: bool, running: bool, installed: bool) -> &'static str {
+    if unsupported {
+        "unsupported"
+    } else if running {
+        "running"
+    } else if installed {
+        "stopped"
+    } else {
+        "absent"
+    }
+}
+
+fn stderr_tail(text: &str, lines: usize) -> String {
+    let all: Vec<&str> = text.trim().lines().collect();
+    all[all.len().saturating_sub(lines)..].join("\n")
+}
+
+fn failure_with_log(reason: String, launcher_err: &str) -> String {
+    let mut out = reason;
+    let launcher = stderr_tail(launcher_err, 12);
+    if !launcher.is_empty() {
+        out.push_str(&format!("\n{launcher}"));
+    }
+    if let Some(path) = crate::home::resolve_home(Some("default")).map(|h| h.join("logs").join("service.log")) {
+        let log = std::fs::read_to_string(&path).map(|t| stderr_tail(&t, 12)).unwrap_or_default();
+        if !log.is_empty() {
+            out.push_str(&format!("\n{}:\n{log}", path.display()));
+        }
+    }
+    out
+}
+
+fn child_path(binary: &std::path::Path, home: Option<&std::path::Path>) -> std::ffi::OsString {
+    let mut dirs: Vec<std::path::PathBuf> = binary.parent().map(|d| vec![d.to_path_buf()]).unwrap_or_default();
+    for dir in ALPI_FALLBACK_DIRS {
+        if dir.starts_with('/') {
+            dirs.push(dir.into());
+        } else if let Some(h) = home {
+            dirs.push(h.join(dir));
+        }
+    }
+    if let Some(inherited) = std::env::var_os("PATH") {
+        dirs.extend(std::env::split_paths(&inherited));
+    }
+    let mut seen = std::collections::HashSet::new();
+    dirs.retain(|d| seen.insert(d.clone()));
+    std::env::join_paths(dirs).unwrap_or_default()
+}
+
+static DETACHED_START_ALIVE: OnceLock<std::sync::Arc<std::sync::atomic::AtomicBool>> = OnceLock::new();
+
+fn detached_start_alive() -> std::sync::Arc<std::sync::atomic::AtomicBool> {
+    DETACHED_START_ALIVE.get_or_init(Default::default).clone()
+}
+
+fn start_local_daemon() -> Result<String, String> {
+    use std::sync::atomic::Ordering;
+    let sup = detect_supervisor();
+    let mut argv = daemon_start_argv(sup, current_uid());
+    let detached = sup == Supervisor::None;
+    let alive = detached_start_alive();
+    let home = std::env::var_os("HOME").map(std::path::PathBuf::from);
+    let launcher_log = crate::home::resolve_home(Some("default")).map(|h| h.join("logs").join("desktop-start.log"));
+    let launcher_err = || launcher_log.as_ref().and_then(|p| std::fs::read_to_string(p).ok()).unwrap_or_default();
+    let reuse_running_start = detached && alive.load(Ordering::SeqCst);
+    let mut exit = None;
+    if !reuse_running_start {
+        let binary = if detached {
+            match find_alpi_binary(std::env::var_os("PATH").as_deref(), home.as_deref()) {
+                Some(bin) => {
+                    argv[0] = bin.to_string_lossy().into_owned();
+                    Some(bin)
+                }
+                None => return Err("alpi is not installed on this computer".into()),
+            }
+        } else {
+            None
+        };
+        let stderr = launcher_log
+            .as_ref()
+            .and_then(|p| {
+                let _ = std::fs::create_dir_all(p.parent()?);
+                std::fs::File::create(p).ok()
+            })
+            .map(Stdio::from)
+            .unwrap_or_else(Stdio::null);
+        let mut cmd = Command::new(&argv[0]);
+        cmd.args(&argv[1..]).stdin(Stdio::null()).stdout(Stdio::null()).stderr(stderr);
+        if let Some(bin) = &binary {
+            cmd.env("PATH", child_path(bin, home.as_deref()));
+        }
+        #[cfg(unix)]
+        if detached {
+            use std::os::unix::process::CommandExt;
+            cmd.process_group(0);
+        }
+        let mut child = cmd.spawn().map_err(|e| format!("spawn {argv:?}: {e}"))?;
+        let (tx, rx) = std::sync::mpsc::channel();
+        if detached {
+            alive.store(true, Ordering::SeqCst);
+        }
+        let reaper_alive = alive.clone();
+        // The child is the daemon itself when detached: reap it on every path or a crash leaves a zombie that `kill(pid, 0)` reports as running.
+        std::thread::spawn(move || {
+            let status = child.wait();
+            if detached {
+                reaper_alive.store(false, Ordering::SeqCst);
+            }
+            let _ = tx.send(status.ok());
+        });
+        exit = Some(rx);
+    }
+    // Readiness = host.sock + a working RPC, never the pidfile (the pid is written before the socket listens).
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(45);
+    while std::time::Instant::now() < deadline {
+        if host_client::local_answers() {
+            return Ok("started".into());
+        }
+        if let Some(Ok(Some(status))) = exit.as_ref().map(|rx| rx.try_recv()) {
+            exit = None;
+            if !status.success() {
+                if host_client::local_answers() {
+                    return Ok("started".into());
+                }
+                return Err(failure_with_log(format!("daemon start failed ({status})"), &launcher_err()));
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
+    Err(failure_with_log("alpi did not answer within 45 seconds".into(), &launcher_err()))
+}
+
+#[tauri::command]
+async fn local_daemon_state() -> serde_json::Value {
+    off_main(|| {
+        let home = std::env::var_os("HOME").map(std::path::PathBuf::from);
+        let binary = find_alpi_binary(std::env::var_os("PATH").as_deref(), home.as_deref());
+        let running = !cfg!(windows) && host_client::local_answers();
+        let installed = home.as_deref().map(|h| alpi_installed(h, binary.is_some())).unwrap_or(binary.is_some());
+        serde_json::json!({
+            "state": classify_local_state(cfg!(windows), running, installed),
+            "binary": binary.map(|b| b.to_string_lossy().into_owned()),
+        })
+    })
+    .await
+    .unwrap_or_else(|e| serde_json::json!({"state": "absent", "error": e}))
+}
+
+#[tauri::command]
+async fn local_daemon_start() -> Result<String, String> {
+    off_main(start_local_daemon).await?
+}
+
 fn detect_supervisor() -> Supervisor {
     let Some(home) = std::env::var_os("HOME").map(std::path::PathBuf::from) else {
         return Supervisor::None;
@@ -840,90 +1014,6 @@ fn detect_supervisor() -> Supervisor {
         return Supervisor::Systemd;
     }
     Supervisor::None
-}
-
-// Local subprocess: daemon may not be running yet (start/install case).
-#[tauri::command]
-async fn service_action(profile: String, action: String) -> Result<String, String> {
-    let _ = &profile; // kept for the JS command ABI; the daemon is global, not per-profile.
-    if !matches!(
-        action.as_str(),
-        "start" | "stop" | "restart" | "install" | "uninstall"
-    ) {
-        return Err(format!("invalid action: {action}"));
-    }
-    if action == "start" {
-        return tauri::async_runtime::spawn_blocking(move || {
-            let argv = daemon_start_argv(detect_supervisor(), current_uid());
-            let mut child = Command::new(&argv[0])
-                .args(&argv[1..])
-                .stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .stderr(Stdio::piped())
-                .spawn()
-                .map_err(|e| format!("spawn {argv:?}: {e}"))?;
-            // Readiness = host.sock + a working RPC, never the pidfile (the pid is written before the socket listens).
-            let mut launcher_exited = false;
-            for _ in 0..240 {
-                if host_client::call("host.version", serde_json::json!({})).is_ok() {
-                    return Ok("started".into());
-                }
-                if !launcher_exited {
-                    if let Ok(Some(status)) = child.try_wait() {
-                        launcher_exited = true;
-                        if !status.success() {
-                            if host_client::call("host.version", serde_json::json!({})).is_ok() {
-                                return Ok("started".into());
-                            }
-                            let mut err = String::new();
-                            if let Some(mut s) = child.stderr.take() {
-                                use std::io::Read;
-                                let _ = s.read_to_string(&mut err);
-                            }
-                            return Err(format!("daemon start failed ({status}): {}", err.trim()));
-                        }
-                    }
-                }
-                std::thread::sleep(std::time::Duration::from_millis(50));
-            }
-            Err("daemon did not become reachable (host.sock + RPC) in time".into())
-        })
-        .await
-        .map_err(|e| format!("join: {e}"))?;
-    }
-    let action_for_msg = action.clone();
-    let action_for_wait = action.clone();
-    let out = tauri::async_runtime::spawn_blocking(move || {
-        Command::new("alpi")
-            .args(["daemon", &action])
-            .output()
-    })
-    .await
-    .map_err(|e| format!("join: {e}"))?
-    .map_err(|e| format!("spawn `alpi daemon`: {e}"))?;
-    if !out.status.success() {
-        return Err(format!(
-            "daemon {} failed: {}",
-            action_for_msg,
-            String::from_utf8_lossy(&out.stderr).trim()
-        ));
-    }
-    if action_for_wait == "restart" || action_for_wait == "install" {
-        tauri::async_runtime::spawn_blocking(move || {
-            if let Some(home) = crate::home::resolve_home(Some("default")) {
-                let pid_path = home.join("service.pid");
-                for _ in 0..120 {
-                    if pid_path.exists() {
-                        break;
-                    }
-                    std::thread::sleep(std::time::Duration::from_millis(50));
-                }
-            }
-        })
-        .await
-        .map_err(|e| format!("join: {e}"))?;
-    }
-    Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
 #[tauri::command]
@@ -2492,6 +2582,22 @@ async fn outputs_mark_read(
 }
 
 #[tauri::command]
+async fn outputs_mark_unread(
+    profile: String,
+    id: String,
+    connection_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let params = serde_json::json!({"profile": profile, "id": id});
+    let result = tauri::async_runtime::spawn_blocking(move || match connection_id {
+        Some(cid) => host_client::call_for(&cid, "host.outputs.mark_unread", params),
+        None => host_client::call("host.outputs.mark_unread", params),
+    })
+    .await
+    .map_err(|e| format!("outputs_mark_unread: {e}"))??;
+    Ok(result.get("output").cloned().unwrap_or(serde_json::Value::Null))
+}
+
+#[tauri::command]
 async fn outputs_mark_all_read(
     profile: String,
     connection_id: Option<String>,
@@ -3858,7 +3964,8 @@ pub fn run() {
             unset_config_field,
             draft_identity,
             port_available,
-            service_action,
+            local_daemon_state,
+            local_daemon_start,
             reveal_in_finder,
             save_file_as,
             email_status,
@@ -3884,6 +3991,7 @@ pub fn run() {
             outputs_list,
             outputs_read,
             outputs_mark_read,
+            outputs_mark_unread,
             outputs_mark_all_read,
             outputs_delete,
             approval_respond,
@@ -4196,3 +4304,70 @@ mod attachment_size_tests {
         }
     }
 }
+
+#[cfg(test)]
+mod local_daemon_tests {
+    use super::{alpi_installed, child_path, classify_local_state, find_alpi_binary, stderr_tail};
+
+    fn scratch(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("alpi-local-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn classifies_every_local_state() {
+        assert_eq!(classify_local_state(true, true, true), "unsupported");
+        assert_eq!(classify_local_state(false, true, false), "running");
+        assert_eq!(classify_local_state(false, false, true), "stopped");
+        assert_eq!(classify_local_state(false, false, false), "absent");
+    }
+
+    #[test]
+    fn finds_alpi_on_the_path_or_in_the_user_bin_a_gui_app_does_not_inherit() {
+        let home = scratch("bin");
+        assert!(find_alpi_binary(None, Some(&home)).is_none() || std::path::Path::new("/opt/homebrew/bin/alpi").exists() || std::path::Path::new("/usr/local/bin/alpi").exists());
+        let bin = home.join(".local/bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        std::fs::write(bin.join("alpi"), "").unwrap();
+        assert_eq!(find_alpi_binary(None, Some(&home)), Some(bin.join("alpi")));
+        let on_path = home.join("onpath");
+        std::fs::create_dir_all(&on_path).unwrap();
+        std::fs::write(on_path.join("alpi"), "").unwrap();
+        let path_var = std::env::join_paths([on_path.clone()]).unwrap();
+        assert_eq!(find_alpi_binary(Some(&path_var), Some(&home)), Some(on_path.join("alpi")));
+    }
+
+    #[test]
+    fn counts_a_binary_or_a_service_unit_as_installed_never_the_home_the_app_creates() {
+        let home = scratch("home");
+        assert!(!alpi_installed(&home, false));
+        assert!(alpi_installed(&home, true));
+        std::fs::create_dir_all(home.join(".alpi")).unwrap();
+        assert!(!alpi_installed(&home, false));
+        assert_eq!(classify_local_state(false, false, alpi_installed(&home, false)), "absent");
+        let other = scratch("unit");
+        std::fs::create_dir_all(other.join("Library/LaunchAgents")).unwrap();
+        std::fs::write(other.join("Library/LaunchAgents/com.alpi.daemon.plist"), "").unwrap();
+        assert!(alpi_installed(&other, false));
+    }
+
+    #[test]
+    fn gives_a_detached_daemon_the_install_dirs_a_gui_app_does_not_inherit() {
+        let home = std::path::Path::new("/Users/someone");
+        let path = child_path(std::path::Path::new("/Users/someone/.local/bin/alpi"), Some(home));
+        let dirs: Vec<std::path::PathBuf> = std::env::split_paths(&path).collect();
+        assert_eq!(dirs[0], home.join(".local/bin"));
+        assert!(dirs.contains(&std::path::PathBuf::from("/opt/homebrew/bin")));
+        assert_eq!(dirs.iter().filter(|d| **d == home.join(".local/bin")).count(), 1);
+    }
+
+    #[test]
+    fn keeps_the_last_lines_of_a_failed_start() {
+        let text = (1..=20).map(|i| format!("line {i}")).collect::<Vec<_>>().join("\n");
+        assert_eq!(stderr_tail(&text, 2), "line 19\nline 20");
+        assert_eq!(stderr_tail("only", 5), "only");
+    }
+}
+

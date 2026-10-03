@@ -90,18 +90,9 @@
 
 .bubble {
   padding: var(--space-5) var(--space-7);
-  border-radius: var(--r-2xl);
+  border-radius: var(--r-xs);
   background: var(--selected);
-  box-shadow: var(--shadow-sm);
   text-wrap: pretty;
-}
-
-.left .bubble {
-  border-top-left-radius: var(--r-md);
-}
-
-.right .bubble {
-  border-top-right-radius: var(--r-md);
 }
 
 .footer {
@@ -201,7 +192,7 @@
   font-size: 0.88em;
   background: var(--bg-side);
   border: .5px solid var(--line);
-  border-radius: var(--r-md);
+  border-radius: var(--r-xs);
   padding: var(--space-5);
   margin: 0 0 var(--space-5);
   overflow-x: auto;
@@ -215,10 +206,11 @@
 }
 
 .md a {
-  color: var(--accent);
+  color: var(--ink);
   font-weight: var(--fw-semibold);
   text-decoration: underline;
-  text-underline-offset: var(--space-1);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
 }
 
 .md blockquote {

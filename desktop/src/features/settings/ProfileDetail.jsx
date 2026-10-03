@@ -12,19 +12,21 @@ import { Section, Row, CopyButton } from "./primitives.jsx";
 import Usage from "./Usage.jsx";
 import SettingsNav from "./SettingsNav.jsx";
 import {
+  AppearancePicker,
   CopyIcon,
+  Fold,
   MeterChip,
   Mono,
   SettingsHero,
   Tip,
 } from "../../primitives/index.js";
+import { ALPACA_FOLD } from "../../../../common/folds.mjs";
 import { profileLabel } from "../../lib/profile-display.js";
 import { modelLabel } from "../../lib/modelLabel.js";
 import RefreshBar from "../../primitives/RefreshBar.jsx";
 import { FIELD_KEYS, providerPills } from "./util.js";
 import { mergeProfileDraft } from "../../lib/profile-draft.js";
 import {
-  AccentField,
   BudgetField,
   SandboxField,
   WorkspaceField,
@@ -63,6 +65,7 @@ import styles from "./Settings.module.css";
 import { copyText } from "../../lib/clipboard.js";
 import { useSettingsDirty } from "../../lib/settingsDirty.js";
 import { emptyLine } from "../../../../common/emptyCopy.mjs";
+import { normaliseFold } from "../../../../common/folds.mjs";
 
 // storage stays out: its os.walk dominates snapshot latency, so StorageField fetches it independently.
 const SNAPSHOT_SECTIONS = ["detail", "usage", "workgroups", "email"];
@@ -73,6 +76,7 @@ function initialDraft(profile) {
     workspace: profile.workspace ?? "",
     model: profile.model ?? "",
     accent: (profile.accent ?? "").toLowerCase(),
+    fold: normaliseFold(profile.fold),
     reasoningEffort: profile.model_reasoning_effort ?? "",
   };
 }
@@ -267,8 +271,10 @@ export default function ProfileDetail({
         kind="profile"
         id={profileLabel(profile.name)}
         accent={accent}
+        fold={profile.fold}
         bio={profile.bio || profile.public_bio}
         meta={heroMeta}
+        paused={!!profile.paused}
         onOpenChat={onOpenChat ? () => onOpenChat(profile) : undefined}
         onOpenConnections={onOpenConnections}
       />
@@ -370,11 +376,19 @@ export default function ProfileDetail({
               isLocal={activeConnection?.kind === "local"}
             />
           </Row>
-          <Row label="accent">
-            <AccentField
-              value={draft.accent}
-              onChange={(v) => update("accent", v)}
-            />
+          <Row label="appearance" keywords="accent colour color fold origami">
+            {profile.name === "default" ? (
+              <span className={styles.lockedAppearance}>
+                <Fold fold={ALPACA_FOLD} color={accent} size={28} />
+                <Mono>alpaca · brand accent</Mono>
+              </span>
+            ) : (
+              <AppearancePicker
+                fold={draft.fold}
+                accent={draft.accent}
+                onChange={(patch) => Object.entries(patch).forEach(([field, value]) => update(field, value))}
+              />
+            )}
           </Row>
         </Section>
 

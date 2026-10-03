@@ -1,8 +1,7 @@
 .backdrop {
   position: fixed;
   inset: 0;
-  background: color-mix(in srgb, var(--ink) 32%, transparent);
-  backdrop-filter: blur(2px);
+  background: var(--veil);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -12,7 +11,7 @@
 .modal {
   background: var(--bg-elev);
   border: 0.5px solid var(--line-2);
-  border-radius: var(--r-2xl);
+  border-radius: var(--r-xs);
   box-shadow: var(--shadow);
   width: min(820px, calc(100vw - var(--space-10)));
   max-height: min(720px, calc(100vh - var(--space-10)));

@@ -20,7 +20,7 @@
   width: 100%;
   padding: 0;
   border: .5px solid var(--line);
-  border-radius: var(--r-md);
+  border-radius: var(--r-xs);
   overflow: hidden;
   background: none;
   cursor: pointer;

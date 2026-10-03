@@ -4,7 +4,6 @@ import Button from "../../../primitives/Button.jsx";
 import Chip from "../../../primitives/Chip.jsx";
 import { useNotify } from "../../../primitives/Notification.jsx";
 import { Row } from "../primitives.jsx";
-import { AccentPicker } from "../../../primitives/SettingsLayout.jsx";
 import Field from "../../../primitives/Field.jsx";
 import { BudgetEdit } from "../../../primitives/index.js";
 import styles from "../Settings.module.css";
@@ -62,10 +61,6 @@ export function WorkspaceField({ value, onChange, isLocal = true }) {
       )}
     </span>
   );
-}
-
-export function AccentField({ value, onChange }) {
-  return <AccentPicker value={(value ?? "").toLowerCase()} onChange={onChange} />;
 }
 
 export function SandboxField({ profile, onSaved }) {

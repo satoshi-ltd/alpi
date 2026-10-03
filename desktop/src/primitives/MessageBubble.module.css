@@ -33,14 +33,12 @@
 
 .bubble {
   padding: var(--space-5) var(--space-7);
-  border-radius: var(--r-2xl);
+  border-radius: var(--r-xs);
   color: var(--ink);
   line-height: var(--text-chat-leading);
   font-size: var(--text-chat-size);
   text-wrap: pretty;
 }
-.rootRight .bubble { border-radius: var(--r-2xl) var(--r-sm) var(--r-2xl) var(--r-2xl); }
-.rootLeft .bubble { border-radius: var(--r-sm) var(--r-2xl) var(--r-2xl) var(--r-2xl); }
 
 .footer {
   opacity: 0;

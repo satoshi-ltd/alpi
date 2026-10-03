@@ -1,5 +1,5 @@
 from gen import ic, page
-from desktop_boards import AMBER, HOVER, INK, INK2, INK3, LINE2, PANE, MONO, SIDE, diamond_stack
+from desktop_boards import AMBER, HOVER, INK, INK2, INK3, LINE2, PANE, MONO, SIDE, wg_mark
 from conversation_boards import h1, label, mono, spec
 
 PAGE_W = 1280
@@ -34,7 +34,7 @@ def glass(inner, pad=14):
 
 
 def app_icon():
-    return f'<span style="width: 34px; height: 34px; border-radius: 8px; background: #fff; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0">{diamond_stack(AMBER, 10)}</span>'
+    return f'<span style="width: 34px; height: 34px; border-radius: 8px; background: #fff; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0">{wg_mark(AMBER, 16)}</span>'
 
 
 def push_banner(actions):
@@ -51,7 +51,7 @@ def push_banner(actions):
 
 def live_activity():
     seg = lambda on: f'<span style="flex: 1; height: 5px; border-radius: 999px; background: {AMBER if on else "rgba(255,255,255,0.25)"}"></span>'
-    top = (f'<div style="display: flex; align-items: center; gap: 10px">{diamond_stack(AMBER, 10)}<span style="flex: 1; font-size: 15px; font-weight: 600; color: #fff">alpha · #collect</span>'
+    top = (f'<div style="display: flex; align-items: center; gap: 10px">{wg_mark(AMBER, 16)}<span style="flex: 1; font-size: 15px; font-weight: 600; color: #fff">alpha · #collect</span>'
            f'<span style="font-family: {MONO}; font-size: 13px; color: #fff">4:12</span></div>')
     bar = f'<div style="display: flex; gap: 4px">{seg(True)}{seg(True)}{seg(False)}{seg(False)}</div>'
     foot = (f'<div style="display: flex; justify-content: space-between; font-family: {MONO}; font-size: 12px; color: rgba(255,255,255,0.7)"><span>phase 2 of 4</span><span>doc · alpi · yuri</span></div>')
@@ -71,7 +71,7 @@ def live_now():
                            f'<div style="flex: 1; display: flex; flex-direction: column; gap: 4px"><span style="font-weight: 500; font-size: 15px; color: {INK}">alpha · #collect</span>'
                            f'<span style="font-family: {MONO}; font-size: 12px; color: {INK3}">phase 2 of 4 · daily-digest</span></div></div>')
     banner = (f'<div style="width: 350px; box-sizing: border-box; padding: 12px; border-radius: 18px; background: {SIDE}; border: 0.5px solid {LINE2}; display: flex; flex-direction: column; gap: 10px">'
-              f'<div style="display: flex; gap: 10px; align-items: flex-start"><span style="width: 34px; height: 34px; border-radius: 8px; background: {PANE}; border: 0.5px solid {LINE2}; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0">{diamond_stack(AMBER, 10)}</span>'
+              f'<div style="display: flex; gap: 10px; align-items: flex-start"><span style="width: 34px; height: 34px; border-radius: 8px; background: {PANE}; border: 0.5px solid {LINE2}; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0">{wg_mark(AMBER, 16)}</span>'
               f'<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span style="display: flex; justify-content: space-between; font-size: 12px; color: {INK3}"><span>ALPI</span><span>now</span></span>'
               f'<span style="font-size: 14px; font-weight: 600; color: {INK}">remote-casa · abby · approval needed</span><span style="font-family: {MONO}; font-size: 12px; color: {INK2}">rm -rf dist &amp;&amp; npm run build</span></div></div>'
               f'<div style="display: flex; gap: 8px"><span style="flex: 1; text-align: center; padding: 9px 0; border-radius: 12px; background: {HOVER}; font-size: 14px; font-weight: 600; color: #b73737">Deny</span>'
@@ -101,6 +101,9 @@ PROPOSALS = [
         "h": 870,
     },
 ]
+
+
+
 
 
 def proposal_board(p):

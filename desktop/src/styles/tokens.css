@@ -3,6 +3,7 @@
 
   --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-crease: "Bricolage Grotesque", var(--font-sans);
 
   --fs-label:   10px;    /* uppercase mono labels — a role, not a ladder step */
   --fs-xxs:     9px;
@@ -106,6 +107,10 @@
 
   --focus-border: color-mix(in srgb, var(--ink) 30%, transparent);
   --focus-ring: 0 0 0 4px color-mix(in srgb, var(--ink) 6%, transparent);
+  --veil: color-mix(in srgb, var(--bg) 72%, transparent);
+  --well: var(--hover);
+  --well-focus: var(--selected);
+  --well-ring: inset 0 0 0 1px var(--focus-border);
 
   --pane-pad-x: var(--space-10);
   --hero-pad-top: 46px;
@@ -117,6 +122,7 @@
 
   --chip-pad: 1px 5px;
 
+  --r-tag: 2px;
   --r-xs:  4px;
   --r-sm:  6px;
   --r-md:  8px;
@@ -149,78 +155,74 @@
   --c-warning: #e08a3c;
   --c-danger:  #c14545;
 
-  --bg:        #eef0f2;
+  --bg:        #f0f0f0;
   --bg-pane:   #ffffff;
-  --bg-side:   #f5f6f8;
+  --bg-side:   #f6f6f6;
   --bg-elev:   #ffffff;
   --bg-input:  #ffffff;
-  --ink:       #0b1117;
-  --ink-2:     #3d4955;
-  --ink-3:     #626e7d;
-  --ink-4:     #b1bac4;
-  --line:      rgba(11, 17, 23, .07);
-  --line-2:    rgba(11, 17, 23, .14);
-  --hover:     rgba(11, 17, 23, .04);
-  --selected:  rgba(11, 17, 23, .06);
-  --shadow:    0 0 0 .5px rgba(11, 17, 23, .08), 0 18px 50px rgba(11, 17, 23, .10);
-  --shadow-sm: 0 0 0 .5px rgba(11, 17, 23, .10);
+  --ink:       #141414;
+  --ink-2:     #454545;
+  --ink-3:     #6b6b6b;
+  --ink-4:     #b4b4b4;
+  --line:      rgba(20, 20, 20, .07);
+  --line-2:    rgba(20, 20, 20, .14);
+  --hover:     rgba(20, 20, 20, .04);
+  --selected:  rgba(20, 20, 20, .06);
+  --shadow:    0 0 0 .5px var(--line-2);
+  --shadow-sm: 0 0 0 .5px var(--line);
 
-  --accent: #8a5a0a;
+  --accent: #14110c;
   --c-success-text: #217a45;
   --c-warning-text: #b3470e;
   --c-danger-text: #b73737;
   --on-danger: #ffffff;
-
-  --logo-filter: none;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-mode="light"]) {
-    --bg:        #0a0d11;
-    --bg-pane:   #11151a;
-    --bg-side:   #0c1014;
-    --bg-elev:   #161b22;
-    --bg-input:  #11151a;
-    --ink:       #e6edf3;
-    --ink-2:     #b1bac4;
-    --ink-3:     #828b97;
-    --ink-4:     #484f58;
-    --line:      rgba(230, 237, 243, .08);
-    --line-2:    rgba(230, 237, 243, .16);
-    --hover:     rgba(230, 237, 243, .04);
-    --selected:  rgba(230, 237, 243, .07);
-    --shadow:    0 0 0 .5px rgba(230, 237, 243, .06), 0 18px 50px rgba(0, 0, 0, .6);
-    --shadow-sm: 0 0 0 .5px rgba(230, 237, 243, .08);
-    --accent:    #f0b447;
+    --bg:        #0b0b0b;
+    --bg-pane:   #151515;
+    --bg-side:   #0f0f0f;
+    --bg-elev:   #1b1b1b;
+    --bg-input:  #151515;
+    --ink:       #ededed;
+    --ink-2:     #b4b4b4;
+    --ink-3:     #8a8a8a;
+    --ink-4:     #4a4a4a;
+    --line:      rgba(237, 237, 237, .08);
+    --line-2:    rgba(237, 237, 237, .16);
+    --hover:     rgba(237, 237, 237, .04);
+    --selected:  rgba(237, 237, 237, .07);
+    --shadow:    0 0 0 .5px var(--line-2);
+    --shadow-sm: 0 0 0 .5px var(--line);
+    --accent:    #f3efe6;
     --c-success-text: #70c592;
     --c-warning-text: #f59e5b;
     --c-danger-text: #f08080;
-    --logo-filter: invert(1) brightness(.95);
     color-scheme: dark;
   }
 }
 
 [data-mode="dark"] {
-  --bg:        #0a0d11;
-  --bg-pane:   #11151a;
-  --bg-side:   #0c1014;
-  --bg-elev:   #161b22;
-  --bg-input:  #11151a;
-  --ink:       #e6edf3;
-  --ink-2:     #b1bac4;
-  --ink-3:     #828b97;
-  --ink-4:     #484f58;
-  --line:      rgba(230, 237, 243, .08);
-  --line-2:    rgba(230, 237, 243, .16);
-  --hover:     rgba(230, 237, 243, .04);
-  --selected:  rgba(230, 237, 243, .07);
-  --shadow:    0 0 0 .5px rgba(230, 237, 243, .06), 0 18px 50px rgba(0, 0, 0, .6);
-  --shadow-sm: 0 0 0 .5px rgba(230, 237, 243, .08);
-  --accent:    #f0b447;
+  --bg:        #0b0b0b;
+  --bg-pane:   #151515;
+  --bg-side:   #0f0f0f;
+  --bg-elev:   #1b1b1b;
+  --bg-input:  #151515;
+  --ink:       #ededed;
+  --ink-2:     #b4b4b4;
+  --ink-3:     #8a8a8a;
+  --ink-4:     #4a4a4a;
+  --line:      rgba(237, 237, 237, .08);
+  --line-2:    rgba(237, 237, 237, .16);
+  --hover:     rgba(237, 237, 237, .04);
+  --selected:  rgba(237, 237, 237, .07);
+  --shadow:    0 0 0 .5px var(--line-2);
+  --shadow-sm: 0 0 0 .5px var(--line);
+  --accent:    #f3efe6;
   --c-success-text: #70c592;
   --c-warning-text: #f59e5b;
   --c-danger-text: #f08080;
-  --logo-filter: invert(1) brightness(.95);
   color-scheme: dark;
 }
 

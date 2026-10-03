@@ -16,9 +16,9 @@
   gap: var(--space-4);
   padding: var(--space-3) var(--space-7) var(--space-3) var(--space-6);
   background: var(--bg-elev);
-  border: .5px solid var(--line);
-  border-radius: var(--r-3xl);
-  box-shadow: 0 0 0 .5px rgba(0, 0, 0, .04), 0 12px 32px rgba(0, 0, 0, .10);
+  border: 0;
+  border-radius: var(--r-xs);
+  box-shadow: var(--shadow);
   font-size: var(--text-ui);
   color: var(--ink-2);
   pointer-events: auto;
@@ -55,7 +55,7 @@
 
 .actionBtn {
   padding: var(--space-1) var(--space-4);
-  border-radius: var(--r-3xl);
+  border-radius: var(--r-xs);
   background: transparent;
   color: var(--ink);
   font-size: var(--fs-sm);

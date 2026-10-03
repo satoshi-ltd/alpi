@@ -20,10 +20,7 @@
 }
 
 .mark {
-  width: 64px;
-  height: 64px;
-  color: var(--ink-4);
-  opacity: 0.55;
+  opacity: var(--alpha-muted);
 }
 
 .heading {
@@ -54,10 +51,8 @@
   flex-direction: column;
   gap: var(--space-2);
   padding: var(--space-5) var(--space-6);
-  border: .5px solid var(--line-2);
-  border-left: 2px solid var(--c-danger);
-  border-radius: var(--r-lg);
-  background: var(--bg-elev);
+  border-radius: var(--r-xs);
+  background: var(--bg-pane);
   text-align: left;
 }
 
@@ -88,7 +83,7 @@
 .primary,
 .secondary {
   padding: var(--space-3) var(--space-8);
-  border-radius: var(--r-md);
+  border-radius: var(--r-xs);
   font-size: var(--text-ui);
   cursor: pointer;
   transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
@@ -160,6 +155,6 @@
   color: var(--ink-3);
   background: var(--bg-elev);
   border: .5px solid var(--line);
-  border-radius: var(--r-md);
+  border-radius: var(--r-xs);
   padding: var(--space-5);
 }

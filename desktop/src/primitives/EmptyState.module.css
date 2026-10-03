@@ -16,24 +16,6 @@
   max-width: 720px;
 }
 
-.diamond {
-  display: inline-block;
-  width: var(--ctrl-xs);
-  height: var(--ctrl-xs);
-  transform: rotate(45deg);
-  border: 1.5px solid var(--c, var(--accent));
-  border-radius: 2px;
-  opacity: var(--alpha-soft);
-}
-
-.hash {
-  font-family: var(--font-mono);
-  font-size: var(--text-hero);
-  font-weight: var(--fw-medium);
-  color: var(--ink-4);
-  line-height: var(--lh-tight);
-}
-
 .col .subtitle {
   font-family: var(--font-sans);
   color: var(--ink-3);

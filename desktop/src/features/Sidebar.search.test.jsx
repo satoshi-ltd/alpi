@@ -23,7 +23,7 @@ import Sidebar, { fitWorkgroupRows } from "./Sidebar.jsx";
 const BASE = {
   profiles: [{ name: "doc", model: "a/b" }, { name: "mind", model: "a/b" }],
   workgroups: [{ profile: "doc", id: "webfactory", name: "webfactory" }],
-  view: { kind: "empty" },
+  view: { kind: "landing" },
   hostConnections: { active_id: "remote", connections: [] },
 };
 
@@ -36,21 +36,18 @@ describe("Sidebar filter", () => {
     expect(fitWorkgroupRows(3, 6, -200, 34)).toBe(2);
   });
 
-  it("swaps New session for the filter input when search is open", () => {
-    const { rerender } = render(<Sidebar {...BASE} onNewChat={() => {}} />);
-    expect(screen.getByText("New session")).toBeInTheDocument();
+  it("shows the filter input under the connection only while search is open", () => {
+    const { rerender } = render(<Sidebar {...BASE} onNewSessionWith={() => {}} />);
+    expect(screen.queryByPlaceholderText(/Filter profiles/)).not.toBeInTheDocument();
 
-    rerender(<Sidebar {...BASE} onNewChat={() => {}} searchOpen />);
-    expect(screen.queryByText("New session")).not.toBeInTheDocument();
+    rerender(<Sidebar {...BASE} onNewSessionWith={() => {}} searchOpen />);
     expect(filterInput()).toBeInTheDocument();
   });
 
-  it("keeps the New session row text-only and names ⌘N in its tooltip", () => {
-    render(<Sidebar {...BASE} onNewChat={() => {}} />);
-    const row = screen.getByText("New session").closest("button");
-
-    expect(row.textContent).toBe("New session");
-    expect(row.closest(".ds-tip").textContent).toContain("⌘N");
+  it("has no New session row: new chats start from the profile", () => {
+    render(<Sidebar {...BASE} onNewSessionWith={() => {}} />);
+    expect(screen.queryByText("New session")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button").map((b) => b.textContent)).not.toContain("New session");
   });
 
   it("narrows the list to matches as you type", () => {
@@ -95,7 +92,7 @@ describe("Sidebar filter", () => {
     fireEvent.change(filterInput(), { target: { value: "mind" } });
     expect(screen.queryByText("doc")).not.toBeInTheDocument();
 
-    rerender(<Sidebar {...BASE} onNewChat={() => {}} />);
+    rerender(<Sidebar {...BASE} onNewSessionWith={() => {}} />);
     expect(screen.getByText("doc")).toBeInTheDocument();
     expect(screen.getByText("mind")).toBeInTheDocument();
     expect(screen.getByText("webfactory")).toBeInTheDocument();

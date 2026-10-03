@@ -85,9 +85,12 @@ export default function useAutoPosition({
     const onScrollOrResize = () => compute();
     window.addEventListener("scroll", onScrollOrResize, true);
     window.addEventListener("resize", onScrollOrResize);
+    const observer = typeof ResizeObserver === "function" && popoverRef.current ? new ResizeObserver(onScrollOrResize) : null;
+    observer?.observe(popoverRef.current);
     return () => {
       window.removeEventListener("scroll", onScrollOrResize, true);
       window.removeEventListener("resize", onScrollOrResize);
+      observer?.disconnect();
     };
   }, [open]);
 

@@ -37,14 +37,15 @@ import {
   saveCachedMessages,
 } from "../lib/workgroup-cache.js";
 import { fetchWorkgroupTranscript } from "../lib/workgroup-fetch.js";
-import { WorkgroupChatHeader, TasksButton, Eyebrow, AlpiSilhouette, LoadFailed } from "../primitives/index.js";
+import { FOLD_SIZES, WORKGROUP_FOLD } from "../../../common/folds.mjs";
+import { WorkgroupChatHeader, TasksButton, Eyebrow, LoadFailed } from "../primitives/index.js";
 import { ChatLoadSkeleton } from "./ChatSkeletons.jsx";
 import { JumpToLatest, MarkerCard, MessageBubble } from "../primitives/index.js";
 import {
   Banner,
   Chip,
   CopyIcon,
-  Diamond,
+  Fold,
   Dot,
   Icon,
   IconBtn,
@@ -462,6 +463,7 @@ export default function WorkgroupView({
       <WorkgroupChatHeader
         workgroup={workgroup}
         hubAccent={ownerProfile?.accent}
+        hubFold={ownerProfile?.fold}
         hubName={hubName}
         hubBio={ownerProfile?.bio || ownerProfile?.public_bio}
         memberCount={members.length || workgroup.members || 0}
@@ -583,7 +585,7 @@ export default function WorkgroupView({
           <>
             {messages.length === 0 && (
               <div className={styles.empty}>
-                <AlpiSilhouette color={ownerProfile?.accent || "var(--accent)"} />
+                <Fold fold={WORKGROUP_FOLD} color={ownerProfile?.accent || "var(--accent)"} size={FOLD_SIZES.hero} />
                 <div className={styles.emptyHeading}>{EMPTY.posts.title}</div>
                 <div className={styles.emptyModel}>{postsHint(profileLabel(hubName))}</div>
               </div>
@@ -603,6 +605,7 @@ export default function WorkgroupView({
                       isFromHub={Boolean(hubPubkey && m.from_pubkey === hubPubkey)}
                       speakerName={speaker.name}
                       speakerAccent={speaker.accent}
+                      speakerFold={speaker.fold}
                       speakerBio={speaker.bio}
                       costTokens={cost?.tokens ?? 0}
                       costUsd={cost?.usd ?? 0}
@@ -630,6 +633,7 @@ export default function WorkgroupView({
         mentions={mentionsForWorkgroup(members, peers, profiles, ownPubkey)}
         hubName={hubName}
         hubAccent={ownerProfile?.accent}
+        hubFold={ownerProfile?.fold}
         onSend={async (text) => {
           const tempSeq = Date.now();
           const optimistic = {
@@ -764,7 +768,7 @@ function PhaseIcon({ state, accent }) {
 }
 
 function renderWgMeta({ seq, cost, speaker, isFromHub, styles }) {
-  const rawDiamond = <Diamond color={speaker.accent} />;
+  const rawDiamond = <Fold fold={speaker.fold} color={speaker.accent} />;
   const diamond = speaker.bio
     ? <Tip text={speaker.bio} side={isFromHub ? "up-r" : "up-l"}>{rawDiamond}</Tip>
     : rawDiamond;
@@ -801,6 +805,7 @@ const WgMessage = memo(function WgMessage({
   isFromHub,
   speakerName,
   speakerAccent,
+  speakerFold,
   speakerBio,
   costTokens,
   costUsd,
@@ -811,7 +816,7 @@ const WgMessage = memo(function WgMessage({
   voice,
   profile,
 }) {
-  const speaker = { name: speakerName, accent: speakerAccent, bio: speakerBio };
+  const speaker = { name: speakerName, accent: speakerAccent, fold: speakerFold, bio: speakerBio };
   const cls = classifyMessage(body);
   const task = cls.variant === "task" ? cls.task : null;
   const working = cls.variant === "working" ? { content: cls.text } : null;
@@ -897,12 +902,12 @@ function mentionsForWorkgroup(members, peers, profiles, ownPubkey) {
     const profile = profiles.find(
       (p) => p.pubkey_b64 === m.pubkey || p.name === id,
     );
-    out.push({ id, accent: profile?.accent ?? null });
+    out.push({ id, accent: profile?.accent ?? null, fold: profile?.fold });
   }
   return out;
 }
 
-function WorkgroupComposer({ paused, offline, mentions, onSend, hubName, hubAccent, draftKey }) {
+function WorkgroupComposer({ paused, offline, mentions, onSend, hubName, hubAccent, hubFold, draftKey }) {
   const [text, setText] = useState(() => getDraft(draftKey));
   useEffect(() => {
     setText(getDraft(draftKey));
@@ -944,7 +949,7 @@ function WorkgroupComposer({ paused, offline, mentions, onSend, hubName, hubAcce
     <>
       <span className={styles.metaGroup}>
         <span className={styles.hintArrow}>→</span>
-        <Diamond color={hubAccent} />
+        <Fold fold={hubFold} color={hubAccent} />
         <span>
           <Mono className={styles.hintMono}>@{profileLabel(hubName)}</Mono>
           {" formulates as "}

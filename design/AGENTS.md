@@ -9,17 +9,22 @@ this file is the whole contract of the kit.
 - `python3 design/build.py` rewrites every `design/*.html`, `boards.css`, `favicon.svg` and the canvas artboards under
   `design/canvas/project/`. It needs `node` on PATH to read the shared icons in `common/`.
 - `design/src/` is the source, one module per family of boards: `build.py` (page shell and nav), `gen.py` (canvas index, mobile screens),
-  `system_boards.py`, `desktop_boards.py`, `desktop_overlays.py`, `conversation_boards.py`, `mobile_overlays.py` and
-  `proposals.py` (the proposal boards). Never edit a generated file by hand.
+  `system_boards.py`, `desktop_boards.py`, `desktop_overlays.py`, `conversation_boards.py`, `mobile_overlays.py`,
+  `brand_boards.py` and `folds.py` (the Brand tab) and `proposals.py` (the proposal boards). Never edit a generated file by hand.
 - `design/drift.py` runs the build and exits 1 naming every file it had to regenerate; `scripts/validate.py` runs it as the
   `design` step. `scripts/` holds no design file.
 - `design/README.md` is the human note; this file owns the contract.
 
 ## Tabs
 
-- `System` (tokens and components of both clients), `Desktop`, `Mobile`, `Proposals`, in that order.
-- The Fold is rendered inside Mobile, not on a tab of its own.
+- `Brand` (the identity as it ships), `System` (tokens and components of both clients), `Desktop`, `Mobile`, `Proposals`, in that order. The marketing site is not a tab: it is a web page you open in a browser, and a proposal for it is a board on Proposals with `client: site`.
+- The Fold (the foldable-phone layout) is rendered inside Mobile, not on a tab of its own.
 - A new interface adds its tab before Proposals.
+- `Brand` describes the identity as it ships (the mark and wordmark, the twelve pairs, the palette and the states), one board per area, in `design/src/brand_boards.py`
+  with the objects read from `common/folds.mjs` (the single source, through node) and the crease tones from `common/crease.mjs`. A new direction is first a board on Proposals; when it ships it is one change: the code, the views regenerated and its board deleted or rewritten as a description.
+- **Hard gate on every Brand object:** it is an established origami model folded from one square (named in `folds.MODELS`), has at most six
+  facets, is one piece (every facet touches another; nothing floats), fills the 1:1 square (shorter side at least 80 % of the longer) and has no shadows, gradients or outlines, and is never a four-fold chiral motif (a pinwheel reads as a swastika). An icon of something
+  (a pencil, a flag, an isometric cube) is not origami and does not enter. `tests/test_design_kit.py` enforces it.
 - There is no Open work page: `docs/ROADMAP.md` already is the list of what is left.
 
 ## Proposals
@@ -28,7 +33,7 @@ The Proposals page holds purely visual ideas, only while they are proposals; it 
 Each idea is one board in `design/src/proposals.py`, an entry of `PROPOSALS` with these fields:
 
 - `id` — stable, never reused; the ROADMAP task takes the same ID.
-- `client` — `desktop` or `mobile`.
+- `client` — `desktop`, `mobile` or `site`.
 - `area` — the screen or field it touches.
 - `title` — what the board proposes.
 - `why` — the evidence and the recommendation.
@@ -75,8 +80,8 @@ and a stale or orphaned artboard fails the tests.
 ## Tests
 
 - `tests/test_design_kit.py` builds the kit into a temporary directory and fails until `design/` is regenerated. It enforces:
-  every page carries the shipped tokens and the version banner; the nav is exactly System, Desktop, Mobile, Proposals and no
-  Open work page exists; the committed files equal what the generator writes and the canvas holds the same artboards;
+  every page carries the shipped tokens and the version banner; the nav is exactly Brand, System, Desktop, Mobile, Proposals and no
+  Open work page exists; the Brand tab holds its four boards, every pair of object and colour drawn in the palette; the committed files equal what the generator writes and the canvas holds the same artboards;
   every page and artboard links the favicon copy inside `design/`; boards follow the theme except the literal swatches;
   every ROADMAP task of type `ui` has a board with its ID, names the board in its accept, and a board without a task is a
   valid pending proposal carrying its parts; board IDs are unique and a split task names its `UI-<TASKID>` board; the

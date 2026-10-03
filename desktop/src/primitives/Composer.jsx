@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { SendButton } from "./index.js";
+import { Fold, SendButton } from "./index.js";
 import styles from "./Composer.module.css";
 
 export default function Composer({
@@ -15,7 +15,6 @@ export default function Composer({
   disabledTitle = "Type a message",
   leftActions = null,
   hint = null,
-  embedded = false,
   mentions = [],
   accent = null,
   topBar = null,
@@ -145,9 +144,7 @@ export default function Composer({
   }
 
   return (
-    <div
-      className={`${styles.wrap} ${embedded ? styles.wrapEmbedded : ""}`}
-    >
+    <div className={styles.wrap}>
       <div
         className={styles.body}
         data-disabled={disabled || undefined}
@@ -182,14 +179,9 @@ export default function Composer({
                     selectMention(item);
                   }}
                 >
-                  <span
-                    className={styles.mentionDot}
-                    style={
-                      item.accent && !unverified
-                        ? { backgroundColor: item.accent }
-                        : undefined
-                    }
-                    aria-hidden
+                  <Fold
+                    fold={item.fold}
+                    color={item.accent && !unverified ? item.accent : undefined}
                   />
                   <span className={styles.mentionId}>{item.id}</span>
                   {unverified && (

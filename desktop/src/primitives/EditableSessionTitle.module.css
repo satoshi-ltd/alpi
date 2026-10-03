@@ -11,9 +11,9 @@
   width: 100%;
   height: 20px;
   box-sizing: border-box;
-  border: 0.5px solid var(--line-2);
-  border-radius: var(--r-sm);
-  background: var(--bg-elev);
+  border: .5px solid transparent;
+  border-radius: var(--r-xs);
+  background: var(--well);
   color: var(--ink);
   font: inherit;
   line-height: 18px;
@@ -22,6 +22,6 @@
 }
 
 .input:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent);
+  background: var(--well-focus);
+  box-shadow: var(--well-ring);
 }

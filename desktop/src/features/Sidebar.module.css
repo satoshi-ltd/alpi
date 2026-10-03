@@ -20,6 +20,7 @@
 }
 
 .inner {
+  --sb-bleed: var(--space-5);
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -91,30 +92,7 @@
 
 .rowWrap:hover :global(.sb-row-trailing),
 .rowWrap:hover .rowTime,
-.rowWrap:hover .rowTag {
-  opacity: 0;
-  transform: translateX(calc(-1 * var(--space-7)));
-}
 
-.rowTag {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: var(--space-7);
-  height: var(--space-7);
-  padding: 0 var(--space-3);
-  border-radius: var(--r-3xl);
-  background: var(--hover);
-  color: var(--ink-3);
-  font-family: var(--font-mono);
-  font-size: var(--text-meta);
-  font-weight: var(--fw-semibold);
-  text-transform: uppercase;
-  flex-shrink: 0;
-  transition:
-    opacity 160ms var(--ease),
-    transform 160ms var(--ease);
-}
 
 .pinWrap {
   position: absolute;
@@ -135,6 +113,12 @@
   pointer-events: all;
 }
 
+.rowWrapFixed:hover :global(.sb-row-trailing) {
+  position: static;
+  opacity: 1;
+  transform: none;
+}
+
 .kbdGroup {
   display: inline-flex;
   gap: var(--space-1);
@@ -152,8 +136,8 @@
   gap: var(--space-3);
   height: 30px;
   padding: 0 var(--space-4);
-  border-radius: var(--r-md);
-  background: var(--bg-input);
+  border-radius: var(--r-xs);
+  background: var(--well);
 }
 
 .searchIcon {
@@ -205,13 +189,6 @@
   width: var(--ctrl-xs);
 }
 
-.actionGlyph {
-  width: var(--icon-sm);
-  display: inline-flex;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
 .sectionAdd {
   width: var(--ctrl-2xs);
   height: var(--ctrl-2xs);
@@ -236,7 +213,7 @@
 }
 
 .workgroupLeading {
-  width: 14px;
+  width: 16px;
   display: inline-flex;
   justify-content: center;
 }
@@ -324,20 +301,18 @@
 }
 
 .stateChip[data-state="working"] {
-  color: var(--accent);
-}
-
-.stateChip[data-state="working"] .stateDot {
-  animation: statePulse var(--dur-loop) ease-in-out infinite;
-}
-
-@keyframes statePulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: var(--alpha-faint); }
+  color: color-mix(in srgb, var(--c, var(--ink-2)) 50%, var(--ink));
 }
 
 .phaseCount {
   font-family: var(--font-mono);
   font-size: var(--text-meta);
-  color: var(--accent);
+  color: var(--c, var(--ink-2));
+}
+
+.searchRow:focus-within {
+  outline: none;
+  border-color: transparent;
+  background: var(--well-focus);
+  box-shadow: var(--well-ring);
 }

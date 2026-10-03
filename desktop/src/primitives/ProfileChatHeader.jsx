@@ -133,9 +133,11 @@ export default function ProfileChatHeader({
       kind="profile"
       id={profileLabel(profile?.name) || ""}
       accent={accent}
+      fold={profile?.fold}
       bio={profile?.bio || profile?.public_bio}
       meta={meta}
       right={right}
+      paused={paused}
     />
   );
 }

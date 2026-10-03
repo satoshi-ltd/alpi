@@ -160,7 +160,27 @@ describe("WorkgroupsView", () => {
     expect(screen.queryByText("No workgroups yet")).toBeNull();
     rerender(<WorkgroupsView workgroups={[]} profiles={[]} syncing={false} onNewWorkgroup={onNewWorkgroup} />);
     expect(screen.getByText("No workgroups yet")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "No workgroups yet" }).parentElement.firstElementChild.dataset.fold).toBe("honeycomb");
     fireEvent.click(screen.getAllByRole("button", { name: "New workgroup" }).at(-1));
     expect(onNewWorkgroup).toHaveBeenCalledTimes(1);
+  });
+
+  it("draws each row as the honeycomb in its hub's colour, rippling when working and unfolded in grey when paused", () => {
+    render(<WorkgroupsView workgroups={WORKGROUPS} profiles={[{ name: "mira", accent: "#3388ff" }]} />);
+    const glyph = (name) => screen.getByText(name).closest("button").querySelector("[data-fold]");
+    const cells = (name) => [...glyph(name).querySelectorAll("polygon")];
+    expect(glyph("Finished hotel").dataset.fold).toBe("honeycomb");
+    expect(cells("Finished hotel").map((c) => c.getAttribute("fill"))).toContain("#3388ff");
+    expect(cells("Finished hotel").every((c) => c.getAttribute("fill-opacity") === null && c.style.animationDelay === "")).toBe(true);
+    expect(cells("Active hotel").every((c) => c.style.animationDelay !== "")).toBe(true);
+    expect(cells("Paused hotel").every((c) => c.getAttribute("fill") === "none")).toBe(true);
+    expect(document.querySelector(".ds-diamond")).toBeNull();
+  });
+
+  it("heads the page with the honeycomb at header size", () => {
+    render(<WorkgroupsView workgroups={WORKGROUPS} profiles={[]} />);
+    const glyph = screen.getByRole("heading", { name: "Workgroups" }).parentElement.firstElementChild;
+    expect(glyph.dataset.fold).toBe("honeycomb");
+    expect(glyph.style.width).toBe("20px");
   });
 });

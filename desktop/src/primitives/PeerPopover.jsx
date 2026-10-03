@@ -6,7 +6,7 @@ import DialogFooter from "./DialogFooter.jsx";
 import {
   ActionLink,
   ArrowLeftIcon,
-  Diamond,
+  Fold,
   Eyebrow,
   IconBtn,
   Mono,
@@ -21,7 +21,7 @@ import { EMPTY } from "../../../common/emptyCopy.mjs";
 function PeerRow({ peer, onOpen }) {
   return (
     <button type="button" onClick={onOpen} className={styles.row}>
-      <Diamond color={peer.accent} />
+      <Fold fold={peer.fold} color={peer.accent} />
       <span className={styles.rowId}>{peer.id}</span>
       <Mono className={styles.rowKey}>
         {pubkeyTail(peer.pubkey)}
@@ -42,7 +42,7 @@ function PeerDetail({ peer, onBack, onRemove }) {
             <ArrowLeftIcon />
           </IconBtn>
         </Tip>
-        <Diamond color={peer.accent} />
+        <Fold fold={peer.fold} color={peer.accent} />
         <span className={styles.detailHandle}>@{peer.id}</span>
         <span className={styles.detailStatusSlot}>
           <Pill state={peer.online ? "on" : "off"}>

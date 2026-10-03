@@ -38,13 +38,28 @@
   width: var(--pop-xs);
   background: var(--bg-elev);
   border: .5px solid var(--line-2);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-xs);
   box-shadow: var(--shadow);
   z-index: var(--z-panel);
 }
 
 .panel {
   padding: var(--space-7);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-7) var(--space-7) 0;
+}
+
+.brand + * {
+  padding-top: var(--space-5);
+}
+
+.brandMark {
+  font-size: 26px;
 }
 
 .panelGap4 {

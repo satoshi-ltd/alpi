@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 
 globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} };
 window.matchMedia ??= () => ({
@@ -23,7 +23,7 @@ import Sidebar from "./Sidebar.jsx";
 const BASE = {
   profiles: [],
   workgroups: [],
-  view: { kind: "empty" },
+  view: { kind: "landing" },
   hostConnections: { active_id: "remote", connections: [] },
 };
 
@@ -32,9 +32,15 @@ const loadingRows = () =>
 
 describe("Sidebar connection-switch skeleton", () => {
   it("stays silent at first, then shows loading rows for a slow empty-cache sync", async () => {
-    render(<Sidebar {...BASE} connectionSyncing />);
+    render(<Sidebar {...BASE} connectionSyncing rosterAnswered={false} />);
     expect(loadingRows()).not.toBeInTheDocument();
     await waitFor(() => expect(loadingRows()).toBeInTheDocument());
+  });
+
+  it("never shows loading rows for a reload of a roster that already answered empty", async () => {
+    render(<Sidebar {...BASE} connectionSyncing rosterAnswered />);
+    await act(async () => { await new Promise((r) => setTimeout(r, 400)); });
+    expect(loadingRows()).not.toBeInTheDocument();
   });
 
   it("renders no loading rows once profiles are present", async () => {
@@ -45,13 +51,13 @@ describe("Sidebar connection-switch skeleton", () => {
         connectionSyncing
       />,
     );
-    await new Promise((r) => setTimeout(r, 400));
+    await act(async () => { await new Promise((r) => setTimeout(r, 400)); });
     expect(loadingRows()).not.toBeInTheDocument();
   });
 
   it("renders no loading rows when idle", async () => {
     render(<Sidebar {...BASE} />);
-    await new Promise((r) => setTimeout(r, 400));
+    await act(async () => { await new Promise((r) => setTimeout(r, 400)); });
     expect(loadingRows()).not.toBeInTheDocument();
   });
 });

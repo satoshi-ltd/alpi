@@ -1,5 +1,6 @@
+import { WORKGROUP_FOLD } from "../../../common/folds.mjs";
 import { Scrim, PanelShell } from "../primitives/Panels.jsx";
-import { Button, Diamond, DiamondStack, Icon, IconBtn, Kbd } from "../primitives/index.js";
+import { Button, Fold, Icon, IconBtn, Kbd } from "../primitives/index.js";
 import { useNow } from "../hooks/useNow.js";
 import { recentlyFailed, toEpochSeconds } from "../hooks/useActivity.js";
 import { profileLabel } from "../lib/profile-display.js";
@@ -14,13 +15,13 @@ function ago(seconds, now) {
   return rel === "now" ? "just now" : `${rel} ago`;
 }
 
-function Row({ glyph, title, sub, action = null, onClick = null, tone = null }) {
+function Row({ glyph, title, sub, action = null, onClick = null, tone = null, color = null }) {
   const body = (
     <>
-      <span className={styles.glyph} data-tone={tone || undefined}>{glyph}</span>
+      <span className={styles.glyph} data-tone={tone || undefined} style={color ? { "--c": color } : undefined}>{glyph}</span>
       <span className={styles.text}>
         <span className={styles.title}>{title}</span>
-        {sub ? <span className={styles.sub}>{sub}</span> : null}
+        {sub ? <span className={styles.sub} data-tone={tone || undefined}>{sub}</span> : null}
       </span>
     </>
   );
@@ -52,6 +53,7 @@ export default function ActivityPanel({
   onClose,
   activity,
   accentByProfile = {},
+  foldByProfile = {},
   onReview,
   onOpenSession,
   onOpenWorkgroup,
@@ -92,7 +94,7 @@ export default function ActivityPanel({
                 <Row
                   key={item.request_id}
                   tone="warning"
-                  glyph={<Icon name="triangle-alert" />}
+                  glyph={<Fold fold={foldByProfile[item.profile]} color={accentByProfile[item.profile] || undefined} />}
                   title={`${profileLabel(item.profile ?? "")} · ${item.title || (item.kind === "clarification" ? "has a question" : "wants to run a command")}`}
                   sub={`${item.kind === "clarification" ? "question" : "approval"} · ${ago(toEpochSeconds(item.ts), now)}`}
                   action={
@@ -111,7 +113,8 @@ export default function ActivityPanel({
                   <Row
                     key={`wg:${run.profile}/${run.workgroup_id}`}
                     tone="accent"
-                    glyph={<DiamondStack color={accentByProfile[run.profile] || undefined} pulse />}
+                    color={accentByProfile[run.profile]}
+                    glyph={<Fold fold={WORKGROUP_FOLD} color={accentByProfile[run.profile] || undefined} pulse />}
                     title={`${run.name || run.workgroup_id}${run.phase ? ` · #${run.phase}` : ""}`}
                     sub={
                       Number.isInteger(run.phases_total) && run.phases_total > 0
@@ -124,7 +127,8 @@ export default function ActivityPanel({
                   <Row
                     key={`turn:${run.profile}/${run.session_id ?? ""}`}
                     tone="accent"
-                    glyph={<Diamond color={accentByProfile[run.profile] || undefined} pulse />}
+                    color={accentByProfile[run.profile]}
+                    glyph={<Fold fold={foldByProfile[run.profile]} color={accentByProfile[run.profile] || undefined} pulse />}
                     title={`${profileLabel(run.profile ?? "")} · ${run.title || "New session"}`}
                     sub={[
                       run.started_at ? relativeTime(toEpochSeconds(run.started_at), now) : null,
@@ -144,7 +148,7 @@ export default function ActivityPanel({
                   <Row
                     key={`job:${job.profile}/${job.job_id}`}
                     tone={failed ? "danger" : null}
-                    glyph={<Icon name={failed ? "x" : "clock"} />}
+                    glyph={<Fold fold={foldByProfile[job.profile]} color={accentByProfile[job.profile] || undefined} />}
                     title={`${profileLabel(job.profile ?? "")} · ${job.title || job.job_id}`}
                     sub={
                       failed

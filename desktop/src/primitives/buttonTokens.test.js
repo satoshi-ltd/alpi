@@ -24,7 +24,6 @@ describe("Button-based triggers follow the size contract", () => {
 
   it.each([
     ["ModelPicker.module.css", "modelPickerTrigger"],
-    ["../features/AlpiPicker.module.css", "trigger"],
     ["../features/VersionButton.module.css", "installBtn"],
   ])("%s does not pin .%s to a stale height", (file, cls) => {
     expect(read(file)).not.toMatch(new RegExp(`\\.${cls} \\{[^}]*height`));

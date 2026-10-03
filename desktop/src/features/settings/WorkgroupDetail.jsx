@@ -13,7 +13,7 @@ import { profileLabel } from "../../lib/profile-display.js";
 import { Section, Row, CopyButton } from "./primitives.jsx";
 import { ConfirmDelete, ConfirmDeleteAction } from "../../primitives/index.js";
 import { RefreshBar, SettingsHero } from "../../primitives/index.js";
-import { Diamond, Dot, LoadFailed, Mono } from "../../primitives/index.js";
+import { Fold, Dot, LoadFailed, Mono } from "../../primitives/index.js";
 import { BudgetEdit } from "../../primitives/index.js";
 import { useProfileDetail } from "../../hooks/useProfileDetail.js";
 import { useWorkgroupUsageDaily } from "../../hooks/useUsage.js";
@@ -34,7 +34,7 @@ function renderMemberRow(m, profiles, workgroup, hubPubkey, onRemove) {
   return (
     <DsMemberRow
       key={m.pubkey}
-      member={{ id, color: local?.accent || "var(--ink-3)" }}
+      member={{ id, color: local?.accent || "var(--ink-3)", fold: local?.fold }}
       isHub={isHub}
       note={bio}
       onRemove={() => onRemove?.(m)}
@@ -234,10 +234,7 @@ export default function WorkgroupDetail({
     <>
       <span className={styles.heroMetaGroup}>
         <span className={styles.heroMetaLabel}>hub</span>
-        <span
-          className={`diamond ${styles.heroMetaDiamond}`}
-          style={{ "--c": hub?.accent || "var(--accent)" }}
-        />
+        <Fold fold={hub?.fold} color={hub?.accent || "var(--accent)"} />
         <Mono className={styles.heroMetaValue}>@{profileLabel(hubName)}</Mono>
       </span>
       <span aria-hidden className={styles.heroMetaSep} />
@@ -296,7 +293,7 @@ export default function WorkgroupDetail({
           <Section title="Overview">
             <Row label="hub">
               <span className={styles.inlineRow}>
-                <Diamond color={hub?.accent} />
+                <Fold fold={hub?.fold} color={hub?.accent} />
                 <span className={styles.mono}>@{profileLabel(hubName)}</span>
               </span>
             </Row>
@@ -546,7 +543,7 @@ export default function WorkgroupDetail({
                             <Dropdown.Row
                               key={p.id}
                               caption={shortPubkey(p.pubkey)}
-                              leading={<Diamond color={local?.accent} />}
+                              leading={<Fold fold={local?.fold} color={local?.accent} />}
                               onClick={() => {
                                 close();
                                 addMember(p.id, label);

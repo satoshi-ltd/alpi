@@ -50,7 +50,7 @@ export function NotificationProvider({ children }) {
     const now = Date.now();
     const recent = recentRef.current;
     const last = recent.get(key) ?? 0;
-    if (now - last < DEDUP_WINDOW_MS) return null;
+    if (!o.onAction && now - last < DEDUP_WINDOW_MS) return null;
     for (const [k, ts] of recent) {
       if (now - ts >= DEDUP_WINDOW_MS) recent.delete(k);
     }

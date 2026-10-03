@@ -24,7 +24,6 @@ vi.mock("../../primitives/Notification.jsx", () => ({
 
 vi.mock("./Usage.jsx", () => ({ default: () => null }));
 vi.mock("./fields/boundaries.jsx", () => ({
-  AccentField: () => null,
   BudgetField: () => null,
   SandboxField: () => null,
   WorkspaceField: () => null,
@@ -304,6 +303,78 @@ describe("ProfileDetail unsaved state", () => {
     view.unmount();
     expect(invoke).toHaveBeenCalledWith("set_config_field", expect.objectContaining({ profile: "doc", value: "drafted bio" }));
     expect(hasDirtySettings()).toBe(false);
+    invoke.mockReset();
+  });
+});
+
+describe("ProfileDetail appearance", () => {
+  const profile = { name: "doc", model: "a/b", accent: "#3899e2", fold: "shield" };
+  const mount = () =>
+    render(<ProfileDetail profile={profile} profiles={[]} activeConnection={{ id: "local", kind: "local" }} />);
+
+  it("shows the profile's current object and colour", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    invoke.mockImplementation(async () => null);
+    mount();
+    expect(screen.getByText("appearance")).toBeInTheDocument();
+    expect(screen.queryByText("accent")).toBeNull();
+    expect(screen.getByRole("button", { name: "blue shield" })).toBeInTheDocument();
+    invoke.mockReset();
+  });
+
+  it("shows the default profile's alpaca as read-only text, with no picker", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    invoke.mockImplementation(async () => null);
+    const { container } = render(
+      <ProfileDetail profile={{ name: "default", fold: "alpaca", accent: null }} profiles={[]} activeConnection={{ id: "local", kind: "local" }} />,
+    );
+    expect(screen.getByText("alpaca · brand accent")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /alpaca|diamond/ })).toBeNull();
+    expect([...container.querySelectorAll("[data-fold='alpaca']")].length).toBeGreaterThan(0);
+    invoke.mockReset();
+  });
+
+  it("falls back to the diamond when the daemon reports no fold", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    invoke.mockImplementation(async () => null);
+    render(<ProfileDetail profile={{ name: "doc", accent: "#3899e2" }} profiles={[]} activeConnection={{ id: "local", kind: "local" }} />);
+    expect(screen.getByRole("button", { name: "blue diamond" })).toBeInTheDocument();
+    invoke.mockReset();
+  });
+
+  it("saves a picked object to tui.fold and leaves the accent unwritten", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const { waitFor } = await import("@testing-library/react");
+    invoke.mockImplementation(async () => null);
+    mount();
+    fireEvent.click(screen.getByRole("button", { name: "blue shield" }));
+    fireEvent.click(screen.getByRole("button", { name: "heart" }));
+    expect(screen.getByRole("button", { name: "blue heart" })).toBeInTheDocument();
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("set_config_field", { profile: "doc", key: "tui.fold", value: "heart" }));
+    expect(invoke).not.toHaveBeenCalledWith("set_config_field", expect.objectContaining({ key: "tui.accent" }));
+    invoke.mockReset();
+  });
+
+  it("saves a picked colour to tui.accent and leaves the fold unwritten", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const { waitFor } = await import("@testing-library/react");
+    invoke.mockImplementation(async () => null);
+    mount();
+    fireEvent.click(screen.getByRole("button", { name: "blue shield" }));
+    fireEvent.click(screen.getByRole("button", { name: "rose #f36a8a" }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("set_config_field", { profile: "doc", key: "tui.accent", value: "#f36a8a" }));
+    expect(invoke).not.toHaveBeenCalledWith("set_config_field", expect.objectContaining({ key: "tui.fold" }));
+    invoke.mockReset();
+  });
+
+  it("saves the reset as the diamond", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const { waitFor } = await import("@testing-library/react");
+    invoke.mockImplementation(async () => null);
+    mount();
+    fireEvent.click(screen.getByRole("button", { name: "blue shield" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reset to diamond" }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("set_config_field", { profile: "doc", key: "tui.fold", value: "diamond" }));
     invoke.mockReset();
   });
 });

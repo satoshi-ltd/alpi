@@ -1,5 +1,14 @@
 import { SendIcon, StopIcon, SpinnerIcon } from "./icons.jsx";
 import Tip from "./Tip.jsx";
+import { contrastRatio } from "../../../common/crease.mjs";
+import { BRAND_INK, isHexColour } from "../../../common/folds.mjs";
+
+const LIGHT_FG = "#ffffff";
+
+export function foregroundOn(fill) {
+  if (!isHexColour(fill)) return "var(--bg-pane)";
+  return contrastRatio(LIGHT_FG, fill) >= contrastRatio(BRAND_INK.light, fill) ? LIGHT_FG : BRAND_INK.light;
+}
 
 export default function SendButton({
   canSend = false,
@@ -19,7 +28,7 @@ export default function SendButton({
     : enabled
       ? accent || "var(--accent)"
       : "var(--line)";
-  const fg = enabled || isStop ? "#fff" : "var(--ink-3)";
+  const fg = enabled || isStop ? foregroundOn(bg) : "var(--ink-3)";
   const btn = (
     <button
       type="button"
@@ -29,7 +38,7 @@ export default function SendButton({
       style={{
         width: "var(--ctrl-md)",
         height: "var(--ctrl-md)",
-        borderRadius: "calc(var(--ctrl-md) / 3)",
+        borderRadius: "var(--r-xs)",
         border: 0,
         background: bg,
         color: fg,

@@ -342,6 +342,40 @@ describe("useChatStream completed-turn seam", () => {
     expect(reload).toHaveBeenCalled();
   });
 
+  it("leaves the blank composer alone when the new chat was detached while its reply was loading", async () => {
+    const pending = deferredDetail();
+    const { result, setView } = mount({ activeConnectionIdRef: { current: "A" } });
+    await waitForListen();
+    seedTurn(result, { connectionId: "A", sessionId: null, launchSessionId: null });
+    emit({ kind: "reply", session_id: "S1" });
+    act(() => result.current.detachNewChatTurns("A", "doc"));
+    await act(async () => {
+      pending().res({ id: "S1", turns: [] });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    const blank = { kind: "profile", profile: "doc", sessionId: null };
+    const updaters = setView.mock.calls.map(([u]) => u).filter((u) => typeof u === "function");
+    expect(updaters.length).toBeGreaterThan(0);
+    for (const update of updaters) expect(update(blank)).toBe(blank);
+  });
+
+  it("leaves the blank composer alone when the detached turn settles before its slow fetch resolves", async () => {
+    const pending = deferredDetail();
+    const { result, setView } = mount({ activeConnectionIdRef: { current: "A" } });
+    await waitForListen();
+    seedTurn(result, { connectionId: "A", sessionId: null, launchSessionId: null });
+    emit({ kind: "reply", session_id: "S1" });
+    emit({ kind: "done", session_id: "S1" });
+    act(() => result.current.detachNewChatTurns("A", "doc"));
+    await act(async () => { await vi.advanceTimersByTimeAsync(31_000); });
+    await act(async () => {
+      pending().res({ id: "S1", turns: [] });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    const blank = { kind: "profile", profile: "doc", sessionId: null };
+    for (const update of setView.mock.calls.map(([u]) => u).filter((u) => typeof u === "function")) expect(update(blank)).toBe(blank);
+  });
+
   it("drops the turn when the transcript fetch fails, degrading to the pre-wait behaviour", async () => {
     const pending = deferredDetail();
     const { result, notify } = mount({ activeConnectionIdRef: { current: "A" } });
@@ -639,33 +673,33 @@ describe("useChatStream connection scoping", () => {
   });
 });
 
-describe("useChatStream new-chat hero detach", () => {
-  it("promotes a streaming new-chat turn to its real session so the hero frees up", async () => {
+describe("useChatStream new-session detach", () => {
+  it("frees the profile's blank composer by moving a streaming new chat to its own slot", async () => {
     const { result } = mount();
     await waitForListen();
-    seedTurn(result, { requestId: "req-1", connectionId: "A", sessionId: null, launchSessionId: null });
+    seedTurn(result, { requestId: "req-1", profile: "doc", connectionId: "A", sessionId: null, launchSessionId: null });
     emit({ kind: "session_start", session_id: "S1" });
-    expect(turnOf(result, "req-1").sessionId).toBe("S1");
-    expect(turnOf(result, "req-1").launchSessionId).toBeNull();
-    act(() => result.current.detachNewChatTurns("A"));
+    act(() => result.current.detachNewChatTurns("A", "doc"));
     expect(turnOf(result, "req-1").launchSessionId).toBe("S1");
   });
 
-  it("falls back to the request id when the turn has no session id yet", async () => {
+  it("falls back to the request id before session_start", async () => {
     const { result } = mount();
     await waitForListen();
-    seedTurn(result, { requestId: "req-1", connectionId: "A", sessionId: null, launchSessionId: null });
-    act(() => result.current.detachNewChatTurns("A"));
+    seedTurn(result, { requestId: "req-1", profile: "doc", connectionId: "A", sessionId: null, launchSessionId: null });
+    act(() => result.current.detachNewChatTurns("A", "doc"));
     expect(turnOf(result, "req-1").launchSessionId).toBe("req-1");
   });
 
-  it("leaves new-chat turns on other connections untouched", async () => {
+  it("leaves other profiles and other connections untouched", async () => {
     const { result } = mount();
     await waitForListen();
-    seedTurn(result, { requestId: "a1", connectionId: "A", sessionId: null, launchSessionId: null });
-    seedTurn(result, { requestId: "b1", connectionId: "B", sessionId: null, launchSessionId: null });
-    act(() => result.current.detachNewChatTurns("A"));
+    seedTurn(result, { requestId: "a1", profile: "doc", connectionId: "A", sessionId: null, launchSessionId: null });
+    seedTurn(result, { requestId: "a2", profile: "abby", connectionId: "A", sessionId: null, launchSessionId: null });
+    seedTurn(result, { requestId: "b1", profile: "doc", connectionId: "B", sessionId: null, launchSessionId: null });
+    act(() => result.current.detachNewChatTurns("A", "doc"));
     expect(turnOf(result, "a1").launchSessionId).toBe("a1");
+    expect(turnOf(result, "a2").launchSessionId).toBeNull();
     expect(turnOf(result, "b1").launchSessionId).toBeNull();
   });
 });

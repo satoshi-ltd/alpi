@@ -1,7 +1,6 @@
 import { renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useWindowChrome } from "./useWindowChrome.js";
-import { setSettingsDirty } from "../lib/settingsDirty.js";
 
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: () => ({
@@ -22,7 +21,7 @@ function press(key, options = {}) {
 function mountWindowChrome(overrides = {}) {
   const props = {
     viewRef: { current: { kind: "settings" } },
-    setView: vi.fn(),
+    onNewSession: vi.fn(),
     paletteOpenRef: { current: false },
     activeProfileName: "doc",
     historyKind: "sessions",
@@ -149,21 +148,33 @@ describe("useWindowChrome", () => {
     chrome.unmount();
   });
 
-  it("starts a new session on ⌘N and keeps New profile on ⇧⌘N", () => {
+  it("starts a new session on ⌘N from Settings and keeps New profile on ⇧⌘N", () => {
     const onNewProfile = vi.fn();
     const settings = mountWindowChrome({ onNewProfile });
     press("n", { metaKey: true });
-    expect(settings.setView).toHaveBeenCalledWith({ kind: "empty" });
+    expect(settings.onNewSession).toHaveBeenCalledTimes(1);
     expect(onNewProfile).not.toHaveBeenCalled();
     press("N", { metaKey: true, shiftKey: true });
     expect(onNewProfile).toHaveBeenCalledTimes(1);
+    expect(settings.onNewSession).toHaveBeenCalledTimes(1);
     settings.unmount();
+  });
 
-    const profile = mountWindowChrome({ viewRef: { current: { kind: "profile" } } });
-    press("n", { metaKey: true });
-    const updater = profile.setView.mock.calls[0][0];
-    expect(updater({ kind: "profile", profile: "doc", sessionId: "s1" })).toEqual({ kind: "profile", profile: "doc", sessionId: null });
-    profile.unmount();
+  it("starts a new session on ⌘N from a profile, a workgroup, the workgroups list and the landing", () => {
+    for (const kind of ["profile", "workgroup", "workgroups", "landing"]) {
+      const chrome = mountWindowChrome({ viewRef: { current: { kind } } });
+      press("n", { metaKey: true });
+      expect(chrome.onNewSession).toHaveBeenCalledTimes(1);
+      chrome.unmount();
+    }
+  });
+
+  it("leaves ⌘N alone with no profiles to start a session with", () => {
+    const chrome = mountWindowChrome({ viewRef: { current: { kind: "workgroup" } }, onNewSession: null });
+    const ev = new KeyboardEvent("keydown", { key: "n", metaKey: true, cancelable: true });
+    window.dispatchEvent(ev);
+    expect(ev.defaultPrevented).toBe(false);
+    chrome.unmount();
   });
 
   it("opens contextual history when available", () => {
@@ -212,7 +223,7 @@ describe("useWindowChrome", () => {
   });
 });
 
-describe("useWindowChrome on non-US layouts and dirty settings", () => {
+describe("useWindowChrome on non-US layouts", () => {
   it("opens the shortcuts sheet for ⇧⌘7 producing '/' and never jumps to slot 7", () => {
     const onToggleShortcuts = vi.fn();
     const onJumpToProfile = vi.fn();
@@ -232,20 +243,5 @@ describe("useWindowChrome on non-US layouts and dirty settings", () => {
     press("-", { metaKey: true, code: "Slash" });
     expect(onToggleShortcuts).toHaveBeenCalledTimes(1);
     chrome.unmount();
-  });
-
-  it("keeps ⌘N from leaving settings while a draft is unsaved", () => {
-    const notifySpy = vi.fn();
-    window.notify = notifySpy;
-    setSettingsDirty("profile:doc:bio", true);
-    const chrome = mountWindowChrome();
-    press("n", { metaKey: true });
-    expect(chrome.setView).not.toHaveBeenCalled();
-    expect(notifySpy).toHaveBeenCalledTimes(1);
-    setSettingsDirty("profile:doc:bio", false);
-    press("n", { metaKey: true });
-    expect(chrome.setView).toHaveBeenCalledWith({ kind: "empty" });
-    chrome.unmount();
-    delete window.notify;
   });
 });

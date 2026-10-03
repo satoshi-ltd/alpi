@@ -1,7 +1,8 @@
 import { useState, StrictMode } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import AlpiPicker from "../features/AlpiPicker.jsx";
+import AppearancePicker from "./AppearancePicker.jsx";
+import { pairName } from "../../../common/accents.mjs";
 import VersionButton from "../features/VersionButton.jsx";
 
 vi.mock("../lib/updater.js", () => ({
@@ -13,6 +14,8 @@ vi.mock("../lib/updater.js", () => ({
 }));
 
 import Modal from "./Modal.jsx";
+
+const APPEARANCE = pairName("shield", "#3899e2");
 import BrowseModal from "./BrowseModal.jsx";
 import Dropdown from "./Dropdown.jsx";
 import ContextMenu from "./ContextMenu.jsx";
@@ -50,16 +53,16 @@ describe("overlay interactions", () => {
     expect(screen.getByRole("dialog", { name: "Schedules" })).toBeTruthy();
   });
 
-  it.each(["profile", "version"])("Escape closes only the %s popover above a dialog", (kind) => {
+  it.each(["appearance", "version"])("Escape closes only the %s popover above a dialog", (kind) => {
     const close = vi.fn();
     render(<StrictMode><Modal open title="Parent" onClose={close}>
-      {kind === "profile"
-        ? <AlpiPicker profiles={[{ name: "pixel" }]} activeAlpi="pixel" />
+      {kind === "appearance"
+        ? <AppearancePicker fold="shield" accent="#3899e2" />
         : <VersionButton />}
     </Modal></StrictMode>);
-    fireEvent.click(screen.getByRole("button", { name: kind === "profile" ? /pixel/ : "0.0.0" }));
-    const panel = () => kind === "profile"
-      ? screen.queryByPlaceholderText("Find profile…")
+    fireEvent.click(screen.getByRole("button", { name: kind === "appearance" ? APPEARANCE : "0.0.0" }));
+    const panel = () => kind === "appearance"
+      ? screen.queryByText("Object")
       : screen.queryByText("You're up to date");
     expect(panel()).toBeTruthy();
     fireEvent.keyDown(document.activeElement, { key: "Escape" });
@@ -73,23 +76,23 @@ describe("overlay interactions", () => {
     function Scene() {
       const [open, setOpen] = useState(false);
       return <>
-        <AlpiPicker profiles={[{ name: "pixel" }]} activeAlpi="pixel" />
+        <AppearancePicker fold="shield" accent="#3899e2" />
         <VersionButton />
         <button onClick={() => setOpen(true)}>Open dialog</button>
         <Modal open={open} title="New dialog" onClose={() => setOpen(false)}>Content</Modal>
       </>;
     }
     render(<Scene />);
-    fireEvent.click(screen.getByRole("button", { name: /pixel/ }));
+    fireEvent.click(screen.getByRole("button", { name: APPEARANCE }));
     fireEvent.click(screen.getByRole("button", { name: "0.0.0" }));
     fireEvent.click(screen.getByText("Open dialog"));
     fireEvent.keyDown(document.activeElement, { key: "Escape" });
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(screen.getByPlaceholderText("Find profile…")).toBeTruthy();
+    expect(screen.getByText("Object")).toBeTruthy();
     expect(screen.getByText("You're up to date")).toBeTruthy();
     fireEvent.keyDown(document.body, { key: "Escape" });
     expect(screen.queryByText("You're up to date")).toBeNull();
-    expect(screen.getByPlaceholderText("Find profile…")).toBeTruthy();
+    expect(screen.getByText("Object")).toBeTruthy();
   });
 
   it("keeps Tab inside a dialog, skipping disabled controls", () => {

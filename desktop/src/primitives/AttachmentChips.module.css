@@ -18,7 +18,7 @@
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
   border: .5px solid var(--line-2);
-  border-radius: var(--r-md);
+  border-radius: var(--r-xs);
   background: var(--bg-pane);
   max-width: 280px;
 }
@@ -35,7 +35,7 @@
   justify-content: center;
   width: var(--ctrl-md);
   height: var(--ctrl-md);
-  border-radius: var(--r-sm);
+  border-radius: var(--r-xs);
   background: var(--hover);
   color: var(--ink-3);
   flex-shrink: 0;
@@ -54,7 +54,7 @@
 .thumb {
   width: var(--ctrl-md);
   height: var(--ctrl-md);
-  border-radius: var(--r-sm);
+  border-radius: var(--r-xs);
   object-fit: cover;
   flex-shrink: 0;
   display: block;

@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { buildSpeakerIndex, paletteFor, speakerFromIndex } from "./wg-speakers.js";
 
 const profiles = [
-  { name: "doc", pubkey_b64: "pk-doc", accent: "#123456", bio: "local doc bio" },
+  { name: "doc", pubkey_b64: "pk-doc", accent: "#123456", fold: "shield", bio: "local doc bio" },
   { name: "muse", pubkey_b64: "pk-muse", public_bio: "muse public" },
   { name: "default", pubkey_b64: "pk-default", accent: "#abc123" },
 ];
@@ -18,7 +18,7 @@ const index = buildSpeakerIndex(profiles, peers, members);
 describe("speakerFromIndex", () => {
   it("matches a local profile and prefers the member bio over the local one", () => {
     const s = speakerFromIndex(index, { from_pubkey: "pk-doc" });
-    expect(s).toEqual({ name: "doc", accent: "#123456", bio: "member doc bio" });
+    expect(s).toEqual({ name: "doc", accent: "#123456", fold: "shield", bio: "member doc bio" });
   });
 
   it("falls back to the profile's public_bio when no member bio exists", () => {

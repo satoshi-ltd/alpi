@@ -12,7 +12,7 @@
   gap: var(--space-3);
   height: var(--ctrl-sm);
   padding: 0 var(--space-5);
-  border-radius: var(--r-md);
+  border-radius: var(--r-xs);
   background: transparent;
   color: var(--ink-2);
   font: inherit;
@@ -40,40 +40,39 @@
 }
 
 .triggerField {
-  border: .5px solid var(--line-2);
-  border-radius: var(--r-md);
+  border: .5px solid transparent;
+  border-radius: var(--r-xs);
   height: var(--ctrl-md);
   padding: 0 var(--space-5);
-  background: var(--bg-input);
+  background: var(--well);
 }
 
-.triggerField:hover {
-  background: var(--bg-input);
-  border-color: color-mix(in srgb, var(--ink) 24%, transparent);
+.triggerField.triggerField:hover {
+  background: var(--well);
+  color: inherit;
 }
 
-.triggerField:focus,
-.triggerField:focus-visible {
+.triggerField.triggerField:focus,
+.triggerField.triggerField:focus-visible,
+.triggerField.triggerField.triggerOpen,
+.triggerField.triggerField.triggerOpen:hover {
   outline: none;
-  background: var(--bg-input);
-  border-color: var(--focus-border);
-  box-shadow: var(--focus-ring);
+  border-color: transparent;
+  border-radius: var(--r-xs);
+  background: var(--well-focus);
+  color: var(--ink);
+  box-shadow: var(--well-ring);
 }
 
 .triggerOpen {
-  border-color: var(--focus-border);
-  box-shadow: var(--focus-ring);
-}
-
-.trigger.triggerOpen:hover {
-  background: var(--bg-input);
+  background: var(--hover);
 }
 
 .triggerList {
   gap: var(--space-4);
   height: 44px;
   padding: 0 var(--space-5);
-  border-radius: var(--r-lg);
+  border-radius: var(--r-xs);
   border: .5px solid var(--line);
   background: var(--bg-elev);
   max-width: none;
@@ -165,7 +164,7 @@
   max-height: 420px;
   background: var(--bg-elev);
   border: .5px solid var(--line-2);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-xs);
   box-shadow: var(--shadow);
   display: flex;
   flex-direction: column;
@@ -186,24 +185,20 @@
 .search {
   width: 100%;
   padding: var(--space-3) var(--space-5);
-  border-radius: var(--r-md);
+  border-radius: var(--r-xs);
   border: .5px solid transparent;
-  background: var(--bg-side);
+  background: var(--well);
   font: inherit;
   font-size: var(--fs-sm);
   color: var(--ink);
   outline: none;
 }
 
-.search:hover {
-  border-color: color-mix(in srgb, var(--ink) 24%, transparent);
-}
-
 .search:focus,
 .search:focus-visible {
   outline: none;
-  border-color: var(--focus-border);
-  box-shadow: var(--focus-ring);
+  background: var(--well-focus);
+  box-shadow: var(--well-ring);
 }
 
 .list {
@@ -238,7 +233,7 @@
   gap: var(--space-4);
   width: 100%;
   padding: var(--space-3) var(--space-4);
-  border-radius: var(--r-md);
+  border-radius: var(--r-xs);
   text-align: left;
   font: inherit;
   color: var(--ink);

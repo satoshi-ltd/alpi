@@ -1,0 +1,47 @@
+.crease {
+  font-family: var(--font-crease);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: var(--lh-tight);
+  color: transparent;
+  background-image: var(--crease-light);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+@media (prefers-color-scheme: dark) {
+  :global(:root:not([data-mode="light"])) .crease {
+    background-image: var(--crease-dark);
+  }
+}
+
+:global([data-mode="dark"]) .crease {
+  background-image: var(--crease-dark);
+}
+
+.ink {
+  color: var(--crease-l1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :global(:root:not([data-mode="light"])) .ink {
+    color: var(--crease-d1);
+  }
+}
+
+:global([data-mode="dark"]) .ink {
+  color: var(--crease-d1);
+}
+
+@media (forced-colors: active) {
+  :global(:root) .crease,
+  :global(:root:not([data-mode="light"])) .crease,
+  :global([data-mode="dark"]) .crease {
+    background-image: none;
+    background-clip: border-box;
+    -webkit-background-clip: border-box;
+    color: CanvasText;
+  }
+}

@@ -1,0 +1,29 @@
+.slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.cell {
+  animation: cellRipple var(--dur-loop) ease-in-out infinite;
+}
+
+@keyframes cellRipple {
+  0%, 100% { opacity: 1; }
+  35% { opacity: 0.4; }
+}
+
+.alpaca {
+  --alp: var(--alp-l);
+}
+
+@media (prefers-color-scheme: dark) {
+  :global(:root:not([data-mode="light"])) .alpaca {
+    --alp: var(--alp-d);
+  }
+}
+
+:global([data-mode="dark"]) .alpaca {
+  --alp: var(--alp-d);
+}

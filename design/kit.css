@@ -1,7 +1,7 @@
 body.kit {
   margin: 0;
-  background: var(--bg, #eef0f2);
-  color: var(--ink, #0b1117);
+  background: var(--bg, #f0f0f0);
+  color: var(--ink, #141414);
   font-family: "Geist", ui-sans-serif, system-ui, sans-serif;
 }
 .kit-header {
@@ -13,7 +13,7 @@ body.kit {
   gap: 16px;
   padding: 10px 24px;
   background: var(--bg-pane, #ffffff);
-  border-bottom: 0.5px solid var(--line-2, rgba(11, 17, 23, 0.14));
+  border-bottom: 0.5px solid var(--line-2, rgba(20, 20, 20, 0.14));
 }
 .kit-header .brand-lockup {
   display: flex;
@@ -35,20 +35,20 @@ body.kit {
 .kit-header nav a {
   font-size: 13px;
   font-weight: 500;
-  color: var(--ink-3, #626e7d);
+  color: var(--ink-3, #6b6b6b);
   padding: 6px 10px;
   border-radius: 8px;
   text-decoration: none;
 }
 .kit-header nav a[aria-current="page"] {
-  background: var(--selected, rgba(11, 17, 23, 0.06));
-  color: var(--ink, #0b1117);
+  background: var(--selected, rgba(20, 20, 20, 0.06));
+  color: var(--ink, #141414);
 }
 .kit-header .kit-version {
   margin-left: auto;
   font-family: "Geist Mono", ui-monospace, monospace;
   font-size: 11px;
-  color: var(--ink-3, #626e7d);
+  color: var(--ink-3, #6b6b6b);
 }
 .kit-main {
   max-width: 1360px;
@@ -68,7 +68,7 @@ body.kit {
   max-width: 760px;
   font-size: 15px;
   line-height: 1.55;
-  color: var(--ink-3, #626e7d);
+  color: var(--ink-3, #6b6b6b);
   margin: 0;
 }
 .kit-facts {
@@ -78,7 +78,7 @@ body.kit {
   margin-top: 16px;
   font-family: "Geist Mono", ui-monospace, monospace;
   font-size: 11px;
-  color: var(--ink-3, #626e7d);
+  color: var(--ink-3, #6b6b6b);
 }
 .kit-section {
   display: flex;
@@ -95,13 +95,13 @@ body.kit {
   font-family: "Geist Mono", ui-monospace, monospace;
   font-size: 11px;
   font-weight: 400;
-  color: var(--ink-4, #b1bac4);
+  color: var(--ink-4, #b4b4b4);
 }
 .kit-empty {
   margin: 0;
   font-size: 15px;
   line-height: 1.55;
-  color: var(--ink-3, #626e7d);
+  color: var(--ink-3, #6b6b6b);
 }
 .kit-row {
   display: flex;
@@ -146,7 +146,7 @@ body.kit {
   font-size: 11px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--ink-3, #626e7d);
+  color: var(--ink-3, #6b6b6b);
 }
 .kit-header .logo-dark {
   display: none;

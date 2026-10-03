@@ -1,12 +1,12 @@
 import Popover from "./Popover.jsx";
-import { Diamond, Mono, Eyebrow } from "./index.js";
+import { Fold, Mono, Eyebrow } from "./index.js";
 import styles from "./AddMemberPopover.module.css";
 import { pubkeyTail } from "../lib/pubkey.js";
 
 export default function AddMemberPopover({
   open,
   onClose,
-  candidates = [],   // [{ id, accent, pubkey }]
+  candidates = [],   // [{ id, accent, fold, pubkey }]
   onPick,
 }) {
   return (
@@ -28,7 +28,7 @@ export default function AddMemberPopover({
             }}
             className={`row row-gap ${styles.item}`}
           >
-            <Diamond color={c.accent} />
+            <Fold fold={c.fold} color={c.accent} />
             <Mono className={styles.label}>@{c.id}</Mono>
             <Mono className={styles.suffix}>
               {pubkeyTail(c.pubkey)}

@@ -7,22 +7,10 @@
   flex-shrink: 0;
 }
 
-.wrapEmbedded {
-  width: 100%;
-  padding: 0;
-  margin-top: var(--space-3);
-}
-
-.wrapEmbedded .body {
-  border-radius: var(--r-3xl);
-  padding: var(--space-7) var(--space-8) var(--space-5);
-  box-shadow: var(--shadow-sm);
-}
-
 .body {
-  background: var(--bg-input);
-  border: .5px solid var(--line-2);
-  border-radius: var(--r-3xl);
+  background: var(--well);
+  border: .5px solid transparent;
+  border-radius: var(--r-xs);
   padding: var(--space-6) var(--space-7) var(--space-4);
   display: flex;
   flex-direction: column;
@@ -42,7 +30,8 @@
 }
 
 .body:has(.input:focus) {
-  border-color: color-mix(in srgb, var(--ink) 14%, transparent);
+  background: var(--well-focus);
+  box-shadow: var(--well-ring);
 }
 
 .body button,
@@ -58,12 +47,6 @@
   margin-right: calc(var(--space-7) * -1 - .5px);
   margin-bottom: 0;
   padding: 0;
-}
-.wrapEmbedded .topBar {
-  margin-top: calc(var(--space-7) * -1 - .5px);
-  margin-left: calc(var(--space-8) * -1 - .5px);
-  margin-right: calc(var(--space-8) * -1 - .5px);
-  margin-bottom: 0;
 }
 .topBar > * { flex: 1; }
 
@@ -123,7 +106,7 @@
   z-index: var(--z-chrome);
   background: var(--bg-elev);
   border: .5px solid var(--line-2);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-xs);
   box-shadow: var(--shadow);
   padding: var(--space-2);
   max-height: 15rem;
@@ -145,7 +128,7 @@
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
   border: 0;
-  border-radius: var(--r-md);
+  border-radius: var(--r-xs);
   background: transparent;
   text-align: left;
   font: inherit;
@@ -172,15 +155,6 @@
   color: var(--ink-3);
   text-transform: uppercase;
   letter-spacing: 0.02em;
-}
-
-.mentionDot {
-  width: 9px;
-  height: 9px;
-  transform: rotate(45deg);
-  border-radius: 1.5px;
-  background: var(--ink-3);
-  flex-shrink: 0;
 }
 
 .mentionId {

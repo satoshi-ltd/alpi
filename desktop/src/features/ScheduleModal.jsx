@@ -29,7 +29,7 @@ function matchesJob(j, query) {
   return [j.title, j.prompt, j.expression, j.id].filter(Boolean).join(" ").toLowerCase().includes(needle);
 }
 
-export default function ScheduleModal({ open, onClose, profile, connectionId }) {
+export default function ScheduleModal({ open, onClose, profile, connectionId, openJob = null }) {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -67,7 +67,10 @@ export default function ScheduleModal({ open, onClose, profile, connectionId }) 
     setError(null);
     setConfirm(false);
     load();
-    return () => { genRef.current += 1; };
+    return () => {
+      genRef.current += 1;
+      setJobs([]);
+    };
   }, [open, profile, connectionId]);
 
   useEffect(() => {
@@ -86,6 +89,19 @@ export default function ScheduleModal({ open, onClose, profile, connectionId }) 
     if (!jobs.length) { if (selectedId) setSelectedId(null); return; }
     if (!jobs.some((j) => j.id === selectedId)) setSelectedId(jobs[0].id);
   }, [jobs, selectedId]);
+
+  const pendingJobRef = useRef(null);
+  useEffect(() => {
+    pendingJobRef.current = openJob?.id ?? null;
+  }, [openJob]);
+  useEffect(() => {
+    const wanted = pendingJobRef.current;
+    if (wanted == null) return;
+    const match = jobs.find((j) => String(j.id) === String(wanted));
+    if (!match) return;
+    pendingJobRef.current = null;
+    setSelectedId(match.id);
+  }, [jobs, openJob]);
 
   const filtered = useMemo(() => jobs.filter((j) => matchesJob(j, query)), [jobs, query]);
   const active = jobs.find((j) => j.id === selectedId) || null;

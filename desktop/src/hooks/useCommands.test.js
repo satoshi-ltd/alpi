@@ -95,15 +95,15 @@ describe("useCommands", () => {
     expect(onOpenHistory).toHaveBeenCalledTimes(1);
   });
 
-  it("offers New session under ⌘N from any non-empty view", () => {
-    const onNewChat = vi.fn();
-    const commands = renderCommands({ view: { kind: "workgroup" }, onNewChat });
-    const command = commands.find((cmd) => cmd.id === "create:chat");
-
-    expect(command).toMatchObject({ group: "Chat", label: "New session", hint: "⌘N" });
-    command.action();
-    expect(onNewChat).toHaveBeenCalledTimes(1);
-    expect(renderCommands({ view: { kind: "empty" }, onNewChat }).map((c) => c.id)).not.toContain("create:chat");
+  it("offers New session under ⌘N from any view whenever there is a target", () => {
+    for (const kind of ["profile", "workgroup", "workgroups", "settings", "landing"]) {
+      const onNewSession = vi.fn();
+      const command = renderCommands({ view: { kind }, onNewSession }).find((cmd) => cmd.id === "create:chat");
+      expect(command).toMatchObject({ group: "Chat", label: "New session", hint: "⌘N" });
+      command.action();
+      expect(onNewSession).toHaveBeenCalledTimes(1);
+    }
+    expect(renderCommands({ view: { kind: "workgroup" }, onNewSession: null }).map((c) => c.id)).not.toContain("create:chat");
   });
 
   it("shows profile pause and refresh when available", () => {
@@ -270,7 +270,7 @@ describe("useCommands", () => {
       activeProfileName: "doc",
       historyKind: "sessions",
       onOpenHistory: vi.fn(),
-      onNewChat: vi.fn(),
+      onNewSession: vi.fn(),
       onOpenShortcuts: vi.fn(),
       onToggleActivity: vi.fn(),
       onToggleSidebarSearch: vi.fn(),

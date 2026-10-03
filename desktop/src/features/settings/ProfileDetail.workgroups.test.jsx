@@ -13,7 +13,7 @@ vi.mock("../../hooks/useUsage.js", () => ({ useUsageDaily: () => ({ days: [], lo
 vi.mock("../../primitives/Notification.jsx", () => ({ useNotify: () => vi.fn() }));
 vi.mock("./Usage.jsx", () => ({ default: () => null }));
 vi.mock("./fields/boundaries.jsx", () => ({
-  AccentField: () => null, BudgetField: () => null, SandboxField: () => null, WorkspaceField: () => null,
+  BudgetField: () => null, SandboxField: () => null, WorkspaceField: () => null,
 }));
 vi.mock("./fields/agent.jsx", () => ({
   AddProviderField: () => null, McpField: () => null, ModelField: () => null, ReasoningEffortField: () => null,

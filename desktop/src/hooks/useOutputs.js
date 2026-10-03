@@ -1,3 +1,4 @@
+import { defaultAsAlpaca } from "../../../common/folds.mjs";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { subscribeDaemonEvent } from "../lib/daemon-bus.js";
@@ -46,7 +47,7 @@ export async function fetchConnectionOutputs(connection, status, previous = null
   let profiles;
   try {
     const res = await invoke("profile_summaries", { connectionId });
-    profiles = (Array.isArray(res) ? res : []).map((p) => ({ name: p.name, accent: p.accent || null, voice_id: p.voice_id ?? null }));
+    profiles = (Array.isArray(res) ? res : []).map(defaultAsAlpaca("var(--accent)")).map((p) => ({ name: p.name, accent: p.accent || null, fold: p.fold ?? null, voice_id: p.voice_id ?? null }));
   } catch {
     return null;
   }
@@ -73,6 +74,7 @@ export async function fetchConnectionOutputs(connection, status, previous = null
         ...o,
         profile: o.profile || "default",
         accent: p.accent ?? null,
+        fold: p.fold ?? null,
         voice_id: p.voice_id ?? null,
         connectionId,
         connectionName: connection.name,
@@ -93,6 +95,7 @@ export async function fetchConnectionOutputs(connection, status, previous = null
             ...o,
             profile: o.profile || p.name,
             accent: p.accent,
+            fold: p.fold,
             voice_id: p.voice_id,
             connectionId,
             connectionName: connection.name,
@@ -421,7 +424,17 @@ export function useOutput(profile, id, connectionId) {
     }
   }, [profile, id, connectionId]);
 
-  return { row, loading, error, reload: load, markRead };
+  const markUnread = useCallback(async () => {
+    if (!profile || !id) return null;
+    const out = await invoke("outputs_mark_unread", { profile, id, ...(connectionId ? { connectionId } : {}) });
+    if (out) {
+      setRow(out);
+      notifyLocalChange(connectionId ?? null);
+    }
+    return out;
+  }, [profile, id, connectionId]);
+
+  return { row, loading, error, reload: load, markRead, markUnread };
 }
 
 

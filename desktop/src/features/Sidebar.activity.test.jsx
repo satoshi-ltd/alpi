@@ -33,7 +33,7 @@ const BASE = {
     { name: "abby", model: "a/b", latest_session: { updated_at: TS } },
   ],
   workgroups: [{ profile: "alpi", id: "crew", name: "launch-crew", mtime: TS }],
-  view: { kind: "empty" },
+  view: { kind: "landing" },
   hostConnections: { active_id: "local", connections: [] },
 };
 
@@ -48,7 +48,8 @@ describe("Sidebar agent states", () => {
     expect(screen.getByRole("button", { name: "builder, needs you" })).toHaveTextContent("needs you");
     expect(screen.getByRole("button", { name: "doc, failed" })).toHaveTextContent("failed");
     const alpi = screen.getByRole("button", { name: "alpi, working" });
-    expect(alpi.querySelector(".pulse-glyph")).not.toBeNull();
+    expect(alpi.querySelector("polygon[class*='cell']")).not.toBeNull();
+    expect(alpi.querySelector("[data-state='working'] span")).toBeNull();
     const abby = screen.getByText("abby").closest("button");
     expect(abby.querySelector("[data-state]")).toBeNull();
     expect(abby.querySelector(".sb-ts")).not.toBeNull();

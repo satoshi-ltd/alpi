@@ -152,13 +152,17 @@ export function useChatStream({
     });
   }, [dropTurnTimers]);
 
-  const detachNewChatTurns = useCallback((connectionId) => {
+  const detachedRef = useRef(new Set());
+  const detachNewChatTurns = useCallback((connectionId, profile) => {
     const cid = connectionId ?? null;
+    for (const [rid, t] of Object.entries(pendingTurnsRef.current ?? {})) {
+      if ((t.connectionId ?? null) === cid && t.profile === profile && (t.launchSessionId ?? null) === null) detachedRef.current.add(rid);
+    }
     setPendingTurns((prev) => {
       let changed = false;
       const next = { ...prev };
       for (const [rid, t] of Object.entries(prev)) {
-        if ((t.connectionId ?? null) === cid && (t.launchSessionId ?? null) === null) {
+        if ((t.connectionId ?? null) === cid && t.profile === profile && (t.launchSessionId ?? null) === null) {
           next[rid] = { ...t, launchSessionId: t.sessionId ?? t.requestId };
           changed = true;
         }
@@ -218,8 +222,9 @@ export function useChatStream({
     setView((cur) => {
       const isProfile = cur?.kind === "profile" && cur.profile === turn.profile;
       const foregroundExisting = isProfile && (cur.sessionId ?? null) === sid;
-      const foregroundNewChat =
-        isProfile && (cur.sessionId ?? null) === null && (turn.launchSessionId ?? null) === null;
+      const detached = detachedRef.current.has(turn.requestId);
+      const launchSessionId = (pendingTurnsRef.current[turn.requestId] ?? turn).launchSessionId ?? null;
+      const foregroundNewChat = isProfile && (cur.sessionId ?? null) === null && launchSessionId === null && !detached;
       if (foregroundExisting || foregroundNewChat) {
         setRewriteDraft(null);
         setSessionData(newData);

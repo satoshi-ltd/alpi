@@ -41,6 +41,39 @@ describe("ScheduleModal", () => {
     expect(invokeMock).toHaveBeenCalledWith("schedule_fire", { profile: "lens", id: "45188eab" });
   });
 
+  it("opens on the job a notification pointed at", async () => {
+    render(<ScheduleModal open onClose={vi.fn()} profile="lens" connectionId={null} openJob={{ id: "aa11bb22" }} />);
+    await waitFor(() => expect(screen.getByText("python3 run.py")).toBeTruthy());
+    expect(screen.queryByText("Run the whoop skill")).toBeNull();
+  });
+
+  it("opens on the linked job after it was opened and closed before on the same profile", async () => {
+    const onClose = vi.fn();
+    const { rerender } = render(<ScheduleModal open onClose={onClose} profile="lens" connectionId={null} />);
+    await waitFor(() => expect(screen.getByText("Run the whoop skill")).toBeTruthy());
+    rerender(<ScheduleModal open={false} onClose={onClose} profile="lens" connectionId={null} />);
+    rerender(<ScheduleModal open onClose={onClose} profile="lens" connectionId={null} openJob={{ id: "aa11bb22" }} />);
+    await waitFor(() => expect(screen.getByText("python3 run.py")).toBeTruthy());
+  });
+
+  it("goes back to a job asked for again after another one was picked", async () => {
+    const onClose = vi.fn();
+    const { rerender } = render(<ScheduleModal open onClose={onClose} profile="lens" connectionId={null} openJob={{ id: "aa11bb22" }} />);
+    await waitFor(() => expect(screen.getByText("python3 run.py")).toBeTruthy());
+    fireEvent.click(screen.getByText("WHOOP sync"));
+    await waitFor(() => expect(screen.getByText("Run the whoop skill")).toBeTruthy());
+    rerender(<ScheduleModal open onClose={onClose} profile="lens" connectionId={null} openJob={{ id: "aa11bb22" }} />);
+    await waitFor(() => expect(screen.getByText("python3 run.py")).toBeTruthy());
+  });
+
+  it("moves to a job another notification points at while it is already open", async () => {
+    const onClose = vi.fn();
+    const { rerender } = render(<ScheduleModal open onClose={onClose} profile="lens" connectionId={null} />);
+    await waitFor(() => expect(screen.getByText("Run the whoop skill")).toBeTruthy());
+    rerender(<ScheduleModal open onClose={onClose} profile="lens" connectionId={null} openJob={{ id: "aa11bb22" }} />);
+    await waitFor(() => expect(screen.getByText("python3 run.py")).toBeTruthy());
+  });
+
   it("shows mode and notify state in the detail", async () => {
     open();
     await waitFor(() => expect(screen.getByText("Run the whoop skill")).toBeTruthy());

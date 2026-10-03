@@ -1,19 +1,23 @@
-import { Diamond, DiamondStack, Tip } from "./index.js";
+import { WORKGROUP_FOLD } from "../../../common/folds.mjs";
+import { palettes } from "../../../common/tokens.mjs";
+import { Crease, Fold, Tip } from "./index.js";
 import styles from "./ChatHeader.module.css";
 
 export default function ChatHeader({
   kind = "profile",
   id,
   accent,
+  fold,
   bio,
   meta,
   right,
+  paused = false,
 }) {
   const isWg = kind === "workgroup";
   const trimmedBio = (bio || "").trim();
   const glyph = isWg
-    ? <DiamondStack color={accent} size="md" className={styles.stackGlyph} />
-    : <Diamond color={accent} size="md" />;
+    ? <Fold fold={WORKGROUP_FOLD} color={accent} size="md" unfolded={paused} />
+    : <Fold fold={fold} color={accent} size="md" unfolded={paused} />;
   const titleGlyph = trimmedBio
     ? <Tip text={trimmedBio} side="l">{glyph}</Tip>
     : glyph;
@@ -23,13 +27,12 @@ export default function ChatHeader({
         <div className={`col ${styles.titleCol}`}>
           <div className="title-row">
             {titleGlyph}
-            <h1>{id}</h1>
+            <h1><Crease text={id} accent={paused ? palettes.light.ink3 : accent} /></h1>
           </div>
           {meta && <div className="meta-row">{meta}</div>}
         </div>
         {right && <div className={`row ${styles.actions}`}>{right}</div>}
       </div>
-      <span className="stripe" aria-hidden />
     </header>
   );
 }

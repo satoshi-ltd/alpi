@@ -13,8 +13,8 @@
   min-width: 220px;
   max-width: 70%;
   padding: var(--space-5) var(--space-7);
-  border-radius: var(--r-3xl);
-  background: var(--hover);
+  border-radius: var(--r-xs);
+  background: var(--selected);
 }
 
 .pending {

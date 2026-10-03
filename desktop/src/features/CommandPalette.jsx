@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { WORKGROUP_FOLD } from "../../../common/folds.mjs";
 import { Palette } from "../primitives/Panels.jsx";
-import { Diamond, DiamondStack, Icon } from "../primitives/index.js";
+import { Fold, Icon } from "../primitives/index.js";
 import { I } from "../primitives/icons.jsx";
 import { profileLabel } from "../lib/profile-display.js";
 import { displaySessionTitle } from "../lib/session-titles.js";
@@ -10,6 +11,8 @@ import { ICON_ROLES } from "../../../common/iconRoles.mjs";
 
 const SESSION_FETCH_LIMIT = 12;
 const SESSION_ROWS = 8;
+export const RECENT_SESSION_ROWS = 5;
+const NEW_SESSION_COMMAND = "create:chat";
 
 const GLYPH_BY_PREFIX = {
   "view:settings": () => <Icon name={ICON_ROLES.settings} />,
@@ -79,14 +82,24 @@ export function loadRecentSessions(connectionId, profileNames, now = Date.now())
   const key = `${connectionId ?? ""}|${profileNames.join(",")}`;
   const hit = sessionCache.get(key);
   if (hit && now - hit.at < SESSION_CACHE_TTL_MS) return hit.promise;
-  const promise = mapBounded(profileNames, SESSION_CONCURRENCY, (profile) =>
+  const entry = { at: now, promise: null, rows: null };
+  entry.promise = mapBounded(profileNames, SESSION_CONCURRENCY, (profile) =>
     invoke("sessions", { profile, limit: SESSION_FETCH_LIMIT, connectionId: connectionId ?? null })
       .then((rows) => (Array.isArray(rows) ? rows : []))
       .catch(() => []),
-  ).then(recentChats);
-  sessionCache.set(key, { at: now, promise });
+  ).then(recentChats).then((rows) => {
+    entry.rows = rows;
+    return rows;
+  });
+  const promise = entry.promise;
+  sessionCache.set(key, entry);
   promise.catch(() => sessionCache.delete(key));
   return promise;
+}
+
+function cachedRecentSessions(key, now = Date.now()) {
+  const hit = sessionCache.get(key);
+  return hit?.rows && now - hit.at < SESSION_CACHE_TTL_MS ? hit.rows : null;
 }
 
 export function useRecentSessions(open, connectionId, profileNames = []) {
@@ -101,7 +114,9 @@ export function useRecentSessions(open, connectionId, profileNames = []) {
     });
     return () => { cancelled = true; };
   }, [open, connectionId, namesKey, key]);
-  return open && state.key === key ? state.rows : EMPTY_ROWS;
+  if (!open) return EMPTY_ROWS;
+  if (state.key === key) return state.rows;
+  return cachedRecentSessions(key) ?? EMPTY_ROWS;
 }
 
 const EMPTY_ROWS = [];
@@ -118,6 +133,7 @@ export function entityGroups({
   now = Date.now(),
 }) {
   const hint = (n) => (n ? `⌘${n}` : undefined);
+  const hubAccent = Object.fromEntries(profiles.map((p) => [p.name, p.accent]));
   return [
     {
       label: "Profiles",
@@ -128,7 +144,7 @@ export function entityGroups({
         keywords: [p.name, p.bio || ""].filter(Boolean),
         sub: "profile",
         shortcut: hint(jumpHints[`profile:${p.name}`]),
-        glyph: <Diamond color={p.accent || undefined} />,
+        glyph: <Fold fold={p.fold} color={p.accent || undefined} />,
         onSelect: onOpenProfile ? () => onOpenProfile(p) : undefined,
       })),
     },
@@ -141,7 +157,7 @@ export function entityGroups({
         keywords: [String(w.id ?? ""), w.profile].filter(Boolean),
         sub: `#${profileLabel(w.profile)}`,
         shortcut: hint(jumpHints[`workgroup:${w.profile}/${w.id}`]),
-        glyph: <DiamondStack />,
+        glyph: <Fold fold={WORKGROUP_FOLD} color={hubAccent[w.hub_id ?? w.profile] || undefined} unfolded={!!w.paused} />,
         onSelect: onOpenWorkgroup ? () => onOpenWorkgroup(w) : undefined,
       })),
     },
@@ -149,6 +165,7 @@ export function entityGroups({
       label: "Sessions",
       searchOnly: true,
       limit: SESSION_ROWS,
+      idle: { label: "Recent sessions", limit: RECENT_SESSION_ROWS },
       items: sessions.map((s) => {
         const ts = s.updated_at || s.started_at || s.mtime || 0;
         return {
@@ -193,6 +210,7 @@ export default function CommandPalette({
     const commandGroups = Array.from(byGroup.entries()).map(([label, items]) => ({
       label,
       items,
+      leadWhenIdle: items.some((item) => item.id === NEW_SESSION_COMMAND),
     }));
     return [
       ...entityGroups({

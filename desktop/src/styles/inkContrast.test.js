@@ -5,9 +5,6 @@ import { describe, expect, it } from "vitest";
 const SRC = join(import.meta.dirname, "..");
 
 const DECORATIVE_GLYPHS = {
-  "primitives/BootSplash.module.css": [".glyph"],
-  "primitives/ErrorBoundary.module.css": [".mark"],
-  "primitives/EmptyState.module.css": [".hash"],
   "pages/ChatPane.module.css": [".emptyHash"],
   "styles/design-system.css": [".ds-chat-header .title-row .ds-hash, .hash"],
 };

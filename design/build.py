@@ -3,6 +3,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -15,6 +16,7 @@ from desktop_boards import DESKTOP  # noqa: E402
 FONT_LINK = '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">'
 FAVICON_SOURCE = os.path.join(REPO, "site", "assets", "alpi-favicon.svg")
 PAGES = (
+    ("brand.html", "brand", "Brand", "Brand", "The identity as it ships: the mark and its wordmark, the twelve pairs, the palette and the states. A profile is a sheet of paper and its fold is its personality."),
     ("index.html", "system", "System", "Design system", "One token file feeds both clients. Colour, type, space, radius and every primitive of desktop and mobile, drawn from the values that ship."),
     ("desktop.html", "desktop", "Desktop", "Desktop", "Tauri client, 1280 wide. Every screen as the code paints it, with the sidebar it shares."),
     ("mobile.html", "mobile", "Mobile", "Phone and Fold", "Expo client. The phone keeps its own grammar; a fold or tablet renders the desktop layout at scale."),
@@ -29,18 +31,18 @@ def version(rel):
 
 # Boards are drawn in the light palette; the kit rewrites those literals to the token sheet so the theme switch reaches them.
 THEMED = (
-    ("rgba(11,17,23,0.07)", "var(--line)"),
-    ("rgba(11,17,23,0.14)", "var(--line-2)"),
-    ("rgba(11,17,23,0.04)", "var(--hover)"),
-    ("rgba(11,17,23,0.06)", "var(--selected)"),
+    ("rgba(20,20,20,0.07)", "var(--line)"),
+    ("rgba(20,20,20,0.14)", "var(--line-2)"),
+    ("rgba(20,20,20,0.04)", "var(--hover)"),
+    ("rgba(20,20,20,0.06)", "var(--selected)"),
     ("#ffffff", "var(--bg-pane)"),
-    ("#eef0f2", "var(--bg)"),
-    ("#f5f6f8", "var(--bg-side)"),
-    ("#f1f3f5", "var(--bg-side)"),
-    ("#0b1117", "var(--ink)"),
-    ("#3d4955", "var(--ink-2)"),
-    ("#626e7d", "var(--ink-3)"),
-    ("#b1bac4", "var(--ink-4)"),
+    ("#f0f0f0", "var(--bg)"),
+    ("#f6f6f6", "var(--bg-side)"),
+    ("#f2f2f2", "var(--bg-side)"),
+    ("#141414", "var(--ink)"),
+    ("#454545", "var(--ink-2)"),
+    ("#6b6b6b", "var(--ink-3)"),
+    ("#b4b4b4", "var(--ink-4)"),
     ("#8a5a0a", "var(--accent)"),
     ("#b73737", "var(--c-danger-text)"),
     ("#b3470e", "var(--c-warning-text)"),

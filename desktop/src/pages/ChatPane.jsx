@@ -24,18 +24,17 @@ import SearchBar from "../primitives/SearchBar.jsx";
 import { useTranscriptSearch } from "../hooks/useTranscriptSearch.js";
 import { useContextWindow } from "../hooks/useContextWindow.js";
 import { useNotify } from "../primitives/Notification.jsx";
-import Logo from "../primitives/Logo.jsx";
 import Markdown from "../primitives/Markdown.jsx";
 import { ACCENT_HEXES } from "../../../common/accents.mjs";
+import { FOLD_SIZES } from "../../../common/folds.mjs";
 import ProducedImages from "../primitives/ProducedImages.jsx";
 import { setImageRoots } from "../lib/imageRoots.js";
-import { Banner, JumpToLatest, LoadFailed, MessageBubble, NewChatHero, ProfileChatHeader } from "../primitives/index.js";
+import { Banner, JumpToLatest, LoadFailed, MessageBubble, ProfileChatHeader } from "../primitives/index.js";
 import { ProfileMessage } from "../primitives/index.js";
 import {
-  AlpiSilhouette,
   CopyIcon as DSCopyIcon,
-  Diamond,
   EditIcon,
+  Fold,
   IconBtn,
   Kbd,
   Mono,
@@ -71,7 +70,6 @@ export default function ChatPane({
   pendingTurn,
   onSend,
   onCancel,
-  onSelectProfile,
   onConfigureProfile,
   onTogglePauseProfile,
   onRewriteMessage,
@@ -93,8 +91,6 @@ export default function ChatPane({
   daemonOffline = false,
   searchOpen = false,
   onCloseSearch,
-  recents = [],
-  onOpenRecent,
   loadError = null,
   onRetryLoad,
   inlineApprovals = null,
@@ -109,8 +105,7 @@ export default function ChatPane({
     onClarificationResolved,
   }), [inlineApprovals, inlineClarifications, onApprovalResolved, onClarificationResolved]);
   const inProfile = view.kind === "profile";
-  const inEmpty = !pendingTurn && view.kind === "empty";
-  const sessionKey = inProfile ? `${view.profile}:${view.sessionId ?? "new"}` : "empty";
+  const sessionKey = `${view.profile}:${view.sessionId ?? "new"}`;
   const [modelOverride, setModelOverride] = useState(null);
   const [refreshBeat, setRefreshBeat] = useState(0);
   const [stopping, setStopping] = useState(false);
@@ -252,7 +247,7 @@ export default function ChatPane({
         <div className={styles.emptyShell}>
           <div className={styles.emptyContent}>
             <div className={styles.emptyMark}>
-              <Logo color={activeProfile?.accent || "var(--ink)"} />
+              <Fold fold={activeProfile?.fold} color={activeProfile?.accent || "var(--ink-3)"} size={FOLD_SIZES.hero} />
             </div>
             <div className={styles.titleGroup}>
               <h1 className={styles.emptyHeading}>
@@ -281,41 +276,6 @@ export default function ChatPane({
           </div>
         </div>
       </>
-    );
-  }
-
-  if (inEmpty) {
-    return (
-      <NewChatHero
-        profiles={profiles}
-        recents={recents}
-        onOpenRecent={onOpenRecent}
-        accent={activeProfile?.accent}
-      >
-        <ChatComposer
-          profiles={profiles}
-          activeProfile={activeProfile}
-          connectionId={connectionId}
-          availableModels={activeModels}
-          onSelectProfile={onSelectProfile}
-          onConfigureProfile={onConfigureProfile}
-          onSend={onSend}
-          onCancel={cancellableTurn ? handleCancel : null}
-          stopping={stopping}
-          disabled={daemonOffline || paused}
-          daemonOffline={daemonOffline}
-          paused={paused}
-          showPicker={view.kind === "empty"}
-          modelOverride={modelOverride}
-          onModelChange={setModelOverride}
-          embedded
-          rewriteDraft={rewriteDraft}
-          onRewriteDraftApplied={onRewriteDraftApplied}
-          pendingAttachment={pendingAttachment}
-          onPendingAttachmentApplied={onPendingAttachmentApplied}
-          minHeight={68}
-        />
-      </NewChatHero>
     );
   }
 
@@ -378,6 +338,7 @@ export default function ChatPane({
           profiles={profiles}
           pendingTurn={pendingTurn}
           accent={activeProfile?.accent ?? null}
+          fold={activeProfile?.fold}
           showEmptyHint={inProfile && view.sessionId == null && !pendingTurn}
           profileName={activeProfile?.name ?? null}
           profileModel={activeProfile?.model ?? null}
@@ -399,7 +360,6 @@ export default function ChatPane({
         activeProfile={activeProfile}
         connectionId={connectionId}
         availableModels={activeModels}
-        onSelectProfile={onSelectProfile}
         onConfigureProfile={onConfigureProfile}
         onSend={onSend}
         onCancel={cancellableTurn ? handleCancel : null}
@@ -407,7 +367,6 @@ export default function ChatPane({
         disabled={daemonOffline || paused}
         daemonOffline={daemonOffline}
         paused={paused}
-        showPicker={false}
         modelOverride={modelOverride}
         onModelChange={setModelOverride}
         rewriteDraft={rewriteDraft}
@@ -426,6 +385,7 @@ function SessionView({
   profiles,
   pendingTurn,
   accent,
+  fold,
   showEmptyHint,
   profileName,
   profileModel,
@@ -449,6 +409,7 @@ function SessionView({
         profiles={profiles}
         pendingTurn={pendingTurn}
         accent={accent}
+        fold={fold}
         showEmptyHint={showEmptyHint}
         profileName={profileName}
         profileModel={profileModel}
@@ -474,6 +435,7 @@ const Transcript = memo(function Transcript({
   profiles,
   pendingTurn,
   accent,
+  fold,
   showEmptyHint,
   profileName,
   profileModel,
@@ -545,10 +507,8 @@ const Transcript = memo(function Transcript({
   if (showEmptyHint) {
     return (
       <div className={styles.empty}>
-        <AlpiSilhouette color={accent || "var(--accent)"} />
-        <div className={styles.emptyHeading}>
-          Start a thread with {profileName}
-        </div>
+        <Fold fold={fold} color={accent || "var(--accent)"} size={FOLD_SIZES.hero} />
+        <div className={styles.emptyHeading}>Start a new thread</div>
         {profileModel && (
           <div className={styles.emptyModel}>{profileModel}</div>
         )}
@@ -598,6 +558,7 @@ const Transcript = memo(function Transcript({
               baseModel={baseModel}
               profiles={profiles}
               accent={accent}
+              fold={fold}
               profileName={profileName}
               voiceId={voiceId}
               onRewriteMessage={onRewriteMessage}
@@ -610,6 +571,7 @@ const Transcript = memo(function Transcript({
               <PendingTurn
                 turn={streamingTurn}
                 accent={accent}
+                fold={fold}
                 profiles={profiles}
                 fresh={fresh.streamFresh}
                 inline={inlineBlock}
@@ -630,6 +592,7 @@ const HistoryTurns = memo(function HistoryTurns({
   baseModel,
   profiles,
   accent,
+  fold,
   profileName,
   voiceId,
   onRewriteMessage,
@@ -649,6 +612,7 @@ const HistoryTurns = memo(function HistoryTurns({
           baseModel={baseModel}
           profiles={profiles}
           accent={accent}
+          fold={fold}
           profileName={profileName}
           voiceId={voiceId}
           sessionId={sessionId}
@@ -668,6 +632,7 @@ const Turn = memo(function Turn({
   baseModel,
   profiles,
   accent,
+  fold,
   profileName,
   voiceId,
   sessionId,
@@ -725,7 +690,6 @@ const Turn = memo(function Turn({
       {turn.user && (
         <ProfileMessage
           role="user"
-          accent={accent || "var(--accent)"}
           footer={
             <TurnFooter ts={turn.at} side="right">
               {onRewriteMessage && (
@@ -761,9 +725,9 @@ const Turn = memo(function Turn({
       )}
       {(process.length > 0 || parts.askUsers.length > 0) && (
         <div className={styles.steps}>
-          {process.length > 0 && <ProcessBlock entries={process} accent={accent} />}
+          {process.length > 0 && <ProcessBlock entries={process} accent={accent} fold={fold} />}
           {parts.askUsers.map((a, i) => (
-            <AskUserAnswer key={`a-${a.tool_id ?? i}`} result={a.result} question={a.question} accent={accent} />
+            <AskUserAnswer key={`a-${a.tool_id ?? i}`} result={a.result} question={a.question} accent={accent} fold={fold} />
           ))}
         </div>
       )}
@@ -772,6 +736,7 @@ const Turn = memo(function Turn({
           peerId={peerTool.args?.peer_id || "peer"}
           reply={turn.assistant}
           accent={accentForPeer(peerTool.args?.peer_id, profiles)}
+          fold={(profiles || []).find((p) => p.name === peerTool.args?.peer_id)?.fold}
         />
       )}
       {(turn.assistant || turn.output_attachments?.length > 0) && !hideAssistant && !peerTool && (
@@ -864,7 +829,7 @@ function askUserNoAnswerTag(result) {
   return null;
 }
 
-function AskUserAnswer({ result, question, accent }) {
+function AskUserAnswer({ result, question, accent, fold }) {
   const noAnswerTag = askUserNoAnswerTag(result);
   if (noAnswerTag) {
     return (
@@ -879,7 +844,7 @@ function AskUserAnswer({ result, question, accent }) {
   }
   return (
     <div className={styles.askUserAnswer}>
-      <Diamond color={accent || undefined} className={styles.askUserDiamond} />
+      <Fold fold={fold} color={accent || undefined} className={styles.askUserFold} />
       <span className={styles.askUserAnswerLabel}>{result}</span>
     </div>
   );
@@ -905,11 +870,11 @@ function peerReplyFrom(tools) {
   return null;
 }
 
-function PeerReplyCard({ peerId, reply, accent }) {
+function PeerReplyCard({ peerId, reply, accent, fold }) {
   const tint = accent || "var(--accent)";
   const meta = (
     <span className={styles.peerMeta}>
-      <Diamond color={tint} />
+      <Fold fold={fold} color={tint} />
       <span className={styles.peerName}>@{peerId}</span>
     </span>
   );
@@ -969,7 +934,7 @@ function turnMeta(turn, baseModel) {
   );
 }
 
-function PendingTurn({ turn, accent, profiles, fresh = false, inline = null }) {
+function PendingTurn({ turn, accent, fold, profiles, fresh = false, inline = null }) {
   const allTools = turn.tools ?? [];
   const parts = turnParts({
     tools: allTools,
@@ -989,7 +954,7 @@ function PendingTurn({ turn, accent, profiles, fresh = false, inline = null }) {
   return (
     <div className={`${styles.turn} ${fresh ? styles.turnEnter : ""}`} data-enter={fresh ? "" : undefined}>
       {turn.user && (
-        <ProfileMessage role="user" accent={accent || "var(--accent)"}>
+        <ProfileMessage role="user">
           {turn.attachments?.length > 0 && (
             <AttachmentChips items={turn.attachments} variant="message" />
           )}
@@ -999,10 +964,10 @@ function PendingTurn({ turn, accent, profiles, fresh = false, inline = null }) {
       {(process.length > 0 || parts.askUsers.length > 0 || thinking) && (
         <div className={styles.steps}>
           {(process.length > 0 || thinking) && (
-            <ProcessBlock entries={process} accent={accent} thinking={thinking} answered={answered} />
+            <ProcessBlock entries={process} accent={accent} fold={fold} thinking={thinking} answered={answered} />
           )}
           {parts.askUsers.map((a, i) => (
-            <AskUserAnswer key={`a-${a.tool_id ?? i}`} result={a.result} question={a.question} accent={accent} />
+            <AskUserAnswer key={`a-${a.tool_id ?? i}`} result={a.result} question={a.question} accent={accent} fold={fold} />
           ))}
         </div>
       )}
@@ -1011,6 +976,7 @@ function PendingTurn({ turn, accent, profiles, fresh = false, inline = null }) {
           peerId={peerTool.args?.peer_id || "peer"}
           reply={turn.assistantPreview}
           accent={accentForPeer(peerTool.args?.peer_id, profiles)}
+          fold={(profiles || []).find((p) => p.name === peerTool.args?.peer_id)?.fold}
         />
       )}
       {turn.assistantPreview && !peerTool && (

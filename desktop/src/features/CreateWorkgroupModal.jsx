@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import {
   Button,
   Chip,
-  Diamond,
+  Fold,
   DialogFooter,
   Dropdown,
   Eyebrow,
@@ -267,14 +267,14 @@ export default function CreateWorkgroupModal({
           </div>
           {isRecipe ? (
             <div className={styles.recipeHub}>
-              <Diamond color={hub?.accent} /> @{profileLabel(recipeHub)}
+              <Fold fold={hub?.fold} color={hub?.accent} /> @{profileLabel(recipeHub)}
               <span className={styles.recipeName}>· {recipeMeta?.name}</span>
             </div>
           ) : (
             <>
               <Dropdown
                 trigger={{
-                  leading: hub && <Diamond color={hub.accent} />,
+                  leading: hub && <Fold fold={hub.fold} color={hub.accent} />,
                   label: hub ? `@${profileLabel(hub.name)}` : "Pick profile…",
                   trailing: hub?.model || undefined,
                 }}
@@ -289,7 +289,7 @@ export default function CreateWorkgroupModal({
                     <Dropdown.Row
                       key={p.name}
                       active={p.name === hubProfile}
-                      leading={<Diamond color={p.accent} />}
+                      leading={<Fold fold={p.fold} color={p.accent} />}
                       caption={p.model || undefined}
                       onClick={() => {
                         setHubProfile(p.name);
@@ -357,7 +357,7 @@ export default function CreateWorkgroupModal({
                       </>
                     }
                   >
-                    <Diamond color={accent} /> @{p.id}
+                    <Fold fold={local?.fold} color={accent} /> @{p.id}
                   </Chip>
                 );
               })}

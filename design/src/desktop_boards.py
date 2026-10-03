@@ -1,9 +1,9 @@
-from gen import app_version, button_heights, ALPI_ACCENT, DANGER, DOC_ACCENT, PROFILES, diamond, ic, mix, page, usage_chart
+from gen import LIGHT_ACCENT, app_version, button_heights, ALPI_ACCENT, DANGER, DOC_ACCENT, FRONT, PROFILES, diamond, ic, identity_glyph, mix, profile_mark, page, usage_chart
 
-INK, INK2, INK3, INK4 = "#0b1117", "#3d4955", "#626e7d", "#b1bac4"
-LINE, LINE2, HOVER, SELECTED = "rgba(11,17,23,0.07)", "rgba(11,17,23,0.14)", "rgba(11,17,23,0.04)", "rgba(11,17,23,0.06)"
-SIDE, PANE, BG = "#f5f6f8", "#ffffff", "#eef0f2"
-AMBER = "#f0b447"
+INK, INK2, INK3, INK4 = "#141414", "#454545", "#6b6b6b", "#b4b4b4"
+LINE, LINE2, HOVER, SELECTED = "rgba(20,20,20,0.07)", "rgba(20,20,20,0.14)", "rgba(20,20,20,0.04)", "rgba(20,20,20,0.06)"
+SIDE, PANE, BG = "#f6f6f6", "#ffffff", "#f0f0f0"
+AMBER = "#14110c"
 MONO = "'Geist Mono', monospace"
 
 
@@ -13,7 +13,7 @@ def eyebrow(text, color=INK3, weight=500, track=0.06, size=11, extra=""):
 
 
 def iconbtn(name, label, size=28, icon=16, color=INK2, width=None):
-    return (f'<button aria-label="{label}" style="width: {width or size}px; height: {size}px; border: 0; border-radius: 8px; background: transparent; '
+    return (f'<button aria-label="{label}" style="width: {width or size}px; height: {size}px; border: 0; border-radius: 4px; background: transparent; '
             f'display: inline-flex; align-items: center; justify-content: center; padding: 0; cursor: pointer">{ic(name, icon, color)}</button>')
 
 
@@ -24,7 +24,7 @@ def button(label, variant="ghost", size="md", icon=None, icon_only=False):
     if variant == "primary":
         bg, fg = INK, PANE
     elif variant == "secondary":
-        bg, fg = HOVER, INK
+        bg, fg = SELECTED, INK
     elif variant == "danger":
         bg, fg = "#c14545", "#ffffff"
     elif variant == "danger-ghost":
@@ -32,10 +32,10 @@ def button(label, variant="ghost", size="md", icon=None, icon_only=False):
     else:
         bg, fg = "transparent", INK2
     if icon_only:
-        return (f'<button aria-label="{label}" style="display: inline-flex; align-items: center; justify-content: center; width: {h}px; height: {h}px; padding: 0; border: 0; border-radius: 8px; '
+        return (f'<button aria-label="{label}" style="display: inline-flex; align-items: center; justify-content: center; width: {h}px; height: {h}px; padding: 0; border: 0; border-radius: 4px; '
                 f'background: {bg}; cursor: pointer; flex-shrink: 0">{ic(icon, 14 if size == "sm" else 16, fg)}</button>')
     i = ic(icon, 14, fg) if icon else ""
-    return (f'<button style="display: inline-flex; align-items: center; gap: 6px; height: {h}px; padding: 0 {padx}px; border: 0; border-radius: 8px; '
+    return (f'<button style="display: inline-flex; align-items: center; gap: 6px; height: {h}px; padding: 0 {padx}px; border: 0; border-radius: 4px; '
             f'background: {bg}; color: {fg}; font-family: Geist, sans-serif; font-weight: 500; font-size: {fs}px; line-height: 1; cursor: pointer; white-space: nowrap">{i}{label}</button>')
 
 
@@ -54,20 +54,21 @@ def key_hint(hint):
 
 
 STATE_TEXT = {"needs-you": "needs you", "failed": "failed", "working": "working"}
-STATE_COLOR = {"needs-you": "#b3470e", "failed": DANGER, "working": ALPI_ACCENT}
+STATE_COLOR = {"needs-you": "#b3470e", "failed": DANGER, "working": INK2}
 
 
-def state_chip(state):
-    color = STATE_COLOR[state]
+def state_chip(state, profile=None):
+    color = mix(profile, 0.5, INK) if state == "working" and profile else STATE_COLOR[state]
+    dot = "" if state == "working" else f'<span style="width: 6px; height: 6px; border-radius: 999px; background: {color}; flex-shrink: 0"></span>'
     return (f'<span data-state="{state}" style="display: inline-flex; align-items: center; gap: 5px; font-family: {MONO}; font-size: 11px; line-height: 1; white-space: nowrap; color: {color}">'
-            f'<span style="width: 6px; height: 6px; border-radius: 999px; background: {color}; flex-shrink: 0"></span>{STATE_TEXT[state]}</span>')
+            f'{dot}{STATE_TEXT[state]}</span>')
 
 
 def phase_count(done, total):
     return f'<span aria-label="phase {done} of {total}" style="font-family: {MONO}; font-size: 11px; color: {ALPI_ACCENT}">{done}/{total}</span>'
 
 
-def count_badge(n, tone="danger", ring="#f5f6f8"):
+def count_badge(n, tone="danger", ring="#f6f6f6"):
     bg = "#e08a3c" if tone == "warning" else "#c14545"
     return (f'<span style="position: absolute; top: -9px; right: -4px; min-width: 14px; height: 14px; padding: 0 4px; border-radius: 999px; background: {bg}; color: #fff; '
             f'font-size: 11px; font-weight: 600; line-height: 14px; white-space: nowrap; text-align: center; box-sizing: border-box">{n}</span>')
@@ -75,7 +76,7 @@ def count_badge(n, tone="danger", ring="#f5f6f8"):
 
 def badged(icon, label, n, tone, width=None):
     glyph = f'<span style="position: relative; display: inline-flex">{ic(icon, 14, INK2)}{count_badge(n, tone) if n else ""}</span>'
-    return (f'<button aria-label="{label}" style="width: {width or 28}px; height: 28px; border: 0; border-radius: 8px; background: transparent; '
+    return (f'<button aria-label="{label}" style="width: {width or 28}px; height: 28px; border: 0; border-radius: 4px; background: transparent; '
             f'display: inline-flex; align-items: center; justify-content: center; padding: 0; cursor: pointer">{glyph}</button>')
 
 
@@ -86,10 +87,15 @@ def diamond_stack(color, size=8):
             f'{small_diamond(color, size).replace("display: inline-block", f"display: inline-block; position: absolute; left: 0; top: {off}px")}</span>')
 
 
+def wg_mark(color, size=16):
+    import folds
+    return folds.fold("honeycomb", color, max(size, 16))
+
+
 def alink(label, icon=None, danger=False):
     color = DANGER if danger else INK2
     i = ic(icon, 12, color) if icon else ""
-    return (f'<button style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; margin: -4px -8px; border: 0; border-radius: 6px; '
+    return (f'<button style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; margin: -4px -8px; border: 0; border-radius: 4px; '
             f'background: transparent; color: {color}; font-family: Geist, sans-serif; font-weight: 500; font-size: 13px; line-height: 1; cursor: pointer">{i}{label}</button>')
 
 
@@ -109,31 +115,31 @@ def chip(text, state="plain", size="md", clickable=False):
     elif state == "accent":
         bg, fg = mix(ALPI_ACCENT, 0.18), INK
     d = f'<span style="width: {dot}px; height: {dot}px; border-radius: 999px; background: {dotc}; flex-shrink: 0"></span>' if dotc else ""
-    return (f'<span style="display: inline-flex; align-items: center; gap: {6 if size == "md" else 4}px; height: {h}px; padding: 0 8px; border-radius: 16px; '
+    return (f'<span style="display: inline-flex; align-items: center; gap: {6 if size == "md" else 4}px; height: {h}px; padding: 0 8px; border-radius: 2px; '
             f'background: {bg}; color: {fg}; font-family: {MONO}; font-size: {fs}px; line-height: 1; opacity: {op}; white-space: nowrap; box-sizing: border-box">{d}{text}</span>')
 
 
 def code_chip(text):
-    return (f'<span style="display: inline-flex; align-items: center; padding: 4px 8px; border-radius: 6px; background: {HOVER}; '
+    return (f'<span style="display: inline-flex; align-items: center; padding: 4px 8px; border-radius: 4px; background: {HOVER}; '
             f'font-family: {MONO}; font-size: 12px; color: {INK2}; max-width: 360px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{text}</span>')
 
 
 def selectish(inner, mono=True):
     fam = MONO if mono else "Geist, sans-serif"
-    return (f'<span style="display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border-radius: 8px; background: #ffffff; '
-            f'border: 0.5px solid {LINE2}; font-family: {fam}; font-size: {12 if mono else 13}px; font-weight: {400 if mono else 500}; color: {INK if mono else INK2}; box-sizing: border-box">{inner}{ic("chev-d", 12, INK3)}</span>')
+    return (f'<span style="display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border-radius: 4px; background: {HOVER}; '
+            f'font-family: {fam}; font-size: {12 if mono else 13}px; font-weight: {400 if mono else 500}; color: {INK if mono else INK2}; box-sizing: border-box">{inner}{ic("chev-d", 12, INK3)}</span>')
 
 
 def field_input(value, w=520, placeholder=False):
     color = INK3 if placeholder else INK
-    return (f'<span style="display: inline-flex; align-items: center; height: 32px; max-width: {w}px; flex: 1; padding: 0 12px; border-radius: 10px; background: #ffffff; '
-            f'border: 0.5px solid {LINE2}; font-size: 13px; color: {color}; box-sizing: border-box">{value}</span>')
+    return (f'<span style="display: inline-flex; align-items: center; height: 32px; max-width: {w}px; flex: 1; padding: 0 12px; border-radius: 4px; background: {HOVER}; '
+            f'font-size: 13px; color: {color}; box-sizing: border-box">{value}</span>')
 
 
 def textarea(text, rows=3, w=520, placeholder=False):
     color = INK3 if placeholder else INK
-    return (f'<div style="width: 100%; max-width: {w}px; min-height: {max(88, rows * 21 + 20)}px; padding: 8px 12px; border-radius: 8px; background: #ffffff; '
-            f'border: 0.5px solid {LINE2}; font-size: 13px; line-height: 1.5; color: {color}; box-sizing: border-box">{text}</div>')
+    return (f'<div style="width: 100%; max-width: {w}px; min-height: {max(88, rows * 21 + 20)}px; padding: 8px 12px; border-radius: 4px; background: {HOVER}; '
+            f'font-size: 13px; line-height: 1.5; color: {color}; box-sizing: border-box">{text}</div>')
 
 
 def muted(text):
@@ -154,12 +160,13 @@ SEP = f'<span style="width: 1px; height: 10px; background: {LINE2}; display: inl
 
 
 def sb_row(glyph, name, ts="", active=False, unread=False, dim=False, href="Desktop-Chat.dc.html", trailing=""):
-    bg = SELECTED if active else "transparent"
+    bg = PANE if active else "transparent"
+    shape = "margin: 0 -12px; padding: 0 22px; border-radius: 0;" if active else "padding: 0 10px; border-radius: 4px;"
     fw = 500 if active else (600 if unread else 400)
     color = INK if (active or unread) else INK2
     t = trailing or (f'<span style="font-family: {MONO}; font-weight: {600 if unread else 500}; font-size: 11px; color: {INK if unread else INK3}">{ts}</span>' if ts else "")
-    return (f'<a href="{href}" style="display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px; border-radius: 8px; background: {bg}; '
-            f'text-decoration: none; opacity: {0.55 if dim else 1}"><span style="width: 14px; display: inline-flex; justify-content: center">{glyph}</span>'
+    return (f'<a href="{href}" style="display: flex; align-items: center; gap: 8px; height: 30px; {shape} background: {bg}; '
+            f'text-decoration: none; opacity: {0.55 if dim else 1}"><span style="width: 16px; display: inline-flex; justify-content: center">{glyph}</span>'
             f'<span style="flex: 1; min-width: 0; font-size: 13px; font-weight: {fw}; color: {color}; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{name}</span>{t}</a>')
 
 
@@ -172,40 +179,41 @@ PINNED = ("doc",)
 
 
 def sb_section(label, add=True):
-    plus = (f'<button aria-label="New {label.lower()[:-1]}" style="width: 18px; height: 18px; border: 0; border-radius: 6px; background: transparent; display: inline-flex; align-items: center; justify-content: center; padding: 0; cursor: pointer">{ic("plus", 12, INK2)}</button>') if add else ""
+    plus = (f'<button aria-label="New {label.lower()[:-1]}" style="width: 18px; height: 18px; border: 0; border-radius: 4px; background: transparent; display: inline-flex; align-items: center; justify-content: center; padding: 0; cursor: pointer">{ic("plus", 12, INK2)}</button>') if add else ""
     return f'<div style="display: flex; align-items: center; min-height: 22px; padding: 14px 10px 6px">{eyebrow(label, INK3, 500, 0.06, 11, "padding-left: 2px; flex: 1")}{plus}</div>'
 
 
-def d_sidebar(h, selected="doc", settings_mode=False, new_session=False, wg_selected=False, states=None, version=None):
+def d_sidebar(h, selected="doc", settings_mode=False, wg_selected=False, states=None, version=None):
     version = version or app_version("desktop")
     states = ROSTER_STATES if states is None else states
 
     def prow(name, col, ts):
         state = states.get(name)
-        return sb_row(small_diamond(col), name, ts, active=name == selected, unread=name == "yuri" and not state, dim=name == "etxea", trailing=state_chip(state) if state else "")
+        return sb_row(identity_glyph(name, col, 16, small_diamond(col)), name, ts, active=name == selected, unread=name == "yuri" and not state, dim=name == "etxea", trailing=state_chip(state, col) if state else "")
 
+    front = "".join(prow(n, c, t) for n, c, t, _ in PROFILES if n == FRONT)
     pinned = "".join(prow(n, c, t) for n, c, t, _ in PROFILES if n in PINNED)
-    rows = "".join(prow(n, c, t) for n, c, t, _ in PROFILES if n not in PINNED)
-    wgs = (sb_row(diamond_stack(DOC_ACCENT), "alpha", active=wg_selected, href="Desktop-WorkgroupSettings.dc.html", trailing=phase_count(2, 4))
-           + sb_row(diamond_stack(AMBER), "launch-crew", "2h", href="Desktop-WorkgroupSettings.dc.html"))
+    rows = "".join(prow(n, c, t) for n, c, t, _ in PROFILES if n not in PINNED and n != FRONT)
+    wgs = (sb_row(wg_mark(DOC_ACCENT), "alpha", active=wg_selected, href="Desktop-WorkgroupSettings.dc.html", trailing=phase_count(2, 4))
+           + sb_row(wg_mark(AMBER), "launch-crew", "2h", href="Desktop-WorkgroupSettings.dc.html"))
     if settings_mode:
-        footer_main = (f'<button style="display: inline-flex; align-items: center; gap: 10px; height: 28px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: {INK}; font-family: Geist, sans-serif; font-size: 13px; font-weight: 500; cursor: pointer">'
+        footer_main = (f'<button style="display: inline-flex; align-items: center; gap: 10px; height: 28px; padding: 0 10px; border: 0; border-radius: 4px; background: transparent; color: {INK}; font-family: Geist, sans-serif; font-size: 13px; font-weight: 500; cursor: pointer">'
                        f'{ic("search", 14, INK)}Command…{key_hint("⌘K")}</button>')
     else:
-        footer_main = (f'<a href="Desktop-AppSettings.dc.html" style="display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 4px 0 10px; border-radius: 8px; color: {INK}; font-size: 13px; font-weight: 500; text-decoration: none">{ic("role:settings", 14, INK)}Settings</a>'
+        footer_main = (f'<a href="Desktop-AppSettings.dc.html" style="display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 4px 0 10px; border-radius: 4px; color: {INK}; font-size: 13px; font-weight: 500; text-decoration: none">{ic("role:settings", 14, INK)}Settings</a>'
                        f'{badged("role:notifications", "Notifications · 1 unread · ⌘O", 1, "danger", 22)}{badged("role:activity", "Activity · 2 need you · ⌘J", 2, "danger", 22)}{iconbtn("sun", "Theme", 28, 14, width=22)}')
     return f"""<div style="width: 248px; height: {h}px; flex-shrink: 0; box-sizing: border-box; background: {SIDE}; border-right: 0.5px solid {LINE}; display: flex; flex-direction: column">
 <div style="height: 38px; flex-shrink: 0"></div>
 <div style="padding: 6px 12px 4px; display: flex; flex-direction: column">
 <div style="padding: 14px 10px 6px 4px">{eyebrow("Connection")}</div>
-<div style="display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 12px; border-radius: 10px; background: #ffffff; border: 0.5px solid {LINE}; box-sizing: border-box">
+<div style="display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 12px; border-radius: 4px; background: #ffffff; border: 0.5px solid {LINE}; box-sizing: border-box">
 <span style="position: relative; display: inline-flex">{ic("chip", 16, INK2)}<span style="position: absolute; right: -2px; bottom: -2px; width: 7px; height: 7px; border-radius: 999px; background: #3fb37a; border: 1.5px solid #fff; box-sizing: content-box"></span></span>
 <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 13px; font-weight: 500; color: {INK}; line-height: 1">casa</span><span style="font-family: {MONO}; font-size: 11px; color: {INK3}; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">ws://100.99.29.84:49200</span></span>
 {ic("chev-d", 14, INK3)}
 </div>
-{"" if settings_mode else '<div style="margin-top: 8px">' + sb_row(ic("plus", 14, INK2), "New session", active=new_session) + '</div>'}
 </div>
 <div style="padding: 0 12px 12px; display: flex; flex-direction: column">
+<div style="padding-top: 8px">{front}</div>
 {sb_section("Pinned", add=False)}
 {pinned}
 {sb_section("Profiles")}
@@ -229,11 +237,13 @@ def d_hero(title_html, meta_html, actions_html, accent):
 <div style="display: flex; align-items: center; gap: 14px; font-size: 12px; color: {INK3}">{meta_html}</div>
 </div>
 <div style="display: flex; align-items: center; gap: 2px">{actions_html}</div>
-<div style="position: absolute; left: 32px; bottom: -0.5px; height: 1.5px; width: 40px; background: {accent}"></div>
 </div>"""
 
 
-def h1(text, glyph):
+def h1(text, glyph, crease_accent=None):
+    if crease_accent:
+        from brand_boards import app_crease
+        return f'{glyph}{app_crease(text, 28, crease_accent, PANE, track="-0.018em")}'
     return f'{glyph}<span style="font-size: 28px; font-weight: 600; letter-spacing: -0.018em; line-height: 1; color: {INK}">{text}</span>'
 
 
@@ -259,9 +269,9 @@ def d_body(inner, pad_bottom=80):
 
 def settings_rail(sections, active=0, query=""):
     value = f'<span style="font-size: 12px; color: {INK}">{query}</span>' if query else f'<span style="font-size: 12px; color: {INK3}">Search settings</span>'
-    search = (f'<label style="display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px; margin-bottom: 8px; border-radius: 8px; border: 0.5px solid {LINE2}; background: #ffffff; box-sizing: border-box">'
+    search = (f'<label style="display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px; margin-bottom: 8px; border-radius: 4px; border: 0.5px solid {LINE2}; background: #ffffff; box-sizing: border-box">'
               f'{ic("search", 14, INK3)}{value}</label>')
-    rows = "".join(f'<span style="display: flex; align-items: center; height: 28px; padding: 0 10px; border-radius: 8px; background: {SELECTED if i == active else "transparent"}; font-size: 13px; font-weight: 500; color: {INK}">{t}</span>'
+    rows = "".join(f'<span style="display: flex; align-items: center; height: 28px; padding: 0 10px; border-radius: 4px; background: {SELECTED if i == active else "transparent"}; font-size: 13px; font-weight: 500; color: {INK}">{t}</span>'
                    for i, t in enumerate(sections))
     return f'<nav aria-label="Settings sections" style="width: 168px; flex-shrink: 0; display: flex; flex-direction: column; gap: 2px">{search}{rows}</nav>'
 
@@ -281,7 +291,7 @@ def desktop_chat():
     actions = (f'{button("Sessions", "ghost", "md")}{ic("chev-d", 12, INK2)}'.replace('</button>' + ic("chev-d", 12, INK2), ic("chev-d", 12, INK2) + '</button>')
                + f'<span style="display: inline-flex; align-items: flex-end; gap: 2px; height: 18px; padding: 0 4px">' + ''.join(f'<span style="width: 2px; height: {h}px; border-radius: 1px; background: {INK3}"></span>' for h in (6, 12, 8, 14, 7)) + '</span>'
                + iconbtn("more", "More"))
-    header = d_hero(h1("doc", diamond(DOC_ACCENT, 14)), meta, actions, DOC_ACCENT)
+    header = d_hero(h1("doc", identity_glyph("doc", DOC_ACCENT, 20, diamond(DOC_ACCENT, 14)), DOC_ACCENT), meta, actions, DOC_ACCENT)
     turn = lambda *parts: f'<div style="display: flex; flex-direction: column; gap: 10px">{"".join(parts)}</div>'
     first = turn(
         d_user("Pull my last three lipid panels and tell me what moved.", DOC_ACCENT),
@@ -317,7 +327,7 @@ PROFILE_SECTIONS = ("Overview", "Usage", "Service", "ALP", "Sandbox", "Voice", "
 
 def desktop_profile_settings():
     meta = f'{mono12("deepseek-v4.1-flash")}{SEP}{meterchip("$0.00", "/$1.00", 0, DOC_ACCENT)}'
-    hero = d_hero(h1("doc", diamond(DOC_ACCENT, 14)) + eyebrow("settings"), meta, button("Connections", "ghost", "md", "globe") + iconbtn("back", "Back to chat"), DOC_ACCENT)
+    hero = d_hero(h1("doc", identity_glyph("doc", DOC_ACCENT, 20, diamond(DOC_ACCENT, 14)), DOC_ACCENT) + eyebrow("settings"), meta, button("Connections", "ghost", "md", "globe") + iconbtn("back", "Back to chat"), DOC_ACCENT)
     clean = lambda: button("Clean", "ghost", "sm")
     delete = lambda text: button(text, "danger-ghost", "sm")
     group = lambda name, size, files, *actions: row(name, chip(size, "plain", "sm") + chip(files, "plain", "sm") + "".join(actions))
@@ -340,7 +350,7 @@ def desktop_profile_settings():
             row("vision model", muted("read_image uses main model")),
             row("budget", selectish("$1.00/day")),
             row("workspace", field_input("/data/workspace/doc") + button("Browse…", "ghost", "sm")),
-            row("accent", selectish(f'<span style="display: inline-flex; align-items: center; gap: 8px">{small_diamond(DOC_ACCENT)}#3d7ea6</span>')),
+            row("appearance", selectish(f'<span style="display: inline-flex; align-items: center; gap: 8px">{identity_glyph("doc", DOC_ACCENT, 16)}blue shield</span>')),
         ]), first=True)
         + section("Usage", "last 14 days", usage_chart(days=COST_DAYS, footer="bars by cost · 30-day total $1.61 · 17.2M in / 277K out"))
         + section("Service", "daemon + network", row("daemon", button("Update alpi", "ghost", "sm") + button("Restart daemon", "ghost", "sm")))
@@ -374,24 +384,24 @@ def member_row(name, color, bio, hub=False, removable=True):
     tag = f'<span style="font-family: {MONO}; font-size: 11px; letter-spacing: 0.06em; color: {INK4}; padding-left: 15px">HUB</span>' if hub else ""
     x = iconbtn("x", f"Remove @{name}", 28, 14) if removable and not hub else ""
     return (f'<div style="display: flex; align-items: center; gap: 16px; padding: 14px 0; border-top: 0.5px solid {LINE}">'
-            f'<div style="width: 130px; flex-shrink: 0; display: flex; flex-direction: column; gap: 4px"><span style="display: inline-flex; align-items: center; gap: 7px">{small_diamond(color, 7)}<span style="font-family: {MONO}; font-size: 13px; font-weight: 600; color: {INK}">@{name}</span></span>{tag}</div>'
+            f'<div style="width: 130px; flex-shrink: 0; display: flex; flex-direction: column; gap: 4px"><span style="display: inline-flex; align-items: center; gap: 7px">{profile_mark(color)}<span style="font-family: {MONO}; font-size: 13px; font-weight: 600; color: {INK}">@{name}</span></span>{tag}</div>'
             f'<span style="flex: 1; font-size: 13px; line-height: 1.5; color: {INK2}">{bio}</span>{x}</div>')
 
 
 def desktop_wg_settings():
-    stack = f'<span style="position: relative; width: 14px; height: 14px; display: inline-block">{small_diamond(mix(ALPI_ACCENT, 0.35), 8).replace("display: inline-block", "display: inline-block; position: absolute; left: 4px; top: 0")}{small_diamond(ALPI_ACCENT, 8).replace("display: inline-block", "display: inline-block; position: absolute; left: 0; top: 4px")}</span>'
-    meta = (f'<span>hub</span>{small_diamond(DOC_ACCENT, 7)}{mono12("@doc")}{SEP}<span>members</span>{mono12("3")}{SEP}'
+    stack = wg_mark(ALPI_ACCENT, 20)
+    meta = (f'<span>hub</span>{profile_mark(DOC_ACCENT)}{mono12("@doc")}{SEP}<span>members</span>{mono12("3")}{SEP}'
             f'<span style="display: inline-flex; align-items: center; gap: 6px"><span style="width: 7px; height: 7px; border-radius: 999px; background: #3fb37a"></span>active</span>{SEP}{mono12("wg_4f2a…9c1e", INK3)}')
-    hero = d_hero(h1("alpha", stack) + eyebrow("settings"), meta, iconbtn("pause", "Pause") + iconbtn("back", "Back to chat"), ALPI_ACCENT)
+    hero = d_hero(h1("alpha", stack, ALPI_ACCENT) + eyebrow("settings"), meta, iconbtn("pause", "Pause") + iconbtn("back", "Back to chat"), ALPI_ACCENT)
     stages = ''.join(f'{chip("#" + s, "plain", "sm")}<span style="font-size: 11px; color: {INK3}">→</span>' for s in ("collect", "write")) + chip("#send", "plain", "sm")
     inner = (
         section("Overview", "", ''.join([
-            row("hub", f'<span style="display: inline-flex; align-items: center; gap: 8px">{small_diamond(DOC_ACCENT)}{mono12("@doc")}</span>'),
+            row("hub", f'<span style="display: inline-flex; align-items: center; gap: 8px">{profile_mark(DOC_ACCENT)}{mono12("@doc")}</span>'),
             row("status", chip("active", "on") + button("Pause", "ghost", "sm")),
             row("auto-read", chip("off", "off") + button("Enable", "ghost", "sm")),
             row("id", mono12("wg_4f2a…9c1e") + button("Copy", "ghost", "sm")),
         ]))
-        + section("Budget", "workgroup spend cap", row("used", f'<div style="flex: 1; display: flex; flex-direction: column; gap: 10px"><div style="display: flex; align-items: baseline; gap: 10px"><span style="font-size: 28px; font-weight: 600; letter-spacing: -0.018em; line-height: 1">$0.40</span><span style="font-family: {MONO}; font-size: 12px; color: {INK3}">of <span style="color: {INK2}">$5.00</span> · 8%</span><span style="flex: 1"></span>{selectish("Edit cap")}</div><div style="height: 6px; border-radius: 16px; background: {LINE}; overflow: hidden"><div style="width: 8%; height: 100%; background: {ALPI_ACCENT}"></div></div></div>', align_top=True))
+        + section("Budget", "workgroup spend cap", row("used", f'<div style="flex: 1; display: flex; flex-direction: column; gap: 10px"><div style="display: flex; align-items: baseline; gap: 10px"><span style="font-size: 28px; font-weight: 600; letter-spacing: -0.018em; line-height: 1">$0.40</span><span style="font-family: {MONO}; font-size: 12px; color: {INK3}">of <span style="color: {INK2}">$5.00</span> · 8%</span><span style="flex: 1"></span>{selectish("Edit cap")}</div><div style="height: 6px; border-radius: 4px; background: {LINE}; overflow: hidden"><div style="width: 8%; height: 100%; background: {ALPI_ACCENT}"></div></div></div>', align_top=True))
         + section("Usage", "last 14 days", usage_chart(ALPI_ACCENT, "$0.00", "12K", "310", None, None, "bars by cost · 14-day total $0.40 · 0.9M in / 22K out"))
         + section("Briefing", "what this workgroup decides", row("brief", f'<div style="flex: 1; display: flex; flex-direction: column; gap: 8px">{textarea("Weekly digest of lab results for the household; doc leads, alpi formats, yuri translates.", rows=4)}<div style="display: flex; max-width: 520px"><span style="flex: 1"></span>{button("Draft", "ghost", "sm")}</div></div>', align_top=True))
         + section("Pipelines", "declared chains the hub runs", row("daily-digest", chip("launch", "on", "sm") + stages))
@@ -399,7 +409,7 @@ def desktop_wg_settings():
                   + member_row("alpi", AMBER, "Household operator: schedules, reminders, the boring glue.")
                   + member_row("yuri", "#f0a58f", "Translator and editor; keeps the tone consistent across languages.")
                   + row("add", selectish("Add member…", mono=False)))
-        + section("Invitations", "pending member invites", row("join command", mono12("alpi workgroup join doc wg_4f2a…9c1e") + button("Copy", "ghost", "sm")) + member_row("lingo", "#8a5cf6", "Language coach; invited, not yet joined.", removable=False))
+        + section("Invitations", "pending member invites", row("join command", mono12("alpi workgroup join doc wg_4f2a…9c1e") + button("Copy", "ghost", "sm")) + member_row("lingo", "#9b5ad9", "Language coach; invited, not yet joined.", removable=False))
         + section("Danger zone", "", row("delete", alink("Delete workgroup…", danger=True)))
     )
     body = f"""<div style="display: flex; height: 100%">
@@ -415,7 +425,7 @@ def desktop_wg_settings():
 
 def desktop_connections():
     meta = f'<span>2 paired · 2 connected</span>{SEP}<span>14-day spend {mono12("$1.49")}</span>{SEP}<span>14 sessions</span>'
-    hero = d_hero(h1("alpi", diamond(AMBER, 14)) + eyebrow("connections"), meta, button("Audit log", "ghost", "md", "history") + button("New connection", "ghost", "md", "plus") + iconbtn("back", "Back to chat"), AMBER)
+    hero = d_hero(h1("alpi", identity_glyph("alpi", AMBER, 20)) + eyebrow("connections"), meta, button("Audit log", "ghost", "md", "history") + button("New connection", "ghost", "md", "plus") + iconbtn("back", "Back to chat"), AMBER)
     head = (f'<div style="display: grid; grid-template-columns: minmax(240px, 1fr) 126px 88px 112px; min-height: 32px; align-items: center; padding: 0 10px; font-family: {MONO}; font-size: 11px; text-transform: uppercase; color: {INK3}">'
             f'<span>Connection</span><span style="text-align: right">Last activity</span><span style="text-align: right">Sessions</span><span style="text-align: right">14-day spend</span></div>')
 
@@ -423,7 +433,7 @@ def desktop_connections():
         return f'<span style="display: flex; flex-direction: column; align-items: flex-end; gap: 3px"><span style="font-family: {MONO}; font-size: 12px; font-weight: 500; color: {INK}">{v}</span><span style="font-family: {MONO}; font-size: 11px; color: {INK3}">{cap}</span></span>'
 
     def crow(label, sub, seen, sessions, spend, expanded=False, host=False):
-        ring = f'box-shadow: inset 0 0 0 0.5px {LINE2}; border-radius: 6px;' if expanded else ""
+        ring = f'box-shadow: inset 0 0 0 0.5px {LINE2}; border-radius: 4px;' if expanded else ""
         return (f'<div style="display: grid; grid-template-columns: minmax(240px, 1fr) 126px 88px 112px; min-height: 74px; align-items: center; padding: 0 10px; border-bottom: 0.5px solid {LINE}; {ring}">'
                 f'<span style="display: flex; flex-direction: column; gap: 3px"><strong style="font-size: 13px; font-weight: 700; line-height: 1.3; color: {INK}">{label}</strong><span style="font-family: {MONO}; font-size: 11px; color: {INK3}">{sub}</span></span>'
                 f'{metric(seen, "last seen")}{metric(sessions, "sessions")}{metric(spend, "14-day")}</div>')
@@ -439,7 +449,7 @@ def desktop_connections():
 </div>"""
     table = f"""<div style="display: flex; flex-direction: column">
 <div style="display: flex; align-items: center; gap: 12px; min-height: 42px; padding: 0 10px; border-bottom: 0.5px solid {LINE}">
-<label style="display: inline-flex; align-items: center; gap: 8px; width: 360px; height: 28px; padding: 0 10px; border-radius: 8px; background: #ffffff; border: 0.5px solid {LINE2}; box-sizing: border-box">{ic("search", 12, INK3)}<span style="position: absolute; left: -9999px">Search</span><input placeholder="Search connections…" style="flex: 1; border: 0; outline: 0; background: transparent; font-family: Geist, sans-serif; font-size: 13px; color: {INK}"></label>
+<label style="display: inline-flex; align-items: center; gap: 8px; width: 360px; height: 28px; padding: 0 10px; border-radius: 4px; background: #ffffff; border: 0.5px solid {LINE2}; box-sizing: border-box">{ic("search", 12, INK3)}<span style="position: absolute; left: -9999px">Search</span><input placeholder="Search connections…" style="flex: 1; border: 0; outline: 0; background: transparent; font-family: Geist, sans-serif; font-size: 13px; color: {INK}"></label>
 <span style="flex: 1"></span><span style="font-family: {MONO}; font-size: 11px; color: {INK3}">3 of 3</span>
 </div>
 {head}
@@ -472,15 +482,15 @@ def desktop_workgroups():
             lines += f'<span style="padding-left: 13px; font-family: {MONO}; font-size: 11px; color: {INK3}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{note}</span>'
         cell = lambda v, size: f'<span style="text-align: right; font-family: {MONO}; font-size: {size}px; color: {INK2 if size == 12 else INK3}">{v}</span>'
         return (f'<div style="display: grid; {WG_GRID}; align-items: center; min-height: 64px; border-bottom: 0.5px solid {LINE}">'
-                f'<span style="display: flex; align-items: center; gap: 10px; min-width: 0">{diamond_stack(accent)}<strong style="font-size: 13px; font-weight: 700; color: {INK}">{name}</strong></span>'
+                f'<span style="display: flex; align-items: center; gap: 10px; min-width: 0">{wg_mark(accent)}<strong style="font-size: 13px; font-weight: 700; color: {INK}">{name}</strong></span>'
                 f'<span style="display: flex; flex-direction: column; gap: 3px; min-width: 0">{lines}</span>{cell(members, 12)}{cell(spend, 12)}{cell(age, 11)}</div>')
 
     table = (head
              + wrow("alpha", DOC_ACCENT, "#3fb37a", "Working · media", 3, "$0.40", "2m", "setup done")
              + wrow("launch-crew", AMBER, "#e08a3c", "Queued · #2", 4, "$1.12", "9m", "setup done · media next")
-             + wrow("digest", "#8a5cf6", INK4, "Idle", 2, "$0.08", "1d"))
+             + wrow("digest", "#9b5ad9", INK4, "Idle", 2, "$0.08", "1d"))
     meta = f'<span>3 workgroups</span>{SEP}<span>1 working · 1 queued · 1 idle</span>'
-    hero = d_hero(h1("workgroups", diamond(AMBER, 14)) + eyebrow("all profiles"), meta, button("New workgroup", "ghost", "md", "plus"), AMBER)
+    hero = d_hero(h1("workgroups", wg_mark(AMBER, 20)) + eyebrow("all profiles"), meta, button("New workgroup", "ghost", "md", "plus"), AMBER)
     body = f"""<div style="display: flex; height: 100%">
 {d_sidebar(560, selected="", settings_mode=False)}
 <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; background: {PANE}">
@@ -495,7 +505,7 @@ def desktop_workgroups():
 def palette_row(glyph, label, sub="", hint="", selected=False, hit=""):
     text = label.replace(hit, f'<b style="font-weight: 600">{hit}</b>', 1) if hit else label
     sub_html = f'<span style="flex-shrink: 0; font-family: {MONO}; font-size: 11px; color: {INK3}">{sub}</span>' if sub else ""
-    return (f'<div role="option" style="display: flex; align-items: center; gap: 10px; padding: 7px 12px; border-radius: 8px; background: {SELECTED if selected else "transparent"}">'
+    return (f'<div role="option" style="display: flex; align-items: center; gap: 10px; padding: 7px 12px; border-radius: 4px; background: {SELECTED if selected else "transparent"}">'
             f'<span style="width: 16px; display: inline-flex; justify-content: center; flex-shrink: 0; color: {INK3}">{glyph or ic("chev-r", 14, INK3)}</span>'
             f'<span style="min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: {INK}">{text}</span>{sub_html}'
             f'<span style="flex: 1"></span>{key_hint(hint) if hint else ""}</div>')
@@ -504,38 +514,40 @@ def palette_row(glyph, label, sub="", hint="", selected=False, hit=""):
 def palette(query, groups, w=560, placeholder="Search profiles, sessions and commands…"):
     value = f'<span style="font-size: 13px; color: {INK}">{query}</span>' if query else f'<span style="font-size: 13px; color: {INK3}">{placeholder}</span>'
     body = "".join(f'<div role="presentation" style="padding: 14px 12px 6px">{eyebrow(label)}</div>' + "".join(rows) for label, rows in groups)
-    return (f'<div style="width: {w}px; border-radius: 14px; background: #ffffff; border: 0.5px solid {LINE2}; box-shadow: 0 0 0 .5px rgba(11,17,23,.08), 0 18px 50px rgba(11,17,23,.10); overflow: hidden; display: flex; flex-direction: column">'
+    return (f'<div style="width: {w}px; border-radius: 4px; background: #ffffff; border: 0.5px solid {LINE2}; box-shadow: 0 0 0 0.5px rgba(20,20,20,0.14); overflow: hidden; display: flex; flex-direction: column">'
             f'<div style="display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 16px; border-bottom: 0.5px solid {LINE}">{ic("search", 14, INK3)}{value}</div>'
             f'<div role="listbox" style="padding: 6px 6px 10px">{body}</div></div>')
 
 
 def desktop_app_settings():
     card = lambda title, inner, w: (f'<div style="width: {w}px; display: flex; flex-direction: column; gap: 12px"><span style="font-size: 12px; color: {INK3}">{title}</span>'
-                                    f'<div style="background: #ffffff; border: 0.5px solid {LINE2}; border-radius: 14px; box-shadow: 0 0 0 .5px rgba(11,17,23,.08), 0 18px 50px rgba(11,17,23,.10); overflow: hidden">{inner}</div></div>')
+                                    f'<div style="background: #ffffff; border: 0.5px solid {LINE2}; border-radius: 4px; box-shadow: 0 0 0 0.5px rgba(20,20,20,0.14); overflow: hidden">{inner}</div></div>')
     footer = (f'<div style="display: flex; align-items: center; gap: 4px; padding: 10px 12px; background: {SIDE}; border-top: 0.5px solid {LINE}; width: 248px; box-sizing: border-box">'
               f'<span style="display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 4px 0 10px; color: {INK}; font-size: 13px; font-weight: 500">{ic("role:settings", 14, INK)}Settings</span>'
               f'{badged("role:notifications", "Notifications", 1, "danger", 22)}{badged("role:activity", "Activity · 2 need you", 2, "danger", 22)}'
               f'{iconbtn("sun", "Theme: light → dark → system", 28, 14, width=22)}<span style="flex: 1"></span><span style="font-family: {MONO}; font-size: 11px; color: #217a45; padding: 2px 4px">{app_version("desktop")}</span></div>')
+    from brand_boards import alpaca, app_crease
+    locked_row = (f'<div style="width: 360px; padding: 16px; box-sizing: border-box; display: flex; align-items: center; justify-content: space-between"><span style="font-size: 13px; color: {INK2}">Appearance</span>'
+                  f'<span style="display: inline-flex; align-items: center; gap: 10px; color: {INK3}">{identity_glyph("alpi", AMBER, 28)}{mono12("alpaca · brand accent")}</span></div>')
     popover = (f'<div style="width: 220px; padding: 16px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px">'
+               f'<span style="display: inline-flex; align-items: center; gap: 8px">{alpaca(LIGHT_ACCENT, 26)}{app_crease("alpi", 26, AMBER, PANE)}</span>'
                f'<span style="display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500"><span style="width: 7px; height: 7px; border-radius: 999px; background: #3fb37a"></span>Update available</span>'
                f'<span style="font-family: {MONO}; font-size: 12px; color: {INK2}">0.7.0 → 0.7.1</span>'
                f'<div style="display: flex; align-items: center; justify-content: flex-end; gap: 12px">{alink("Later")}{button("Restart &amp; install", "primary", "sm")}</div></div>')
-    notif_row = lambda color, title, sub: (f'<div style="display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 8px"><span style="width: 6px; height: 6px; border-radius: 999px; background: {color}; margin-top: 6px"></span>'
-                                           f'<span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 13px; color: {INK}">{title}</span><span style="font-family: {MONO}; font-size: 11px; color: {INK3}">{sub}</span></span></div>')
-    modal = (f'<div style="width: 460px; padding: 24px; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px">'
-             f'<div style="display: flex; align-items: center; justify-content: space-between"><span style="font-size: 18px; font-weight: 600; line-height: 1.3">Notifications</span>{button("Mark all read", "ghost", "sm")}</div>'
-             f'{notif_row("#3fb37a", "Daily brief delivered", "doc · schedule · 2h ago")}{notif_row("#c14545", "Cron job failed: weekly labs", "doc · timeout after 20m · 1d ago")}{notif_row("#e08a3c", "Provider key expiring", "openrouter · 3d ago")}</div>')
+    from notif_studies import VIEW, a_panel
+    panel = a_panel(VIEW, 500)
     zoom = palette("zoom", [("View", [palette_row("", "Zoom in", hint="⌘+", selected=True, hit="Zoom"), palette_row("", "Zoom out", hint="⌘-", hit="Zoom"), palette_row("", "Reset zoom", hint="⌘0", hit="zoom")])], w=460)
     body = f"""<div style="padding: 40px; display: flex; flex-direction: column; gap: 28px; box-sizing: border-box">
 <div style="display: flex; flex-direction: column; gap: 6px"><span style="font-size: 22px; font-weight: 600; letter-spacing: -0.018em; line-height: 1.3">Desktop has no settings page</span><span style="font-size: 13px; color: {INK3}; max-width: 720px; line-height: 1.5">Theme, updates, notifications and Activity live in the sidebar footer; text size is the window zoom in the command palette. Mobile groups the equivalents plus pairing and biometrics under one Settings screen.</span></div>
 <div style="display: flex; gap: 28px; align-items: flex-start; flex-wrap: wrap">
 {card("Sidebar footer · Settings, Notifications (⌘O), Activity (⌘J, needs-you count), theme · version turns green when an update exists", footer, 248)}
-{card("Version popover · from the footer version", popover, 220)}
-{card("Notifications modal · from the bell", modal, 460)}
+{card("Default profile · appearance is read-only: always the alpaca in the brand accent", locked_row, 360)}
+{card("Version popover · from the footer version, the alpaca and wordmark in crease type", popover, 220)}
 </div>
+{card("Notifications · from the bell or ⌘O: a Needs you group, All / Needs you / Unread, an ink dot for unread and a word for severity, the reader led by Reply, ↑↓ ⏎ R U ⌫ / 1–3 from the list", panel, 1200)}
 <div style="display: flex; flex-direction: column; gap: 12px"><span style="font-size: 12px; color: {INK3}">Command palette · the View group carries zoom, Preferences carries Switch theme</span>{zoom}</div>
 </div>"""
-    return page("Desktop · app-level settings", 1280, 740, body, bg=BG)
+    return page("Desktop · app-level settings", 1280, 1230, body, bg=BG)
 
 
 DESKTOP = {

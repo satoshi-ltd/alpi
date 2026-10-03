@@ -53,7 +53,7 @@
   padding: var(--space-5) var(--space-6);
   background: var(--hover);
   border: .5px solid var(--line);
-  border-radius: var(--r-md);
+  border-radius: var(--r-xs);
   overflow: auto;
   font-family: var(--font-mono);
   font-size: var(--fs-sm);
@@ -74,12 +74,10 @@
 }
 
 .body a {
-  color: var(--accent);
-  text-decoration: none;
-}
-
-.body a:hover {
+  color: var(--ink);
   text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
 }
 
 /* Tables and fenced code blocks are styled globally on `.alpi-md`

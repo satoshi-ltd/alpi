@@ -31,7 +31,8 @@ describe("Modal content wrapper", () => {
     const a = getByText("alpha");
     const b = getByText("beta");
     expect(a.parentElement).toBe(b.parentElement);
-    expect(a.parentElement.className).toMatch(/content/);
+    expect(a.parentElement.style.display).toBe("contents");
+    expect(a.parentElement.parentElement.className).toMatch(/content/);
   });
 });
 

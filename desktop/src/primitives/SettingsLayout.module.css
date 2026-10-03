@@ -76,74 +76,6 @@
   flex-wrap: wrap;
 }
 
-.accentPickerWrap {
-  position: relative;
-}
-
-.accentPopover {
-  position: absolute;
-  top: calc(100% + var(--space-2));
-  left: 0;
-  width: var(--pop-sm);
-  background: var(--bg-elev);
-  border: .5px solid var(--line-2);
-  border-radius: var(--r-lg);
-  box-shadow: var(--shadow);
-  z-index: var(--z-sticky);
-  padding: var(--space-6);
-}
-
-.swatchGrid {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: var(--space-3);
-  margin-bottom: var(--space-5);
-  justify-items: center;
-}
-
-.swatchChip {
-  width: var(--ctrl-md);
-  height: var(--ctrl-md);
-  padding: 0;
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.swatchDiamond {
-  transition:
-    transform var(--dur-1) var(--ease),
-    box-shadow var(--dur-1) var(--ease);
-}
-
-.swatchChip:hover .swatchDiamond {
-  transform: rotate(45deg) scale(1.08);
-}
-
-.swatchChipSelected .swatchDiamond {
-  box-shadow: 0 0 0 2px var(--ink);
-}
-
-.swatchChipSelected:hover .swatchDiamond {
-  transform: rotate(45deg);
-}
-
-.hexInput {
-  padding: var(--space-3) var(--space-4);
-  height: var(--ctrl-md);
-  font-size: var(--fs-sm);
-}
-
-.hexError {
-  margin-top: 6px;
-  font-size: var(--text-meta);
-  color: var(--c-danger-text);
-  font-family: var(--font-mono);
-}
-
 .memberRow {
   gap: var(--space-7);
   padding: var(--space-6) 0;
@@ -171,7 +103,7 @@
   letter-spacing: .06em;
   color: var(--ink-3);
   text-transform: uppercase;
-  padding-left: 15px;
+  padding-left: 22px;
 }
 
 .memberNote {

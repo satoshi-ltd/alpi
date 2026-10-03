@@ -7,7 +7,7 @@
   overflow-y: auto;
   background: var(--bg-elev);
   border: .5px solid var(--line-2);
-  border-radius: var(--r-lg);
+  border-radius: var(--r-xs);
   box-shadow: var(--shadow);
   padding: var(--space-1);
   transform-origin: top left;
@@ -22,7 +22,7 @@
 .item {
   width: 100%;
   padding: var(--space-2) var(--space-4);
-  border-radius: var(--r-sm);
+  border-radius: var(--r-xs);
   gap: var(--space-4);
   text-align: left;
   align-items: center;

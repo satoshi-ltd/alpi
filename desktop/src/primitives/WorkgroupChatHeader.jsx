@@ -1,4 +1,4 @@
-import { ChatHeader, Diamond, MeterChip, Mono, Tip } from "./index.js";
+import { ChatHeader, Fold, MeterChip, Mono, Tip } from "./index.js";
 import { profileLabel } from "../lib/profile-display.js";
 import SoundWave from "./SoundWave.jsx";
 import HeaderMenu from "./HeaderMenu.jsx";
@@ -7,6 +7,7 @@ import styles from "./WorkgroupChatHeader.module.css";
 export default function WorkgroupChatHeader({
   workgroup,
   hubAccent,
+  hubFold,
   hubName,
   hubBio,
   memberCount = 0,
@@ -21,7 +22,7 @@ export default function WorkgroupChatHeader({
 }) {
   const accent = hubAccent || "var(--accent)";
   const bio = (hubBio || "").trim();
-  const rawDiamond = <Diamond color={accent} />;
+  const rawDiamond = <Fold fold={hubFold} color={accent} />;
   const diamond = bio
     ? <Tip text={bio} side="l">{rawDiamond}</Tip>
     : rawDiamond;
@@ -82,6 +83,7 @@ export default function WorkgroupChatHeader({
       bio={workgroup?.briefing}
       meta={meta}
       right={right}
+      paused={paused}
     />
   );
 }

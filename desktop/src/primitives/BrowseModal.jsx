@@ -30,12 +30,14 @@ export default function BrowseModal({
       if (!isTop()) return;
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         const active = document.activeElement;
-        if (active !== searchRef.current && active?.getAttribute?.("role") !== "option") return;
+        const option = active?.closest?.('[role="option"]') ?? null;
+        const adrift = active === wrapRef.current || active === document.body || !active;
+        if (active !== searchRef.current && !option && !adrift) return;
         const opts = Array.from(wrapRef.current?.querySelectorAll('[role="option"]') || [])
           .filter((el) => el.tagName === "BUTTON" || el.tabIndex >= 0);
         if (!opts.length) return;
         e.preventDefault();
-        const idx = opts.indexOf(active);
+        const idx = opts.indexOf(option);
         const step = e.key === "ArrowDown" ? 1 : -1;
         const next = idx === -1
           ? (step === 1 ? opts[0] : opts[opts.length - 1])

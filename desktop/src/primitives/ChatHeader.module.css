@@ -12,7 +12,3 @@
   gap: var(--space-tight);
   flex-shrink: 0;
 }
-
-.stackGlyph {
-  --stack-bg: var(--bg-pane);
-}

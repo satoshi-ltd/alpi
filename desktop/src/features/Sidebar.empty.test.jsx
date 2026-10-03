@@ -23,7 +23,7 @@ import Sidebar from "./Sidebar.jsx";
 const BASE = {
   profiles: [],
   workgroups: [],
-  view: { kind: "empty" },
+  view: { kind: "landing" },
   hostConnections: { active_id: "remote", connections: [] },
 };
 
@@ -36,10 +36,30 @@ describe("Sidebar with nothing to list", () => {
     expect(onNewProfile).toHaveBeenCalledTimes(1);
   });
 
-  it("stays quiet while syncing or offline, when an empty roster means nothing yet", () => {
-    const { rerender } = render(<Sidebar {...BASE} connectionSyncing />);
+  it("stays quiet until the roster answers or while offline, when an empty roster means nothing yet", () => {
+    const { rerender } = render(<Sidebar {...BASE} connectionSyncing rosterAnswered={false} />);
+    expect(screen.queryByText(/No profiles yet/)).toBeNull();
+    rerender(<Sidebar {...BASE} rosterAnswered={false} />);
     expect(screen.queryByText(/No profiles yet/)).toBeNull();
     rerender(<Sidebar {...BASE} daemonOffline />);
     expect(screen.queryByText(/No profiles yet/)).toBeNull();
+  });
+
+  it("keeps saying so through a later reload of an answered roster", () => {
+    render(<Sidebar {...BASE} connectionSyncing rosterAnswered />);
+    expect(screen.getByText(/No profiles yet/)).toBeInTheDocument();
+  });
+});
+
+describe("Sidebar while the daemon is away", () => {
+  it("keeps the roster and draws every profile and workgroup unfolded", () => {
+    const profiles = [{ name: "default", is_default: true, model: "m" }, { name: "doc", fold: "heart", accent: "#f36a8a", model: "m" }];
+    const workgroups = [{ profile: "doc", id: "crew", name: "crew" }];
+    const { container, rerender } = render(<Sidebar {...BASE} profiles={profiles} workgroups={workgroups} rosterAnswered daemonOffline />);
+    const folds = [...container.querySelectorAll("[data-fold]")];
+    expect(folds.length).toBeGreaterThanOrEqual(3);
+    expect(folds.every((f) => f.hasAttribute("data-unfolded"))).toBe(true);
+    rerender(<Sidebar {...BASE} profiles={profiles} workgroups={workgroups} rosterAnswered />);
+    expect(container.querySelector("[data-unfolded]")).toBeNull();
   });
 });

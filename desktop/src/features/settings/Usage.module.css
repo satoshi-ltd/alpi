@@ -180,7 +180,7 @@
   padding: var(--space-4);
   background: var(--bg-elev);
   border: 0.5px solid var(--line-2);
-  border-radius: var(--r-md);
+  border-radius: var(--r-xs);
   box-shadow: var(--shadow);
 }
 

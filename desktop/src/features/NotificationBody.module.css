@@ -45,7 +45,7 @@
 
 .tableWrap {
   border: 0.5px solid var(--line-2);
-  border-radius: var(--r-md);
+  border-radius: var(--r-xs);
   overflow-x: auto;
 }
 .table {
@@ -96,6 +96,120 @@ ol.list .marker {
 }
 .itemText { flex: 1; min-width: 0; }
 
+.entries {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.entry {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4) 0;
+  line-height: var(--lh-normal);
+  box-shadow: inset 0 -.5px 0 var(--line);
+}
+.entry:first-child { padding-top: 0; }
+.entry:last-child { box-shadow: none; padding-bottom: 0; }
+.entryHead {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.entryName {
+  flex-shrink: 0;
+  font-weight: var(--fw-semibold);
+  color: var(--ink);
+}
+.entryMeta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+.entryText { color: var(--ink-2); }
+
+.errorCard {
+  max-width: var(--notif-measure);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-6) var(--space-7);
+  background: var(--bg-side);
+  border-radius: var(--r-xs);
+}
+.errorHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0;
+  font-size: var(--text-title);
+  font-weight: var(--fw-semibold);
+  letter-spacing: -0.012em;
+  line-height: var(--lh-cozy);
+  color: var(--ink);
+}
+.errorTitle { min-width: 0; }
+.failed { color: var(--c-danger-text); }
+.facts { margin: 0; }
+.fact {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: var(--space-5);
+  padding: var(--space-3) 0;
+  box-shadow: inset 0 -.5px 0 var(--line);
+}
+.fact:last-child { box-shadow: none; }
+.factLabel {
+  padding-top: 2px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.factValue {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  line-height: var(--lh-normal);
+  color: var(--ink-2);
+  -webkit-user-select: text;
+  user-select: text;
+}
+.fact:first-child .factValue { color: var(--ink); }
+.details {
+  background: var(--hover);
+  border-radius: var(--r-xs);
+}
+.detailsSummary {
+  padding: var(--space-3) var(--space-5);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.detailsTrace {
+  margin: 0;
+  padding: 0 var(--space-5) var(--space-4);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-normal);
+  color: var(--ink-2);
+  overflow-x: auto;
+  -webkit-user-select: text;
+  user-select: text;
+}
+.errorActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
 .bold { font-weight: var(--fw-semibold); color: var(--ink); }
 .italic { font-style: italic; }
 
@@ -116,7 +230,7 @@ ol.list .marker {
   color: var(--ink-2);
   background: var(--bg-side);
   border: 0.5px solid var(--line);
-  border-radius: var(--r-md);
+  border-radius: var(--r-xs);
   padding: var(--space-5) var(--space-6);
   overflow-x: auto;
 }
@@ -127,6 +241,7 @@ ol.list .marker {
 .body > .quote,
 .body > .labelBlock,
 .body > .list,
+.body > .entries,
 .body > .codeblock,
 .body > .tableWrap { margin-top: var(--space-7); }
 .body > .heading { margin-top: var(--space-8); }

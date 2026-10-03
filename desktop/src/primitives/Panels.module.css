@@ -1,8 +1,7 @@
 .scrim {
   position: fixed;
   inset: 0;
-  background: color-mix(in srgb, var(--ink) 20%, transparent);
-  backdrop-filter: blur(2px);
+  background: var(--veil);
   z-index: var(--z-panel);
   display: flex;
   justify-content: center;
@@ -10,7 +9,7 @@
 
 .shell {
   background: var(--bg-elev);
-  border-radius: var(--r-2xl);
+  border-radius: var(--r-xs);
   border: .5px solid var(--line-2);
   box-shadow: var(--shadow);
   overflow: hidden;
@@ -51,7 +50,7 @@
 .connRow {
   width: 100%;
   padding: var(--space-4) var(--space-5);
-  border-radius: var(--r-lg);
+  border-radius: var(--r-xs);
   background: transparent;
   text-align: left;
   gap: var(--space-5);
@@ -71,7 +70,7 @@
 .connIcon {
   width: var(--ctrl-sm);
   height: var(--ctrl-sm);
-  border-radius: var(--r-sm);
+  border-radius: var(--r-xs);
   background: var(--bg-input);
   display: grid;
   place-items: center;
@@ -157,9 +156,9 @@
   max-width: 240px;
   height: 22px;
   box-sizing: border-box;
-  border: 0.5px solid var(--line-2);
-  border-radius: var(--r-sm);
-  background: var(--bg-elev);
+  border: .5px solid transparent;
+  border-radius: var(--r-xs);
+  background: var(--well);
   color: var(--ink);
   font: inherit;
   font-size: var(--text-ui);
@@ -170,8 +169,8 @@
 }
 
 .renameInput:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent);
+  background: var(--well-focus);
+  box-shadow: var(--well-ring);
 }
 
 .pairFoot {
@@ -191,18 +190,6 @@
 
 .pairCode {
   font-size: var(--text-meta);
-}
-
-.pairRow {
-  gap: var(--space-3);
-}
-
-.pairInput {
-  flex: 1;
-}
-
-.pairBtnDisabled {
-  opacity: 0.5;
 }
 
 .paletteInputWrap {
@@ -249,7 +236,7 @@
 .paletteItem {
   width: 100%;
   padding: 7px var(--space-5);
-  border-radius: var(--r-md);
+  border-radius: var(--r-xs);
   background: transparent;
   text-align: left;
   gap: var(--space-4);
@@ -357,7 +344,7 @@
 .mdPre {
   margin: var(--space-5) 0;
   padding: var(--space-5) var(--space-6);
-  border-radius: var(--r-md);
+  border-radius: var(--r-xs);
   background: var(--hover);
   border: .5px solid var(--line);
   font-family: var(--font-mono);
