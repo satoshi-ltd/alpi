@@ -14,6 +14,28 @@ The mobile app is a host-plane client of one or more remote
 ``alpi`` daemons over Tailscale. Each release pins a minimum
 compatible alpi version.
 
+## v0.7.0 — 2026-10-02 — profiles wear their origami
+
+- **A profile wears an origami object in its colour** in the inbox, lists, headers and every empty chat at hero
+  size; one that has not chosen shows the kite-base diamond. The appearance sheet picks an object and one of twelve
+  colours in a six-by-two grid; the app, adaptive, splash and favicon icons are the alpaca in one flat ink (nine
+  facets for the favicon, the iOS tinted icon single-ink). The default profile is always the first row of the
+  roster on the phone and the Fold, above Pinned and never pinned. Names in the chat and settings headers take the
+  crease type with a font that ships in the app.
+- **Pairing names each step:** Scan QR opens the camera at once and the first screen says where a link comes from;
+  reading the link, reaching the host and signing in are named steps, and each failure says what to do (a used link is
+  cleared, any other kept). Paired names the host and the role, Open inbox leaves nothing behind it, a member with
+  nothing shared sees whom to ask, and a dropped call or a return to the app re-checks the daemon so offline shows at once.
+- **A working profile ripples its own object facet by facet**, its thinking line leads with that object and its colour, and a workgroup is a honeycomb in its hub's colour that
+  ripples the same way, outlined when paused; every ripple stops under reduced motion; a paused profile or workgroup, and every object while its daemon is away, unfolds into its grey dashed crease pattern, and a paused name reads in grey; a profile running a job again after it failed reads working, not failed.
+- **The accent is ink** (cream on dark, black on light) on neutral greys and flat surfaces (headers end on their seam without a coloured stripe, your messages are a neutral 4 pt sheet without the profile's tint, toasts are flat cards, an approval opens with the asking profile's object and name and keeps red for the warning mark, activity rows lead with the profile's object, settings rows sit in inset tonal groups, the selected roster row on the Fold is the pane's own sheet, pills are tags; buttons, cards, images and code blocks are 4 pt sheets and buttons press by tone, borderless wells for fields and the composer, 4 pt sheets on a paper veil with a seam instead of a shadow), splash included, and the default profile is
+  the alpaca in it, also on older daemons.
+- **Notifications triage at a glance:** All / Needs you / Unread filters, unread errors and warnings pinned
+  on top, swipe a row to mark it unread or delete it with Undo; the page steps up and down the list, keeps Reply (a new
+  chat quoting it) and Open job at the thumb, draws digests as entries and a failed run as a card with Run again.
+
+  Requires alpi 0.17.0.
+
 ## v0.6.7 — 2026-10-01 — empty states speak in one voice
 
 - **Every empty state now has a sentence-case title and at most one hint sentence ending in a full stop,**

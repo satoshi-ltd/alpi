@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 
 import { EndpointContext } from '../../lib/EndpointContext';
 import { ThemeProvider } from '../../theme/ThemeContext';
@@ -12,6 +12,7 @@ const h = vi.hoisted(() => ({
   router: { push: vi.fn(), back: vi.fn(), replace: vi.fn() },
   visionSheetProps: null,
   modelSheetProps: null,
+  appearanceSheetProps: null,
 }));
 
 vi.mock('expo-router', () => ({
@@ -69,6 +70,7 @@ vi.mock('../../components/TextPrompt', () => ({ TextPrompt: () => null }));
 
 vi.mock('../../components/Row', () => ({
   SectionHeader: ({ children }) => <h2>{children}</h2>,
+  RowGroup: ({ children }) => <div data-row-group="">{children}</div>,
   SettingsBand: ({ children }) => <section>{children}</section>,
   RowSeparator: () => <hr />,
   Row: ({ label, helper, value }) => (
@@ -98,9 +100,6 @@ vi.mock('./IdentityEditor', () => ({
   IdentityEditor: ({ profileId }) => <div data-identity-editor={profileId}>Draft</div>,
 }));
 
-vi.mock('../../components/Diamond', () => ({
-  Diamond: () => <span />,
-}));
 
 vi.mock('../../components/TypedConfirm', () => ({
   Bold: ({ children }) => <strong>{children}</strong>,
@@ -109,8 +108,11 @@ vi.mock('../../components/TypedConfirm', () => ({
     open ? <div data-confirm={title} data-expected={String(expected)} /> : null,
 }));
 
-vi.mock('../../features/sheets/AccentSheet', () => ({
-  AccentSheet: () => null,
+vi.mock('../../features/sheets/AppearanceSheet', () => ({
+  AppearanceSheet: (props) => {
+    h.appearanceSheetProps = props;
+    return null;
+  },
 }));
 
 vi.mock('../../features/sheets/ProfileFieldSheets', () => ({
@@ -146,6 +148,7 @@ beforeEach(() => {
   h.router = { push: vi.fn(), back: vi.fn(), replace: vi.fn() };
   h.visionSheetProps = null;
   h.modelSheetProps = null;
+  h.appearanceSheetProps = null;
 });
 
 describe('ProfileSettings snapshot first paint', () => {
@@ -641,5 +644,102 @@ describe('ProfileSettings daemon update on a daemon that cannot update itself', 
     await waitFor(() => expect(scope.getByText('Restart daemon').closest('button')).toBeTruthy());
     expect(scope.queryByText('Update alpi')).toBeNull();
     expect(container.textContent).toContain(sentence);
+  });
+});
+
+describe('ProfileSettings appearance', () => {
+  beforeEach(cleanup);
+
+  const profileCall = (summary, detail, calls = []) =>
+    vi.fn(async (method, params) => {
+      calls.push([method, params]);
+      if (method === 'host.profile.summaries') return { profiles: [{ name: 'doc', counts: {}, ...summary }] };
+      if (method === 'host.settings.profile_snapshot') {
+        return { detail: { name: 'doc', ...detail }, usage: { days: [] }, schedules: { jobs: [] }, workgroups: { workgroups: [] }, email: { accounts: [] }, storage: { storage: [] } };
+      }
+      if (method === 'host.config.set_field') return {};
+      throw new Error(`unexpected ${method}`);
+    });
+
+  it('shows the pair name and the colour on the appearance row', async () => {
+    const call = profileCall({ fold: 'shield' }, { accent: '#3899e2' });
+    render(<ProfileSettings />, { wrapper: wrapper(call) });
+
+    await waitFor(() => expect(screen.getByText('Appearance')).toBeTruthy());
+    expect(screen.getByText('blue shield')).toBeTruthy();
+    expect(screen.getByText('#3899e2')).toBeTruthy();
+    expect(document.querySelector('svg[data-fold="shield"]')).not.toBeNull();
+    expect(screen.queryByText('Accent')).toBeNull();
+  });
+
+  it('shows the default profile as the alpaca on a row that cannot be opened', async () => {
+    h.params = { id: 'default' };
+    const call = profileCall({ name: 'default', fold: 'alpaca' }, { name: 'default', accent: '#f0b447' });
+    render(<ProfileSettings />, { wrapper: wrapper(call) });
+
+    await waitFor(() => expect(screen.getByText('Alpaca')).toBeTruthy());
+    expect(screen.getByText('brand accent')).toBeTruthy();
+    expect(document.querySelector('svg[data-fold="alpaca"]')).not.toBeNull();
+    h.params = { id: 'doc' };
+  });
+
+  it('names a profile without a fold after the diamond', async () => {
+    const call = profileCall({}, { accent: '#f0b447' });
+    render(<ProfileSettings />, { wrapper: wrapper(call) });
+
+    await waitFor(() => expect(screen.getByText('amber diamond')).toBeTruthy());
+  });
+
+  it('writes the fold and the accent to their own config keys', async () => {
+    const calls = [];
+    const call = profileCall({ fold: 'shield' }, { accent: '#3899e2' }, calls);
+    render(<ProfileSettings />, { wrapper: wrapper(call) });
+
+    await waitFor(() => expect(h.appearanceSheetProps?.initialFold).toBe('shield'));
+    expect(h.appearanceSheetProps.initialValue).toBe('#3899e2');
+
+    await h.appearanceSheetProps.onSave({ fold: 'rocket', accent: '#2CB3B5' });
+    const writes = calls.filter(([method]) => method === 'host.config.set_field').map(([, params]) => params);
+    expect(writes).toEqual([
+      { profile: 'doc', key: 'tui.fold', value: 'rocket' },
+      { profile: 'doc', key: 'tui.accent', value: '#2cb3b5' },
+    ]);
+
+    calls.length = 0;
+    await h.appearanceSheetProps.onSave({ accent: '#9b5ad9' });
+    expect(calls.filter(([method]) => method === 'host.config.set_field').map(([, params]) => params)).toEqual([
+      { profile: 'doc', key: 'tui.accent', value: '#9b5ad9' },
+    ]);
+  });
+});
+
+describe('ProfileSettings phone sections', () => {
+  beforeEach(cleanup);
+  const groupOf = (text) => screen.getByText(text).closest('[data-row-group]');
+
+  it('puts each section in its own row group, header outside', async () => {
+    const call = vi.fn(async (method) => {
+      if (method === 'host.profile.summaries') return { profiles: [{ name: 'doc', counts: {} }] };
+      if (method === 'host.settings.profile_snapshot') {
+        return {
+          detail: { name: 'doc', model: 'openrouter/example' },
+          usage: { days: [{ iso: '2026-06-29', tokIn: 1000, tokOut: 500, cost: 0.12, today: true }] },
+          schedules: { jobs: [] },
+          workgroups: { workgroups: [] },
+          email: { accounts: [] },
+          storage: { storage: [] },
+        };
+      }
+      throw new Error(`unexpected ${method}`);
+    });
+    render(<ProfileSettings />, { wrapper: wrapper(call) });
+
+    await waitFor(() => expect(screen.getByText(/14-day total \$0\.12/)).toBeTruthy());
+    expect(groupOf('Providers')).not.toBeNull();
+    expect(groupOf('Providers')).toBe(groupOf('Workspace'));
+    expect(screen.getByText('Overview').closest('[data-row-group]')).toBeNull();
+    expect(groupOf(/14-day total/)).not.toBeNull();
+    expect(groupOf(/14-day total/)).not.toBe(groupOf('Providers'));
+    expect(groupOf('Delete profile')).not.toBe(groupOf('Reclaim space'));
   });
 });

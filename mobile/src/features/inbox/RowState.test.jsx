@@ -28,7 +28,7 @@ vi.mock('../../theme/ThemeContext', async () => {
   const tokens = await import('../../theme/tokens');
   return {
     useTheme: () => ({
-      colors: { accent: '#accent', warningText: '#warn', dangerText: '#danger' },
+      colors: { accent: '#accent', ink2: '#ink2', warningText: '#warn', dangerText: '#danger' },
       fonts: { sans: { medium: 'sans-medium' }, monoMedium: 'mono-medium' },
       fontSizes: tokens.fontSizes,
     }),
@@ -48,29 +48,32 @@ describe('RowState', () => {
   it.each([
     ['needs-you', 'needs you', '#warn'],
     ['failed', 'failed', '#danger'],
-    ['working', 'working', '#accent'],
+    ['working', 'working', '#ink2'],
   ])('%s reads "%s" in its own colour', (state, text, color) => {
     render(<RowState state={state} />);
     expect(screen.getByText(text).getAttribute('data-color')).toBe(color);
     expect(Number(screen.getByText(text).getAttribute('data-size'))).toBe(fontSizes.xs);
   });
 
-  it('pulses only a working row', async () => {
+  it('paints a working row in its profile colour when the row knows it', () => {
+    render(<RowState state="working" color="#3ac9f3" />);
+    expect(screen.getByText('working').getAttribute('data-color')).toBe('#3ac9f3');
+  });
+
+  it('keeps needs-you and failed in their status colours whatever the profile colour', () => {
+    render(<RowState state="needs-you" color="#3ac9f3" />);
+    expect(screen.getByText('needs you').getAttribute('data-color')).toBe('#warn');
+  });
+
+  it('says working with the word alone, leaving the motion to the object', async () => {
     render(<RowState state="working" />);
     await act(async () => {});
-    expect(screen.getByTestId('state-pulse')).toBeTruthy();
-    expect(h.loops).toBe(1);
+    expect(screen.queryByTestId('state-pulse')).toBeNull();
+    expect(screen.queryByTestId('state-dot')).toBeNull();
+    expect(h.loops).toBe(0);
     cleanup();
     render(<RowState state="needs-you" />);
     expect(screen.getByTestId('state-dot')).toBeTruthy();
-  });
-
-  it('holds the working dot still under reduced motion', async () => {
-    h.reduce = true;
-    render(<RowState state="working" />);
-    await act(async () => {});
-    expect(screen.getByTestId('state-dot')).toBeTruthy();
-    expect(h.loops).toBe(0);
   });
 
   it('shows the phase count of a running pipeline in place of the word', () => {

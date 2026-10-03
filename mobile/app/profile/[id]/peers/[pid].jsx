@@ -5,16 +5,17 @@ import { useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Diamond } from '../../../../src/components/Diamond';
+import { Fold } from '../../../../src/components/Fold';
 import { Pill } from '../../../../src/components/Pill';
-import { Row, RowSeparator, SectionHeader } from '../../../../src/components/Row';
+import { Row, RowGroup, RowSeparator, SectionHeader } from '../../../../src/components/Row';
 import { ScreenHeader } from '../../../../src/components/ScreenHeader';
 import { useToast } from '../../../../src/components/Toast';
 import { Bold, Code, TypedConfirm } from '../../../../src/components/TypedConfirm';
 import { useBack } from '../../../../src/hooks/useBack';
+import { useProfileSummaries } from '../../../../src/hooks/useDaemonData';
 import { useProfile } from '../../../../src/hooks/useSubject';
 import { useEndpoint } from '../../../../src/lib/EndpointContext';
-import { accentForProfile } from '../../../../src/theme/accents';
+import { accentForPubkey, foldForPubkey } from '../../../../src/lib/localFold';
 import { useTheme } from '../../../../src/theme/ThemeContext';
 
 const KNOWN_SCOPES = [
@@ -30,6 +31,7 @@ export default function PeerDetail() {
   const { call } = useEndpoint();
   const { colors } = useTheme();
   const { profile } = useProfile(id);
+  const summaries = useProfileSummaries();
   const [confirmRevoke, setConfirmRevoke] = useState(false);
 
   const peer = (profile?.peers ?? []).find((p) => p.id === pid);
@@ -51,46 +53,54 @@ export default function PeerDetail() {
         title={`@${pid}`}
         subtitle={`@${id} · PEER`}
         onBack={goBack}
-        leadingGlyph={<Diamond color={accentForProfile(pid)} size="md" />}
+        leadingGlyph={<Fold fold={foldForPubkey(summaries, peer?.pubkey)} color={accentForPubkey(summaries, peer?.pubkey)} size="md" />}
       />
       <ScrollView>
         <SectionHeader>Identity</SectionHeader>
-        <Row label="Handle" value={`@${pid}`} chevron={false} />
-        <RowSeparator />
-        <Row label="Pubkey" value={peer?.pubkey ?? '—'} chevron={false} />
-        {peer?.alias ? (
-          <>
-            <RowSeparator />
-            <Row label="Alias" value={peer.alias} chevron={false} />
-          </>
-        ) : null}
+        <RowGroup>
+          <Row label="Handle" value={`@${pid}`} chevron={false} />
+          <RowSeparator />
+          <Row label="Pubkey" value={peer?.pubkey ?? '—'} chevron={false} />
+          {peer?.alias ? (
+            <>
+              <RowSeparator />
+              <Row label="Alias" value={peer.alias} chevron={false} />
+            </>
+          ) : null}
+        </RowGroup>
 
         <SectionHeader>Transport</SectionHeader>
-        <Row label="Address" value={peer?.address ?? 'intra-machine'} chevron={false} />
+        <RowGroup>
+          <Row label="Address" value={peer?.address ?? 'intra-machine'} chevron={false} />
+        </RowGroup>
 
         <SectionHeader>Allowed scopes</SectionHeader>
-        {KNOWN_SCOPES.map((s, i) => (
-          <View key={s.id}>
-            {i > 0 ? <RowSeparator /> : null}
-            <Row
-              label={s.id}
-              helper={s.desc}
-              value={
-                allow.includes(s.id) ? <Pill tone="on">allowed</Pill> : <Pill off>blocked</Pill>
-              }
-              chevron={false}
-            />
-          </View>
-        ))}
+        <RowGroup>
+          {KNOWN_SCOPES.map((s, i) => (
+            <View key={s.id}>
+              {i > 0 ? <RowSeparator /> : null}
+              <Row
+                label={s.id}
+                helper={s.desc}
+                value={
+                  allow.includes(s.id) ? <Pill tone="on">allowed</Pill> : <Pill off>blocked</Pill>
+                }
+                chevron={false}
+              />
+            </View>
+          ))}
+        </RowGroup>
 
         <SectionHeader>Danger</SectionHeader>
-        <Row
-          label="Revoke"
-          helper="removes trust, future requests will be rejected"
-          danger
-          chevron={false}
-          onPress={() => setConfirmRevoke(true)}
-        />
+        <RowGroup>
+          <Row
+            label="Revoke"
+            helper="removes trust, future requests will be rejected"
+            danger
+            chevron={false}
+            onPress={() => setConfirmRevoke(true)}
+          />
+        </RowGroup>
       </ScrollView>
       <TypedConfirm
         open={confirmRevoke}

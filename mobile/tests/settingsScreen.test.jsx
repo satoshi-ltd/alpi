@@ -60,6 +60,7 @@ vi.mock('../src/components/OnOff', () => ({
   OnOff: ({ on, onLabel, offLabel }) =>
     React.createElement('span', { 'data-onoff': on ? onLabel : offLabel }),
 }));
+vi.mock('../src/components/Fold', () => ({ Fold: () => null }));
 vi.mock('../src/components/Toast', () => ({ useToast: () => vi.fn() }));
 vi.mock('../src/components/TypedConfirm', () => ({
   Bold: ({ children }) => React.createElement('span', {}, children),

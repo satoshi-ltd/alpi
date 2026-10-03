@@ -43,7 +43,7 @@ const STYLES = StyleSheet.create({
     gap: space.s1,
   },
   phaseBlocked: {
-    borderRadius: radii.pill,
+    borderRadius: radii.tag,
     paddingHorizontal: space.s3,
     paddingVertical: 2,
   },

@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { space } from '../../../../../src/theme/tokens';
 
-import { Row, RowSeparator, SectionHeader } from '../../../../../src/components/Row';
+import { Row, RowGroup, RowSeparator, SectionHeader } from '../../../../../src/components/Row';
 import { ScreenHeader } from '../../../../../src/components/ScreenHeader';
 import { useBack } from '../../../../../src/hooks/useBack';
 import { useSkills } from '../../../../../src/hooks/useDaemonData';
@@ -56,43 +56,47 @@ export default function SkillsList() {
         ) : skills.error && rows.length === 0 ? (
           <LoadFailed inline label="skills" error={skills.error} onRetry={() => skills.refresh?.()} />
         ) : rows.length === 0 ? (
-          <Row label={EMPTY.skills.title} helper={EMPTY.skills.hint} chevron={false} />
+          <RowGroup style={{ marginTop: space.s5 }}>
+            <Row label={EMPTY.skills.title} helper={EMPTY.skills.hint} chevron={false} />
+          </RowGroup>
         ) : (
           categoryOrder.map((cat) => (
             <View key={cat}>
               <SectionHeader>{cat}</SectionHeader>
-              {groups.get(cat).map((s, i) => (
-                <View key={s.path ?? `${s.category}/${s.name}/${i}`}>
-                  {i > 0 ? <RowSeparator /> : null}
-                  <Pressable
-                    onPress={() =>
-                      router.push({
-                        pathname: `/profile/${id}/brain/skills/[name]`,
-                        params: { name: s.name, path: s.path ?? '', category: s.category ?? '' },
-                      })
-                    }
-                    android_ripple={{ color: colors.selected }}
-                    style={({ pressed }) => ({
-                      paddingHorizontal: space.s8,
-                      paddingVertical: space.s6,
-                      gap: space.s1,
-                      backgroundColor: pressed ? colors.selected : 'transparent',
-                    })}
-                  >
-                    <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.lg, color: colors.ink }}>
-                      {s.name}
-                    </Text>
-                    {s.description ? (
-                      <Text
-                        numberOfLines={2}
-                        style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }}
-                      >
-                        {s.description}
+              <RowGroup>
+                {groups.get(cat).map((s, i) => (
+                  <View key={s.path ?? `${s.category}/${s.name}/${i}`}>
+                    {i > 0 ? <RowSeparator /> : null}
+                    <Pressable
+                      onPress={() =>
+                        router.push({
+                          pathname: `/profile/${id}/brain/skills/[name]`,
+                          params: { name: s.name, path: s.path ?? '', category: s.category ?? '' },
+                        })
+                      }
+                      android_ripple={{ color: colors.selected }}
+                      style={({ pressed }) => ({
+                        paddingHorizontal: space.s8,
+                        paddingVertical: space.s6,
+                        gap: space.s1,
+                        backgroundColor: pressed ? colors.selected : 'transparent',
+                      })}
+                    >
+                      <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.lg, color: colors.ink }}>
+                        {s.name}
                       </Text>
-                    ) : null}
-                  </Pressable>
-                </View>
-              ))}
+                      {s.description ? (
+                        <Text
+                          numberOfLines={2}
+                          style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3 }}
+                        >
+                          {s.description}
+                        </Text>
+                      ) : null}
+                    </Pressable>
+                  </View>
+                ))}
+              </RowGroup>
             </View>
           ))
         )}

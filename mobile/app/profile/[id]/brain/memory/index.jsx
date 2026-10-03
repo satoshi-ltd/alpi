@@ -4,7 +4,7 @@ import { ActivityIndicator, RefreshControl, ScrollView, Text, View } from 'react
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { space } from '../../../../../src/theme/tokens';
 
-import { Row, RowSeparator } from '../../../../../src/components/Row';
+import { Row, RowGroup, RowSeparator } from '../../../../../src/components/Row';
 import { ScreenHeader } from '../../../../../src/components/ScreenHeader';
 import { useBack } from '../../../../../src/hooks/useBack';
 import { useProfileMemory } from '../../../../../src/hooks/useDaemonData';
@@ -54,27 +54,29 @@ export default function MemoryList() {
         ) : mem.error && !mem.data ? (
           <LoadFailed inline label="memories" error={mem.error} onRetry={() => mem.refresh?.()} />
         ) : (
-          FILES.map((f, i) => {
-            const text = mem.data?.[f.name] ?? '';
-            const u = mem.usage?.[f.name];
-            const value = u?.pct != null ? `${u.pct}%` : (text ? humanBytes(text.length) : 'Empty');
-            return (
-              <View key={f.name}>
-                {i > 0 ? <RowSeparator /> : null}
-                <Row
-                  label={f.label}
-                  helper={f.helper}
-                  value={value}
-                  onPress={() =>
-                    router.push({
-                      pathname: `/profile/${id}/brain/memory/[name]`,
-                      params: { name: f.name, label: f.label, helper: f.helper },
-                    })
-                  }
-                />
-              </View>
-            );
-          })
+          <RowGroup style={{ marginTop: space.s5 }}>
+            {FILES.map((f, i) => {
+              const text = mem.data?.[f.name] ?? '';
+              const u = mem.usage?.[f.name];
+              const value = u?.pct != null ? `${u.pct}%` : (text ? humanBytes(text.length) : 'Empty');
+              return (
+                <View key={f.name}>
+                  {i > 0 ? <RowSeparator /> : null}
+                  <Row
+                    label={f.label}
+                    helper={f.helper}
+                    value={value}
+                    onPress={() =>
+                      router.push({
+                        pathname: `/profile/${id}/brain/memory/[name]`,
+                        params: { name: f.name, label: f.label, helper: f.helper },
+                      })
+                    }
+                  />
+                </View>
+              );
+            })}
+          </RowGroup>
         )}
       </ScrollView>
     </SafeAreaView>

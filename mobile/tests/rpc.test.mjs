@@ -652,6 +652,19 @@ await test('other errors are not retried', async () => {
   assert.strictEqual(nextWs, ws, 'no second socket was opened');
 });
 
+await test('only errors the client made itself are marked as transport failures', async () => {
+  _resetPoolForTests();
+  nextWs = null;
+  const answered = call(endpoint, 'host.ping', {});
+  const ws = nextWs;
+  ws.open();
+  ws.message({ id: JSON.parse(ws.sent[0]).id, error: { code: -32001, message: 'forbidden' } });
+  await assert.rejects(answered, (e) => e.code === -32001 && !e.transport);
+  const dropped = call(endpoint, 'host.ping', {});
+  ws.closeWith(1006, '');
+  await assert.rejects(dropped, (e) => e.code === -32002 && e.transport === true);
+});
+
 await test('a stream refused with too-many-connections reopens once and keeps its handle', async () => {
   _resetPoolForTests();
   nextWs = null;

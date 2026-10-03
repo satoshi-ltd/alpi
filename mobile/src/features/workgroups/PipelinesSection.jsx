@@ -2,7 +2,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { lineHeights, radii, space } from '../../theme/tokens';
 
 import { Pill } from '../../components/Pill';
-import { RowSeparator, SectionHeader } from '../../components/Row';
+import { RowGroup, RowSeparator, SectionHeader } from '../../components/Row';
 import { isLaunchless, namedPipelines } from '../../lib/workgroupPipelines';
 import { useTheme } from '../../theme/ThemeContext';
 import { EMPTY } from '../../../../common/emptyCopy.mjs';
@@ -32,7 +32,7 @@ const STYLES = StyleSheet.create({
     paddingHorizontal: space.s4,
     paddingVertical: space.s2,
     borderWidth: 0.5,
-    borderRadius: radii.lg,
+    borderRadius: radii.xs,
   },
   note: {
     paddingHorizontal: space.s8,
@@ -79,18 +79,20 @@ export function PipelinesSection({ workgroup }) {
             : `${EMPTY.noPipelines.title}. ${EMPTY.noPipelines.hint}`}
         </Note>
       ) : (
-        chains.map((chain, i) => (
-          <View key={chain.key}>
-            {i > 0 ? <RowSeparator indent={0} /> : null}
-            <View style={STYLES.head}>
-              <Text style={[STYLES.key, { fontFamily: fonts.monoSemibold, fontSize: fontSizes.md, color: colors.ink }]}>
-                #{chain.key}
-              </Text>
-              {chain.isLaunch ? <Pill tone="on">launch</Pill> : <Pill off>on demand</Pill>}
+        <RowGroup>
+          {chains.map((chain, i) => (
+            <View key={chain.key}>
+              {i > 0 ? <RowSeparator indent={0} /> : null}
+              <View style={STYLES.head}>
+                <Text style={[STYLES.key, { fontFamily: fonts.monoSemibold, fontSize: fontSizes.md, color: colors.ink }]}>
+                  #{chain.key}
+                </Text>
+                {chain.isLaunch ? <Pill tone="on">launch</Pill> : <Pill off>on demand</Pill>}
+              </View>
+              <Phases phases={chain.phases} />
             </View>
-            <Phases phases={chain.phases} />
-          </View>
-        ))
+          ))}
+        </RowGroup>
       )}
       {isLaunchless(workgroup) ? (
         <Note>{EMPTY.launchPipeline.title}. {EMPTY.launchPipeline.hint}</Note>

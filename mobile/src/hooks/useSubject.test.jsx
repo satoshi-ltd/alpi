@@ -4,6 +4,7 @@ import { renderHook, act, waitFor } from "@testing-library/react";
 import { EndpointContext } from "../lib/EndpointContext";
 import { useProfile } from "./useSubject";
 
+vi.mock("../theme/ThemeContext", () => ({ useTheme: () => ({ colors: { accent: "#14110c" } }) }));
 vi.mock("./useEvents", () => ({
   useEventEffect: vi.fn(),
 }));

@@ -1,7 +1,9 @@
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { radii, space, lineHeights } from '../../theme/tokens';
 
-import { Diamond } from '../../components/Diamond';
+import { WORKGROUP_FOLD } from '../../../../common/folds.mjs';
+import { Crease } from '../../components/Crease';
+import { Fold } from '../../components/Fold';
 import { Icon } from '../../components/Icon';
 import { MetaStrip } from '../../components/MetaStrip';
 import { useShowBack } from '../../hooks/useShowBack';
@@ -9,7 +11,7 @@ import { CHROME_BTN, PANE_PAD_X, tapSlop } from '../../lib/panes';
 import { usePane } from '../../nav/PaneContext';
 import { useTheme } from '../../theme/ThemeContext';
 
-const STRIPE_H = 1.5;
+const CREASE_MIN_SIZE = 28;
 
 export function headerMenuActions({
   noun = 'profile',
@@ -71,7 +73,7 @@ function HeaderButton({ label, onPress, children }) {
       style={({ pressed }) => ({
         width: CHROME_BTN,
         height: CHROME_BTN,
-        borderRadius: radii.md,
+        borderRadius: radii.xs,
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: pressed ? colors.selected : 'transparent',
@@ -91,11 +93,12 @@ function SessionsTrigger({ onPress }) {
   );
 }
 
-export function ChatHeader({ kind, accent, title, meta, onBack, onMore, onPickSession, right }) {
+export function ChatHeader({ kind, accent, fold, creased = false, paused = false, title, meta, onBack, onMore, onPickSession, right }) {
   const { colors, fonts, fontSizes } = useTheme();
   const { twoPane, sidebarOpen, toggleSidebar } = usePane();
   const showBack = useShowBack(onBack);
   const titleSize = fontSizes.xl;
+  const showCrease = creased && typeof accent === 'string' && typeof title === 'string' && title.length > 0;
   const showSidebarToggle = twoPane && !sidebarOpen;
 
   return (
@@ -136,23 +139,23 @@ export function ChatHeader({ kind, accent, title, meta, onBack, onMore, onPickSe
       ) : null}
       <View style={{ flex: 1, minWidth: 0, flexDirection: 'column' }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: twoPane ? space.s5 : space.s2 }}>
-          {kind === 'profile' ? (
-            <Diamond color={accent} size="md" />
+          <Fold fold={kind === 'profile' ? fold : WORKGROUP_FOLD} color={accent} size="md" unfolded={paused} />
+          {showCrease ? (
+            <Crease text={title} accent={paused ? colors.ink3 : accent} size={Math.max(CREASE_MIN_SIZE, titleSize)} style={{ flex: 1 }} />
           ) : (
-            <Text style={{ fontFamily: fonts.monoMedium, fontSize: titleSize, color: twoPane ? colors.ink4 : colors.ink3 }}>#</Text>
+            <Text
+              numberOfLines={1}
+              style={{
+                flex: 1,
+                fontFamily: fonts.sans.semibold,
+                fontSize: titleSize,
+                lineHeight: titleSize * lineHeights.cozy,
+                color: colors.ink,
+              }}
+            >
+              {title}
+            </Text>
           )}
-          <Text
-            numberOfLines={1}
-            style={{
-              flex: 1,
-              fontFamily: fonts.sans.semibold,
-              fontSize: titleSize,
-              lineHeight: titleSize * lineHeights.cozy,
-              color: colors.ink,
-            }}
-          >
-            {title}
-          </Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 0 }}>
             {right}
             {onPickSession ? <SessionsTrigger onPress={onPickSession} /> : null}
@@ -194,16 +197,6 @@ export function ChatHeader({ kind, accent, title, meta, onBack, onMore, onPickSe
           )
         ) : null}
       </View>
-      <View
-        style={{
-          position: 'absolute',
-          left: PANE_PAD_X,
-          bottom: -0.5,
-          height: STRIPE_H,
-          width: space.s11,
-          backgroundColor: accent ?? colors.accent,
-        }}
-      />
     </View>
   );
 }

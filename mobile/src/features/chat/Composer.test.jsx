@@ -146,3 +146,10 @@ describe('composer text and keyboard', () => {
     expect(bottomPad()).toBe(COMPOSER_PAD_Y);
   });
 });
+
+describe('initial text', () => {
+  it('starts with the text a reply hands it', () => {
+    render(<Composer onSend={() => {}} initialText={'> **Digest**\n\n'} />);
+    expect(document.querySelector('textarea').value).toBe('> **Digest**\n\n');
+  });
+});

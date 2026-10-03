@@ -49,8 +49,8 @@ vi.mock('../lib/profileReady', () => ({
   profileEmptyState: (p) => (p?.incomplete ? 'needs-provider' : p?.modelless ? 'needs-model' : 'ready'),
 }));
 vi.mock('../lib/profileName', () => ({ profileLabel: (name) => name }));
-vi.mock('../theme/accents', () => ({ accentForProfile: () => '#000000' }));
 
+import { FALLBACK_ACCENT } from '../../../common/folds.mjs';
 import { useInbox } from './useInbox';
 
 let seen;
@@ -107,6 +107,43 @@ describe('useInbox roster membership', () => {
     h.workgroups = [{ id: 'wg1', name: 'alpha', profile: 'doc' }];
     render(<Probe />);
     expect(seen.items.map((i) => i.id)).toEqual(['doc', 'wg1']);
+  });
+});
+
+describe('useInbox profile fold', () => {
+  it('carries the summary fold onto the profile row', () => {
+    h.profiles = [{ ...fresh('doc'), fold: 'shield' }];
+    render(<Probe />);
+    expect(seen.items[0].fold).toBe('shield');
+  });
+
+  it('leaves the fold undefined for a daemon that does not send one', () => {
+    h.profiles = [fresh('doc')];
+    render(<Probe />);
+    expect(seen.items[0].fold).toBeUndefined();
+  });
+});
+
+describe('useInbox accent', () => {
+  it('paints a profile with the accent its summary carries', () => {
+    h.profiles = [{ ...fresh('doc'), accent: '#3ac9f3' }];
+    render(<Probe />);
+    expect(seen.items[0].accent).toBe('#3ac9f3');
+  });
+
+  it('falls back to the shared accent instead of a colour picked by name', () => {
+    h.profiles = [fresh('lex'), fresh('ghost')];
+    render(<Probe />);
+    expect(seen.items.map((i) => i.accent)).toEqual([FALLBACK_ACCENT, FALLBACK_ACCENT]);
+  });
+
+  it('borrows the hub accent for a workgroup, or the shared fallback when the hub is unknown', () => {
+    h.profiles = [{ ...withSession('doc', 60), accent: '#3ac9f3' }];
+    h.workgroups = [{ ...wg('alpha', 30), hub_id: 'doc' }, { ...wg('beta', 20), hub_id: 'lex' }];
+    render(<Probe />);
+    const accentOf = (id) => seen.items.find((i) => i.id === id).accent;
+    expect(accentOf('alpha')).toBe('#3ac9f3');
+    expect(accentOf('beta')).toBe(FALLBACK_ACCENT);
   });
 });
 

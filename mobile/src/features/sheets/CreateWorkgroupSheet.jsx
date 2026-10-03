@@ -3,8 +3,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { mobile, radii, space } from '../../theme/tokens';
 
+import { FALLBACK_ACCENT } from '../../../../common/folds.mjs';
 import { ActionSheet } from '../../components/ActionSheet';
-import { Diamond } from '../../components/Diamond';
+import { Fold } from '../../components/Fold';
 import { Field, FieldLabel } from '../../components/Field';
 import { Icon } from '../../components/Icon';
 import { Sheet } from '../../components/Sheet';
@@ -14,7 +15,6 @@ import { useProfile } from '../../hooks/useSubject';
 import { useEndpoint } from '../../lib/EndpointContext';
 import { openVerb } from '../../lib/panes';
 import { usePane } from '../../nav/PaneContext';
-import { accentForProfile } from '../../theme/accents';
 import { useTheme } from '../../theme/ThemeContext';
 
 const CHIP_H = 32;
@@ -133,14 +133,14 @@ export function CreateWorkgroupSheet({ open, onClose }) {
                 backgroundColor: pressed ? colors.selected : colors.bgInput,
                 borderWidth: 0.5,
                 borderColor: colors.line2,
-                borderRadius: radii.xl,
+                borderRadius: radii.xs,
                 paddingHorizontal: space.s6,
                 minHeight: mobile.tap,
               })}
             >
               {hubSummary ? (
                 <>
-                  <Diamond color={hubSummary.accent ?? accentForProfile(hubSummary.name)} />
+                  <Fold fold={hubSummary.fold} color={hubSummary.accent ?? FALLBACK_ACCENT} />
                   <Text style={{ flex: 1, fontFamily: fonts.mono, fontSize: fontSizes.md, color: colors.ink }}>
                     @{hubSummary.name}
                   </Text>
@@ -180,7 +180,7 @@ export function CreateWorkgroupSheet({ open, onClose }) {
                 {peers.map((peer) => {
                   const on = members.has(peer.id);
                   const local = (summaries.data?.profiles ?? []).find((x) => x.pubkey_b64 === peer.pubkey);
-                  const peerAccent = local?.accent ?? accentForProfile(peer.id);
+                  const peerAccent = local?.accent ?? FALLBACK_ACCENT;
                   return (
                     <Pressable
                       key={peer.id}
@@ -193,13 +193,13 @@ export function CreateWorkgroupSheet({ open, onClose }) {
                         gap: space.s2,
                         paddingHorizontal: space.s5,
                         height: CHIP_H,
-                        borderRadius: radii.pill,
+                        borderRadius: radii.tag,
                         backgroundColor: on ? `${peerAccent}33` : colors.hover,
                         borderWidth: on ? 1 : 0,
                         borderColor: on ? peerAccent : 'transparent',
                       }}
                     >
-                      <Diamond color={peerAccent} />
+                      <Fold fold={local?.fold} color={peerAccent} />
                       <Text
                         style={{
                           fontFamily: fonts.mono,
@@ -234,7 +234,7 @@ export function CreateWorkgroupSheet({ open, onClose }) {
         subtitle="WORKGROUP HUB"
         actions={eligibleHubs.map((p) => ({
           id: p.name,
-          icon: <Diamond color={p.accent ?? accentForProfile(p.name)} size="md" />,
+          icon: <Fold fold={p.fold} color={p.accent ?? FALLBACK_ACCENT} size="md" />,
           label: `@${p.name}`,
           detail: p.model || undefined,
           selected: hub === p.name,

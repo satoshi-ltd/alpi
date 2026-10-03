@@ -1,12 +1,16 @@
+import { mixHex } from "../../../../common/color.mjs";
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 
-import { Diamond } from '../../components/Diamond';
+import { Icon } from '../../components/Icon';
 import { Sheet } from '../../components/Sheet';
 import { warning } from '../../lib/haptics';
 import { lineHeights, radii, space } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeContext';
 import { useApprovalQueue } from './useApprovalQueue';
+import { Fold } from '../../components/Fold';
+import { useProfileSummaries } from '../../hooks/useDaemonData';
+import { profileLabel } from '../../lib/profileName';
 
 const ALLOW_CHOICES = [
   { value: 'once',    label: 'Allow once',        hint: 'just this invocation' },
@@ -17,6 +21,8 @@ const ALLOW_CHOICES = [
 export function ApprovalSheet() {
   const { colors, fonts, fontSizes } = useTheme();
   const { current, busy, error, respond } = useApprovalQueue();
+  const summaries = useProfileSummaries();
+  const asker = summaries.data?.profiles?.find((p) => p.name === current?.profile);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -56,38 +62,25 @@ export function ApprovalSheet() {
         <View style={{ paddingHorizontal: space.s8, paddingTop: space.s1, paddingBottom: space.s8, gap: space.s6 }}>
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space.s5 }}>
             <View style={{ flex: 1, gap: space.s2 }}>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' }}>
-                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.danger, letterSpacing: 0.6 }}>
-                  ALERT
-                </Text>
-                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink4, letterSpacing: 0.6 }}>
-                  {' · '}
-                </Text>
-                <View style={{ paddingRight: space.s2 }}>
-                  <Diamond color={colors.danger} />
-                </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3 }}>
                 {current.profile ? (
-                  <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink2, letterSpacing: 0.6 }}>
-                    {`@${current.profile.toUpperCase()}`}
-                  </Text>
-                ) : null}
-                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink4, letterSpacing: 0.6 }}>
-                  {' · '}
-                </Text>
-                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink3, letterSpacing: 0.6 }}>
-                  SHELL
-                </Text>
-                {eyebrow.tail ? (
                   <>
-                    <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink4, letterSpacing: 0.6 }}>
-                      {' · '}
-                    </Text>
-                    <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink3, letterSpacing: 0.6 }}>
-                      {eyebrow.tail}
+                    <Fold fold={asker?.fold} color={asker?.accent ?? undefined} />
+                    <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.md, color: colors.ink }}>
+                      {profileLabel(current.profile)}
                     </Text>
                   </>
                 ) : null}
+                <Text numberOfLines={1} style={{ flexShrink: 1, fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink3 }}>
+                  wants to run a command
+                </Text>
+                <View accessible accessibilityRole="image" accessibilityLabel="needs your approval">
+                  <Icon name="triangle-alert" size="sm" color={colors.danger} />
+                </View>
               </View>
+              {eyebrow.tail ? (
+                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink3 }}>{eyebrow.tail.toLowerCase()}</Text>
+              ) : null}
               <Text
                 style={{
                   fontFamily: fonts.sans.bold,
@@ -106,7 +99,7 @@ export function ApprovalSheet() {
               style={{
                 maxHeight: 160,
                 backgroundColor: colors.bgInput,
-                borderRadius: radii['3xl'],
+                borderRadius: radii.xs,
                 borderWidth: 0.5,
                 borderColor: colors.line2,
               }}
@@ -136,7 +129,7 @@ export function ApprovalSheet() {
                 style={({ pressed }) => ({
                   paddingVertical: space.s5,
                   paddingHorizontal: space.s5,
-                  borderRadius: radii.lg,
+                  borderRadius: radii.xs,
                   backgroundColor: pressed ? colors.hover : 'transparent',
                   opacity: busy ? 0.5 : 1,
                 })}
@@ -167,10 +160,10 @@ export function ApprovalSheet() {
             style={({ pressed }) => ({
               alignSelf: 'stretch',
               paddingVertical: space.s6,
-              borderRadius: radii.lg,
-              backgroundColor: colors.danger,
+              borderRadius: radii.xs,
+              backgroundColor: pressed && !busy ? mixHex(colors.danger, 0.82, '#000000') : colors.danger,
               alignItems: 'center',
-              opacity: busy ? 0.4 : pressed ? 0.85 : 1,
+              opacity: busy ? 0.4 : 1,
             })}
           >
             <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.lg, color: colors.bgPane }}>

@@ -11,7 +11,7 @@ import { AdminGuard } from '../../src/components/AdminGuard';
 import { Icon } from '../../src/components/Icon';
 import { Toggle } from '../../src/components/Toggle';
 import { Pill } from '../../src/components/Pill';
-import { Row, RowSeparator, SectionHeader, SettingsBand } from '../../src/components/Row';
+import { Row, RowGroup, RowSeparator, SectionHeader, SettingsBand } from '../../src/components/Row';
 import { ScreenHeader } from '../../src/components/ScreenHeader';
 import { SyncBar } from '../../src/components/SyncBar';
 import { TextPrompt } from '../../src/components/TextPrompt';
@@ -43,7 +43,7 @@ function RevokeButton({ label, onPress }) {
       style={({ pressed }) => ({
         width: 40,
         height: 40,
-        borderRadius: radii.md,
+        borderRadius: radii.xs,
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: pressed ? colors.selected : 'transparent',
@@ -139,105 +139,113 @@ function ConnectionDetail() {
         refreshControl={<RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={colors.ink3} />}
       >
         <SectionHeader first>Overview</SectionHeader>
-        {isHost ? (
-          <Row label="Local host" helper="alpi setup, the TUI and the CLI on the daemon's machine" chevron={false} />
-        ) : (
-          <>
-            <Row label="Label" value={row.label || row.id} onPress={() => setPrompt('label')} />
-            <RowSeparator />
-            <Row
-              label="Role"
-              helper={row.role === 'admin' ? 'manages profiles and connections' : 'chat + settings of scoped profiles'}
-              value={<Pill tone={row.role === 'admin' ? 'warn' : undefined}>{row.role}</Pill>}
-              onPress={() => setConfirm('role')}
-              chevron={false}
-            />
-            {row.role !== 'admin' ? (
-              <>
-                <RowSeparator />
-                <Row label="Profiles" helper="blank = all" value={scopeLabel(row)} onPress={() => setScopeOpen(true)} />
-                <RowSeparator />
-                <Row
-                  label="Session scope"
-                  helper={perDevice ? 'each device sees only the chats it started' : 'every device sees every chat'}
-                  value={sessionScopeLabel(row)}
-                  onPress={() => setConfirm('scope')}
-                />
-              </>
-            ) : null}
-            <RowSeparator />
-            <Row
-              label="Enabled"
-              helper={
-                disabled
-                  ? 'devices reconnect with their existing tokens'
-                  : isSelf
-                    ? 'this phone goes offline with it · an admin elsewhere must re-enable it'
-                    : 'every device goes offline · sessions and usage stay'
-              }
-              value={
-                <Toggle
-                  on={!disabled}
-                  label="Enabled"
-                  onChange={async (next) => {
-                    if (!next && isSelf) {
-                      setConfirm('disable');
-                      return false;
-                    }
-                    const result = await act('host.connections.set_status', { status: next ? 'active' : 'disabled' }, next ? 'Connection enabled' : 'Connection disabled');
-                    return result !== null;
-                  }}
-                />
-              }
-              chevron={false}
-            />
-          </>
-        )}
-        <RowSeparator />
-        <Row label="Sessions" value={String(row.sessions ?? 0)} chevron={false} />
-        <RowSeparator />
-        <Row label="Last seen" value={relativeSeen(row.last_seen)} chevron={false} />
+        <RowGroup>
+          {isHost ? (
+            <Row label="Local host" helper="alpi setup, the TUI and the CLI on the daemon's machine" chevron={false} />
+          ) : (
+            <>
+              <Row label="Label" value={row.label || row.id} onPress={() => setPrompt('label')} />
+              <RowSeparator />
+              <Row
+                label="Role"
+                helper={row.role === 'admin' ? 'manages profiles and connections' : 'chat + settings of scoped profiles'}
+                value={<Pill tone={row.role === 'admin' ? 'warn' : undefined}>{row.role}</Pill>}
+                onPress={() => setConfirm('role')}
+                chevron={false}
+              />
+              {row.role !== 'admin' ? (
+                <>
+                  <RowSeparator />
+                  <Row label="Profiles" helper="blank = all" value={scopeLabel(row)} onPress={() => setScopeOpen(true)} />
+                  <RowSeparator />
+                  <Row
+                    label="Session scope"
+                    helper={perDevice ? 'each device sees only the chats it started' : 'every device sees every chat'}
+                    value={sessionScopeLabel(row)}
+                    onPress={() => setConfirm('scope')}
+                  />
+                </>
+              ) : null}
+              <RowSeparator />
+              <Row
+                label="Enabled"
+                helper={
+                  disabled
+                    ? 'devices reconnect with their existing tokens'
+                    : isSelf
+                      ? 'this phone goes offline with it · an admin elsewhere must re-enable it'
+                      : 'every device goes offline · sessions and usage stay'
+                }
+                value={
+                  <Toggle
+                    on={!disabled}
+                    label="Enabled"
+                    onChange={async (next) => {
+                      if (!next && isSelf) {
+                        setConfirm('disable');
+                        return false;
+                      }
+                      const result = await act('host.connections.set_status', { status: next ? 'active' : 'disabled' }, next ? 'Connection enabled' : 'Connection disabled');
+                      return result !== null;
+                    }}
+                  />
+                }
+                chevron={false}
+              />
+            </>
+          )}
+          <RowSeparator />
+          <Row label="Sessions" value={String(row.sessions ?? 0)} chevron={false} />
+          <RowSeparator />
+          <Row label="Last seen" value={relativeSeen(row.last_seen)} chevron={false} />
+        </RowGroup>
 
         <SectionHeader kicker="last 14 days">Usage</SectionHeader>
-        {usageDays.length ? (
-          <SettingsBand>
-            <UsageChart days={usageDays} />
-          </SettingsBand>
-        ) : (
-          <Row label={EMPTY.usage.title} value={formatUsd(row.cost_14d)} chevron={false} />
-        )}
+        <RowGroup>
+          {usageDays.length ? (
+            <SettingsBand>
+              <UsageChart days={usageDays} />
+            </SettingsBand>
+          ) : (
+            <Row label={EMPTY.usage.title} value={formatUsd(row.cost_14d)} chevron={false} />
+          )}
+        </RowGroup>
 
         {!isHost ? (
           <>
             <SectionHeader kicker={`${devices.length} paired`}>Devices</SectionHeader>
-            {devices.length === 0 ? (
-              <Row label={EMPTY.devices.title} helper={EMPTY.devices.hint} chevron={false} />
-            ) : (
-              devices.map((d, i) => (
-                <View key={d.id}>
-                  {i > 0 ? <RowSeparator /> : null}
-                  <Row
-                    label={deviceTitle(d)}
-                    item
-                    helper={deviceMeta(d)}
-                    value={d.id === thisDevice ? <Pill tone="on">this phone</Pill> : d.expired ? <Pill tone="warn">expired</Pill> : undefined}
-                    trailing={<RevokeButton label={`Revoke ${deviceTitle(d)}`} onPress={() => setConfirm({ revoke: d })} />}
-                    chevron={false}
-                  />
-                </View>
-              ))
-            )}
-            <RowSeparator />
-            <Row label="+ Add device" helper="one-time pairing link" onPress={() => setAddOpen(true)} chevron={false} />
+            <RowGroup>
+              {devices.length === 0 ? (
+                <Row label={EMPTY.devices.title} helper={EMPTY.devices.hint} chevron={false} />
+              ) : (
+                devices.map((d, i) => (
+                  <View key={d.id}>
+                    {i > 0 ? <RowSeparator /> : null}
+                    <Row
+                      label={deviceTitle(d)}
+                      item
+                      helper={deviceMeta(d)}
+                      value={d.id === thisDevice ? <Pill tone="on">this phone</Pill> : d.expired ? <Pill tone="warn">expired</Pill> : undefined}
+                      trailing={<RevokeButton label={`Revoke ${deviceTitle(d)}`} onPress={() => setConfirm({ revoke: d })} />}
+                      chevron={false}
+                    />
+                  </View>
+                ))
+              )}
+              <RowSeparator />
+              <Row label="+ Add device" helper="one-time pairing link" onPress={() => setAddOpen(true)} chevron={false} />
+            </RowGroup>
 
             <SectionHeader>Danger zone</SectionHeader>
-            <Row
-              label="Delete connection"
-              helper={isSelf ? 'this phone is paired through it · you would be signed out' : 'revokes every device · sessions and usage stay attributed'}
-              danger
-              chevron={false}
-              onPress={() => setConfirm('delete')}
-            />
+            <RowGroup>
+              <Row
+                label="Delete connection"
+                helper={isSelf ? 'this phone is paired through it · you would be signed out' : 'revokes every device · sessions and usage stay attributed'}
+                danger
+                chevron={false}
+                onPress={() => setConfirm('delete')}
+              />
+            </RowGroup>
           </>
         ) : null}
       </ScrollView>

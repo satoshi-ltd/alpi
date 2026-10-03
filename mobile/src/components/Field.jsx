@@ -3,6 +3,7 @@ import { radii, space, lineHeights } from '../theme/tokens';
 
 import { Eyebrow } from './Eyebrow';
 import { useTheme } from '../theme/ThemeContext';
+import { useWell } from './well';
 
 export function FieldLabel({ children }) {
   return <Eyebrow>{children}</Eyebrow>;
@@ -25,15 +26,14 @@ export function Field({
   error,
 }) {
   const { colors, fonts, fontSizes, mobile } = useTheme();
+  const [well, focus] = useWell(colors, !!error);
   return (
     <View style={{ gap: space.s2 }}>
       {label ? <FieldLabel>{label}</FieldLabel> : null}
       <View
         style={{
-          backgroundColor: editable ? colors.bgInput : colors.bgPane,
-          borderRadius: radii.xl,
-          borderWidth: 0.5,
-          borderColor: error ? colors.dangerText : colors.line2,
+          ...well,
+          ...(editable ? null : { backgroundColor: colors.bgPane }),
           paddingHorizontal: space.s5,
           paddingVertical: multiline ? 12 : 0,
           minHeight: multiline ? rows * 22 + 24 : mobile.inputH,
@@ -47,6 +47,7 @@ export function Field({
           onChangeText={onChangeText}
           placeholder={placeholder}
           placeholderTextColor={colors.ink3}
+          {...focus}
           multiline={multiline}
           editable={editable}
           keyboardType={keyboardType}

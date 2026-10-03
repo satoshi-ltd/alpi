@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Modal, Text, View } from 'react-native';
+import { Animated, Easing, Modal, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { radii, space } from '../theme/tokens';
+import { mobile, radii, space } from '../theme/tokens';
 
 import { useTheme } from '../theme/ThemeContext';
 import { plainError } from '../../../common/plainError.mjs';
@@ -32,6 +32,15 @@ export function ToastProvider({ children }) {
   const fade = useRef(new Animated.Value(0)).current;
   const timer = useRef(null);
 
+  const hide = useCallback(() => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+    Animated.parallel([
+      Animated.timing(slide, { toValue: -100, duration: 200, useNativeDriver: true }),
+      Animated.timing(fade, { toValue: 0, duration: 200, useNativeDriver: true }),
+    ]).start(() => setToast(null));
+  }, [slide, fade]);
+
   const show = useCallback(
     (next) => {
       if (timer.current) clearTimeout(timer.current);
@@ -41,15 +50,9 @@ export function ToastProvider({ children }) {
         Animated.timing(slide, { toValue: 0, duration: 220, useNativeDriver: true }),
         Animated.timing(fade, { toValue: 1, duration: 220, useNativeDriver: true }),
       ]).start();
-      const duration = next?.duration ?? 2800;
-      timer.current = setTimeout(() => {
-        Animated.parallel([
-          Animated.timing(slide, { toValue: -100, duration: 200, useNativeDriver: true }),
-          Animated.timing(fade, { toValue: 0, duration: 200, useNativeDriver: true }),
-        ]).start(() => setToast(null));
-      }, duration);
+      timer.current = setTimeout(hide, next?.duration ?? 2800);
     },
-    [slide, fade],
+    [slide, fade, hide],
   );
 
   useEffect(
@@ -62,13 +65,13 @@ export function ToastProvider({ children }) {
   return (
     <ToastContext.Provider value={show}>
       {children}
-      {toast ? <ToastView toast={toast} slide={slide} fade={fade} /> : null}
+      {toast ? <ToastView toast={toast} slide={slide} fade={fade} onDismiss={hide} /> : null}
     </ToastContext.Provider>
   );
 }
 
-function ToastView({ toast, slide, fade }) {
-  const { colors, fonts, fontSizes } = useTheme();
+function ToastView({ toast, slide, fade, onDismiss }) {
+  const { colors, fonts, fontSizes, shadow } = useTheme();
   const kind = toast.kind ?? inferKind(toast.title);
   const dotColor = dotColorFor(kind, colors);
   const pulse = useRef(new Animated.Value(1)).current;
@@ -83,6 +86,11 @@ function ToastView({ toast, slide, fade }) {
     loop.start();
     return () => loop.stop();
   }, [kind, pulse]);
+  const actionable = !!(toast.action && toast.onAction);
+  const onAction = () => {
+    onDismiss();
+    toast.onAction();
+  };
 
   // <Modal> here forces a higher native layer than bottom-sheet Modals; <View pointerEvents="box-none"> is required so taps fall through.
   return (
@@ -101,19 +109,15 @@ function ToastView({ toast, slide, fade }) {
           style={{ position: 'absolute', left: 0, right: 0, top: 0, alignItems: 'center', paddingHorizontal: space.s7 }}
         >
           <Animated.View
-            pointerEvents="none"
+            pointerEvents={actionable ? 'box-none' : 'none'}
             style={{
               marginVertical: space.s7,
               width: '100%',
               maxWidth: 560,
               padding: space.s6,
               backgroundColor: colors.bgPane,
-              borderRadius: radii.xl,
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 8 },
-              shadowOpacity: 0.18,
-              shadowRadius: 18,
-              elevation: 12,
+              borderRadius: radii.xs,
+              ...shadow.base,
               transform: [{ translateY: slide }],
               opacity: fade,
               flexDirection: 'row',
@@ -150,6 +154,26 @@ function ToastView({ toast, slide, fade }) {
                 </Text>
               ) : null}
             </View>
+            {actionable ? (
+              <Pressable
+                onPress={onAction}
+                accessibilityRole="button"
+                accessibilityLabel={toast.action}
+                style={({ pressed }) => ({
+                  minHeight: mobile.tap,
+                  minWidth: mobile.tap,
+                  marginVertical: -space.s4,
+                  marginRight: -space.s3,
+                  paddingHorizontal: space.s4,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: radii.xs,
+                  backgroundColor: pressed ? colors.selected : 'transparent',
+                })}
+              >
+                <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.md, color: colors.ink }}>{toast.action}</Text>
+              </Pressable>
+            ) : null}
           </Animated.View>
         </SafeAreaView>
       </View>

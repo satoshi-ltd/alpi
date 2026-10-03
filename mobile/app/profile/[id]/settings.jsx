@@ -2,16 +2,18 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { radii, space } from '../../../src/theme/tokens';
+import { space } from '../../../src/theme/tokens';
 
+import { pairName } from '../../../../common/accents.mjs';
+import { FALLBACK_ACCENT } from '../../../../common/folds.mjs';
 import { toUsageDays } from '../../../../common/usage.mjs';
 import { Button } from '../../../src/components/Button';
-import { Diamond } from '../../../src/components/Diamond';
+import { Fold } from '../../../src/components/Fold';
 import { Meter } from '../../../src/components/Meter';
 import { Eyebrow } from '../../../src/components/Eyebrow';
 import { Toggle } from '../../../src/components/Toggle';
 import { Pill } from '../../../src/components/Pill';
-import { Row, RowSeparator, SectionHeader, SettingsBand } from '../../../src/components/Row';
+import { Row, RowGroup, RowSeparator, SectionHeader, SettingsBand } from '../../../src/components/Row';
 import { ScreenHeader } from '../../../src/components/ScreenHeader';
 import { SettingsSkeleton } from '../../../src/components/SettingsSkeleton';
 import { SyncBar } from '../../../src/components/SyncBar';
@@ -35,7 +37,7 @@ import {
 } from '../../../src/hooks/useDaemonData';
 import { useProfile } from '../../../src/hooks/useSubject';
 import { useEndpoint } from '../../../src/lib/EndpointContext';
-import { AccentSheet } from '../../../src/features/sheets/AccentSheet';
+import { AppearanceSheet } from '../../../src/features/sheets/AppearanceSheet';
 import {
   BudgetSheet,
   CleanupSheet,
@@ -46,7 +48,6 @@ import {
 } from '../../../src/features/sheets/ProfileFieldSheets';
 import { usePane } from '../../../src/nav/PaneContext';
 import { SettingsSurface } from '../../../src/nav/SettingsSurface';
-import { accentForProfile } from '../../../src/theme/accents';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { voiceLabel } from '../../../src/lib/voices';
 import { EMPTY } from '../../../../common/emptyCopy.mjs';
@@ -194,7 +195,8 @@ export default function ProfileSettings() {
     );
   }
 
-  const accent = profile.accent ?? accentForProfile(profile.name);
+  const accent = profile.accent ?? FALLBACK_ACCENT;
+  const locked = profile.name === 'default';
   const emailSection = sectionData(snap.data?.email);
   const scheduleSection = sectionData(snap.data?.schedules);
   const storageSection = sectionData(snap.data?.storage);
@@ -295,7 +297,7 @@ export default function ProfileSettings() {
         subtitle={twoPane ? 'SETTINGS' : 'PROFILE · SETTINGS'}
         onBack={goBack}
         accent={accent}
-        leadingGlyph={<Diamond color={accent} size="md" />}
+        leadingGlyph={<Fold fold={profile.fold} color={accent} size="md" />}
         meta={
           <>
             {profile.model ? (
@@ -323,409 +325,440 @@ export default function ProfileSettings() {
         refreshControl={<RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={colors.ink3} />}
       >
         <SectionHeader first>Overview</SectionHeader>
-        <Row
-          label="Paused"
-          helper="paused profiles can't be chatted and sort last in new-chat"
-          value={
-            <Toggle
-              on={!!profile.paused}
-              label="Paused"
-              color={accent}
-              onChange={(next) => saveField('paused', next ? 'true' : 'false').catch(failing('Save failed'))}
-            />
-          }
-          chevron={false}
-        />
-        <RowSeparator />
-        <Row
-          label="Providers"
-          helper={providers.length ? (twoPane ? 'API keys + local Ollama' : providers.join(' · ')) : EMPTY.providers.hint}
-          value={twoPane && providers.length ? <ChipRow items={providers} /> : providers.length ? String(providers.length) : EMPTY.providers.title}
-          onPress={() => router.push(`/profile/${id}/providers`)}
-        />
-        <RowSeparator />
-        <Row
-          label="Model"
-          value={profile.model ? modelLabel(profile.model) : '—'}
-          onPress={() => setSheet('model')}
-        />
-        {profile.model_reasoning_supported && (
-          <>
-            <RowSeparator />
-            <Row
-              label="Reasoning"
-              helper="how hard the model thinks before answering"
-              value={(profile.model_reasoning_effort || 'default')}
-              onPress={() => setSheet('reasoning')}
-            />
-          </>
-        )}
-        {profile.tiers ? (
-          <>
-            <RowSeparator />
-            <Row
-              label="Fast model"
-              helper="cheap model for side-tasks & delegation"
-              value={tierValue(profile.tiers.fast)}
-              onPress={() => setSheet('tierFast')}
-            />
-            {profile.tiers.fast?.reasoning_supported && (
-              <>
-                <RowSeparator />
-                <Row
-                  label="Fast reasoning"
-                  value={(profile.tiers.fast.effort || 'default')}
-                  onPress={() => setSheet('tierFastReasoning')}
-                />
-              </>
-            )}
-            <RowSeparator />
-            <Row
-              label="Deep model"
-              helper="stronger model for escalation & deep research"
-              value={tierValue(profile.tiers.deep)}
-              onPress={() => setSheet('tierDeep')}
-            />
-            {profile.tiers.deep?.reasoning_supported && (
-              <>
-                <RowSeparator />
-                <Row
-                  label="Deep reasoning"
-                  value={(profile.tiers.deep.effort || 'default')}
-                  onPress={() => setSheet('tierDeepReasoning')}
-                />
-              </>
-            )}
-          </>
-        ) : null}
-        {profile.vision_model !== undefined ? (
-          <>
-            <RowSeparator />
-            <Row
-              label="Vision model"
-              helper="image inspection via read_image"
-              value={profile.vision_model ? modelLabel(profile.vision_model) : 'main model'}
-              onPress={() => setSheet('vision')}
-            />
-          </>
-        ) : null}
-        <RowSeparator />
-        <Row
-          label="Budget"
-          helper="daily spend cap"
-          value={budgetValue}
-          onPress={() => setSheet('budget')}
-        />
-        <RowSeparator />
-        <Row
-          label="Workspace"
-          value={profile.workspace ?? 'not set'}
-          onPress={() => setSheet('workspace')}
-        />
-        <RowSeparator />
-        <Row
-          label="Accent"
-          value={
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2 }}>
-              <View style={{ width: 14, height: 14, borderRadius: radii.md, backgroundColor: accent }} />
-              <Text style={{ fontFamily: fonts.monoMedium, fontSize: fontSizes.sm, color: colors.ink3 }}>
-                {accent}
-              </Text>
-            </View>
-          }
-          onPress={() => setSheet('accent')}
-        />
-        <RowSeparator />
-        <Row label="Home" value={`~/.alpi/profiles/${profile.name}`} chevron={false} />
-
-        <SectionHeader kicker="last 14 days">Usage</SectionHeader>
-        {usageDays.length === 0 && snap.loading ? (
-          <Row label="Loading usage…" chevron={false} />
-        ) : usageDays.length === 0 ? (
-          <Row label={EMPTY.usage.title} helper={EMPTY.usage.hint} chevron={false} />
-        ) : (
-          <SettingsBand>
-            <UsageChart
-              days={usageDays}
-              accent={accent}
-              capLine={capUsd != null ? Number(capUsd) : null}
-              total30={usageSection?.total30 ?? null}
-            />
-          </SettingsBand>
-        )}
-
-        <SectionHeader kicker="how peers see this agent">Identity</SectionHeader>
-        {twoPane ? (
-          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space.s9, paddingVertical: space.s3 }}>
-            <View style={{ width: WIDE_LABEL_W, flexShrink: 1, paddingTop: space.s3 }}>
-              <Eyebrow color={colors.ink3}>Identity</Eyebrow>
-            </View>
-            <View style={{ flex: 1, maxWidth: 520 }}>
-              <IdentityEditor profileId={id} profile={profile} call={call} onSaved={refreshSettings} />
-            </View>
-          </View>
-        ) : (
+        <RowGroup>
           <Row
-            label={profile.bio ? profile.bio : 'Set identity prompt'}
-            helper={profile.bio ? undefined : 'one-line public bio · draft it from AGENT.md'}
-            labelLines={2}
-            onPress={() => router.push(`/profile/${id}/identity`)}
-          />
-        )}
-
-        <SectionHeader kicker="daemon">Service</SectionHeader>
-        {twoPane ? (
-          <Row
-            label="Daemon"
-            helper={manualStep ? `${manualStep} Restart exits and the supervisor relaunches.` : 'update installs the newest alpi · restart exits and the supervisor relaunches'}
-            helperLines={0}
+            label="Paused"
+            helper="paused profiles can't be chatted and sort last in new-chat"
             value={
-              <View style={{ flexDirection: 'row', gap: space.s3 }}>
-                {selfUpdate ? (
-                  <Button
-                    title="Update alpi"
-                    variant="secondary"
-                    size="sm"
-                    loading={updateBusy}
-                    disabled={restartBusy}
-                    onPress={() => setConfirmUpdate(true)}
-                  />
-                ) : null}
-                <Button
-                  title="Restart daemon"
-                  variant="secondary"
-                  size="sm"
-                  loading={restartBusy}
-                  disabled={updateBusy}
-                  onPress={() => setConfirmRestart(true)}
-                />
-              </View>
+              <Toggle
+                on={!!profile.paused}
+                label="Paused"
+                color={accent}
+                onChange={(next) => saveField('paused', next ? 'true' : 'false').catch(failing('Save failed'))}
+              />
             }
             chevron={false}
           />
-        ) : (
-          <>
-            {selfUpdate ? (
-              <Row
-                label="Update alpi"
-                helper="installs the newest alpi and restarts"
-                value={
-                  <Button
-                    title="Update"
-                    variant="secondary"
-                    size="sm"
-                    loading={updateBusy}
-                    onPress={() => setConfirmUpdate(true)}
-                  />
-                }
-                onPress={updateBusy ? undefined : () => setConfirmUpdate(true)}
-                chevron={false}
-              />
-            ) : manualStep ? (
-              <Row label="Update alpi" helper={manualStep} helperLines={0} chevron={false} />
-            ) : null}
-            {selfUpdate || manualStep ? <RowSeparator /> : null}
-            <Row
-              label="Restart daemon"
-              helper="exits the daemon · supervisor relaunches · reconnects automatically"
-              value={
-                <Button
-                  title="Restart"
-                  variant="secondary"
-                  size="sm"
-                  loading={restartBusy}
-                  onPress={() => setConfirmRestart(true)}
-                />
-              }
-              onPress={restartBusy ? undefined : () => setConfirmRestart(true)}
-              chevron={false}
-            />
-          </>
-        )}
-        <RowSeparator />
-        <Row
-          label="Email"
-          helper={emailList.length === 0 ? 'IMAP / Gmail accounts' : `${emailList.length} account${emailList.length === 1 ? '' : 's'}`}
-          value={
-            <View style={{ flexDirection: 'row', gap: space.s1, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: 200 }}>
-              {emailList.filter((a) => a.configured).length === 0 ? (
-                <Pill off>{EMPTY.accounts.title}</Pill>
-              ) : (
-                emailList
-                  .filter((a) => a.configured)
-                  .map((a) => (
-                    <Pill key={a.id ?? a.address} tone="on">
-                      {a.address ?? a.id}
-                    </Pill>
-                  ))
-              )}
-            </View>
-          }
-          onPress={() => router.push(`/profile/${id}/email`)}
-        />
-
-        <SectionHeader kicker="peers + workgroups">ALP</SectionHeader>
-        <Row
-          label="Public key"
-          helper={profile.pubkey_b64 ? 'tap to copy' : 'No identity yet'}
-          value={shortPubkey(profile.pubkey_b64)}
-          onPress={profile.pubkey_b64 ? copyPubkey : undefined}
-          chevron={false}
-        />
-        <RowSeparator />
-        <Row
-          label="Port"
-          helper="ALP listener · set from alpi setup on the daemon's machine"
-          value={String(profile.tcp_port || DEFAULT_ALP_PORT)}
-          chevron={false}
-        />
-        <RowSeparator />
-        <Row
-          label="Concurrency"
-          helper={`${profile.queued_pipelines ? `${profile.queued_pipelines} queued · ` : ''}active workgroup pipelines at once`}
-          value={pipelineLimitLabel(profile.max_active_workgroups)}
-          onPress={() => setSheet('concurrency')}
-        />
-        <RowSeparator />
-        <Row
-          label="Peers"
-          helper={peerCount ? undefined : EMPTY.peers.hint}
-          value={peerCount ? String(peerCount) : EMPTY.peers.title}
-          onPress={() => router.push(`/profile/${id}/peers`)}
-        />
-        {workgroups.length === 0 ? (
-          <>
-            <RowSeparator />
-            <Row label="Workgroups" helper={workgroupCount ? undefined : EMPTY.workgroups.hint} value={String(workgroupCount)} chevron={false} />
-          </>
-        ) : (
-          workgroups.map((wg) => (
-            <View key={wg.id}>
+          <RowSeparator />
+          <Row
+            label="Providers"
+            helper={providers.length ? (twoPane ? 'API keys + local Ollama' : providers.join(' · ')) : EMPTY.providers.hint}
+            value={twoPane && providers.length ? <ChipRow items={providers} /> : providers.length ? String(providers.length) : EMPTY.providers.title}
+            onPress={() => router.push(`/profile/${id}/providers`)}
+          />
+          <RowSeparator />
+          <Row
+            label="Model"
+            value={profile.model ? modelLabel(profile.model) : '—'}
+            onPress={() => setSheet('model')}
+          />
+          {profile.model_reasoning_supported && (
+            <>
               <RowSeparator />
               <Row
-                label={`#${wg.name || wg.id}`}
-                item
-                helper={wg.is_hub ? 'hub · this profile runs it' : `hub @${wg.hub_id ?? '?'}`}
-                value={wg.paused ? <Pill tone="warn">paused</Pill> : undefined}
-                onPress={() => router.push(`/wg/${wg.id}`)}
+                label="Reasoning"
+                helper="how hard the model thinks before answering"
+                value={(profile.model_reasoning_effort || 'default')}
+                onPress={() => setSheet('reasoning')}
               />
-            </View>
-          ))
-        )}
-
-        <SectionHeader>Schedule</SectionHeader>
-        <Row
-          label="Cron jobs"
-          helper="disable · fire · delete · add new"
-          value={String(scheduleCount)}
-          onPress={() => router.push(`/profile/${id}/schedule`)}
-        />
-
-        <SectionHeader>Sandbox</SectionHeader>
-        <Row
-          label="Terminal"
-          helper="wraps shell tools in sandbox-exec / bubblewrap"
-          value={<Toggle on={!!profile.sandbox} label="Terminal sandbox" color={accent} onChange={toggleSandbox} />}
-          chevron={false}
-        />
-        <RowSeparator />
-        <Row
-          label="Network"
-          helper={profile.sandbox ? 'outbound http access' : 'enable terminal sandbox first'}
-          value={
-            <Toggle
-              on={!!profile.sandbox && !!profile.sandbox_allow_network}
-              disabled={!profile.sandbox}
-              label="Sandbox network"
-              color={accent}
-              onChange={toggleSandboxNetwork}
-            />
-          }
-          chevron={false}
-        />
-
-        <SectionHeader>Voice</SectionHeader>
-        <Row
-          label="Voice"
-          value={voiceLabel(profile.voice_id) ?? 'not set'}
-          onPress={() => setSheet('voice')}
-        />
-        <RowSeparator />
-        <Row
-          label="Auto-read replies"
-          helper="reads each agent reply aloud as it arrives — never your messages"
-          value={<Toggle on={!!profile.voice_auto_read} label="Auto-read replies" color={accent} onChange={toggleAutoRead} />}
-          chevron={false}
-        />
-
-        <SectionHeader>MCP Servers</SectionHeader>
-        <Row
-          label="Manage"
-          helper="add, remove, inspect tools"
-          value={twoPane && mcpCount ? <ChipRow items={(profile.mcps ?? []).map((m) => m.name)} /> : String(mcpCount)}
-          onPress={() => router.push(`/profile/${id}/mcp`)}
-        />
-
-        <SectionHeader kicker="skills, memories, tools">Brain</SectionHeader>
-        <Row
-          label="Skills"
-          helper="instructions loaded on demand"
-          value={String(skillCount)}
-          onPress={() => router.push(`/profile/${id}/brain/skills`)}
-        />
-        <RowSeparator />
-        <Row
-          label="Memories"
-          helper="USER · MEMORY · AGENT"
-          value="3 files"
-          onPress={() => router.push(`/profile/${id}/brain/memory`)}
-        />
-        <RowSeparator />
-        <Row
-          label="Tools"
-          helper="native callable functions"
-          value="view"
-          onPress={() => router.push(`/profile/${id}/brain/tools`)}
-        />
-
-        <SectionHeader kicker="disk footprint">Storage</SectionHeader>
-        {storageRows.filter((it) => it.size_bytes > 0 || it.file_count > 0).length === 0 ? (
+            </>
+          )}
+          {profile.tiers ? (
+            <>
+              <RowSeparator />
+              <Row
+                label="Fast model"
+                helper="cheap model for side-tasks & delegation"
+                value={tierValue(profile.tiers.fast)}
+                onPress={() => setSheet('tierFast')}
+              />
+              {profile.tiers.fast?.reasoning_supported && (
+                <>
+                  <RowSeparator />
+                  <Row
+                    label="Fast reasoning"
+                    value={(profile.tiers.fast.effort || 'default')}
+                    onPress={() => setSheet('tierFastReasoning')}
+                  />
+                </>
+              )}
+              <RowSeparator />
+              <Row
+                label="Deep model"
+                helper="stronger model for escalation & deep research"
+                value={tierValue(profile.tiers.deep)}
+                onPress={() => setSheet('tierDeep')}
+              />
+              {profile.tiers.deep?.reasoning_supported && (
+                <>
+                  <RowSeparator />
+                  <Row
+                    label="Deep reasoning"
+                    value={(profile.tiers.deep.effort || 'default')}
+                    onPress={() => setSheet('tierDeepReasoning')}
+                  />
+                </>
+              )}
+            </>
+          ) : null}
+          {profile.vision_model !== undefined ? (
+            <>
+              <RowSeparator />
+              <Row
+                label="Vision model"
+                helper="image inspection via read_image"
+                value={profile.vision_model ? modelLabel(profile.vision_model) : 'main model'}
+                onPress={() => setSheet('vision')}
+              />
+            </>
+          ) : null}
+          <RowSeparator />
           <Row
-            label={snap.loading || storage.loading ? 'Loading storage…' : EMPTY.storage.title}
-            helper={snap.loading || storage.loading ? undefined : EMPTY.storage.hint}
+            label="Budget"
+            helper="daily spend cap"
+            value={budgetValue}
+            onPress={() => setSheet('budget')}
+          />
+          <RowSeparator />
+          <Row
+            label="Workspace"
+            value={profile.workspace ?? 'not set'}
+            onPress={() => setSheet('workspace')}
+          />
+          <RowSeparator />
+          <Row
+            label="Appearance"
+            value={
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2, flexShrink: 1 }}>
+                <Fold fold={profile.fold} color={accent} size="md" />
+                <Text
+                  numberOfLines={1}
+                  style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.sm, color: colors.ink2, flexShrink: 1 }}
+                >
+                  {locked ? 'Alpaca' : pairName(profile.fold, accent)}
+                </Text>
+                <Text style={{ fontFamily: fonts.monoMedium, fontSize: fontSizes.sm, color: colors.ink3 }}>
+                  {locked ? 'brand accent' : accent}
+                </Text>
+              </View>
+            }
+            chevron={!locked}
+            onPress={locked ? undefined : () => setSheet('appearance')}
+          />
+          <RowSeparator />
+          <Row label="Home" value={`~/.alpi/profiles/${profile.name}`} chevron={false} />
+        </RowGroup>
+
+        <SectionHeader kicker="last 14 days">Usage</SectionHeader>
+        <RowGroup>
+          {usageDays.length === 0 && snap.loading ? (
+            <Row label="Loading usage…" chevron={false} />
+          ) : usageDays.length === 0 ? (
+            <Row label={EMPTY.usage.title} helper={EMPTY.usage.hint} chevron={false} />
+          ) : (
+            <SettingsBand>
+              <UsageChart
+                days={usageDays}
+                accent={accent}
+                capLine={capUsd != null ? Number(capUsd) : null}
+                total30={usageSection?.total30 ?? null}
+              />
+            </SettingsBand>
+          )}
+        </RowGroup>
+
+        <SectionHeader kicker="how peers see this agent">Identity</SectionHeader>
+        <RowGroup>
+          {twoPane ? (
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: space.s9, paddingVertical: space.s3 }}>
+              <View style={{ width: WIDE_LABEL_W, flexShrink: 1, paddingTop: space.s3 }}>
+                <Eyebrow color={colors.ink3}>Identity</Eyebrow>
+              </View>
+              <View style={{ flex: 1, maxWidth: 520 }}>
+                <IdentityEditor profileId={id} profile={profile} call={call} onSaved={refreshSettings} />
+              </View>
+            </View>
+          ) : (
+            <Row
+              label={profile.bio ? profile.bio : 'Set identity prompt'}
+              helper={profile.bio ? undefined : 'one-line public bio · draft it from AGENT.md'}
+              labelLines={2}
+              onPress={() => router.push(`/profile/${id}/identity`)}
+            />
+          )}
+        </RowGroup>
+
+        <SectionHeader kicker="daemon">Service</SectionHeader>
+        <RowGroup>
+          {twoPane ? (
+            <Row
+              label="Daemon"
+              helper={manualStep ? `${manualStep} Restart exits and the supervisor relaunches.` : 'update installs the newest alpi · restart exits and the supervisor relaunches'}
+              helperLines={0}
+              value={
+                <View style={{ flexDirection: 'row', gap: space.s3 }}>
+                  {selfUpdate ? (
+                    <Button
+                      title="Update alpi"
+                      variant="secondary"
+                      size="sm"
+                      loading={updateBusy}
+                      disabled={restartBusy}
+                      onPress={() => setConfirmUpdate(true)}
+                    />
+                  ) : null}
+                  <Button
+                    title="Restart daemon"
+                    variant="secondary"
+                    size="sm"
+                    loading={restartBusy}
+                    disabled={updateBusy}
+                    onPress={() => setConfirmRestart(true)}
+                  />
+                </View>
+              }
+              chevron={false}
+            />
+          ) : (
+            <>
+              {selfUpdate ? (
+                <Row
+                  label="Update alpi"
+                  helper="installs the newest alpi and restarts"
+                  value={
+                    <Button
+                      title="Update"
+                      variant="secondary"
+                      size="sm"
+                      loading={updateBusy}
+                      onPress={() => setConfirmUpdate(true)}
+                    />
+                  }
+                  onPress={updateBusy ? undefined : () => setConfirmUpdate(true)}
+                  chevron={false}
+                />
+              ) : manualStep ? (
+                <Row label="Update alpi" helper={manualStep} helperLines={0} chevron={false} />
+              ) : null}
+              {selfUpdate || manualStep ? <RowSeparator /> : null}
+              <Row
+                label="Restart daemon"
+                helper="exits the daemon · supervisor relaunches · reconnects automatically"
+                value={
+                  <Button
+                    title="Restart"
+                    variant="secondary"
+                    size="sm"
+                    loading={restartBusy}
+                    onPress={() => setConfirmRestart(true)}
+                  />
+                }
+                onPress={restartBusy ? undefined : () => setConfirmRestart(true)}
+                chevron={false}
+              />
+            </>
+          )}
+          <RowSeparator />
+          <Row
+            label="Email"
+            helper={emailList.length === 0 ? 'IMAP / Gmail accounts' : `${emailList.length} account${emailList.length === 1 ? '' : 's'}`}
+            value={
+              <View style={{ flexDirection: 'row', gap: space.s1, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: 200 }}>
+                {emailList.filter((a) => a.configured).length === 0 ? (
+                  <Pill off>{EMPTY.accounts.title}</Pill>
+                ) : (
+                  emailList
+                    .filter((a) => a.configured)
+                    .map((a) => (
+                      <Pill key={a.id ?? a.address} tone="on">
+                        {a.address ?? a.id}
+                      </Pill>
+                    ))
+                )}
+              </View>
+            }
+            onPress={() => router.push(`/profile/${id}/email`)}
+          />
+        </RowGroup>
+
+        <SectionHeader kicker="peers + workgroups">ALP</SectionHeader>
+        <RowGroup>
+          <Row
+            label="Public key"
+            helper={profile.pubkey_b64 ? 'tap to copy' : 'No identity yet'}
+            value={shortPubkey(profile.pubkey_b64)}
+            onPress={profile.pubkey_b64 ? copyPubkey : undefined}
             chevron={false}
           />
-        ) : (
-          storageRows
-            .filter((it) => it.size_bytes > 0 || it.file_count > 0)
-            .map((it, i) => (
-              <View key={it.key}>
-                {i > 0 ? <RowSeparator /> : null}
+          <RowSeparator />
+          <Row
+            label="Port"
+            helper="ALP listener · set from alpi setup on the daemon's machine"
+            value={String(profile.tcp_port || DEFAULT_ALP_PORT)}
+            chevron={false}
+          />
+          <RowSeparator />
+          <Row
+            label="Concurrency"
+            helper={`${profile.queued_pipelines ? `${profile.queued_pipelines} queued · ` : ''}active workgroup pipelines at once`}
+            value={pipelineLimitLabel(profile.max_active_workgroups)}
+            onPress={() => setSheet('concurrency')}
+          />
+          <RowSeparator />
+          <Row
+            label="Peers"
+            helper={peerCount ? undefined : EMPTY.peers.hint}
+            value={peerCount ? String(peerCount) : EMPTY.peers.title}
+            onPress={() => router.push(`/profile/${id}/peers`)}
+          />
+          {workgroups.length === 0 ? (
+            <>
+              <RowSeparator />
+              <Row label="Workgroups" helper={workgroupCount ? undefined : EMPTY.workgroups.hint} value={String(workgroupCount)} chevron={false} />
+            </>
+          ) : (
+            workgroups.map((wg) => (
+              <View key={wg.id}>
+                <RowSeparator />
                 <Row
-                  label={it.label}
+                  label={`#${wg.name || wg.id}`}
                   item
-                  helper={`${it.file_count} file${it.file_count === 1 ? '' : 's'}`}
-                  value={formatBytes(it.size_bytes)}
-                  chevron={false}
+                  helper={wg.is_hub ? 'hub · this profile runs it' : `hub @${wg.hub_id ?? '?'}`}
+                  value={wg.paused ? <Pill tone="warn">paused</Pill> : undefined}
+                  onPress={() => router.push(`/wg/${wg.id}`)}
                 />
               </View>
             ))
-        )}
-        <RowSeparator />
-        <Row
-          label="Reclaim space"
-          helper="caches, logs, old transcripts, index bloat"
-          onPress={() => setSheet('cleanup')}
-        />
+          )}
+        </RowGroup>
+
+        <SectionHeader>Schedule</SectionHeader>
+        <RowGroup>
+          <Row
+            label="Cron jobs"
+            helper="disable · fire · delete · add new"
+            value={String(scheduleCount)}
+            onPress={() => router.push(`/profile/${id}/schedule`)}
+          />
+        </RowGroup>
+
+        <SectionHeader>Sandbox</SectionHeader>
+        <RowGroup>
+          <Row
+            label="Terminal"
+            helper="wraps shell tools in sandbox-exec / bubblewrap"
+            value={<Toggle on={!!profile.sandbox} label="Terminal sandbox" color={accent} onChange={toggleSandbox} />}
+            chevron={false}
+          />
+          <RowSeparator />
+          <Row
+            label="Network"
+            helper={profile.sandbox ? 'outbound http access' : 'enable terminal sandbox first'}
+            value={
+              <Toggle
+                on={!!profile.sandbox && !!profile.sandbox_allow_network}
+                disabled={!profile.sandbox}
+                label="Sandbox network"
+                color={accent}
+                onChange={toggleSandboxNetwork}
+              />
+            }
+            chevron={false}
+          />
+        </RowGroup>
+
+        <SectionHeader>Voice</SectionHeader>
+        <RowGroup>
+          <Row
+            label="Voice"
+            value={voiceLabel(profile.voice_id) ?? 'not set'}
+            onPress={() => setSheet('voice')}
+          />
+          <RowSeparator />
+          <Row
+            label="Auto-read replies"
+            helper="reads each agent reply aloud as it arrives — never your messages"
+            value={<Toggle on={!!profile.voice_auto_read} label="Auto-read replies" color={accent} onChange={toggleAutoRead} />}
+            chevron={false}
+          />
+        </RowGroup>
+
+        <SectionHeader>MCP Servers</SectionHeader>
+        <RowGroup>
+          <Row
+            label="Manage"
+            helper="add, remove, inspect tools"
+            value={twoPane && mcpCount ? <ChipRow items={(profile.mcps ?? []).map((m) => m.name)} /> : String(mcpCount)}
+            onPress={() => router.push(`/profile/${id}/mcp`)}
+          />
+        </RowGroup>
+
+        <SectionHeader kicker="skills, memories, tools">Brain</SectionHeader>
+        <RowGroup>
+          <Row
+            label="Skills"
+            helper="instructions loaded on demand"
+            value={String(skillCount)}
+            onPress={() => router.push(`/profile/${id}/brain/skills`)}
+          />
+          <RowSeparator />
+          <Row
+            label="Memories"
+            helper="USER · MEMORY · AGENT"
+            value="3 files"
+            onPress={() => router.push(`/profile/${id}/brain/memory`)}
+          />
+          <RowSeparator />
+          <Row
+            label="Tools"
+            helper="native callable functions"
+            value="view"
+            onPress={() => router.push(`/profile/${id}/brain/tools`)}
+          />
+        </RowGroup>
+
+        <SectionHeader kicker="disk footprint">Storage</SectionHeader>
+        <RowGroup>
+          {storageRows.filter((it) => it.size_bytes > 0 || it.file_count > 0).length === 0 ? (
+            <Row
+              label={snap.loading || storage.loading ? 'Loading storage…' : EMPTY.storage.title}
+              helper={snap.loading || storage.loading ? undefined : EMPTY.storage.hint}
+              chevron={false}
+            />
+          ) : (
+            storageRows
+              .filter((it) => it.size_bytes > 0 || it.file_count > 0)
+              .map((it, i) => (
+                <View key={it.key}>
+                  {i > 0 ? <RowSeparator /> : null}
+                  <Row
+                    label={it.label}
+                    item
+                    helper={`${it.file_count} file${it.file_count === 1 ? '' : 's'}`}
+                    value={formatBytes(it.size_bytes)}
+                    chevron={false}
+                  />
+                </View>
+              ))
+          )}
+          <RowSeparator />
+          <Row
+            label="Reclaim space"
+            helper="caches, logs, old transcripts, index bloat"
+            onPress={() => setSheet('cleanup')}
+          />
+        </RowGroup>
 
         <SectionHeader>Danger zone</SectionHeader>
-        <Row
-          label="Delete profile"
-          helper="removes identity, memory, skills, schedule from disk. Cannot be undone."
-          danger
-          chevron={false}
-          onPress={() => setConfirmDelete(true)}
-        />
+        <RowGroup>
+          <Row
+            label="Delete profile"
+            helper="removes identity, memory, skills, schedule from disk. Cannot be undone."
+            danger
+            chevron={false}
+            onPress={() => setConfirmDelete(true)}
+          />
+        </RowGroup>
       </ScrollView>
       </SettingsSurface>
 
@@ -826,12 +859,16 @@ export default function ProfileSettings() {
         initialValue={profile.workspace}
         onSave={(value) => saveField('workspace', value)}
       />
-      <AccentSheet
-        open={sheet === 'accent'}
+      <AppearanceSheet
+        open={sheet === 'appearance'}
         onClose={() => setSheet(null)}
         profileName={profile.name}
         initialValue={accent}
-        onSave={(value) => saveField('tui.accent', (value ?? '').toLowerCase())}
+        initialFold={profile.fold}
+        onSave={async ({ fold, accent: next }) => {
+          if (fold) await saveField('tui.fold', fold);
+          if (next) await saveField('tui.accent', next.toLowerCase());
+        }}
       />
       <VoiceSheet
         open={sheet === 'voice'}

@@ -66,7 +66,6 @@ vi.mock('../src/theme/ThemeContext', () => ({
 }));
 
 vi.mock('../src/components/ActionSheet', () => ({ ActionSheet: () => null }));
-vi.mock('../src/components/AlpiMark', () => ({ AlpiMark: () => React.createElement('span', {}) }));
 vi.mock('../src/components/Button', () => ({ Button: ({ title }) => React.createElement('button', { type: 'button' }, title) }));
 vi.mock('../src/components/Diamond', () => ({ Diamond: () => React.createElement('span', {}) }));
 vi.mock('../src/components/Dot', () => ({ Dot: () => React.createElement('span', {}) }));

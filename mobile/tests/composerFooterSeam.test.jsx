@@ -206,21 +206,21 @@ describe('composer controls', () => {
 });
 
 describe('composer matches the desktop card', () => {
-  it('fills the card white and rules it off from the transcript, as desktop does', () => {
+  it('draws the composer as a borderless 4 pt well and rules it off from the transcript, as desktop does', () => {
     const { container } = render(<Composer placeholder="Message @doc…" onPickAttachment={() => {}} />);
     const c = styleOf(card(container));
-    expect(c.backgroundColor).toBe(tokens.palettes.light.bgElev);
-    expect(c.backgroundColor).not.toBe(tokens.palettes.light.bgInput);
+    expect(c.backgroundColor).toBe(tokens.palettes.light.bgInput);
+    expect(c.borderRadius).toBe(4);
+    expect(c.borderColor).toBe('transparent');
     expect(styleOf(container.firstChild).borderTopWidth).toBeGreaterThan(0);
   });
 
-  it('draws send as a rounded square of desktop\'s size, not a circle', () => {
+  it('draws send as a 4 pt sheet of desktop\'s size, like desktop\'s send', () => {
     render(<Composer placeholder="Message @doc…" onPickAttachment={() => {}} />);
     const send = styleOf(screen.getByLabelText('Send'));
     expect(send.width).toBe(30);
     expect(send.height).toBe(30);
-    expect(send.borderRadius).toBe(tokens.radii.lg);
-    expect(send.borderRadius).not.toBe(tokens.radii.pill);
+    expect(send.borderRadius).toBe(tokens.radii.xs);
   });
 
   it('gives send more weight than attach, since only one is the primary action', () => {

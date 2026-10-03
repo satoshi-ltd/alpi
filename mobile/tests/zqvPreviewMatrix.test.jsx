@@ -15,7 +15,6 @@ vi.mock('../src/lib/EndpointContext', () => ({ useEndpoint: () => ({ endpoint: {
 vi.mock('../src/lib/readState', () => ({
   useReadState: () => ({ checkProfile: () => false, checkWorkgroup: () => false }),
 }));
-vi.mock('../src/theme/accents', () => ({ accentForProfile: () => '#000000' }));
 
 import { useInbox } from '../src/hooks/useInbox';
 import { profileEmptyState } from '../src/lib/profileReady';

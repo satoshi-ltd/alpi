@@ -42,7 +42,7 @@ vi.mock('../../theme/ThemeContext', async () => {
 
 vi.mock('../../lib/reduceMotion', () => ({ useReduceMotion: () => themeState.reduce }));
 vi.mock('../../lib/haptics', () => ({ selection: () => themeState.ticks.push('selection'), tap: () => themeState.ticks.push('tap') }));
-vi.mock('../../components/Diamond', () => ({ Diamond: () => React.createElement('span', { 'data-diamond': 'true' }) }));
+vi.mock('../../components/Fold', () => ({ Fold: ({ fold, color, size, outlined }) => React.createElement('span', { 'data-fold': fold ?? 'diamond', 'data-color': color, 'data-size': size, 'data-outlined': String(!!outlined) }) }));
 vi.mock('./AttachmentCards', () => ({ AttachmentCards: () => React.createElement('span', { 'data-cards': 'true' }) }));
 vi.mock('../../components/RichText', () => ({
   RichText: ({ children, size, color }) => React.createElement('span', { 'data-size': String(size), 'data-color': color }, children),
@@ -87,6 +87,25 @@ describe('transcript body type scale', () => {
   });
 });
 
+describe('workgroup speaker fold', () => {
+  it('marks the speaker with their fold in their accent', () => {
+    const { container } = render(<WorkgroupMessage body="status?" speakerName="scout" speakerAccent="#0af0af" speakerFold="shield" seq={7} />);
+    const fold = container.querySelector('[data-fold]');
+    expect(fold.getAttribute('data-fold')).toBe('shield');
+    expect(fold.getAttribute('data-color')).toBe('#0af0af');
+  });
+
+  it('marks the hub on the right with the same fold', () => {
+    const { container } = render(<WorkgroupMessage body="status?" speakerName="scout" speakerAccent="#0af0af" speakerFold="tree" isFromHub seq={7} />);
+    expect(container.querySelectorAll('[data-fold="tree"]')).toHaveLength(1);
+  });
+
+  it('falls back to the diamond for a speaker with no fold', () => {
+    const { container } = render(<WorkgroupMessage body="status?" speakerName="scout" speakerAccent="#0af0af" seq={7} />);
+    expect(container.querySelector('[data-fold]').getAttribute('data-fold')).toBe('diamond');
+  });
+});
+
 describe('transcript row gutter', () => {
   it.each(VARIANTS)('keeps the %s row on the phone gutter token', (_name, Variant) => {
     const { container } = render(Variant());
@@ -122,11 +141,13 @@ describe('bubble cap by pane mode', () => {
 
 
 describe('user bubble palette', () => {
-  it.each([['light', 'rgb(253,246,233)'], ['dark', 'rgb(44,40,31)']])('uses a readable tint in %s', (mode, expected) => {
+  it.each(['light', 'dark'])('draws your message as a neutral 4 pt sheet with no profile tint in %s', (mode) => {
     themeState.mode = mode;
     const { container } = render(<ProfileUserMessage text="Readable message" accent="#f0b447" />);
     const style = JSON.parse(container.querySelector('button').getAttribute('data-style'));
-    expect(style.backgroundColor).toBe(expected);
+    expect(style.backgroundColor).toBe(palettes[mode].selected);
+    expect(style.borderTopRightRadius).toBe(4);
+    expect(style.borderBottomLeftRadius).toBe(4);
     expect(screen.getByText('Readable message').getAttribute('data-color')).toBe(palettes[mode].ink);
     expect(style.paddingHorizontal).toBe(space.s7);
   });

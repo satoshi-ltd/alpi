@@ -1,13 +1,13 @@
+import { WORKGROUP_FOLD } from '../../../common/folds.mjs';
 import { useTheme } from '../theme/ThemeContext';
-import { Diamond } from './Diamond';
-import { DiamondStack } from './DiamondStack';
+import { Fold } from './Fold';
 
-export function Glyph({ kind, color, needsProvider = false }) {
+export function Glyph({ kind, color, fold, needsProvider = false, working = false, paused = false, offline = false }) {
   const { colors } = useTheme();
   const tint = typeof color === 'string' && color.startsWith('#') ? color : colors.ink3;
   return kind === 'workgroup' ? (
-    <DiamondStack color={tint} size="md" />
+    <Fold fold={WORKGROUP_FOLD} color={tint} pulse={working && !paused} unfolded={offline || paused} />
   ) : (
-    <Diamond color={tint} size="md" outlined={needsProvider} />
+    <Fold fold={fold} color={tint} pulse={working && !needsProvider && !paused} outlined={needsProvider} unfolded={offline || paused} />
   );
 }

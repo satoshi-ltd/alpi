@@ -98,9 +98,8 @@ vi.mock('../src/theme/ThemeContext', () => ({
 }));
 
 vi.mock('../src/components/ActionSheet', () => ({ ActionSheet: () => null }));
-vi.mock('../src/components/AlpiMark', () => ({
-  AlpiMark: ({ color }) => React.createElement('span', { 'data-mark': color }),
-}));
+vi.mock('../src/components/Fold', () => ({ Fold: ({ fold, color }) => React.createElement('span', { 'data-mark': color, 'data-fold': String(fold) }) }));
+
 vi.mock('../src/components/Banner', () => ({ Banner: ({ children }) => React.createElement('div', {}, children) }));
 vi.mock('../src/components/Button', () => ({ Button: ({ title }) => React.createElement('button', { type: 'button' }, title) }));
 vi.mock('../src/components/Diamond', () => ({ Diamond: () => React.createElement('span', {}) }));
@@ -201,7 +200,7 @@ describe('profile thread with nothing to load', () => {
   it('settles into the empty state when the profile has no sessions', async () => {
     render(<ProfileChat />);
     await settle();
-    expect(hasText('Start a thread with doc')).toBe(true);
+    expect(hasText('Start a new thread')).toBe(true);
     expect(skeleton()).toBeNull();
   });
 
@@ -214,14 +213,14 @@ describe('profile thread with nothing to load', () => {
     render(<ProfileChat />);
     await settle();
     expect(skeleton()).toBeNull();
-    expect(hasText('Start a thread with doc')).toBe(true);
+    expect(hasText('Start a new thread')).toBe(true);
     expect(document.querySelector('[data-composer]').getAttribute('data-disabled')).toBe('false');
   });
 
   it('names the subject and the provider-less model in the empty state', async () => {
     render(<ProfileChat />);
     await settle();
-    expect(hasText('Start a thread with doc')).toBe(true);
+    expect(hasText('Start a new thread')).toBe(true);
     expect(hasText('claude-opus-5')).toBe(true);
     expect(hasText('anthropic/claude-opus-5')).toBe(false);
     expect(document.querySelector('[data-mark]').getAttribute('data-mark')).toBe('#abc123');
@@ -237,7 +236,7 @@ describe('profile thread with nothing to load', () => {
     render(<ProfileChat />);
     await settle();
     expect(skeleton()?.getAttribute('data-skeleton')).toBe('profile');
-    expect(hasText('Start a thread with doc')).toBe(false);
+    expect(hasText('Start a new thread')).toBe(false);
   });
 
   it('never flashes the empty state while the seeded transcript is on its way', async () => {
@@ -253,7 +252,7 @@ describe('profile thread with nothing to load', () => {
     watch.stop();
 
     expect(watch.sawText('doc')).toBe(true);
-    expect(watch.sawText('Start a thread with doc')).toBe(false);
+    expect(watch.sawText('Start a new thread')).toBe(false);
     expect(skeleton()).toBeTruthy();
   });
 
@@ -277,7 +276,7 @@ describe('profile thread with nothing to load', () => {
 
     expect(skeleton()).toBeNull();
     expect(document.querySelector('[data-list]').getAttribute('data-list')).toBe('1');
-    expect(hasText('Start a thread with doc')).toBe(false);
+    expect(hasText('Start a new thread')).toBe(false);
   });
 
   it('shows the empty state for a session that exists with no turns', async () => {
@@ -292,20 +291,20 @@ describe('profile thread with nothing to load', () => {
 
     render(<ProfileChat />);
     await settle();
-    expect(hasText('Start a thread with doc')).toBe(true);
+    expect(hasText('Start a new thread')).toBe(true);
     expect(skeleton()).toBeNull();
   });
 
   it('keeps the empty state through a refresh instead of flashing the skeleton', async () => {
     render(<ProfileChat />);
     await settle();
-    expect(hasText('Start a thread with doc')).toBe(true);
+    expect(hasText('Start a new thread')).toBe(true);
 
     h.handlers['host.sessions.list'] = () => deferred().promise;
     await emit('session_changed', { profile: 'doc' });
 
     expect(skeleton()).toBeNull();
-    expect(hasText('Start a thread with doc')).toBe(true);
+    expect(hasText('Start a new thread')).toBe(true);
   });
 });
 
@@ -319,6 +318,7 @@ describe('workgroup thread with nothing to load', () => {
     await settle();
     expect(hasText('No posts yet')).toBe(true);
     expect(hasText('Direct @scout to open a #task.')).toBe(true);
+    expect(document.querySelector('[data-fold="honeycomb"]')).not.toBeNull();
     expect(skeleton()).toBeNull();
   });
 

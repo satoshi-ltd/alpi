@@ -9,7 +9,9 @@ import { usePane } from '../../nav/PaneContext';
 import { useTheme } from '../../theme/ThemeContext';
 import { SEPARATOR_INSET } from './InboxRow';
 import { InboxSkeleton } from './InboxSkeleton';
+import { memberEmptyCopy } from '../../../../common/onboarding.mjs';
 import { EMPTY } from '../../../../common/emptyCopy.mjs';
+import { useWell } from '../../components/well';
 
 const HAIRLINE = 0.5;
 const EMPTY_MIN_H = 240;
@@ -21,6 +23,7 @@ function rosterKey(item) {
 
 function SearchField({ query, onQueryChange, gutter }) {
   const { colors, fonts, fontSizes, mobile } = useTheme();
+  const [well, focus] = useWell(colors);
   return (
     <View
       style={{
@@ -31,16 +34,14 @@ function SearchField({ query, onQueryChange, gutter }) {
         marginBottom: space.s3,
         paddingHorizontal: space.s5,
         height: mobile.inputH,
-        backgroundColor: colors.bgElev,
-        borderRadius: radii.xl,
-        borderWidth: HAIRLINE,
-        borderColor: colors.line,
+        ...well,
       }}
     >
       <Icon name="search" size="md" color={colors.ink3} />
       <TextInput
         value={query}
         onChangeText={onQueryChange}
+        {...focus}
         autoFocus
         autoCapitalize="none"
         autoCorrect={false}
@@ -67,7 +68,7 @@ function SectionAdd({ label, onPress }) {
         width: ADD_BOX,
         height: ADD_BOX,
         marginVertical: -space.s2,
-        borderRadius: radii.md,
+        borderRadius: radii.xs,
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: pressed ? colors.selected : 'transparent',
@@ -89,7 +90,9 @@ function EmptyState({ paired, query, device, canCreate = false, daemonDown = fal
         ? ['Daemon unreachable', 'Profiles and workgroups show up again once the connection is back.']
         : error
           ? ['Couldn\'t load the roster', String(error?.message ?? error)]
-          : [EMPTY.roster.title, canCreate ? EMPTY.roster.hint : ''];
+          : canCreate
+            ? [EMPTY.roster.title, EMPTY.roster.hint]
+            : (({ title: t, hint: h }) => [t, h])(memberEmptyCopy(device ? `this ${device}` : null));
   const retry = paired && !needle && (daemonDown || error) && onRetry;
   return (
     <View
@@ -144,6 +147,7 @@ export function Roster({
 
   const renderSectionHeader = useCallback(
     ({ section }) => {
+      if (!section.label) return null;
       const add = section.key === 'pinned' ? null : addActions?.[section.key];
       return (
         <View
@@ -164,6 +168,15 @@ export function Roster({
     [fonts, fontSizes, colors, gutter, addActions],
   );
 
+  const seamAfterFront = sections.length > 1 && sections[0].key === 'front';
+  const renderSectionFooter = useCallback(
+    ({ section }) =>
+      section.key === 'front' && seamAfterFront ? (
+        <View testID="front-seam" style={{ height: HAIRLINE, backgroundColor: colors.line2 }} />
+      ) : null,
+    [seamAfterFront, colors.line2],
+  );
+
   const pull = useCallback(() => onRefresh?.(), [onRefresh]);
 
   const separator = useCallback(
@@ -182,6 +195,7 @@ export function Roster({
         keyExtractor={rosterKey}
         renderItem={renderRow}
         renderSectionHeader={renderSectionHeader}
+        renderSectionFooter={renderSectionFooter}
         stickySectionHeadersEnabled={false}
         keyboardShouldPersistTaps="handled"
         ItemSeparatorComponent={twoPane ? undefined : separator}

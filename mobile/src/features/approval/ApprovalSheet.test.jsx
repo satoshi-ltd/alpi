@@ -21,7 +21,9 @@ vi.mock('react-native', () => {
   return { View, Text, Pressable, ScrollView };
 });
 
-vi.mock('../../components/Diamond', () => ({ Diamond: () => React.createElement('span', { 'data-diamond': 'true' }) }));
+vi.mock('../../hooks/useDaemonData', () => ({ useProfileSummaries: () => ({ data: { profiles: [{ name: 'doc', fold: 'heart', accent: '#f36a8a' }] } }) }));
+vi.mock('../../components/Fold', () => ({ Fold: ({ fold, color }) => React.createElement('span', { 'data-fold': fold ?? 'none', 'data-color': color ?? '' }) }));
+vi.mock('../../components/Icon', () => ({ Icon: ({ name, color }) => React.createElement('span', { 'data-icon': name, 'data-color': color }) }));
 vi.mock('../../components/Sheet', () => ({
   Sheet: ({ open, children, dismissible }) => (open ? React.createElement('div', { 'data-sheet': 'true', 'data-dismissible': String(dismissible ?? true) }, children) : null),
 }));
@@ -45,6 +47,23 @@ vi.mock('./useApprovalQueue', () => ({
 }));
 
 import { ApprovalSheet } from './ApprovalSheet';
+
+describe('ApprovalSheet alert eyebrow', () => {
+  it('marks the alert with the danger icon instead of a profile diamond', () => {
+    const { container } = render(<ApprovalSheet />);
+    const icon = container.querySelector('[data-icon="triangle-alert"]');
+    expect(icon.getAttribute('data-color')).toBe('#f00');
+  });
+
+  it('says who asks before it says danger: the asking profile\'s object and name in ink, no red ALERT', () => {
+    const { container } = render(<ApprovalSheet />);
+    const object = container.querySelector('[data-fold]');
+    expect(object.getAttribute('data-fold')).toBe('heart');
+    expect(object.getAttribute('data-color')).toBe('#f36a8a');
+    expect(screen.getByText('doc')).toBeTruthy();
+    expect(screen.queryByText('ALERT')).toBeNull();
+  });
+});
 
 describe('ApprovalSheet dismissal contract', () => {
   it('words no Cancel — the sheet close icon owns dismissal', () => {

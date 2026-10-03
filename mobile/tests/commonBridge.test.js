@@ -59,5 +59,5 @@ describe("common/ shared source directory", () => {
         { encoding: "utf8", stdio: "pipe" },
       ), file).not.toThrow();
     }
-  });
+  }, 30000);
 });

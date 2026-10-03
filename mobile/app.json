@@ -4,7 +4,7 @@
     "slug": "alpi-mobile",
     "owner": "satoshi-ltd",
     "scheme": "alpi",
-    "version": "0.6.7",
+    "version": "0.7.0",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -12,7 +12,7 @@
       "supportsTablet": true,
       "requireFullScreen": false,
       "bundleIdentifier": "com.satoshilimited.alpi",
-      "buildNumber": "51",
+      "buildNumber": "52",
       "icon": {
         "light": "./assets/ios-light.png",
         "dark": "./assets/ios-dark.png",
@@ -41,10 +41,10 @@
     },
     "android": {
       "package": "com.satoshilimited.alpi",
-      "versionCode": 51,
+      "versionCode": 52,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#eef0f2"
+        "backgroundColor": "#f0f0f0"
       },
       "predictiveBackGestureEnabled": false,
       "permissions": [
@@ -86,10 +86,10 @@
           "image": "./assets/splash-icon-light.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#eef0f2",
+          "backgroundColor": "#f0f0f0",
           "dark": {
             "image": "./assets/splash-icon-dark.png",
-            "backgroundColor": "#0f1115"
+            "backgroundColor": "#0b0b0b"
           }
         }
       ],
@@ -101,7 +101,7 @@
         "expo-notifications",
         {
           "icon": "./assets/ios-tinted.png",
-          "color": "#0f1115"
+          "color": "#0b0b0b"
         }
       ],
       "expo-background-task",

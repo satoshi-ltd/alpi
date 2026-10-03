@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { space } from '../../../../../src/theme/tokens';
 
-import { Row, RowSeparator, SectionHeader } from '../../../../../src/components/Row';
+import { Row, RowGroup, RowSeparator, SectionHeader } from '../../../../../src/components/Row';
 import { Eyebrow } from '../../../../../src/components/Eyebrow';
 import { ScreenHeader } from '../../../../../src/components/ScreenHeader';
 import { useBack } from '../../../../../src/hooks/useBack';
@@ -61,60 +61,64 @@ export default function ToolsList() {
         ) : tools.error && rows.length === 0 ? (
           <LoadFailed inline label="tools" error={tools.error} onRetry={() => tools.refresh?.()} />
         ) : rows.length === 0 ? (
-          <Row label={EMPTY.tools.title} helper={EMPTY.tools.hint} chevron={false} />
+          <RowGroup style={{ marginTop: space.s5 }}>
+            <Row label={EMPTY.tools.title} helper={EMPTY.tools.hint} chevron={false} />
+          </RowGroup>
         ) : (
           cats.map((cat) => (
             <View key={cat}>
               <SectionHeader>{cat}</SectionHeader>
-              {groups.get(cat).map((t, i) => (
-                <View key={t.name}>
-                  {i > 0 ? <RowSeparator /> : null}
-                  <Pressable
-                    onPress={() =>
-                      router.push({
-                        pathname: `/profile/${id}/brain/tools/[name]`,
-                        params: { name: t.name },
-                      })
-                    }
-                    android_ripple={{ color: colors.selected }}
-                    style={({ pressed }) => ({
-                      paddingHorizontal: space.s8,
-                      paddingVertical: space.s6,
-                      gap: space.s1,
-                      backgroundColor: pressed ? colors.selected : 'transparent',
-                    })}
-                  >
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3 }}>
-                      <Text
-                        style={{
-                          fontFamily: fonts.monoMedium,
-                          fontSize: fontSizes.lg,
-                          color: t.denied ? colors.ink3 : colors.ink,
-                          textDecorationLine: t.denied ? 'line-through' : 'none',
-                        }}
-                      >
-                        {t.name}
-                      </Text>
-                      {t.denied ? (
-                        <Eyebrow color={colors.warning}>denied</Eyebrow>
+              <RowGroup>
+                {groups.get(cat).map((t, i) => (
+                  <View key={t.name}>
+                    {i > 0 ? <RowSeparator /> : null}
+                    <Pressable
+                      onPress={() =>
+                        router.push({
+                          pathname: `/profile/${id}/brain/tools/[name]`,
+                          params: { name: t.name },
+                        })
+                      }
+                      android_ripple={{ color: colors.selected }}
+                      style={({ pressed }) => ({
+                        paddingHorizontal: space.s8,
+                        paddingVertical: space.s6,
+                        gap: space.s1,
+                        backgroundColor: pressed ? colors.selected : 'transparent',
+                      })}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3 }}>
+                        <Text
+                          style={{
+                            fontFamily: fonts.monoMedium,
+                            fontSize: fontSizes.lg,
+                            color: t.denied ? colors.ink3 : colors.ink,
+                            textDecorationLine: t.denied ? 'line-through' : 'none',
+                          }}
+                        >
+                          {t.name}
+                        </Text>
+                        {t.denied ? (
+                          <Eyebrow color={colors.warning}>denied</Eyebrow>
+                        ) : null}
+                      </View>
+                      {t.description ? (
+                        <Text
+                          numberOfLines={2}
+                          style={{
+                            fontFamily: fonts.sans.regular,
+                            fontSize: fontSizes.sm,
+                            color: colors.ink3,
+                            opacity: t.denied ? 0.6 : 1,
+                          }}
+                        >
+                          {t.description}
+                        </Text>
                       ) : null}
-                    </View>
-                    {t.description ? (
-                      <Text
-                        numberOfLines={2}
-                        style={{
-                          fontFamily: fonts.sans.regular,
-                          fontSize: fontSizes.sm,
-                          color: colors.ink3,
-                          opacity: t.denied ? 0.6 : 1,
-                        }}
-                      >
-                        {t.description}
-                      </Text>
-                    ) : null}
-                  </Pressable>
-                </View>
-              ))}
+                    </Pressable>
+                  </View>
+                ))}
+              </RowGroup>
             </View>
           ))
         )}

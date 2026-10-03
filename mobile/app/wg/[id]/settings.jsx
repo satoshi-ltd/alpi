@@ -9,12 +9,13 @@ import { radii, space, tracking } from '../../../src/theme/tokens';
 import { toUsageDays } from '../../../../common/usage.mjs';
 import { ActionSheet } from '../../../src/components/ActionSheet';
 import { Button } from '../../../src/components/Button';
-import { Diamond } from '../../../src/components/Diamond';
+import { FALLBACK_ACCENT, WORKGROUP_FOLD } from '../../../../common/folds.mjs';
+import { Fold } from '../../../src/components/Fold';
 import { Eyebrow } from '../../../src/components/Eyebrow';
 import { Icon } from '../../../src/components/Icon';
 import { Toggle } from '../../../src/components/Toggle';
 import { Pill } from '../../../src/components/Pill';
-import { Row, RowSeparator, SectionHeader, SettingsBand } from '../../../src/components/Row';
+import { Row, RowGroup, RowSeparator, SectionHeader, SettingsBand } from '../../../src/components/Row';
 import { ScreenHeader } from '../../../src/components/ScreenHeader';
 import { SettingsSkeleton } from '../../../src/components/SettingsSkeleton';
 import { UsageChart } from '../../../src/components/UsageChart';
@@ -30,7 +31,6 @@ import { EditBudgetSheet } from '../../../src/features/sheets/EditBudgetSheet';
 import { PipelinesSection } from '../../../src/features/workgroups/PipelinesSection';
 import { usePane } from '../../../src/nav/PaneContext';
 import { SettingsSurface } from '../../../src/nav/SettingsSurface';
-import { accentForProfile } from '../../../src/theme/accents';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { AdminGuard } from '../../../src/components/AdminGuard';
 import { EMPTY } from '../../../../common/emptyCopy.mjs';
@@ -57,7 +57,7 @@ function RemoveButton({ label, onPress }) {
       style={({ pressed }) => ({
         width: 40,
         height: 40,
-        borderRadius: radii.md,
+        borderRadius: radii.xs,
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: pressed ? colors.selected : 'transparent',
@@ -101,11 +101,11 @@ function WorkgroupSettings() {
   const peerByPubkey = useMemo(() => {
     const m = new Map();
     for (const p of (summaries.data?.profiles ?? [])) {
-      if (p.pubkey_b64) m.set(p.pubkey_b64, { name: p.name, accent: p.accent, bio: p.bio });
+      if (p.pubkey_b64) m.set(p.pubkey_b64, { name: p.name, accent: p.accent, fold: p.fold, bio: p.bio });
     }
     for (const peer of (hub?.peers ?? [])) {
       if (peer.pubkey && !m.has(peer.pubkey)) {
-        m.set(peer.pubkey, { name: peer.alias || peer.id, accent: undefined, bio: undefined });
+        m.set(peer.pubkey, { name: peer.alias || peer.id, accent: undefined, fold: undefined, bio: undefined });
       }
     }
     return m;
@@ -130,7 +130,7 @@ function WorkgroupSettings() {
     );
   }
 
-  const accent = hub?.accent ?? accentForProfile(wg.hub_id) ?? colors.ink3;
+  const accent = hub?.accent ?? FALLBACK_ACCENT;
   const cap = Number(wg.budget_usd ?? 0);
   const used = Number(wg.spent_usd ?? 0);
   const pct = cap > 0 ? (used / cap) * 100 : 0;
@@ -144,8 +144,8 @@ function WorkgroupSettings() {
 
   const resolveMember = (pk) => {
     const hit = peerByPubkey.get(pk);
-    if (hit?.name) return { label: `@${hit.name}`, accent: hit.accent ?? accentForProfile(hit.name), bio: hit.bio };
-    return { label: shortPubkey(pk), accent: colors.ink3, bio: undefined };
+    if (hit?.name) return { label: `@${hit.name}`, accent: hit.accent ?? FALLBACK_ACCENT, fold: hit.fold, bio: hit.bio };
+    return { label: shortPubkey(pk), accent: colors.ink3, fold: undefined, bio: undefined };
   };
 
   // pause/resume = hub-only meta.yaml mutation; leave = subscriber ALP message to hub.
@@ -209,7 +209,7 @@ function WorkgroupSettings() {
       <View key={pk ?? i}>
         {i > 0 ? <RowSeparator /> : null}
         <Row
-          leading={<Diamond color={isHubMember ? accent : resolved.accent} size="md" />}
+          leading={<Fold fold={isHubMember ? hub?.fold : resolved.fold} color={isHubMember ? accent : resolved.accent} size="md" />}
           label={resolved.label}
           item
           helper={m.bio || resolved.bio || (m.joined ? 'joined' : 'invited')}
@@ -241,7 +241,7 @@ function WorkgroupSettings() {
         subtitle={twoPane ? 'SETTINGS' : `WORKGROUP · ${isHub ? 'HUB' : 'MEMBER'}`}
         onBack={goBack}
         accent={accent}
-        leadingGlyph={<Text style={{ color: colors.ink4, fontFamily: fonts.mono, fontSize: fontSizes.lg }}>#</Text>}
+        leadingGlyph={<Fold fold={WORKGROUP_FOLD} color={accent} size="md" outlined={!!paused} />}
         meta={
           <>
             <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink2 }}>{`hub @${wg.hub_id}`}</Text>
@@ -260,167 +260,181 @@ function WorkgroupSettings() {
         refreshControl={<RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} tintColor={colors.ink3} />}
       >
         <SectionHeader first>Overview</SectionHeader>
-        <Row
-          label="Hub"
-          value={
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2 }}>
-              <Diamond color={accentForProfile(wg.hub_id)} />
-              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink2 }}>
-                @{wg.hub_id}
-              </Text>
-            </View>
-          }
-          chevron={false}
-        />
-        <RowSeparator />
-        <Row
-          label="Status"
-          value={<Pill tone={paused ? 'warn' : 'on'}>{paused ? 'paused' : 'active'}</Pill>}
-          chevron={false}
-        />
-        <RowSeparator />
-        {isHub ? (
-          <>
-            <Row
-              label="Auto-read messages"
-              helper="reads agents' automatic messages aloud — never your directives"
-              value={<Toggle on={!!wg.auto_read} label="Auto-read messages" color={accent} onChange={toggleAutoRead} />}
-              chevron={false}
-            />
-            <RowSeparator />
-          </>
-        ) : null}
-        <Row label="ID" value={`wg_${wg.id}`} chevron={false} />
-        <RowSeparator />
-        <Row
-          label="Accent"
-          value={
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2 }}>
-              <View style={{ width: 14, height: 14, borderRadius: radii.md, backgroundColor: accent }} />
-              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink3 }}>
-                {accent}
-              </Text>
-            </View>
-          }
-          chevron={false}
-        />
+        <RowGroup>
+          <Row
+            label="Hub"
+            value={
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2 }}>
+                <Fold fold={hub?.fold} color={accent} />
+                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink2 }}>
+                  @{wg.hub_id}
+                </Text>
+              </View>
+            }
+            chevron={false}
+          />
+          <RowSeparator />
+          <Row
+            label="Status"
+            value={<Pill tone={paused ? 'warn' : 'on'}>{paused ? 'paused' : 'active'}</Pill>}
+            chevron={false}
+          />
+          <RowSeparator />
+          {isHub ? (
+            <>
+              <Row
+                label="Auto-read messages"
+                helper="reads agents' automatic messages aloud — never your directives"
+                value={<Toggle on={!!wg.auto_read} label="Auto-read messages" color={accent} onChange={toggleAutoRead} />}
+                chevron={false}
+              />
+              <RowSeparator />
+            </>
+          ) : null}
+          <Row label="ID" value={`wg_${wg.id}`} chevron={false} />
+          <RowSeparator />
+          <Row
+            label="Accent"
+            value={
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s2 }}>
+                <View style={{ width: 14, height: 14, borderRadius: radii.xs, backgroundColor: accent }} />
+                <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink3 }}>
+                  {accent}
+                </Text>
+              </View>
+            }
+            chevron={false}
+          />
+        </RowGroup>
 
         {cap > 0 || isHub ? (
           <>
             <SectionHeader kicker="workgroup spend cap">Budget</SectionHeader>
-            <SettingsBand>
-              <View style={{ gap: space.s4 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: space.s4, flexWrap: 'wrap' }}>
-                  <Text
-                    style={{
-                      fontFamily: fonts.sans.semibold,
-                      fontSize: fontSizes.display,
-                      color: colors.ink,
-                      letterSpacing: fontSizes.display * tracking.tight,
-                    }}
-                  >
-                    ${used.toFixed(2)}
-                  </Text>
-                  <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.md, color: colors.ink3 }}>
-                    of <Text style={{ color: colors.ink2 }}>{cap > 0 ? `$${cap.toFixed(2)}/wk` : 'no cap'}</Text>
-                    {cap > 0 ? ` · ${Math.round(pct)}%` : ''}
-                  </Text>
-                  {isHub ? (
-                    <>
-                      <View style={{ flex: 1 }} />
-                      <Button title={cap > 0 ? 'Edit' : 'Set cap'} variant="ghost" size="sm" onPress={() => setBudgetOpen(true)} />
-                    </>
+            <RowGroup>
+              <SettingsBand>
+                <View style={{ gap: space.s4 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: space.s4, flexWrap: 'wrap' }}>
+                    <Text
+                      style={{
+                        fontFamily: fonts.sans.semibold,
+                        fontSize: fontSizes.display,
+                        color: colors.ink,
+                        letterSpacing: fontSizes.display * tracking.tight,
+                      }}
+                    >
+                      ${used.toFixed(2)}
+                    </Text>
+                    <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.md, color: colors.ink3 }}>
+                      of <Text style={{ color: colors.ink2 }}>{cap > 0 ? `$${cap.toFixed(2)}/wk` : 'no cap'}</Text>
+                      {cap > 0 ? ` · ${Math.round(pct)}%` : ''}
+                    </Text>
+                    {isHub ? (
+                      <>
+                        <View style={{ flex: 1 }} />
+                        <Button title={cap > 0 ? 'Edit' : 'Set cap'} variant="ghost" size="sm" onPress={() => setBudgetOpen(true)} />
+                      </>
+                    ) : null}
+                  </View>
+                  {cap > 0 ? (
+                    <View style={{ height: 6, borderRadius: radii.pill, backgroundColor: colors.line, overflow: 'hidden' }}>
+                      <View style={{ width: `${Math.min(100, pct)}%`, height: '100%', backgroundColor: accent }} />
+                    </View>
                   ) : null}
                 </View>
-                {cap > 0 ? (
-                  <View style={{ height: 6, borderRadius: radii.pill, backgroundColor: colors.line, overflow: 'hidden' }}>
-                    <View style={{ width: `${Math.min(100, pct)}%`, height: '100%', backgroundColor: accent }} />
-                  </View>
-                ) : null}
-              </View>
-            </SettingsBand>
+              </SettingsBand>
+            </RowGroup>
           </>
         ) : null}
 
         <SectionHeader kicker="last 14 days">Usage</SectionHeader>
-        {usageDays.length === 0 && usage.loading ? (
-          <Row label="Loading usage…" chevron={false} />
-        ) : usageDays.length === 0 ? (
-          <Row label={EMPTY.workgroupUsage.title} helper={EMPTY.workgroupUsage.hint} chevron={false} />
-        ) : (
-          <SettingsBand>
-            <UsageChart days={usageDays} accent={accent} />
-          </SettingsBand>
-        )}
+        <RowGroup>
+          {usageDays.length === 0 && usage.loading ? (
+            <Row label="Loading usage…" chevron={false} />
+          ) : usageDays.length === 0 ? (
+            <Row label={EMPTY.workgroupUsage.title} helper={EMPTY.workgroupUsage.hint} chevron={false} />
+          ) : (
+            <SettingsBand>
+              <UsageChart days={usageDays} accent={accent} />
+            </SettingsBand>
+          )}
+        </RowGroup>
 
         <SectionHeader kicker="what this workgroup decides">Briefing</SectionHeader>
-        <Row
-          label={wg.briefing && wg.briefing.length > 0 ? wg.briefing : EMPTY.briefing.title}
-          labelLines={3}
-          helper={isHub ? 'tap to edit' : undefined}
-          onPress={isHub ? () => router.push(`/wg/${id}/briefing`) : undefined}
-          chevron={isHub}
-        />
+        <RowGroup>
+          <Row
+            label={wg.briefing && wg.briefing.length > 0 ? wg.briefing : EMPTY.briefing.title}
+            labelLines={3}
+            helper={isHub ? 'tap to edit' : undefined}
+            onPress={isHub ? () => router.push(`/wg/${id}/briefing`) : undefined}
+            chevron={isHub}
+          />
+        </RowGroup>
         <PipelinesSection workgroup={wg} />
 
         <SectionHeader kicker={`${joined.length || wg.members || 0} profiles`}>Members</SectionHeader>
-        {joined.map((m, i) => renderMember(m, i, { removable: true }))}
-        {isHub ? (
-          <>
-            {joined.length ? <RowSeparator /> : null}
-            <Row label="+ Add member" onPress={() => router.push(`/wg/${id}/member`)} chevron={false} />
-          </>
-        ) : null}
+        <RowGroup>
+          {joined.map((m, i) => renderMember(m, i, { removable: true }))}
+          {isHub ? (
+            <>
+              {joined.length ? <RowSeparator /> : null}
+              <Row label="+ Add member" onPress={() => router.push(`/wg/${id}/member`)} chevron={false} />
+            </>
+          ) : null}
+        </RowGroup>
 
         {invited.length > 0 ? (
           <>
             <SectionHeader kicker={`${invited.length} pending`}>Invitations</SectionHeader>
-            {isHub ? (
-              <>
-                <Row
-                  label="Join command"
-                  helper={joinCommand(wg.hub_id, wg.id)}
-                  value="Copy"
-                  onPress={copyJoin}
-                  chevron={false}
-                />
-                <RowSeparator />
-              </>
-            ) : null}
-            {invited.map((m, i) => renderMember(m, i, { removable: true }))}
+            <RowGroup>
+              {isHub ? (
+                <>
+                  <Row
+                    label="Join command"
+                    helper={joinCommand(wg.hub_id, wg.id)}
+                    value="Copy"
+                    onPress={copyJoin}
+                    chevron={false}
+                  />
+                  <RowSeparator />
+                </>
+              ) : null}
+              {invited.map((m, i) => renderMember(m, i, { removable: true }))}
+            </RowGroup>
           </>
         ) : null}
 
         <SectionHeader>Danger zone</SectionHeader>
-        <Row
-          label={paused ? 'Resume workgroup' : 'Pause workgroup'}
-          helper={isHub ? (paused ? 'lets the hub fire tasks again' : 'stops the hub from firing tasks') : 'only the hub can pause / resume'}
-          onPress={isHub ? () => performAction(paused ? 'resume' : 'pause') : undefined}
-          chevron={false}
-        />
-        {isHub ? (
-          <>
-            <RowSeparator />
-            <Row
-              label="Delete workgroup"
-              helper="removes channel and all history. Cannot be undone."
-              danger
-              chevron={false}
-              onPress={() => setConfirmDelete(true)}
-            />
-          </>
-        ) : (
-          <>
-            <RowSeparator />
-            <Row
-              label="Leave workgroup"
-              helper="unsubscribes this profile. The hub keeps the channel."
-              danger
-              chevron={false}
-              onPress={() => setConfirmLeave(true)}
-            />
-          </>
-        )}
+        <RowGroup>
+          <Row
+            label={paused ? 'Resume workgroup' : 'Pause workgroup'}
+            helper={isHub ? (paused ? 'lets the hub fire tasks again' : 'stops the hub from firing tasks') : 'only the hub can pause / resume'}
+            onPress={isHub ? () => performAction(paused ? 'resume' : 'pause') : undefined}
+            chevron={false}
+          />
+          {isHub ? (
+            <>
+              <RowSeparator />
+              <Row
+                label="Delete workgroup"
+                helper="removes channel and all history. Cannot be undone."
+                danger
+                chevron={false}
+                onPress={() => setConfirmDelete(true)}
+              />
+            </>
+          ) : (
+            <>
+              <RowSeparator />
+              <Row
+                label="Leave workgroup"
+                helper="unsubscribes this profile. The hub keeps the channel."
+                danger
+                chevron={false}
+                onPress={() => setConfirmLeave(true)}
+              />
+            </>
+          )}
+        </RowGroup>
       </ScrollView>
       </SettingsSurface>
 

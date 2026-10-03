@@ -161,11 +161,12 @@ export function SidebarPane({ onCollapse }) {
         item={item}
         selected={isRowSelected(item, selectedKind, selectedId)}
         showState
+        offline={activeFailed}
         onPress={openItem}
         onLongPress={handleLongPress}
       />
     ),
-    [selectedKind, selectedId, openItem, handleLongPress],
+    [selectedKind, selectedId, openItem, handleLongPress, activeFailed],
   );
 
   const addActions = useMemo(

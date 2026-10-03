@@ -1,7 +1,8 @@
 import { Pressable, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AlpiMark } from '../../components/AlpiMark';
+import { ALPACA_FOLD } from '../../../../common/folds.mjs';
+import { Fold } from '../../components/Fold';
 import { Icon } from '../../components/Icon';
 import { CHROME_BTN, tapSlop } from '../../lib/panes';
 import { usePane } from '../../nav/PaneContext';
@@ -9,6 +10,7 @@ import { useTheme } from '../../theme/ThemeContext';
 import { radii, space } from '../../theme/tokens';
 
 const MARK_SIZE = 96;
+const MARK_OPACITY = 0.16;
 
 export function HomePane() {
   const { colors } = useTheme();
@@ -27,7 +29,7 @@ export function HomePane() {
             left: space.s5,
             width: CHROME_BTN,
             height: CHROME_BTN,
-            borderRadius: radii.md,
+            borderRadius: radii.xs,
             alignItems: 'center',
             justifyContent: 'center',
             backgroundColor: pressed ? colors.selected : 'transparent',
@@ -38,7 +40,9 @@ export function HomePane() {
         </Pressable>
       ) : null}
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <AlpiMark size={MARK_SIZE} color={colors.line2} />
+        <View style={{ opacity: MARK_OPACITY }}>
+          <Fold fold={ALPACA_FOLD} size={MARK_SIZE} />
+        </View>
       </View>
     </SafeAreaView>
   );

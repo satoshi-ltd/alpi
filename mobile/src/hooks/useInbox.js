@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { FALLBACK_ACCENT } from '../../../common/folds.mjs';
 import { useEndpoint } from '../lib/EndpointContext';
 import { profileEmptyState } from '../lib/profileReady';
 import { profileLabel } from '../lib/profileName';
 import { useReadState } from '../lib/readState';
-import { accentForProfile } from '../theme/accents';
 import { useProfileSummaries, useWorkgroups } from './useDaemonData';
 import { useEventEffect } from './useEvents';
 import { quiet } from '../lib/settled';
@@ -101,7 +101,8 @@ export function useInbox() {
         id: p.name,
         name: p.name,
         label: profileLabel(p.name),
-        accent: p.accent ?? accentForProfile(p.name),
+        accent: p.accent ?? FALLBACK_ACCENT,
+        fold: p.fold,
         needsProvider: blocked,
         emptyState: state,
         preview,
@@ -124,7 +125,7 @@ export function useInbox() {
         profile: w.profile,
         name: w.name ?? w.id,
         label: w.name ?? w.id,
-        accent: hub?.accent ?? accentForProfile(w.hub_id),
+        accent: hub?.accent ?? FALLBACK_ACCENT,
         paused: w.paused,
         preview: workgroupPreview(w),
         unread,

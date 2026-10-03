@@ -41,7 +41,7 @@ vi.mock('../../theme/ThemeContext', () => ({
   }),
 }));
 
-vi.mock('../../components/Diamond', () => ({ Diamond: () => React.createElement('span', { 'data-diamond': 'true' }) }));
+vi.mock('../../components/Fold', () => ({ Fold: ({ fold, color, size, outlined }) => React.createElement('span', { 'data-fold': fold ?? 'diamond', 'data-color': color, 'data-size': size, 'data-outlined': String(!!outlined) }) }));
 vi.mock('../../components/Dot', () => ({ Dot: () => React.createElement('span', { 'data-dot': 'true' }) }));
 vi.mock('../../components/RichText', () => ({
   RichText: ({ children }) => React.createElement('span', { 'data-rich': 'true' }, children),
@@ -73,6 +73,20 @@ describe('MarkerCard typography', () => {
     expect(screen.getByText('TASK').getAttribute('data-font')).toBe('GeistMono_600SemiBold');
     expect(screen.getByText('#7').getAttribute('data-font')).toBe('GeistMono_500Medium');
     expect(screen.getByText('collect the brief').getAttribute('data-font')).toBe('Geist_600SemiBold');
+  });
+});
+
+describe('MarkerCard speaker fold', () => {
+  it('marks the speaker with their fold in the hub colour', () => {
+    const { container } = render(<MarkerCard variant="task" hubColor="#0af0af" hubFold="shield" seq={7} speakerName="scout" title="collect" />);
+    const fold = container.querySelector('[data-fold]');
+    expect(fold.getAttribute('data-fold')).toBe('shield');
+    expect(fold.getAttribute('data-color')).toBe('#0af0af');
+  });
+
+  it('keeps the diamond when the speaker has no fold', () => {
+    const { container } = render(<MarkerCard variant="task" hubColor="#0af0af" seq={7} speakerName="scout" title="collect" />);
+    expect(container.querySelector('[data-fold]').getAttribute('data-fold')).toBe('diamond');
   });
 });
 

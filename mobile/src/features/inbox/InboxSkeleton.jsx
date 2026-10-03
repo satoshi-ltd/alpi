@@ -21,7 +21,7 @@ function Row() {
         style={{
           width: 40,
           height: 40,
-          borderRadius: radii.pill,
+          borderRadius: radii.xs,
           backgroundColor: colors.hover,
         }}
       />

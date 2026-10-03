@@ -2,7 +2,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { space } from '../../../../../src/theme/tokens';
+import { radii, space } from '../../../../../src/theme/tokens';
 
 import { ScreenHeader } from '../../../../../src/components/ScreenHeader';
 import { useBack } from '../../../../../src/hooks/useBack';
@@ -81,7 +81,7 @@ export default function SkillDetail() {
               style={{
                 paddingHorizontal: space.s3,
                 paddingVertical: space.s1,
-                borderRadius: space.s2,
+                borderRadius: radii.tag,
                 backgroundColor: statusBg,
               }}
               accessibilityRole="text"
@@ -103,7 +103,7 @@ export default function SkillDetail() {
             <View
               style={{
                 padding: space.s4,
-                borderRadius: space.s2,
+                borderRadius: radii.xs,
                 borderWidth: 0.5,
                 borderColor: status === 'invalid' ? colors.danger : colors.line,
                 gap: space.s1,

@@ -31,8 +31,8 @@ export function ChatSkeleton({ kind = 'profile', accent }) {
         <View
           style={{
             width: '60%',
-            backgroundColor: accent ? `${accent}22` : colors.bgInput,
-            borderRadius: radii.bubble,
+            backgroundColor: colors.selected,
+            borderRadius: radii.xs,
             padding: space.s5,
             gap: space.s2,
           }}

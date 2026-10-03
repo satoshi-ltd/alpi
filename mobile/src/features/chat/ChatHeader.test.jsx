@@ -75,7 +75,8 @@ vi.mock('../../theme/ThemeContext', () => ({
   }),
 }));
 
-vi.mock('../../components/Diamond', () => ({ Diamond: () => React.createElement('span', { 'data-diamond': 'true' }) }));
+vi.mock('../../components/Fold', () => ({ Fold: ({ fold, color, size, outlined, unfolded }) => React.createElement('span', { 'data-fold': fold ?? 'diamond', 'data-color': color, 'data-size': size, 'data-outlined': String(!!outlined), 'data-unfolded': String(!!unfolded) }) }));
+vi.mock('../../components/Crease', () => ({ Crease: ({ text, accent, size }) => React.createElement('span', { 'data-crease': text, 'data-accent': accent, 'data-size': size }) }));
 vi.mock('../../components/Icon', () => ({ Icon: ({ name }) => React.createElement('span', {}, name) }));
 
 import { PaneContext } from '../../nav/PaneContext';
@@ -102,6 +103,59 @@ function labels(actions) {
 beforeEach(() => {
   h.pathname = '/wg/alpha';
   h.canGoBack.mockClear().mockReturnValue(true);
+});
+
+describe('ChatHeader profile fold', () => {
+  it('draws the profile fold at header size in the accent', () => {
+    const { container } = render(<ChatHeader kind="profile" accent="#3899e2" fold="shield" title="@doc" />);
+    const fold = container.querySelector('[data-fold]');
+    expect(fold.getAttribute('data-fold')).toBe('shield');
+    expect(fold.getAttribute('data-color')).toBe('#3899e2');
+    expect(fold.getAttribute('data-size')).toBe('md');
+  });
+
+  it('draws the legacy diamond when the profile never chose a fold', () => {
+    const { container } = render(<ChatHeader kind="profile" accent="#3899e2" title="@doc" />);
+    expect(container.querySelector('[data-fold]').getAttribute('data-fold')).toBe('diamond');
+  });
+
+  it('draws the honeycomb in the hub colour for a workgroup, whatever fold the profile has', () => {
+    const { container } = render(<ChatHeader kind="workgroup" fold="shield" accent="#6572e4" title="alpha" />);
+    const fold = container.querySelector('[data-fold]');
+    expect(fold.getAttribute('data-fold')).toBe('honeycomb');
+    expect(fold.getAttribute('data-color')).toBe('#6572e4');
+    expect(fold.getAttribute('data-outlined')).toBe('false');
+  });
+
+  it('unfolds a paused object in grey and greys its crease name', () => {
+    for (const kind of ['workgroup', 'profile']) {
+      const { container } = render(<ChatHeader kind={kind} creased accent="#6572e4" title="alpha" paused />);
+      expect(container.querySelector('[data-fold]').getAttribute('data-unfolded')).toBe('true');
+      expect(container.querySelector('[data-crease]').getAttribute('data-accent')).not.toBe('#6572e4');
+      cleanup();
+    }
+  });
+});
+
+describe('ChatHeader crease title', () => {
+  it('draws the name in crease type at 28 or more when creased', () => {
+    const { container } = render(<ChatHeader kind="profile" creased accent="#3899e2" title="@doc" />);
+    const crease = container.querySelector('[data-crease]');
+    expect(crease.getAttribute('data-crease')).toBe('@doc');
+    expect(crease.getAttribute('data-accent')).toBe('#3899e2');
+    expect(Number(crease.getAttribute('data-size'))).toBeGreaterThanOrEqual(28);
+  });
+
+  it('keeps plain Geist for placeholder headers that are not creased', () => {
+    const { container } = render(<ChatHeader kind="profile" accent="#666" title="@doc" meta="loading…" />);
+    expect(container.querySelector('[data-crease]')).toBeNull();
+    expect(screen.getByText('@doc')).toBeTruthy();
+  });
+
+  it('keeps plain Geist when there is no accent', () => {
+    const { container } = render(<ChatHeader kind="workgroup" creased title="#alpha" />);
+    expect(container.querySelector('[data-crease]')).toBeNull();
+  });
 });
 
 describe('ChatHeader back chevron', () => {
@@ -196,28 +250,14 @@ describe('ChatHeader box', () => {
   });
 });
 
-describe('ChatHeader accent stripe', () => {
-  it('pins a stripe to the bottom-left hairline under two panes', () => {
-    const { container } = inTwoPane(<ChatHeader kind="workgroup" title="#alpha" accent="#abc123" />);
+describe('ChatHeader seam', () => {
+  it.each([['two panes', true], ['the phone', false]])('ends on its seam with no accent stripe in %s', (_, two) => {
+    const header = <ChatHeader kind="workgroup" title="#alpha" accent="#abc123" />;
+    const { container } = two ? inTwoPane(header) : render(header);
     const stripe = [...container.querySelectorAll('div')]
       .map(styleOf)
-      .find((s) => s.position === 'absolute');
-    expect(stripe).toBeTruthy();
-    expect(stripe.backgroundColor).toBe('#abc123');
-    expect(stripe.left).toBe(PANE_PAD_X);
-    expect(stripe.bottom).toBe(-0.5);
-    expect(stripe.width).toBe(space.s11);
-  });
-
-  it('draws the same accent notch on the phone, like the sidebar and desktop', () => {
-    const { container } = render(<ChatHeader kind="workgroup" title="#alpha" accent="#abc123" />);
-    const stripe = [...container.querySelectorAll('div')]
-      .map(styleOf)
-      .find((s) => s.position === 'absolute');
-    expect(stripe.backgroundColor).toBe('#abc123');
-    expect(stripe.left).toBe(PANE_PAD_X);
-    expect(stripe.bottom).toBe(-0.5);
-    expect(stripe.width).toBe(space.s11);
+      .find((s) => s.position === 'absolute' && s.backgroundColor === '#abc123');
+    expect(stripe).toBeUndefined();
   });
 
   it('seats the session and more controls on the title line, so the meta strip keeps the full width', () => {

@@ -351,3 +351,39 @@ describe("EndpointProvider offline auto-reprobe", () => {
     }
   });
 });
+
+describe("EndpointProvider liveness", () => {
+  it("re-probes the active daemon when a call fails on the transport, so a dropped daemon reads offline", async () => {
+    const { captureRef } = await mount();
+    await waitFor(() => expect(captureRef.current.probeState.get("alpha")).toBe("online"));
+    probeResults.set("alpha", { status: "offline" });
+    callSpy.mockRejectedValueOnce(Object.assign(new Error("connection closed before response"), { code: -32002, transport: true }));
+    await act(async () => {
+      await captureRef.current.call("host.profile.summaries", {}).catch(() => {});
+    });
+    await waitFor(() => expect(captureRef.current.probeState.get("alpha")).toBe("offline"));
+  });
+
+  it("leaves the status alone when the daemon answers with an error that shares a transport code", async () => {
+    const { captureRef } = await mount();
+    await waitFor(() => expect(captureRef.current.probeState.get("alpha")).toBe("online"));
+    probeResults.set("alpha", { status: "offline" });
+    callSpy.mockRejectedValueOnce(Object.assign(new Error("forbidden"), { code: -32001 }));
+    await act(async () => {
+      await captureRef.current.call("host.outputs.delete", {}).catch(() => {});
+    });
+    expect(captureRef.current.probeState.get("alpha")).toBe("online");
+  });
+
+  it("re-probes when a stream drops on the transport", async () => {
+    const { captureRef } = await mount();
+    await waitFor(() => expect(captureRef.current.probeState.get("alpha")).toBe("online"));
+    probeResults.set("alpha", { status: "offline" });
+    const onError = vi.fn();
+    act(() => { captureRef.current.callStream("host.events.subscribe", {}, { onError }); });
+    const handlers = callStreamSpy.mock.calls.at(-1)[3];
+    act(() => handlers.onError(Object.assign(new Error("closed"), { code: -32002, transport: true })));
+    expect(onError).toHaveBeenCalled();
+    await waitFor(() => expect(captureRef.current.probeState.get("alpha")).toBe("offline"));
+  });
+});

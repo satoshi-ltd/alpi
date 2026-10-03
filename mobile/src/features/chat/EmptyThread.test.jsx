@@ -12,8 +12,8 @@ vi.mock('react-native', () => ({
   Keyboard: { addListener: () => ({ remove: () => {} }) },
   StyleSheet: { create: (s) => s },
 }));
-vi.mock('../../components/AlpiMark', () => ({
-  AlpiMark: ({ color, size }) => React.createElement('span', { 'data-mark': color, 'data-size': String(size) }),
+vi.mock('../../components/Fold', () => ({
+  Fold: ({ fold, color, size }) => React.createElement('span', { 'data-mark': color, 'data-fold': String(fold), 'data-size': String(size) }),
 }));
 vi.mock('../../theme/ThemeContext', async () => {
   const tokens = await import('../../theme/tokens');
@@ -40,10 +40,13 @@ describe('EmptyThread', () => {
     expect(styles().some((s) => s.includes(`"maxWidth":${CONTENT_MAX_W}`))).toBe(true);
   });
 
-  it('draws the heading at the display token and tints the silhouette with the accent', () => {
-    render(<EmptyThread heading="start a thread with doc" detail="anthropic/claude-opus-5" accent="#abc123" />);
+  it('draws the heading at the display token and the profile fold in the accent', () => {
+    render(<EmptyThread heading="start a thread with doc" detail="anthropic/claude-opus-5" accent="#abc123" fold="shield" />);
     expect(styles().some((s) => s.includes(`"fontSize":${fontSizes.xxl}`))).toBe(true);
-    expect(document.querySelector('[data-mark]').getAttribute('data-mark')).toBe('#abc123');
+    const mark = document.querySelector('[data-mark]');
+    expect(mark.getAttribute('data-mark')).toBe('#abc123');
+    expect(mark.getAttribute('data-size')).toBe('72');
+    expect(mark.getAttribute('data-fold')).toBe('shield');
   });
 
   it('drops the detail line when the subject has no model', () => {

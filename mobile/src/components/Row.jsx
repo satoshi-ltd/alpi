@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
-import { iconSizes, lineHeights, mobile, space, tracking } from '../theme/tokens';
+import { Pressable, Text, View, Platform } from 'react-native';
+import { iconSizes, lineHeights, mobile, radii, space, tracking } from '../theme/tokens';
 
 import { Eyebrow } from './Eyebrow';
+import { GroupToneContext, groupTone } from './groupTone';
 import { Icon } from './Icon';
 import { stacksRow } from '../lib/panes';
 import { useWideSettings } from '../nav/SettingsSurface';
@@ -10,6 +11,22 @@ import { useTheme } from '../theme/ThemeContext';
 
 const WIDE_LABEL_W = 148;
 const WIDE_SECTION_GAP = 36;
+
+export { groupTone };
+
+export function RowGroup({ children, style }) {
+  const { colors, mode } = useTheme();
+  const wide = useWideSettings();
+  if (wide) return <>{children}</>;
+  const tone = groupTone(colors, mode);
+  return (
+    <GroupToneContext.Provider value={tone}>
+      <View style={[{ marginHorizontal: space.s5, borderRadius: radii.xs, overflow: 'hidden', backgroundColor: tone }, style]}>
+        {children}
+      </View>
+    </GroupToneContext.Provider>
+  );
+}
 
 export function SectionHeader({ children, kicker, first = false }) {
   const { colors, fonts, fontSizes } = useTheme();
@@ -59,7 +76,7 @@ function pressable(body, { onPress, onLongPress, disabled, colors, spoken }) {
       onPress={onPress}
       onLongPress={onLongPress}
       android_ripple={{ color: colors.selected }}
-      style={({ pressed }) => ({ backgroundColor: pressed ? colors.selected : 'transparent' })}
+      style={({ pressed }) => ({ backgroundColor: pressed && Platform.OS !== 'android' ? colors.selected : 'transparent' })}
     >
       {body}
     </Pressable>
@@ -228,7 +245,6 @@ export function Row({ label, helper, value, leading, trailing, onPress, onLongPr
         paddingHorizontal: space.s8,
         paddingVertical: space.s6,
         gap: space.s5,
-        backgroundColor: colors.bgPane,
         opacity: disabled ? 0.45 : 1,
       }}
     >
@@ -269,11 +285,10 @@ export function RowSeparator({ indent = 20 }) {
 }
 
 export function SettingsBand({ children }) {
-  const { colors } = useTheme();
   const wide = useWideSettings();
   if (wide) return <View>{children}</View>;
   return (
-    <View style={{ backgroundColor: colors.bgPane, paddingHorizontal: space.s8, paddingVertical: space.s7 }}>
+    <View style={{ paddingHorizontal: space.s8, paddingVertical: space.s7 }}>
       {children}
     </View>
   );

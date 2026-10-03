@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { radii, space } from '../src/theme/tokens';
 
 import { Pill } from '../src/components/Pill';
-import { Row, RowSeparator, SectionHeader } from '../src/components/Row';
+import { Row, RowGroup, RowSeparator, SectionHeader } from '../src/components/Row';
 import { ScreenHeader } from '../src/components/ScreenHeader';
 import { useToast } from '../src/components/Toast';
 import { useBack } from '../src/hooks/useBack';
@@ -49,52 +49,56 @@ export default function BiometricSettings() {
       <ScreenHeader title="Biometric unlock" subtitle="THIS PHONE · LOCK ON COLD START" onBack={goBack} />
       <ScrollView>
         <SectionHeader>Capability</SectionHeader>
-        <Row
-          label="Hardware"
-          value={<Pill tone={caps.hasHardware ? 'on' : undefined} off={!caps.hasHardware}>{caps.hasHardware ? 'detected' : 'none'}</Pill>}
-          chevron={false}
-        />
-        <RowSeparator />
-        <Row
-          label={caps.label}
-          value={<Pill tone={caps.enrolled ? 'on' : undefined} off={!caps.enrolled}>{caps.enrolled ? 'enrolled' : 'not enrolled'}</Pill>}
-          chevron={false}
-        />
+        <RowGroup>
+          <Row
+            label="Hardware"
+            value={<Pill tone={caps.hasHardware ? 'on' : undefined} off={!caps.hasHardware}>{caps.hasHardware ? 'detected' : 'none'}</Pill>}
+            chevron={false}
+          />
+          <RowSeparator />
+          <Row
+            label={caps.label}
+            value={<Pill tone={caps.enrolled ? 'on' : undefined} off={!caps.enrolled}>{caps.enrolled ? 'enrolled' : 'not enrolled'}</Pill>}
+            chevron={false}
+          />
+        </RowGroup>
 
         <SectionHeader>Unlock</SectionHeader>
-        <Pressable
-          onPress={toggle}
-          android_ripple={{ color: colors.selected }}
-          style={({ pressed }) => ({
-            paddingHorizontal: space.s8,
-            paddingVertical: space.s6,
-            flexDirection: 'row',
-            alignItems: 'center',
-            backgroundColor: pressed ? colors.selected : 'transparent',
-          })}
-        >
-          <View style={{ flex: 1, gap: space.s1 }}>
-            <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.lg, color: colors.ink }}>
-              Require {caps.label} on cold start
-            </Text>
-            <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4 }}>
-              {on ? 'on' : 'off'}
-            </Text>
-          </View>
-          <View
-            style={{
-              width: 44,
-              height: 26,
-              borderRadius: radii.pill,
-              backgroundColor: on ? colors.ink : colors.line,
-              padding: space.s1,
-              alignItems: on ? 'flex-end' : 'flex-start',
-              justifyContent: 'center',
-            }}
+        <RowGroup>
+          <Pressable
+            onPress={toggle}
+            android_ripple={{ color: colors.selected }}
+            style={({ pressed }) => ({
+              paddingHorizontal: space.s8,
+              paddingVertical: space.s6,
+              flexDirection: 'row',
+              alignItems: 'center',
+              backgroundColor: pressed ? colors.selected : 'transparent',
+            })}
           >
-            <View style={{ width: 20, height: 20, borderRadius: radii.lg, backgroundColor: colors.bgPane }} />
-          </View>
-        </Pressable>
+            <View style={{ flex: 1, gap: space.s1 }}>
+              <Text style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.lg, color: colors.ink }}>
+                Require {caps.label} on cold start
+              </Text>
+              <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4 }}>
+                {on ? 'on' : 'off'}
+              </Text>
+            </View>
+            <View
+              style={{
+                width: 44,
+                height: 26,
+                borderRadius: radii.pill,
+                backgroundColor: on ? colors.ink : colors.line,
+                padding: space.s1,
+                alignItems: on ? 'flex-end' : 'flex-start',
+                justifyContent: 'center',
+              }}
+            >
+              <View style={{ width: 20, height: 20, borderRadius: radii.pill, backgroundColor: colors.bgPane }} />
+            </View>
+          </Pressable>
+        </RowGroup>
       </ScrollView>
     </SafeAreaView>
   );

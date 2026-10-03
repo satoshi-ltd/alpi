@@ -6,14 +6,14 @@ import { ActivityIndicator, FlatList, Pressable, Text, View } from 'react-native
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { space } from '../../../src/theme/tokens';
 
-import { Diamond } from '../../../src/components/Diamond';
+import { Fold } from '../../../src/components/Fold';
 import { ScreenHeader } from '../../../src/components/ScreenHeader';
 import { useToast } from '../../../src/components/Toast';
 import { useBack } from '../../../src/hooks/useBack';
-import { useWorkgroupMembers } from '../../../src/hooks/useDaemonData';
+import { useProfileSummaries, useWorkgroupMembers } from '../../../src/hooks/useDaemonData';
 import { useProfile, useWorkgroup } from '../../../src/hooks/useSubject';
+import { accentForPubkey, foldForPubkey } from '../../../src/lib/localFold';
 import { useEndpoint } from '../../../src/lib/EndpointContext';
-import { accentForProfile } from '../../../src/theme/accents';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { AdminGuard } from '../../../src/components/AdminGuard';
 
@@ -33,6 +33,7 @@ function AddMember() {
   const { colors, fonts, fontSizes } = useTheme();
   const { workgroup: wg } = useWorkgroup(id);
   const memberQuery = useWorkgroupMembers(wg?.profile, wg?.id);
+  const summaries = useProfileSummaries();
   const { profile: hub } = useProfile(wg?.hub_id ?? wg?.profile ?? null);
   const [busy, setBusy] = useState(null);
 
@@ -93,7 +94,7 @@ function AddMember() {
                   opacity: busy && !isBusy ? 0.4 : 1,
                 })}
               >
-                <Diamond color={accentForProfile(item.id) ?? colors.ink3} size="md" />
+                <Fold fold={foldForPubkey(summaries, item.pubkey)} color={accentForPubkey(summaries, item.pubkey)} size="md" />
                 <View style={{ flex: 1 }}>
                   <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.md, color: colors.ink }}>
                     @{item.alias || item.id}

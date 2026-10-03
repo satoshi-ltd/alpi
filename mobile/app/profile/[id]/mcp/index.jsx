@@ -6,7 +6,7 @@ import { space } from '../../../../src/theme/tokens';
 
 import { Button } from '../../../../src/components/Button';
 import { Pill } from '../../../../src/components/Pill';
-import { Row, RowSeparator, SectionHeader } from '../../../../src/components/Row';
+import { Row, RowGroup, RowSeparator, SectionHeader } from '../../../../src/components/Row';
 import { LoadFailed } from '../../../../src/components/LoadFailed';
 import { Sheet } from '../../../../src/components/Sheet';
 import { ScreenHeader } from '../../../../src/components/ScreenHeader';
@@ -75,43 +75,47 @@ export default function McpList() {
           </View>
         ) : error && !profile ? (
           <LoadFailed inline label="MCP servers" error={error} onRetry={() => refresh?.()} />
-        ) : servers.length === 0 ? (
-          <Row label={EMPTY.mcp.title} helper={EMPTY.mcp.hint} chevron={false} />
         ) : (
-          servers.map((s, i) => {
-            const argLine = (s.args ?? []).join(' ');
-            return (
-              <View key={s.name}>
-                {i > 0 ? <RowSeparator /> : null}
-                <Pressable
-                  onPress={() => setTarget(s)}
-                  android_ripple={{ color: colors.selected }}
-                  style={({ pressed }) => ({
-                    paddingHorizontal: space.s8,
-                    paddingVertical: space.s6,
-                    gap: space.s1,
-                    backgroundColor: pressed ? colors.selected : 'transparent',
-                  })}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3 }}>
-                    <Text style={{ flex: 1, fontFamily: fonts.sans.semibold, fontSize: fontSizes.lg, color: colors.ink }}>
-                      {s.name}
-                    </Text>
-                    {(s.env_keys ?? []).length > 0 ? (
-                      <Pill tone="on">{s.env_keys.length} env</Pill>
-                    ) : null}
+          <RowGroup style={{ marginTop: space.s5 }}>
+            {servers.length === 0 ? (
+              <Row label={EMPTY.mcp.title} helper={EMPTY.mcp.hint} chevron={false} />
+            ) : (
+              servers.map((s, i) => {
+                const argLine = (s.args ?? []).join(' ');
+                return (
+                  <View key={s.name}>
+                    {i > 0 ? <RowSeparator /> : null}
+                    <Pressable
+                      onPress={() => setTarget(s)}
+                      android_ripple={{ color: colors.selected }}
+                      style={({ pressed }) => ({
+                        paddingHorizontal: space.s8,
+                        paddingVertical: space.s6,
+                        gap: space.s1,
+                        backgroundColor: pressed ? colors.selected : 'transparent',
+                      })}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s3 }}>
+                        <Text style={{ flex: 1, fontFamily: fonts.sans.semibold, fontSize: fontSizes.lg, color: colors.ink }}>
+                          {s.name}
+                        </Text>
+                        {(s.env_keys ?? []).length > 0 ? (
+                          <Pill tone="on">{s.env_keys.length} env</Pill>
+                        ) : null}
+                      </View>
+                      <Text
+                        numberOfLines={1}
+                        ellipsizeMode="tail"
+                        style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}
+                      >
+                        {s.command} {argLine}
+                      </Text>
+                    </Pressable>
                   </View>
-                  <Text
-                    numberOfLines={1}
-                    ellipsizeMode="tail"
-                    style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink3 }}
-                  >
-                    {s.command} {argLine}
-                  </Text>
-                </Pressable>
-              </View>
-            );
-          })
+                );
+              })
+            )}
+          </RowGroup>
         )}
       </ScrollView>
       <Sheet

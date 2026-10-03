@@ -142,8 +142,8 @@ describe('Sheet wide form', () => {
     expect(sheetStyleOf(container)).toEqual({
       maxHeight: '88%',
       backgroundColor: '#fff',
-      borderTopLeftRadius: radii.sheet,
-      borderTopRightRadius: radii.sheet,
+      borderTopLeftRadius: radii.xs,
+      borderTopRightRadius: radii.xs,
       overflow: 'hidden',
     });
   });
@@ -153,10 +153,10 @@ describe('Sheet wide form', () => {
     expect(sheetStyleOf(container)).toEqual({
       maxHeight: '88%',
       backgroundColor: '#fff',
-      borderTopLeftRadius: radii.sheet,
-      borderTopRightRadius: radii.sheet,
-      borderBottomLeftRadius: radii.sheet,
-      borderBottomRightRadius: radii.sheet,
+      borderTopLeftRadius: radii.xs,
+      borderTopRightRadius: radii.xs,
+      borderBottomLeftRadius: radii.xs,
+      borderBottomRightRadius: radii.xs,
       overflow: 'hidden',
       alignSelf: 'center',
       width: '100%',

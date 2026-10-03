@@ -1,16 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
-import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 
 import { Expand } from '../../components/Expand';
 import { Icon } from '../../components/Icon';
-import { useReduceMotion } from '../../lib/reduceMotion';
+import { Fold } from '../../components/Fold';
+import { mixHex } from '../../../../common/color.mjs';
 import { useTheme } from '../../theme/ThemeContext';
 import { lineHeights, space } from '../../theme/tokens';
 import { thoughtLabel } from '../../../../common/reasoningLabel.mjs';
 import { PROCESS_GAP, PROCESS_INDENT, PROCESS_LEAD_W, processRowStyle, processSlop, processText } from './processRow';
-
-const SHIMMER_HALF_MS = 700;
 
 function toLines(text) {
   return String(text || '')
@@ -19,7 +17,7 @@ function toLines(text) {
     .filter((s) => s.trim());
 }
 
-export function Reasoning({ text, seconds, timeline, streaming = false, answered = false, edges }) {
+export function Reasoning({ text, seconds, timeline, streaming = false, answered = false, edges, accent, fold }) {
   const [open, setOpen] = useState(false);
   useEffect(() => {
     if (answered) setOpen(false);
@@ -30,8 +28,8 @@ export function Reasoning({ text, seconds, timeline, streaming = false, answered
   if (!streaming && !items.length) {
     return (
       <View style={processRowStyle} accessibilityLabel={thoughtLabel(seconds)}>
-        <View style={{ width: PROCESS_LEAD_W }} />
-        <Thought seconds={seconds} />
+        <Mark fold={fold} accent={accent} />
+        <Thought seconds={seconds} accent={accent} />
       </View>
     );
   }
@@ -45,8 +43,9 @@ export function Reasoning({ text, seconds, timeline, streaming = false, answered
         accessibilityLiveRegion={streaming ? 'polite' : 'none'}
         style={processRowStyle}
       >
+        <Mark fold={fold} accent={accent} working={streaming} />
+        {streaming ? <Thinking hint={open ? '' : lines[lines.length - 1]} accent={accent} /> : <Thought seconds={seconds} accent={accent} />}
         <Chevron open={open} />
-        {streaming ? <Thinking hint={open ? '' : lines[lines.length - 1]} /> : <Thought seconds={seconds} />}
       </Pressable>
       <Expand open={open && items.length > 0}>
         <Body items={items} follow={streaming} />
@@ -55,42 +54,34 @@ export function Reasoning({ text, seconds, timeline, streaming = false, answered
   );
 }
 
+function Mark({ fold, accent, working = false }) {
+  return (
+    <View style={{ width: PROCESS_LEAD_W, alignItems: 'center' }}>
+      <Fold fold={fold} color={accent} size={PROCESS_LEAD_W} pulse={working} />
+    </View>
+  );
+}
+
 function Chevron({ open }) {
   const { colors } = useTheme();
   return (
-    <View style={{ width: PROCESS_LEAD_W, alignItems: 'center', transform: [{ rotate: open ? '90deg' : '0deg' }] }}>
+    <View style={{ marginLeft: 'auto', paddingLeft: space.s2, transform: [{ rotate: open ? '90deg' : '0deg' }] }}>
       <Icon name="chevron-right" size="xs" color={colors.ink3} />
     </View>
   );
 }
 
-function Shimmer({ children, style }) {
-  const reduceMotion = useReduceMotion();
-  const opacity = useSharedValue(1);
-  useEffect(() => {
-    if (reduceMotion) {
-      cancelAnimation(opacity);
-      opacity.value = 1;
-      return undefined;
-    }
-    opacity.value = withRepeat(withTiming(0.4, { duration: SHIMMER_HALF_MS }), -1, true);
-    return () => cancelAnimation(opacity);
-  }, [reduceMotion, opacity]);
-  const animated = useAnimatedStyle(() => ({ opacity: opacity.value }));
-  return (
-    <Animated.Text style={[style, animated]}>
-      {children}
-    </Animated.Text>
-  );
+function labelColor(colors, accent) {
+  return /^#[0-9a-f]{6}$/i.test(accent ?? '') && /^#[0-9a-f]{6}$/i.test(colors.ink ?? '') ? mixHex(accent, 0.5, colors.ink) : colors.ink3;
 }
 
-function Thinking({ hint }) {
+function Thinking({ hint, accent }) {
   const theme = useTheme();
   return (
     <>
-      <Shimmer style={processText(theme, theme.colors.ink3)}>Thinking…</Shimmer>
+      <Text style={{ ...processText(theme, labelColor(theme.colors, accent)), fontFamily: theme.fonts.sans.medium }}>Thinking…</Text>
       {hint ? (
-        <Text numberOfLines={1} style={{ ...processText(theme, theme.colors.ink3), flex: 1 }}>
+        <Text numberOfLines={1} style={{ ...processText(theme, theme.colors.ink3), fontFamily: theme.fonts.sans.regular, flex: 1, fontStyle: 'italic' }}>
           {hint}
         </Text>
       ) : null}
@@ -98,9 +89,9 @@ function Thinking({ hint }) {
   );
 }
 
-function Thought({ seconds }) {
+function Thought({ seconds, accent }) {
   const theme = useTheme();
-  return <Text style={processText(theme, theme.colors.ink3)}>{thoughtLabel(seconds)}</Text>;
+  return <Text style={{ ...processText(theme, labelColor(theme.colors, accent)), fontFamily: theme.fonts.sans.medium }}>{thoughtLabel(seconds)}</Text>;
 }
 
 function Body({ items, follow }) {

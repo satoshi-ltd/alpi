@@ -1,8 +1,10 @@
 // Module-level shared cache so refresh() from any consumer propagates to all subscribers.
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { defaultAsAlpaca } from '../../../common/folds.mjs';
 import { useEndpoint } from '../lib/EndpointContext';
+import { useTheme } from '../theme/ThemeContext';
 import { quiet } from '../lib/settled';
 
 const cache = new Map();
@@ -140,7 +142,13 @@ export function invalidate(endpointId, method, params = {}) {
 }
 
 export function useProfileSummaries() {
-  return usePolledCall('host.profile.summaries', {}, []);
+  const inner = usePolledCall('host.profile.summaries', {}, []);
+  const { colors } = useTheme();
+  const data = useMemo(() => {
+    const profiles = inner.data?.profiles;
+    return Array.isArray(profiles) ? { ...inner.data, profiles: profiles.map(defaultAsAlpaca(colors.accent)) } : inner.data;
+  }, [inner.data, colors.accent]);
+  return { ...inner, data };
 }
 
 // storage is excluded on purpose (its os.walk dominates snapshot latency) — needsFallback() fetches it separately; old daemons ignore `sections`.

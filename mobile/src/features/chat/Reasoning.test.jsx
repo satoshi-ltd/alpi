@@ -4,8 +4,6 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 
 afterEach(cleanup);
 
-const h = vi.hoisted(() => ({ reduce: false, repeats: 0 }));
-
 vi.mock('react-native', () => {
   const View = ({ children, style, ...p }) =>
     React.createElement('div', { ...p, 'data-pad': style?.paddingHorizontal ?? '' }, children);
@@ -18,12 +16,7 @@ vi.mock('react-native', () => {
   return { View, Text, Pressable, ScrollView, useWindowDimensions: () => ({ height: 800 }) };
 });
 
-vi.mock('react-native-reanimated', async () => {
-  const base = await import('../../../tests/mocks/reanimated.js');
-  return { ...base, withRepeat: (v) => { h.repeats += 1; return v; } };
-});
 
-vi.mock('../../lib/reduceMotion', () => ({ useReduceMotion: () => h.reduce }));
 
 vi.mock('../../theme/ThemeContext', async () => {
   const tokens = await import('../../theme/tokens');
@@ -36,6 +29,9 @@ vi.mock('../../theme/ThemeContext', async () => {
   };
 });
 
+vi.mock('../../components/Fold', () => ({
+  Fold: ({ fold, color, pulse }) => React.createElement('span', { 'data-fold': fold ?? 'none', 'data-color': color ?? '', 'data-pulse': String(!!pulse) }),
+}));
 vi.mock('../../components/Icon', () => ({
   Icon: ({ name }) => React.createElement('span', { 'data-icon': name }),
 }));
@@ -52,7 +48,7 @@ describe('Reasoning', () => {
     const button = row.closest('button');
     expect(Number(button.getAttribute('data-min-h'))).toBe(PROCESS_ROW_H);
     expect(Number(button.getAttribute('data-slop'))).toBe(PROCESS_GAP);
-    expect(row.getAttribute('data-font')).toBe(fonts.mono);
+    expect(row.getAttribute('data-font')).toBe(fonts.sans.medium);
   });
 
   it('opens to a mono, relaxed, scrollable body', () => {
@@ -77,29 +73,24 @@ describe('Reasoning', () => {
     expect(spans).toEqual(['read the log', '→ read_file, grep', 'wrap up']);
   });
 
-  it('sets every label in the same mono face and size', () => {
+  it('sets the label in sans and the gist in italic sans, at the same size', () => {
     render(<Reasoning text={'first\nreading the deploy log'} streaming />);
+    expect(screen.getByText('Thinking…').getAttribute('data-font')).toBe(fonts.sans.medium);
+    expect(screen.getByText('reading the deploy log').getAttribute('data-font')).toBe(fonts.sans.regular);
     for (const label of [screen.getByText('Thinking…'), screen.getByText('reading the deploy log')]) {
-      expect(label.getAttribute('data-font')).toBe(fonts.mono);
       expect(Number(label.getAttribute('data-size'))).toBe(fontSizes.sm);
     }
   });
 
-  it('shows a shimmering Thinking label while it streams, with the latest line as a hint', () => {
-    h.repeats = 0;
-    render(<Reasoning text={'first\nreading the deploy log'} streaming />);
-    expect(screen.getByText('Thinking…')).toBeTruthy();
+  it('leads with the profile object, rippling while it streams and still once it has thought', () => {
+    const { rerender } = render(<Reasoning text={'first\nreading the deploy log'} streaming fold="shield" accent="#3899e2" />);
+    const live = document.querySelector('[data-fold]');
+    expect(live.getAttribute('data-fold')).toBe('shield');
+    expect(live.getAttribute('data-color')).toBe('#3899e2');
+    expect(live.getAttribute('data-pulse')).toBe('true');
     expect(screen.getByText('reading the deploy log')).toBeTruthy();
-    expect(h.repeats).toBe(1);
-  });
-
-  it('keeps the Thinking label still under reduced motion', () => {
-    h.repeats = 0;
-    h.reduce = true;
-    render(<Reasoning text="" streaming />);
-    expect(screen.getByText('Thinking…')).toBeTruthy();
-    expect(h.repeats).toBe(0);
-    h.reduce = false;
+    rerender(<Reasoning text={'first'} seconds={4} fold="shield" accent="#3899e2" />);
+    expect(document.querySelector('[data-fold]').getAttribute('data-pulse')).toBe('false');
   });
 
   it('collapses on its own when the answer lands', () => {

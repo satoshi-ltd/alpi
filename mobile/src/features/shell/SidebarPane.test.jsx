@@ -119,7 +119,7 @@ vi.mock('../../components/Banner', () => ({
     ),
 }));
 vi.mock('../../components/Icon', () => ({ Icon: ({ name }) => React.createElement('span', { 'data-icon': name }) }));
-vi.mock('../../components/Glyph', () => ({ Glyph: () => React.createElement('span', { 'data-glyph': 'true' }) }));
+vi.mock('../../components/Glyph', () => ({ Glyph: ({ offline }) => React.createElement('span', { 'data-glyph': 'true', 'data-offline': String(!!offline) }) }));
 vi.mock('../../components/Dot', () => ({ Dot: () => React.createElement('span', { 'data-dot': 'true' }) }));
 vi.mock('react-native-gesture-handler', () => ({
   GestureDetector: ({ children }) => React.createElement('div', { 'data-gesture': 'true' }, children),
@@ -281,11 +281,25 @@ describe('SidebarPane connection identity', () => {
   });
 });
 
+describe('SidebarPane front door on the Fold', () => {
+  const HOST = { kind: 'profile', id: 'default', name: 'default', label: 'alpi', preview: 'quiet', ts: '1w', paused: true, raw: { name: 'default', is_default: true } };
+
+  it('draws the default profile first, above Pinned, even paused and with a stale pin', () => {
+    h.items = [...ITEMS, HOST];
+    h.pinnedProfiles = ['default', 'agora'];
+    render(<SidebarPane />);
+    const keys = [...document.querySelectorAll('[data-item]')].map((el) => el.getAttribute('data-item'));
+    expect(keys).toEqual(['profile:default', 'profile:agora', 'profile:doc', 'workgroup:doc/alpha']);
+    const text = screen.getByTestId('list').textContent;
+    expect(text.indexOf('alpi')).toBeLessThan(text.indexOf('PINNED'));
+  });
+});
+
 describe('SidebarPane selection', () => {
   it('lights the row that sidebarSelection(pathname) points at', () => {
     h.pathname = '/chat/agora';
     render(<SidebarPane />);
-    expect(row('agora').getAttribute('data-bg')).toBe('#eaeaea');
+    expect(row('agora').getAttribute('data-bg')).toBe('#fff');
     expect(row('doc').getAttribute('data-bg')).toBe('transparent');
     expect(row('alpha').getAttribute('data-bg')).toBe('transparent');
   });
@@ -294,14 +308,14 @@ describe('SidebarPane selection', () => {
     h.pathname = '/wg/alpha';
     h.items = [...ITEMS, { kind: 'profile', id: 'alpha', name: 'alpha', label: 'alpha', preview: 'p', ts: '3m' }];
     render(<SidebarPane />);
-    expect(itemRow('workgroup:doc/alpha').getAttribute('data-bg')).toBe('#eaeaea');
+    expect(itemRow('workgroup:doc/alpha').getAttribute('data-bg')).toBe('#fff');
     expect(itemRow('profile:alpha').getAttribute('data-bg')).toBe('transparent');
   });
 
   it('keeps the row lit while a drilled screen of that subject is open', () => {
     h.pathname = '/profile/doc/settings';
     render(<SidebarPane />);
-    expect(row('doc').getAttribute('data-bg')).toBe('#eaeaea');
+    expect(row('doc').getAttribute('data-bg')).toBe('#fff');
   });
 
   it('lights nothing on a list-only path', () => {
@@ -612,6 +626,17 @@ describe('Sidebar daemon health', () => {
       expect(banner.textContent, status).toContain(entry.message);
       view.unmount();
     }
+  });
+
+  it('unfolds every roster object while the daemon is down, and folds them back when it answers', () => {
+    h.status = 'offline';
+    const { rerender } = render(<SidebarPane />);
+    const glyphs = [...document.querySelectorAll('[data-glyph]')];
+    expect(glyphs.length).toBeGreaterThan(0);
+    expect(glyphs.every((g) => g.getAttribute('data-offline') === 'true')).toBe(true);
+    h.status = 'online';
+    rerender(<SidebarPane />);
+    expect(document.querySelector('[data-offline="true"]')).toBeNull();
   });
 
   it('keeps the offline retry wired to the roster refresh', () => {

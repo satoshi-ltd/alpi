@@ -1,10 +1,12 @@
 import { useRouter } from 'expo-router';
 import { Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { space, tracking } from '../src/theme/tokens';
+import { ALPACA_FOLD } from '../../common/folds.mjs';
+import { LINK_SOURCES } from '../../common/onboarding.mjs';
+import { radii, space, tracking } from '../src/theme/tokens';
 
 import { Button } from '../src/components/Button';
-import { AlpiMark } from '../src/components/AlpiMark';
+import { Fold } from '../src/components/Fold';
 import { useTheme } from '../src/theme/ThemeContext';
 
 export default function Onboarding() {
@@ -14,7 +16,7 @@ export default function Onboarding() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg, padding: space.s9 }}>
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: space.s9 }}>
-        <AlpiMark color={colors.ink} size={88} />
+        <Fold fold={ALPACA_FOLD} size={88} />
         <Text
           style={{
             fontFamily: fonts.sans.semibold,
@@ -24,7 +26,7 @@ export default function Onboarding() {
             letterSpacing: fontSizes.display * tracking.tight,
           }}
         >
-          Connect to Alpi
+          Pair with your alpi
         </Text>
         <Text
           style={{
@@ -36,12 +38,20 @@ export default function Onboarding() {
             maxWidth: 320,
           }}
         >
-          Alpi runs as a daemon on your computer or Umbrel. This phone is a client — pair it once and you can talk to your profiles from anywhere.
+          alpi runs on a computer or a server. Pair this phone once and its profiles come with you.
         </Text>
       </View>
       <View style={{ gap: space.s4 }}>
-        <Button title="Scan QR" onPress={() => router.push('/pair')} fullWidth size="hero" />
-        <Button title="Paste alpi:// link" variant="ghost" onPress={() => router.push('/pair')} fullWidth />
+        <View style={{ gap: space.s2, padding: space.s5, borderRadius: radii.xs, backgroundColor: colors.hover }}>
+          <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.md, color: colors.ink }}>Where do I get a link?</Text>
+          {LINK_SOURCES.map((line) => (
+            <Text key={line} style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, lineHeight: fontSizes.sm * lineHeights.relaxed, color: colors.ink2 }}>
+              {line}
+            </Text>
+          ))}
+        </View>
+        <Button title="Scan QR" onPress={() => router.push({ pathname: '/pair', params: { mode: 'scan' } })} fullWidth size="hero" />
+        <Button title="Paste link" variant="ghost" onPress={() => router.push('/pair')} fullWidth />
       </View>
     </SafeAreaView>
   );

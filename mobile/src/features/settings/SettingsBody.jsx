@@ -4,9 +4,12 @@ import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { alpha, mobile, radii, space } from '../../theme/tokens';
 
+import { ALPACA_FOLD } from '../../../../common/folds.mjs';
+import { Crease } from '../../components/Crease';
 import { Eyebrow } from '../../components/Eyebrow';
+import { Fold } from '../../components/Fold';
 import { OnOff } from '../../components/OnOff';
-import { Row, RowSeparator, SectionHeader } from '../../components/Row';
+import { Row, RowGroup, RowSeparator, SectionHeader } from '../../components/Row';
 import { useToast } from '../../components/Toast';
 import { Bold, Code, TypedConfirm } from '../../components/TypedConfirm';
 import {
@@ -49,8 +52,8 @@ function StepButton({ glyph, label, disabled, onPress }) {
         height: mobile.tap,
         alignItems: 'center',
         justifyContent: 'center',
-        borderRadius: radii.md,
-        backgroundColor: pressed && !disabled ? colors.selected : colors.bgInput,
+        borderRadius: radii.xs,
+        backgroundColor: pressed && !disabled ? colors.line2 : colors.selected,
         opacity: disabled ? alpha.disabled : 1,
       })}
     >
@@ -150,98 +153,108 @@ export function SettingsBody({ active = true, onDismiss }) {
     <>
       <ScrollView contentContainerStyle={{ paddingBottom: space.s9 }}>
         <SectionHeader>This phone</SectionHeader>
-        <Row label="Re-pair this phone" helper="opens QR scanner" onPress={() => navigate('/pair')} />
-        <RowSeparator />
-        <Row
-          label={`${bioCaps.label} unlock`}
-          helper={
-            bioCaps.hasHardware
-              ? bioCaps.enrolled
-                ? 'required on cold start'
-                : 'not enrolled in OS settings'
-              : 'not available on this device'
-          }
-          value={<StatusValue active={bioOn} label="on" disabled={!bioCaps.hasHardware} />}
-          onPress={toggleBiometric}
-          chevron={false}
-        />
+        <RowGroup>
+          <Row label="Re-pair this phone" helper="opens QR scanner" onPress={() => navigate('/pair')} />
+          <RowSeparator />
+          <Row
+            label={`${bioCaps.label} unlock`}
+            helper={
+              bioCaps.hasHardware
+                ? bioCaps.enrolled
+                  ? 'required on cold start'
+                  : 'not enrolled in OS settings'
+                : 'not available on this device'
+            }
+            value={<StatusValue active={bioOn} label="on" disabled={!bioCaps.hasHardware} />}
+            onPress={toggleBiometric}
+            chevron={false}
+          />
+        </RowGroup>
 
         {isAdmin ? (
           <>
             <SectionHeader>Daemon</SectionHeader>
-            <Row
-              label="Connections"
-              helper="paired apps, devices, pairing links, usage"
-              onPress={() => navigate('/connections')}
-            />
+            <RowGroup>
+              <Row
+                label="Connections"
+                helper="paired apps, devices, pairing links, usage"
+                onPress={() => navigate('/connections')}
+              />
+            </RowGroup>
           </>
         ) : null}
 
         <SectionHeader>Notifications</SectionHeader>
-        <Row
-          label="System permission"
-          helper="instant while alpi is open · in the background the OS decides when to check"
-          value={<StatusValue active={notifPerm === 'granted'} />}
-          onPress={onPermissionPress}
-          chevron={notifPerm !== 'granted'}
-        />
-        {notifHealth && (
-          <>
-            <RowSeparator />
-            <Row
-              label="Delivery status"
-              helper={notifHealth.detail}
-              value={<StatusValue active={notifHealth.ok} />}
-              chevron={false}
-            />
-          </>
-        )}
-        {__DEV__ && (
-          <>
-            <RowSeparator />
-            <Row
-              label="Test notifications"
-              helper="dev-only · sample notifications + routing check"
-              onPress={() => navigate('/debug/aln')}
-            />
-          </>
-        )}
+        <RowGroup>
+          <Row
+            label="System permission"
+            helper="instant while alpi is open · in the background the OS decides when to check"
+            value={<StatusValue active={notifPerm === 'granted'} />}
+            onPress={onPermissionPress}
+            chevron={notifPerm !== 'granted'}
+          />
+          {notifHealth && (
+            <>
+              <RowSeparator />
+              <Row
+                label="Delivery status"
+                helper={notifHealth.detail}
+                value={<StatusValue active={notifHealth.ok} />}
+                chevron={false}
+              />
+            </>
+          )}
+          {__DEV__ && (
+            <>
+              <RowSeparator />
+              <Row
+                label="Test notifications"
+                helper="dev-only · sample notifications + routing check"
+                onPress={() => navigate('/debug/aln')}
+              />
+            </>
+          )}
+        </RowGroup>
 
         <SectionHeader>Appearance</SectionHeader>
-        <Row label="Theme" value={appearanceLabel} onPress={cycleAppearance} />
-        <RowSeparator />
-        <Row
-          label="Text size"
-          helper="multiplies your OS text size · long-press to reset"
-          value={textScaleLabel(textScale)}
-          onLongPress={() => setTextScale?.(DEFAULT_TEXT_SCALE)}
-          chevron={false}
-          trailing={
-            <View style={{ flexDirection: 'row', gap: space.s3 }}>
-              <StepButton
-                glyph="−"
-                label="Smaller text"
-                disabled={textScale <= MIN_TEXT_SCALE}
-                onPress={() => setTextScale?.(stepTextScale(textScale, -1))}
-              />
-              <StepButton
-                glyph="+"
-                label="Larger text"
-                disabled={textScale >= MAX_TEXT_SCALE}
-                onPress={() => setTextScale?.(stepTextScale(textScale, 1))}
-              />
-            </View>
-          }
-        />
+        <RowGroup>
+          <Row label="Theme" value={appearanceLabel} onPress={cycleAppearance} />
+          <RowSeparator />
+          <Row
+            label="Text size"
+            helper="multiplies your OS text size · long-press to reset"
+            value={textScaleLabel(textScale)}
+            onLongPress={() => setTextScale?.(DEFAULT_TEXT_SCALE)}
+            chevron={false}
+            trailing={
+              <View style={{ flexDirection: 'row', gap: space.s3 }}>
+                <StepButton
+                  glyph="−"
+                  label="Smaller text"
+                  disabled={textScale <= MIN_TEXT_SCALE}
+                  onPress={() => setTextScale?.(stepTextScale(textScale, -1))}
+                />
+                <StepButton
+                  glyph="+"
+                  label="Larger text"
+                  disabled={textScale >= MAX_TEXT_SCALE}
+                  onPress={() => setTextScale?.(stepTextScale(textScale, 1))}
+                />
+              </View>
+            }
+          />
+        </RowGroup>
 
         <SectionHeader>Danger zone</SectionHeader>
-        <Row
-          label="Sign out"
-          helper="forgets every daemon + clears pins, prefs, biometric. The app reverts to first-install."
-          danger
-          chevron={false}
-          onPress={() => setConfirmSignOut(true)}
-        />
+        <RowGroup>
+          <Row
+            label="Sign out"
+            helper="forgets every daemon + clears pins, prefs, biometric. The app reverts to first-install."
+            danger
+            chevron={false}
+            onPress={() => setConfirmSignOut(true)}
+          />
+        </RowGroup>
 
         <View
           style={{
@@ -257,6 +270,10 @@ export function SettingsBody({ active = true, onDismiss }) {
           <Text style={{ fontFamily: fonts.monoMedium, fontSize: fontSizes.xs, color: colors.ink4 }}>
             Alpi mobile · v{APP_VERSION}
           </Text>
+        </View>
+        <View style={{ paddingHorizontal: space.s8, paddingBottom: space.s9, flexDirection: 'row', alignItems: 'center', gap: space.s4 }}>
+          <Fold fold={ALPACA_FOLD} size={36} />
+          <Crease text="alpi" accent={colors.accent} size={32} />
         </View>
       </ScrollView>
 

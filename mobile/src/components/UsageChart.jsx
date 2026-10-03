@@ -15,6 +15,7 @@ import {
 } from '../../../common/usage.mjs';
 import { alpha, lineHeights, space, tracking } from '../theme/tokens';
 import { Eyebrow } from './Eyebrow';
+import { useGroundTone } from './groupTone';
 import { useTheme } from '../theme/ThemeContext';
 import { usageRangeEmpty } from '../../../common/emptyCopy.mjs';
 
@@ -64,6 +65,7 @@ export const NARROW_TILES_W = 520;
 
 export function UsageChart({ days = [], accent, capLine = null, total30 = null, height = CHART_H }) {
   const { colors, fonts, fontSizes } = useTheme();
+  const ground = useGroundTone();
   const [selected, setSelected] = useState(null);
   const [tilesW, setTilesW] = useState(0);
   if (!days.length) return null;
@@ -71,7 +73,7 @@ export function UsageChart({ days = [], accent, capLine = null, total30 = null, 
   const empty = !hasUsage(days);
 
   const tint = accent ?? colors.accent;
-  const inColor = mixHex(tint, IN_TINT, colors.bgPane);
+  const inColor = mixHex(tint, IN_TINT, ground);
   const today = todayOf(days);
   const totals = usageTotals(days);
   const avg = totals.cost / days.length;
@@ -173,7 +175,7 @@ export function UsageChart({ days = [], accent, capLine = null, total30 = null, 
                       borderRadius: 3 + RING_W * 2,
                       borderWidth: RING_W,
                       borderColor: tint,
-                      backgroundColor: colors.bgPane,
+                      backgroundColor: ground,
                       alignItems: 'center',
                     }}
                   >

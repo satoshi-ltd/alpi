@@ -1,12 +1,12 @@
 import { useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { space } from '../../../../src/theme/tokens';
 
 import { ActionSheet } from '../../../../src/components/ActionSheet';
 import { Icon } from '../../../../src/components/Icon';
-import { Row, RowSeparator } from '../../../../src/components/Row';
+import { Row, RowGroup, RowSeparator } from '../../../../src/components/Row';
 import { ScreenHeader } from '../../../../src/components/ScreenHeader';
 import { useToast } from '../../../../src/components/Toast';
 import { Bold, Code, TypedConfirm } from '../../../../src/components/TypedConfirm';
@@ -20,7 +20,7 @@ import { useTheme } from '../../../../src/theme/ThemeContext';
 import { EMPTY } from '../../../../../common/emptyCopy.mjs';
 
 export default function ScheduleList() {
-  const { id } = useLocalSearchParams();
+  const { id, job } = useLocalSearchParams();
   const goBack = useBack();
   const toast = useToast();
   const { call } = useEndpoint();
@@ -32,6 +32,15 @@ export default function ScheduleList() {
   const [confirmDelete, setConfirmDelete] = useState(null);
 
   const jobs = schedule.data?.jobs ?? [];
+  const linked = useRef(false);
+
+  useEffect(() => {
+    if (linked.current || !job) return;
+    const match = jobs.find((j) => String(j.id) === String(job));
+    if (!match) return;
+    linked.current = true;
+    setTarget(match);
+  }, [job, jobs]);
   const loadError = schedule.error ? String(schedule.error?.message ?? schedule.error) : null;
 
   // schedule.changed fires on remove/pause/resume from any client — without it, a desktop pause wouldn't update this screen until manual pull-to-refresh.
@@ -93,58 +102,62 @@ export default function ScheduleList() {
               {loadError}
             </Text>
           </View>
-        ) : jobs.length === 0 ? (
-          <Row label={EMPTY.schedule.title} helper={EMPTY.schedule.hint} chevron={false} />
         ) : (
-          jobs.map((j, i) => {
-            const summary = scheduleSummary(j);
-            const desc = j.prompt || '—';
-            const paused = !!j.paused;
-            return (
-              <View key={j.id}>
-                {i > 0 ? <RowSeparator /> : null}
-                <Pressable
-                  onPress={() => setTarget(j)}
-                  android_ripple={{ color: colors.selected }}
-                  style={({ pressed }) => ({
-                    paddingHorizontal: space.s8,
-                    paddingVertical: space.s6,
-                    gap: space.s1,
-                    backgroundColor: pressed ? colors.selected : 'transparent',
-                    opacity: paused ? 0.55 : 1,
-                  })}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s5 }}>
-                    <Text
-                      style={{ flex: 1, fontFamily: fonts.monoMedium, fontSize: fontSizes.md, color: colors.ink }}
-                      numberOfLines={1}
+          <RowGroup style={{ marginTop: space.s5 }}>
+            {jobs.length === 0 ? (
+              <Row label={EMPTY.schedule.title} helper={EMPTY.schedule.hint} chevron={false} />
+            ) : (
+              jobs.map((j, i) => {
+                const summary = scheduleSummary(j);
+                const desc = j.prompt || '—';
+                const paused = !!j.paused;
+                return (
+                  <View key={j.id}>
+                    {i > 0 ? <RowSeparator /> : null}
+                    <Pressable
+                      onPress={() => setTarget(j)}
+                      android_ripple={{ color: colors.selected }}
+                      style={({ pressed }) => ({
+                        paddingHorizontal: space.s8,
+                        paddingVertical: space.s6,
+                        gap: space.s1,
+                        backgroundColor: pressed ? colors.selected : 'transparent',
+                        opacity: paused ? 0.55 : 1,
+                      })}
                     >
-                      {summary}
-                    </Text>
-                    {busyId === j.id ? (
-                      <ActivityIndicator color={colors.ink3} size="small" />
-                    ) : (
-                      <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4 }} numberOfLines={1}>
-                        {j.id}
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.s5 }}>
+                        <Text
+                          style={{ flex: 1, fontFamily: fonts.monoMedium, fontSize: fontSizes.md, color: colors.ink }}
+                          numberOfLines={1}
+                        >
+                          {summary}
+                        </Text>
+                        {busyId === j.id ? (
+                          <ActivityIndicator color={colors.ink3} size="small" />
+                        ) : (
+                          <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4 }} numberOfLines={1}>
+                            {j.id}
+                          </Text>
+                        )}
+                      </View>
+                      <Text
+                        style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3, lineHeight: fontSizes.sm * 1.4 }}
+                        numberOfLines={2}
+                      >
+                        {j.title || desc}
                       </Text>
-                    )}
+                      <Text
+                        style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4 }}
+                        numberOfLines={1}
+                      >
+                        {formatLastRun(j.last_run_at, j.last_run_status)}
+                      </Text>
+                    </Pressable>
                   </View>
-                  <Text
-                    style={{ fontFamily: fonts.sans.regular, fontSize: fontSizes.sm, color: colors.ink3, lineHeight: fontSizes.sm * 1.4 }}
-                    numberOfLines={2}
-                  >
-                    {j.title || desc}
-                  </Text>
-                  <Text
-                    style={{ fontFamily: fonts.mono, fontSize: fontSizes.xs, color: colors.ink4 }}
-                    numberOfLines={1}
-                  >
-                    {formatLastRun(j.last_run_at, j.last_run_status)}
-                  </Text>
-                </Pressable>
-              </View>
-            );
-          })
+                );
+              })
+            )}
+          </RowGroup>
         )}
       </ScrollView>
       <ActionSheet

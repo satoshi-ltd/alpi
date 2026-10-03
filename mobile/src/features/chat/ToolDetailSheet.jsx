@@ -16,7 +16,7 @@ function Block({ label, tag, children, danger = false }) {
         <Text style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.sm, color: colors.ink3 }}>{label}</Text>
         {tag ? <Text style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, color: colors.ink3 }}>{tag}</Text> : null}
       </View>
-      <View style={{ borderRadius: radii.lg, backgroundColor: colors.bgInput, paddingHorizontal: space.s6, paddingVertical: space.s5 }}>
+      <View style={{ borderRadius: radii.xs, backgroundColor: colors.bgInput, paddingHorizontal: space.s6, paddingVertical: space.s5 }}>
         <Text
           selectable
           style={{

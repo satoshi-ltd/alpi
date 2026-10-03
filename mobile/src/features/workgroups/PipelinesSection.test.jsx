@@ -28,6 +28,7 @@ vi.mock('../../components/Pill', () => ({
 
 vi.mock('../../components/Row', () => ({
   SectionHeader: ({ children }) => React.createElement('h2', null, children),
+  RowGroup: ({ children }) => React.createElement('section', null, children),
   RowSeparator: () => React.createElement('hr', null),
   Row: ({ label, helper, onPress, disabled }) =>
     React.createElement(

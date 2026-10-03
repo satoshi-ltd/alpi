@@ -47,6 +47,7 @@ vi.mock('../src/components/Button', () => ({ Button: ({ title }) => React.create
 vi.mock('../src/components/Pill', () => ({ Pill: ({ children }) => React.createElement('span', {}, children) }));
 vi.mock('../src/components/Row', () => ({
   Row: ({ label }) => React.createElement('div', {}, label),
+  RowGroup: ({ children }) => React.createElement('div', { 'data-row-group': '' }, children),
   RowSeparator: () => React.createElement('hr', {}),
   SectionHeader: ({ children }) => React.createElement('h3', {}, children),
 }));

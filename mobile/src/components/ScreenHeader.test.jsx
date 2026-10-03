@@ -12,7 +12,8 @@ vi.mock('expo-router', () => ({
 }));
 
 vi.mock('react-native', () => {
-  const View = ({ children, style, ...p }) => React.createElement('div', p, children);
+  const View = ({ children, style, accessibilityRole, accessibilityLabel, accessible, ...p }) =>
+    React.createElement('div', { ...(accessibilityRole === 'header' ? { role: 'heading' } : {}), ...(accessibilityLabel ? { 'aria-label': accessibilityLabel } : {}), ...p }, children);
   const Text = ({ children, style, numberOfLines, ...p }) => React.createElement('span', p, children);
   const Pressable = ({ children, onPress, hitSlop, style, ...p }) =>
     React.createElement('button', { type: 'button', onClick: onPress, ...p }, children);
@@ -22,9 +23,9 @@ vi.mock('react-native', () => {
 
 vi.mock('../theme/ThemeContext', () => ({
   useTheme: () => ({
-    colors: { ink: '#000', ink2: '#333', ink3: '#666', bg: '#fff', line: '#eee' },
+    colors: { ink: '#000', ink2: '#333', ink3: '#666', bg: '#fff', line: '#eee', accent: '#c9a227' },
     fonts: { sans: { semibold: 'Geist_600SemiBold' }, mono: 'GeistMono_400Regular' },
-    fontSizes: { xs: 11, lg: 15 },
+    fontSizes: { xs: 11, lg: 15, xl: 18 },
   }),
 }));
 
@@ -115,5 +116,34 @@ describe('ScreenHeader right slot', () => {
   it('leaves anything that is not a Button at its own height', () => {
     expect(headerRightBleed(<span>wave</span>)).toBe(0);
     expect(headerRightBleed(null)).toBe(0);
+  });
+});
+
+describe('ScreenHeader crease title', () => {
+  it('sets a profile title in crease type when it carries an accent', () => {
+    render(<ScreenHeader title="@doc" accent="#6572e4" />);
+    expect(document.querySelector('text').textContent).toBe('@doc');
+    expect(document.querySelectorAll('linearGradient')).toHaveLength(1);
+    expect(screen.getByRole('heading').getAttribute('aria-label')).toBe('@doc');
+  });
+
+  it('sets the crease title at no less than 28 even when the title step is smaller', () => {
+    render(<ScreenHeader title="@doc" accent="#6572e4" />);
+    expect(Number(document.querySelector('text').getAttribute('font-size'))).toBe(28);
+  });
+
+  it('keeps plain Geist titles on screens with no accent', () => {
+    render(<ScreenHeader title="Settings" />);
+    expect(screen.getByText('Settings')).toBeTruthy();
+    expect(document.querySelector('text')).toBeNull();
+    expect(document.querySelector('linearGradient')).toBeNull();
+  });
+});
+
+describe('ScreenHeader seam', () => {
+  it('ends on its seam with no accent stripe under two panes', () => {
+    const { container } = inTwoPane(<ScreenHeader title="doc" accent="#abc123" />);
+    const stripe = [...container.querySelectorAll('div')].find((el) => (el.getAttribute('style') || '').includes('#abc123') && (el.getAttribute('style') || '').includes('absolute'));
+    expect(stripe).toBeUndefined();
   });
 });

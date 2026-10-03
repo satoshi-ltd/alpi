@@ -1,8 +1,11 @@
 import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 
+import { WORKGROUP_FOLD } from '../../../../common/folds.mjs';
 import { ICON_ROLES } from '../../../../common/iconRoles.mjs';
 import { Eyebrow } from '../../components/Eyebrow';
+import { Fold } from '../../components/Fold';
 import { Icon } from '../../components/Icon';
+import { useProfileSummaries } from '../../hooks/useDaemonData';
 import { recentlyFailed, toEpochSeconds } from '../../hooks/useActivity';
 import { mobile, lineHeights, radii, space } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeContext';
@@ -32,6 +35,7 @@ function needsYouRow(item, nowSec) {
   return {
     key: `need:${item.request_id}`,
     tone: 'warning',
+    profile: item.profile,
     icon: 'triangle-alert',
     title: [item.profile, item.title || (question ? 'a question' : 'a command')].filter(Boolean).join(' · '),
     sub: [question ? 'question' : 'approval', ago(item.ts, nowSec)].filter(Boolean).join(' · '),
@@ -47,6 +51,8 @@ function runningRow(run, nowSec) {
     return {
       key: `wg:${run.workgroup_id}`,
       tone: 'accent',
+      profile: run.profile,
+      workgroup: true,
       icon: ICON_ROLES.activity,
       title: [run.name || run.workgroup_id, run.phase ? `#${run.phase}` : null].filter(Boolean).join(' · '),
       sub: [phase, run.pipeline].filter(Boolean).join(' · '),
@@ -57,6 +63,7 @@ function runningRow(run, nowSec) {
   return {
     key: `turn:${run.profile}:${run.session_id ?? ''}`,
     tone: 'accent',
+    profile: run.profile,
     icon: ICON_ROLES.activity,
     title: [run.profile, run.title || 'working'].filter(Boolean).join(' · '),
     sub: [run.started_at ? span(nowSec - toEpochSeconds(run.started_at)) : null, run.source].filter(Boolean).join(' · '),
@@ -69,6 +76,7 @@ function scheduledRow(job, nowSec) {
   return {
     key: `job:${job.profile}:${job.job_id}`,
     tone: failed ? 'danger' : 'quiet',
+    profile: job.profile,
     icon: failed ? 'x' : 'clock',
     title: [job.profile, job.title || job.job_id].filter(Boolean).join(' · '),
     sub: failed ? `failed ${ago(job.last_run_at, nowSec)}`.trim() : until(job.next_fire, nowSec) || 'not scheduled',
@@ -99,9 +107,12 @@ export function activityTint(tone, colors) {
   }[tone];
 }
 
-function ActivityRow({ row, onPress }) {
+function ActivityRow({ row, onPress, who }) {
   const { colors, fonts, fontSizes } = useTheme();
   const tint = activityTint(row.tone, colors);
+  const lead = who || row.workgroup
+    ? <Fold fold={row.workgroup ? WORKGROUP_FOLD : who?.fold} color={who?.accent ?? undefined} size="md" pulse={row.tone === 'accent'} />
+    : <Icon name={row.icon} size="lg" color={tint} />;
   return (
     <Pressable
       onPress={row.target ? () => onPress(row.target) : undefined}
@@ -118,19 +129,19 @@ function ActivityRow({ row, onPress }) {
         backgroundColor: pressed ? colors.selected : 'transparent',
       })}
     >
-      <Icon name={row.icon} size="md" color={tint} />
+      {lead}
       <View style={{ flex: 1, minWidth: 0, gap: space.s1 }}>
         <Text numberOfLines={2} style={{ fontFamily: fonts.sans.medium, fontSize: fontSizes.lg, lineHeight: fontSizes.lg * lineHeights.cozy, color: colors.ink }}>
           {row.title}
         </Text>
         {row.sub ? (
-          <Text numberOfLines={1} style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, lineHeight: fontSizes.sm * lineHeights.cozy, color: row.tone === 'danger' ? tint : colors.ink3 }}>
+          <Text numberOfLines={1} style={{ fontFamily: fonts.mono, fontSize: fontSizes.sm, lineHeight: fontSizes.sm * lineHeights.cozy, color: row.tone === 'danger' || row.tone === 'warning' ? tint : colors.ink3 }}>
             {row.sub}
           </Text>
         ) : null}
       </View>
       {row.action ? (
-        <View style={{ paddingHorizontal: space.s5, paddingVertical: space.s2, borderRadius: radii.lg, backgroundColor: colors.ink }}>
+        <View style={{ paddingHorizontal: space.s5, paddingVertical: space.s2, borderRadius: radii.xs, backgroundColor: colors.ink }}>
           <Text style={{ fontFamily: fonts.sans.semibold, fontSize: fontSizes.sm, color: colors.bgPane }}>{row.action}</Text>
         </View>
       ) : null}
@@ -153,6 +164,8 @@ function Empty({ unsupported }) {
 
 export function ActivityList({ activity, supported, unsupported = false, onOpen, refreshing = false, onRefresh, nowSec }) {
   const { colors } = useTheme();
+  const summaries = useProfileSummaries();
+  const byName = Object.fromEntries((summaries.data?.profiles ?? []).map((p) => [p.name, p]));
   const sections = supported ? activitySections(activity, nowSec) : [];
   const settled = supported || unsupported;
   return (
@@ -167,7 +180,7 @@ export function ActivityList({ activity, supported, unsupported = false, onOpen,
           <View style={{ paddingHorizontal: space.s7, paddingTop: space.s7, paddingBottom: space.s2 }}>
             <Eyebrow color={section.key === 'needs' ? colors.warningText ?? colors.warning : undefined}>{section.label}</Eyebrow>
           </View>
-          {section.rows.map((row) => <ActivityRow key={row.key} row={row} onPress={onOpen} />)}
+          {section.rows.map((row) => <ActivityRow key={row.key} row={row} onPress={onOpen} who={byName[row.profile]} />)}
         </View>
       ))}
     </ScrollView>

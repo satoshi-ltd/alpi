@@ -137,8 +137,8 @@ function InboxScreen({ items, loading, refresh, error = null }) {
   const activityEntry = activity.supported ? openActivity : null;
 
   const renderRow = useCallback(
-    ({ item }) => <InboxRow item={item} onPress={openItem} onLongPress={handleLongPress} />,
-    [openItem, handleLongPress],
+    ({ item }) => <InboxRow item={item} onPress={openItem} onLongPress={handleLongPress} offline={activeFailed} />,
+    [openItem, handleLongPress, activeFailed],
   );
 
   const addActions = useMemo(

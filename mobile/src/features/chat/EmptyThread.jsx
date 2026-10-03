@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 
-import { AlpiMark } from '../../components/AlpiMark';
+import { FOLD_SIZES } from '../../../../common/folds.mjs';
+import { Fold } from '../../components/Fold';
 import { CONTENT_MAX_W } from '../../lib/panes';
 import { lineHeights, space, tracking } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeContext';
@@ -12,12 +13,12 @@ const STYLES = StyleSheet.create({
   detail: { textAlign: 'center' },
 });
 
-export function EmptyThread({ heading, detail, accent }) {
+export function EmptyThread({ heading, detail, accent, fold }) {
   const { colors, fonts, fontSizes } = useTheme();
   return (
     <View style={STYLES.root}>
       <View style={STYLES.column}>
-        <AlpiMark color={accent ?? colors.ink3} />
+        <Fold fold={fold} color={accent ?? colors.ink3} size={FOLD_SIZES.hero} />
         <Text
           style={[
             STYLES.heading,

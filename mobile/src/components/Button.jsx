@@ -1,14 +1,14 @@
-import { contrastText } from "../../../common/color.mjs";
+import { contrastText, mixHex } from "../../../common/color.mjs";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { buttonDefaults, buttonHeights, buttonVariants } from '../../../common/button.mjs';
-import { space } from '../theme/tokens';
+import { radii, space } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeContext';
 
 const SIZES = {
-  sm: { padX: 12, radius: 10, token: 'sm' },
-  md: { padX: 14, radius: 10, token: 'md' },
-  lg: { padX: 18, radius: 14, token: 'lg' },
-  hero: { padX: 22, radius: 14, token: 'xl' },
+  sm: { padX: 12, token: 'sm' },
+  md: { padX: 14, token: 'md' },
+  lg: { padX: 18, token: 'lg' },
+  hero: { padX: 22, token: 'xl' },
 };
 
 export function Button({
@@ -32,11 +32,11 @@ export function Button({
   const bgIdle = disabled ? (quiet ? 'transparent' : colors.bgInput)
     : quiet ? 'transparent'
       : primary ? accent ?? colors.ink
-        : danger ? colors.danger : colors.hover;
+        : danger ? colors.danger : colors.selected;
   const fg = disabled ? colors.ink4 : quiet ? (danger ? colors.dangerText : colors.ink2)
     : danger ? colors.onDanger : primary ? (accent ? contrastText(accent) : colors.bgPane) : colors.ink;
-  const bgPressed = quiet ? colors.selected : primary ? colors.ink2
-    : danger ? colors.danger : colors.selected;
+  const bgPressed = quiet ? colors.selected : primary ? (accent ? mixHex(accent, 0.82, '#000000') : colors.ink2)
+    : danger ? mixHex(colors.danger, 0.82, '#000000') : colors.line2;
 
   return (
     <Pressable
@@ -48,9 +48,8 @@ export function Button({
       style={({ pressed }) => [styles.root, {
         minHeight: Button.touchHeight(size),
         paddingHorizontal: dims.padX,
-        borderRadius: dims.radius,
+        borderRadius: radii.xs,
         backgroundColor: pressed && !blocked ? bgPressed : bgIdle,
-        opacity: pressed && !blocked ? 0.85 : 1,
         alignSelf: fullWidth ? 'stretch' : 'auto',
       }]}
     >
