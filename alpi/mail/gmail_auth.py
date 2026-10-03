@@ -248,7 +248,7 @@ def exchange(
             "code_verifier": code_verifier,
         })
         if r.status_code != 200:
-            raise GmailAuthError(f"token exchange failed: {r.status_code} {r.text}")
+            raise GmailAuthError(f"token exchange failed ({r.status_code}): {_oauth_reason(r)}")
         body = r.json()
         access_token = body["access_token"]
         refresh_token = body.get("refresh_token")
@@ -366,6 +366,17 @@ def _paste_flow(home: Path, account_id: str, handle: AuthHandle, port: int) -> G
     )
 
 
+def _oauth_reason(response) -> str:
+    try:
+        body = response.json()
+    except ValueError:
+        body = None
+    if isinstance(body, dict) and body.get("error"):
+        detail = str(body.get("error_description") or "").strip()
+        return f"{body['error']} ({detail})" if detail else str(body["error"])
+    return " ".join(str(response.text or "").split())[:200] or "no detail"
+
+
 def _refresh(home: Path, account_id: str, token: GmailToken) -> GmailToken:
     client_id, client_secret = _client_credentials(home)
     with httpx.Client(timeout=10.0) as client:
@@ -377,7 +388,7 @@ def _refresh(home: Path, account_id: str, token: GmailToken) -> GmailToken:
         })
         if r.status_code != 200:
             raise GmailAuthError(
-                f"token refresh failed ({r.status_code}): {r.text}. "
+                f"token refresh failed ({r.status_code}): {_oauth_reason(r)}. "
                 "If the refresh token was revoked, run setup again."
             )
         body = r.json()

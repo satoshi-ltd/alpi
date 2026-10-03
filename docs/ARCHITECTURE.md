@@ -76,7 +76,8 @@ alpi logs                      tail every subsystem log merged by timestamp
   -n N                                         last N lines (default 100)
   -f                                           follow mode (poll every 1s)
 
-alpi profile list              list profiles, mark the active one
+alpi profile list              list profiles, mark the active one with its object glyph
+alpi profile show [name]       draw the profile's object as half-block art with its model and path
 alpi profile create <name>     bootstrap a new profile tree
 alpi profile remove <name>     delete after safety checks + confirm
 
@@ -175,7 +176,7 @@ alpi/
 │   ├── network_rpc.py     bind status and the ordered WS/WSS pairing routes
 │   ├── probes.py          host.email.probe, host.peers.ping, host.model.ctx_window
 │   ├── schedule.py        host.schedule.{list,remove,set_paused,fire}
-│   ├── outputs.py         host.outputs.{list,read,mark_read,mark_all_read,delete}
+│   ├── outputs.py         host.outputs.{list,read,mark_read,mark_unread,mark_all_read,delete}
 │   ├── daemon.py          host.daemon.{restart,update}
 │   ├── device_state.py    device-facing profile state for the apps
 │   ├── events.py          host.events.subscribe + thread-safe emit() for daemon-pushed updates
@@ -528,7 +529,7 @@ Spawns a sub-agent with a read-only toolset (`web_search`, `web_fetch`, `web_ext
 
 `host.chat.send` accepts `attachments: [{path, mime?, name?}]`. The engine validates them (`att.validate` — magic-byte sniff for image/PDF, NUL/control-ratio guard for binary-as-text, per-type size caps, allowlist: images `png`/`jpeg`/`webp`, PDF, and text/source incl. `py`/`js`/`ts`/`tsx`/`go`/`rs`/`sh`/`sql`) and turns them into OpenAI content-parts (`build_content_parts`): images → base64 `image_url` data parts, text/source → inline text parts, PDFs → text extraction (bounded by `tools.attachments.max_text_tokens` → chars at ~4/token; default auto = half the active model's context window, no page cap). A **scanned** PDF (extractable text below `SCANNED_PDF_TEXT_FLOOR`) falls back by model capability: vision-capable → rendered page images; text-only → **RapidOCR** text (capped at `SCAN_MAX_PAGES`), so a profile with no knowledge base and no vision can still summarize a scan. PDF text/render/OCR mechanics are shared with the knowledge tool via `alpi/extract.py`. Images on a text-only model are **not** OCR'd — they degrade to a path note telling the model it can't see them. A guidance text-part tells the model the files are inline so it doesn't reflexively call filesystem or knowledge tools to "find" them.
 
-**Per-turn only.** Bytes live only in the in-memory message. `session_metadata` is itself bytes- and **path-free** (`{name, mime, size}`), but the engine re-adds a **best-effort local `path`** to each persisted chat-turn attachment so clients can thumbnail history — the path may be unfetchable from another client (outside `host.attachments.fetch` roots) or after a staged file's TTL, so this is preview replay, not durable storage. The validated turn attachments (`{name, path, mime}`) are also published to a runtime-only `ContextVar` (`tools/_state.set_turn_attachments`) so a tool can resolve a turn's files. Remote clients (mobile, or desktop pointed at a remote daemon) can't hand the daemon a local path, so they upload bytes via the `host.attachments.stage` RPC (type-aware caps, content validated 1:1 with send) which writes to a TTL-swept temp dir and returns a daemon-side path. Under `session_scope: device`, `host.attachments.fetch` serves a remote member device only what it staged (a `.owner` marker beside the upload; uploads with no marker stay fetchable until the TTL, but an existing unreadable or malformed marker refuses access) or a path that appears in a session it owns: a turn's `attachments` or `output_attachments`, a tool's args or result, or the assistant's text, never a path the user typed (a path the user also wrote is not offered even if the agent repeats it), and only exact paths: a file named only in the assistant's text with a space or a parenthesis in its name is not offered, and one the agent lists or reads on its own becomes offered (the `terminal` gap is SCOPE.8). `alpi/host/offered_paths.py` keeps that set per session and rebuilds it only when the session file changes. Admins, the Unix socket and `session_scope: connection` are not narrowed, and the roots and the secrets denylist still apply first.
+**Per-turn only.** Bytes live only in the in-memory message. `session_metadata` is itself bytes- and **path-free** (`{name, mime, size}`), but the engine re-adds a **best-effort local `path`** to each persisted chat-turn attachment so clients can thumbnail history — the path may be unfetchable from another client (outside `host.attachments.fetch` roots) or after a staged file's TTL, so this is preview replay, not durable storage. The validated turn attachments (`{name, path, mime}`) are also published to a runtime-only `ContextVar` (`tools/_state.set_turn_attachments`) so a tool can resolve a turn's files. Remote clients (mobile, or desktop pointed at a remote daemon) can't hand the daemon a local path, so they upload bytes via the `host.attachments.stage` RPC (type-aware caps, content validated 1:1 with send) which writes to a TTL-swept temp dir and returns a daemon-side path. Under `session_scope: device`, `host.attachments.fetch` serves a remote member device only what it staged (a `.owner` marker beside the upload; uploads with no marker stay fetchable until the TTL, but an existing unreadable or malformed marker refuses access) or a path that appears in a session it owns: a turn's `attachments` or `output_attachments`, a tool's args or result, or the assistant's text, never a path the user typed (a path the user also wrote is not offered even if the agent repeats it), and only exact paths: a file named only in the assistant's text with a space or a parenthesis in its name is not offered, and one the agent lists or reads on its own becomes offered. `alpi/host/offered_paths.py` keeps that set per session and rebuilds it only when the session file changes. Admins, the Unix socket and `session_scope: connection` are not narrowed, and the roots and the secrets denylist still apply first.
 
 **Durable.** `knowledge(action="ingest")` is the bridge from per-turn input to permanent knowledge. It reads an attachment or source file, synthesizes Markdown pages under `<workspace>/knowledge/`, updates `index.md` / `log.md`, and refreshes the profile-local derived index in `knowledge.sqlite`. The raw source is not copied into a durable documents directory. There is **no auto-learn**: attachments stay one-turn unless the user explicitly asks to learn/remember/save/index/compile one.
 
@@ -580,7 +581,9 @@ Caching and diagnostics are best-effort and cannot fail a provider call.
 
 Textual 8.2.x. Layout: `AlpiTopBar` (identity: version, profile, workspace) + chat scroll (`VerticalScroll.anchor()` auto-follows new content) + a bottom dock holding the completion popup, the multi-line composer (`ChatInput`, a `TextArea`) and the `StatusLine` (model · ctx % · cost · budget · sandbox · unread inbox · prompts waiting, then context-aware key hints).
 
-**Theme** (`themes.py`): `build_theme(accent, dark)` returns a Textual `Theme` whose background, surfaces, ink and status colours come from `alpi/palette.py`, a mirror of `common/tokens.mjs` kept honest by a parity test. `palette.resolve_accent` maps an unset or brand accent (including the legacy `#c8a24e`) to the mode's token (`#f0b447` dark, `#8a5a0a` light); a custom accent is kept. The console (`ui.py`, `alpi profile list`) goes through the same resolver. Registered in `AlpiApp.__init__` (not `on_mount` — child widgets read `theme_variables` during their own mount).
+**Theme** (`themes.py`): `build_theme(accent, dark)` returns a Textual `Theme` whose background, surfaces, ink and status colours come from `alpi/palette.py`, a mirror of `common/tokens.mjs` kept honest by a parity test. Every grey of both themes, in the console and in the apps, is an equal-channel neutral, so the only colour on any surface is a profile's. `palette.resolve_accent` maps an unset or legacy brand accent (`#c8a24e`, `#8a5a0a`) to the mode's token (`#f3efe6` dark, `#14110c` light, the brand ink); a chosen colour, amber included, is kept. The console (`ui.py`, `alpi profile list`) goes through the same resolver. Registered in `AlpiApp.__init__` (not `on_mount` — child widgets read `theme_variables` during their own mount).
+
+**Fold in the console** (`fold_art.py`, `fold_shapes.py`): the console wears the profile's object. `fold_shapes.py` is generated by `scripts/sync_fold_shapes.py` from `common/folds.mjs` (`--check` fails when stale; a parity test runs node on the shared module for every object, `honeycomb` and `alpaca`), and `fold_art.fold_tones` is the OKLCH three-tone rule of `foldTones`, tested for the same hex on every accent and random colours. `fold_art.art(fold, accent, rows)` rasterises the polygons into half-block cells (`▀` with the top sample as foreground and the bottom as background, `▄` when only the bottom is filled, a space when neither, so the terminal background shows through), two cells wide per row. `fold_art.identity(home, tui)` is the pair a profile wears: the alpaca for the default profile (in `palette.BRAND_INK` of the theme, the brand accent `#14110c` light and `#f3efe6` dark, mirrored from `common/folds.mjs`), else `tui.fold` (the diamond when unset or unknown) in `palette.profile_accent`. The art draws beside the title of the `alpi setup` menu (when the terminal is wide enough and tall enough to show the whole menu beside it) and in `alpi profile show`. `fold_art.GLYPHS` gives each object one narrow, distinct, BMP glyph (East Asian Width N or Na); `fold_art.marker(home, tui)` is that glyph in the accent and replaces the diamond that marks the active entry in `alpi profile list`, the TUI list rows (`list_row.set_marker`) and the status line. `supports_fold_art()` is true only on a TTY stdout with UTF-8 encoding and locale, `COLORTERM` `truecolor` or `24bit`, no `NO_COLOR` and `TERM` not `dumb`; anywhere else every mark falls back to the single-colour `◆` (and `◇` for an inactive profile) exactly as before. Menu cursors (`ui.POINTER`) and the tool-hint chip are status marks and stay diamonds.
 
 **Steps** (`StepsGroup` / `ToolCard` in `widgets.py`): each turn's tool calls collapse into one `▸ N steps · Xs` row that shows the live step while running. It expands to one card per call: a family glyph (file, terminal, globe, search, link, memory, chip — `tool_hints.tool_family`), the argument summary, the result hint and the duration; a card opens to the pretty-printed arguments and an output excerpt. Failed calls start open and open their group. `ask_user` answers render as their own line, not as steps. `Ctrl+O` toggles the last turn's reasoning and steps.
 
@@ -593,7 +596,7 @@ Textual 8.2.x. Layout: `AlpiTopBar` (identity: version, profile, workspace) + ch
 
 **Persistence contract** (cross-surface). The engine consolidates the whole turn's reasoning — `reasoning_delta` thinking + the inter-tool prose — into **`Turn.reasoning`** (str), and records **`Turn.reasoned_s`** (float) = the reasoning span from turn start to the first tool boundary, or to the first final-answer text token when there are no tools; it **excludes both tool execution and final-answer streaming** so the duration isn't inflated by a long-running tool or a long reply. Desktop, mobile and the TUI render a collapsible "Thought for Ns" block from `Turn.reasoning`, falling back to joining `ToolLog.reasoning` for turns logged before the field existed. `ToolLog.reasoning` (first tool of each batch) remains the legacy per-tool fallback.
 
-**Slash commands** come from one registry (`alpi/tui/commands.py`) that drives `/help` and the completion popup (`/` or `@peer`, with descriptions): `/help`, `/activity`, `/status`, `/model`, `/new`, `/clear`, `/compact`, `/sessions`, `/outputs`, `/runs`, `/memory`, `/skills`, `/tools`, `/mcps`, `/peers`, `/diff [since]`, `/attach <path>`, `/attachments`, `/clear-attachments`, `/quit` (alias `/exit`). Panels are `FloatingPanel`s on the overlay layer docked above the composer, dismissed by Esc or click-outside. `/activity` calls `host.activity.list` over `host.sock` (needs you / running / scheduled) and answers listed approvals and questions via `host.approval.respond` / `host.clarification.respond`; without a daemon it says so. Configuration verbs (workspace, email, sandbox, …) live in `alpi setup` — the TUI is for chat and inspection.
+**Slash commands** come from one registry (`alpi/tui/commands.py`) that drives `/help` and the completion popup (`/` or `@peer`, with descriptions): `/help`, `/activity`, `/status`, `/model`, `/new`, `/clear`, `/compact`, `/sessions`, `/outputs`, `/runs`, `/memory`, `/skills`, `/tools`, `/mcps`, `/peers`, `/diff [since]`, `/fold [object] [colour]`, `/attach <path>`, `/attachments`, `/clear-attachments`, `/quit` (alias `/exit`). Panels are `FloatingPanel`s on the overlay layer docked above the composer, dismissed by Esc or click-outside. `/activity` calls `host.activity.list` over `host.sock` (needs you / running / scheduled) and answers listed approvals and questions via `host.approval.respond` / `host.clarification.respond`; without a daemon it says so. Configuration verbs (workspace, email, sandbox, …) live in `alpi setup` — the TUI is for chat and inspection.
 
 **Approvals and questions** raised by the in-process engine are prompt panels that cannot be dismissed by a click or by opening another panel. They queue (the first shows `+N queued`), show a live countdown to the engine deadline (60 s approval, 300 s question), and Esc answers deny / cancel immediately. A prompt that times out, shown or still queued, leaves a line in the transcript.
 
@@ -923,8 +926,27 @@ Verb namespaces in current shape:
   `decrypt_transcript` opens the hub sealed group key once outside
   the per-post loop (was O(N) Curve25519 unseals per fetch).
 - **`host.profile.summaries`** — lightweight inbox/sidebar shape:
-  `name`, `model`, `accent`, `latest_session`, `counts`, `budget_*`,
-  `pubkey_b64`, `has_any_provider`. No peers/models/
+  `name`, `model`, `accent`, `fold`, `latest_session`, `counts`, `budget_*`,
+  `pubkey_b64`, `has_any_provider`. A profile's identity is its `fold` in its `accent`, and the apps draw it wherever the diamond
+  identified a profile (a missing or unknown fold is the diamond; status marks stay diamonds):
+  the twelve objects and the twelve colours (all hues, no grey, so no profile reads as the ink alpaca; the
+  `nearestAccent` map from any stored colour, with the retired grey `#7e8792` read as sky) live in
+  `common/folds.mjs` and `common/accents.mjs`, and the design kit reads its shapes from the same file. A new
+  profile (`host.profile.create`, `alpi profile create`, or any first bootstrap of a home under `profiles/`)
+  is seeded with the next pair of a fixed roulette (`appearance.ROULETTE`): the least worn colour among the
+  existing profiles, in roulette order, with its own object, so no pair repeats until all twelve are worn. The default profile (the host-plane one, never one under `profiles/`) is not one of the twelve: its
+  summary always reports `fold: "alpaca"` and no `accent` (the apps use the brand ink of the theme), the apps draw the flat ink alpaca for it and show its appearance
+  read-only, and `host.config.set_field` refuses `tui.fold` and `tui.accent` for it (a client that does not know `alpaca` falls back to
+  the diamond). Roster objects draw unfolded (the dashed crease pattern in grey, no fill, no ripple) for a paused profile or workgroup and, for the whole roster, while the active connection is offline, disabled, auth-failed or rate-limited; such rows stay openable, a paused name in a header reads in grey, and a stale working state is dropped. From `host.activity.list` a row reads needs you over failed (a job whose last run failed in the last day) over working, and a failed job whose `job_id` has a running turn again reads working. The daemon lists the default profile first, and both clients keep it there: `common/rosterOrder.mjs` splits it
+  (`is_default` or the name `default`) out of the list, and the desktop sidebar, the phone roster and the Fold draw it as the
+  unlabelled first row above Pinned, dimmed when paused or without a provider, never pinnable (a stored `default` pin is
+  ignored), never behind *Show N more*, kept under a filter only when it matches like any other row (the desktop checks its
+  name and the `alpi` label, the phone also its last message), and absent when the
+  connection does not list it; ⌘1 on the desktop opens it. The desktop has no start screen: startup, a connection
+  switch and a deleted open profile land on the first profile row's latest session once the live roster has answered
+  (on the cached one only while the connection is offline; with no profiles, the empty roster state), and closing
+  Settings returns to its profile or the previous view only when the active connection still serves it; a new session starts from a profile (its row menu, the Sessions menu, or ⌘N, which outside a profile uses the
+  last profile seen on the connection or the first row), and ⌘K opens on New session, highlighted, with the recent sessions across profiles below it. No peers/models/
   mcps/provider_keys/sandbox/voice — those live in **`host.profile.detail`**
   (`{workspace, tcp_port, advertise_host, provider_keys, provider_ollama,
   sandbox*, voice_*, mcps, peers, models}`), fetched lazily by
@@ -1009,10 +1031,15 @@ Verb namespaces in current shape:
   non-token costs like image generation); workgroup usage reads the hub
   transcript (per-post declared cost). Both bucket by UTC day, so the
   today figure matches the budget gate / `budget_used_usd`.
-- **`host.outputs.{list,read,mark_read,mark_all_read,delete}`** —
+- **`host.outputs.{list,read,mark_read,mark_unread,mark_all_read,delete}`** —
   durable inbox for proactive agent messages and schedule
   results. Backed by `<home>/outputs/outputs.jsonl` (capped at
-  500 rows, atomic compaction). `notify` pushes to the OWNER's own
+  500 rows, atomic compaction). Rows the scheduler files (a notified
+  reply, a failure, a child agent's own notification) carry the
+  `job_id` and `run_id` behind them, so a client can open the job or its
+  run; `mark_unread` flips a row back and emits `output.updated` like
+  `mark_read`, and `alpi outputs unread <id>` does the same from the
+  console (`alpi outputs show` prints the source). `notify` pushes to the OWNER's own
   apps (native, via the shared
   `outputs.create_output_and_emit_message` helper) and carries the
   row's single `type` axis (`info` | `warning` | `error`, default
@@ -1033,9 +1060,11 @@ Verb namespaces in current shape:
   parses the `tool_end` args to file one canonical output with the
   full `delivered_to` list. Each row carries
   `{id, profile, created_at, title?, body,
-  type: info|warning|error, status: unread|read, session_id, delivered_to}`
+  type: info|warning|error, status: unread|read, session_id, job_id?, run_id?, delivered_to}`
   (`title` present when a `notify` caller set one, or on scheduler
-  failure rows — the job's title).
+  failure rows — "<job> failed", whose body opens with `**Reason:**`, then
+  `**Exit:**` / `**Timeout:**` when they apply and any trace in a fenced
+  `text` block, capped at 2000 characters).
   No `archive` action — the 500-row cap handles retention so
   clients only render a two-state inbox. `agent.message`,
   `schedule.done` and `schedule.failed` events ship `output_id`
@@ -1090,8 +1119,8 @@ queries those stores, not ``host.events.history``.
     `notify: true` (or one whose agent called `notify` itself) has
     its reply re-emitted as `agent.message` from the scheduler
     daemon so it wakes the owner's apps. `schedule.failed` remains an
-    interrupt — it adds the job `title` and an enriched `body`
-    (reason + timeout/exit) plus `output_id` + `deep_link`
+    interrupt — it adds the job `title` and a plain one-line `body`
+    ("reason; exit N; timeout: …", no markdown) plus `output_id` + `deep_link`
     (`/outputs/<profile>/<id>`), and is itself the failure
     notification (clients raise it; failures are NOT re-emitted as
     `agent.message`).
@@ -1197,7 +1226,7 @@ default-executor turns. A regression test in
 `tests/core/test_schedule.py::test_serve_runs_tick_off_loop_so_chat_can_progress`
 pins the contract.
 
-**First run.** A cron job runs at its next occurrence, never on the tick it appears. The `schedule` tool records `last_run_at` when it adds a job; a job that arrives without run state (written into `jobs.json` by hand or by a deploy, or whose `schedule/runs.json` entry was lost) gets `first_seen_at` in `runs.json` from the first tick that sees it, or, if it arrives paused, from the first tick after it is resumed. A fired job is stamped (`last_run_at`, `last_run_status`; a one-shot that succeeded is removed) the moment its run returns, before its outputs and events are written and not at the end of the pass, so a daemon restart in the middle of a long pass does not fire a job that already finished. `schedule(action="fire")` runs a job now.
+**First run.** A cron job runs at its next occurrence, never on the tick it appears. The `schedule` tool records `last_run_at` when it adds a job; a job that arrives without run state (written into `jobs.json` by hand or by a deploy, or whose `schedule/runs.json` entry was lost) gets `first_seen_at` in `runs.json` from the first tick that sees it, or, if it arrives paused, from the first tick after it is resumed. A fired job is stamped (`last_run_at`, `last_run_status`; a one-shot that succeeded is removed) the moment its run returns, before its outputs and events are written and not at the end of the pass, so a daemon restart in the middle of a long pass does not fire a job that already finished. A run that raises (the agent subprocess cannot start, a file is missing) is a failed outcome stamped and reported like any other failure, and the pass goes on with the next job. `schedule(action="fire")` runs a job now.
 
 **Timezone.** Cron expressions evaluate against the **machine's system timezone** (`datetime.now().astimezone()` in `scheduler/run.py`). Jobs are stored with UTC `last_run_at` but fire according to local wall-clock time. Practical consequence: if you specify `10 12 * * *` because you want a 12:10 reminder in Bangkok, the Mac must be set to `Asia/Bangkok`. Move the machine to a different timezone and the cron fires at 12:10 there, not in Bangkok. No in-job timezone override today — add it via `TZ=…` in the launchd plist / systemd unit if cross-timezone stability is required.
 
@@ -1383,7 +1412,36 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   verb — never read `~/.alpi/` directly from Rust, never spawn `alpi` as
   a subprocess. ALP (`alpi/alp/`) is a separate plane for cross-machine
   peer-to-peer (`link.*`, `workgroup.*`) and is **not** what the client
-  calls.
+  calls. The one exception is the local daemon's lifecycle, which no
+  `host.*` verb can serve while the daemon is down: `local_daemon_state`
+  classifies this machine as `running` (`host.version` answers on the
+  local socket), `stopped` (an `alpi` binary on `PATH` or the usual install
+  dirs, or a launchd / systemd unit exists; `~/.alpi` alone does not count,
+  the app creates it), `absent` or `unsupported` (Windows), checking
+  existence only; `local_daemon_start` kickstarts the supervisor unit, or
+  without one runs `alpi daemon start` detached in its own process group
+  (with the install dirs on its `PATH`, stderr to `logs/desktop-start.log`,
+  reaped when it exits, and not spawned again while a previous one lives),
+  waits up to 45 s of wall clock for `host.version` on the local socket and
+  on failure returns the tail of the launcher's stderr and of
+  `logs/service.log`. It never installs a service.
+
+- **First run is one welcome, not an error.** On a local connection that
+  has not answered yet in this session, the desktop replaces the main pane
+  by state (once it has answered, an outage keeps the open view under the
+  reconnecting banner, whose Retry runs this flow again): `stopped`
+  starts alpi once on its own, then offers Start alpi; while starting it
+  shows the steps (start requested, waiting for alpi to answer); a failed
+  start shows the error, `alpi daemon start` to run by hand and Retry;
+  `absent` offers the install commands (re-detected when the window gains
+  focus) beside a pasted `alpi://` link; `unsupported` offers only the
+  link. Once alpi answers, a one-time card says how to add a phone. Both
+  clients pair through the same three named steps (link read, reaching
+  the host, signing in) and name each failure with its next action from
+  `common/onboarding.mjs`; a used, expired or malformed link is cleared,
+  any other failure keeps it. The phone's Scan QR opens the camera
+  directly, Paired names the host and the role, and Open inbox clears the
+  stack. A member with nothing shared sees whom to ask, naming the device.
 
 - **`host.version` says whether a daemon can update itself.** It returns
   `installer` (`uv` | `pipx` | `docker` | `source`, cached after a successful probe by
@@ -1423,14 +1481,16 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   The scheduler tick emits `{profile, job_id, title, kind, message, reply,
   delivered_to, silent}` on the host event bus. `message` is the
   operational status for daemon logs and ops UIs. `reply` is the clean
-  agent/script output, capped at 2000 chars, intended for native
-  notification bodies. A job has one delivery axis, `notify: bool` (default
+  agent/script output, capped at 2000 chars in the event, intended for native
+  notification bodies; the archived inbox row keeps the whole reply up to
+  8000 chars and, past that, ends with a line saying where it was cut. A job has one delivery axis, `notify: bool` (default
   `false`). `delivered_to` is `""` (silent, `notify:false`) | `"alpi"`
   (`notify:true` → the daemon re-emits the reply as `agent.message`) |
   `"external"` (the agent called `notify` itself → no duplicate). Failures
   always file an `error` inbox row and emit `schedule.failed`, regardless of
-  `notify`; the failed event and row carry the job `title` and an enriched
-  `body` (reason + timeout/exit; a timeout also says which tool was in flight
+  `notify`; the failed event carries the job `title` and a plain one-line
+  summary, the row is titled "<job> failed" with a markdown `body` (the reason —
+  the exception line of a traceback — then exit and timeout; a timeout also says which tool was in flight
   and for how long, how many tool calls ran, and the agent's last message), and
   `schedule.failed` is the single failure
   notification — it is NOT also re-emitted as `agent.message`. `silent` means a
@@ -1520,8 +1580,8 @@ Breaking one of these breaks a client, a gateway or a peer. Change the contract,
   writes as device A and reads as device B through each path it lists (the session verbs, replay,
   runs, activity, prompts, summaries, events and the session tools); a new path is one more row.
   Profile-wide data is shared by design: workgroup posts, memory and the files an admin may read.
-  The known gaps, the `terminal` tool, peer turns, staged attachments, the profile session count
-  and the admin reading of the scope, are tasks in `docs/ROADMAP.md`. A device with `provisioner: true` may call the `_SELF_SERVICE_METHODS`
+  The known gaps, turns a workgroup post wakes (unfenced, SCOPE.11), staged attachments, the
+  profile session count and the admin reading of the scope, are tasks in `docs/ROADMAP.md`. A device with `provisioner: true` may call the `_SELF_SERVICE_METHODS`
   (`add_device`, `pairing_status`, `cancel_pairing`, `revoke_device`) on its own
   `connection_id` without the admin role; those verbs are `_SCOPE_FREE_METHODS`
   because they carry no profile.

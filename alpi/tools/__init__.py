@@ -7,7 +7,6 @@ import copy
 from contextlib import contextmanager
 from typing import Iterator
 
-from alpi.host.connection_context import current
 from alpi.tools.base import Tool, ToolResult
 from alpi.tools import _policy
 from alpi.tools._availability import is_available, invalidate as _invalidate_availability
@@ -56,7 +55,7 @@ _turn_mcp_tools: contextvars.ContextVar[dict[str, type[Tool]]] = contextvars.Con
 )
 
 _MEMBER_ALLOWED_ACTIONS: dict[str, frozenset[str]] = {
-    "skill": frozenset({"list", "view", "validate", "run", "test", "invoke"}),
+    "skill": frozenset({"list", "view", "validate"}),
     "memory": frozenset({"read", "promotion_list"}),
     "schedule": frozenset({"list"}),
 }
@@ -102,7 +101,8 @@ def schemas(deny: frozenset[str] | set[str] | None = None) -> list[dict]:
         ),
         key=_schema_sort_key,
     )
-    if current().role != "member":
+    from alpi.tools._paths import private_areas_fenced
+    if not private_areas_fenced():
         return schemas
     return [_member_schema(schema) for schema in schemas]
 
@@ -155,7 +155,7 @@ def _execute_registered(
             ok=False, output="",
             error=reason or f"tool denied for this profile: {name} (see tools.deny in config.yaml)",
         )
-    if _policy.allowed() is not None and not _policy.permits(cls.schema(), arguments):
+    if not _policy.permits(cls.schema(), arguments):
         return ToolResult(ok=False, output="", error=_policy.refusal(name, arguments))
     member_refusal = _member_mutation_refusal(name, arguments)
     if member_refusal is not None:
@@ -189,8 +189,9 @@ def _member_schema(schema: dict) -> dict:
 
 
 def _member_mutation_refusal(name: str, arguments: dict) -> ToolResult | None:
+    from alpi.tools._paths import private_areas_fenced
     allowed = _MEMBER_ALLOWED_ACTIONS.get(name)
-    if current().role != "member" or allowed is None:
+    if allowed is None or not private_areas_fenced():
         return None
     action = str(arguments.get("action", "") or "")
     if action in allowed:
@@ -198,7 +199,11 @@ def _member_mutation_refusal(name: str, arguments: dict) -> ToolResult | None:
     return ToolResult(
         ok=False,
         output="",
-        error=f"members cannot modify {name}; action '{action or '(none)'}' requires an admin device",
+        error=(
+            f"member devices and peers without a tool policy cannot use {name} action "
+            f"'{action or '(none)'}': it changes the profile or runs a skill's scripts outside the "
+            "sandbox; it requires an admin device or a peer tools.allow that grants it"
+        ),
     )
 
 

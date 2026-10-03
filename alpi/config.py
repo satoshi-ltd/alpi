@@ -48,6 +48,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "show_tokens": True,
         "show_reasoning": True,
         "accent": "#f0b447",
+        "fold": "diamond",
         "theme": "dark",
         "auto_resume": False,
     },
@@ -775,7 +776,9 @@ DEFAULT_HOME_ACTIVE_WORKGROUPS = 5
 def seed_config_for(home: Path) -> dict[str, Any]:
     # Only the default home carries the daemon-wide cap; profile homes inherit it through pipeline_queue.limit_origin.
     if home.parent.name == "profiles":
-        return SEED_CONFIG
+        from alpi import appearance
+
+        return {**SEED_CONFIG, "tui": appearance.next_pair(home.parent, home.name)}
     return {**SEED_CONFIG, "alp": {**SEED_CONFIG.get("alp", {}), "max_active_workgroups": DEFAULT_HOME_ACTIVE_WORKGROUPS}}
 
 

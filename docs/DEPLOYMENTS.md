@@ -170,7 +170,11 @@ runtime's host and ALP ports private.
 A connection role and `profile_scope` restrict the host RPC surface. They do
 not make profiles inside one daemon separate tenants: an authenticated member
 can still send turns, and those turns may use every tool granted to the target
-profile. Multiple profiles in one daemon are appropriate only when they share
+profile. The one exception is `terminal`: the commands of a member device, or
+of an ALP peer without `tools.allow`, run only inside Linux `bubblewrap` with
+the alpi home and every other process hidden, or in the Docker execution
+backend, so in the supported Docker runtime and on macOS they otherwise have no
+`terminal` at all. Multiple profiles in one daemon are appropriate only when they share
 the same underlying trust owner. Runtime isolation lets a customer profile keep
 the terminal, skills, and network access it genuinely needs without granting
 that runtime access to another customer's volume or credentials.

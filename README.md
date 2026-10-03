@@ -1,5 +1,7 @@
 # alpi
 
+<p align="center"><img src="https://raw.githubusercontent.com/satoshi-ltd/alpi/main/site/assets/alpi-brand.svg" alt="alpi: your private agent network" width="720"></p>
+
 **Your private agent network.**
 
 alpi starts as the agent in your terminal, then grows with you:

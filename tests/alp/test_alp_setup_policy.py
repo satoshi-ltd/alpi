@@ -76,4 +76,4 @@ def test_the_peer_detail_shows_the_allowlist_or_why_it_is_refused(tmp_path: Path
 
     assert shown["a"] == ["  tools    allow: knowledge:search"]
     assert "INVALID" in shown["b"][0] and "tools.allow" in shown["b"][0]
-    assert shown["c"] == ["  tools    profile tools (no policy)"]
+    assert shown["c"] == ["  tools    profile tools except session history (no policy)"]

@@ -528,6 +528,45 @@ def test_link_ask_binds_each_peers_tool_policy_to_its_own_turn(monkeypatch, tmp_
     assert _policy.allowed() is None
 
 
+def test_a_peer_turn_never_reads_session_history_unless_its_tools_allow_names_it(monkeypatch, tmp_path: Path) -> None:
+    from alpi import tools
+    from alpi.session import Session, Turn
+
+    home = tmp_path / "bob"
+    home.mkdir()
+    monkeypatch.setenv("ALPI_HOME", str(home))
+    session = Session(home, "model", connection_id="member-conn", device_id="d1")
+    session.turns.append(Turn(1, "MEMBER-SECRET question", [], "MEMBER-SECRET answer"))
+    session.save()
+    seen: list[tuple[set[str], str, str]] = []
+
+    class HistoryEngine(_FakeEngine):
+        def run_turn(self, prompt, emit, *, source="user", persist_inflight=True):
+            names = {s["function"]["name"] for s in tools.schemas()}
+            read = tools.execute("session_read", {"session": session.id})
+            search = tools.execute("session_search", {"query": "MEMBER-SECRET"})
+            seen.append((names, f"{read.output}{read.error}", f"{search.output}{search.error}"))
+            super().run_turn(prompt, emit, source=source, persist_inflight=persist_inflight)
+
+    monkeypatch.setattr(alp_handlers, "Engine", lambda *, home, cfg: HistoryEngine(home=home, cfg=cfg))
+    active = alp_handlers._ActiveTurn()
+
+    alp_handlers._run_turn(home, "a", "carol", active)
+    alp_handlers._run_turn(home, "b", "alexandra", active, tool_allow=frozenset({"knowledge:search"}))
+    alp_handlers._run_turn(home, "c", "dave", active, tool_allow=frozenset({"session_read", "session_search"}))
+
+    assert "history stay out of turns another agent starts" in seen[0][1]
+    assert "tool not allowed by the tool policy" in seen[1][1]
+    for names, read, search in seen[:2]:
+        assert not names & {"session_search", "session_read", "recall_sessions", "index_sessions", "workgroup_search", "index_workgroups"}
+        assert "MEMBER-SECRET" not in read
+        assert "MEMBER-SECRET" not in search
+    names, read, _search = seen[2]
+    assert {"session_search", "session_read"} <= names
+    assert "MEMBER-SECRET" in read
+    assert "session_read" in {s["function"]["name"] for s in tools.schemas()}
+
+
 @pytest.mark.asyncio
 async def test_link_ask_handler_applies_the_pinned_peers_tool_policy_on_both_paths(
     monkeypatch, tmp_path: Path,
@@ -540,9 +579,12 @@ async def test_link_ask_handler_applies_the_pinned_peers_tool_policy_on_both_pat
     home.mkdir()
     seen: list[frozenset[str] | None] = []
 
+    withheld: list[bool] = []
+
     class PolicyEngine(_FakeEngine):
         def run_turn(self, prompt, emit, *, source="user", persist_inflight=True):
             seen.append(_policy.allowed())
+            withheld.append(("session_read" in _policy._withheld.get(), _policy.fences_private_areas()))
             super().run_turn(prompt, emit, source=source, persist_inflight=persist_inflight)
 
     factory = lambda *, home, cfg: PolicyEngine(home=home, cfg=cfg)  # noqa: E731
@@ -563,12 +605,15 @@ async def test_link_ask_handler_applies_the_pinned_peers_tool_policy_on_both_pat
     await ask({"prompt": "x"}, alexandra, server)
     [f async for f in ask({"prompt": "y", "stream": True}, alexandra, server)]
     await ask({"prompt": "z"}, carol, server)
+    [f async for f in ask({"prompt": "w", "stream": True}, carol, server)]
 
     assert seen == [
         frozenset({"knowledge:search", "alpi_knowledge"}),
         frozenset({"knowledge:search", "alpi_knowledge"}),
         None,
+        None,
     ]
+    assert withheld == [(False, False), (False, False), (True, True), (True, True)]
     assert _policy.allowed() is None
 
 

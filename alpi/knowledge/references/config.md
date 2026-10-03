@@ -30,7 +30,7 @@
 | `alp` | ALP peer/workgroup settings. |
 | `network` | Shared accessible address. |
 | `host` | Control-plane port, device label, public-bind opt-in. |
-| `tui` | TUI cosmetics. |
+| `tui` | TUI cosmetics; `tui.accent` colours a profile and `tui.fold` names the origami model that marks it in the apps (a new profile is seeded with the next unworn pair of the twelve, so it already has one before anyone chooses); the console draws that object as half-block art in `alpi profile show` and the `alpi setup` header and as a one-cell glyph on the active entry of profile and TUI lists, only on a truecolor UTF-8 terminal (a plain diamond elsewhere); set both with `/fold [object] [colour]` in the TUI (the default profile is always the alpaca in the brand accent and cannot be restyled), `alpi setup → Appearance` or the appearance row in the apps. |
 | `memory` | Reviewer cadence. |
 | `model_reasoning.effort` | `"" \| low \| medium \| high` reasoning hint passed alongside `cfg.model`. Default model only; mid-chat overrides and tool sub-models ignore it. |
 | `public_bio` | One-line public tag-line broadcast to every workgroup this profile joins (source of truth for `Member.bio`). Empty = no publication. |
@@ -71,7 +71,7 @@ providers:
 
 ## Change paths
 
-- `alpi setup` (recommended): model, email, MCPs, sandbox, voice, peers, workgroups, connections, network, budget, cleanup (including completed run journals older than 30 days or beyond 200 MiB per profile, and expired workgroup tombstones), and daemon lifecycle.
+- `alpi setup` (recommended): model, email, appearance (the profile's origami object and colour; `/fold` in the TUI does the same), MCPs, sandbox, voice, peers, workgroups, connections, network, budget, cleanup (including completed run journals older than 30 days or beyond 200 MiB per profile, and expired workgroup tombstones), and daemon lifecycle.
 - `/model` inside the TUI.
 - Direct `config.yaml` edit for advanced/cosmetic fields.
 - Desktop/mobile settings through `host.*` where available.
@@ -83,7 +83,7 @@ providers:
 | `model` | Next turn/session depending on caller. |
 | `workspace` | Next tool call after reload. |
 | `budget` | Next turn. |
-| `tools.terminal.sandbox` | Next terminal call. |
+| `tools.terminal.sandbox` | Next terminal call (member turns and peers without `tools.allow` run only in Linux bubblewrap or the Docker execution backend, and are refused in the Docker runtime and on macOS). |
 | `tools.deny` | Next turn (re-read from disk per turn, same as `budget`). |
 | `providers.openrouter.ignore` | Next turn (re-read from disk per turn, same as `tools.deny`). |
 | `tools.max_steps_per_turn` | Next turn. |

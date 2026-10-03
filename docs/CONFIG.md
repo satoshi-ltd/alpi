@@ -194,7 +194,10 @@ Sandbox`, or directly in YAML. It has no working form in the supported
 Docker runtime — the container grants none of the namespaces `bubblewrap`
 needs — so there it refuses every `terminal` call rather than run one
 unsandboxed, and the container plus its volume is the isolation boundary
-instead (see [DEPLOYMENTS.md](DEPLOYMENTS.md)). The TUI top bar shows the current
+instead (see [DEPLOYMENTS.md](DEPLOYMENTS.md)). A turn from a member device, or from
+an ALP peer without `tools.allow`, ignores `false` here: its commands run only in
+Linux `bubblewrap` with the alpi home hidden (or the Docker execution backend),
+and are refused in the Docker runtime and on macOS ([SECURITY.md](SECURITY.md)). The TUI top bar shows the current
 state (`sandbox on` / `off`). Most useful on profiles that run
 unattended (schedule, sub-agents) — see
 [SECURITY.md](SECURITY.md) for the recommended pattern + platform
@@ -423,7 +426,8 @@ the primary interactive surface. Replies stream in and settle as Markdown;
 each turn's tool calls collapse into one `N steps · Xs` row that opens to
 per-call cards, reasoning collapses into a `Thought for Xs` row, and the
 layout collapses labels below 60 columns. `tui.accent` recolours highlights
-and the profile name; `tui.theme` picks dark or light.
+and the profile name, and `tui.fold` names the origami model that marks the profile
+in the apps and the console beside its colour (the diamond until you choose one; set it with `/fold` in the TUI or `alpi setup → Appearance`; the default profile is always the alpaca in the brand accent and ignores both). The console draws the object as half-block art in `alpi profile show` and the `alpi setup` header and as a one-cell glyph on the active entry of profile and TUI lists, only on a truecolor UTF-8 terminal; elsewhere it keeps the diamond. `tui.theme` picks dark or light.
 
 **What the top bar shows (left to right):**
 
@@ -453,7 +457,8 @@ current context. Hints drop first when the terminal is narrow.
 | `tui.show_cost` | `true` | bool | next session |
 | `tui.show_tokens` | `true` | bool | next session |
 | `tui.show_reasoning` | `true` | bool | next session |
-| `tui.accent` | `#f0b447` (`#8a5a0a` in light mode) | CSS color (hex / named / rgb) | next session |
+| `tui.accent` | `#f0b447` (the amber profile colour; the brand accent is ink, `#f3efe6` dark and `#14110c` light, for the default profile) | CSS color (hex / named / rgb) | next session |
+| `tui.fold` | `diamond` | `diamond` \| `house` \| `heart` \| `plane` \| `shield` \| `rocket` \| `star` \| `tree` \| `box` \| `crown` \| `feather` \| `bulb` | next client refresh |
 | `tui.theme` | `dark` | `dark` \| `light` | next session |
 | `tui.auto_resume` | `false` | bool | next launch |
 
@@ -628,7 +633,7 @@ updated process before it can enforce them.
 
 Turns a profile into a **read-only front door** to one designated peer. When set, the engine offers the profile **only the `peer` and `decline` tools** and hard-gates every turn: the agent MUST consult that pinned peer via `peer` before it can produce a final answer — a call to any other peer id is rejected before it runs, an empty reply does not count, and if the turn ends (or hits the step/time limit) without a valid reply it fails closed with a fixed message rather than answer from the model's own knowledge. The peer's reply is surfaced as the answer. A request the relay must not forward (a change, an action, something out of scope) can be refused with `decline(reason)`: the reason, written in the user's language, becomes the answer and the peer is never consulted; an empty reason does not count, and everything else still has to go through the peer. So you only pin that peer in `peers.yaml` with `link.ask` — no separate `tools.deny` needed.
 
-This makes the **relay side** read-only, structurally. It does **not** make the target agent immutable: an inbound `link.ask` runs a full turn on the target with the target's own tools, so keeping the knowledge source unwritable is the target profile's responsibility — deny its mutating tools there for everyone with `tools.deny`, or list the only tools that relay may use with `tools.allow` on the relay's record in the target's `peers.yaml` ([ALP.md → Per-peer tool policy](ALP.md#per-peer-tool-policy)); `knowledge:search` plus `alpi_knowledge` keeps a knowledge relay read-only, and restrict which paired devices may address it via a member connection's `profile_scope` (see *Host* below). The relay does not police the peer; the target polices the relay.
+This makes the **relay side** read-only, structurally. It does **not** make the target agent immutable: an inbound `link.ask` runs a full turn on the target with the target's own tools (fenced like a member device unless the peer has a `tools.allow`), so keeping the knowledge source unwritable is the target profile's responsibility — deny its mutating tools there for everyone with `tools.deny`, or list the only tools that relay may use with `tools.allow` on the relay's record in the target's `peers.yaml` ([ALP.md → Per-peer tool policy](ALP.md#per-peer-tool-policy)); `knowledge:search` plus `alpi_knowledge` keeps a knowledge relay read-only, and restrict which paired devices may address it via a member connection's `profile_scope` (see *Host* below). The relay does not police the peer; the target polices the relay.
 
 | Key | Default | Notes |
 |---|---|---|

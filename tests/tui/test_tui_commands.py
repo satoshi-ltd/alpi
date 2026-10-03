@@ -97,3 +97,83 @@ async def test_session_resets_repoint_session_search(tui_home, command) -> None:
         app._handle_slash(command)
         await pilot.pause()
         assert session_search._CURRENT_SESSION_ID == app.engine.session.id
+
+
+@pytest.mark.asyncio
+async def test_fold_command_shows_and_sets_the_pair(tui_profile_home) -> None:
+    from alpi import config
+    from alpi.tui.app import AlpiApp
+    from alpi.tui.widgets import DimLine
+
+    app = AlpiApp(home_dir=tui_profile_home)
+    async with app.run_test(size=(120, 40)) as pilot:
+        app._cmd_fold("")
+        await pilot.pause()
+        shown = " ".join(str(w.render()) for w in app.query(DimLine))
+        assert "amber diamond" in shown and "objects:" in shown
+        app._cmd_fold("shield blue")
+        await pilot.pause()
+        assert config.load(tui_profile_home).tui["fold"] == "shield"
+        assert config.load(tui_profile_home).tui["accent"] == "#3899e2"
+        app._cmd_fold("pencil")
+        await pilot.pause()
+        assert config.load(tui_profile_home).tui["fold"] == "shield"
+        assert "pencil" in " ".join(str(w.render()) for w in app.query(DimLine))
+
+
+@pytest.mark.asyncio
+async def test_fold_keeps_a_session_only_model_switch(tui_profile_home) -> None:
+    from alpi import config
+    from alpi.tui.app import AlpiApp
+
+    app = AlpiApp(home_dir=tui_profile_home)
+    async with app.run_test(size=(120, 40)) as pilot:
+        app.cfg.model = "openai/session-only"
+        app.engine.cfg = app.cfg
+        app._cmd_fold("heart")
+        await pilot.pause()
+        assert app.engine.cfg is app.cfg and app.cfg.model == "openai/session-only"
+        assert app.cfg.tui["fold"] == "heart"
+        assert config.load(tui_profile_home).tui["fold"] == "heart"
+        assert config.load(tui_profile_home).model != "openai/session-only"
+        app._cmd_fold(",")
+        await pilot.pause()
+        assert app.cfg.tui["fold"] == "heart"
+
+
+@pytest.mark.asyncio
+async def test_fold_on_the_default_profile_explains_the_alpaca_and_writes_nothing(tui_home) -> None:
+    from alpi import config
+    from alpi.tui.app import AlpiApp
+    from alpi.tui.widgets import DimLine
+
+    app = AlpiApp(home_dir=tui_home)
+    async with app.run_test(size=(120, 40)) as pilot:
+        app._cmd_fold("")
+        await pilot.pause()
+        shown = " ".join(str(w.render()) for w in app.query(DimLine))
+        assert "alpaca (brand accent)" in shown and "objects:" not in shown
+        app._cmd_fold("shield blue")
+        await pilot.pause()
+        assert "alpaca" in " ".join(str(w.render()) for w in app.query(DimLine))
+        assert config.load(tui_home).tui["fold"] == "diamond"
+        assert config.load(tui_home).tui["accent"] == "#f0b447"
+
+
+@pytest.mark.asyncio
+async def test_fold_refreshes_the_marker_without_a_restart(tui_profile_home) -> None:
+    from alpi import fold_art
+    from alpi.tui import list_row
+    from alpi.tui.app import AlpiApp
+
+    app = AlpiApp(home_dir=tui_profile_home)
+    async with app.run_test(size=(120, 40)) as pilot:
+        app._fold_art = True
+        app._cmd_fold("heart")
+        await pilot.pause()
+        assert app._fold_marker == fold_art.GLYPHS["heart"]
+        assert list_row._marker == fold_art.GLYPHS["heart"]
+        app._fold_art = False
+        app._cmd_fold("tree")
+        await pilot.pause()
+        assert app._fold_marker == fold_art.FALLBACK_GLYPH

@@ -145,7 +145,7 @@ def test_send_rejects_non_attachment_member_private_path(
         )
 
     assert not result.ok
-    assert "members cannot read" in result.error
+    assert "cannot read the profile" in result.error
 
 
 def test_get_surfaces_missing_blob(tmp_path: Path, monkeypatch) -> None:

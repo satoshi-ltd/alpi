@@ -17,6 +17,7 @@ from alpi import config as cfg_mod
 from alpi.alp import peers as peers_mod
 from alpi.alp import server as alp_server
 from alpi.engine import AgentEvent, Engine
+from alpi.tools._paths import PEER_HISTORY_TOOLS
 
 log = logging.getLogger("alpi.alp.handlers")
 
@@ -183,7 +184,9 @@ async def _run_turn_stream(
         def worker() -> None:
             from alpi.tools import _policy as tool_policy
             try:
-                with ledger.peer_context(peer_id), tool_policy.use(tool_allow, f"peer '{peer_id}'"):
+                with ledger.peer_context(peer_id), tool_policy.use(
+                    tool_allow, f"peer '{peer_id}'", PEER_HISTORY_TOOLS, fence_without_policy=True,
+                ):
                     engine.run_turn(
                         prompt, emit=sink, source="peer",
                         persist_inflight=False,
@@ -315,7 +318,9 @@ def _run_turn(
         from alpi import ledger
         from alpi.tools import _policy as tool_policy
 
-        with ledger.peer_context(peer_id), tool_policy.use(tool_allow, f"peer '{peer_id}'"):
+        with ledger.peer_context(peer_id), tool_policy.use(
+            tool_allow, f"peer '{peer_id}'", PEER_HISTORY_TOOLS, fence_without_policy=True,
+        ):
             engine.run_turn(
                 prompt, emit=sink, source="peer",
                 persist_inflight=False,

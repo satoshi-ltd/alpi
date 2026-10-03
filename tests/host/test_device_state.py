@@ -16,7 +16,7 @@ from alpi.host import server as host_server
 
 
 def _bootstrap(home: Path) -> Path:
-    home.mkdir()
+    home.mkdir(parents=True)
     cfg = cfg_mod.Config(home=home, model="openai/gpt-5.4-mini")
     cfg.workspace = "/tmp/work"
     cfg.public_bio = "desktop test profile"
@@ -1551,3 +1551,110 @@ def test_session_view_key_never_merges_a_device_scoped_caller_with_the_connectio
     assert views["no_device"] != views["shared"]
     assert len({views["no_device"], views["dev_a"], views["shared"]}) == 3
     assert views["local"] == ("host", "")
+
+
+async def _fold_summary(srv: host_server.Server, name: str = "doc") -> dict:
+    resp = await srv._dispatch({"id": "s", "method": "host.profile.summaries", "params": {}})
+    return next(p for p in resp["result"]["profiles"] if p["name"] == name)
+
+
+def _fold_server(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[host_server.Server, Path, Path]:
+    root = _bootstrap(tmp_path / "root")
+    profile = _bootstrap(root / "profiles" / "doc")
+    monkeypatch.setattr(host_device_state.home_mod, "_ROOT", root)
+    monkeypatch.setattr(host_handlers, "_resolve_home", lambda name: profile if name == "doc" else root)
+    host_device_state.invalidate_summary()
+    srv = host_server.Server(home=root)
+    host_device_state.register(srv)
+    return srv, root, profile
+
+
+@pytest.mark.asyncio
+async def test_a_profile_is_a_diamond_until_it_names_a_fold(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    srv, _root, home = _fold_server(tmp_path, monkeypatch)
+    config_path = home / "config.yaml"
+    before = config_path.read_bytes() if config_path.exists() else None
+
+    profile = await _fold_summary(srv)
+    assert profile["fold"] == "diamond" and "accent" in profile
+    assert (config_path.read_bytes() if config_path.exists() else None) == before
+
+    async def _call(method: str, **params):
+        return await srv._dispatch({"id": method, "method": method, "params": {"profile": "doc", **params}})
+
+    assert (await _call("host.config.set_field", key="tui.fold", value="Shield"))["result"] == {"ok": True}
+    assert (await _fold_summary(srv))["fold"] == "shield"
+    assert cfg_mod.load(home).tui["fold"] == "shield"
+
+    await _call("host.config.unset_field", key="tui.fold")
+    assert (await _fold_summary(srv))["fold"] == "diamond"
+
+
+@pytest.mark.asyncio
+async def test_an_unknown_fold_is_refused_and_a_hand_edited_one_reads_as_the_diamond(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    srv, _root, home = _fold_server(tmp_path, monkeypatch)
+
+    resp = await srv._dispatch({
+        "id": "bad", "method": "host.config.set_field",
+        "params": {"profile": "doc", "key": "tui.fold", "value": "pencil"},
+    })
+    assert resp["error"]["code"] == -32602 and "diamond" in resp["error"]["data"]["detail"]
+    assert cfg_mod.load(home).tui["fold"] == "diamond"
+
+    (home / "config.yaml").write_text("tui:\n  fold: pencil\n")
+    host_device_state.invalidate_summary()
+    assert (await _fold_summary(srv))["fold"] == "diamond"
+
+
+@pytest.mark.asyncio
+async def test_the_default_profile_always_wears_the_alpaca_and_the_theme_accent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    srv, root, _profile = _fold_server(tmp_path, monkeypatch)
+    (root / "config.yaml").write_text("tui:\n  fold: shield\n  accent: '#3899e2'\n")
+    host_device_state.invalidate_summary()
+
+    default = await _fold_summary(srv, "default")
+    assert default["fold"] == "alpaca" and default["accent"] is None
+    assert (await _fold_summary(srv, "doc"))["fold"] == "diamond"
+
+    for key, value in (("tui.fold", "heart"), ("tui.accent", "#f36a8a"), ("tui..fold", "heart"), ("tui.fold.", "heart"), ("tui", {"fold": "heart"})):
+        resp = await srv._dispatch({
+            "id": key, "method": "host.config.set_field",
+            "params": {"profile": "default", "key": key, "value": value},
+        })
+        assert resp["error"]["code"] == -32602 and "alpaca" in resp["error"]["data"]["detail"]
+    unset = await srv._dispatch({
+        "id": "u", "method": "host.config.unset_field", "params": {"profile": "default", "key": "tui.fold"},
+    })
+    assert unset["error"]["code"] == -32602
+    assert cfg_mod.load(root).tui["fold"] == "shield"
+
+    ok = await srv._dispatch({
+        "id": "t", "method": "host.config.set_field",
+        "params": {"profile": "default", "key": "tui.theme", "value": "light"},
+    })
+    assert ok["result"] == {"ok": True}
+
+
+def test_an_unknown_or_missing_fold_resolves_to_the_diamond() -> None:
+    from alpi import palette
+
+    assert len(palette.FOLDS) == 12 and palette.DEFAULT_FOLD == "diamond"
+    assert palette.resolve_fold(None) == palette.resolve_fold("") == palette.resolve_fold("pencil") == "diamond"
+    assert palette.resolve_fold(["heart"]) == palette.resolve_fold(0) == "diamond"
+    assert palette.resolve_fold(" HEART ") == "heart"
+
+
+@pytest.mark.asyncio
+async def test_a_retired_grey_reaches_the_apps_as_its_colour(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    srv, _root, home = _fold_server(tmp_path, monkeypatch)
+    (home / "config.yaml").write_text("tui:\n  fold: box\n  accent: '#7e8792'\n")
+    host_device_state.invalidate_summary()
+    assert (await _fold_summary(srv))["accent"] == "#3ac9f3"

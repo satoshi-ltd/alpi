@@ -26,6 +26,7 @@ class ExecutionWorld:
         *,
         container_name: str | None = None,
         write_rules: tuple[tuple[str, Path], ...] | None = None,
+        member: bool = False,
     ) -> list[str] | str:
         return command
 
@@ -44,6 +45,7 @@ class DockerExecutionWorld(ExecutionWorld):
         *,
         container_name: str | None = None,
         write_rules: tuple[tuple[str, Path], ...] | None = None,
+        member: bool = False,
     ) -> list[str]:
         if shutil.which("docker") is None:
             raise RuntimeError("Docker execution requested but the docker CLI is unavailable")
@@ -55,7 +57,7 @@ class DockerExecutionWorld(ExecutionWorld):
             raise RuntimeError("Docker execution workspace and profile home must be directories")
         workspace = self.context.workspace.resolve()
         home = self.context.home.resolve()
-        mounts = {workspace, home, cwd.resolve()}
+        mounts = {workspace, cwd.resolve()} if member else {workspace, home, cwd.resolve()}
         args = ["docker", "run", "--rm", "-i", "--network", "bridge" if self.allow_network else "none"]
         if container_name is not None:
             args.extend(["--name", container_name])

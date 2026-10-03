@@ -10,7 +10,7 @@ from rich.prompt import Confirm
 from rich.text import Text
 from rich.theme import Theme
 
-from alpi import palette
+from alpi import fold_art, palette
 
 _THEME = Theme(
     {
@@ -38,9 +38,10 @@ _THEME = Theme(
 
 _console = Console(theme=_THEME, highlight=False)
 
-_MUTED_STYLE = "fg:#828b97"
+_MUTED_STYLE = f"fg:{palette.DARK['ink3']}"
 
 LABEL_WIDTH = 16
+_CREST_CHROME_ROWS = 3
 
 POINTER = "◆"
 NAV_HINT = "(↑↓ navigate  ENTER select  ESC cancel)"
@@ -53,14 +54,44 @@ def crumb(*parts: str) -> str:
 
 
 def banner(title: str, subtitle: str = "", hint: str = "",
-           home: Path | None = None) -> None:
+           home: Path | None = None, art: bool = False) -> None:
     _console.clear()
     line = _render_title(title, home=home)
     if subtitle:
         line += f"[dim] › {subtitle}[/dim]"
-    _console.print(line)
-    if hint:
-        _console.print(f"[dim]{hint}[/dim]")
+    _print_header(line, hint, home, art)
+
+
+def _crest(home: Path | None, reserve: int = 0) -> Text | None:
+    if _console.size.height < fold_art.BANNER_ROWS + _CREST_CHROME_ROWS + reserve:
+        return None
+    if not fold_art.supports_fold_art(stream=_console.file):
+        return None
+    try:
+        from alpi import config as config_mod
+        from alpi import home as home_mod
+        resolved = home or home_mod.get_home()
+        fold, accent = fold_art.identity(resolved, config_mod.load(resolved).tui)
+    except Exception:  # noqa: BLE001
+        return None
+    return fold_art.art(fold, accent, rows=fold_art.BANNER_ROWS)
+
+
+def _print_header(line: str, hint: str, home: Path | None, art: bool, reserve: int = 0) -> None:
+    picture = _crest(home, reserve) if art else None
+    if picture is not None:
+        widest = max(Text.from_markup(line).cell_len, Text(hint).cell_len)
+        if _console.size.width < max(row.cell_len for row in picture.split("\n")) + 2 + widest:
+            picture = None
+    if picture is None:
+        _console.print(line)
+        if hint:
+            _console.print(f"[dim]{hint}[/dim]")
+    else:
+        lines = [Text.from_markup(line)]
+        if hint:
+            lines.append(Text(hint, style="dim"))
+        _console.print(fold_art.beside(picture, lines))
     _console.print("")
 
 
@@ -80,7 +111,7 @@ def _accent_hex(home: Path | None) -> str:
         from alpi import home as home_mod
         resolved = home or home_mod.get_home()
         cfg = config_mod.load(resolved)
-        return palette.profile_accent(cfg.tui)
+        return fold_art.identity(resolved, cfg.tui)[1]
     except Exception:  # noqa: BLE001
         return DEFAULT_ACCENT
 
@@ -126,6 +157,7 @@ def menu(
     subtitle: str = "",
     home: Path | None = None,
     close: str = "Exit",
+    art: bool = False,
 ) -> Any:
     """Render a banner and arrow-key menu."""
     if title:
@@ -133,9 +165,7 @@ def menu(
         line = _render_title(title, home=home)
         if subtitle:
             line += f"[dim] › {subtitle}[/dim]"
-        _console.print(line)
-        _console.print(f"[dim]{NAV_HINT}[/dim]")
-        _console.print("")
+        _print_header(line, NAV_HINT, home, art, reserve=len(items) + 2)
 
     # Find the widest labeled row so status columns line up.
     auto_width = LABEL_WIDTH

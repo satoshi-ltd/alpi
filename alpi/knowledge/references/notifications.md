@@ -39,6 +39,26 @@ A good daily-summary shape: a lead sentence, then `## Embudo`, with
 `**Veredicto:**` / `**Volumen:**` subsections, bullets or a small table
 under each, and 🔴🟡🟢 to flag status.
 
+A digest of items (mail, PRs, alerts) lists one entry per line as
+`- **Name** meta — text`: the sender or subject owner in bold, a short meta
+(an address, a repo, a time) after it, then the line itself; the apps draw
+each entry as name, meta in small mono and the text below, so keep the meta
+short and put the substance in the text.
+
+A failed scheduled run is filed by the daemon, not by you: its title is
+"<job> failed" and its body opens with `**Reason:**`, then `**Exit:**` and
+`**Timeout:**` when they apply, with any trace in a ```` ```text ```` block.
+The apps draw any `error` row as a card: the labelled lines it opens with as
+facts, the rest in order, and the code blocks it ends with folded under Details,
+with Run again and Open job when the daemon filed it; a brace-delimited run of
+lines in any body (a pasted JSON payload) renders as a code block. Both apps pin
+unread `error` and `warning` rows in a Needs you group, so set `type` only when
+the owner has to act. Reply starts a new chat with you about the notification: the
+desktop attaches it as a Markdown file, the phone quotes its title and body (`> `
+lines, clipped) at the top of the message. A digest is
+drawn as entries only when it has two or more items, every one a plain `-` bullet
+in that form with a plain meta of at most four words; any other list stays a list.
+
 ## Auto-simplified (don't bother — it is downgraded for you)
 
 - `####+` deep headings → capped at two levels (heading + subheading)

@@ -86,6 +86,20 @@ _MACOS_PROFILE = """
 """.strip()
 
 
+def member_root_paths(root: Path) -> tuple[Path, ...]:
+    paths = [root.absolute(), root.resolve()]
+    try:
+        profiles = [p for p in (root / "profiles").iterdir() if p.is_dir()]
+    except OSError:
+        profiles = []
+    real_root = root.resolve()
+    for profile in profiles:
+        real = profile.resolve()
+        if real != real_root and real_root not in real.parents:
+            paths.append(real)
+    return tuple(dict.fromkeys(paths))
+
+
 def wrap_command(
     cmd: str,
     *,
@@ -93,15 +107,20 @@ def wrap_command(
     alpi_home: Path,
     allow_network: bool,
     write_rules: tuple[tuple[str, Path], ...] | None = None,
+    member_root: Path | None = None,
 ) -> list[str]:
     platform = sys.platform
     if platform == "darwin":
+        if member_root is not None:
+            raise SandboxUnavailable(
+                "the macOS sandbox cannot hide other processes' arguments and environment"
+            )
         return _wrap_macos(
             cmd, workspace, alpi_home, allow_network, write_rules,
         )
     if platform.startswith("linux"):
         return _wrap_linux(
-            cmd, workspace, alpi_home, allow_network, write_rules,
+            cmd, workspace, alpi_home, allow_network, write_rules, member_root,
         )
     raise SandboxUnavailable(
         f"No sandbox implementation for platform {platform!r}. "
@@ -170,6 +189,7 @@ def _wrap_linux(
     alpi_home: Path,
     allow_network: bool,
     write_rules: tuple[tuple[str, Path], ...] | None,
+    member_root: Path | None = None,
 ) -> list[str]:
     if shutil.which("bwrap") is None:
         from alpi.runtime import is_docker
@@ -199,15 +219,18 @@ def _wrap_linux(
         "/etc/ssl", "/etc/ca-certificates", "/etc/resolv.conf",
     ])
     args += ["--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp"]
+    homes = [] if member_root is not None else [alpi_home]
     if write_rules is None:
-        args += _linux_dir_mounts([workspace, alpi_home])
+        args += _linux_dir_mounts([workspace, *homes])
         args += ["--bind", str(workspace), str(workspace)]
-        args += ["--bind", str(alpi_home), str(alpi_home)]
+        for home in homes:
+            args += ["--bind", str(home), str(home)]
     else:
         writable = [path for _, path in write_rules]
-        args += _linux_dir_mounts([workspace, alpi_home, *writable])
+        args += _linux_dir_mounts([workspace, *homes, *writable])
         args += ["--ro-bind", str(workspace), str(workspace)]
-        args += ["--ro-bind", str(alpi_home), str(alpi_home)]
+        for home in homes:
+            args += ["--ro-bind", str(home), str(home)]
         for _, path in write_rules:
             args += ["--bind", str(path), str(path)]
     args += ["--remount-ro", "/"]

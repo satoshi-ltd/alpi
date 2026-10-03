@@ -455,6 +455,70 @@ def test_tick_failure_still_updates_last_run(monkeypatch, tmp_home_no_env: Path)
         (tmp_home_no_env / "schedule" / "jobs.json").read_text())[0]
 
 
+def test_a_job_that_raises_is_stamped_failed_and_the_pass_goes_on(monkeypatch, tmp_home_no_env: Path) -> None:
+    jobs = [
+        {"id": jid, "kind": "cron", "expression": "* * * * *", "prompt": jid, "last_run_at": _PAST}
+        for jid in ("a", "b", "c")
+    ]
+    scheduler._save_jobs(tmp_home_no_env, jobs)
+    fired: list[str] = []
+
+    def run(job, home):
+        fired.append(job["id"])
+        if job["id"] == "b":
+            raise PermissionError("agent subprocess denied")
+        return scheduler.JobOutcome(True, "ok")
+
+    monkeypatch.setattr(scheduler, "run_job", run)
+    now = datetime(2026, 10, 3, 12, 0, 5, tzinfo=timezone.utc)
+    results = scheduler.tick(tmp_home_no_env, now=now)
+
+    assert [(jid, ok) for jid, ok, _ in results] == [("a", True), ("b", False), ("c", True)]
+    assert "PermissionError" in results[1][2]
+    status = {j["id"]: j["last_run_status"] for j in jobs_store.read(tmp_home_no_env)}
+    assert status == {"a": "ok", "b": "error", "c": "ok"}
+
+    fired.clear()
+    scheduler.tick(tmp_home_no_env, now=now + timedelta(seconds=10))
+    assert fired == []
+    from alpi import outputs as outputs_mod
+    errors = [o for o in outputs_mod.list_outputs(tmp_home_no_env) if o.get("type") == "error"]
+    assert [o.get("job_id") for o in errors] == ["b"]
+
+
+def test_a_job_fired_by_hand_that_raises_is_stamped_and_reported(monkeypatch, tmp_home_no_env: Path, caplog) -> None:
+    scheduler._save_jobs(tmp_home_no_env, [{"id": "m", "kind": "cron", "expression": "0 3 * * *", "prompt": "m"}])
+
+    def run(job, home):
+        raise OSError("token=sk-live-1234567890abcdefghij could not open /data/x")
+
+    monkeypatch.setattr(scheduler, "run_job", run)
+    ok, message = scheduler.fire_by_id(tmp_home_no_env, "m")
+
+    assert ok is False
+    assert message.startswith("the run raised OSError")
+    assert "sk-live-1234567890abcdefghij" not in message
+    assert "sk-live-1234567890abcdefghij" not in caplog.text and "OSError" in caplog.text
+    assert jobs_store.read(tmp_home_no_env)[0]["last_run_status"] == "error"
+
+
+def test_a_run_that_succeeded_stays_ok_when_closing_its_activity_row_raises(monkeypatch, tmp_home_no_env: Path) -> None:
+    from contextlib import contextmanager
+    from alpi.host import activity
+
+    @contextmanager
+    def closing_fails(home, job):
+        yield
+        raise RuntimeError("Event loop is closed")
+
+    monkeypatch.setattr(activity, "scheduled_run", closing_fails)
+    monkeypatch.setattr(scheduler, "run_job", lambda job, home: scheduler.JobOutcome(True, "done"))
+    assert scheduler._run_guarded({"id": "j"}, tmp_home_no_env).ok is True
+
+    monkeypatch.setattr(scheduler, "run_job", lambda job, home: (_ for _ in ()).throw(ValueError()))
+    assert scheduler._run_guarded({"id": "j"}, tmp_home_no_env).message == "the run raised ValueError"
+
+
 def _deploy_by_file(home: Path, jobs: list[dict], runs: dict | None = None) -> None:
     jobs_store.jobs_path(home).parent.mkdir(parents=True, exist_ok=True)
     jobs_store.jobs_path(home).write_text(json.dumps(jobs))
@@ -1733,3 +1797,84 @@ def test_the_scheduled_prompt_states_its_time_budget(tmp_home_no_env: Path, monk
 
     assert "This run has about 25 minutes before it is stopped" in prompts[0]
     assert "before it is stopped" not in prompts[1]
+
+
+def test_emit_schedule_event_files_the_job_and_run_behind_every_row(tmp_home_no_env: Path) -> None:
+    from alpi import outputs as outputs_mod
+    ok = scheduler.JobOutcome(True, "ok", reply="digest", delivered_to="alpi", run_id="r" * 32)
+    scheduler._emit_schedule_event(tmp_home_no_env, {"id": "daily", "kind": "cron", "title": "Daily", "notify": True}, ok)
+    failed = scheduler.JobOutcome(False, "boom", run_id="f" * 32)
+    scheduler._emit_schedule_event(tmp_home_no_env, {"id": "weekly", "kind": "cron", "title": "Weekly"}, failed)
+    rows = {o["job_id"]: o for o in outputs_mod.list_outputs(tmp_home_no_env)}
+    assert rows["daily"]["run_id"] == "r" * 32 and rows["daily"]["type"] == "info"
+    assert rows["weekly"]["run_id"] == "f" * 32 and rows["weekly"]["type"] == "error"
+
+
+def test_a_child_notification_carries_the_job_and_run_that_sent_it(tmp_home_no_env: Path) -> None:
+    from alpi import outputs as outputs_mod
+    scheduler._emit_agent_messages(tmp_home_no_env, [{"text": "done", "title": "Labs"}], job_id="labs", run_id="a" * 32)
+    rows = outputs_mod.list_outputs(tmp_home_no_env)
+    assert rows and rows[0]["job_id"] == "labs" and rows[0]["run_id"] == "a" * 32
+
+
+def test_run_job_files_a_child_notification_with_its_job_and_run(monkeypatch, tmp_home_no_env: Path) -> None:
+    from alpi import outputs as outputs_mod
+
+    class _Done:
+        returncode = 0
+        stdout = _events_stdout([
+            {"kind": "tool_start", "name": "notify", "preview": "labs", "args": {"text": "labs are in", "title": "Labs"}},
+            {"kind": "tool_end", "name": "notify", "ok": True},
+            {"kind": "reply", "text": "done"},
+        ])
+        stderr = ""
+
+    monkeypatch.setattr(scheduler.subprocess, "run", lambda *a, **kw: _Done())
+    outcome = scheduler.run_job({"id": "labs", "kind": "cron", "prompt": "p", "notify": True}, tmp_home_no_env)
+    rows = outputs_mod.list_outputs(tmp_home_no_env)
+    assert rows and rows[0]["job_id"] == "labs" and rows[0]["run_id"] == outcome.run_id
+
+
+def test_a_failure_reads_as_a_failure_with_its_trace_folded(tmp_home_no_env: Path) -> None:
+    from alpi import outputs as outputs_mod
+    outcome = scheduler.JobOutcome(False, "agent rc=1: crashed\nTraceback (most recent call last):\n  boom", exit_code=1, timeout_reason=None)
+    scheduler._emit_schedule_event(tmp_home_no_env, {"id": "nightly", "kind": "cron", "title": "Nightly sync"}, outcome)
+    row = outputs_mod.list_outputs(tmp_home_no_env)[0]
+    assert row["title"] == "Nightly sync failed"
+    assert row["body"].startswith("**Reason:** boom\n**Exit:** 1")
+    assert "```text\nTraceback (most recent call last):\n  boom\n```" in row["body"]
+
+
+def test_a_failure_body_stays_under_its_cap_and_closes_its_fence() -> None:
+    body = scheduler.failure_body(scheduler.JobOutcome(False, "x\n" + "line\n" * 2000, timeout_reason="wall clock 600s"))
+    assert len(body) <= scheduler.FAILURE_BODY_CAP and body.endswith("```") and "**Timeout:** wall clock 600s" in body
+    long_reason = scheduler.failure_body(scheduler.JobOutcome(False, "r" * 1990 + "\ntrace"))
+    assert len(long_reason) <= scheduler.FAILURE_BODY_CAP and long_reason.count("```") in (0, 2)
+
+
+def test_a_stored_trace_keeps_its_indentation_and_symbols() -> None:
+    from alpi import outputs as outputs_mod
+    body = outputs_mod.normalize_notification_body("**Reason:** boom\n\n```text\n  File \"x.py\", line 3, in <module>\n    # x\n---\n[a](u)\n```\n## Next")
+    assert '  File "x.py", line 3, in <module>\n    # x\n---\n[a](u)' in body
+    assert body.endswith("## Next")
+
+
+def test_a_notified_reply_is_archived_whole_or_says_where_it_was_cut(tmp_home_no_env: Path) -> None:
+    from alpi import outputs as outputs_mod
+    long_digest = "\n".join(f"- **Sender {i}** a{i}@example.com — subject number {i}" for i in range(120))
+    assert 2000 < len(long_digest) < scheduler.REPLY_BODY_CAP
+    scheduler._emit_schedule_event(tmp_home_no_env, {"id": "mail", "kind": "cron", "title": "Mail", "notify": True},
+                                   scheduler.JobOutcome(True, "ok", reply=long_digest, delivered_to="alpi"))
+    assert outputs_mod.list_outputs(tmp_home_no_env)[0]["body"].endswith("subject number 119")
+    huge = "x" * (scheduler.REPLY_BODY_CAP + 500)
+    body = outputs_mod.normalize_notification_body(scheduler.reply_body(huge))
+    assert body.startswith("x" * 100) and body.endswith(f"*Cut at 8,000 of {len(huge):,} characters.*")
+
+
+def test_a_reply_cut_inside_a_code_block_closes_it_before_saying_where_it_was_cut() -> None:
+    from alpi import outputs as outputs_mod
+    reply = "Report\n\n```text\n" + "line\n" * 3000 + "```\nAfter"
+    body = outputs_mod.normalize_notification_body(scheduler.reply_body(reply))
+    assert body.count("```") == 2
+    note = f"*Cut at 8,000 of {len(reply):,} characters.*"
+    assert body.endswith(note) and body.rindex("```") < body.index(note)

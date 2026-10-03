@@ -68,10 +68,40 @@ not reach.
   — `$HOME`, `/tmp`, directories outside the workspace — is allowed.
   For a turn started from a member device, file tools also refuse every
   profile's `host/`, `secrets/`, `gateway/`, `cache/`, `logs/`, `outputs/`,
-  `sessions/`, `memories/`, `schedule/`, `skills/`, `runs/` and `mentions/`,
-  for reads and writes, and `search` leaves them out of its results; `alp/`
-  transcripts stay readable (its `secrets/` never). Turns that run as admin
-  (admin devices, the CLI, jobs, ALP turns) are not fenced, and the session
+  `sessions/`, `memories/`, `schedule/`, `skills/`, `runs/`, `run/`,
+  `mentions/` and `browser/`, for reads and writes, and `search` leaves them out of its
+  results; `alp/` transcripts stay readable (its `secrets/` never). A member
+  turn's `terminal` runs only inside Linux `bubblewrap`, whatever
+  `tools.terminal.sandbox` says: the alpi home is not mounted there, other
+  processes are invisible (`--unshare-pid`) and `/tmp` is private (the Docker
+  execution backend does not mount the home either). The workspace and the
+  working directory must lie outside the alpi home and a viewed skill's
+  declared secrets are not passed to the shell; a workspace inside or around
+  `~/.ssh`, `~/.aws` or `~/.gnupg` is refused too. With
+  `tools.execution.backend: docker` the command runs in that container
+  instead. Everywhere else the command is refused before it runs (before any
+  approval is asked), with no fallback: in the supported Docker
+  runtime, on Linux without `bubblewrap`, and on macOS, whose sandbox cannot
+  hide other processes' arguments and environment (scheduled prompts, profile
+  `.env`, MCP tokens). A
+  member sees and stops only the background jobs its own device started, and
+  only while the job's process is the one it started (a recycled pid is never
+  signalled). Skill scripts (`run`, `test`, `invoke`) and every change to
+  skills, memory or jobs are refused to members, nested calls included; prose
+  skills keep working. The file fence covers every profile under the alpi
+  root (custom roots, any letter case, profiles linked from elsewhere) and its
+  `knowledge.sqlite`. A turn answering an ALP peer that has no `tools.allow`
+  gets all of the above (file tools, `search`, `terminal`, skills, jobs) and
+  no session history tools, without changing its role. MCP tools are not
+  fenced: what a configured MCP server can read is the operator's grant, and
+  so is the `db` tool on a skill's state database. The fence does not hold
+  for a profile in a workgroup: any of its member devices or peers without a
+  policy can `workgroup_post`, and the turn that post wakes runs as the
+  profile, unfenced (no session history tools, but its file tools and
+  `terminal` still reach `sessions/`) and can post the answer back to a
+  transcript they can read. Keep profiles that member devices or untrusted
+  peers drive out of workgroups until those turns are fenced (SCOPE.11). Turns that run as admin (admin devices, the CLI, jobs, a
+  peer whose `tools.allow` grants the tools) are not fenced, and the session
   tools do not use file paths.
   Workspace-only isolation is Layer 2.
 

@@ -11,18 +11,36 @@ _allowed: contextvars.ContextVar[frozenset[str] | None] = contextvars.ContextVar
     "alpi_tool_policy_allowed", default=None,
 )
 _label: contextvars.ContextVar[str] = contextvars.ContextVar("alpi_tool_policy_label", default="")
+_withheld: contextvars.ContextVar[frozenset[str]] = contextvars.ContextVar(
+    "alpi_tool_policy_withheld", default=frozenset(),
+)
+_fenced: contextvars.ContextVar[bool] = contextvars.ContextVar("alpi_tool_policy_fenced", default=False)
 
 
 @contextmanager
-def use(allowed: Iterable[str] | None, label: str) -> Iterator[None]:
+def use(
+    allowed: Iterable[str] | None,
+    label: str,
+    withheld: Iterable[str] = (),
+    *,
+    fence_without_policy: bool = False,
+) -> Iterator[None]:
     entries = None if allowed is None else frozenset(str(a).strip() for a in allowed if str(a).strip())
     allowed_token = _allowed.set(entries)
     label_token = _label.set(label)
+    withheld_token = _withheld.set(frozenset(withheld) if entries is None else frozenset())
+    fenced_token = _fenced.set(fence_without_policy and entries is None)
     try:
         yield
     finally:
+        _fenced.reset(fenced_token)
+        _withheld.reset(withheld_token)
         _label.reset(label_token)
         _allowed.reset(allowed_token)
+
+
+def fences_private_areas() -> bool:
+    return _fenced.get()
 
 
 def allowed() -> frozenset[str] | None:
@@ -47,7 +65,7 @@ def is_denied(name: str, deny: Iterable[str] | None) -> bool:
 def allowed_actions(name: str) -> frozenset[str] | None:
     policy = _allowed.get()
     if policy is None:
-        return None
+        return frozenset() if name in _withheld.get() else None
     actions: set[str] = set()
     for entry in policy:
         tool, _, action = entry.partition(":")
@@ -105,6 +123,11 @@ def allowed_schema(schema: dict) -> dict | None:
 
 
 def refusal(name: str, arguments: object = None) -> str:
+    if _allowed.get() is None and name in _withheld.get():
+        return (
+            f"{name} is not available to {_label.get() or 'this turn'}: session and workgroup history "
+            "stay out of turns another agent starts unless that peer's tools.allow in peers.yaml names it"
+        )
     action = _action(arguments)
     shown = f"{name}:{action}" if action and allowed_actions(name) else name
     return f"tool not allowed by the tool policy for {_label.get() or 'this turn'}: {shown} (tools.allow in peers.yaml)"

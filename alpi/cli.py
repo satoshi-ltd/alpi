@@ -1324,9 +1324,39 @@ def outputs_show(ctx: click.Context, output_id: str) -> None:
     outputs_mod.mark_read(h, output_id)
     ts = datetime.fromtimestamp(float(it.get("created_at") or 0)).strftime("%Y-%m-%d %H:%M")
     click.echo(f"{it.get('title') or '(untitled)'}")
-    click.echo(f"{ts} · {it.get('type', 'info')} · {it.get('id')}")
+    source = " · ".join(f"{key} {it[key]}" for key in ("job_id", "run_id", "session_id") if it.get(key))
+    click.echo(f"{ts} · {it.get('type', 'info')} · {it.get('id')}" + (f" · {source}" if source else ""))
     click.echo("")
     click.echo(it.get("body") or "")
+
+
+@outputs_group.command("unread")
+@click.argument("output_id")
+@click.pass_context
+def outputs_unread(ctx: click.Context, output_id: str) -> None:
+    """Mark one output unread again."""
+    import asyncio
+
+    from alpi import outputs as outputs_mod
+    from alpi.home import profile_name
+    from alpi.tui import host_client
+
+    h: Path = ctx.obj["home"]
+    _bootstrap(h)
+    try:
+        asyncio.run(host_client.acall("host.outputs.mark_unread", {"profile": profile_name(h), "id": output_id}))
+    except host_client.HostError as e:
+        if not e.missing_verb:
+            click.echo(f"no output with id {output_id!r}" if e.code == -32004 else e.message, err=True)
+            ctx.exit(1)
+        if outputs_mod.mark_unread(h, output_id) is None:
+            click.echo(f"no output with id {output_id!r}", err=True)
+            ctx.exit(1)
+    except host_client.HostUnavailable:
+        if outputs_mod.mark_unread(h, output_id) is None:
+            click.echo(f"no output with id {output_id!r}", err=True)
+            ctx.exit(1)
+    click.echo(f"marked {output_id} unread")
 
 
 @outputs_group.command("read-all")
@@ -1992,6 +2022,7 @@ def setup_cmd(ctx: click.Context) -> None:
             ("Model / Provider", "model", cfg.model or "(not set)"),
             ("Routing models", "tiers", _tiers_status(cfg)),
             ("Voice", "voice", _voice_status(cfg)),
+            ("Appearance", "appearance", _appearance_status(cfg)),
             ("MCPs", "mcps", _mcp_status(h)),
             ("Emails", "email", _email_accounts_status(h)),
 
@@ -2030,6 +2061,7 @@ def setup_cmd(ctx: click.Context) -> None:
             subtitle=f"profile: {profile_name}",
             home=h,
             close="Exit",
+            art=True,
         )
         if choice is None:
             _setup_farewell(profile_name, h)
@@ -2056,6 +2088,8 @@ def setup_cmd(ctx: click.Context) -> None:
             _sandbox_setup(h)
         elif choice == "voice":
             _voice_setup(h)
+        elif choice == "appearance":
+            _appearance_setup(h)
         elif choice == "cleanup":
             _cleanup_setup(h)
         elif choice == "alp-tcp":
@@ -3192,6 +3226,42 @@ def _budget_setup(h: Path) -> None:
     ui.ok_and_wait(f"cap: ${v:.2f}/day")
 
 
+def _appearance_status(cfg: config.Config) -> str:
+    from alpi import appearance
+
+    return appearance.pair_name(cfg.tui, cfg.home)
+
+
+def _appearance_setup(h: Path) -> None:
+    from alpi import appearance, palette, ui
+
+    if appearance.is_default(h):
+        ui.ok_and_wait(appearance.LOCKED_MESSAGE)
+        return
+    cfg = config.load(h)
+    fold, _accent = appearance.current(cfg.tui)
+    picked = ui.menu(
+        ui.crumb("setup", "appearance"),
+        [(name, name, "current" if name == fold else "") for name in palette.FOLDS],
+        subtitle=f"origami object · {appearance.pair_name(cfg.tui)}",
+        home=h,
+        close="Back",
+    )
+    if picked is None:
+        return
+    colour = ui.menu(
+        ui.crumb("setup", "appearance"),
+        [("keep the current colour", "", ""), *[(name, hex_, hex_) for name, hex_ in appearance.ACCENTS]],
+        subtitle=f"colour for the {picked}",
+        home=h,
+        close="Back",
+    )
+    if colour is None:
+        return
+    name = appearance.apply(h, picked, colour or None)
+    ui.ok_and_wait(f"appearance set: {name}")
+
+
 def _identity_status(cfg: config.Config) -> str:
     bio = (cfg.public_bio or "").strip()
     if not bio:
@@ -3655,14 +3725,14 @@ def _cleanup_setup(h: Path) -> None:
 
 @main.group()
 def profile() -> None:
-    """Manage profiles (list, create, remove)."""
+    """Manage profiles (list, show, create, remove)."""
 
 
 @profile.command("list")
 @click.pass_context
 def profile_list(ctx: click.Context) -> None:
     """List available profiles with their model, size, and path."""
-    from alpi import config as cfg_mod, home as home_mod, palette, ui
+    from alpi import config as cfg_mod, fold_art, home as home_mod, palette, ui
 
     active = ctx.obj.get("profile") or "default"
 
@@ -3680,12 +3750,14 @@ def profile_list(ctx: click.Context) -> None:
         )
         try:
             cfg = cfg_mod.load(home_path)
-            accent = palette.profile_accent(cfg.tui)
+            accent = fold_art.identity(home_path, cfg.tui)[1]
             model = cfg.model or "(no model)"
+            active_glyph, _ = fold_art.marker(home_path, cfg.tui)
         except Exception:  # noqa: BLE001
             accent = palette.DEFAULT_ACCENT
             model = "(unreadable)"
-        glyph = "◆" if name == active else "◇"
+            active_glyph = fold_art.FALLBACK_GLYPH
+        glyph = active_glyph if name == active else fold_art.FALLBACK_INACTIVE
         name_cell = f"[b]{name}[/b]" if name == active else name
         rows.append(
             [
@@ -3714,6 +3786,44 @@ def profile_list(ctx: click.Context) -> None:
         click.echo("  alias alpiw='alpi -p work'     # shell alias if you live there")
 
 
+@profile.command("show")
+@click.argument("name", required=False)
+@click.pass_context
+def profile_show(ctx: click.Context, name: str | None) -> None:
+    """Show a profile's object, colour, model and location."""
+    from rich.text import Text
+
+    from alpi import appearance, fold_art, ui
+
+    name = name or ctx.obj.get("profile") or "default"
+    try:
+        h = home.home_for(name)
+    except home.InvalidProfileName as e:
+        raise click.ClickException(str(e))
+    if not h.is_dir():
+        raise click.ClickException(f"profile {name!r} does not exist")
+    try:
+        cfg = config.load(h)
+    except Exception as e:  # noqa: BLE001
+        raise click.ClickException(f"profile {name!r} has an unreadable config.yaml: {e}")
+    fold, accent = fold_art.identity(h, cfg.tui)
+    details = [
+        ("object", appearance.pair_name(cfg.tui, h)),
+        ("model", cfg.model or "(no model)"),
+        ("size", home.profile_size_label(h)),
+        ("path", home.shorten_home(h)),
+    ]
+    lines = [Text(name, style=f"bold {accent}")]
+    lines += [Text.assemble((f"{label:<7}", "dim"), value) for label, value in details]
+    if fold_art.supports_fold_art(stream=ui._console.file):
+        picture = fold_art.art(fold, accent)
+        ui._console.print(fold_art.beside(picture, lines))
+        return
+    lines[0] = Text.assemble((f"{fold_art.FALLBACK_GLYPH} ", accent), lines[0])
+    for line in lines:
+        ui._console.print(line)
+
+
 @profile.command("create")
 @click.argument("name")
 def profile_create(name: str) -> None:
@@ -3730,7 +3840,10 @@ def profile_create(name: str) -> None:
         raise click.ClickException(f"profile {name!r} already exists at {h}")
 
     _bootstrap(h)
+    from alpi import appearance
+
     click.echo(f"created profile {name!r} at {h}")
+    click.echo(f"it wears the {appearance.pair_name(config.load(h).tui)} · change it with /fold or alpi -p {name} setup")
     click.echo(f"use it with: alpi -p {name}")
     click.echo("")
     click.echo("Configure it:")
@@ -3979,7 +4092,7 @@ def peers_add(
     "--allow", default=None,
     help="Comma-separated tool names, `*` patterns or `tool:action` entries this peer may run; everything else is refused. An empty value allows no tool.",
 )
-@click.option("--clear", is_flag=True, help="Remove the policy: the peer gets this profile's own tools.")
+@click.option("--clear", is_flag=True, help="Remove the policy: the peer gets this profile's own tools except session history.")
 @click.pass_context
 def peers_tools(ctx: click.Context, peer_id: str, allow: str | None, clear: bool) -> None:
     """Show or set the only tools an inbound link.ask from PEER_ID may run."""
@@ -4003,7 +4116,7 @@ def peers_tools(ctx: click.Context, peer_id: str, allow: str | None, clear: bool
                 f"invalid tool policy — link.ask from {peer_id!r} is refused until fixed: {e}",
             )
         if allowed is None:
-            click.echo(f"no tool policy — {peer_id!r} gets this profile's own tools")
+            click.echo(f"no tool policy — {peer_id!r} gets this profile's own tools except session history")
         else:
             click.echo(", ".join(sorted(allowed)) or f"{peer_id!r} may run no tool")
         return

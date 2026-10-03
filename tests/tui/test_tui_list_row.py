@@ -95,3 +95,11 @@ def test_build_options_preserves_ids_and_order() -> None:
     items = [("x", "Xname", "xd"), ("y", "Yname", "yd"), ("z", "Zname", "zd")]
     opts = list_row.build_options(items)
     assert [o.id for o in opts] == ["x", "y", "z"]
+
+
+def test_set_marker_replaces_the_active_glyph(monkeypatch) -> None:
+    monkeypatch.setattr(list_row, "_marker", "◆")
+    list_row.set_marker("❤")
+    t = list_row.row_text("foo", "bar", width=10, active=True, accent="#f36a8a")
+    assert t.plain.startswith("❤ foo       ")
+    assert list_row.row_text("foo", "bar", width=10).plain.startswith("  foo")

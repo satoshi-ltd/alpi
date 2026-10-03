@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.17.0 — 2026-10-02 — profiles are origami
+
+- **A profile names its origami object** (`tui.fold`) and colour: twelve established models in twelve colours,
+  chosen with `/fold` in the TUI or `alpi setup → Appearance`. Every colour is a hue, and a new profile already
+  wears the next unworn pair, so three new profiles are three different objects until all twelve are taken.
+- **The brand accent is ink** (cream on dark, black on light) and the default profile is always the alpaca in it;
+  it refuses restyling. The console greys are neutral, so only a profile carries colour, and the site follows: the
+  alpaca beside a crease wordmark, crease headings, a redrawn README card, favicon and social image, a hero console
+  that speaks in each profile's object and colour, and documentation links to repository files that open on GitHub.
+- **The console wears the fold**: `alpi profile show` and the setup header draw the object in three tones, one
+  coloured glyph marks the active profile, and a terminal without truecolor keeps the single-colour diamond.
+- **Members and untrusted peers are fenced from other people's conversations**: the shell of a member device, or of an
+  ALP peer without `tools.allow`, runs only in Linux bubblewrap with the alpi home and other processes hidden (or the
+  Docker execution backend) and is refused in the Docker runtime and on macOS; such a peer is fenced out of the private
+  areas by the file tools, neither runs skill scripts or changes skills, memory or jobs, and no peer gets session history
+  unless a `tools.allow` grants it. The fence does not yet cover profiles in a workgroup, whose posts wake unfenced turns.
+- **Notifications know where they came from**: a scheduled job's rows carry its job and run, and any row can be
+  marked unread again (`alpi outputs unread`), which every open app sees at once; a failed run is titled
+  "<job> failed" with its reason, exit and timeout first and the trace folded, a Gmail refusal says why in one line, and a long notified reply is kept whole (up to 8000 characters, then it says where it was cut). A job whose run cannot even start fails like any other and no longer stops the rest of the pass.
+
 ## v0.16.22 — 2026-10-02 — a broken tool call never runs on empty arguments
 
 - **A tool call whose arguments do not parse no longer runs with none.** Cut-off or malformed JSON used to

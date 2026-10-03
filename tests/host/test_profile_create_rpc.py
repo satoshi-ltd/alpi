@@ -73,3 +73,19 @@ async def test_host_profile_create_rejects_empty_name(
     assert "error" in resp
     assert resp["error"]["code"] == -32602
     assert "name required" in resp["error"]["data"]["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_each_profile_created_from_an_app_wears_the_next_pair(monkeypatch, tmp_path: Path) -> None:
+    from alpi import appearance, config
+
+    monkeypatch.setattr(home_mod, "_ROOT", tmp_path)
+    srv = host_server.Server(home=tmp_path)
+    data_config.register(srv)
+    worn = []
+    for name in ("one", "two", "three"):
+        resp = await srv._dispatch({"id": name, "method": "host.profile.create", "params": {"name": name}})
+        assert resp["result"]["ok"] is True
+        worn.append(config.load(tmp_path / "profiles" / name).tui)
+    assert [appearance.accent_name(t["accent"]) for t in worn] == list(appearance.ROULETTE[:3])
+    assert [t["fold"] for t in worn] == [appearance.FOLD_OF[c] for c in appearance.ROULETTE[:3]]

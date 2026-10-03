@@ -176,6 +176,9 @@ clients surface every `agent.message`; `schedule.*` fields instead of parsing
     its `ui` line deleted, and the changelog and the spec updated. A board left standing after its change shipped, or
     a view that still draws the old look, fails the adversarial review before the commit.
 
+- **App icons are generated.** `python3 scripts/gen_icons.py` rewrites every icon under `desktop/src-tauri/icons/` and
+  `mobile/assets/` from `common/folds.mjs` (the alpaca in one flat ink); never edit those PNGs, ICNS or ICO by hand, and
+  `tests/test_icons.py` fails when they drift. The iOS tinted icon and the tray templates stay single-ink.
 - **Console parity is mandatory.** The console (`alpi setup`, the TUI,
   the CLI) is the core product; desktop/mobile are siblings, not the
   primary surface. Any new host verb that gets UI in the apps ships its

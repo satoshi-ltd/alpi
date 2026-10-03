@@ -110,6 +110,7 @@ _ADMIN_METHODS = frozenset({
     "host.outputs.list",
     "host.outputs.read",
     "host.outputs.mark_read",
+    "host.outputs.mark_unread",
     "host.outputs.mark_all_read",
     "host.outputs.delete",
     "host.cleanup.plan",

@@ -334,7 +334,7 @@ def _inspect(
     try:
         allowed = peer.allowed_tools()
         if allowed is None:
-            policy = "profile tools (no policy)"
+            policy = "profile tools except session history (no policy)"
         else:
             policy = "allow: " + (", ".join(sorted(allowed)) or "(none)")
     except peers_mod.PolicyError as e:

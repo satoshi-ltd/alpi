@@ -85,7 +85,7 @@ def test_scheduler_failed_creates_output(
     assert out["type"] == "error"
     assert out["delivered_to"] == []
     assert "boom" in out["body"]
-    assert out["title"] == "job j-fail"
+    assert out["title"] == "job j-fail failed"
 
     failed = next(d for k, d in events if k == "schedule.failed")
     assert failed["output_id"] == out["id"]

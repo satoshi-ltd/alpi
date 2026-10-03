@@ -188,6 +188,20 @@ other tool is removed from what the model sees and refused if called
 anyway, in both transport paths and in nested execution (sub-agents from
 `delegate`, `research` helpers, `workflow` steps, parallel calls). A tool
 added later, a skill runner or a new MCP server is refused until you list it.
+A peer with no `tools.allow` keeps the profile's tools, fenced like a member
+device: the file tools and `search` never read or write the profile's
+`sessions/`, `runs/`, `host/` and other private areas, `terminal` runs only
+inside Linux `bubblewrap` with the alpi home hidden or in the Docker execution
+backend (refused in the Docker runtime and on macOS), skill scripts and changes to skills, memory
+or jobs are refused, and the session and workgroup history tools
+(`session_search`, `session_read`, `recall_sessions`, `index_sessions`,
+`workgroup_search`, `index_workgroups`) are withheld, mention replies
+included. A `tools.allow` replaces all of that with exactly the tools it
+lists: granting `read_file`, `search` or `terminal` gives that peer the
+profile's data, conversations included. The fence does not cover a profile
+in a workgroup: such a peer can `workgroup_post`, and the turn the post wakes
+has no session history tools but is otherwise unfenced (its file tools and
+`terminal` still reach `sessions/`).
 
 An entry is one of:
 
@@ -221,12 +235,12 @@ The policy is bound to the authenticated peer and the individual turn: two
 peers with different policies cannot affect one another, and local chat is
 untouched. It only narrows: the profile's own `tools.deny` still applies, so
 a peer can never reach a tool the profile itself denies. A peer without
-`tools` keeps today's behaviour, the profile's full tool set. `allow: []`
+`tools` gets the profile's tools fenced as described above. `allow: []`
 lets the peer run no tool at all. Set it with `alpi peers add --allow-tools …`,
 `alpi peers tools <id> --allow …` (`--clear` removes it), or the setup
 wizard when pinning. An empty value, on the command line or in the wizard
 once you choose to limit the tools, allows no tool; only leaving the policy
-out gives the full tool set.
+out gives the fenced profile tool set.
 
 A `tools` block that is present but malformed — not a mapping, an `allow`
 that is not a list, a key other than `allow`, an entry that is not a tool
