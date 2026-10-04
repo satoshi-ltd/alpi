@@ -3,10 +3,10 @@
   --t-fg:#ebe6dc;
   --t-muted:#827b70;
   --t-dim:#3d3830;
-  --t-acc:#f0b447;
+  --t-acc:#f3efe6;
   --t-bot:#d9d3c7;
   --t-border:#221f19;
-  --t-ok:#f0b447;
+  --t-ok:#f3efe6;
   font-family:"Geist Mono",ui-monospace,monospace;
   color:var(--t-fg);
   color-scheme:dark;
@@ -55,7 +55,23 @@
 .alpi-term-body .dim{color:var(--t-dim)}
 .alpi-term-body .bot{color:var(--t-bot)}
 .alpi-term-body .ok{color:var(--t-ok);font-weight:600}
-.alpi-term-body .diamond{color:var(--t-acc);font-weight:600;display:inline-block;width:14px}
+.alpi-term-body .diamond,.alpi-term-body .pg{color:var(--t-acc);font-weight:600;display:inline-block;width:14px}
+.alpi-term-status .pg,.alpi-term-top .pg{font-weight:600}
+.alpi-term-body .pn{font-weight:600}
+.alpi-term-body .pg svg,.alpi-term-top .pg svg{width:13px;height:13px;vertical-align:-2px}
+.alpi-term-top .pn{font-weight:600}
+.alpi-term-body .said{display:inline-block;border-left:2px solid;padding-left:10px;margin-left:5px}
+.alpi-term-body .thinking{display:block}
+.alpi-term-status .pdot{display:inline-block;width:7px;height:7px;border-radius:50%}
+@media (prefers-reduced-motion:no-preference){
+  .alpi-term-body .thinking polygon{animation:alpi-fold 1.2s ease-in-out infinite}
+  .alpi-term-body .thinking polygon:nth-of-type(2){animation-delay:.15s}
+  .alpi-term-body .thinking polygon:nth-of-type(3){animation-delay:.3s}
+  .alpi-term-body .thinking polygon:nth-of-type(4){animation-delay:.45s}
+  .alpi-term-body .thinking polygon:nth-of-type(5){animation-delay:.6s}
+  .alpi-term-body .thinking polygon:nth-of-type(6){animation-delay:.75s}
+}
+@keyframes alpi-fold{50%{opacity:.35}}
 .alpi-term-body .prompt{color:var(--t-acc);font-weight:600}
 .alpi-term-body .user{color:var(--t-acc);font-weight:600}
 .alpi-term-body .check{color:var(--t-ok)}

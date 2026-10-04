@@ -2,12 +2,13 @@
 // Build script for the alpi site. Zero runtime dependencies.
 // Reads docs at HEAD from the repo and bakes a static site into site/dist/.
 
-import { ALPI_PATHS } from '../../common/alpiMark.mjs';
 import { ICONS } from '../../common/iconPaths.mjs';
+import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, rmSync, readdirSync, copyFileSync, existsSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { renderMarkdown, parseFrontmatter } from './markdown.mjs';
+import { FONT_FILE, brandCss, cardSvg, demoProfiles, favicon, lockup, pairMark, profileInk } from './brand.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SITE = resolve(__dirname, '..');
@@ -28,6 +29,14 @@ const OG_IMAGE_H = 630;
 // ── version (single source of truth: pyproject.toml) ─────────────────────────
 const pyproject = readFileSync(join(REPO, 'pyproject.toml'), 'utf8');
 const VERSION = (pyproject.match(/^version\s*=\s*"([^"]+)"/m) || [null, '0.0.0'])[1];
+
+const DEMO_JS = readFileSync(join(TPL, 'demo.js'), 'utf8')
+  .replace(/\bv?\d+\.\d+\.\d+\b/g, m => (m.startsWith('v') ? 'v' : '') + VERSION)
+  .replace('__PROFILES__', () => JSON.stringify(demoProfiles({ reviewer: 'shield', builder: 'rocket', librarian: 'tree' })));
+const DEMO_CSS = readFileSync(join(TPL, 'demo.css'), 'utf8');
+const contentVersion = (text) => createHash('sha256').update(text).digest('hex').slice(0, 10);
+const DEMO_JS_V = contentVersion(DEMO_JS);
+const DEMO_CSS_V = contentVersion(DEMO_CSS);
 
 // Desktop version travels separately (released on its own cadence as
 // `desktop-vX.Y.Z`). Source of truth: tauri.conf.json — package.json
@@ -95,6 +104,7 @@ const POSTS = loadPosts();
 // kind: 'landing' | 'docs-index' | 'doc'
 function renderHead({ kind, title, description, path, iconPath, date }) {
   const canonical = `${SITE_URL}${path}`;
+  const root = kind === 'landing' ? '' : '../';
   const ogType = (kind === 'doc' || kind === 'post') ? 'article' : 'website';
   const structuredData = renderJsonLd({ kind, title, description, canonical, date });
   return `<meta charset="utf-8" />
@@ -102,12 +112,13 @@ function renderHead({ kind, title, description, path, iconPath, date }) {
 <meta name="description" content="${escapeAttr(description)}" />
 <meta name="author" content="Satoshi Ltd." />
 <meta name="theme-color" content="#0c0b09" />
-<script src="${kind === 'landing' ? '' : '../'}theme.js?v=${VERSION}"></script>
+<script src="${root}theme.js?v=${VERSION}"></script>
 <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
 <meta name="generator" content="${SITE_NAME} static build" />
 <link rel="canonical" href="${canonical}" />
 <link rel="icon" href="${iconPath}" type="image/svg+xml" />
-<link rel="mask-icon" href="${iconPath.replace('alpi-icon.svg', 'alpi-black.svg')}" color="#f0b447" />
+<link rel="mask-icon" href="${iconPath.replace(FAVICON, 'alpi-black.svg')}" color="#14110c" />
+<link rel="stylesheet" href="${root}brand.css?v=${VERSION}" />${kind === 'landing' ? `\n<link rel="preload" href="assets/fonts/${FONT_FILE}" as="font" type="font/woff2" crossorigin />` : ''}
 
 <!-- Open Graph -->
 <meta property="og:type" content="${ogType}" />
@@ -226,16 +237,7 @@ function renderJsonLd({ kind, title, description, canonical, date }) {
   return `<script type="application/ld+json">${JSON.stringify(data)}</script>`;
 }
 
-// ── alpi logo (llama + wordmark, inlined into the nav) ─────────────────────
-// The alpaca geometry has ONE source: common/alpiMark.mjs, the same module both apps
-// render. Written into dist so the favicon link resolves to a real file.
-const ALPI_ICON = 'alpi-icon.svg';
-function alpiIconSvg() {
-  const paths = ALPI_PATHS.map((d) => `<path d="${d}"/>`).join('');
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="alpi">`
-    + `<rect x="8" y="8" width="496" height="496" rx="116" fill="#f0b447"/>`
-    + `<g fill="#141006" transform="translate(97.70 40.61) scale(0.37072)">${paths}</g></svg>`;
-}
+const FAVICON = 'alpi-favicon.svg';
 
 // Same lucide source the desktop app renders, so the toggle can never drift from it.
 function lucide(name, className) {
@@ -246,19 +248,7 @@ function lucide(name, className) {
     + `stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
 }
 
-function inlineLogoPart(fileName, className, attrs = '') {
-  const src = fileName === ALPI_ICON
-    ? alpiIconSvg()
-    : readFileSync(join(SITE, 'assets', fileName), 'utf8');
-  return src
-    .replace(/<\?xml[^?]*\?>\s*/i, '')
-    .replace(/<svg\b/i, `<svg class="${className}" ${attrs} aria-hidden="true" focusable="false"`)
-    .trim();
-}
-
-// App-icon tile + wordmark, the lockup the sibling product uses. The tile is the one
-// place the mark sits on a ground; everywhere else the alpaca stays a bare silhouette.
-const logoSvg = `<span class="logo">${inlineLogoPart('alpi-icon.svg', 'logo-mark', 'width="36" height="36"')}<span class="logo-word">alpi</span></span>`;
+const logoSvg = lockup({ height: 34 });
 const GITHUB_URL = 'https://github.com/satoshi-ltd/alpi';
 const githubIcon = `<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path fill="currentColor" d="M8 0C3.58 0 0 3.67 0 8.2c0 3.62 2.29 6.69 5.47 7.78.4.08.55-.18.55-.4l-.01-1.52c-2.23.5-2.7-1.1-2.7-1.1-.36-.95-.89-1.2-.89-1.2-.73-.51.06-.5.06-.5.8.06 1.23.85 1.23.85.72 1.26 1.88.9 2.34.68.07-.53.28-.9.51-1.1-1.78-.21-3.64-.91-3.64-4.04 0-.9.31-1.62.82-2.2-.08-.21-.36-1.04.08-2.17 0 0 .68-.22 2.2.84A7.42 7.42 0 0 1 8 3.84c.68 0 1.36.09 1.99.28 1.52-1.06 2.2-.84 2.2-.84.44 1.13.16 1.96.08 2.17.51.58.82 1.31.82 2.2 0 3.14-1.87 3.83-3.65 4.03.29.26.54.76.54 1.53l-.01 2.37c0 .22.14.48.55.4A8.12 8.12 0 0 0 16 8.2C16 3.67 12.42 0 8 0Z"/></svg>`;
 
@@ -417,15 +407,11 @@ footer .sig{
     margin-top:48px;padding-top:30px;border-top:1px solid var(--line);
     display:flex;align-items:baseline;justify-content:space-between;gap:20px;flex-wrap:wrap;
   }
-/* inline-block, not flex: a flex lockup takes its baseline from the icon, which
-   drops the version ~6px below the wordmark it is meant to sit next to. */
-footer .sig .brand{
-    display:inline-block;
-    font-family:"Instrument Sans",system-ui,sans-serif;font-size:23px;font-weight:700;
-    letter-spacing:-1px;color:var(--fg);line-height:1;
-  }
-footer .sig .brand .logo-mark{width:28px;height:28px;border-radius:8px;display:inline-block;vertical-align:middle;margin-right:12px}
-footer .sig .who{display:flex;align-items:baseline;gap:13px}
+footer .sig .brand{display:inline-block;color:var(--fg);line-height:1}
+footer .sig .brand .logo{gap:10px}
+footer .sig .brand .logo-mark{height:28px;width:auto}
+footer .sig .brand .logo-word{font-size:25px}
+footer .sig .who{display:flex;align-items:center;gap:13px}
 footer .sig .ver{font-family:"Geist Mono",ui-monospace,monospace;font-size:11px;color:var(--muted);letter-spacing:.02em}
 footer .sig .attr{font-size:11px;color:var(--muted);font-family:"Geist Mono",ui-monospace,monospace}
 footer .sig .attr a{font-size:inherit}
@@ -472,7 +458,7 @@ function renderFooter(base = '') {
     </div>
     <div class="sig">
       <div class="who">
-        <a class="brand" href="${base || ''}index.html">${inlineLogoPart('alpi-icon.svg', 'logo-mark', 'width="28" height="28"')}alpi</a>
+        <a class="brand" href="${base || ''}index.html">${lockup({ height: 28 })}</a>
         <span class="ver">v${VERSION}</span>
       </div>
       <span class="attr">By <a href="https://www.satoshi-ltd.com/">Satoshi Ltd.</a> &middot; no telemetry</span>
@@ -505,7 +491,7 @@ ${cards}
   return `<section id="docs">
   <div class="shell">
     <div class="eyebrow">${eyebrow}</div>
-    <h1 class="index-title">${heading}</h1>
+    <h1 class="index-title crease crease-heading">${heading}</h1>
     <p class="sub">${sub}</p>
     <nav class="docs-start" aria-label="Start using alpi">
       <a href="${hrefPrefix}INSTALL.html"><span>01 / Install</span><strong>Put alpi on your machine <span aria-hidden="true">→</span></strong></a>
@@ -547,6 +533,10 @@ function linkRewrite(url) {
   if (known) return known.slug + '.html' + (hash ? '#' + hash : '');
   const repoFile = REPO_FILES[base.toLowerCase()];
   if (repoFile) return repoFile + (hash ? '#' + hash : '');
+  if (url.startsWith('../')) {
+    const target = url.replace(/^(\.\.\/)+/, '');
+    return `${GITHUB_URL}/${target.split('#')[0].endsWith('/') ? 'tree' : 'blob'}/main/${target}`;
+  }
   return url;
 }
 
@@ -561,7 +551,7 @@ function stripFrontmatter(src) {
 
 // Strip the first H1 — the page header already shows the title.
 function stripFirstH1(src) {
-  return src.replace(/^#\s+.+\n+/, '');
+  return src.replace(/^#\s+.+\n+/, '').replace(/^<p align="center">[\s\S]*?<\/p>\n+/, '');
 }
 
 // ── doc page template ────────────────────────────────────────────────────────
@@ -574,14 +564,14 @@ ${renderHead({
   title: `${doc.slug} — alpi docs`,
   description: `${doc.sub} Part of the alpi documentation (${doc.ix}/${String(TOTAL).padStart(2,'0')}, ${doc.category}). v${VERSION}.`,
   path: `/docs/${doc.slug}.html`,
-  iconPath: '../assets/alpi-icon.svg',
+  iconPath: '../assets/alpi-favicon.svg',
 })}
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400..700&family=Geist+Mono:wght@400..700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../doc.css?v=${VERSION}" />
-<link rel="stylesheet" href="../demo.css" />
+<link rel="stylesheet" href="../demo.css?v=${DEMO_CSS_V}" />
 </head>
 <body>
 <div class="aurora" aria-hidden="true"></div>
@@ -594,7 +584,7 @@ ${renderNav('doc', { current: doc.slug })}
 <main class="shell doc">
 ${buildToc(bodyHtml)}
   <header class="dochead">
-    <h1>${doc.slug}</h1>
+    <h1 class="crease crease-heading">${doc.slug}</h1>
     <p class="sub">${doc.sub}</p>
     <div class="meta mono">
       <span class="ct">${doc.ix} / ${String(TOTAL).padStart(2, '0')}</span><span class="d">·</span><span>${doc.category}</span><span class="d">·</span><span>v${VERSION}</span>
@@ -618,7 +608,7 @@ ${bodyHtml}
 ${renderFooter('../')}
 
 <script src="../doc.js?v=${VERSION}"></script>
-<script src="../demo.js?v=${VERSION}" defer></script>
+<script src="../demo.js?v=${DEMO_JS_V}" defer></script>
 </body>
 </html>
 `;
@@ -634,7 +624,7 @@ ${renderHead({
   title: 'alpi docs — documentation index',
   description: `Complete documentation for alpi v${VERSION}: ${TOTAL} references covering quickstart, skills, profiles, models, architecture, security, deployments, the Alpi Link Protocol, and more.`,
   path: '/docs/',
-  iconPath: '../assets/alpi-icon.svg',
+  iconPath: '../assets/alpi-favicon.svg',
 })}
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -720,7 +710,7 @@ ${renderHead({
   title: 'alpi blog — posts',
   description: `Writing from the alpi project: positioning, architecture, and how local-first agent infrastructure plays out in practice. ${POSTS.length} post${POSTS.length === 1 ? '' : 's'}.`,
   path: '/blog/',
-  iconPath: '../assets/alpi-icon.svg',
+  iconPath: '../assets/alpi-favicon.svg',
 })}
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -740,7 +730,7 @@ ${renderNav('blog-index')}
 <section id="docs">
   <div class="shell">
     <div class="eyebrow">${POSTS.length} post${POSTS.length === 1 ? '' : 's'}</div>
-    <h1 class="index-title">Notes from the project.</h1>
+    <h1 class="index-title crease crease-heading">Notes from the project.</h1>
     <p class="sub">On building, running and keeping control of your own agents.</p>
 ${renderPostsGrid()}
   </div>
@@ -765,7 +755,7 @@ ${renderHead({
   title: `${post.title} — alpi blog`,
   description: post.description || `A post from the alpi blog.`,
   path: `/blog/${post.slug}.html`,
-  iconPath: '../assets/alpi-icon.svg',
+  iconPath: '../assets/alpi-favicon.svg',
   date: post.date || undefined,
 })}
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -784,7 +774,7 @@ ${renderNav('blog')}
 
 <main class="shell doc">
   <header class="dochead">
-    <h1>${escapeHtml(post.title)}</h1>
+    <h1 class="crease crease-heading">${escapeHtml(post.title)}</h1>
     ${post.description ? `<p class="sub">${escapeHtml(post.description)}</p>` : ''}
     ${metaLine ? `<div class="meta mono"><span>${escapeHtml(metaLine)}</span></div>` : ''}
   </header>
@@ -837,9 +827,13 @@ console.log(`alpi site build — v${VERSION}`);
 if (existsSync(DIST)) rmSync(DIST, { recursive: true });
 ensureDir(DIST);
 
-// Assets
+const fontData = readFileSync(join(SITE, 'assets', 'fonts', FONT_FILE)).toString('base64');
+writeFileSync(join(SITE, 'assets', FAVICON), favicon());
+writeFileSync(join(SITE, 'assets', 'alpi-brand.svg'), cardSvg({ height: 520, fontData }));
+writeFileSync(join(SITE, 'assets', 'alpi-social.svg'), cardSvg({ height: OG_IMAGE_H, fontData }));
+
 copyTree(join(SITE, 'assets'), join(DIST, 'assets'));
-writeFileSync(join(DIST, 'assets', ALPI_ICON), alpiIconSvg());
+writeFileSync(join(DIST, 'brand.css'), brandCss());
 
 copyFileSync(join(TPL, 'theme.js'), join(DIST, 'theme.js'));
 
@@ -847,20 +841,8 @@ copyFileSync(join(TPL, 'theme.js'), join(DIST, 'theme.js'));
 copyFileSync(join(TPL, 'doc.css'), join(DIST, 'doc.css'));
 writeFileSync(join(DIST, 'doc.js'), runtimeJs);
 
-// Quickstart demo widget (mounts in landing hero and on QUICKSTART doc).
-// CSS travels as-is; demo.js gets the same version sweep landing.html
-// gets so the simulated terminal advertises the version this build
-// is shipping (header `alpi v…`, install line, doctor row, etc.).
-copyFileSync(join(TPL, 'demo.css'), join(DIST, 'demo.css'));
-{
-  const src = readFileSync(join(TPL, 'demo.js'), 'utf8');
-  // ``\bv?\d+\.\d+\.\d+\b`` catches both ``v0.3.0`` and bare ``0.3.0``
-  // (the doctor row prints the bare form). Preserve the ``v`` prefix
-  // when the literal had one so we don't drop it on the way out.
-  const out = src.replace(/\bv?\d+\.\d+\.\d+\b/g,
-    m => (m.startsWith('v') ? 'v' : '') + VERSION);
-  writeFileSync(join(DIST, 'demo.js'), out);
-}
+writeFileSync(join(DIST, 'demo.css'), DEMO_CSS);
+writeFileSync(join(DIST, 'demo.js'), DEMO_JS);
 
 // Landing — inject head, shared nav + docs grid, rewrite version refs
 const landingHead = renderHead({
@@ -868,7 +850,7 @@ const landingHead = renderHead({
   title: `alpi — ${SITE_TAGLINE}`,
   description: SITE_DESCRIPTION,
   path: '/',
-  iconPath: 'assets/alpi-icon.svg',
+  iconPath: 'assets/alpi-favicon.svg',
 });
 const landing = readFileSync(join(TPL, 'landing.html'), 'utf8')
   .replace('<meta charset="utf-8" />\n<!-- SEO_HEAD (injected by build.mjs) -->', landingHead)
@@ -877,11 +859,16 @@ const landing = readFileSync(join(TPL, 'landing.html'), 'utf8')
   // chrome, and footer all track pyproject.toml regardless of which
   // version the template was last saved with.
   .replace(/\bv\d+\.\d+\.\d+\b/g, `v${VERSION}`)
-  // cache-bust the demo widget script — same defense as doc.js/apps.css.
-  .replace('src="demo.js"', `src="demo.js?v=${VERSION}"`)
+  .replace('src="demo.js"', `src="demo.js?v=${DEMO_JS_V}"`)
+  .replace('href="demo.css"', `href="demo.css?v=${DEMO_CSS_V}"`)
   // Desktop version goes AFTER the alpi-version sweep so the regex
   // above doesn't clobber it (desktop ships on its own track).
   .replace('<!-- FOOTER (injected by build.mjs) -->', renderFooter(''))
+  .replace(/<!-- PAIR (\w+) (\d+) -->/g, (_, fold, size) => pairMark(fold, Number(size)))
+  .replace(/<span data-ink="(\w+)">/g, (_, fold) => {
+    const { night, paper } = profileInk(fold);
+    return `<span class="profile-ink" style="--ink-night:${night};--ink-paper:${paper}">`;
+  })
   .replaceAll('<!-- DESKTOP_DOWNLOAD_URL -->', DESKTOP_DOWNLOAD_URL)
   .replaceAll('<!-- DESKTOP_RELEASES_URL -->', DESKTOP_RELEASES_URL)
   .replaceAll('<!-- DESKTOP_RELEASES_URL -->', DESKTOP_RELEASES_URL)

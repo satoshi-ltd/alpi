@@ -1,0 +1,190 @@
+import { ACCENTS, ACCENT_FOLDS } from '../../common/accents.mjs';
+import { CREASE_ANGLE, CREASE_FONT, contrastRatio, creaseGradient, creaseTones } from '../../common/crease.mjs';
+import { ALPACA_LOW_FOLD, BRAND_INK, foldPolygons, foldTones } from '../../common/folds.mjs';
+
+export const NIGHT = '#0c0b09';
+export const PAPER = '#f6f3ec';
+export const CREAM = BRAND_INK.dark;
+export const INK = BRAND_INK.light;
+export const FAVICON_INK = '#7a7468';
+export const MUTED = '#a39a8b';
+export const FONT_FILE = 'bricolage-800-latin.woff2';
+export const FONT_URL = `assets/fonts/${FONT_FILE}`;
+export const LOCKUP_SLIT = 0.6;
+export const HERO_SLIT = 0.7;
+export const TAGLINE = 'Your private agent network.';
+
+export const IDENTITIES = ACCENTS.map(([colour, hex]) => ({
+  colour,
+  hex,
+  fold: ACCENT_FOLDS[colour],
+  name: `${colour} ${ACCENT_FOLDS[colour]}`,
+}));
+
+const fixed = (n) => Number(n.toFixed(2));
+const polygonTag = ({ points, fill, tone }, themed = false) => `<polygon${themed ? ` class="t${tone}"` : ''} points="${points.map(([x, y]) => `${fixed(x)},${fixed(y)}`).join(' ')}" fill="${fill}"/>`;
+const bounds = (polygons) => {
+  const xs = polygons.flatMap((p) => p.points.map((q) => q[0]));
+  const ys = polygons.flatMap((p) => p.points.map((q) => q[1]));
+  return { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+};
+const a11y = (label) => (label ? `role="img" aria-label="${label}"` : 'aria-hidden="true" focusable="false"');
+
+export function alpacaMark({ accent = CREAM, height = 64, className = '', label = '', square = false, themed = false, small = false } = {}) {
+  const polygons = foldPolygons(small ? ALPACA_LOW_FOLD : 'alpaca', accent, height);
+  const box = bounds(polygons);
+  const viewBox = square ? '0 0 100 100' : `${fixed(box.x)} ${fixed(box.y)} ${fixed(box.w)} ${fixed(box.h)}`;
+  const width = square ? height : fixed((height * box.w) / box.h);
+  const cls = className ? ` class="${className}"` : '';
+  return `<svg xmlns="http://www.w3.org/2000/svg"${cls} viewBox="${viewBox}" width="${width}" height="${height}" ${a11y(label)}>${polygons.map((p) => polygonTag(p, themed)).join('')}</svg>`;
+}
+
+export function favicon() {
+  return alpacaMark({ accent: FAVICON_INK, height: 64, label: 'alpi', square: true, small: true });
+}
+
+export function identityMark({ fold, hex, name, size = 34 }) {
+  const polygons = foldPolygons(fold, hex, size).map((p) => polygonTag(p)).join('');
+  return `<svg viewBox="0 0 100 100" width="${size}" height="${size}" role="img" aria-label="${name}"><title>${name}</title>${polygons}</svg>`;
+}
+
+const identityFor = (fold) => {
+  const identity = IDENTITIES.find((item) => item.fold === fold);
+  if (!identity) throw new Error(`no identity wears the fold "${fold}"`);
+  return identity;
+};
+
+export function pairMark(fold, size = 24) {
+  return identityMark({ ...identityFor(fold), size });
+}
+
+export const TEXT_MIN_CONTRAST = 4.5;
+
+export function readableOn(hex, ground, min = TEXT_MIN_CONTRAST) {
+  const rgb = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  for (let keep = 1; keep >= 0; keep -= 0.02) {
+    const out = `#${rgb.map((c) => Math.round(c * keep).toString(16).padStart(2, '0')).join('')}`;
+    if (contrastRatio(out, ground) >= min) return out;
+  }
+  return '#000000';
+}
+
+export function profileInk(fold) {
+  const { hex } = identityFor(fold);
+  return { night: hex, paper: readableOn(hex, PAPER) };
+}
+
+export function demoProfiles(byName, size = 13) {
+  return Object.fromEntries(Object.entries(byName).map(([name, fold]) => {
+    const identity = identityFor(fold);
+    return [name, { color: identity.hex, mark: identityMark({ ...identity, size }) }];
+  }));
+}
+
+export function identityStrip({ size = 34 } = {}) {
+  const items = IDENTITIES.map((identity) => `<li>${identityMark({ ...identity, size })}</li>`).join('');
+  return `<ul class="identities" aria-label="The twelve identities">${items}</ul>`;
+}
+
+export function lockup({ height = 34 } = {}) {
+  return `<span class="logo">${alpacaMark({ height, className: 'logo-mark', themed: true, })}<span class="logo-word crease">alpi</span></span>`;
+}
+
+const ladders = (ground, ink) => ({
+  lockup: creaseTones(ink, ground),
+  first: creaseTones(ink, ground),
+  second: creaseTones(ink === CREAM ? '#ffffff' : ink, ground),
+});
+
+export function creaseLadders() {
+  return { night: ladders(NIGHT, CREAM), light: ladders(PAPER, INK) };
+}
+
+const tokens = (set) => [
+  `--crease-lockup:${creaseGradient(set.lockup, LOCKUP_SLIT)}`,
+  `--crease-first:${creaseGradient(set.first, HERO_SLIT)}`,
+  `--crease-second:${creaseGradient(set.second, HERO_SLIT)}`,
+].join(';');
+
+export function brandCss() {
+  const { night, light } = creaseLadders();
+  return [
+    `@font-face{font-family:"${CREASE_FONT}";font-style:normal;font-weight:800;font-display:swap;src:url("${FONT_URL}") format("woff2")}`,
+    `:root{${tokens(night)}}`,
+    `:root[data-theme="light"]{${tokens(light)}}`,
+    ...foldTones(INK).map((fill, tone) => `:root[data-theme="light"] .logo-mark .t${tone}{fill:${fill}}`),
+    `.logo .logo-word.crease,.hero h1 .crease,h1.crease-heading,h2.crease-heading{font-family:"${CREASE_FONT}","Instrument Sans",system-ui,sans-serif}`,
+    `.crease{font-weight:800;letter-spacing:-.04em;-webkit-background-clip:text;background-clip:text;color:transparent;display:inline-block;padding:.06em 0 .22em;margin:-.06em 0 -.22em}`,
+    `:root .logo .logo-word.crease{background-image:var(--crease-lockup);color:transparent;font-weight:800;letter-spacing:-.04em}`,
+    `.hero h1 .crease{display:block;width:fit-content}`,
+    `.hero h1 .crease-first{background-image:var(--crease-first)}`,
+    `.hero h1 .crease-second{background-image:var(--crease-second)}`,
+    `h1.crease-heading{display:block;width:fit-content;max-width:100%;padding:0 0 .12em;font-weight:800;letter-spacing:-.03em;line-height:1.08;background-image:var(--crease-second)}`,
+    `h2.crease-heading{display:block;width:fit-content;margin:15px 0 25px;padding:0 0 .12em;font-weight:800;letter-spacing:-.03em;line-height:1.1;background-image:var(--crease-second)}`,
+    `@media (forced-colors:active){.crease,:root .logo .logo-word.crease,h1.crease-heading,h2.crease-heading{background:none;color:CanvasText}}`,
+    `@media print{.crease,:root .logo .logo-word.crease,h1.crease-heading,h2.crease-heading{background:none;color:#000}}`,
+    '',
+  ].join('\n');
+}
+
+const stop = (offset, color, opacity = 1) => `<stop offset="${Number(offset.toFixed(4))}" stop-color="${color}"${opacity < 1 ? ` stop-opacity="${opacity}"` : ''}/>`;
+
+function svgGradient(id, tones, box, slit) {
+  const angle = (CREASE_ANGLE * Math.PI) / 180;
+  const [dx, dy] = [Math.sin(angle), -Math.cos(angle)];
+  const length = Math.abs(box.w * dx) + Math.abs(box.h * dy);
+  const [cx, cy] = [box.x + box.w / 2, box.y + box.h / 2];
+  const g = slit / length;
+  const [a, b, c] = tones;
+  const stops = [
+    stop(0, a), stop(0.33 - g, a), stop(0.33 - g, a, 0), stop(0.33 + g, b, 0), stop(0.33 + g, b),
+    stop(0.66 - g, b), stop(0.66 - g, b, 0), stop(0.66 + g, c, 0), stop(0.66 + g, c), stop(1, c),
+  ].join('');
+  const [x1, y1, x2, y2] = [cx - (dx * length) / 2, cy - (dy * length) / 2, cx + (dx * length) / 2, cy + (dy * length) / 2].map(fixed);
+  return `<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}">${stops}</linearGradient>`;
+}
+
+const WORD_WIDTH = 1.45;
+
+export function cardSvg({ width = 1200, height = 630, fontData = '' } = {}) {
+  const markHeight = Math.round(height * 0.46);
+  const mark = alpacaMark({ height: markHeight });
+  const markWidth = Number(mark.match(/ width="([\d.]+)"/)[1]);
+  const fontSize = Math.round(markHeight * 0.66);
+  const wordWidth = fontSize * WORD_WIDTH;
+  const gap = Math.round(markHeight * 0.18);
+  const tagSize = Math.round(height * 0.05);
+  const stripSize = Math.round(height * 0.076);
+  const stripGap = Math.round(stripSize * 0.3);
+  const spacing = Math.round(height * 0.07);
+  const block = markHeight + spacing + tagSize + spacing + stripSize;
+  const top = Math.round((height - block) / 2);
+  const left = Math.round((width - (markWidth + gap + wordWidth)) / 2);
+  const baseline = top + Math.round(markHeight * 0.9);
+  const box = { x: left + markWidth + gap, y: baseline - fontSize * 0.75, w: wordWidth, h: fontSize * 0.98 };
+  const tones = creaseTones(CREAM, NIGHT);
+  const tagY = top + markHeight + spacing + tagSize * 0.8;
+  const stripWidth = IDENTITIES.length * stripSize + (IDENTITIES.length - 1) * stripGap;
+  const stripLeft = Math.round((width - stripWidth) / 2);
+  const stripTop = top + markHeight + spacing + tagSize + spacing;
+  const strip = IDENTITIES.map((identity, i) => {
+    const inner = foldPolygons(identity.fold, identity.hex, stripSize).map((p) => polygonTag(p)).join('');
+    return `<svg x="${stripLeft + i * (stripSize + stripGap)}" y="${stripTop}" width="${stripSize}" height="${stripSize}" viewBox="0 0 100 100" role="img" aria-label="${identity.name}">${inner}</svg>`;
+  }).join('');
+  const font = fontData
+    ? `<style>@font-face{font-family:"${CREASE_FONT}";font-weight:800;src:url(data:font/woff2;base64,${fontData}) format("woff2")}</style>`
+    : '';
+  const inner = mark.replace(/^<svg [^>]*?viewBox="([^"]+)"[^>]*>/, (_, vb) => `<svg x="${left}" y="${top}" width="${markWidth}" height="${markHeight}" viewBox="${vb}" aria-hidden="true">`);
+  return [
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="alpi — ${TAGLINE.toLowerCase().replace(/\.$/, '')}">`,
+    font,
+    `<defs>${svgGradient('crease', tones, box, Math.max(0.6, fontSize / 140))}</defs>`,
+    `<rect width="${width}" height="${height}" fill="${NIGHT}"/>`,
+    inner,
+    `<text x="${box.x}" y="${baseline}" font-family="${CREASE_FONT}, Instrument Sans, Arial Black, sans-serif" font-size="${fontSize}" font-weight="800" letter-spacing="${-0.04 * fontSize}" fill="url(#crease)">alpi</text>`,
+    `<text x="${width / 2}" y="${tagY}" text-anchor="middle" font-family="Instrument Sans, Helvetica Neue, Arial, sans-serif" font-size="${tagSize}" fill="${MUTED}">${TAGLINE}</text>`,
+    strip,
+    '</svg>',
+    '',
+  ].join('');
+}
