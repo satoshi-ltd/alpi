@@ -9,7 +9,7 @@
     const theme = choice || (system.matches ? 'dark' : 'light');
     root.dataset.theme = theme;
     const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', theme === 'light' ? '#f6f3ec' : '#0c0b09');
+    if (meta) meta.setAttribute('content', theme === 'light' ? '#f0f0f0' : '#0b0b0b');
     const button = document.querySelector('.theme-btn');
     if (button) button.setAttribute('aria-label', theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme');
   }

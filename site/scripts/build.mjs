@@ -3,12 +3,13 @@
 // Reads docs at HEAD from the repo and bakes a static site into site/dist/.
 
 import { ICONS } from '../../common/iconPaths.mjs';
+import { palettes, radii } from '../../common/tokens.mjs';
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, rmSync, readdirSync, copyFileSync, existsSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { renderMarkdown, parseFrontmatter } from './markdown.mjs';
-import { FONT_FILE, brandCss, cardSvg, demoProfiles, favicon, lockup, pairMark, profileInk } from './brand.mjs';
+import { FONT_FILE, brandCss, cardSvg, demoProfiles, favicon, lockup, profileName } from './brand.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SITE = resolve(__dirname, '..');
@@ -50,24 +51,30 @@ const DESKTOP_RELEASES_URL = `https://github.com/satoshi-ltd/alpi/releases/tag/d
 // ── doc metadata ─────────────────────────────────────────────────────────────
 // Order drives prev/next pager and the docs index.
 const DOCS = [
-  { slug: 'README',       src: 'README.md',             ix: '01', category: 'intro',     sub: "Start here. The public thesis: local-first, user-owned agent infrastructure." },
-  { slug: 'INSTALL',      src: 'docs/INSTALL.md',       ix: '02', category: 'guide',     sub: "Install with uv or pipx, the update path, uninstall, supported platforms." },
-  { slug: 'QUICKSTART',   src: 'QUICKSTART.md',         ix: '03', category: 'guide',     sub: 'Install, pick a model, pin a workspace, send a first message, and check health.' },
-  { slug: 'PROFILES',     src: 'docs/PROFILES.md',      ix: '04', category: 'guide',     sub: 'The isolation primitive: identity, keys, memory, skills, peers, schedules, and cost.' },
-  { slug: 'SKILLS',       src: 'docs/SKILLS.md',        ix: '05', category: 'guide',     sub: "Directory contract, frontmatter, the scanner, eligibility gates, secrets." },
-  { slug: 'MODELS',       src: 'docs/MODELS.md',        ix: '06', category: 'guide',     sub: 'Model tiers for tool-heavy agent use: quality, cost/service, and local Ollama.' },
-  { slug: 'ALP',          src: 'docs/ALP.md',           ix: '07', category: 'reference', sub: 'Alpi Link Protocol: pinned identity, signed envelopes, peer capabilities, workgroups.' },
-  { slug: 'WORKGROUPS',   src: 'docs/WORKGROUPS.md',    ix: '08', category: 'reference', sub: "Briefings, task markers, recipes, pipelines with gates, and how a human steers." },
-  { slug: 'ARCHITECTURE', src: 'docs/ARCHITECTURE.md',  ix: '09', category: 'reference', sub: 'Code structure, turn loop, memory, sessions, email tool, scheduler, MCP, logging.' },
-  { slug: 'CONFIG',       src: 'docs/CONFIG.md',        ix: '10', category: 'reference', sub: "Every YAML key, what it controls, its default, and when a change takes effect." },
-  { slug: 'SECURITY',     src: 'docs/SECURITY.md',      ix: '11', category: 'reference', sub: 'Two-layer security model. Approval system, SSRF, prompt-injection, sensitive paths. Sandbox.' },
-  { slug: 'DEPLOYMENTS',  src: 'docs/DEPLOYMENTS.md',   ix: '12', category: 'ops',       sub: "Reference topologies from one laptop to an enterprise mesh, Docker and WSS included." },
-  { slug: 'OPERATIONS',   src: 'docs/OPERATIONS.md',    ix: '13', category: 'ops',       sub: 'Day-2 runbook. Doctor, diagnostics, log rotation, backup, recovery, upgrade.' },
-  { slug: 'INTEGRATIONS', src: 'docs/INTEGRATIONS.md',  ix: '14', category: 'reference', sub: "Drive a profile or a workgroup from your own code, over the host-plane WebSocket." },
-  { slug: 'LICENSE',      src: 'LICENSE',               ix: '15', category: 'legal',     sub: "Source-available terms: what individuals get free, when a company needs a licence.", raw: true },
-  { slug: 'ROADMAP',      src: 'docs/ROADMAP.md',       ix: '16', category: 'planning',  sub: "Open release gates, demand-gated candidates, and decisions already discarded." },
+  { slug: 'README',       src: 'README.md',             title: 'Overview',      group: 'Start',    sub: "Start here. The public thesis: local-first, user-owned agent infrastructure." },
+  { slug: 'INSTALL',      src: 'docs/INSTALL.md',       title: 'Install',       group: 'Start',    sub: "Install with uv or pipx, the update path, uninstall, supported platforms." },
+  { slug: 'QUICKSTART',   src: 'QUICKSTART.md',         title: 'Quickstart',    group: 'Start',    sub: 'Install, pick a model, pin a workspace, send a first message, and check health.' },
+  { slug: 'PROFILES',     src: 'docs/PROFILES.md',      title: 'Profiles',      group: 'Use alpi', sub: 'The isolation primitive: identity, keys, memory, skills, peers, schedules, and cost.' },
+  { slug: 'SKILLS',       src: 'docs/SKILLS.md',        title: 'Skills',        group: 'Use alpi', sub: "Directory contract, frontmatter, the scanner, eligibility gates, secrets." },
+  { slug: 'MODELS',       src: 'docs/MODELS.md',        title: 'Models',        group: 'Use alpi', sub: 'Model tiers for tool-heavy agent use: quality, cost/service, and local Ollama.' },
+  { slug: 'WORKGROUPS',   src: 'docs/WORKGROUPS.md',    title: 'Workgroups',    group: 'Use alpi', sub: "Briefings, task markers, recipes, pipelines with gates, and how a human steers." },
+  { slug: 'ALP',          src: 'docs/ALP.md',           title: 'ALP',           group: 'Connect',  sub: 'Alpi Link Protocol: pinned identity, signed envelopes, peer capabilities, workgroups.' },
+  { slug: 'INTEGRATIONS', src: 'docs/INTEGRATIONS.md',  title: 'Integrations',  group: 'Connect',  sub: "Drive a profile or a workgroup from your own code, over the host-plane WebSocket." },
+  { slug: 'DEPLOYMENTS',  src: 'docs/DEPLOYMENTS.md',   title: 'Deployments',   group: 'Run it',   sub: "Reference topologies from one laptop to an enterprise mesh, Docker and WSS included." },
+  { slug: 'OPERATIONS',   src: 'docs/OPERATIONS.md',    title: 'Operations',    group: 'Run it',   sub: 'Day-2 runbook. Doctor, diagnostics, log rotation, backup, recovery, upgrade.' },
+  { slug: 'SECURITY',     src: 'docs/SECURITY.md',      title: 'Security',      group: 'Run it',   sub: 'Two-layer security model. Approval system, SSRF, prompt-injection, sensitive paths. Sandbox.' },
+  { slug: 'CONFIG',       src: 'docs/CONFIG.md',        title: 'Configuration', group: 'Run it',   sub: "Every YAML key, what it controls, its default, and when a change takes effect." },
+  { slug: 'ARCHITECTURE', src: 'docs/ARCHITECTURE.md',  title: 'Architecture',  group: 'Project',  sub: 'How alpi is built, for contributors: code structure, turn loop, memory, scheduler, MCP.' },
+  { slug: 'LICENSE',      src: 'LICENSE',               title: 'License',       group: 'Project',  sub: "Source-available terms: what individuals get free, when a company needs a licence.", raw: true },
 ];
-const TOTAL = DOCS.length;
+const DOC_GROUPS = [...new Set(DOCS.map(d => d.group))];
+const WORDS_PER_MINUTE = 230;
+const readingMinutes = (text) => Math.max(1, Math.round(String(text).split(/\s+/).filter(Boolean).length / WORDS_PER_MINUTE));
+for (const d of DOCS) {
+  const path = join(REPO, d.src);
+  d.minutes = existsSync(path) ? readingMinutes(readFileSync(path, 'utf8')) : 1;
+}
+const ROADMAP_URL = 'https://github.com/satoshi-ltd/alpi/blob/main/docs/ROADMAP.md';
 
 // ── blog posts ───────────────────────────────────────────────────────────────
 // Auto-discovered from site/posts/*.md — no manual registry. Drop a markdown
@@ -91,6 +98,7 @@ function loadPosts() {
       date: meta.date || '',
       description: meta.description || '',
       tags: Array.isArray(meta.tags) ? meta.tags : [],
+      minutes: readingMinutes(body),
       body,
     });
   }
@@ -111,13 +119,14 @@ function renderHead({ kind, title, description, path, iconPath, date }) {
 <title>${escapeHtml(title)}</title>
 <meta name="description" content="${escapeAttr(description)}" />
 <meta name="author" content="Satoshi Ltd." />
-<meta name="theme-color" content="#0c0b09" />
+<meta name="theme-color" content="${palettes.dark.bg}" />
 <script src="${root}theme.js?v=${VERSION}"></script>
 <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
 <meta name="generator" content="${SITE_NAME} static build" />
 <link rel="canonical" href="${canonical}" />
 <link rel="icon" href="${iconPath}" type="image/svg+xml" />
 <link rel="mask-icon" href="${iconPath.replace(FAVICON, 'alpi-black.svg')}" color="#14110c" />
+<link rel="stylesheet" href="${root}tokens.css?v=${TOKENS_V}" />
 <link rel="stylesheet" href="${root}brand.css?v=${VERSION}" />${kind === 'landing' ? `\n<link rel="preload" href="assets/fonts/${FONT_FILE}" as="font" type="font/woff2" crossorigin />` : ''}
 
 <!-- Open Graph -->
@@ -237,6 +246,27 @@ function renderJsonLd({ kind, title, description, canonical, date }) {
   return `<script type="application/ld+json">${JSON.stringify(data)}</script>`;
 }
 
+function siteTokens(p) {
+  const rgb = p.bg.match(/\w\w/g).map(h => parseInt(h, 16)).join(',');
+  return {
+    '--bg': p.bg, '--bg-rgb': rgb, '--fg': p.ink, '--ink-2': p.ink2, '--muted': p.ink3, '--dim': p.ink4,
+    '--line': p.line, '--line-2': p.line2, '--hover': p.hover, '--selected': p.selected,
+    '--soft': p.bgPane, '--pane': p.bgPane, '--band': p.bgSide, '--panel-bg': p.bgPane, '--panel-soft': p.bgPane,
+    '--nav-bg': p.bg, '--drawer-bg': p.bg, '--ctrl-bg': p.bgPane,
+    '--accent': p.ink, '--accent-line': p.line2, '--accent-wash': p.hover, '--warn': p.dangerText,
+    '--prose': p.ink2, '--prose-lead': p.ink, '--code-fg': p.ink, '--code-bg': p.hover,
+    '--term-bg': p.bgPane, '--term-line': p.line2, '--term-fg': p.ink, '--term-muted': p.ink3,
+    '--term-cmd': p.ink, '--term-flag': p.ink2, '--term-string': p.ink2,
+  };
+}
+const block = (vars) => Object.entries(vars).map(([k, v]) => `${k}:${v}`).join(';');
+const SHAPE = {
+  '--radius': `${radii.xs}px`, '--radius-in': `${radii.xs}px`, '--radius-btn': `${radii.xs}px`, '--radius-sm': `${radii.tag}px`,
+  '--r-xs': `${radii.xs}px`, '--r-tag': `${radii.tag}px`, '--seam': '.5px',
+};
+const TOKENS_CSS = `:root{${block(SHAPE)};${block(siteTokens(palettes.dark))}}\n:root[data-theme="light"]{${block(siteTokens(palettes.light))}}\n.hero [data-alpi-demo]{${block(siteTokens(palettes.dark))}}\n`;
+
+const TOKENS_V = contentVersion(TOKENS_CSS);
 const FAVICON = 'alpi-favicon.svg';
 
 // Same lucide source the desktop app renders, so the toggle can never drift from it.
@@ -329,6 +359,7 @@ function renderNav(kind, opts = {}) {
   } else if (kind === 'blog') {
     brandHref = '../index.html';
     crumbs.push({ label: 'BLOG', href: 'index.html', docs: true });
+    if (opts.current) crumbs.push({ label: opts.current, current: true });
   }
 
   const crumbsHtml = crumbs.length
@@ -375,8 +406,9 @@ function renderNav(kind, opts = {}) {
     ${menuHtml}
     <div class="nav-actions">
       <a href="${ctaHref}" class="nav-cta">$ uv tool install alpi-agent →</a>
+      <button class="theme-btn" type="button" aria-label="Switch theme">${lucide('sun', 'sun')}${lucide('moon', 'moon')}</button>
+      ${burgerHtml}
     </div>
-    ${burgerHtml}
   </div>
   ${drawerHtml}
 </nav>
@@ -395,7 +427,7 @@ document.addEventListener('click', function (e) {
 // The footer is a shared component, so it carries its own styles — the landing
 // keeps them inline and doc.css never had them, which left 37 pages unstyled.
 const FOOTER_CSS = `<style>
-footer{border-top:1px solid var(--line);padding:64px 0 48px;margin-top:80px;position:relative;z-index:5}
+footer{border-top:var(--seam) solid var(--line);padding:64px 0 48px;margin-top:80px;position:relative;z-index:5}
 footer .row{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:40px}
 @media(max-width:760px){footer .row{grid-template-columns:1fr 1fr}}
 footer h5{font-family:"Geist Mono",ui-monospace,monospace;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;margin-bottom:16px}
@@ -404,8 +436,8 @@ footer li{margin-bottom:10px}
 footer a{color:var(--fg);text-decoration:none;font-size:14px}
 footer a:hover{color:var(--muted)}
 footer .sig{
-    margin-top:48px;padding-top:30px;border-top:1px solid var(--line);
-    display:flex;align-items:baseline;justify-content:space-between;gap:20px;flex-wrap:wrap;
+    margin-top:48px;padding-top:30px;border-top:var(--seam) solid var(--line);
+    display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;
   }
 footer .sig .brand{display:inline-block;color:var(--fg);line-height:1}
 footer .sig .brand .logo{gap:10px}
@@ -415,6 +447,13 @@ footer .sig .who{display:flex;align-items:center;gap:13px}
 footer .sig .ver{font-family:"Geist Mono",ui-monospace,monospace;font-size:11px;color:var(--muted);letter-spacing:.02em}
 footer .sig .attr{font-size:11px;color:var(--muted);font-family:"Geist Mono",ui-monospace,monospace}
 footer .sig .attr a{font-size:inherit}
+footer .sig .attr{margin-left:auto}
+.theme-btn{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:var(--r-xs);border:var(--seam) solid var(--line-2);background:var(--pane);color:var(--muted);cursor:pointer;transition:background .15s,color .15s}
+.theme-btn:hover{background:var(--hover);color:var(--fg)}
+.theme-btn svg{width:16px;height:16px;display:block}
+.theme-btn .moon{display:none}
+:root[data-theme="light"] .theme-btn .sun{display:none}
+:root[data-theme="light"] .theme-btn .moon{display:block}
 /* Last: a media query adds no specificity, so the base rules above would win. */
 @media(max-width:720px){footer h5,footer .sig .attr,footer .sig .attr a,footer .sig .ver{font-size:12.5px}}
 </style>`;
@@ -445,13 +484,13 @@ function renderFooter(base = '') {
     ['Product', [['#what','What alpi is'], ['#how','How it works'], ['#alp','ALP protocol'], ['#apps','Get it'], ['blog/index.html','Writing']]],
     ['Guides', [['docs/INSTALL.html','Install'], ['docs/QUICKSTART.html','Quickstart'], ['docs/PROFILES.html','Profiles'], ['docs/SKILLS.html','Skills'], ['docs/MODELS.html','Models'], ['docs/INTEGRATIONS.html','Integrations']]],
     ['Reference', [['docs/ARCHITECTURE.html','Architecture'], ['docs/ALP.html','ALP protocol'], ['docs/CONFIG.html','Configuration'], ['docs/SECURITY.html','Security'], ['docs/OPERATIONS.html','Operations'], ['docs/DEPLOYMENTS.html','Deployments']]],
-    ['Meta', [['https://github.com/satoshi-ltd/alpi/blob/main/CHANGELOG.md','Changelog'], ['docs/ROADMAP.html','Roadmap'], ['https://github.com/satoshi-ltd/alpi/blob/main/LICENSE','Licence'], ['mailto:info@satoshi-ltd.com','Commercial use'], ['https://github.com/satoshi-ltd/alpi','GitHub']]],
+    ['Meta', [['https://github.com/satoshi-ltd/alpi/blob/main/CHANGELOG.md','Changelog'], [ROADMAP_URL,'Roadmap'], ['https://github.com/satoshi-ltd/alpi/blob/main/LICENSE','Licence'], ['mailto:info@satoshi-ltd.com','Commercial use'], ['https://github.com/satoshi-ltd/alpi','GitHub']]],
   ];
   const colHtml = cols.map(([head, links]) => `<div>
         <h5>${head}</h5>
         <ul>${links.map(([h, l]) => `<li><a href="${abs(h)}">${l}</a></li>`).join('')}</ul>
       </div>`).join('\n      ');
-  return `${FOOTER_CSS}<button class="theme-btn" type="button" aria-label="Switch theme">${lucide('sun', 'sun')}${lucide('moon', 'moon')}</button><footer>
+  return `${FOOTER_CSS}<footer>
   <div class="shell">
     <div class="row">
       ${colHtml}
@@ -467,40 +506,31 @@ function renderFooter(base = '') {
 </footer>`;
 }
 
-// ── shared docs grid — used by the landing "docs" section and /docs/ ─────
-// `hrefPrefix`: '' when emitted on /docs/index.html (already inside docs/),
-//               'docs/' when emitted on the landing page.
-// `withSection`: if true, wraps in the <section id="docs"> landing block
-//               with eyebrow + heading. If false, just the grid (for /docs/).
-function renderDocsGrid({ hrefPrefix = '', withSection = false, eyebrow, heading, sub } = {}) {
-  const cards = DOCS.map(d =>
-    `      <a class="doc" href="${hrefPrefix}${d.slug}.html">
-        <span class="ix">${d.ix} · ${d.category}</span>
-        <h2>${d.slug}</h2>
-        <p>${d.sub}</p>
-        <span class="go">read →</span>
-      </a>`
-  ).join('\n');
+// ── docs: grouped by what the reader is doing ───────────────────────────────
+function renderDocGroups(hrefPrefix = '') {
+  return `<div class="doc-groups">${DOC_GROUPS.map(group => `
+    <section class="doc-group">
+      <h2 class="group-h">${group}</h2>
+      <ul>${DOCS.filter(d => d.group === group).map(d => `
+        <li><a href="${hrefPrefix}${d.slug}.html"><span class="row-t">${d.title}</span><span class="row-m">${d.minutes} min</span><span class="row-s">${d.sub}</span></a></li>`).join('')}
+      </ul>
+    </section>`).join('')}
+  </div>`;
+}
 
-  const grid = `    <div class="docs docs-catalog">
-${cards}
-    </div>`;
+function renderDocRail(current) {
+  return DOC_GROUPS.map(group => `<p class="rail-h">${group}</p>
+    <ul>${DOCS.filter(d => d.group === group).map(d => d.slug === current
+      ? `<li><a href="${d.slug}.html" aria-current="page">${d.title}</a></li>`
+      : `<li><a href="${d.slug}.html">${d.title}</a></li>`).join('')}</ul>`).join('');
+}
 
-  if (!withSection) return grid;
-
-  return `<section id="docs">
-  <div class="shell">
-    <div class="eyebrow">${eyebrow}</div>
-    <h1 class="index-title crease crease-heading">${heading}</h1>
-    <p class="sub">${sub}</p>
-    <nav class="docs-start" aria-label="Start using alpi">
-      <a href="${hrefPrefix}INSTALL.html"><span>01 / Install</span><strong>Put alpi on your machine <span aria-hidden="true">→</span></strong></a>
-      <a href="${hrefPrefix}QUICKSTART.html"><span>02 / First run</span><strong>Talk to your first agent <span aria-hidden="true">→</span></strong></a>
-      <a href="${hrefPrefix}PROFILES.html"><span>03 / Make it yours</span><strong>Give each agent a role <span aria-hidden="true">→</span></strong></a>
-    </nav>
-${grid}
-  </div>
-</section>`;
+function titleLinkText(html) {
+  return html.replace(/<a href="([A-Z_]+)\.html(#[^"]*)?">(<code>)?([A-Za-z_]+)(?:\.md)?(<\/code>)?<\/a>/g, (whole, slug, hash = '', _open, text) => {
+    const doc = DOCS.find(d => d.slug === slug);
+    if (!doc || text.toUpperCase() !== slug) return whole;
+    return `<a href="${slug}.html${hash}">${doc.title}</a>`;
+  });
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -521,6 +551,7 @@ const REPO_FILES = {
   'changelog': 'https://github.com/satoshi-ltd/alpi/blob/main/CHANGELOG.md',
   'docker/readme': 'https://github.com/satoshi-ltd/alpi/blob/main/docker/README.md',
   'release': 'https://github.com/satoshi-ltd/alpi/blob/main/docs/RELEASE.md',
+  'roadmap': ROADMAP_URL,
 };
 
 function linkRewrite(url) {
@@ -556,13 +587,15 @@ function stripFirstH1(src) {
 
 // ── doc page template ────────────────────────────────────────────────────────
 function docPage(doc, bodyHtml, prev, next) {
+  const toc = buildToc(bodyHtml);
+  const tocItems = toc ? toc.match(/<ol>[\s\S]*<\/ol>/)[0] : '';
   return `<!doctype html>
 <html lang="en">
 <head>
 ${renderHead({
   kind: 'doc',
-  title: `${doc.slug} — alpi docs`,
-  description: `${doc.sub} Part of the alpi documentation (${doc.ix}/${String(TOTAL).padStart(2,'0')}, ${doc.category}). v${VERSION}.`,
+  title: `${doc.title} — alpi docs`,
+  description: `${doc.sub} Part of the alpi documentation (${doc.group}). v${VERSION}.`,
   path: `/docs/${doc.slug}.html`,
   iconPath: '../assets/alpi-favicon.svg',
 })}
@@ -574,34 +607,35 @@ ${renderHead({
 <link rel="stylesheet" href="../demo.css?v=${DEMO_CSS_V}" />
 </head>
 <body>
-<div class="aurora" aria-hidden="true"></div>
-<div id="ascii-bg" aria-hidden="true"><pre id="ascii-pre"></pre></div>
-<div class="veil"></div>
-<div class="grain" aria-hidden="true"></div>
 
-${renderNav('doc', { current: doc.slug })}
+${renderNav('doc', { current: doc.title })}
 
-<main class="shell doc">
-${buildToc(bodyHtml)}
+<main class="shell doc with-rail">
+  <nav class="docrail" aria-label="Documentation">${renderDocRail(doc.slug)}</nav>
+${toc}
+  <details class="docnav-m">
+    <summary><span>Docs</span><span class="d">/</span><b>${doc.title}</b></summary>
+    <nav aria-label="Documentation">${renderDocRail(doc.slug)}</nav>
+  </details>
   <header class="dochead">
-    <h1 class="crease crease-heading">${doc.slug}</h1>
+    <h1 class="crease crease-heading">${doc.title}</h1>
     <p class="sub">${doc.sub}</p>
     <div class="meta mono">
-      <span class="ct">${doc.ix} / ${String(TOTAL).padStart(2, '0')}</span><span class="d">·</span><span>${doc.category}</span><span class="d">·</span><span>v${VERSION}</span>
+      <span>${doc.group}</span><span class="d">·</span><span>${doc.minutes} min</span><span class="d">·</span><span>v${VERSION}</span>
     </div>
   </header>
-
+${tocItems ? `  <details class="toc-m"><summary>On this page</summary>${tocItems}</details>\n` : ''}
   <article id="md-target" class="md">
 ${bodyHtml}
   </article>
 
   <nav class="pager">
     ${prev
-      ? `<a class="pg prev" href="${prev.slug}.html"><span class="lbl">← ${prev.ix}</span><span class="tt">${prev.slug}</span></a>`
-      : `<a class="pg prev" href="index.html"><span class="lbl">← back</span><span class="tt">all docs</span></a>`}
+      ? `<a class="pg prev" href="${prev.slug}.html"><span class="lbl">← previous</span><span class="tt">${prev.title}</span></a>`
+      : `<a class="pg prev" href="index.html"><span class="lbl">← back</span><span class="tt">All docs</span></a>`}
     ${next
-      ? `<a class="pg next" href="${next.slug}.html"><span class="lbl">${next.ix} →</span><span class="tt">${next.slug}</span></a>`
-      : `<a class="pg next" href="index.html"><span class="lbl">index →</span><span class="tt">all docs</span></a>`}
+      ? `<a class="pg next" href="${next.slug}.html"><span class="lbl">next →</span><span class="tt">${next.title}</span></a>`
+      : `<a class="pg next" href="index.html"><span class="lbl">index →</span><span class="tt">All docs</span></a>`}
   </nav>
 </main>
 
@@ -614,7 +648,7 @@ ${renderFooter('../')}
 `;
 }
 
-// ── docs index (same card grid as the landing "docs" section) ──────────────
+// ── docs index ──────────────────────────────────────────────────────────────
 function docsIndexPage() {
   return `<!doctype html>
 <html lang="en">
@@ -622,7 +656,7 @@ function docsIndexPage() {
 ${renderHead({
   kind: 'docs-index',
   title: 'alpi docs — documentation index',
-  description: `Complete documentation for alpi v${VERSION}: ${TOTAL} references covering quickstart, skills, profiles, models, architecture, security, deployments, the Alpi Link Protocol, and more.`,
+  description: `Documentation for alpi v${VERSION}: install, a first agent, profiles, skills, models, workgroups, the Alpi Link Protocol, deployment, operations and security.`,
   path: '/docs/',
   iconPath: '../assets/alpi-favicon.svg',
 })}
@@ -633,27 +667,40 @@ ${renderHead({
 <link rel="stylesheet" href="../doc.css?v=${VERSION}" />
 </head>
 <body>
-<div class="aurora" aria-hidden="true"></div>
-<div id="ascii-bg" aria-hidden="true"><pre id="ascii-pre"></pre></div>
-<div class="veil"></div>
-<div class="grain" aria-hidden="true"></div>
 
 ${renderNav('docs-index')}
 
 <main class="shell shell-wide docs-index">
-${renderDocsGrid({
-  hrefPrefix: '',
-  withSection: true,
-  eyebrow: `v${VERSION} · ${TOTAL} documents · updated ${new Date().toISOString().slice(0, 7)}`,
-  heading: 'Documentation.',
-  sub: "Start with installation and your first conversation. Come back for the guides and reference as your setup grows.",
-})}
+  <div class="eyebrow">v${VERSION} · ${DOCS.length} documents</div>
+  <h1 class="index-title crease crease-heading">Documentation</h1>
+  <p class="sub">Start with Install and Quickstart; the rest is grouped by what you are doing.</p>
+  <nav class="docs-start" aria-label="Start using alpi">
+    <a href="INSTALL.html"><span>01 · install</span><strong>Put alpi on your machine <span aria-hidden="true">→</span></strong></a>
+    <a href="QUICKSTART.html"><span>02 · first run</span><strong>Talk to your first agent <span aria-hidden="true">→</span></strong></a>
+    <a href="PROFILES.html"><span>03 · make it yours</span><strong>Give each agent a role <span aria-hidden="true">→</span></strong></a>
+  </nav>
+${renderDocGroups('')}
 </main>
 
 ${renderFooter('../')}
 
 <script src="../doc.js?v=${VERSION}"></script>
 </body>
+</html>
+`;
+}
+
+function redirectPage(url, title) {
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>${title}</title>
+<meta name="robots" content="noindex" />
+<link rel="canonical" href="${url}" />
+<meta http-equiv="refresh" content="0; url=${url}" />
+</head>
+<body><p><a href="${url}">${title}</a> lives in the repository.</p></body>
 </html>
 `;
 }
@@ -677,39 +724,54 @@ function postLinkRewrite(url) {
   return linkRewrite(url);
 }
 
-function postMetaLine(post) {
-  const parts = [];
-  if (post.date) parts.push(formatPostDate(post.date));
-  if (post.tags.length) parts.push(post.tags.join(' · '));
-  return parts.join('  ·  ');
+const tagSlug = (tag) => String(tag).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const tagHref = (tag) => `tag-${tagSlug(tag)}.html`;
+const shortDate = (iso) => formatPostDate(iso).replace(/, \d{4}$/, '');
+const POST_TAGS = (() => {
+  const count = new Map();
+  for (const post of POSTS) for (const tag of post.tags) count.set(tag, (count.get(tag) || 0) + 1);
+  return [...count.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([tag]) => tag);
+})();
+
+const TOPIC_CHIPS = 8;
+
+function tagChips(tags, current = null) {
+  return tags.map(tag => tag === current
+    ? `<span class="chip on" aria-current="page">${escapeHtml(tag)}</span>`
+    : `<a class="chip" href="${tagHref(tag)}">${escapeHtml(tag)}</a>`).join('');
 }
 
-function renderPostsGrid() {
-  if (!POSTS.length) {
-    return `    <p class="sub">No posts yet.</p>`;
-  }
-  const cards = POSTS.map(p =>
-    `      <a class="doc" href="${p.slug}.html">
-        <span class="ix">${escapeHtml(postMetaLine(p))}</span>
-        <h2>${escapeHtml(p.title)}</h2>
-        <p>${escapeHtml(p.description)}</p>
-        <span class="go">read →</span>
-      </a>`
-  ).join('\n');
-  return `    <div class="docs blog-grid">
-${cards}
-    </div>`;
+function renderPostList(posts) {
+  if (!posts.length) return `    <p class="sub">No posts yet.</p>`;
+  const [lead, ...rest] = posts;
+  const leadHtml = `<a class="post-lead" href="${lead.slug}.html">
+      <span class="lead-m">latest · ${escapeHtml(formatPostDate(lead.date))} · ${lead.minutes} min read</span>
+      <h2>${escapeHtml(lead.title)}</h2>
+      <p>${escapeHtml(lead.description)}</p>
+    </a>`;
+  const years = [...new Set(rest.map(p => (p.date || '').slice(0, 4)))];
+  const yearsHtml = years.map(year => `<section class="post-year">
+      <h2 class="group-h">${year || 'Undated'}</h2>
+      <ul>${rest.filter(p => (p.date || '').slice(0, 4) === year).map(p => `
+        <li><a href="${p.slug}.html"><span class="row-d">${escapeHtml(shortDate(p.date))}</span><span class="row-t">${escapeHtml(p.title)}</span><span class="row-m">${p.minutes} min</span><span class="row-s">${escapeHtml(p.description)}</span></a></li>`).join('')}
+      </ul>
+    </section>`).join('\n');
+  return `${leadHtml}\n${yearsHtml}`;
 }
 
-function blogIndexPage() {
+function blogIndexPage(tag = null) {
+  const posts = tag ? POSTS.filter(p => p.tags.includes(tag)) : POSTS;
+  const heading = tag ? `Posts on ${escapeHtml(tag)}` : 'Notes from the project';
   return `<!doctype html>
 <html lang="en">
 <head>
 ${renderHead({
   kind: 'blog-index',
-  title: 'alpi blog — posts',
-  description: `Writing from the alpi project: positioning, architecture, and how local-first agent infrastructure plays out in practice. ${POSTS.length} post${POSTS.length === 1 ? '' : 's'}.`,
-  path: '/blog/',
+  title: tag ? `alpi blog — ${tag}` : 'alpi blog — posts',
+  description: tag
+    ? `Posts from the alpi project about ${tag}. ${posts.length} post${posts.length === 1 ? '' : 's'}.`
+    : `Writing from the alpi project: positioning, architecture, and how local-first agent infrastructure plays out in practice. ${POSTS.length} post${POSTS.length === 1 ? '' : 's'}.`,
+  path: tag ? `/blog/${tagHref(tag)}` : '/blog/',
   iconPath: '../assets/alpi-favicon.svg',
 })}
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -719,22 +781,15 @@ ${renderHead({
 <link rel="stylesheet" href="../doc.css?v=${VERSION}" />
 </head>
 <body>
-<div class="aurora" aria-hidden="true"></div>
-<div id="ascii-bg" aria-hidden="true"><pre id="ascii-pre"></pre></div>
-<div class="veil"></div>
-<div class="grain" aria-hidden="true"></div>
 
-${renderNav('blog-index')}
+${renderNav(tag ? 'blog' : 'blog-index', tag ? { current: escapeHtml(tag) } : {})}
 
-<main class="shell shell-wide docs-index">
-<section id="docs">
-  <div class="shell">
-    <div class="eyebrow">${POSTS.length} post${POSTS.length === 1 ? '' : 's'}</div>
-    <h1 class="index-title crease crease-heading">Notes from the project.</h1>
-    <p class="sub">On building, running and keeping control of your own agents.</p>
-${renderPostsGrid()}
-  </div>
-</section>
+<main class="shell shell-wide docs-index blog-index">
+  <div class="eyebrow">${posts.length} post${posts.length === 1 ? '' : 's'}</div>
+  <h1 class="index-title crease crease-heading">${heading}</h1>
+  <p class="sub">On building, running and keeping control of your own agents.</p>
+  <nav class="chips" aria-label="Topics">${tag ? '<a class="chip" href="index.html">All</a>' : '<span class="chip on" aria-current="page">All</span>'}${tagChips(tag && !POST_TAGS.slice(0, TOPIC_CHIPS).includes(tag) ? [...POST_TAGS.slice(0, TOPIC_CHIPS), tag] : POST_TAGS.slice(0, TOPIC_CHIPS), tag)}</nav>
+${renderPostList(posts)}
 </main>
 
 ${renderFooter('../')}
@@ -746,7 +801,6 @@ ${renderFooter('../')}
 }
 
 function postPage(post, bodyHtml, prev, next) {
-  const metaLine = postMetaLine(post);
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -765,18 +819,14 @@ ${renderHead({
 <link rel="stylesheet" href="../doc.css?v=${VERSION}" />
 </head>
 <body>
-<div class="aurora" aria-hidden="true"></div>
-<div id="ascii-bg" aria-hidden="true"><pre id="ascii-pre"></pre></div>
-<div class="veil"></div>
-<div class="grain" aria-hidden="true"></div>
 
-${renderNav('blog')}
+${renderNav('blog', { current: escapeHtml(post.title) })}
 
 <main class="shell doc">
   <header class="dochead">
     <h1 class="crease crease-heading">${escapeHtml(post.title)}</h1>
     ${post.description ? `<p class="sub">${escapeHtml(post.description)}</p>` : ''}
-    ${metaLine ? `<div class="meta mono"><span>${escapeHtml(metaLine)}</span></div>` : ''}
+    <div class="meta mono"><span>${escapeHtml(formatPostDate(post.date))}</span><span class="d">·</span><span>${post.minutes} min read</span>${post.tags.length ? `<span class="chips">${tagChips(post.tags)}</span>` : ''}</div>
   </header>
 
   <article id="md-target" class="md">
@@ -834,6 +884,7 @@ writeFileSync(join(SITE, 'assets', 'alpi-social.svg'), cardSvg({ height: OG_IMAG
 
 copyTree(join(SITE, 'assets'), join(DIST, 'assets'));
 writeFileSync(join(DIST, 'brand.css'), brandCss());
+writeFileSync(join(DIST, 'tokens.css'), TOKENS_CSS);
 
 copyFileSync(join(TPL, 'theme.js'), join(DIST, 'theme.js'));
 
@@ -864,11 +915,7 @@ const landing = readFileSync(join(TPL, 'landing.html'), 'utf8')
   // Desktop version goes AFTER the alpi-version sweep so the regex
   // above doesn't clobber it (desktop ships on its own track).
   .replace('<!-- FOOTER (injected by build.mjs) -->', renderFooter(''))
-  .replace(/<!-- PAIR (\w+) (\d+) -->/g, (_, fold, size) => pairMark(fold, Number(size)))
-  .replace(/<span data-ink="(\w+)">/g, (_, fold) => {
-    const { night, paper } = profileInk(fold);
-    return `<span class="profile-ink" style="--ink-night:${night};--ink-paper:${paper}">`;
-  })
+  .replace(/<!-- PROFILE (\w+) (\d+) (\w+) -->/g, (_, fold, size, name) => profileName(fold, name, Number(size)))
   .replaceAll('<!-- DESKTOP_DOWNLOAD_URL -->', DESKTOP_DOWNLOAD_URL)
   .replaceAll('<!-- DESKTOP_RELEASES_URL -->', DESKTOP_RELEASES_URL)
   .replaceAll('<!-- DESKTOP_RELEASES_URL -->', DESKTOP_RELEASES_URL)
@@ -903,12 +950,14 @@ for (let k = 0; k < DOCS.length; k++) {
   }
   const prev = DOCS[k - 1] || null;
   const next = DOCS[k + 1] || null;
-  write(join(DIST, 'docs', `${doc.slug}.html`), docPage(doc, body, prev, next));
-  console.log(`  ${doc.ix}  ${doc.slug.padEnd(14)} ← ${doc.src}`);
+  write(join(DIST, 'docs', `${doc.slug}.html`), docPage(doc, titleLinkText(body), prev, next));
+  console.log(`  ${doc.group.padEnd(9)} ${doc.slug.padEnd(14)} ← ${doc.src}`);
 }
+write(join(DIST, 'docs', 'ROADMAP.html'), redirectPage(ROADMAP_URL, 'alpi roadmap'));
 
 // Blog — auto-discovered posts. Index + one page per post; newest-first pager.
 write(join(DIST, 'blog', 'index.html'), blogIndexPage());
+for (const tag of POST_TAGS) write(join(DIST, 'blog', tagHref(tag)), blogIndexPage(tag));
 for (let k = 0; k < POSTS.length; k++) {
   const post = POSTS[k];
   const body = wrapTables(renderMarkdown(stripFirstH1(post.body), { linkRewrite: postLinkRewrite }));
@@ -933,6 +982,11 @@ const sitemapUrls = [
     loc: `${SITE_URL}/blog/${p.slug}.html`,
     priority: '0.6',
     changefreq: 'monthly',
+  })),
+  ...POST_TAGS.map(tag => ({
+    loc: `${SITE_URL}/blog/${tagHref(tag)}`,
+    priority: '0.5',
+    changefreq: 'weekly',
   })),
 ];
 const sitemapXml = `<?xml version="1.0" encoding="UTF-8"?>

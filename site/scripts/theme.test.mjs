@@ -29,7 +29,7 @@ function page({ saved = null, dark = false, blocked = false } = {}) {
 test('saved choice sets theme, browser color and accessible toggle before page content', () => {
   const p = page({ saved: 'light', dark: true });
   assert.equal(p.root.dataset.theme, 'light');
-  assert.equal(p.meta.color, '#f6f3ec');
+  assert.equal(p.meta.color, '#f0f0f0');
   assert.equal(p.button.label, 'Switch to dark theme');
   p.system.change();
   assert.equal(p.root.dataset.theme, 'light');
@@ -43,7 +43,7 @@ test('system preference follows changes until the user chooses', () => {
   assert.equal(p.root.dataset.theme, 'dark');
   p.click();
   assert.equal(p.saved(), 'light');
-  assert.equal(p.meta.color, '#f6f3ec');
+  assert.equal(p.meta.color, '#f0f0f0');
   p.system.change();
   assert.equal(p.root.dataset.theme, 'light');
   const nextPage = page({ saved: p.saved(), dark: true });
@@ -54,6 +54,6 @@ test('theme toggle works when browser storage is unavailable', () => {
   const p = page({ blocked: true });
   p.click();
   assert.equal(p.root.dataset.theme, 'dark');
-  assert.equal(p.meta.color, '#0c0b09');
+  assert.equal(p.meta.color, '#0b0b0b');
   assert.equal(p.button.label, 'Switch to light theme');
 });

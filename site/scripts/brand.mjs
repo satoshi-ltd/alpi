@@ -1,13 +1,14 @@
 import { ACCENTS, ACCENT_FOLDS } from '../../common/accents.mjs';
 import { CREASE_ANGLE, CREASE_FONT, contrastRatio, creaseGradient, creaseTones } from '../../common/crease.mjs';
 import { ALPACA_LOW_FOLD, BRAND_INK, foldPolygons, foldTones } from '../../common/folds.mjs';
+import { palettes } from '../../common/tokens.mjs';
 
-export const NIGHT = '#0c0b09';
-export const PAPER = '#f6f3ec';
+export const NIGHT = palettes.dark.bg;
+export const PAPER = palettes.light.bg;
 export const CREAM = BRAND_INK.dark;
 export const INK = BRAND_INK.light;
 export const FAVICON_INK = '#7a7468';
-export const MUTED = '#a39a8b';
+export const NIGHT_LOCKUP = [CREAM, '#ffffff', '#b9b3a4'];
 export const FONT_FILE = 'bricolage-800-latin.woff2';
 export const FONT_URL = `assets/fonts/${FONT_FILE}`;
 export const LOCKUP_SLIT = 0.6;
@@ -58,20 +59,11 @@ export function pairMark(fold, size = 24) {
   return identityMark({ ...identityFor(fold), size });
 }
 
-export const TEXT_MIN_CONTRAST = 4.5;
-
-export function readableOn(hex, ground, min = TEXT_MIN_CONTRAST) {
-  const rgb = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
-  for (let keep = 1; keep >= 0; keep -= 0.02) {
-    const out = `#${rgb.map((c) => Math.round(c * keep).toString(16).padStart(2, '0')).join('')}`;
-    if (contrastRatio(out, ground) >= min) return out;
-  }
-  return '#000000';
-}
-
-export function profileInk(fold) {
+export function profileName(fold, name, size = 18) {
   const { hex } = identityFor(fold);
-  return { night: hex, paper: readableOn(hex, PAPER) };
+  const night = creaseGradient(creaseTones(hex, NIGHT));
+  const paper = creaseGradient(creaseTones(hex, PAPER));
+  return `<span class="profile-name">${pairMark(fold, size)}<span class="crease crease-name" style="--crease-night:${night};--crease-paper:${paper}">${name}</span></span>`;
 }
 
 export function demoProfiles(byName, size = 13) {
@@ -113,10 +105,14 @@ export function brandCss() {
     `:root{${tokens(night)}}`,
     `:root[data-theme="light"]{${tokens(light)}}`,
     ...foldTones(INK).map((fill, tone) => `:root[data-theme="light"] .logo-mark .t${tone}{fill:${fill}}`),
-    `.logo .logo-word.crease,.hero h1 .crease,h1.crease-heading,h2.crease-heading{font-family:"${CREASE_FONT}","Instrument Sans",system-ui,sans-serif}`,
+    `.logo .logo-word.crease,.hero h1 .crease,h1.crease-heading,h2.crease-heading,.crease-name{font-family:"${CREASE_FONT}","Instrument Sans",system-ui,sans-serif}`,
     `.crease{font-weight:800;letter-spacing:-.04em;-webkit-background-clip:text;background-clip:text;color:transparent;display:inline-block;padding:.06em 0 .22em;margin:-.06em 0 -.22em}`,
     `:root .logo .logo-word.crease{background-image:var(--crease-lockup);color:transparent;font-weight:800;letter-spacing:-.04em}`,
     `.hero h1 .crease{display:block;width:fit-content}`,
+    `.profile-name{display:inline-flex;align-items:center;gap:.45em;vertical-align:middle}`,
+    `.profile-name svg{flex:none;display:block}`,
+    `.crease-name{letter-spacing:-.03em;background-image:var(--crease-night)}`,
+    `:root[data-theme="light"] .crease-name{background-image:var(--crease-paper)}`,
     `.hero h1 .crease-first{background-image:var(--crease-first)}`,
     `.hero h1 .crease-second{background-image:var(--crease-second)}`,
     `h1.crease-heading{display:block;width:fit-content;max-width:100%;padding:0 0 .12em;font-weight:800;letter-spacing:-.03em;line-height:1.08;background-image:var(--crease-second)}`,
@@ -147,30 +143,17 @@ function svgGradient(id, tones, box, slit) {
 const WORD_WIDTH = 1.45;
 
 export function cardSvg({ width = 1200, height = 630, fontData = '' } = {}) {
-  const markHeight = Math.round(height * 0.46);
+  const markHeight = Math.round(height * 0.5);
   const mark = alpacaMark({ height: markHeight });
   const markWidth = Number(mark.match(/ width="([\d.]+)"/)[1]);
   const fontSize = Math.round(markHeight * 0.66);
   const wordWidth = fontSize * WORD_WIDTH;
-  const gap = Math.round(markHeight * 0.18);
-  const tagSize = Math.round(height * 0.05);
-  const stripSize = Math.round(height * 0.076);
-  const stripGap = Math.round(stripSize * 0.3);
-  const spacing = Math.round(height * 0.07);
-  const block = markHeight + spacing + tagSize + spacing + stripSize;
-  const top = Math.round((height - block) / 2);
+  const gap = Math.round(markHeight * 0.3);
+  const top = Math.round((height - markHeight) / 2);
   const left = Math.round((width - (markWidth + gap + wordWidth)) / 2);
   const baseline = top + Math.round(markHeight * 0.9);
   const box = { x: left + markWidth + gap, y: baseline - fontSize * 0.75, w: wordWidth, h: fontSize * 0.98 };
-  const tones = creaseTones(CREAM, NIGHT);
-  const tagY = top + markHeight + spacing + tagSize * 0.8;
-  const stripWidth = IDENTITIES.length * stripSize + (IDENTITIES.length - 1) * stripGap;
-  const stripLeft = Math.round((width - stripWidth) / 2);
-  const stripTop = top + markHeight + spacing + tagSize + spacing;
-  const strip = IDENTITIES.map((identity, i) => {
-    const inner = foldPolygons(identity.fold, identity.hex, stripSize).map((p) => polygonTag(p)).join('');
-    return `<svg x="${stripLeft + i * (stripSize + stripGap)}" y="${stripTop}" width="${stripSize}" height="${stripSize}" viewBox="0 0 100 100" role="img" aria-label="${identity.name}">${inner}</svg>`;
-  }).join('');
+  const tones = NIGHT_LOCKUP;
   const font = fontData
     ? `<style>@font-face{font-family:"${CREASE_FONT}";font-weight:800;src:url(data:font/woff2;base64,${fontData}) format("woff2")}</style>`
     : '';
@@ -182,8 +165,6 @@ export function cardSvg({ width = 1200, height = 630, fontData = '' } = {}) {
     `<rect width="${width}" height="${height}" fill="${NIGHT}"/>`,
     inner,
     `<text x="${box.x}" y="${baseline}" font-family="${CREASE_FONT}, Instrument Sans, Arial Black, sans-serif" font-size="${fontSize}" font-weight="800" letter-spacing="${-0.04 * fontSize}" fill="url(#crease)">alpi</text>`,
-    `<text x="${width / 2}" y="${tagY}" text-anchor="middle" font-family="Instrument Sans, Helvetica Neue, Arial, sans-serif" font-size="${tagSize}" fill="${MUTED}">${TAGLINE}</text>`,
-    strip,
     '</svg>',
     '',
   ].join('');

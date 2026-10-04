@@ -3,7 +3,7 @@ import { foldTones } from '../../common/folds.mjs';
 import assert from 'node:assert/strict';
 import { contrastRatio, CREASE_MIN_CONTRAST } from '../../common/crease.mjs';
 import { ACCENT_FOLDS } from '../../common/accents.mjs';
-import { CREAM, IDENTITIES, NIGHT, PAPER, alpacaMark, cardSvg, creaseLadders, favicon, identityStrip, lockup } from './brand.mjs';
+import { CREAM, IDENTITIES, NIGHT, NIGHT_LOCKUP, PAPER, alpacaMark, cardSvg, creaseLadders, favicon, identityStrip, lockup } from './brand.mjs';
 
 const fills = svg => [...svg.matchAll(/<polygon [^>]*fill="(#[0-9a-f]{6})"/g)].map(m => m[1]);
 
@@ -43,14 +43,15 @@ test('every crease ladder keeps three distinct tones at 3:1 on its ground', () =
   assert.equal(night.lockup[0], '#ffffff');
 });
 
-test('the card is a self-contained SVG with the crease wordmark and the twelve identities', () => {
+test('the card is a self-contained SVG: the alpaca and the wordmark in the night lockup crease, nothing else', () => {
   const svg = cardSvg({ height: 630, fontData: 'QUJD' });
   assert.ok(svg.startsWith('<svg xmlns="http://www.w3.org/2000/svg"'));
   assert.ok(svg.includes('data:font/woff2;base64,QUJD'));
   assert.ok(!svg.includes('<image'));
-  assert.ok(svg.includes('>alpi</text>'));
+  assert.deepEqual([...svg.matchAll(/<text\b[^>]*>([^<]*)<\/text>/g)].map((m) => m[1]), ['alpi']);
   assert.ok(svg.includes('fill="url(#crease)"'));
-  assert.equal([...svg.matchAll(/aria-label="[a-z]+ [a-z]+"/g)].length, 12);
+  for (const tone of NIGHT_LOCKUP) assert.ok(svg.includes(`stop-color="${tone}"`), tone);
+  assert.equal([...svg.matchAll(/aria-label="[a-z]+ [a-z]+"/g)].length, 0);
   assert.equal(cardSvg({ height: 630, fontData: 'QUJD' }), svg);
 });
 

@@ -1,15 +1,14 @@
 .alpi-demo{
-  --t-bg:#100e0b;
-  --t-fg:#ebe6dc;
-  --t-muted:#827b70;
-  --t-dim:#3d3830;
-  --t-acc:#f3efe6;
-  --t-bot:#d9d3c7;
-  --t-border:#221f19;
-  --t-ok:#f3efe6;
+  --t-bg:var(--term-bg);
+  --t-fg:var(--term-fg);
+  --t-muted:var(--term-muted);
+  --t-dim:var(--dim);
+  --t-acc:var(--fg);
+  --t-bot:var(--ink-2);
+  --t-border:var(--line);
+  --t-ok:var(--fg);
   font-family:"Geist Mono",ui-monospace,monospace;
   color:var(--t-fg);
-  color-scheme:dark;
 }
 .alpi-demo[hidden]{display:none !important}
 
@@ -19,14 +18,13 @@
 
 .alpi-term{
   background:var(--t-bg);
-  border:1px solid var(--t-border);border-radius:var(--radius);
-  overflow:hidden;display:flex;flex-direction:column;height:560px;
-  box-shadow:0 30px 80px -20px rgba(0,0,0,.32);
+  border:var(--seam) solid var(--line-2);border-radius:var(--r-xs);
+  overflow:hidden;display:flex;flex-direction:column;height:auto;min-height:220px;max-height:480px;
 }
 
 .alpi-term-top{
   display:flex;align-items:center;justify-content:space-between;
-  gap:12px;padding:12px 18px;border-bottom:1px solid var(--t-border);
+  gap:12px;padding:12px 18px;border-bottom:var(--seam) solid var(--t-border);
   font-size:12px;color:var(--t-muted);
   flex-wrap:wrap;
 }
@@ -88,11 +86,10 @@
 @keyframes alpi-blink{50%{opacity:0}}
 
 .alpi-term-status{
-  padding:11px 18px;border-top:1px solid var(--t-border);
+  padding:11px 18px;border-top:var(--seam) solid var(--t-border);
   font-size:12px;color:var(--t-muted);
   display:flex;gap:14px;align-items:center;
   flex-wrap:wrap;
-  background:rgba(255,255,255,.015);
 }
 .alpi-term-status[hidden]{display:none !important}
 .alpi-term-status .diamond{color:var(--t-acc);font-weight:600}
@@ -100,7 +97,7 @@
 .alpi-term-status .sep{color:var(--t-dim)}
 
 .alpi-term-input{
-  padding:11px 18px;border-top:1px solid var(--t-border);
+  padding:11px 18px;border-top:var(--seam) solid var(--t-border);
   font-size:12.5px;color:var(--t-fg);
   display:flex;align-items:center;gap:8px;
   font-family:"Geist Mono",ui-monospace,monospace;
@@ -112,20 +109,19 @@
 
 .alpi-term-foot{
   display:flex;align-items:center;justify-content:space-between;
-  padding:11px 16px;border-top:1px solid var(--t-border);
+  padding:11px 16px;border-top:var(--seam) solid var(--t-border);
   font-size:12px;letter-spacing:.03em;
-  background:rgba(0,0,0,.18);
 }
 .alpi-term-foot[hidden]{display:none}
 .alpi-term-foot .nav{display:flex;gap:8px}
 .alpi-term-foot button{
   appearance:none;background:transparent;
-  border:1px solid var(--t-border);border-radius:var(--radius-btn);
+  border:var(--seam) solid var(--line-2);border-radius:var(--r-xs);
   color:var(--t-muted);font:inherit;font-family:"Geist Mono",ui-monospace,monospace;
   font-size:14px;padding:6px 14px;cursor:pointer;text-transform:lowercase;
   transition:border-color .15s,color .15s;
 }
-.alpi-term-foot button:hover:not(:disabled){color:var(--t-fg);border-color:var(--t-fg)}
+.alpi-term-foot button:hover:not(:disabled){color:var(--t-fg);background:var(--hover)}
 .alpi-term-foot button:disabled{opacity:.3;cursor:not-allowed}
 
 .alpi-term-caption{
@@ -136,7 +132,7 @@
 }
 
 @media (max-width:760px){
-  .alpi-term{height:420px}
+  .alpi-term{max-height:420px}
   .alpi-term-body{font-size:11px;padding:14px 14px 18px;line-height:1.6}
   .alpi-term-top,.alpi-term-foot,.alpi-term-input,.alpi-term-status{padding:9px 12px;font-size:11px;gap:8px}
   .alpi-term-top .step{font-size:10px;letter-spacing:.05em}
@@ -149,5 +145,5 @@
 
 /* Quiet scrollbar — the console is a panel, not a document. */
 .alpi-term-body::-webkit-scrollbar{width:8px}
-.alpi-term-body::-webkit-scrollbar-thumb{background:#2e2a23;border-radius:4px}
+.alpi-term-body::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:var(--r-tag)}
 .alpi-term-body::-webkit-scrollbar-track{background:transparent}
