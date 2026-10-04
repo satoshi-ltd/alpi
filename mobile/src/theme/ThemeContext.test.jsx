@@ -8,6 +8,7 @@ const h = vi.hoisted(() => ({ store: new Map() }));
 
 vi.mock('react-native', () => ({
   useColorScheme: () => 'light',
+  useWindowDimensions: () => ({ width: 390, height: 844, scale: 3, fontScale: 1 }),
 }));
 
 vi.mock('expo-secure-store', () => ({

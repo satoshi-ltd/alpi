@@ -8,9 +8,13 @@ import { contrastRatio, creaseTones } from '../../../common/crease.mjs';
 import { fonts, palettes } from '../theme/tokens';
 import { creaseWidth } from './creaseMetrics';
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  h.fontScale = 1;
+  h.textScale = 1;
+});
 
-const h = vi.hoisted(() => ({ mode: 'light', layout: null }));
+const h = vi.hoisted(() => ({ mode: 'light', layout: null, fontScale: 1, textScale: 1 }));
 
 vi.mock('react-native', () => {
   const View = ({ children, accessibilityRole, accessibilityLabel, accessible, style, onLayout, ...p }) => {
@@ -24,7 +28,7 @@ vi.mock('react-native', () => {
 
 vi.mock('../theme/ThemeContext', async () => {
   const tokens = await import('../theme/tokens');
-  return { useTheme: () => ({ mode: h.mode, colors: tokens.palettes[h.mode], fonts: tokens.fonts }) };
+  return { useTheme: () => ({ mode: h.mode, colors: tokens.palettes[h.mode], fonts: tokens.fonts, textScale: h.textScale, fontScale: h.fontScale }) };
 });
 
 const { Crease, creaseAxis, creaseStops } = await import('./Crease');
@@ -142,5 +146,25 @@ describe('Crease width', () => {
     expect(box.height).toBeUndefined();
     expect(box.overflow).toBeUndefined();
     expect(line.lineHeight).toBeUndefined();
+  });
+
+  it('grows with the system text size and the app text size', () => {
+    h.fontScale = 1.5;
+    render(<Crease text="doc" accent="#6572e4" size={28} />);
+    act(() => h.layout({ nativeEvent: { layout: { width: 1000 } } }));
+    expect(Number(document.querySelector('text').getAttribute('font-size'))).toBe(42);
+    cleanup();
+    h.fontScale = 1;
+    h.textScale = 1.3;
+    render(<Crease text="site-hotel-victoire" accent="#6572e4" size={28} />);
+    act(() => h.layout({ nativeEvent: { layout: { width: 120 } } }));
+    expect(JSON.parse(document.querySelector('[data-plain]').getAttribute('data-style')).fontSize).toBeCloseTo(18 * 1.3);
+  });
+
+  it('caps the system scale so a giant text setting cannot blow the title up past twice its size', () => {
+    h.fontScale = 3.5;
+    render(<Crease text="doc" accent="#6572e4" size={28} />);
+    act(() => h.layout({ nativeEvent: { layout: { width: 1000 } } }));
+    expect(Number(document.querySelector('text').getAttribute('font-size'))).toBe(56);
   });
 });

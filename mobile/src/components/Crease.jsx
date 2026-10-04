@@ -9,6 +9,7 @@ import { creaseWidth } from './creaseMetrics';
 
 const FLOOR_SIZE = 24;
 const PLAIN_SIZE = 18;
+const MAX_FONT_SCALE = 2;
 const LINE_HEIGHT = 1.25;
 const BASELINE = 0.98;
 const BANDS = [0.33, 0.66];
@@ -47,8 +48,9 @@ export function creaseAxis(width, height) {
   };
 }
 
-export function Crease({ text, accent, size = 28, style }) {
-  const { colors, fonts } = useTheme();
+export function Crease({ text, accent, size: base = 28, style }) {
+  const { colors, fonts, textScale = 1, fontScale = 1 } = useTheme();
+  const size = Math.round(base * textScale * Math.min(fontScale, MAX_FONT_SCALE));
   const gradientId = `crease${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
   const [available, setAvailable] = useState(null);
   const label = String(text ?? '');
@@ -73,7 +75,7 @@ export function Crease({ text, accent, size = 28, style }) {
         <Text
           numberOfLines={1}
           accessible={false}
-          style={{ fontFamily: fonts?.sans?.semibold, fontSize: PLAIN_SIZE, color: colors.ink }}
+          style={{ fontFamily: fonts?.sans?.semibold, fontSize: PLAIN_SIZE * textScale, color: colors.ink }}
         >
           {label}
         </Text>

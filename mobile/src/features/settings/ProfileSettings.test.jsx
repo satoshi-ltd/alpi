@@ -42,6 +42,7 @@ vi.mock('react-native', () => {
     ActivityIndicator: () => React.createElement('span', { 'data-testid': 'activity' }),
     StyleSheet: { create: (s) => s, absoluteFillObject: {} },
     useColorScheme: () => 'light',
+    useWindowDimensions: () => ({ width: 390, height: 844, scale: 3, fontScale: 1 }),
     Animated: {
       Value: class {
         setValue() {}

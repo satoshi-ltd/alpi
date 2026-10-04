@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { useColorScheme } from 'react-native';
+import { useColorScheme, useWindowDimensions } from 'react-native';
 
 import { loadThemePref, saveThemePref } from '../lib/themePref';
 import { chromeFontMultiplier, clampTextScale, DEFAULT_TEXT_SCALE, scaleFontSizes } from './textScale';
@@ -42,6 +42,7 @@ export function ThemeProvider({ children }) {
     saveTextScale(value);
   }, []);
 
+  const { fontScale = 1 } = useWindowDimensions();
   const fontSizes = useMemo(() => scaleFontSizes(textScale), [textScale]);
   const chromeScale = chromeFontMultiplier(textScale);
 
@@ -55,6 +56,7 @@ export function ThemeProvider({ children }) {
       fonts,
       fontSizes,
       textScale,
+      fontScale,
       chromeScale,
       setTextScale,
       lineHeights,
@@ -63,7 +65,7 @@ export function ThemeProvider({ children }) {
       motion,
       hydrated,
     }),
-    [mode, pref, setMode, colors, shadow, fontSizes, textScale, chromeScale, setTextScale, hydrated],
+    [mode, pref, setMode, colors, shadow, fontSizes, textScale, fontScale, chromeScale, setTextScale, hydrated],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
